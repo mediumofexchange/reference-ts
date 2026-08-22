@@ -103,12 +103,14 @@ the rule still stands.
   submit path and the gap path alike, and the verifier's gap fold). Exactly one
   exit is open at every index **per record**, as for a demand on its acceptance
   (a set of records can have both closed within the holder's own declared
-  window — and then **re-prepare is the holder's move**: an expired leg is
-  withdrawn, alone and past its timeout, and locked again under the standing
-  demand through `submitLegs`, by the checks each leg passed at filing — so no
-  window remains in which the backer's choices close every exit, and the only
-  bound left is the timeout the holder signed itself; §C3's "a demand outlives
-  its locks"). A lock and a demand never share a hash on one backing, and a bundle
+  window — a set has an exit at or before a leg's timeout only while an
+  acceptance is live, and otherwise the holder waits out the timeout it signed;
+  what no longer exists is a window the BACKER's choices close: a leg that lapses
+  inside a live acceptance is **re-prepared** — withdrawn, alone and past its
+  timeout, and locked again under the standing demand through `submitLeg`, one
+  leg per call, by the checks each leg passed at filing, with the record adopted
+  first; §C3's "a demand outlives its locks"). A lock and a demand never share a
+  hash on one backing, and a bundle
   lock is prepared only where the sequencer can read the commits it may settle
   on and only for an attempt the record does not already show committed (a set
   leg names no venue, needs none, and comes only with its set — at filing, or

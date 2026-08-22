@@ -426,7 +426,7 @@ describe("§C3: the paying slot cannot be taken before the demand either", () =>
     };
     f.sequencer.submitLock(first, ed25519.sign(encodeLock(first), SECRETS.alice));
     expect(() => f.sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice))).toThrow(
-      /paying slot/,
+      /re-file with a fresh nonce/,
     );
     expect(f.sequencer.openDemands(f.eur)).toHaveLength(0);
   });

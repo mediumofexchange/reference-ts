@@ -44,27 +44,28 @@ signature, against any backer.
 
 **Decisions (Bob approved the plan as proposed):**
 
-- **Re-prepare is a door, `submitLegs`.** The demand's holder locks any subset
-  of R(b)'s legs again under a standing demand, through every per-leg check
+- **Re-prepare is a door, `submitLeg`.** The demand's holder locks a lapsed leg
+  again under a standing demand, one leg per call, through every per-leg check
   `legSet` applies at filing — the set's terms, the demand holder's own units,
   no decision venue, one of R(b)'s targets, none twice; filing's completeness
   check is the one it drops, since a re-prepare names the lapsed legs and not
   the set — and the law refuses a slot that stands, so which legs lapsed is the
   record's to say. A stranger's lock fails the terms, so slice 26's squat doors
   stay shut: the same lock bytes are refused at `submitLock` and taken at
-  `submitLegs`, because the door is the set, not the bytes. **One leg at a
-  time**, each its own reservation, receipt and repeat (invariant 26): nothing
+  `submitLeg`, because the door is the set, not the bytes. **One leg per
+  call**, its own reservation, receipt and repeat (invariant 26): nothing
   has to hold together, since the demand already stands and a standing leg is
   the holder's own units.
-- **No window remains in which the backer's choices close every exit**, and a
-  test says so at every boundary of the holder's window (and a scratch run at
-  every index): exactly one of release, withdrawal, or re-prepare-then-release
-  is open — the set-level form of "exactly one exit is open at every index"
-  (per record since 24c). Leg timeout 40, acceptance 90, demand 100: release to
-  40, re-prepare-then-release to 90, withdrawal after. The one bound left is the
-  timeout the holder signs itself: a re-prepare (or a filing) with a leg timeout
-  past the demand's own deadline waits for that timeout, which is the holder's
-  own term and nobody else's.
+- **The set's exit table, in one sentence: at or before a leg's timeout the set
+  has an exit only while an acceptance is live, and otherwise the holder waits
+  out the timeout it signed.** What the slice removes is the one window the
+  BACKER's choices closed — a leg lapsed inside a live acceptance — and a test
+  pins the table at every boundary for both shapes (leg 40 / acceptance 90 /
+  demand 100: release to 40, re-prepare-then-release to 90, withdrawal after;
+  acceptance to 30, or none: nothing to 40, withdrawal after). Exactly one exit
+  per RECORD at every index still holds (24c); at set level it is this sentence,
+  not "exactly one" — the first draft claimed "never stuck" and the review
+  round's exit tables refuted it (below).
 - **The acceptance is not bounded by the legs' timeouts** — 24c's recorded
   refinement, considered and not taken. §C3 wants timeout and deadline to
   differ, with retry as the answer; the backer reads `accompanimentOf`, timeouts
@@ -78,9 +79,52 @@ signature, against any backer.
   as the lock's: a zero-length window is no window.
 - `legSet` now maps over the caller's list rather than over R(b), so it sorts
   by leg name to keep what mapping over the canonical reliance list gave for
-  free: the entries are applied — and `submitLegs`' receipts returned — in one
+  free: the entries are applied in one
   order whatever order a caller listed them in. (The receipt key of a filing is
   the demand, which is prepended; leg order never reached it.)
+
+**The review round (R7 of eight survived the usage limit; the other seven were
+re-run as four consolidated angles), and what it changed.** R7: the liveness
+test sampled indices and short-circuited on the first open move, so it could
+only show *some* move existed — it now runs each move on its own fresh fixture
+at every boundary of the window and asserts the whole triple; "never stuck" was
+an over-claim (a leg re-prepared with a timeout past the demand's own deadline
+waits for that timeout — the holder's own term) and is now the bounded claim
+above; "one index later" was true only of a deadline equal to the filing index;
+the sentence about receipt keys and name order was wrong (the filing receipt is
+the demand's, prepended; the sort keeps the order the canonical reliance list
+gave); the replay test now asserts the demand is kept; the gap test separates
+the venue's stamp from the index the operator returns and checks the verifier's
+fold. Re-run D and B, independently: `submitLegs` read the demand record
+without the demanded backing ever going through `submit`'s two loops — so a head
+withdrawn at the venue in a gap was still re-prepared for, and a REPLACED
+operator still took re-prepares on a backing it no longer served. The two loops
+are one helper now, `ready` (in force, then adopted), asked by `submit` of its
+items and by the re-prepare door of the demanded backing; and the door takes
+**one leg per call** (`submitLeg`), since a call that took several and refused
+one halfway discarded the receipts of the legs it had applied, and the `"all" |
+"some"` mode put two callers' rules in one helper. A repeat of an accepted set
+leg through `submitLock` was refused before the receipt lookup — answered first
+now, as 24c round four did for the gate. The filing-time slot check covers every
+slot the set takes (each reliance leg's and the paying slot's), with the remedy
+named. Recorded, not patched: at the window's last index the law's strictly-ahead
+timeout leaves no re-prepare timeout inside it, so a backer answering at the
+holder's own deadline puts the exit at deadline+2 — one index past what the
+acceptance rule alone costs, and declinable (pinned). And a party rule, the twin
+of "keep the last committed state": **a demand's window is priced against the
+commitment before the one that first carries it**, because the record keeps no
+filing index — a holder may back-date the instant and file at the last index,
+and the log, record and hash are byte-identical to an honest early filing; the
+commitment chain bounds the window to E's declared interval, and a stranger who
+means to price one keeps both commitments. Re-run C built the exit tables by
+running them: the stated reason for refusing a deadline AT the filing index was
+false (an acceptance with that deadline is legal and releasable at that index —
+only a deadline behind it is unanswerable), so the rule keeps its shape for the
+lock's reason and the four places that gave the wrong one now give the right
+one; "re-prepare is the holder's move" answered only one of 24c's two closed
+windows, hence the one sentence above and the second parameter set pinned; and
+re-prepare was taken for a demand past its own deadline, where nothing can
+settle — refused now, naming withdrawal.
 
 **Procedure, added to CLAUDE.md:** a refusal added at a door names the honest
 path it leaves open, and a test walks it; and a test's name is a claim the test
@@ -95,10 +139,12 @@ not that a shut one is refused, and no invariant constrains the deadline (24
 constrains the instant). So a note is warranted rather than assumed, drafted for
 §C3's "The window is the holder's" paragraph: *"The deadline is strictly ahead of
 the witnessed index the demand is filed at: a short window is the holder's to
-set and reads as weak evidence; one already closed is not a term at all, since
-no acceptance could name a deadline both at or after filing and at or before the
-demand's, so the demand would be unanswerable and read as dishonoured from the
-index it was filed at."* Bob's call whether it goes upstream.
+set, and a stranger prices it against the commitment interval that first carries
+it; one behind the filing index is not a term at all, since no acceptance
+could name a deadline both at or after filing and at or before the demand's, so
+the demand would be unanswerable and read as dishonoured from the index it was
+filed at; and one at the filing index is refused as a lock's timeout at its own
+creation is — the same index is not a window."* Bob's call whether it goes upstream.
 ## 2026-08-22 - Slice 26: a payout paying in claims settles inside the settlement
 
 **Question:** §C3. "A payout paying in claims settles as a swap inside the
@@ -176,7 +222,7 @@ the demand's hash cannot hold both the holder's leg and the backer's payout; the
   is refused at the gate: a demand's hash is its set's. (The 24c junk-relock and
   leg-slot squat tests now end at that gate.) And the bare door: `submitLock`
   refuses a lock naming no decision venue, since a set leg comes only with its
-  set *[Slice 27: or re-prepared for a standing demand by its holder, `submitLegs` — the holder's door these fixes had closed]* — found regression-reviewing the fixes, where a bare leg-shaped lock slipped
+  set *[Slice 27: or re-prepared for a standing demand by its holder, `submitLeg` — the holder's door these fixes had closed]* — found regression-reviewing the fixes, where a bare leg-shaped lock slipped
   past the gate's skip for legs and squatted the slot. Regression-reviewing those
   fixes found the squat's other side — BEFORE the demand exists, by anyone who
   predicts the hash — so filing refuses a demand whose paying slot already holds a
@@ -567,7 +613,7 @@ deleting.
   *[Corrected 2026-08-21 in 24c: the exit needed one thing new, a floor —
   withdrawal opens only past the timeout.]*
   *[And 2026-08-22 in slice 27: the RETRY needed a door as well — slice 26's
-  squat fixes had closed re-prepare — which is `submitLegs`.]*
+  squat fixes had closed re-prepare — which is `submitLeg`.]*
 
 - **At the timeout is inside it, one past is not** — §C3's own predicate, "was a
   valid release witnessed at or before the lock timeout?"

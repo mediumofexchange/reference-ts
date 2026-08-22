@@ -447,16 +447,15 @@ describe("§C3: an acceptance cannot launder the backer's own failure", () => {
 
 describe("§C3: the window is the holder's, and it is open when it is set", () => {
   // "The holder signs a notice naming... a deadline of their choosing... The
-  // deadline marks when non-payment becomes a public fact." A deadline not ahead
-  // of the filing index is a window already shut: no acceptance can name a
-  // deadline at or after now and at or before it, so the demand reads as
-  // dishonoured at the index it was filed at — or, where the deadline equals
-  // it, one index later — for one signature, against any backer
-  // (review-past-deadline-demand.mjs). The lock has had the same rule since 24a
-  // — a timeout not strictly ahead of the witnessed index is refused at creation
-  // — and the demand gets it here, as a TIME rule: a refusal and never a
-  // balance, so the gap path inherits it at the venue's stamp and a replay stays
-  // exact.
+  // deadline marks when non-payment becomes a public fact." A deadline behind
+  // the filing index could never be answered — an acceptance's deadline is at or
+  // after now and at or before the demand's — so the demand read as dishonoured
+  // from the index it was filed at, for one signature, against any backer
+  // (review-past-deadline-demand.mjs). A deadline AT the filing index could be
+  // answered at that index and nowhere after it; it is refused too, as a lock's
+  // timeout at its own creation is (24a/24c): the same index is not a window.
+  // A TIME rule: a refusal and never a balance, so the gap path inherits it at
+  // the venue's stamp and a replay stays exact.
   it("refuses a demand whose deadline is behind the witnessed index", () => {
     const { ledger, backing } = setup();
     expect(() => present(ledger, backing, 40n, 4n, 5n)).toThrow(/deadline is not ahead/);

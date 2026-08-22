@@ -468,13 +468,14 @@ export function applyEntry(
         throw new LedgerError("demand instant is later than the latest witnessed index");
       }
       // TIME. The window is the holder's, and it is open when it is set (§C3: "a
-      // deadline of their choosing"). A deadline not strictly ahead of the
-      // witnessed index is a window already shut: no acceptance can name a
-      // deadline at or after now and at or before it, so the demand would read
-      // as dishonoured at the index it was filed at (or, where the deadline equals
-      // it, one index later), for one signature, against any backer.
-      // The lock's creation rule, for the same reason — and like it a refusal
-      // at the door, never a balance, so a replay (no clock) stays exact.
+      // deadline of their choosing"). A deadline behind the witnessed index could
+      // never be answered — an acceptance's deadline is at or after now and at or
+      // before the demand's — so the demand would read as dishonoured from the
+      // index it was filed at, for one signature, against any backer. A deadline
+      // AT the filing index could be answered at that same index and nowhere
+      // after it; it is refused too, as a lock's timeout at its own creation is
+      // (24c): the same index is not a window. Like every TIME rule a refusal at
+      // the door, never a balance, so a replay (no clock) stays exact.
       if (clock !== undefined && entry.deadline <= clock) {
         throw new LedgerError("demand deadline is not ahead of the witnessed index");
       }
