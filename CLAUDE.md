@@ -102,11 +102,18 @@ the rule still stands.
   (`committedInTime`: the sequencer before it co-signs a withdrawal, on the
   submit path and the gap path alike, and the verifier's gap fold). Exactly one
   exit is open at every index **per record**, as for a demand on its acceptance
-  (a set of records can have both closed, within the holder's own declared
-  window). A lock and a demand never share a hash on one backing, and a bundle
+  (a set of records can have both closed within the holder's own declared
+  window — and then **re-prepare is the holder's move**: an expired leg is
+  withdrawn, alone and past its timeout, and locked again under the standing
+  demand through `submitLegs`, by the checks the legs passed at filing, so the
+  holder is never stuck — §C3's "a demand outlives its locks"). A lock and a
+  demand never share a hash on one backing, and a bundle
   lock is prepared only where the sequencer can read the commits it may settle
   on and only for an attempt the record does not already show committed (a set
-  leg names no venue, needs none, and comes only with its set). Every TIME
+  leg names no venue, needs none, and comes only with its set — at filing, or
+  re-prepared for a standing demand by its holder). A demand's deadline, like a
+  lock's timeout, is strictly ahead of the witnessed index at filing, or the
+  window is shut before it opens. Every TIME
   rule is a refusal and never a balance, because the clock is undefined on a
   replay and a lock that freed its own units would make an honest history
   unreplayable. Quantities are whole
@@ -332,6 +339,12 @@ for speed anywhere else; this is a reference implementation, not a product.
 - **Regression-review the fixes.** After fixing review findings, review the
   fixes themselves. Every round so far has found a real bug there, and the
   recurring shape is a fix that bounded one input and left the other open.
+- **A refusal added at a door names the honest path it leaves open, and a test
+  walks it.** Slice 26 closed a stranger's door and the holder's re-prepare with
+  it; the regression review asked "what else does this refuse?" only about
+  strangers. A door closed to one party is a door closed to everyone who used it.
+- **A test's name is a claim the test must exercise.** A test titled "can be
+  relocked" that never relocks is how a behaviour retires unnoticed.
 - **Explain, don't just produce.** Bob is learning TypeScript and git. When
   asked to explain, walk through the code in plain language. Prefer readable
   code over clever code everywhere.

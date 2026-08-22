@@ -16,6 +16,70 @@ Format:
 
 ---
 
+## 2026-08-22 - Slice 27: a demand outlives its locks, and a window is open when it is set
+
+**Question:** found double-checking the merged code before this session's plan,
+and proven by two scratch runs (`review-demand-outlives-locks.mjs`,
+`review-past-deadline-demand.mjs`). §C3: "the timeout ends the atomic attempt,
+the deadline governs evidence, and a demand outlives its locks" — an expired
+attempt is a retry. Slice 26's squat fixes closed both doors a holder would
+re-prepare through: `submitLock` refuses `NO_DECISION_VENUE` (the bare door) and
+the gate refuses a named venue under a standing demand's hash. So past a leg's
+timeout the demand could only be withdrawn and re-filed — losing its instant,
+which is the value a demand fixes ("the payout is fixed at the demand's instant
+up to the deadline") — and under a live acceptance not even that: release
+refused at the leg, withdrawal refused at the head, the holder stuck until the
+acceptance expired. 24c had recorded that window as "known and accepted"
+*because* "the leg-alone withdrawal plus relock is the set-level exit", and 26
+removed the relock without noticing; the test titled "the demand outlives its
+locks, and can be relocked" never relocked.
+
+And: the law refuses a lock whose timeout is not strictly ahead of the witnessed
+index, but accepted a demand whose deadline was already past. Such a demand can
+never be answered (an acceptance's deadline must be at or after now and at or
+before the demand's), so it read as `isDishonoured` one index later, for one
+signature, against any backer.
+
+**Decisions (Bob approved the plan as proposed):**
+
+- **Re-prepare is a door, `submitLegs`.** The demand's holder locks any subset
+  of R(b)'s legs again under a standing demand, through exactly the checks
+  `legSet` applies at filing — the set's terms, the demand holder's own units,
+  no decision venue, one of R(b)'s targets, none twice — and the law refuses a
+  slot that stands, so which legs lapsed is the record's to say. A stranger's
+  lock fails the terms, so slice 26's squat doors stay shut: the same lock bytes
+  are refused at `submitLock` and taken at `submitLegs`, because the door is the
+  set, not the bytes. **One leg at a time**, each its own reservation, receipt
+  and repeat (invariant 26): nothing has to hold together, since the demand
+  already stands and a standing leg is the holder's own units.
+- **The holder is never stuck**, and a test says so: at every index one of
+  release, withdrawal, or re-prepare-then-release is open — the set-level form
+  of "exactly one exit is open at every index" (per record since 24c). Leg
+  timeout 40, acceptance 90, demand 100: release to 40, re-prepare-then-release
+  to 90, withdrawal after.
+- **The acceptance is not bounded by the legs' timeouts** — 24c's recorded
+  refinement, considered and not taken. §C3 wants timeout and deadline to
+  differ, with retry as the answer; the backer reads `accompanimentOf`, timeouts
+  visible, before choosing its deadline, and its paying lock must outlast its
+  answer already. With re-prepare the window that refinement would have closed
+  is gone.
+- **A demand's deadline is strictly ahead of the witnessed index at filing**, a
+  TIME rule in the law beside the lock's: a refusal and never a balance, so the
+  gap path inherits it at the venue's stamp (pinned) and a replay with no clock
+  keeps the history (pinned — the convention every TIME rule follows). Strictly,
+  as the lock's: a zero-length window is no window.
+- `legSet` returns its items in name order, so a set's identity — the receipt
+  key is its first item — does not depend on the order a caller listed it in.
+
+**Procedure, added to CLAUDE.md:** a refusal added at a door names the honest
+path it leaves open, and a test walks it; and a test's name is a claim the test
+must exercise.
+
+**Spec change:** none needed. §C3 says "a demand outlives its locks" and the
+code now follows; "a deadline of their choosing" and "a five-minute window is
+worthless evidence" already presume an open one, and refusing a shut one at
+filing is the implementation's reading.
+
 ## 2026-08-22 - Slice 26: a payout paying in claims settles inside the settlement
 
 **Question:** §C3. "A payout paying in claims settles as a swap inside the
@@ -93,7 +157,7 @@ the demand's hash cannot hold both the holder's leg and the backer's payout; the
   is refused at the gate: a demand's hash is its set's. (The 24c junk-relock and
   leg-slot squat tests now end at that gate.) And the bare door: `submitLock`
   refuses a lock naming no decision venue, since a set leg comes only with its
-  set — found regression-reviewing the fixes, where a bare leg-shaped lock slipped
+  set *[Slice 27: or re-prepared for a standing demand by its holder, `submitLegs` — the holder's door these fixes had closed]* — found regression-reviewing the fixes, where a bare leg-shaped lock slipped
   past the gate's skip for legs and squatted the slot. Regression-reviewing those
   fixes found the squat's other side — BEFORE the demand exists, by anyone who
   predicts the hash — so filing refuses a demand whose paying slot already holds a
@@ -262,7 +326,7 @@ per record and not per set: with the lock timeout past and an acceptance still
 live, release is refused at the leg and withdrawal at the head; with the
 acceptance expired and the timeout not yet reached, neither is open either.
 Both sit inside the holder's own declared window, and the leg-alone withdrawal
-plus relock is the set-level exit. The gap path reads the set one record at a
+plus relock is the set-level exit *[Superseded 2026-08-22: slice 26 refused that relock at both doors, and slice 27 reopens it for the demand's own holder as `submitLegs`, so the holder is never stuck]*. The gap path reads the set one record at a
 time, so a set withdrawal published early lands the head and leaves the leg to
 its timeout — pinned in c3-lock-timeout so the shape is known. A refinement
 that would remove the first window, **an acceptance may not outlast the set's
@@ -483,6 +547,8 @@ deleting.
   was already that, which is why the exit itself needed nothing new.
   *[Corrected 2026-08-21 in 24c: the exit needed one thing new, a floor —
   withdrawal opens only past the timeout.]*
+  *[And 2026-08-22 in slice 27: the RETRY needed a door as well — slice 26's
+  squat fixes had closed re-prepare — which is `submitLegs`.]*
 
 - **At the timeout is inside it, one past is not** — §C3's own predicate, "was a
   valid release witnessed at or before the lock timeout?"
