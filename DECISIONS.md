@@ -37,26 +37,34 @@ locks, and can be relocked" never relocked.
 And: the law refuses a lock whose timeout is not strictly ahead of the witnessed
 index, but accepted a demand whose deadline was already past. Such a demand can
 never be answered (an acceptance's deadline must be at or after now and at or
-before the demand's), so it read as `isDishonoured` one index later, for one
+before the demand's), so it read as `isDishonoured` at the index it was filed
+at (one index later where the deadline equalled it), for one
 signature, against any backer.
+
 
 **Decisions (Bob approved the plan as proposed):**
 
 - **Re-prepare is a door, `submitLegs`.** The demand's holder locks any subset
-  of R(b)'s legs again under a standing demand, through exactly the checks
+  of R(b)'s legs again under a standing demand, through every per-leg check
   `legSet` applies at filing — the set's terms, the demand holder's own units,
-  no decision venue, one of R(b)'s targets, none twice — and the law refuses a
-  slot that stands, so which legs lapsed is the record's to say. A stranger's
-  lock fails the terms, so slice 26's squat doors stay shut: the same lock bytes
-  are refused at `submitLock` and taken at `submitLegs`, because the door is the
-  set, not the bytes. **One leg at a time**, each its own reservation, receipt
-  and repeat (invariant 26): nothing has to hold together, since the demand
-  already stands and a standing leg is the holder's own units.
-- **The holder is never stuck**, and a test says so: at every index one of
-  release, withdrawal, or re-prepare-then-release is open — the set-level form
-  of "exactly one exit is open at every index" (per record since 24c). Leg
-  timeout 40, acceptance 90, demand 100: release to 40, re-prepare-then-release
-  to 90, withdrawal after.
+  no decision venue, one of R(b)'s targets, none twice; filing's completeness
+  check is the one it drops, since a re-prepare names the lapsed legs and not
+  the set — and the law refuses a slot that stands, so which legs lapsed is the
+  record's to say. A stranger's lock fails the terms, so slice 26's squat doors
+  stay shut: the same lock bytes are refused at `submitLock` and taken at
+  `submitLegs`, because the door is the set, not the bytes. **One leg at a
+  time**, each its own reservation, receipt and repeat (invariant 26): nothing
+  has to hold together, since the demand already stands and a standing leg is
+  the holder's own units.
+- **No window remains in which the backer's choices close every exit**, and a
+  test says so at every boundary of the holder's window (and a scratch run at
+  every index): exactly one of release, withdrawal, or re-prepare-then-release
+  is open — the set-level form of "exactly one exit is open at every index"
+  (per record since 24c). Leg timeout 40, acceptance 90, demand 100: release to
+  40, re-prepare-then-release to 90, withdrawal after. The one bound left is the
+  timeout the holder signs itself: a re-prepare (or a filing) with a leg timeout
+  past the demand's own deadline waits for that timeout, which is the holder's
+  own term and nobody else's.
 - **The acceptance is not bounded by the legs' timeouts** — 24c's recorded
   refinement, considered and not taken. §C3 wants timeout and deadline to
   differ, with retry as the answer; the backer reads `accompanimentOf`, timeouts
@@ -68,18 +76,29 @@ signature, against any backer.
   gap path inherits it at the venue's stamp (pinned) and a replay with no clock
   keeps the history (pinned — the convention every TIME rule follows). Strictly,
   as the lock's: a zero-length window is no window.
-- `legSet` returns its items in name order, so a set's identity — the receipt
-  key is its first item — does not depend on the order a caller listed it in.
+- `legSet` now maps over the caller's list rather than over R(b), so it sorts
+  by leg name to keep what mapping over the canonical reliance list gave for
+  free: the entries are applied — and `submitLegs`' receipts returned — in one
+  order whatever order a caller listed them in. (The receipt key of a filing is
+  the demand, which is prepended; leg order never reached it.)
 
 **Procedure, added to CLAUDE.md:** a refusal added at a door names the honest
 path it leaves open, and a test walks it; and a test's name is a claim the test
 must exercise.
 
-**Spec change:** none needed. §C3 says "a demand outlives its locks" and the
-code now follows; "a deadline of their choosing" and "a five-minute window is
-worthless evidence" already presume an open one, and refusing a shut one at
-filing is the implementation's reading.
-
+**Spec change: one sentence proposed, not yet made.** §C3 says "a demand
+outlives its locks" and "Refiling recovers nothing", and the code now follows —
+re-prepare rather than re-file. The deadline rule is the implementation's own
+reading of a silence: "a five-minute window is worthless evidence, thirty
+unanswered days damning" says a short window is permitted and prices as weak,
+not that a shut one is refused, and no invariant constrains the deadline (24
+constrains the instant). So a note is warranted rather than assumed, drafted for
+§C3's "The window is the holder's" paragraph: *"The deadline is strictly ahead of
+the witnessed index the demand is filed at: a short window is the holder's to
+set and reads as weak evidence; one already closed is not a term at all, since
+no acceptance could name a deadline both at or after filing and at or before the
+demand's, so the demand would be unanswerable and read as dishonoured from the
+index it was filed at."* Bob's call whether it goes upstream.
 ## 2026-08-22 - Slice 26: a payout paying in claims settles inside the settlement
 
 **Question:** §C3. "A payout paying in claims settles as a swap inside the

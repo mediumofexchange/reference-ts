@@ -745,38 +745,49 @@ describe("§C3: a demand outlives its locks, so an expired attempt is a retry", 
   // past a leg's timeout the set could neither settle nor, under a live
   // acceptance, be withdrawn. `submitLegs` is the holder's door back in, through
   // the checks the legs passed at filing.
-  it("the holder is never stuck: at every index one of release, withdrawal or re-prepare-then-release is open", () => {
+  it("at every boundary of the holder's window exactly one of release, withdrawal or re-prepare-then-release is open", () => {
     // The set-level form of "exactly one exit is open at every index". Leg
-    // timeout 40, acceptance deadline 90, demand deadline 100. Before the slice
-    // the holder was stuck in (40, 90]: release refused at the leg, withdrawal
-    // refused at the head, and no door to re-prepare.
-    for (const at of [0n, 39n, 40n, 41n, 65n, 89n, 90n, 91n, 100n, 101n]) {
-      const { venue, sequencer, eur, gold } = setup();
-      const { hash } = file(sequencer, venue, eur, gold, 40n);
-      accept(sequencer, eur, hash, 90n);
-      advanceWitnessedIndex(venue, at);
-      let move = "stuck";
-      if (tryMove(() => releaseSet(sequencer, eur, gold, hash))) move = "release";
-      else if (tryMove(() => withdrawSet(sequencer, eur, gold, hash))) move = "withdraw";
-      else if (
-        tryMove(() => {
-          withdrawLeg(sequencer, gold, hash);
-          relock(sequencer, eur, gold, hash, at + 10n);
-          releaseSet(sequencer, eur, gold, hash);
-        })
-      )
-        move = "re-prepare+release";
-      const expected = at <= 40n ? "release" : at <= 90n ? "re-prepare+release" : "withdraw";
-      expect([at, move]).toEqual([at, expected]);
-      // And the set moved whole, whichever way it went.
-      const settled = move !== "withdraw";
-      expect(sequencer.balance(eur, KEYS.backer)).toBe(settled ? 40n : 0n);
-      expect(sequencer.balance(gold, KEYS.backer)).toBe(settled ? 80n : 0n);
-      expect(sequencer.openDemands(eur)).toHaveLength(0);
+    // timeout 40, acceptance deadline 90, demand deadline 100; each move on its
+    // own fresh fixture, so exclusivity is what is measured and not only that
+    // some move exists. Before the slice the holder had NO move in (40, 90]:
+    // release refused at the leg, withdrawal refused at the head, no door to
+    // re-prepare. Every index 0..102 holds the same (review27-R7-3.mjs); the
+    // boundaries and their neighbours are what is run here.
+    for (const at of [0n, 1n, 39n, 40n, 41n, 42n, 89n, 90n, 91n, 92n, 99n, 100n, 101n, 102n]) {
+      const fresh = () => {
+        const f = setup();
+        const { hash } = file(f.sequencer, f.venue, f.eur, f.gold, 40n);
+        accept(f.sequencer, f.eur, hash, 90n);
+        advanceWitnessedIndex(f.venue, at);
+        return { ...f, hash };
+      };
+      const a = fresh();
+      const released = tryMove(() => releaseSet(a.sequencer, a.eur, a.gold, a.hash));
+      const b = fresh();
+      const withdrew = tryMove(() => withdrawSet(b.sequencer, b.eur, b.gold, b.hash));
+      const c = fresh();
+      const reprepared = tryMove(() => {
+        withdrawLeg(c.sequencer, c.gold, c.hash);
+        relock(c.sequencer, c.eur, c.gold, c.hash, at + 10n);
+        releaseSet(c.sequencer, c.eur, c.gold, c.hash);
+      });
+      expect([at, released, withdrew, reprepared]).toEqual([at, at <= 40n, at > 90n, at > 40n && at <= 90n]);
+      // And whichever moved, the set moved whole.
+      for (const [f, settled] of [[a, released], [c, reprepared]] as const) {
+        if (!settled) continue;
+        expect(f.sequencer.balance(f.eur, KEYS.backer)).toBe(40n);
+        expect(f.sequencer.balance(f.gold, KEYS.backer)).toBe(80n);
+        expect(f.sequencer.openDemands(f.eur)).toHaveLength(0);
+      }
+      if (withdrew) {
+        expect(b.sequencer.balance(b.eur, KEYS.backer)).toBe(0n);
+        expect(b.sequencer.availableBalance(b.gold, KEYS.alice)).toBe(200n);
+        expect(b.sequencer.openDemands(b.eur)).toHaveLength(0);
+      }
     }
   });
 
-  it("re-prepare is read against the set's terms exactly as filing was", () => {
+  it("re-prepare reads each leg against the set's terms exactly as filing did", () => {
     const { venue, sequencer, eur, gold } = setup();
     const { hash } = file(sequencer, venue, eur, gold, 40n);
     venue.advance(TIMEOUT + 1n);
@@ -930,11 +941,13 @@ describe("§C3: a demand outlives its locks, so an expired attempt is a retry", 
 });
 
 describe("§C3: a demand's window is open when it is set, on the gap path as at the door", () => {
-  it("a demand published in a gap with a deadline not ahead of its witnessed index is not adopted", () => {
-    // The law's TIME rule (invariant-27.presentation), read at the venue's stamp:
-    // `adopt` and the verifier's fold apply the same applyEntry at the same
-    // clock, so neither takes it. A demand with its window open, published in
-    // the same gap, is adopted as before — the rule is no wider than its reason.
+  it("a demand published in a gap with a deadline not ahead of its witnessed index is not adopted, and the verifier agrees", () => {
+    // The law's TIME rule (invariant-27.presentation), read at the venue's
+    // STAMP and not at the index the operator returns: a demand stamped 30 with
+    // deadline 35 is adopted at 40, one with deadline 30 is not. `adopt` and the
+    // verifier's fold apply one applyEntry at one clock, so a release chain
+    // behind the shut demand settles nothing for either reader, and the open
+    // one settles for both.
     const f = gapGold();
     f.sequencer.commit();
     f.venue.advance(30n);
@@ -949,15 +962,40 @@ describe("§C3: a demand's window is open when it is set, on the gap path as at 
         nonce: op.nonce,
         signature: ed25519.sign(encodeDemand(op), SECRETS.alice),
       });
-      return demandHash(op);
+      return { hash: demandHash(op), instant: op.instant };
     };
-    const shut = publish(30n, 0n); // deadline AT the witnessed index: shut
-    const open = publish(200n, 0n); // same nonce, window open
+    const shut = publish(30n, 0n); // deadline AT the stamp: shut
+    const open = publish(35n, 0n); // same nonce, window open at the stamp, shut by the time the operator returns
     f.venue.advance(1n);
+    // The backer answers, and the holder releases, both in the gap — once for each.
+    for (const d of [shut, open]) {
+      const answer = { backing: f.gold, demandHash: d.hash, instant: d.instant, deadline: 34n, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
+      f.venue.publishOp(f.gold.name, {
+        kind: "acceptance",
+        demandHash: d.hash,
+        instant: answer.instant,
+        deadline: answer.deadline,
+        nonce: answer.nonce,
+        signature: ed25519.sign(encodeAcceptance(answer), SECRETS.backer),
+      });
+      const settle = { backing: f.gold, demandHash: d.hash, nonce: 1n };
+      f.venue.publishOp(f.gold.name, {
+        kind: "release",
+        demandHash: d.hash,
+        nonce: settle.nonce,
+        signature: ed25519.sign(encodeRelease(settle), SECRETS.alice),
+      });
+    }
+    const served = { snapshots: f.sequencer.snapshot(), commitment: f.venue.latestFor(KEYS.operator)! };
+    // The verifier: one redemption, the open demand's.
+    const redemptions = snapshotRedemptions(f.venue, f.gold, served);
+    expect(redemptions).toHaveLength(1);
+    expect(redemptions[0]?.demandHash).toEqual(open.hash);
+    // The operator, returning at 40: the same, at the stamp the publications carried.
+    advanceWitnessedIndex(f.venue, 40n);
     f.sequencer.commit();
-    const standing = f.sequencer.openDemands(f.gold);
-    expect(standing).toHaveLength(1);
-    expect(standing[0]?.hash).toEqual(open);
-    expect(standing.some((d) => compareBytes(d.hash, shut) === 0)).toBe(false);
+    expect(f.sequencer.openDemands(f.gold)).toHaveLength(0);
+    expect(f.sequencer.balance(f.gold, KEYS.backer)).toBe(40n);
+    expect(f.sequencer.balance(f.gold, KEYS.alice)).toBe(160n);
   });
 });

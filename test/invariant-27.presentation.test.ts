@@ -1,4 +1,5 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import { describe, expect, it } from "vitest";
 import { acceptanceIsLive, isDishonoured, LedgerError, replayLog, TransparentLedger } from "../src/ledger.js";
 import { encodeBurn, encodeIssuance, encodeTransfer } from "../src/messages.js";
@@ -449,7 +450,8 @@ describe("§C3: the window is the holder's, and it is open when it is set", () =
   // deadline marks when non-payment becomes a public fact." A deadline not ahead
   // of the filing index is a window already shut: no acceptance can name a
   // deadline at or after now and at or before it, so the demand reads as
-  // dishonoured one index later, for one signature, against any backer
+  // dishonoured at the index it was filed at — or, where the deadline equals
+  // it, one index later — for one signature, against any backer
   // (review-past-deadline-demand.mjs). The lock has had the same rule since 24a
   // — a timeout not strictly ahead of the witnessed index is refused at creation
   // — and the demand gets it here, as a TIME rule: a refusal and never a
@@ -457,13 +459,14 @@ describe("§C3: the window is the holder's, and it is open when it is set", () =
   // exact.
   it("refuses a demand whose deadline is behind the witnessed index", () => {
     const { ledger, backing } = setup();
-    expect(() => present(ledger, backing, 40n, 4n, 5n)).toThrow(/deadline/);
+    expect(() => present(ledger, backing, 40n, 4n, 5n)).toThrow(/deadline is not ahead/);
     expect(ledger.openDemands(backing)).toHaveLength(0);
   });
 
   it("and one whose deadline is the witnessed index: a zero-length window is no window", () => {
     const { ledger, backing } = setup();
-    expect(() => present(ledger, backing, 40n, 5n, 5n)).toThrow(/deadline/);
+    expect(() => present(ledger, backing, 40n, 5n, 5n)).toThrow(/deadline is not ahead/);
+    expect(ledger.openDemands(backing)).toHaveLength(0);
   });
 
   it("one index ahead is the holder's shortest window, and it stands", () => {
@@ -496,6 +499,7 @@ describe("§C3: the window is the holder's, and it is open when it is set", () =
       signature: ed25519.sign(encodeDemand(op), SECRETS.alice),
       position: ledger.opLog(backing).length,
     };
-    expect(replayLog(backing, [...ledger.opLog(backing), entry])).toBeDefined();
+    const state = replayLog(backing, [...ledger.opLog(backing), entry]);
+    expect(state?.demands.get(bytesToHex(demandHash(op)))?.deadline).toBe(4n);
   });
 });

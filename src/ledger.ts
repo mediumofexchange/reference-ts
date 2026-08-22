@@ -471,7 +471,8 @@ export function applyEntry(
       // deadline of their choosing"). A deadline not strictly ahead of the
       // witnessed index is a window already shut: no acceptance can name a
       // deadline at or after now and at or before it, so the demand would read
-      // as dishonoured one index later, for one signature, against any backer.
+      // as dishonoured at the index it was filed at (or, where the deadline equals
+      // it, one index later), for one signature, against any backer.
       // The lock's creation rule, for the same reason — and like it a refusal
       // at the door, never a balance, so a replay (no clock) stays exact.
       if (clock !== undefined && entry.deadline <= clock) {
