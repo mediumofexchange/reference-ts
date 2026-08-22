@@ -2,6 +2,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { replayLog } from "../src/ledger.js";
+import { compareBytes } from "../src/bytes.js";
 import { snapshotRedemptions } from "../src/recovery.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import {
@@ -129,6 +130,47 @@ function withdrawSet(sequencer: Sequencer, eur: Backing, gold: Backing, hash: Ui
   ]);
 }
 
+/** Alice withdraws her GOLD leg alone — open only past its timeout (24c). */
+function withdrawLeg(sequencer: Sequencer, gold: Backing, hash: Uint8Array) {
+  const leg = { backing: gold, demandHash: hash, nonce: sequencer.nextNonce(KEYS.alice, gold) };
+  return sequencer.submitWithdrawal(leg, ed25519.sign(encodeWithdrawal(leg), SECRETS.alice));
+}
+
+/** Alice re-prepares the GOLD leg of her standing demand, with a fresh timeout. */
+function relock(
+  sequencer: Sequencer,
+  eur: Backing,
+  gold: Backing,
+  hash: Uint8Array,
+  timeout: bigint,
+  quantity = 80n,
+) {
+  const lock: LockOp = {
+    backing: gold,
+    attemptId: hash,
+    holder: KEYS.alice,
+    beneficiary: KEYS.backer,
+    quantity,
+    timeout,
+    decisionVenue: NO_DECISION_VENUE,
+    parties: [KEYS.alice],
+    nonce: sequencer.nextNonce(KEYS.alice, gold),
+  };
+  return sequencer.submitLegs(eur, hash, [
+    { op: lock, signature: ed25519.sign(encodeLock(lock), SECRETS.alice) },
+  ]);
+}
+
+/** Whether a move the holder tries is accepted; a refusal is an answer, not a failure. */
+function tryMove(move: () => void): boolean {
+  try {
+    move();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe("§C3: the lock timeout ends the atomic attempt", () => {
   it("settles inside the timeout", () => {
     const { venue, sequencer, eur, gold } = setup();
@@ -162,7 +204,10 @@ describe("§C3: the lock timeout ends the atomic attempt", () => {
   it("the demand outlives its locks, and can be relocked", () => {
     // §C3: "the timeout ends the atomic attempt, the deadline governs evidence,
     // and a demand outlives its locks." So an expired attempt is a retry, not a
-    // lost demand — the whole point of the timeout being separate.
+    // lost demand — the whole point of the timeout being separate. The retry is
+    // re-prepare: the expired leg is withdrawn (the holder's alone, past its
+    // timeout) and locked again under the standing demand, and the set settles
+    // against the acceptance that was live all along.
     const { venue, sequencer, eur, gold } = setup();
     const { hash } = file(sequencer, venue, eur, gold, 40n);
     accept(sequencer, eur, hash);
@@ -172,6 +217,13 @@ describe("§C3: the lock timeout ends the atomic attempt", () => {
     // The demand still stands, and its units are still committed to it.
     expect(sequencer.openDemands(eur)).toHaveLength(1);
     expect(sequencer.availableBalance(eur, KEYS.alice)).toBe(160n);
+
+    withdrawLeg(sequencer, gold, hash);
+    relock(sequencer, eur, gold, hash, 95n);
+    releaseSet(sequencer, eur, gold, hash);
+    expect(sequencer.balance(gold, KEYS.backer)).toBe(80n);
+    expect(sequencer.balance(eur, KEYS.backer)).toBe(40n);
+    expect(sequencer.openDemands(eur)).toHaveLength(0);
   });
 });
 
@@ -678,5 +730,234 @@ describe("§C2b: what a gap still takes for a set with legs", () => {
     venue.advance(1n);
     sequencer.commit();
     expect(sequencer.openDemands(eur)[0]?.acceptedDeadline).toBe(90n);
+  });
+});
+
+describe("§C3: a demand outlives its locks, so an expired attempt is a retry", () => {
+  // "The lock timeout... is not the demand's deadline: the timeout ends the
+  // atomic attempt, the deadline governs evidence, and a demand outlives its
+  // locks." A lapsed attempt is re-prepared, not re-filed: re-filing would cost
+  // the demand its instant, which is the value it fixes ("the payout is fixed at
+  // the demand's instant up to the deadline").
+  //
+  // Slice 26 closed both doors a stranger could squat a leg slot through, and
+  // the holder's own re-prepare went with them (review-demand-outlives-locks.mjs):
+  // past a leg's timeout the set could neither settle nor, under a live
+  // acceptance, be withdrawn. `submitLegs` is the holder's door back in, through
+  // the checks the legs passed at filing.
+  it("the holder is never stuck: at every index one of release, withdrawal or re-prepare-then-release is open", () => {
+    // The set-level form of "exactly one exit is open at every index". Leg
+    // timeout 40, acceptance deadline 90, demand deadline 100. Before the slice
+    // the holder was stuck in (40, 90]: release refused at the leg, withdrawal
+    // refused at the head, and no door to re-prepare.
+    for (const at of [0n, 39n, 40n, 41n, 65n, 89n, 90n, 91n, 100n, 101n]) {
+      const { venue, sequencer, eur, gold } = setup();
+      const { hash } = file(sequencer, venue, eur, gold, 40n);
+      accept(sequencer, eur, hash, 90n);
+      advanceWitnessedIndex(venue, at);
+      let move = "stuck";
+      if (tryMove(() => releaseSet(sequencer, eur, gold, hash))) move = "release";
+      else if (tryMove(() => withdrawSet(sequencer, eur, gold, hash))) move = "withdraw";
+      else if (
+        tryMove(() => {
+          withdrawLeg(sequencer, gold, hash);
+          relock(sequencer, eur, gold, hash, at + 10n);
+          releaseSet(sequencer, eur, gold, hash);
+        })
+      )
+        move = "re-prepare+release";
+      const expected = at <= 40n ? "release" : at <= 90n ? "re-prepare+release" : "withdraw";
+      expect([at, move]).toEqual([at, expected]);
+      // And the set moved whole, whichever way it went.
+      const settled = move !== "withdraw";
+      expect(sequencer.balance(eur, KEYS.backer)).toBe(settled ? 40n : 0n);
+      expect(sequencer.balance(gold, KEYS.backer)).toBe(settled ? 80n : 0n);
+      expect(sequencer.openDemands(eur)).toHaveLength(0);
+    }
+  });
+
+  it("re-prepare is read against the set's terms exactly as filing was", () => {
+    const { venue, sequencer, eur, gold } = setup();
+    const { hash } = file(sequencer, venue, eur, gold, 40n);
+    venue.advance(TIMEOUT + 1n);
+    withdrawLeg(sequencer, gold, hash);
+    const leg = (over: Partial<LockOp>, secret: Uint8Array = SECRETS.alice): LockOp => ({
+      backing: gold,
+      attemptId: hash,
+      holder: KEYS.alice,
+      beneficiary: KEYS.backer,
+      quantity: 80n,
+      timeout: 95n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: sequencer.nextNonce(secret === SECRETS.alice ? KEYS.alice : KEYS.mallory, gold),
+      ...over,
+    });
+    const submit = (op: LockOp, secret: Uint8Array = SECRETS.alice) =>
+      sequencer.submitLegs(eur, hash, [{ op, signature: ed25519.sign(encodeLock(op), secret) }]);
+    // A stranger's units are not the set's accompaniment, however many.
+    expect(() => submit(leg({ holder: KEYS.mallory }, SECRETS.mallory), SECRETS.mallory)).toThrow(/holder/);
+    // Not the quantity, not the beneficiary, not a venue, not a leg R(b) does not name.
+    expect(() => submit(leg({ quantity: 79n }))).toThrow(/quantity/);
+    expect(() => submit(leg({ beneficiary: KEYS.mallory }))).toThrow(/pay/);
+    expect(() => submit(leg({ decisionVenue: venue.id }))).toThrow(/venue/);
+    expect(() => submit(leg({ backing: eur }))).toThrow(/not a reliance leg/);
+    // Not under a demand that does not stand, and not an empty set.
+    expect(() => sequencer.submitLegs(eur, new Uint8Array(32).fill(9), [])).toThrow(/no demand stands/);
+    expect(() => sequencer.submitLegs(eur, hash, [])).toThrow(/at least one leg/);
+    // Nothing above reserved anything.
+    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(200n);
+    // And the one that carries the terms is taken.
+    submit(leg({}));
+    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(120n);
+  });
+
+  it("a standing leg is not re-prepared over: the slot is the lock that stands", () => {
+    const { venue, sequencer, eur, gold } = setup();
+    const { hash } = file(sequencer, venue, eur, gold, 40n);
+    // Live or expired, a lock that stands holds its slot until it is withdrawn —
+    // the law's rule, and the only one needed.
+    expect(() => relock(sequencer, eur, gold, hash, 95n)).toThrow(/already has a lock/);
+    venue.advance(TIMEOUT + 1n);
+    expect(() => relock(sequencer, eur, gold, hash, 95n)).toThrow(/already has a lock/);
+  });
+
+  it("with two legs only the lapsed one is re-prepared, and the release still takes both", () => {
+    const venue = new LocalVenue();
+    const mk = (thing: string, reliance: { target: Uint8Array; count: bigint }[] = []) =>
+      makeBacking({
+        obligor: KEYS.backer,
+        payout: { thing, quantumExponent: -2, perUnit: 100n },
+        reliance: [...reliance].sort((a, b) => compareBytes(a.target, b.target)),
+        evidence: { setting: "transparent", operator: KEYS.operator },
+      });
+    const gold = mk("GOLD");
+    const silver = mk("SILVER");
+    const eur = mk("EUR", [
+      { target: gold.name, count: 2n },
+      { target: silver.name, count: 1n },
+    ]);
+    const sequencer = new Sequencer(SECRETS.operator, venue);
+    for (const backing of [gold, silver, eur]) {
+      sequencer.register(backing, signBacking(SECRETS.backer, backing));
+      const nonce = sequencer.nextNonce(KEYS.backer, backing);
+      sequencer.submitIssue(
+        { backing, recipient: KEYS.alice, quantity: 200n, nonce },
+        ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 200n, nonce), SECRETS.backer),
+      );
+    }
+    const demand: DemandOp = { backing: eur, holder: KEYS.alice, quantity: 40n, instant: 0n, deadline: 100n, nonce: 0n };
+    const hash = demandHash(demand);
+    const lockOn = (backing: Backing, quantity: bigint, timeout: bigint): LockOp => ({
+      backing,
+      attemptId: hash,
+      holder: KEYS.alice,
+      beneficiary: KEYS.backer,
+      quantity,
+      timeout,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: sequencer.nextNonce(KEYS.alice, backing),
+    });
+    const signed = (op: LockOp) => ({ op, signature: ed25519.sign(encodeLock(op), SECRETS.alice) });
+    // GOLD lapses at 40, SILVER runs to 200.
+    sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice), [
+      signed(lockOn(gold, 80n, 40n)),
+      signed(lockOn(silver, 40n, 200n)),
+    ]);
+    accept(sequencer, eur, hash, 90n);
+    venue.advance(41n);
+    withdrawLeg(sequencer, gold, hash);
+    sequencer.submitLegs(eur, hash, [signed(lockOn(gold, 80n, 95n))]);
+    const rel = (backing: Backing) => {
+      const op = { backing, demandHash: hash, nonce: sequencer.nextNonce(KEYS.alice, backing) };
+      return { op, signature: ed25519.sign(encodeRelease(op), SECRETS.alice) };
+    };
+    const head = rel(eur);
+    sequencer.submitRelease(head.op, head.signature, [rel(gold), rel(silver)]);
+    expect(sequencer.balance(gold, KEYS.backer)).toBe(80n);
+    expect(sequencer.balance(silver, KEYS.backer)).toBe(40n);
+    expect(sequencer.balance(eur, KEYS.backer)).toBe(40n);
+  });
+
+  it("a repeated re-prepare is answered with the prior receipt (invariant 26)", () => {
+    const { venue, sequencer, eur, gold } = setup();
+    const { hash } = file(sequencer, venue, eur, gold, 40n);
+    venue.advance(TIMEOUT + 1n);
+    withdrawLeg(sequencer, gold, hash);
+    const lock: LockOp = {
+      backing: gold,
+      attemptId: hash,
+      holder: KEYS.alice,
+      beneficiary: KEYS.backer,
+      quantity: 80n,
+      timeout: 95n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: sequencer.nextNonce(KEYS.alice, gold),
+    };
+    const legs = [{ op: lock, signature: ed25519.sign(encodeLock(lock), SECRETS.alice) }];
+    const first = sequencer.submitLegs(eur, hash, legs);
+    const again = sequencer.submitLegs(eur, hash, legs);
+    expect(again).toEqual(first);
+    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(120n);
+  });
+
+  it("the bare door stays shut while the set's door opens: one lock, two answers", () => {
+    // The same lock, signed once: through submitLock it is a leg of nothing and
+    // refused (slice 26); through submitLegs it is the standing demand's own leg
+    // and taken. The door is the set, not the bytes.
+    const { venue, sequencer, eur, gold } = setup();
+    const { hash } = file(sequencer, venue, eur, gold, 40n);
+    venue.advance(TIMEOUT + 1n);
+    withdrawLeg(sequencer, gold, hash);
+    const lock: LockOp = {
+      backing: gold,
+      attemptId: hash,
+      holder: KEYS.alice,
+      beneficiary: KEYS.backer,
+      quantity: 80n,
+      timeout: 95n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: sequencer.nextNonce(KEYS.alice, gold),
+    };
+    const signature = ed25519.sign(encodeLock(lock), SECRETS.alice);
+    expect(() => sequencer.submitLock(lock, signature)).toThrow(/bare lock/);
+    sequencer.submitLegs(eur, hash, [{ op: lock, signature }]);
+    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(120n);
+  });
+});
+
+describe("§C3: a demand's window is open when it is set, on the gap path as at the door", () => {
+  it("a demand published in a gap with a deadline not ahead of its witnessed index is not adopted", () => {
+    // The law's TIME rule (invariant-27.presentation), read at the venue's stamp:
+    // `adopt` and the verifier's fold apply the same applyEntry at the same
+    // clock, so neither takes it. A demand with its window open, published in
+    // the same gap, is adopted as before — the rule is no wider than its reason.
+    const f = gapGold();
+    f.sequencer.commit();
+    f.venue.advance(30n);
+    const publish = (deadline: bigint, nonce: bigint) => {
+      const op: DemandOp = { backing: f.gold, holder: KEYS.alice, quantity: 40n, instant: f.venue.witnessedIndex(), deadline, nonce };
+      f.venue.publishOp(f.gold.name, {
+        kind: "demand",
+        holder: op.holder,
+        quantity: op.quantity,
+        instant: op.instant,
+        deadline: op.deadline,
+        nonce: op.nonce,
+        signature: ed25519.sign(encodeDemand(op), SECRETS.alice),
+      });
+      return demandHash(op);
+    };
+    const shut = publish(30n, 0n); // deadline AT the witnessed index: shut
+    const open = publish(200n, 0n); // same nonce, window open
+    f.venue.advance(1n);
+    f.sequencer.commit();
+    const standing = f.sequencer.openDemands(f.gold);
+    expect(standing).toHaveLength(1);
+    expect(standing[0]?.hash).toEqual(open);
+    expect(standing.some((d) => compareBytes(d.hash, shut) === 0)).toBe(false);
   });
 });

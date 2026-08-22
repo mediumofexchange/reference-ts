@@ -467,6 +467,16 @@ export function applyEntry(
       if (clock !== undefined && entry.instant > clock) {
         throw new LedgerError("demand instant is later than the latest witnessed index");
       }
+      // TIME. The window is the holder's, and it is open when it is set (§C3: "a
+      // deadline of their choosing"). A deadline not strictly ahead of the
+      // witnessed index is a window already shut: no acceptance can name a
+      // deadline at or after now and at or before it, so the demand would read
+      // as dishonoured one index later, for one signature, against any backer.
+      // The lock's creation rule, for the same reason — and like it a refusal
+      // at the door, never a balance, so a replay (no clock) stays exact.
+      if (clock !== undefined && entry.deadline <= clock) {
+        throw new LedgerError("demand deadline is not ahead of the witnessed index");
+      }
       if (spendable(state, entry.holder) < entry.quantity) {
         throw new LedgerError("insufficient balance");
       }

@@ -480,8 +480,37 @@ export class Sequencer {
     }
     return this.submit([
       { backing, op: demand },
-      ...this.legSet(backing, demandHash(op), op.holder, op.quantity, legs),
+      ...this.legSet(backing, demandHash(op), op.holder, op.quantity, legs, "all"),
     ]);
+  }
+
+  /**
+   * §C3's **prepare, again, for a standing demand**: "the timeout ends the
+   * atomic attempt, the deadline governs evidence, and a demand outlives its
+   * locks." A lapsed attempt is re-prepared rather than re-filed — re-filing
+   * would cost the demand its instant, which is the value it fixes. The holder
+   * withdraws the expired leg (theirs alone, past its timeout) and locks again
+   * under the demand's hash, through the checks the legs passed at filing:
+   * the set's terms, the demand holder's own units, no decision venue. A
+   * stranger's lock fails the terms, so slice 26's squat doors stay shut.
+   *
+   * **One leg at a time**, each its own reservation, receipt and repeat
+   * (invariant 26): nothing here has to hold together, since the demand already
+   * stands and a leg that stands is the holder's own units. Which legs lapsed is
+   * the record's to say — the law refuses a slot that stands — so submit the
+   * ones that did.
+   */
+  submitLegs(
+    backing: Backing,
+    hash: Uint8Array,
+    legs: readonly { readonly op: LockOp; readonly signature: Uint8Array }[],
+  ): Receipt[] {
+    const demanded = this.served(backing);
+    const demand = this.ledger.demandOf(demanded, hash);
+    if (demand === undefined) throw new SequencerError("no demand stands under that hash on this backing");
+    return this.legSet(demanded, hash, demand.holder, demand.quantity, legs, "some").map((item) =>
+      this.submit([item]),
+    );
   }
 
   /**
@@ -763,8 +792,12 @@ export class Sequencer {
   }
 
   /**
-   * The locks a demand on this backing must carry, checked against R(b) rather
-   * than taken on the caller's word.
+   * The locks a set on this backing carries, checked against R(b) rather than
+   * taken on the caller's word. `"all"` is filing: exactly one per entry in
+   * R(b). `"some"` is re-prepare (submitLegs): any non-empty subset, each one of
+   * R(b)'s legs and none twice — which legs lapsed is the record's to say, since
+   * the law refuses a slot that stands. Returned in name order, so a set's
+   * identity does not depend on the order a caller listed it in.
    */
   private legSet(
     backing: Backing,
@@ -772,27 +805,34 @@ export class Sequencer {
     holder: Uint8Array,
     quantity: bigint,
     legs: readonly { readonly op: LockOp; readonly signature: Uint8Array }[],
+    which: "all" | "some",
   ): { backing: Backing; op: PublishedOp }[] {
     const terms = this.legTerms(backing, holder, quantity);
-    if (legs.length !== terms.size) {
+    if (which === "all" && legs.length !== terms.size) {
       throw new SequencerError("a demand must lock every reliance leg, and only those");
     }
-    return backing.reliance.map((entry) => {
-      const supplied = legs.find(
-        (leg) => compareBytes(leg.op.backing.name, entry.target) === 0,
-      );
-      if (supplied === undefined) throw new SequencerError("a reliance leg is not locked");
-      const legBacking = this.served(supplied.op.backing);
-      if (compareBytes(supplied.op.attemptId, hash) !== 0) {
-        throw new SequencerError("a lock must name the demand it accompanies");
-      }
-      if (compareBytes(supplied.op.decisionVenue, NO_DECISION_VENUE) !== 0) {
-        throw new SequencerError("a leg names no decision venue: it settles with its set, never on a commit");
-      }
-      const why = legMismatch(supplied.op, terms.get(legBacking.nameHex) as LegTerms);
-      if (why !== undefined) throw new SequencerError(why);
-      return { backing: legBacking, op: lockEntry(supplied.op, supplied.signature) };
-    });
+    if (which === "some" && legs.length === 0) {
+      throw new SequencerError("re-preparing a set names at least one leg");
+    }
+    const seen = new Set<string>();
+    return legs
+      .map((supplied) => {
+        const legBacking = this.served(supplied.op.backing);
+        const want = terms.get(legBacking.nameHex);
+        if (want === undefined) throw new SequencerError("that backing is not a reliance leg of this demand");
+        if (seen.has(legBacking.nameHex)) throw new SequencerError("a leg is named twice");
+        seen.add(legBacking.nameHex);
+        if (compareBytes(supplied.op.attemptId, hash) !== 0) {
+          throw new SequencerError("a lock must name the demand it accompanies");
+        }
+        if (compareBytes(supplied.op.decisionVenue, NO_DECISION_VENUE) !== 0) {
+          throw new SequencerError("a leg names no decision venue: it settles with its set, never on a commit");
+        }
+        const why = legMismatch(supplied.op, want);
+        if (why !== undefined) throw new SequencerError(why);
+        return { backing: legBacking, op: lockEntry(supplied.op, supplied.signature) };
+      })
+      .sort((a, b) => compareBytes(a.backing.name, b.backing.name));
   }
 
   /**
