@@ -120,13 +120,13 @@ export function stateProvesCommitment(
   snapshots: readonly BackingSnapshot[],
   commitment: Commitment,
 ): boolean {
-  let root: Uint8Array;
+  // The whole body, not only the root: a malformed COMMITMENT threw past the
+  // guard (found by the 2026-08-22 audit).
   try {
-    root = stateRoot(snapshots);
+    return compareBytes(stateRoot(snapshots), commitment.root) === 0 && verifyCommitment(commitment);
   } catch {
     return false;
   }
-  return compareBytes(root, commitment.root) === 0 && verifyCommitment(commitment);
 }
 
 /** A served state and the commitment it must prove against — what a holder is handed. */

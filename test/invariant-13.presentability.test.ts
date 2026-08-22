@@ -171,3 +171,23 @@ describe("§C3: presentation, and where a reliance leg is reserved", () => {
     expect(replayLog(backing, [...ledger.opLog(backing), entry])).toBeDefined();
   });
 });
+
+describe("invariant 13: presentableFor is a verifier, and answers rather than throwing", () => {
+  it("a non-quantity is not presentable, with or without reliance", () => {
+    // Found by the 2026-08-22 audit: with reliance the per-leg multiplication
+    // threw "Cannot mix BigInt and other types" for a number, and a string was
+    // silently coerced in the comparisons before it. isValidQuantity, as
+    // provesHolding already asks.
+    const ledger = new TransparentLedger();
+    const a = register(ledger, SECRETS.backer, "A");
+    const b = register(ledger, SECRETS.backer, "B", [{ target: a.name, count: 2n }]);
+    give(ledger, SECRETS.backer, a, 100n, 0n);
+    give(ledger, SECRETS.backer, b, 10n, 0n);
+    const view = ledger.holdingView(KEYS.alice);
+    for (const junk of [5, "5", 0n, -1n, undefined, null]) {
+      expect(presentableFor(view, b, junk as never)).toBe(false);
+      expect(presentableFor(view, a, junk as never)).toBe(false);
+    }
+    expect(presentableFor(view, b, 5n)).toBe(true);
+  });
+});

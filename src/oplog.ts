@@ -42,6 +42,7 @@ import {
 import {
   commitMessage,
   readCommitSignatures,
+  readKeySet,
   type CommitSignature,
   writeCommitSignatures,
   encodeAcceptanceMessage,
@@ -289,13 +290,6 @@ function readQuantity(r: ByteReader): bigint {
 }
 
 /** A key set as a lock message writes it: count, then keys. Canonical form is the re-encode's to check. */
-function readKeySet(r: ByteReader): Uint8Array[] {
-  const count = r.u8();
-  const keys: Uint8Array[] = [];
-  for (let i = 0; i < count; i++) keys.push(r.raw(32));
-  return keys;
-}
-
 /**
  * Strict inverse of encodePublishedOp: accepts exactly the canonical bytes and
  * nothing else, and hands back the backing name the message names alongside the
@@ -376,7 +370,7 @@ export function decodePublishedOp(bytes: Uint8Array): {
           quantity,
           timeout,
           decisionVenue: r.raw(32),
-          parties: readKeySet(r),
+          parties: readKeySet(r, "lock parties"),
           nonce: r.u64(),
           signature,
         };

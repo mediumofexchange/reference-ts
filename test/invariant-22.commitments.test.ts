@@ -359,3 +359,15 @@ describe("invariant 22: hostile presentation entries fail the proof, never throw
     );
   });
 });
+
+describe("invariant 22: the proof never throws, whatever it is handed", () => {
+  it("a malformed commitment is a failed proof, not a crash", () => {
+    // Found by the 2026-08-22 audit: only the root computation was guarded, so a
+    // served state whose commitment was missing or whose root was not bytes
+    // threw past "Never throws".
+    const snapshots = new Sequencer(SECRETS.operator, new LocalVenue()).snapshot();
+    for (const junk of [undefined, null, {}, { root: null }, { root: 5, sequence: 1n, operator: KEYS.operator, signature: new Uint8Array(64) }]) {
+      expect(stateProvesCommitment(snapshots, junk as never)).toBe(false);
+    }
+  });
+});

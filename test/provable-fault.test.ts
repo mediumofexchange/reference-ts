@@ -217,6 +217,19 @@ describe("an operator that co-signed a history one nonce cannot hold", () => {
     expect(isDoublePosition(backing, venue, a.receipt, b.receipt)).toBe(true);
   });
 
+  it("proves one operation receipted into two positions — the mirror, and the same lie", () => {
+    // Found by the 2026-08-22 audit: a position holds one entry and a nonce
+    // admits one operation, so at most one of two receipts for one op at two
+    // positions can be true — and both verified, both covered, and the pair read
+    // as `pending` with nobody named.
+    const { a, venue } = splitBrain();
+    const twice = signReceipt(SECRETS.operator, backing.name, a.receipt.opHash, a.receipt.position + 5n);
+    expect(isDoublePosition(backing, venue, a.receipt, twice)).toBe(true);
+    expect(isDoublePosition(backing, venue, twice, a.receipt)).toBe(true);
+    // The identical receipt twice is one receipt, not a fault.
+    expect(isDoublePosition(backing, venue, a.receipt, a.receipt)).toBe(false);
+  });
+
   it("refuses a receipt paired with an operation it does not cover", () => {
     // Or anyone could pin any operator's signature to any operation.
     const { a, b, venue } = splitBrain();

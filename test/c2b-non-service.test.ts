@@ -25,7 +25,7 @@ import { KEYS, SECRETS } from "./support.js";
 // publishing and reads as perfectly live, and this is the grade that counts what
 // it stopped doing.
 
-const NON_SERVICE = { duration: 10n, count: 2, window: 100n };
+const NON_SERVICE = { duration: 10n, count: 2n, window: 100n };
 
 function setup(nonService: typeof NON_SERVICE | undefined = NON_SERVICE) {
   const venue = new LocalVenue();
@@ -78,6 +78,44 @@ describe("§C2b: non-service is counted on service, not on publication", () => {
     venue.advance(NON_SERVICE.duration + 1n);
 
     expect(isSilent(venue, backing)).toBe(false);
+    expect(unservedRequests(venue, backing, served)).toHaveLength(2);
+    expect(isNonServing(venue, backing, served)).toBe(true);
+  });
+
+  it("a junk lock publication at the venue does not erase the grade", () => {
+    // Found by the 2026-08-22 audit: a lock record could not be decoded, so one
+    // publication of one — by anyone, the operator being graded included — made
+    // every read of the backing's record fail, and behind `answering` the grade
+    // read false. The record must stay readable whatever is filed against it.
+    const { venue, sequencer, backing } = setup();
+    const served = servedBy(sequencer);
+    venue.publishOp(backing.name, request(backing, 10n, 0n));
+    venue.publishOp(backing.name, request(backing, 20n, 1n));
+    const junk = {
+      backing,
+      attemptId: new Uint8Array(32).fill(0x33),
+      holder: KEYS.mallory,
+      beneficiary: KEYS.mallory,
+      quantity: 1n,
+      timeout: 10_000n,
+      decisionVenue: venue.id,
+      parties: [KEYS.mallory],
+      nonce: 0n,
+    };
+    venue.publishOp(backing.name, {
+      kind: "lock",
+      attemptId: junk.attemptId,
+      holder: junk.holder,
+      beneficiary: junk.beneficiary,
+      quantity: junk.quantity,
+      timeout: junk.timeout,
+      decisionVenue: junk.decisionVenue,
+      parties: junk.parties,
+      nonce: junk.nonce,
+      signature: new Uint8Array(64),
+    });
+    venue.advance(NON_SERVICE.duration + 1n);
+    expect(venue.publishedOpsFor(backing.name)).toHaveLength(3);
     expect(unservedRequests(venue, backing, served)).toHaveLength(2);
     expect(isNonServing(venue, backing, served)).toBe(true);
   });
@@ -263,7 +301,7 @@ describe("§C2b: no calibration is policed", () => {
     // The numbers are the backer's to choose and the holder's to read. m = 0
     // says the grade stands with nothing standing, which is odd and is what it
     // says — the same latitude a zero silence duration has.
-    const { venue, sequencer, backing } = setup({ duration: 10n, count: 0, window: 100n });
+    const { venue, sequencer, backing } = setup({ duration: 10n, count: 0n, window: 100n });
     const served = servedBy(sequencer);
     expect(unservedRequests(venue, backing, served)).toEqual([]);
     expect(isNonServing(venue, backing, served)).toBe(true);

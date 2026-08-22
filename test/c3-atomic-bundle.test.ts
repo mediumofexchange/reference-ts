@@ -10,7 +10,9 @@ import {
   type LockOp,
 } from "../src/presentation.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
-import { LocalVenue } from "../src/venue.js";
+import { LocalVenue, VenueError } from "../src/venue.js";
+import { committedInTime, witnessedCommitFor } from "../src/recovery.js";
+import { replayLog } from "../src/ledger.js";
 import { advanceWitnessedIndex, KEYS, SECRETS } from "./support.js";
 
 // §C3's prepare-decide-commit, generalised to any multi-sequencer transfer.
@@ -480,5 +482,97 @@ describe("§C3: settle names what is missing", () => {
     const { venue, one, two, eur, gold } = setup();
     prepare(venue, one, two, eur, gold);
     expect(() => one.settle(eur, ATTEMPT)).toThrow(/witnessed/);
+  });
+});
+
+describe("§C3: an attempt id names one attempt on one backing, for the locks a commit can reach", () => {
+  // Found by the 2026-08-22 audit. A commit binds its attempt id and nothing
+  // else, so a signed object WITHHELD from one attempt converted a later lock
+  // under the same id and the same parties: A and B lock under X, both sign, A
+  // keeps the object; both withdraw past the timeout; B re-locks under X (24c
+  // forbade only an id the VENUE showed committed); A publishes, and B's new
+  // lock settles against B's consent to the old attempt. The log is what says an
+  // id is spent: once a venue-naming lock under it has settled or withdrawn on
+  // a backing, no other stands there, and a retry names a fresh id.
+  it("a withheld commit from an aborted attempt converts nothing later: the id is spent on that backing", () => {
+    const { venue, one, two, eur, gold } = setup();
+    prepare(venue, one, two, eur, gold);
+    const withheld = signCommit(SECRETS.alice, ATTEMPT); // signed, never published
+    advanceWitnessedIndex(venue, TIMEOUT + 1n);
+    withdrawLock(one, eur, ATTEMPT);
+    withdrawLock(two, gold, ATTEMPT);
+    // The retry under the same id is refused by the law, on both backings.
+    const again = lockFor(two, gold, venue, 90n, ATTEMPT, 300n);
+    expect(() => two.submitLock(again, ed25519.sign(encodeLock(again), SECRETS.alice))).toThrow(
+      /already been used on this backing/,
+    );
+    // So the withheld object, published now, reaches nothing.
+    venue.publishCommit(withheld);
+    expect(() => two.settle(gold, ATTEMPT)).toThrow(/no lock for that attempt/);
+    expect(two.balance(gold, KEYS.bob)).toBe(0n);
+    expect(two.availableBalance(gold, KEYS.alice)).toBe(200n);
+  });
+
+  it("a fresh id is the retry, and a settled id is spent too", () => {
+    const { venue, one, two, eur, gold } = setup();
+    prepare(venue, one, two, eur, gold);
+    venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
+    one.settle(eur, ATTEMPT);
+    two.settle(gold, ATTEMPT);
+    const relock = lockFor(two, gold, venue, 10n, ATTEMPT, 300n);
+    expect(() => two.submitLock(relock, ed25519.sign(encodeLock(relock), SECRETS.alice))).toThrow(
+      /already been used on this backing|already committed/,
+    );
+    const fresh = new Uint8Array(32).fill(0xb8);
+    const next = lockFor(two, gold, venue, 10n, fresh, 300n);
+    two.submitLock(next, ed25519.sign(encodeLock(next), SECRETS.alice));
+    expect(two.availableBalance(gold, KEYS.alice)).toBe(100n);
+  });
+
+  it("the replay folds the same rule: a log that carries a second venue-naming lock under a spent id is not a history", () => {
+    const { venue, one, two, eur, gold } = setup();
+    prepare(venue, one, two, eur, gold);
+    advanceWitnessedIndex(venue, TIMEOUT + 1n);
+    withdrawLock(two, gold, ATTEMPT);
+    const again = lockFor(two, gold, venue, 90n, ATTEMPT, 300n);
+    const entry = {
+      kind: "lock" as const,
+      attemptId: again.attemptId,
+      holder: again.holder,
+      beneficiary: again.beneficiary,
+      quantity: again.quantity,
+      timeout: again.timeout,
+      decisionVenue: again.decisionVenue,
+      parties: again.parties,
+      nonce: again.nonce,
+      signature: ed25519.sign(encodeLock(again), SECRETS.alice),
+      position: two.opLog(gold).length,
+    };
+    expect(replayLog(gold, [...two.opLog(gold), entry])).toBeUndefined();
+    void one; void eur;
+  });
+});
+
+describe("§C3: the readers of a lock's venue never throw, and never read the wrong record", () => {
+  it("a lock naming another decision venue is a refusal for this record, not 'no commit was witnessed'", () => {
+    // Found by the 2026-08-22 audit: handed a venue the lock does not name, the
+    // reader answered false — and a verifier folded a withdrawal the operator,
+    // reading the right venue, refused.
+    const { venue, one, two, eur, gold } = setup();
+    prepare(venue, one, two, eur, gold);
+    venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
+    const lock = lockFor(two, gold, venue, 1n);
+    const record = { ...lock, nonce: 0n };
+    expect(committedInTime(venue, record)).toBe(true);
+    expect(() => committedInTime(new LocalVenue(new Uint8Array(32).fill(0x55)), record)).toThrow(VenueError);
+    void one; void eur;
+  });
+
+  it("a malformed lock record is an answer, not a throw", () => {
+    const { venue } = setup();
+    for (const junk of [undefined, null, {}, { attemptId: 5 }, { attemptId: new Uint8Array(32), parties: "x", decisionVenue: 7 }]) {
+      expect(committedInTime(venue, junk as never)).toBe(false);
+      expect(witnessedCommitFor(venue, junk as never)).toBeUndefined();
+    }
   });
 });

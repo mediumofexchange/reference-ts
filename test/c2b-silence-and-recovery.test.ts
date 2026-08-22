@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { signCommitment, stateProvesCommitment, type Commitment } from "../src/commitment.js";
 import { encodeIssuance, encodeTransfer } from "../src/messages.js";
+import { encodeLock } from "../src/presentation.js";
 import { isSilent, provesHolding, quietFor, redemptionIsOpen } from "../src/recovery.js";
 import { Sequencer } from "../src/sequencer.js";
 import { LocalVenue, type Venue } from "../src/venue.js";
@@ -269,5 +270,40 @@ describe("E declares the silence clause, so it is inside the backing's name", ()
       noCommitmentDuration: 10n,
       challengeWindow: 5n,
     });
+  });
+});
+
+describe("§C2b: a proved holding is what the law would let the holder commit", () => {
+  it("units a standing lock has spoken for are not a holding redemption can reach, and the reader says so", () => {
+    // Found by the 2026-08-22 audit: provesHolding read the raw balance where
+    // the gap walk — applying the demand leg through the law — reads spendable,
+    // so redemptionIsOpen said yes to 100 of which 20 were locked, and the fold
+    // settled nothing. One subtraction, the law's, for both.
+    const { venue, sequencer, backing } = setup();
+    const lock = {
+      backing,
+      attemptId: new Uint8Array(32).fill(0x2c),
+      holder: KEYS.alice,
+      beneficiary: KEYS.bob,
+      quantity: 20n,
+      timeout: 500n,
+      decisionVenue: venue.id,
+      parties: [KEYS.alice],
+      nonce: 0n,
+    };
+    sequencer.submitLock(lock, ed25519.sign(encodeLock(lock), SECRETS.alice));
+    const state = served(sequencer);
+    venue.advance(SILENCE.noCommitmentDuration + 1n);
+    expect(provesHolding(venue, backing, state, KEYS.alice, 80n)).toBe(true);
+    expect(provesHolding(venue, backing, state, KEYS.alice, 81n)).toBe(false);
+    expect(redemptionIsOpen(venue, backing, state, KEYS.alice, 100n)).toBe(false);
+    expect(redemptionIsOpen(venue, backing, state, KEYS.alice, 80n)).toBe(true);
+  });
+
+  it("quietFor answers for a malformed operator key rather than throwing", () => {
+    const { venue } = setup();
+    for (const junk of [undefined, null, 42, "operator", new Uint8Array(5)]) {
+      expect(() => quietFor(venue, junk as never)).not.toThrow();
+    }
   });
 });

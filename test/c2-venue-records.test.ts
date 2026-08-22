@@ -1,6 +1,6 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
-import { EncodingError } from "../src/bytes.js";
+import { compareBytes, EncodingError } from "../src/bytes.js";
 import { decodeCommitment, encodeCommitment, signCommitment } from "../src/commitment.js";
 import {
   encodeBurnMessage,
@@ -12,6 +12,10 @@ import {
   encodeDemandMessage,
   encodeReleaseMessage,
   encodeWithdrawalMessage,
+  encodeLock,
+  NO_DECISION_VENUE,
+  signCommit,
+  type LockOp,
 } from "../src/presentation.js";
 import { decodePublishedOp, encodePublishedOp, type PublishedOp } from "../src/oplog.js";
 import {
@@ -20,8 +24,8 @@ import {
   ROLE_OPERATOR,
   type Replacement,
 } from "../src/replacement.js";
-import { LocalVenue } from "../src/venue.js";
-import { KEYS, makeTransparentBacking, SECRETS } from "./support.js";
+import { LocalVenue, VenueError } from "../src/venue.js";
+import { KEYS, makeTransparentBacking, pub, SECRETS } from "./support.js";
 
 // A venue that is not a variable in this process stores **bytes** — a chain
 // stores bytes. So every record a venue holds needs a canonical encoding and a
@@ -157,5 +161,97 @@ describe("holding bytes makes copy-in copy-out structural", () => {
     venue.publishOp(backing.name, transferOp());
     (venue.publishedOpsFor(backing.name)[0]!.op as TransferOp).signature.fill(0xff);
     expect((venue.publishedOpsFor(backing.name)[0]!.op as TransferOp).signature).toEqual(transferOp().signature);
+  });
+});
+
+describe("the two record kinds the first table left out: a lock and a commit", () => {
+  // Found by the 2026-08-22 audit. `writeKeySet` wrote a lock's party list with
+  // no count while `readKeySet` read one, so a lock record could not be decoded
+  // at all — and since publishOp only encodes, one junk lock publication made
+  // every read of that backing's record throw (or, behind `answering`, answer
+  // empty: the non-service grade erased for one publication). The first table
+  // round-tripped seven kinds and never the two that slices 22–26 added.
+  const name = backing.name;
+  const attempt = new Uint8Array(32).fill(0x7a);
+  /** `n` distinct valid keys in canonical order. */
+  const parties = (n: number) =>
+    Array.from({ length: n }, (_, i) => pub(new Uint8Array(32).fill(0x10 + i))).sort(compareBytes);
+  const lockOp = (keys: readonly Uint8Array[]): PublishedOp => {
+    const op: LockOp = {
+      backing,
+      attemptId: attempt,
+      holder: KEYS.alice,
+      beneficiary: KEYS.bob,
+      quantity: 9n,
+      timeout: 77n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: keys,
+      nonce: 3n,
+    };
+    return {
+      kind: "lock",
+      attemptId: op.attemptId,
+      holder: op.holder,
+      beneficiary: op.beneficiary,
+      quantity: op.quantity,
+      timeout: op.timeout,
+      decisionVenue: op.decisionVenue,
+      parties: op.parties,
+      nonce: op.nonce,
+      signature: ed25519.sign(encodeLock(op), SECRETS.alice),
+    };
+  };
+
+  it("round-trips a lock with one, two and sixteen parties, and a commit", () => {
+    for (const n of [1, 2, 16]) {
+      const op = lockOp(parties(n));
+      const bytes = encodePublishedOp(name, op);
+      const decoded = decodePublishedOp(bytes);
+      expect(decoded.op).toEqual(op);
+      expect(decoded.backingName).toEqual(name);
+      expect(encodePublishedOp(name, decoded.op)).toEqual(bytes);
+    }
+    const commit = signCommit(SECRETS.alice, attempt);
+    const op: PublishedOp = { kind: "commit", attemptId: commit.attemptId, signatures: commit.signatures };
+    const bytes = encodePublishedOp(name, op);
+    const decoded = decodePublishedOp(bytes);
+    expect(decoded.op).toEqual(op);
+    // A commit names no backing, by design (CLAUDE.md): the record says so.
+    expect(decoded.backingName).toBeUndefined();
+  });
+
+  it("a lock record has one spelling: an unsorted, repeated, empty or seventeen-key party set is refused at the venue", () => {
+    const venue = new LocalVenue();
+    const [a, b] = parties(2) as [Uint8Array, Uint8Array];
+    for (const keys of [[b, a], [a, a], [], parties(17)]) {
+      // Signed over nothing: the bytes must reach the venue, whose encoder is
+      // what refuses them (signing would refuse them first, at the signer).
+      const junk = { ...lockOp(parties(1)), parties: keys, signature: new Uint8Array(64) };
+      expect(() => venue.publishOp(name, junk)).toThrow(VenueError);
+    }
+    expect(venue.publishedOpsFor(name)).toEqual([]);
+  });
+
+  it("a published lock reads back, so one lock publication cannot blind a reader to the rest of the record", () => {
+    const venue = new LocalVenue();
+    venue.publishOp(name, transferOp());
+    venue.publishOp(name, lockOp(parties(1)));
+    venue.publishOp(name, transferOp(41n, 1n));
+    const read = venue.publishedOpsFor(name);
+    expect(read.map((w) => w.op.kind)).toEqual(["transfer", "lock", "transfer"]);
+    expect(read[1]?.op).toEqual(lockOp(parties(1)));
+  });
+
+  it("a commit is filed under its attempt, never under a backing: publishOp refuses it, as an Ergo sync does", () => {
+    // A commit's message names no backing, so a record of it filed under one
+    // names a key the bytes do not carry. ErgoVenue's sync refuses a nameless
+    // operation record; the local venue now answers the same bytes the same way.
+    const venue = new LocalVenue();
+    const commit = signCommit(SECRETS.alice, attempt);
+    expect(() =>
+      venue.publishOp(name, { kind: "commit", attemptId: commit.attemptId, signatures: commit.signatures }),
+    ).toThrow(VenueError);
+    venue.publishCommit(commit);
+    expect(venue.commitsFor(attempt)).toHaveLength(1);
   });
 });

@@ -232,3 +232,24 @@ describe("§8b: an unclosed requirement is readable", () => {
     expect(closureStatus(store(x), actuallyClosed)).toBe("unreadable");
   });
 });
+
+describe("invariant 16: an answer is checked against the name it was asked for — really", () => {
+  it("a store that answers for the asked name with other terms is refused, because the name is recomputed", () => {
+    // Found by the 2026-08-22 audit. `backingName` read the stored field, so
+    // "every answer is checked against the name asked for" was a no-op: a wallet
+    // store handing back L1's object under L0's name passed every check, and
+    // closureOf emitted a closure over the substituted terms — into a name
+    // invariant 1 makes permanent. Recomputed from the fields, the lie shows.
+    const z = mk("Z");
+    const y = mk("Y", [at(z, 1n)]);
+    const x = mk("X", [at(y, 2n)]);
+    // A forgery: Z's object wearing Y's name.
+    const lie = { ...z, name: y.name, nameHex: y.nameHex } as Backing;
+    const lying: Terms = (name) => (Buffer.from(name).toString("hex") === y.nameHex ? lie : store(x, z)(name));
+    expect(closureStatus(lying, x)).toBe("unreadable");
+    expect(() => closureOf(lying, [at(x, 1n)])).toThrow(EncodingError);
+    // And the honest store still closes to {x:1, y:2, z:2}.
+    const closed = closureOf(store(x, y, z), [at(x, 1n)]);
+    expect(closed.map((e) => e.count)).toEqual(expect.arrayContaining([1n, 2n, 2n]));
+  });
+});

@@ -372,9 +372,26 @@ function validateKeySet(keys: readonly Uint8Array[], what: string): void {
   });
 }
 
+/**
+ * A key set on the wire: u8 count, then the keys — framed, as every
+ * variable-length field is (CLAUDE.md). The reader is its strict inverse and
+ * validates the same way, so a record has one spelling; the first version wrote
+ * no count and the one reader expected one, so a lock record could not be read
+ * at all (found by the 2026-08-22 audit).
+ */
 function writeKeySet(w: ByteWriter, keys: readonly Uint8Array[], what: string): void {
   validateKeySet(keys, what);
+  w.u8(keys.length);
   for (const key of keys) w.key32(key, what);
+}
+
+/** Strict inverse of writeKeySet: reads the count, the keys, and refuses any set that would not have been written. */
+export function readKeySet(r: ByteReader, what: string): Uint8Array[] {
+  const count = r.u8();
+  const keys: Uint8Array[] = [];
+  for (let i = 0; i < count; i++) keys.push(r.raw(32));
+  validateKeySet(keys, what);
+  return keys;
 }
 
 /**

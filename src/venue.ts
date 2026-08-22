@@ -305,6 +305,10 @@ export class LocalVenue implements Venue {
    * and every reader would have to handle the throw instead.
    */
   publishOp(backingName: Uint8Array, op: PublishedOp): void {
+    // A commit names no backing, so a record of it filed under one names a key
+    // the bytes do not carry; it is filed under its attempt (publishCommit), and
+    // an Ergo sync refuses the nameless record. One answer for the same bytes.
+    if (op.kind === "commit") throw new VenueError("a commit is published under its attempt, not under a backing");
     // Both halves of "can this be recorded at all" are inside one guard.
     // Encoding proves the operation names something; copying it proves every
     // field is really there — including the signature, which the canonical

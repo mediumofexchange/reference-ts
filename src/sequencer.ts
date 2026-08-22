@@ -74,6 +74,7 @@ import {
 } from "./messages.js";
 import { opHashOfEntry, type OpLogEntry, type PublishedOp } from "./oplog.js";
 import {
+  commitMessage,
   demandHash,
   legMismatch,
   NO_DECISION_VENUE,
@@ -473,7 +474,17 @@ export class Sequencer {
     // gap, and refused a byte-identical replay of the filing for the slots the
     // filing itself had filled (found regression-reviewing this slice).
     const slots = backing.reliance.map((entry) => entry.target);
-    if (paysInClaims(backing.payout)) slots.push(backing.payout.backing);
+    if (paysInClaims(backing.payout)) {
+      // §C3's single-phase is "the whole set and the paying leg inside one
+      // operator": filed without the paying leg reachable, the demand could never
+      // be answered and read as dishonoured against a backer with no path (the
+      // 2026-08-22 audit) — an abort rather than a demand nobody can answer. The
+      // honest path is filing at an operator that serves both.
+      if (!this.backings.has(bytesToHex(backing.payout.backing))) {
+        throw new SequencerError("this sequencer does not serve the paying backing: file at an operator that serves both, or the set cannot be taken in one decision");
+      }
+      slots.push(backing.payout.backing);
+    }
     const slotBackings = slots.map((slot) => this.backings.get(bytesToHex(slot))).filter((b): b is Backing => b !== undefined);
     const prior = this.priorReceipt(backing, demand);
     if (prior !== undefined) return prior;
@@ -484,9 +495,8 @@ export class Sequencer {
     // unfileable or the backer's answer impossible — a dishonour the holder could
     // manufacture, or a demand refused with the law's bare "already has a lock"
     // and no remedy named (found reviewing slice 27). Refused at filing, with the
-    // remedy: the holder re-files with a fresh nonce. The paying backing must
-    // also be one this operator serves, or the set §C3 asks it to take in one
-    // decision cannot be (the 2026-08-22 audit); that refusal lands elsewhere.
+    // remedy: the holder re-files with a fresh nonce. (The paying backing being
+    // one this operator serves is refused above, where the slots are gathered.)
     for (const held of slotBackings) {
       if (this.ledger.hasLock(held, demandHash(op))) {
         throw new SequencerError("a slot under this demand's hash is taken: re-file with a fresh nonce");
@@ -609,24 +619,22 @@ export class Sequencer {
     if (lock !== undefined && compareBytes(lock.decisionVenue, NO_DECISION_VENUE) === 0) {
       throw new SequencerError("a set leg settles with its set on the holder's release, not on a commit");
     }
-    const witnessed =
-      lock !== undefined
-        ? witnessedCommitFor(this.venue, lock)
-        : // No lock stands, so this attempt has already resolved here — or never
-          // existed. Invariant 26 wants a repeat answered with the identical
-          // prior receipt rather than refused, so the one already co-signed is
-          // what is looked for.
-          this.venue
-            .commitsFor(attemptId)
-            .find((w) => this.receipts.has(this.receiptKey(held, opHashOfEntry(held.name, asOp(w.commit)))));
+    // No lock stands: this attempt has already resolved here, or never existed.
+    // Invariant 26 wants a repeat answered with the identical prior receipt, and
+    // the receipt needs no venue to find — a commit's hash is its attempt's —
+    // so the record is asked only where there is a lock to settle, and "no lock
+    // stands" is answered in this sequencer's own voice (found by the 2026-08-22
+    // audit: a commits-refusing venue threw before that answer could be given).
+    if (lock === undefined) {
+      const prior = this.receipts.get(this.receiptKey(held, sha256(commitMessage(attemptId))));
+      if (prior !== undefined) return copyReceipt(prior);
+      throw new SequencerError("no lock for that attempt stands here");
+    }
+    const witnessed = witnessedCommitFor(this.venue, lock);
     if (witnessed === undefined) {
-      // Two answers, not one: a caller told the commit is missing would go to
-      // the venue for an object that is there.
-      throw new SequencerError(
-        lock === undefined
-          ? "no lock for that attempt stands here"
-          : "no commit for that attempt is witnessed at this venue",
-      );
+      // Two answers, not one (above and here): a caller told the commit is
+      // missing would go to the venue for an object that is there.
+      throw new SequencerError("no commit for that attempt is witnessed at this venue");
     }
     return this.submit([{ backing: held, op: asOp(witnessed.commit) }], witnessed.at);
   }
@@ -748,6 +756,13 @@ export class Sequencer {
       throw new SequencerError("that backing is a leg of this demand, not the demand it accompanies");
     }
     const head: PublishedOp = { kind, demandHash: op.demandHash, nonce: op.nonce, signature };
+    // A repeat is answered before the set's shape is read from live state: once
+    // the set applied the demand is gone, so the shape the repeat must carry no
+    // longer derives — and a partition-recovering holder was refused the one
+    // receipt that proves the settlement (invariant 26; found by the 2026-08-22
+    // audit). One lookup, the one `submit` owns.
+    const prior = this.receiptOf(backing, head);
+    if (prior !== undefined) return prior;
     const items = [{ backing, op: head }];
     // **Which legs the set has.** A release settles the accompaniment, so it
     // needs every leg R(b) names, each carrying the set's terms — the shape
@@ -999,6 +1014,18 @@ export class Sequencer {
     const prior = this.receipts.get(this.receiptKey(backing, opHashOfEntry(backing.name, op)));
     return prior === undefined ? undefined : copyReceipt(prior);
   }
+  /**
+   * The receipt this operator co-signed for an operation, or undefined if it
+   * never took it. A copy, as every receipt leaves here. This is how a set's
+   * legs and a backer's paying lock — co-signed beside the operation the caller
+   * asked for, and returned with nothing — are obtained afterwards, and how a
+   * repeat of any one of them is answered (invariant 26).
+   */
+  receiptOf(backing: Backing, op: PublishedOp): Receipt | undefined {
+    const stored = this.receipts.get(this.receiptKey(this.served(backing), opHashOfEntry(backing.name, op)));
+    return stored === undefined ? undefined : copyReceipt(stored);
+  }
+
   /**
    * The shared submit path: routing, then idempotency, then the ledger, then
    * the co-signed receipt. A replay of an accepted operation returns the

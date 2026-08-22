@@ -14,8 +14,8 @@ import {
 import { isRewrittenHistory } from "../src/fault.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import { receiptStatus } from "../src/receipt.js";
-import { isOverdue, isSilent, stateIsAuthentic } from "../src/recovery.js";
-import { encodeLock } from "../src/presentation.js";
+import { gapLegsFor, isOverdue, isSilent, snapshotRedemptions, stateIsAuthentic } from "../src/recovery.js";
+import { demandHash, encodeAcceptance, encodeDemand, encodeLock, encodeRelease } from "../src/presentation.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
 import { LocalVenue, VenueError, type Venue } from "../src/venue.js";
 import { KEYS, pub, SECRETS } from "./support.js";
@@ -542,5 +542,87 @@ describe("§C2: a retired operator still answers a repeat, and refuses a new act
     // A new act: refused.
     const fresh = { ...lock, attemptId: new Uint8Array(32).fill(0x4f), nonce: 1n };
     expect(() => incumbent.submitLock(fresh, ed25519.sign(encodeLock(fresh), SECRETS.alice))).toThrow(/not yet in force/);
+  });
+});
+
+describe("§C2: a publication is judged against the record that governed at its index", () => {
+  // Found by the 2026-08-22 audit. Both gap readers asked for the operator in
+  // force AT the publication's index and then looked strictly BEFORE it — so at
+  // the index a successor takes force it had nothing before, the quiet time
+  // read from the venue's genesis, and an orderly handover opened one gap index
+  // in which the operator adopted legs no verifier could resolve. The operator
+  // in force just before the index is whose record governed: "Until then the
+  // predecessor's last commitment governs."
+  function punctualThenHandedOver(lastCommit: bigint, handoverAt: bigint) {
+    const { venue, backing } = setup();
+    const incumbent = new Sequencer(SECRETS.operator, venue);
+    incumbent.register(backing, signBacking(SECRETS.backer, backing));
+    incumbent.submitIssue(
+      { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
+      ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
+    );
+    let served = { snapshots: incumbent.snapshot(), commitment: incumbent.commit() };
+    for (let i = 5n; i <= lastCommit; i += 5n) {
+      at(venue, i);
+      served = { snapshots: incumbent.snapshot(), commitment: incumbent.commit() };
+    }
+    at(venue, handoverAt);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, handoverAt));
+    const successor = new Sequencer(SUCCESSOR_SECRET, venue);
+    successor.register(backing, signBacking(SECRETS.backer, backing));
+    successor.takeOver(backing, served);
+    successor.commit();
+    expect(operatorAt(backing, venue, handoverAt)).toEqual(SUCCESSOR);
+    return { venue, backing, served, successor };
+  }
+  const legsAt = (venue: LocalVenue, backing: Backing, index: bigint) => {
+    const demand = { backing, holder: KEYS.alice, quantity: 40n, instant: index, deadline: index + 50n, nonce: 0n };
+    venue.publishOp(backing.name, {
+      kind: "demand",
+      holder: demand.holder,
+      quantity: demand.quantity,
+      instant: demand.instant,
+      deadline: demand.deadline,
+      nonce: demand.nonce,
+      signature: ed25519.sign(encodeDemand(demand), SECRETS.alice),
+    });
+    return demandHash(demand);
+  };
+
+  it("an orderly handover from a punctual operator opens no gap at the successor's force index", () => {
+    const { venue, backing, successor } = punctualThenHandedOver(30n, 31n);
+    legsAt(venue, backing, 31n);
+    expect(isSilent(venue, backing)).toBe(false);
+    expect(gapLegsFor(venue, backing)).toEqual([]);
+    successor.commit();
+    expect(successor.openDemands(backing)).toHaveLength(0);
+  });
+
+  it("legs published at the force index of a successor to a SILENT predecessor resolve against the predecessor's last snapshot, for the verifier as for the operator", () => {
+    const { venue, backing, served, successor } = punctualThenHandedOver(0n, 20n);
+    const hash = legsAt(venue, backing, 20n);
+    // The backer's nonce 0 went on the issuance; its answer is its next.
+    const answer = { backing, demandHash: hash, instant: 20n, deadline: 60n, nonce: 1n };
+    venue.publishOp(backing.name, {
+      kind: "acceptance",
+      demandHash: hash,
+      instant: answer.instant,
+      deadline: answer.deadline,
+      nonce: answer.nonce,
+      signature: ed25519.sign(encodeAcceptance(answer), SECRETS.backer),
+    });
+    const settle = { backing, demandHash: hash, nonce: 1n };
+    venue.publishOp(backing.name, {
+      kind: "release",
+      demandHash: hash,
+      nonce: settle.nonce,
+      signature: ed25519.sign(encodeRelease(settle), SECRETS.alice),
+    });
+    // The verifier, against the predecessor's last commitment — the record that governed.
+    expect(snapshotRedemptions(venue, backing, served)).toHaveLength(1);
+    // The operator, adopting.
+    successor.commit();
+    expect(successor.balance(backing, KEYS.backer)).toBe(40n);
+    expect(successor.openDemands(backing)).toHaveLength(0);
   });
 });

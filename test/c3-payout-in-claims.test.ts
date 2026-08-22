@@ -20,6 +20,8 @@ import { Sequencer, SequencerError } from "../src/sequencer.js";
 import { LocalVenue } from "../src/venue.js";
 import { compareBytes } from "../src/bytes.js";
 import { snapshotRedemptions } from "../src/recovery.js";
+import { replayLog } from "../src/ledger.js";
+import { receiptCovers, type Receipt } from "../src/receipt.js";
 import { advanceWitnessedIndex, KEYS, SECRETS } from "./support.js";
 
 // §C3: "A payout paying in claims settles as a swap inside the settlement. The
@@ -330,6 +332,13 @@ describe("§C3: the other doors to the payout, closed", () => {
     f.venue.publishCommit(signCommit(SECRETS.alice, hash));
     expect(() => f.sequencer.settle(f.gold, hash)).toThrow(/settles with its set/);
     expect(f.sequencer.balance(f.gold, KEYS.alice)).toBe(0n);
+    // And the LAW refuses it, not only the sequencer's settle: a served log
+    // carrying that commit against the paying lock does not replay, so a
+    // verifier never calls the payout-taken-nothing-surrendered history one
+    // that could have happened (found by the 2026-08-22 audit, twice).
+    const commit = signCommit(SECRETS.alice, hash);
+    const bare = { kind: "commit" as const, attemptId: commit.attemptId, signatures: commit.signatures };
+    expect(replayLog(f.gold, [...f.sequencer.opLog(f.gold), { ...bare, position: f.sequencer.opLog(f.gold).length }])).toBeUndefined();
     // And the backer's own exit is untouched by that object: past the timeout it withdraws.
     f.venue.advance(94n);
     const back = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
@@ -436,5 +445,99 @@ describe("§C3: the paying slot cannot be taken before the demand either", () =>
       /re-file with a fresh nonce/,
     );
     expect(f.sequencer.openDemands(f.eur)).toHaveLength(0);
+  });
+});
+
+describe("§C3: what the 2026-08-22 audit found around the paying lock", () => {
+  it("a claims-paying demand whose paying backing this operator does not serve is refused at filing", () => {
+    // §C3: single-phase is "the whole set and the paying leg inside one
+    // operator". Filed without the paying leg reachable, the demand could never
+    // be answered — every acceptance door was shut — and read as dishonoured
+    // against a backer with no path (audit A3/C4). Refused where the question is
+    // already asked, at filing: an abort rather than a demand nobody can answer.
+    const venue = new LocalVenue();
+    const other = KEYS.backer2; // another operator's key, never this sequencer's
+    const gold = makeBacking({
+      obligor: KEYS.backer,
+      payout: { thing: "GOLD", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: { setting: "transparent", operator: other },
+    });
+    const eur = makeBacking({
+      obligor: KEYS.backer,
+      payout: { backing: gold.name, perUnit: 2n },
+      reliance: [],
+      evidence: { setting: "transparent", operator: KEYS.operator },
+    });
+    const sequencer = new Sequencer(SECRETS.operator, venue);
+    sequencer.register(eur, signBacking(SECRETS.backer, eur));
+    const nonce = sequencer.nextNonce(KEYS.backer, eur);
+    sequencer.submitIssue(
+      { backing: eur, recipient: KEYS.alice, quantity: 100n, nonce },
+      ed25519.sign(encodeIssuanceMessage(eur.name, KEYS.alice, 100n, nonce), SECRETS.backer),
+    );
+    const demand: DemandOp = { backing: eur, holder: KEYS.alice, quantity: 40n, instant: 0n, deadline: DEADLINE, nonce: 0n };
+    expect(() => sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice))).toThrow(
+      /paying backing/,
+    );
+    expect(sequencer.openDemands(eur)).toHaveLength(0);
+  });
+
+  it("a repeated release of the set is answered with the prior receipt, and so is a repeated withdrawal", () => {
+    // Invariant 26: "The rule covers locks and releases, so partition recovery
+    // simply repeats the request." The set's shape was derived from live state
+    // before the receipt lookup, so a repeat found the demand gone and was
+    // refused — and the release receipt, the only evidence of the settlement
+    // outside the operator's log, was unobtainable (audit C1).
+    const f = setup();
+    const { hash } = file(f, 40n);
+    accept(f, hash, 40n);
+    const head = { backing: f.eur, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
+    const pay = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
+    const legs = [{ op: pay, signature: ed25519.sign(encodeRelease(pay), SECRETS.alice) }];
+    const signature = ed25519.sign(encodeRelease(head), SECRETS.alice);
+    const first = f.sequencer.submitRelease(head, signature, legs);
+    const again = f.sequencer.submitRelease(head, signature, legs);
+    expect(again).toEqual(first);
+    expect(f.sequencer.balance(f.gold, KEYS.alice)).toBe(80n);
+    expect(f.sequencer.balance(f.eur, KEYS.backer)).toBe(40n);
+
+    const g = setup();
+    const w = file(g, 40n);
+    const out = { backing: g.eur, demandHash: w.hash, nonce: g.sequencer.nextNonce(KEYS.alice, g.eur) };
+    const outSig = ed25519.sign(encodeWithdrawal(out), SECRETS.alice);
+    const once = g.sequencer.submitWithdrawal(out, outSig, []);
+    expect(g.sequencer.submitWithdrawal(out, outSig, [])).toEqual(once);
+    expect(g.sequencer.openDemands(g.eur)).toHaveLength(0);
+  });
+});
+
+describe("§C3: every co-signed operation's receipt can be obtained, legs and paying lock included", () => {
+  it("receiptOf returns the receipt for an operation taken beside the one the caller asked for", () => {
+    // `submit` returns the first item's receipt; the paying lock was co-signed
+    // beside the acceptance and its receipt returned to nobody, and `submitLock`
+    // refuses a set leg so no repeat could fetch it either (found by the
+    // 2026-08-22 audit). The sequencer's own record answers.
+    const f = setup();
+    const { hash } = file(f, 40n);
+    accept(f, hash, 40n);
+    const lock = {
+      kind: "lock" as const,
+      attemptId: hash,
+      holder: KEYS.backer,
+      beneficiary: KEYS.alice,
+      quantity: 80n,
+      timeout: 95n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: 1n, // the backer's GOLD nonce after its issuance
+      signature: new Uint8Array(64), // not part of the hash
+    };
+    const receipt = f.sequencer.receiptOf(f.gold, lock);
+    expect(receipt).toBeDefined();
+    expect(receipt?.operator).toEqual(KEYS.operator);
+    expect(receiptCovers(f.gold.name, lock, receipt as Receipt)).toBe(true);
+    // An operation never taken has none.
+    expect(f.sequencer.receiptOf(f.gold, { ...lock, nonce: 9n })).toBeUndefined();
   });
 });
