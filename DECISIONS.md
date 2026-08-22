@@ -16,6 +16,140 @@ Format:
 
 ---
 
+## 2026-08-22 - The audit: six angles over the merged code, what was wrong, and what is Bob's to decide
+
+**Question:** Bob asked for an audit of the merged implementation against the
+paper — six Opus angles (sets and exits; the gap path and succession; bundles,
+commits, receipts and Ergo; the law alone; the readers; encodings and
+identity), each proving its findings by a scratch run (`audit-?-n.mjs`). The
+last such pass (2026-08-20) reshaped the direction; this one found twenty-odd
+real defects and six design questions. The defects are fixed in this slice; the
+questions are below, open, for Bob.
+
+**Fixed here, by the rule each broke.**
+
+- *Bytes are framed* (CLAUDE.md): a lock record's party list was written with no
+  count while its reader read one, so a lock record could not be decoded — and
+  since `publishOp` only encodes, one junk lock publication made a backing's
+  whole venue record throw (or, behind `answering`, answer empty: the non-service
+  grade erased for one publication). `writeKeySet` writes the count;
+  `readKeySet` is its exported inverse and validates; lock and commit join the
+  venue-records round-trip. `publishOp` refuses a commit, as an Ergo sync
+  refuses the nameless record — one answer for the same bytes.
+- *The law point-checks every credit*: a lock's beneficiary was the third credit
+  path and the only unchecked one (units under a dead key, still outstanding).
+- *A set leg names no decision venue, so no commit reaches it*: read at the
+  venue reader and never in the law, so a bare commit against a paying lock —
+  the payout taken, nothing surrendered — replayed as a history that could have
+  happened. The law refuses it now; `replayLog` and `stateIsAuthentic` catch it.
+- *All or nothing*: `applyAll`'s dry run took a fresh copy per item, so a set
+  naming one backing twice passed the dry run and applied half. One working copy
+  per backing, items applied into it in order.
+- *An attempt id names one attempt on one backing, for the locks a commit can
+  reach.* A commit binds its attempt id and nothing else, so an object signed
+  for one attempt and withheld converted a later lock under the same id and the
+  same parties — theft, demonstrated. 24c's "the record does not already show
+  committed" read the venue, which cannot see a withheld object; the log can:
+  `LedgerState.retired` holds the ids venue-naming locks have settled or
+  withdrawn under, and a lock naming a venue under one is refused. Set legs
+  (NO_DECISION_VENUE) are not retired — no commit reaches them, and a demand's
+  legs re-prepare under the demand's own hash (slice 27). **Cross-backing reuse
+  of an id a party has signed a commit for remains that party's own discipline**,
+  as "check the others' locks before you sign" is; whether the commit should
+  bind the exchange's backing set instead is Bob's question below.
+- *P has one shape at a time*: `paysInClaims` is a structural test and a union's
+  excess-property check let a literal carry both shapes, encoded as claims alone —
+  the name silently lost the thing. `makeBacking` refuses both shapes at once.
+  And `NonServiceTerms.count` is a bigint (a count; CLAUDE.md's rule), u32 on
+  the wire.
+- *Naming the venue is agreeing the depth*: `ErgoVenue` took its id and its depth
+  as separate arguments, so one declared venue could be read on two clocks — the
+  fork `ergoVenueId` exists to rule out. The constructor derives the id. And
+  `witnessedIndex()` was the one read with no sync guard: an unsynced view
+  answered 0, so every lock read live and nothing read dishonoured — absence of
+  data as an exoneration.
+- *Single-phase is "the whole set and the paying leg inside one operator"*: a
+  claims-paying demand whose paying backing another operator serves was filed,
+  could never be answered (every acceptance door shut), and read as dishonoured
+  against a backer with no path. Refused at filing.
+- *A repeat is answered first* (invariant 26): a set's release or withdrawal
+  derived its shape from live state before the receipt lookup, so once the set
+  applied the repeat was refused — and the release receipt, the only evidence of
+  the settlement outside the operator's log, was unobtainable. `receiptOf` hands
+  out any co-signed operation's receipt (a set's legs and the paying lock were
+  co-signed and returned to nobody). `settle` answers "no lock stands" in its own
+  voice, asking its receipts before the venue.
+- *Every answer is checked against the name it was asked for — really*:
+  `backingName` read the stored field, so the check was a no-op and a lying
+  resolver passed `closureOf` and `accompanimentOf`; it recomputes the hash.
+- *Verifiers never throw, and never merge two answers*: `stateProvesCommitment`
+  threw on a malformed commitment; `quietFor`, `witnessedCommitFor`,
+  `committedInTime`, `presentableFor` (and `isValidQuantity` under it) threw on
+  malformed input; `witnessedCommitFor` read whatever venue it was handed and
+  answered "no commit was witnessed" for a lock naming another — a VenueError
+  now; `provesHolding` read the raw balance where the gap walk reads spendable,
+  so `redemptionIsOpen` said yes to units a lock had spoken for; `isDoublePosition`
+  names its mirror (one operation receipted into two positions read as
+  `pending`); `admittedInGap` had a `default` arm (24a's allow-list lesson); the
+  venue-refusal matcher truncated a parameter list at the first `)`.
+- *A publication is judged against the record that governed at its index*:
+  `publishedInGap` and `isLatestAt` read the operator in force AT the index and
+  then looked strictly before it, so at a successor's force index they had
+  nothing — an orderly handover from a punctual operator opened one gap index,
+  and legs published there were adopted by the operator and resolvable by no
+  verifier. Both read the operator in force just before the index now: "Until
+  then the predecessor's last commitment governs."
+
+**Open, for Bob — each proven by a run, none decided here.**
+
+1. **The uncommitted tail on return from silence** (audit-B-2, -4). An operator
+   returning from a gap keeps its uncommitted tail and adopts gap legs on top;
+   the verifier's fold applies them to the last COMMITTED state, as "final when
+   witnessed" says. The two disagree wherever the tail conflicts: a withdrawal
+   in the tail and a release in the gap — the verifier settles a redemption the
+   operator never applied, and the backer owes 100 while the claimant keeps 100;
+   a tail transfer to Bob and a gap redemption challenged by Bob — Bob is paid
+   the payout and keeps the units. The paper's rule is the verifier's; the
+   operator is wrong to keep the tail. But dropping it (as `takeOver` does for a
+   successor) kills tail receipts, and a tail receipt's position then points at
+   a log that holds something else — which `receiptStatus` reads as a fault and
+   `isDoublePosition` would name if the operator re-issues. So the question is
+   not only "drop the tail" but what a receipt from before a gap is worth
+   afterwards. My reading: a receipt proves an act the operator took, and after
+   a gap its position proves nothing — which "a payment is final when witnessed"
+   already says — so the operator should rebuild from its last commitment before
+   adopting, and the fault predicates should not count a pre-gap position
+   against it. A law-of-the-tail slice, Bob's call.
+2. **A named successor that never commits ends the replacement chain forever**
+   (audit-B-3): the walk returns at a link with no commitment, a second
+   replacement at the same link loses the earliest-wins tie, and one naming the
+   dead link is never reached. The rule-holder cannot recover from naming a dead
+   successor. A chain walk that passes through a link that never took force — or
+   earliest-USABLE with a stable definition of usable — is the fix shape; the
+   stability question (a dead link committing later) needs deciding.
+3. **`isDishonoured` against a backer whose reserved payout stood and was never
+   taken up** (audit-A-6): where P pays in claims the record shows the payout
+   reserved for the whole answer window; the core reads an expired acceptance as
+   dishonour regardless. The extensions' lapse rule distinguishes; the core has
+   no reader that does. `payoutOf` at the acceptance's own deadline is the shape.
+4. **Cross-operator presentation is unbuildable since slice 26** (audit-A-4): a
+   set leg names no venue, a bundle lock is refused as a leg, so a demand whose
+   legs live at other operators has no filing path. Deliberate, and
+   extensions.md calls cross-operator presentation an extension — but DECISIONS
+   recorded the flip only as a test that changed direction. Recorded here.
+5. **Noise commits cost the reader a signature verify each** (audit-B-6): 2000
+   free publications under a standing lock's attempt id cost the operator 6s per
+   submit and the same to every verifier. On a real venue the publisher pays a
+   fee per record; a LocalVenue that refused unverifiable commits would diverge
+   from Ergo. Record, or memoise verified-bad commits per view.
+6. **Should the commit bind the exchange's backing set?** The single-use rule
+   above closes id reuse on one backing; reuse of a signed id on ANOTHER backing
+   with the same parties is still the signer's own discipline. A commit that
+   carried a hash of the sorted backing names would scope the object without
+   breaking "one object in every log".
+
+**Spec change:** none made. Items 1–4 may each want a sentence once decided.
+
 ## 2026-08-22 - Slice 27: a demand outlives its locks, and a window is open when it is set
 
 **Question:** found double-checking the merged code before this session's plan,
