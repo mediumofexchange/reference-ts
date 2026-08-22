@@ -95,8 +95,10 @@ the rule still stands.
   a demand's legs were locked — for the set's quantity, by the set's holder, to
   the set's beneficiary, convertible by the demand holder and by that party
   alone, and still live — is read across the served state by `accompanimentOf`,
-  which the backer asks before it signs an acceptance (one definition,
-  `LegTerms`, for the sequencer and both readers). **A
+  which the backer asks before it signs an acceptance (the converter and the
+  venue are one definition, `LegTerms`, for the sequencer and both readers;
+  liveness is the law's at the doors and each reader's own question on the
+  venue's clock). **A
   lock carries §C3's timeout**, and it is the one predicate both exits read
   (`lockIsLive`): at or before it a commit can still settle the set and no
   withdrawal is accepted; a commit witnessed past it does not reach it, and

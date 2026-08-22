@@ -58,6 +58,11 @@ import { KEYS, SECRETS } from "./support.js";
 
 /** A view synced for nothing: every record read refuses, exactly as ErgoVenue's do. */
 class RefusesEverything extends LocalVenue {
+  // The clock too: the accompaniment readers ask it (slice 27), and an unsynced
+  // Ergo view refuses it — a reader must not take 0 for an answer.
+  override witnessedIndex(): never {
+    throw new VenueError("this view has not been synced");
+  }
   override publishedOpsFor(): never {
     throw new VenueError("this view was not synced for that backing");
   }

@@ -15,7 +15,7 @@
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { paysInClaims, backingName, type Backing } from "./backing.js";
 import { legMismatch } from "./presentation.js";
-import { lockIsLive } from "./ledger.js";
+import { acceptanceIsLive, lockIsLive } from "./ledger.js";
 import { compareBytes } from "./bytes.js";
 import { type Terms } from "./closure.js";
 import { type ServedState } from "./commitment.js";
@@ -82,6 +82,11 @@ export function accompanimentOf(
     if (head === undefined) return "unreadable";
     const demand = head.demands.get(bytesToHex(demandHash));
     if (demand === undefined) return "unreadable";
+    // Past the demand's own deadline no acceptance can be live again, so there
+    // is no set to answer (found regression-reviewing slice 27). The clock is the
+    // venue's, as every index here is.
+    const now = venue.witnessedIndex();
+    if (now > demand.deadline) return "unaccompanied";
 
     for (const entry of backing.reliance) {
       const leg = terms(entry.target);
@@ -99,7 +104,7 @@ export function accompanimentOf(
       // And live: a leg past its timeout can no longer settle, so a backer
       // answering it now would answer a set the holder has to re-prepare first
       // (slice 27). Read on the venue's clock, as every index here is.
-      if (!lockIsLive(lock, venue.witnessedIndex())) return "unaccompanied";
+      if (!lockIsLive(lock, now)) return "unaccompanied";
     }
     return "accompanied";
   }, "unreadable");
@@ -141,7 +146,14 @@ export function payoutOf(
     if (lock === undefined) return "unreserved";
     const want = { quantity: demand.quantity * backing.payout.perUnit, holder: backing.obligor, beneficiary: demand.holder, converter: demand.holder };
     if (legMismatch(lock, want) !== undefined) return "unreserved";
-    if (!lockIsLive(lock, venue.witnessedIndex())) return "unreserved";
+    // The predicate the release asks: a live acceptance. The paying lock outlasts
+    // the acceptance by the door's own rule, so its liveness alone could never
+    // fire while the answer stood — and the holder was told "reserved" while the
+    // law refused the release (found regression-reviewing slice 27). Both, on
+    // the venue's clock: the acceptance for what the release needs, the lock as
+    // the guard against a state no door built.
+    const now = venue.witnessedIndex();
+    if (!acceptanceIsLive(demand, now) || !lockIsLive(lock, now)) return "unreserved";
     return "reserved";
   }, "unreadable");
 }

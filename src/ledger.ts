@@ -161,9 +161,10 @@ export interface LockRecord {
 /**
  * §C3's lock predicate: "was a valid release witnessed **at or before** the lock
  * timeout?" At the timeout is inside; one past is not. Commit and release read
- * it, withdrawal reads its complement — three sites, one definition, so exactly
- * one exit is open at every index, as release and withdrawal are complements on
- * `acceptanceIsLive` for a demand. Creation asks a different question, that the
+ * it, withdrawal reads its complement, the gap readers ask it of a witnessed
+ * commit, and the two accompaniment readers ask it of a leg — one definition,
+ * so exactly one exit is open at every index, as release and withdrawal are
+ * complements on `acceptanceIsLive` for a demand. Creation asks a different question, that the
  * timeout be strictly ahead, and keeps its own inequality. Three hand-written
  * inequalities agreed until the withdrawal's was forgotten (24b, found in 24c).
  */

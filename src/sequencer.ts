@@ -475,8 +475,9 @@ export class Sequencer {
     const slots = backing.reliance.map((entry) => entry.target);
     if (paysInClaims(backing.payout)) slots.push(backing.payout.backing);
     const slotBackings = slots.map((slot) => this.backings.get(bytesToHex(slot))).filter((b): b is Backing => b !== undefined);
-    const prior = this.answered([backing, ...slotBackings], backing, demand);
+    const prior = this.priorReceipt(backing, demand);
     if (prior !== undefined) return prior;
+    this.ready([backing, ...slotBackings]);
     // The demand's hash is the key of every slot its set takes — each reliance
     // leg's, and the paying slot's where P pays in claims. A lock standing under
     // it on any of them (anyone who predicted the hash) would make the set
@@ -532,8 +533,12 @@ export class Sequencer {
     const demanded = this.served(backing);
     const legBacking = this.served(leg.op.backing);
     const entry = lockEntry(leg.op, leg.signature);
-    const prior = this.answered([demanded, legBacking], legBacking, entry);
+    const prior = this.priorReceipt(legBacking, entry);
     if (prior !== undefined) return prior;
+    // The record first: in force for, and adopted against, the demanded backing
+    // before its demand is read — a head the venue ended in a gap is not one to
+    // re-prepare for, and a backing a successor serves is not this operator's.
+    this.ready([demanded]);
     const demand = this.ledger.demandOf(demanded, hash);
     if (demand === undefined) throw new SequencerError("no demand stands under that hash on this backing");
     // Past the demand's own deadline no acceptance can be live again, so a leg
@@ -563,7 +568,7 @@ export class Sequencer {
   submitLock(op: LockOp, signature: Uint8Array): Receipt {
     const backing = this.served(op.backing);
     const entry = lockEntry(op, signature);
-    const prior = this.answered([backing], backing, entry);
+    const prior = this.priorReceipt(backing, entry);
     if (prior !== undefined) return prior;
     // A set leg comes only with its set (a demand's legs, an acceptance's paying
     // lock): a bare lock naming no decision venue would be a leg of nothing — and,
@@ -666,9 +671,6 @@ export class Sequencer {
     const payingBacking = this.served(supplied.op.backing);
     if (payingBacking.nameHex !== target) throw new SequencerError("the paying lock is not on the backing P names");
     if (compareBytes(supplied.op.attemptId, hash) !== 0) throw new SequencerError("the paying lock must name the demand it pays");
-    if (compareBytes(supplied.op.decisionVenue, NO_DECISION_VENUE) !== 0) {
-      throw new SequencerError("a paying lock names no decision venue: it settles with its set");
-    }
     const why = legMismatch(supplied.op, want);
     if (why !== undefined) throw new SequencerError(why);
     if (supplied.op.timeout < deadline) throw new SequencerError("the paying lock must outlast the acceptance");
@@ -840,9 +842,6 @@ export class Sequencer {
     if (compareBytes(supplied.op.attemptId, hash) !== 0) {
       throw new SequencerError("a lock must name the demand it accompanies");
     }
-    if (compareBytes(supplied.op.decisionVenue, NO_DECISION_VENUE) !== 0) {
-      throw new SequencerError("a leg names no decision venue: it settles with its set, never on a commit");
-    }
     const why = legMismatch(supplied.op, want);
     if (why !== undefined) throw new SequencerError(why);
     return { backing: legBacking, op: lockEntry(supplied.op, supplied.signature) };
@@ -986,18 +985,17 @@ export class Sequencer {
   }
 
   /**
-   * What every door does first, in this order: the backings the act touches are
-   * ready (in force, adopted — `ready`), and then a repeat of an operation this
-   * operator already co-signed is answered with its receipt (invariant 26)
-   * before any door-specific refusal can see it. The order is the point, twice
-   * over: a repeat answered before `ready` would be a co-signature from an
-   * operator no longer in force, or a record read before what the venue
-   * witnessed; and a refusal ahead of the repeat is a refusal on the clock or
-   * the record rather than on the request (24c round four, and slice 27's
-   * rounds two and four, each found one door with one half of this).
+   * A repeat of an operation this operator already co-signed, answered with its
+   * receipt (invariant 26) — the first thing every door does, before the
+   * backing is readied and before any refusal. A repeat is a read of the receipt
+   * book, not an act: the co-signature happened when it was given, and a
+   * retired operator re-serving it is not a new one, while refusing it is the
+   * hole slice 26's release repeat had — the payee's only evidence of an act the
+   * successor cannot produce. Adoption cannot change the answer either: it only
+   * adds receipts. (Slice 27's review first put `ready` ahead of this lookup and
+   * then reversed it, for those reasons.)
    */
-  private answered(backings: readonly Backing[], backing: Backing, op: PublishedOp): Receipt | undefined {
-    this.ready(backings);
+  private priorReceipt(backing: Backing, op: PublishedOp): Receipt | undefined {
     const prior = this.receipts.get(this.receiptKey(backing, opHashOfEntry(backing.name, op)));
     return prior === undefined ? undefined : copyReceipt(prior);
   }
@@ -1013,6 +1011,17 @@ export class Sequencer {
     at: bigint = this.witnessedIndex(),
   ): Receipt {
     const hashes = items.map((item) => opHashOfEntry(item.backing.name, item.op));
+    // The repeat first — before the gate, before ready: a read of the receipt
+    // book, not an act (priorReceipt). Keyed on the FIRST operation, which is the
+    // one the caller asked for: a
+    // demand and its locks are one act, so a replay of the demand answers for
+    // the set exactly as it was accepted (invariant 26).
+    const key = this.receiptKey((items[0] as { readonly backing: Backing }).backing, hashes[0] as Uint8Array);
+    const existing = this.receipts.get(key);
+    // A copy on both paths: the stored receipt is the operator's record of what
+    // it co-signed, and a caller that could reach into it would decide what
+    // every later replay is answered with.
+    if (existing !== undefined) return copyReceipt(existing);
     // **A bundle lock is prepared only where it can later be read, on the clock it
     // names, and only once; a set leg names no venue and needs none.** Each lock
     // item passes this one gate; one naming a venue must name this one
@@ -1045,15 +1054,6 @@ export class Sequencer {
     // any of it is applied, and before an idempotent replay is answered.
     this.ready(items.map((item) => item.backing));
 
-    // Keyed on the FIRST operation, which is the one the caller asked for: a
-    // demand and its locks are one act, so a replay of the demand answers for
-    // the set exactly as it was accepted (invariant 26).
-    const key = this.receiptKey((items[0] as { readonly backing: Backing }).backing, hashes[0] as Uint8Array);
-    const existing = this.receipts.get(key);
-    // A copy on both paths: the stored receipt is the operator's record of what
-    // it co-signed, and a caller that could reach into it would decide what
-    // every later replay is answered with.
-    if (existing !== undefined) return copyReceipt(existing);
 
     // A withdrawal of a lock asserts that its attempt did not commit. The record
     // decides that, not the holder: see committedInTime.

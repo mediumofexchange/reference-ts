@@ -215,6 +215,7 @@ export interface LegShape {
   readonly holder: Uint8Array;
   readonly beneficiary: Uint8Array;
   readonly parties: readonly Uint8Array[];
+  readonly decisionVenue: Uint8Array;
 }
 
 /** Why a lock does not carry the set's terms, or undefined if it does. */
@@ -225,6 +226,13 @@ export function legMismatch(lock: LegShape, want: LegTerms): string | undefined 
   const party = soleParty(lock.parties);
   if (party === undefined || compareBytes(party, want.converter) !== 0) {
     return "a lock is not convertible by the party the set names, and by that party alone";
+  }
+  // A set leg names no decision venue: it settles with its set on the holder's
+  // release, never on a commit. In the one definition rather than at the two
+  // doors alone, or a reader called a venue-naming lock accompanied and it
+  // converted alone on a commit (found regression-reviewing slice 27).
+  if (compareBytes(lock.decisionVenue, NO_DECISION_VENUE) !== 0) {
+    return "a leg names no decision venue: it settles with its set, never on a commit";
   }
   return undefined;
 }

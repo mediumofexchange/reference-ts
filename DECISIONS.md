@@ -162,13 +162,38 @@ squat the venue had freed in a gap still refused the filing; `submitLeg`
 refused repeats (demand ended, deadline passed) that `submitLock` answered; and
 `submitLock` answered a repeat before the in-force check, so a retired operator
 still co-signed on that one door. Every public door now has one shape — served,
-then `answered` (`ready` for every backing the act touches, then a repeat
-answered with its receipt), then its own refusals, then `submit` — and the order
-is the rule: a repeat answered before `ready` is a co-signature from an operator
-no longer in force or a record read before what the venue witnessed, and a
-refusal ahead of the repeat is a refusal on the clock rather than on the
-request. CLAUDE.md still carried the deadline rule's refuted reason ("or the
+then the repeat answered with its receipt, then `ready` for every backing the
+act touches (in force, adopted) before any record is read, then its own
+refusals, then `submit` — and the order is the rule: a record read before
+`ready` is a record read before what the venue witnessed, and a refusal ahead
+of the repeat is a refusal on the clock rather than on the request. (Round
+four first put `ready` ahead of the repeat; round five reversed it — below.) CLAUDE.md still carried the deadline rule's refuted reason ("or the
 window is shut before it opens") — it says "the same index is not a window" now.
+
+**Round five, from regression-reviewing rounds three and four, and from the
+audit slice's reviewers.** Round three's liveness line in `payoutOf` could never
+fire while an acceptance stood — the paying lock outlasts the answer by the
+door's own rule — so the holder was told "reserved" at 91..95 while the law
+refused the release; the reader asks the predicate the release asks,
+`acceptanceIsLive`, and keeps `lockIsLive` as the guard against a state no door
+built. `accompanimentOf` answers unaccompanied for a demand past its own
+deadline, where no acceptance can be live again. The decision venue was checked
+at both doors and read by neither reader, so a lock carrying the set's every
+other term and a venue read as accompanied — and converted alone on a commit
+over a served state from an operator with a motive; it is in `legMismatch`
+now, and the two hand-written door checks are gone. The round-three reason
+given for `payoutOf`'s liveness was wrong (the paying lock is the backer's; its
+move is withdraw-and-re-answer, not re-prepare) — the one definition is the
+converter and the venue in `LegTerms`; liveness is the law's at the doors and
+each reader's own question on the venue's clock. **And round four's order is
+reversed**: a repeat is answered FIRST, before `ready` and before any refusal,
+at every door including `submit`'s own — a repeat is a read of the receipt book,
+not an act, so a retired operator re-serving it is not a new co-signature,
+while refusing it denies the payee the one evidence the successor cannot
+produce (two reviewers reached opposite conclusions; the receipt rule decides
+it). The readers' callers list: `legItem`, `submitAcceptance`, `endDemand`'s
+release re-check, `accompanimentOf`, `payoutOf`. The refusal fixture refuses the
+clock too, since the readers now ask it.
 
 **Procedure, added to CLAUDE.md:** a refusal added at a door names the honest
 path it leaves open, and a test walks it; and a test's name is a claim the test
