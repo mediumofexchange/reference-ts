@@ -482,3 +482,22 @@ describe("P has one shape at a time", () => {
     expect(claims.nameHex).not.toBe(constant.nameHex);
   });
 });
+
+describe("E's non-service count is a count, on a u32 wire", () => {
+  it("refuses a count outside the u32 range, and round-trips the largest one", () => {
+    // A bigint in the object (CLAUDE.md: counts are bigint), a u32 on the wire —
+    // the one bound the type no longer enforces (found reviewing the audit slice).
+    const fields = (count: bigint) => ({
+      obligor: KEYS.backer,
+      payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: { setting: "transparent" as const, operator: KEYS.operator, nonService: { duration: 10n, count, window: 100n } },
+    });
+    expect(() => makeBacking(fields(0x1_0000_0000n))).toThrow(/u32 range/);
+    expect(() => makeBacking(fields(-1n))).toThrow(/u32 range/);
+    const top = makeBacking(fields(0xffff_ffffn));
+    const back = decodeBacking(encodeBacking(top));
+    expect(back.evidence.nonService?.count).toBe(0xffff_ffffn);
+    expect(makeBacking(back).nameHex).toBe(top.nameHex);
+  });
+});

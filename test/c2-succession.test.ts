@@ -627,3 +627,65 @@ describe("§C2: a publication is judged against the record that governed at its 
     expect(successor.openDemands(backing)).toHaveLength(0);
   });
 });
+
+describe("§C2: what a door asks of a backing it touches, and of one it only reads", () => {
+  it("a filing is not refused for the operator's force on the PAYING backing, which the filing never touches", () => {
+    // Found regression-reviewing slice 27: readying every slot backing at filing
+    // asked in-force of the paying backing — handed to a successor, and only
+    // it — and refused an honest filing the never-served operator would take.
+    // The paying lock arrives at the acceptance; the filing only reads the slot.
+    const { venue, backing: gold } = setup();
+    const eur = makeBacking({
+      obligor: KEYS.backer,
+      payout: { backing: gold.name, perUnit: 2n },
+      reliance: [],
+      evidence: { setting: "transparent", operator: KEYS.operator, silence: SILENCE, replacementRule: KEYS.backer },
+    });
+    const incumbent = new Sequencer(SECRETS.operator, venue);
+    for (const b of [gold, eur]) incumbent.register(b, signBacking(SECRETS.backer, b));
+    incumbent.submitIssue(
+      { backing: eur, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
+      ed25519.sign(encodeIssuanceMessage(eur.name, KEYS.alice, 100n, 0n), SECRETS.backer),
+    );
+    incumbent.commit();
+    // GOLD, and only GOLD, goes to a successor that takes force.
+    at(venue, 5n);
+    venue.publishReplacement(gold.name, replacementBy(gold, SECRETS.backer, SUCCESSOR, gold.name, 5n));
+    commitAs(venue, SUCCESSOR_SECRET);
+    expect(operatorAt(gold, venue, venue.witnessedIndex())).toEqual(SUCCESSOR);
+    expect(operatorAt(eur, venue, venue.witnessedIndex())).toEqual(KEYS.operator);
+    const demand = { backing: eur, holder: KEYS.alice, quantity: 40n, instant: 0n, deadline: 100n, nonce: 0n };
+    incumbent.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice));
+    expect(incumbent.openDemands(eur)).toHaveLength(1);
+  });
+
+  it("a successor refuses to take over a state carrying a lock on a decision venue it does not watch", () => {
+    // Found reviewing the audit slice: taken over, such a lock made the successor
+    // refuse at every door forever — adoption asked a record that was not the
+    // lock's. The gate asks this of every lock it prepares; takeOver is the one
+    // other path that applies many operations.
+    const { venue, backing } = setup();
+    const other = new LocalVenue(new Uint8Array(32).fill(0x6c));
+    const incumbent = new Sequencer(SECRETS.operator, venue);
+    incumbent.register(backing, signBacking(SECRETS.backer, backing));
+    incumbent.submitIssue(
+      { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
+      ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
+    );
+    const lock = { backing, attemptId: new Uint8Array(32).fill(0x3a), holder: KEYS.alice, beneficiary: KEYS.bob, quantity: 10n, timeout: 500n, decisionVenue: venue.id, parties: [KEYS.alice], nonce: 0n };
+    incumbent.submitLock(lock, ed25519.sign(encodeLock(lock), SECRETS.alice));
+    const served = { snapshots: incumbent.snapshot(), commitment: incumbent.commit() };
+    other.publish(served.commitment);
+    at(venue, 5n); at(other, 5n);
+    const replacement = replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n);
+    venue.publishReplacement(backing.name, replacement);
+    other.publishReplacement(backing.name, replacement);
+    // On the venue the lock names: fine. On another: refused, in the sequencer's voice.
+    const onVenue = new Sequencer(SUCCESSOR_SECRET, venue);
+    onVenue.register(backing, signBacking(SECRETS.backer, backing));
+    onVenue.takeOver(backing, served);
+    const onOther = new Sequencer(SUCCESSOR_SECRET, other);
+    onOther.register(backing, signBacking(SECRETS.backer, backing));
+    expect(() => onOther.takeOver(backing, served)).toThrow(/does not watch/);
+  });
+});

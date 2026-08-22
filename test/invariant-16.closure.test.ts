@@ -253,3 +253,22 @@ describe("invariant 16: an answer is checked against the name it was asked for â
     expect([closed.get(x.nameHex), closed.get(y.nameHex), closed.get(z.nameHex)]).toEqual([1n, 2n, 2n]);
   });
 });
+
+describe("invariant 16: the closure names what was checked, never what was handed back", () => {
+  it("a resolver answering with the right terms under a forged name field is emitted as the key, not the lie", () => {
+    // Found reviewing the audit slice: the walk checked the answer against the
+    // name asked for â€” and then emitted the answer's own `.name` field. A store
+    // handing back the right terms wearing a forged name put the forgery into
+    // the closure, which a builder would mint into R for good (invariant 1).
+    const z = mk("Z");
+    const x = mk("X", [at(z, 2n)]);
+    const forged = new Uint8Array(32).fill(0xbb);
+    const liar = { ...z, name: forged, nameHex: Buffer.from(forged).toString("hex") } as Backing;
+    const lying: Terms = (name) => (Buffer.from(name).toString("hex") === z.nameHex ? liar : store(x)(name));
+    const closed = closureOf(lying, [at(x, 1n)]);
+    const zEntry = closed.find((e) => Buffer.from(e.target).toString("hex") === z.nameHex);
+    expect(zEntry?.count).toBe(2n);
+    expect(closed.some((e) => Buffer.from(e.target).equals(Buffer.from(forged)))).toBe(false);
+    expect(closureStatus(lying, x)).toBe("closed");
+  });
+});

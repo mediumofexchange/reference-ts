@@ -100,6 +100,72 @@ questions are below, open, for Bob.
   verifier. Both read the operator in force just before the index now: "Until
   then the predecessor's last commitment governs."
 
+**The review round (four Opus angles: the law and encodings; the sequencer and
+readers; the gap, succession and Ergo; docs and tests-as-claims), plus slice 27's
+last regression pass, and what it changed.**
+
+- *The retire lives with the removal.* It sat beside two of the three sites a
+  venue-naming lock leaves by; a one-party bundle lock converted by its party's
+  RELEASE left its id reusable, and the withheld object took the next lock —
+  through `TransparentLedger.apply`, and the history replayed. `settleLock`
+  retires; `retire` is one line with the venue guard.
+- *`closureOf` emits the key it checked*, never the resolver's `.name` field: a
+  store handing back the right terms under a forged name put the forgery into
+  the closure, which a builder mints into R for good.
+- *A claims-paying demand whose paying backing is one of its own reliance legs
+  is refused at filing* — the same manufactured dishonour as the unserved paying
+  backing, one input over. (24c's `(attempt, holder)` key would lift the
+  restriction rather than refuse it.)
+- *`walkGap` skips the one leg it cannot judge; `takeOver` refuses a log it
+  cannot serve.* The reader's `VenueError` for a lock naming another venue
+  escaped the fold and made an unrelated holder's redemption unreadable on an
+  honest record of another identity (a backing declaring no venue is "answered
+  by whichever record its reader holds"); and a successor that took over such a
+  log refused at every door forever. The withdrawal of such a lock is the one
+  leg the verifier skips — the conservative side — and the operator never holds
+  one, because `takeOver` asks what the gate asks of every lock it prepares.
+- *`provesHolding` reads `redeemable` — held minus LOCKS.* Raw balance was wrong
+  on one side (units a lock had spoken for), `spendable` on the other (the
+  holder's own standing demand, the very thing §C2b continues). Recorded as a
+  narrowing: a holder whose units are all locked to an attempt at a dark
+  operator can neither settle nor redeem until the lock's withdrawal is adopted.
+- *Every door has one shape, and round four's order is reversed twice over*:
+  served → `caughtUp` (adopted against every backing the act touches — which an
+  operator not in force skips by itself) → the repeat answered from the receipt
+  book → `inForce` (asked of the backings the act WRITES; a filing's paying slot
+  is only read, and refusing there refused an honest filing at the operator that
+  knew the slot best) → the door's own refusals → `submit`. Caught up before the
+  repeat, because adoption is what writes the receipt of a leg the venue took
+  for a holder, and her first ask must find it; the repeat before in-force and
+  before any refusal, because a repeat is a read, not an act — a retired operator
+  re-serving a receipt it gave in force is no new co-signature, and refusing it
+  denies the payee the one evidence the successor cannot produce (two reviewers
+  concluded oppositely; the receipt rule decided it). Converted by this round:
+  `submitIssue` (the revocation refusal sat ahead of the repeat), `endDemand`
+  (its record reads left a head unwithdrawable after a gap until a refused call
+  had adopted), `submitAcceptance`, `settle`, and `submitLeg` (a repeat is a
+  repeat of THIS request: a leg naming another demand is refused, not answered
+  with the receipt of a lock under the first). `receiptOf` is gone: every
+  co-signed operation's receipt is re-obtained by repeating it at its door.
+- *`presentableFor` answers* for a backing that does not re-encode, as it does
+  for a non-quantity. *`quietFor` throws* on a malformed operator key after all:
+  the key is the reader's own validated object, and answering 0 read as
+  "published just now" — the exoneration shape. *A payout of neither shape* is
+  refused beside one of both. *`isDoublePosition`'s mirror* adds a second
+  predicate open question 1 must settle (a rebuilt tail re-applies an operation
+  at a new position). *The non-service count may be 0*: a backer conceding the
+  grade unconditionally is slice 16's recorded setting, pinned by a test, not a
+  bug. *ErgoVenue's addressing* is not in the id: in this reference the
+  addresses are a client's derivation from the publication script the id does
+  commit to (the seam for the library that derives them); two views naming one
+  id with different addressing have mis-stated their id — recorded, not patched.
+  And the docs: `signerOf` returned a standing demand's holder key by reference
+  (copied now); the `retired` field's doc, `settleLock`'s "drifted once",
+  `admittedInGap`'s "admitted one", the venue-refusal matcher's "hid a reader",
+  `recovery.ts`'s and `oplog.ts`'s and `fault.ts`'s headers, an orphaned
+  docblock, and eight tests whose titles claimed more than their bodies —
+  including one this slice had emptied by a careless `sed` — all corrected.
+
 **Open, for Bob — each proven by a run, none decided here.**
 
 1. **The uncommitted tail on return from silence** (audit-B-2, -4). An operator
@@ -134,7 +200,8 @@ questions are below, open, for Bob.
    no reader that does. `payoutOf` at the acceptance's own deadline is the shape.
 4. **Cross-operator presentation is unbuildable since slice 26** (audit-A-4): a
    set leg names no venue, a bundle lock is refused as a leg, so a demand whose
-   legs live at other operators has no filing path. Deliberate, and
+   legs live at other operators has no filing path — and, since this slice, a
+   demand whose PAYING backing lives at another operator has none either. Deliberate, and
    extensions.md calls cross-operator presentation an extension — but DECISIONS
    recorded the flip only as a test that changed direction. Recorded here.
 5. **Noise commits cost the reader a signature verify each** (audit-B-6): 2000

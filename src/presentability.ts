@@ -26,14 +26,18 @@ import { answering, type Venue } from "./venue.js";
 export type HoldingView = (name: Uint8Array) => bigint;
 
 export function presentableFor(view: HoldingView, backing: Backing, quantity: bigint): boolean {
-  // A verifier: a non-quantity is "not presentable", not a TypeError (found by
-  // the 2026-08-22 audit).
-  if (!isValidQuantity(quantity)) return false;
-  if (view(backingName(backing)) < quantity) return false;
-  for (const entry of backing.reliance) {
-    if (view(entry.target) < quantity * entry.count) return false;
-  }
-  return true;
+  // A verifier: a non-quantity is "not presentable", not a TypeError, and a
+  // backing whose fields do not re-encode (backingName recomputes the hash) is
+  // not presentable either rather than a throw (found by the 2026-08-22 audit,
+  // and reviewing its slice).
+  return answering(() => {
+    if (!isValidQuantity(quantity)) return false;
+    if (view(backingName(backing)) < quantity) return false;
+    for (const entry of backing.reliance) {
+      if (view(entry.target) < quantity * entry.count) return false;
+    }
+    return true;
+  }, false);
 }
 
 /**

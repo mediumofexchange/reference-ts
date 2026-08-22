@@ -3,9 +3,9 @@
 //
 // Every accepted operation appends exactly one entry, and `position` is the
 // per-backing append index — a stand-in for witnessed interval time (§C2). The
-// log carries all seven operation kinds: the three that move value (issue,
-// transfer, burn) and the four of presentation (demand, acceptance, release,
-// withdrawal). Presentation belongs here because a receipt binds an operation to
+// log carries all nine operation kinds: the three that move value (issue,
+// transfer, burn), the four of presentation (demand, acceptance, release,
+// withdrawal) and the two of an atomic attempt (lock, commit). Presentation belongs here because a receipt binds an operation to
 // its position in the committed log (receipt.ts), and an operation that moves no
 // value still needs to be undeniable.
 //
@@ -289,7 +289,6 @@ function readQuantity(r: ByteReader): bigint {
   return minimalBytesToBigint(r.lengthPrefixed(MAX_QUANTITY_BYTES));
 }
 
-/** A key set as a lock message writes it: count, then keys. Canonical form is the re-encode's to check. */
 /**
  * Strict inverse of encodePublishedOp: accepts exactly the canonical bytes and
  * nothing else, and hands back the backing name the message names alongside the

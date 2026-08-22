@@ -22,8 +22,9 @@
 //   - `isDoubleAcceptance` — an operator co-signed both halves of that. Under
 //     §C2's backer-run default the operator key is the backer's, so this names
 //     the party that owes the money.
-//   - `isDoublePosition` — an operator co-signed two operations into one log
-//     position, so one of its receipts is a lie about its own log.
+//   - `isDoublePosition` — an operator co-signed two receipts that cannot both
+//     describe one append-only log: two operations at one position, or one
+//     operation at two. Either way one of its receipts is a lie about its own log.
 //   - `isRewrittenHistory` — an operator committed a log that takes back one it
 //     had already committed. An append-only log may grow and may not shrink, and
 //     no committed entry may change. This is what restoring from stale data and
@@ -156,8 +157,10 @@ export function isDoubleAcceptance(
 
 /**
  * Whether one operator co-signed two receipts on one backing that cannot both
- * describe one append-only log: two different operations into one position of
- * one backing's log. Positions are the log's own append indices, so a position
+ * describe one append-only log: two different operations into one position, or
+ * one operation into two positions (a nonce and a position each admit one; the
+ * mirror read as "pending" with nobody named — the 2026-08-22 audit) of one
+ * backing's log. Positions are the log's own append indices, so a position
  * holds one operation and one of these receipts misdescribes the operator's own
  * log — which is what a receipt is for ("witnessed order: a receipt binds an
  * operation to its committed position", §C2).

@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { signCommitment, stateProvesCommitment, type Commitment } from "../src/commitment.js";
 import { encodeIssuance, encodeTransfer } from "../src/messages.js";
-import { encodeLock } from "../src/presentation.js";
-import { isSilent, provesHolding, quietFor, redemptionIsOpen } from "../src/recovery.js";
+import { demandHash, encodeAcceptance, encodeDemand, encodeLock, encodeRelease, encodeWithdrawal } from "../src/presentation.js";
+import { isSilent, provesHolding, quietFor, redemptionIsOpen, snapshotRedemptions } from "../src/recovery.js";
 import { Sequencer } from "../src/sequencer.js";
 import { LocalVenue, type Venue } from "../src/venue.js";
 import { KEYS, makeTransparentBacking, SECRETS } from "./support.js";
@@ -299,11 +299,54 @@ describe("§C2b: a proved holding is what the law would let the holder commit", 
     expect(redemptionIsOpen(venue, backing, state, KEYS.alice, 100n)).toBe(false);
     expect(redemptionIsOpen(venue, backing, state, KEYS.alice, 80n)).toBe(true);
   });
+});
 
-  it("quietFor answers for a malformed operator key rather than throwing", () => {
-    const { venue } = setup();
-    for (const junk of [undefined, null, 42, "operator", new Uint8Array(5)]) {
-      expect(quietFor(venue, junk as never)).toBe(0n);
-    }
+describe("§C2b: what a proved holding subtracts, and what the fold does with a leg it cannot judge", () => {
+  it("a standing demand of the holder's own still proves the holding: it is the claim being redeemed", () => {
+    // Found reviewing the audit slice: reading spendable denied the holder's own
+    // filed demand — the very thing §C2b continues in a gap ("a standing demand
+    // is continued, not blocked"). `redeemable` is held minus LOCKS.
+    const { venue, sequencer, backing } = setup();
+    const demand = { backing, holder: KEYS.alice, quantity: 100n, instant: 0n, deadline: 500n, nonce: 0n };
+    sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice));
+    const state = served(sequencer);
+    venue.advance(SILENCE.noCommitmentDuration + 1n);
+    expect(provesHolding(venue, backing, state, KEYS.alice, 100n)).toBe(true);
+    expect(redemptionIsOpen(venue, backing, state, KEYS.alice, 100n)).toBe(true);
+  });
+
+  it("a withdrawal of a lock naming a venue this record does not hold is the one leg the fold skips, not the whole backing", () => {
+    // Found reviewing the audit slice, twice: the reader's refusal for such a
+    // lock escaped the fold and made an unrelated holder's redemption unreadable
+    // on an honest record of another identity (a backing declaring no venue is
+    // "answered by whichever record its reader holds"). The operator never holds
+    // such a lock — takeOver refuses the log — so the skip is the verifier's
+    // conservative side alone.
+    const { venue, sequencer, backing } = setup();
+    const other = new LocalVenue(new Uint8Array(32).fill(0x5b));
+    // Alice locks 20 for Bob under an attempt, on THIS venue; Bob files a
+    // redemption for his own 30 in the gap; Alice withdraws her lapsed lock there.
+    const issue = { backing, recipient: KEYS.bob, quantity: 30n, nonce: 1n };
+    sequencer.submitIssue(issue, ed25519.sign(encodeIssuance(issue), SECRETS.backer));
+    const lock = { backing, attemptId: new Uint8Array(32).fill(0x2d), holder: KEYS.alice, beneficiary: KEYS.bob, quantity: 20n, timeout: 5n, decisionVenue: venue.id, parties: [KEYS.alice], nonce: 0n };
+    sequencer.submitLock(lock, ed25519.sign(encodeLock(lock), SECRETS.alice));
+    const state = served(sequencer);
+    other.publish(state.commitment);
+    const publishBoth = (op: Parameters<LocalVenue["publishOp"]>[1]) => { venue.publishOp(backing.name, op); other.publishOp(backing.name, op); };
+    for (const v of [venue, other]) v.advance(SILENCE.noCommitmentDuration + 5n);
+    const demand = { backing, holder: KEYS.bob, quantity: 30n, instant: venue.witnessedIndex(), deadline: 500n, nonce: 0n };
+    publishBoth({ kind: "demand", holder: KEYS.bob, quantity: 30n, instant: demand.instant, deadline: demand.deadline, nonce: 0n, signature: ed25519.sign(encodeDemand(demand), SECRETS.bob) });
+    const hash = demandHash(demand);
+    const answer = { backing, demandHash: hash, instant: demand.instant, deadline: 400n, nonce: 2n };
+    publishBoth({ kind: "acceptance", demandHash: hash, instant: answer.instant, deadline: answer.deadline, nonce: 2n, signature: ed25519.sign(encodeAcceptance(answer), SECRETS.backer) });
+    const settle = { backing, demandHash: hash, nonce: 1n };
+    publishBoth({ kind: "release", demandHash: hash, nonce: 1n, signature: ed25519.sign(encodeRelease(settle), SECRETS.bob) });
+    const out = { backing, demandHash: lock.attemptId, nonce: 1n };
+    publishBoth({ kind: "withdrawal", demandHash: lock.attemptId, nonce: 1n, signature: ed25519.sign(encodeWithdrawal(out), SECRETS.alice) });
+    for (const v of [venue, other]) v.advance(1n);
+    // The record the lock names: Bob's redemption, and Alice's withdrawal folded.
+    expect(snapshotRedemptions(venue, backing, state)).toHaveLength(1);
+    // Another identity: Bob's redemption still answers; Alice's leg is skipped.
+    expect(snapshotRedemptions(other, backing, state)).toHaveLength(1);
   });
 });

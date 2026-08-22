@@ -425,6 +425,9 @@ export function makeBacking(fields: BackingFields): Backing {
   if ("backing" in fields.payout && ("thing" in fields.payout || "quantumExponent" in fields.payout)) {
     throw new EncodingError("payout declares both shapes: claims of a backing, or a named thing, not both");
   }
+  if (!("backing" in fields.payout) && !("thing" in fields.payout)) {
+    throw new EncodingError("payout declares neither shape: claims of a backing, or a named thing");
+  }
   if (paysInClaims(fields.payout)) {
     if (fields.payout.backing.length !== NAME_LENGTH) {
       throw new EncodingError("payout backing name must be 32 bytes");

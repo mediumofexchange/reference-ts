@@ -23,9 +23,10 @@
 //
 // Every operation is atomic: all checks run before any mutation, so it either
 // fully applies or throws with no state change. Every operation — the three that
-// move value and the four of presentation — appends exactly one entry to the
-// operation log and consumes exactly one nonce, both in `apply`, so there is
-// one place where an operation becomes a fact. A signer's nonce is per
+// move value, the four of presentation and the two of an atomic attempt —
+// appends exactly one entry to the operation log, and every one but the commit
+// consumes exactly one nonce (CLAUDE.md names that departure), both in `apply`,
+// so there is one place where an operation becomes a fact. A signer's nonce is per
 // (signer, backing).
 //
 // Operations whose outcome depends on time take the witnessed index they are
@@ -180,8 +181,9 @@ export interface LedgerState {
   /** Reliance legs reserved against a demand elsewhere, by demand hash hex. */
   readonly locks: Map<string, LockRecord>;
   /**
-   * Attempt ids this backing has carried a venue-naming lock under, and will
-   * not again. A commit binds its attempt id and nothing else, so a signed
+   * Attempt ids whose venue-naming lock on this backing has already settled or
+   * been withdrawn, and which no later lock may name (a standing lock's id is
+   * refused by the locks map itself). A commit binds its attempt id and nothing else, so a signed
    * object withheld from one attempt would convert a later lock under the same
    * id and the same parties (found by the 2026-08-22 audit); 24c's "the record
    * does not already show committed" read the venue, which cannot see a withheld
@@ -265,6 +267,23 @@ export function spendable(state: LedgerState, key: Uint8Array): bigint {
   return heldBy(state, hex) - locked;
 }
 
+/**
+ * Units a holder could still redeem against a snapshot: held minus what a LOCK
+ * has spoken for — a standing demand of the holder's own is the claim being
+ * redeemed, not a spend of it (§C2b: "a standing demand is continued, not
+ * blocked"), where a lock's units belong to an attempt that may yet commit
+ * elsewhere. The reader's question, beside spendable (the law's, which also
+ * subtracts the holder's own demands); found reviewing the audit slice, where
+ * provesHolding read spendable and denied the holder's own filed demand.
+ */
+export function redeemable(state: LedgerState, key: Uint8Array): bigint {
+  let locked = 0n;
+  for (const record of state.locks.values()) {
+    if (compareBytes(record.holder, key) === 0) locked += record.quantity;
+  }
+  return heldBy(state, bytesToHex(key)) - locked;
+}
+
 function move(state: LedgerState, key: Uint8Array, delta: bigint): void {
   const hex = bytesToHex(key);
   const units = heldBy(state, hex) + delta;
@@ -280,9 +299,15 @@ function move(state: LedgerState, key: Uint8Array, delta: bigint): void {
 /**
  * Convert a standing lock: its units leave the holder for the beneficiary the
  * holder signed, and the record goes. One body for the commit and the leg
- * release — written twice, the two drifted once (found by the 2026-08-22 audit).
- * Every check runs before any mutation, and the lock is dropped first so the
- * settling transfer is not blocked by its own reservation.
+ * release — a second copy is where a drift starts (applyEntry's own header
+ * names two that did). Every check runs before any mutation, and the lock is
+ * dropped first so the settling transfer is not blocked by its own reservation.
+ *
+ * And the attempt id of a venue-naming lock is retired HERE, with the removal,
+ * not beside two of the three removal sites: a one-party venue-naming lock can
+ * also leave by its party's release, and written beside the commit alone that
+ * door left the id reusable for a withheld object (found reviewing the audit
+ * slice). A set leg (no venue) is not retired.
  */
 function settleLock(state: LedgerState, lock: LockRecord): void {
   if (heldBy(state, bytesToHex(lock.beneficiary)) + lock.quantity >= MAX_QUANTITY_EXCLUSIVE) {
@@ -292,8 +317,14 @@ function settleLock(state: LedgerState, lock: LockRecord): void {
     throw new LedgerError("debit exceeds the holding");
   }
   state.locks.delete(bytesToHex(lock.attemptId));
+  retire(state, lock);
   move(state, lock.holder, -lock.quantity);
   move(state, lock.beneficiary, lock.quantity);
+}
+
+/** A venue-naming lock's id names one attempt on this backing: spent once the lock has left. */
+function retire(state: LedgerState, lock: LockRecord): void {
+  if (compareBytes(lock.decisionVenue, NO_DECISION_VENUE) !== 0) state.retired.add(bytesToHex(lock.attemptId));
 }
 
 function standingDemand(state: LedgerState, hash: Uint8Array): DemandRecord {
@@ -605,7 +636,6 @@ export function applyEntry(
         throw new LedgerError("the commit was witnessed past the lock timeout");
       }
       settleLock(state, lock);
-      state.retired.add(bytesToHex(entry.attemptId));
       break;
     }
     case "acceptance": {
@@ -698,7 +728,7 @@ export function applyEntry(
           throw new LedgerError("the lock has not expired: the attempt settles or times out");
         }
         state.locks.delete(bytesToHex(entry.demandHash));
-        if (compareBytes(leg.decisionVenue, NO_DECISION_VENUE) !== 0) state.retired.add(bytesToHex(entry.demandHash));
+        retire(state, leg);
         break;
       }
       const record = standingDemand(state, entry.demandHash);

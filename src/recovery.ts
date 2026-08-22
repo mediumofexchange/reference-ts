@@ -52,13 +52,16 @@
 //     operator's, so no leg needs an index anybody asserts. See DECISIONS.md.
 //
 // Everything here is a verifier: it answers questions about state an untrusted
-// operator served, so it returns false on any malformed input and never throws.
+// operator served, so it returns false on any malformed input and never throws —
+// with the one exception every layer shares: a venue's refusal propagates rather
+// than being answered (CLAUDE.md, `answering`), and witnessedCommitFor raises
+// one for a record that is not the lock's venue.
 
 import { paysInClaims, type Backing } from "./backing.js";
 import {
   applyEntry,
   lockIsLive,
-  spendable,
+  redeemable,
   copyState,
   replayLog,
   type DemandRecord,
@@ -96,9 +99,11 @@ function isTransfer(witnessed: WitnessedOp): witnessed is WitnessedTransfer {
  * otherwise never publishing at all would be the way to escape the grade.
  */
 export function quietFor(venue: Venue, operator: Uint8Array): bigint {
-  // A malformed operator key is a question with no answer, not a crash: quiet
-  // for nothing (found by the 2026-08-22 audit — a verifier that threw).
-  return answering(() => venue.witnessedIndex() - (venue.witnessedAtFor(operator) ?? 0n), 0n);
+  // The operator key is the reader's own validated object (a Backing's, or a
+  // witnessed replacement's), never adversary bytes: a malformed one is a caller
+  // bug and throws, where answering 0 would read as "published just now" — the
+  // exoneration shape the audit slice removed one file over.
+  return venue.witnessedIndex() - (venue.witnessedAtFor(operator) ?? 0n);
 }
 
 /** The operator in force at the venue's present index. */
@@ -359,9 +364,12 @@ export function replayServedState(
  * holder who has since spent the units would still prove the state that shows
  * them.
  *
- * It answers the holding, not the policy: whether a standing demand on the same
- * units blocks redemption is a question for the redemption legs, where the
- * double-payment it would risk actually arises. See DECISIONS.md.
+ * It answers what the holder could redeem: held minus what a LOCK has spoken
+ * for. A standing demand of the holder's own is the claim being redeemed and
+ * is not subtracted — "a standing demand is continued, not blocked" — where a
+ * lock's units belong to an attempt that may yet commit elsewhere (audit slice:
+ * the reader once read the raw balance, then spendable, and each was wrong on
+ * one side; `redeemable` in ledger.ts is the one definition). See DECISIONS.md.
  */
 export function provesHolding(
   venue: Venue,
@@ -374,10 +382,7 @@ export function provesHolding(
     if (!isValidQuantity(quantity)) return false;
     const replay = replayLatestState(venue, backing, served);
     if (replay === undefined) return false;
-    // Spendable, not held: units a standing demand or lock has spoken for are
-    // not a holding the gap walk could redeem (found by the 2026-08-22 audit —
-    // the reader said yes where the fold said no).
-    return spendable(replay, holder) >= quantity;
+    return redeemable(replay, holder) >= quantity;
   }, false);
 }
 
@@ -700,8 +705,11 @@ export function committedInTime(venue: Venue, lock: LockRecord): boolean {
  * the two never disagree about what happened in it (24c's lesson).
  *
  * Every kind decided, none defaulted: an allow-list is where a new kind goes to
- * be forgotten (24a), and the `default` arm this once had admitted one nobody
- * had decided about (found by the 2026-08-22 audit).
+ * be forgotten (24a), and the `default` arm this once had would have admitted
+ * the next kind added without anyone deciding about it (found by the 2026-08-22
+ * audit). The `commit` arm here and in isLeg is decided and dead: no venue hands
+ * a commit to publishedOpsFor (publishOp refuses one; an Ergo sync skips the
+ * nameless record).
  */
 export function admittedInGap(
   backing: Backing,
@@ -754,6 +762,19 @@ function walkGap(
     // keeps reserved.
     if (witnessed.op.kind === "withdrawal") {
       const lock = state.locks.get(bytesToHex(witnessed.op.demandHash));
+      // A lock naming a venue this reader does not hold is one leg it cannot
+      // judge: skipped, the conservative side (a withdrawal folded could free
+      // what a commit settled elsewhere), not a refusal of the whole backing —
+      // one stranger's bundle lock must not make every other holder's
+      // redemption unreadable (found reviewing the audit slice, twice). The
+      // operator never holds such a lock: takeOver refuses the log.
+      if (
+        lock !== undefined &&
+        compareBytes(lock.decisionVenue, NO_DECISION_VENUE) !== 0 &&
+        compareBytes(lock.decisionVenue, venue.id) !== 0
+      ) {
+        continue;
+      }
       if (lock !== undefined && committedInTime(venue, lock)) continue;
     }
     const settling =

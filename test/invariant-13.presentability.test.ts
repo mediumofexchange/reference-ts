@@ -191,3 +191,17 @@ describe("invariant 13: presentableFor is a verifier, and answers rather than th
     expect(presentableFor(view, b, 5n)).toBe(true);
   });
 });
+
+describe("invariant 13: presentableFor answers for a backing that does not re-encode", () => {
+  it("a backing whose fields were mutated is not presentable, not a throw", () => {
+    // backingName recomputes the hash (the audit slice), so a Backing object
+    // whose fields no longer encode would have thrown out of this verifier.
+    const ledger = new TransparentLedger();
+    const a = register(ledger, SECRETS.backer, "A");
+    give(ledger, SECRETS.backer, a, 10n, 0n);
+    const view = ledger.holdingView(KEYS.alice);
+    const mutated = { ...a, reliance: [{ target: new Uint8Array(5), count: 1n }] } as typeof a;
+    expect(presentableFor(view, mutated, 1n)).toBe(false);
+    expect(presentableFor(view, a, 1n)).toBe(true);
+  });
+});
