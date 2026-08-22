@@ -161,9 +161,10 @@ export interface LockRecord {
 /**
  * §C3's lock predicate: "was a valid release witnessed **at or before** the lock
  * timeout?" At the timeout is inside; one past is not. Commit and release read
- * it, withdrawal reads its complement — three sites, one definition, so exactly
- * one exit is open at every index, as release and withdrawal are complements on
- * `acceptanceIsLive` for a demand. Creation asks a different question, that the
+ * it, withdrawal reads its complement, the gap readers ask it of a witnessed
+ * commit, and the two accompaniment readers ask it of a leg — one definition,
+ * so exactly one exit is open at every index, as release and withdrawal are
+ * complements on `acceptanceIsLive` for a demand. Creation asks a different question, that the
  * timeout be strictly ahead, and keeps its own inequality. Three hand-written
  * inequalities agreed until the withdrawal's was forgotten (24b, found in 24c).
  */
@@ -466,6 +467,18 @@ export function applyEntry(
       // same guarantee into the backer's signature.
       if (clock !== undefined && entry.instant > clock) {
         throw new LedgerError("demand instant is later than the latest witnessed index");
+      }
+      // TIME. The window is the holder's, and it is open when it is set (§C3: "a
+      // deadline of their choosing"). A deadline behind the witnessed index could
+      // never be answered — an acceptance's deadline is at or after now and at or
+      // before the demand's — so the demand would read as dishonoured from the
+      // index it was filed at, for one signature, against any backer. A deadline
+      // AT the filing index could be answered at that same index and nowhere
+      // after it; it is refused too, as a lock's timeout at its own creation is
+      // (24c): the same index is not a window. Like every TIME rule a refusal at
+      // the door, never a balance, so a replay (no clock) stays exact.
+      if (clock !== undefined && entry.deadline <= clock) {
+        throw new LedgerError("demand deadline is not ahead of the witnessed index");
       }
       if (spendable(state, entry.holder) < entry.quantity) {
         throw new LedgerError("insufficient balance");

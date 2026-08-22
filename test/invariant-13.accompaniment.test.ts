@@ -9,6 +9,7 @@ import {
   demandHash,
   encodeDemand,
   encodeLock,
+  encodeWithdrawal,
   type DemandOp,
   type LockOp,
   NO_DECISION_VENUE,
@@ -16,7 +17,8 @@ import {
 import { type PublishedOp } from "../src/oplog.js";
 import { Sequencer } from "../src/sequencer.js";
 import { LocalVenue } from "../src/venue.js";
-import { KEYS, SECRETS } from "./support.js";
+import { advanceWitnessedIndex, KEYS, SECRETS } from "./support.js";
+import { compareBytes } from "../src/bytes.js";
 
 // The gap slice 22 pinned as OPEN, and the party it costs.
 //
@@ -376,5 +378,129 @@ describe("one level, no traversal — and what covers the rest", () => {
     // The gap is in the TERMS, and that is the question closure answers.
     expect(closureStatus(terms, eur)).toBe("unclosed");
     expect(closureStatus(terms, gold)).toBe("closed");
+  });
+});
+
+describe("invariant 13: a leg is accompaniment only if the holder's release converts it, now", () => {
+  /** A GOLD leg for alice's demand, signed over the parties given. */
+  function legWith(sequencer: Sequencer, gold: Backing, hash: Uint8Array, parties: Uint8Array[]): PublishedOp {
+    const full: LockOp = {
+      backing: gold,
+      attemptId: hash,
+      holder: KEYS.alice,
+      beneficiary: KEYS.backer,
+      quantity: 80n,
+      timeout: 90n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties,
+      nonce: sequencer.nextNonce(KEYS.alice, gold),
+    };
+    return {
+      kind: "lock",
+      attemptId: full.attemptId,
+      holder: full.holder,
+      beneficiary: full.beneficiary,
+      quantity: full.quantity,
+      timeout: full.timeout,
+      decisionVenue: full.decisionVenue,
+      parties: full.parties,
+      nonce: full.nonce,
+      signature: ed25519.sign(encodeLock(full), SECRETS.alice),
+    };
+  }
+
+  it("catches a leg convertible by anyone but the demand holder, or by several", () => {
+    // Found from four angles (the 2026-08-22 audit, slice 27's review): the
+    // converting party was checked for the paying lock in two hand-written
+    // places and for a leg nowhere, so a leg naming a stranger, or two parties,
+    // read as accompanied — and a set leg names no venue, so no witnessed object
+    // could ever convert it. LegTerms carries the converter now, for every reader.
+    for (const parties of [[KEYS.mallory], [KEYS.alice, KEYS.mallory].sort(compareBytes), [KEYS.backer]]) {
+      const { venue, sequencer, eur, gold, terms } = setup();
+      const { hash, op } = bareDemand(sequencer, eur, 40n);
+      const state = commitWith(venue, sequencer, [
+        { backing: eur, op },
+        { backing: gold, op: legWith(sequencer, gold, hash, parties) },
+      ]);
+      expect(accompanimentOf(eur, venue, terms, state, hash)).toBe("unaccompanied");
+    }
+  });
+
+  it("and a leg past its timeout: the set has to be re-prepared before it can be answered", () => {
+    const { venue, sequencer, eur, gold, terms } = setup();
+    const { hash } = file(sequencer, venue, eur, gold, 40n);
+    const state = served(sequencer);
+    advanceWitnessedIndex(venue, 90n);
+    expect(accompanimentOf(eur, venue, terms, state, hash)).toBe("accompanied");
+    advanceWitnessedIndex(venue, 91n);
+    expect(accompanimentOf(eur, venue, terms, state, hash)).toBe("unaccompanied");
+    // Re-prepared — withdrawn alone, locked again — it reads accompanied again.
+    const out = { backing: gold, demandHash: hash, nonce: sequencer.nextNonce(KEYS.alice, gold) };
+    sequencer.submitWithdrawal(out, ed25519.sign(encodeWithdrawal(out), SECRETS.alice));
+    const again: LockOp = {
+      backing: gold,
+      attemptId: hash,
+      holder: KEYS.alice,
+      beneficiary: KEYS.backer,
+      quantity: 80n,
+      timeout: 150n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: sequencer.nextNonce(KEYS.alice, gold),
+    };
+    sequencer.submitLeg(eur, hash, { op: again, signature: ed25519.sign(encodeLock(again), SECRETS.alice) });
+    expect(accompanimentOf(eur, venue, terms, served(sequencer), hash)).toBe("accompanied");
+  });
+});
+
+describe("invariant 13: what the readers say when nothing can answer the set any more", () => {
+  it("a demand past its own deadline reads unaccompanied: no acceptance can be live again", () => {
+    // Found regression-reviewing slice 27: the reader said accompanied at 101 for
+    // a demand with deadline 100, where the backer's acceptance and the holder's
+    // re-prepare were both refused.
+    const { venue, sequencer, eur, gold, terms } = setup();
+    const { hash } = file(sequencer, venue, eur, gold, 40n);
+    const state = served(sequencer);
+    advanceWitnessedIndex(venue, 100n);
+    // (the leg lapsed at 90 — so unaccompanied already; the deadline is what is read here)
+    advanceWitnessedIndex(venue, 101n);
+    expect(accompanimentOf(eur, venue, terms, state, hash)).toBe("unaccompanied");
+  });
+
+  it("a leg naming a decision venue reads unaccompanied, whatever its other terms: a set leg names none", () => {
+    // Found regression-reviewing slice 27: the venue was checked at both doors
+    // and by neither reader, so a lock carrying the set's every other term and a
+    // venue read as accompanied — and converted alone on a commit. The venue is
+    // part of the one definition (legMismatch) now.
+    const { venue, sequencer, eur, gold, terms } = setup();
+    const { hash, op } = bareDemand(sequencer, eur, 40n);
+    const full: LockOp = {
+      backing: gold,
+      attemptId: hash,
+      holder: KEYS.alice,
+      beneficiary: KEYS.backer,
+      quantity: 80n,
+      timeout: 90n,
+      decisionVenue: venue.id,
+      parties: [KEYS.alice],
+      nonce: sequencer.nextNonce(KEYS.alice, gold),
+    };
+    const venueLeg: PublishedOp = {
+      kind: "lock",
+      attemptId: full.attemptId,
+      holder: full.holder,
+      beneficiary: full.beneficiary,
+      quantity: full.quantity,
+      timeout: full.timeout,
+      decisionVenue: full.decisionVenue,
+      parties: full.parties,
+      nonce: full.nonce,
+      signature: ed25519.sign(encodeLock(full), SECRETS.alice),
+    };
+    const state = commitWith(venue, sequencer, [
+      { backing: eur, op },
+      { backing: gold, op: venueLeg },
+    ]);
+    expect(accompanimentOf(eur, venue, terms, state, hash)).toBe("unaccompanied");
   });
 });

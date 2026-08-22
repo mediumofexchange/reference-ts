@@ -15,6 +15,7 @@ import { isRewrittenHistory } from "../src/fault.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import { receiptStatus } from "../src/receipt.js";
 import { isOverdue, isSilent, stateIsAuthentic } from "../src/recovery.js";
+import { encodeLock } from "../src/presentation.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
 import { LocalVenue, VenueError, type Venue } from "../src/venue.js";
 import { KEYS, pub, SECRETS } from "./support.js";
@@ -496,5 +497,50 @@ describe("§C2: a takeover is all or nothing", () => {
     expect(() => successor.takeOver(backing, rooted)).toThrow(SequencerError);
     // And nothing of it stuck, so an honest state can still be taken over.
     expect(successor.opLog(backing)).toHaveLength(0);
+  });
+});
+
+describe("§C2: a retired operator still answers a repeat, and refuses a new act", () => {
+  it("a lock it co-signed before the handover is answered with its receipt afterwards; a fresh lock is refused", () => {
+    // A repeat is a read of the receipt book, not an act: the co-signature was
+    // given while the operator was in force, and the successor cannot produce
+    // it — so refusing to re-serve it would deny the payee the only evidence of
+    // what happened (invariant 26; CLAUDE.md's receipt rule). "No new
+    // co-signatures issue" is about acts, which `ready` refuses. Slice 27's
+    // review first put the in-force check ahead of the repeat and then reversed
+    // it, for this reason.
+    const { venue, backing } = setup();
+    const incumbent = new Sequencer(SECRETS.operator, venue);
+    incumbent.register(backing, signBacking(SECRETS.backer, backing));
+    incumbent.submitIssue(
+      { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
+      ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
+    );
+    const lock = {
+      backing,
+      attemptId: new Uint8Array(32).fill(0x4e),
+      holder: KEYS.alice,
+      beneficiary: KEYS.bob,
+      quantity: 10n,
+      timeout: 500n,
+      decisionVenue: venue.id,
+      parties: [KEYS.alice],
+      nonce: 0n,
+    };
+    const signature = ed25519.sign(encodeLock(lock), SECRETS.alice);
+    const receipt = incumbent.submitLock(lock, signature);
+    const served = { snapshots: incumbent.snapshot(), commitment: incumbent.commit() };
+    at(venue, 5n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
+    const successor = new Sequencer(SUCCESSOR_SECRET, venue);
+    successor.register(backing, signBacking(SECRETS.backer, backing));
+    successor.takeOver(backing, served);
+    successor.commit();
+    expect(operatorAt(backing, venue, venue.witnessedIndex())).toEqual(SUCCESSOR);
+    // The repeat: the same receipt, from the retired operator's own book.
+    expect(incumbent.submitLock(lock, signature)).toEqual(receipt);
+    // A new act: refused.
+    const fresh = { ...lock, attemptId: new Uint8Array(32).fill(0x4f), nonce: 1n };
+    expect(() => incumbent.submitLock(fresh, ed25519.sign(encodeLock(fresh), SECRETS.alice))).toThrow(/not yet in force/);
   });
 });

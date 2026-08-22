@@ -92,8 +92,13 @@ the rule still stands.
   (`NO_DECISION_VENUE`), so no commit reaches it and it settles only with its set. Which branch a trade uses is the parties' choice — §C2's other honest
   answer, partial-and-retry, is the ordinary transfer path and covers every trade
   where both sides have recourse. The law stays per backing, so whether
-  a demand's legs were locked is read across the served state by
-  `accompanimentOf`, which the backer asks before it signs an acceptance. **A
+  a demand's legs were locked — for the set's quantity, by the set's holder, to
+  the set's beneficiary, convertible by the demand holder and by that party
+  alone, and still live — is read across the served state by `accompanimentOf`,
+  which the backer asks before it signs an acceptance (the converter and the
+  venue are one definition, `LegTerms`, for the sequencer and both readers;
+  liveness is the law's at the doors and each reader's own question on the
+  venue's clock). **A
   lock carries §C3's timeout**, and it is the one predicate both exits read
   (`lockIsLive`): at or before it a commit can still settle the set and no
   withdrawal is accepted; a commit witnessed past it does not reach it, and
@@ -102,11 +107,21 @@ the rule still stands.
   (`committedInTime`: the sequencer before it co-signs a withdrawal, on the
   submit path and the gap path alike, and the verifier's gap fold). Exactly one
   exit is open at every index **per record**, as for a demand on its acceptance
-  (a set of records can have both closed, within the holder's own declared
-  window). A lock and a demand never share a hash on one backing, and a bundle
+  (a set of records can have both closed within the holder's own declared
+  window — a set has an exit at or before a leg's timeout only while an
+  acceptance is live, and otherwise the holder waits out the timeout it signed;
+  what no longer exists is a window the BACKER's choices close: a leg that lapses
+  inside a live acceptance is **re-prepared** — withdrawn, alone and past its
+  timeout, and locked again under the standing demand through `submitLeg`, one
+  leg per call, by the checks each leg passed at filing, with the record adopted
+  first; §C3's "a demand outlives its locks"). A lock and a demand never share a
+  hash on one backing, and a bundle
   lock is prepared only where the sequencer can read the commits it may settle
   on and only for an attempt the record does not already show committed (a set
-  leg names no venue, needs none, and comes only with its set). Every TIME
+  leg names no venue, needs none, and comes only with its set — at filing, or
+  re-prepared for a standing demand by its holder). A demand's deadline, like a
+  lock's timeout, is strictly ahead of the witnessed index at filing: the same
+  index is not a window. Every TIME
   rule is a refusal and never a balance, because the clock is undefined on a
   replay and a lock that freed its own units would make an honest history
   unreplayable. Quantities are whole
@@ -332,6 +347,12 @@ for speed anywhere else; this is a reference implementation, not a product.
 - **Regression-review the fixes.** After fixing review findings, review the
   fixes themselves. Every round so far has found a real bug there, and the
   recurring shape is a fix that bounded one input and left the other open.
+- **A refusal added at a door names the honest path it leaves open, and a test
+  walks it.** Slice 26 closed a stranger's door and the holder's re-prepare with
+  it; the regression review asked "what else does this refuse?" only about
+  strangers. A door closed to one party is a door closed to everyone who used it.
+- **A test's name is a claim the test must exercise.** A test titled "can be
+  relocked" that never relocks is how a behaviour retires unnoticed.
 - **Explain, don't just produce.** Bob is learning TypeScript and git. When
   asked to explain, walk through the code in plain language. Prefer readable
   code over clever code everywhere.

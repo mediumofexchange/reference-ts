@@ -1,6 +1,7 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import { describe, expect, it } from "vitest";
-import { acceptanceIsLive, isDishonoured, LedgerError, TransparentLedger } from "../src/ledger.js";
+import { acceptanceIsLive, isDishonoured, LedgerError, replayLog, TransparentLedger } from "../src/ledger.js";
 import { encodeBurn, encodeIssuance, encodeTransfer } from "../src/messages.js";
 import {
   demandHash,
@@ -441,5 +442,66 @@ describe("§C3: an acceptance cannot launder the backer's own failure", () => {
         expect([at, accepted, released, withdrew]).toEqual([at, accepted, released, !released]);
       }
     }
+  });
+});
+
+describe("§C3: the window is the holder's, and it is open when it is set", () => {
+  // "The holder signs a notice naming... a deadline of their choosing... The
+  // deadline marks when non-payment becomes a public fact." A deadline behind
+  // the filing index could never be answered — an acceptance's deadline is at or
+  // after now and at or before the demand's — so the demand read as dishonoured
+  // from the index it was filed at, for one signature, against any backer
+  // (review-past-deadline-demand.mjs). A deadline AT the filing index could be
+  // answered at that index and nowhere after it; it is refused too, as a lock's
+  // timeout at its own creation is (24a/24c): the same index is not a window.
+  // A TIME rule: a refusal and never a balance, so the gap path inherits it at
+  // the venue's stamp and a replay stays exact.
+  it("refuses a demand whose deadline is behind the witnessed index", () => {
+    const { ledger, backing } = setup();
+    expect(() => present(ledger, backing, 40n, 4n, 5n)).toThrow(/deadline is not ahead/);
+    expect(ledger.openDemands(backing)).toHaveLength(0);
+  });
+
+  it("and one whose deadline is the witnessed index: a zero-length window is no window", () => {
+    const { ledger, backing } = setup();
+    expect(() => present(ledger, backing, 40n, 5n, 5n)).toThrow(/deadline is not ahead/);
+    expect(ledger.openDemands(backing)).toHaveLength(0);
+  });
+
+  it("one index ahead is the holder's shortest window, and it stands", () => {
+    const { ledger, backing } = setup();
+    present(ledger, backing, 40n, 6n, 5n);
+    expect(ledger.openDemands(backing)).toHaveLength(1);
+  });
+
+  it("a replay has no clock and keeps the history: TIME rules refuse at the door, never in the fold", () => {
+    // The same convention as the lock's creation rule: a verifier folding a
+    // served log cannot know the index a demand was filed at, so the rule is
+    // the operator's — and the gap path's, at the venue's stamp — and not the
+    // replay's. So a log that carries one was not accepted at any door: it is
+    // a log an operator inserted a refused demand into, and it replays — the
+    // verdict it manufactures costs the holder's signature AND a co-operating
+    // operator, which is the price every TIME rule has on a replay (24a).
+    const { ledger, backing } = setup();
+    const op = {
+      backing,
+      holder: KEYS.alice,
+      quantity: 40n,
+      instant: 5n,
+      deadline: 4n,
+      nonce: ledger.nextNonce(KEYS.alice, backing),
+    };
+    const entry = {
+      kind: "demand" as const,
+      holder: op.holder,
+      quantity: op.quantity,
+      instant: op.instant,
+      deadline: op.deadline,
+      nonce: op.nonce,
+      signature: ed25519.sign(encodeDemand(op), SECRETS.alice),
+      position: ledger.opLog(backing).length,
+    };
+    const state = replayLog(backing, [...ledger.opLog(backing), entry]);
+    expect(state?.demands.get(bytesToHex(demandHash(op)))?.deadline).toBe(4n);
   });
 });

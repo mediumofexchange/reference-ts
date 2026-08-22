@@ -20,7 +20,7 @@ import { Sequencer, SequencerError } from "../src/sequencer.js";
 import { LocalVenue } from "../src/venue.js";
 import { compareBytes } from "../src/bytes.js";
 import { snapshotRedemptions } from "../src/recovery.js";
-import { KEYS, SECRETS } from "./support.js";
+import { advanceWitnessedIndex, KEYS, SECRETS } from "./support.js";
 
 // §C3: "A payout paying in claims settles as a swap inside the settlement. The
 // acceptance names the claims, or the fresh issuance, that will pay, and the
@@ -226,6 +226,13 @@ describe("§C3: reading the payout, and the gap", () => {
     expect(payoutOf(f.eur, f.venue, terms, served(), hash)).toBe("unreserved");
     accept(f, hash, 40n);
     expect(payoutOf(f.eur, f.venue, terms, served(), hash)).toBe("reserved");
+    // And only while the acceptance is live: the lock outlasts the answer by the
+    // door's rule, so it is the acceptance the holder's read must ask (found
+    // regression-reviewing slice 27: "reserved" at 91 while the release was refused).
+    advanceWitnessedIndex(f.venue, 90n);
+    expect(payoutOf(f.eur, f.venue, terms, served(), hash)).toBe("reserved");
+    advanceWitnessedIndex(f.venue, 91n);
+    expect(payoutOf(f.eur, f.venue, terms, served(), hash)).toBe("unreserved");
     expect(payoutOf(f.gold, f.venue, terms, served(), hash)).toBe("outside");
     expect(payoutOf(f.eur, f.venue, () => undefined, served(), hash)).toBe("unreadable");
   });
@@ -426,7 +433,7 @@ describe("§C3: the paying slot cannot be taken before the demand either", () =>
     };
     f.sequencer.submitLock(first, ed25519.sign(encodeLock(first), SECRETS.alice));
     expect(() => f.sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice))).toThrow(
-      /paying slot/,
+      /re-file with a fresh nonce/,
     );
     expect(f.sequencer.openDemands(f.eur)).toHaveLength(0);
   });
