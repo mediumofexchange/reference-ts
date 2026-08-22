@@ -242,7 +242,7 @@ describe("the two record kinds the first table left out: a lock and a commit", (
     expect(read[1]?.op).toEqual(lockOp(parties(1)));
   });
 
-  it("a commit is filed under its attempt, never under a backing: publishOp refuses it, as an Ergo sync does", () => {
+  it("a commit is filed under its attempt, never under a backing: publishOp refuses it", () => {
     // A commit's message names no backing, so a record of it filed under one
     // names a key the bytes do not carry. ErgoVenue's sync refuses a nameless
     // operation record; the local venue now answers the same bytes the same way.

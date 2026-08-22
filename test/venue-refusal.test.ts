@@ -230,8 +230,9 @@ function exportedVenueReaders(): string[] {
     if (!file.endsWith(".ts")) continue;
     const source = readFileSync(new URL(file, dir), "utf8");
     // The parameter list is read to its matching paren, not to the first `)`:
-    // a callback type before the Venue parameter hid a reader from this check
-    // entirely (found by the 2026-08-22 audit).
+    // no reader is hidden today, but the first exported reader written with an
+    // inline callback type before its Venue parameter would have vanished from
+    // this check silently (found by the 2026-08-22 audit).
     for (const match of source.matchAll(/export function (\w+)\(/g)) {
       const open = (match.index as number) + match[0].length;
       let depth = 1;

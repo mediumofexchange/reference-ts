@@ -303,7 +303,7 @@ describe("§C2b: a proved holding is what the law would let the holder commit", 
   it("quietFor answers for a malformed operator key rather than throwing", () => {
     const { venue } = setup();
     for (const junk of [undefined, null, 42, "operator", new Uint8Array(5)]) {
-      expect(() => quietFor(venue, junk as never)).not.toThrow();
+      expect(quietFor(venue, junk as never)).toBe(0n);
     }
   });
 });

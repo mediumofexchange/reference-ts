@@ -252,6 +252,7 @@ describe("§C2: the grade follows the incumbent", () => {
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
     commitAs(venue, SUCCESSOR_SECRET);
     at(venue, 5n + SILENCE.noCommitmentDuration + 1n);
+    expect(operatorAt(backing, venue, venue.witnessedIndex())).toEqual(SUCCESSOR);
     expect(isSilent(venue, backing)).toBe(true);
   });
 });

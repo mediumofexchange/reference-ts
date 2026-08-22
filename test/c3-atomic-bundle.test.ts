@@ -506,11 +506,17 @@ describe("§C3: an attempt id names one attempt on one backing, for the locks a 
     expect(() => two.submitLock(again, ed25519.sign(encodeLock(again), SECRETS.alice))).toThrow(
       /already been used on this backing/,
     );
-    // So the withheld object, published now, reaches nothing.
+    const againEur = lockFor(one, eur, venue, 40n, ATTEMPT, 300n);
+    expect(() => one.submitLock(againEur, ed25519.sign(encodeLock(againEur), SECRETS.alice))).toThrow(
+      /already been used on this backing/,
+    );
+    // So the withheld object, published now, reaches nothing on either.
     venue.publishCommit(withheld);
     expect(() => two.settle(gold, ATTEMPT)).toThrow(/no lock for that attempt/);
+    expect(() => one.settle(eur, ATTEMPT)).toThrow(/no lock for that attempt/);
     expect(two.balance(gold, KEYS.bob)).toBe(0n);
     expect(two.availableBalance(gold, KEYS.alice)).toBe(200n);
+    expect(one.availableBalance(eur, KEYS.alice)).toBe(200n);
   });
 
   it("a fresh id is the retry, and a settled id is spent too", () => {
@@ -520,9 +526,26 @@ describe("§C3: an attempt id names one attempt on one backing, for the locks a 
     one.settle(eur, ATTEMPT);
     two.settle(gold, ATTEMPT);
     const relock = lockFor(two, gold, venue, 10n, ATTEMPT, 300n);
+    // At the sequencer the gate answers first (24c: the venue shows the attempt
+    // committed); in the law the retired id answers — pinned through the replay,
+    // since the gate stands in front of the door.
     expect(() => two.submitLock(relock, ed25519.sign(encodeLock(relock), SECRETS.alice))).toThrow(
-      /already been used on this backing|already committed/,
+      /already committed at this venue/,
     );
+    const entry = {
+      kind: "lock" as const,
+      attemptId: relock.attemptId,
+      holder: relock.holder,
+      beneficiary: relock.beneficiary,
+      quantity: relock.quantity,
+      timeout: relock.timeout,
+      decisionVenue: relock.decisionVenue,
+      parties: relock.parties,
+      nonce: relock.nonce,
+      signature: ed25519.sign(encodeLock(relock), SECRETS.alice),
+      position: two.opLog(gold).length,
+    };
+    expect(replayLog(gold, [...two.opLog(gold), entry])).toBeUndefined();
     const fresh = new Uint8Array(32).fill(0xb8);
     const next = lockFor(two, gold, venue, 10n, fresh, 300n);
     two.submitLock(next, ed25519.sign(encodeLock(next), SECRETS.alice));
@@ -549,7 +572,6 @@ describe("§C3: an attempt id names one attempt on one backing, for the locks a 
       position: two.opLog(gold).length,
     };
     expect(replayLog(gold, [...two.opLog(gold), entry])).toBeUndefined();
-    void one; void eur;
   });
 });
 
@@ -565,7 +587,6 @@ describe("§C3: the readers of a lock's venue never throw, and never read the wr
     const record = { ...lock, nonce: 0n };
     expect(committedInTime(venue, record)).toBe(true);
     expect(() => committedInTime(new LocalVenue(new Uint8Array(32).fill(0x55)), record)).toThrow(VenueError);
-    void one; void eur;
   });
 
   it("a malformed lock record is an answer, not a throw", () => {

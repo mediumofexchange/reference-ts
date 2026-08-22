@@ -249,7 +249,7 @@ describe("invariant 16: an answer is checked against the name it was asked for â
     expect(closureStatus(lying, x)).toBe("unreadable");
     expect(() => closureOf(lying, [at(x, 1n)])).toThrow(EncodingError);
     // And the honest store still closes to {x:1, y:2, z:2}.
-    const closed = closureOf(store(x, y, z), [at(x, 1n)]);
-    expect(closed.map((e) => e.count)).toEqual(expect.arrayContaining([1n, 2n, 2n]));
+    const closed = new Map(closureOf(store(x, y, z), [at(x, 1n)]).map((e) => [Buffer.from(e.target).toString("hex"), e.count]));
+    expect([closed.get(x.nameHex), closed.get(y.nameHex), closed.get(z.nameHex)]).toEqual([1n, 2n, 2n]);
   });
 });
