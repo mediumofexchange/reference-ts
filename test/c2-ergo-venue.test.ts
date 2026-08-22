@@ -383,13 +383,17 @@ describe("a view answers only for what it was synced for", () => {
 });
 
 describe("a sequencer on this venue refuses to prepare", () => {
-  it("because it could not read the commit a lock would settle on", () => {
+  it("because it could not read the commit a lock would settle on", async () => {
     // §C3: "A sequencer unwilling to watch it refuses to prepare, which is an
     // abort rather than a fork." This view does not sync commits (above), so a
     // lock taken here could be neither settled nor, once the record showed it
     // committed, safely released — the sequencer probes the venue before it
     // reserves anything, and the venue's refusal is the answer.
-    const sequencer = new Sequencer(SECRETS.operator, venue());
+    // A synced, box-less view: the clock and the record answer, and the commits
+    // probe is what refuses (the door readies — adopts — before it probes).
+    const v = venue();
+    await v.sync(new FakeNode().at(100n), [backing]);
+    const sequencer = new Sequencer(SECRETS.operator, v);
     sequencer.register(backing, signBacking(SECRETS.backer, backing));
     const lock: LockOp = {
       backing,
@@ -412,7 +416,7 @@ describe("a sequencer on this venue refuses to prepare", () => {
 });
 
 describe("and a set leg names no venue at all", () => {
-  it("a leg naming this venue is refused: legs settle with their set, never on a commit", () => {
+  it("a leg naming this venue is refused: legs settle with their set, never on a commit", async () => {
     // Slice 26: a presentation's legs name no decision venue (NO_DECISION_VENUE), so
     // this view's silence on commits never touches them — and a leg that names a
     // venue anyway is refused where the set is filed.
@@ -436,7 +440,11 @@ describe("and a set leg names no venue at all", () => {
         witnessing: { venue: VENUE_ID, interval: 5n },
       },
     });
-    const sequencer = new Sequencer(SECRETS.operator, venue());
+    // A synced, box-less view: the clock and the record answer, and the commits
+    // probe is what refuses (the door readies — adopts — before it probes).
+    const v = venue();
+    await v.sync(new FakeNode().at(100n), [gold, eur]);
+    const sequencer = new Sequencer(SECRETS.operator, v);
     sequencer.register(gold, signBacking(SECRETS.backer, gold));
     sequencer.register(eur, signBacking(SECRETS.backer, eur));
     const demand: DemandOp = {
