@@ -189,6 +189,8 @@ export class ErgoVenue implements Venue {
   private readonly depth: bigint;
   private readonly addressing: ErgoAddressing;
   private height = 0n;
+  /** Whether `sync` has run: until it has, the clock is nothing this view can answer. */
+  private synced = false;
   /** Operator hex -> its commitments, in witnessed order. */
   private readonly commitments = new Map<string, Witnessed<Commitment>[]>();
   /** Backing name hex -> operations, in witnessed order. */
@@ -204,12 +206,15 @@ export class ErgoVenue implements Venue {
   /** The obligor keys it fetched revocations for. */
   private readonly revoked = new Set<string>();
 
-  constructor(id: Uint8Array, depth: bigint, addressing: ErgoAddressing) {
-    if (!(id instanceof Uint8Array) || id.length !== 32) {
-      throw new VenueError("a venue id must be 32 bytes");
-    }
+  /**
+   * The id is derived here from the chain, the depth and the publication script,
+   * never handed in: taken as a separate argument, one declared venue could be
+   * read on two clocks — the exact fork `ergoVenueId` exists to rule out (found
+   * by the 2026-08-22 audit, twice).
+   */
+  constructor(chain: string, depth: bigint, publicationScript: string, addressing: ErgoAddressing) {
     if (depth < 0n) throw new VenueError("a finality depth cannot be negative");
-    this.venueId = copyBytes(id);
+    this.venueId = ergoVenueId(chain, depth, publicationScript);
     this.depth = depth;
     this.addressing = addressing;
   }
@@ -278,6 +283,7 @@ export class ErgoVenue implements Venue {
         }
       }
     }
+    this.synced = true;
   }
 
   /**
@@ -397,6 +403,10 @@ export class ErgoVenue implements Venue {
   }
 
   witnessedIndex(): bigint {
+    // The one read that had no guard (found by the 2026-08-22 audit): a view
+    // that has not synced answered 0, so every lock read live, every acceptance
+    // live, nothing dishonoured — absence of data as an exoneration.
+    if (!this.synced) throw new VenueError("this view has not been synced");
     return this.height;
   }
 

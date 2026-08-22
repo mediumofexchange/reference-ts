@@ -410,3 +410,22 @@ describe("§C2b: void, not a fault, and nothing is unwound", () => {
     expect(standingOutstanding(backing, venue, boundary)).toBe(100n);
   });
 });
+
+describe("§C2b: a revoked key stops new issuance, not the receipt of one already taken", () => {
+  it("the replay of an accepted issuance is answered with its receipt after the revocation; a fresh one is refused", () => {
+    // Found regression-reviewing slice 27: the revocation refusal sat ahead of
+    // the repeat lookup, so the one door that must never issue again also
+    // refused to re-serve a receipt it had given in force (invariant 26).
+    const { venue, sequencer, backing } = setup();
+    const op = { backing, recipient: KEYS.alice, quantity: 10n, nonce: sequencer.nextNonce(KEYS.backer, backing) };
+    const signature = ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 10n, op.nonce), SECRETS.backer);
+    const receipt = sequencer.submitIssue(op, signature);
+    venue.publishRevocation(signRevocation(SECRETS.backer));
+    venue.advance(1n);
+    expect(sequencer.submitIssue(op, signature)).toEqual(receipt);
+    const fresh = { ...op, nonce: op.nonce + 1n };
+    expect(() =>
+      sequencer.submitIssue(fresh, ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 10n, fresh.nonce), SECRETS.backer)),
+    ).toThrow(/revoked/);
+  });
+});

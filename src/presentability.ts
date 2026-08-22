@@ -16,7 +16,7 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { paysInClaims, backingName, type Backing } from "./backing.js";
 import { legMismatch } from "./presentation.js";
 import { acceptanceIsLive, lockIsLive } from "./ledger.js";
-import { compareBytes } from "./bytes.js";
+import { compareBytes, isValidQuantity } from "./bytes.js";
 import { type Terms } from "./closure.js";
 import { type ServedState } from "./commitment.js";
 import { replayServedState } from "./recovery.js";
@@ -26,12 +26,18 @@ import { answering, type Venue } from "./venue.js";
 export type HoldingView = (name: Uint8Array) => bigint;
 
 export function presentableFor(view: HoldingView, backing: Backing, quantity: bigint): boolean {
-  if (quantity < 1n) return false;
-  if (view(backingName(backing)) < quantity) return false;
-  for (const entry of backing.reliance) {
-    if (view(entry.target) < quantity * entry.count) return false;
-  }
-  return true;
+  // A verifier: a non-quantity is "not presentable", not a TypeError, and a
+  // backing whose fields do not re-encode (backingName recomputes the hash) is
+  // not presentable either rather than a throw (found by the 2026-08-22 audit,
+  // and reviewing its slice).
+  return answering(() => {
+    if (!isValidQuantity(quantity)) return false;
+    if (view(backingName(backing)) < quantity) return false;
+    for (const entry of backing.reliance) {
+      if (view(entry.target) < quantity * entry.count) return false;
+    }
+    return true;
+  }, false);
 }
 
 /**

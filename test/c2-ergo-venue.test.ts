@@ -13,7 +13,7 @@ import {
 import { encodePublishedOp } from "../src/oplog.js";
 import { encodeTransferMessage } from "../src/messages.js";
 import { demandHash, encodeDemand, encodeLock, type DemandOp, type LockOp } from "../src/presentation.js";
-import { Sequencer } from "../src/sequencer.js";
+import { Sequencer, SequencerError } from "../src/sequencer.js";
 import { isSilent, provesHolding, quietFor } from "../src/recovery.js";
 import { VenueError } from "../src/venue.js";
 import { operatorAt } from "../src/replacement.js";
@@ -97,7 +97,7 @@ function commitment(sequence: bigint, fill: number): Commitment {
 }
 
 function venue(): ErgoVenue {
-  return new ErgoVenue(VENUE_ID, DEPTH, ADDRESSING);
+  return new ErgoVenue("ergo-testnet", DEPTH, SCRIPT, ADDRESSING);
 }
 
 describe("a venue's identity commits to its finality rule", () => {
@@ -112,6 +112,34 @@ describe("a venue's identity commits to its finality rule", () => {
     expect(ergoVenueId("ergo-mainnet", 3n, SCRIPT)).not.toEqual(base);
     expect(ergoVenueId("ergo-testnet", 3n, "other-script")).not.toEqual(base);
     expect(base).toHaveLength(32);
+  });
+
+  it("the view derives its id from the depth it runs, so one declared venue cannot be read on two clocks", async () => {
+    // Found by the 2026-08-22 audit, twice: the id and the depth were separate
+    // constructor arguments, so two views carrying E's id could answer §C3's
+    // release predicate differently. Now the only way to carry the id is to run
+    // the depth it commits to.
+    expect(venue().id).toEqual(VENUE_ID);
+    expect(new ErgoVenue("ergo-testnet", 0n, SCRIPT, ADDRESSING).id).not.toEqual(VENUE_ID);
+    const node = new FakeNode().at(100n).putCommitment(commitment(0n, 0xaa), 40n);
+    const declared = venue();
+    const eager = new ErgoVenue("ergo-testnet", 0n, SCRIPT, ADDRESSING);
+    await declared.sync(node, [backing]);
+    await eager.sync(node, [backing]);
+    expect(declared.witnessedIndex()).toBe(97n);
+    expect(eager.witnessedIndex()).toBe(100n);
+    // And only one of them is the venue the backing declares.
+    expect(declared.id).toEqual(backing.evidence.witnessing?.venue);
+    expect(eager.id).not.toEqual(backing.evidence.witnessing?.venue);
+  });
+
+  it("the clock is nothing an unsynced view can answer", async () => {
+    // The one read that had no guard: it answered 0, so every lock read live and
+    // nothing read dishonoured — absence of data as an exoneration.
+    const v = venue();
+    expect(() => v.witnessedIndex()).toThrow(VenueError);
+    await v.sync(new FakeNode().at(100n), [backing]);
+    expect(v.witnessedIndex()).toBe(97n);
   });
 });
 
@@ -471,5 +499,20 @@ describe("and a set leg names no venue at all", () => {
         { op: leg, signature: ed25519.sign(encodeLock(leg), SECRETS.alice) },
       ]),
     ).toThrow(/names no decision venue/);
+  });
+});
+
+describe("settle answers in the sequencer's own voice where the venue is not needed", () => {
+  it("no lock standing is a SequencerError, not a VenueError, on a venue that refuses commits", async () => {
+    // Found by the 2026-08-22 audit: settle read the venue's commits to answer a
+    // repeat before it knew whether a lock stood, so a commits-refusing view
+    // threw where "no lock for that attempt stands here" was the honest answer
+    // — and the receipt a repeat needs is the sequencer's own, no venue required.
+    const v = venue();
+    await v.sync(new FakeNode().at(100n), [backing]);
+    const sequencer = new Sequencer(SECRETS.operator, v);
+    sequencer.register(backing, signBacking(SECRETS.backer, backing));
+    expect(() => sequencer.settle(backing, new Uint8Array(32).fill(0xd1))).toThrow(SequencerError);
+    expect(() => sequencer.settle(backing, new Uint8Array(32).fill(0xd1))).toThrow(/no lock for that attempt/);
   });
 });

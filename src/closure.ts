@@ -30,7 +30,7 @@
 // for looping.
 
 import { backingName, type Backing, type RelianceEntry } from "./backing.js";
-import { bytesToHex } from "@noble/hashes/utils.js";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError, validateQuantity } from "./bytes.js";
 
 /**
@@ -142,7 +142,10 @@ export function closureOf(
   if (settled.size !== nodes.size) throw new EncodingError("closure did not complete");
 
   return [...settled]
-    .map(([key, count]) => ({ target: copyBytes((nodes.get(key) as Backing).name), count }))
+    // The key the node was filed under — the name the answer was checked against —
+    // never a field on the object the resolver handed back: a forged `.name` was
+    // emitted verbatim (found reviewing the audit slice).
+    .map(([key, count]) => ({ target: hexToBytes(key), count }))
     .sort((a, b) => compareBytes(a.target, b.target));
 }
 

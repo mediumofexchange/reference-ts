@@ -117,11 +117,15 @@ the rule still stands.
   first; §C3's "a demand outlives its locks"). A lock and a demand never share a
   hash on one backing, and a bundle
   lock is prepared only where the sequencer can read the commits it may settle
-  on and only for an attempt the record does not already show committed (a set
-  leg names no venue, needs none, and comes only with its set — at filing, or
-  re-prepared for a standing demand by its holder). A demand's deadline, like a
-  lock's timeout, is strictly ahead of the witnessed index at filing: the same
-  index is not a window. Every TIME
+  on and only for an attempt the record does not already show committed — and,
+  in the law, **an attempt id names one attempt on one backing for the locks a
+  commit can reach**: once a venue-naming lock under it has settled or withdrawn
+  there, no other stands there, since a commit binds its id and nothing else and
+  a withheld object would otherwise convert a later lock (the 2026-08-22 audit).
+  A set leg names no venue, needs none, is not retired, and comes only with its
+  set — at filing, or re-prepared for a standing demand by its holder. A demand's
+  deadline, like a lock's timeout, is strictly ahead of the witnessed index at
+  filing: the same index is not a window. Every TIME
   rule is a refusal and never a balance, because the clock is undefined on a
   replay and a lock that freed its own units would make an honest history
   unreplayable. Quantities are whole

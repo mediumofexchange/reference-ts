@@ -10,6 +10,7 @@ import {
   type ConstantPayout,
 } from "../src/backing.js";
 import { EncodingError } from "../src/bytes.js";
+import { KEYS } from "./support.js";
 
 // Invariant 1: a backing's name is the hash, under a declared function, of a
 // canonical encoding of (K, P, R, E). Same fields must give the same bytes
@@ -461,3 +462,42 @@ const GOLDEN_ENCODING_HEX =
   "4d46504201018a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c0100000003455552fe0000000164000000020133333333333333333333333333333333333333333333333333333333333333330000000101014444444444444444444444444444444444444444444444444444444444444444" +
   "0000000102012222222222222222222222222222222222222222222222222222222222222222";
 const GOLDEN_NAME_HEX = "9be9c2da6e525a84f632d0ff4ca502a03c66e9a693f8aa59089dc5fd36fcb5c9";
+
+describe("P has one shape at a time", () => {
+  it("refuses a payout that declares both a named thing and a paying backing", () => {
+    // Found by the 2026-08-22 audit. `paysInClaims` is a structural test, and a
+    // union's excess-property check lets a literal carry both shapes — so a
+    // payout of "GOLD, or claims of X" was encoded as claims of X alone, and the
+    // name silently lost the thing. Two declared payouts, one name (invariant 1).
+    const hybrid = {
+      obligor: KEYS.backer,
+      payout: { thing: "GOLD", quantumExponent: -3, perUnit: 5n, backing: new Uint8Array(32).fill(0x42) },
+      reliance: [],
+      evidence: { setting: "transparent" as const, operator: KEYS.operator },
+    };
+    expect(() => makeBacking(hybrid)).toThrow(EncodingError);
+    // Each shape alone is fine, and they are two different names.
+    const claims = makeBacking({ ...hybrid, payout: { backing: hybrid.payout.backing, perUnit: 5n } });
+    const constant = makeBacking({ ...hybrid, payout: { thing: "GOLD", quantumExponent: -3, perUnit: 5n } });
+    expect(claims.nameHex).not.toBe(constant.nameHex);
+  });
+});
+
+describe("E's non-service count is a count, on a u32 wire", () => {
+  it("refuses a count outside the u32 range, and round-trips the largest one", () => {
+    // A bigint in the object (CLAUDE.md: counts are bigint), a u32 on the wire —
+    // the one bound the type no longer enforces (found reviewing the audit slice).
+    const fields = (count: bigint) => ({
+      obligor: KEYS.backer,
+      payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: { setting: "transparent" as const, operator: KEYS.operator, nonService: { duration: 10n, count, window: 100n } },
+    });
+    expect(() => makeBacking(fields(0x1_0000_0000n))).toThrow(/u32 range/);
+    expect(() => makeBacking(fields(-1n))).toThrow(/u32 range/);
+    const top = makeBacking(fields(0xffff_ffffn));
+    const back = decodeBacking(encodeBacking(top));
+    expect(back.evidence.nonService?.count).toBe(0xffff_ffffn);
+    expect(makeBacking(back).nameHex).toBe(top.nameHex);
+  });
+});

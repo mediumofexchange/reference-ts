@@ -19,7 +19,9 @@ export const MAX_QUANTITY_BYTES = 32;
 export const MAX_QUANTITY_EXCLUSIVE = 1n << (8n * BigInt(MAX_QUANTITY_BYTES));
 
 export function isValidQuantity(n: bigint): boolean {
-  return n >= 1n && n < MAX_QUANTITY_EXCLUSIVE;
+  // A verifier's question, so it answers for a non-bigint too rather than
+  // throwing on the comparison (found by the 2026-08-22 audit).
+  return typeof n === "bigint" && n >= 1n && n < MAX_QUANTITY_EXCLUSIVE;
 }
 
 export function validateQuantity(n: bigint, what: string): void {

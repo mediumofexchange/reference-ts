@@ -863,9 +863,11 @@ describe("§C3: a demand outlives its locks, so an expired attempt is a retry", 
     // And convertible by the demand holder alone: a stranger, or several, is not a leg.
     expect(() => submit(leg({ parties: [KEYS.mallory] }))).toThrow(/convertible/);
     expect(() => submit(leg({ parties: [KEYS.alice, KEYS.mallory].sort(compareBytes) }))).toThrow(/convertible/);
-    // Not under a demand that does not stand.
+    // Not under a demand that does not stand (the leg naming that same hash: a
+    // leg naming another is no repeat of, and no leg for, this request).
+    const nowhere = new Uint8Array(32).fill(9);
     expect(() =>
-      sequencer.submitLeg(eur, new Uint8Array(32).fill(9), { op: leg({}), signature: new Uint8Array(64) }),
+      sequencer.submitLeg(eur, nowhere, { op: leg({ attemptId: nowhere }), signature: new Uint8Array(64) }),
     ).toThrow(/no demand stands/);
     // Nothing above reserved anything.
     expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(200n);
@@ -1224,5 +1226,76 @@ describe("§C3: every door is ready, then answers a repeat, then refuses — in 
       { op: lock, signature: ed25519.sign(encodeLock(lock), SECRETS.alice) },
     ]);
     expect(sequencer.openDemands(eur)).toHaveLength(1);
+  });
+});
+
+describe("§C3: the doors, caught up first — what the round-four regression review found", () => {
+  it("the first ask for the receipt of a leg the venue took in a gap is answered, not refused", () => {
+    // Adoption co-signs the gap's legs and writes their receipts; a holder
+    // asking for hers by resubmitting the bytes must find it on the FIRST ask —
+    // a door that looked up the repeat before catching up refused once (the
+    // law: "no such standing demand") and answered only on the second call, the
+    // refused one having adopted as a side effect.
+    const f = gapGold();
+    f.sequencer.commit();
+    f.venue.advance(30n);
+    const demand: DemandOp = { backing: f.gold, holder: KEYS.alice, quantity: 40n, instant: f.venue.witnessedIndex(), deadline: 200n, nonce: 0n };
+    const signature = ed25519.sign(encodeDemand(demand), SECRETS.alice);
+    f.venue.publishOp(f.gold.name, { kind: "demand", holder: demand.holder, quantity: demand.quantity, instant: demand.instant, deadline: demand.deadline, nonce: demand.nonce, signature });
+    f.venue.advance(1n);
+    // The operator is back; the first thing it hears is Alice asking for her receipt.
+    const receipt = f.sequencer.submitDemand(demand, signature);
+    expect(receipt.position).toBe(1n);
+    expect(f.sequencer.openDemands(f.gold)).toHaveLength(1);
+  });
+
+  it("after a gap the head is withdrawn naming the legs that stand — none — on the first call", () => {
+    // The exit door read "which legs stand" from a record not yet caught up with
+    // the leg withdrawal the venue took, so the truthful call was refused and
+    // only a wrong guess, refused too, adopted for it.
+    const { venue, sequencer, eur, gold } = gapPair();
+    const { hash } = file(sequencer, venue, eur, gold, 40n);
+    sequencer.commit();
+    advanceWitnessedIndex(venue, 41n);
+    const out = { backing: gold, demandHash: hash, nonce: 1n };
+    venue.publishOp(gold.name, { kind: "withdrawal", demandHash: hash, nonce: 1n, signature: ed25519.sign(encodeWithdrawal(out), SECRETS.alice) });
+    venue.advance(1n);
+    const head = { backing: eur, demandHash: hash, nonce: sequencer.nextNonce(KEYS.alice, eur) };
+    sequencer.submitWithdrawal(head, ed25519.sign(encodeWithdrawal(head), SECRETS.alice), []);
+    expect(sequencer.openDemands(eur)).toHaveLength(0);
+    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(200n);
+  });
+
+  it("a re-prepare's repeat is a repeat of this request: the same bytes under another hash are refused, not answered", () => {
+    const { venue, sequencer, eur, gold } = setup();
+    const { hash } = file(sequencer, venue, eur, gold, 40n);
+    venue.advance(TIMEOUT + 1n);
+    withdrawLeg(sequencer, gold, hash);
+    const lock: LockOp = { backing: gold, attemptId: hash, holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout: 95n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: sequencer.nextNonce(KEYS.alice, gold) };
+    const leg = { op: lock, signature: ed25519.sign(encodeLock(lock), SECRETS.alice) };
+    const receipt = sequencer.submitLeg(eur, hash, leg);
+    expect(sequencer.submitLeg(eur, hash, leg)).toEqual(receipt);
+    expect(() => sequencer.submitLeg(eur, new Uint8Array(32).fill(0x77), leg)).toThrow(/must name the demand/);
+  });
+});
+
+describe("§C3: a filing's repeat carries the set it names", () => {
+  it("the demand's bytes with no legs, or with the wrong legs, is not a repeat of the filing; with legs of the set's shape it is", () => {
+    // Found in the audit slice's last regression pass: the repeat was keyed on
+    // the demand's bytes alone and the legs handed in were never looked at. The
+    // set's shape is checked first — one lock per entry in R(b), under this
+    // hash, the set's terms; a leg of the same shape with another timeout still
+    // rides the repeat (the act is the demand; accompanimentOf says what stands).
+    const { venue, sequencer, eur, gold } = setup();
+    const demand: DemandOp = { backing: eur, holder: KEYS.alice, quantity: 40n, instant: 0n, deadline: 100n, nonce: 0n };
+    const signature = ed25519.sign(encodeDemand(demand), SECRETS.alice);
+    const lockOf = (timeout: bigint, nonce: bigint): LockOp => ({ backing: gold, attemptId: demandHash(demand), holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce });
+    const signed = (op: LockOp) => ({ op, signature: ed25519.sign(encodeLock(op), SECRETS.alice) });
+    const receipt = sequencer.submitDemand(demand, signature, [signed(lockOf(40n, 0n))]);
+    expect(() => sequencer.submitDemand(demand, signature, [])).toThrow(/every reliance leg/);
+    expect(() => sequencer.submitDemand(demand, signature, [signed({ ...lockOf(40n, 0n), quantity: 79n })])).toThrow(/quantity/);
+    expect(sequencer.submitDemand(demand, signature, [signed(lockOf(9000n, 1n))])).toEqual(receipt);
+    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(120n);
+    void venue;
   });
 });

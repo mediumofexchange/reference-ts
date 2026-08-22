@@ -99,7 +99,7 @@ function fixtures() {
       silence: { noCommitmentDuration: 10n, challengeWindow: 5n },
       witnessing: { venue: real.id, interval: 5n },
       replacementRule: KEYS.backer,
-      nonService: { duration: 5n, count: 1, window: 100n },
+      nonService: { duration: 5n, count: 1n, window: 100n },
     },
   });
   // Real, well-formed evidence, so nothing below fails for a second reason.
@@ -229,12 +229,26 @@ function exportedVenueReaders(): string[] {
   for (const file of readdirSync(dir)) {
     if (!file.endsWith(".ts")) continue;
     const source = readFileSync(new URL(file, dir), "utf8");
-    for (const match of source.matchAll(/export function (\w+)\(([^)]*)\)/gs)) {
+    // The parameter list is read to its matching paren, not to the first `)`:
+    // no reader is hidden today, but the first exported reader written with an
+    // inline callback type before its Venue parameter would have vanished from
+    // this check silently (found by the 2026-08-22 audit).
+    for (const match of source.matchAll(/export function (\w+)\(/g)) {
+      const open = (match.index as number) + match[0].length;
+      let depth = 1;
+      let close = open;
+      while (close < source.length && depth > 0) {
+        const ch = source[close] as string;
+        if (ch === "(") depth++;
+        else if (ch === ")") depth--;
+        close++;
+      }
+      const params = source.slice(open, close - 1);
       // The TYPE, not the word: a parameter merely named `decisionVenue` is not
       // a venue read, and matching the substring reported one as a gap in the
       // surface. A guard that cries wolf gets an exception added to it, which is
       // how it stops being a guard.
-      if (/:\s*Venue\b/.test(match[2] as string)) names.push(match[1] as string);
+      if (/:\s*Venue\b/.test(params)) names.push(match[1] as string);
     }
   }
   return names;

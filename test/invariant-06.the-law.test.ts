@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EncodingError } from "../src/bytes.js";
 import { LedgerError, TransparentLedger } from "../src/ledger.js";
 import { encodeBurn, encodeIssuance, encodeTransfer } from "../src/messages.js";
+import { encodeLock, NO_DECISION_VENUE } from "../src/presentation.js";
 import { KEYS, register, SECRETS } from "./support.js";
 
 // The law: nothing you owe (your written maximum) grows without your
@@ -112,5 +113,71 @@ describe("the law: nothing you hold leaves without your signature", () => {
     expect(() => ledger.transfer(op, ed25519.sign(encodeTransfer(op), SECRETS.alice))).toThrow(
       /not a valid Ed25519 point/,
     );
+  });
+
+  it("a lock's beneficiary signs nothing either, and is checked like a recipient", () => {
+    // Found by the 2026-08-22 audit: the third credit path. A lock to a key that
+    // is not a point settles units no signature can ever move, still counted in
+    // outstanding. Refused at the lock, so the refusal lands on whoever chose it.
+    const { ledger, backing } = ledgerWithAliceHolding100();
+    const dead = new Uint8Array(32).fill(0x04);
+    const op = {
+      backing,
+      attemptId: new Uint8Array(32).fill(0x11),
+      holder: KEYS.alice,
+      beneficiary: dead,
+      quantity: 10n,
+      timeout: 100n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: 0n,
+    };
+    const entry = {
+      kind: "lock" as const,
+      attemptId: op.attemptId,
+      holder: op.holder,
+      beneficiary: op.beneficiary,
+      quantity: op.quantity,
+      timeout: op.timeout,
+      decisionVenue: op.decisionVenue,
+      parties: op.parties,
+      nonce: op.nonce,
+      signature: ed25519.sign(encodeLock(op), SECRETS.alice),
+    };
+    expect(() => ledger.apply(backing, entry, 0n)).toThrow(/not a valid Ed25519 point/);
+    expect(ledger.availableBalance(backing, KEYS.alice)).toBe(100n);
+  });
+});
+
+describe("the law: a set is applied whole or not at all, whatever backings it names", () => {
+  it("applyAll establishes a repeated backing as the set will run, and applies nothing on a refusal", () => {
+    // Found by the 2026-08-22 audit: the dry run took a fresh copy per item, so
+    // two of Alice's transfers at one nonce each passed alone, the first applied
+    // for real and the second threw — half a set. One working copy per backing,
+    // each item applied into it in order, is what "all or nothing" needs.
+    const { ledger, backing } = freshLedger();
+    const issue = { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n };
+    ledger.issue(issue, ed25519.sign(encodeIssuance(issue), SECRETS.backer));
+    const first = { backing, from: KEYS.alice, to: KEYS.bob, quantity: 10n, nonce: 0n };
+    const second = { backing, from: KEYS.alice, to: KEYS.carol, quantity: 10n, nonce: 0n };
+    const item = (op: typeof first) => ({
+      backing,
+      op: {
+        kind: "transfer" as const,
+        from: op.from,
+        to: op.to,
+        quantity: op.quantity,
+        nonce: op.nonce,
+        signature: ed25519.sign(encodeTransfer(op), SECRETS.alice),
+      },
+    });
+    expect(() => ledger.applyAll([item(first), item(second)], undefined)).toThrow(/nonce/);
+    expect(ledger.balance(backing, KEYS.alice)).toBe(100n);
+    expect(ledger.balance(backing, KEYS.bob)).toBe(0n);
+    expect(ledger.opLog(backing)).toHaveLength(1);
+    // And a set that does run on one backing twice runs whole.
+    const third = { ...second, nonce: 1n };
+    ledger.applyAll([item(first), item(third)], undefined);
+    expect(ledger.balance(backing, KEYS.alice)).toBe(80n);
   });
 });

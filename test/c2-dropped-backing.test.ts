@@ -44,7 +44,7 @@ import { KEYS, SECRETS } from "./support.js";
 // the first, and every caller inherited the blindness.
 
 const SILENCE = { noCommitmentDuration: 20n, challengeWindow: 5n };
-const NON_SERVICE = { duration: 10n, count: 2, window: 100n };
+const NON_SERVICE = { duration: 10n, count: 2n, window: 100n };
 
 function setup(replaceable = true) {
   const venue = new LocalVenue();

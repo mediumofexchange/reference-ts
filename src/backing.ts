@@ -190,7 +190,7 @@ export interface NonServiceTerms {
   /** A request unserved for longer than this begins to count. */
   readonly duration: bigint;
   /** How many must stand at once for the grade to fire — the paper's *m*. */
-  readonly count: number;
+  readonly count: bigint;
   /** The window they must stand within — the paper's *W*. */
   readonly window: bigint;
 }
@@ -322,7 +322,10 @@ function encodeFields(b: BackingFields): Uint8Array {
       tag: CLAUSE_NON_SERVICE,
       write: () => {
         w.u64(terms.duration);
-        w.u32(terms.count);
+        // A count, so bigint in the object (CLAUDE.md); a u32 on the wire, which
+        // the writer asserts.
+        if (terms.count < 0n || terms.count > 0xffff_ffffn) throw new EncodingError("non-service count out of u32 range");
+        w.u32(Number(terms.count));
         w.u64(terms.window);
       },
     });
@@ -416,6 +419,15 @@ export function makeBacking(fields: BackingFields): Backing {
     throw new EncodingError("operator key is not a valid non-small-order Ed25519 point");
   }
 
+  // P has one shape at a time. `paysInClaims` is a structural test, and a union's
+  // excess-property check lets a literal carry both shapes — encoded as claims
+  // alone, the name silently lost the thing (found by the 2026-08-22 audit).
+  if ("backing" in fields.payout && ("thing" in fields.payout || "quantumExponent" in fields.payout)) {
+    throw new EncodingError("payout declares both shapes: claims of a backing, or a named thing, not both");
+  }
+  if (!("backing" in fields.payout) && !("thing" in fields.payout)) {
+    throw new EncodingError("payout declares neither shape: claims of a backing, or a named thing");
+  }
   if (paysInClaims(fields.payout)) {
     if (fields.payout.backing.length !== NAME_LENGTH) {
       throw new EncodingError("payout backing name must be 32 bytes");
@@ -581,7 +593,7 @@ export function decodeBacking(bytes: Uint8Array): Backing {
       } else if (clause === CLAUSE_REPLACEMENT) {
         replacementRule = r.raw(KEY_LENGTH);
       } else if (clause === CLAUSE_NON_SERVICE) {
-        nonService = { duration: r.u64(), count: r.u32(), window: r.u64() };
+        nonService = { duration: r.u64(), count: BigInt(r.u32()), window: r.u64() };
       } else {
         // Not skipped: a reader reporting terms it cannot check is worse than
         // one reporting none.
@@ -608,7 +620,12 @@ export function decodeBacking(bytes: Uint8Array): Backing {
 
 /** The backing's name: SHA-256 of its canonical encoding (invariant 1). */
 export function backingName(backing: Backing): Uint8Array {
-  return copyBytes(backing.name);
+  // Recomputed from the fields, not read off the object: `readonly` is erased
+  // at runtime, and every reader that checks "the answer names what I asked
+  // for" rested on this being a derivation — read as a field it was a no-op, and
+  // a lying resolver passed closureOf and accompanimentOf (found by the
+  // 2026-08-22 audit). For an honestly built backing the two are equal.
+  return sha256(encodeBacking(backing));
 }
 
 function signedMessage(name: Uint8Array): Uint8Array {

@@ -232,3 +232,43 @@ describe("§8b: an unclosed requirement is readable", () => {
     expect(closureStatus(store(x), actuallyClosed)).toBe("unreadable");
   });
 });
+
+describe("invariant 16: an answer is checked against the name it was asked for — really", () => {
+  it("a store that answers for the asked name with other terms is refused, because the name is recomputed", () => {
+    // Found by the 2026-08-22 audit. `backingName` read the stored field, so
+    // "every answer is checked against the name asked for" was a no-op: a wallet
+    // store handing back L1's object under L0's name passed every check, and
+    // closureOf emitted a closure over the substituted terms — into a name
+    // invariant 1 makes permanent. Recomputed from the fields, the lie shows.
+    const z = mk("Z");
+    const y = mk("Y", [at(z, 1n)]);
+    const x = mk("X", [at(y, 2n)]);
+    // A forgery: Z's object wearing Y's name.
+    const lie = { ...z, name: y.name, nameHex: y.nameHex } as Backing;
+    const lying: Terms = (name) => (Buffer.from(name).toString("hex") === y.nameHex ? lie : store(x, z)(name));
+    expect(closureStatus(lying, x)).toBe("unreadable");
+    expect(() => closureOf(lying, [at(x, 1n)])).toThrow(EncodingError);
+    // And the honest store still closes to {x:1, y:2, z:2}.
+    const closed = new Map(closureOf(store(x, y, z), [at(x, 1n)]).map((e) => [Buffer.from(e.target).toString("hex"), e.count]));
+    expect([closed.get(x.nameHex), closed.get(y.nameHex), closed.get(z.nameHex)]).toEqual([1n, 2n, 2n]);
+  });
+});
+
+describe("invariant 16: the closure names what was checked, never what was handed back", () => {
+  it("a resolver answering with the right terms under a forged name field is emitted as the key, not the lie", () => {
+    // Found reviewing the audit slice: the walk checked the answer against the
+    // name asked for — and then emitted the answer's own `.name` field. A store
+    // handing back the right terms wearing a forged name put the forgery into
+    // the closure, which a builder would mint into R for good (invariant 1).
+    const z = mk("Z");
+    const x = mk("X", [at(z, 2n)]);
+    const forged = new Uint8Array(32).fill(0xbb);
+    const liar = { ...z, name: forged, nameHex: Buffer.from(forged).toString("hex") } as Backing;
+    const lying: Terms = (name) => (Buffer.from(name).toString("hex") === z.nameHex ? liar : store(x)(name));
+    const closed = closureOf(lying, [at(x, 1n)]);
+    const zEntry = closed.find((e) => Buffer.from(e.target).toString("hex") === z.nameHex);
+    expect(zEntry?.count).toBe(2n);
+    expect(closed.some((e) => Buffer.from(e.target).equals(Buffer.from(forged)))).toBe(false);
+    expect(closureStatus(lying, x)).toBe("closed");
+  });
+});
