@@ -153,6 +153,23 @@ reserves for nothing; so a backer answering with deadline = now opens the
 "no exit until the leg's timeout" stretch of the exit table at index 1, which
 is the table as recorded, not a new window.
 
+**Regression-reviewing rounds one and two found the shape in round two itself,
+four times, and round four answers them with one helper.** The filing slot
+check ran before the repeat lookup, so a byte-identical replay of any reliant
+filing was refused for the slots the filing itself had filled (invariant 26,
+broken for every reliant backing); it read the slots before adoption, so a
+squat the venue had freed in a gap still refused the filing; `submitLeg`
+refused repeats (demand ended, deadline passed) that `submitLock` answered; and
+`submitLock` answered a repeat before the in-force check, so a retired operator
+still co-signed on that one door. Every public door now has one shape — served,
+then `answered` (`ready` for every backing the act touches, then a repeat
+answered with its receipt), then its own refusals, then `submit` — and the order
+is the rule: a repeat answered before `ready` is a co-signature from an operator
+no longer in force or a record read before what the venue witnessed, and a
+refusal ahead of the repeat is a refusal on the clock rather than on the
+request. CLAUDE.md still carried the deadline rule's refuted reason ("or the
+window is shut before it opens") — it says "the same index is not a window" now.
+
 **Procedure, added to CLAUDE.md:** a refusal added at a door names the honest
 path it leaves open, and a test walks it; and a test's name is a claim the test
 must exercise.

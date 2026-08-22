@@ -467,6 +467,16 @@ export class Sequencer {
       nonce,
       signature,
     };
+    // Ready for every backing the set touches — the demanded one and each slot
+    // this operator serves — and the repeat answered, BEFORE any record is read:
+    // the slot check below once read a squat the venue had already freed in a
+    // gap, and refused a byte-identical replay of the filing for the slots the
+    // filing itself had filled (found regression-reviewing this slice).
+    const slots = backing.reliance.map((entry) => entry.target);
+    if (paysInClaims(backing.payout)) slots.push(backing.payout.backing);
+    const slotBackings = slots.map((slot) => this.backings.get(bytesToHex(slot))).filter((b): b is Backing => b !== undefined);
+    const prior = this.answered([backing, ...slotBackings], backing, demand);
+    if (prior !== undefined) return prior;
     // The demand's hash is the key of every slot its set takes — each reliance
     // leg's, and the paying slot's where P pays in claims. A lock standing under
     // it on any of them (anyone who predicted the hash) would make the set
@@ -476,11 +486,8 @@ export class Sequencer {
     // remedy: the holder re-files with a fresh nonce. The paying backing must
     // also be one this operator serves, or the set §C3 asks it to take in one
     // decision cannot be (the 2026-08-22 audit); that refusal lands elsewhere.
-    const slots = backing.reliance.map((entry) => entry.target);
-    if (paysInClaims(backing.payout)) slots.push(backing.payout.backing);
-    for (const slot of slots) {
-      const held = this.backings.get(bytesToHex(slot));
-      if (held !== undefined && this.ledger.hasLock(held, demandHash(op))) {
+    for (const held of slotBackings) {
+      if (this.ledger.hasLock(held, demandHash(op))) {
         throw new SequencerError("a slot under this demand's hash is taken: re-file with a fresh nonce");
       }
     }
@@ -523,7 +530,10 @@ export class Sequencer {
     leg: { readonly op: LockOp; readonly signature: Uint8Array },
   ): Receipt {
     const demanded = this.served(backing);
-    this.ready([demanded]);
+    const legBacking = this.served(leg.op.backing);
+    const entry = lockEntry(leg.op, leg.signature);
+    const prior = this.answered([demanded, legBacking], legBacking, entry);
+    if (prior !== undefined) return prior;
     const demand = this.ledger.demandOf(demanded, hash);
     if (demand === undefined) throw new SequencerError("no demand stands under that hash on this backing");
     // Past the demand's own deadline no acceptance can be live again, so a leg
@@ -553,11 +563,8 @@ export class Sequencer {
   submitLock(op: LockOp, signature: Uint8Array): Receipt {
     const backing = this.served(op.backing);
     const entry = lockEntry(op, signature);
-    // A repeat is answered before any door refuses it (invariant 26; 24c's round
-    // four, one door further): a set leg this operator co-signed at filing or
-    // re-prepare, replayed here, is the same operation and gets the same receipt.
-    const prior = this.receipts.get(this.receiptKey(backing, opHashOfEntry(backing.name, entry)));
-    if (prior !== undefined) return copyReceipt(prior);
+    const prior = this.answered([backing], backing, entry);
+    if (prior !== undefined) return prior;
     // A set leg comes only with its set (a demand's legs, an acceptance's paying
     // lock): a bare lock naming no decision venue would be a leg of nothing — and,
     // under a standing demand's hash, a squat the gate would not see (found
@@ -976,6 +983,23 @@ export class Sequencer {
       }
     }
     for (const backing of backings) this.adopt(backing);
+  }
+
+  /**
+   * What every door does first, in this order: the backings the act touches are
+   * ready (in force, adopted — `ready`), and then a repeat of an operation this
+   * operator already co-signed is answered with its receipt (invariant 26)
+   * before any door-specific refusal can see it. The order is the point, twice
+   * over: a repeat answered before `ready` would be a co-signature from an
+   * operator no longer in force, or a record read before what the venue
+   * witnessed; and a refusal ahead of the repeat is a refusal on the clock or
+   * the record rather than on the request (24c round four, and slice 27's
+   * rounds two and four, each found one door with one half of this).
+   */
+  private answered(backings: readonly Backing[], backing: Backing, op: PublishedOp): Receipt | undefined {
+    this.ready(backings);
+    const prior = this.receipts.get(this.receiptKey(backing, opHashOfEntry(backing.name, op)));
+    return prior === undefined ? undefined : copyReceipt(prior);
   }
   /**
    * The shared submit path: routing, then idempotency, then the ledger, then

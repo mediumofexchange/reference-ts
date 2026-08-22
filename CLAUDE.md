@@ -118,8 +118,8 @@ the rule still stands.
   on and only for an attempt the record does not already show committed (a set
   leg names no venue, needs none, and comes only with its set — at filing, or
   re-prepared for a standing demand by its holder). A demand's deadline, like a
-  lock's timeout, is strictly ahead of the witnessed index at filing, or the
-  window is shut before it opens. Every TIME
+  lock's timeout, is strictly ahead of the witnessed index at filing: the same
+  index is not a window. Every TIME
   rule is a refusal and never a balance, because the clock is undefined on a
   replay and a lock that freed its own units would make an honest history
   unreplayable. Quantities are whole

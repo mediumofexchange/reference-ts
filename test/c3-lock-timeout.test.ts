@@ -1142,3 +1142,87 @@ describe("§C3: re-prepare reads the record first, and the window's last index",
     expect(sequencer.openDemands(eur)).toHaveLength(0);
   });
 });
+
+describe("§C3: every door is ready, then answers a repeat, then refuses — in that order", () => {
+  // Found regression-reviewing this slice's rounds (the recurring shape, twice):
+  // round two's filing slot check ran before the repeat lookup, so a byte-
+  // identical replay of a reliant filing was refused for the slots the filing
+  // itself had filled; and it read the slots before adoption, so a squat the
+  // venue had freed in a gap still refused the filing. `submitLeg` refused
+  // repeats that `submitLock` answered. One helper, `answered`, for every door.
+  it("a byte-identical replay of a reliant filing is answered with the identical receipt", () => {
+    const { venue, sequencer, eur, gold } = setup();
+    const demand: DemandOp = { backing: eur, holder: KEYS.alice, quantity: 40n, instant: 0n, deadline: 100n, nonce: 0n };
+    const lock: LockOp = {
+      backing: gold,
+      attemptId: demandHash(demand),
+      holder: KEYS.alice,
+      beneficiary: KEYS.backer,
+      quantity: 80n,
+      timeout: TIMEOUT,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: 0n,
+    };
+    const signature = ed25519.sign(encodeDemand(demand), SECRETS.alice);
+    const legs = [{ op: lock, signature: ed25519.sign(encodeLock(lock), SECRETS.alice) }];
+    const first = sequencer.submitDemand(demand, signature, legs);
+    expect(sequencer.submitDemand(demand, signature, legs)).toEqual(first);
+    expect(sequencer.openDemands(eur)).toHaveLength(1);
+    void venue;
+  });
+
+  it("a re-prepare's bytes are a repeat after the deadline passed and after the demand ended, at submitLeg as at submitLock", () => {
+    const { venue, sequencer, eur, gold } = setup();
+    const { hash } = file(sequencer, venue, eur, gold, 40n);
+    venue.advance(TIMEOUT + 1n);
+    withdrawLeg(sequencer, gold, hash);
+    const lock: LockOp = {
+      backing: gold,
+      attemptId: hash,
+      holder: KEYS.alice,
+      beneficiary: KEYS.backer,
+      quantity: 80n,
+      timeout: 95n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: sequencer.nextNonce(KEYS.alice, gold),
+    };
+    const leg = { op: lock, signature: ed25519.sign(encodeLock(lock), SECRETS.alice) };
+    const receipt = sequencer.submitLeg(eur, hash, leg);
+    advanceWitnessedIndex(venue, 101n);
+    expect(sequencer.submitLeg(eur, hash, leg)).toEqual(receipt);
+    // And once the demand has ended — the lapsed leg withdrawn, then the head.
+    withdrawLeg(sequencer, gold, hash);
+    const head = { backing: eur, demandHash: hash, nonce: sequencer.nextNonce(KEYS.alice, eur) };
+    sequencer.submitWithdrawal(head, ed25519.sign(encodeWithdrawal(head), SECRETS.alice));
+    expect(sequencer.submitLeg(eur, hash, leg)).toEqual(receipt);
+    expect(sequencer.submitLock(lock, leg.signature)).toEqual(receipt);
+  });
+
+  it("a squat the venue freed while the operator was dark does not refuse the filing: the record first", () => {
+    const { venue, sequencer, eur, gold } = gapPair();
+    const demand: DemandOp = { backing: eur, holder: KEYS.alice, quantity: 40n, instant: 0n, deadline: 300n, nonce: 0n };
+    const hash = demandHash(demand);
+    // Mallory squats GOLD's slot under the predicted hash with a bundle lock, timeout 20.
+    const nonce = sequencer.nextNonce(KEYS.backer, gold);
+    sequencer.submitIssue(
+      { backing: gold, recipient: KEYS.mallory, quantity: 5n, nonce },
+      ed25519.sign(encodeIssuanceMessage(gold.name, KEYS.mallory, 5n, nonce), SECRETS.backer),
+    );
+    const squat: LockOp = { backing: gold, attemptId: hash, holder: KEYS.mallory, beneficiary: KEYS.mallory, quantity: 1n, timeout: 20n, decisionVenue: venue.id, parties: [KEYS.mallory], nonce: 0n };
+    sequencer.submitLock(squat, ed25519.sign(encodeLock(squat), SECRETS.mallory));
+    sequencer.commit();
+    advanceWitnessedIndex(venue, 40n);
+    // Past its timeout Mallory withdraws it AT THE VENUE; the operator is dark.
+    const out = { backing: gold, demandHash: hash, nonce: 1n };
+    venue.publishOp(gold.name, { kind: "withdrawal", demandHash: hash, nonce: 1n, signature: ed25519.sign(encodeWithdrawal(out), SECRETS.mallory) });
+    venue.advance(1n);
+    // The operator returns and Alice files: the freed slot is read after adoption.
+    const lock: LockOp = { backing: gold, attemptId: hash, holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout: 200n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: sequencer.nextNonce(KEYS.alice, gold) };
+    sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice), [
+      { op: lock, signature: ed25519.sign(encodeLock(lock), SECRETS.alice) },
+    ]);
+    expect(sequencer.openDemands(eur)).toHaveLength(1);
+  });
+});

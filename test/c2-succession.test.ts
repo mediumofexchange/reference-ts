@@ -15,6 +15,7 @@ import { isRewrittenHistory } from "../src/fault.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import { receiptStatus } from "../src/receipt.js";
 import { isOverdue, isSilent, stateIsAuthentic } from "../src/recovery.js";
+import { encodeLock } from "../src/presentation.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
 import { LocalVenue, VenueError, type Venue } from "../src/venue.js";
 import { KEYS, pub, SECRETS } from "./support.js";
@@ -496,5 +497,44 @@ describe("§C2: a takeover is all or nothing", () => {
     expect(() => successor.takeOver(backing, rooted)).toThrow(SequencerError);
     // And nothing of it stuck, so an honest state can still be taken over.
     expect(successor.opLog(backing)).toHaveLength(0);
+  });
+});
+
+describe("§C2: a retired operator answers no repeat either", () => {
+  it("a lock it co-signed before the handover is refused as a repeat once it is out of force", () => {
+    // Found regression-reviewing slice 27: `submitLock` answered a repeat before
+    // the in-force check, the one door on which a retired operator still
+    // co-signed. Every door is ready first now — in force, adopted — and only
+    // then answers a repeat (`answered`).
+    const { venue, backing } = setup();
+    const incumbent = new Sequencer(SECRETS.operator, venue);
+    incumbent.register(backing, signBacking(SECRETS.backer, backing));
+    incumbent.submitIssue(
+      { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
+      ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
+    );
+    const lock = {
+      backing,
+      attemptId: new Uint8Array(32).fill(0x4e),
+      holder: KEYS.alice,
+      beneficiary: KEYS.bob,
+      quantity: 10n,
+      timeout: 500n,
+      decisionVenue: venue.id,
+      parties: [KEYS.alice],
+      nonce: 0n,
+    };
+    const signature = ed25519.sign(encodeLock(lock), SECRETS.alice);
+    const receipt = incumbent.submitLock(lock, signature);
+    const served = { snapshots: incumbent.snapshot(), commitment: incumbent.commit() };
+    expect(incumbent.submitLock(lock, signature)).toEqual(receipt);
+    at(venue, 5n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
+    const successor = new Sequencer(SUCCESSOR_SECRET, venue);
+    successor.register(backing, signBacking(SECRETS.backer, backing));
+    successor.takeOver(backing, served);
+    successor.commit();
+    expect(operatorAt(backing, venue, venue.witnessedIndex())).toEqual(SUCCESSOR);
+    expect(() => incumbent.submitLock(lock, signature)).toThrow(/not yet in force/);
   });
 });
