@@ -188,7 +188,7 @@ construction.md before touching anything they govern.
 
 ## What the parties must do, that no code here enforces
 
-Six rules the protocol cannot check but the reference implementation must not
+Seven rules the protocol cannot check but the reference implementation must not
 leave unsaid. Each was reached by asking what a failing sequencer costs
 somebody, and each is recorded in [[DECISIONS.md]] with the reasoning.
 
@@ -259,6 +259,15 @@ construction — which is why they are rules here rather than code.
   grade is read on the venue the backing itself declares. A backing that declares
   neither is answered by whichever record its reader holds, which is a setting
   its backer chose.
+- **Never reuse an attempt id you have signed a commit for.** A commit binds its
+  attempt id and nothing else, so an object you signed for one attempt converts
+  any later lock under that id whose parties you are among — on another backing
+  too, where the law cannot see the first (the law retires an id per backing
+  once a venue-naming lock under it has left; across backings it cannot). A
+  fresh id per attempt costs nothing; the alternative, a commit that binds the
+  exchange's backing set, was considered and not taken (the 2026-08-22 audit,
+  question 6): one more field in the one object for a discipline a wallet keeps
+  anyway, and simplicity won.
 
 A receipt proves **acceptance, not a holding**: a payee who was paid and paid
 onward still holds the receipt for what they received. Reading it as a holding
@@ -367,9 +376,11 @@ for speed anywhere else; this is a reference implementation, not a product.
   fix round — is started with `model: "opus"`; the session model does the
   synthesis, the verdicts and the fixes. A review is judgement work and a
   weaker model would miss the shape these rounds keep finding, but it does not
-  need the session model's cost at every angle. Fan out eight angles for a
-  slice that touches the law or an encoding, three or four otherwise.
-  Bob's call on 2026-08-22, for token efficiency.
+  need the session model's cost at every angle. **The session model decides
+  which angles to run and how many**, sized to what the slice touches — the
+  law, an encoding, a reader, a door — rather than to a fixed count; it says in
+  DECISIONS which it ran. Bob's call on 2026-08-22, for token efficiency
+  (eight-angle rounds twice exhausted his usage limit that day).
 
 ## Toolchain
 

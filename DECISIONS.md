@@ -247,7 +247,39 @@ on the record the lock names.
    carried a hash of the sorted backing names would scope the object without
    breaking "one object in every log".
 
-**Spec change:** none made. Items 1–4 may each want a sentence once decided.
+**Decided (Bob, 2026-08-22 evening): "none seem to break anything of the core;
+I'll follow your recommendations — make sure it all stays aligned with
+simplicity, and backings stay separate."** So, on my recommendations and under
+those two constraints:
+
+1. **The tail:** an operator returning from silence rebuilds from its last
+   commitment before it adopts the gap, and a receipt's position proves nothing
+   across a gap — the fault predicates (`isDoublePosition` with its mirror,
+   `receiptStatus`'s "holds something else") must not count a pre-gap position
+   against it. Per backing (the rebuild is `takeOver`'s rule, applied to the
+   incumbent), one mechanism. **Queued as the next slice.**
+2. **The dead successor:** the chain walk passes through a link that never took
+   force, with a stable definition of "usable" (a link that committed before the
+   next candidate at the same predecessor was witnessed). Per backing, since the
+   chain is. **Queued, second.**
+3. **Dishonour with a payout reserved:** where P pays in claims, dishonour is the
+   branch where no acceptance *with its payout reserved* answered — a reader
+   (`payoutOf` at the acceptance's own deadline), not a law change; the law stays
+   per backing and the reader reads across the served state as the others do.
+   **Queued, third.**
+4. **Cross-operator presentation:** out of scope, an extension; recorded, not
+   built. A spec note may follow.
+5. **Noise and adoption cost:** recorded; the venue's fee is the bound; no
+   memoisation while a venue can take publications at the current index.
+6. **The commit does not bind the exchange's backing set:** simplicity — one
+   object, no new field; the discipline is a party rule now (CLAUDE.md: never
+   reuse an attempt id you have signed a commit for).
+
+And slice 28 as first planned — unserved lock requests as non-service objects,
+and the two fault predicates (a withdrawal co-signed against an in-time commit;
+a set settled in part, read across the served state) — stays queued after these.
+
+**Spec change:** none made. Items 1–4 may each want a sentence once built.
 
 ## 2026-08-22 - Slice 27: a demand outlives its locks, and a window is open when it is set
 
