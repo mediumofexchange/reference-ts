@@ -860,6 +860,9 @@ describe("§C3: a demand outlives its locks, so an expired attempt is a retry", 
     expect(() => submit(leg({ decisionVenue: venue.id }))).toThrow(/venue/);
     expect(() => submit(leg({ backing: eur }))).toThrow(/not a reliance leg/);
     expect(() => submit(leg({ attemptId: new Uint8Array(32).fill(9) }))).toThrow(/must name the demand/);
+    // And convertible by the demand holder alone: a stranger, or several, is not a leg.
+    expect(() => submit(leg({ parties: [KEYS.mallory] }))).toThrow(/convertible/);
+    expect(() => submit(leg({ parties: [KEYS.alice, KEYS.mallory].sort(compareBytes) }))).toThrow(/convertible/);
     // Not under a demand that does not stand.
     expect(() =>
       sequencer.submitLeg(eur, new Uint8Array(32).fill(9), { op: leg({}), signature: new Uint8Array(64) }),

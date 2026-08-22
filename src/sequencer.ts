@@ -77,7 +77,6 @@ import {
   demandHash,
   legMismatch,
   NO_DECISION_VENUE,
-  soleParty,
   type LegTerms,
   type AcceptanceOp,
   type Commit,
@@ -665,10 +664,6 @@ export class Sequencer {
     }
     const why = legMismatch(supplied.op, want);
     if (why !== undefined) throw new SequencerError(why);
-    const party = soleParty(supplied.op.parties);
-    if (party === undefined || compareBytes(party, want.beneficiary) !== 0) {
-      throw new SequencerError("the paying lock is the demand holder's to convert, and nobody else's");
-    }
     if (supplied.op.timeout < deadline) throw new SequencerError("the paying lock must outlast the acceptance");
     return this.submit([
       { backing, op: answer },
@@ -685,7 +680,7 @@ export class Sequencer {
     if (!paysInClaims(backing.payout)) return undefined;
     return [
       bytesToHex(backing.payout.backing),
-      { quantity: quantity * backing.payout.perUnit, holder: backing.obligor, beneficiary: holder },
+      { quantity: quantity * backing.payout.perUnit, holder: backing.obligor, beneficiary: holder, converter: holder },
     ];
   }
 
@@ -816,7 +811,7 @@ export class Sequencer {
         // the claim need q·c of each target. Where the accompaniment goes: the
         // DEMANDED backing's obligor, who takes in the set and may then present
         // at this leg itself.
-        { quantity: quantity * entry.count, holder, beneficiary: backing.obligor },
+        { quantity: quantity * entry.count, holder, beneficiary: backing.obligor, converter: holder },
       ]),
     );
   }

@@ -189,23 +189,43 @@ export interface CommitSignature {
 
 /**
  * What one lock of a set must carry: the quantity the set needs, committed by the
- * party the set names as its holder, paying the party the set names. A demand's
- * legs: q·c units, the demanding holder, the demanded obligor. A backer's paying
- * lock: q·perUnit units, the obligor, the demanding holder. One definition, read
+ * party the set names as its holder, paying the party the set names, and
+ * convertible by the set's converting party and by that party alone. A demand's
+ * legs: q·c units, the demanding holder, the demanded obligor, converted by the
+ * demanding holder. A backer's paying lock: q·perUnit units, the obligor, the
+ * demanding holder, converted by the demanding holder. One definition, read
  * where a lock is taken (the sequencer) and where it is read back (the holder's
- * and the backer's readers), so enforcer and reader cannot drift.
+ * and the backer's readers), so enforcer and reader cannot drift — the converter
+ * was checked for the paying lock in two hand-written places and for a leg
+ * nowhere, so a leg naming a stranger, or two parties, read as accompanied and
+ * could never settle on the holder's release (found by the 2026-08-22 audit and
+ * slice 27's review, from four angles).
  */
 export interface LegTerms {
   readonly quantity: bigint;
   readonly holder: Uint8Array;
   readonly beneficiary: Uint8Array;
+  /** The one party whose signature converts the lock on a release. */
+  readonly converter: Uint8Array;
+}
+
+/** The fields of a lock the set's terms are read against. */
+export interface LegShape {
+  readonly quantity: bigint;
+  readonly holder: Uint8Array;
+  readonly beneficiary: Uint8Array;
+  readonly parties: readonly Uint8Array[];
 }
 
 /** Why a lock does not carry the set's terms, or undefined if it does. */
-export function legMismatch(lock: LegTerms, want: LegTerms): string | undefined {
+export function legMismatch(lock: LegShape, want: LegTerms): string | undefined {
   if (lock.quantity !== want.quantity) return "a lock does not cover the quantity the set needs";
   if (compareBytes(lock.holder, want.holder) !== 0) return "a lock is not held by the party the set names as its holder";
   if (compareBytes(lock.beneficiary, want.beneficiary) !== 0) return "a lock does not pay the party the set names";
+  const party = soleParty(lock.parties);
+  if (party === undefined || compareBytes(party, want.converter) !== 0) {
+    return "a lock is not convertible by the party the set names, and by that party alone";
+  }
   return undefined;
 }
 

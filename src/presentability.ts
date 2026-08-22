@@ -14,7 +14,8 @@
 
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { paysInClaims, backingName, type Backing } from "./backing.js";
-import { legMismatch, soleParty } from "./presentation.js";
+import { legMismatch } from "./presentation.js";
+import { lockIsLive } from "./ledger.js";
 import { compareBytes } from "./bytes.js";
 import { type Terms } from "./closure.js";
 import { type ServedState } from "./commitment.js";
@@ -93,8 +94,12 @@ export function accompanimentOf(
       if (lock === undefined) return "unaccompanied";
       // The set's terms for this leg, the one definition the sequencer took it by:
       // q times c of the target, the demanding holder's own units, to the obligor.
-      const want = { quantity: demand.quantity * entry.count, holder: demand.holder, beneficiary: backing.obligor };
+      const want = { quantity: demand.quantity * entry.count, holder: demand.holder, beneficiary: backing.obligor, converter: demand.holder };
       if (legMismatch(lock, want) !== undefined) return "unaccompanied";
+      // And live: a leg past its timeout can no longer settle, so a backer
+      // answering it now would answer a set the holder has to re-prepare first
+      // (slice 27). Read on the venue's clock, as every index here is.
+      if (!lockIsLive(lock, venue.witnessedIndex())) return "unaccompanied";
     }
     return "accompanied";
   }, "unreadable");
@@ -134,10 +139,9 @@ export function payoutOf(
     if (payingState === undefined) return "unreadable";
     const lock = payingState.locks.get(bytesToHex(demandHash));
     if (lock === undefined) return "unreserved";
-    const want = { quantity: demand.quantity * backing.payout.perUnit, holder: backing.obligor, beneficiary: demand.holder };
+    const want = { quantity: demand.quantity * backing.payout.perUnit, holder: backing.obligor, beneficiary: demand.holder, converter: demand.holder };
     if (legMismatch(lock, want) !== undefined) return "unreserved";
-    const party = soleParty(lock.parties);
-    if (party === undefined || compareBytes(party, demand.holder) !== 0) return "unreserved";
+    if (!lockIsLive(lock, venue.witnessedIndex())) return "unreserved";
     return "reserved";
   }, "unreadable");
 }

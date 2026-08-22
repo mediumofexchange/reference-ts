@@ -478,7 +478,10 @@ describe("§C3: the window is the holder's, and it is open when it is set", () =
     // The same convention as the lock's creation rule: a verifier folding a
     // served log cannot know the index a demand was filed at, so the rule is
     // the operator's — and the gap path's, at the venue's stamp — and not the
-    // replay's. A log that carries one is a log some door accepted.
+    // replay's. So a log that carries one was not accepted at any door: it is
+    // a log an operator inserted a refused demand into, and it replays — the
+    // verdict it manufactures costs the holder's signature AND a co-operating
+    // operator, which is the price every TIME rule has on a replay (24a).
     const { ledger, backing } = setup();
     const op = {
       backing,

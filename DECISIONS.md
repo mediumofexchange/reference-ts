@@ -126,6 +126,33 @@ windows, hence the one sentence above and the second parameter set pinned; and
 re-prepare was taken for a demand past its own deadline, where nothing can
 settle — refused now, naming withdrawal.
 
+Re-run A, last in: a leg's **parties** were checked at no door and read by no
+reader — the paying lock's converter was checked in two hand-written places,
+the holder's leg nowhere — so a leg naming a stranger, or two parties, read as
+`accompanied`, could never settle on the holder's release (and a set leg names no
+venue, so no witnessed object converts it), and where P pays in claims the
+backer reserved its payout for a set that could not close (found from four
+angles: the audit's A, C and E, and this). `LegTerms` carries the converter now
+and `legMismatch` checks it, so `legItem`, `submitAcceptance`, `accompanimentOf`
+and `payoutOf` read one definition and the two hand-written checks are gone;
+and both readers answer `unaccompanied`/`unreserved` for a lock past its
+timeout, on the venue's clock, since a lapsed leg is one the holder must
+re-prepare before the backer should answer. Two corrections of the record: the
+replay test claimed "a log that carries [a past-deadline demand] is a log some
+door accepted" — no door accepts one, so such a log is one an operator inserted a
+refused demand into, and the verdict it manufactures costs the holder's
+signature and a co-operating operator, the price every TIME rule has on a
+replay (24a); and a repeat of a withdrawn leg's own bytes through `submitLeg` is
+answered with its receipt and reserves nothing — invariant 26's rule, so a
+re-prepare uses a fresh nonce and `accompanimentOf` is what says the set is
+whole. Recorded, not patched: the acceptance's deadline may equal the filing
+index (`>= now`) where a demand's and a lock's must be strictly ahead — a
+zero-length answer commits the holder's claims for one index and harms nobody,
+where a zero-length demand manufactures a verdict and a zero-length lock
+reserves for nothing; so a backer answering with deadline = now opens the
+"no exit until the leg's timeout" stretch of the exit table at index 1, which
+is the table as recorded, not a new window.
+
 **Procedure, added to CLAUDE.md:** a refusal added at a door names the honest
 path it leaves open, and a test walks it; and a test's name is a claim the test
 must exercise.

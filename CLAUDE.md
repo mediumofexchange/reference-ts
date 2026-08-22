@@ -92,8 +92,11 @@ the rule still stands.
   (`NO_DECISION_VENUE`), so no commit reaches it and it settles only with its set. Which branch a trade uses is the parties' choice — §C2's other honest
   answer, partial-and-retry, is the ordinary transfer path and covers every trade
   where both sides have recourse. The law stays per backing, so whether
-  a demand's legs were locked is read across the served state by
-  `accompanimentOf`, which the backer asks before it signs an acceptance. **A
+  a demand's legs were locked — for the set's quantity, by the set's holder, to
+  the set's beneficiary, convertible by the demand holder and by that party
+  alone, and still live — is read across the served state by `accompanimentOf`,
+  which the backer asks before it signs an acceptance (one definition,
+  `LegTerms`, for the sequencer and both readers). **A
   lock carries §C3's timeout**, and it is the one predicate both exits read
   (`lockIsLive`): at or before it a commit can still settle the set and no
   withdrawal is accepted; a commit witnessed past it does not reach it, and
