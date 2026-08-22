@@ -15,7 +15,7 @@ import { isRewrittenHistory } from "../src/fault.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import { receiptStatus } from "../src/receipt.js";
 import { gapLegsFor, isOverdue, isSilent, snapshotRedemptions, stateIsAuthentic } from "../src/recovery.js";
-import { demandHash, encodeAcceptance, encodeDemand, encodeLock, encodeRelease } from "../src/presentation.js";
+import { demandHash, encodeAcceptance, encodeDemand, encodeLock, encodeRelease, encodeWithdrawal, NO_DECISION_VENUE } from "../src/presentation.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
 import { LocalVenue, VenueError, type Venue } from "../src/venue.js";
 import { KEYS, pub, SECRETS } from "./support.js";
@@ -687,5 +687,45 @@ describe("§C2: what a door asks of a backing it touches, and of one it only rea
     const onOther = new Sequencer(SUCCESSOR_SECRET, other);
     onOther.register(backing, signBacking(SECRETS.backer, backing));
     expect(() => onOther.takeOver(backing, served)).toThrow(/does not watch/);
+  });
+});
+
+describe("§C2: a re-prepare is written against the demanded backing's record, so that record must be this operator's", () => {
+  it("a handed-over operator reading its stale record refuses to re-prepare under a demand the successor now holds", () => {
+    // Found in the audit slice's last regression pass: caught up but not asked
+    // in-force of the demanded backing, the old operator took a lock under a
+    // demand the successor had ended, reading its own stale record.
+    const { venue, backing: gold } = setup();
+    const eur = makeBacking({
+      obligor: KEYS.backer,
+      payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },
+      reliance: [{ target: gold.name, count: 2n }],
+      evidence: { setting: "transparent", operator: KEYS.operator, silence: SILENCE, replacementRule: KEYS.backer },
+    });
+    const old = new Sequencer(SECRETS.operator, venue);
+    for (const b of [gold, eur]) {
+      old.register(b, signBacking(SECRETS.backer, b));
+      old.submitIssue(
+        { backing: b, recipient: KEYS.alice, quantity: 200n, nonce: 0n },
+        ed25519.sign(encodeIssuanceMessage(b.name, KEYS.alice, 200n, 0n), SECRETS.backer),
+      );
+    }
+    const demand = { backing: eur, holder: KEYS.alice, quantity: 40n, instant: 0n, deadline: 100n, nonce: 0n };
+    const hash = demandHash(demand);
+    const leg = { backing: gold, attemptId: hash, holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout: 10n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: 0n };
+    old.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice), [{ op: leg, signature: ed25519.sign(encodeLock(leg), SECRETS.alice) }]);
+    old.commit();
+    // EUR — and only EUR — goes to a successor, which takes force.
+    at(venue, 20n);
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR, eur.name, 20n));
+    commitAs(venue, SUCCESSOR_SECRET);
+    expect(operatorAt(eur, venue, venue.witnessedIndex())).toEqual(SUCCESSOR);
+    // The lapsed leg is withdrawn at the old operator (still GOLD's).
+    const out = { backing: gold, demandHash: hash, nonce: 1n };
+    old.submitWithdrawal(out, ed25519.sign(encodeWithdrawal(out), SECRETS.alice));
+    // Re-preparing under the demand at the old operator: refused — EUR is not its to read.
+    const again = { ...leg, timeout: 500n, nonce: 2n };
+    expect(() => old.submitLeg(eur, hash, { op: again, signature: ed25519.sign(encodeLock(again), SECRETS.alice) })).toThrow(/not yet in force/);
+    expect(old.availableBalance(gold, KEYS.alice)).toBe(200n);
   });
 });

@@ -129,8 +129,8 @@ last regression pass, and what it changed.**
   holder's own standing demand, the very thing §C2b continues). Recorded as a
   narrowing: a holder whose units are all locked to an attempt at a dark
   operator can neither settle nor redeem until the lock's withdrawal is adopted.
-- *Every door has one shape, and round four's order is reversed twice over*:
-  served → `caughtUp` (adopted against every backing the act touches — which an
+- *Every door has one shape, and round four's order is reversed twice over*
+  (refined once more in the last pass, below): served → `caughtUp` (adopted against every backing the act touches — which an
   operator not in force skips by itself) → the repeat answered from the receipt
   book → `inForce` (asked of the backings the act WRITES; a filing's paying slot
   is only read, and refusing there refused an honest filing at the operator that
@@ -165,6 +165,38 @@ last regression pass, and what it changed.**
   `recovery.ts`'s and `oplog.ts`'s and `fault.ts`'s headers, an orphaned
   docblock, and eight tests whose titles claimed more than their bodies —
   including one this slice had emptied by a careless `sed` — all corrected.
+
+**The last regression pass, over that round.** The snapshot a reader folds was
+still picked by the resolved object's `.name` field, one layer under the
+recompute — a store answering gold's terms under another name steered
+`accompanimentOf` into that backing's state; `committedLogFor` picks by the
+recomputed name now, the one place a snapshot is picked, and a liar is refused
+("unreadable") rather than folded. `submitLeg` had lost the in-force question
+for the demanded backing and a handed-over operator took a lock under a demand
+its successor had ended, reading its stale record. `endDemand`'s "that backing
+is a leg" refusal still ran before the repeat, so a stranger's one-unit lock
+under a settled demand's hash (free, and never retired) made the payee's
+release receipt unobtainable. A filing's or an acceptance's repeat discarded
+companions of another shape — the set's shape is checked of the request first
+now (one lock per entry in R(b), under this hash, the set's terms; the paying
+lock the set's), and a companion of the same shape with another timeout rides
+the repeat, since the act is the head. `quietFor` refuses a malformed key at the
+boundary that owns well-formedness (`EncodingError`), neither exonerating
+(answer 0) nor accusing (a wrong-length key reading "quiet since genesis").
+**So the door order, finally:** the request's own shape (pure) → `caughtUp`
+(adopted against every backing the act touches; a retired operator skips by
+itself) → the repeat answered from the receipt book → `inForce` of the
+backings the act WRITES (submitLeg: the demanded backing too, since the lock's
+legality is its record's) → refusals that read the record or the clock →
+`submit`. Two things recorded rather than patched: `walkGap`'s skip of a
+withdrawal it cannot judge is not one leg's worth — every later leg by that
+holder that needed the freed units fails behind it, so a reader on a record the
+lock does not name reads FEWER settlements, never more (the conservative side,
+stated); and a repeat now costs an adoption walk, twice per act (door and
+`submit`), which compounds question 5 — memoising adoption per venue index is
+unsafe while a venue can still take publications at the current index, so the
+cost stands. The `takeOver` refusal names its honest path: take the state over
+on the record the lock names.
 
 **Open, for Bob — each proven by a run, none decided here.**
 

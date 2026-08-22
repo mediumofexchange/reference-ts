@@ -53,9 +53,10 @@
 //
 // Everything here is a verifier: it answers questions about state an untrusted
 // operator served, so it returns false on any malformed input and never throws —
-// with the one exception every layer shares: a venue's refusal propagates rather
-// than being answered (CLAUDE.md, `answering`), and witnessedCommitFor raises
-// one for a record that is not the lock's venue.
+// with two exceptions: a venue's refusal propagates rather than being answered
+// (CLAUDE.md, `answering`; witnessedCommitFor raises one for a record that is
+// not the lock's venue), and quietFor refuses a malformed operator key, which
+// is the reader's own validated object and never adversary bytes.
 
 import { paysInClaims, type Backing } from "./backing.js";
 import {
@@ -68,7 +69,7 @@ import {
   type LedgerState,
   type LockRecord,
 } from "./ledger.js";
-import { compareBytes, copyBytes, isValidQuantity } from "./bytes.js";
+import { compareBytes, copyBytes, EncodingError, isValidQuantity } from "./bytes.js";
 import { unknownOpKind, type PublishedOp } from "./oplog.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
@@ -101,8 +102,13 @@ function isTransfer(witnessed: WitnessedOp): witnessed is WitnessedTransfer {
 export function quietFor(venue: Venue, operator: Uint8Array): bigint {
   // The operator key is the reader's own validated object (a Backing's, or a
   // witnessed replacement's), never adversary bytes: a malformed one is a caller
-  // bug and throws, where answering 0 would read as "published just now" — the
-  // exoneration shape the audit slice removed one file over.
+  // bug, refused by the boundary that owns well-formedness — answering 0 would
+  // read as "published just now", the exoneration shape the audit slice removed
+  // one file over, and a wrong-length key reading "quiet since genesis" is the
+  // accusation shape (found in the last regression pass).
+  if (!(operator instanceof Uint8Array) || operator.length !== 32) {
+    throw new EncodingError("operator key must be 32 bytes");
+  }
   return venue.witnessedIndex() - (venue.witnessedAtFor(operator) ?? 0n);
 }
 

@@ -42,7 +42,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { ByteReader, ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
 import { COMMITMENT_CONTEXT } from "./contexts.js";
 import { verifySignatureStrict } from "./keys.js";
-import type { Backing } from "./backing.js";
+import { backingName, type Backing } from "./backing.js";
 import type { BackingSnapshot } from "./ledger.js";
 import { isAnOperator } from "./replacement.js";
 import { answering, type Venue } from "./venue.js";
@@ -198,7 +198,11 @@ export function committedLogFor(
     if (!isAnOperator(backing, venue, served.commitment.operator)) return undefined;
     if (!stateProvesCommitment(served.snapshots, served.commitment)) return undefined;
     const sequence = served.commitment.sequence;
-    const snapshot = served.snapshots.find((s) => compareBytes(s.name, backing.name) === 0);
+    // By the RECOMPUTED name: a resolver's object carrying another backing's
+    // `.name` field steered every reader into that backing's state after the
+    // hash check had passed (found in the last regression pass) — the one place a
+    // snapshot is picked, so every reader inherits it.
+    const snapshot = served.snapshots.find((s) => compareBytes(s.name, backingName(backing)) === 0);
     if (snapshot === undefined) return { kind: "dropped", sequence };
     return { kind: "log", sequence, opLog: snapshot.opLog };
   }, undefined);

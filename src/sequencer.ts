@@ -294,7 +294,7 @@ export class Sequencer {
     // slice). Refused in this sequencer's own voice, as an unreplayable state is.
     for (const lock of replayed.locks.values()) {
       if (compareBytes(lock.decisionVenue, NO_DECISION_VENUE) !== 0 && compareBytes(lock.decisionVenue, this.venue.id) !== 0) {
-        throw new SequencerError("that state carries a lock on a decision venue this sequencer does not watch: it cannot be taken over here");
+        throw new SequencerError("that state carries a lock on a decision venue this sequencer does not watch: take it over on the record the lock names, or not at all");
       }
     }
     for (const entry of committed.opLog) this.ledger.apply(held, entry, undefined);
@@ -513,6 +513,11 @@ export class Sequencer {
       slots.push(paying);
     }
     const slotBackings = slots.map((slot) => this.backings.get(bytesToHex(slot))).filter((b): b is Backing => b !== undefined);
+    // The companions must be this act's: a repeat carries the legs the set names
+    // (one per entry in R(b), each under this demand's hash, the set's terms) —
+    // a demand's bytes with other companions is not a repeat of the filing, and
+    // legSet asks only of the request (found in the last regression pass).
+    const legItems = this.legSet(backing, demandHash(op), op.holder, op.quantity, legs);
     this.caughtUp([backing, ...slotBackings]);
     const prior = this.priorReceipt(backing, demand);
     if (prior !== undefined) return prior;
@@ -529,10 +534,7 @@ export class Sequencer {
         throw new SequencerError("a slot under this demand's hash is taken: re-file with a fresh nonce");
       }
     }
-    return this.submit([
-      { backing, op: demand },
-      ...this.legSet(backing, demandHash(op), op.holder, op.quantity, legs),
-    ]);
+    return this.submit([{ backing, op: demand }, ...legItems]);
   }
 
   /**
@@ -553,9 +555,9 @@ export class Sequencer {
    * applied (found reviewing this slice). Which legs lapsed is the record's to
    * say: the law refuses a slot that stands.
    *
-   * **The record first.** The demand is read only once this operator is in
-   * force for the demanded backing and has adopted what the venue witnessed
-   * against it while this operator was dark — a head withdrawn at the venue is
+   * **The record first.** The demand is read only once this operator has
+   * adopted what the venue witnessed against the demanded backing while it was
+   * dark, and — after the repeat — is in force for it — a head withdrawn at the venue is
    * not a demand to re-prepare for, and a backing a successor now serves is not
    * this operator's to speak for. `submit` owes the same to its own items; this
    * is the one reader of a demand record whose item is another backing's, so it
@@ -580,6 +582,11 @@ export class Sequencer {
     this.caughtUp([demanded, legBacking]);
     const prior = this.priorReceipt(legBacking, entry);
     if (prior !== undefined) return prior;
+    // The lock's legality is decided by the demanded backing's record, so this
+    // operator must be in force for it — a handed-over operator reading its stale
+    // record took a lock under a demand the successor had ended (found in the
+    // last regression pass).
+    this.inForce([demanded]);
     const demand = this.ledger.demandOf(demanded, hash);
     if (demand === undefined) throw new SequencerError("no demand stands under that hash on this backing");
     // Past the demand's own deadline no acceptance can be live again, so a leg
@@ -691,20 +698,27 @@ export class Sequencer {
     const { demandHash: hash, instant, deadline, nonce } = op;
     const answer: PublishedOp = { kind: "acceptance", demandHash: hash, instant, deadline, nonce, signature };
     this.caughtUp([backing]);
-    const priorAnswer = this.priorReceipt(backing, answer);
-    if (priorAnswer !== undefined) return priorAnswer;
     const demand = this.ledger.demandOf(backing, hash);
-    // No demand stands: the law says so, in its own words, on the acceptance alone.
-    if (demand === undefined) return this.submit([{ backing, op: answer }]);
+    // No demand stands: a repeat of an answer the set has since settled is
+    // answered; otherwise the law says so, in its own words, on the acceptance
+    // alone.
+    if (demand === undefined) {
+      const prior = this.priorReceipt(backing, answer);
+      if (prior !== undefined) return prior;
+      return this.submit([{ backing, op: answer }]);
+    }
     const terms = this.payoutTerms(backing, demand.holder, demand.quantity);
     if (terms === undefined) {
       if (paying.length !== 0) throw new SequencerError("this backing's payout settles outside the claim layer");
       return this.submit([{ backing, op: answer }]);
     }
+    // The companion must be this act's before the repeat is answered: the
+    // answer's bytes with another paying lock is not a repeat of the acceptance
+    // (found in the last regression pass).
     const [target, want] = terms;
     // Locks are keyed by attempt id per backing: one slot under the demand's hash
-    // cannot hold both the holder's leg and the backer's payout. (The (attempt,
-    // holder) key recorded open in 24c would lift this.)
+    // cannot hold both the holder's leg and the backer's payout — refused at
+    // filing now, and here for a demand filed before that rule.
     if (backing.reliance.some((entry) => bytesToHex(entry.target) === target)) {
       throw new SequencerError("the paying backing is a reliance leg of this demand: one lock slot, two locks");
     }
@@ -718,6 +732,8 @@ export class Sequencer {
     const why = legMismatch(supplied.op, want);
     if (why !== undefined) throw new SequencerError(why);
     if (supplied.op.timeout < deadline) throw new SequencerError("the paying lock must outlast the acceptance");
+    const prior = this.priorReceipt(backing, answer);
+    if (prior !== undefined) return prior;
     return this.submit([
       { backing, op: answer },
       { backing: payingBacking, op: lockEntry(supplied.op, supplied.signature) },
@@ -788,9 +804,6 @@ export class Sequencer {
     // reservation gives nothing away, so nothing needs holding together.
     // "Expired" is the law's to read, and whether the record already shows the
     // half committed is the sequencer's (committedInTime, in submit).
-    if (kind === "release" && this.ledger.hasLock(backing, op.demandHash)) {
-      throw new SequencerError("that backing is a leg of this demand, not the demand it accompanies");
-    }
     const head: PublishedOp = { kind, demandHash: op.demandHash, nonce: op.nonce, signature };
     // Caught up with the demanded backing and every leg it serves before the
     // record decides which legs stand: a leg the venue freed in a gap, read before
@@ -801,13 +814,21 @@ export class Sequencer {
       ...backing.reliance.map((entry) => this.backings.get(bytesToHex(entry.target))).filter((b): b is Backing => b !== undefined),
       ...(paysInClaims(backing.payout) ? [this.backings.get(bytesToHex(backing.payout.backing))].filter((b): b is Backing => b !== undefined) : []),
     ]);
-    // A repeat is answered before the set's shape is read from live state: once
-    // the set applied the demand is gone, so the shape the repeat must carry no
-    // longer derives — and a partition-recovering holder was refused the one
+    // A repeat is answered before the set's shape is read from live state (the
+    // leg-not-head refusal below included): once the set applied the demand is
+    // gone, so the shape the repeat must carry no longer derives — and a partition-recovering holder was refused the one
     // receipt that proves the settlement (invariant 26; found by the 2026-08-22
     // audit). One lookup, the one `submit` owns.
     const prior = this.priorReceipt(backing, head);
     if (prior !== undefined) return prior;
+    // The head of the set, not one of its legs — and only for a release (a leg
+    // released alone would settle its accompaniment with no demand settled). A
+    // door refusal, so after the repeat: a stranger's one-unit lock under a
+    // settled demand's hash once made the payee's release receipt unobtainable
+    // (found in the last regression pass).
+    if (kind === "release" && this.ledger.hasLock(backing, op.demandHash)) {
+      throw new SequencerError("that backing is a leg of this demand, not the demand it accompanies");
+    }
     const items = [{ backing, op: head }];
     // **Which legs the set has.** A release settles the accompaniment, so it
     // needs every leg R(b) names, each carrying the set's terms — the shape
@@ -1026,7 +1047,7 @@ export class Sequencer {
   /**
    * Caught up with what the venue witnessed against these backings while this
    * operator was dark — adopted, which an operator not in force skips by itself
-   * ("no new co-signatures issue"). The FIRST thing every door does, before a
+   * ("no new co-signatures issue"). Done at every door before a
    * repeat is answered: adoption co-signs the gap's legs and writes their
    * receipts, so a holder asking for the receipt of a leg the venue took for her
    * must find it on the first ask, not after a refusal that adopted as a side
@@ -1060,8 +1081,9 @@ export class Sequencer {
 
   /**
    * A repeat of an operation this operator already co-signed, answered with its
-   * receipt (invariant 26) — the first thing every door does, before the
-   * backing is readied and before any refusal. A repeat is a read of the receipt
+   * receipt (invariant 26) — asked at every door after the request's own shape
+   * is checked (pure: the companions this act names) and after `caughtUp`, and
+   * before any refusal that reads the record or the clock. A repeat is a read of the receipt
    * book, not an act: the co-signature happened when it was given, and a
    * retired operator re-serving it is not a new one, while refusing it is the
    * hole slice 26's release repeat had — the payee's only evidence of an act the

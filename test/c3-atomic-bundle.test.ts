@@ -5,6 +5,7 @@ import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js
 import {
   encodeCommit,
   encodeLock,
+  encodeRelease,
   encodeWithdrawal,
   signCommit,
   type LockOp,
@@ -12,7 +13,7 @@ import {
 import { Sequencer, SequencerError } from "../src/sequencer.js";
 import { LocalVenue, VenueError } from "../src/venue.js";
 import { committedInTime, witnessedCommitFor } from "../src/recovery.js";
-import { replayLog } from "../src/ledger.js";
+import { replayLog, TransparentLedger } from "../src/ledger.js";
 import { advanceWitnessedIndex, KEYS, SECRETS } from "./support.js";
 
 // §C3's prepare-decide-commit, generalised to any multi-sequencer transfer.
@@ -595,5 +596,25 @@ describe("§C3: the readers of a lock's venue never throw, and never read the wr
       expect(committedInTime(venue, junk as never)).toBe(false);
       expect(witnessedCommitFor(venue, junk as never)).toBeUndefined();
     }
+  });
+});
+
+describe("§C3: a venue-naming lock retires its id by every exit, the release included", () => {
+  it("a one-party venue-naming lock converted by its party's release leaves no reusable id", () => {
+    // Found reviewing the audit slice: the retire sat beside two of the three
+    // exits, and a lock that left by its party's RELEASE (the ledger's own door)
+    // left its id to a withheld object. It lives in settleLock now.
+    const { venue, two, gold } = setup();
+    const ledger = new TransparentLedger();
+    ledger.register(gold, signBacking(SECRETS.backer, gold));
+    ledger.issue({ backing: gold, recipient: KEYS.alice, quantity: 100n, nonce: 0n }, ed25519.sign(encodeIssuanceMessage(gold.name, KEYS.alice, 100n, 0n), SECRETS.backer));
+    const lock = { ...lockFor(two, gold, venue, 40n, ATTEMPT, 500n), nonce: 0n };
+    const entry = (op: LockOp, nonce: bigint) => ({ kind: "lock" as const, attemptId: op.attemptId, holder: op.holder, beneficiary: op.beneficiary, quantity: op.quantity, timeout: op.timeout, decisionVenue: op.decisionVenue, parties: op.parties, nonce, signature: ed25519.sign(encodeLock({ ...op, nonce }), SECRETS.alice) });
+    ledger.apply(gold, entry(lock, 0n), 0n);
+    const rel = { backing: gold, demandHash: ATTEMPT, nonce: 1n };
+    ledger.apply(gold, { kind: "release", demandHash: ATTEMPT, nonce: 1n, signature: ed25519.sign(encodeRelease(rel), SECRETS.alice) }, 0n);
+    expect(ledger.balance(gold, KEYS.bob)).toBe(40n);
+    expect(() => ledger.apply(gold, entry({ ...lock, quantity: 10n }, 2n), 0n)).toThrow(/already been used/);
+    expect(replayLog(gold, [...ledger.opLog(gold), { ...entry({ ...lock, quantity: 10n }, 2n), position: ledger.opLog(gold).length }])).toBeUndefined();
   });
 });

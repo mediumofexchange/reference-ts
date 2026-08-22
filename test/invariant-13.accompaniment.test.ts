@@ -504,3 +504,27 @@ describe("invariant 13: what the readers say when nothing can answer the set any
     expect(accompanimentOf(eur, venue, terms, state, hash)).toBe("unaccompanied");
   });
 });
+
+describe("invariant 13: the snapshot a reader folds is the one it checked the name of", () => {
+  it("a resolver answering gold's terms under another backing's name field cannot steer the read into that backing's state", () => {
+    // Found in the audit slice's last regression pass: the hash check passed (the
+    // terms were gold's) and the snapshot was then picked by the object's `.name`
+    // field — a short set read as accompanied out of silver's state. The picker
+    // uses the recomputed name now, for every reader.
+    const { venue, sequencer, eur, gold, terms } = setup();
+    const { hash } = file(sequencer, venue, eur, gold, 40n);
+    const state = served(sequencer);
+    advanceWitnessedIndex(venue, 91n);
+    const out = { backing: gold, demandHash: hash, nonce: sequencer.nextNonce(KEYS.alice, gold) };
+    sequencer.submitWithdrawal(out, ed25519.sign(encodeWithdrawal(out), SECRETS.alice));
+    const short = served(sequencer);
+    const liar = { ...gold, name: eur.name, nameHex: eur.nameHex } as Backing;
+    const lying: Terms = (name) => (Buffer.from(name).equals(Buffer.from(gold.name)) ? liar : terms(name));
+    expect(accompanimentOf(eur, venue, terms, short, hash)).toBe("unaccompanied");
+    // The liar is refused, not folded: its snapshot is picked by the recomputed
+    // name (gold's), and gold's log does not replay under an object whose own
+    // name field says otherwise — "unreadable", never another backing's answer.
+    expect(accompanimentOf(eur, venue, lying, short, hash)).toBe("unreadable");
+    void state;
+  });
+});

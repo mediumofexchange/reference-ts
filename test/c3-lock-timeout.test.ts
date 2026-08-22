@@ -1278,3 +1278,24 @@ describe("§C3: the doors, caught up first — what the round-four regression re
     expect(() => sequencer.submitLeg(eur, new Uint8Array(32).fill(0x77), leg)).toThrow(/must name the demand/);
   });
 });
+
+describe("§C3: a filing's repeat carries the set it names", () => {
+  it("the demand's bytes with no legs, or with the wrong legs, is not a repeat of the filing; with legs of the set's shape it is", () => {
+    // Found in the audit slice's last regression pass: the repeat was keyed on
+    // the demand's bytes alone and the legs handed in were never looked at. The
+    // set's shape is checked first — one lock per entry in R(b), under this
+    // hash, the set's terms; a leg of the same shape with another timeout still
+    // rides the repeat (the act is the demand; accompanimentOf says what stands).
+    const { venue, sequencer, eur, gold } = setup();
+    const demand: DemandOp = { backing: eur, holder: KEYS.alice, quantity: 40n, instant: 0n, deadline: 100n, nonce: 0n };
+    const signature = ed25519.sign(encodeDemand(demand), SECRETS.alice);
+    const lockOf = (timeout: bigint, nonce: bigint): LockOp => ({ backing: gold, attemptId: demandHash(demand), holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce });
+    const signed = (op: LockOp) => ({ op, signature: ed25519.sign(encodeLock(op), SECRETS.alice) });
+    const receipt = sequencer.submitDemand(demand, signature, [signed(lockOf(40n, 0n))]);
+    expect(() => sequencer.submitDemand(demand, signature, [])).toThrow(/every reliance leg/);
+    expect(() => sequencer.submitDemand(demand, signature, [signed({ ...lockOf(40n, 0n), quantity: 79n })])).toThrow(/quantity/);
+    expect(sequencer.submitDemand(demand, signature, [signed(lockOf(9000n, 1n))])).toEqual(receipt);
+    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(120n);
+    void venue;
+  });
+});

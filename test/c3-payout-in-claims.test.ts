@@ -551,3 +551,46 @@ describe("§C3: every co-signed operation's receipt can be obtained by repeating
     expect(() => f.sequencer.submitLock(fresh, ed25519.sign(encodeLock(fresh), SECRETS.backer))).toThrow(/bare lock/);
   });
 });
+
+describe("§C3: a repeat is a repeat of this request, and it is answered before a door refusal", () => {
+  it("the release repeat is answered after a stranger locks under the settled demand's hash", () => {
+    // Found in the audit slice's last regression pass: the "that backing is a
+    // leg, not the head" refusal ran before the repeat, so a one-unit squat under
+    // a settled hash — free once the set applied, and never retired (no
+    // venue-naming lock stood there) — made the payee's release receipt
+    // unobtainable forever.
+    const f = setup();
+    const { hash } = file(f, 40n);
+    accept(f, hash, 40n);
+    const head = { backing: f.eur, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
+    const pay = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
+    const legs = [{ op: pay, signature: ed25519.sign(encodeRelease(pay), SECRETS.alice) }];
+    const signature = ed25519.sign(encodeRelease(head), SECRETS.alice);
+    const receipt = f.sequencer.submitRelease(head, signature, legs);
+    // Mallory, one unit of EUR, a bundle lock under the settled hash.
+    const n = f.sequencer.nextNonce(KEYS.backer, f.eur);
+    f.sequencer.submitIssue({ backing: f.eur, recipient: KEYS.mallory, quantity: 1n, nonce: n }, ed25519.sign(encodeIssuanceMessage(f.eur.name, KEYS.mallory, 1n, n), SECRETS.backer));
+    const squat: LockOp = { backing: f.eur, attemptId: hash, holder: KEYS.mallory, beneficiary: KEYS.mallory, quantity: 1n, timeout: 9000n, decisionVenue: f.venue.id, parties: [KEYS.mallory], nonce: 0n };
+    f.sequencer.submitLock(squat, ed25519.sign(encodeLock(squat), SECRETS.mallory));
+    expect(f.sequencer.submitRelease(head, signature, legs)).toEqual(receipt);
+  });
+
+  it("an acceptance repeat is answered with its companion of the set's shape, and refused with one of another shape", () => {
+    // The act is the acceptance; its paying lock must be the set's (the backing P
+    // names, the set's terms, the demand's hash) before the repeat is answered —
+    // an answer's bytes with a companion of another shape is not a repeat of it
+    // (found in the audit slice's last regression pass).
+    const f = setup();
+    const { hash } = file(f, 40n);
+    const op: AcceptanceOp = { backing: f.eur, demandHash: hash, instant: 0n, deadline: 90n, nonce: f.sequencer.nextNonce(KEYS.backer, f.eur) };
+    const signature = ed25519.sign(encodeAcceptance(op), SECRETS.backer);
+    const lock: LockOp = { backing: f.gold, attemptId: hash, holder: KEYS.backer, beneficiary: KEYS.alice, quantity: 80n, timeout: 95n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
+    const paying = [{ op: lock, signature: ed25519.sign(encodeLock(lock), SECRETS.backer) }];
+    const receipt = f.sequencer.submitAcceptance(op, signature, paying);
+    expect(f.sequencer.submitAcceptance(op, signature, paying)).toEqual(receipt);
+    const wrong = { ...lock, quantity: 79n, nonce: lock.nonce + 1n };
+    expect(() => f.sequencer.submitAcceptance(op, signature, [{ op: wrong, signature: ed25519.sign(encodeLock(wrong), SECRETS.backer) }])).toThrow(/quantity/);
+    expect(() => f.sequencer.submitAcceptance(op, signature, [])).toThrow(/exactly one paying lock/);
+    expect(f.sequencer.availableBalance(f.gold, KEYS.backer)).toBe(420n);
+  });
+});
