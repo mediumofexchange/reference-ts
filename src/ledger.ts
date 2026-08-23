@@ -9,7 +9,10 @@
 //     verify against the holding key itself. No other mutation path exists
 //     (invariant 8) — there is deliberately no method that takes an operator's
 //     or backer's authority over someone else's balance, and every accessor
-//     returns a copy so a caller cannot reach in and mutate state.
+//     returns a copy so a caller cannot reach in and mutate state. The one
+//     method that shrinks a log, truncateTo, shrinks it to a prefix of itself
+//     and only drops what no commitment ever carried (§C2b's return from
+//     silence); it moves no witnessed claim.
 //
 // Conservation (invariant 10): outstanding = issued − burned, per backing,
 // after every operation, and the sum of balances equals outstanding.
@@ -931,6 +934,39 @@ export class TransparentLedger {
     const { demandHash, nonce } = op;
     const entry = { kind: "withdrawal", demandHash, nonce, signature } as const;
     return this.apply(op.backing, entry, atWitnessedIndex);
+  }
+
+  /**
+   * Restore one backing's book to a prefix of its own log: drop the entries past
+   * `length` and refold the state from what is kept.
+   *
+   * **The one place a log shrinks, and it shrinks only to a prefix of itself.**
+   * It exists for §C2b's return from silence: what an operator co-signed after
+   * its last commitment and before the silence was never witnessed — "a payment
+   * is final when witnessed, not when co-signed" (CLAUDE.md) — and died with the
+   * gap, so on return the operator restores its book to the last commitment
+   * before it adopts what the venue witnessed (Sequencer.adopt). The sequencer
+   * is what knows the committed length; this only refuses to go past the log.
+   *
+   * It is not invariant 8's clawback, and the difference is the record: nothing
+   * witnessed is undone, because the committed log is always a prefix of the
+   * operator's own and a commitment that failed to extend its predecessor is
+   * isRewrittenHistory's to name. What it drops is the operator's own
+   * co-signatures that no commitment ever carried — exactly what takeOver drops
+   * of a predecessor's. Replayed through applyEntry with no clock, as every
+   * committed log is, into a fresh state that replaces the old only once the
+   * whole prefix has applied.
+   */
+  truncateTo(backing: Backing, length: number): void {
+    const held = this.stateOf(backing);
+    if (!Number.isSafeInteger(length) || length < 0 || length > held.opLog.length) {
+      throw new LedgerError("a log is restored only to a prefix of itself");
+    }
+    if (length === held.opLog.length) return;
+    const kept = held.opLog.slice(0, length);
+    const state = emptyState();
+    for (const entry of kept) applyEntry(state, held.backing, entry, undefined);
+    this.states.set(held.backing.nameHex, { backing: held.backing, state, opLog: kept });
   }
 
   /**

@@ -869,8 +869,12 @@ describe("§C2b: a returning sequencer adopts what was witnessed during the gap"
     goDark(venue, sequencer);
     redeemAtVenue(venue, backing);
 
-    // Alice's next operation is co-signed only after the gap is adopted, so the
-    // log carries the three legs ahead of it.
+    // Returning is committing: the commit adopts the gap, and the first
+    // co-signature after it — from the next index, since the return index is
+    // still inside the gap — lands behind the three legs
+    // (c2b-return-from-silence).
+    sequencer.commit();
+    venue.advance(1n);
     const spend = { backing, from: KEYS.backer, to: KEYS.carol, quantity: 100n, nonce: 2n };
     sequencer.submitTransfer(
       spend,
@@ -912,6 +916,9 @@ describe("§C2b: a returning sequencer adopts what was witnessed during the gap"
     goDark(venue, sequencer);
     const claim = redeemAtVenue(venue, backing);
     sequencer.adopt(backing);
+    // Asked once the operator serves again: the commit, then the next index.
+    sequencer.commit();
+    venue.advance(1n);
     const receipt = sequencer.submitRelease({ backing, demandHash: claim.hash, nonce: 1n }, new Uint8Array(64));
     expect(verifyReceipt(receipt)).toBe(true);
     expect(receipt.position).toBe(3n);
@@ -938,6 +945,8 @@ describe("§C2b: a returning sequencer adopts what was witnessed during the gap"
     publishAt(venue, 12n, backing, acceptance(backing, SECRETS.backer, claim.hash, 11n, 40n, 1n));
     sequencer.commit();
     expect(sequencer.openDemands(backing)).toHaveLength(1);
+    // The ordinary way, from the index after the return commitment.
+    venue.advance(1n);
 
     const message = encodeReleaseMessage(backing.name, claim.hash, 1n);
     sequencer.submitRelease(

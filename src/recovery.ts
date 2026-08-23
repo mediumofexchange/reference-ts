@@ -574,6 +574,29 @@ function before(at: bigint): bigint {
   return at - 1n;
 }
 
+/**
+ * Whether a publication at the PRESENT index would have gap force for this
+ * backing — the verifier's own `publishedInGap`, read at the door.
+ *
+ * This is the operator's question before it co-signs anything. §C2b: a sequencer
+ * "returning from silence adopts every nullifier witnessed during the gap before
+ * co-signing again", and the gap "runs from the first missed commitment until
+ * commitments resume" — so while this answers yes, a publication the operator
+ * has not yet adopted can still land with force, and anything it co-signs
+ * meanwhile is a history the verifier's fold will contradict. It stays yes at
+ * the very index the return commitment lands, because a publication there is
+ * judged strictly before its own index (`before`): the operator serves from the
+ * index after. One predicate, so the operator's doors and the verifier's fold
+ * cannot disagree about which indices belong to the gap (the 2026-08-22 audit's
+ * B-2 and B-4, and the return-index probe that followed them).
+ *
+ * A backing with no silence clause never has a gap, and a venue's refusal
+ * propagates, as everywhere.
+ */
+export function gapOpen(venue: Venue, backing: Backing): boolean {
+  return publishedInGap(venue, backing, successionOf(backing, venue), venue.witnessedIndex());
+}
+
 /** Whether a publication witnessed at `at` landed inside a gap in commitments. */
 function publishedInGap(
   venue: Venue,

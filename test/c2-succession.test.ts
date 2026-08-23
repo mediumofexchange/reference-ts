@@ -720,6 +720,10 @@ describe("§C2: a re-prepare is written against the demanded backing's record, s
     venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR, eur.name, 20n));
     commitAs(venue, SUCCESSOR_SECRET);
     expect(operatorAt(eur, venue, venue.witnessedIndex())).toEqual(SUCCESSOR);
+    // The old operator has been quiet past GOLD's duration: it commits before it
+    // serves GOLD again, from the next index (c2b-return-from-silence).
+    old.commit();
+    at(venue, 21n);
     // The lapsed leg is withdrawn at the old operator (still GOLD's).
     const out = { backing: gold, demandHash: hash, nonce: 1n };
     old.submitWithdrawal(out, ed25519.sign(encodeWithdrawal(out), SECRETS.alice));

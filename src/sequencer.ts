@@ -33,13 +33,21 @@
 // verdict.
 //
 // **Coming back from silence.** §C2b: "a sequencer returning from silence adopts
-// every nullifier witnessed during the gap before co-signing again." Adoption is
-// enforced structurally rather than by a flag: `submit` adopts before it applies
-// anything, and `commit` before it snapshots, so there is no order of calls in
-// which this operator co-signs while ignoring what the venue witnessed without
-// it. Each adopted operation is judged at the index the VENUE stamped it with,
-// so adoption is reproducible by anyone holding the same record — the sequencer
-// asserts nothing about when.
+// every nullifier witnessed during the gap before co-signing again", and the gap
+// "runs from the first missed commitment until commitments resume". So returning
+// IS committing: while a publication at the venue would still have gap force
+// (`gapOpen`, the verifier's own predicate read at the door) every door refuses
+// and names the commit; the commit restores the book to the last commitment —
+// what was co-signed after it and before the silence was never witnessed, and
+// "a payment is final when witnessed, not when co-signed" — then adopts what the
+// venue witnessed, and the operator serves again from the index after. Adoption
+// is enforced structurally rather than by a flag: every door is caught up before
+// it answers anything, and `commit` adopts before it snapshots, so there is no
+// order of calls in which this operator co-signs while ignoring what the venue
+// witnessed without it — or co-signs onto a book the verifier's fold would
+// contradict. Each adopted operation is judged at the index the VENUE stamped
+// it with, so adoption is reproducible by anyone holding the same record — the
+// sequencer asserts nothing about when.
 //
 // **Two ways to move value, and the parties pick per trade.** §C2: "Two honest
 // answers, pick one. Extend §C3's prepare-decide-commit to any multi-sequencer
@@ -89,7 +97,7 @@ import {
 import { copyReceipt, signReceipt, type Receipt } from "./receipt.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
 import { isNamedSuccessor, operatorAt } from "./replacement.js";
-import { admittedInGap, committedInTime, gapLegsFor, venueIsDeclared, witnessedCommitFor } from "./recovery.js";
+import { admittedInGap, committedInTime, gapLegsFor, gapOpen, venueIsDeclared, witnessedCommitFor } from "./recovery.js";
 import { revokedAt } from "./revocation.js";
 import { type Venue } from "./venue.js";
 
@@ -141,6 +149,12 @@ export class Sequencer {
   // every backing it serves without the ledger handing out a Backing object,
   // which would be handing out the obligor key that authorises issuance.
   private readonly backings = new Map<string, Backing>();
+
+  // Backing name hex -> the length of its log at this operator's last commitment
+  // (or at takeOver, where the predecessor's commitment is the last). Everything
+  // past it is the tail: co-signed, receipted, and not yet witnessed. Absent
+  // means nothing committed, so the whole log is tail.
+  private readonly committedLength = new Map<string, number>();
 
   private readonly operatorSecret: Uint8Array;
   private readonly operatorKey: Uint8Array;
@@ -298,6 +312,9 @@ export class Sequencer {
       }
     }
     for (const entry of committed.opLog) this.ledger.apply(held, entry, undefined);
+    // The predecessor's commitment is the last one this book has: what was taken
+    // on is committed, and nothing past it is.
+    this.committedLength.set(held.nameHex, committed.opLog.length);
   }
 
   /**
@@ -356,8 +373,36 @@ export class Sequencer {
     // and asking walks the chain, which verifies a signature per published
     // replacement — both counts being the adversary's to grow.
     if (!this.isInForce(served)) return;
+    // Returning from silence: the book is restored to the last commitment FIRST.
+    // The verifier folds the gap onto the last committed state (walkGap), so the
+    // operator must too, or the two read different histories wherever the tail
+    // and the gap conflict — a withdrawal in the tail and a release in the gap,
+    // a transfer in the tail and a redemption of the same units in the gap (the
+    // 2026-08-22 audit, B-2 and B-4). Idempotent: restoring again inside one
+    // gap drops and re-adopts the same legs at the same positions, and once the
+    // return commit has carried them they are the committed prefix and stay.
+    if (gapOpen(this.venue, served)) this.restore(served);
     for (const witnessed of gapLegsFor(this.venue, served)) {
       this.adoptOne(served, witnessed.op, witnessed.at);
+    }
+  }
+
+  /**
+   * The book as of the last commitment: the tail past it is dropped from the
+   * ledger (truncateTo, the one place a log shrinks) and from the receipt book,
+   * because a receipt of a dropped operation answered as a repeat would apply
+   * nothing and tell the holder it had (invariant 26 is about accepted
+   * operations, and the gap un-accepted these). A dropped operation is
+   * resubmittable by anyone holding it once the operator serves again, and is
+   * then a fresh act with a fresh receipt; what the dead receipt still proves is
+   * 28b's question (DECISIONS.md).
+   */
+  private restore(backing: Backing): void {
+    const length = this.committedLength.get(backing.nameHex) ?? 0;
+    this.ledger.truncateTo(backing, length);
+    const prefix = backing.nameHex + ":";
+    for (const [key, receipt] of this.receipts) {
+      if (key.startsWith(prefix) && receipt.position >= BigInt(length)) this.receipts.delete(key);
     }
   }
 
@@ -985,13 +1030,17 @@ export class Sequencer {
    */
   commit(): Commitment {
     for (const backing of this.backings.values()) this.adopt(backing);
-    const root = stateRoot(this.snapshot());
+    const snapshots = this.snapshot();
     const commitment = signCommitment(
       this.operatorSecret,
       this.venue.nextSequenceFor(this.operatorKey),
-      root,
+      stateRoot(snapshots),
     );
     this.venue.publish(commitment);
+    // Witnessed now: the whole log is the committed prefix, and the tail is empty.
+    for (const snapshot of snapshots) {
+      this.committedLength.set(bytesToHex(snapshot.name), snapshot.opLog.length);
+    }
     return commitment;
   }
 
@@ -1056,6 +1105,22 @@ export class Sequencer {
    * for, and the slots a squatter freed there are free (rounds two and four).
    */
   private caughtUp(backings: readonly Backing[]): void {
+    // **Nothing is served while the gap is open** — not an act, not a repeat.
+    // A publication at the venue can still land with force, so anything
+    // co-signed now is a book the verifier's fold may contradict; and the
+    // receipt book is about to be restored to the last commitment, so a repeat
+    // answered from it could be a dead receipt. The honest path is the commit,
+    // which closes the gap, and the doors open from the index after. Asked only
+    // of a backing this operator is in force for: a retired operator's receipt
+    // book is its own, and a successor not yet in force is refused further down
+    // for a different reason.
+    for (const backing of backings) {
+      if (this.isInForce(backing) && gapOpen(this.venue, backing)) {
+        throw new SequencerError(
+          "this operator is returning from silence: it commits first, and serves from the index after its commitment",
+        );
+      }
+    }
     for (const backing of backings) this.adopt(backing);
   }
 

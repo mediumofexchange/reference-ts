@@ -542,8 +542,10 @@ describe("§C3: the gap path reads the same exits, because the rules are the law
     f.venue.advance(1n);
     f.sequencer.commit();
     expect(f.sequencer.availableBalance(f.gold, KEYS.alice)).toBe(110n);
-    // And the commit witnessed in time settles the half she tried to take back.
+    // And the commit witnessed in time settles the half she tried to take back —
+    // from the index after the return commitment (c2b-return-from-silence).
     f.venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
+    f.venue.advance(1n);
     f.sequencer.settle(f.gold, ATTEMPT);
     expect(f.sequencer.balance(f.gold, KEYS.bob)).toBe(90n);
   });
@@ -558,6 +560,7 @@ describe("§C3: the gap path reads the same exits, because the rules are the law
     f.venue.advance(1n);
     f.sequencer.commit();
     expect(f.sequencer.availableBalance(f.gold, KEYS.alice)).toBe(110n);
+    f.venue.advance(1n);
     f.sequencer.settle(f.gold, ATTEMPT);
     expect(f.sequencer.balance(f.gold, KEYS.bob)).toBe(90n);
   });
@@ -637,6 +640,10 @@ describe("§C3: a set published into a gap is read one record at a time", () => 
     expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(120n);
 
     advanceWitnessedIndex(venue, 101n);
+    // Quiet from 31 to 101 is a second gap: the operator commits, then serves
+    // from the next index (c2b-return-from-silence).
+    sequencer.commit();
+    venue.advance(1n);
     const alone = { backing: gold, demandHash: hash, nonce: sequencer.nextNonce(KEYS.alice, gold) };
     sequencer.submitWithdrawal(alone, ed25519.sign(encodeWithdrawal(alone), SECRETS.alice));
     expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(200n);
@@ -699,6 +706,7 @@ describe("§C3: the verifier's gap fold reads the record the way the operator do
     // The operator, on return: the same. The commit settles the lock, nothing else moved.
     f.venue.advance(1n);
     f.sequencer.commit();
+    f.venue.advance(1n);
     f.sequencer.settle(f.gold, ATTEMPT);
     expect(f.sequencer.balance(f.gold, KEYS.bob)).toBe(90n);
     expect(f.sequencer.balance(f.gold, KEYS.backer)).toBe(0n);
@@ -1078,7 +1086,11 @@ describe("§C3: re-prepare reads the record first, and the window's last index",
     accept(sequencer, eur, hash, 50n);
     sequencer.commit();
     advanceWitnessedIndex(venue, 60n);
-    // The acceptance expired at 50: the head withdrawal is lawful, and a gap leg.
+    // The operator returns: its commit at 60 closes the gap from the next index.
+    sequencer.commit();
+    // The acceptance expired at 50: the head withdrawal is lawful, and — published
+    // at the return index, after the commit — still a gap leg the commit did not
+    // adopt (c2b-return-from-silence: the tie rule).
     const head = { backing: eur, demandHash: hash, nonce: 1n };
     venue.publishOp(eur.name, {
       kind: "withdrawal",
@@ -1087,7 +1099,7 @@ describe("§C3: re-prepare reads the record first, and the window's last index",
       signature: ed25519.sign(encodeWithdrawal(head), SECRETS.alice),
     });
     venue.advance(1n);
-    // The operator returns. The leg's own withdrawal adopts GOLD — and only GOLD.
+    // The leg's own withdrawal adopts GOLD — and only GOLD.
     withdrawLeg(sequencer, gold, hash);
     expect(() => relock(sequencer, eur, gold, hash, 95n)).toThrow(/no demand stands/);
     expect(sequencer.openDemands(eur)).toHaveLength(0);
@@ -1216,11 +1228,14 @@ describe("§C3: every door is ready, then answers a repeat, then refuses — in 
     sequencer.submitLock(squat, ed25519.sign(encodeLock(squat), SECRETS.mallory));
     sequencer.commit();
     advanceWitnessedIndex(venue, 40n);
-    // Past its timeout Mallory withdraws it AT THE VENUE; the operator is dark.
+    // The operator returns at 40; past its timeout Mallory withdraws the squat AT
+    // THE VENUE at the same index, after the commit — a gap leg the commit did
+    // not adopt (c2b-return-from-silence: the tie rule).
+    sequencer.commit();
     const out = { backing: gold, demandHash: hash, nonce: 1n };
     venue.publishOp(gold.name, { kind: "withdrawal", demandHash: hash, nonce: 1n, signature: ed25519.sign(encodeWithdrawal(out), SECRETS.mallory) });
     venue.advance(1n);
-    // The operator returns and Alice files: the freed slot is read after adoption.
+    // Alice files: the freed slot is read after adoption.
     const lock: LockOp = { backing: gold, attemptId: hash, holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout: 200n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: sequencer.nextNonce(KEYS.alice, gold) };
     sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice), [
       { op: lock, signature: ed25519.sign(encodeLock(lock), SECRETS.alice) },
@@ -1239,11 +1254,14 @@ describe("§C3: the doors, caught up first — what the round-four regression re
     const f = gapGold();
     f.sequencer.commit();
     f.venue.advance(30n);
+    // The operator returns at 30; Alice's demand lands at the same index, after
+    // the commit — a gap leg the commit did not adopt (c2b-return-from-silence).
+    f.sequencer.commit();
     const demand: DemandOp = { backing: f.gold, holder: KEYS.alice, quantity: 40n, instant: f.venue.witnessedIndex(), deadline: 200n, nonce: 0n };
     const signature = ed25519.sign(encodeDemand(demand), SECRETS.alice);
     f.venue.publishOp(f.gold.name, { kind: "demand", holder: demand.holder, quantity: demand.quantity, instant: demand.instant, deadline: demand.deadline, nonce: demand.nonce, signature });
     f.venue.advance(1n);
-    // The operator is back; the first thing it hears is Alice asking for her receipt.
+    // The first thing the operator hears is Alice asking for her receipt.
     const receipt = f.sequencer.submitDemand(demand, signature);
     expect(receipt.position).toBe(1n);
     expect(f.sequencer.openDemands(f.gold)).toHaveLength(1);
@@ -1257,6 +1275,9 @@ describe("§C3: the doors, caught up first — what the round-four regression re
     const { hash } = file(sequencer, venue, eur, gold, 40n);
     sequencer.commit();
     advanceWitnessedIndex(venue, 41n);
+    // The operator returns at 41; the leg withdrawal lands at the same index,
+    // after the commit — a gap leg the commit did not adopt.
+    sequencer.commit();
     const out = { backing: gold, demandHash: hash, nonce: 1n };
     venue.publishOp(gold.name, { kind: "withdrawal", demandHash: hash, nonce: 1n, signature: ed25519.sign(encodeWithdrawal(out), SECRETS.alice) });
     venue.advance(1n);
