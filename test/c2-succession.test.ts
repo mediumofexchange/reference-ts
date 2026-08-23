@@ -310,7 +310,8 @@ describe("§C2: a successor serves, and only once it is in force", () => {
       { backing, from: KEYS.alice, to: KEYS.bob, quantity: 40n, nonce: 0n },
       ed25519.sign(encodeTransferMessage(backing.name, KEYS.alice, KEYS.bob, 40n, 0n), SECRETS.alice),
     );
-    return { server, issued, served: { snapshots: server.snapshot(), commitment: server.commit() } };
+    const commitment = server.commit();
+    return { server, issued, served: { snapshots: server.snapshot(), commitment } };
   }
 
   function handedOver() {

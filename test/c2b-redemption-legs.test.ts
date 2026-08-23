@@ -58,8 +58,11 @@ function setup(quantity = 100n) {
 
 /** Commit the state a redemption runs against, then let the silence elapse. */
 function goDark(venue: LocalVenue, sequencer: Sequencer): ServedState {
-  const snapshots = sequencer.snapshot();
+  // Committed first, then snapshotted: a commit adopts (and on a return,
+  // restores) before it publishes, so the snapshot a commitment roots is the one
+  // taken after it (c2b-return-from-silence's `served`).
   const commitment = sequencer.commit();
+  const snapshots = sequencer.snapshot();
   venue.advance(SILENCE.noCommitmentDuration + 1n);
   return { snapshots, commitment };
 }
@@ -867,13 +870,15 @@ describe("§C2b: a returning sequencer adopts what was witnessed during the gap"
   it("adopts the legs before co-signing again", () => {
     const { venue, sequencer, backing } = setup();
     goDark(venue, sequencer);
-    redeemAtVenue(venue, backing);
-
-    // Returning is committing: the commit adopts the gap, and the first
-    // co-signature after it — from the next index, since the return index is
-    // still inside the gap — lands behind the three legs
+    // Returning is committing, and the return index is still inside the gap: the
+    // three legs land at 11 AFTER the return commitment, so the commit did not
+    // adopt them, and the first door at 12 must — before it co-signs anything
     // (c2b-return-from-silence).
     sequencer.commit();
+    const claim = demand(backing, SECRETS.alice, KEYS.alice, 100n, 11n, 40n, 0n);
+    publishAt(venue, 11n, backing, claim.op);
+    publishAt(venue, 11n, backing, acceptance(backing, SECRETS.backer, claim.hash, 11n, 40n, 1n));
+    publishAt(venue, 11n, backing, release(backing, SECRETS.alice, claim.hash, 1n));
     venue.advance(1n);
     const spend = { backing, from: KEYS.backer, to: KEYS.carol, quantity: 100n, nonce: 2n };
     sequencer.submitTransfer(

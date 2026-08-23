@@ -65,7 +65,9 @@ function request(backing: Backing, quantity: bigint, nonce: bigint): Extract<Pub
 }
 
 function servedBy(sequencer: Sequencer) {
-  return { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+  // Committed first, then snapshotted: the commit adopts before it publishes.
+  const commitment = sequencer.commit();
+  return { snapshots: sequencer.snapshot(), commitment };
 }
 
 describe("§C2b: non-service is counted on service, not on publication", () => {
