@@ -9,6 +9,7 @@ import { isOperatorReceipt, receiptStatus, type Receipt } from "../src/receipt.j
 import {
   committedInTime,
   committedOutstanding,
+  eraLapsed,
   gapLegsFor,
   gapOpen,
   quietFor,
@@ -117,6 +118,7 @@ function fixtures() {
     backingName: backing.name,
     opHash: new Uint8Array(32).fill(7),
     position: 0n,
+    after: 0n,
     operator: KEYS.operator,
     signature: new Uint8Array(64),
   };
@@ -182,6 +184,7 @@ function surface() {
     ["successionOf", () => successionOf(backing, refusing)],
     ["gapLegsFor", () => gapLegsFor(refusing, backing)],
     ["gapOpen", () => gapOpen(refusing, backing)],
+    ["eraLapsed", () => eraLapsed(refusing, backing, KEYS.operator, 0n)],
     ["quietFor", () => quietFor(refusing, KEYS.operator)],
     ["replayServedState", () => replayServedState(backing, refusing, served)],
     ["witnessedCommitFor", () => witnessedCommitFor(refusing, { attemptId: new Uint8Array(32), parties: [KEYS.alice], decisionVenue: refusing.id })],

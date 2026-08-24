@@ -62,6 +62,7 @@ import { signerFromTerms } from "./ledger.js";
 import { opMessageOfEntry, type PublishedOp } from "./oplog.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
 import { receiptCovers, isOperatorReceipt, type Receipt } from "./receipt.js";
+import { eraLapsed } from "./recovery.js";
 import { successionOf, type Succession } from "./replacement.js";
 import { answering, type Venue } from "./venue.js";
 
@@ -143,6 +144,13 @@ export function isDoubleAcceptance(
     if (compareBytes(a.receipt.operator, b.receipt.operator) !== 0) return false;
     if (!isOperatorReceipt(backing, venue, a.receipt)) return false;
     if (!isOperatorReceipt(backing, venue, b.receipt)) return false;
+    // An era that ended in a return or a handover dropped its tail with
+    // license (§C2b), so a receipt from it may attest an operation the record
+    // rightly never held: the pair proves nothing. The residual — an operator
+    // laundering this fault by going silent, at the price of the public grade —
+    // is recorded (DECISIONS, slice 28b).
+    if (eraLapsed(venue, backing, a.receipt.operator, a.receipt.after)) return false;
+    if (eraLapsed(venue, backing, b.receipt.operator, b.receipt.after)) return false;
     // Each receipt has to cover the operation it is exhibited with, ON THIS
     // BACKING, or an accuser pins any operator's signature to any operation it
     // likes — including a receipt the operator issued perfectly correctly
@@ -179,6 +187,10 @@ export function isDoublePosition(
   return answering(() => {
     if (compareBytes(a.operator, b.operator) !== 0) return false;
     if (!isOperatorReceipt(backing, venue, a) || !isOperatorReceipt(backing, venue, b)) return false;
+    // As in isDoubleAcceptance: a lapsed era dropped its tail with license, so
+    // either receipt may describe a book the record rightly never held.
+    if (eraLapsed(venue, backing, a.operator, a.after)) return false;
+    if (eraLapsed(venue, backing, b.operator, b.after)) return false;
     // Two receipts by one operator on one backing that cannot both describe one
     // append-only log: one position holding two operations — or, the mirror, one
     // operation receipted into two positions, which a nonce and a position each

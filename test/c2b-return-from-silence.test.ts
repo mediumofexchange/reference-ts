@@ -742,13 +742,11 @@ describe("§C2b: the return commit restores the book to the last commitment, the
     expect(sequencer.balance(backing, KEYS.bob)).toBe(100n);
     // And the repeat of the fresh act is the fresh receipt.
     expect(sequencer.submitTransfer(spend.op, spend.signature)).toEqual(fresh);
-    // OPEN (28b): the dead receipt's position holds the demand now, and a reader
-    // of the return commitment calls that `contradicted` — an honest operator
-    // accused of lying about its log for having gone silent; isDoublePosition
-    // reads the dead and the fresh receipt the same way. A receipt must say
-    // which record it was signed against before a reader can tell a dead tail
-    // from a lie; until then this pins the question rather than the answer.
-    expect(receiptStatus(backing, venue, dead, after)).toBe("contradicted");
+    // 28b: the receipt names its era, so the dead receipt reads `lapsed` — its
+    // era ended in a return, an act that died unwitnessed and accuses nobody —
+    // and the fresh receipt, witnessed.
+    expect(receiptStatus(backing, venue, dead, after)).toBe("lapsed");
+    expect(receiptStatus(backing, venue, fresh, served(sequencer))).toBe("witnessed");
   });
 
   it("adopting inside one gap is idempotent: one book, one set of positions, and the receipt of a gap leg is the same on every ask — inside the gap and after the return", () => {

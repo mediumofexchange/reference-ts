@@ -10,7 +10,10 @@
 //   mfp/issuance/v1            a backer authorising issuance
 //   mfp/transfer/v1            a holder moving units
 //   mfp/burn/v1                a holder destroying units
-//   mfp/receipt/v1             an operator co-signing an accepted operation
+//   mfp/receipt/v2             an operator co-signing an accepted operation
+//                              (v2 added the era — the witnessed index of the
+//                              operator's last commitment at signing; no v1
+//                              receipt was ever issued outside this repository)
 //   mfp/commitment/v1          an operator committing to served state
 //   mfp/demand/v1              a holder presenting claims for payment
 //   mfp/acceptance/v1          a backer answering a demand
@@ -28,7 +31,7 @@ export const BACKING_SIGNATURE_CONTEXT = tag("mfp/backing-signature/v1");
 export const ISSUANCE_CONTEXT = tag("mfp/issuance/v1");
 export const TRANSFER_CONTEXT = tag("mfp/transfer/v1");
 export const BURN_CONTEXT = tag("mfp/burn/v1");
-export const RECEIPT_CONTEXT = tag("mfp/receipt/v1");
+export const RECEIPT_CONTEXT = tag("mfp/receipt/v2");
 export const COMMITMENT_CONTEXT = tag("mfp/commitment/v1");
 export const DEMAND_CONTEXT = tag("mfp/demand/v1");
 export const ACCEPTANCE_CONTEXT = tag("mfp/acceptance/v1");

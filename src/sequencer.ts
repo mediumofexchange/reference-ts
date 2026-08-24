@@ -217,6 +217,14 @@ export class Sequencer {
    * question §C2 answers with "until then the predecessor's last commitment
    * governs, no new co-signatures issue".
    */
+  /**
+   * The era a receipt this operator signs right now names: the witnessed index
+   * of its last commitment, 0 where it has none (receipt.ts, `after`).
+   */
+  private era(): bigint {
+    return this.venue.witnessedAtFor(this.operatorKey) ?? 0n;
+  }
+
   private isInForce(backing: Backing): boolean {
     return (
       compareBytes(
@@ -494,7 +502,7 @@ export class Sequencer {
     }
     this.receipts.set(
       key,
-      signReceipt(this.operatorSecret, backing.name, opHashOfEntry(backing.name, op), BigInt(entry.position)),
+      signReceipt(this.operatorSecret, backing.name, opHashOfEntry(backing.name, op), BigInt(entry.position), this.era()),
     );
   }
 
@@ -1315,6 +1323,7 @@ export class Sequencer {
         (items[i] as { readonly backing: Backing }).backing.name,
         hashes[i] as Uint8Array,
         BigInt(entry.position),
+        this.era(),
       ),
     );
     // Every accepted operation is co-signed, legs included: an operator cannot

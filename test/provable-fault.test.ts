@@ -223,7 +223,7 @@ describe("an operator that co-signed a history one nonce cannot hold", () => {
     // positions can be true — and both verified, both covered, and the pair read
     // as `pending` with nobody named.
     const { a, venue } = splitBrain();
-    const twice = signReceipt(SECRETS.operator, backing.name, a.receipt.opHash, a.receipt.position + 5n);
+    const twice = signReceipt(SECRETS.operator, backing.name, a.receipt.opHash, a.receipt.position + 5n, a.receipt.after);
     expect(isDoublePosition(backing, venue, a.receipt, twice)).toBe(true);
     expect(isDoublePosition(backing, venue, twice, a.receipt)).toBe(true);
     // The identical receipt twice is one receipt, not a fault.
@@ -280,8 +280,8 @@ describe("an operator that co-signed a history one nonce cannot hold", () => {
     const alice2 = pub(new Uint8Array(32).fill(0x09));
     const a = op("transfer", SECRETS.alice, backing, { to: KEYS.bob, nonce: 0n });
     const b = op("transfer", SECRETS.alice, backing, { to: alice2, nonce: 0n });
-    const ra = signReceipt(SECRETS.mallory, backing.name, opHashOfEntry(backing.name, a), 1n);
-    const rb = signReceipt(SECRETS.mallory, backing.name, opHashOfEntry(backing.name, b), 1n);
+    const ra = signReceipt(SECRETS.mallory, backing.name, opHashOfEntry(backing.name, a), 1n, 0n);
+    const rb = signReceipt(SECRETS.mallory, backing.name, opHashOfEntry(backing.name, b), 1n, 0n);
 
     expect(equivocatingSigner(backing, a, b)).toBeDefined();
     expect(isDoubleAcceptance(backing, venue, { op: a, receipt: ra }, { op: b, receipt: rb })).toBe(false);
@@ -290,7 +290,7 @@ describe("an operator that co-signed a history one nonce cannot hold", () => {
 
   it("refuses two receipts by different operators", () => {
     const { a, b, venue } = splitBrain();
-    const stranger = signReceipt(SECRETS.mallory, backing.name, b.receipt.opHash, b.receipt.position);
+    const stranger = signReceipt(SECRETS.mallory, backing.name, b.receipt.opHash, b.receipt.position, b.receipt.after);
     expect(isDoubleAcceptance(backing, venue, a, { op: b.op, receipt: stranger })).toBe(false);
     expect(isDoublePosition(backing, venue, a.receipt, stranger)).toBe(false);
   });
@@ -364,7 +364,7 @@ describe("a receipt covers exactly one operation", () => {
   it("fails where the receipt names another backing", () => {
     const { receipt, op: accepted_ } = accepted();
     const other = makeTransparentBacking(SECRETS.backer, "USD");
-    const elsewhere = signReceipt(SECRETS.operator, other.name, receipt.opHash, receipt.position);
+    const elsewhere = signReceipt(SECRETS.operator, other.name, receipt.opHash, receipt.position, receipt.after);
     expect(receiptCovers(backing.name, accepted_, elsewhere)).toBe(false);
     // And the operation it really does cover is still refused against the
     // backing the caller asked about.

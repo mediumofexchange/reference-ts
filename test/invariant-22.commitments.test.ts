@@ -185,7 +185,7 @@ describe("verifiers return false on hostile input, never throw", () => {
   it("a malformed operator key fails verification instead of crashing", () => {
     expect(verifyCommitment({ sequence: 0n, root: name, operator: shortKey, signature: sig })).toBe(false);
     expect(
-      verifyReceipt({ backingName: name, opHash: name, position: 0n, operator: shortKey, signature: sig }),
+      verifyReceipt({ backingName: name, opHash: name, position: 0n, after: 0n, operator: shortKey, signature: sig }),
     ).toBe(false);
   });
 
@@ -194,7 +194,7 @@ describe("verifiers return false on hostile input, never throw", () => {
       name,
       opLog: [{ position: 1.5, kind: "burn" as const, holder: name, quantity: 1n, nonce: 0n, signature: new Uint8Array(64) }],
     };
-    const receipt = { backingName: name, opHash: name, position: 0n, operator: name, signature: sig };
+    const receipt = { backingName: name, opHash: name, position: 0n, after: 0n, operator: name, signature: sig };
     expect(receiptProvenBy(receipt, hostile)).toBe(false);
   });
 
