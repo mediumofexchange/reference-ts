@@ -225,8 +225,9 @@ construction — which is why they are rules here rather than code.
   claims "go illiquid rather than dead. Value discounts until they return." A
   transfer published at the venue is evidence, never an operation, so nothing
   moves until the operator returns or a successor takes over — and the operator
-  itself co-signs nothing while it is dark by its own declared measure (slice
-  28a, below), so a payee cannot be handed a co-signature to rely on. A presentation
+  itself co-signs no new act while it is dark by its own declared measure (slice
+  28a, below; adopting the gap's legs is the one co-signature it still gives),
+  so a payee cannot be handed a co-signature to rely on. A presentation
   with legs — reliance or a claims payout — neither opens nor settles in a gap:
   the venue holds operations one at a time, never a set. One predicate
   (`admittedInGap`) says so for the operator's adoption and the verifier's fold
@@ -260,7 +261,7 @@ construction — which is why they are rules here rather than code.
   signed but never committed is exactly as unprovable. **The operator's own side
   of this is code since slice 28a: returning from silence is committing.** While
   a publication at the venue would still have gap force against the operator's
-  own silence on any backing it serves (`gapOpen`, the verifier's own predicate
+  own silence on any backing it is in force for (`gapOpen`, the verifier's own predicate
   read at the door — true at the very index the return commitment lands, so the
   operator serves from the index after), every door refuses the act and names
   the commit, answering only repeats; the commit restores the whole book to the

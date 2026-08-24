@@ -51,9 +51,11 @@ of its mechanisms, below):**
   test holds the two to each other index by index.
 - **No act is co-signed while it holds; a repeat is answered.** `submit` — the
   one path every act takes — refuses after the repeat lookup, naming the commit,
-  wherever the operator's own silence is open on any backing it serves or the
-  touched backing's gap is open against a predecessor (a successor at its
-  handover index). Every door is exercised by a test. A repeat is a read of the
+  wherever the operator's own silence is open on any backing it is in force for
+  or the gap of a backing the act writes — or, at the one door that decides an
+  act on a record it only reads (`submitLeg`), reads — is open against a
+  predecessor (a successor at its handover index). Every door is exercised by a
+  test. A repeat is a read of the
   receipt book, not an act (the door order the audit settled: "the repeat before
   any refusal"), and it is answered from a book already restored — the first
   draft refused repeats too, which the review named as a silent reversal of that
@@ -127,6 +129,39 @@ what stands across a gap; a silence duration of 0 makes a backing unserveable
 between commitments is always partly unwitnessed; the return doubles the chain
 walks per act (`returning()` asks every served backing), which compounds the
 audit's open question 5 and is what the one-door refactor (below) would halve.
+
+**Regression-reviewing the fixes found the shape again, three times** (two
+Opus angles over the fix round's diff; sixteen mutations run against the suite).
+The gap refusal bounded the backings an act WRITES, and `submitLeg` decides a
+lock on the leg's backing by the DEMANDED backing's record — at a successor's
+handover index (not "returning": the silence is the predecessor's) with the
+leg's backing clear, a re-prepare was co-signed while a head withdrawal
+published at that same index still landed with force, a lock under a head the
+record ended (`shut`, asked of the demanded backing where `inForce` already
+is). `restoreAll` swept every REGISTERED backing where the tail lives only on
+the in-force ones, so an operator returning from its own silence forgot the
+receipt book of a backing it had handed over — the one evidence the successor
+cannot produce (scoped to in force; a retired book and its receipts stay). And
+the restore had gone operator-wide while adoption stayed per-touched, so a door
+about one backing rolled the others' adopted gap legs back and re-adopted
+nothing — returning, the operator catches every in-force backing up, not only
+the act's. Untested claims closed: `submit`'s repeat-before-refusal was pinned
+by nothing (seven doors answer repeats themselves; a transfer and a burn are now
+resubmitted through it mid-gap), and the mark's doc claimed isRewrittenHistory
+catches a mark set anywhere but at a commitment — true only of one set too LOW;
+one set too high is the drift itself, which no fault predicate sees and only the
+mark's two writers stop, and the doc says so now. **Recorded, not patched (all
+pre-existing, re-found here):** a retired operator's commitments still root and
+mark the stale log of a backing it handed over — the record then reads the pair
+as the SUCCESSOR's rewritten history, and what a retired operator's commitment
+should carry is an open question beside slice 18's; re-appointing a former
+operator is unimplementable (`takeOver` refuses its non-empty log) and fails
+open onto its stale book — adjacent to the dead-successor slice, queued; a
+successor whose effective index lies far past its own qualifying commitment is
+"returning" on arrival (its last commitment is old by then) and must commit
+again before serving — bounded, and its own schedule to avoid; and `returning()`
+walks every served backing's chain on every act, gap or no gap — the cost sits
+where the one-door refactor would remove it.
 
 **OPEN, pinned for 28b — the second half of Bob's item 1.** After a restore a
 dead tail receipt's position holds something else, and `receiptStatus` answers

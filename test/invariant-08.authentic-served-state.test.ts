@@ -303,7 +303,7 @@ describe("the signer of a presentation entry comes from the log, not the operato
     f.sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice));
     // The operator commits inside its declared duration (10): index 11 is six
     // past this commitment, not eleven past none — an operator that has never
-    // committed is in a gap from genesis and serves nothing (c2b-return-from-silence).
+    // committed is in a gap from genesis and co-signs nothing (c2b-return-from-silence).
     f.sequencer.commit();
     f.venue.advance(6n);
     const walk = {
@@ -348,7 +348,7 @@ describe("a served log must be a history the law could have produced", () => {
     f.sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice));
     // The operator commits inside its declared duration (10): index 11 is six
     // past this commitment, not eleven past none — an operator that has never
-    // committed is in a gap from genesis and serves nothing (c2b-return-from-silence).
+    // committed is in a gap from genesis and co-signs nothing (c2b-return-from-silence).
     f.sequencer.commit();
     f.venue.advance(6n);
     const walk = {
@@ -804,7 +804,7 @@ describe("the law is applied once, so the ledger and the replay cannot drift", (
     f.sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice));
     // The operator commits inside its declared duration (10): index 11 is six
     // past this commitment, not eleven past none — an operator that has never
-    // committed is in a gap from genesis and serves nothing (c2b-return-from-silence).
+    // committed is in a gap from genesis and co-signs nothing (c2b-return-from-silence).
     f.sequencer.commit();
     f.venue.advance(6n);
     const walk = {

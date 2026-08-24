@@ -12,8 +12,12 @@
 //     returns a copy so a caller cannot reach in and mutate state. The one
 //     method that shrinks a log, `restore`, shrinks it to the mark the
 //     sequencer set at its last commitment and never below it (§C2b's return
-//     from silence); what it drops is co-signed and unwitnessed, and a mark set
-//     anywhere but at a commitment is isRewrittenHistory's to catch.
+//     from silence); what it drops is co-signed and unwitnessed. The mark has
+//     two writers, commit and takeOver, and each sets it to what was just
+//     committed or taken on — that is the guard; a mark set too low would
+//     shrink a committed log, which isRewrittenHistory names, and one set too
+//     high would keep a tail no commitment carried, which is the drift this
+//     mechanism exists to remove and which only the writers' discipline stops.
 //
 // Conservation (invariant 10): outstanding = issued − burned, per backing,
 // after every operation, and the sum of balances equals outstanding.
@@ -971,9 +975,13 @@ export class TransparentLedger {
    * mark is set only where the sequencer has published a commitment over the
    * log or taken on a committed one. That is the guard invariant 8 asks for
    * here rather than a length a caller promises: nothing witnessed is undone,
-   * because the committed log is always a prefix of the operator's own, and a
-   * mark set anywhere but at a commitment would make the next commitment fail
-   * to extend its predecessor, which is isRewrittenHistory's to name. What the
+   * because the committed log is always a prefix of the operator's own. The
+   * mark's two writers, commit and takeOver, each set it to what was just
+   * committed or taken on; a mark set too low would shrink a committed log,
+   * which isRewrittenHistory names, and one set too high would keep a tail no
+   * commitment carried — the operator/verifier drift this mechanism exists to
+   * remove, which no fault predicate sees and only those two writers stop
+   * (found regression-reviewing the review round). What the
    * restore drops is the operator's own co-signatures that no commitment ever
    * carried — "a payment is final when witnessed, not when co-signed"
    * (CLAUDE.md) — which is what takeOver drops of a predecessor's. §C2b's return
