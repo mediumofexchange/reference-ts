@@ -185,7 +185,10 @@ the doubled walks above are the price of the doubled prefix. One door, not nine,
 is its own behaviour-preserving slice.
 
 **Spec change:** one sentence explained to Bob rather than made, at his
-instruction. §C2b's "a sequencer returning from silence adopts every nullifier
+instruction. *[Made 2026-08-24 in money-from-first-principles@a5665d1, at
+Bob's instruction, with the three other pending sentences (@e370e59 slice 27's
+deadline, @213d9e1 slice 21's closure floor, @b62f6ee the audit's question 4);
+committed locally, not pushed.]* §C2b's "a sequencer returning from silence adopts every nullifier
 witnessed during the gap before co-signing again" is right and under-specified:
 returning is committing, since the gap runs until a commitment is witnessed and
 a publication inside it has force; the operator rebuilds from its last
@@ -445,7 +448,8 @@ those two constraints:
    per backing and the reader reads across the served state as the others do.
    **Queued, third.**
 4. **Cross-operator presentation:** out of scope, an extension; recorded, not
-   built. A spec note may follow.
+   built. A spec note may follow. *[Made 2026-08-24 in
+   money-from-first-principles@b62f6ee, at Bob's instruction.]*
 5. **Noise and adoption cost:** recorded; the venue's fee is the bound; no
    memoisation while a venue can take publications at the current index.
 6. **The commit does not bind the exchange's backing set:** simplicity — one
@@ -641,7 +645,8 @@ clock too, since the readers now ask it.
 path it leaves open, and a test walks it; and a test's name is a claim the test
 must exercise.
 
-**Spec change: one sentence proposed, not yet made.** §C3 says "a demand
+**Spec change: one sentence proposed, not yet made.** *[Made 2026-08-24 in
+money-from-first-principles@e370e59, at Bob's instruction.]* §C3 says "a demand
 outlives its locks" and "Refiling recovers nothing", and the code now follows —
 re-prepare rather than re-file. The deadline rule is the implementation's own
 reading of a silence: "a five-minute window is worthless evidence, thirty
@@ -1412,7 +1417,8 @@ second way.
 on a backing with reliance. That is §C3's prepare-decide-commit, which this slice
 was the prerequisite for.
 
-**Spec change:** none made. §8b's example could gain the discriminating case -
+**Spec change:** *[Made 2026-08-24 in money-from-first-principles@213d9e1, at
+Bob's instruction.]* §8b's example could gain the discriminating case -
 one line showing that a directly-named target is a floor rather than a second
 contribution - but the reading is forced by `closed(b)` having to mean anything,
 so the paper is not wrong, only silent. Worth raising if Bob agrees.
