@@ -259,16 +259,20 @@ construction — which is why they are rules here rather than code.
   operator's last commitment lives only in its unpublished log and in the
   receipt, and dies with it — in **every** construction, since a Chaumian token
   signed but never committed is exactly as unprovable. **The operator's own side
-  of this is code since slice 28a: returning from silence is committing.** While
-  a publication at the venue would still have gap force against the operator's
-  own silence on any backing it is in force for (`gapOpen`, the verifier's own predicate
-  read at the door — true at the very index the return commitment lands, so the
-  operator serves from the index after), every door refuses the act and names
-  the commit, answering only repeats; the commit restores the whole book to the
-  last commitment (`restore`, the one place a log shrinks, and only to the mark
-  the last commitment set — the tail is the operator's, since one commitment
-  covers every backing it serves) and adopts what the venue witnessed. What was
-  co-signed after that commitment and before the silence is dead, and its
+  of this is code since slice 28a: returning from silence is committing — per
+  backing, since 28b: the era is the backing's own.** While a publication on a
+  backing would still have gap force (`gapOpen`, the verifier's own predicate
+  read at the door — true at the very index the return commitment lands, so
+  that backing is served from the index after), its doors refuse every act and
+  name the commit, answering only repeats; where the silence is the operator's
+  own, the commit first restores that backing's book to the last commitment
+  (`restore`, the one place a log shrinks, and only to the mark the last
+  commitment set) and adopts what the venue witnessed. **A set is one act and
+  dies as one, so the sequencer takes it only over backings that declare one
+  silence duration** (or none): one operator means one last commitment, so
+  equal durations open and close their gaps together and a set in the tail is
+  restored whole — which is what lets the restore stay per backing. What was
+  co-signed after the last commitment and before the silence is dead, and its
   receipt's position proves nothing across the gap; making that readable from
   the receipt is slice 28b. So the exposure is the
   interval since the last commitment, which is why §C2 makes the interval "a
