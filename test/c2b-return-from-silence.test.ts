@@ -48,8 +48,8 @@ import { KEYS, makeTransparentBacking, pub, SECRETS, advanceWitnessedIndex } fro
 // operator's own silence on any backing it is in force for, no door co-signs: acts are
 // refused and name the commit, repeats are answered from a book already
 // restored to the last commitment (the tail is the OPERATOR'S — one commitment
-// covers every backing it serves, so one return restores every backing, or a
-// set taken as one act would be torn); the commit adopts the gap; and from the
+// covers every backing it is in force for, so one return restores each of their
+// books, or a set taken as one act would be torn); the commit adopts the gap; and from the
 // index after that commitment the operator serves again.
 
 const SILENCE = { noCommitmentDuration: 10n, challengeWindow: 5n };
