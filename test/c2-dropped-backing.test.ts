@@ -80,7 +80,9 @@ function setup(replaceable = true) {
 
 /** The state as the operator serves it now, committed and published. */
 function commitAll(sequencer: Sequencer): ServedState {
-  return { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+  // Committed first, then snapshotted: the commit adopts before it publishes.
+  const commitment = sequencer.commit();
+  return { snapshots: sequencer.snapshot(), commitment };
 }
 
 /**

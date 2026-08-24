@@ -212,15 +212,22 @@ construction — which is why they are rules here rather than code.
   threshold K". Like the operator rule above it is **invisible here**: t-of-n
   aggregated to one Ed25519 key leaves the name, E and strict verification
   untouched, so nothing in this repository can check that a backer took it.
-- **The payee obtains the receipt at payment time.** During a §C2b gap the
-  operator's log is unpublished, so its receipt is the only evidence outside it
-  that an operation was accepted at all. A payee without one has the payer's
-  signature and nothing that says the operator ever saw it. `submitTransfer`
-  returns the receipt to whoever submitted, which is normally the payer.
+- **The payee obtains the signed request and the receipt at payment time.**
+  During a §C2b gap the operator's log is unpublished, so its receipt is the
+  only evidence outside it that an operation was accepted at all. A payee
+  without one has the payer's signature and nothing that says the operator ever
+  saw it. `submitTransfer` returns the receipt to whoever submitted, which is
+  normally the payer. And the signed request itself, because a receipt given
+  after the operator's last commitment dies with a gap (below): the operation
+  is resubmittable by anyone holding the request once the operator serves
+  again, and a payee holding only the receipt cannot.
 - **Claims go illiquid while the operator is dark. Do not accept one.** §C2b:
   claims "go illiquid rather than dead. Value discounts until they return." A
   transfer published at the venue is evidence, never an operation, so nothing
-  moves until the operator returns or a successor takes over. A presentation
+  moves until the operator returns or a successor takes over — and the operator
+  itself co-signs no new act while it is dark by its own declared measure (slice
+  28a, below; adopting the gap's legs is the one co-signature it still gives),
+  so a payee cannot be handed a co-signature to rely on. A presentation
   with legs — reliance or a claims payout — neither opens nor settles in a gap:
   the venue holds operations one at a time, never a set. One predicate
   (`admittedInGap`) says so for the operator's adoption and the verifier's fold
@@ -251,7 +258,19 @@ construction — which is why they are rules here rather than code.
   release nobody witnessed did not happen." An operation accepted after the
   operator's last commitment lives only in its unpublished log and in the
   receipt, and dies with it — in **every** construction, since a Chaumian token
-  signed but never committed is exactly as unprovable. So the exposure is the
+  signed but never committed is exactly as unprovable. **The operator's own side
+  of this is code since slice 28a: returning from silence is committing.** While
+  a publication at the venue would still have gap force against the operator's
+  own silence on any backing it is in force for (`gapOpen`, the verifier's own predicate
+  read at the door — true at the very index the return commitment lands, so the
+  operator serves from the index after), every door refuses the act and names
+  the commit, answering only repeats; the commit restores the whole book to the
+  last commitment (`restore`, the one place a log shrinks, and only to the mark
+  the last commitment set — the tail is the operator's, since one commitment
+  covers every backing it serves) and adopts what the venue witnessed. What was
+  co-signed after that commitment and before the silence is dead, and its
+  receipt's position proves nothing across the gap; making that readable from
+  the receipt is slice 28b. So the exposure is the
   interval since the last commitment, which is why §C2 makes the interval "a
   signed field rather than operational discretion". E carries it, with the venue
   it is read on, under evidence tags 0x03 and 0x04 — so a payee can tell a fast
@@ -390,3 +409,8 @@ Node 24, TypeScript (strict), Vitest.
 npm test           # run all tests
 npm run typecheck  # tsc --noEmit
 ```
+
+Scratch scripts (root `*.mjs`, gitignored) import `./src/*.js`, so they run
+against a compiled copy: `npx tsc --noEmit false --outDir <scratch> --rootDir .`
+from the repo, then copy the script beside `<scratch>/src`, link
+`node_modules` there, and `node` it from `<scratch>`.

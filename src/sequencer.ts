@@ -33,13 +33,29 @@
 // verdict.
 //
 // **Coming back from silence.** §C2b: "a sequencer returning from silence adopts
-// every nullifier witnessed during the gap before co-signing again." Adoption is
-// enforced structurally rather than by a flag: `submit` adopts before it applies
-// anything, and `commit` before it snapshots, so there is no order of calls in
-// which this operator co-signs while ignoring what the venue witnessed without
-// it. Each adopted operation is judged at the index the VENUE stamped it with,
-// so adoption is reproducible by anyone holding the same record — the sequencer
-// asserts nothing about when.
+// every nullifier witnessed during the gap before co-signing again", and the gap
+// "runs from the first missed commitment until commitments resume". So returning
+// IS committing: while a publication at the venue would still have gap force
+// against this operator's own silence (`gapOpen`, the verifier's own predicate
+// read at the door, on any backing it is in force for) no door co-signs — every
+// act is refused and names the commit, and only a repeat is answered, from a
+// book already restored; the commit restores the book to the last commitment —
+// what was co-signed after it and before the silence was never witnessed, and
+// "a payment is final when witnessed, not when co-signed" — then adopts what the
+// venue witnessed, and the operator serves again from the index after. **The
+// tail is the operator's, not a backing's**: one commitment covers every backing
+// it serves (§C2 batches), so one return restores every backing's book, or a set
+// the ledger took as one act would be torn in half wherever two of its backings
+// declare different durations (found reviewing this slice). Adoption is
+// enforced structurally rather than by a flag: every submit door is caught up
+// before it answers anything, and `commit` adopts before it snapshots, so there
+// is no order of calls in which this operator co-signs while ignoring what the
+// venue witnessed without it — or co-signs onto a book the verifier's fold would
+// contradict. Each adopted operation is judged at the index the VENUE stamped
+// it with, so adoption is reproducible by anyone holding the same record — the
+// sequencer asserts nothing about when. The plain reads (balance, opLog,
+// snapshot, ...) answer the live book, which between commitments is always
+// partly unwitnessed; what is final is the commitment.
 //
 // **Two ways to move value, and the parties pick per trade.** §C2: "Two honest
 // answers, pick one. Extend §C3's prepare-decide-commit to any multi-sequencer
@@ -89,7 +105,7 @@ import {
 import { copyReceipt, signReceipt, type Receipt } from "./receipt.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
 import { isNamedSuccessor, operatorAt } from "./replacement.js";
-import { admittedInGap, committedInTime, gapLegsFor, venueIsDeclared, witnessedCommitFor } from "./recovery.js";
+import { admittedInGap, committedInTime, gapLegsFor, gapOpen, venueIsDeclared, witnessedCommitFor } from "./recovery.js";
 import { revokedAt } from "./revocation.js";
 import { type Venue } from "./venue.js";
 
@@ -298,6 +314,10 @@ export class Sequencer {
       }
     }
     for (const entry of committed.opLog) this.ledger.apply(held, entry, undefined);
+    // The predecessor's commitment is the last one this book has: what was taken
+    // on is committed, and nothing past it is — and a restore of this operator's
+    // own book (its own silence on another backing) must leave it whole.
+    this.ledger.markCommitted(held);
   }
 
   /**
@@ -334,15 +354,19 @@ export class Sequencer {
 
   /**
    * Take on everything the venue witnessed against this backing while this
-   * operator was dark (§C2b), in the order it was witnessed. Each operation is
-   * applied at the index the venue stamped it with, never at the index adoption
-   * happens to run at — a leg is judged by when it was published, and by the
-   * time a sequencer can adopt it the silence has ended by definition.
+   * operator was dark (§C2b), in the order it was witnessed — restoring the
+   * book to the last commitment first where the silence is this operator's own.
+   * Each operation is applied at the index the venue stamped it with, never at
+   * the index adoption happens to run at: a leg is judged by when it was
+   * published, and adoption runs while the gap is still open (the return
+   * commitment's own index is inside it).
    *
    * A publication the law refuses is skipped rather than fatal: anyone may
    * publish anything at the venue, so noise there is ordinary and must not stop
    * this operator serving. Idempotent for the same reason a resubmission is —
-   * an operation already in the log fails on its own spent nonce.
+   * an operation already in the log fails on its own spent nonce — and a
+   * restore inside one gap drops and re-adopts the same legs at the same
+   * positions.
    */
   adopt(backing: Backing): void {
     this.requireServed(backing);
@@ -356,8 +380,62 @@ export class Sequencer {
     // and asking walks the chain, which verifies a signature per published
     // replacement — both counts being the adversary's to grow.
     if (!this.isInForce(served)) return;
-    for (const witnessed of gapLegsFor(this.venue, served)) {
-      this.adoptOne(served, witnessed.op, witnessed.at);
+    this.caughtUp([served]);
+  }
+
+  /** The gap's legs for one backing, taken on in the order the venue witnessed them. */
+  private adoptLegs(backing: Backing): void {
+    for (const witnessed of gapLegsFor(this.venue, backing)) {
+      this.adoptOne(backing, witnessed.op, witnessed.at);
+    }
+  }
+
+  /**
+   * Whether this operator is returning from silence: a publication now would
+   * have gap force on some backing it is in force for, and the silence is its
+   * own — the operator in force just before the present index is this one. Its
+   * uncommitted tail is then dead on EVERY backing, because one commitment
+   * covers them all (§C2 batches) and the tail is what that commitment did not
+   * carry. A gap read at a handover index is the predecessor's silence: that
+   * backing's doors shut for the index (submit), and nothing of this operator's
+   * own is unwitnessed for it, so nothing is restored.
+   */
+  private returning(): boolean {
+    for (const backing of this.backings.values()) {
+      if (!this.isInForce(backing)) continue;
+      const silent = gapOpen(this.venue, backing);
+      if (silent !== undefined && compareBytes(silent, this.operatorKey) === 0) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The book as of the last commitment, on every backing: the tail past the
+   * ledger's committed mark is dropped from the ledger (restore, the one place a
+   * log shrinks, and never below the mark) and from the receipt book, because a
+   * receipt of a dropped operation answered as a repeat would apply nothing and
+   * tell the holder it had (invariant 26 is about accepted operations, and the
+   * gap un-accepted these). Every backing at once: a set the ledger applied as
+   * one act sits in every one of its backings' tails, and restoring one backing
+   * alone tears it (found reviewing this slice). A dropped operation is
+   * resubmittable by anyone holding the signed request once the operator serves
+   * again, and is then a fresh act with a fresh receipt; what the dead receipt
+   * still proves is 28b's question (DECISIONS.md).
+   */
+  private restoreAll(): void {
+    for (const backing of this.backings.values()) {
+      // The backings this operator is in force for: its tail is co-signed there
+      // and nowhere else. A backing it has handed over keeps its book and its
+      // receipt book — a retired operator re-serving a receipt it gave in force
+      // is no new co-signature (CLAUDE.md), and the first draft of this loop
+      // reached those receipts (found regression-reviewing the review round);
+      // one it has taken over and not yet committed carries no tail of its own.
+      if (!this.isInForce(backing)) continue;
+      const mark = this.ledger.restore(backing);
+      const prefix = backing.nameHex + ":";
+      for (const [key, receipt] of this.receipts) {
+        if (key.startsWith(prefix) && receipt.position >= BigInt(mark)) this.receipts.delete(key);
+      }
     }
   }
 
@@ -377,9 +455,11 @@ export class Sequencer {
    * a gap and keeps the whole accompaniment — 40 units to the backer with none
    * of what must accompany them.
    *
-   * Since slice 26 a set neither opens nor settles in a gap: the venue holds
-   * operations one at a time, never a set, and a paying lock released alone
-   * would hand the holder the payout for nothing. Refusing is §C2b's own
+   * Since slice 26 a set neither opens nor settles in a gap (an acceptance that
+   * brings nothing with it — P paying outside the claim layer — is the backer's
+   * whole act and is taken): the venue holds operations one at a time, never a
+   * set, and a paying lock released alone would hand the holder the payout for
+   * nothing. Refusing is §C2b's own
    * posture, since claims "go illiquid rather than dead" while the operator is
    * away; the predicate is admittedInGap (recovery.ts), read by the verifier too.
    */
@@ -586,6 +666,7 @@ export class Sequencer {
     // operator must be in force for it — a handed-over operator reading its stale
     // record took a lock under a demand the successor had ended (found in the
     // last regression pass).
+    this.shut([demanded]);
     this.inForce([demanded]);
     const demand = this.ledger.demandOf(demanded, hash);
     if (demand === undefined) throw new SequencerError("no demand stands under that hash on this backing");
@@ -980,18 +1061,26 @@ export class Sequencer {
   }
 
   /**
-   * Publish a commitment over the served state. The index comes from the
-   * venue's record of this operator, so a failed publish does not burn one.
+   * Publish a commitment over the served state — caught up first: returning
+   * from silence, the whole book is restored to the last commitment and the gap
+   * adopted, so what this roots is the history the verifier's fold reads
+   * (§C2b; the module header). The index comes from the venue's record of this
+   * operator, so a failed publish does not burn one.
    */
   commit(): Commitment {
-    for (const backing of this.backings.values()) this.adopt(backing);
-    const root = stateRoot(this.snapshot());
+    this.caughtUp([...this.backings.values()]);
     const commitment = signCommitment(
       this.operatorSecret,
       this.venue.nextSequenceFor(this.operatorKey),
-      root,
+      stateRoot(this.snapshot()),
     );
     this.venue.publish(commitment);
+    // Witnessed now: every log this commitment roots is committed to its end,
+    // and the tail is empty. Marked on every backing the root carries, which is
+    // every registered one; a restore reaches only those this operator is in
+    // force for (restoreAll), so on the others the mark is a record of what this
+    // signature rooted and nothing more.
+    for (const backing of this.backings.values()) this.ledger.markCommitted(backing);
     return commitment;
   }
 
@@ -1047,16 +1136,54 @@ export class Sequencer {
   /**
    * Caught up with what the venue witnessed against these backings while this
    * operator was dark — adopted, which an operator not in force skips by itself
-   * ("no new co-signatures issue"). Done at every door before a
-   * repeat is answered: adoption co-signs the gap's legs and writes their
-   * receipts, so a holder asking for the receipt of a leg the venue took for her
-   * must find it on the first ask, not after a refusal that adopted as a side
-   * effect (found regression-reviewing slice 27, round five). And before any
-   * record is read: a head the venue ended in a gap is not one to re-prepare
-   * for, and the slots a squatter freed there are free (rounds two and four).
+   * ("no new co-signatures issue"). Done at every door before a repeat is
+   * answered: adoption co-signs the gap's legs and writes their receipts, so a
+   * holder asking for the receipt of a leg the venue took for her must find it
+   * on the first ask, not after a refusal that adopted as a side effect (found
+   * regression-reviewing slice 27, round five). And before any record is read:
+   * a head the venue ended in a gap is not one to re-prepare for, and the slots
+   * a squatter freed there are free (rounds two and four).
+   *
+   * **Returning from silence (the operator's own), the whole book is restored
+   * first** — every backing it is in force for, to the last commitment — and
+   * then every one of those backings is adopted, not only the ones asked for:
+   * a restore drops the gap legs adopted earlier on every backing, and a door
+   * about one backing must not leave another's book short of what the venue
+   * witnessed (found regression-reviewing the review round). What the repeat
+   * lookup reads next is then a receipt book with no dead receipt in it and the
+   * gap's legs in it. Answers whether the operator is returning, because
+   * `submit` refuses every act while it is (after the repeat: a repeat is a
+   * read, not an act — DECISIONS 2026-08-22).
    */
-  private caughtUp(backings: readonly Backing[]): void {
-    for (const backing of backings) this.adopt(backing);
+  private caughtUp(backings: readonly Backing[]): boolean {
+    const returning = this.returning();
+    if (returning) this.restoreAll();
+    const adopted = returning ? [...this.backings.values()] : backings;
+    for (const backing of adopted) {
+      if (this.isInForce(backing)) this.adoptLegs(backing);
+    }
+    return returning;
+  }
+
+  /**
+   * Refuse while a publication now would still have gap force on any of these
+   * backings this operator is in force for — against a predecessor's silence
+   * at a handover index as much as its own. Asked of the backings an act
+   * WRITES (submit's items) and, by the one door that decides an act on a
+   * record it only READS, of that backing too: `submitLeg` reads the demanded
+   * backing's record and writes the leg's, and a head withdrawn at the venue
+   * at that same index still lands with force (found regression-reviewing the
+   * review round — the refusal had bounded the written backings and left the
+   * read one open).
+   */
+  private shut(backings: readonly Backing[]): void {
+    for (const backing of backings) {
+      if (this.isInForce(backing) && gapOpen(this.venue, backing) !== undefined) {
+        throw new SequencerError(
+          "this operator is returning from silence: it commits first, and serves from the index after its commitment",
+        );
+      }
+    }
   }
 
   /**
@@ -1109,7 +1236,7 @@ export class Sequencer {
   ): Receipt {
     const hashes = items.map((item) => opHashOfEntry(item.backing.name, item.op));
     const touched = items.map((item) => item.backing);
-    this.caughtUp(touched);
+    const returning = this.caughtUp(touched);
     // The repeat first — before the gate, before ready: a read of the receipt
     // book, not an act (priorReceipt). Keyed on the FIRST operation, which is the
     // one the caller asked for: a
@@ -1121,6 +1248,21 @@ export class Sequencer {
     // it co-signed, and a caller that could reach into it would decide what
     // every later replay is answered with.
     if (existing !== undefined) return copyReceipt(existing);
+    // **No act is co-signed while a publication would still have gap force.**
+    // Against this operator's own silence, on any backing it is in force for:
+    // its tail is dead and anything co-signed now would be the next tail; and
+    // against a predecessor's silence at a handover index, on the backing
+    // handed over: a leg published now still lands with force, and a
+    // co-signature here is what the verifier's fold would contradict. After the
+    // repeat, which is a read of the receipt book and not an act. The honest
+    // path is the commit, which closes the gap, and the doors open from the
+    // index after — the return index itself is inside the gap (the tie rule).
+    if (returning) {
+      throw new SequencerError(
+        "this operator is returning from silence: it commits first, and serves from the index after its commitment",
+      );
+    }
+    this.shut(touched);
     this.inForce(touched);
     // **A bundle lock is prepared only where it can later be read, on the clock it
     // names, and only once; a set leg names no venue and needs none.** Each lock

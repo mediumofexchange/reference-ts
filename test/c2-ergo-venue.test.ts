@@ -417,10 +417,12 @@ describe("a sequencer on this venue refuses to prepare", () => {
     // lock taken here could be neither settled nor, once the record showed it
     // committed, safely released — the sequencer probes the venue before it
     // reserves anything, and the venue's refusal is the answer.
-    // A synced, box-less view: the clock and the record answer, and the commits
-    // probe is what refuses (the door readies — adopts — before it probes).
+    // A synced view holding one recent commitment by this operator, so it is
+    // inside its declared duration and serving (c2b-return-from-silence); the
+    // clock and the record answer, and the commits probe is what refuses (the
+    // door readies — adopts — before it probes).
     const v = venue();
-    await v.sync(new FakeNode().at(100n), [backing]);
+    await v.sync(new FakeNode().at(100n).putCommitment(commitment(0n, 0xaa), 95n), [backing]);
     const sequencer = new Sequencer(SECRETS.operator, v);
     sequencer.register(backing, signBacking(SECRETS.backer, backing));
     const lock: LockOp = {
@@ -509,7 +511,8 @@ describe("settle answers in the sequencer's own voice where the venue is not nee
     // threw where "no lock for that attempt stands here" was the honest answer
     // — and the receipt a repeat needs is the sequencer's own, no venue required.
     const v = venue();
-    await v.sync(new FakeNode().at(100n), [backing]);
+    // One recent commitment by this operator: it is serving, not returning.
+    await v.sync(new FakeNode().at(100n).putCommitment(commitment(0n, 0xaa), 95n), [backing]);
     const sequencer = new Sequencer(SECRETS.operator, v);
     sequencer.register(backing, signBacking(SECRETS.backer, backing));
     expect(() => sequencer.settle(backing, new Uint8Array(32).fill(0xd1))).toThrow(SequencerError);

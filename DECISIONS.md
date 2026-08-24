@@ -16,6 +16,183 @@ Format:
 
 ---
 
+## 2026-08-23 - Slice 28a: returning from silence is committing
+
+**Question:** the audit's first open item, decided by Bob on 2026-08-22: "an
+operator returning from silence rebuilds from its last commitment before it
+adopts the gap, and a receipt's position proves nothing across a gap — the fault
+predicates must not count a pre-gap position against it" (audit-B-2, -B-4: the
+verifier folds the gap onto the last COMMITTED state, the operator onto its live
+book with the uncommitted tail, and the two disagree wherever the tail and the
+gap conflict). **Split in two here, with Bob's approval of the plan**: 28a is the
+book (this entry), 28b the receipt and the fault predicates (queued next, below).
+Double-checking the merged code before planning found the same shape one door
+over, proven by `probe-return-index.mjs`: at the very index c the return
+commitment lands, a publication at c still has gap force — "a publication is
+judged against the record as it stood strictly before its own index" (slice 8's
+tie rule) — so an operator that commits at c and co-signs at c is contradicted
+by a leg published at c after it. Rebuilding before adopting is not enough; the
+operator must not co-sign while a publication could still land with force.
+
+**Decisions (Bob approved the plan as proposed; the review round reshaped two
+of its mechanisms, below):**
+
+- **Returning is committing, and one predicate says when.** §C2b's "adopts every
+  nullifier witnessed during the gap before co-signing again" read with "runs
+  from the first missed commitment until commitments resume": the gap has force
+  until a commitment is witnessed, so the operator cannot have adopted the gap
+  before it has committed. `gapOpen(venue, backing)` is the verifier's own
+  `publishedInGap` read at the present index — would a publication NOW have gap
+  force — and it answers at the return index too (the tie rule), so the operator
+  serves from the index after. It names **whose** silence it is: the operator in
+  force just before the present index, which is what decides whose book is dead
+  (below). The operator's doors and the verifier's fold read one definition of
+  which indices belong to the gap; that is the whole of the mechanism, and a
+  test holds the two to each other index by index.
+- **No act is co-signed while it holds; a repeat is answered.** `submit` — the
+  one path every act takes — refuses after the repeat lookup, naming the commit,
+  wherever the operator's own silence is open on any backing it is in force for
+  or the gap of a backing the act writes — or, at the one door that decides an
+  act on a record it only reads (`submitLeg`), reads — is open against a
+  predecessor (a successor at its handover index). Every door is exercised by a
+  test. A repeat is a read of the
+  receipt book, not an act (the door order the audit settled: "the repeat before
+  any refusal"), and it is answered from a book already restored — the first
+  draft refused repeats too, which the review named as a silent reversal of that
+  decision and a denial of evidence for no reason; it is answered now.
+- **The commit restores the book first, then adopts — and the tail is the
+  OPERATOR'S.** `adopt`, `caughtUp` and `commit` all restore when the operator is
+  returning: `TransparentLedger.restore` — the one place a log shrinks, and only
+  to the **committed mark** the ledger keeps (`markCommitted`, set at `commit`
+  and at `takeOver`; it only advances) — then the receipts of the dropped tail
+  are forgotten (position at or past the mark), because invariant 26 would
+  otherwise answer a resubmitted dead operation with its dead receipt and apply
+  nothing. The first draft restored per backing and kept a length in the
+  sequencer; the review found a set torn in half (a settlement whose head sat on
+  a short-duration backing and whose leg sat on a long-duration one — the backer
+  keeping the accompaniment without the claims; the other direction strands a
+  demand unaccompanied), and a length a caller promises where a mark the ledger
+  owns is the structural guard. One commitment covers every backing the operator
+  serves (§C2 batches), so the tail is one tail and one return restores every
+  backing's book — **backings stay separate in everything that is theirs (the
+  grade, a publication's force, snapshot redemption, the law) and not in the
+  operator's book, which was never per backing.** The cost, recorded: an operator
+  late by its shortest-duration backing's standard shuts every door, a
+  long-duration backing's exits included, until it commits; the co-signature
+  those doors would give is the next dead tail, and the stall is bounded by the
+  durations the operator agreed to serve.
+- **Whose silence decides whose book is dead.** A successor at its handover
+  index reads the predecessor's silence on the handed-over backing: that
+  backing's doors shut for the index (a leg published there still lands with
+  force) and nothing of the successor's own is restored — its other backings'
+  tails, co-signed while it was punctual, stand. takeOver's rule applied to the
+  incumbent, one mechanism; and takeOver's mark is what keeps a taken-over log
+  whole through the successor's own silence elsewhere (pinned).
+- **It is not invariant 8's clawback, and the record is why.** Nothing witnessed
+  is undone: the committed log is always a prefix of the operator's own, the
+  mark is set only at a commitment, and a commitment that fails to extend its
+  predecessor is `isRewrittenHistory`'s to name. What the restore drops is the
+  operator's own co-signatures that no commitment ever carried — which "a
+  payment is final when witnessed, not when co-signed" already called dead, in
+  every construction. A dropped operation is resubmittable by anyone holding the
+  **signed request** once the operator serves again (CLAUDE.md's payee rule now
+  says request and receipt), and is then a fresh act with a fresh receipt.
+- **Quiet counts from genesis, and its consequences stand.** The convention
+  `quietFor` already had: a fresh operator at an index past the duration commits
+  before it serves; an operator that served from genesis and first commits past
+  the duration loses that book; a backing registered after the operator's last
+  commitment is all tail and dies if the operator's gap opens before the next
+  commitment. None of it was witnessed. Pinned, and the rule is the one every
+  party rule already gives: commit inside the duration you agreed to serve.
+
+**The review round (three Opus angles: the law and the book; the doors and the
+gap path; tests as claims and docs), and what it changed.** Besides the torn set,
+the ledger's mark and the repeat, each above: `gapOpen` skipped `venueIsDeclared`
+where every other clause reader asks it (a foreign record accused instead of
+abstaining — the shape the audit removed from `quietFor`); "every door refuses"
+walked three doors and now walks ten; "the receipts are the same" compared no
+receipts and now does, inside the gap and after the return; a retired operator's
+repeat through its successor's gap and a named successor's own refusal are
+walked; `admittedInGap`'s header said a set's acceptance does not open in a gap
+where the code admits one that brings nothing with it (slice 26's record); the
+`served()` helpers that snapshot before committing root the wrong state at a
+return commit — the four named helpers commit first now, the inline literals
+are at commits that adopt nothing and are left; `adopt`'s "by the time a
+sequencer can adopt it the silence has ended by definition" was false under the
+tie rule. **Recorded, not patched:** a retirement that happened in the tail
+(`retired`, the audit's attempt-id rule) dies with the tail — the log never held
+the lock or its withdrawal, the state is the fold of the log and nothing else,
+and the party rule ("never reuse an attempt id you have signed a commit for") is
+what stands across a gap; a silence duration of 0 makes a backing unserveable
+(every index is a gap under the tie rule), a term nobody should write and
+`makeBacking` does not refuse; the plain reads answer the live book, which
+between commitments is always partly unwitnessed; the return doubles the chain
+walks per act (`returning()` asks every served backing), which compounds the
+audit's open question 5 and is what the one-door refactor (below) would halve.
+
+**Regression-reviewing the fixes found the shape again, three times** (two
+Opus angles over the fix round's diff; sixteen mutations run against the suite).
+The gap refusal bounded the backings an act WRITES, and `submitLeg` decides a
+lock on the leg's backing by the DEMANDED backing's record — at a successor's
+handover index (not "returning": the silence is the predecessor's) with the
+leg's backing clear, a re-prepare was co-signed while a head withdrawal
+published at that same index still landed with force, a lock under a head the
+record ended (`shut`, asked of the demanded backing where `inForce` already
+is). `restoreAll` swept every REGISTERED backing where the tail lives only on
+the in-force ones, so an operator returning from its own silence forgot the
+receipt book of a backing it had handed over — the one evidence the successor
+cannot produce (scoped to in force; a retired book and its receipts stay). And
+the restore had gone operator-wide while adoption stayed per-touched, so a door
+about one backing rolled the others' adopted gap legs back and re-adopted
+nothing — returning, the operator catches every in-force backing up, not only
+the act's. Untested claims closed: `submit`'s repeat-before-refusal was pinned
+by nothing (seven doors answer repeats themselves; a transfer and a burn are now
+resubmitted through it mid-gap), and the mark's doc claimed isRewrittenHistory
+catches a mark set anywhere but at a commitment — true only of one set too LOW;
+one set too high is the drift itself, which no fault predicate sees and only the
+mark's two writers stop, and the doc says so now. **Recorded, not patched (all
+pre-existing, re-found here):** a retired operator's commitments still root and
+mark the stale log of a backing it handed over — the record then reads the pair
+as the SUCCESSOR's rewritten history, and what a retired operator's commitment
+should carry is an open question beside slice 18's; re-appointing a former
+operator is unimplementable (`takeOver` refuses its non-empty log) and fails
+open onto its stale book — adjacent to the dead-successor slice, queued; a
+successor whose effective index lies far past its own qualifying commitment is
+"returning" on arrival (its last commitment is old by then) and must commit
+again before serving — bounded, and its own schedule to avoid; and `returning()`
+walks every served backing's chain on every act, gap or no gap — the cost sits
+where the one-door refactor would remove it.
+
+**OPEN, pinned for 28b — the second half of Bob's item 1.** After a restore a
+dead tail receipt's position holds something else, and `receiptStatus` answers
+`contradicted`; `isDoublePosition` names the operator from the dead receipt and
+the fresh one of the same operation (a resubmission, or the venue's copy
+adopted), and `isDoubleAcceptance` from the dead tail transfer and the adopted
+gap demand at one nonce — an honest operator proved at fault, by a stranger,
+forever, for having gone silent. A receipt records an operation and a position
+and never when it was signed, so no reader can tell a dead tail from a lie.
+**28b:** the receipt names the record it was signed against — the witnessed
+index of the operator's last commitment — so `firstCommitmentFor(op, w+1)` finds
+the commitment that should carry it and `lapsed` becomes a sixth answer; the two
+no-commitment fault predicates excuse a pair whose next commitment closed a gap.
+Residual to record then: an operator can launder a double acceptance by going
+silent, at the price of a public aggravated grade.
+
+**Rethink, recorded for Bob:** the doors each hand-write one order (shape →
+caught up → repeat → in force → refusals → submit) and `submit` repeats the first
+half; this slice put its rule in `submit`, the one place every act passes, and
+the doubled walks above are the price of the doubled prefix. One door, not nine,
+is its own behaviour-preserving slice.
+
+**Spec change:** one sentence explained to Bob rather than made, at his
+instruction. §C2b's "a sequencer returning from silence adopts every nullifier
+witnessed during the gap before co-signing again" is right and under-specified:
+returning is committing, since the gap runs until a commitment is witnessed and
+a publication inside it has force; the operator rebuilds from its last
+commitment before it adopts, because what it co-signed after that commitment
+was never witnessed; and it serves from the index after its commitment, since a
+publication at the commitment's own index is judged strictly before it.
+
 ## 2026-08-22 - The audit: six angles over the merged code, what was wrong, and what is Bob's to decide
 
 **Question:** Bob asked for an audit of the merged implementation against the

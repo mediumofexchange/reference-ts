@@ -310,7 +310,8 @@ describe("§C2: a successor serves, and only once it is in force", () => {
       { backing, from: KEYS.alice, to: KEYS.bob, quantity: 40n, nonce: 0n },
       ed25519.sign(encodeTransferMessage(backing.name, KEYS.alice, KEYS.bob, 40n, 0n), SECRETS.alice),
     );
-    return { server, issued, served: { snapshots: server.snapshot(), commitment: server.commit() } };
+    const commitment = server.commit();
+    return { server, issued, served: { snapshots: server.snapshot(), commitment } };
   }
 
   function handedOver() {
@@ -720,6 +721,10 @@ describe("§C2: a re-prepare is written against the demanded backing's record, s
     venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR, eur.name, 20n));
     commitAs(venue, SUCCESSOR_SECRET);
     expect(operatorAt(eur, venue, venue.witnessedIndex())).toEqual(SUCCESSOR);
+    // The old operator has been quiet past GOLD's duration: it commits before it
+    // serves GOLD again, from the next index (c2b-return-from-silence).
+    old.commit();
+    at(venue, 21n);
     // The lapsed leg is withdrawn at the old operator (still GOLD's).
     const out = { backing: gold, demandHash: hash, nonce: 1n };
     old.submitWithdrawal(out, ed25519.sign(encodeWithdrawal(out), SECRETS.alice));

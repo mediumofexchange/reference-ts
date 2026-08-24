@@ -9,7 +9,15 @@
 //     verify against the holding key itself. No other mutation path exists
 //     (invariant 8) — there is deliberately no method that takes an operator's
 //     or backer's authority over someone else's balance, and every accessor
-//     returns a copy so a caller cannot reach in and mutate state.
+//     returns a copy so a caller cannot reach in and mutate state. The one
+//     method that shrinks a log, `restore`, shrinks it to the mark the
+//     sequencer set at its last commitment and never below it (§C2b's return
+//     from silence); what it drops is co-signed and unwitnessed. The mark has
+//     two writers, commit and takeOver, and each sets it to what was just
+//     committed or taken on — that is the guard; a mark set too low would
+//     shrink a committed log, which isRewrittenHistory names, and one set too
+//     high would keep a tail no commitment carried, which is the drift this
+//     mechanism exists to remove and which only the writers' discipline stops.
 //
 // Conservation (invariant 10): outstanding = issued − burned, per backing,
 // after every operation, and the sum of balances equals outstanding.
@@ -774,6 +782,12 @@ interface BackingState {
   readonly backing: Backing;
   readonly state: LedgerState;
   readonly opLog: OpLogEntry[];
+  /**
+   * The committed mark: the log's length when the sequencer last published a
+   * commitment over it (markCommitted), or took on a committed log (takeOver).
+   * Everything past it is the tail — co-signed, receipted, not yet witnessed.
+   */
+  committed: number;
 }
 
 export class TransparentLedger {
@@ -798,6 +812,7 @@ export class TransparentLedger {
       backing: makeBacking(backing),
       state: emptyState(),
       opLog: [],
+      committed: 0,
     });
   }
 
@@ -931,6 +946,66 @@ export class TransparentLedger {
     const { demandHash, nonce } = op;
     const entry = { kind: "withdrawal", demandHash, nonce, signature } as const;
     return this.apply(op.backing, entry, atWitnessedIndex);
+  }
+
+  /**
+   * Mark this backing's whole log as committed: the sequencer has published a
+   * commitment over it (commit), or taken on a log a predecessor committed
+   * (takeOver). The mark only advances — it is the log's length when set, and
+   * between marks the log only grows, except through `restore`, which cuts it
+   * back exactly to the mark and never below.
+   */
+  markCommitted(backing: Backing): void {
+    const held = this.stateOf(backing);
+    held.committed = held.opLog.length;
+  }
+
+  /** The committed mark: how much of this backing's log a commitment has carried. */
+  committedLength(backing: Backing): number {
+    return this.stateOf(backing).committed;
+  }
+
+  /**
+   * Restore one backing's book to its committed mark: drop the entries past it,
+   * refold the state from what is kept, and answer the mark.
+   *
+   * **The one place a log shrinks, and it shrinks only to the mark.** The ledger
+   * does not know what a commitment is; what it knows is that the log behind
+   * the mark is the part no caller can take back through this door, and the
+   * mark is set only where the sequencer has published a commitment over the
+   * log or taken on a committed one. That is the guard invariant 8 asks for
+   * here rather than a length a caller promises: nothing witnessed is undone,
+   * because the committed log is always a prefix of the operator's own. The
+   * mark's two writers, commit and takeOver, each set it to what was just
+   * committed or taken on; a mark set too low would shrink a committed log,
+   * which isRewrittenHistory names, and one set too high would keep a tail no
+   * commitment carried — the operator/verifier drift this mechanism exists to
+   * remove, which no fault predicate sees and only those two writers stop
+   * (found regression-reviewing the review round). What the
+   * restore drops is the operator's own co-signatures that no commitment ever
+   * carried — "a payment is final when witnessed, not when co-signed"
+   * (CLAUDE.md) — which is what takeOver drops of a predecessor's. §C2b's return
+   * from silence is why it exists (Sequencer.adopt).
+   *
+   * The state is the fold of the kept prefix and nothing else — not what the
+   * dropped tail remembered. A venue-naming lock that settled or withdrew in
+   * the tail retired its attempt id in the tail (`retired`), and that
+   * retirement dies with it: the record never held either, and the party rule
+   * — never reuse an attempt id you have signed a commit for — is what stands
+   * across a gap (found reviewing slice 28a; DECISIONS.md).
+   *
+   * Replayed through applyEntry with no clock, as every committed log is, into
+   * a fresh state that replaces the old only once the whole prefix has applied.
+   */
+  restore(backing: Backing): number {
+    const held = this.stateOf(backing);
+    const mark = held.committed;
+    if (mark === held.opLog.length) return mark;
+    const kept = held.opLog.slice(0, mark);
+    const state = emptyState();
+    for (const entry of kept) applyEntry(state, held.backing, entry, undefined);
+    this.states.set(held.backing.nameHex, { backing: held.backing, state, opLog: kept, committed: mark });
+    return mark;
   }
 
   /**
