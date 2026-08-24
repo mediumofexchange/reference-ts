@@ -111,8 +111,9 @@ describe("invariant 22: state proves against the latest commitment", () => {
   });
 
   it("distinct roots at distinct sequences are not equivocation", () => {
-    const { sequencer } = setup();
+    const { venue, sequencer } = setup();
     const first = sequencer.commit();
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     const second = sequencer.commit();
     expect(second.sequence).toBe(first.sequence + 1n);
     expect(isEquivocation(first, second)).toBe(false);
@@ -185,7 +186,7 @@ describe("verifiers return false on hostile input, never throw", () => {
   it("a malformed operator key fails verification instead of crashing", () => {
     expect(verifyCommitment({ sequence: 0n, root: name, operator: shortKey, signature: sig })).toBe(false);
     expect(
-      verifyReceipt({ backingName: name, opHash: name, position: 0n, operator: shortKey, signature: sig }),
+      verifyReceipt({ backingName: name, opHash: name, position: 0n, after: 0n, operator: shortKey, signature: sig }),
     ).toBe(false);
   });
 
@@ -194,7 +195,7 @@ describe("verifiers return false on hostile input, never throw", () => {
       name,
       opLog: [{ position: 1.5, kind: "burn" as const, holder: name, quantity: 1n, nonce: 0n, signature: new Uint8Array(64) }],
     };
-    const receipt = { backingName: name, opHash: name, position: 0n, operator: name, signature: sig };
+    const receipt = { backingName: name, opHash: name, position: 0n, after: 0n, operator: name, signature: sig };
     expect(receiptProvenBy(receipt, hostile)).toBe(false);
   });
 

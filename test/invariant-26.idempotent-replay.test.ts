@@ -114,7 +114,7 @@ describe("invariant 26: a repeated request returns the identical prior response"
     // the caller rewrite what the operator co-signed.
     const name = new Uint8Array(32).fill(0x01);
     const opHash = new Uint8Array(32).fill(0x02);
-    const receipt = signReceipt(SECRETS.operator, name, opHash, 3n);
+    const receipt = signReceipt(SECRETS.operator, name, opHash, 3n, 0n);
     name.fill(0xff);
     opHash.fill(0xff);
     expect(verifyReceipt(receipt)).toBe(true);

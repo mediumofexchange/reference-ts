@@ -227,6 +227,7 @@ describe("§C3: reading the payout, and the gap", () => {
     const served = () => ({ snapshots: f.sequencer.snapshot(), commitment: f.sequencer.commit() });
     expect(payoutOf(f.eur, f.venue, terms, served(), hash)).toBe("unreserved");
     accept(f, hash, 40n);
+    advanceWitnessedIndex(f.venue, 1n); // one commitment per witnessed index (28b: eras end legibly)
     expect(payoutOf(f.eur, f.venue, terms, served(), hash)).toBe("reserved");
     // And only while the acceptance is live: the lock outlasts the answer by the
     // door's rule, so it is the acceptance the holder's read must ask (found
@@ -235,7 +236,9 @@ describe("§C3: reading the payout, and the gap", () => {
     expect(payoutOf(f.eur, f.venue, terms, served(), hash)).toBe("reserved");
     advanceWitnessedIndex(f.venue, 91n);
     expect(payoutOf(f.eur, f.venue, terms, served(), hash)).toBe("unreserved");
+    advanceWitnessedIndex(f.venue, 92n); // one commitment per witnessed index (28b: eras end legibly)
     expect(payoutOf(f.gold, f.venue, terms, served(), hash)).toBe("outside");
+    advanceWitnessedIndex(f.venue, 93n); // one commitment per witnessed index (28b: eras end legibly)
     expect(payoutOf(f.eur, f.venue, () => undefined, served(), hash)).toBe("unreadable");
   });
 

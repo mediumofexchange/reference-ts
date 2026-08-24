@@ -220,7 +220,12 @@ construction — which is why they are rules here rather than code.
   normally the payer. And the signed request itself, because a receipt given
   after the operator's last commitment dies with a gap (below): the operation
   is resubmittable by anyone holding the request once the operator serves
-  again, and a payee holding only the receipt cannot.
+  again, and a payee holding only the receipt cannot. Read the receipt's era
+  when taking it: `after` names the operator's last commitment, and one naming
+  anything but the latest at payment time is stale on its face — which is also
+  the whole defence against an operator stamping a lie with an old era the
+  fault predicates excuse (`lapsed` is an era's license to have dropped its
+  tail, and a stamp claiming a dead era is a receipt nobody should have taken).
 - **Claims go illiquid while the operator is dark. Do not accept one.** §C2b:
   claims "go illiquid rather than dead. Value discounts until they return." A
   transfer published at the venue is evidence, never an operation, so nothing
@@ -259,18 +264,36 @@ construction — which is why they are rules here rather than code.
   operator's last commitment lives only in its unpublished log and in the
   receipt, and dies with it — in **every** construction, since a Chaumian token
   signed but never committed is exactly as unprovable. **The operator's own side
-  of this is code since slice 28a: returning from silence is committing.** While
-  a publication at the venue would still have gap force against the operator's
-  own silence on any backing it is in force for (`gapOpen`, the verifier's own predicate
-  read at the door — true at the very index the return commitment lands, so the
-  operator serves from the index after), every door refuses the act and names
-  the commit, answering only repeats; the commit restores the whole book to the
-  last commitment (`restore`, the one place a log shrinks, and only to the mark
-  the last commitment set — the tail is the operator's, since one commitment
-  covers every backing it serves) and adopts what the venue witnessed. What was
-  co-signed after that commitment and before the silence is dead, and its
-  receipt's position proves nothing across the gap; making that readable from
-  the receipt is slice 28b. So the exposure is the
+  of this is code since slice 28a: returning from silence is committing — per
+  backing, since 28b: the era is the backing's own.** While a publication on a
+  backing would still have gap force (`gapOpen`, the verifier's own predicate
+  read at the door — true at the very index the return commitment lands, so
+  that backing is served from the index after), its doors refuse every act and
+  name the commit, answering only repeats; where the silence is the operator's
+  own, the commit first restores that backing's book to the last commitment
+  (`restore`, the one place a log shrinks, and only to the mark the last
+  commitment set) and adopts what the venue witnessed. **A set is one act and
+  dies as one, so the sequencer takes it only over backings that declare one
+  silence duration** (or none; asked at the filing, the acceptance, the
+  re-prepare and the release — the withdrawal moves nothing and stays open as
+  an inherited mixed set's exit): one operator means one last commitment, so
+  equal durations open and close their gaps together and a set in the tail is
+  restored whole — which is what lets the restore stay per backing. Across a
+  return, that is; a handover takes no tail (takeOver), so a set sitting in
+  the tail when part of it is handed over dies half by half in the record —
+  no door moves value on one side (a partial handover strands a set, it never
+  tears it), and what protects a party performing against a set is finality:
+  perform only against the witnessed whole. What was
+  co-signed after the last commitment and before the silence is dead, and the
+  receipt makes that readable (slice 28b): it names its **era** — `after`, the
+  witnessed index of the operator's last commitment at signing — and an era
+  that ended in a return or a handover lapses its receipts (`eraLapsed`,
+  `receiptStatus` answering `lapsed`), where one that ended at an ordinary
+  commitment carried its whole tail, so an attested operation missing then is
+  `contradicted` and a pair of receipts one log cannot hold is a fault
+  (`isDoublePosition`, `isDoubleAcceptance` — both excuse a lapsed era; the
+  recorded residual is that silence launders a real fault, at the price of the
+  public grade). So the exposure is the
   interval since the last commitment, which is why §C2 makes the interval "a
   signed field rather than operational discretion". E carries it, with the venue
   it is read on, under evidence tags 0x03 and 0x04 — so a payee can tell a fast

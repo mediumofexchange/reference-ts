@@ -112,6 +112,7 @@ describe("invariant 8: accessors expose no mutation path into ledger state", () 
     sequencer.operator.fill(0xff);
     expect(sequencer.operator).toEqual(KEYS.operator);
     // Still routes and still commits, on the next sequence.
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     expect(sequencer.commit().sequence).toBe(1n);
     expect(venue.nextSequenceFor(KEYS.operator)).toBe(2n);
   });
@@ -128,6 +129,7 @@ describe("invariant 8: accessors expose no mutation path into ledger state", () 
     sequencer.commit();
 
     secret.fill(0x09);
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     const next = sequencer.commit();
     expect(next.operator).toEqual(KEYS.operator);
     expect(venue.latestFor(KEYS.operator)?.sequence).toBe(1n);

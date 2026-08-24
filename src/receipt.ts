@@ -17,7 +17,8 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import type { Backing } from "./backing.js";
 import { ByteWriter, compareBytes, copyBytes } from "./bytes.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
-import { isAnOperator } from "./replacement.js";
+import { eraLapsed } from "./recovery.js";
+import { isAnOperator, successionOf } from "./replacement.js";
 import { answering, type Venue } from "./venue.js";
 import { RECEIPT_CONTEXT } from "./contexts.js";
 import { verifySignatureStrict } from "./keys.js";
@@ -29,6 +30,17 @@ export interface Receipt {
   readonly opHash: Uint8Array;
   /** The operation's position in the backing's operation log. */
   readonly position: bigint;
+  /**
+   * The era the receipt was signed in: the witnessed index of the operator's
+   * last commitment at signing, 0 where it had none. What the record says the
+   * operator's book stood on when it co-signed — which is what lets a reader
+   * tell a tail that died with a gap or a handover (`lapsed`) from a lie about
+   * the log (`contradicted`), where a position alone cannot (slice 28b; the
+   * receipt records an operation and a position and never when it was signed).
+   * 0 is a sentinel and collides with a commitment witnessed at index 0; the
+   * readers treat that era conservatively — a missed fault, never a wrong one.
+   */
+  readonly after: bigint;
   readonly operator: Uint8Array;
   readonly signature: Uint8Array;
 }
@@ -45,18 +57,25 @@ export function copyReceipt(receipt: Receipt): Receipt {
     backingName: copyBytes(receipt.backingName),
     opHash: copyBytes(receipt.opHash),
     position: receipt.position,
+    after: receipt.after,
     operator: copyBytes(receipt.operator),
     signature: copyBytes(receipt.signature),
   };
 }
 
 /** Both 32-byte fields are asserted, so one signature covers one receipt. */
-function receiptMessage(backingName: Uint8Array, opHash: Uint8Array, position: bigint): Uint8Array {
+function receiptMessage(
+  backingName: Uint8Array,
+  opHash: Uint8Array,
+  position: bigint,
+  after: bigint,
+): Uint8Array {
   const w = new ByteWriter();
   w.context(RECEIPT_CONTEXT);
   w.key32(backingName, "backing name");
   w.key32(opHash, "op hash");
   w.u64(position);
+  w.u64(after);
   return w.finish();
 }
 
@@ -65,24 +84,26 @@ export function signReceipt(
   backingName: Uint8Array,
   opHash: Uint8Array,
   position: bigint,
+  after: bigint,
 ): Receipt {
   const operator = ed25519.getPublicKey(operatorSecret);
-  const signature = ed25519.sign(receiptMessage(backingName, opHash, position), operatorSecret);
+  const signature = ed25519.sign(receiptMessage(backingName, opHash, position, after), operatorSecret);
   // The receipt owns its bytes: it is handed a backing name and an op hash the
   // caller still holds, and what the operator co-signed must not be rewritable.
   return {
     backingName: copyBytes(backingName),
     opHash: copyBytes(opHash),
     position,
+    after,
     operator,
     signature,
   };
 }
 
-/** Valid iff the operator signed exactly (backing name, op hash, position). */
+/** Valid iff the operator signed exactly (backing name, op hash, position, era). */
 export function verifyReceipt(receipt: Receipt): boolean {
   try {
-    const message = receiptMessage(receipt.backingName, receipt.opHash, receipt.position);
+    const message = receiptMessage(receipt.backingName, receipt.opHash, receipt.position, receipt.after);
     return verifySignatureStrict(receipt.signature, message, receipt.operator);
   } catch {
     return false;
@@ -196,12 +217,19 @@ export function isOperatorReceipt(backing: Backing, venue: Venue, receipt: Recei
  * "Finality means witnessed rather than co-signed").
  *
  *   - `witnessed`    the committed log holds this operation at this position.
- *   - `pending`      the log is shorter than the position. Not yet.
- *   - `contradicted` the log is long enough and holds something else, so one of
- *                    the operator's two signatures is a lie about its own log.
+ *   - `pending`      the record has not reached it: the era the receipt names
+ *                    is still open, or this state predates its end.
+ *   - `lapsed`       the era ended in a return or a handover (eraLapsed), so
+ *                    the operation died unwitnessed with the tail it sat in —
+ *                    a fact about the operator's silence, not a lie, and the
+ *                    signed request is resubmittable (CLAUDE.md's payee rule).
+ *   - `contradicted` the record is past the era's end, or already held the
+ *                    position otherwise, so one of the operator's two
+ *                    signatures is a lie about its own log.
  *   - `dropped`      this IS the operator's committed state, and it carries no
  *                    log for this backing at all, so it answers nothing.
- *   - `unrelated`    not this backing's operator's receipt, or not its state.
+ *   - `unrelated`    not this backing's operator's receipt, not its state, or
+ *                    an era the operator's record never had.
  *
  * **`dropped` is not an accusation, and is not `unrelated` either.** A commitment
  * made before this backing was registered carries no log for it innocently, and a
@@ -231,6 +259,7 @@ export function isOperatorReceipt(backing: Backing, venue: Venue, receipt: Recei
 export type ReceiptStatus =
   | "witnessed"
   | "pending"
+  | "lapsed"
   | "contradicted"
   | "dropped"
   | "unrelated";
@@ -243,20 +272,51 @@ export function receiptStatus(
 ): ReceiptStatus {
   return answering(() => {
     if (!isOperatorReceipt(backing, venue, receipt)) return "unrelated";
+    // The era the receipt names must be real: `after` is the witnessed index of
+    // the operator's last commitment at signing, or 0 where it had none. One
+    // naming an index this operator committed nothing at is not a receipt its
+    // record can answer for.
+    if (typeof receipt.after !== "bigint" || receipt.after < 0n) return "unrelated";
+    if (receipt.after > 0n && venue.witnessedAtFor(receipt.operator, receipt.after) !== receipt.after) {
+      return "unrelated";
+    }
+    // The genesis era (after = 0) is not further verifiable: the doors are open
+    // from the venue's genesis through the declared duration, so honest
+    // receipts carry it — and so can a lie stamped by an operator that arrived
+    // late, which no reader can tell apart (a first fix here refused every
+    // late-first-commitment genesis era and called 28a's own honest
+    // first-commit-wipe receipts forged). What answers the stamp is the
+    // payee's freshness rule (CLAUDE.md): a receipt naming anything but the
+    // operator's latest commitment at payment time is stale on its face.
     const committed = committedLogFor(backing, venue, served);
     if (committed === undefined) return "unrelated";
     if (committed.kind === "dropped") return "dropped";
-    if (receipt.position < 0n || receipt.position >= BigInt(committed.opLog.length)) {
-      return "pending";
-    }
-    // Not reachable through committedLogFor, which recomputes the root and so
-    // rejects a log whose positions are not pinned to their indices. Answered
-    // "unrelated" rather than "contradicted" anyway: a state this malformed is
-    // not this operator's committed state, and a proof must not accuse on it.
+    // Once witnessed, always witnessed: positions are pinned and the log is
+    // append-only, so this needs no view on the era — a tail operation
+    // resubmitted onto its old position included.
     const entry = entryAt(committed.opLog, receipt.position);
-    if (entry === undefined) return "unrelated";
-    return compareBytes(opHashOfEntry(backing.name, entry), receipt.opHash) === 0
-      ? "witnessed"
-      : "contradicted";
+    if (entry !== undefined && compareBytes(opHashOfEntry(backing.name, entry), receipt.opHash) === 0) {
+      return "witnessed";
+    }
+    // Not carried here, so the era decides what that means. An era that ended
+    // in a return or a handover dropped its tail with license: the receipt
+    // attests an act that died unwitnessed, and accuses nobody.
+    if (eraLapsed(venue, backing, receipt.operator, receipt.after)) return "lapsed";
+    // The era is open, or ended at an ordinary commitment that carries the
+    // whole tail. Past its end — this operator's own later commitment, or a
+    // successor's record — an operation not at its position is the operator's
+    // lie about its own log; before it, a position the record already holds
+    // otherwise was fixed before the receipt was signed (the log is
+    // append-only), and one it does not reach yet is simply not there yet.
+    const sameOperator = compareBytes(served.commitment.operator, receipt.operator) === 0;
+    const past = sameOperator
+      ? served.commitment.sequence > (venue.latestFor(receipt.operator, receipt.after)?.sequence ?? -1n)
+      : successionOf(backing, venue).some(
+          (link) =>
+            link.from > receipt.after &&
+            compareBytes(link.operator, served.commitment.operator) === 0,
+        );
+    if (past) return "contradicted";
+    return entry === undefined ? "pending" : "contradicted";
   }, "unrelated");
 }

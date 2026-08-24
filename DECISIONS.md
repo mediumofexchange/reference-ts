@@ -16,6 +16,151 @@ Format:
 
 ---
 
+## 2026-08-24 - Slice 28b: the receipt names its era, and the era is the backing's own
+
+**Question:** the second half of Bob's audit item 1, split off in 28a and queued:
+after a return, a dead tail receipt read `contradicted`, and `isDoublePosition` /
+`isDoubleAcceptance` proved an honest operator at fault from its dead receipt
+beside its record (28a's pinned OPEN). A receipt records an operation and a
+position and never when it was signed, so no reader could tell a tail that died
+with a gap or a handover from a lie about the log.
+
+**The design 28a merged did not survive this slice's first requirement, and was
+reversed knowingly.** Whether a receipt lapsed must be readable by a stranger
+from ONE backing's terms. Under 28a's operator-wide restore, whether the
+operator restored at a commitment depended on the shortest declared duration
+across its whole portfolio — which no stranger can enumerate, and which an
+operator could shorten at will by registering a junk backing with duration 1,
+licensing itself to drop tails. So:
+
+- **The era is the backing's own.** The restore is per backing again: a backing
+  whose OWN gap is open (`gapOpen` names this operator) is restored to the
+  ledger's committed mark at its doors and at every commit; `returning()` and
+  `restoreAll` are gone. Doors shut per backing (`shut` — any operator's
+  silence, asked of the backings an act writes and of `submitLeg`'s demanded
+  backing, which it only reads), so an operator late by one backing's clock
+  serves the others on — the door-wide shutdown 28a's whole-book rule forced is
+  gone with it.
+- **What keeps a set whole is the door, not the restore.** 28a went
+  operator-wide because a per-backing restore tore a set whose head and leg
+  declared different durations. The set rule replaces that: **the sequencer
+  takes a set only over backings that declare one silence duration, or none**
+  (`sameDuration`, asked at filing of every slot the set takes, at the
+  acceptance of the paying slot, and at the re-prepare). One operator means one
+  last commitment, so equal durations open and close their gaps together, and a
+  set co-signed into the tail is restored whole or kept whole. A constraint on
+  terms the paper does not state, flagged as such: a backer writing reliance or
+  a claims payout matches the members' silence durations at signing, which it
+  can read there.
+- **The receipt carries its era**: `after`, the witnessed index of the
+  operator's last commitment at signing, 0 where it had none —
+  `RECEIPT_CONTEXT` v2; no v1 receipt was ever issued outside this repository.
+  An era the operator's record never had (an index it committed nothing at)
+  reads `unrelated`.
+- **`eraLapsed` is the one reader of what an era's end means** (recovery.ts,
+  venue-refusal holds it): the era ends at the operator's next commitment, or
+  at a successor taking force, whichever the record shows first. Ordinary end —
+  at or inside the backing's declared duration — carries the whole tail, so an
+  attested operation missing from the record is `contradicted`: the
+  stale-restore shortened log that read `pending` forever (slice 13's "cannot
+  tell not-yet from taken-back") is now the operator's own receipt turning
+  against it, on one state. A return or a handover dropped the tail with
+  license: `lapsed`, the sixth answer, an act that died unwitnessed and accuses
+  nobody; the signed request is resubmittable (CLAUDE.md's payee rule).
+  `witnessed` is checked first and needs no era — a tail operation resubmitted
+  onto its old position keeps its dead receipt readable.
+- **The fault pairs prove within a live or ordinarily-ended era, and nothing
+  across a lapsed one.** `isDoublePosition` and `isDoubleAcceptance` excuse a
+  receipt whose era lapsed. **Recorded residual, pinned by a test:** an
+  operator can launder a real double acceptance or double position by going
+  silent past the duration and returning — at the price of the public
+  aggravated grade, snapshot redemption open, and the replacement case made.
+  The honest operator the excuse exists for is 28a's, whose dead tail beside
+  its adopted gap otherwise proved `isDoublePosition` against it forever.
+
+**The review round, and a procedure deviation recorded.** The three Opus angles
+were lost four times over to a day-long server outage (529s on every resume);
+rather than skip the review, the three angles were re-run on the session model —
+a knowing deviation from "review agents run on Opus", whose reason is token
+economy, not quality. What they found, and what it changed:
+
+- **The excuse is the absence, not the receipt** (the sharpest, from the era
+  angle). The first build excused a fault-pair receipt on its ERA alone, and an
+  adopted gap leg's receipt — signed in the era the return closes, for an
+  operation the return commitment CARRIES — became a permanent excuse token for
+  later lies at its position; a stale-but-real era stamped lies out of the
+  pairs the same way. §C2b licenses an era to have dropped its TAIL, never to
+  disown what the record carried: the pairs excuse a receipt exactly where the
+  record reads it `lapsed`, and take the served state to ask — which an accuser
+  fetches anyway, since anything checked against a commitment has to be served.
+  Pinned: the adopted receipt beside a live-era lie proves again.
+- **The release door never asked `sameDuration`** (the set angle) — and a mixed
+  set reaches it: the law knows no door rules, so takeOver replays a
+  predecessor's committed log carrying one, the acceptance of a THING payout
+  never enters the paying branch, and the release settled the mixed set into
+  both tails — 28a's torn shape resurrected through the one value-moving door
+  the guard missed. The release asks now, reliance legs and the payout slot;
+  the withdrawal deliberately does not, since it moves nothing and is the
+  inherited mixed set's one honest exit. Pinned through takeOver.
+- **The era was read from the venue AFTER the act applied** (both signing
+  sites), so a venue refusal there — legal by the repo's own rule — left an
+  applied operation with no receipt forever, the resubmission meeting its own
+  spent nonce (invariant 26). The era is read once, before anything applies.
+- **One commitment per witnessed index**, at the operator's own door: eras are
+  keyed by the index of the last commitment, and a second commitment at one
+  index is invisible to `firstCommitmentFor(operator, after + 1)` — the misses
+  read in the excusing direction (a missed fault, never a wrong one), and the
+  genesis sentinel (`after` = 0 beside a commitment witnessed at index 0)
+  collides the same way, recorded in receipt.ts. Twelve fixtures committed
+  twice at one index and now advance between.
+- **A structural fix that was wrong, caught by the boundary test it shipped
+  with.** The genesis-stamp channel (a mature-venue operator stamping lies with
+  `after` = 0) looked closable by refusing genesis-era receipts where the first
+  commitment came later than the duration — but the doors are open from genesis
+  THROUGH the duration, so 28a's own first-commit-wipe receipts are honest
+  genesis-era receipts of exactly that shape. Reverted to a record: the answer
+  is the payee's freshness rule (CLAUDE.md — a receipt naming anything but the
+  operator's latest commitment at payment time is stale on its face), which is
+  also the whole defence against the stale-era stamp.
+- **A partial handover strands a set, it never tears it** (probed inline while
+  the reviewers were down, and the claim is scoped in CLAUDE.md): the
+  acceptance stays answerable, every one-sided settlement door refuses, and
+  both halves free by withdrawal at their own operators — but a set sitting in
+  the TAIL when part of it is handed over dies half by half in the record,
+  since takeOver takes no tail; what protects a party performing against a set
+  is finality, and only that (`probe-partial-handover.mjs`).
+- Tests and docs: the duration boundary (a commitment at exactly the duration
+  carries) and the successor `past` branch (a carried era's lie stays
+  contradicted across a handover) were claims with no test and have them; the
+  finality header carries all six answers; `era()` no longer orphans
+  `isInForce`'s doc; the stale `restoreAll` reference and the answered "28b's
+  question" comment are gone.
+
+**Recorded, not patched (the residuals, each priced):** an operator can launder
+a live-era double by going silent past the duration (the public aggravated
+grade, snapshot redemption, the replacement case) or by arranging its own
+succession (§15 prices the succession; the handover genuinely kills honest
+tails, so the record cannot tell); a lie stamped with a stale or genesis era is
+excused by the pairs and refused only by the payee's freshness rule at
+hand-over; `sameDuration` makes terms whose reliance targets or paying backing
+declare a different duration permanently unpresentable — a term mistake fixed
+only by a successor backing, the same family as the recorded duration-0 note,
+and `makeBacking` cannot see it (targets are hashes); the acceptance-door
+`sameDuration` check is reachable only through an inherited claims-paying
+mixed demand and is kept unwalked as belt-and-braces; the own-silence guard on
+the restore is unfalsifiable in-suite (the mark already protects a taken-over
+book) and kept because it states the reason; and a malicious predecessor can
+hand a successor a torn set BY CONSTRUCTION in the committed state it serves —
+the same class as the recorded stale-root warts, bounded by
+`isRewrittenHistory`.
+
+**Spec change:** none made beyond the four sentences landed 2026-08-24 (the 28a
+entry points at them). Two candidates recorded for Bob: the set rule — "a
+presentable set spans one silence clause" — is an implementation-forced
+constraint on terms the paper could state beside §C3's single-phase boundary;
+and the receipt's era — §C2's "witnessed order: a receipt binds an operation to
+its committed position" could add "and to the commitment it stood on".
+
 ## 2026-08-23 - Slice 28a: returning from silence is committing
 
 **Question:** the audit's first open item, decided by Bob on 2026-08-22: "an

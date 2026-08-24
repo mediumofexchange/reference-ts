@@ -20,20 +20,26 @@ import { KEYS, makeTransparentBacking, SECRETS } from "./support.js";
 // and it has more than two answers:
 //
 //   witnessed     the committed log holds this operation at this position.
-//   pending       the log is shorter than the position. Not yet.
-//   contradicted  the log is long enough and holds something else.
-//   unrelated     not this backing's operator's receipt, or not its state.
+//   pending       the record has not reached it: the era the receipt names is
+//                 still open, or this state predates its end.
+//   lapsed        the era ended in a return or a handover, so the operation
+//                 died unwitnessed with the tail it sat in (28b; the era tests
+//                 live in c2b-receipt-era).
+//   contradicted  the record is past the era's end, or already held the
+//                 position otherwise: a lie about the operator's own log.
+//   dropped       the operator's committed state carries no log for this
+//                 backing at all (see c2-dropped-backing).
+//   unrelated     not this backing's operator's receipt, not its state, or an
+//                 era its record never had.
 //
-// The fourth exists because a proof that accuses must not accuse the wrong
+// "Unrelated" exists because a proof that accuses must not accuse the wrong
 // party — the finding slice 9 made twice. Answering "contradicted" for a
 // stranger's receipt is exactly that bug.
 //
-// **And the receipt alone cannot see everything.** An operator that comes back
-// on stale data commits a SHORTER log, and a receipt for a position that log
-// never reaches reads "pending" forever — indistinguishable from an operation
-// still in flight. What catches that is the pair of commitments: an append-only
-// log cannot shrink, and a later one must have the earlier as a prefix. That is
-// isRewrittenHistory, and it is why both live in one slice.
+// Since 28b the receipt names its era (the witnessed index of the operator's
+// last commitment at signing), so a stale restore — a SHORTER log committed at
+// an era's ordinary end — is caught by the receipt on one state, where before
+// only isRewrittenHistory's pair of commitments could see it.
 
 function setup() {
   const venue = new LocalVenue();
@@ -89,7 +95,7 @@ function otherEntry(backing: Backing, position: number, nonce: bigint): OpLogEnt
   return { ...op, position };
 }
 
-describe("§C2: a receipt's fate is witnessed, pending, or contradicted", () => {
+describe("§C2: a receipt's fate — witnessed, pending, lapsed, or contradicted", () => {
   it("reads witnessed once the operation is in a committed log", () => {
     const { venue, sequencer, backing } = setup();
     const { moveReceipt } = twoOperations(sequencer, backing);
@@ -114,6 +120,7 @@ describe("§C2: a receipt's fate is witnessed, pending, or contradicted", () => 
     const { venue, sequencer, backing } = setup();
     const { issueReceipt } = twoOperations(sequencer, backing);
     const early = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     const move = { backing, from: KEYS.alice, to: KEYS.carol, quantity: 5n, nonce: 1n };
     sequencer.submitTransfer(
       move,
@@ -139,15 +146,19 @@ describe("§C2: a receipt's fate is witnessed, pending, or contradicted", () => 
     expect(receiptStatus(backing, venue, moveReceipt, rewritten)).toBe("contradicted");
   });
 
-  it("reads pending, not contradicted, where the log was shortened", () => {
-    // The stale restore. A receipt for a position the log never reaches cannot
-    // tell "not yet" from "taken back" — which is the whole reason
-    // isRewrittenHistory exists.
+  it("reads contradicted where the log was shortened at the era's end: a stale restore turns the operator's own receipt against it", () => {
+    // Before 28b this read "pending": a receipt for a position the log never
+    // reached could not tell "not yet" from "taken back", and only
+    // isRewrittenHistory — needing two states — could. The receipt names its
+    // era now, and an era that ends at an ordinary commitment carries the whole
+    // tail (only a return or a handover drops one, and both read `lapsed`), so
+    // a log that never reaches the position is the operator's own lie about its
+    // own book, on one state.
     const { venue, sequencer, backing } = setup();
     const { moveReceipt } = twoOperations(sequencer, backing);
     const honest = sequencer.snapshot()[0]!;
     const shortened = commitLog(backing, [honest.opLog[0]!], 0n);
-    expect(receiptStatus(backing, venue, moveReceipt, shortened)).toBe("pending");
+    expect(receiptStatus(backing, venue, moveReceipt, shortened)).toBe("contradicted");
   });
 });
 
@@ -233,6 +244,7 @@ describe("invariant 22: a later commitment must extend the earlier one", () => {
     const { venue, sequencer, backing } = setup();
     twoOperations(sequencer, backing);
     const early = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     const move = { backing, from: KEYS.alice, to: KEYS.carol, quantity: 5n, nonce: 1n };
     sequencer.submitTransfer(
       move,

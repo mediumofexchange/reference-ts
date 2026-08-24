@@ -3,13 +3,16 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { compareBytes } from "../src/bytes.js";
+import { signCommitment, stateRoot } from "../src/commitment.js";
 import { TransparentLedger } from "../src/ledger.js";
+import { type OpLogEntry } from "../src/oplog.js";
 import { encodeBurnMessage, encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import { type PublishedOp } from "../src/oplog.js";
 import {
   encodeAcceptanceMessage,
   encodeDemandMessage,
   encodeLock,
+  encodeLockMessage,
   encodeReleaseMessage,
   encodeWithdrawalMessage,
   NO_DECISION_VENUE,
@@ -44,13 +47,16 @@ import { KEYS, makeTransparentBacking, pub, SECRETS, advanceWitnessedIndex } fro
 //
 // One predicate settles both sides: `gapOpen` — would a publication at the
 // present index have gap force, and against whose silence — which is the
-// verifier's own `publishedInGap` read at the door. While it names this
-// operator's own silence on any backing it is in force for, no door co-signs: acts are
-// refused and name the commit, repeats are answered from a book already
-// restored to the last commitment (the tail is the OPERATOR'S — one commitment
-// covers every backing it is in force for, so one return restores each of their
-// books, or a set taken as one act would be torn); the commit adopts the gap; and from the
-// index after that commitment the operator serves again.
+// verifier's own `publishedInGap` read at the door, and it is PER BACKING: the
+// era is the backing's own. While a publication on a backing would still have
+// gap force, that backing's doors co-sign nothing — acts are refused and name
+// the commit, repeats are answered — and where the silence is this operator's
+// own, that backing's book is first restored to the last commitment; the commit
+// adopts the gap, and that backing is served again from the index after. What
+// keeps a set whole is the door, not an operator-wide restore (slice 28a's, and
+// DECISIONS records why it died): a set spans one silence clause, so its
+// backings' gaps — one operator, one last commitment — open and close together
+// and its halves die together or not at all.
 
 const SILENCE = { noCommitmentDuration: 10n, challengeWindow: 5n };
 const SUCCESSOR_SECRET = new Uint8Array(32).fill(0x0b);
@@ -282,7 +288,7 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     expect(sequencer.balance(backing, KEYS.bob)).toBe(20n);
   });
 
-  it("one quiet, two durations: the grades and the gap's force are each backing's own, and the book is the operator's — one return restores both tails and shuts both doors", () => {
+  it("one quiet, two durations: everything is each backing's own — the strict one's doors shut and its tail dies at the return, the patient one serves on and keeps its tail", () => {
     const venue = new LocalVenue();
     const sequencer = new Sequencer(SECRETS.operator, venue);
     const patient = makeTransparentBacking(SECRETS.backer, "EUR", [], { noCommitmentDuration: 100n, challengeWindow: 5n });
@@ -308,27 +314,35 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     venue.publishOp(patient.name, demandOp(patient, SECRETS.alice, KEYS.alice, 5n, 20n, 70n, 0n).published);
     expect(gapLegsFor(venue, strict)).toHaveLength(1);
     expect(gapLegsFor(venue, patient)).toHaveLength(0);
-    // Per operator: the silence is its own, so the book is dead on both and no
-    // door co-signs on either — a payment co-signed on the patient backing now
-    // would be the next tail to die.
+    // And the doors and the tail are each backing's own too: the patient
+    // backing serves on — its tail was witnessed by nothing and conflicts with
+    // nothing, since no publication against it has force — while the strict
+    // one's doors shut until the commit, and only its tail dies there.
     const more = transferOp(patient, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 1n);
-    expect(() => sequencer.submitTransfer(more.op, more.signature)).toThrow(RETURNING);
+    expect(verifyReceipt(sequencer.submitTransfer(more.op, more.signature))).toBe(true);
     const refused = transferOp(strict, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 1n);
     expect(() => sequencer.submitTransfer(refused.op, refused.signature)).toThrow(RETURNING);
-    sequencer.commit(); // at 20: both restored; the strict backing's gap leg adopted
-    expect(kinds(sequencer, patient)).toEqual(["issue"]);
+    sequencer.commit(); // at 20: the strict book restored, its gap leg adopted
+    expect(kinds(sequencer, patient)).toEqual(["issue", "transfer", "transfer"]);
     expect(kinds(sequencer, strict)).toEqual(["issue", "demand"]);
-    expect(sequencer.balance(patient, KEYS.bob)).toBe(0n);
+    expect(sequencer.balance(patient, KEYS.bob)).toBe(20n);
     expect(sequencer.balance(strict, KEYS.bob)).toBe(0n);
   });
 
-  it("a set the ledger took as one act dies as one: the head's backing returning restores the leg's backing too, whatever its own duration says", () => {
-    // Found reviewing this slice: restored per backing, a settlement whose head
-    // sat on EUR (short duration, gap open) and whose leg sat on GOLD (long
-    // duration, no gap) lost its head and kept its leg — the backer holding the
-    // accompaniment and none of the claims. One commitment covers both logs, so
-    // both halves are tail, and the tail is the operator's.
-    const { venue, sequencer, eur, gold } = pair(10n, 1000n);
+  it("a set is one act and dies as one: it spans one silence clause at the door, and equal clauses die together at the return", () => {
+    // 28a found the torn set — a settlement whose head sat on a short-duration
+    // backing and whose leg on a long one lost its head and kept its leg, the
+    // backer holding the accompaniment and none of the claims — and first fixed
+    // it by restoring the operator's whole book at once, which 28b found made a
+    // receipt's death unreadable from one backing's terms. What keeps the set
+    // whole now is the door: a set spans one silence clause, so its backings'
+    // gaps — one operator, one last commitment — open together and its halves
+    // are restored together.
+    const torn = pair(10n, 1000n);
+    const mixed = demandOp(torn.eur, SECRETS.alice, KEYS.alice, 40n, 0n, 90n, 0n);
+    const mixedLeg: LockOp = { backing: torn.gold, attemptId: mixed.hash, holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout: 500n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: 0n };
+    expect(() => torn.sequencer.submitDemand(mixed.op, mixed.signature, [signed(mixedLeg, encodeLock(mixedLeg), SECRETS.alice)])).toThrow(/one act and dies as one/);
+    const { venue, sequencer, eur, gold } = pair(10n, 10n);
     const claim = demandOp(eur, SECRETS.alice, KEYS.alice, 40n, 0n, 90n, 0n);
     const leg: LockOp = { backing: gold, attemptId: claim.hash, holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout: 500n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: 0n };
     sequencer.submitDemand(claim.op, claim.signature, [signed(leg, encodeLock(leg), SECRETS.alice)]);
@@ -341,9 +355,9 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     sequencer.submitRelease(release.op, release.signature, [legRelease]);
     expect(sequencer.balance(eur, KEYS.backer)).toBe(40n);
     expect(sequencer.balance(gold, KEYS.backer)).toBe(80n);
-    advanceWitnessedIndex(venue, 11n); // EUR's gap is open; GOLD's is not
+    advanceWitnessedIndex(venue, 11n); // one clause, one last commitment: both gaps open together
     expect(gapOpen(venue, eur)).toBeDefined();
-    expect(gapOpen(venue, gold)).toBeUndefined();
+    expect(gapOpen(venue, gold)).toBeDefined();
     sequencer.commit(); // the return
     // Whole again: the demand stands, the leg is reserved, nothing has moved.
     expect(kinds(sequencer, eur)).toEqual(["issue", "demand"]);
@@ -352,6 +366,76 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     expect(sequencer.balance(eur, KEYS.backer)).toBe(0n);
     expect(sequencer.balance(gold, KEYS.backer)).toBe(0n);
     expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(120n);
+  });
+
+  it("an inherited mixed set reaches only the doors that move nothing: the release and the re-prepare refuse it, the withdrawal is its exit", () => {
+    // The law knows no door rules, so takeOver replays a predecessor's
+    // committed log carrying a set the filing rule would refuse — a demand on
+    // EUR (duration 10) with its leg on GOLD (duration 1000). Found reviewing
+    // this slice: the release door did not ask sameDuration, and the inherited
+    // set settled into both tails and tore at EUR's return, 28a's shape
+    // resurrected. The release and the re-prepare ask now; the withdrawal
+    // stays open, since it moves nothing and is the set's one honest exit.
+    const venue = new LocalVenue();
+    const mkDur = (thing: string, duration: bigint, reliance: { target: Uint8Array; count: bigint }[] = []) =>
+      makeBacking({
+        obligor: KEYS.backer,
+        payout: { thing, quantumExponent: -2, perUnit: 100n },
+        reliance,
+        evidence: { setting: "transparent", operator: KEYS.operator, silence: { noCommitmentDuration: duration, challengeWindow: 5n }, replacementRule: KEYS.backer },
+      });
+    const gold = mkDur("GOLD", 1000n);
+    const eur = mkDur("EUR", 10n, [{ target: gold.name, count: 2n }]);
+    // The predecessor's committed log, built by hand: the law replays it.
+    const entry = (backing: Backing, position: number, op: PublishedOp): OpLogEntry => ({ ...op, position });
+    const issueOf = (backing: Backing): PublishedOp => ({
+      kind: "issue", recipient: KEYS.alice, quantity: 200n, nonce: 0n,
+      signature: ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 200n, 0n), SECRETS.backer),
+    });
+    const claim = demandOp(eur, SECRETS.alice, KEYS.alice, 40n, 0n, 90n, 0n);
+    const legMessage = encodeLockMessage(gold.name, claim.hash, KEYS.alice, KEYS.backer, 80n, 20n, NO_DECISION_VENUE, [KEYS.alice], 0n);
+    const legOp: PublishedOp = { kind: "lock", attemptId: claim.hash, holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout: 20n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: 0n, signature: ed25519.sign(legMessage, SECRETS.alice) };
+    const snapshots = [
+      { name: eur.name, opLog: [entry(eur, 0, issueOf(eur)), entry(eur, 1, claim.published)] },
+      { name: gold.name, opLog: [entry(gold, 0, issueOf(gold)), entry(gold, 1, legOp)] },
+    ];
+    const commitment = signCommitment(SECRETS.operator, 0n, stateRoot(snapshots));
+    venue.publish(commitment);
+    const before = { snapshots, commitment };
+    advanceWitnessedIndex(venue, 2n);
+    for (const b of [gold, eur]) venue.publishReplacement(b.name, replacementBy(b, SECRETS.backer, SUCCESSOR, b.name, 2n));
+    const successor = new Sequencer(SUCCESSOR_SECRET, venue);
+    for (const b of [gold, eur]) {
+      successor.register(b, signBacking(SECRETS.backer, b));
+      successor.takeOver(b, before);
+    }
+    successor.commit(); // at 2: in force for both, the mixed set standing
+    advanceWitnessedIndex(venue, 3n);
+    // The backer's answer is one act and goes through.
+    successor.submitAcceptance({ backing: eur, demandHash: claim.hash, instant: 0n, deadline: 90n, nonce: 1n }, ed25519.sign(encodeAcceptanceMessage(eur.name, claim.hash, 0n, 90n, 1n), SECRETS.backer));
+    // The release — the door that would move value — refuses the mixed set.
+    const release = signed({ backing: eur, demandHash: claim.hash, nonce: 1n }, encodeReleaseMessage(eur.name, claim.hash, 1n), SECRETS.alice);
+    const legRelease = signed({ backing: gold, demandHash: claim.hash, nonce: 1n }, encodeReleaseMessage(gold.name, claim.hash, 1n), SECRETS.alice);
+    expect(() => successor.submitRelease(release.op, release.signature, [legRelease])).toThrow(/one act and dies as one/);
+    // The re-prepare refuses it too (the leg lapses at 20, and re-locking a
+    // mixed set would re-arm the same tear). Past 21 the successor has its own
+    // gap to close first — the acceptance, co-signed into the tail, dies with
+    // it, which also frees the head for withdrawal.
+    advanceWitnessedIndex(venue, 21n);
+    successor.commit();
+    advanceWitnessedIndex(venue, 22n);
+    const legOut = withdrawalOp(gold, SECRETS.alice, claim.hash, 1n);
+    successor.submitWithdrawal(legOut.op, legOut.signature);
+    const again: LockOp = { attemptId: claim.hash, backing: gold, holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout: 60n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: 2n };
+    expect(() => successor.submitLeg(eur, claim.hash, signed(again, encodeLock(again), SECRETS.alice))).toThrow(/one act and dies as one/);
+    // The withdrawal is the honest exit: the head, its leg already withdrawn.
+    const headOut = withdrawalOp(eur, SECRETS.alice, claim.hash, 1n);
+    successor.submitWithdrawal(headOut.op, headOut.signature, []);
+    expect(successor.openDemands(eur)).toHaveLength(0);
+    expect(successor.availableBalance(gold, KEYS.alice)).toBe(200n);
+    expect(successor.availableBalance(eur, KEYS.alice)).toBe(200n);
+    expect(successor.balance(eur, KEYS.backer)).toBe(0n);
+    expect(successor.balance(gold, KEYS.backer)).toBe(0n);
   });
 
   it("whose silence it is decides whose book is dead: a successor at its handover index shuts the handed-over backing's doors for that index and keeps its own tail", () => {
@@ -480,21 +564,23 @@ describe("§C2b: the fixes reviewed — the door that reads, the retired book, a
   it("the one door that reads a record it does not write asks the gap question of it: a re-prepare is refused while the demanded backing's gap is open against a predecessor", () => {
     // Found regression-reviewing the review round — the recurring shape: the
     // refusal bounded the backings an act WRITES, and submitLeg decides a lock
-    // on the LEG's backing by the DEMANDED backing's record. At a successor's
-    // handover index the demanded backing's gap is the predecessor's (so the
-    // operator is not "returning") and the leg's backing is clear, but a head
-    // withdrawal published at that index still lands with force — a lock
-    // co-signed on the stale record would stand under a head the record ended.
+    // on the LEG's backing by the DEMANDED backing's record. The leg's backing
+    // was handed to the successor early and is punctual under it; the demanded
+    // one arrives at its handover index still carrying the predecessor's
+    // silence — so the operator is not "returning", the leg's own door is open,
+    // and a head withdrawal published at that index still lands with force. A
+    // lock co-signed on the stale record would stand under a head the record
+    // ended.
     const venue = new LocalVenue();
-    const mk = (thing: string, duration: bigint, reliance: { target: Uint8Array; count: bigint }[] = []) =>
+    const mk = (thing: string, reliance: { target: Uint8Array; count: bigint }[] = []) =>
       makeBacking({
         obligor: KEYS.backer,
         payout: { thing, quantumExponent: -2, perUnit: 100n },
         reliance,
-        evidence: { setting: "transparent", operator: KEYS.operator, silence: { noCommitmentDuration: duration, challengeWindow: 5n }, replacementRule: KEYS.backer },
+        evidence: { setting: "transparent", operator: KEYS.operator, silence: SILENCE, replacementRule: KEYS.backer },
       });
-    const gold = mk("GOLD", 1000n);
-    const eur = mk("EUR", 10n, [{ target: gold.name, count: 2n }]);
+    const gold = mk("GOLD");
+    const eur = mk("EUR", [{ target: gold.name, count: 2n }]);
     const incumbent = new Sequencer(SECRETS.operator, venue);
     for (const b of [gold, eur]) {
       incumbent.register(b, signBacking(SECRETS.backer, b));
@@ -504,14 +590,21 @@ describe("§C2b: the fixes reviewed — the door that reads, the retired book, a
     const leg: LockOp = { backing: gold, attemptId: claim.hash, holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout: 8n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: 0n };
     incumbent.submitDemand(claim.op, claim.signature, [signed(leg, encodeLock(leg), SECRETS.alice)]);
     const before = served(incumbent); // at 0; the incumbent goes dark
-    advanceWitnessedIndex(venue, 12n);
-    for (const b of [gold, eur]) venue.publishReplacement(b.name, replacementBy(b, SECRETS.backer, SUCCESSOR, b.name, 12n));
+    // GOLD goes to the successor early, which serves it punctually.
+    advanceWitnessedIndex(venue, 2n);
+    venue.publishReplacement(gold.name, replacementBy(gold, SECRETS.backer, SUCCESSOR, gold.name, 2n));
     const successor = new Sequencer(SUCCESSOR_SECRET, venue);
-    for (const b of [gold, eur]) {
-      successor.register(b, signBacking(SECRETS.backer, b));
-      successor.takeOver(b, before);
-    }
-    successor.commit(); // at 12: in force for both
+    successor.register(gold, signBacking(SECRETS.backer, gold));
+    successor.takeOver(gold, before);
+    successor.commit(); // at 2: in force for GOLD
+    advanceWitnessedIndex(venue, 8n);
+    successor.commit(); // GOLD stays punctual
+    // EUR arrives at 12, its handover index, carrying the predecessor's silence.
+    advanceWitnessedIndex(venue, 12n);
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR, eur.name, 12n));
+    successor.register(eur, signBacking(SECRETS.backer, eur));
+    successor.takeOver(eur, before);
+    successor.commit(); // at 12: in force for EUR too
     // At 12, EUR's gap is the predecessor's and GOLD's is not open at all.
     expect(compareBytes(gapOpen(venue, eur) as Uint8Array, KEYS.operator)).toBe(0);
     expect(gapOpen(venue, gold)).toBeUndefined();
@@ -574,21 +667,32 @@ describe("§C2b: the fixes reviewed — the door that reads, the retired book, a
     expect(incumbent.submitTransfer(onEur.op, new Uint8Array(64))).toEqual(eurReceipt);
   });
 
-  it("returning, the operator catches every backing up, not only the act's: a door about one backing leaves no other short of what the venue witnessed", () => {
-    // Found regression-reviewing the review round: the restore went
-    // operator-wide and adoption stayed per-touched, so a door about GOLD
-    // rolled EUR's adopted gap legs back and re-adopted nothing — the reads
-    // lost operations the venue DID witness.
+  it("a door touches only the backings it names: it restores and catches up its own, and another's book waits for its own door or the commit", () => {
+    // The era is the backing's own, and so is the catch-up: an EUR door during
+    // EUR's gap restores EUR's book, and GOLD's — its tail and its unadopted
+    // gap leg alike — is exactly as it was until a GOLD door or the commit.
     const { venue, sequencer, eur, gold } = pair(10n, 10n);
+    issue(sequencer, eur, KEYS.carol, 10n, 1n);
     sequencer.commit(); // at 0
-    // A gap leg on GOLD (no reliance, so a plain demand flows through a gap).
+    advanceWitnessedIndex(venue, 1n);
+    const eurTail = transferOp(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
+    sequencer.submitTransfer(eurTail.op, eurTail.signature);
+    const goldTail = transferOp(gold, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
+    sequencer.submitTransfer(goldTail.op, goldTail.signature);
+    // A gap leg on GOLD — at Alice's COMMITTED nonce (0): the verifier folds the
+    // gap onto the committed state, where her tail transfer at 0 never happened.
     publishAt(venue, 11n, gold, demandOp(gold, SECRETS.alice, KEYS.alice, 5n, 11n, 70n, 0n).published);
     advanceWitnessedIndex(venue, 12n);
-    // A door about EUR alone, refused — and GOLD's book has the leg after it.
-    const spend = transferOp(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
+    // A door about EUR alone: EUR is restored before the refusal; GOLD untouched.
+    const spend = transferOp(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 1n);
     expect(() => sequencer.submitTransfer(spend.op, spend.signature)).toThrow(RETURNING);
-    expect(sequencer.openDemands(gold)).toHaveLength(1);
+    expect(kinds(sequencer, eur)).toEqual(["issue", "issue"]);
+    expect(kinds(sequencer, gold)).toEqual(["issue", "transfer"]);
+    expect(sequencer.openDemands(gold)).toHaveLength(0);
+    // The commit catches GOLD up: its tail dies, its gap leg is adopted.
+    sequencer.commit();
     expect(kinds(sequencer, gold)).toEqual(["issue", "demand"]);
+    expect(sequencer.balance(gold, KEYS.bob)).toBe(0n);
   });
 });
 
@@ -623,7 +727,8 @@ describe("§C2b: the return commit restores the book to the last commitment, the
     expect(stateIsAuthentic(backing, venue, after)).toBe(true);
     // The withdrawal's receipt attests an act the operator took and never
     // witnessed: its position now holds the acceptance. What a reader should
-    // make of that is 28b's question (below); what this slice settles is that
+    // make of that is answered by the receipt's era (28b, c2b-receipt-era: it
+    // reads lapsed); what this slice settles is that
     // the book no longer holds the act.
     expect(deadReceipt.position).toBe(2n);
     advanceWitnessedIndex(venue, 19n);
@@ -711,13 +816,11 @@ describe("§C2b: the return commit restores the book to the last commitment, the
     expect(sequencer.balance(backing, KEYS.bob)).toBe(100n);
     // And the repeat of the fresh act is the fresh receipt.
     expect(sequencer.submitTransfer(spend.op, spend.signature)).toEqual(fresh);
-    // OPEN (28b): the dead receipt's position holds the demand now, and a reader
-    // of the return commitment calls that `contradicted` — an honest operator
-    // accused of lying about its log for having gone silent; isDoublePosition
-    // reads the dead and the fresh receipt the same way. A receipt must say
-    // which record it was signed against before a reader can tell a dead tail
-    // from a lie; until then this pins the question rather than the answer.
-    expect(receiptStatus(backing, venue, dead, after)).toBe("contradicted");
+    // 28b: the receipt names its era, so the dead receipt reads `lapsed` — its
+    // era ended in a return, an act that died unwitnessed and accuses nobody —
+    // and the fresh receipt, witnessed.
+    expect(receiptStatus(backing, venue, dead, after)).toBe("lapsed");
+    expect(receiptStatus(backing, venue, fresh, served(sequencer))).toBe("witnessed");
   });
 
   it("adopting inside one gap is idempotent: one book, one set of positions, and the receipt of a gap leg is the same on every ask — inside the gap and after the return", () => {

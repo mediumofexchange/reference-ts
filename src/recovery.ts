@@ -640,6 +640,59 @@ export function gapLegsFor(venue: Venue, backing: Backing): WitnessedOp[] {
     .filter((w) => isLeg(w.op) && publishedInGap(venue, backing, chain, w.at));
 }
 
+/**
+ * Whether the era a receipt was signed in ended without carrying its tail — so
+ * that an operation the receipt attests, absent from the record, was dropped
+ * with license rather than lied about.
+ *
+ * A receipt names its era: `after`, the witnessed index of the operator's last
+ * commitment when it co-signed (0 where it had none). The era ends at the
+ * operator's next commitment, or at a successor taking force, whichever the
+ * record shows first — and how it ends decides what the receipt is worth:
+ *
+ *   - **at an ordinary commitment** (at or inside the backing's declared
+ *     duration): the commitment carries the whole tail, so the era CARRIED, and
+ *     an attested operation missing from the record is the operator's lie about
+ *     its own log (`contradicted`, and the fault pair in fault.ts).
+ *   - **at a return** — the next commitment came more than THIS backing's
+ *     declared duration after `after` — the book was restored to the mark and
+ *     the tail died unwitnessed (§C2b; the sequencer's `restore`): true.
+ *   - **at a handover** — a successor took force before the operator committed
+ *     again — the successor took over the committed state without the tail
+ *     (takeOver): true.
+ *
+ * Readable from this backing's own terms, which is why the restore is per
+ * backing and a set spans one silence clause (DECISIONS, slice 28b). A backing
+ * declaring no silence clause has no return to lapse into — only a handover —
+ * and a record the backing does not declare shows nothing, as every clause
+ * reader answers. A venue's refusal propagates, as everywhere.
+ */
+export function eraLapsed(
+  venue: Venue,
+  backing: Backing,
+  operator: Uint8Array,
+  after: bigint,
+): boolean {
+  return answering(() => {
+    if (!(operator instanceof Uint8Array) || operator.length !== 32) return false;
+    if (typeof after !== "bigint" || after < 0n) return false;
+    if (!venueIsDeclared(venue, backing)) return false;
+    const next = venue.firstCommitmentFor(operator, after + 1n);
+    // The first force taken after `after` by anyone else ends the era too.
+    const chain = successionOf(backing, venue);
+    let handover: bigint | undefined;
+    for (const link of chain) {
+      if (link.from > after && compareBytes(link.operator, operator) !== 0) {
+        handover = link.from;
+        break;
+      }
+    }
+    if (handover !== undefined && (next === undefined || handover <= next)) return true;
+    const duration = backing.evidence.silence?.noCommitmentDuration;
+    return next !== undefined && duration !== undefined && next - after > duration;
+  }, false);
+}
+
 /** One party the backer pays for one redemption, and how much of it. */
 export interface Payment {
   readonly payee: Uint8Array;

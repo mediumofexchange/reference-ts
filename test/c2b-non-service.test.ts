@@ -156,6 +156,7 @@ describe("§C2b: non-service is counted on service, not on publication", () => {
       { backing, from: KEYS.alice, to: KEYS.bob, quantity: 10n, nonce: 0n },
       first.signature,
     );
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     const after = servedBy(sequencer);
     expect(unservedRequests(venue, backing, after)).toHaveLength(1);
     expect(isNonServing(venue, backing, after)).toBe(false);
