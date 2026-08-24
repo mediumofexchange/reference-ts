@@ -217,14 +217,6 @@ export class Sequencer {
    * question §C2 answers with "until then the predecessor's last commitment
    * governs, no new co-signatures issue".
    */
-  /**
-   * The era a receipt this operator signs right now names: the witnessed index
-   * of its last commitment, 0 where it has none (receipt.ts, `after`).
-   */
-  private era(): bigint {
-    return this.venue.witnessedAtFor(this.operatorKey) ?? 0n;
-  }
-
   private isInForce(backing: Backing): boolean {
     return (
       compareBytes(
@@ -232,6 +224,14 @@ export class Sequencer {
         this.operatorKey,
       ) === 0
     );
+  }
+
+  /**
+   * The era a receipt this operator signs right now names: the witnessed index
+   * of its last commitment, 0 where it has none (receipt.ts, `after`).
+   */
+  private era(): bigint {
+    return this.venue.witnessedAtFor(this.operatorKey) ?? 0n;
   }
 
   /**
@@ -447,7 +447,14 @@ export class Sequencer {
    * so equal durations open and close their gaps together — a set settled into
    * the tail is then restored whole or kept whole, never torn (the reason is
    * `restore`'s doc). Asked at filing of every slot the set takes, at the
-   * acceptance of the paying slot, and at the re-prepare of a leg.
+   * acceptance of the paying slot, at the re-prepare of a leg, and at the
+   * release — the one value-moving door a mixed set can still reach, through a
+   * takeOver of a log the law replayed without door rules; the withdrawal is
+   * deliberately not asked, since it moves nothing and is the inherited mixed
+   * set's one honest exit. Durations only, deliberately: this sequencer has one
+   * venue, so the members' gaps are read on one clock either way, and a member
+   * declaring no witnessing venue is the recorded "answered by whichever record
+   * its reader holds" setting.
    */
   private sameDuration(demanded: Backing, member: Backing): void {
     if (demanded.evidence.silence?.noCommitmentDuration !== member.evidence.silence?.noCommitmentDuration) {
@@ -494,6 +501,11 @@ export class Sequencer {
     // committed, and a gap is not a way around the record.
     const lock = op.kind === "withdrawal" ? this.ledger.lockOf(backing, op.demandHash) : undefined;
     if (lock !== undefined && committedInTime(this.venue, lock)) return;
+    // The era is read BEFORE the apply: it reads the venue, and a venue's
+    // refusal after the apply would leave an accepted operation with no
+    // receipt, forever — the re-adoption meets its own spent nonce (invariant
+    // 26; found reviewing this slice). Refusing here instead applies nothing.
+    const era = this.era();
     let entry: OpLogEntry;
     try {
       entry = this.ledger.apply(backing, op, at);
@@ -502,7 +514,7 @@ export class Sequencer {
     }
     this.receipts.set(
       key,
-      signReceipt(this.operatorSecret, backing.name, opHashOfEntry(backing.name, op), BigInt(entry.position), this.era()),
+      signReceipt(this.operatorSecret, backing.name, opHashOfEntry(backing.name, op), BigInt(entry.position), era),
     );
   }
 
@@ -948,7 +960,14 @@ export class Sequencer {
       demand === undefined ? undefined : this.legTerms(backing, demand.holder, demand.quantity);
     // And the backer's paying lock, where P pays in claims: released by the holder
     // in the same set (its one party), so surrendered set and payout move together.
+    // A release spans the payout slot's clause too (the reliance legs are asked
+    // per leg below): an inherited log can carry the acceptance already
+    // committed, so the acceptance door's own check may never have run.
     const payout = demand === undefined ? undefined : this.payoutTerms(backing, demand.holder, demand.quantity);
+    if (kind === "release" && payout !== undefined) {
+      const paying = this.backings.get(payout[0]);
+      if (paying !== undefined) this.sameDuration(backing, paying);
+    }
     if (terms !== undefined && payout !== undefined) terms.set(payout[0], payout[1]);
     // Standing means the DEMAND HOLDER'S lock under the hash: a stranger's lock
     // there is a squat, not a leg (found reviewing 24c), and a head that is a
@@ -977,6 +996,13 @@ export class Sequencer {
       if (compareBytes(leg.op.demandHash, op.demandHash) !== 0) {
         throw new SequencerError("a leg must name the demand being settled");
       }
+      // The release settles value, so the set it settles must be one that dies
+      // as one — a mixed set can reach this door through takeOver, since the
+      // law knows no door rules and a predecessor's committed log replays
+      // (found reviewing this slice). The WITHDRAWAL stays open: it moves
+      // nothing, and it is the inherited mixed set's one honest exit — a
+      // refusal names the path it leaves open.
+      if (kind === "release") this.sameDuration(backing, legBacking);
       if (kind === "release" && terms !== undefined) {
         const lock = this.ledger.lockOf(legBacking, op.demandHash);
         // No lock: the law refuses the leg itself, and relabelling that here is
@@ -1092,6 +1118,18 @@ export class Sequencer {
    * operator, so a failed publish does not burn one.
    */
   commit(): Commitment {
+    // One commitment per witnessed index: the venue's clock cannot order two,
+    // and the era a receipt names — the index of the operator's last commitment
+    // — must name one record, not the earlier of two (found reviewing this
+    // slice: eras are keyed by index, and a second commitment at one index is
+    // invisible to `firstCommitmentFor(operator, after + 1)`, so a reader's
+    // missed era-end reads in the excusing direction — a missed fault). The
+    // honest path is the next index: the venue advances on its own.
+    if (this.venue.witnessedAtFor(this.operatorKey) === this.venue.witnessedIndex()) {
+      throw new SequencerError(
+        "this operator already committed at this witnessed index: the next commitment goes at the next",
+      );
+    }
     this.caughtUp([...this.backings.values()]);
     const commitment = signCommitment(
       this.operatorSecret,
@@ -1101,9 +1139,9 @@ export class Sequencer {
     this.venue.publish(commitment);
     // Witnessed now: every log this commitment roots is committed to its end,
     // and the tail is empty. Marked on every backing the root carries, which is
-    // every registered one; a restore reaches only those this operator is in
-    // force for (restoreAll), so on the others the mark is a record of what this
-    // signature rooted and nothing more.
+    // every registered one; a restore reaches a backing only at its own open
+    // gap, in force (caughtUp), so on the others the mark is a record of what
+    // this signature rooted and nothing more.
     for (const backing of this.backings.values()) this.ledger.markCommitted(backing);
     return commitment;
   }
@@ -1316,6 +1354,10 @@ export class Sequencer {
         throw new SequencerError("the attempt committed in time: settle it");
       }
     }
+    // The era is read once, BEFORE the apply — a venue refusal after it would
+    // leave an applied act with no obtainable receipt, since the resubmission
+    // meets its own spent nonce (invariant 26; found reviewing this slice).
+    const era = this.era();
     const entries = this.ledger.applyAll(items, at);
     const receipts = entries.map((entry, i) =>
       signReceipt(
@@ -1323,7 +1365,7 @@ export class Sequencer {
         (items[i] as { readonly backing: Backing }).backing.name,
         hashes[i] as Uint8Array,
         BigInt(entry.position),
-        this.era(),
+        era,
       ),
     );
     // Every accepted operation is co-signed, legs included: an operator cannot

@@ -1025,6 +1025,7 @@ describe("§C2b: what the record shows when redemption cannot complete", () => {
     redeemAtVenue(venue, backing);
     // The operator returns, adopts, commits — then goes dark a second time.
     sequencer.commit();
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     const served = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
     venue.advance(SILENCE.noCommitmentDuration + 1n);
 

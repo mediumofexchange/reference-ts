@@ -239,6 +239,7 @@ describe("invariant 13: whether a standing demand is accompanied", () => {
     const liar: Terms = (name) =>
       Buffer.from(eur.name).equals(Buffer.from(name)) ? eur : eur;
     expect(accompanimentOf(eur, venue, liar, served(sequencer), hash)).toBe("unreadable");
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     expect(accompanimentOf(eur, venue, terms, served(sequencer), hash)).toBe("accompanied");
   });
 });

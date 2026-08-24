@@ -111,8 +111,9 @@ describe("invariant 22: state proves against the latest commitment", () => {
   });
 
   it("distinct roots at distinct sequences are not equivocation", () => {
-    const { sequencer } = setup();
+    const { venue, sequencer } = setup();
     const first = sequencer.commit();
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     const second = sequencer.commit();
     expect(second.sequence).toBe(first.sequence + 1n);
     expect(isEquivocation(first, second)).toBe(false);

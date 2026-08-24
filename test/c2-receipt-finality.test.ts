@@ -27,6 +27,8 @@ import { KEYS, makeTransparentBacking, SECRETS } from "./support.js";
 //                 live in c2b-receipt-era).
 //   contradicted  the record is past the era's end, or already held the
 //                 position otherwise: a lie about the operator's own log.
+//   dropped       the operator's committed state carries no log for this
+//                 backing at all (see c2-dropped-backing).
 //   unrelated     not this backing's operator's receipt, not its state, or an
 //                 era its record never had.
 //
@@ -93,7 +95,7 @@ function otherEntry(backing: Backing, position: number, nonce: bigint): OpLogEnt
   return { ...op, position };
 }
 
-describe("§C2: a receipt's fate is witnessed, pending, or contradicted", () => {
+describe("§C2: a receipt's fate — witnessed, pending, lapsed, or contradicted", () => {
   it("reads witnessed once the operation is in a committed log", () => {
     const { venue, sequencer, backing } = setup();
     const { moveReceipt } = twoOperations(sequencer, backing);
@@ -118,6 +120,7 @@ describe("§C2: a receipt's fate is witnessed, pending, or contradicted", () => 
     const { venue, sequencer, backing } = setup();
     const { issueReceipt } = twoOperations(sequencer, backing);
     const early = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     const move = { backing, from: KEYS.alice, to: KEYS.carol, quantity: 5n, nonce: 1n };
     sequencer.submitTransfer(
       move,
@@ -241,6 +244,7 @@ describe("invariant 22: a later commitment must extend the earlier one", () => {
     const { venue, sequencer, backing } = setup();
     twoOperations(sequencer, backing);
     const early = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     const move = { backing, from: KEYS.alice, to: KEYS.carol, quantity: 5n, nonce: 1n };
     sequencer.submitTransfer(
       move,

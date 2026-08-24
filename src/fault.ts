@@ -61,8 +61,7 @@ import { verifySignatureStrict } from "./keys.js";
 import { signerFromTerms } from "./ledger.js";
 import { opMessageOfEntry, type PublishedOp } from "./oplog.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
-import { receiptCovers, isOperatorReceipt, type Receipt } from "./receipt.js";
-import { eraLapsed } from "./recovery.js";
+import { receiptCovers, receiptStatus, isOperatorReceipt, type Receipt } from "./receipt.js";
 import { successionOf, type Succession } from "./replacement.js";
 import { answering, type Venue } from "./venue.js";
 
@@ -128,10 +127,16 @@ export function equivocatingSigner(
  * A boolean, where `equivocatingSigner` returns a key: the operator at fault is
  * already in the receipts the caller passed in, so there is nothing to hand back
  * that it does not have.
+ *
+ * Takes the served state since 28b, because the excuse must show the absence:
+ * a receipt the record reads `lapsed` proves nothing, and whether it does is a
+ * question about the record — which an accuser fetches anyway, since anything
+ * checked against a commitment has to be served (invariant 23).
  */
 export function isDoubleAcceptance(
   backing: Backing,
   venue: Venue,
+  served: ServedState,
   a: AcceptedOp,
   b: AcceptedOp,
 ): boolean {
@@ -144,13 +149,20 @@ export function isDoubleAcceptance(
     if (compareBytes(a.receipt.operator, b.receipt.operator) !== 0) return false;
     if (!isOperatorReceipt(backing, venue, a.receipt)) return false;
     if (!isOperatorReceipt(backing, venue, b.receipt)) return false;
-    // An era that ended in a return or a handover dropped its tail with
-    // license (§C2b), so a receipt from it may attest an operation the record
-    // rightly never held: the pair proves nothing. The residual — an operator
-    // laundering this fault by going silent, at the price of the public grade —
-    // is recorded (DECISIONS, slice 28b).
-    if (eraLapsed(venue, backing, a.receipt.operator, a.receipt.after)) return false;
-    if (eraLapsed(venue, backing, b.receipt.operator, b.receipt.after)) return false;
+    // **The excuse is the absence, not the receipt.** §C2b licenses an era that
+    // ended in a return or a handover to drop its TAIL — never to disown an
+    // operation the record carried. So a receipt is excused exactly where the
+    // record reads it `lapsed`: era ended with license AND the operation absent.
+    // Excusing on the era alone made every receipt of an adopted gap leg — a
+    // carried operation signed in the era the return closes — a permanent
+    // excuse token for later lies at its position (found reviewing this slice).
+    // The residuals, recorded in DECISIONS: an operator can stamp a lie with a
+    // stale era, which a payee reading the receipt's freshness refuses at
+    // hand-over; and a return or an arranged succession still launders a
+    // live-era pair whose lying half the record then rightly lacks — priced by
+    // the public grade, and by §15's price on the succession.
+    if (receiptStatus(backing, venue, a.receipt, served) === "lapsed") return false;
+    if (receiptStatus(backing, venue, b.receipt, served) === "lapsed") return false;
     // Each receipt has to cover the operation it is exhibited with, ON THIS
     // BACKING, or an accuser pins any operator's signature to any operation it
     // likes — including a receipt the operator issued perfectly correctly
@@ -181,16 +193,17 @@ export function isDoubleAcceptance(
 export function isDoublePosition(
   backing: Backing,
   venue: Venue,
+  served: ServedState,
   a: Receipt,
   b: Receipt,
 ): boolean {
   return answering(() => {
     if (compareBytes(a.operator, b.operator) !== 0) return false;
     if (!isOperatorReceipt(backing, venue, a) || !isOperatorReceipt(backing, venue, b)) return false;
-    // As in isDoubleAcceptance: a lapsed era dropped its tail with license, so
-    // either receipt may describe a book the record rightly never held.
-    if (eraLapsed(venue, backing, a.operator, a.after)) return false;
-    if (eraLapsed(venue, backing, b.operator, b.after)) return false;
+    // As in isDoubleAcceptance: the excuse is the absence, not the receipt — a
+    // receipt is excused exactly where the record reads it `lapsed`.
+    if (receiptStatus(backing, venue, a, served) === "lapsed") return false;
+    if (receiptStatus(backing, venue, b, served) === "lapsed") return false;
     // Two receipts by one operator on one backing that cannot both describe one
     // append-only log: one position holding two operations — or, the mirror, one
     // operation receipted into two positions, which a nonce and a position each

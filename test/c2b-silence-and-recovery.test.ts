@@ -140,6 +140,7 @@ describe("§C2b: the holder proves the claim unspent as of the last snapshot", (
     // that still shows them.
     const { venue, sequencer, backing } = setup();
     const stale = served(sequencer);
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     expect(provesHolding(venue, backing, stale, KEYS.alice, 100n)).toBe(true);
 
     const move = { backing, from: KEYS.alice, to: KEYS.bob, quantity: 90n, nonce: 0n };

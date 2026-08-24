@@ -37,6 +37,8 @@ export interface Receipt {
    * tell a tail that died with a gap or a handover (`lapsed`) from a lie about
    * the log (`contradicted`), where a position alone cannot (slice 28b; the
    * receipt records an operation and a position and never when it was signed).
+   * 0 is a sentinel and collides with a commitment witnessed at index 0; the
+   * readers treat that era conservatively — a missed fault, never a wrong one.
    */
   readonly after: bigint;
   readonly operator: Uint8Array;
@@ -278,6 +280,14 @@ export function receiptStatus(
     if (receipt.after > 0n && venue.witnessedAtFor(receipt.operator, receipt.after) !== receipt.after) {
       return "unrelated";
     }
+    // The genesis era (after = 0) is not further verifiable: the doors are open
+    // from the venue's genesis through the declared duration, so honest
+    // receipts carry it — and so can a lie stamped by an operator that arrived
+    // late, which no reader can tell apart (a first fix here refused every
+    // late-first-commitment genesis era and called 28a's own honest
+    // first-commit-wipe receipts forged). What answers the stamp is the
+    // payee's freshness rule (CLAUDE.md): a receipt naming anything but the
+    // operator's latest commitment at payment time is stale on its face.
     const committed = committedLogFor(backing, venue, served);
     if (committed === undefined) return "unrelated";
     if (committed.kind === "dropped") return "dropped";
@@ -307,6 +317,6 @@ export function receiptStatus(
             compareBytes(link.operator, served.commitment.operator) === 0,
         );
     if (past) return "contradicted";
-    return entryAt(committed.opLog, receipt.position) === undefined ? "pending" : "contradicted";
+    return entry === undefined ? "pending" : "contradicted";
   }, "unrelated");
 }

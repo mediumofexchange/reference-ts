@@ -596,6 +596,7 @@ describe("§C2: a publication is judged against the record that governed at its 
     legsAt(venue, backing, 31n);
     expect(isSilent(venue, backing)).toBe(false);
     expect(gapLegsFor(venue, backing)).toEqual([]);
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     successor.commit();
     expect(successor.openDemands(backing)).toHaveLength(0);
   });
@@ -623,6 +624,7 @@ describe("§C2: a publication is judged against the record that governed at its 
     // The verifier, against the predecessor's last commitment — the record that governed.
     expect(snapshotRedemptions(venue, backing, served)).toHaveLength(1);
     // The operator, adopting.
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     successor.commit();
     expect(successor.balance(backing, KEYS.backer)).toBe(40n);
     expect(successor.openDemands(backing)).toHaveLength(0);

@@ -140,6 +140,17 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     const pastEra = commitLog(late.backing, [logB[0]!], 0n);
     late.venue.publish(pastEra.commitment);
     expect(receiptStatus(late.backing, late.venue, receiptB, pastEra)).toBe("lapsed");
+    // And the boundary itself: a commitment at exactly the duration is inside
+    // it — strictly `>`, the same side gapOpen reads — so the era carried.
+    const edge = setup();
+    issue(edge.sequencer, edge.backing, KEYS.alice, 100n, 0n);
+    const spendC = transferOp(edge.backing, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
+    const receiptC = edge.sequencer.submitTransfer(spendC.op, spendC.signature);
+    const logC = edge.sequencer.snapshot()[0]!.opLog;
+    advanceWitnessedIndex(edge.venue, 10n); // exactly the duration
+    const atEdge = commitLog(edge.backing, [logC[0]!], 0n);
+    edge.venue.publish(atEdge.commitment);
+    expect(receiptStatus(edge.backing, edge.venue, receiptC, atEdge)).toBe("contradicted");
   });
 
   it("the era ends at a handover too: a predecessor's tail receipt reads lapsed against the successor's record", () => {
@@ -172,7 +183,8 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     // operation into a position its log already gave away.
     const { venue, sequencer, backing } = setup();
     issue(sequencer, backing, KEYS.alice, 100n, 0n);
-    sequencer.commit(); // at 0
+    const c0 = sequencer.commit(); // at 0
+    const state0 = { snapshots: sequencer.snapshot(), commitment: c0 };
     advanceWitnessedIndex(venue, 1n);
     const spend = transferOp(backing, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
     const honest = sequencer.submitTransfer(spend.op, spend.signature); // position 1
@@ -184,7 +196,7 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
       honest.position,
       honest.after,
     );
-    expect(isDoublePosition(backing, venue, honest, lie)).toBe(true);
+    expect(isDoublePosition(backing, venue, state0, honest, lie)).toBe(true);
     // And the live-era double acceptance: two operations at one nonce, both
     // operator-receipted.
     const equivocation = transferOp(backing, SECRETS.alice, KEYS.alice, KEYS.carol, 10n, 0n);
@@ -196,7 +208,7 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
       honest.after,
     );
     expect(
-      isDoubleAcceptance(backing, venue, { op: spend.published, receipt: honest }, { op: equivocation.published, receipt: second }),
+      isDoubleAcceptance(backing, venue, state0, { op: spend.published, receipt: honest }, { op: equivocation.published, receipt: second }),
     ).toBe(true);
     // The era lapses — the operator goes silent past the duration and returns —
     // and the SAME pairs prove nothing: a lapsed era dropped its tail with
@@ -206,11 +218,12 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     // the honest operator this excuse exists for is 28a's, whose dead tail
     // beside its adopted gap otherwise proved isDoublePosition against it.
     advanceWitnessedIndex(venue, 15n);
-    sequencer.commit(); // the return closes the era with a gap
+    const cr = sequencer.commit(); // the return closes the era with a gap
+    const after = { snapshots: sequencer.snapshot(), commitment: cr };
     expect(eraLapsed(venue, backing, KEYS.operator, honest.after)).toBe(true);
-    expect(isDoublePosition(backing, venue, honest, lie)).toBe(false);
+    expect(isDoublePosition(backing, venue, after, honest, lie)).toBe(false);
     expect(
-      isDoubleAcceptance(backing, venue, { op: spend.published, receipt: honest }, { op: equivocation.published, receipt: second }),
+      isDoubleAcceptance(backing, venue, after, { op: spend.published, receipt: honest }, { op: equivocation.published, receipt: second }),
     ).toBe(false);
   });
 
@@ -232,10 +245,72 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     const adopted = sequencer.submitDemand(claim.op, claim.published.signature);
     // Two operations by one signer at one nonce, both operator-receipted — and
     // no fault: the transfer's era lapsed.
+    const record = served(sequencer);
     expect(
-      isDoubleAcceptance(backing, venue, { op: spend.published, receipt: deadTail }, { op: claim.published, receipt: adopted }),
+      isDoubleAcceptance(backing, venue, record, { op: spend.published, receipt: deadTail }, { op: claim.published, receipt: adopted }),
     ).toBe(false);
     // The dead receipt itself reads lapsed, not contradicted.
-    expect(receiptStatus(backing, venue, deadTail, served(sequencer))).toBe("lapsed");
+    expect(receiptStatus(backing, venue, deadTail, record)).toBe("lapsed");
+  });
+
+  it("a carried era's lie is contradicted against the successor's record too: the handover does not launder what the operator's own commitment already owed", () => {
+    // The operator co-signs a transfer, commits a log WITHOUT it inside the
+    // duration (the era ends carried, the drop unlicensed), and is then
+    // replaced. The successor's record is past the era's end, so the receipt
+    // still reads contradicted — the era ended at the operator's own ordinary
+    // commitment before the handover could excuse anything.
+    const venue = new LocalVenue();
+    const eur = makeBacking({
+      obligor: KEYS.backer,
+      payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: { setting: "transparent", operator: KEYS.operator, silence: SILENCE, replacementRule: KEYS.backer },
+    });
+    const incumbent = new Sequencer(SECRETS.operator, venue);
+    incumbent.register(eur, signBacking(SECRETS.backer, eur));
+    issue(incumbent, eur, KEYS.alice, 100n, 0n);
+    const spend = transferOp(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
+    const receipt = incumbent.submitTransfer(spend.op, spend.signature);
+    const honest = incumbent.snapshot()[0]!.opLog;
+    advanceWitnessedIndex(venue, 5n); // inside the duration: the era ends carried
+    const shortened = commitLog(eur, [honest[0]!], 0n);
+    venue.publish(shortened.commitment);
+    advanceWitnessedIndex(venue, 8n);
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR, eur.name, 8n));
+    const successor = new Sequencer(SUCCESSOR_SECRET, venue);
+    successor.register(eur, signBacking(SECRETS.backer, eur));
+    successor.takeOver(eur, shortened);
+    const theirs = served(successor); // at 8
+    expect(eraLapsed(venue, eur, KEYS.operator, receipt.after)).toBe(false);
+    expect(receiptStatus(eur, venue, receipt, theirs)).toBe("contradicted");
+  });
+
+  it("an adopted gap leg's receipt is no excuse token: its operation carried, so a later lie at its position is still a fault", () => {
+    // Found reviewing this slice: the first draft excused a receipt on its ERA
+    // alone, and an adopted leg's receipt — signed in the era the return
+    // closes, for an operation the return commitment CARRIES — became a
+    // permanent excuse for lies at its position. The excuse is the absence:
+    // a receipt the record reads witnessed excuses nothing.
+    const { venue, sequencer, backing } = setup();
+    issue(sequencer, backing, KEYS.alice, 100n, 0n);
+    sequencer.commit(); // at 0
+    const claim = demandPublished(backing, SECRETS.alice, KEYS.alice, 40n, 11n, 70n, 0n);
+    advanceWitnessedIndex(venue, 11n);
+    venue.publishOp(backing.name, claim.published);
+    advanceWitnessedIndex(venue, 15n);
+    const cr = sequencer.commit(); // the return adopts the demand
+    const record = { snapshots: sequencer.snapshot(), commitment: cr };
+    advanceWitnessedIndex(venue, 16n);
+    const adopted = sequencer.submitDemand(claim.op, claim.published.signature); // the repeat: the adoption's receipt
+    expect(adopted.after).toBe(0n); // signed in the era the return closed
+    expect(receiptStatus(backing, venue, adopted, record)).toBe("witnessed");
+    const lie = signReceipt(
+      SECRETS.operator,
+      backing.name,
+      new Uint8Array(32).fill(0x66),
+      adopted.position,
+      15n, // the live era
+    );
+    expect(isDoublePosition(backing, venue, record, adopted, lie)).toBe(true);
   });
 });
