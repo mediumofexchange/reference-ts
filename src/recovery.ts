@@ -95,6 +95,15 @@ function isTransfer(witnessed: WitnessedOp): witnessed is WitnessedTransfer {
 }
 
 /**
+ * A published operation narrowed to the requests §C2b counts: a transfer, or —
+ * "a lock request left unserved is §C2b's non-service object" (§C3) — a bare
+ * lock. Both kinds carry the signer's nonce, which the count's fold sorts on.
+ */
+type WitnessedRequest = WitnessedOp & {
+  readonly op: Extract<PublishedOp, { kind: "transfer" | "lock" }>;
+};
+
+/**
  * How many witnessed indices this operator has been quiet. Measured from its
  * latest commitment, or from the venue's genesis where it has never published —
  * otherwise never publishing at all would be the way to escape the grade.
@@ -190,8 +199,19 @@ export function isOverdue(venue: Venue, backing: Backing): boolean {
  *
  * Four things make a request count, and each is a sentence of the clause:
  *
- *   - **It is a transfer published at the venue.** §C3's demand shape without
- *     the backer.
+ *   - **It is a transfer or a bare lock request published at the venue.** The
+ *     transfer is §C3's demand shape without the backer; the lock is §C3's "a
+ *     lock request left unserved is §C2b's non-service object". A lock counts
+ *     only where the operator was OBLIGED to serve it, which is the door's own
+ *     three refusals mirrored: it names this decision venue (one naming none
+ *     is a leg and comes only with its set; one naming another venue is not
+ *     watched here), its attempt is not already committed at the venue (the
+ *     record itself answered that one), and — the law's own TIME rule, asked
+ *     at the one index the operator was first handed it — its timeout was not
+ *     already spent at its witnessing, since a door with a live clock would
+ *     have refused it then and at every later index too. The refusal aggregate
+ *     (m', W') is NOT this count: its object is a signed refusal to prepare,
+ *     and prepare-decide-commit is an extension (see DECISIONS, slice 28).
  *   - **It is not in the committed log.** Served means served, and a request the
  *     operator took stops counting the moment it commits it.
  *   - **Its age is past the declared duration and inside the window W.** Below
@@ -256,9 +276,14 @@ export function unservedRequests(
     // In nonce order, then witnessed order: a signer's own requests must be
     // folded in the order they were signed, and the witnessed index is the only
     // thing that separates two signed at one nonce (§C2, witnessing pins order).
+    const isRequest = (w: WitnessedOp): w is WitnessedRequest =>
+      w.op.kind === "transfer" ||
+      (w.op.kind === "lock" &&
+        compareBytes(w.op.decisionVenue, venue.id) === 0 &&
+        witnessedCommitFor(venue, w.op) === undefined);
     const candidates = venue
       .publishedOpsFor(backing.name)
-      .filter(isTransfer)
+      .filter(isRequest)
       .sort((a, b) =>
         a.op.nonce !== b.op.nonce
           ? a.op.nonce < b.op.nonce
@@ -277,7 +302,10 @@ export function unservedRequests(
       // applying it again would only meet its own spent nonce.
       if (servedAlready.has(hash) || applied.has(hash)) continue;
       try {
-        applyEntry(working, backing, witnessed.op, undefined);
+        // A lock's clock is its own witnessing index — "could have served"
+        // needs an index at which a door would have; a transfer has no TIME
+        // term and folds as before.
+        applyEntry(working, backing, witnessed.op, witnessed.op.kind === "lock" ? witnessed.at : undefined);
       } catch {
         continue;
       }

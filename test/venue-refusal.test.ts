@@ -3,7 +3,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
 import { makeBacking } from "../src/backing.js";
 import { committedLogFor, signCommitment, stateRoot, type ServedState } from "../src/commitment.js";
-import { isDoubleAcceptance, isDoublePosition, isRewrittenHistory } from "../src/fault.js";
+import { isDoubleAcceptance, isDoublePosition, isRewrittenHistory, settledInPart, withdrawnAgainstCommit } from "../src/fault.js";
 import { encodeTransferMessage } from "../src/messages.js";
 import { isOperatorReceipt, receiptStatus, type Receipt } from "../src/receipt.js";
 import {
@@ -166,6 +166,8 @@ function surface() {
     ["isDoubleAcceptance", () => isDoubleAcceptance(backing, refusing, served, accepted, accepted2)],
     ["isDoublePosition", () => isDoublePosition(backing, refusing, served, receipt, receipt)],
     ["isRewrittenHistory", () => isRewrittenHistory(backing, refusing, served, other)],
+    ["withdrawnAgainstCommit", () => withdrawnAgainstCommit(backing, refusing, served)],
+    ["settledInPart", () => settledInPart(backing, refusing, () => paying, served, new Uint8Array(32))],
     ["isAnOperator", () => isAnOperator(backing, refusing, KEYS.operator)],
     ["isNamedSuccessor", () => isNamedSuccessor(backing, refusing, KEYS.carol)],
     ["operatorsOf", () => operatorsOf(backing, refusing)],

@@ -25,6 +25,13 @@
 //   - `isDoublePosition` — an operator co-signed two receipts that cannot both
 //     describe one append-only log: two operations at one position, or one
 //     operation at two. Either way one of its receipts is a lie about its own log.
+//   - `withdrawnAgainstCommit` — an operator co-signed a withdrawal of a lock
+//     the shared record shows committed in time. Its own door refuses exactly
+//     this ("the attempt committed in time: settle it"), so the pair is the
+//     refusal turned into the fault it proves.
+//   - `settledInPart` — one commitment carrying half a settlement. One
+//     operator's doors apply a set as one act, so half of one is a history no
+//     door produced.
 //   - `isRewrittenHistory` — an operator committed a log that takes back one it
 //     had already committed. An append-only log may grow and may not shrink, and
 //     no committed entry may change. This is what restoring from stale data and
@@ -55,10 +62,14 @@
 // Verifiers, all of them: the bytes come from whoever is exhibiting them, so
 // anything malformed is a fault that is not proven rather than a throw.
 
-import { type Backing } from "./backing.js";
+import { backingName, paysInClaims, type Backing } from "./backing.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
+import { type Terms } from "./closure.js";
 import { compareBytes, copyBytes } from "./bytes.js";
 import { verifySignatureStrict } from "./keys.js";
-import { signerFromTerms } from "./ledger.js";
+import { applyEntry, emptyState, replayLog, signerFromTerms } from "./ledger.js";
+import { NO_DECISION_VENUE } from "./presentation.js";
+import { committedInTime } from "./recovery.js";
 import { opMessageOfEntry, type PublishedOp } from "./oplog.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
 import { receiptCovers, receiptStatus, isOperatorReceipt, type Receipt } from "./receipt.js";
@@ -343,4 +354,130 @@ export function isRewrittenHistory(
     }
     return false;
   }, false);
+}
+
+/**
+ * The operator co-signed a withdrawal of a lock the shared record shows
+ * committed in time: the attempt id proven, or undefined if this state does not
+ * prove it.
+ *
+ * Sound with no clock, which is what makes it a fault a stranger can hold. An
+ * honest withdrawal opens only past the lock's timeout (24c), and an in-time
+ * commit is witnessed at or before that timeout — witnessing is shared and
+ * pinned in order (§C2), so by the time any door could lawfully take the
+ * withdrawal, the commit was on the record for the operator to read. Its own
+ * door reads it ("the attempt committed in time: settle it"); co-signing anyway
+ * is either ignoring the record or co-signing before the timeout it was bound
+ * to wait out, and both are its own. A commit first witnessed past the timeout
+ * proves nothing: it was never in time, and nothing here fires after the fact
+ * (a venue witnesses at its current index, so no later publication can become
+ * an earlier commitment).
+ *
+ * Read on the venue the lock names, as every commit read is: a lock naming
+ * another venue is one leg this reader cannot judge — the gap fold's own
+ * conservative side — and a withdrawal that resolves to a demand is the holder
+ * walking away, which no commit reaches. The whole log must replay: the proof
+ * is an entry in a lawful history this operator committed, not a stray byte in
+ * a garbage one.
+ */
+export function withdrawnAgainstCommit(
+  backing: Backing,
+  venue: Venue,
+  served: ServedState,
+): Uint8Array | undefined {
+  return answering(() => {
+    const committed = committedLogFor(backing, venue, served);
+    if (committed === undefined || committed.kind === "dropped") return undefined;
+    const state = emptyState();
+    let proven: Uint8Array | undefined;
+    try {
+      for (const entry of committed.opLog) {
+        if (entry.kind === "withdrawal") {
+          // Read before the law applies it, since applying is what removes it.
+          const lock = state.locks.get(bytesToHex(entry.demandHash));
+          if (
+            proven === undefined &&
+            lock !== undefined &&
+            compareBytes(lock.decisionVenue, NO_DECISION_VENUE) !== 0 &&
+            compareBytes(lock.decisionVenue, venue.id) === 0 &&
+            committedInTime(venue, lock)
+          ) {
+            proven = copyBytes(lock.attemptId);
+          }
+        }
+        applyEntry(state, backing, entry, undefined);
+      }
+    } catch {
+      return undefined;
+    }
+    return proven;
+  }, undefined);
+}
+
+/**
+ * One commitment carrying half a settlement: the name of the leg backing whose
+ * log is missing its half — or carrying it under a head that still stands — or
+ * undefined if this state does not prove it.
+ *
+ * §C3 settles a set as one act: the head's release and every leg's, applied
+ * together, co-signed together, committed together. Within ONE operator's
+ * commitment that is not merely the door's habit but the record's invariant —
+ * the doors apply a set atomically, the committed marks advance together at
+ * each publication, and `sameDuration` puts a set's backings under one silence
+ * clause so a gap restores them together — so one root showing the head's
+ * release without a leg's is a history no door produced, and the operator
+ * co-signed every entry of it.
+ *
+ * What deliberately does NOT fire, each the conservative side:
+ *
+ *   - **A leg backing absent from the state** is slice 28b's strand, not a
+ *     tear: a partial handover lawfully leaves a set's halves with different
+ *     operators, and each operator's own commitment shows only its own. This
+ *     predicate reads ONE commitment; across two is not its question.
+ *   - **A withdrawal is not half a settlement.** One-sided withdrawal is the
+ *     stranded set's lawful exit, so only the release — the act that takes
+ *     value — counts on either side. A leg released under a head that was
+ *     WITHDRAWN reads as unproven for the same reason the head must be in the
+ *     log at all: what this state shows of the head must itself say the set
+ *     stood, and a walked-away set's story is not this reader's to finish.
+ *   - **Terms not to hand, a leg log that does not replay, a head that never
+ *     filed the demand**: a proof is read off lawful records or not at all.
+ */
+export function settledInPart(
+  backing: Backing,
+  venue: Venue,
+  terms: Terms,
+  served: ServedState,
+  demandHash: Uint8Array,
+): Uint8Array | undefined {
+  return answering(() => {
+    const committed = committedLogFor(backing, venue, served);
+    if (committed === undefined || committed.kind === "dropped") return undefined;
+    const head = replayLog(backing, committed.opLog);
+    if (head === undefined) return undefined;
+    const headReleased = committed.opLog.some(
+      (entry) => entry.kind === "release" && compareBytes(entry.demandHash, demandHash) === 0,
+    );
+    const headStands = head.demands.has(bytesToHex(demandHash));
+    if (!headReleased && !headStands) return undefined;
+
+    const legs: Uint8Array[] = [
+      ...backing.reliance.map((entry) => entry.target),
+      ...(paysInClaims(backing.payout) ? [backing.payout.backing] : []),
+    ];
+    for (const name of legs) {
+      const leg = terms(name);
+      if (leg === undefined) continue;
+      if (compareBytes(backingName(leg), name) !== 0) continue;
+      const legLog = committedLogFor(leg, venue, served);
+      if (legLog === undefined || legLog.kind === "dropped") continue;
+      if (replayLog(leg, legLog.opLog) === undefined) continue;
+      const legReleased = legLog.opLog.some(
+        (entry) => entry.kind === "release" && compareBytes(entry.demandHash, demandHash) === 0,
+      );
+      if (headReleased && !legReleased) return copyBytes(name);
+      if (!headReleased && headStands && legReleased) return copyBytes(name);
+    }
+    return undefined;
+  }, undefined);
 }

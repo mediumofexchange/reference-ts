@@ -2,6 +2,15 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
+import {
+  demandHash,
+  encodeDemand,
+  encodeLock,
+  signCommit,
+  type DemandOp,
+  type LockOp,
+  NO_DECISION_VENUE,
+} from "../src/presentation.js";
 import { type PublishedOp } from "../src/oplog.js";
 import { isNonServing, isSilent, unservedRequests } from "../src/recovery.js";
 import { Sequencer } from "../src/sequencer.js";
@@ -61,6 +70,44 @@ function request(backing: Backing, quantity: bigint, nonce: bigint): Extract<Pub
       encodeTransferMessage(backing.name, KEYS.alice, KEYS.bob, quantity, nonce),
       SECRETS.alice,
     ),
+  };
+}
+
+/**
+ * Alice's signed bare lock request at the venue: her own units, naming the
+ * decision venue the operator watches — §C3's "a lock request left unserved is
+ * §C2b's non-service object".
+ */
+function lockRequest(
+  venue: LocalVenue,
+  backing: Backing,
+  quantity: bigint,
+  nonce: bigint,
+  over: Partial<LockOp> = {},
+): Extract<PublishedOp, { kind: "lock" }> {
+  const op: LockOp = {
+    backing,
+    attemptId: new Uint8Array(32).fill(0x50 + Number(nonce)),
+    holder: KEYS.alice,
+    beneficiary: KEYS.bob,
+    quantity,
+    timeout: 10_000n,
+    decisionVenue: venue.id,
+    parties: [KEYS.bob],
+    nonce,
+    ...over,
+  };
+  return {
+    kind: "lock",
+    attemptId: op.attemptId,
+    holder: op.holder,
+    beneficiary: op.beneficiary,
+    quantity: op.quantity,
+    timeout: op.timeout,
+    decisionVenue: op.decisionVenue,
+    parties: op.parties,
+    nonce: op.nonce,
+    signature: ed25519.sign(encodeLock(op), SECRETS.alice),
   };
 }
 
@@ -222,7 +269,7 @@ describe("§C2b: non-service is counted on service, not on publication", () => {
     expect(isNonServing(venue, backing, served)).toBe(false);
   });
 
-  it("counts only transfers, not the presentation legs published beside them", () => {
+  it("a kind that is no request does not count, published beside one", () => {
     const { venue, sequencer, backing } = setup();
     const served = servedBy(sequencer);
     venue.publishOp(backing.name, request(backing, 10n, 0n));
@@ -308,5 +355,113 @@ describe("§C2b: no calibration is policed", () => {
     const served = servedBy(sequencer);
     expect(unservedRequests(venue, backing, served)).toEqual([]);
     expect(isNonServing(venue, backing, served)).toBe(true);
+  });
+});
+
+describe("§C3: a lock request left unserved is §C2b's non-service object", () => {
+  // "A request is answered at the index its sequencer publishes a lock or a
+  // signed refusal naming it" — this reference has no signed-refusal object
+  // (the refusal aggregate m'/W' counts refusals to prepare, and
+  // prepare-decide-commit is an extension), so service is the one answer, and
+  // the count is the same fold the transfer count is: the law, in signing
+  // order, against the state the operator committed.
+
+  it("a lock request left unserved counts beside a transfer, and fires the grade", () => {
+    const { venue, sequencer, backing } = setup();
+    const served = servedBy(sequencer);
+    venue.publishOp(backing.name, request(backing, 10n, 0n));
+    venue.publishOp(backing.name, lockRequest(venue, backing, 20n, 1n));
+    venue.advance(NON_SERVICE.duration + 1n);
+    expect(unservedRequests(venue, backing, served)).toHaveLength(2);
+    expect(isNonServing(venue, backing, served)).toBe(true);
+  });
+
+  it("serving the lock request stops its count", () => {
+    const { venue, sequencer, backing } = setup();
+    const one = lockRequest(venue, backing, 20n, 0n);
+    venue.publishOp(backing.name, one);
+    venue.advance(NON_SERVICE.duration + 1n);
+    expect(unservedRequests(venue, backing, servedBy(sequencer))).toHaveLength(1);
+    const op: LockOp = {
+      backing,
+      attemptId: one.attemptId,
+      holder: one.holder,
+      beneficiary: one.beneficiary,
+      quantity: one.quantity,
+      timeout: one.timeout,
+      decisionVenue: one.decisionVenue,
+      parties: [...one.parties],
+      nonce: one.nonce,
+    };
+    sequencer.submitLock(op, one.signature);
+    venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
+    expect(unservedRequests(venue, backing, servedBy(sequencer))).toHaveLength(0);
+  });
+
+  it("a leg names no decision venue and is nobody's unserved request: it comes with its set", () => {
+    const { venue, sequencer, backing } = setup();
+    const served = servedBy(sequencer);
+    venue.publishOp(backing.name, lockRequest(venue, backing, 20n, 0n, { decisionVenue: NO_DECISION_VENUE }));
+    venue.advance(NON_SERVICE.duration + 1n);
+    expect(unservedRequests(venue, backing, served)).toHaveLength(0);
+  });
+
+  it("a request naming a venue the operator does not watch is not its to serve", () => {
+    const { venue, sequencer, backing } = setup();
+    const served = servedBy(sequencer);
+    venue.publishOp(backing.name, lockRequest(venue, backing, 20n, 0n, { decisionVenue: new Uint8Array(32).fill(0x77) }));
+    venue.advance(NON_SERVICE.duration + 1n);
+    expect(unservedRequests(venue, backing, served)).toHaveLength(0);
+  });
+
+  it("a lock that could never have been served does not count: its timeout was spent at its witnessing", () => {
+    // The law's own refusal, asked at the one index the operator was first
+    // handed the request — a live clock at the door would have refused it at
+    // every later index too.
+    const { venue, sequencer, backing } = setup();
+    const served = servedBy(sequencer);
+    venue.advance(50n);
+    venue.publishOp(backing.name, lockRequest(venue, backing, 20n, 0n, { timeout: 40n }));
+    venue.advance(NON_SERVICE.duration + 1n);
+    expect(unservedRequests(venue, backing, served)).toHaveLength(0);
+  });
+
+  it("a lock under a standing demand's hash is a squat the law refuses, not a request", () => {
+    const { venue, sequencer, backing } = setup();
+    const demand: DemandOp = {
+      backing,
+      holder: KEYS.alice,
+      quantity: 10n,
+      instant: 0n,
+      deadline: 5_000n,
+      nonce: 0n,
+    };
+    sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice));
+    const served = servedBy(sequencer);
+    venue.publishOp(backing.name, lockRequest(venue, backing, 1n, 1n, { attemptId: demandHash(demand) }));
+    venue.advance(NON_SERVICE.duration + 1n);
+    expect(unservedRequests(venue, backing, served)).toHaveLength(0);
+  });
+
+  it("a request the record itself has answered does not count: its attempt is committed at the venue", () => {
+    const { venue, sequencer, backing } = setup();
+    const served = servedBy(sequencer);
+    const one = lockRequest(venue, backing, 20n, 0n);
+    venue.publishOp(backing.name, one);
+    venue.publishCommit(signCommit(SECRETS.bob, one.attemptId));
+    venue.advance(NON_SERVICE.duration + 1n);
+    expect(unservedRequests(venue, backing, served)).toHaveLength(0);
+  });
+
+  it("the fold is a sequence: a lock the earlier transfer leaves unfunded is no request the operator could have served", () => {
+    // Tested one at a time the lock passes (Alice holds 100); folded behind
+    // her own transfer of 60 it does not, and "the operator could have served
+    // these" means in the order she signed them.
+    const { venue, sequencer, backing } = setup();
+    const served = servedBy(sequencer);
+    venue.publishOp(backing.name, request(backing, 60n, 0n));
+    venue.publishOp(backing.name, lockRequest(venue, backing, 95n, 1n));
+    venue.advance(NON_SERVICE.duration + 1n);
+    expect(unservedRequests(venue, backing, served)).toHaveLength(1);
   });
 });
