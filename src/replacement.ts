@@ -170,15 +170,20 @@ export interface Succession {
  * Walked forward from the backing itself, taking at each step the **earliest
  * USABLE** replacement that names the current link as its predecessor: the
  * earliest whose successor qualified — committed at or after its witnessing,
- * and strictly before any candidate at a strictly later index was witnessed.
- * Earliest still wins where it is alive (§C2, witnessing pins order: the one
- * the rule-holder published first is the one it chose first), but a successor
- * that never qualifies no longer ends the chain: its window closes the moment
- * the rule-holder names another, and the walk passes over it — so naming a
- * dead successor is recoverable, and re-naming the incumbent is the
- * rule-holder's revocation of a successor it regrets (the 2026-08-22 audit,
- * question 2). Nothing freezes, and nothing moves back: a window still open
- * holds the chain at the incumbent rather than being skipped.
+ * no later than the index at which the next distinct candidate at the link was
+ * witnessed, and with a force index no earlier than the incumbent's (a replay
+ * of a candidate's bytes is the same candidate at its first witnessing, so a
+ * stranger manufactures no boundary with the rule-holder's own signature).
+ * Earliest still wins
+ * where it qualified (§C2, witnessing pins order: the one the rule-holder
+ * published first is the one it chose first), but a successor that never
+ * qualifies no longer ends the chain: its window closes the moment the
+ * rule-holder names another, and the walk passes over it — so naming a dead
+ * successor is recoverable, and re-naming the incumbent is the rule-holder's
+ * revocation of a successor it regrets (the 2026-08-22 audit, question 2).
+ * The chain extends and no past read ever moves; what still ends the walk
+ * with the incumbent governing is the one candidate whose window is open —
+ * the last, uncommitted — and a malformed record (the cycle guard).
  *
  * A link takes force at the LATER of two indices, which is §C2's own two-stage
  * rule: the effective index it declares, and the first index at which the
@@ -220,58 +225,81 @@ export function successionOf(backing: Backing, venue: Venue): Succession[] {
     let link = backing.name;
     for (;;) {
       // **The earliest USABLE candidate at this link** — a dead successor does
-      // not end the chain (the 2026-08-22 audit, question 2; Bob's decision).
-      // The old walk took the earliest candidate outright and stopped wherever
-      // its successor never committed, so a second replacement at the same
-      // link was unreachable forever and the rule-holder could not recover
-      // from naming a dead successor (audit-B-3).
+      // not end the chain (the 2026-08-22 audit, question 2; Bob's decision:
+      // usable is "a link that committed before the next candidate at the same
+      // predecessor was witnessed"). The old walk took the earliest candidate
+      // outright and stopped wherever its successor never committed, so a
+      // second replacement at the same link was unreachable forever and the
+      // rule-holder could not recover from naming a dead successor
+      // (audit-B-3).
       //
-      // A candidate is passed over only once it is CONCLUSIVELY dead:
+      // A candidate's window is [its witnessing, the NEXT candidate's
+      // witnessing) — the next in the venue's own order, a sibling at the very
+      // same index included, so a same-index sibling leaves a ONE-INDEX
+      // window (the review round's first draft gave same-index candidates a
+      // shared window, and a later naming then unlocked one RETROACTIVELY,
+      // moving force at a past index — the very instability this rule exists
+      // to forbid). And the window closes only against a commitment STRICTLY
+      // AFTER its boundary's index: a qualification standing at the boundary's
+      // own index stands, since the boundary is judged against the record
+      // strictly before its index and must not kill what stood beside it —
+      // the tie goes against the party with the motive to close (slice 8's
+      // direction; the review round showed the other tie erasing a successor
+      // that had already taken over and served, orphaning its receipts). A
+      // candidate is passed over where it is conclusively decided:
       //   - it names the incumbent — not a handover, and never one ("the old
       //     attester's co-signatures stop counting" must never mean its own);
-      //     it still closes earlier windows below, which is the rule-holder's
-      //     one way to revoke a successor it regrets;
-      //   - or a candidate at a STRICTLY later index has been witnessed and
-      //     this one's first commitment did not land strictly before that —
-      //     the later replacement was made against a record in which this
-      //     successor had not qualified, the tie every publication reads
-      //     (slice 8). The moment the later candidate is witnessed, whether
-      //     this one qualified is fixed forever: that is what keeps every
-      //     reader's walk stable, and a dead link committing later changes
-      //     nothing anywhere.
+      //     as the next candidate it still bounds earlier windows, which is
+      //     the rule-holder's one way to revoke a successor it regrets;
+      //   - its first commitment (at or after its own witnessing — one made
+      //     before anyone named it cannot be the one §C2 asks for) landed
+      //     strictly after the next candidate's index, or never: the next
+      //     replacement was made against a record in which this successor had
+      //     not qualified;
+      //   - or its force index would precede the incumbent's (a rule-holder's
+      //     effective-index mistake): force is fixed once the commitment is,
+      //     so this too is decided, and a later candidate with an effective at
+      //     or past the incumbent's force can still recover the link.
+      // The last candidate uncommitted is merely undecided, and ends the walk
+      // with the incumbent governing: every window before it is closed, and
+      // its own is still open.
       //
-      // A candidate that is merely undecided — uncommitted, with no later
-      // candidate to close its window — HOLDS the chain here: the incumbent
-      // governs until the window is won or closed. Skipping it would hand
-      // force to a later candidate and take it back when the earlier one
-      // committed, which stability forbids; two candidates at one index share
-      // the moment for the same reason, and the first published holds it.
-      const candidates = witnessed
-        .filter((w) => compareBytes(w.replacement.predecessor, link) === 0)
-        .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+      // Once the next candidate is witnessed, whether this one qualified is
+      // fixed forever — and a candidate becomes usable only at its own
+      // commitment, never before any index a reader has already read — so
+      // the walk is stable: the chain extends, and no past read ever moves.
+      //
+      // Candidates are the DISTINCT replacements at this link, each at its
+      // FIRST witnessing: a replacement is one act of the rule-holder, and
+      // anyone may republish its bytes — dated by the replay, a stranger
+      // could manufacture a boundary and kill an honest successor's window
+      // with the rule-holder's own signature (found reviewing this slice).
+      const candidates: WitnessedReplacement[] = [];
+      {
+        const distinct = new Set<string>();
+        for (const w of witnessed
+          .filter((w) => compareBytes(w.replacement.predecessor, link) === 0)
+          .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))) {
+          const hash = bytesToHex(replacementHash(backing.name, w.replacement));
+          if (distinct.has(hash)) continue;
+          distinct.add(hash);
+          candidates.push(w);
+        }
+      }
       const incumbent = chain[chain.length - 1] as Succession;
-      let chosen: { at: bigint; successor: Uint8Array; effective: bigint; hash: Uint8Array; committed: bigint } | undefined;
+      let chosen: { successor: Uint8Array; hash: Uint8Array; from: bigint } | undefined;
       for (let i = 0; i < candidates.length && chosen === undefined; i++) {
         const candidate = candidates[i] as WitnessedReplacement;
         const successor = candidate.replacement.successor;
-        const boundary = candidates.find((later) => later.at > candidate.at)?.at;
         if (compareBytes(successor, incumbent.operator) === 0) continue;
-        // At or after the handover was witnessed: a commitment made before
-        // anyone named this successor cannot be the one §C2 asks for.
+        const boundary = candidates[i + 1]?.at;
         const committed = venue.firstCommitmentFor(successor, candidate.at);
-        if (committed === undefined || (boundary !== undefined && committed >= boundary)) {
-          // Dead where the window is closed; undecided — and the chain's end —
-          // where it is still open.
-          if (boundary !== undefined) continue;
-          return chain;
-        }
-        chosen = {
-          at: candidate.at,
-          successor,
-          effective: candidate.replacement.effective,
-          hash: replacementHash(backing.name, candidate.replacement),
-          committed,
-        };
+        if (committed === undefined || (boundary !== undefined && committed > boundary)) continue;
+        const from = candidate.replacement.effective > committed ? candidate.replacement.effective : committed;
+        // In force no earlier than the incumbent: a chain that went backwards
+        // would have two operators in force at one index.
+        if (from < incumbent.from) continue;
+        chosen = { successor, hash: replacementHash(backing.name, candidate.replacement), from };
       }
       if (chosen === undefined) return chain;
 
@@ -281,12 +309,7 @@ export function successionOf(backing: Backing, venue: Venue): Succession[] {
       if (seen.has(bytesToHex(chosen.hash))) return chain;
       seen.add(bytesToHex(chosen.hash));
 
-      const from = chosen.effective > chosen.committed ? chosen.effective : chosen.committed;
-      // In force no earlier than the incumbent was: a chain that went backwards
-      // would have two operators in force at one index.
-      if (from < incumbent.from) return chain;
-
-      chain.push({ operator: copyBytes(chosen.successor), from, link: copyBytes(chosen.hash) });
+      chain.push({ operator: copyBytes(chosen.successor), from: chosen.from, link: copyBytes(chosen.hash) });
       link = chosen.hash;
     }
   }, chain);
@@ -330,7 +353,12 @@ export function operatorsOf(backing: Backing, venue: Venue): Uint8Array[] {
 }
 
 /**
- * Whether this key is the successor the chain's tip names, and not yet in force.
+ * Whether this key is A successor named at the chain's tip, and not yet in
+ * force — live or already passed over: several candidates can be named at one
+ * link, and one whose window has closed still reads true here. That is a
+ * permission to prepare, deliberately: force is the chain's alone, so a
+ * passed-over candidate that registers, takes over and commits has co-signed
+ * noise and is refused at every door (`inForce`), harming nobody.
  *
  * §C2's two-stage handover has a gap between the two stages that somebody has to
  * live in: "it takes effect only from the first index at which it has published

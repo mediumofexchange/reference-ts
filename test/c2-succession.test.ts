@@ -159,14 +159,19 @@ describe("§C2: a dead successor does not end the chain — the walk takes the e
   // witnessed replacement at a link and stopped dead if its successor never
   // committed — a second replacement at the same link lost the earliest-wins
   // tie forever, so the rule-holder could not recover from naming a dead
-  // successor (audit-B-3). The walk passes over a candidate that is
-  // CONCLUSIVELY dead: one naming the incumbent (never a handover), or one
-  // whose first commitment did not land strictly before the next
-  // strictly-later candidate at the same link was witnessed. The moment that
-  // next candidate is witnessed, whether the earlier one qualified is fixed
-  // forever — which is what keeps every reader's walk stable. A candidate
-  // whose window is still open (uncommitted, nobody later named) holds the
-  // chain at the incumbent: undecided is not dead.
+  // successor (audit-B-3). A candidate's window runs from its witnessing to
+  // the index at which the next distinct candidate at the link is witnessed,
+  // that index INCLUDED: a qualification standing at the boundary's own index
+  // stands, since the boundary is judged against the record strictly before
+  // its index and must not kill what stood beside it — the tie goes against
+  // the party with the motive to close. A same-index sibling therefore leaves
+  // a one-index window, and a replayed replacement is the same candidate at
+  // its first witnessing (a stranger manufactures no boundary). The walk
+  // takes the earliest candidate that qualified in its window; one naming the
+  // incumbent never qualifies but still bounds; the last candidate
+  // uncommitted is undecided and holds the chain at the incumbent. Once the
+  // window is over, whether the candidate qualified is fixed forever — no
+  // past-index read ever moves.
 
   it("a second replacement at the link recovers from a successor that never commits (audit-B-3)", () => {
     const { venue, backing } = setup();
@@ -203,6 +208,44 @@ describe("§C2: a dead successor does not end the chain — the walk takes the e
     expect(isAnOperator(backing, venue, SUCCESSOR)).toBe(false);
   });
 
+  it("stability at a same-index tie: a later naming cannot move force at a past index", () => {
+    // The review round's finding, pinned as its fix: with a shared same-index
+    // window, a third naming at 10 closed the tie retroactively, and the
+    // operator in force AT INDEX 8 changed after the fact. The one-index
+    // window decides the tie as its index closes instead.
+    const { venue, backing } = setup();
+    at(venue, 5n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD, backing.name, 6n));
+    at(venue, 7n);
+    commitAs(venue, THIRD_SECRET);
+    at(venue, 9n);
+    const before = operatorAt(backing, venue, 8n);
+    expect(before).toEqual(THIRD);
+    at(venue, 10n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 10n));
+    expect(operatorAt(backing, venue, 8n)).toEqual(before);
+  });
+
+  it("a replayed replacement is the same act at its first witnessing: a stranger cannot manufacture a boundary with the rule-holder's own bytes", () => {
+    // Anyone may republish a witnessed replacement, and a candidate list dated
+    // by replays would let a stranger close an honest successor's window with
+    // a signature the rule-holder gave for something else (found reviewing
+    // this slice). Candidates are the DISTINCT replacements, each at its
+    // first witnessing.
+    const { venue, backing } = setup();
+    at(venue, 5n);
+    const old = replacementBy(backing, SECRETS.backer, THIRD, backing.name, 1000n);
+    venue.publishReplacement(backing.name, old);
+    at(venue, 800n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 800n));
+    at(venue, 900n);
+    venue.publishReplacement(backing.name, old); // the replay
+    at(venue, 950n);
+    commitAs(venue, SUCCESSOR_SECRET);
+    expect(operatorAt(backing, venue, 950n)).toEqual(SUCCESSOR);
+  });
+
   it("earliest usable is earliest: a successor that committed before the next candidate was witnessed keeps the chain", () => {
     const { venue, backing } = setup();
     at(venue, 5n);
@@ -217,9 +260,14 @@ describe("§C2: a dead successor does not end the chain — the walk takes the e
     expect(isAnOperator(backing, venue, THIRD)).toBe(false);
   });
 
-  it("the boundary is strict: a first commitment at the very index the next candidate is witnessed is too late", () => {
-    // The next replacement was made against a record in which this successor
-    // had not committed — the same tie every publication reads (slice 8).
+  it("a qualification standing at the boundary's own index stands: the tie cannot kill what stood beside it", () => {
+    // The boundary is judged against the record strictly before its index, so
+    // a commitment landing at that very index is not one it can see — and the
+    // tie goes against the party with the motive to close (slice 8's
+    // direction): the review round showed the other reading erasing a
+    // successor that had already taken over and served, orphaning every
+    // receipt it gave. Only a commitment strictly after the boundary's index
+    // is too late.
     const { venue, backing } = setup();
     at(venue, 5n);
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
@@ -228,8 +276,20 @@ describe("§C2: a dead successor does not end the chain — the walk takes the e
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD, backing.name, 10n)); // — the same index
     at(venue, 12n);
     commitAs(venue, THIRD_SECRET);
-    expect(operatorAt(backing, venue, 13n)).toEqual(THIRD);
-    expect(isAnOperator(backing, venue, SUCCESSOR)).toBe(false);
+    expect(operatorAt(backing, venue, 13n)).toEqual(SUCCESSOR);
+    expect(isAnOperator(backing, venue, THIRD)).toBe(false);
+    // One index later is too late.
+    const late = setup();
+    at(late.venue, 5n);
+    late.venue.publishReplacement(late.backing.name, replacementBy(late.backing, SECRETS.backer, SUCCESSOR, late.backing.name, 5n));
+    at(late.venue, 10n);
+    late.venue.publishReplacement(late.backing.name, replacementBy(late.backing, SECRETS.backer, THIRD, late.backing.name, 10n));
+    at(late.venue, 11n);
+    commitAs(late.venue, SUCCESSOR_SECRET); // strictly after the boundary
+    at(late.venue, 12n);
+    commitAs(late.venue, THIRD_SECRET);
+    expect(operatorAt(late.backing, late.venue, 13n)).toEqual(THIRD);
+    expect(isAnOperator(late.backing, late.venue, SUCCESSOR)).toBe(false);
   });
 
   it("naming the incumbent is not a handover, and no longer freezes the chain", () => {
@@ -263,6 +323,9 @@ describe("§C2: a dead successor does not end the chain — the walk takes the e
   });
 
   it("an undecided window holds the chain at the incumbent: uncommitted is not dead while nobody later is named", () => {
+    // The one open window is the last candidate's; every earlier one is
+    // closed. The claim here is the behaviour — the incumbent governs, for as
+    // long as it takes — not a separate mechanism.
     const { venue, backing } = setup();
     at(venue, 5n);
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
@@ -274,22 +337,91 @@ describe("§C2: a dead successor does not end the chain — the walk takes the e
     expect(operatorAt(backing, venue, 500n)).toEqual(SUCCESSOR);
   });
 
-  it("two candidates at one index share the moment: the first published holds the live window, and the chain waits for it", () => {
-    // The venue orders publications inside an index, and the walk prefers the
-    // earlier — but a window is closed only by a candidate at a strictly later
-    // index, so the second-published cannot take force while the first's
-    // window is open (a walk that skipped an uncommitted-but-live candidate
-    // would move BACK to it when it committed, which stability forbids).
+  it("two candidates at one index: the earlier's window is that one index, and the moment it closes the tie is decided", () => {
+    // A same-index sibling leaves the earlier candidate exactly its own index
+    // to qualify in; committing later than that is too late. Deciding the tie
+    // as the index closes is what stability costs: a shared window would be
+    // won later, retroactively (the test above).
     const { venue, backing } = setup();
     at(venue, 5n);
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD, backing.name, 6n));
     at(venue, 7n);
     commitAs(venue, THIRD_SECRET);
-    expect(operatorAt(backing, venue, 8n)).toEqual(KEYS.operator);
+    expect(operatorAt(backing, venue, 7n)).toEqual(THIRD);
+    // The first-published commits at last — dead since the moment of the tie.
     at(venue, 9n);
     commitAs(venue, SUCCESSOR_SECRET);
-    expect(operatorAt(backing, venue, 9n)).toEqual(SUCCESSOR);
+    expect(operatorAt(backing, venue, 8n)).toEqual(THIRD);
+    expect(operatorAt(backing, venue, 9n)).toEqual(THIRD);
+    expect(isAnOperator(backing, venue, SUCCESSOR)).toBe(false);
+  });
+
+  it("a recovered chain serves: the successor named after a dead one takes the state over and answers doors", () => {
+    const { venue, backing } = setup();
+    const incumbent = new Sequencer(SECRETS.operator, venue);
+    incumbent.register(backing, signBacking(SECRETS.backer, backing));
+    incumbent.submitIssue(
+      { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
+      ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
+    );
+    const commitment = incumbent.commit();
+    const served = { snapshots: incumbent.snapshot(), commitment };
+    at(venue, 5n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
+    // The named successor never commits; the rule-holder names another.
+    at(venue, 10n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD, backing.name, 10n));
+    const heir = new Sequencer(THIRD_SECRET, venue);
+    heir.register(backing, signBacking(SECRETS.backer, backing));
+    heir.takeOver(backing, served);
+    heir.commit(); // at 10: in force
+    at(venue, 11n);
+    const move = { backing, from: KEYS.alice, to: KEYS.bob, quantity: 40n, nonce: 0n };
+    const receipt = heir.submitTransfer(
+      move,
+      ed25519.sign(encodeTransferMessage(backing.name, KEYS.alice, KEYS.bob, 40n, 0n), SECRETS.alice),
+    );
+    expect(receipt.position).toBe(1n);
+    expect(heir.balance(backing, KEYS.bob)).toBe(40n);
+    expect(operatorAt(backing, venue, 11n)).toEqual(THIRD);
+    expect(isAnOperator(backing, venue, SUCCESSOR)).toBe(false);
+  });
+
+  it("a passed-over candidate may prepare and never serve: named is a permission, force is the chain's alone", () => {
+    // isNamedSuccessor stays true for a candidate whose window has closed —
+    // deliberately, since narrowing it buys nothing: what it permits is
+    // registering, taking the committed state over and committing, all of
+    // which a stranger could watch happen, and none of which is force. Its
+    // commitments are noise, and every door refuses it.
+    const { venue, backing } = setup();
+    const incumbent = new Sequencer(SECRETS.operator, venue);
+    incumbent.register(backing, signBacking(SECRETS.backer, backing));
+    incumbent.submitIssue(
+      { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
+      ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
+    );
+    const commitment = incumbent.commit();
+    const served = { snapshots: incumbent.snapshot(), commitment };
+    at(venue, 5n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
+    at(venue, 8n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD, backing.name, 8n));
+    // The passed-over candidate prepares in full — after its window closed.
+    at(venue, 9n);
+    const dead = new Sequencer(SUCCESSOR_SECRET, venue);
+    dead.register(backing, signBacking(SECRETS.backer, backing));
+    dead.takeOver(backing, served);
+    dead.commit(); // noise: a commitment by a key the chain never seats
+    // The heir takes force regardless, and the dead candidate serves nothing.
+    at(venue, 12n);
+    commitAs(venue, THIRD_SECRET);
+    expect(operatorAt(backing, venue, 12n)).toEqual(THIRD);
+    expect(isAnOperator(backing, venue, SUCCESSOR)).toBe(false);
+    const move = { backing, from: KEYS.alice, to: KEYS.bob, quantity: 10n, nonce: 0n };
+    expect(() =>
+      dead.submitTransfer(move, ed25519.sign(encodeTransferMessage(backing.name, KEYS.alice, KEYS.bob, 10n, 0n), SECRETS.alice)),
+    ).toThrow(SequencerError);
   });
 });
 

@@ -16,6 +16,91 @@ Format:
 
 ---
 
+## 2026-08-25 - Slice 29: a dead successor does not end the chain
+
+**Question:** the audit's question 2, decided by Bob: "the chain walk passes
+through a link that never took force, with a stable definition of 'usable' (a
+link that committed before the next candidate at the same predecessor was
+witnessed). Per backing, since the chain is." `successionOf` took the earliest
+witnessed replacement at a link and stopped wherever its successor never
+committed — a second replacement at the same link lost the earliest-wins tie
+forever, so the rule-holder could not recover from naming a dead successor
+(audit-B-3) — and a replacement naming the incumbent froze the chain the same
+way, since the walk hard-stopped at it.
+
+**The rule, as it survived its own review round** (the first draft shipped an
+unstable version — below — and the round found it):
+
+- **The walk takes the earliest USABLE candidate at each link.** Candidates are
+  the DISTINCT replacements naming the link, each at its FIRST witnessing — a
+  replay of a candidate's bytes is the same candidate, or a stranger could
+  manufacture a window-closing boundary with the rule-holder's own signature,
+  a free and repeatable succession denial (found by the round; pinned).
+- **A candidate's window runs from its witnessing to the index at which the
+  next candidate at the link is witnessed, that index INCLUDED.** It is usable
+  iff its successor's first commitment at or after its witnessing landed inside
+  the window. The tie at the boundary's own index goes to the standing
+  qualification: the boundary is judged against the record strictly before its
+  index (slice 8) and must not kill what stood beside it — the round showed
+  the other tie erasing a successor that had already taken over and served,
+  orphaning every receipt it gave, on one publication by the party with the
+  motive. A same-index sibling therefore leaves the earlier candidate exactly
+  one index to qualify in.
+- **Stability: no past-index read ever moves.** Once a window is over, whether
+  its candidate qualified is fixed forever; a candidate becomes usable only at
+  its own commitment, never before an index a reader already read; reads at
+  the venue's current index are provisional while the index still fills, which
+  the codebase already says of adoption. The first draft gave same-index
+  siblings a SHARED window with the first-published holding it — and a third
+  naming then closed the tie retroactively, unlocking the sibling with a force
+  index in the past: `operatorAt(8)` changed after the fact, flipping
+  `isSilent` against a punctual operator, giving a stale demand gap force, and
+  lapsing era-0 receipts, all for one free publication (both angles found it,
+  proven by runs). The one-index window decides the tie as its index closes
+  instead.
+- **A candidate naming the incumbent never qualifies but still bounds** — not
+  a handover ("the old attester's co-signatures stop counting" must never mean
+  its own), and as the next candidate it closes earlier windows: the
+  rule-holder's one lever against a named successor it regrets, bought with a
+  publication it would make anyway. The old walk hard-stopped at one, freezing
+  the chain — the same dead end by another door; pinned.
+- **A candidate whose force index would precede the incumbent's is passed
+  over, not a wall.** The old `return` froze the link; force is fixed once the
+  commitment is, so the corner is decided, and a later candidate with an
+  effective at or past the incumbent's force recovers it. What remains the
+  rule-holder's own signed term: a successor with a far-future effective that
+  qualified is chosen and unrevokable, and nothing serves before its force —
+  recorded, with the recovery being a further candidate ahead of it.
+- The last candidate uncommitted is merely undecided and ends the walk with
+  the incumbent governing. And `isNamedSuccessor` deliberately still reads a
+  conclusively passed-over candidate as named: it is a permission to prepare —
+  register, take over, commit — and force is the chain's alone; its
+  commitments are noise and every door refuses it (`inForce`). Pinned, with
+  the recovered chain serving end-to-end beside it.
+
+**The review round** (two Opus angles: the walk adversarially; tests as claims
+and docs — Opus back after yesterday's outage). Besides the instability and
+the erasure above: the replay denial; the frozen from-corner; a mutation table
+over ten variants (two guards — the cycle stop and, before the fix, the
+from-corner — are termination insurance no test can falsify, recorded);
+a first-draft test that claimed the undecided-hold and could not exercise it
+(reworded to the behaviour, with the mechanism now carried by the plain loop);
+and two coverage gaps now walked — a recovered chain serving end-to-end, and a
+passed-over candidate preparing in full and serving nothing. Recorded, not
+patched, both pre-existing: `isRewrittenHistory` ranks a re-appointed
+operator's states by its first term only (re-appointment now walks cleanly, so
+the miss is reachable; it fails toward missing a fault); and a commitment
+published earlier WITHIN the naming index qualifies a successor, slice 13's
+at-or-after read at index granularity.
+
+**Spec change: one sentence proposed, not made.** §C2's replacement paragraph
+orders competing replacements nowhere; the implementation's rule is now: *"Two
+replacements naming one predecessor resolve to the earliest whose successor
+qualified — committed no later than the index at which the next was witnessed
+— so naming a successor that never commits does not end the chain, and
+re-naming the incumbent revokes a successor not yet in force."* Bob's call
+whether it goes upstream.
+
 ## 2026-08-24 - Slice 28b: the receipt names its era, and the era is the backing's own
 
 **Question:** the second half of Bob's audit item 1, split off in 28a and queued:
