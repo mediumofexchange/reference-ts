@@ -16,6 +16,45 @@ Format:
 
 ---
 
+## 2026-08-25 - Session close: the audit queue is done; what the next instance picks up
+
+**Decision (Bob, 2026-08-25):** the 2026-08-22 audit queue is complete —
+slices 28a, 28b, 29, 30, 28, each with its Opus review round, all merged, 784
+tests green. Both repos pushed at Bob's instruction (mfp-reference main;
+money-from-first-principles 589316a..6e5e4ff, the six spec sentences the
+slices earned — pointers added to each slice's entry above).
+
+**Queued for the next instance, in Bob's words "todos for another instance":**
+
+1. **Locks keyed by (attempt, holder).** Open since 24c, resurfaced by every
+   review since: it ends the whole squat family — the leg-slot squat, the
+   pre-lock demand refusal, the acceptance-vs-leg slot collision — and would
+   let `demandStands` and the "one slot, two locks" filing refusals be
+   deleted, doors and counts agreeing by the law alone. A law change: hash
+   keys in LedgerState, signerOf resolution, the hash-sharing rule and
+   replays all move. Its own slice, tests first.
+2. **`commit()` roots only the backings the operator is in force for.** The
+   root cause behind slice 28's settledInPart false accusation (fixed
+   reader-side with the pen-holder gate) and behind 28a's recorded wart that
+   a retired operator's commitments root handed-over logs (isRewrittenHistory
+   then names the heir). One mechanism would replace both patches; decide
+   what a commitment may carry, and what takeOver inherits, before touching
+   commit(). See the slice 28 entry's review round.
+3. **The one-door refactor.** Every slice pays the nine-doors tax (shape →
+   caughtUp → repeat → inForce → refusals → submit, hand-copied per door);
+   one gate asked by all doors would make the next law change one edit.
+   Standing offer, never ruled on — ask Bob before starting.
+4. **CLAUDE.md restructure.** Short rules in CLAUDE.md, reasoning moved to
+   DECISIONS; the file has grown past quick reference. Standing offer, never
+   ruled on — ask Bob before starting.
+
+Residuals worth re-reading before any of these: the slice 28 entry's list
+(the grade-suppression chase, the tail-shielded squat, settledInPart's
+absence-has-no-prefix dodge), slice 30's clockless-reservation misses, and
+slice 29's far-future-effective corner.
+
+**Spec change:** the six above, made and pushed; nothing further proposed.
+
 ## 2026-08-25 - Slice 28: unserved lock requests, and two set faults made provable
 
 **Question:** the last of the queue Bob set in the 2026-08-22 audit, and slice
@@ -128,7 +167,10 @@ that mattered, every one proven by a run before it was fixed:
   `accompanimentOf` answers "unreadable" — a fault predicate's conservative
   side points the other way, and both docs now say which way and why.
 
-**Spec change:** none made. Two candidates for Bob: §C2b could name the lock
+**Spec change:** *[Both made 2026-08-25, at Bob's instruction:
+money-from-first-principles@6e5e4ff (the lock request's gates) and @ec60e8c
+(one commitment shows the whole settlement or none), with @b5dfa8a carrying
+the set-clause sentence they lean on.]* The candidates as recorded: §C2b could name the lock
 request beside the transfer in the non-service clause's own text (one
 sentence, "a lock request naming the declared decision venue is the same
 object, servable while its timeout stands"); §C3's settlement paragraph could
@@ -211,7 +253,8 @@ fixes and a law change:
   pinned; the two structural mutations (boundary, dropped replay) re-run and
   caught.
 
-**Spec change:** proposed, not made — §C3's presentation section reads
+**Spec change:** *[Made 2026-08-25 in money-from-first-principles@9fde8cd,
+at Bob's instruction.]* As recorded: §C3's presentation section reads
 dishonour from the demand record alone. Candidate sentence: *"Where P pays in
 claims, dishonour is read across both records: a demand past its deadline with
 no acceptance whose reserved payout stood to that acceptance's own deadline.
@@ -295,7 +338,8 @@ the miss is reachable; it fails toward missing a fault); and a commitment
 published earlier WITHIN the naming index qualifies a successor, slice 13's
 at-or-after read at index granularity.
 
-**Spec change: one sentence proposed, not made.** §C2's replacement paragraph
+**Spec change: one sentence proposed** *[made 2026-08-25 in
+money-from-first-principles@589316a, at Bob's instruction]***.** §C2's replacement paragraph
 orders competing replacements nowhere; the implementation's rule is now: *"Two
 replacements naming one predecessor resolve to the earliest whose successor
 qualified — committed no later than the index at which the next was witnessed
@@ -441,8 +485,10 @@ hand a successor a torn set BY CONSTRUCTION in the committed state it serves —
 the same class as the recorded stale-root warts, bounded by
 `isRewrittenHistory`.
 
-**Spec change:** none made beyond the four sentences landed 2026-08-24 (the 28a
-entry points at them). Two candidates recorded for Bob: the set rule — "a
+**Spec change:** *[Both candidates made 2026-08-25, at Bob's instruction:
+money-from-first-principles@b5dfa8a (the set spans one clause) and @1ff751a
+(the receipt binds to the commitment it stood on).]* Beyond the four sentences
+landed 2026-08-24 (the 28a entry points at them), two candidates were recorded: the set rule — "a
 presentable set spans one silence clause" — is an implementation-forced
 constraint on terms the paper could state beside §C3's single-phase boundary;
 and the receipt's era — §C2's "witnessed order: a receipt binds an operation to
