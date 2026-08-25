@@ -15,10 +15,10 @@
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { paysInClaims, backingName, type Backing } from "./backing.js";
 import { legMismatch } from "./presentation.js";
-import { acceptanceIsLive, lockIsLive } from "./ledger.js";
+import { acceptanceIsLive, isDishonoured, lockIsLive, replayLog } from "./ledger.js";
 import { compareBytes, isValidQuantity } from "./bytes.js";
 import { type Terms } from "./closure.js";
-import { type ServedState } from "./commitment.js";
+import { committedLogFor, type ServedState } from "./commitment.js";
 import { replayServedState } from "./recovery.js";
 import { answering, type Venue } from "./venue.js";
 
@@ -161,5 +161,95 @@ export function payoutOf(
     const now = venue.witnessedIndex();
     if (!acceptanceIsLive(demand, now) || !lockIsLive(lock, now)) return "unreserved";
     return "reserved";
+  }, "unreadable");
+}
+
+/**
+ * What a standing demand's silence means, read across the served state — the
+ * audit's question 3, decided by Bob: where P pays in claims, dishonour is the
+ * branch where no acceptance WITH ITS PAYOUT RESERVED answered.
+ *
+ *   - `dishonoured` the demand is past its deadline with no live answer, and
+ *                   no acceptance ever stood with the payout reserved through
+ *                   its own window. The backer's visible failure (§C3).
+ *   - `lapsed`      an acceptance stood, its payout reserved with a timeout at
+ *                   or past its own deadline, and the holder let it expire.
+ *                   The claims were payable the whole window; not releasing
+ *                   was the holder's own choice, and reading it as the
+ *                   backer's failure would let a holder manufacture dishonour
+ *                   by filing and walking away.
+ *   - `pending`     the demand is not past its deadline, or a live acceptance
+ *                   stands. Nothing has failed yet.
+ *   - `unreadable`  the state is not this backing's operator's, the demand is
+ *                   not standing in it, or the paying backing's terms or log
+ *                   are not to hand.
+ *
+ * **The law's `isDishonoured` stays blind to legs, deliberately** — it reads
+ * one record, and the paying lock lives in another backing's state. Where P
+ * pays outside the claim layer there is nothing to reserve, and the record is
+ * the whole answer: an expired acceptance is dishonour there, as §C3 reads it.
+ * Where P pays in claims, this reader refines the true branch the way
+ * `accompanimentOf` refines a demand's standing: across the served state, on
+ * the venue's clock, with the paying backing's terms from a resolver whose
+ * every answer is checked against the name asked for.
+ *
+ * **The reservation is read from the paying LOG, not the door.** An honest
+ * door only takes an acceptance with its paying lock beside it — but a served
+ * log comes from an operator with a motive, and the law replays an acceptance
+ * without ever seeing legs. So each logged acceptance counts only if the
+ * paying log holds a lock under the demand's hash, with the set's terms, whose
+ * timeout reaches that acceptance's own deadline (`payoutOf` at the
+ * acceptance's own deadline, as the decision put it).
+ *
+ * A verifier: anything malformed is a question that cannot be answered rather
+ * than a throw, and a venue's refusal propagates.
+ */
+export type Dishonour = "dishonoured" | "lapsed" | "pending" | "unreadable";
+
+export function dishonourOf(
+  backing: Backing,
+  venue: Venue,
+  terms: Terms,
+  served: ServedState,
+  demandHash: Uint8Array,
+): Dishonour {
+  return answering(() => {
+    const committed = committedLogFor(backing, venue, served);
+    if (committed === undefined || committed.kind === "dropped") return "unreadable";
+    const head = replayLog(backing, committed.opLog);
+    if (head === undefined) return "unreadable";
+    const demand = head.demands.get(bytesToHex(demandHash));
+    if (demand === undefined) return "unreadable";
+    if (!isDishonoured(demand, venue.witnessedIndex())) return "pending";
+    if (!paysInClaims(backing.payout)) return "dishonoured";
+    const paying = terms(backing.payout.backing);
+    if (paying === undefined) return "unreadable";
+    if (compareBytes(backingName(paying), backing.payout.backing) !== 0) return "unreadable";
+    const payingLog = committedLogFor(paying, venue, served);
+    if (payingLog === undefined || payingLog.kind === "dropped") return "unreadable";
+    const want = {
+      quantity: demand.quantity * backing.payout.perUnit,
+      holder: backing.obligor,
+      beneficiary: demand.holder,
+      converter: demand.holder,
+    };
+    const reservedThrough = (deadline: bigint): boolean =>
+      payingLog.opLog.some(
+        (entry) =>
+          entry.kind === "lock" &&
+          compareBytes(entry.attemptId, demandHash) === 0 &&
+          legMismatch(entry, want) === undefined &&
+          entry.timeout >= deadline,
+      );
+    for (const entry of committed.opLog) {
+      if (
+        entry.kind === "acceptance" &&
+        compareBytes(entry.demandHash, demandHash) === 0 &&
+        reservedThrough(entry.deadline)
+      ) {
+        return "lapsed";
+      }
+    }
+    return "dishonoured";
   }, "unreadable");
 }
