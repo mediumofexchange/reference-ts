@@ -167,7 +167,7 @@ function surface() {
     ["isDoublePosition", () => isDoublePosition(backing, refusing, served, receipt, receipt)],
     ["isRewrittenHistory", () => isRewrittenHistory(backing, refusing, served, other)],
     ["withdrawnAgainstCommit", () => withdrawnAgainstCommit(backing, refusing, served)],
-    ["settledInPart", () => settledInPart(backing, refusing, () => paying, served, new Uint8Array(32))],
+    ["settledInPart", () => settledInPart(paying, refusing, () => backing, served, new Uint8Array(32))],
     ["isAnOperator", () => isAnOperator(backing, refusing, KEYS.operator)],
     ["isNamedSuccessor", () => isNamedSuccessor(backing, refusing, KEYS.carol)],
     ["operatorsOf", () => operatorsOf(backing, refusing)],

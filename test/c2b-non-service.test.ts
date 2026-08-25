@@ -13,6 +13,7 @@ import {
 } from "../src/presentation.js";
 import { type PublishedOp } from "../src/oplog.js";
 import { isNonServing, isSilent, unservedRequests } from "../src/recovery.js";
+import { VenueError } from "../src/venue.js";
 import { Sequencer } from "../src/sequencer.js";
 import { LocalVenue } from "../src/venue.js";
 import { KEYS, SECRETS } from "./support.js";
@@ -414,7 +415,7 @@ describe("§C3: a lock request left unserved is §C2b's non-service object", () 
     expect(unservedRequests(venue, backing, served)).toHaveLength(0);
   });
 
-  it("a lock that could never have been served does not count: its timeout was spent at its witnessing", () => {
+  it("a lock that could never have been served does not count: its timeout was spent before its witnessing", () => {
     // The law's own refusal, asked at the one index the operator was first
     // handed the request — a live clock at the door would have refused it at
     // every later index too.
@@ -424,6 +425,133 @@ describe("§C3: a lock request left unserved is §C2b's non-service object", () 
     venue.publishOp(backing.name, lockRequest(venue, backing, 20n, 0n, { timeout: 40n }));
     venue.advance(NON_SERVICE.duration + 1n);
     expect(unservedRequests(venue, backing, served)).toHaveLength(0);
+  });
+
+  it("a lock whose timeout IS its witnessing index was never servable either: the law's boundary is at-or-before", () => {
+    const { venue, sequencer, backing } = setup();
+    const served = servedBy(sequencer);
+    venue.advance(50n);
+    venue.publishOp(backing.name, lockRequest(venue, backing, 20n, 0n, { timeout: 50n }));
+    venue.advance(NON_SERVICE.duration + 1n);
+    expect(unservedRequests(venue, backing, served)).toHaveLength(0);
+  });
+
+  it("a lock outlived by the wait stops counting: the door refuses an expired lock at every index in the band", () => {
+    // Found reviewing this slice: the TIME gate was asked only at witnessing,
+    // so m one-unit locks with short timeouts fired the grade against an
+    // operator with no lawful move for the rest of W. The holder's own
+    // declared term bounds the accusation, as a demand's deadline does — and
+    // the consequence, accepted knowingly: an operator that stalls a lock
+    // past its own timeout escapes this count for that request.
+    const { venue, sequencer, backing } = setup();
+    const served = servedBy(sequencer);
+    venue.publishOp(backing.name, lockRequest(venue, backing, 20n, 0n, { timeout: 15n }));
+    venue.advance(14n); // in the band (age > 10), one index inside the timeout
+    expect(unservedRequests(venue, backing, served)).toHaveLength(1);
+    venue.advance(1n); // the timeout's own index: at-or-before is spent
+    expect(unservedRequests(venue, backing, served)).toHaveLength(0);
+  });
+
+  it("a lock reserves its units in the fold: the transfer behind it is no longer servable", () => {
+    // The mirror of "the fold is a sequence" one arm over: tested one at a
+    // time the transfer passes (Alice holds 100); folded behind her own lock
+    // of 60 it does not.
+    const { venue, sequencer, backing } = setup();
+    const served = servedBy(sequencer);
+    venue.publishOp(backing.name, lockRequest(venue, backing, 60n, 0n));
+    venue.publishOp(backing.name, request(backing, 50n, 1n));
+    venue.advance(NON_SERVICE.duration + 1n);
+    expect(unservedRequests(venue, backing, served)).toHaveLength(1);
+  });
+
+  it("a demand standing on another backing claims no slot here: the door serves the lock, and the count agrees", () => {
+    // Found reviewing this slice: the squat refusal scanned the whole book,
+    // so a one-unit demand on X made a bare lock on Y unservable at the door
+    // while Y's count — a one-backing reader — counted it: a manufactured
+    // grade. The slot a leg or the payout must take exists only on the set's
+    // own backings, and the refusal now reaches exactly as far as the set.
+    const { venue, sequencer, backing } = setup();
+    const other = makeBacking({
+      obligor: KEYS.backer,
+      payout: { thing: "USD", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: { setting: "transparent", operator: KEYS.operator },
+    });
+    sequencer.register(other, signBacking(SECRETS.backer, other));
+    sequencer.submitIssue(
+      { backing: other, recipient: KEYS.alice, quantity: 10n, nonce: 0n },
+      ed25519.sign(encodeIssuanceMessage(other.name, KEYS.alice, 10n, 0n), SECRETS.backer),
+    );
+    const demand: DemandOp = {
+      backing: other,
+      holder: KEYS.alice,
+      quantity: 1n,
+      instant: 0n,
+      deadline: 5_000n,
+      nonce: 0n,
+    };
+    sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice));
+    const served = servedBy(sequencer);
+    const one = lockRequest(venue, backing, 20n, 0n, { attemptId: demandHash(demand) });
+    venue.publishOp(backing.name, one);
+    venue.advance(NON_SERVICE.duration + 1n);
+    expect(unservedRequests(venue, backing, served)).toHaveLength(1);
+    const op: LockOp = {
+      backing,
+      attemptId: one.attemptId,
+      holder: one.holder,
+      beneficiary: one.beneficiary,
+      quantity: one.quantity,
+      timeout: one.timeout,
+      decisionVenue: one.decisionVenue,
+      parties: [...one.parties],
+      nonce: one.nonce,
+    };
+    sequencer.submitLock(op, one.signature); // the door agrees: no slot here
+    venue.advance(1n); // one commitment per witnessed index
+    expect(unservedRequests(venue, backing, servedBy(sequencer))).toHaveLength(0);
+  });
+
+  it("the venue's commit read sits behind the law: unsigned noise cannot make the count unanswerable on a commits-refusing view", () => {
+    // Found reviewing this slice: the commit read ran in the filter, before
+    // the signature check, so one unsigned junk lock took the whole count —
+    // transfers included — down with a VenueError on a view that does not
+    // sync commits (the walkGap residual, made reachable). Behind the law,
+    // noise dies at the signature; a LAWFUL lock's commit read still
+    // propagates the refusal, as every venue read must.
+    class CommitsRefusing extends LocalVenue {
+      override commitsFor(): never {
+        throw new VenueError("this view does not sync commits");
+      }
+    }
+    const venue = new CommitsRefusing();
+    const backing = makeBacking({
+      obligor: KEYS.backer,
+      payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: {
+        setting: "transparent",
+        operator: KEYS.operator,
+        silence: { noCommitmentDuration: 1000n, challengeWindow: 5n },
+        nonService: NON_SERVICE,
+      },
+    });
+    const sequencer = new Sequencer(SECRETS.operator, venue);
+    sequencer.register(backing, signBacking(SECRETS.backer, backing));
+    sequencer.submitIssue(
+      { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
+      ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
+    );
+    const served = servedBy(sequencer);
+    venue.publishOp(backing.name, request(backing, 10n, 0n));
+    venue.publishOp(backing.name, request(backing, 20n, 1n));
+    const junk = lockRequest(venue, backing, 20n, 2n);
+    venue.publishOp(backing.name, { ...junk, signature: new Uint8Array(64) });
+    venue.advance(NON_SERVICE.duration + 1n);
+    expect(unservedRequests(venue, backing, served)).toHaveLength(2);
+    venue.publishOp(backing.name, lockRequest(venue, backing, 20n, 2n));
+    venue.advance(NON_SERVICE.duration + 1n); // into the lawful lock's own band
+    expect(() => unservedRequests(venue, backing, served)).toThrow(VenueError);
   });
 
   it("a lock under a standing demand's hash is a squat the law refuses, not a request", () => {

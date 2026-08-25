@@ -206,10 +206,14 @@ export function isOverdue(venue: Venue, backing: Backing): boolean {
  *     three refusals mirrored: it names this decision venue (one naming none
  *     is a leg and comes only with its set; one naming another venue is not
  *     watched here), its attempt is not already committed at the venue (the
- *     record itself answered that one), and — the law's own TIME rule, asked
- *     at the one index the operator was first handed it — its timeout was not
- *     already spent at its witnessing, since a door with a live clock would
- *     have refused it then and at every later index too. The refusal aggregate
+ *     record itself answered that one), and its timeout is not spent — at its
+ *     witnessing (the law's TIME rule, asked at the one index the operator was
+ *     first handed it) NOR by the reading index, since a door with a live
+ *     clock refuses an expired lock at every index in the counting band too,
+ *     and a one-sided gate let m short-timeout locks fire the grade against an
+ *     operator with no lawful move. Both venue-and-timeout exclusions are
+ *     asked after the law's fold accepts the entry, so unsigned noise dies at
+ *     the signature check and never reaches the venue. The refusal aggregate
  *     (m', W') is NOT this count: its object is a signed refusal to prepare,
  *     and prepare-decide-commit is an extension (see DECISIONS, slice 28).
  *   - **It is not in the committed log.** Served means served, and a request the
@@ -278,9 +282,7 @@ export function unservedRequests(
     // thing that separates two signed at one nonce (§C2, witnessing pins order).
     const isRequest = (w: WitnessedOp): w is WitnessedRequest =>
       w.op.kind === "transfer" ||
-      (w.op.kind === "lock" &&
-        compareBytes(w.op.decisionVenue, venue.id) === 0 &&
-        witnessedCommitFor(venue, w.op) === undefined);
+      (w.op.kind === "lock" && compareBytes(w.op.decisionVenue, venue.id) === 0);
     const candidates = venue
       .publishedOpsFor(backing.name)
       .filter(isRequest)
@@ -319,6 +321,25 @@ export function unservedRequests(
       // them, which is the same mistake as testing them one at a time.
       const age = now - witnessed.at;
       if (age <= terms.duration || age > terms.window) continue;
+      if (witnessed.op.kind === "lock") {
+        // Applied, and then two exclusions the transfer arm has no analogue
+        // of — both asked here, after the law, so unsigned junk died at the
+        // signature check and never reached the venue's commit read (found
+        // reviewing this slice: a commits-refusing view threw on noise).
+        //
+        // A timeout spent by the reading index: the door refuses this lock at
+        // EVERY index in the counting band, not only at its witnessing — the
+        // gate at the fold's clock is one-sided without this (found reviewing
+        // this slice: m one-unit locks with short timeouts fired the grade
+        // against an operator with no lawful move). The holder's own declared
+        // term bounds the accusation, as a demand's deadline does — and the
+        // consequence, accepted knowingly: an operator that stalls a lock past
+        // its own timeout escapes this count for that request.
+        if (witnessed.op.timeout <= now) continue;
+        // An attempt the venue's record already answered: the door's own
+        // "a lock needs a fresh id".
+        if (witnessedCommitFor(venue, witnessed.op) !== undefined) continue;
+      }
       standing.push(witnessed);
     }
     return standing;

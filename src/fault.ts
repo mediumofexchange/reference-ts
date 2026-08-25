@@ -68,7 +68,7 @@ import { type Terms } from "./closure.js";
 import { compareBytes, copyBytes } from "./bytes.js";
 import { verifySignatureStrict } from "./keys.js";
 import { applyEntry, emptyState, replayLog, signerFromTerms } from "./ledger.js";
-import { NO_DECISION_VENUE } from "./presentation.js";
+import { demandHash as hashOfDemand, legMismatch, type LegTerms } from "./presentation.js";
 import { committedInTime } from "./recovery.js";
 import { opMessageOfEntry, type PublishedOp } from "./oplog.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
@@ -287,7 +287,7 @@ export function isDoublePosition(
  * it means per-term sequence windows, which is a lot of arithmetic for a case
  * that costs a missed fault rather than a wrong one. See DECISIONS.md.
  */
-function droppedWhileInForce(
+function committedWhileInForce(
   chain: readonly Succession[],
   venue: Venue,
   operator: Uint8Array,
@@ -327,6 +327,7 @@ export function isRewrittenHistory(
     const later = secondIsEarlier ? first : second;
     // Kept in step with the swap, because whether a DROP is a fault turns on who
     // signed it. A log comparison does not care.
+    // (committedWhileInForce is the read below; settledInPart asks it too.)
     const laterOperator = secondIsEarlier ? a.commitment.operator : b.commitment.operator;
 
     // **A backing that vanishes is a log that shrank to nothing**, so it is this
@@ -343,7 +344,7 @@ export function isRewrittenHistory(
       // drop this one as a matter of obedience. Naming that a fault accuses a
       // retired party for doing what the handover told it to, which is the shape
       // slice 9 found twice and slice 14 once more.
-      return droppedWhileInForce(chain, venue, laterOperator, later.sequence);
+      return committedWhileInForce(chain, venue, laterOperator, later.sequence);
     }
     if (earlier.kind === "dropped") return false;
     if (later.opLog.length < earlier.opLog.length) return true;
@@ -376,9 +377,19 @@ export function isRewrittenHistory(
  * Read on the venue the lock names, as every commit read is: a lock naming
  * another venue is one leg this reader cannot judge — the gap fold's own
  * conservative side — and a withdrawal that resolves to a demand is the holder
- * walking away, which no commit reaches. The whole log must replay: the proof
- * is an entry in a lawful history this operator committed, not a stray byte in
- * a garbage one.
+ * walking away, which no commit reaches.
+ *
+ * **The proof stands on the lawful prefix.** The entries up to and including
+ * the withdrawal are this operator's committed, replayable history; what
+ * follows cannot buy the fault back. Requiring the whole log to replay handed
+ * the operator a dodge priced at one garbage entry — its state went
+ * unauthentic, which nothing names, while the fault went unprovable (found
+ * reviewing this slice).
+ *
+ * **The proof names the operator of the book it stands in**, and the door
+ * keeps that honest: takeOver refuses a log carrying this artefact, so an
+ * heir never inherits its predecessor's withdrawal unknowingly — one that
+ * carries it anyway chose to commit it, and §15 prices the key's history.
  */
 export function withdrawnAgainstCommit(
   backing: Backing,
@@ -390,25 +401,33 @@ export function withdrawnAgainstCommit(
     if (committed === undefined || committed.kind === "dropped") return undefined;
     const state = emptyState();
     let proven: Uint8Array | undefined;
-    try {
-      for (const entry of committed.opLog) {
-        if (entry.kind === "withdrawal") {
-          // Read before the law applies it, since applying is what removes it.
-          const lock = state.locks.get(bytesToHex(entry.demandHash));
-          if (
-            proven === undefined &&
-            lock !== undefined &&
-            compareBytes(lock.decisionVenue, NO_DECISION_VENUE) !== 0 &&
-            compareBytes(lock.decisionVenue, venue.id) === 0 &&
-            committedInTime(venue, lock)
-          ) {
-            proven = copyBytes(lock.attemptId);
-          }
+    for (const entry of committed.opLog) {
+      if (entry.kind === "withdrawal") {
+        // Read before the law applies it, since applying is what removes it.
+        // One compare carries the venue scoping: a set leg names
+        // NO_DECISION_VENUE, which is no venue's id — and witnessedCommitFor
+        // answers a leg with undefined besides.
+        const lock = state.locks.get(bytesToHex(entry.demandHash));
+        if (
+          proven === undefined &&
+          lock !== undefined &&
+          compareBytes(lock.decisionVenue, venue.id) === 0 &&
+          committedInTime(venue, lock)
+        ) {
+          proven = copyBytes(lock.attemptId);
         }
-        applyEntry(state, backing, entry, undefined);
       }
-    } catch {
-      return undefined;
+      // The catch guards ONLY the law's application, which takes no venue and
+      // so can never raise a venue's refusal — the old whole-fold catch ate
+      // the one exception `answering` exists to let through, and an Ergo
+      // view, whose commitsFor refuses BY DESIGN, read every log as faultless
+      // (found reviewing this slice). The law's first refusal ends the
+      // readable prefix, and the proof stands on that prefix.
+      try {
+        applyEntry(state, backing, entry, undefined);
+      } catch {
+        break;
+      }
     }
     return proven;
   }, undefined);
@@ -416,32 +435,55 @@ export function withdrawnAgainstCommit(
 
 /**
  * One commitment carrying half a settlement: the name of the leg backing whose
- * log is missing its half — or carrying it under a head that still stands — or
- * undefined if this state does not prove it.
+ * log shows the set's reservation taken and never converted under a settled
+ * head — or converted under a head that never settled — or undefined if this
+ * state does not prove it.
  *
  * §C3 settles a set as one act: the head's release and every leg's, applied
- * together, co-signed together, committed together. Within ONE operator's
- * commitment that is not merely the door's habit but the record's invariant —
- * the doors apply a set atomically, the committed marks advance together at
- * each publication, and `sameDuration` puts a set's backings under one silence
- * clause so a gap restores them together — so one root showing the head's
- * release without a leg's is a history no door produced, and the operator
- * co-signed every entry of it.
+ * together, co-signed together, committed together. Within one operator's
+ * commitment, FOR THE BACKINGS IT HELD THE PEN ON, that is the record's
+ * invariant — the doors apply a set atomically, the committed marks advance
+ * together at each publication, and `sameDuration` puts a set's backings
+ * under one silence clause so a gap restores them together — so such a root
+ * showing half a settlement is a history no door produced.
+ *
+ * **The pen-holder gate is what keeps this a fault of the guilty party.**
+ * `commit()` roots every registered backing, in force or not — so a set
+ * co-signed into the tail, a partial handover, and the operator's own gap
+ * honestly produce a root with one restored half and one handed-over tail
+ * (found reviewing this slice: the first draft called that operator at fault).
+ * Head and each leg are therefore read only where the committing operator was
+ * in force for that backing at this commitment's own sequence
+ * (`committedWhileInForce`, the stable-forever read above); a half the pen
+ * had left is 28b's strand wearing one root, and proves nothing.
+ *
+ * **Each half is the set's own act, not a byte under the right hash.** The
+ * head must show the demand FILED (its hash recomputed from the entry — a
+ * head that merely withdrew it still filed it, so the walk-away no longer
+ * covers a taken payout; found reviewing this slice). The leg's half is read
+ * through the fold, the way `withdrawnAgainstCommit` reads its lock: the
+ * set's reservation is a lock entry under the demand's hash carrying the
+ * set's own terms (`legMismatch`), and its conversion is a release whose
+ * standing lock, at that point in the law, carried them — a one-unit decoy
+ * locked and released under the hash exonerated the first draft. Direction
+ * one (head settled, reservation taken, never converted) asks the
+ * reservation was SEEN: an heir whose inherited leg log never held the set's
+ * lock shows no half to miss, and its empty log is `isRewrittenHistory`'s
+ * artefact, not a second name here.
  *
  * What deliberately does NOT fire, each the conservative side:
  *
- *   - **A leg backing absent from the state** is slice 28b's strand, not a
- *     tear: a partial handover lawfully leaves a set's halves with different
- *     operators, and each operator's own commitment shows only its own. This
- *     predicate reads ONE commitment; across two is not its question.
+ *   - **A leg backing absent from the state, or one the operator had handed
+ *     over** — the strand, as above.
  *   - **A withdrawal is not half a settlement.** One-sided withdrawal is the
- *     stranded set's lawful exit, so only the release — the act that takes
- *     value — counts on either side. A leg released under a head that was
- *     WITHDRAWN reads as unproven for the same reason the head must be in the
- *     log at all: what this state shows of the head must itself say the set
- *     stood, and a walked-away set's story is not this reader's to finish.
- *   - **Terms not to hand, a leg log that does not replay, a head that never
- *     filed the demand**: a proof is read off lawful records or not at all.
+ *     stranded set's lawful exit, so only conversion counts on the leg.
+ *   - **Terms not to hand, a lying resolver's answer, a log that does not
+ *     replay, a head that never filed the demand.** Both logs must be lawful
+ *     WHOLE: this proof needs an absence, and an absence cannot be read off a
+ *     prefix — so one garbage entry hides the fault, at the price of a state
+ *     nothing can authenticate (`stateIsAuthentic` false, snapshot redemption
+ *     gone). Recorded, not patched: the sibling predicate proves a presence
+ *     and keeps its prefix.
  */
 export function settledInPart(
   backing: Backing,
@@ -453,30 +495,99 @@ export function settledInPart(
   return answering(() => {
     const committed = committedLogFor(backing, venue, served);
     if (committed === undefined || committed.kind === "dropped") return undefined;
-    const head = replayLog(backing, committed.opLog);
-    if (head === undefined) return undefined;
-    const headReleased = committed.opLog.some(
-      (entry) => entry.kind === "release" && compareBytes(entry.demandHash, demandHash) === 0,
-    );
-    const headStands = head.demands.has(bytesToHex(demandHash));
-    if (!headReleased && !headStands) return undefined;
+    if (!committedWhileInForce(successionOf(backing, venue), venue, served.commitment.operator, committed.sequence)) {
+      return undefined;
+    }
 
-    const legs: Uint8Array[] = [
-      ...backing.reliance.map((entry) => entry.target),
-      ...(paysInClaims(backing.payout) ? [backing.payout.backing] : []),
+    const state = emptyState();
+    let filed: { holder: Uint8Array; quantity: bigint } | undefined;
+    let headReleased = false;
+    try {
+      for (const entry of committed.opLog) {
+        if (entry.kind === "demand" && filed === undefined) {
+          const hash = hashOfDemand({
+            backing,
+            holder: entry.holder,
+            quantity: entry.quantity,
+            instant: entry.instant,
+            deadline: entry.deadline,
+            nonce: entry.nonce,
+          });
+          if (compareBytes(hash, demandHash) === 0) {
+            filed = { holder: entry.holder, quantity: entry.quantity };
+          }
+        }
+        if (entry.kind === "release" && compareBytes(entry.demandHash, demandHash) === 0) {
+          headReleased = true;
+        }
+        applyEntry(state, backing, entry, undefined);
+      }
+    } catch {
+      return undefined;
+    }
+    if (filed === undefined) return undefined;
+
+    const wanted: { name: Uint8Array; want: LegTerms }[] = [
+      ...backing.reliance.map((entry) => ({
+        name: entry.target,
+        // Invariant 13's arithmetic, the sequencer's own legTerms shape.
+        want: {
+          quantity: filed.quantity * entry.count,
+          holder: filed.holder,
+          beneficiary: backing.obligor,
+          converter: filed.holder,
+        },
+      })),
+      ...(paysInClaims(backing.payout)
+        ? [
+            {
+              name: backing.payout.backing,
+              // §C3's payout slot, the sequencer's own payoutTerms shape.
+              want: {
+                quantity: filed.quantity * backing.payout.perUnit,
+                holder: backing.obligor,
+                beneficiary: filed.holder,
+                converter: filed.holder,
+              },
+            },
+          ]
+        : []),
     ];
-    for (const name of legs) {
+    for (const { name, want } of wanted) {
       const leg = terms(name);
       if (leg === undefined) continue;
       if (compareBytes(backingName(leg), name) !== 0) continue;
       const legLog = committedLogFor(leg, venue, served);
       if (legLog === undefined || legLog.kind === "dropped") continue;
-      if (replayLog(leg, legLog.opLog) === undefined) continue;
-      const legReleased = legLog.opLog.some(
-        (entry) => entry.kind === "release" && compareBytes(entry.demandHash, demandHash) === 0,
-      );
-      if (headReleased && !legReleased) return copyBytes(name);
-      if (!headReleased && headStands && legReleased) return copyBytes(name);
+      if (!committedWhileInForce(successionOf(leg, venue), venue, served.commitment.operator, committed.sequence)) {
+        continue;
+      }
+      const legState = emptyState();
+      let taken = false;
+      let converted = false;
+      let lawful = true;
+      try {
+        for (const entry of legLog.opLog) {
+          if (
+            entry.kind === "lock" &&
+            compareBytes(entry.attemptId, demandHash) === 0 &&
+            legMismatch(entry, want) === undefined
+          ) {
+            taken = true;
+          }
+          if (entry.kind === "release" && compareBytes(entry.demandHash, demandHash) === 0) {
+            // The lock standing as the law reads it, before applying removes it.
+            const lock = legState.locks.get(bytesToHex(entry.demandHash));
+            if (lock !== undefined && legMismatch(lock, want) === undefined) converted = true;
+          }
+          applyEntry(legState, leg, entry, undefined);
+        }
+      } catch {
+        lawful = false;
+      }
+      if (!lawful) continue;
+      if (headReleased && taken && !converted) return copyBytes(name);
+      if (!headReleased && converted) return copyBytes(name);
     }
     return undefined;
   }, undefined);

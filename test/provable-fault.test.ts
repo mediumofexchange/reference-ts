@@ -21,6 +21,8 @@ import {
   NO_DECISION_VENUE,
 } from "../src/presentation.js";
 import { makeBacking } from "../src/backing.js";
+import { replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
+import { VenueError } from "../src/venue.js";
 import { signCommitment, stateRoot, type ServedState } from "../src/commitment.js";
 import { type OpLogEntry } from "../src/oplog.js";
 import { receiptCovers, signReceipt, type Receipt } from "../src/receipt.js";
@@ -523,6 +525,202 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
     expect(withdrawnAgainstCommit(f.backing, f.venue, served)).toBeUndefined();
   });
 
+  it("a view that does not sync commits refuses rather than acquits", () => {
+    // Found reviewing this slice: the fold's catch ate the VenueError, so an
+    // Ergo view — whose commitsFor refuses BY DESIGN — read every log as
+    // faultless: a fact about a party built out of not having looked.
+    class CommitsRefusing extends LocalVenue {
+      override commitsFor(): never {
+        throw new VenueError("this view does not sync commits");
+      }
+    }
+    const venue = new CommitsRefusing();
+    const backing = makeBacking({
+      obligor: KEYS.backer,
+      payout: { thing: "GOLD", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: { setting: "transparent", operator: KEYS.operator },
+    });
+    const sequencer = new Sequencer(SECRETS.operator, venue);
+    sequencer.register(backing, signBacking(SECRETS.backer, backing));
+    sequencer.submitIssue(
+      { backing, recipient: KEYS.alice, quantity: 200n, nonce: 0n },
+      ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 200n, 0n), SECRETS.backer),
+    );
+    // The door itself reads the record before taking a bare lock, so on this
+    // view the whole log is built by hand: the reader's behaviour is the claim.
+    const lock: LockOp = {
+      backing,
+      attemptId: ATTEMPT,
+      holder: KEYS.alice,
+      beneficiary: KEYS.bob,
+      quantity: 90n,
+      timeout: 40n,
+      decisionVenue: venue.id,
+      parties: [KEYS.alice],
+      nonce: 0n,
+    };
+    const log = sequencer.opLog(backing);
+    const lockEntry: OpLogEntry = {
+      position: log.length,
+      kind: "lock",
+      attemptId: lock.attemptId,
+      holder: lock.holder,
+      beneficiary: lock.beneficiary,
+      quantity: lock.quantity,
+      timeout: lock.timeout,
+      decisionVenue: lock.decisionVenue,
+      parties: lock.parties,
+      nonce: 0n,
+      signature: ed25519.sign(encodeLock(lock), SECRETS.alice),
+    };
+    venue.advance(50n);
+    const op = { backing, demandHash: ATTEMPT, nonce: 1n };
+    const entry: OpLogEntry = {
+      position: log.length + 1,
+      kind: "withdrawal",
+      demandHash: ATTEMPT,
+      nonce: 1n,
+      signature: ed25519.sign(encodeWithdrawal(op), SECRETS.alice),
+    };
+    const snapshots = [{ name: backing.name, opLog: [...log, lockEntry, entry] }];
+    const commitment = signCommitment(SECRETS.operator, 0n, stateRoot(snapshots));
+    venue.publish(commitment);
+    expect(() => withdrawnAgainstCommit(backing, venue, { snapshots, commitment })).toThrow(VenueError);
+  });
+
+  it("one garbage entry after the withdrawal does not buy the fault back: the proof stands on the lawful prefix", () => {
+    // Found reviewing this slice: requiring the whole log to replay priced the
+    // dodge at one junk entry — the state went unauthentic, which nothing
+    // names, while the fault went unprovable.
+    const f = world();
+    const { lock, signature } = lockedBy(f);
+    f.sequencer.submitLock(lock, signature);
+    f.venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
+    f.venue.advance(50n);
+    const log = f.sequencer.opLog(f.backing);
+    const op = { backing: f.backing, demandHash: ATTEMPT, nonce: 1n };
+    const withdrawal: OpLogEntry = {
+      position: log.length,
+      kind: "withdrawal",
+      demandHash: ATTEMPT,
+      nonce: 1n,
+      signature: ed25519.sign(encodeWithdrawal(op), SECRETS.alice),
+    };
+    const junk: OpLogEntry = {
+      position: log.length + 1,
+      kind: "withdrawal",
+      demandHash: new Uint8Array(32).fill(0x66),
+      nonce: 9n,
+      signature: new Uint8Array(64),
+    };
+    const snapshots = [{ name: f.backing.name, opLog: [...log, withdrawal, junk] }];
+    const commitment = signCommitment(SECRETS.operator, 0n, stateRoot(snapshots));
+    f.venue.publish(commitment);
+    const proven = withdrawnAgainstCommit(f.backing, f.venue, { snapshots, commitment });
+    expect(proven).toBeDefined();
+    expect(compareBytes(proven as Uint8Array, ATTEMPT)).toBe(0);
+  });
+
+  it("a stranger's certificate frames nobody: the commit's signatures are the parties' own", () => {
+    const f = world();
+    const { lock, signature } = lockedBy(f);
+    f.sequencer.submitLock(lock, signature);
+    f.venue.publishCommit(signCommit(SECRETS.mallory, ATTEMPT)); // not a party
+    f.venue.advance(50n);
+    const served = servedWithWithdrawal(f, f.sequencer.opLog(f.backing), 1n);
+    expect(withdrawnAgainstCommit(f.backing, f.venue, served)).toBeUndefined();
+  });
+
+  it("the first proven withdrawal is the one named", () => {
+    const f = world();
+    const second = new Uint8Array(32).fill(0x6b);
+    const { lock, signature } = lockedBy(f);
+    f.sequencer.submitLock(lock, signature);
+    const other: LockOp = { ...lock, attemptId: second, quantity: 50n, nonce: 1n };
+    f.sequencer.submitLock(other, ed25519.sign(encodeLock(other), SECRETS.alice));
+    f.venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
+    f.venue.publishCommit(signCommit(SECRETS.alice, second));
+    f.venue.advance(50n);
+    const log = f.sequencer.opLog(f.backing);
+    const w = (hash: Uint8Array, nonce: bigint, position: number): OpLogEntry => ({
+      position,
+      kind: "withdrawal",
+      demandHash: hash,
+      nonce,
+      signature: ed25519.sign(encodeWithdrawal({ backing: f.backing, demandHash: hash, nonce }), SECRETS.alice),
+    });
+    const snapshots = [
+      { name: f.backing.name, opLog: [...log, w(second, 2n, log.length), w(ATTEMPT, 3n, log.length + 1)] },
+    ];
+    const commitment = signCommitment(SECRETS.operator, 0n, stateRoot(snapshots));
+    f.venue.publish(commitment);
+    const proven = withdrawnAgainstCommit(f.backing, f.venue, { snapshots, commitment });
+    expect(compareBytes(proven as Uint8Array, second)).toBe(0);
+  });
+
+  it("an heir does not co-sign its predecessor's artefact: takeOver refuses the poisoned log", () => {
+    // Found reviewing this slice: takeOver is all-or-nothing, so the heir's
+    // only exits were carrying the proof under its own key or refusing the
+    // backing entirely. The door is what keeps the proof attributable.
+    const venue = new LocalVenue();
+    const backing = makeBacking({
+      obligor: KEYS.backer,
+      payout: { thing: "GOLD", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: { setting: "transparent", operator: KEYS.operator, replacementRule: KEYS.backer },
+    });
+    const sequencer = new Sequencer(SECRETS.operator, venue);
+    sequencer.register(backing, signBacking(SECRETS.backer, backing));
+    sequencer.submitIssue(
+      { backing, recipient: KEYS.alice, quantity: 200n, nonce: 0n },
+      ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 200n, 0n), SECRETS.backer),
+    );
+    const lock: LockOp = {
+      backing,
+      attemptId: ATTEMPT,
+      holder: KEYS.alice,
+      beneficiary: KEYS.bob,
+      quantity: 90n,
+      timeout: 40n,
+      decisionVenue: venue.id,
+      parties: [KEYS.alice],
+      nonce: 0n,
+    };
+    sequencer.submitLock(lock, ed25519.sign(encodeLock(lock), SECRETS.alice));
+    venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
+    venue.advance(50n);
+    const op = { backing, demandHash: ATTEMPT, nonce: 1n };
+    const entry: OpLogEntry = {
+      position: sequencer.opLog(backing).length,
+      kind: "withdrawal",
+      demandHash: ATTEMPT,
+      nonce: 1n,
+      signature: ed25519.sign(encodeWithdrawal(op), SECRETS.alice),
+    };
+    const snapshots = [{ name: backing.name, opLog: [...sequencer.opLog(backing), entry] }];
+    const commitment = signCommitment(SECRETS.operator, 0n, stateRoot(snapshots));
+    venue.publish(commitment);
+    const poisoned = { snapshots, commitment };
+    expect(withdrawnAgainstCommit(backing, venue, poisoned)).toBeDefined();
+
+    const unsigned = {
+      role: ROLE_OPERATOR,
+      successor: KEYS.carol,
+      predecessor: backing.name,
+      effective: venue.witnessedIndex(),
+      signature: new Uint8Array(64),
+    };
+    const replacement: Replacement = {
+      ...unsigned,
+      signature: ed25519.sign(replacementMessage(backing.name, unsigned), SECRETS.backer),
+    };
+    venue.publishReplacement(backing.name, replacement);
+    const heir = new Sequencer(SECRETS.carol, venue);
+    heir.register(backing, signBacking(SECRETS.backer, backing));
+    expect(() => heir.takeOver(backing, poisoned)).toThrow(/the fault is its signer's to keep/);
+  });
+
   it("a withdrawal of a demand is the holder walking away, not this fault", () => {
     const f = world();
     const demand: DemandOp = {
@@ -780,6 +978,237 @@ describe("a set settled in part is the operator's fault, read across one commitm
     expect(compareBytes(proven as Uint8Array, gold.name)).toBe(0);
   });
 
+  it("a taken payout under a withdrawn head is settled in part: walking away covers nothing", () => {
+    // Found reviewing this slice: the first draft required the head demand to
+    // still STAND, so a holder who took the payout without surrendering the
+    // set simply withdrew her own demand afterwards — both logs lawful, the
+    // backer out the payout, nobody named. A head that withdrew the demand
+    // still FILED it, and filing is what makes the set this reader's.
+    const f = world();
+    const hash = fileAndAccept(f);
+    const wNonce = f.sequencer.nextNonce(KEYS.alice, f.eur);
+    const wOp = { backing: f.eur, demandHash: hash, nonce: wNonce };
+    const headWithdrawal: OpLogEntry = {
+      position: f.sequencer.opLog(f.eur).length,
+      kind: "withdrawal",
+      demandHash: hash,
+      nonce: wNonce,
+      signature: ed25519.sign(encodeWithdrawal(wOp), SECRETS.alice),
+    };
+    const served = serveBoth(f, [headWithdrawal], [releaseEntry(f, f.gold, hash)]);
+    const proven = settledInPart(f.eur, f.venue, f.terms, served, hash);
+    expect(proven).toBeDefined();
+    expect(compareBytes(proven as Uint8Array, f.gold.name)).toBe(0);
+  });
+
+  it("a one-unit decoy released under the hash is not the conversion: the set's own terms decide", () => {
+    // Found reviewing this slice: the first draft matched the leg's half by
+    // (kind, hash), so the backer-run operator withdrew its unfulfilled
+    // payout lock, locked one unit to itself under the same hash, released
+    // that — a lawful history, the holder paid nothing, the fault gone.
+    const f = world();
+    const hash = fileAndAccept(f);
+    const gold = f.gold;
+    const wNonce = f.sequencer.nextNonce(KEYS.backer, gold);
+    const wOp = { backing: gold, demandHash: hash, nonce: wNonce };
+    const takeBack: OpLogEntry = {
+      position: f.sequencer.opLog(gold).length,
+      kind: "withdrawal",
+      demandHash: hash,
+      nonce: wNonce,
+      signature: ed25519.sign(encodeWithdrawal(wOp), SECRETS.backer),
+    };
+    const decoyOp: LockOp = {
+      backing: gold,
+      attemptId: hash,
+      holder: KEYS.backer,
+      beneficiary: KEYS.backer,
+      quantity: 1n,
+      timeout: 200n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.backer],
+      nonce: wNonce + 1n,
+    };
+    const decoy: OpLogEntry = {
+      position: f.sequencer.opLog(gold).length + 1,
+      kind: "lock",
+      attemptId: hash,
+      holder: KEYS.backer,
+      beneficiary: KEYS.backer,
+      quantity: 1n,
+      timeout: 200n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.backer],
+      nonce: wNonce + 1n,
+      signature: ed25519.sign(encodeLock(decoyOp), SECRETS.backer),
+    };
+    const rNonce = wNonce + 2n;
+    const rOp = { backing: gold, demandHash: hash, nonce: rNonce };
+    const decoyRelease: OpLogEntry = {
+      position: f.sequencer.opLog(gold).length + 2,
+      kind: "release",
+      demandHash: hash,
+      nonce: rNonce,
+      signature: ed25519.sign(encodeRelease(rOp), SECRETS.backer),
+    };
+    const served = serveBoth(f, [releaseEntry(f, f.eur, hash)], [takeBack, decoy, decoyRelease]);
+    const proven = settledInPart(f.eur, f.venue, f.terms, served, hash);
+    expect(proven).toBeDefined();
+    expect(compareBytes(proven as Uint8Array, gold.name)).toBe(0);
+  });
+
+  it("a whole set withdrawn through the door is the honest exit, and proves nothing", () => {
+    const f = world();
+    const hash = fileAndAccept(f);
+    f.venue.advance(96n); // past the paying lock's own timeout
+    // Each half is its signer's own one-sided exit: the holder walks the
+    // demand, the backer takes back its expired reservation.
+    const head = { backing: f.eur, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
+    f.sequencer.submitWithdrawal(head, ed25519.sign(encodeWithdrawal(head), SECRETS.alice));
+    const leg = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
+    f.sequencer.submitWithdrawal(leg, ed25519.sign(encodeWithdrawal(leg), SECRETS.backer));
+    const commitment = f.sequencer.commit();
+    const served = { snapshots: f.sequencer.snapshot(), commitment };
+    expect(settledInPart(f.eur, f.venue, f.terms, served, hash)).toBeUndefined();
+  });
+
+  it("a resolver's wrong backing under the right name proves nothing", () => {
+    const f = world();
+    const hash = fileAndAccept(f);
+    const served = serveBoth(f, [releaseEntry(f, f.eur, hash)], []);
+    expect(settledInPart(f.eur, f.venue, f.terms, served, hash)).toBeDefined();
+    expect(settledInPart(f.eur, f.venue, () => f.eur, served, hash)).toBeUndefined();
+  });
+
+  it("a leg log that is not a history proves nothing: this proof needs an absence, and an absence has no prefix", () => {
+    const f = world();
+    const hash = fileAndAccept(f);
+    const junk: OpLogEntry = {
+      position: f.sequencer.opLog(f.gold).length,
+      kind: "withdrawal",
+      demandHash: new Uint8Array(32).fill(0x71),
+      nonce: 9n,
+      signature: new Uint8Array(64),
+    };
+    const served = serveBoth(f, [releaseEntry(f, f.eur, hash)], [junk]);
+    expect(settledInPart(f.eur, f.venue, f.terms, served, hash)).toBeUndefined();
+  });
+
+  it("a head log that is not a history proves nothing either", () => {
+    const f = world();
+    const hash = fileAndAccept(f);
+    const one = releaseEntry(f, f.eur, hash);
+    const again: OpLogEntry = { ...one, position: one.position + 1 };
+    const served = serveBoth(f, [one, again], []);
+    expect(settledInPart(f.eur, f.venue, f.terms, served, hash)).toBeUndefined();
+  });
+
+  it("a set of three backings names whichever leg is missing its half", () => {
+    // reliance on GOLD and a payout in SILVER claims: the legs list walks both.
+    const venue = new LocalVenue();
+    const evidence = { setting: "transparent" as const, operator: KEYS.operator };
+    const mkThing = (thing: string) =>
+      makeBacking({
+        obligor: KEYS.backer,
+        payout: { thing, quantumExponent: -2, perUnit: 100n },
+        reliance: [],
+        evidence,
+      });
+    const gold = mkThing("GOLD");
+    const silver = mkThing("SILVER");
+    const eur = makeBacking({
+      obligor: KEYS.backer,
+      payout: { backing: silver.name, perUnit: 2n },
+      reliance: [{ target: gold.name, count: 1n }],
+      evidence,
+    });
+    const sequencer = new Sequencer(SECRETS.operator, venue);
+    for (const b of [gold, silver, eur]) sequencer.register(b, signBacking(SECRETS.backer, b));
+    const issue = (backing: Backing, to: Uint8Array, quantity: bigint) => {
+      const nonce = sequencer.nextNonce(KEYS.backer, backing);
+      sequencer.submitIssue(
+        { backing, recipient: to, quantity, nonce },
+        ed25519.sign(encodeIssuanceMessage(backing.name, to, quantity, nonce), SECRETS.backer),
+      );
+    };
+    issue(eur, KEYS.alice, 100n);
+    issue(gold, KEYS.alice, 100n);
+    issue(silver, KEYS.backer, 500n);
+    const demand: DemandOp = {
+      backing: eur,
+      holder: KEYS.alice,
+      quantity: 40n,
+      instant: 0n,
+      deadline: 100n,
+      nonce: sequencer.nextNonce(KEYS.alice, eur),
+    };
+    const hash = demandHash(demand);
+    const rely: LockOp = {
+      backing: gold,
+      attemptId: hash,
+      holder: KEYS.alice,
+      beneficiary: KEYS.backer,
+      quantity: 40n,
+      timeout: 95n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: sequencer.nextNonce(KEYS.alice, gold),
+    };
+    sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice), [
+      { op: rely, signature: ed25519.sign(encodeLock(rely), SECRETS.alice) },
+    ]);
+    const answer: AcceptanceOp = {
+      backing: eur,
+      demandHash: hash,
+      instant: 0n,
+      deadline: 90n,
+      nonce: sequencer.nextNonce(KEYS.backer, eur),
+    };
+    const paying: LockOp = {
+      backing: silver,
+      attemptId: hash,
+      holder: KEYS.backer,
+      beneficiary: KEYS.alice,
+      quantity: 80n,
+      timeout: 95n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: sequencer.nextNonce(KEYS.backer, silver),
+    };
+    sequencer.submitAcceptance(answer, ed25519.sign(encodeAcceptance(answer), SECRETS.backer), [
+      { op: paying, signature: ed25519.sign(encodeLock(paying), SECRETS.backer) },
+    ]);
+    const terms = (name: Uint8Array) =>
+      compareBytes(name, gold.name) === 0 ? gold : compareBytes(name, silver.name) === 0 ? silver : undefined;
+    // Every half of this set is alice's to release: the head as its holder,
+    // each leg as its converter.
+    const release = (backing: Backing): OpLogEntry => {
+      const nonce = sequencer.nextNonce(KEYS.alice, backing);
+      const op = { backing, demandHash: hash, nonce };
+      return {
+        position: sequencer.opLog(backing).length,
+        kind: "release",
+        demandHash: hash,
+        nonce,
+        signature: ed25519.sign(encodeRelease(op), SECRETS.alice),
+      };
+    };
+    const serve = (eurE: OpLogEntry[], goldE: OpLogEntry[], silverE: OpLogEntry[]) => {
+      const snapshots = [
+        { name: eur.name, opLog: [...sequencer.opLog(eur), ...eurE] },
+        { name: gold.name, opLog: [...sequencer.opLog(gold), ...goldE] },
+        { name: silver.name, opLog: [...sequencer.opLog(silver), ...silverE] },
+      ];
+      const commitment = signCommitment(SECRETS.operator, 0n, stateRoot(snapshots));
+      venue.publish(commitment);
+      return { snapshots, commitment };
+    };
+    // Head settled, both halves missing: the reliance leg is named first, the
+    // canonical order.
+    const both = serve([release(eur)], [], []);
+    expect(compareBytes(settledInPart(eur, venue, terms, both, hash) as Uint8Array, gold.name)).toBe(0);
+  });
+
   it("a head log that never filed the demand proves nothing against it", () => {
     // The leg's release under a hash this head never saw may be another
     // record's story; without the demand in the head log the set is not this
@@ -794,5 +1223,135 @@ describe("a set settled in part is the operator's fault, read across one commitm
     const commitment = signCommitment(SECRETS.operator, 0n, stateRoot(snapshots));
     f.venue.publish(commitment);
     expect(settledInPart(f.eur, f.venue, f.terms, { snapshots, commitment }, hash)).toBeUndefined();
+  });
+
+  // The 28b strand, wearing one root — the review round's critical finding:
+  // commit() roots every registered backing, in force or not, so a set
+  // committed whole, its release co-signed into the tail, a partial handover
+  // and the operator's own restore honestly produce a root showing one half
+  // of the settlement. The pen-holder gate reads it as the strand it is.
+
+  function replaceableWorld() {
+    const venue = new LocalVenue();
+    const evidence = {
+      setting: "transparent" as const,
+      operator: KEYS.operator,
+      replacementRule: KEYS.backer,
+    };
+    const gold = makeBacking({
+      obligor: KEYS.backer,
+      payout: { thing: "GOLD", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence,
+    });
+    const eur = makeBacking({
+      obligor: KEYS.backer,
+      payout: { backing: gold.name, perUnit: 2n },
+      reliance: [],
+      evidence,
+    });
+    const sequencer = new Sequencer(SECRETS.operator, venue);
+    for (const backing of [gold, eur]) sequencer.register(backing, signBacking(SECRETS.backer, backing));
+    const issue = (backing: Backing, to: Uint8Array, quantity: bigint) => {
+      const nonce = sequencer.nextNonce(KEYS.backer, backing);
+      sequencer.submitIssue(
+        { backing, recipient: to, quantity, nonce },
+        ed25519.sign(encodeIssuanceMessage(backing.name, to, quantity, nonce), SECRETS.backer),
+      );
+    };
+    issue(eur, KEYS.alice, 100n);
+    issue(gold, KEYS.backer, 500n);
+    const terms = (name: Uint8Array) => (compareBytes(name, gold.name) === 0 ? gold : undefined);
+    return { venue, sequencer, eur, gold, terms };
+  }
+
+  /** The rule-holder hands `backing` to carol; her bare commitment takes force
+   * unless the test's heir will take over and commit properly itself. */
+  function handToCarol(venue: LocalVenue, backing: Backing, commit = true): void {
+    const unsigned = {
+      role: ROLE_OPERATOR,
+      successor: KEYS.carol,
+      predecessor: backing.name,
+      effective: venue.witnessedIndex(),
+      signature: new Uint8Array(64),
+    };
+    venue.publishReplacement(backing.name, {
+      ...unsigned,
+      signature: ed25519.sign(replacementMessage(backing.name, unsigned), SECRETS.backer),
+    });
+    if (commit) {
+      venue.publish(signCommitment(SECRETS.carol, venue.nextSequenceFor(KEYS.carol), stateRoot([])));
+    }
+  }
+
+  /** The whole set through the doors, its release left in the tail; the committed lengths mark the tear line. */
+  function setWithTailRelease(f: ReturnType<typeof replaceableWorld>) {
+    const hash = fileAndAccept(f);
+    f.sequencer.commit(); // the set committed whole, sequence 0
+    const eurCommitted = f.sequencer.opLog(f.eur).length;
+    const goldCommitted = f.sequencer.opLog(f.gold).length;
+    const head = { backing: f.eur, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
+    const pay = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
+    f.sequencer.submitRelease(head, ed25519.sign(encodeRelease(head), SECRETS.alice), [
+      { op: pay, signature: ed25519.sign(encodeRelease(pay), SECRETS.alice) },
+    ]); // both halves co-signed, in the tail
+    f.venue.advance(1n);
+    return { hash, eurCommitted, goldCommitted };
+  }
+
+  it("a handed-over head with its tail is the strand, not the operator's tear", () => {
+    // The old operator's root carries the head it no longer holds the pen for,
+    // release and all, beside the half its own restore rolled back. Exactly a
+    // firing shape — but the pen had left the head, and it accuses nobody.
+    const f = replaceableWorld();
+    const { hash, goldCommitted } = setWithTailRelease(f);
+    handToCarol(f.venue, f.eur);
+    const snapshots = [
+      { name: f.eur.name, opLog: f.sequencer.opLog(f.eur) }, // the tail kept
+      { name: f.gold.name, opLog: f.sequencer.opLog(f.gold).slice(0, goldCommitted) }, // restored
+    ];
+    const commitment = signCommitment(SECRETS.operator, f.venue.nextSequenceFor(KEYS.operator), stateRoot(snapshots));
+    f.venue.publish(commitment);
+    expect(settledInPart(f.eur, f.venue, f.terms, { snapshots, commitment }, hash)).toBeUndefined();
+  });
+
+  it("a handed-over leg with its tail is the strand from the other side", () => {
+    const f = replaceableWorld();
+    const { hash, eurCommitted } = setWithTailRelease(f);
+    handToCarol(f.venue, f.gold);
+    const snapshots = [
+      { name: f.eur.name, opLog: f.sequencer.opLog(f.eur).slice(0, eurCommitted) }, // restored
+      { name: f.gold.name, opLog: f.sequencer.opLog(f.gold) }, // the tail kept: converted
+    ];
+    const commitment = signCommitment(SECRETS.operator, f.venue.nextSequenceFor(KEYS.operator), stateRoot(snapshots));
+    f.venue.publish(commitment);
+    expect(settledInPart(f.eur, f.venue, f.terms, { snapshots, commitment }, hash)).toBeUndefined();
+  });
+
+  it("an heir whose inherited leg log never held the set's lock shows no half to miss", () => {
+    // The successor takes over the head — settled whole by its predecessor —
+    // and commits before taking the leg over: its root carries the leg with an
+    // empty log. That artefact is isRewrittenHistory's, and naming it here too
+    // would let one artefact be reported as two.
+    const f = replaceableWorld();
+    const hash = fileAndAccept(f);
+    const head = { backing: f.eur, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
+    const pay = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
+    f.sequencer.submitRelease(head, ed25519.sign(encodeRelease(head), SECRETS.alice), [
+      { op: pay, signature: ed25519.sign(encodeRelease(pay), SECRETS.alice) },
+    ]);
+    const commitment = f.sequencer.commit(); // the predecessor's honest whole
+    const served = { snapshots: f.sequencer.snapshot(), commitment };
+    expect(settledInPart(f.eur, f.venue, f.terms, served, hash)).toBeUndefined();
+
+    handToCarol(f.venue, f.eur, false);
+    handToCarol(f.venue, f.gold, false);
+    const heir = new Sequencer(SECRETS.carol, f.venue);
+    for (const backing of [f.eur, f.gold]) heir.register(backing, signBacking(SECRETS.backer, backing));
+    heir.takeOver(f.eur, served);
+    f.venue.advance(1n);
+    const heirCommitment = heir.commit();
+    const heirServed = { snapshots: heir.snapshot(), commitment: heirCommitment };
+    expect(settledInPart(f.eur, f.venue, f.terms, heirServed, hash)).toBeUndefined();
   });
 });
