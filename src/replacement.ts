@@ -167,12 +167,18 @@ export interface Succession {
  * The chain of operators this backing has had, in force order, starting with the
  * key E names.
  *
- * Walked forward from the backing itself, taking at each step the earliest
- * witnessed replacement that names the current link as its predecessor. **Earliest
- * witnessed wins**, which is the rule two requests at one nonce already follow
- * (§C2, witnessing pins order): two replacements naming one predecessor are the
- * rule-holder signing two successors, and the one it published first is the one
- * it chose first. Nothing freezes, and the rule-holder is entitled to choose.
+ * Walked forward from the backing itself, taking at each step the **earliest
+ * USABLE** replacement that names the current link as its predecessor: the
+ * earliest whose successor qualified — committed at or after its witnessing,
+ * and strictly before any candidate at a strictly later index was witnessed.
+ * Earliest still wins where it is alive (§C2, witnessing pins order: the one
+ * the rule-holder published first is the one it chose first), but a successor
+ * that never qualifies no longer ends the chain: its window closes the moment
+ * the rule-holder names another, and the walk passes over it — so naming a
+ * dead successor is recoverable, and re-naming the incumbent is the
+ * rule-holder's revocation of a successor it regrets (the 2026-08-22 audit,
+ * question 2). Nothing freezes, and nothing moves back: a window still open
+ * holds the chain at the incumbent rather than being skipped.
  *
  * A link takes force at the LATER of two indices, which is §C2's own two-stage
  * rule: the effective index it declares, and the first index at which the
@@ -213,36 +219,75 @@ export function successionOf(backing: Backing, venue: Venue): Succession[] {
     const seen = new Set<string>([bytesToHex(backing.name)]);
     let link = backing.name;
     for (;;) {
-      const next = witnessed
+      // **The earliest USABLE candidate at this link** — a dead successor does
+      // not end the chain (the 2026-08-22 audit, question 2; Bob's decision).
+      // The old walk took the earliest candidate outright and stopped wherever
+      // its successor never committed, so a second replacement at the same
+      // link was unreachable forever and the rule-holder could not recover
+      // from naming a dead successor (audit-B-3).
+      //
+      // A candidate is passed over only once it is CONCLUSIVELY dead:
+      //   - it names the incumbent — not a handover, and never one ("the old
+      //     attester's co-signatures stop counting" must never mean its own);
+      //     it still closes earlier windows below, which is the rule-holder's
+      //     one way to revoke a successor it regrets;
+      //   - or a candidate at a STRICTLY later index has been witnessed and
+      //     this one's first commitment did not land strictly before that —
+      //     the later replacement was made against a record in which this
+      //     successor had not qualified, the tie every publication reads
+      //     (slice 8). The moment the later candidate is witnessed, whether
+      //     this one qualified is fixed forever: that is what keeps every
+      //     reader's walk stable, and a dead link committing later changes
+      //     nothing anywhere.
+      //
+      // A candidate that is merely undecided — uncommitted, with no later
+      // candidate to close its window — HOLDS the chain here: the incumbent
+      // governs until the window is won or closed. Skipping it would hand
+      // force to a later candidate and take it back when the earlier one
+      // committed, which stability forbids; two candidates at one index share
+      // the moment for the same reason, and the first published holds it.
+      const candidates = witnessed
         .filter((w) => compareBytes(w.replacement.predecessor, link) === 0)
-        .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))[0];
-      if (next === undefined) return chain;
+        .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+      const incumbent = chain[chain.length - 1] as Succession;
+      let chosen: { at: bigint; successor: Uint8Array; effective: bigint; hash: Uint8Array; committed: bigint } | undefined;
+      for (let i = 0; i < candidates.length && chosen === undefined; i++) {
+        const candidate = candidates[i] as WitnessedReplacement;
+        const successor = candidate.replacement.successor;
+        const boundary = candidates.find((later) => later.at > candidate.at)?.at;
+        if (compareBytes(successor, incumbent.operator) === 0) continue;
+        // At or after the handover was witnessed: a commitment made before
+        // anyone named this successor cannot be the one §C2 asks for.
+        const committed = venue.firstCommitmentFor(successor, candidate.at);
+        if (committed === undefined || (boundary !== undefined && committed >= boundary)) {
+          // Dead where the window is closed; undecided — and the chain's end —
+          // where it is still open.
+          if (boundary !== undefined) continue;
+          return chain;
+        }
+        chosen = {
+          at: candidate.at,
+          successor,
+          effective: candidate.replacement.effective,
+          hash: replacementHash(backing.name, candidate.replacement),
+          committed,
+        };
+      }
+      if (chosen === undefined) return chain;
 
-      const hash = replacementHash(backing.name, next.replacement);
       // A hash cycle cannot be built (invariant 5's reasoning), so this guards a
       // malformed record rather than a real cycle — and it guarantees the walk
       // terminates on any input at all, which a verifier needs.
-      if (seen.has(bytesToHex(hash))) return chain;
-      seen.add(bytesToHex(hash));
+      if (seen.has(bytesToHex(chosen.hash))) return chain;
+      seen.add(bytesToHex(chosen.hash));
 
-      const incumbent = chain[chain.length - 1] as Succession;
-      const successor = next.replacement.successor;
-      // A handover to the incumbent is not one. Refusing it keeps the chain
-      // strictly a sequence of changes, so "the old attester's co-signatures
-      // stop counting" never means its own.
-      if (compareBytes(successor, incumbent.operator) === 0) return chain;
-
-      // At or after the handover was witnessed: a commitment made before anyone
-      // named this successor cannot be the one §C2 asks for.
-      const committed = venue.firstCommitmentFor(successor, next.at);
-      if (committed === undefined) return chain;
-      const from = next.replacement.effective > committed ? next.replacement.effective : committed;
+      const from = chosen.effective > chosen.committed ? chosen.effective : chosen.committed;
       // In force no earlier than the incumbent was: a chain that went backwards
       // would have two operators in force at one index.
       if (from < incumbent.from) return chain;
 
-      chain.push({ operator: copyBytes(successor), from, link: copyBytes(hash) });
-      link = hash;
+      chain.push({ operator: copyBytes(chosen.successor), from, link: copyBytes(chosen.hash) });
+      link = chosen.hash;
     }
   }, chain);
 }

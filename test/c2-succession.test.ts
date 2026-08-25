@@ -11,6 +11,7 @@ import {
   ROLE_OPERATOR,
   type Replacement,
 } from "../src/replacement.js";
+import { isNamedSuccessor } from "../src/replacement.js";
 import { isRewrittenHistory } from "../src/fault.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import { receiptStatus } from "../src/receipt.js";
@@ -153,6 +154,145 @@ describe("§C2: the chain from the original terms is walkable", () => {
   });
 });
 
+describe("§C2: a dead successor does not end the chain — the walk takes the earliest USABLE candidate", () => {
+  // The audit's question 2, decided by Bob: successionOf took the earliest
+  // witnessed replacement at a link and stopped dead if its successor never
+  // committed — a second replacement at the same link lost the earliest-wins
+  // tie forever, so the rule-holder could not recover from naming a dead
+  // successor (audit-B-3). The walk passes over a candidate that is
+  // CONCLUSIVELY dead: one naming the incumbent (never a handover), or one
+  // whose first commitment did not land strictly before the next
+  // strictly-later candidate at the same link was witnessed. The moment that
+  // next candidate is witnessed, whether the earlier one qualified is fixed
+  // forever — which is what keeps every reader's walk stable. A candidate
+  // whose window is still open (uncommitted, nobody later named) holds the
+  // chain at the incumbent: undecided is not dead.
+
+  it("a second replacement at the link recovers from a successor that never commits (audit-B-3)", () => {
+    const { venue, backing } = setup();
+    at(venue, 5n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
+    // The named successor never commits; the incumbent governs meanwhile.
+    at(venue, 9n);
+    expect(operatorAt(backing, venue, 9n)).toEqual(KEYS.operator);
+    // The rule-holder names another at the same link, and that one takes force.
+    at(venue, 10n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD, backing.name, 10n));
+    commitAs(venue, THIRD_SECRET);
+    expect(operatorAt(backing, venue, 10n)).toEqual(THIRD);
+    expect(operatorsOf(backing, venue)).toHaveLength(2);
+    expect(isAnOperator(backing, venue, SUCCESSOR)).toBe(false);
+  });
+
+  it("the window is stable: the dead successor committing later cannot take the chain back", () => {
+    const { venue, backing } = setup();
+    at(venue, 5n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
+    at(venue, 10n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD, backing.name, 10n));
+    commitAs(venue, THIRD_SECRET);
+    at(venue, 15n);
+    const before = operatorAt(backing, venue, 12n);
+    // The dead successor commits at last — after the boundary that closed its
+    // window. Nothing anywhere moves: a fault proved against this chain
+    // yesterday must prove today.
+    at(venue, 20n);
+    commitAs(venue, SUCCESSOR_SECRET);
+    expect(operatorAt(backing, venue, 12n)).toEqual(before);
+    expect(operatorAt(backing, venue, 20n)).toEqual(THIRD);
+    expect(isAnOperator(backing, venue, SUCCESSOR)).toBe(false);
+  });
+
+  it("earliest usable is earliest: a successor that committed before the next candidate was witnessed keeps the chain", () => {
+    const { venue, backing } = setup();
+    at(venue, 5n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
+    at(venue, 7n);
+    commitAs(venue, SUCCESSOR_SECRET); // qualified at 7
+    at(venue, 10n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD, backing.name, 10n));
+    commitAs(venue, THIRD_SECRET);
+    // THIRD's replacement names the genesis link, whose window SUCCESSOR won.
+    expect(operatorAt(backing, venue, 12n)).toEqual(SUCCESSOR);
+    expect(isAnOperator(backing, venue, THIRD)).toBe(false);
+  });
+
+  it("the boundary is strict: a first commitment at the very index the next candidate is witnessed is too late", () => {
+    // The next replacement was made against a record in which this successor
+    // had not committed — the same tie every publication reads (slice 8).
+    const { venue, backing } = setup();
+    at(venue, 5n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
+    at(venue, 10n);
+    commitAs(venue, SUCCESSOR_SECRET); // at 10 —
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD, backing.name, 10n)); // — the same index
+    at(venue, 12n);
+    commitAs(venue, THIRD_SECRET);
+    expect(operatorAt(backing, venue, 13n)).toEqual(THIRD);
+    expect(isAnOperator(backing, venue, SUCCESSOR)).toBe(false);
+  });
+
+  it("naming the incumbent is not a handover, and no longer freezes the chain", () => {
+    // The old walk stopped at it, so every later candidate at the link was
+    // unreachable — the dead-end shape again, by a different door.
+    const { venue, backing } = setup();
+    at(venue, 5n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, KEYS.operator, backing.name, 5n));
+    at(venue, 8n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD, backing.name, 8n));
+    commitAs(venue, THIRD_SECRET);
+    expect(operatorAt(backing, venue, 8n)).toEqual(THIRD);
+  });
+
+  it("re-naming the incumbent closes a dead successor's window: the rule-holder's revocation of a successor it regrets", () => {
+    const { venue, backing } = setup();
+    at(venue, 5n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
+    at(venue, 9n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, KEYS.operator, backing.name, 9n));
+    // The regretted successor commits — too late: the re-naming closed it.
+    at(venue, 12n);
+    commitAs(venue, SUCCESSOR_SECRET);
+    expect(operatorAt(backing, venue, 13n)).toEqual(KEYS.operator);
+    expect(isAnOperator(backing, venue, SUCCESSOR)).toBe(false);
+    // And a real successor named after it takes force normally.
+    at(venue, 15n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD, backing.name, 15n));
+    commitAs(venue, THIRD_SECRET);
+    expect(operatorAt(backing, venue, 15n)).toEqual(THIRD);
+  });
+
+  it("an undecided window holds the chain at the incumbent: uncommitted is not dead while nobody later is named", () => {
+    const { venue, backing } = setup();
+    at(venue, 5n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
+    at(venue, 500n);
+    expect(operatorAt(backing, venue, 500n)).toEqual(KEYS.operator);
+    expect(isNamedSuccessor(backing, venue, SUCCESSOR)).toBe(true);
+    // And the window is still winnable.
+    commitAs(venue, SUCCESSOR_SECRET);
+    expect(operatorAt(backing, venue, 500n)).toEqual(SUCCESSOR);
+  });
+
+  it("two candidates at one index share the moment: the first published holds the live window, and the chain waits for it", () => {
+    // The venue orders publications inside an index, and the walk prefers the
+    // earlier — but a window is closed only by a candidate at a strictly later
+    // index, so the second-published cannot take force while the first's
+    // window is open (a walk that skipped an uncommitted-but-live candidate
+    // would move BACK to it when it committed, which stability forbids).
+    const { venue, backing } = setup();
+    at(venue, 5n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD, backing.name, 6n));
+    at(venue, 7n);
+    commitAs(venue, THIRD_SECRET);
+    expect(operatorAt(backing, venue, 8n)).toEqual(KEYS.operator);
+    at(venue, 9n);
+    commitAs(venue, SUCCESSOR_SECRET);
+    expect(operatorAt(backing, venue, 9n)).toEqual(SUCCESSOR);
+  });
+});
+
 describe("§C2: a replacement counts only on the terms E set", () => {
   it("counts nothing where E declares no replacement rule", () => {
     // §C2b: "Whether a sequencer can be replaced at all is answered in E."
@@ -220,13 +360,15 @@ describe("§C2: a replacement counts only on the terms E set", () => {
   it("takes the earliest witnessed where the rule-holder signed two successors", () => {
     // Two replacements naming one predecessor are the rule-holder choosing
     // twice, and the one it published first is the one it chose first —
-    // witnessing pins order (§C2), the rule two requests at one nonce follow.
+    // witnessing pins order (§C2), the rule two requests at one nonce follow —
+    // provided it QUALIFIED in its window: it committed strictly before the
+    // second was witnessed (the dead-successor rule, below).
     const { venue, backing } = setup();
     at(venue, 5n);
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR, backing.name, 5n));
+    commitAs(venue, SUCCESSOR_SECRET);
     at(venue, 6n);
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD, backing.name, 6n));
-    commitAs(venue, SUCCESSOR_SECRET);
     commitAs(venue, THIRD_SECRET);
     at(venue, 20n);
     expect(operatorAt(backing, venue, 20n)).toEqual(SUCCESSOR);
