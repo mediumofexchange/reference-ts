@@ -99,7 +99,7 @@ export interface ReleaseOp {
  * for it. Its own value rather than UNNAMED_VENUE, which is a real venue's
  * identity (the one nobody named) that a bundle lock may legitimately name.
  */
-export const NO_DECISION_VENUE = sha256(utf8Encoder.encode("mfp/lock/no-decision-venue/v1"));
+export const NO_DECISION_VENUE = sha256(utf8Encoder.encode("moe/lock/no-decision-venue/v1"));
 
 export interface LockOp {
   /** The backing whose units are reserved. */

@@ -6,41 +6,41 @@
 // rather than beside each use: no tag may be a prefix of another, and that is
 // checkable only by reading them together.
 //
-//   mfp/backing-signature/v1   the obligor's signature over a backing's name
-//   mfp/issuance/v1            a backer authorising issuance
-//   mfp/transfer/v1            a holder moving units
-//   mfp/burn/v1                a holder destroying units
-//   mfp/receipt/v2             an operator co-signing an accepted operation
+//   moe/backing-signature/v1   the obligor's signature over a backing's name
+//   moe/issuance/v1            a backer authorising issuance
+//   moe/transfer/v1            a holder moving units
+//   moe/burn/v1                a holder destroying units
+//   moe/receipt/v2             an operator co-signing an accepted operation
 //                              (v2 added the era — the witnessed index of the
 //                              operator's last commitment at signing; no v1
 //                              receipt was ever issued outside this repository)
-//   mfp/commitment/v1          an operator committing to served state
-//   mfp/demand/v1              a holder presenting claims for payment
-//   mfp/acceptance/v1          a backer answering a demand
-//   mfp/release/v1             a holder settling an accepted demand
-//   mfp/withdrawal/v1          a holder ending an unanswered demand
-//   mfp/lock/v1                a holder reserving units for an atomic attempt
-//   mfp/commit/v1              a holder committing one attempt, at every sequencer
-//   mfp/replacement/v1         E's rule naming a successor operator
-//   mfp/revocation/v1          K withdrawing its own authority to issue
+//   moe/commitment/v1          an operator committing to served state
+//   moe/demand/v1              a holder presenting claims for payment
+//   moe/acceptance/v1          a backer answering a demand
+//   moe/release/v1             a holder settling an accepted demand
+//   moe/withdrawal/v1          a holder ending an unanswered demand
+//   moe/lock/v1                a holder reserving units for an atomic attempt
+//   moe/commit/v1              a holder committing one attempt, at every sequencer
+//   moe/replacement/v1         E's rule naming a successor operator
+//   moe/revocation/v1          K withdrawing its own authority to issue
 
 const encoder = new TextEncoder();
 const tag = (s: string): Uint8Array => encoder.encode(s);
 
-export const BACKING_SIGNATURE_CONTEXT = tag("mfp/backing-signature/v1");
-export const ISSUANCE_CONTEXT = tag("mfp/issuance/v1");
-export const TRANSFER_CONTEXT = tag("mfp/transfer/v1");
-export const BURN_CONTEXT = tag("mfp/burn/v1");
-export const RECEIPT_CONTEXT = tag("mfp/receipt/v2");
-export const COMMITMENT_CONTEXT = tag("mfp/commitment/v1");
-export const DEMAND_CONTEXT = tag("mfp/demand/v1");
-export const ACCEPTANCE_CONTEXT = tag("mfp/acceptance/v1");
-export const RELEASE_CONTEXT = tag("mfp/release/v1");
-export const WITHDRAWAL_CONTEXT = tag("mfp/withdrawal/v1");
-export const LOCK_CONTEXT = tag("mfp/lock/v1");
-export const COMMIT_CONTEXT = tag("mfp/commit/v1");
-export const REPLACEMENT_CONTEXT = tag("mfp/replacement/v1");
-export const REVOCATION_CONTEXT = tag("mfp/revocation/v1");
+export const BACKING_SIGNATURE_CONTEXT = tag("moe/backing-signature/v1");
+export const ISSUANCE_CONTEXT = tag("moe/issuance/v1");
+export const TRANSFER_CONTEXT = tag("moe/transfer/v1");
+export const BURN_CONTEXT = tag("moe/burn/v1");
+export const RECEIPT_CONTEXT = tag("moe/receipt/v2");
+export const COMMITMENT_CONTEXT = tag("moe/commitment/v1");
+export const DEMAND_CONTEXT = tag("moe/demand/v1");
+export const ACCEPTANCE_CONTEXT = tag("moe/acceptance/v1");
+export const RELEASE_CONTEXT = tag("moe/release/v1");
+export const WITHDRAWAL_CONTEXT = tag("moe/withdrawal/v1");
+export const LOCK_CONTEXT = tag("moe/lock/v1");
+export const COMMIT_CONTEXT = tag("moe/commit/v1");
+export const REPLACEMENT_CONTEXT = tag("moe/replacement/v1");
+export const REVOCATION_CONTEXT = tag("moe/revocation/v1");
 
 /** Shared UTF-8 codecs. The decoder is strict and BOM-preserving so that
  *  decode(encode(s)) === s for every well-formed string. */
