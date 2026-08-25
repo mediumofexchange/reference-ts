@@ -670,6 +670,16 @@ export function applyEntry(
       if (entry.instant !== record.instant) {
         throw new LedgerError("acceptance does not agree the demand's instant");
       }
+      // Not a TIME rule: both values are the parties' own signed terms, so a
+      // replay checks it too. An acceptance whose deadline precedes the
+      // demand's instant ended before the demand could exist — the instant is
+      // at or before the filing index, the acceptance at or after it — and a
+      // served log carrying one is a fabrication that biased a reader's
+      // "reserved through the window" toward vacuously true (found reviewing
+      // slice 30: deadline 0 made every timeout suffice).
+      if (entry.deadline < record.instant) {
+        throw new LedgerError(ACCEPTANCE_WINDOW);
+      }
       state.demands.set(bytesToHex(record.hash), { ...record, acceptedDeadline: entry.deadline });
       break;
     }

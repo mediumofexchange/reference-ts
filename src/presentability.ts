@@ -172,12 +172,18 @@ export function payoutOf(
  *   - `dishonoured` the demand is past its deadline with no live answer, and
  *                   no acceptance ever stood with the payout reserved through
  *                   its own window. The backer's visible failure (§C3).
- *   - `lapsed`      an acceptance stood, its payout reserved with a timeout at
- *                   or past its own deadline, and the holder let it expire.
- *                   The claims were payable the whole window; not releasing
- *                   was the holder's own choice, and reading it as the
- *                   backer's failure would let a holder manufacture dishonour
- *                   by filing and walking away.
+ *   - `lapsed`      an acceptance stood whose payout the record shows
+ *                   reserved — a lock under the demand's hash, the set's
+ *                   terms, live at that acceptance's own deadline — and no
+ *                   release came. The branch the record shows, not a
+ *                   conviction: the holder's operator may have refused the
+ *                   release (§C2b's non-service grade is that reader), and a
+ *                   log's entries carry no witnessed index, so a lying
+ *                   operator can bias what cannot be established toward this
+ *                   answer — a reservation withdrawn mid-window, or taken
+ *                   after it, replays clocklessly all the same. The misses
+ *                   fall on the non-accusing side, deliberately; what they
+ *                   cost, and whom, is recorded (DECISIONS, slice 30).
  *   - `pending`     the demand is not past its deadline, or a live acceptance
  *                   stands. Nothing has failed yet.
  *   - `unreadable`  the state is not this backing's operator's, the demand is
@@ -227,6 +233,11 @@ export function dishonourOf(
     if (compareBytes(backingName(paying), backing.payout.backing) !== 0) return "unreadable";
     const payingLog = committedLogFor(paying, venue, served);
     if (payingLog === undefined || payingLog.kind === "dropped") return "unreadable";
+    // The paying log replays under the law, as the head's does: replay is the
+    // one bound on what an operator can ADD to a log, and this reader's verdict
+    // turns on an added entry (found reviewing this slice — a junk lock nobody
+    // signed read as a reservation).
+    if (replayLog(paying, payingLog.opLog) === undefined) return "unreadable";
     const want = {
       quantity: demand.quantity * backing.payout.perUnit,
       holder: backing.obligor,
@@ -239,7 +250,9 @@ export function dishonourOf(
           entry.kind === "lock" &&
           compareBytes(entry.attemptId, demandHash) === 0 &&
           legMismatch(entry, want) === undefined &&
-          entry.timeout >= deadline,
+          // Was the lock live at the acceptance's own deadline — lockIsLive,
+          // the one liveness definition, at the one instant the decision names.
+          lockIsLive(entry, deadline),
       );
     for (const entry of committed.opLog) {
       if (

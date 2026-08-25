@@ -613,6 +613,67 @@ describe("§C3: dishonour where P pays in claims — the branch where no accepta
     return { snapshots: f.sequencer.snapshot(), commitment };
   };
 
+  /** An answer straight into the served eur log, no door asked. */
+  const bareAcceptance = (f: ReturnType<typeof setup>, hash: Uint8Array, deadline: bigint): OpLogEntry => {
+    const nonce = f.sequencer.nextNonce(KEYS.backer, f.eur);
+    const answer: AcceptanceOp = { backing: f.eur, demandHash: hash, instant: 0n, deadline, nonce };
+    return {
+      position: f.sequencer.opLog(f.eur).length,
+      kind: "acceptance",
+      demandHash: hash,
+      instant: 0n,
+      deadline,
+      nonce,
+      signature: ed25519.sign(encodeAcceptance(answer), SECRETS.backer),
+    };
+  };
+
+  /** A lawful lock straight into the served gold log — signed, funded, next nonce. */
+  const goldLock = (f: ReturnType<typeof setup>, over: Partial<LockOp>): OpLogEntry => {
+    const base: LockOp = {
+      backing: f.gold,
+      attemptId: new Uint8Array(32),
+      holder: KEYS.backer,
+      beneficiary: KEYS.alice,
+      quantity: 80n,
+      timeout: 200n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: f.sequencer.nextNonce(KEYS.backer, f.gold),
+      ...over,
+    };
+    return {
+      position: f.sequencer.opLog(f.gold).length,
+      kind: "lock",
+      attemptId: base.attemptId,
+      holder: base.holder,
+      beneficiary: base.beneficiary,
+      quantity: base.quantity,
+      timeout: base.timeout,
+      decisionVenue: base.decisionVenue,
+      parties: base.parties,
+      nonce: base.nonce,
+      signature: ed25519.sign(encodeLock(base), SECRETS.backer),
+    };
+  };
+
+  /** The operator's story: both logs with whatever appended, committed and witnessed. */
+  const serve = (
+    f: ReturnType<typeof setup>,
+    eurExtra: OpLogEntry[],
+    goldExtra: OpLogEntry[],
+    at: bigint,
+  ): ServedState => {
+    const snapshots = [
+      { name: f.eur.name, opLog: [...f.sequencer.opLog(f.eur), ...eurExtra] },
+      { name: f.gold.name, opLog: [...f.sequencer.opLog(f.gold), ...goldExtra] },
+    ];
+    advanceWitnessedIndex(f.venue, at);
+    const commitment = signCommitment(SECRETS.operator, 0n, stateRoot(snapshots));
+    f.venue.publish(commitment);
+    return { snapshots, commitment };
+  };
+
   it("an expired acceptance whose payout stood reserved through its window is the holder's lapse, and the record alone still reads dishonour", () => {
     const f = setup();
     const { hash } = file(f, 40n);
@@ -651,14 +712,17 @@ describe("§C3: dishonour where P pays in claims — the branch where no accepta
     expect(dishonourOf(f.eur, f.venue, () => undefined, state, hash)).toBe("unreadable");
   });
 
-  it("where P pays outside the claim layer the record is the whole answer", () => {
-    // Nothing to reserve, so an expired demand is dishonour there, as §C3
-    // reads it — the backer-as-holder files on GOLD to keep the fixture small.
+  it("where P pays outside the claim layer the record is the whole answer: an expired acceptance had nothing to reserve", () => {
+    // The refinement is only for claims-paying backings. GOLD pays a thing, so
+    // an acceptance stands with no leg beside it and its expiry is dishonour
+    // plain — the backer-as-holder files to keep the fixture small.
     const f = setup();
     const demand = { backing: f.gold, holder: KEYS.backer, quantity: 10n, instant: 0n, deadline: 20n, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
     f.sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.backer));
     const hash = demandHash(demand);
     expect(dishonourOf(f.gold, f.venue, gold(f), servedOf(f), hash)).toBe("pending");
+    const answer: AcceptanceOp = { backing: f.gold, demandHash: hash, instant: 0n, deadline: 15n, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
+    f.sequencer.submitAcceptance(answer, ed25519.sign(encodeAcceptance(answer), SECRETS.backer), []);
     advanceWitnessedIndex(f.venue, 21n);
     expect(dishonourOf(f.gold, f.venue, gold(f), servedOf(f), hash)).toBe("dishonoured");
   });
@@ -667,7 +731,7 @@ describe("§C3: dishonour where P pays in claims — the branch where no accepta
     // The law replays an acceptance without seeing legs, so a lying operator
     // can serve one bare; the reader checks the paying log, not the door.
     const f = setup();
-    const { hash, demand } = file(f, 40n);
+    const { hash } = file(f, 40n);
     const eurLog = f.sequencer.opLog(f.eur);
     const answer = { backing: f.eur, demandHash: hash, instant: 0n, deadline: 90n, nonce: 1n };
     const bare: OpLogEntry = {
@@ -686,9 +750,7 @@ describe("§C3: dishonour where P pays in claims — the branch where no accepta
     advanceWitnessedIndex(f.venue, 101n);
     const commitment = signCommitment(SECRETS.operator, 0n, stateRoot(snapshots));
     f.venue.publish(commitment);
-    const state = { snapshots, commitment };
-    void demand;
-    expect(dishonourOf(f.eur, f.venue, gold(f), state, hash)).toBe("dishonoured");
+    expect(dishonourOf(f.eur, f.venue, gold(f), { snapshots, commitment }, hash)).toBe("dishonoured");
   });
 
   it("a reservation too short for the answer is no reservation: the lock must reach the acceptance's own deadline", () => {
@@ -728,5 +790,113 @@ describe("§C3: dishonour where P pays in claims — the branch where no accepta
     const commitment = signCommitment(SECRETS.operator, 0n, stateRoot(snapshots));
     f.venue.publish(commitment);
     expect(dishonourOf(f.eur, f.venue, gold(f), { snapshots, commitment }, hash)).toBe("dishonoured");
+  });
+
+  it("a lock reaching exactly the acceptance's deadline is a reservation: the boundary is the door's own", () => {
+    // The door refuses only a lock that falls short of the acceptance
+    // (timeout < deadline), so timeout === deadline is a lawful answer and the
+    // reader must not read it as dishonour.
+    const f = setup();
+    const { hash } = file(f, 40n);
+    accept(f, hash, 40n, { timeout: 90n }); // the acceptance's own deadline
+    advanceWitnessedIndex(f.venue, 101n);
+    expect(dishonourOf(f.eur, f.venue, gold(f), servedOf(f), hash)).toBe("lapsed");
+  });
+
+  it("a paying log that does not replay under the law answers nothing", () => {
+    // Replay is the one bound on what an operator can ADD to a log: an
+    // omission is caught by the holder's receipt position, an addition only by
+    // this. A junk lock nobody signed, with the set's own terms, must not
+    // become the reservation that exonerates the backer.
+    const f = setup();
+    const { hash } = file(f, 40n);
+    const junk = { ...goldLock(f, { attemptId: hash }), signature: new Uint8Array(64) };
+    const state = serve(f, [bareAcceptance(f, hash, 90n)], [junk], 101n);
+    expect(replayLog(f.gold, state.snapshots[1]!.opLog)).toBeUndefined();
+    expect(dishonourOf(f.eur, f.venue, gold(f), state, hash)).toBe("unreadable");
+  });
+
+  it("an acceptance whose deadline precedes the demand's instant is not a history: the head log will not replay", () => {
+    // Both values are the parties' own signed terms, so the law checks them
+    // with no clock — the instant is at or before the filing index, the
+    // acceptance at or after it. Without this, a fabricated deadline-0 answer
+    // made "reserved through the window" vacuously true for any lock at all.
+    const f = setup();
+    advanceWitnessedIndex(f.venue, 5n);
+    const demand: DemandOp = { backing: f.eur, holder: KEYS.alice, quantity: 40n, instant: 5n, deadline: DEADLINE, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
+    f.sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice));
+    const hash = demandHash(demand);
+    const nonce = f.sequencer.nextNonce(KEYS.backer, f.eur);
+    const answer: AcceptanceOp = { backing: f.eur, demandHash: hash, instant: 5n, deadline: 2n, nonce };
+    const vacuous: OpLogEntry = {
+      position: f.sequencer.opLog(f.eur).length,
+      kind: "acceptance",
+      demandHash: hash,
+      instant: 5n,
+      deadline: 2n,
+      nonce,
+      signature: ed25519.sign(encodeAcceptance(answer), SECRETS.backer),
+    };
+    const state = serve(f, [vacuous], [goldLock(f, { attemptId: hash, timeout: 2n })], 101n);
+    expect(replayLog(f.eur, state.snapshots[0]!.opLog)).toBeUndefined();
+    expect(dishonourOf(f.eur, f.venue, gold(f), state, hash)).toBe("unreadable");
+  });
+
+  it("a reservation to somebody else is no reservation", () => {
+    const f = setup();
+    const { hash } = file(f, 40n);
+    const state = serve(
+      f,
+      [bareAcceptance(f, hash, 90n)],
+      [goldLock(f, { attemptId: hash, beneficiary: KEYS.bob, parties: [KEYS.bob] })],
+      101n,
+    );
+    expect(dishonourOf(f.eur, f.venue, gold(f), state, hash)).toBe("dishonoured");
+  });
+
+  it("a reservation of half the payout is no reservation", () => {
+    const f = setup();
+    const { hash } = file(f, 40n);
+    const state = serve(f, [bareAcceptance(f, hash, 90n)], [goldLock(f, { attemptId: hash, quantity: 40n })], 101n);
+    expect(dishonourOf(f.eur, f.venue, gold(f), state, hash)).toBe("dishonoured");
+  });
+
+  it("a reservation under another attempt is no reservation", () => {
+    const f = setup();
+    const { hash } = file(f, 40n);
+    const state = serve(
+      f,
+      [bareAcceptance(f, hash, 90n)],
+      [goldLock(f, { attemptId: new Uint8Array(32).fill(3) })],
+      101n,
+    );
+    expect(dishonourOf(f.eur, f.venue, gold(f), state, hash)).toBe("dishonoured");
+  });
+
+  it("the log answers, not the record: a reserved first round under a bare second is the holder's lapse", () => {
+    // The record keeps only the LAST acceptance's deadline; the reader scans
+    // the log, where an earlier round that stood fully reserved answers for
+    // its own window even though the served record's answer was never taken
+    // at any door.
+    const f = setup();
+    const { hash } = file(f, 40n);
+    const op1: AcceptanceOp = { backing: f.eur, demandHash: hash, instant: 0n, deadline: 40n, nonce: f.sequencer.nextNonce(KEYS.backer, f.eur) };
+    const lock1: LockOp = { backing: f.gold, attemptId: hash, holder: KEYS.backer, beneficiary: KEYS.alice, quantity: 80n, timeout: 40n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
+    f.sequencer.submitAcceptance(op1, ed25519.sign(encodeAcceptance(op1), SECRETS.backer), [{ op: lock1, signature: ed25519.sign(encodeLock(lock1), SECRETS.backer) }]);
+    advanceWitnessedIndex(f.venue, 41n); // round 1 expires
+    const state = serve(f, [bareAcceptance(f, hash, 90n)], [], 101n);
+    const record = replayLog(f.eur, state.snapshots[0]!.opLog)!.demands.values().next().value!;
+    expect(record.acceptedDeadline).toBe(90n); // the record's own answer: bare
+    expect(dishonourOf(f.eur, f.venue, gold(f), state, hash)).toBe("lapsed"); // round 1 answers
+  });
+
+  it("a resolver handing back another backing under the name asked for is unreadable", () => {
+    // "A resolver whose every answer is checked against the name asked for" —
+    // the regression the terms readers were hardened against, asked of this one.
+    const f = setup();
+    const { hash } = file(f, 40n);
+    accept(f, hash, 40n);
+    advanceWitnessedIndex(f.venue, 101n);
+    expect(dishonourOf(f.eur, f.venue, () => f.eur, servedOf(f), hash)).toBe("unreadable");
   });
 });

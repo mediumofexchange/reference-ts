@@ -16,6 +16,89 @@ Format:
 
 ---
 
+## 2026-08-25 - Slice 30: dishonour with a payout reserved is the holder's lapse
+
+**Question:** the audit's question 3, decided by Bob: "where P pays in claims,
+dishonour is the branch where no acceptance *with its payout reserved*
+answered — a reader (`payoutOf` at the acceptance's own deadline), not a law
+change." The law's `isDishonoured` reads one record and stays blind to legs —
+deliberately, one state per backing — so an expired acceptance read as
+dishonour even where the record shows the claims were payable the whole
+window and the holder simply never released (audit-A-6). The extensions' lapse
+rule distinguishes; the core had no reader that did.
+
+**The reader:** `dishonourOf(backing, venue, terms, served, demandHash)` →
+`dishonoured | lapsed | pending | unreadable`, beside `payoutOf` and
+`accompanimentOf` in presentability.ts. It refines only `isDishonoured`'s TRUE
+branch, and only for claims-paying backings — where P pays a thing there is
+nothing to reserve and the record is the whole answer. Both logs come through
+`committedLogFor` and replay under the law; the paying backing's terms come
+from a resolver checked against the name asked for.
+
+- **The reservation is read from the paying LOG, not the door and not the
+  locks map.** The decision's shape was "`payoutOf` at the acceptance's own
+  deadline", and the WHICH-instant survives — each logged acceptance counts
+  iff a lock in the paying log names the demand's hash, carries the set's
+  terms (`legMismatch`), and was live at that acceptance's own deadline
+  (`lockIsLive` — the review round caught the inequality hand-written, a
+  fourth copy). But the HOW diverged from a literal `payoutOf` call: that
+  replays to the present and reads the `locks` map, and a backer that
+  lawfully withdrew its expired lock after the window would read as
+  dishonoured. The log keeps what the map forgets. Same reason the scan walks
+  log entries rather than the record's `acceptedDeadline`: the record keeps
+  only the LAST answer, and an earlier round that stood fully reserved
+  answers for its own window (pinned).
+- **An honest door cannot produce the case** — it takes an acceptance only
+  with its paying lock beside it, timeout at or past the deadline. The reader
+  exists because a served log comes from an operator with a motive and the
+  law replays an acceptance without ever seeing legs: a bare acceptance, or
+  one beside a too-short lock, must still read as dishonour (both pinned).
+
+**The review round** (one Opus angle: attack the reservation read). Three
+fixes and a law change:
+
+- **The paying log was never replayed** — `committedLogFor` checks operator,
+  root and carriage, and replay is the ONE bound on what an operator can ADD
+  to a log (an omission is caught by the holder's receipt position; an
+  addition by nothing else). A junk lock nobody signed, with the set's own
+  terms, exonerated the backer. Fixed with the neighbour's own rule — the
+  paying log replays or the answer is `unreadable` — and pinned.
+- **A clockless log cannot establish "stood through the window."** Entries
+  carry no witnessed index, so a reservation withdrawn mid-window, or taken
+  only after it, replays exactly like one that stood — a lying operator can
+  serve either. The misses fall to `lapsed`, the NON-ACCUSING side,
+  deliberately: the reader neither convicts the holder nor acquits the
+  backer, it says which branch the record shows, and the doc now says so.
+  Residual, recorded: only a lying operator's log shows these shapes (the
+  door refuses a live lock's withdrawal), and its artefact — the backer's own
+  co-signed withdrawal inside a window it had answered — sits in the
+  committed record for the queued slice-28 fault predicate ("a withdrawal
+  co-signed against an in-time commit") to name. The opposite direction (a
+  lock OMITTED from the served paying log reads as false dishonour) is
+  answered by the backer's own lock receipt position, not by this reader.
+- **Law change, clockless: an acceptance's deadline may not precede the
+  demand's instant.** Both are the parties' own signed terms, so the check
+  binds on replay (the instant is at or before the filing index, the
+  acceptance at or after it) and refuses nothing an honest door ever took.
+  Without it a fabricated deadline-0 answer made "reserved through the
+  window" vacuously true for any lock at all. Reaches exactly as far as the
+  instant the holder named: the demand door refuses only post-dating, so a
+  holder who back-dates the instant forfeits that much of the protection —
+  the payee-freshness family, the holder's own term.
+- **Five decision points had no test** — the timeout boundary (the door takes
+  `timeout === deadline`; `>=` → `>` survived the suite), the beneficiary and
+  quantity of the paying lock, the attempt id, the record-vs-log scan, and
+  the resolver handing back the wrong backing under the right name. All
+  pinned; the two structural mutations (boundary, dropped replay) re-run and
+  caught.
+
+**Spec change:** proposed, not made — §C3's presentation section reads
+dishonour from the demand record alone. Candidate sentence: *"Where P pays in
+claims, dishonour is read across both records: a demand past its deadline with
+no acceptance whose reserved payout stood to that acceptance's own deadline.
+An acceptance that stood so reserved and expired unclaimed is the holder's
+lapse, not the backer's failure."* Bob's call.
+
 ## 2026-08-25 - Slice 29: a dead successor does not end the chain
 
 **Question:** the audit's question 2, decided by Bob: "the chain walk passes
