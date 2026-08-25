@@ -133,6 +133,12 @@ export function acceptanceIsLive(record: DemandRecord, atWitnessedIndex: bigint)
  * "claims still live past the deadline are the backer's visible failure" reports
  * nothing. Publicly checkable against the committed record and a witnessed
  * index, with nobody reporting anything.
+ *
+ * Blind to legs, deliberately: one record, one state. Where P pays in claims an
+ * expired acceptance may have stood with its payout reserved the whole window —
+ * the holder's lapse, not the backer's failure — and `dishonourOf`
+ * (presentability.ts) is the reader that refines this predicate's true branch
+ * across the served state (the 2026-08-22 audit, question 3).
  */
 export function isDishonoured(record: DemandRecord, atWitnessedIndex: bigint): boolean {
   return !acceptanceIsLive(record, atWitnessedIndex) && atWitnessedIndex > record.deadline;
@@ -663,6 +669,16 @@ export function applyEntry(
       }
       if (entry.instant !== record.instant) {
         throw new LedgerError("acceptance does not agree the demand's instant");
+      }
+      // Not a TIME rule: both values are the parties' own signed terms, so a
+      // replay checks it too. An acceptance whose deadline precedes the
+      // demand's instant ended before the demand could exist — the instant is
+      // at or before the filing index, the acceptance at or after it — and a
+      // served log carrying one is a fabrication that biased a reader's
+      // "reserved through the window" toward vacuously true (found reviewing
+      // slice 30: deadline 0 made every timeout suffice).
+      if (entry.deadline < record.instant) {
+        throw new LedgerError(ACCEPTANCE_WINDOW);
       }
       state.demands.set(bytesToHex(record.hash), { ...record, acceptedDeadline: entry.deadline });
       break;

@@ -32,7 +32,7 @@ import {
   operatorsOf,
   successionOf,
 } from "../src/replacement.js";
-import { accompanimentOf, payoutOf } from "../src/presentability.js";
+import { accompanimentOf, dishonourOf, payoutOf } from "../src/presentability.js";
 import { revokedAt } from "../src/revocation.js";
 import { LocalVenue, VenueError, type Venue } from "../src/venue.js";
 import { KEYS, SECRETS } from "./support.js";
@@ -209,6 +209,10 @@ function surface() {
     [
       "payoutOf",
       () => payoutOf(paying, refusing, () => backing, served, new Uint8Array(32)),
+    ],
+    [
+      "dishonourOf",
+      () => dishonourOf(paying, refusing, () => backing, served, new Uint8Array(32)),
     ],
   ] as const;
 }
