@@ -701,6 +701,85 @@ describe("a set settled in part is the operator's fault, read across one commitm
     expect(settledInPart(f.eur, f.venue, f.terms, served, hash)).toBeUndefined();
   });
 
+  it("a reliance leg is read the same way: the head released without the accompaniment's half names it", () => {
+    // The set's legs are the head's reliance targets AND its claims payout;
+    // the first arm gets its own walk here, with the accompaniment locked at
+    // filing (invariant 13) and the head's release served without its half.
+    const venue = new LocalVenue();
+    const evidence = { setting: "transparent" as const, operator: KEYS.operator };
+    const gold = makeBacking({
+      obligor: KEYS.backer,
+      payout: { thing: "GOLD", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence,
+    });
+    const eur = makeBacking({
+      obligor: KEYS.backer,
+      payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },
+      reliance: [{ target: gold.name, count: 2n }],
+      evidence,
+    });
+    const sequencer = new Sequencer(SECRETS.operator, venue);
+    for (const backing of [gold, eur]) sequencer.register(backing, signBacking(SECRETS.backer, backing));
+    for (const [backing, quantity] of [[eur, 100n], [gold, 200n]] as const) {
+      const nonce = sequencer.nextNonce(KEYS.backer, backing);
+      sequencer.submitIssue(
+        { backing, recipient: KEYS.alice, quantity, nonce },
+        ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, quantity, nonce), SECRETS.backer),
+      );
+    }
+    const demand: DemandOp = {
+      backing: eur,
+      holder: KEYS.alice,
+      quantity: 40n,
+      instant: 0n,
+      deadline: 100n,
+      nonce: sequencer.nextNonce(KEYS.alice, eur),
+    };
+    const hash = demandHash(demand);
+    const leg: LockOp = {
+      backing: gold,
+      attemptId: hash,
+      holder: KEYS.alice,
+      beneficiary: KEYS.backer,
+      quantity: 80n,
+      timeout: 95n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: sequencer.nextNonce(KEYS.alice, gold),
+    };
+    sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice), [
+      { op: leg, signature: ed25519.sign(encodeLock(leg), SECRETS.alice) },
+    ]);
+    const answer: AcceptanceOp = {
+      backing: eur,
+      demandHash: hash,
+      instant: 0n,
+      deadline: 90n,
+      nonce: sequencer.nextNonce(KEYS.backer, eur),
+    };
+    sequencer.submitAcceptance(answer, ed25519.sign(encodeAcceptance(answer), SECRETS.backer), []);
+    const headNonce = sequencer.nextNonce(KEYS.alice, eur);
+    const headOp = { backing: eur, demandHash: hash, nonce: headNonce };
+    const headRelease: OpLogEntry = {
+      position: sequencer.opLog(eur).length,
+      kind: "release",
+      demandHash: hash,
+      nonce: headNonce,
+      signature: ed25519.sign(encodeRelease(headOp), SECRETS.alice),
+    };
+    const snapshots = [
+      { name: eur.name, opLog: [...sequencer.opLog(eur), headRelease] },
+      { name: gold.name, opLog: sequencer.opLog(gold) },
+    ];
+    const commitment = signCommitment(SECRETS.operator, 0n, stateRoot(snapshots));
+    venue.publish(commitment);
+    const terms = (name: Uint8Array) => (compareBytes(name, gold.name) === 0 ? gold : undefined);
+    const proven = settledInPart(eur, venue, terms, { snapshots, commitment }, hash);
+    expect(proven).toBeDefined();
+    expect(compareBytes(proven as Uint8Array, gold.name)).toBe(0);
+  });
+
   it("a head log that never filed the demand proves nothing against it", () => {
     // The leg's release under a hash this head never saw may be another
     // record's story; without the demand in the head log the set is not this
