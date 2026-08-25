@@ -109,6 +109,7 @@ import { copyReceipt, signReceipt, type Receipt } from "./receipt.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
 import { isNamedSuccessor, operatorAt } from "./replacement.js";
 import { admittedInGap, committedInTime, gapLegsFor, gapOpen, venueIsDeclared, witnessedCommitFor } from "./recovery.js";
+import { withdrawnAgainstCommit } from "./fault.js";
 import { revokedAt } from "./revocation.js";
 import { type Venue } from "./venue.js";
 
@@ -312,6 +313,17 @@ export class Sequencer {
     const replayed = replayLog(held, committed.opLog);
     if (replayed === undefined) {
       throw new SequencerError("that committed state is not a history that could have happened");
+    }
+    // A withdrawal the shared record refutes is the predecessor's provable
+    // fault (withdrawnAgainstCommit), and this door is what keeps that proof
+    // attributable: an heir that applied the entry would root it under its own
+    // key, carrying its predecessor's artefact with no way to shed it —
+    // dropping the entry later is isRewrittenHistory (found reviewing this
+    // slice: the heir's only other exit was refusing the backing entirely).
+    if (withdrawnAgainstCommit(held, this.venue, served) !== undefined) {
+      throw new SequencerError(
+        "that log carries a withdrawal the record refutes: the fault is its signer's to keep",
+      );
     }
     // And every venue-naming lock in it must name the venue this operator
     // watches: the gate asks that of every lock it prepares, and this is the one
@@ -871,9 +883,17 @@ export class Sequencer {
   }
 
   /** Whether any backing this sequencer serves has a standing demand under that hash. */
-  private demandStands(hash: Uint8Array): boolean {
+  /**
+   * Whether a standing demand claims this hash for its set ON THIS BACKING:
+   * the demanded backing itself, its reliance targets, its claims payout. A
+   * demand standing elsewhere in the book says nothing about a slot here.
+   */
+  private demandStands(hash: Uint8Array, on: Backing): boolean {
     for (const backing of this.backings.values()) {
-      if (this.ledger.demandOf(backing, hash) !== undefined) return true;
+      if (this.ledger.demandOf(backing, hash) === undefined) continue;
+      const set = [backing.name, ...backing.reliance.map((entry) => entry.target)];
+      if (paysInClaims(backing.payout)) set.push(backing.payout.backing);
+      if (set.some((name) => compareBytes(name, on.name) === 0)) return true;
     }
     return false;
   }
@@ -1333,8 +1353,15 @@ export class Sequencer {
       // A set leg names no venue and settles with its set: nothing here to read.
       if (compareBytes(item.op.decisionVenue, NO_DECISION_VENUE) === 0) return;
       // A demand's hash is its set's: a lock naming a venue under it is a squat on
-      // the slot a leg or the payout must take (found reviewing slice 26).
-      if (this.demandStands(item.op.attemptId)) {
+      // the slot a leg or the payout must take (found reviewing slice 26) —
+      // and that slot exists only on the set's own backings, so the refusal
+      // reaches exactly as far as the set does. On an unrelated backing the
+      // hash collides with nothing a lawful act will ever need: the demand
+      // cannot be refiled under another backing without a new hash, so the
+      // refusal there protected no slot and made the door refuse what §C2b's
+      // count — a one-backing reader — must count (found reviewing slice 28:
+      // a standing demand anywhere in the book manufactured the grade).
+      if (this.demandStands(item.op.attemptId, item.backing)) {
         throw new SequencerError("that attempt is a standing demand's: only its set locks under it");
       }
       if (compareBytes(item.op.decisionVenue, this.venue.id) !== 0) {

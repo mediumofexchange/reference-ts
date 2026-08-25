@@ -16,6 +16,125 @@ Format:
 
 ---
 
+## 2026-08-25 - Slice 28: unserved lock requests, and two set faults made provable
+
+**Question:** the last of the queue Bob set in the 2026-08-22 audit, and slice
+26's open items (1) and (2): `unservedRequests` counted only transfers though
+§C3 says "a lock request left unserved is §C2b's non-service object"; an
+operator co-signing a withdrawal where the venue shows an in-time commit was
+provable from public data with no predicate in fault.ts; and beside it the
+audit queued "a set settled in part, read across the served state."
+
+**1. Lock requests join the non-service count** (`unservedRequests`,
+recovery.ts). A bare lock counts where the operator was OBLIGED to serve it —
+the door's own refusals mirrored: it names this decision venue (a
+`NO_DECISION_VENUE` lock is a leg and comes only with its set; a foreign venue
+is not watched), its attempt is not already committed at the venue, and its
+timeout is not spent — at its witnessing (the law's TIME rule, asked at the one
+index the operator was first handed it) nor by the reading index. Locks fold
+into the same signing-order sequence as transfers and reserve their units
+there, both directions pinned. **The refusal aggregate (m′, W′) is not built:**
+its counted object is a signed refusal to prepare, and prepare-decide-commit
+went to Extensions (money-from-first-principles@b62f6ee), so the aggregate goes
+with it; recorded here so building it later is a decision, not a discovery.
+
+**2. `withdrawnAgainstCommit`** (fault.ts): the sequencer's own refusal ("the
+attempt committed in time: settle it") turned into the fault it proves. Sound
+with no clock: an honest withdrawal opens only past the timeout, an in-time
+commit is witnessed at or before it, and witnessing is shared and pinned in
+order — so the pair cannot happen honestly, and no later publication can become
+an earlier commitment. The proof stands on the LAWFUL PREFIX of the committed
+log, and names the operator of the book it stands in; `takeOver` refuses a log
+carrying the artefact, so an heir never inherits its predecessor's withdrawal
+unknowingly.
+
+**3. `settledInPart`** (fault.ts): one commitment carrying half a settlement,
+for the backings the committing operator held the pen on. The invariant it
+rests on, each leg verified in review: the doors apply a set atomically
+(applyAll dry-runs before applying), the committed marks advance together at
+each publication, `sameDuration` is asked at every set-creating door so a gap
+restores a set's backings together, and the gap channel admits no set piece
+(the head's release by `hasLegs`, a leg's by `lockStands`, a freed leg's by the
+law — a demand hash binds its own backing). Each half is the set's own act:
+the head must show the demand FILED (hash recomputed from the entry), and the
+leg's half is the conversion of a lock carrying the set's own terms
+(`legMismatch`), read through the fold the sibling predicate uses.
+
+**The review round** (three Opus angles: the count adversarially; the
+withdrawal fault adversarially; settledInPart's invariant). The three findings
+that mattered, every one proven by a run before it was fixed:
+
+- **The count's TIME gate was one-sided** — asked only at witnessing, so m
+  one-unit locks with short timeouts fired the grade against an operator with
+  no lawful move for the rest of W. A lock whose timeout is spent by the
+  reading index is applied but never counted; the consequence, accepted
+  knowingly: an operator that stalls a lock past its own timeout escapes that
+  request's count — the holder's own declared term bounds the accusation, as a
+  demand's deadline does. And the squat refusal (`demandStands`) scanned the
+  whole book while the count reads one backing, so a one-unit demand on X made
+  a bare lock on Y unservable-but-counted: the refusal is now scoped to the
+  set's own backings, its stated purpose, and door and count agree by
+  construction. The venue's commit read moved behind the law's fold so
+  unsigned noise dies at the signature check instead of taking the whole count
+  down with a `VenueError` on a commits-refusing view (walkGap's recorded
+  residual, made reachable and closed).
+- **The withdrawal fault swallowed the venue's refusal and named the wrong
+  key.** The fold's catch ate the `VenueError` that `answering` exists to let
+  through — an Ergo view, whose commitsFor refuses BY DESIGN, read every log
+  as faultless. The catch now guards only `applyEntry`, which takes no venue;
+  the same restructuring made the proof prefix-based, closing the
+  garbage-tail dodge (one junk entry had bought unprovability at the price of
+  an unnamed boolean). And `takeOver` — all-or-nothing, checking locks but
+  never withdrawals — carried the predecessor's artefact into the heir's book
+  under the heir's key; the door now refuses the poisoned log, which is what
+  keeps the proof's attribution honest.
+- **The first draft of `settledInPart` made a false accusation** — the one
+  thing a fault predicate must never do. `commit()` roots every registered
+  backing, in force or not, so a set with its release in the tail, a partial
+  handover, and the operator's own restore honestly produced a root showing
+  one half (28b's strand wearing one root). The pen-holder gate —
+  `committedWhileInForce`, the stable by-sequence read `isRewrittenHistory`
+  already owned — reads it as the strand it is, both directions pinned with
+  real successions. The same round killed two escapes: a holder who took the
+  payout and WITHDREW her demand afterwards (the head must show the demand
+  filed, not standing), and a backer-run operator that withdrew its payout
+  lock and released a one-unit decoy under the same hash (the conversion must
+  carry the set's own terms). An heir whose inherited leg log never held the
+  set's lock shows no half to miss — that artefact is `isRewrittenHistory`'s,
+  and naming it twice would report one artefact as two.
+
+**Residuals, recorded not patched:**
+
+- The count: a named party can suppress the grade by publishing a commit per
+  attempt id (one signature each) — the door then shuts the id and the holder
+  republishes under a fresh one, a chase priced per round on both sides.
+  Mirrored exactly between door and count, so no divergence; the (attempt,
+  holder) lock key recorded open since 24c would end the squat family
+  entirely. A demand in the operator's TAIL shields a same-backing squat from
+  the door while the count reads the prior commitment — bounded by one
+  publication, since a tail commits at the next publish or the silence grade
+  takes over.
+- `settledInPart` needs an ABSENCE, and an absence has no prefix: one garbage
+  entry in either log hides the fault, at the price of a state nothing can
+  authenticate (`stateIsAuthentic` false, snapshot redemption gone). The
+  sibling proves a presence and keeps its prefix; the asymmetry is the
+  principled line, and both docs say so.
+- A leg released under a head whose log the operator never carried the demand
+  in stays unproven (the set is not derivable from the hash alone), and a
+  fault-carrying log can still be inherited by an heir that FORKS the rule —
+  takeOver's refusal protects the honest path only.
+- The resolver contract diverges from the presentability readers by design: a
+  withheld or lying resolver costs the ACCUSER the proof (silent skip), where
+  `accompanimentOf` answers "unreadable" — a fault predicate's conservative
+  side points the other way, and both docs now say which way and why.
+
+**Spec change:** none made. Two candidates for Bob: §C2b could name the lock
+request beside the transfer in the non-service clause's own text (one
+sentence, "a lock request naming the declared decision venue is the same
+object, servable while its timeout stands"); §C3's settlement paragraph could
+say "one commitment shows the whole settlement or none of it, for the backings
+its operator then held the pen on."
+
 ## 2026-08-25 - Slice 30: dishonour with a payout reserved is the holder's lapse
 
 **Question:** the audit's question 3, decided by Bob: "where P pays in claims,
@@ -1289,9 +1408,11 @@ this reference has no persisted logs, and the rule says why it should not.
 
 **Open:** (1) `unservedRequests` counts only transfer requests, though §C3 says
 "a lock request left unserved is §C2b's non-service object" — slice 26, with
-the refusal aggregate (m', W'). (2) An operator that co-signs a withdrawal
-where the venue shows an in-time commit: provable from public data, no
-predicate in fault.ts yet. (3) The acceptance-vs-lock-timeout bound above. (4)
+the refusal aggregate (m', W'). *[Closed by slice 28, 2026-08-25; the refusal
+aggregate went to Extensions with prepare-decide-commit.]* (2) An operator
+that co-signs a withdrawal where the venue shows an in-time commit: provable
+from public data, no predicate in fault.ts yet. *[Closed by slice 28:
+`withdrawnAgainstCommit`.]* (3) The acceptance-vs-lock-timeout bound above. (4)
 Locks keyed by (attempt, holder), which would end the leg-slot squat.
 
 **Spec change:** none needed. §C3's "expired locks unlock unilaterally" and
