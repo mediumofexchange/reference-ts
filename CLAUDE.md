@@ -1,11 +1,23 @@
-# mfp-reference
+# reference-ts
 
-TypeScript reference implementation of **Money from First Principles**:
+TypeScript reference implementation of the **Medium of Exchange Protocol**:
 one object `B = (K, P, R, E)`, claims held against it, wallets, and the law.
+
+Published to npm as `@mediumofexchange/reference`, under the `next` dist-tag
+while the API moves.
+
+Three names, three jobs, so it is clear which one a change belongs to:
+
+- **Money from First Principles** — the paper. Why the object is what it is.
+  Keeps its own name; it is an argument, and arguments are cited, not
+  versioned.
+- **Medium of Exchange Protocol** — what `construction.md` and `extensions.md`
+  define. The thing that gets built, and the thing an implementation tracks.
+- **reference-ts** — this repository. One way to build it.
 
 ## The spec is a reference, not gospel
 
-- Spec: https://github.com/decentbob/money-from-first-principles
+- Spec: https://github.com/mediumofexchange/money-from-first-principles
   (the derivation is in `money-from-first-principles.md`, the build machinery
   in `construction.md`, optional profiles in `extensions.md`).
 - The code tracks the spec as it stands, not a snapshot. When the spec

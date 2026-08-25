@@ -26,7 +26,7 @@
 //
 // Canonical message, signed by the key E's replacement clause names:
 //
-//   context "mfp/replacement/v1"
+//   context "moe/replacement/v1"
 //     || 32-byte backing name
 //     || u8 role (0x01 operator)
 //     || 32-byte successor

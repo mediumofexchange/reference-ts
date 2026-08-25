@@ -139,7 +139,7 @@ export function ergoVenueId(chain: string, depth: bigint, publicationScript: str
   // prefix-free, and this one is not among them. Borrowing the escape hatch
   // outside the condition that justifies it is how a checked invariant turns
   // into a convention.
-  w.lengthPrefixed(utf8Encoder.encode("mfp/venue/ergo/v1"));
+  w.lengthPrefixed(utf8Encoder.encode("moe/venue/ergo/v1"));
   w.lengthPrefixed(utf8Encoder.encode(chain));
   w.u64(depth);
   w.lengthPrefixed(utf8Encoder.encode(publicationScript));
