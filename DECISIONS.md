@@ -16,6 +16,58 @@ Format:
 
 ---
 
+## 2026-08-25 — The domain-separation namespace is `moe/`, and the magic is `MOEB`
+
+**Question:** the project moved to the `mediumofexchange` org, the domain
+`mediumofexchange.org`, and the npm scope `@mediumofexchange`. The paper keeps
+its name, but the code's signed bytes carried the old one: fourteen
+domain-separation tags in `contexts.ts` (`mfp/backing-signature/v1` and the
+rest), three namespaced identity strings hashed into venue ids
+(`mfp/venue/ergo/v1`, `mfp/venue/unnamed/v1`,
+`mfp/lock/no-decision-venue/v1`), and the 4-byte magic `"MFPB"` opening every
+canonical backing encoding. These are not cosmetic: they are the pre-image of
+every signature and every name the system produces.
+
+**Decision (Bob, 2026-08-25):** rename all of them to the `moe/` namespace and
+`"MOEB"` now, before the first npm publish and before any consumer exists.
+The reasoning is that this is the cheapest moment the change will ever have.
+A domain-separation tag is only ever as good as its stability, so the choice
+is between changing it while the cost is zero and being stuck with a name the
+project has left behind. Nothing is deployed, no keys are in the wild, and no
+data outside this repository was ever signed under the old tags.
+
+What this is, precisely: **a wire-format break**. Every backing name, every
+venue id, and every signature changes. Anything persisted under the old bytes
+is unreadable and unverifiable against the new code, and no compatibility path
+is provided — there is deliberately no `mfp/` fallback, because accepting both
+namespaces would defeat the domain separation the tags exist to provide.
+
+The version bytes did **not** move. The encoding's `version` byte stays `0x01`
+and the tags keep their existing `/v1` (and `/v2` for the receipt): those
+version markers track the *shape* of what is signed, and no shape changed —
+only the namespace label did. Bumping them would falsely imply a second
+readable format.
+
+The prefix-free assertion in `contexts.ts` still holds and is still checked at
+load; `moe/` is a uniform substitution and cannot introduce a collision that
+`mfp/` did not already have.
+
+**Golden vectors:** `invariant-01.backing-name.test.ts` pins the byte layout
+independently of `src/backing.ts`, which is the point of it. Both goldens were
+updated: `GOLDEN_ENCODING_HEX`'s leading `4d465042` became `4d4f4542` and
+nothing else in it moved, and `GOLDEN_NAME_HEX` was recomputed as SHA-256 over
+the new bytes with `node:crypto` rather than by running the implementation, so
+the test still checks the code against an independent statement of the format
+rather than against itself. The old bytes were confirmed to hash to the old
+recorded name first, which is what makes the new figure trustworthy.
+
+784 tests green after the change.
+
+**Spec change:** none needed. The paper does not name the tags; `construction.md`
+specifies that a domain-separation tag exists and that the set is prefix-free,
+not what the strings are.
+
+
 ## 2026-08-25 - Session close: the audit queue is done; what the next instance picks up
 
 **Decision (Bob, 2026-08-25):** the 2026-08-22 audit queue is complete —
@@ -4404,7 +4456,8 @@ here because it hardens invariant 2.
 ## 2026-08-18 — Signatures are over a domain-separated message, not the bare name
 
 **Question:** CLAUDE.md states invariant 2 as "a valid signature by K over
-its own name". The code actually signs `"mfp/backing-signature/v1" || name`.
+its own name". The code actually signs `"mfp/backing-signature/v1" || name` (renamed to
+`"moe/backing-signature/v1"` on 2026-08-25 — see the namespace entry at the top).
 A review flagged this as undocumented drift from the stated rule.
 
 **Decision (Bob):** keep the domain separation — signing a bare 32-byte hash

@@ -139,7 +139,7 @@ export function venueIsDeclared(venue: Venue, backing: Backing): boolean {
  * a Venue built without an identity is that record — one venue, not a wildcard,
  * so a backing may declare this id and mean it.
  */
-export const UNNAMED_VENUE = sha256(utf8Encoder.encode("mfp/venue/unnamed/v1"));
+export const UNNAMED_VENUE = sha256(utf8Encoder.encode("moe/venue/unnamed/v1"));
 
 /**
  * One record, as a venue holds it: the canonical bytes, and the venue's own word

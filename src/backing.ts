@@ -14,7 +14,7 @@
 //
 // Canonical encoding v1 (all lengths u32 big-endian, hash = SHA-256):
 //
-//   magic    "MFPB" (4 bytes)
+//   magic    "MOEB" (4 bytes)
 //   version  u8 = 0x01
 //   K        u8 tag 0x01 (single Ed25519) || 32-byte verification key
 //   P        u8 tag 0x01 (constant payout) | 0x02 (claims of a named backing)
@@ -75,7 +75,7 @@ import {
 import { BACKING_SIGNATURE_CONTEXT, utf8Decoder, utf8Encoder } from "./contexts.js";
 import { isValidPublicKey, KEY_LENGTH, verifySignatureStrict } from "./keys.js";
 
-const MAGIC = Uint8Array.of(0x4d, 0x46, 0x50, 0x42); // "MFPB"
+const MAGIC = Uint8Array.of(0x4d, 0x4f, 0x45, 0x42); // "MOEB"
 const VERSION = 0x01;
 const TAG_OBLIGOR_ED25519 = 0x01;
 const TAG_PAYOUT_CONSTANT = 0x01;

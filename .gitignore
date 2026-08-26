@@ -3,3 +3,4 @@ dist/
 *.log
 # root-level scratch verification scripts (real code is .ts)
 /*.mjs
+*.tgz
