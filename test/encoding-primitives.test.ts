@@ -93,7 +93,7 @@ describe("domain-separation tags are prefix-free", () => {
 
   it("the check actually detects a prefix collision", () => {
     const enc = new TextEncoder();
-    expect(contextsArePrefixFree([enc.encode("mfp/burn/v1"), enc.encode("mfp/burn/v11")])).toBe(false);
-    expect(contextsArePrefixFree([enc.encode("mfp/a/v1"), enc.encode("mfp/b/v1")])).toBe(true);
+    expect(contextsArePrefixFree([enc.encode("moe/burn/v1"), enc.encode("moe/burn/v11")])).toBe(false);
+    expect(contextsArePrefixFree([enc.encode("moe/a/v1"), enc.encode("moe/b/v1")])).toBe(true);
   });
 });
