@@ -51,7 +51,7 @@ Construction.md §C0 says: an implementation that violates an invariant is a
 different system. These are the ones that bind every line of code here.
 
 None of them is sacred. Any rule below can change — but a change needs a very
-good reason, stated explicitly and agreed with Bob, and it happens by editing
+good reason, stated explicitly and agreed with the maintainer, and it happens by editing
 this file (and the spec, where the spec is the source). What is never
 acceptable is silent drift: code that quietly stops following a rule while the
 rule still stands.
@@ -346,11 +346,11 @@ for speed anywhere else; this is a reference implementation, not a product.
 
 ## Workflow
 
-- **Plan before code.** For each slice: propose the approach, wait for Bob's
+- **Plan before code.** For each slice: propose the approach, wait for the maintainer's
   approval, then build.
 - **Tests first, named for invariants.** Test files follow
   `invariant-07.issuance-paths.test.ts`. Each test carries a one-line
-  plain-language statement of what it checks. Bob reviews the tests; the
+  plain-language statement of what it checks. the maintainer reviews the tests; the
   implementation is judged by the tests.
 - **Prove it, don't argue it.** A bug is demonstrated by a script that runs the
   exploit, and the fix by that same script failing to exploit it. An argument
@@ -365,9 +365,9 @@ for speed anywhere else; this is a reference implementation, not a product.
   strangers. A door closed to one party is a door closed to everyone who used it.
 - **A test's name is a claim the test must exercise.** A test titled "can be
   relocked" that never relocks is how a behaviour retires unnoticed.
-- **Explain, don't just produce.** Bob is learning TypeScript and git. When
-  asked to explain, walk through the code in plain language. Prefer readable
-  code over clever code everywhere.
+- **Explain, don't just produce.** When asked to explain, walk through the code
+  in plain language rather than restating the types. Prefer readable code over
+  clever code everywhere — an auditor reads this once and has to be convinced.
 - **Small commits, one slice per branch.** Run `/code-review` before merging
   to main. Never push without asking.
 - **Review agents run on Opus.** Every agent spawned for a review — the
@@ -378,8 +378,8 @@ for speed anywhere else; this is a reference implementation, not a product.
   need the session model's cost at every angle. **The session model decides
   which angles to run and how many**, sized to what the slice touches — the
   law, an encoding, a reader, a door — rather than to a fixed count; it says in
-  DECISIONS which it ran. Bob's call on 2026-08-22, for token efficiency
-  (eight-angle rounds twice exhausted his usage limit that day).
+  DECISIONS which it ran. Decided 2026-08-22: a fixed count spends most of its
+  effort on angles the slice never touched.
 
 ## Toolchain
 

@@ -32,7 +32,7 @@ the month is new), and add its line at the top of the index below.
 - `2026-08-25` [Slice 29: a dead successor does not end the chain](decisions/2026-08.md#2026-08-25---slice-29-a-dead-successor-does-not-end-the-chain)
 - `2026-08-24` [Slice 28b: the receipt names its era, and the era is the backing's own](decisions/2026-08.md#2026-08-24---slice-28b-the-receipt-names-its-era-and-the-era-is-the-backings-own)
 - `2026-08-23` [Slice 28a: returning from silence is committing](decisions/2026-08.md#2026-08-23---slice-28a-returning-from-silence-is-committing)
-- `2026-08-22` [The audit: six angles over the merged code, what was wrong, and what is Bob's to decide](decisions/2026-08.md#2026-08-22---the-audit-six-angles-over-the-merged-code-what-was-wrong-and-what-is-bobs-to-decide)
+- `2026-08-22` [The audit: six angles over the merged code, what was wrong, and what is the maintainer's to decide](decisions/2026-08.md#2026-08-22---the-audit-six-angles-over-the-merged-code-what-was-wrong-and-what-is-the-maintainers-to-decide)
 - `2026-08-22` [Slice 27: a demand outlives its locks, and a window is open when it is set](decisions/2026-08.md#2026-08-22---slice-27-a-demand-outlives-its-locks-and-a-window-is-open-when-it-is-set)
 - `2026-08-22` [Slice 26: a payout paying in claims settles inside the settlement](decisions/2026-08.md#2026-08-22---slice-26-a-payout-paying-in-claims-settles-inside-the-settlement)
 - `2026-08-21` [Slice 25: the n-party exchange, one object signed by all](decisions/2026-08.md#2026-08-21---slice-25-the-n-party-exchange-one-object-signed-by-all)
