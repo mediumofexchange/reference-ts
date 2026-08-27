@@ -32,7 +32,9 @@ Three names, three jobs, so it is clear which one a change belongs to:
 - The spec is corrected upstream (issue or edit on the paper repo), then the
   code follows the corrected spec. Resolved questions are logged in
   `DECISIONS.md` — not to lock them forever, but so that reopening one is
-  done knowingly, with the earlier reasoning in view.
+  done knowingly, with the earlier reasoning in view. That file is an index:
+  one line per decision, with the entries themselves in `decisions/` by month.
+  Read the index, then open only the entry you need — never the whole log.
 
 ## Scope (current)
 
