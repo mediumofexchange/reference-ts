@@ -353,7 +353,7 @@ for speed anywhere else; this is a reference implementation, not a product.
 - **Prove it, don't argue it.** A bug is demonstrated by a script that runs the
   exploit, and the fix by that same script failing to exploit it. An argument
   that code is wrong is a hypothesis; only a run settles it. Scratch scripts are
-  gitignored root `.mjs` files.
+  gitignored `.mjs` files in `scratch/`.
 - **Regression-review the fixes.** After fixing review findings, review the
   fixes themselves. Every round so far has found a real bug there, and the
   recurring shape is a fix that bounded one input and left the other open.
@@ -388,7 +388,11 @@ npm test           # run all tests
 npm run typecheck  # tsc --noEmit
 ```
 
-Scratch scripts (root `*.mjs`, gitignored) import `./src/*.js`, so they run
-against a compiled copy: `npx tsc --noEmit false --outDir <scratch> --rootDir .`
-from the repo, then copy the script beside `<scratch>/src`, link
-`node_modules` there, and `node` it from `<scratch>`.
+Scratch scripts (`scratch/*.mjs`, gitignored) import `./src/*.js`, so they run
+against a compiled copy: `npx tsc --noEmit false --outDir <build> --rootDir .`
+from the repo, then copy the script beside `<build>/src`, link `node_modules`
+there, and `node` it from `<build>`.
+
+`npm run check:docs` holds CLAUDE.md to its line budget and keeps the decision
+index and `decisions/` in agreement. CI runs it, along with typecheck, the
+tests on Node 20 and 24, and a `npm pack` of what would be published.
