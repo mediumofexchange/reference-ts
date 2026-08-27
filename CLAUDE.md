@@ -287,7 +287,9 @@ auditor must check three places and a maintainer can break it in three ways.
 When a fix is needed, first ask whether an existing mechanism should be
 generalized. Never layer a second mechanism on a first to patch its gap: that
 is how a review finding becomes permanent complexity. A fix that adds a layer
-is a signal the layer below is in the wrong place.
+is a signal the layer below is in the wrong place. This is construction.md
+§C0a applied to code — the spec holds itself to the same test, so fix it
+there rather than restating it here.
 
 **Bytes are framed, not concatenated.** Every field written into a signed or
 hashed message is either fixed-width and asserted to be, or length-prefixed.
