@@ -225,7 +225,7 @@ export function successionOf(backing: Backing, venue: Venue): Succession[] {
     let link = backing.name;
     for (;;) {
       // **The earliest USABLE candidate at this link** — a dead successor does
-      // not end the chain (the 2026-08-22 audit, question 2; Bob's decision:
+      // not end the chain (the 2026-08-22 audit, question 2; the maintainer's decision:
       // usable is "a link that committed before the next candidate at the same
       // predecessor was witnessed"). The old walk took the earliest candidate
       // outright and stopped wherever its successor never committed, so a
