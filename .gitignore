@@ -1,6 +1,10 @@
 node_modules/
 dist/
 *.log
-# root-level scratch verification scripts (real code is .ts)
-/*.mjs
 *.tgz
+
+# Scratch verification scripts — the .mjs probes that prove a bug and then
+# prove the fix. Gitignored, and kept in scratch/ so the repo root shows only
+# the dozen files that matter. Real code is .ts.
+/scratch/
+/*.mjs
