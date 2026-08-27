@@ -50,124 +50,52 @@ triggers, pro-rata. Cryptography is limited to hashes and signatures
 Construction.md §C0 says: an implementation that violates an invariant is a
 different system. These are the ones that bind every line of code here.
 
-None of them is sacred. Any rule below can change — but a change needs a
-very good reason, stated explicitly and agreed with Bob, and it happens by
-editing this file (and the spec, where the spec is the source). What is never
-acceptable is silent drift: code that quietly stops following a rule while
-the rule still stands.
+None of them is sacred. Any rule below can change — but a change needs a very
+good reason, stated explicitly and agreed with Bob, and it happens by editing
+this file (and the spec, where the spec is the source). What is never
+acceptable is silent drift: code that quietly stops following a rule while the
+rule still stands.
+
+Each rule says what must hold and names the code that holds it. The reasoning
+that produced it is in the decision log — reach it through the index in
+`DECISIONS.md` rather than restating it here.
 
 - **All quantities, counts, and payout arithmetic use `bigint`.** The
   JavaScript `number` type is a float; a rounding error in this system is a
   counterfeit. `number` may appear only for things that are genuinely not
   quantities (array indices, lengths).
 - **A backing's name is the hash of a canonical encoding of (K, P, R, E)**
-  (inv 1). The encoding must be byte-deterministic: same fields, same bytes,
-  on every machine, forever. No `JSON.stringify` of objects with unordered
-  keys.
+  (inv 1). Byte-deterministic: same fields, same bytes, on every machine,
+  forever. No `JSON.stringify` of objects with unordered keys.
 - **A backing exists only with a valid signature by K over its own name**,
-  under a fixed domain-separation tag (inv 2; see [[DECISIONS.md]]). K must be
-  a valid, non-small-order Ed25519 point, and verification is strict
-  (non-ZIP215).
-- **Issuance and reissuance never share a code path** (inv 7). Issuance
-  changes the outstanding count and needs the backer's signature; reissuance
-  preserves the count and needs none. In the transparent slice this reads as
-  issuance vs. movement (transfer/burn); reissuance proper (denomination
-  swaps) arrives with blinding. See [[DECISIONS.md]].
+  under a fixed domain-separation tag (inv 2). K must be a valid,
+  non-small-order Ed25519 point, and verification is strict (non-ZIP215).
+- **Issuance and reissuance never share a code path** (inv 7). Issuance changes
+  the outstanding count and needs the backer's signature; reissuance preserves
+  the count and needs none. In the transparent slice this reads as issuance vs.
+  movement (transfer/burn); reissuance proper (denomination swaps) arrives with
+  blinding.
 - **No clawback, no reversal, no privileged party who can move claims**
   (inv 8). The rule is not "don't call it" — the code path must not exist.
 - **Fees are ordinary transfers alongside a swap, never a shaved reissue**
   (inv 9).
-- **Do not write cycle detection** (inv 5). A reliance cycle would need a
-  hash cycle; it cannot be built.
-- **`outstanding = issued − burned`, in claim quantity, per backing, at every
-  published moment** (inv 10). Presentation destroys nothing; only a burn
-  lowers the count.
-- **Presentability** (inv 13–15, 18): a holding is presentable at *b* for *q*
-  iff it contains *q* units of *b* and *q·cᵢ* units of each *(bᵢ, cᵢ)* in
-  R(b). Units, never claims. One level, no traversal. **A demand reserves each
-  leg with a `lock` in that leg's own log**, so every backing stays replayable
-  alone, and the sequencer takes the demand and its locks as one act or none
-  (§C3's single-phase, "the whole set and the paying leg inside one operator").
-  **Two-phase across operators is `submitLock` + `settle`** (§C3's
-  prepare-decide-commit, generalised to any bundle): the holder reserves at each
-  sequencer, then publishes ONE commit at a decision venue, and each sequencer
-  settles its own half against that witnessed object without hearing from the
-  others. **§C1's n-party exchange is the same mechanism**: each lock names its
-  parties, one object carries every signature, and a sequencer converts its lock
-  only when every party its lock names has signed — so a partial object settles
-  nothing anywhere, and 24b's bundle is the one-party case. **Where P pays in
-  claims** (§C3: "a payout paying in claims settles as a swap inside the
-  settlement"), the backer's acceptance reserves the payout — its lock on the
-  paying backing, to the holder, convertible by the holder alone — and the
-  holder's release settles surrendered set and payout as one act; `payoutOf` is
-  the holder's read of it, as `accompanimentOf` is the backer's. A lock names who
-  may convert it: one party converts on their release or their commit, several
-  only on the witnessed object — and **a set leg names no decision venue**
-  (`NO_DECISION_VENUE`), so no commit reaches it and it settles only with its set. Which branch a trade uses is the parties' choice — §C2's other honest
-  answer, partial-and-retry, is the ordinary transfer path and covers every trade
-  where both sides have recourse. The law stays per backing, so whether
-  a demand's legs were locked — for the set's quantity, by the set's holder, to
-  the set's beneficiary, convertible by the demand holder and by that party
-  alone, and still live — is read across the served state by `accompanimentOf`,
-  which the backer asks before it signs an acceptance (the converter and the
-  venue are one definition, `LegTerms`, for the sequencer and both readers;
-  liveness is the law's at the doors and each reader's own question on the
-  venue's clock). **A
-  lock carries §C3's timeout**, and it is the one predicate both exits read
-  (`lockIsLive`): at or before it a commit can still settle the set and no
-  withdrawal is accepted; a commit witnessed past it does not reach it, and
-  withdrawal is then the exit — unless the record already shows a commit
-  witnessed in time, which every reader asks before freeing anything
-  (`committedInTime`: the sequencer before it co-signs a withdrawal, on the
-  submit path and the gap path alike, and the verifier's gap fold). Exactly one
-  exit is open at every index **per record**, as for a demand on its acceptance
-  (a set of records can have both closed within the holder's own declared
-  window — a set has an exit at or before a leg's timeout only while an
-  acceptance is live, and otherwise the holder waits out the timeout it signed;
-  what no longer exists is a window the BACKER's choices close: a leg that lapses
-  inside a live acceptance is **re-prepared** — withdrawn, alone and past its
-  timeout, and locked again under the standing demand through `submitLeg`, one
-  leg per call, by the checks each leg passed at filing, with the record adopted
-  first; §C3's "a demand outlives its locks"). A lock and a demand never share a
-  hash on one backing, and a bundle
-  lock is prepared only where the sequencer can read the commits it may settle
-  on and only for an attempt the record does not already show committed — and,
-  in the law, **an attempt id names one attempt on one backing for the locks a
-  commit can reach**: once a venue-naming lock under it has settled or withdrawn
-  there, no other stands there, since a commit binds its id and nothing else and
-  a withheld object would otherwise convert a later lock (the 2026-08-22 audit).
-  A set leg names no venue, needs none, is not retired, and comes only with its
-  set — at filing, or re-prepared for a standing demand by its holder. A demand's
-  deadline, like a lock's timeout, is strictly ahead of the witnessed index at
-  filing: the same index is not a window. Every TIME
-  rule is a refusal and never a balance, because the clock is undefined on a
-  replay and a lock that freed its own units would make an honest history
-  unreplayable. Quantities are whole
-  numbers of the backing's declared unit; counts in R are whole. Reliance is
-  a conjunction over a fixed list with constant counts — no disjunction, no
-  computed membership. Reliance names backings and chain assets only.
-- **`closure(S)` expands deterministically before hashing**; counts sum where
-  paths meet; the stored object is flat; cap closure size (inv 16). `closureOf`
-  in `src/closure.ts` is that macro, and it is a **tool for writing terms, not a
-  rule about them**: §8b makes an unclosed R a readable setting — "the backer
-  takes in a set it cannot fully unwind, usually because it means to sell it" —
-  so `makeBacking` stores what it is handed and `closureStatus` is what a reader
-  asks. Expansion needs the targets' own terms, so it takes a resolver, and every
-  answer is checked against the name it was asked for; that check is also what
-  makes the walk terminate without the cycle detection inv 5 forbids. **A direct
-  count is a floor, not a second contribution** — see [[DECISIONS.md]] for why the
-  other reading cannot be right.
+- **Do not write cycle detection** (inv 5). A reliance cycle would need a hash
+  cycle; it cannot be built.
+- **`outstanding = issued − burned`**, in claim quantity, per backing, at every
+  published moment (inv 10). Presentation destroys nothing; only a burn lowers
+  the count.
 - **An unaccompanied claim is inert, never invalid, and still transferable**
   (inv 17).
 - **Time is a witnessed index, never a clock** (inv 21, 24). Every instant a
   party asserts is an index in the **venue's** witnessed history, never in the
   operator's own commitment history — a clock an operator could stop by going
-  quiet would hand it every deadline in its book; no code reads wall-clock time.
-  The venue stamps what it witnesses, commitments and published operations
-  alike, and that stamp is the clock each is judged against. One witnessed
-  evaluation instant per presentation, named in the demand and agreed by the
-  acceptance — two signatures over one value — and no later than the latest
-  witnessed index at signing. See [[DECISIONS.md]].
+  quiet would hand it every deadline in its book. No code reads wall-clock
+  time. One witnessed evaluation instant per presentation, named in the demand
+  and agreed by the acceptance, and no later than the latest witnessed index at
+  signing.
+- **Every TIME rule is a refusal and never a balance**, because the clock is
+  undefined on a replay and a lock that freed its own units would make an
+  honest history unreplayable.
 - **Every state a sequencer asserts proves against its latest published
   commitment** (inv 22), and the commitment commits to the issuance log, the
   spent set, running totals and the standing demand record (inv 23). The root
@@ -175,36 +103,92 @@ the rule still stands.
   unprovable.
 - **Every operation is signed by the party the law names, over that backing's
   own message, at that signer's next nonce — except the commit.** §C3's commit
-  names no backing, carries no nonce, and is signed by **every party the lock
-  names** (§C1's "all sign") rather than by one signer the law names, because one
-  object has to be valid in every log of an exchange at once and a nonce is per
-  (signer, backing). Those are the only departures in the system, they are what
-  "one object" costs, and they are safe only here: a repeat is a no-op because
-  the lock it settles is gone, and it can only reach an attempt its own parties
-  named in a lock. Do not
-  add a third without the same kind of reason. See [[DECISIONS.md]].
-- **Swaps and presentation are idempotent** (inv 26). A repeated request
-  returns the identical prior response. A crash must lose nothing. The
-  sequencer is where this holds: it returns the identical prior receipt for any
-  resubmitted operation, presentation included, and a different operation at an
-  already-spent nonce is declined. The ledger alone rejects a replay (per
-  (signer, backing) nonce) rather than answering it. See [[DECISIONS.md]].
-- **Settling a published demand voids the exact claims offered, and only on
-  the holder's release signature** (inv 27). A backer must never void
-  unilaterally. Dishonour is the branch where no *live* acceptance answers, so
-  an acceptance that expires unpaid is dishonour too — and an acceptance may
-  not outlast the demand's own deadline, because the lock-up is the holder's
-  term to set. See [[DECISIONS.md]].
+  names no backing, carries no nonce, and is signed by every party the lock
+  names (§C1's "all sign"), because one object has to be valid in every log of
+  an exchange at once and a nonce is per (signer, backing). Those are the only
+  departures in the system, and they are what "one object" costs. Do not add a
+  third without the same kind of reason.
+- **Swaps and presentation are idempotent** (inv 26). The sequencer returns the
+  identical prior receipt for any resubmitted operation, presentation included,
+  and declines a different operation at an already-spent nonce. A crash must
+  lose nothing. The ledger alone rejects a replay (per (signer, backing) nonce)
+  rather than answering it.
+- **Settling a published demand voids the exact claims offered, and only on the
+  holder's release signature** (inv 27). A backer must never void unilaterally.
+  Dishonour is the branch where no *live* acceptance answers, so an acceptance
+  that expires unpaid is dishonour too — and an acceptance may not outlast the
+  demand's own deadline, because the lock-up is the holder's term to set.
+- **`closure(S)` expands deterministically before hashing**; counts sum where
+  paths meet; the stored object is flat; cap closure size (inv 16). `closureOf`
+  in `src/closure.ts` is that macro, and it is a **tool for writing terms, not
+  a rule about them** — §8b makes an unclosed R a readable setting, so
+  `makeBacking` stores what it is handed and `closureStatus` is what a reader
+  asks. Expansion takes a resolver, every answer is checked against the name it
+  was asked for, and that check is also what makes the walk terminate without
+  the cycle detection inv 5 forbids. A direct count is a floor, not a second
+  contribution.
+- **Quantities are whole numbers of the backing's declared unit**; counts in R
+  are whole. Reliance is a conjunction over a fixed list with constant counts —
+  no disjunction, no computed membership — and names backings and chain assets
+  only.
 
-Invariants not listed here (3–4, 6, 11–12, 19–20, 25) still bind; several only
-become implementable with the shielded constructions. Read §C0 of
-construction.md before touching anything they govern.
+### Presentability and the lock (inv 13–15, 18)
+
+A holding is presentable at *b* for *q* iff it contains *q* units of *b* and
+*q·cᵢ* units of each *(bᵢ, cᵢ)* in R(b). Units, never claims. One level, no
+traversal.
+
+- **A demand reserves each leg with a `lock` in that leg's own log**, so every
+  backing stays replayable alone, and the sequencer takes the demand and its
+  locks as one act or none (§C3's single-phase).
+- **Two-phase across operators is `submitLock` + `settle`.** The holder
+  reserves at each sequencer, publishes ONE commit at a decision venue, and
+  each sequencer settles its own half against that witnessed object without
+  hearing from the others. §C1's n-party exchange is the same mechanism: one
+  object carries every signature, and a sequencer converts its lock only when
+  every party its lock names has signed — so a partial object settles nothing
+  anywhere.
+- **A lock names who may convert it.** One party converts on their release or
+  their commit, several only on the witnessed object. A set leg names no
+  decision venue (`NO_DECISION_VENUE`), so no commit reaches it; it is not
+  retired, and it comes and settles only with its set — at filing, or
+  re-prepared for a standing demand by its holder.
+- **A bundle lock is prepared only where the sequencer can read the commits it
+  may settle on**, and only for an attempt the record does not already show
+  committed.
+- **Two-phase is not the only honest answer.** §C2's partial-and-retry is the
+  ordinary transfer path and covers every trade where both sides have recourse.
+  Which branch a trade uses is the parties' choice, not the implementation's.
+- **Where P pays in claims**, the backer's acceptance reserves the payout — its
+  lock on the paying backing, to the holder, convertible by the holder alone —
+  and the holder's release settles surrendered set and payout as one act.
+  `payoutOf` is the holder's read of it, as `accompanimentOf` is the backer's.
+- **The law stays per backing.** Whether a demand's legs were locked is read
+  across the served state by `accompanimentOf`, which the backer asks before it
+  signs an acceptance. Converter and venue are one definition, `LegTerms`, for
+  the sequencer and both readers; liveness is the law's question at the doors
+  and each reader's own on the venue's clock.
+- **A lock carries §C3's timeout, and `lockIsLive` is the one predicate both
+  exits read.** At or before it a commit can still settle the set and no
+  withdrawal is accepted; a commit witnessed past it does not reach it, and
+  withdrawal is then the exit — unless the record already shows a commit
+  witnessed in time, which every reader asks before freeing anything
+  (`committedInTime`). Exactly one exit is open at every index, per record.
+- **A leg that lapses inside a live acceptance is re-prepared**, not lost:
+  withdrawn alone and past its timeout, then locked again under the standing
+  demand through `submitLeg`, one leg per call (§C3's "a demand outlives its
+  locks"). A demand's deadline, like a lock's timeout, is strictly ahead of the
+  witnessed index at filing — the same index is not a window.
+- **An attempt id names one attempt on one backing** for the locks a commit can
+  reach: once a venue-naming lock under it has settled or withdrawn there, no
+  other stands there, since a commit binds its id and nothing else. A lock and
+  a demand never share a hash on one backing.
 
 ## What the parties must do, that no code here enforces
 
 Seven rules the protocol cannot check but the reference implementation must not
 leave unsaid. Each was reached by asking what a failing sequencer costs
-somebody, and each is recorded in [[DECISIONS.md]] with the reasoning.
+somebody, and each is recorded in the decision log with its reasoning.
 
 The three holder rules are load-bearing. §C2b's recovery path does not protect a
 holder who ignores them, and every mechanism that would reach further either
@@ -213,126 +197,83 @@ construction — which is why they are rules here rather than code.
 
 - **One writer at a time**, or a threshold key. Two live servers holding one
   operator key co-sign conflicting operations, and `fault.ts` proves that
-  against the operator exactly as if it were malice — the protocol cannot tell a
-  botched failover from collusion and does not try. A **t-of-n threshold with
-  t > n/2** removes the possibility rather than recording it, since two disjoint
-  quorums cannot exist; aggregated to one Ed25519 key it is invisible here, so
-  the name, E and strict verification are untouched.
+  against the operator exactly as if it were malice — the protocol cannot tell
+  a botched failover from collusion and does not try. A t-of-n threshold with
+  t > n/2 removes the possibility rather than recording it; aggregated to one
+  Ed25519 key it is invisible here, so the name, E and strict verification are
+  untouched.
 - **A threshold K, or theft is unbounded.** §C2b: a stolen backer key does
-  damage that is "unbounded and permanent, since K alone authorises issuance and
-  nothing expires", and revocation is a stop-loss rather than a remedy — a thief
-  issues fast and a backer notices slowly, so the fraudulent supply is already
-  witnessed and stands. The paper calls this "the strongest argument for a
-  threshold K". Like the operator rule above it is **invisible here**: t-of-n
-  aggregated to one Ed25519 key leaves the name, E and strict verification
-  untouched, so nothing in this repository can check that a backer took it.
+  damage that is "unbounded and permanent, since K alone authorises issuance
+  and nothing expires", and revocation is a stop-loss rather than a remedy.
+  Invisible here for the same reason as the operator rule — nothing in this
+  repository can check that a backer took it.
 - **The payee obtains the signed request and the receipt at payment time.**
   During a §C2b gap the operator's log is unpublished, so its receipt is the
-  only evidence outside it that an operation was accepted at all. A payee
-  without one has the payer's signature and nothing that says the operator ever
-  saw it. `submitTransfer` returns the receipt to whoever submitted, which is
-  normally the payer. And the signed request itself, because a receipt given
-  after the operator's last commitment dies with a gap (below): the operation
-  is resubmittable by anyone holding the request once the operator serves
-  again, and a payee holding only the receipt cannot. Read the receipt's era
-  when taking it: `after` names the operator's last commitment, and one naming
-  anything but the latest at payment time is stale on its face — which is also
-  the whole defence against an operator stamping a lie with an old era the
-  fault predicates excuse (`lapsed` is an era's license to have dropped its
-  tail, and a stamp claiming a dead era is a receipt nobody should have taken).
-- **Claims go illiquid while the operator is dark. Do not accept one.** §C2b:
-  claims "go illiquid rather than dead. Value discounts until they return." A
+  only evidence outside it that an operation was accepted at all. The signed
+  request too, because a receipt given after the operator's last commitment
+  dies with a gap: the operation is resubmittable by anyone holding the request
+  once the operator serves again, and a payee holding only the receipt cannot.
+  `submitTransfer` returns the receipt to whoever submitted, normally the
+  payer. Read the receipt's era when taking it — `after` names the operator's
+  last commitment, and one naming anything but the latest at payment time is
+  stale on its face.
+- **Claims go illiquid while the operator is dark. Do not accept one.** A
   transfer published at the venue is evidence, never an operation, so nothing
-  moves until the operator returns or a successor takes over — and the operator
-  itself co-signs no new act while it is dark by its own declared measure (slice
-  28a, below; adopting the gap's legs is the one co-signature it still gives),
-  so a payee cannot be handed a co-signature to rely on. A presentation
-  with legs — reliance or a claims payout — neither opens nor settles in a gap:
-  the venue holds operations one at a time, never a set. One predicate
+  moves until the operator returns or a successor takes over; the operator
+  co-signs no new act while dark by its own declared measure. A presentation
+  with legs neither opens nor settles in a gap — one predicate
   (`admittedInGap`) says so for the operator's adoption and the verifier's fold
-  alike. A payee who
-  accepts anyway is relying on §C2b's challenge window, and that window reaches
-  a careless double-spender and never a deliberate one: the spend's nonce is
-  fixed, the claim's nonce is the claimant's to choose, and she moves the claim
-  off the contested position for two signatures (the OPEN tests in
-  c2b-redemption-legs). What the payee does get is a fault proof — two of the
-  payer's signatures at one nonce, checkable by any stranger forever, needing no
-  operator and no commitment (`fault.ts`).
+  alike. A payee who accepts anyway is relying on §C2b's challenge window, and
+  that window reaches a careless double-spender and never a deliberate one.
+  What the payee does get is a fault proof: two of the payer's signatures at
+  one nonce, checkable by any stranger forever, needing no operator and no
+  commitment (`fault.ts`).
 - **Keep the last committed state that carries your backing.** An operator that
   drops one backing from its commitments and keeps publishing the rest looks
-  perfectly live: §C2b's aggravated grade reads "no commitment past a second
-  declared duration", and a stranger reading a root cannot tell which backings it
-  covers. Every path against that operator runs through the last state that *did*
-  carry the backing — the non-service grade is counted against it (`isNonServing`),
-  the fault is proved against it (`isRewrittenHistory`), and the successor takes
-  over from it (`takeOver`). The party who would otherwise serve it on request is
-  the one with the motive not to, which is the same shape as the receipt rule
-  above: obtain the evidence while the party holding it still has a reason to give
-  it to you. §C2 names no grade for it — nothing declares the object, duration or
-  aggregate that would make failing to serve the trail checkable — so the paper's
-  own answer is this rule: the non-service grade is "read against the last state a
-  holder was given, so a holder keeps one".
+  perfectly live, and a stranger reading a root cannot tell which backings it
+  covers. Every path against that operator runs through the last state that
+  *did* carry the backing — the non-service grade (`isNonServing`), the fault
+  (`isRewrittenHistory`), the successor's takeover (`takeOver`). The party who
+  would otherwise serve it on request is the one with the motive not to, which
+  is the same shape as the receipt rule above: obtain the evidence while the
+  party holding it still has a reason to give it to you.
 - **A payment is final when witnessed, not when co-signed.** §C2: "Finality
-  means witnessed rather than co-signed", and §C3 applies it to the release: "a
-  release nobody witnessed did not happen." An operation accepted after the
-  operator's last commitment lives only in its unpublished log and in the
-  receipt, and dies with it — in **every** construction, since a Chaumian token
-  signed but never committed is exactly as unprovable. **The operator's own side
-  of this is code since slice 28a: returning from silence is committing — per
-  backing, since 28b: the era is the backing's own.** While a publication on a
-  backing would still have gap force (`gapOpen`, the verifier's own predicate
-  read at the door — true at the very index the return commitment lands, so
-  that backing is served from the index after), its doors refuse every act and
-  name the commit, answering only repeats; where the silence is the operator's
-  own, the commit first restores that backing's book to the last commitment
-  (`restore`, the one place a log shrinks, and only to the mark the last
-  commitment set) and adopts what the venue witnessed. **A set is one act and
-  dies as one, so the sequencer takes it only over backings that declare one
-  silence duration** (or none; asked at the filing, the acceptance, the
-  re-prepare and the release — the withdrawal moves nothing and stays open as
-  an inherited mixed set's exit): one operator means one last commitment, so
-  equal durations open and close their gaps together and a set in the tail is
-  restored whole — which is what lets the restore stay per backing. Across a
-  return, that is; a handover takes no tail (takeOver), so a set sitting in
-  the tail when part of it is handed over dies half by half in the record —
-  no door moves value on one side (a partial handover strands a set, it never
-  tears it), and what protects a party performing against a set is finality:
-  perform only against the witnessed whole. What was
+  means witnessed rather than co-signed", and §C3 applies it to the release. An
+  operation accepted after the operator's last commitment lives only in its
+  unpublished log and in the receipt, and dies with it — in every construction.
+  The operator's own side is code: **returning from silence is committing**,
+  per backing. While a publication would still have gap force (`gapOpen`), the
+  doors refuse every act and name the commit; where the silence is the
+  operator's own, the commit first restores that backing's book to the last
+  commitment (`restore`, the one place a log shrinks) and adopts what the venue
+  witnessed. **A set is one act and dies as one**, so the sequencer takes it
+  only over backings that declare one silence duration — and a handover takes
+  no tail (`takeOver`), so perform only against the witnessed whole. What was
   co-signed after the last commitment and before the silence is dead, and the
-  receipt makes that readable (slice 28b): it names its **era** — `after`, the
-  witnessed index of the operator's last commitment at signing — and an era
-  that ended in a return or a handover lapses its receipts (`eraLapsed`,
-  `receiptStatus` answering `lapsed`), where one that ended at an ordinary
-  commitment carried its whole tail, so an attested operation missing then is
-  `contradicted` and a pair of receipts one log cannot hold is a fault
-  (`isDoublePosition`, `isDoubleAcceptance` — both excuse a lapsed era; the
-  recorded residual is that silence launders a real fault, at the price of the
-  public grade). So the exposure is the
-  interval since the last commitment, which is why §C2 makes the interval "a
-  signed field rather than operational discretion". E carries it, with the venue
-  it is read on, under evidence tags 0x03 and 0x04 — so a payee can tell a fast
-  operator running late from a slow one running on time (`isOverdue`), and a
-  grade is read on the venue the backing itself declares. A backing that declares
-  neither is answered by whichever record its reader holds, which is a setting
-  its backer chose.
-- **Never reuse an attempt id you have signed a commit for.** A commit binds its
-  attempt id and nothing else, so an object you signed for one attempt converts
-  any later lock under that id whose parties you are among — on another backing
-  too, where the law cannot see the first (the law retires an id per backing
-  once a venue-naming lock under it has left; across backings it cannot). A
-  fresh id per attempt costs nothing; the alternative, a commit that binds the
-  exchange's backing set, was considered and not taken (the 2026-08-22 audit,
-  question 6): one more field in the one object for a discipline a wallet keeps
-  anyway, and simplicity won.
+  receipt makes that readable: it names its era (`after`); an era ended by a
+  return or a handover lapses its receipts (`eraLapsed`, `receiptStatus`
+  answering `lapsed`), where one ended at an ordinary commitment carried its
+  whole tail — so an attested operation missing then is `contradicted`, and a
+  pair of receipts one log cannot hold is a fault (`isDoublePosition`,
+  `isDoubleAcceptance`, both excusing a lapsed era). The exposure is the
+  interval since the last commitment, which is why §C2 makes it "a signed field
+  rather than operational discretion": E carries it with the venue it is read
+  on, under evidence tags 0x03 and 0x04, so a payee can tell a fast operator
+  running late from a slow one running on time (`isOverdue`).
+- **Never reuse an attempt id you have signed a commit for.** A commit binds
+  its attempt id and nothing else, so an object you signed for one attempt
+  converts any later lock under that id whose parties you are among — on
+  another backing too, where the law cannot see the first. A fresh id per
+  attempt costs nothing.
 
 A receipt proves **acceptance, not a holding**: a payee who was paid and paid
 onward still holds the receipt for what they received. Reading it as a holding
-is how a redemption pays a party that has already spent. The durable form of
-that line, and the one that decides what may be built on a receipt: **it
-attributes an act to the operator, and never proves a value to a holder.** A
-chain of receipts back to committed state would prove the value — and it is
-provenance, which is precisely what blinding exists to destroy, so it is ruled
-out here rather than deferred. See [[DECISIONS.md]].
+is how a redemption pays a party that has already spent. The durable form, and
+the one that decides what may be built on a receipt: **it attributes an act to
+the operator, and never proves a value to a holder.** A chain of receipts back
+to committed state would prove the value — and that is provenance, which is
+precisely what blinding exists to destroy, so it is ruled out here rather than
+deferred.
 
 ## Design rules
 
