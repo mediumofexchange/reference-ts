@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-08-27` [The reorganization: an org front door, a decision index, and CLAUDE.md cut back](decisions/2026-08.md#2026-08-27--the-reorganization-an-org-front-door-a-decision-index-and-claudemd-cut-back)
 - `2026-08-25` [The domain-separation namespace is `moe/`, and the magic is `MOEB`](decisions/2026-08.md#2026-08-25--the-domain-separation-namespace-is-moe-and-the-magic-is-moeb)
 - `2026-08-25` [Session close: the audit queue is done; what the next instance picks up](decisions/2026-08.md#2026-08-25---session-close-the-audit-queue-is-done-what-the-next-instance-picks-up)
 - `2026-08-25` [Slice 28: unserved lock requests, and two set faults made provable](decisions/2026-08.md#2026-08-25---slice-28-unserved-lock-requests-and-two-set-faults-made-provable)
