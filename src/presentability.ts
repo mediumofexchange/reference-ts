@@ -166,7 +166,7 @@ export function payoutOf(
 
 /**
  * What a standing demand's silence means, read across the served state — the
- * audit's question 3, decided by Bob: where P pays in claims, dishonour is the
+ * audit's question 3, decided by the maintainer: where P pays in claims, dishonour is the
  * branch where no acceptance WITH ITS PAYOUT RESERVED answered.
  *
  *   - `dishonoured` the demand is past its deadline with no live answer, and
