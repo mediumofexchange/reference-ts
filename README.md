@@ -66,9 +66,9 @@ Two files are worth opening first:
 | **`src/contexts.ts`** | Every domain-separation tag in the system on one screen, with the prefix-free property asserted at load rather than assumed. |
 | **`src/backing.ts`** | The canonical encoding — the byte layout that every name in the system is a hash of. |
 
-`CLAUDE.md` states the invariants that bind every line, and `DECISIONS.md`
-records the resolved questions, so reopening one is done knowingly rather than
-by forgetting it was ever decided.
+`CLAUDE.md` states the invariants that bind every line. `DECISIONS.md` indexes
+the resolved questions — one line each, with the entries in `decisions/` — so
+reopening one is done knowingly rather than by forgetting it was ever decided.
 
 ## Working on it
 
