@@ -233,8 +233,30 @@ export function opMessageOfEntry(backingName: Uint8Array, entry: PublishedOp): U
   return unknownOpKind(entry);
 }
 
-/** The operation hash a receipt is bound to: sha256 of the signed message. */
+/**
+ * The operation hash a receipt is bound to: sha256 of the signed message.
+ *
+ * A commit is the exception, and binds its **signatures** too. Each party signs
+ * `commitMessage` — the attempt and nothing else — but under the (attempt,
+ * holder) lock key two DIFFERENT objects (different signer sets) settle DIFFERENT
+ * locks under one attempt. Keyed by the attempt alone, the second settlement was
+ * answered with the first's receipt, applied nothing, and froze its lock (found
+ * reviewing slice 31). The signatures live in the committed entry, so a verifier
+ * reconstructs this from the log exactly as for any other op — "the committed
+ * entry reconstructs to the receipt's op hash" still holds. The committed ROOT
+ * stays the attempt message alone (commitment.ts): a commit binds its attempt id
+ * and nothing else, and the object's effect is bound by the state its settlement
+ * leaves. This identity is the receipt's and the gap-adoption set's, not the
+ * root's.
+ */
 export function opHashOfEntry(backingName: Uint8Array, entry: PublishedOp): Uint8Array {
+  if (entry.kind === "commit") {
+    const w = new ByteWriter();
+    w.context(COMMIT_CONTEXT);
+    w.key32(entry.attemptId, "attempt id");
+    writeCommitSignatures(w, entry.signatures);
+    return sha256(w.finish());
+  }
   return sha256(opMessageOfEntry(backingName, entry));
 }
 

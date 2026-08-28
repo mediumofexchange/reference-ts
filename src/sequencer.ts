@@ -783,13 +783,16 @@ export class Sequencer {
       throw new SequencerError("a set leg settles with its set on the holder's release, not on a commit");
     }
     // No lock stands: this attempt has already resolved here, or never existed.
-    // Invariant 26 wants a repeat answered with the identical prior receipt, and
-    // the receipt needs no venue to find — a commit's hash is its attempt's —
-    // so the record is asked only where there is a lock to settle, and "no lock
-    // stands" is answered in this sequencer's own voice (found by the 2026-08-22
-    // audit: a commits-refusing venue threw before that answer could be given).
+    // Invariant 26 wants a repeat answered with the identical prior receipt
+    // without reading the venue (the 2026-08-22 audit: a commits-refusing view
+    // threw before that answer could be given). The mark is keyed by the attempt
+    // ALONE — distinct now from any object's own op-hash, which binds the
+    // signatures — and holds the FIRST commit settled here, set below. `submit`
+    // keys the receipt by the object (its signatures), which this branch cannot
+    // reconstruct without the venue, so the venue-free answer needs its own mark.
+    const settledMark = this.receiptKey(held, sha256(commitMessage(attemptId)));
     if (locks.length === 0) {
-      const prior = this.receipts.get(this.receiptKey(held, sha256(commitMessage(attemptId))));
+      const prior = this.receipts.get(settledMark);
       if (prior !== undefined) return copyReceipt(prior);
       throw new SequencerError("no lock for that attempt stands here");
     }
@@ -804,7 +807,9 @@ export class Sequencer {
       // missing would go to the venue for an object that is there.
       throw new SequencerError("no commit for that attempt is witnessed at this venue");
     }
-    return this.submit([{ backing: held, op: asOp(witnessed.commit) }], witnessed.at);
+    const receipt = this.submit([{ backing: held, op: asOp(witnessed.commit) }], witnessed.at);
+    if (!this.receipts.has(settledMark)) this.receipts.set(settledMark, receipt);
+    return copyReceipt(receipt);
   }
 
   /**
@@ -1012,6 +1017,21 @@ export class Sequencer {
       }
       if (compareBytes(leg.op.demandHash, op.demandHash) !== 0) {
         throw new SequencerError("a leg must name the demand being settled");
+      }
+      // **The leg must end the record the set names**, not merely some record
+      // under this hash. The door checks the lock at the set's holder (the
+      // demand holder for a reliance leg, the obligor for the payout), but the
+      // law settles `leg.op.holder`; under the (attempt, holder) key those are
+      // different records, so unbound a decoy lock a stranger placed under this
+      // hash is converted while the true leg is left standing and the
+      // accompaniment never surrenders (found reviewing slice 31). For a
+      // withdrawal the standing legs are the demand holder's own.
+      const legHolder =
+        kind === "release" && terms !== undefined
+          ? (terms.get(legBacking.nameHex) as LegTerms).holder
+          : owner;
+      if (legHolder !== undefined && compareBytes(leg.op.holder, legHolder) !== 0) {
+        throw new SequencerError("a leg must end the record the set names");
       }
       // The release settles value, so the set it settles must be one that dies
       // as one — a mixed set can reach this door through takeOver, since the

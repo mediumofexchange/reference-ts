@@ -749,30 +749,45 @@ export function applyEntry(
       const matched = locksUnder(state, entry.attemptId).filter((lock) =>
         commitSatisfies(entry, lock.parties),
       );
-      for (const lock of matched) {
-        // A set leg names no decision venue and settles only with its set, on the
-        // holder's release: no commit reaches it. Read in the law and not only at
-        // the venue reader, or a log carrying a bare commit against a paying lock
-        // — the payout taken, nothing surrendered — replays as a history that
-        // could have happened (found by the 2026-08-22 audit).
-        if (compareBytes(lock.decisionVenue, NO_DECISION_VENUE) === 0) {
-          throw new LedgerError("a set leg settles with its set on the holder's release, never on a commit");
-        }
+      // **A set leg is never IN the match set.** It names no decision venue and
+      // settles only with its set on the holder's release — no commit reaches it.
+      // A set leg's parties are `[holder]`, so any object that holder signs
+      // satisfies it; throwing for the whole entry (as the first draft did) let
+      // one set leg brick every genuine venue-naming lock sharing the attempt id,
+      // with no exit at any index — the deadlock CLAUDE.md's "exactly one exit is
+      // open at every index" forbids (found reviewing slice 31). Excluded, not
+      // thrown; the venue-naming locks settle and the set leg stays standing.
+      const reachable = matched.filter(
+        (lock) => compareBytes(lock.decisionVenue, NO_DECISION_VENUE) !== 0,
+      );
+      // A commit that reaches only set legs (or nothing) is refused, not applied
+      // as a no-op: a bare commit against a paying lock — the payout taken,
+      // nothing surrendered — must not replay as a history that could have
+      // happened (found by the 2026-08-22 audit).
+      if (reachable.length === 0) {
+        throw new LedgerError("a set leg settles with its set on the holder's release, never on a commit");
+      }
+      for (const lock of reachable) {
         // TIME, and the predicate every sequencer in the bundle evaluates against
         // the same object: "was a valid release witnessed at or before the lock
         // timeout?" The clock passed here is the index the VENUE witnessed the
         // commit at, never the index this operator happens to be applying it —
         // which is the rule adoption already follows for a gap publication.
+        // All-or-nothing across the set: excluding a timed-out lock and settling
+        // the rest would half-settle a swap, so a dead lock throws the whole
+        // entry, and the exit is the withdrawal its own holder takes past the
+        // timeout. (The heterogeneous-timeout deadlock this can still reach is a
+        // separate question — see DECISIONS.)
         if (clock !== undefined && !lockIsLive(lock, clock)) {
           throw new LedgerError("the commit was witnessed past the lock timeout");
         }
       }
-      // Atomic across the whole match set, as applyEntry is across one entry: a
-      // settlement that skipped what it could not apply would convert a
+      // Atomic across the whole reachable set, as applyEntry is across one entry:
+      // a settlement that skipped what it could not apply would convert a
       // different set at each sequencer according to local state, which is
       // exactly what §C3's "one predicate against the same object" forbids. So
       // the balance checks run over the set before any of it moves.
-      settleLocks(state, matched);
+      settleLocks(state, reachable);
       break;
     }
     case "acceptance": {

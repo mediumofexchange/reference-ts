@@ -453,10 +453,12 @@ describe("a release and a withdrawal name the record they end", () => {
     expect(f.sequencer.balance(f.gold, KEYS.alice)).toBe(80n);
   });
 
-  it("and naming the signer's own key there reaches no record", () => {
+  it("and naming a record other than the set's is refused at the door", () => {
     // The complement, so the claim above is a claim about the field rather than
-    // about the happy path: Alice signs the payout leg naming HERSELF, and
-    // there is no lock of Alice's under that hash on GOLD to end.
+    // about the happy path: Alice signs the payout leg naming HERSELF, where the
+    // set names the obligor's record. The door binds the leg to the set's own
+    // holder (found reviewing slice 31: unbound, the law would settle whatever
+    // record `holder` named — a stranger's decoy — while the true leg stood).
     const f = payoutSetup();
     const demand: DemandOp = {
       backing: f.eur,
@@ -505,7 +507,7 @@ describe("a release and a withdrawal name the record they end", () => {
       f.sequencer.submitRelease(head, ed25519.sign(encodeRelease(head), SECRETS.alice), [
         { op: pay, signature: ed25519.sign(encodeRelease(pay), SECRETS.alice) },
       ]),
-    ).toThrow(LedgerError);
+    ).toThrow(/a leg must end the record the set names/);
   });
 
   it("naming a holder with no record under that hash is refused", () => {
@@ -649,5 +651,117 @@ describe("the doors this slice deletes leave the honest path open", () => {
     expect(() =>
       sequencer.submitRelease(asHead, ed25519.sign(encodeRelease(asHead), SECRETS.alice)),
     ).toThrow(SequencerError);
+  });
+});
+
+// The regression review of the slice, run on Opus across five angles, found
+// three defects the key introduced. Each is pinned here by the exploit it was
+// demonstrated with (scratch/review-*.mjs), so the fix is the exploit refused.
+
+describe("regression: a leg release ends the set's OWN record, not a decoy under its hash", () => {
+  it("a stranger's decoy lock under the hash cannot be substituted for the true leg", () => {
+    // The door checked the lock at the set's holder but submitted the caller's
+    // `holder`, and the law settled the latter: a stranger's one-unit decoy at
+    // (hash, mallory) was converted while Alice's true 80-GOLD leg stood, the
+    // backer taking 40 EUR for no accompaniment (review-leg-holder-substitution).
+    const { venue, sequencer, eur, gold } = setup();
+    const p = present(sequencer, eur, gold, 40n);
+    sequencer.submitDemand(p.demand, p.signature, [{ op: p.leg, signature: p.legSignature }]);
+    const answer: AcceptanceOp = {
+      backing: eur,
+      demandHash: p.hash,
+      instant: 0n,
+      deadline: 90n,
+      nonce: sequencer.nextNonce(KEYS.backer, eur),
+    };
+    sequencer.submitAcceptance(answer, ed25519.sign(encodeAcceptance(answer), SECRETS.backer));
+    // Mallory's own record under the demand's hash on GOLD — served like any other.
+    lock(sequencer, bundleLock(sequencer, gold, venue, "mallory", 1n, p.hash), "mallory");
+    const head = {
+      backing: eur,
+      demandHash: p.hash,
+      holder: KEYS.alice,
+      nonce: sequencer.nextNonce(KEYS.alice, eur),
+    };
+    const decoyLeg = {
+      backing: gold,
+      demandHash: p.hash,
+      holder: KEYS.mallory, // not the set's record: Alice's leg is at (hash, alice)
+      nonce: sequencer.nextNonce(KEYS.alice, gold),
+    };
+    expect(() =>
+      sequencer.submitRelease(head, ed25519.sign(encodeRelease(head), SECRETS.alice), [
+        { op: decoyLeg, signature: ed25519.sign(encodeRelease(decoyLeg), SECRETS.alice) },
+      ]),
+    ).toThrow(/a leg must end the record the set names/);
+    // Nothing moved; the honest release naming the set's own leg still settles.
+    const trueLeg = {
+      backing: gold,
+      demandHash: p.hash,
+      holder: KEYS.alice,
+      nonce: sequencer.nextNonce(KEYS.alice, gold),
+    };
+    sequencer.submitRelease(head, ed25519.sign(encodeRelease(head), SECRETS.alice), [
+      { op: trueLeg, signature: ed25519.sign(encodeRelease(trueLeg), SECRETS.alice) },
+    ]);
+    expect(sequencer.balance(eur, KEYS.backer)).toBe(40n);
+    expect(sequencer.balance(gold, KEYS.backer)).toBe(80n);
+    // Mallory's decoy was never part of the set: her own unit, still reserved.
+    expect(sequencer.availableBalance(gold, KEYS.mallory)).toBe(199n);
+  });
+});
+
+describe("regression: two disjoint objects under one attempt each settle, and neither freezes", () => {
+  it("the second settlement is not swallowed by the first's receipt", () => {
+    // A commit's receipt was keyed by the attempt alone, so two objects settling
+    // two locks under one attempt collided: the second `settle` was answered with
+    // the first's receipt, applied nothing, and left a lock `committedInTime`
+    // would not let its holder withdraw — frozen (review-settle-receipt-collision).
+    const { venue, sequencer, gold } = setup();
+    lock(sequencer, bundleLock(sequencer, gold, venue, "alice", 40n), "alice");
+    lock(sequencer, bundleLock(sequencer, gold, venue, "mallory", 10n), "mallory");
+    venue.advance(3n);
+    venue.publishCommit(signCommit(SECRETS.mallory, ATTEMPT)); // witnessed earlier
+    venue.advance(2n);
+    venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT)); // witnessed later
+    const first = sequencer.settle(gold, ATTEMPT); // earliest object: Mallory's
+    const second = sequencer.settle(gold, ATTEMPT); // Alice's, a distinct object
+    expect(second.position).not.toBe(first.position);
+    expect(sequencer.balance(gold, KEYS.bob)).toBe(50n); // both settled to bob
+    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(160n);
+    expect(sequencer.availableBalance(gold, KEYS.mallory)).toBe(190n);
+  });
+
+  it("and settling one object twice returns its receipt venue-free, not a second payment", () => {
+    // The idempotence the object-keyed receipt must keep: once every lock has
+    // resolved, a repeat is answered from the attempt's own mark without the venue.
+    const { venue, sequencer, gold } = setup();
+    lock(sequencer, bundleLock(sequencer, gold, venue, "alice", 40n), "alice");
+    venue.advance(3n);
+    venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
+    const first = sequencer.settle(gold, ATTEMPT);
+    expect(sequencer.settle(gold, ATTEMPT)).toEqual(first);
+    expect(sequencer.balance(gold, KEYS.bob)).toBe(40n);
+  });
+});
+
+describe("regression: a set leg sharing an attempt id does not brick a venue-naming lock's commit", () => {
+  it("the venue lock settles and the set leg stays standing", () => {
+    // A set leg's parties are [holder], so any object that holder signs matched
+    // it; the law threw for the whole entry, bricking a genuine venue-naming lock
+    // that shared the attempt id — no exit at any index (review-match-set). A set
+    // leg is excluded from the match set now, not thrown for.
+    const { venue, sequencer, eur, gold } = setup();
+    const p = present(sequencer, eur, gold, 40n);
+    sequencer.submitDemand(p.demand, p.signature, [{ op: p.leg, signature: p.legSignature }]);
+    const both = keySet(KEYS.alice, KEYS.mallory);
+    lock(sequencer, bundleLock(sequencer, gold, venue, "mallory", 10n, p.hash, both), "mallory");
+    venue.advance(3n);
+    venue.publishCommit(countersignCommit(signCommit(SECRETS.alice, p.hash), SECRETS.mallory));
+    sequencer.settle(gold, p.hash);
+    expect(sequencer.balance(gold, KEYS.bob)).toBe(10n); // Mallory's venue lock settled
+    // Alice's 80-GOLD set leg still stands; her demand is unsettled.
+    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(120n);
+    expect(sequencer.openDemands(eur)).toHaveLength(1);
   });
 });
