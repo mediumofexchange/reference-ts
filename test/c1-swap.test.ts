@@ -252,7 +252,7 @@ describe("§C1: a ring of three, and what the object tolerates", () => {
     f.venue.advance(2n);
     f.venue.publishCommit(object);
     const first = f.one.settle(f.eur, ATTEMPT);
-    expect(f.one.settle(f.eur, ATTEMPT)).toEqual(first);
+    expect(f.one.settle(f.eur, ATTEMPT, object)).toEqual(first);
     expect(f.one.balance(f.eur, KEYS.bob)).toBe(40n);
   });
 });

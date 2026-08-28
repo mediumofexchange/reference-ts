@@ -280,10 +280,10 @@ construction — which is why they are rules here rather than code.
   attempt on one backing carries one timeout, so a stranger who guesses your id
   and locks first fixes yours.
 - **One timeout for the whole attempt, everywhere.** The law compares only locks
-  under one attempt on ONE BACKING, so a ring or a bundle spread across backings
-  escapes it — even at one operator, which is §C1's own clearing case — and
-  halves dying at different indices half-settle: one leg converted, the other
-  refused. §C3's timeout "unlocks everywhere", singular. Check every lock.
+  under one attempt on ONE BACKING, so a ring or a bundle across backings escapes
+  it — even at one operator, §C1's own clearing case. A counterparty who takes
+  the shorter timeout is paid, then withdraws its own dead half: **theft, not a
+  freeze**. §C3's timeout "unlocks everywhere", singular. Check every lock.
 
 A receipt proves **acceptance, not a holding**: a payee who was paid and paid
 onward still holds the receipt for what they received. Reading it as a holding

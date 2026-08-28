@@ -733,32 +733,56 @@ describe("regression: two disjoint objects under one attempt each settle, and ne
   });
 
   it("and a stranger's fresh lock under a settled attempt cannot hide the receipt", () => {
-    // The release-receipt blockade, resurfaced at `settle`: the venue-free repeat
-    // answer was reachable only while NO lock stood, so a stranger locking one
-    // unit under a settled attempt put the honest holder's receipt permanently
-    // out of reach — one unit, one nonce (found regression-reviewing the fixes).
-    // A repeat is a read of the receipt book, so it answers before the refusal.
+    // The release-receipt blockade, resurfaced at `settle`: a stranger locking one
+    // unit under a settled attempt put the honest holder's receipt out of reach
+    // (found regression-reviewing the fixes). Naming the object answers it — the
+    // caller asks about its own record, and no record of anyone else's can shadow
+    // one it names.
     const { venue, sequencer, gold } = setup();
     lock(sequencer, bundleLock(sequencer, gold, venue, "alice", 40n), "alice");
     venue.advance(3n);
-    venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
+    const object = signCommit(SECRETS.alice, ATTEMPT);
+    venue.publishCommit(object);
     const mine = sequencer.settle(gold, ATTEMPT);
     // Mallory's own record under the same attempt, satisfied by no object here.
     const hers = { ...bundleLock(sequencer, gold, venue, "mallory", 1n), timeout: TIMEOUT + 100n };
     lock(sequencer, hers, "mallory");
-    expect(sequencer.settle(gold, ATTEMPT)).toEqual(mine);
+    expect(sequencer.settle(gold, ATTEMPT, object)).toEqual(mine);
   });
 
-  it("and settling one object twice returns its receipt venue-free, not a second payment", () => {
-    // The idempotence the object-keyed receipt must keep: once every lock has
-    // resolved, a repeat is answered from the attempt's own mark without the venue.
+  it("and a decoy settled first cannot capture the honest party's receipt", () => {
+    // The hijack the attempt-keyed mark allowed: Mallory buys a lock for one unit,
+    // settles her own object FIRST, and every later repeat was answered with her
+    // receipt forever — the honest party's own, which §C2b calls "the only
+    // evidence outside the operator's log", permanently unreachable. Each object
+    // now answers for itself (scratch/sec31-q2-receipt-hijack).
+    const { venue, sequencer, gold } = setup();
+    lock(sequencer, bundleLock(sequencer, gold, venue, "alice", 40n), "alice");
+    lock(sequencer, bundleLock(sequencer, gold, venue, "mallory", 1n), "mallory");
+    venue.advance(2n);
+    const decoy = signCommit(SECRETS.mallory, ATTEMPT);
+    venue.publishCommit(decoy); // witnessed first
+    venue.advance(2n);
+    const honest = signCommit(SECRETS.alice, ATTEMPT);
+    venue.publishCommit(honest);
+    const hers = sequencer.settle(gold, ATTEMPT); // earliest: Mallory's
+    const mine = sequencer.settle(gold, ATTEMPT); // then Alice's
+    expect(mine.opHash).not.toEqual(hers.opHash);
+    // Each party re-obtains its OWN receipt, whichever settled first.
+    expect(sequencer.settle(gold, ATTEMPT, honest)).toEqual(mine);
+    expect(sequencer.settle(gold, ATTEMPT, decoy)).toEqual(hers);
+  });
+
+  it("and an object naming another attempt is refused, not answered", () => {
+    // Slice 27's shape at a new door: a receipt for one attempt handed back to a
+    // request naming another is a receipt for an act the caller never asked about.
     const { venue, sequencer, gold } = setup();
     lock(sequencer, bundleLock(sequencer, gold, venue, "alice", 40n), "alice");
     venue.advance(3n);
     venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
-    const first = sequencer.settle(gold, ATTEMPT);
-    expect(sequencer.settle(gold, ATTEMPT)).toEqual(first);
-    expect(sequencer.balance(gold, KEYS.bob)).toBe(40n);
+    sequencer.settle(gold, ATTEMPT);
+    const elsewhere = signCommit(SECRETS.alice, new Uint8Array(32).fill(0xbb));
+    expect(() => sequencer.settle(gold, ATTEMPT, elsewhere)).toThrow(/names another attempt/);
   });
 });
 

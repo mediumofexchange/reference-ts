@@ -293,9 +293,12 @@ describe("§C3: half a bundle is still not a bundle", () => {
     const { venue, one, two, eur, gold } = setup();
     prepare(venue, one, two, eur, gold);
     venue.advance(3n);
-    venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
+    const object = signCommit(SECRETS.alice, ATTEMPT);
+    venue.publishCommit(object);
     const first = one.settle(eur, ATTEMPT);
-    const again = one.settle(eur, ATTEMPT);
+    // The repeat names the object it is asking about: this door takes an attempt
+    // but the act is an object, and the receipt is the object's.
+    const again = one.settle(eur, ATTEMPT, object);
     expect(again.opHash).toEqual(first.opHash);
     expect(one.balance(eur, KEYS.bob)).toBe(40n);
   });

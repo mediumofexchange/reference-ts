@@ -766,14 +766,36 @@ export class Sequencer {
    * attempt the record already showed, and a holder who published in time is not
    * at the mercy of somebody else's copy arriving late.
    */
-  settle(backing: Backing, attemptId: Uint8Array): Receipt {
+  settle(backing: Backing, attemptId: Uint8Array, commit?: Commit): Receipt {
     const held = this.served(backing);
     this.caughtUp([held]);
-    const asOp = (commit: Commit): PublishedOp => ({
+    const asOp = (object: Commit): PublishedOp => ({
       kind: "commit",
-      attemptId: commit.attemptId,
-      signatures: commit.signatures,
+      attemptId: object.attemptId,
+      signatures: object.signatures,
     });
+    // **A repeat names the object it is asking about.** This door names an
+    // ATTEMPT, but the operation it causes is an OBJECT — the one door left whose
+    // request under-specified the act it takes, which is the whole of what this
+    // slice fixed everywhere else by naming the record rather than the slot. Under
+    // the (attempt, holder) key a stranger buys a lock for one unit, settles a
+    // decoy object first, and every later repeat is answered with the decoy's
+    // receipt forever: the honest party's own receipt, which §C2b makes "the only
+    // evidence outside the operator's log", becomes permanently unreachable
+    // (scratch/sec31-q2-receipt-hijack). Naming the object answers exactly, and
+    // needs no venue — the object is the caller's own artefact, published at the
+    // venue by §C1 for anyone to hold.
+    //
+    // It selects nothing: which object SETTLES is the record's to say (earliest
+    // witnessing, below), never the caller's, or a late republication would
+    // un-commit an attempt.
+    if (commit !== undefined) {
+      if (compareBytes(commit.attemptId, attemptId) !== 0) {
+        throw new SequencerError("that object names another attempt");
+      }
+      const named = this.priorReceipt(held, asOp(commit));
+      if (named !== undefined) return named;
+    }
     // Every lock under the attempt, not one: a lock's slot is its holder's own,
     // so §C1's n-party exchange can stand as several locks here and the object
     // that settles them is any one of their parties' — the law converts every
@@ -784,36 +806,16 @@ export class Sequencer {
     // holder's release, so no object reaches it.
     const reachable = locks.filter((l) => compareBytes(l.decisionVenue, NO_DECISION_VENUE) !== 0);
     // Nothing here for a commit to settle — resolved already, or never existed.
-    // Invariant 26 wants a repeat answered with the identical prior receipt
-    // without reading the venue (the 2026-08-22 audit: a commits-refusing view
-    // threw before that answer could be given). The mark is keyed by the attempt
-    // ALONE — distinct now from any object's own op-hash, which binds the
-    // signatures — and holds the FIRST commit settled here, set below. `submit`
-    // keys the receipt by the object (its signatures), which this branch cannot
-    // reconstruct without the venue, so the venue-free answer needs its own mark.
-    //
-    // **Before either refusal**, since a repeat is a read of the receipt book and
-    // not an act: a settled attempt whose set leg still stands is reachable now
-    // that a set leg is excluded rather than thrown for, and the refusal below
-    // was answering it (found regression-reviewing the fixes).
-    //
-    // Residual, and why it stays one: where two objects settled two locks, the
-    // mark holds the FIRST, so a later caller is answered with a receipt that
-    // does not cover its own object. In §C1's grammar that cannot arise — "the
-    // fully signed exchange object" is one per attempt, every lock in an honest
-    // exchange names the whole party set ("all sign"), and so any object
-    // satisfying one lock satisfies all. Two objects under one attempt means
-    // locks with different party sets under one id: an id collision, answered by
-    // "a fresh id per attempt costs nothing", not by an argument added here for a
-    // shape the spec does not produce.
-    const settledMark = this.receiptKey(held, sha256(commitMessage(attemptId)));
+    // Answered in this sequencer's own voice, without touching the venue (the
+    // 2026-08-22 audit: a commits-refusing view threw before that answer could be
+    // given). A caller asking for the receipt of a settlement that already
+    // happened names its object above; there is no attempt-keyed second index to
+    // answer it from, because that index was the thing an attacker captured.
     if (reachable.length === 0) {
-      const prior = this.receipts.get(settledMark);
-      if (prior !== undefined) return copyReceipt(prior);
       if (locks.length > 0) {
         throw new SequencerError("a set leg settles with its set on the holder's release, not on a commit");
       }
-      throw new SequencerError("no lock for that attempt stands here");
+      throw new SequencerError("no lock for that attempt stands here: name the object to obtain its receipt");
     }
     // Earliest witnessing wins, across the locks as within one: a commit
     // republished later cannot un-commit what the record already showed.
@@ -822,22 +824,16 @@ export class Sequencer {
       .filter((w): w is WitnessedCommit => w !== undefined)
       .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))[0];
     if (witnessed === undefined) {
-      // Nothing standing here has an object — but this attempt may already have
-      // settled, and a receipt the operator co-signed stays obtainable whatever
-      // stands beside it now. A stranger's fresh lock under a settled attempt
-      // re-entered this branch and made the honest holder's receipt unreachable
-      // forever: one unit, one nonce, and the release-receipt blockade was back
-      // at `settle` (found regression-reviewing the fixes). The repeat is a read
-      // of the receipt book, so it answers before the refusal.
-      const prior = this.receipts.get(settledMark);
-      if (prior !== undefined) return copyReceipt(prior);
+      // Nothing standing here has an object. A caller after the receipt of a
+      // settlement that already happened names its object above — which is also
+      // what keeps a stranger's fresh lock under a settled attempt from hiding it
+      // (the release-receipt blockade, back at this door until the object could
+      // be named).
       // Two answers, not one (above and here): a caller told the commit is
       // missing would go to the venue for an object that is there.
       throw new SequencerError("no commit for that attempt is witnessed at this venue");
     }
-    const receipt = this.submit([{ backing: held, op: asOp(witnessed.commit) }], witnessed.at);
-    if (!this.receipts.has(settledMark)) this.receipts.set(settledMark, receipt);
-    return copyReceipt(receipt);
+    return this.submit([{ backing: held, op: asOp(witnessed.commit) }], witnessed.at);
   }
 
   /**
