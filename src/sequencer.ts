@@ -797,11 +797,15 @@ export class Sequencer {
     // that a set leg is excluded rather than thrown for, and the refusal below
     // was answering it (found regression-reviewing the fixes).
     //
-    // Residual, recorded rather than fixed: where two objects settled two locks,
-    // the mark holds the FIRST, so a later caller is answered with a receipt that
-    // does not cover its own object. `settle` names no object — it reads the
-    // venue for one — so there is nothing here to key a second answer by; giving
-    // it one is an API question for the maintainer.
+    // Residual, and why it stays one: where two objects settled two locks, the
+    // mark holds the FIRST, so a later caller is answered with a receipt that
+    // does not cover its own object. In §C1's grammar that cannot arise — "the
+    // fully signed exchange object" is one per attempt, every lock in an honest
+    // exchange names the whole party set ("all sign"), and so any object
+    // satisfying one lock satisfies all. Two objects under one attempt means
+    // locks with different party sets under one id: an id collision, answered by
+    // "a fresh id per attempt costs nothing", not by an argument added here for a
+    // shape the spec does not produce.
     const settledMark = this.receiptKey(held, sha256(commitMessage(attemptId)));
     if (reachable.length === 0) {
       const prior = this.receipts.get(settledMark);
