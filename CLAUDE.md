@@ -141,21 +141,19 @@ traversal.
 - **A demand reserves each leg with a `lock` in that leg's own log**, so every
   backing stays replayable alone, and the sequencer takes the demand and its
   locks as one act or none (§C3's single-phase).
-- **Two-phase across operators is `submitLock` + `settle`.** The holder
-  reserves at each sequencer, publishes ONE commit at a decision venue, and
-  each sequencer settles its own half against that witnessed object without
-  hearing from the others. §C1's n-party exchange is the same mechanism: one
-  object carries every signature, and a sequencer converts its lock only when
-  every party its lock names has signed — so a partial object settles nothing
-  anywhere.
+- **Two-phase across operators is `submitLock` + `settle`.** The holder reserves
+  at each sequencer, publishes ONE commit at a decision venue, and each settles
+  its own half against that witnessed object without hearing from the others.
+  §C1's n-party exchange is the same mechanism: a sequencer converts its lock
+  only when every party the lock names has signed, so a partial object settles
+  nothing anywhere.
 - **A lock names who may convert it.** One party converts on their release or
   their commit, several only on the witnessed object. A set leg names no
   decision venue (`NO_DECISION_VENUE`), so no commit reaches it; it is not
   retired, and it comes and settles only with its set — at filing, or
   re-prepared for a standing demand by its holder.
 - **A bundle lock is prepared only where the sequencer can read the commits it
-  may settle on**, and only for an attempt the record does not already show
-  committed.
+  may settle on**, and only for an attempt the record does not show committed.
 - **Two-phase is not the only honest answer.** §C2's partial-and-retry is the
   ordinary transfer path and covers every trade where both sides have recourse.
   Which branch a trade uses is the parties' choice, not the implementation's.
@@ -183,27 +181,26 @@ traversal.
   stranger's lock under a demand's hash is a record beside the set, never in
   front of it. A release or withdrawal names the record it ends — hash and
   holder, inside the signed message — because the law resolves the signer from
-  the record, and the hash alone now names a slot rather than a record. **A leg
-  ends the record the set names**, so the door binds each leg's holder to the
-  set's own terms; unbound, the law settled whatever record the caller named
-  and a decoy under the hash was converted while the true leg stood. A
-  venue-naming lock names its own holder among its parties (§C1's "all sign"),
-  which bounds what a commit converts: every lock under its attempt whose
-  parties it satisfies, checked and settled as one act. **A set leg is never in
-  that match set** — it names no venue and settles with its set — and is
-  excluded rather than thrown for, or one leg bricks every venue-naming lock
+  the record. **A leg ends the record the set names**, so the door binds each
+  leg's holder to the set's terms; unbound, a decoy under the hash was converted
+  while the true leg stood. A venue-naming lock names its own holder among its
+  parties (§C1's "all sign"), which bounds what a commit converts: every lock
+  under its attempt whose parties it satisfies, settled as one act. **A set leg
+  is never in that match set** — it names no venue and settles with its set — and
+  is excluded rather than thrown for, or one leg bricks every venue-naming lock
   sharing its id. **Every venue-naming lock under one attempt carries one
-  timeout**, because a commit converts its match set or none of it, and locks
-  dying at different indices leave a window with no exit open. An attempt id
-  then names one attempt on one backing **for its holder**: once their
-  venue-naming lock under it has settled or withdrawn there, a retry names a
-  fresh id, since a commit binds its id and nothing else — and a commit's
-  *receipt* is identified by its whole object, signatures included, since two
-  objects can settle two locks under one attempt.
+  timeout**, or locks dying at different indices leave a window with no exit
+  open. An attempt id names one attempt on one backing **for its holder**: once
+  their venue-naming lock under it has settled or withdrawn, a retry names a
+  fresh id, since a commit binds its id and nothing else.
+- **An entry's identity is what decides its effect**, and one answer serves the
+  receipt, the committed root and the rewritten-history comparison
+  (`opIdentityOfEntry`): the signed message, plus — for a commit alone — its
+  signatures, since those decide which locks it converts.
 
 ## What the parties must do, that no code here enforces
 
-Seven rules the protocol cannot check but the reference implementation must not
+Eight rules the protocol cannot check but the reference implementation must not
 leave unsaid. Each was reached by asking what a failing sequencer costs
 somebody, and each is recorded in the decision log with its reasoning.
 
@@ -268,20 +265,25 @@ construction — which is why they are rules here rather than code.
   no tail (`takeOver`), so perform only against the witnessed whole. What was
   co-signed after the last commitment and before the silence is dead, and the
   receipt makes that readable: it names its era (`after`); an era ended by a
-  return or a handover lapses its receipts (`eraLapsed`, `receiptStatus`
-  answering `lapsed`), where one ended at an ordinary commitment carried its
-  whole tail — so an attested operation missing then is `contradicted`, and a
-  pair of receipts one log cannot hold is a fault (`isDoublePosition`,
-  `isDoubleAcceptance`, both excusing a lapsed era). The exposure is the
-  interval since the last commitment, which is why §C2 makes it "a signed field
-  rather than operational discretion": E carries it with the venue it is read
-  on, under evidence tags 0x03 and 0x04, so a payee can tell a fast operator
-  running late from a slow one running on time (`isOverdue`).
+  return or a handover lapses its receipts (`eraLapsed`, `receiptStatus`), where
+  one ended at an ordinary commitment carried its whole tail — so an attested
+  operation missing then is `contradicted`, and a pair one log cannot hold is a
+  fault (`isDoublePosition`, `isDoubleAcceptance`, both excusing a lapsed era).
+  §C2 makes the exposure "a signed field rather than operational discretion": E
+  carries the interval with the venue it is read on, so a payee can tell a fast
+  operator running late from a slow one running on time (`isOverdue`).
 - **Never reuse an attempt id you have signed a commit for.** A commit binds
   its attempt id and nothing else, so an object you signed for one attempt
   converts any later lock under that id whose parties you are among — on
   another backing too, where the law cannot see the first. A fresh id per
-  attempt costs nothing.
+  attempt costs nothing, and an unpredictable one costs nothing either: one
+  attempt on one backing carries one timeout, so a stranger who guesses your id
+  and locks first fixes yours.
+- **One timeout for the whole attempt, at every operator.** The law holds only
+  the locks it serves to one timeout; a bundle's halves may sit at operators
+  that cannot see each other, and halves dying at different indices half-settle
+  — one leg converted, the other refused. §C3's timeout "unlocks everywhere",
+  singular. Check the counterparty's lock before signing an object.
 
 A receipt proves **acceptance, not a holding**: a payee who was paid and paid
 onward still holds the receipt for what they received. Reading it as a holding
