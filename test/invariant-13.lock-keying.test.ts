@@ -18,6 +18,7 @@ import {
   type AcceptanceOp,
   type DemandOp,
   type LockOp,
+  NO_ATTEMPT_SALT,
   NO_DECISION_VENUE,
 } from "../src/presentation.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
@@ -641,15 +642,29 @@ describe("the attempt's terms, and the spellings the law refuses", () => {
     expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(150n);
   });
 
-  it("and a venue-naming lock that omits its salt fails the equation", () => {
-    // The field is optional; the property never is (presentation.ts). An omitted
-    // salt is NO_ATTEMPT_SALT, which hashes to a different id than the one the
-    // holder agreed — so it is refused rather than silently retargeted.
+  it("and a venue-naming lock that omits its salt is refused by name", () => {
+    // The field is optional; the property never is. Omitting it is
+    // NO_ATTEMPT_SALT, and an id built on that is a pure function of PUBLIC
+    // terms — a dictionary over a key directory recovers the party set. Worse,
+    // it is what the frictionless path produces: derive the id from the op you
+    // are about to send, leave the salt out, and both agree. So the law refuses
+    // the one value reachable by omission, which is the mirror of the set leg's
+    // rule and the only part of "draw a random salt" it can check (found
+    // reviewing this slice, where an unsalted lock was simply accepted).
     const { venue, sequencer, gold } = setup();
     const agreed = bundleLock(sequencer, gold, venue, "alice", 40n, new Uint8Array(32).fill(0x0c));
     const { salt: _omitted, ...forgetful } = agreed;
     expect(() => lock(sequencer, forgetful, "alice")).toThrow(
-      /not the hash of this attempt's terms/,
+      /a venue-naming attempt draws its own salt/,
+    );
+    // And the derived-id form of the same mistake, which was the accepted one.
+    const unsalted: LockOp = {
+      ...agreed,
+      salt: NO_ATTEMPT_SALT,
+      attemptId: attemptIdOf(NO_ATTEMPT_SALT, venue.id, TIMEOUT, [KEYS.alice]),
+    };
+    expect(() => lock(sequencer, unsalted, "alice")).toThrow(
+      /a venue-naming attempt draws its own salt/,
     );
   });
 });

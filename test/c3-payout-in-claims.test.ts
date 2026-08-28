@@ -378,6 +378,7 @@ describe("§C3: the other doors to the payout, closed", () => {
       beneficiary: KEYS.mallory,
       quantity: 1n,
       timeout: 10_000n,
+      salt: new Uint8Array(32).fill(0x77),
       decisionVenue: f.venue.id,
       parties: [KEYS.mallory],
       nonce: f.sequencer.nextNonce(KEYS.mallory, f.gold),
@@ -465,6 +466,7 @@ describe("§C3: the paying slot cannot be taken before the demand either", () =>
       beneficiary: KEYS.alice,
       quantity: 1n,
       timeout: 10_000n,
+      salt: new Uint8Array(32).fill(0x77),
       decisionVenue: f.venue.id,
       parties: [KEYS.alice],
       nonce: f.sequencer.nextNonce(KEYS.alice, f.gold),
@@ -575,7 +577,12 @@ describe("§C3: every co-signed operation's receipt can be obtained by repeating
     };
     const signature = ed25519.sign(encodeLock(lock), SECRETS.backer);
     const receipt = f.sequencer.submitLock(lock, signature);
-    expect(receiptCovers(f.gold.name, { kind: "lock", ...lock, signature } as never, receipt)).toBe(true);
+    // The ENTRY carries the salt as a required field — a set leg's zero — where
+    // the op left it optional: the record has one spelling, asserted like every
+    // other field of the message.
+    expect(
+      receiptCovers(f.gold.name, { kind: "lock", ...lock, salt: NO_ATTEMPT_SALT, signature } as never, receipt),
+    ).toBe(true);
     expect(receipt.operator).toEqual(KEYS.operator);
     // The same bytes again: the same receipt. Fresh bytes: the bare door.
     expect(f.sequencer.submitLock(lock, signature)).toEqual(receipt);
@@ -602,7 +609,7 @@ describe("§C3: a repeat is a repeat of this request, and it is answered before 
     // Mallory, one unit of EUR, a bundle lock under the settled hash.
     const n = f.sequencer.nextNonce(KEYS.backer, f.eur);
     f.sequencer.submitIssue({ backing: f.eur, recipient: KEYS.mallory, quantity: 1n, nonce: n }, ed25519.sign(encodeIssuanceMessage(f.eur.name, KEYS.mallory, 1n, n), SECRETS.backer));
-    const squat: LockOp = { backing: f.eur, attemptId: hash, holder: KEYS.mallory, beneficiary: KEYS.mallory, quantity: 1n, timeout: 9000n, decisionVenue: f.venue.id, parties: [KEYS.mallory], nonce: 0n };
+    const squat: LockOp = { backing: f.eur, attemptId: hash, holder: KEYS.mallory, beneficiary: KEYS.mallory, quantity: 1n, timeout: 9000n, salt: new Uint8Array(32).fill(0x77), decisionVenue: f.venue.id, parties: [KEYS.mallory], nonce: 0n };
     // The squat that made the receipt unobtainable cannot be built any more: a
     // venue-naming lock's id is its own terms' hash. The repeat is answered
     // either way, which is what this test is for — the ordering it pins outlives

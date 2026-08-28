@@ -7,6 +7,7 @@ import { snapshotRedemptions } from "../src/recovery.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import {
   attemptIdOf,
+  NO_ATTEMPT_SALT,
   demandHash,
   encodeAcceptance,
   encodeDemand,
@@ -1137,6 +1138,7 @@ describe("§C3: re-prepare reads the record first, and the window's last index",
       beneficiary: KEYS.bob,
       quantity: 1n,
       timeout: 500n,
+      salt: new Uint8Array(32).fill(0x77),
       decisionVenue: venue.id,
       parties: [KEYS.alice],
       nonce: sequencer.nextNonce(KEYS.alice, gold),
@@ -1148,7 +1150,8 @@ describe("§C3: re-prepare reads the record first, and the window's last index",
     expect(() =>
       sequencer.submitLock(squat, ed25519.sign(encodeLock(squat), SECRETS.alice)),
     ).toThrow(/not the hash of this attempt's terms/);
-    const lock: LockOp = { ...squat, beneficiary: KEYS.backer, quantity: 80n, timeout: 40n, decisionVenue: NO_DECISION_VENUE, nonce: sequencer.nextNonce(KEYS.alice, gold) };
+    // The honest leg: a set leg, so no salt — its attempt is the demand.
+    const lock: LockOp = { ...squat, salt: NO_ATTEMPT_SALT, beneficiary: KEYS.backer, quantity: 80n, timeout: 40n, decisionVenue: NO_DECISION_VENUE, nonce: sequencer.nextNonce(KEYS.alice, gold) };
     sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice), [
       { op: lock, signature: ed25519.sign(encodeLock(lock), SECRETS.alice) },
     ]);
@@ -1245,7 +1248,7 @@ describe("§C3: every door is ready, then answers a repeat, then refuses — in 
       { backing: gold, recipient: KEYS.mallory, quantity: 5n, nonce },
       ed25519.sign(encodeIssuanceMessage(gold.name, KEYS.mallory, 5n, nonce), SECRETS.backer),
     );
-    const squat: LockOp = { backing: gold, attemptId: hash, holder: KEYS.mallory, beneficiary: KEYS.mallory, quantity: 1n, timeout: 20n, decisionVenue: venue.id, parties: [KEYS.mallory], nonce: 0n };
+    const squat: LockOp = { backing: gold, attemptId: hash, holder: KEYS.mallory, beneficiary: KEYS.mallory, quantity: 1n, timeout: 20n, salt: new Uint8Array(32).fill(0x77), decisionVenue: venue.id, parties: [KEYS.mallory], nonce: 0n };
     // There is no slot left to squat: a venue-naming lock's id is its own terms'
     // hash, so Mallory's cannot be the demand's. The door-ordering this test was
     // written for — the record read before the refusal — is still pinned by the

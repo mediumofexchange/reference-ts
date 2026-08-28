@@ -733,6 +733,19 @@ export function applyEntry(
           throw new LedgerError("a set leg's attempt is its demand: it carries no salt");
         }
       } else {
+        // **A venue-naming attempt draws a salt**, and the zero one is not a
+        // draw. The law cannot check randomness, but it can check that the one
+        // value reachable by *omission* was not used — and that value is the
+        // worst, because an unsalted id is a pure function of public terms: a
+        // dictionary over a key directory recovers the party set in seconds, and
+        // a repeat trade on the same terms is the SAME attempt rather than a new
+        // one. The frictionless path (derive the id from the op you are about to
+        // send, salt left out) landed exactly there and was accepted (found
+        // reviewing this slice). One line, and the mirror of its sibling above:
+        // each shape has one spelling for the field the other forbids.
+        if (compareBytes(entry.salt, NO_ATTEMPT_SALT) === 0) {
+          throw new LedgerError("a venue-naming attempt draws its own salt");
+        }
         const named = attemptIdOf(entry.salt, entry.decisionVenue, entry.timeout, entry.parties);
         if (compareBytes(named, entry.attemptId) !== 0) {
           throw new LedgerError("attempt id is not the hash of this attempt's terms");

@@ -398,7 +398,7 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
       signature: ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 200n, 0n), SECRETS.backer),
     });
     const claim = demandOp(eur, SECRETS.alice, KEYS.alice, 40n, 0n, 90n, 0n);
-    const legMessage = encodeLockMessage(gold.name, claim.hash, KEYS.alice, KEYS.backer, 80n, 20n, NO_DECISION_VENUE, [KEYS.alice], 0n);
+    const legMessage = encodeLockMessage(gold.name, claim.hash, KEYS.alice, KEYS.backer, 80n, 20n, NO_DECISION_VENUE, [KEYS.alice], 0n, NO_ATTEMPT_SALT);
     const legOp: PublishedOp = { kind: "lock", attemptId: claim.hash, holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout: 20n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: 0n, salt: NO_ATTEMPT_SALT, signature: ed25519.sign(legMessage, SECRETS.alice) };
     const snapshots = [
       { name: eur.name, opLog: [entry(eur, 0, issueOf(eur)), entry(eur, 1, claim.published)] },

@@ -123,13 +123,15 @@ export interface LockOp {
   /** The backing whose units are reserved. */
   readonly backing: Backing;
   /**
-   * The atomic attempt these units are reserved for, named by the holder.
+   * The atomic attempt these units are reserved for, **named by its terms**.
    *
    * **A presentation's attempt is its demand**, so the id is that demand's hash
-   * and everything about reliance legs reads unchanged. A bundle transfer picks
-   * its own id, and nothing else about the mechanism differs — the reservation,
-   * the timeout and the exit are one set of rules, because they are one property:
-   * units spoken for by an attempt that will either commit or expire.
+   * and everything about reliance legs reads unchanged. A bundle transfer's is
+   * `attemptIdOf(salt, decisionVenue, timeout, parties)` — nobody picks it, and
+   * the law refuses a lock that claims one. Nothing else about the mechanism
+   * differs: the reservation, the timeout and the exit are one set of rules,
+   * because they are one property — units spoken for by an attempt that will
+   * either commit or expire.
    */
   readonly attemptId: Uint8Array;
   /**
@@ -143,8 +145,10 @@ export interface LockOp {
    *
    * **Omitted is `NO_ATTEMPT_SALT`**, which is what a set leg carries: its
    * attempt is its demand, whose hash the demand itself fixes, so there is no
-   * salt to draw. A venue-naming lock that omits one fails the equation and is
-   * refused — the field is optional, never the property.
+   * salt to draw. A venue-naming lock that omits one is refused by name — the
+   * law cannot check that a salt is random, but it does check that one was
+   * drawn, because the omitted value is the single guessable one and an id
+   * built on it is a pure function of public terms.
    */
   readonly salt?: Uint8Array;
   readonly holder: Uint8Array;
@@ -418,7 +422,13 @@ export function encodeLockMessage(
   decisionVenue: Uint8Array,
   parties: readonly Uint8Array[],
   nonce: bigint,
-  salt: Uint8Array = NO_ATTEMPT_SALT,
+  // No default. Optionality is `LockOp`'s, and it is applied once, where that
+  // type is turned into bytes (`encodeLock`) or into a record (`lockEntry`). A
+  // default here also served `opMessageOfEntry`, whose entry has the salt as a
+  // REQUIRED field — so an entry missing it got well-formed canonical bytes
+  // instead of `key32`'s refusal, and two distinct entries shared one identity
+  // (found reviewing this slice). Every field of a lock message is asserted.
+  salt: Uint8Array,
 ): Uint8Array {
   validateQuantity(quantity, "lock quantity");
   const w = new ByteWriter();
@@ -579,7 +589,7 @@ export function encodeLock(op: LockOp): Uint8Array {
     op.decisionVenue,
     op.parties,
     op.nonce,
-    op.salt,
+    op.salt ?? NO_ATTEMPT_SALT,
   );
 }
 
