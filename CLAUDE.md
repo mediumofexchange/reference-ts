@@ -192,9 +192,9 @@ traversal.
   invariant 1's move, applied to the other object parties must agree on and none
   may edit alone. A matching id IS matching terms, so one attempt carries one
   timeout across backings and operators alike, and a stranger's differing terms
-  are a different attempt. Drawing the salt at random is the party's to do; a set
-  leg is the same rule — its attempt is its demand — and carries none, which is
-  the law's.
+  are a different attempt. Drawing the salt at RANDOM is the party's; the law
+  refuses only the value an omission produces. A set leg is the same rule — its
+  attempt is its demand — and carries none, which the law does check.
 - **An entry's identity is what decides its effect**, and one answer serves the
   receipt, the committed root and the rewritten-history comparison
   (`opIdentityOfEntry`): the signed message, plus — for a commit alone — its

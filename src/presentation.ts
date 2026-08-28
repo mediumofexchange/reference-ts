@@ -145,10 +145,11 @@ export interface LockOp {
    *
    * **Omitted is `NO_ATTEMPT_SALT`**, which is what a set leg carries: its
    * attempt is its demand, whose hash the demand itself fixes, so there is no
-   * salt to draw. A venue-naming lock that omits one is refused by name — the
-   * law cannot check that a salt is random, but it does check that one was
-   * drawn, because the omitted value is the single guessable one and an id
-   * built on it is a pure function of public terms.
+   * salt to draw. A venue-naming lock is refused for carrying that value — not
+   * because it is the only guessable salt (a counter or a hash of the terms
+   * passes, and both are recomputable), but because it is the one an omission
+   * produces, and omitting it is the mistake this API invites. Drawing a random
+   * one is the party's, and no code here checks it.
    */
   readonly salt?: Uint8Array;
   readonly holder: Uint8Array;
@@ -425,9 +426,11 @@ export function encodeLockMessage(
   // No default. Optionality is `LockOp`'s, and it is applied once, where that
   // type is turned into bytes (`encodeLock`) or into a record (`lockEntry`). A
   // default here also served `opMessageOfEntry`, whose entry has the salt as a
-  // REQUIRED field — so an entry missing it got well-formed canonical bytes
-  // instead of `key32`'s refusal, and two distinct entries shared one identity
-  // (found reviewing this slice). Every field of a lock message is asserted.
+  // REQUIRED field — so an entry missing it encoded as a zero salt, and two
+  // distinct entries shared one identity (found reviewing this slice). Absent,
+  // it now fails in the writer like any other missing field; that failure is a
+  // TypeError rather than a named boundary, which is what every absent field
+  // does here and is why callers of the verifiers catch broadly.
   salt: Uint8Array,
 ): Uint8Array {
   validateQuantity(quantity, "lock quantity");

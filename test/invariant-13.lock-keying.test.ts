@@ -653,11 +653,15 @@ describe("the attempt's terms, and the spellings the law refuses", () => {
     // reviewing this slice, where an unsalted lock was simply accepted).
     const { venue, sequencer, gold } = setup();
     const agreed = bundleLock(sequencer, gold, venue, "alice", 40n, new Uint8Array(32).fill(0x0c));
+    // Dropping the salt from a lock whose id was derived WITH one is an
+    // id-mismatch, and that is the precise name for it: the id no longer
+    // describes the terms carried beside it.
     const { salt: _omitted, ...forgetful } = agreed;
     expect(() => lock(sequencer, forgetful, "alice")).toThrow(
-      /a venue-naming attempt draws its own salt/,
+      /not the hash of this attempt's terms/,
     );
-    // And the derived-id form of the same mistake, which was the accepted one.
+    // The mistake this rule is actually for: derive the id from the op you are
+    // about to send, salt left out, so the two AGREE — which was accepted.
     const unsalted: LockOp = {
       ...agreed,
       salt: NO_ATTEMPT_SALT,

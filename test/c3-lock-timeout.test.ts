@@ -1138,7 +1138,6 @@ describe("§C3: re-prepare reads the record first, and the window's last index",
       beneficiary: KEYS.bob,
       quantity: 1n,
       timeout: 500n,
-      salt: new Uint8Array(32).fill(0x77),
       decisionVenue: venue.id,
       parties: [KEYS.alice],
       nonce: sequencer.nextNonce(KEYS.alice, gold),
@@ -1248,7 +1247,7 @@ describe("§C3: every door is ready, then answers a repeat, then refuses — in 
       { backing: gold, recipient: KEYS.mallory, quantity: 5n, nonce },
       ed25519.sign(encodeIssuanceMessage(gold.name, KEYS.mallory, 5n, nonce), SECRETS.backer),
     );
-    const squat: LockOp = { backing: gold, attemptId: hash, holder: KEYS.mallory, beneficiary: KEYS.mallory, quantity: 1n, timeout: 20n, salt: new Uint8Array(32).fill(0x77), decisionVenue: venue.id, parties: [KEYS.mallory], nonce: 0n };
+    const squat: LockOp = { backing: gold, attemptId: hash, holder: KEYS.mallory, beneficiary: KEYS.mallory, quantity: 1n, timeout: 20n, decisionVenue: venue.id, parties: [KEYS.mallory], nonce: 0n };
     // There is no slot left to squat: a venue-naming lock's id is its own terms'
     // hash, so Mallory's cannot be the demand's. The door-ordering this test was
     // written for — the record read before the refusal — is still pinned by the

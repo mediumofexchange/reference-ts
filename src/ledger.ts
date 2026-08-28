@@ -733,22 +733,26 @@ export function applyEntry(
           throw new LedgerError("a set leg's attempt is its demand: it carries no salt");
         }
       } else {
-        // **A venue-naming attempt draws a salt**, and the zero one is not a
-        // draw. The law cannot check randomness, but it can check that the one
-        // value reachable by *omission* was not used — and that value is the
-        // worst, because an unsalted id is a pure function of public terms: a
-        // dictionary over a key directory recovers the party set in seconds, and
-        // a repeat trade on the same terms is the SAME attempt rather than a new
-        // one. The frictionless path (derive the id from the op you are about to
-        // send, salt left out) landed exactly there and was accepted (found
-        // reviewing this slice). One line, and the mirror of its sibling above:
-        // each shape has one spelling for the field the other forbids.
-        if (compareBytes(entry.salt, NO_ATTEMPT_SALT) === 0) {
-          throw new LedgerError("a venue-naming attempt draws its own salt");
-        }
+        // The id equation FIRST, because it is the rule of this slice and the
+        // one a squat breaks: a lock claiming somebody else's hash is refused
+        // for claiming it, whatever its salt. Ordered the other way, the salt
+        // rule below answered for the whole squat family and named the wrong
+        // boundary — visible as seven salts injected into five squat tests to
+        // route around it, which is what a misplaced refusal looks like (found
+        // reviewing this rule).
         const named = attemptIdOf(entry.salt, entry.decisionVenue, entry.timeout, entry.parties);
         if (compareBytes(named, entry.attemptId) !== 0) {
           throw new LedgerError("attempt id is not the hash of this attempt's terms");
+        }
+        // **The value reachable by omission is not a salt**, and that is the
+        // whole of what this checks. It is not "a salt was drawn" — CLAUDE.md
+        // lists drawing a fresh random one under what no code here enforces, and
+        // salt = 1 or a hash of the terms passes this happily. What it closes is
+        // the mistake the API invites: derive the id from the op you are about
+        // to send, leave the salt out, and the two agree — which was accepted,
+        // and which makes the id a pure function of public terms.
+        if (compareBytes(entry.salt, NO_ATTEMPT_SALT) === 0) {
+          throw new LedgerError("a venue-naming attempt draws its own salt");
         }
       }
       // The third credit path, and the only one that was not checked (found by

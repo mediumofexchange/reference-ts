@@ -378,7 +378,6 @@ describe("§C3: the other doors to the payout, closed", () => {
       beneficiary: KEYS.mallory,
       quantity: 1n,
       timeout: 10_000n,
-      salt: new Uint8Array(32).fill(0x77),
       decisionVenue: f.venue.id,
       parties: [KEYS.mallory],
       nonce: f.sequencer.nextNonce(KEYS.mallory, f.gold),
@@ -466,7 +465,6 @@ describe("§C3: the paying slot cannot be taken before the demand either", () =>
       beneficiary: KEYS.alice,
       quantity: 1n,
       timeout: 10_000n,
-      salt: new Uint8Array(32).fill(0x77),
       decisionVenue: f.venue.id,
       parties: [KEYS.alice],
       nonce: f.sequencer.nextNonce(KEYS.alice, f.gold),
@@ -609,7 +607,7 @@ describe("§C3: a repeat is a repeat of this request, and it is answered before 
     // Mallory, one unit of EUR, a bundle lock under the settled hash.
     const n = f.sequencer.nextNonce(KEYS.backer, f.eur);
     f.sequencer.submitIssue({ backing: f.eur, recipient: KEYS.mallory, quantity: 1n, nonce: n }, ed25519.sign(encodeIssuanceMessage(f.eur.name, KEYS.mallory, 1n, n), SECRETS.backer));
-    const squat: LockOp = { backing: f.eur, attemptId: hash, holder: KEYS.mallory, beneficiary: KEYS.mallory, quantity: 1n, timeout: 9000n, salt: new Uint8Array(32).fill(0x77), decisionVenue: f.venue.id, parties: [KEYS.mallory], nonce: 0n };
+    const squat: LockOp = { backing: f.eur, attemptId: hash, holder: KEYS.mallory, beneficiary: KEYS.mallory, quantity: 1n, timeout: 9000n, decisionVenue: f.venue.id, parties: [KEYS.mallory], nonce: 0n };
     // The squat that made the receipt unobtainable cannot be built any more: a
     // venue-naming lock's id is its own terms' hash. The repeat is answered
     // either way, which is what this test is for — the ordering it pins outlives
