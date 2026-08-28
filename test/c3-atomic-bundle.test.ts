@@ -544,11 +544,11 @@ describe("§C3: an attempt id names one attempt on one backing, for the locks a 
     // set answers the same question one index earlier; this is the id doing it.
     const again = lockFor(two, gold, venue, 90n);
     expect(() => two.submitLock(again, ed25519.sign(encodeLock(again), SECRETS.alice))).toThrow(
-      /already used that attempt id on this backing|timeout is not ahead/,
+      /already used that attempt id on this backing/,
     );
     const againEur = lockFor(one, eur, venue, 40n);
     expect(() => one.submitLock(againEur, ed25519.sign(encodeLock(againEur), SECRETS.alice))).toThrow(
-      /already used that attempt id on this backing|timeout is not ahead/,
+      /already used that attempt id on this backing/,
     );
     // So the withheld object, published now, reaches nothing on either.
     venue.publishCommit(withheld);

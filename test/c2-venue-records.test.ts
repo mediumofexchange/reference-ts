@@ -177,10 +177,16 @@ describe("the two record kinds the first table left out: a lock and a commit", (
   /** `n` distinct valid keys in canonical order. */
   const parties = (n: number) =>
     Array.from({ length: n }, (_, i) => pub(new Uint8Array(32).fill(0x10 + i))).sort(compareBytes);
+  // A NON-ZERO salt, because a zero one round-trips whether or not the codec
+  // carries the field at all: with `salt: op.salt ?? NO_ATTEMPT_SALT` below, a
+  // codec that dropped the salt entirely still produced a matching record. The
+  // review round's mutation pass caught that this test could not see it.
+  const SALT = new Uint8Array(32).fill(0x6d);
   const lockOp = (keys: readonly Uint8Array[]): PublishedOp => {
     const op: LockOp = {
       backing,
       attemptId: attempt,
+      salt: SALT,
       holder: KEYS.alice,
       beneficiary: KEYS.bob,
       quantity: 9n,
@@ -212,6 +218,9 @@ describe("the two record kinds the first table left out: a lock and a commit", (
       expect(decoded.op).toEqual(op);
       expect(decoded.backingName).toEqual(name);
       expect(encodePublishedOp(name, decoded.op)).toEqual(bytes);
+      // Named, not merely covered by the deep compare: the salt is what a
+      // verifier re-checks the attempt id against, so it has to survive the wire.
+      expect((decoded.op as Extract<PublishedOp, { kind: "lock" }>).salt).toEqual(SALT);
     }
     const commit = signCommit(SECRETS.alice, attempt);
     const op: PublishedOp = { kind: "commit", attemptId: commit.attemptId, signatures: commit.signatures };

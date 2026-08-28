@@ -166,6 +166,31 @@ function bundleLock(
   };
 }
 
+/**
+ * A venue-naming lock that CLAIMS an id instead of deriving one — the shape
+ * every squat in this family took, and the shape the law now refuses.
+ *
+ * It exists as its own helper because the id is the last positional argument a
+ * fixture can get wrong: passing a hash where `bundleLock` wants a salt builds a
+ * perfectly valid lock under a DIFFERENT attempt, so the squat quietly stops
+ * being a squat and the test still passes. A review round caught exactly that
+ * here. Naming the id explicitly is the only way to mean it.
+ */
+function claimingLock(
+  sequencer: Sequencer,
+  backing: Backing,
+  venue: LocalVenue,
+  holder: keyof typeof SECRETS,
+  quantity: bigint,
+  attemptId: Uint8Array,
+  parties?: Uint8Array[],
+): LockOp {
+  return {
+    ...bundleLock(sequencer, backing, venue, holder, quantity, ATTEMPT_SALT, parties),
+    attemptId,
+  };
+}
+
 function lock(sequencer: Sequencer, op: LockOp, holder: keyof typeof SECRETS) {
   return sequencer.submitLock(op, ed25519.sign(encodeLock(op), SECRETS[holder]));
 }
@@ -250,16 +275,19 @@ describe("invariant 13: a lock's slot is the holder's own", () => {
 
 describe("the squat family, ended at the source", () => {
   it("a stranger's lock on a leg does not block the demand's own leg", () => {
-    // The leg-slot squat (24c, recorded open there). Mallory predicts the hash,
-    // reserves one unit of GOLD under it, and Alice's leg needed that slot.
+    // The leg-slot squat (24c, recorded open there). Mallory predicts the hash
+    // and tries to reserve one unit of GOLD under it, where Alice's leg goes.
+    // Keying by (attempt, holder) made it harmless; naming the attempt by its
+    // terms makes it unbuildable — a venue-naming lock's id is its own terms'
+    // hash, and a demand's hash is not one.
     const { venue, sequencer, eur, gold } = setup();
     const p = present(sequencer, eur, gold, 40n);
-    const squat = bundleLock(sequencer, gold, venue, "mallory", 1n, p.hash);
-    lock(sequencer, squat, "mallory");
-    // Alice files anyway: her leg is a different record.
+    const squat = claimingLock(sequencer, gold, venue, "mallory", 1n, p.hash);
+    expect(() => lock(sequencer, squat, "mallory")).toThrow(/not the hash of this attempt's terms/);
+    // Alice files: her leg's slot was never at risk.
     sequencer.submitDemand(p.demand, p.signature, [{ op: p.leg, signature: p.legSignature }]);
     expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(120n);
-    expect(sequencer.availableBalance(gold, KEYS.mallory)).toBe(199n);
+    expect(sequencer.availableBalance(gold, KEYS.mallory)).toBe(200n);
   });
 
   it("a stranger's lock on the demanded backing does not refuse the demand", () => {
@@ -267,10 +295,12 @@ describe("the squat family, ended at the source", () => {
     // locks under the predicted hash on EUR itself; the law refused the demand
     // with "a lock already stands under this demand's hash on this backing",
     // and the sequencer refused it earlier with "re-file with a fresh nonce" —
-    // a delay bounded by re-filing, and paid by the honest party.
+    // a delay bounded by re-filing, and paid by the honest party. Now her lock
+    // is refused instead, and the filing was never in question.
     const { venue, sequencer, eur, gold } = setup();
     const p = present(sequencer, eur, gold, 40n);
-    lock(sequencer, bundleLock(sequencer, eur, venue, "mallory", 1n, p.hash), "mallory");
+    const squat = claimingLock(sequencer, eur, venue, "mallory", 1n, p.hash);
+    expect(() => lock(sequencer, squat, "mallory")).toThrow(/not the hash of this attempt's terms/);
     sequencer.submitDemand(p.demand, p.signature, [{ op: p.leg, signature: p.legSignature }]);
     expect(sequencer.availableBalance(eur, KEYS.alice)).toBe(160n);
   });
@@ -278,11 +308,13 @@ describe("the squat family, ended at the source", () => {
   it("and the stranger's lock does not hijack the demand's exits", () => {
     // Why the six doors existed: signerOf resolved a release or withdrawal
     // lock-first, so a stranger's one-unit lock under a standing demand's hash
-    // answered for the head. Alice's withdrawal now names her own record and
-    // reaches her demand, with Mallory's lock untouched beside it.
+    // answered for the head. There is no such lock to place now, and Alice's
+    // own exits are her own.
     const { venue, sequencer, eur, gold } = setup();
     const p = present(sequencer, eur, gold, 40n);
-    lock(sequencer, bundleLock(sequencer, eur, venue, "mallory", 1n, p.hash), "mallory");
+    expect(() =>
+      lock(sequencer, claimingLock(sequencer, eur, venue, "mallory", 1n, p.hash), "mallory"),
+    ).toThrow(/not the hash of this attempt's terms/);
     sequencer.submitDemand(p.demand, p.signature, [{ op: p.leg, signature: p.legSignature }]);
     advanceWitnessedIndex(venue, DEADLINE + 1n);
     const head = {
@@ -302,9 +334,9 @@ describe("the squat family, ended at the source", () => {
     ]);
     expect(sequencer.availableBalance(eur, KEYS.alice)).toBe(200n);
     expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(200n);
-    // Mallory's own unit is still reserved: it was never part of Alice's set.
+    // Mallory reserved nothing: her lock never stood.
     expect(sequencer.availableBalance(gold, KEYS.mallory)).toBe(200n);
-    expect(sequencer.availableBalance(eur, KEYS.mallory)).toBe(199n);
+    expect(sequencer.availableBalance(eur, KEYS.mallory)).toBe(200n);
   });
 
   it("a stranger cannot retire an attempt id the honest holder still needs", () => {
@@ -396,9 +428,19 @@ describe("§C3's commit, under a key it cannot name", () => {
     // balance at the quantity bound) so that the victim's commit is refused
     // outright. All-or-nothing across the match set is what makes it a hole
     // rather than a nuisance, and the rule closes it where it starts.
+    // Built with Alice's own terms — the party set is IN the id now, so the only
+    // way a stranger reaches the victim's attempt at all is by carrying the
+    // victim's parties, and then this rule is the one that stops her. Matched on
+    // the message, not the class, or the id check could pass for it.
     const { venue, sequencer, gold } = setup();
-    const notMine = bundleLock(sequencer, gold, venue, "mallory", 1n, ATTEMPT, [KEYS.alice]);
-    expect(() => lock(sequencer, notMine, "mallory")).toThrow(LedgerError);
+    const notMine: LockOp = {
+      ...bundleLock(sequencer, gold, venue, "mallory", 1n, ATTEMPT_SALT, [KEYS.alice]),
+      holder: KEYS.mallory,
+    };
+    expect(compareBytes(notMine.attemptId, ATTEMPT)).toBe(0);
+    expect(() => lock(sequencer, notMine, "mallory")).toThrow(
+      /names its own holder among its parties/,
+    );
   });
 
   it("and a set leg does not, because no commit reaches it", () => {
@@ -563,6 +605,54 @@ describe("a release and a withdrawal name the record they end", () => {
   });
 });
 
+describe("the attempt's terms, and the spellings the law refuses", () => {
+  it("a set leg carries no salt: one record, one spelling", () => {
+    // The rule's own coverage, and it had none — deleting it left the suite
+    // green (found by the review round's mutation pass). A set leg's attempt is
+    // its demand, whose hash the demand fixes, so a salt there names nothing;
+    // permitting a free one would give a record two spellings, which is the
+    // canonicity every encoder in this system is built to deny.
+    const { sequencer, eur, gold } = setup();
+    const p = present(sequencer, eur, gold, 40n);
+    const salted: LockOp = { ...p.leg, salt: new Uint8Array(32).fill(0x09) };
+    expect(() =>
+      sequencer.submitDemand(p.demand, p.signature, [
+        { op: salted, signature: ed25519.sign(encodeLock(salted), SECRETS.alice) },
+      ]),
+    ).toThrow(/a set leg's attempt is its demand: it carries no salt/);
+    // The honest path it leaves open: the same leg without one.
+    sequencer.submitDemand(p.demand, p.signature, [{ op: p.leg, signature: p.legSignature }]);
+    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(120n);
+  });
+
+  it("two attempts differing only in salt are different attempts", () => {
+    // What the salt is FOR, stated as a claim rather than used as plumbing: it
+    // is the only term a party chooses freely, so it is what separates two
+    // exchanges on identical terms — and what keeps a venue that sees only the
+    // id from reading the party set off it.
+    const { venue, sequencer, gold } = setup();
+    const one = bundleLock(sequencer, gold, venue, "alice", 40n, new Uint8Array(32).fill(0x01));
+    lock(sequencer, one, "alice");
+    const two = bundleLock(sequencer, gold, venue, "alice", 10n, new Uint8Array(32).fill(0x02));
+    expect(compareBytes(one.attemptId, two.attemptId)).not.toBe(0);
+    // Both stand: they are not one attempt, so the key collision never fires.
+    lock(sequencer, two, "alice");
+    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(150n);
+  });
+
+  it("and a venue-naming lock that omits its salt fails the equation", () => {
+    // The field is optional; the property never is (presentation.ts). An omitted
+    // salt is NO_ATTEMPT_SALT, which hashes to a different id than the one the
+    // holder agreed — so it is refused rather than silently retargeted.
+    const { venue, sequencer, gold } = setup();
+    const agreed = bundleLock(sequencer, gold, venue, "alice", 40n, new Uint8Array(32).fill(0x0c));
+    const { salt: _omitted, ...forgetful } = agreed;
+    expect(() => lock(sequencer, forgetful, "alice")).toThrow(
+      /not the hash of this attempt's terms/,
+    );
+  });
+});
+
 describe("the residual this closes: one holder, one hash, two records", () => {
   it("a venue-naming lock cannot name a demand's hash at all", () => {
     // The (attempt, holder) slice documented this rather than refusing it:
@@ -606,16 +696,19 @@ describe("the residual this closes: one holder, one hash, two records", () => {
 });
 
 describe("the doors this slice deletes leave the honest path open", () => {
-  it("a bare lock under a standing demand's hash on an unrelated backing is served", () => {
+  it("a bare lock beside a standing demand is served, and one claiming its hash is not", () => {
     // demandStands (sequencer.ts) scanned every backing the operator served and
     // refused a venue-naming lock under any standing demand's hash on the set's
     // own backings. It was narrowed twice by review — the second time because a
     // one-unit demand on X made a bare lock on Y unservable-but-counted against
-    // the operator (slice 28). Nothing scans now.
+    // the operator (slice 28). Nothing scans now: an ordinary bundle lock beside
+    // a standing demand is served, and the only lock that would have needed the
+    // scan is refused by its own id.
     const { venue, sequencer, eur, gold } = setup();
     const p = file(sequencer, eur, gold, 40n);
-    const bare = bundleLock(sequencer, gold, venue, "mallory", 10n, p.hash);
-    expect(lock(sequencer, bare, "mallory")).toBeDefined();
+    expect(lock(sequencer, bundleLock(sequencer, gold, venue, "mallory", 10n), "mallory")).toBeDefined();
+    const claiming = claimingLock(sequencer, gold, venue, "mallory", 10n, p.hash);
+    expect(() => lock(sequencer, claiming, "mallory")).toThrow(/not the hash of this attempt's terms/);
   });
 
   it("and a release still refuses a leg submitted as the head of its own set", () => {
@@ -657,8 +750,13 @@ describe("regression: a leg release ends the set's OWN record, not a decoy under
       nonce: sequencer.nextNonce(KEYS.backer, eur),
     };
     sequencer.submitAcceptance(answer, ed25519.sign(encodeAcceptance(answer), SECRETS.backer));
-    // Mallory's own record under the demand's hash on GOLD — served like any other.
-    lock(sequencer, bundleLock(sequencer, gold, venue, "mallory", 1n, p.hash), "mallory");
+    // The decoy the exploit needed — a record of Mallory's at (p.hash, mallory)
+    // on the leg backing — cannot be placed at all now: a venue-naming lock's id
+    // is its own terms' hash, and a bare set leg is refused with "set legs come
+    // with their set". So the substitution is closed at the source, and the
+    // door's binding below is what still guards a log the doors did not produce.
+    const decoy = claimingLock(sequencer, gold, venue, "mallory", 1n, p.hash);
+    expect(() => lock(sequencer, decoy, "mallory")).toThrow(/not the hash of this attempt's terms/);
     const head = {
       backing: eur,
       demandHash: p.hash,
@@ -688,8 +786,8 @@ describe("regression: a leg release ends the set's OWN record, not a decoy under
     ]);
     expect(sequencer.balance(eur, KEYS.backer)).toBe(40n);
     expect(sequencer.balance(gold, KEYS.backer)).toBe(80n);
-    // Mallory's decoy was never part of the set: her own unit, still reserved.
-    expect(sequencer.availableBalance(gold, KEYS.mallory)).toBe(199n);
+    // Mallory reserved nothing at all: her decoy never stood.
+    expect(sequencer.availableBalance(gold, KEYS.mallory)).toBe(200n);
   });
 });
 
