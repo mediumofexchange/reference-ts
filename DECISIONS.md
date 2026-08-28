@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-08-28` [Slice 31: locks keyed by (attempt, holder), and the squat family ends](decisions/2026-08.md#2026-08-28--slice-31-locks-keyed-by-attempt-holder-and-the-squat-family-ends)
 - `2026-08-27` [Venues: Ergo is queued, Bitcoin is the direction after it](decisions/2026-08.md#2026-08-27--venues-ergo-is-queued-bitcoin-is-the-direction-after-it)
 - `2026-08-27` [The reorganization: an org front door, a decision index, and CLAUDE.md cut back](decisions/2026-08.md#2026-08-27--the-reorganization-an-org-front-door-a-decision-index-and-claudemd-cut-back)
 - `2026-08-25` [The domain-separation namespace is `moe/`, and the magic is `MOEB`](decisions/2026-08.md#2026-08-25--the-domain-separation-namespace-is-moe-and-the-magic-is-moeb)

@@ -90,10 +90,10 @@ describe("a venue's records have one canonical spelling", () => {
         signature: sign(encodeDemandMessage(n, KEYS.alice, 40n, 3n, 9n, 2n), SECRETS.alice) },
       { kind: "acceptance", demandHash: h, instant: 3n, deadline: 9n, nonce: 1n,
         signature: sign(encodeAcceptanceMessage(n, h, 3n, 9n, 1n), SECRETS.backer) },
-      { kind: "release", demandHash: h, nonce: 3n,
-        signature: sign(encodeReleaseMessage(n, h, 3n), SECRETS.alice) },
-      { kind: "withdrawal", demandHash: h, nonce: 4n,
-        signature: sign(encodeWithdrawalMessage(n, h, 4n), SECRETS.alice) },
+      { kind: "release", demandHash: h, holder: KEYS.alice, nonce: 3n,
+        signature: sign(encodeReleaseMessage(n, h, KEYS.alice, 3n), SECRETS.alice) },
+      { kind: "withdrawal", demandHash: h, holder: KEYS.alice, nonce: 4n,
+        signature: sign(encodeWithdrawalMessage(n, h, KEYS.alice, 4n), SECRETS.alice) },
     ];
     expect(new Set(ops.map((o) => o.kind)).size).toBe(7);
     for (const op of ops) {

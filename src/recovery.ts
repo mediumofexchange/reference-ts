@@ -61,6 +61,7 @@
 import { paysInClaims, type Backing } from "./backing.js";
 import {
   applyEntry,
+  lockIn,
   lockIsLive,
   redeemable,
   copyState,
@@ -862,7 +863,8 @@ export function committedInTime(venue: Venue, lock: LockRecord): boolean {
 export function admittedInGap(
   backing: Backing,
   op: PublishedOp,
-  lockStands: (hash: Uint8Array) => boolean,
+  /** Whether that holder's lock stands under that hash — a lock's slot is its holder's own. */
+  lockStands: (hash: Uint8Array, holder: Uint8Array) => boolean,
 ): boolean {
   const hasLegs = backing.reliance.length > 0 || paysInClaims(backing.payout);
   switch (op.kind) {
@@ -872,7 +874,7 @@ export function admittedInGap(
       // An answer is the whole act, except where it must bring the payout with it.
       return !paysInClaims(backing.payout);
     case "release":
-      return !hasLegs && !lockStands(op.demandHash);
+      return !hasLegs && !lockStands(op.demandHash, op.holder);
     case "withdrawal":
     case "issue":
     case "transfer":
@@ -901,7 +903,7 @@ function walkGap(
     // unresolvable could make it so by publishing one more commitment — and a
     // backer-run operator is exactly the party with that motive.
     if (!isLatestAt(venue, backing, chain, served, witnessed.at)) continue;
-    if (!admittedInGap(backing, witnessed.op, (hash) => state.locks.has(bytesToHex(hash)))) continue;
+    if (!admittedInGap(backing, witnessed.op, (hash, holder) => lockIn(state, hash, holder) !== undefined)) continue;
     // A release settles the demand and drops it, so the record has to be read
     // before the law applies the leg that removes it.
     // The refusal the sequencer applies on adoption: a withdrawal of a lock the
@@ -909,7 +911,7 @@ function walkGap(
     // that folded it would free what the operator, reading the same record,
     // keeps reserved.
     if (witnessed.op.kind === "withdrawal") {
-      const lock = state.locks.get(bytesToHex(witnessed.op.demandHash));
+      const lock = lockIn(state, witnessed.op.demandHash, witnessed.op.holder);
       // A lock naming a venue this reader does not hold is one leg it cannot
       // judge: skipped, the conservative side (a withdrawal folded could free
       // what a commit settled elsewhere), not a refusal of the whole backing —

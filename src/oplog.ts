@@ -115,12 +115,16 @@ export type PublishedOp =
   | {
       readonly kind: "release";
       readonly demandHash: Uint8Array;
+      /** The holder of the record this ends — see ReleaseOp. */
+      readonly holder: Uint8Array;
       readonly nonce: bigint;
       readonly signature: Uint8Array;
     }
   | {
       readonly kind: "withdrawal";
       readonly demandHash: Uint8Array;
+      /** The holder of the record this ends — see ReleaseOp. */
+      readonly holder: Uint8Array;
       readonly nonce: bigint;
       readonly signature: Uint8Array;
     }
@@ -206,9 +210,9 @@ export function opMessageOfEntry(backingName: Uint8Array, entry: PublishedOp): U
         entry.nonce,
       );
     case "release":
-      return encodeReleaseMessage(backingName, entry.demandHash, entry.nonce);
+      return encodeReleaseMessage(backingName, entry.demandHash, entry.holder, entry.nonce);
     case "withdrawal":
-      return encodeWithdrawalMessage(backingName, entry.demandHash, entry.nonce);
+      return encodeWithdrawalMessage(backingName, entry.demandHash, entry.holder, entry.nonce);
     case "lock":
       return encodeLockMessage(
         backingName,
@@ -354,7 +358,7 @@ export function decodePublishedOp(bytes: Uint8Array): {
       }
       case "release":
       case "withdrawal":
-        return { kind, demandHash: r.raw(32), nonce: r.u64(), signature };
+        return { kind, demandHash: r.raw(32), holder: r.raw(32), nonce: r.u64(), signature };
       case "lock": {
         const attemptId = r.raw(32);
         const holder = r.raw(32);
@@ -404,11 +408,17 @@ export function copyOp(entry: PublishedOp): PublishedOp {
     case "demand":
       return { ...entry, holder: copyBytes(entry.holder), signature: copyBytes(entry.signature) };
     case "acceptance":
+      return {
+        ...entry,
+        demandHash: copyBytes(entry.demandHash),
+        signature: copyBytes(entry.signature),
+      };
     case "release":
     case "withdrawal":
       return {
         ...entry,
         demandHash: copyBytes(entry.demandHash),
+        holder: copyBytes(entry.holder),
         signature: copyBytes(entry.signature),
       };
     case "lock":

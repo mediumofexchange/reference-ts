@@ -888,10 +888,11 @@ describe("§C2: a publication is judged against the record that governed at its 
       nonce: answer.nonce,
       signature: ed25519.sign(encodeAcceptance(answer), SECRETS.backer),
     });
-    const settle = { backing, demandHash: hash, nonce: 1n };
+    const settle = { backing, demandHash: hash, holder: KEYS.alice, nonce: 1n };
     venue.publishOp(backing.name, {
       kind: "release",
       demandHash: hash,
+      holder: KEYS.alice,
       nonce: settle.nonce,
       signature: ed25519.sign(encodeRelease(settle), SECRETS.alice),
     });
@@ -1002,7 +1003,7 @@ describe("§C2: a re-prepare is written against the demanded backing's record, s
     old.commit();
     at(venue, 21n);
     // The lapsed leg is withdrawn at the old operator (still GOLD's).
-    const out = { backing: gold, demandHash: hash, nonce: 1n };
+    const out = { backing: gold, demandHash: hash, holder: KEYS.alice, nonce: 1n };
     old.submitWithdrawal(out, ed25519.sign(encodeWithdrawal(out), SECRETS.alice));
     // Re-preparing under the demand at the old operator: refused — EUR is not its to read.
     const again = { ...leg, timeout: 500n, nonce: 2n };

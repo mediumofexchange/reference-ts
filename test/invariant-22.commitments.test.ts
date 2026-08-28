@@ -309,7 +309,7 @@ describe("invariant 22: hostile presentation entries fail the proof, never throw
 
   it("rejects a logged presentation entry with a negative nonce or instant", () => {
     expect(() =>
-      stateRoot(withLog({ position: 0, kind: "withdrawal", demandHash: name, nonce: -1n, signature: new Uint8Array(64) })),
+      stateRoot(withLog({ position: 0, kind: "withdrawal", demandHash: name, holder, nonce: -1n, signature: new Uint8Array(64) })),
     ).toThrow(EncodingError);
     expect(() =>
       stateRoot(
@@ -352,6 +352,7 @@ describe("invariant 22: hostile presentation entries fail the proof, never throw
       position: 0,
       kind: "withdrawal" as const,
       demandHash: holder,
+      holder,
       nonce: 0n,
       signature: new Uint8Array(64),
     };

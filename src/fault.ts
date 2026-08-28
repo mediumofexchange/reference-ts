@@ -67,7 +67,7 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { type Terms } from "./closure.js";
 import { compareBytes, copyBytes } from "./bytes.js";
 import { verifySignatureStrict } from "./keys.js";
-import { applyEntry, emptyState, replayLog, signerFromTerms } from "./ledger.js";
+import { applyEntry, emptyState, lockIn, replayLog, signerFromTerms } from "./ledger.js";
 import { demandHash as hashOfDemand, legMismatch, type LegTerms } from "./presentation.js";
 import { committedInTime } from "./recovery.js";
 import { opMessageOfEntry, type PublishedOp } from "./oplog.js";
@@ -407,7 +407,7 @@ export function withdrawnAgainstCommit(
         // One compare carries the venue scoping: a set leg names
         // NO_DECISION_VENUE, which is no venue's id — and witnessedCommitFor
         // answers a leg with undefined besides.
-        const lock = state.locks.get(bytesToHex(entry.demandHash));
+        const lock = lockIn(state, entry.demandHash, entry.holder);
         if (
           proven === undefined &&
           lock !== undefined &&
@@ -577,7 +577,7 @@ export function settledInPart(
           }
           if (entry.kind === "release" && compareBytes(entry.demandHash, demandHash) === 0) {
             // The lock standing as the law reads it, before applying removes it.
-            const lock = legState.locks.get(bytesToHex(entry.demandHash));
+            const lock = lockIn(legState, entry.demandHash, entry.holder);
             if (lock !== undefined && legMismatch(lock, want) === undefined) converted = true;
           }
           applyEntry(legState, leg, entry, undefined);

@@ -191,16 +191,19 @@ describe("§C1: a ring of three, and what the object tolerates", () => {
     expect(f.one.balance(f.eur, KEYS.bob)).toBe(40n);
   });
 
-  it("a lock names who may convert it, and the locker's consent is the lock itself", () => {
-    // Slice 26: a backer's paying lock is converted by the demand holder alone,
-    // so the locker need not be among the parties. What the locker signed is the
-    // lock — units, beneficiary, timeout and who may convert them.
+  it("a venue-naming lock names its own holder among its parties: consent is a signature the object must carry", () => {
+    // This lock once stood, converted by Bob's signature alone — slice 26's "the
+    // locker need not be among the parties", generalized from the paying lock.
+    // But the paying lock names no decision venue and no commit reaches it
+    // (c3-payout-in-claims); where a commit CAN convert, §C1's "all sign" is the
+    // law. Without the holder among the parties, a stranger reserves one unit
+    // under a victim's attempt naming only the victim, and the victim's own
+    // object converts — or, arranged to fail, refuses — a settlement the victim
+    // never signed for (scratch/review-commit-match-set, the lock-keying slice).
     const f = setup();
-    lock(f.one, f.eur, f.venue, "alice", KEYS.bob, 40n, [KEYS.bob]);
-    f.venue.advance(2n);
-    f.venue.publishCommit(signCommit(SECRETS.bob, ATTEMPT));
-    f.one.settle(f.eur, ATTEMPT);
-    expect(f.one.balance(f.eur, KEYS.bob)).toBe(40n);
+    expect(() => lock(f.one, f.eur, f.venue, "alice", KEYS.bob, 40n, [KEYS.bob])).toThrow(
+      /names its own holder among its parties/,
+    );
   });
 
   it("a lock naming several parties settles only on the witnessed object, never on one release", () => {
@@ -211,10 +214,11 @@ describe("§C1: a ring of three, and what the object tolerates", () => {
     const f = setup();
     prepare(f);
     const two = f.one.opLog(f.eur);
-    const rel = { backing: f.eur, demandHash: ATTEMPT, nonce: f.one.nextNonce(KEYS.alice, f.eur) };
+    const rel = { backing: f.eur, demandHash: ATTEMPT, holder: KEYS.alice, nonce: f.one.nextNonce(KEYS.alice, f.eur) };
     const release = {
       kind: "release" as const,
       demandHash: ATTEMPT,
+      holder: KEYS.alice,
       nonce: rel.nonce,
       signature: ed25519.sign(encodeRelease(rel), SECRETS.alice),
       position: two.length,
@@ -224,7 +228,7 @@ describe("§C1: a ring of three, and what the object tolerates", () => {
     const g = setup();
     lock(g.one, g.eur, g.venue, "alice", KEYS.bob, 40n, [KEYS.alice]);
     const one = g.one.opLog(g.eur);
-    const rel1 = { backing: g.eur, demandHash: ATTEMPT, nonce: g.one.nextNonce(KEYS.alice, g.eur) };
+    const rel1 = { backing: g.eur, demandHash: ATTEMPT, holder: KEYS.alice, nonce: g.one.nextNonce(KEYS.alice, g.eur) };
     const release1 = { ...release, nonce: rel1.nonce, signature: ed25519.sign(encodeRelease(rel1), SECRETS.alice), position: one.length };
     expect(replayLog(g.eur, [...one, release1])).toBeDefined();
   });

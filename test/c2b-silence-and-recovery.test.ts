@@ -340,10 +340,10 @@ describe("§C2b: what a proved holding subtracts, and what the fold does with a 
     const hash = demandHash(demand);
     const answer = { backing, demandHash: hash, instant: demand.instant, deadline: 400n, nonce: 2n };
     publishBoth({ kind: "acceptance", demandHash: hash, instant: answer.instant, deadline: answer.deadline, nonce: 2n, signature: ed25519.sign(encodeAcceptance(answer), SECRETS.backer) });
-    const settle = { backing, demandHash: hash, nonce: 1n };
-    publishBoth({ kind: "release", demandHash: hash, nonce: 1n, signature: ed25519.sign(encodeRelease(settle), SECRETS.bob) });
-    const out = { backing, demandHash: lock.attemptId, nonce: 1n };
-    publishBoth({ kind: "withdrawal", demandHash: lock.attemptId, nonce: 1n, signature: ed25519.sign(encodeWithdrawal(out), SECRETS.alice) });
+    const settle = { backing, demandHash: hash, holder: KEYS.bob, nonce: 1n };
+    publishBoth({ kind: "release", demandHash: hash, holder: KEYS.bob, nonce: 1n, signature: ed25519.sign(encodeRelease(settle), SECRETS.bob) });
+    const out = { backing, demandHash: lock.attemptId, holder: KEYS.alice, nonce: 1n };
+    publishBoth({ kind: "withdrawal", demandHash: lock.attemptId, holder: KEYS.alice, nonce: 1n, signature: ed25519.sign(encodeWithdrawal(out), SECRETS.alice) });
     for (const v of [venue, other]) v.advance(1n);
     // The record the lock names: Bob's redemption, and Alice's withdrawal folded.
     expect(snapshotRedemptions(venue, backing, state)).toHaveLength(1);

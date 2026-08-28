@@ -436,7 +436,7 @@ describe("invariant 13: a leg is accompaniment only if the holder's release conv
     advanceWitnessedIndex(venue, 91n);
     expect(accompanimentOf(eur, venue, terms, state, hash)).toBe("unaccompanied");
     // Re-prepared — withdrawn alone, locked again — it reads accompanied again.
-    const out = { backing: gold, demandHash: hash, nonce: sequencer.nextNonce(KEYS.alice, gold) };
+    const out = { backing: gold, demandHash: hash, holder: KEYS.alice, nonce: sequencer.nextNonce(KEYS.alice, gold) };
     sequencer.submitWithdrawal(out, ed25519.sign(encodeWithdrawal(out), SECRETS.alice));
     const again: LockOp = {
       backing: gold,
@@ -516,7 +516,7 @@ describe("invariant 13: the snapshot a reader folds is the one it checked the na
     const { hash } = file(sequencer, venue, eur, gold, 40n);
     const state = served(sequencer);
     advanceWitnessedIndex(venue, 91n);
-    const out = { backing: gold, demandHash: hash, nonce: sequencer.nextNonce(KEYS.alice, gold) };
+    const out = { backing: gold, demandHash: hash, holder: KEYS.alice, nonce: sequencer.nextNonce(KEYS.alice, gold) };
     sequencer.submitWithdrawal(out, ed25519.sign(encodeWithdrawal(out), SECRETS.alice));
     const short = served(sequencer);
     const liar = { ...gold, name: eur.name, nameHex: eur.nameHex } as Backing;

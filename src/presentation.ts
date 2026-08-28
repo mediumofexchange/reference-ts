@@ -74,6 +74,23 @@ export interface AcceptanceOp {
 export interface ReleaseOp {
   readonly backing: Backing;
   readonly demandHash: Uint8Array;
+  /**
+   * **Which record this ends**, not who signs it.
+   *
+   * A lock is keyed by (attempt, holder), so the hash alone no longer names one
+   * record — that is the whole point of the key, and it is what ends the squat
+   * family. The law has to resolve the signer before it can check a signature,
+   * and for a withdrawal the signer IS the holder, so the lookup cannot wait
+   * for the signature to tell it. The message carries it instead.
+   *
+   * The record's holder rather than the signer's key, because §C3's paying lock
+   * is held by the OBLIGOR and converted by the demand holder alone ("void only
+   * on the holder's release"): a field naming the signer could not express that
+   * record at all. Naming a key you do not control buys nothing — the law
+   * resolves the signer from the record this selects, so the signature is then
+   * checked against a party you are not.
+   */
+  readonly holder: Uint8Array;
   readonly nonce: bigint;
 }
 
@@ -252,6 +269,8 @@ export interface Commit {
 export interface WithdrawalOp {
   readonly backing: Backing;
   readonly demandHash: Uint8Array;
+  /** Which record this ends. Same field, same reason: see ReleaseOp. */
+  readonly holder: Uint8Array;
   readonly nonce: bigint;
 }
 
@@ -292,17 +311,23 @@ export function encodeAcceptanceMessage(
   return w.finish();
 }
 
-/** Release and withdrawal are the same shape: one demand, one nonce. */
+/**
+ * Release and withdrawal are the same shape: one record, one nonce. The record
+ * is (hash, holder) — under a lock key of (attempt, holder) the hash alone
+ * names a slot rather than a record, so the holder is inside the signed bytes.
+ */
 function endOfDemandMessage(
   context: Uint8Array,
   backingName: Uint8Array,
   demandHash: Uint8Array,
+  holder: Uint8Array,
   nonce: bigint,
 ): Uint8Array {
   const w = new ByteWriter();
   w.context(context);
   w.key32(backingName, "backing name");
   w.key32(demandHash, "demand hash");
+  w.key32(holder, "record holder key");
   w.u64(nonce);
   return w.finish();
 }
@@ -310,17 +335,19 @@ function endOfDemandMessage(
 export function encodeReleaseMessage(
   backingName: Uint8Array,
   demandHash: Uint8Array,
+  holder: Uint8Array,
   nonce: bigint,
 ): Uint8Array {
-  return endOfDemandMessage(RELEASE_CONTEXT, backingName, demandHash, nonce);
+  return endOfDemandMessage(RELEASE_CONTEXT, backingName, demandHash, holder, nonce);
 }
 
 export function encodeWithdrawalMessage(
   backingName: Uint8Array,
   demandHash: Uint8Array,
+  holder: Uint8Array,
   nonce: bigint,
 ): Uint8Array {
-  return endOfDemandMessage(WITHDRAWAL_CONTEXT, backingName, demandHash, nonce);
+  return endOfDemandMessage(WITHDRAWAL_CONTEXT, backingName, demandHash, holder, nonce);
 }
 
 export function encodeLockMessage(
@@ -522,9 +549,9 @@ export function encodeAcceptance(op: AcceptanceOp): Uint8Array {
 }
 
 export function encodeRelease(op: ReleaseOp): Uint8Array {
-  return encodeReleaseMessage(op.backing.name, op.demandHash, op.nonce);
+  return encodeReleaseMessage(op.backing.name, op.demandHash, op.holder, op.nonce);
 }
 
 export function encodeWithdrawal(op: WithdrawalOp): Uint8Array {
-  return encodeWithdrawalMessage(op.backing.name, op.demandHash, op.nonce);
+  return encodeWithdrawalMessage(op.backing.name, op.demandHash, op.holder, op.nonce);
 }

@@ -132,14 +132,14 @@ function acceptanceOp(backing: Backing, hash: Uint8Array, instant: bigint, deadl
   return { kind: "acceptance", demandHash: hash, instant, deadline, nonce, signature: ed25519.sign(message, SECRETS.backer) };
 }
 
-function releaseOp(backing: Backing, secret: Uint8Array, hash: Uint8Array, nonce: bigint): PublishedOp {
-  const message = encodeReleaseMessage(backing.name, hash, nonce);
-  return { kind: "release", demandHash: hash, nonce, signature: ed25519.sign(message, secret) };
+function releaseOp(backing: Backing, secret: Uint8Array, holder: Uint8Array, hash: Uint8Array, nonce: bigint): PublishedOp {
+  const message = encodeReleaseMessage(backing.name, hash, holder, nonce);
+  return { kind: "release", demandHash: hash, holder, nonce, signature: ed25519.sign(message, secret) };
 }
 
-function withdrawalOp(backing: Backing, secret: Uint8Array, hash: Uint8Array, nonce: bigint) {
-  const signature = ed25519.sign(encodeWithdrawalMessage(backing.name, hash, nonce), secret);
-  return { op: { backing, demandHash: hash, nonce }, signature };
+function withdrawalOp(backing: Backing, secret: Uint8Array, holder: Uint8Array, hash: Uint8Array, nonce: bigint) {
+  const signature = ed25519.sign(encodeWithdrawalMessage(backing.name, hash, holder, nonce), secret);
+  return { op: { backing, demandHash: hash, holder, nonce }, signature };
 }
 
 /** A signed request, as the doors take it. */
@@ -158,7 +158,7 @@ function redeemAtVenue(venue: LocalVenue, backing: Backing, from: bigint, holder
   const claim = demandOp(backing, SECRETS.alice, KEYS.alice, quantity, from, from + 60n, holderNonce);
   publishAt(venue, from, backing, claim.published);
   publishAt(venue, from + 1n, backing, acceptanceOp(backing, claim.hash, from, from + 60n, backerNonce));
-  publishAt(venue, from + 2n, backing, releaseOp(backing, SECRETS.alice, claim.hash, holderNonce + 1n));
+  publishAt(venue, from + 2n, backing, releaseOp(backing, SECRETS.alice, KEYS.alice, claim.hash, holderNonce + 1n));
   return claim;
 }
 
@@ -236,11 +236,11 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     at(() => sequencer.submitLeg(eur, claim.hash, signed(again, encodeLock(again), SECRETS.alice)));
     at(() => sequencer.settle(gold, attempt));
     at(() => sequencer.submitAcceptance({ backing: eur, demandHash: claim.hash, instant: 0n, deadline: 90n, nonce: 2n }, ed25519.sign(encodeAcceptanceMessage(eur.name, claim.hash, 0n, 90n, 2n), SECRETS.backer)));
-    const head = withdrawalOp(eur, SECRETS.alice, claim.hash, 1n);
-    const legOut = signed({ backing: gold, demandHash: claim.hash, nonce: 2n }, encodeWithdrawalMessage(gold.name, claim.hash, 2n), SECRETS.alice);
+    const head = withdrawalOp(eur, SECRETS.alice, KEYS.alice, claim.hash, 1n);
+    const legOut = signed({ backing: gold, demandHash: claim.hash, holder: KEYS.alice, nonce: 2n }, encodeWithdrawalMessage(gold.name, claim.hash, KEYS.alice, 2n), SECRETS.alice);
     at(() => sequencer.submitWithdrawal(head.op, head.signature, [legOut]));
-    const release = signed({ backing: eur, demandHash: claim.hash, nonce: 1n }, encodeReleaseMessage(eur.name, claim.hash, 1n), SECRETS.alice);
-    const legRelease = signed({ backing: gold, demandHash: claim.hash, nonce: 2n }, encodeReleaseMessage(gold.name, claim.hash, 2n), SECRETS.alice);
+    const release = signed({ backing: eur, demandHash: claim.hash, holder: KEYS.alice, nonce: 1n }, encodeReleaseMessage(eur.name, claim.hash, KEYS.alice, 1n), SECRETS.alice);
+    const legRelease = signed({ backing: gold, demandHash: claim.hash, holder: KEYS.alice, nonce: 2n }, encodeReleaseMessage(gold.name, claim.hash, KEYS.alice, 2n), SECRETS.alice);
     at(() => sequencer.submitRelease(release.op, release.signature, [legRelease]));
     // Nothing was co-signed: the books are as committed.
     expect(kinds(sequencer, eur)).toEqual(["issue", "issue", "demand", "transfer", "burn"]);
@@ -350,8 +350,8 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     advanceWitnessedIndex(venue, 1n);
     // The tail: the backer answers, Alice releases the set — both halves co-signed, neither witnessed.
     sequencer.submitAcceptance({ backing: eur, demandHash: claim.hash, instant: 0n, deadline: 90n, nonce: 1n }, ed25519.sign(encodeAcceptanceMessage(eur.name, claim.hash, 0n, 90n, 1n), SECRETS.backer));
-    const release = signed({ backing: eur, demandHash: claim.hash, nonce: 1n }, encodeReleaseMessage(eur.name, claim.hash, 1n), SECRETS.alice);
-    const legRelease = signed({ backing: gold, demandHash: claim.hash, nonce: 1n }, encodeReleaseMessage(gold.name, claim.hash, 1n), SECRETS.alice);
+    const release = signed({ backing: eur, demandHash: claim.hash, holder: KEYS.alice, nonce: 1n }, encodeReleaseMessage(eur.name, claim.hash, KEYS.alice, 1n), SECRETS.alice);
+    const legRelease = signed({ backing: gold, demandHash: claim.hash, holder: KEYS.alice, nonce: 1n }, encodeReleaseMessage(gold.name, claim.hash, KEYS.alice, 1n), SECRETS.alice);
     sequencer.submitRelease(release.op, release.signature, [legRelease]);
     expect(sequencer.balance(eur, KEYS.backer)).toBe(40n);
     expect(sequencer.balance(gold, KEYS.backer)).toBe(80n);
@@ -414,8 +414,8 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     // The backer's answer is one act and goes through.
     successor.submitAcceptance({ backing: eur, demandHash: claim.hash, instant: 0n, deadline: 90n, nonce: 1n }, ed25519.sign(encodeAcceptanceMessage(eur.name, claim.hash, 0n, 90n, 1n), SECRETS.backer));
     // The release — the door that would move value — refuses the mixed set.
-    const release = signed({ backing: eur, demandHash: claim.hash, nonce: 1n }, encodeReleaseMessage(eur.name, claim.hash, 1n), SECRETS.alice);
-    const legRelease = signed({ backing: gold, demandHash: claim.hash, nonce: 1n }, encodeReleaseMessage(gold.name, claim.hash, 1n), SECRETS.alice);
+    const release = signed({ backing: eur, demandHash: claim.hash, holder: KEYS.alice, nonce: 1n }, encodeReleaseMessage(eur.name, claim.hash, KEYS.alice, 1n), SECRETS.alice);
+    const legRelease = signed({ backing: gold, demandHash: claim.hash, holder: KEYS.alice, nonce: 1n }, encodeReleaseMessage(gold.name, claim.hash, KEYS.alice, 1n), SECRETS.alice);
     expect(() => successor.submitRelease(release.op, release.signature, [legRelease])).toThrow(/one act and dies as one/);
     // The re-prepare refuses it too (the leg lapses at 20, and re-locking a
     // mixed set would re-arm the same tear). Past 21 the successor has its own
@@ -424,12 +424,12 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     advanceWitnessedIndex(venue, 21n);
     successor.commit();
     advanceWitnessedIndex(venue, 22n);
-    const legOut = withdrawalOp(gold, SECRETS.alice, claim.hash, 1n);
+    const legOut = withdrawalOp(gold, SECRETS.alice, KEYS.alice, claim.hash, 1n);
     successor.submitWithdrawal(legOut.op, legOut.signature);
     const again: LockOp = { attemptId: claim.hash, backing: gold, holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout: 60n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: 2n };
     expect(() => successor.submitLeg(eur, claim.hash, signed(again, encodeLock(again), SECRETS.alice))).toThrow(/one act and dies as one/);
     // The withdrawal is the honest exit: the head, its leg already withdrawn.
-    const headOut = withdrawalOp(eur, SECRETS.alice, claim.hash, 1n);
+    const headOut = withdrawalOp(eur, SECRETS.alice, KEYS.alice, claim.hash, 1n);
     successor.submitWithdrawal(headOut.op, headOut.signature, []);
     expect(successor.openDemands(eur)).toHaveLength(0);
     expect(successor.availableBalance(gold, KEYS.alice)).toBe(200n);
@@ -609,15 +609,15 @@ describe("§C2b: the fixes reviewed — the door that reads, the retired book, a
     expect(compareBytes(gapOpen(venue, eur) as Uint8Array, KEYS.operator)).toBe(0);
     expect(gapOpen(venue, gold)).toBeUndefined();
     // The lapsed leg (timeout 8) is withdrawn at the successor: GOLD's own act.
-    const out = withdrawalOp(gold, SECRETS.alice, claim.hash, 1n);
+    const out = withdrawalOp(gold, SECRETS.alice, KEYS.alice, claim.hash, 1n);
     successor.submitWithdrawal(out.op, out.signature);
     // The re-prepare is refused: the demanded backing's record can still be
     // changed by a publication at this index — and is, by the head withdrawal.
     const again: LockOp = { ...leg, timeout: 60n, nonce: 2n };
     const ask = () => successor.submitLeg(eur, claim.hash, signed(again, encodeLock(again), SECRETS.alice));
     expect(ask).toThrow(RETURNING);
-    const head = withdrawalOp(eur, SECRETS.alice, claim.hash, 1n);
-    venue.publishOp(eur.name, { kind: "withdrawal", demandHash: claim.hash, nonce: 1n, signature: head.signature });
+    const head = withdrawalOp(eur, SECRETS.alice, KEYS.alice, claim.hash, 1n);
+    venue.publishOp(eur.name, { kind: "withdrawal", demandHash: claim.hash, holder: KEYS.alice, nonce: 1n, signature: head.signature });
     advanceWitnessedIndex(venue, 13n);
     // At 13 the door adopts the head's end before it reads the record.
     expect(ask).toThrow(/no demand stands/);
@@ -707,13 +707,13 @@ describe("§C2b: the return commit restores the book to the last commitment, the
     // The tail: unanswered, so Alice may withdraw — the operator co-signs, and
     // then goes dark before it ever commits again.
     advanceWitnessedIndex(venue, 1n);
-    const w = withdrawalOp(backing, SECRETS.alice, claim.hash, 1n);
+    const w = withdrawalOp(backing, SECRETS.alice, KEYS.alice, claim.hash, 1n);
     const deadReceipt = sequencer.submitWithdrawal(w.op, w.signature);
     expect(sequencer.openDemands(backing)).toHaveLength(0);
     // The gap: the backer, reading the last committed snapshot, answers the
     // standing demand at the venue; Alice releases.
     publishAt(venue, 11n, backing, acceptanceOp(backing, claim.hash, 0n, 60n, 1n));
-    publishAt(venue, 12n, backing, releaseOp(backing, SECRETS.alice, claim.hash, 1n));
+    publishAt(venue, 12n, backing, releaseOp(backing, SECRETS.alice, KEYS.alice, claim.hash, 1n));
     advanceWitnessedIndex(venue, 18n);
     const redemptions = snapshotRedemptions(venue, backing, before);
     expect(redemptions).toHaveLength(1);
@@ -776,7 +776,7 @@ describe("§C2b: the return commit restores the book to the last commitment, the
     const claim = demandOp(backing, SECRETS.alice, KEYS.alice, 100n, 20n, 80n, 0n);
     venue.publishOp(backing.name, claim.published);
     venue.publishOp(backing.name, acceptanceOp(backing, claim.hash, 20n, 80n, 1n));
-    venue.publishOp(backing.name, releaseOp(backing, SECRETS.alice, claim.hash, 1n));
+    venue.publishOp(backing.name, releaseOp(backing, SECRETS.alice, KEYS.alice, claim.hash, 1n));
     advanceWitnessedIndex(venue, 21n);
     // The first door at 21 adopts the three legs before it co-signs anything:
     // Alice's nonce 0 is her demand now, and the transfer at it is refused.
@@ -802,7 +802,7 @@ describe("§C2b: the return commit restores the book to the last commitment, the
     const claim = demandOp(backing, SECRETS.carol, KEYS.carol, 100n, 11n, 70n, 0n);
     publishAt(venue, 11n, backing, claim.published);
     publishAt(venue, 12n, backing, acceptanceOp(backing, claim.hash, 11n, 70n, 2n));
-    publishAt(venue, 13n, backing, releaseOp(backing, SECRETS.carol, claim.hash, 1n));
+    publishAt(venue, 13n, backing, releaseOp(backing, SECRETS.carol, KEYS.carol, claim.hash, 1n));
     advanceWitnessedIndex(venue, 20n);
     const after = served(sequencer); // the return, at 20
     expect(kinds(sequencer, backing)).toEqual(["issue", "issue", "demand", "acceptance", "release"]);
@@ -834,7 +834,7 @@ describe("§C2b: the return commit restores the book to the last commitment, the
     sequencer.adopt(backing);
     const once = sequencer.opLog(backing);
     // A repeat inside the gap is answered, from the restored book.
-    const ask = () => sequencer.submitRelease({ backing, demandHash: claim.hash, nonce: 1n }, new Uint8Array(64));
+    const ask = () => sequencer.submitRelease({ backing, demandHash: claim.hash, holder: KEYS.alice, nonce: 1n }, new Uint8Array(64));
     const first = ask();
     expect(first.position).toBe(3n);
     sequencer.adopt(backing);
@@ -863,7 +863,7 @@ describe("§C2b: the return commit restores the book to the last commitment, the
     // Committed receipts survive; the gap's legs have theirs; the tail's are gone.
     expect(sequencer.submitIssue({ backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n }, new Uint8Array(64))).toEqual(first);
     expect(sequencer.submitIssue({ backing, recipient: KEYS.carol, quantity: 50n, nonce: 1n }, new Uint8Array(64))).toEqual(second);
-    const release = sequencer.submitRelease({ backing, demandHash: claim.hash, nonce: 1n }, new Uint8Array(64));
+    const release = sequencer.submitRelease({ backing, demandHash: claim.hash, holder: KEYS.alice, nonce: 1n }, new Uint8Array(64));
     expect(release.position).toBe(4n);
     expect(sequencer.balance(backing, KEYS.carol)).toBe(50n);
     expect(sequencer.balance(backing, KEYS.bob)).toBe(0n);

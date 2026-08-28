@@ -187,22 +187,61 @@ export function lockIsLive(lock: { readonly timeout: bigint }, atWitnessedIndex:
   return atWitnessedIndex <= lock.timeout;
 }
 
+/**
+ * **A lock's key: the attempt AND the holder whose units it reserves.**
+ *
+ * The attempt id alone was one exclusive slot per backing, so the first party
+ * to name an id owned it and everyone who needed it afterwards was refused —
+ * the squat family, fought at six doors across slices 24c to 28 before the key
+ * was fixed here. A stranger's lock is a record about the stranger's own units
+ * and now sits beside the honest holder's rather than in front of it.
+ *
+ * Two fixed-width fields concatenated. Framing is a rule about signed and
+ * hashed bytes; this string is a map key that never leaves the process, and
+ * both halves are 32-byte hex of asserted width, so no two pairs collide.
+ */
+function lockKey(attemptId: Uint8Array, holder: Uint8Array): string {
+  return bytesToHex(attemptId) + bytesToHex(holder);
+}
+
+/**
+ * One holder's lock under an attempt, read out of a raw state.
+ *
+ * The key format is `lockKey`'s alone and nothing outside this file builds it:
+ * every reader that used to index `state.locks` by a bare hash — the two
+ * presentability readers, the two fault folds, the gap walk — comes through
+ * here instead. Written any other way, a change to the key is a silent
+ * mis-lookup in five places that the types cannot catch.
+ */
+export function lockIn(
+  state: LedgerState,
+  attemptId: Uint8Array,
+  holder: Uint8Array,
+): LockRecord | undefined {
+  return state.locks.get(lockKey(attemptId, holder));
+}
+
 export interface LedgerState {
   /** Units held, by holder key hex. A holder at zero is absent. */
   readonly balances: Map<string, bigint>;
   /** Open demands, by demand hash hex. Settlement and withdrawal remove them. */
   readonly demands: Map<string, DemandRecord>;
-  /** Reliance legs reserved against a demand elsewhere, by demand hash hex. */
+  /** Reliance legs reserved against a demand elsewhere, by lockKey(attempt, holder). */
   readonly locks: Map<string, LockRecord>;
   /**
-   * Attempt ids whose venue-naming lock on this backing has already settled or
-   * been withdrawn, and which no later lock may name (a standing lock's id is
-   * refused by the locks map itself). A commit binds its attempt id and nothing else, so a signed
+   * Attempts whose venue-naming lock on this backing has already settled or
+   * been withdrawn, and which that holder may not name again (a standing lock's
+   * own key is refused by the locks map itself). A commit binds its attempt id and nothing else, so a signed
    * object withheld from one attempt would convert a later lock under the same
    * id and the same parties (found by the 2026-08-22 audit); 24c's "the record
    * does not already show committed" read the venue, which cannot see a withheld
    * object — the log can. A set leg (no decision venue) is not retired: no commit
    * reaches it, and a demand's legs are re-prepared under the demand's own hash.
+   *
+   * Keyed by lockKey, like the locks themselves. Keyed by the attempt alone it
+   * was a squat of its own: a stranger settling under id X would spend X on this
+   * backing for everybody, and the honest holder could never use it. A holder is
+   * exposed only to objects naming parties that holder chose.
    */
   readonly retired: Set<string>;
   /** The nonce each signer's next operation must carry, by signer key hex. */
@@ -324,21 +363,65 @@ function move(state: LedgerState, key: Uint8Array, delta: bigint): void {
  * slice). A set leg (no venue) is not retired.
  */
 function settleLock(state: LedgerState, lock: LockRecord): void {
+  settleLocks(state, [lock]);
+}
+
+/**
+ * Settle a set of locks as ONE act — the commit's whole match set, or the leg
+ * release's single lock through the wrapper above.
+ *
+ * Settling them one after another would leave the book half-moved when a later
+ * lock's balance check failed, and applyEntry's contract is that it either fully
+ * applies or throws having changed nothing. The checks are cumulative (two locks
+ * paying one beneficiary can each fit under the quantity bound and not both), so
+ * they cannot all be run up front against the balances as they stand either.
+ * A trial book settles the question: each check sees the balances the earlier
+ * settlements in this set leave, and nothing is adopted until every one held.
+ */
+function settleLocks(state: LedgerState, locks: readonly LockRecord[]): void {
+  const trial: LedgerState = { ...state, balances: new Map(state.balances) };
+  for (const lock of locks) {
+    checkSettlement(trial, lock);
+    move(trial, lock.holder, -lock.quantity);
+    move(trial, lock.beneficiary, lock.quantity);
+  }
+  state.balances.clear();
+  for (const [holder, units] of trial.balances) state.balances.set(holder, units);
+  for (const lock of locks) removeLock(state, lock);
+}
+
+/** What settling one lock needs of the balances, asked before anything moves. */
+function checkSettlement(state: LedgerState, lock: LockRecord): void {
   if (heldBy(state, bytesToHex(lock.beneficiary)) + lock.quantity >= MAX_QUANTITY_EXCLUSIVE) {
     throw new LedgerError("settlement would push a balance beyond the quantity bound");
   }
   if (heldBy(state, bytesToHex(lock.holder)) < lock.quantity) {
     throw new LedgerError("debit exceeds the holding");
   }
-  state.locks.delete(bytesToHex(lock.attemptId));
-  retire(state, lock);
-  move(state, lock.holder, -lock.quantity);
-  move(state, lock.beneficiary, lock.quantity);
 }
 
-/** A venue-naming lock's id names one attempt on this backing: spent once the lock has left. */
+/** Drop the record and spend its id, the two halves of a lock leaving. */
+function removeLock(state: LedgerState, lock: LockRecord): void {
+  state.locks.delete(lockKey(lock.attemptId, lock.holder));
+  retire(state, lock);
+}
+
+/** A venue-naming lock's id names one attempt for its holder: spent once the lock has left. */
 function retire(state: LedgerState, lock: LockRecord): void {
-  if (compareBytes(lock.decisionVenue, NO_DECISION_VENUE) !== 0) state.retired.add(bytesToHex(lock.attemptId));
+  if (compareBytes(lock.decisionVenue, NO_DECISION_VENUE) !== 0) {
+    state.retired.add(lockKey(lock.attemptId, lock.holder));
+  }
+}
+
+/**
+ * Every lock this attempt has on this backing, in insertion order. A scan, and
+ * the one place the flat key costs anything: bounded by the locks on a single
+ * backing, and a commit already pays k signature verifies against its parties.
+ * A second map keyed by attempt would buy the lookup and cost a second index to
+ * keep true — smallest first, where security does not turn on it.
+ */
+function locksUnder(state: LedgerState, attemptId: Uint8Array): LockRecord[] {
+  return [...state.locks.values()].filter((lock) => compareBytes(lock.attemptId, attemptId) === 0);
 }
 
 function standingDemand(state: LedgerState, hash: Uint8Array): DemandRecord {
@@ -394,9 +477,15 @@ export function signerFromTerms(backing: Backing, entry: PublishedOp): Uint8Arra
  */
 function signerOf(state: LedgerState, backing: Backing, entry: PublishedOp): Uint8Array {
   if (entry.kind === "release" || entry.kind === "withdrawal") {
-    // In this backing's own state one of the two exists, never both: a demand
-    // where this IS the demanded backing, a lock where it is one of its legs.
-    const lock = state.locks.get(bytesToHex(entry.demandHash));
+    // **The record is (hash, holder), and the message names it.** A lock's slot
+    // is the holder's own, so the hash alone selects a slot rather than a
+    // record and the law cannot resolve a signer from it — for a withdrawal the
+    // signer IS the holder, which is what makes the lookup circular without the
+    // field. Lock first, then the demand: the one collision left is a holder
+    // naming her own demand's hash as her own attempt id on the demanded
+    // backing, which costs a stranger nothing and is documented rather than
+    // refused (the alternative is keeping the two doors this slice deletes).
+    const lock = state.locks.get(lockKey(entry.demandHash, entry.holder));
     if (lock !== undefined) {
       // A withdrawal frees the locker's own units: the locker signs. A release
       // converts them to the party the lock names: that party signs — the
@@ -411,7 +500,14 @@ function signerOf(state: LedgerState, backing: Backing, entry: PublishedOp): Uin
       }
       return copyBytes(party);
     }
-    return copyBytes(standingDemand(state, entry.demandHash).holder);
+    // No lock of this holder's, so the demand — and it must be this holder's
+    // too, or the field would be a hint the law may ignore rather than the
+    // record it selects.
+    const record = standingDemand(state, entry.demandHash);
+    if (compareBytes(record.holder, entry.holder) !== 0) {
+      throw new LedgerError("no record of that holder's stands under this hash");
+    }
+    return copyBytes(record.holder);
   }
   const fromTerms = signerFromTerms(backing, entry);
   if (fromTerms === undefined) throw new LedgerError("no signer for this operation");
@@ -467,9 +563,9 @@ export function applyEntry(
   // because the lock it settles is gone, and it can only reach an attempt its
   // own parties named in a lock. See presentation.ts.
   if (entry.kind === "commit") {
-    const lock = state.locks.get(bytesToHex(entry.attemptId));
-    if (lock === undefined) throw new LedgerError("no lock on this backing for that attempt");
-    if (!commitSatisfies(entry, lock.parties)) {
+    const under = locksUnder(state, entry.attemptId);
+    if (under.length === 0) throw new LedgerError("no lock on this backing for that attempt");
+    if (!under.some((lock) => commitSatisfies(entry, lock.parties))) {
       throw new LedgerError("the commit is not signed by every party to this lock");
     }
   }
@@ -562,10 +658,6 @@ export function applyEntry(
         throw new LedgerError("insufficient balance");
       }
       const hash = sha256(message);
-      // The other door of the same rule: the hash is the demand's alone here.
-      if (state.locks.has(bytesToHex(hash))) {
-        throw new LedgerError("a lock already stands under this demand's hash on this backing");
-      }
       state.demands.set(bytesToHex(hash), {
         hash,
         holder: copyBytes(entry.holder),
@@ -582,26 +674,39 @@ export function applyEntry(
       // about the demand it names, because the demand is another backing's
       // record — what makes the pair coherent is that one operator applies both
       // or neither, and a verifier holding the served state can read both.
-      if (state.locks.has(bytesToHex(entry.attemptId))) {
-        throw new LedgerError("this attempt already has a lock on this backing");
+      if (state.locks.has(lockKey(entry.attemptId, entry.holder))) {
+        throw new LedgerError("this holder already has a lock on this backing for that attempt");
       }
-      // A lock and a demand never share a hash on one backing. signerOf resolves
-      // a release or withdrawal lock-first, so a stranger's one-unit lock under a
-      // standing demand's hash would hijack the head's own exits (found reviewing
-      // 24c). Legs live on OTHER backings; on the demanded one the hash is the
-      // demand's alone.
-      if (state.demands.has(bytesToHex(entry.attemptId))) {
-        throw new LedgerError("a lock may not name a standing demand's hash on the demanded backing");
-      }
-      // An attempt id names one attempt on one backing, for the locks a commit
-      // can reach: once a venue-naming lock under it has settled or withdrawn,
-      // no other stands here, and a retry names a fresh id (24c said so for an
-      // id the venue showed committed; the log says so for every one).
+      // An attempt id names one attempt on one backing FOR ITS HOLDER, for the
+      // locks a commit can reach: once this holder's venue-naming lock under it
+      // has settled or withdrawn, no other of theirs stands here, and a retry
+      // names a fresh id (24c said so for an id the venue showed committed; the
+      // log says so for every one).
       if (
         compareBytes(entry.decisionVenue, NO_DECISION_VENUE) !== 0 &&
-        state.retired.has(bytesToHex(entry.attemptId))
+        state.retired.has(lockKey(entry.attemptId, entry.holder))
       ) {
-        throw new LedgerError("this attempt id has already been used on this backing: a retry names a fresh one");
+        throw new LedgerError("this holder has already used that attempt id on this backing: a retry names a fresh one");
+      }
+      // **A venue-naming lock names its own holder among its parties.** §C1's
+      // "all sign", read as law, and what this record's own `parties` has always
+      // claimed. It bounds the commit's match set to locks whose holders signed
+      // the object: without it a stranger reserves a unit under the victim's
+      // attempt naming ONLY the victim, and since the commit converts every lock
+      // it satisfies and applyEntry is all-or-nothing, a timeout the stranger
+      // picks refuses the victim's own half forever — the victim cannot free
+      // that lock and the stranger will not (scratch/review-commit-match-set).
+      //
+      // Scoped to venue-naming locks, because §C3's paying lock is held by the
+      // obligor and converted by the demand holder alone: no commit reaches it,
+      // and a universal rule would outlaw a payout in claims. Every honest
+      // venue-naming lock already satisfies this — a bundle's names [holder], an
+      // n-party exchange's names every party — so it forbids nothing anyone does.
+      if (
+        compareBytes(entry.decisionVenue, NO_DECISION_VENUE) !== 0 &&
+        !entry.parties.some((party) => compareBytes(party, entry.holder) === 0)
+      ) {
+        throw new LedgerError("a lock naming a decision venue names its own holder among its parties");
       }
       // The third credit path, and the only one that was not checked (found by
       // the 2026-08-22 audit): a key that signs nothing is still checked, or the
@@ -617,7 +722,7 @@ export function applyEntry(
       if (clock !== undefined && entry.timeout <= clock) {
         throw new LedgerError("lock timeout is not ahead of the witnessed index");
       }
-      state.locks.set(bytesToHex(entry.attemptId), {
+      state.locks.set(lockKey(entry.attemptId, entry.holder), {
         attemptId: copyBytes(entry.attemptId),
         holder: copyBytes(entry.holder),
         beneficiary: copyBytes(entry.beneficiary),
@@ -630,26 +735,44 @@ export function applyEntry(
       break;
     }
     case "commit": {
-      // §C3's commit, applied to this backing's own half of an attempt. The
-      // lock is guaranteed to exist: signerOf refused already if it did not.
-      const lock = state.locks.get(bytesToHex(entry.attemptId)) as LockRecord;
-      // A set leg names no decision venue and settles only with its set, on the
-      // holder's release: no commit reaches it. Read in the law and not only at
-      // the venue reader, or a log carrying a bare commit against a paying lock
-      // — the payout taken, nothing surrendered — replays as a history that
-      // could have happened (found by the 2026-08-22 audit).
-      if (compareBytes(lock.decisionVenue, NO_DECISION_VENUE) === 0) {
-        throw new LedgerError("a set leg settles with its set on the holder's release, never on a commit");
+      // §C3's commit, applied to this backing's own half of an attempt.
+      //
+      // **It converts every lock under its attempt whose parties it satisfies,
+      // and it cannot do otherwise.** The commit names no holder: it is one
+      // object that has to be valid in every log of an exchange at once, and an
+      // n-party exchange has a different holder per leg, so a holder field would
+      // make it n objects. Its attempt id and its signatures are all it can ever
+      // discriminate on. §C1's n-party exchange on one backing is the shape this
+      // serves — two parties each reserving their own units for one attempt.
+      //
+      // At least one match exists: signerOf refused already if none did.
+      const matched = locksUnder(state, entry.attemptId).filter((lock) =>
+        commitSatisfies(entry, lock.parties),
+      );
+      for (const lock of matched) {
+        // A set leg names no decision venue and settles only with its set, on the
+        // holder's release: no commit reaches it. Read in the law and not only at
+        // the venue reader, or a log carrying a bare commit against a paying lock
+        // — the payout taken, nothing surrendered — replays as a history that
+        // could have happened (found by the 2026-08-22 audit).
+        if (compareBytes(lock.decisionVenue, NO_DECISION_VENUE) === 0) {
+          throw new LedgerError("a set leg settles with its set on the holder's release, never on a commit");
+        }
+        // TIME, and the predicate every sequencer in the bundle evaluates against
+        // the same object: "was a valid release witnessed at or before the lock
+        // timeout?" The clock passed here is the index the VENUE witnessed the
+        // commit at, never the index this operator happens to be applying it —
+        // which is the rule adoption already follows for a gap publication.
+        if (clock !== undefined && !lockIsLive(lock, clock)) {
+          throw new LedgerError("the commit was witnessed past the lock timeout");
+        }
       }
-      // TIME, and the predicate every sequencer in the bundle evaluates against
-      // the same object: "was a valid release witnessed at or before the lock
-      // timeout?" The clock passed here is the index the VENUE witnessed the
-      // commit at, never the index this operator happens to be applying it —
-      // which is the rule adoption already follows for a gap publication.
-      if (clock !== undefined && !lockIsLive(lock, clock)) {
-        throw new LedgerError("the commit was witnessed past the lock timeout");
-      }
-      settleLock(state, lock);
+      // Atomic across the whole match set, as applyEntry is across one entry: a
+      // settlement that skipped what it could not apply would convert a
+      // different set at each sequencer according to local state, which is
+      // exactly what §C3's "one predicate against the same object" forbids. So
+      // the balance checks run over the set before any of it moves.
+      settleLocks(state, matched);
       break;
     }
     case "acceptance": {
@@ -694,7 +817,7 @@ export function applyEntry(
       // and a verifier's to read across the served state. What the leg does
       // enforce is the whole of what its own units need: the holder signed this
       // release, and the beneficiary was fixed when the units were committed.
-      const leg = state.locks.get(bytesToHex(entry.demandHash));
+      const leg = state.locks.get(lockKey(entry.demandHash, entry.holder));
       if (leg !== undefined) {
         // TIME, and the whole of §C3's abort: "every sequencer evaluates one
         // predicate against the same object: was a valid release witnessed at
@@ -746,13 +869,12 @@ export function applyEntry(
       // and never a balance, like every rule here. Why a live lock cannot be
       // taken back, and why the far side needs the sequencer too: 24c in
       // DECISIONS.md.
-      const leg = state.locks.get(bytesToHex(entry.demandHash));
+      const leg = state.locks.get(lockKey(entry.demandHash, entry.holder));
       if (leg !== undefined) {
         if (clock !== undefined && lockIsLive(leg, clock)) {
           throw new LedgerError("the lock has not expired: the attempt settles or times out");
         }
-        state.locks.delete(bytesToHex(entry.demandHash));
-        retire(state, leg);
+        removeLock(state, leg);
         break;
       }
       const record = standingDemand(state, entry.demandHash);
@@ -948,8 +1070,8 @@ export class TransparentLedger {
    * settlement.
    */
   release(op: ReleaseOp, signature: Uint8Array, atWitnessedIndex: bigint): OpLogEntry {
-    const { demandHash, nonce } = op;
-    const entry = { kind: "release", demandHash, nonce, signature } as const;
+    const { demandHash, holder, nonce } = op;
+    const entry = { kind: "release", demandHash, holder, nonce, signature } as const;
     return this.apply(op.backing, entry, atWitnessedIndex);
   }
 
@@ -959,8 +1081,8 @@ export class TransparentLedger {
    * wait out.
    */
   withdraw(op: WithdrawalOp, signature: Uint8Array, atWitnessedIndex: bigint): OpLogEntry {
-    const { demandHash, nonce } = op;
-    const entry = { kind: "withdrawal", demandHash, nonce, signature } as const;
+    const { demandHash, holder, nonce } = op;
+    const entry = { kind: "withdrawal", demandHash, holder, nonce, signature } as const;
     return this.apply(op.backing, entry, atWitnessedIndex);
   }
 
@@ -1025,15 +1147,17 @@ export class TransparentLedger {
   }
 
   /**
-   * Whether this backing holds a reliance lock against that demand — that is,
-   * whether it is a LEG of the demand rather than the backing demanded.
+   * Whether this holder holds a reliance lock on this backing against that
+   * demand — that is, whether it is a LEG of the demand rather than the backing
+   * demanded.
    *
-   * The law cannot tell the two apart: a release names a demand hash, and this
-   * state resolves whichever record it has for it. Which backing heads a set is
-   * the shape of the set, and that is the sequencer's to know.
+   * The holder is part of the question, not a filter over the answer: a lock's
+   * slot is its holder's own, so "is there a lock under this hash" is a question
+   * about a slot and cannot be asked. Which backing heads a set is still the
+   * shape of the set, and that is the sequencer's to know.
    */
-  hasLock(backing: Backing, attemptId: Uint8Array): boolean {
-    return this.stateOf(backing).state.locks.has(bytesToHex(attemptId));
+  hasLock(backing: Backing, attemptId: Uint8Array, holder: Uint8Array): boolean {
+    return this.stateOf(backing).state.locks.has(lockKey(attemptId, holder));
   }
 
   /** The standing demand record (invariant 23), as copies. */
@@ -1047,10 +1171,20 @@ export class TransparentLedger {
     return record === undefined ? undefined : copyDemand(record);
   }
 
-  /** One standing lock, as a copy, or undefined if none stands under that attempt. */
-  lockOf(backing: Backing, attemptId: Uint8Array): LockRecord | undefined {
-    const record = this.stateOf(backing).state.locks.get(bytesToHex(attemptId));
+  /** One standing lock, as a copy, or undefined if that holder has none under that attempt. */
+  lockOf(backing: Backing, attemptId: Uint8Array, holder: Uint8Array): LockRecord | undefined {
+    const record = this.stateOf(backing).state.locks.get(lockKey(attemptId, holder));
     return record === undefined ? undefined : copyLock(record);
+  }
+
+  /**
+   * Every standing lock under an attempt on this backing, as copies — the set a
+   * commit can reach, which is more than one since the key gained its holder.
+   * §C1's n-party exchange on one backing is two parties reserving their own
+   * units for one attempt, and `settle` has to see both to find their object.
+   */
+  locksFor(backing: Backing, attemptId: Uint8Array): LockRecord[] {
+    return locksUnder(this.stateOf(backing).state, attemptId).map(copyLock);
   }
 
   /** Units this holder can still spend: held minus committed by open demands. */

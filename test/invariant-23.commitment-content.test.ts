@@ -179,6 +179,7 @@ describe("invariant 23: every presentation operation moves the root", () => {
     const settle = {
       backing,
       demandHash: demandHash(demand),
+      holder: KEYS.alice,
       nonce: sequencer.nextNonce(KEYS.alice, backing),
     };
     sequencer.submitRelease(settle, ed25519.sign(encodeRelease(settle), SECRETS.alice));
@@ -204,6 +205,7 @@ describe("invariant 23: every presentation operation moves the root", () => {
     const walk = {
       backing,
       demandHash: demandHash(demand),
+      holder: KEYS.alice,
       nonce: sequencer.nextNonce(KEYS.alice, backing),
     };
     sequencer.submitWithdrawal(walk, ed25519.sign(encodeWithdrawal(walk), SECRETS.alice));

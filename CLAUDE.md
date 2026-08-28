@@ -179,10 +179,17 @@ traversal.
   demand through `submitLeg`, one leg per call (§C3's "a demand outlives its
   locks"). A demand's deadline, like a lock's timeout, is strictly ahead of the
   witnessed index at filing — the same index is not a window.
-- **An attempt id names one attempt on one backing** for the locks a commit can
-  reach: once a venue-naming lock under it has settled or withdrawn there, no
-  other stands there, since a commit binds its id and nothing else. A lock and
-  a demand never share a hash on one backing.
+- **A lock is keyed by (attempt, holder)**: a slot is its holder's own, so a
+  stranger's lock under a demand's hash is a record beside the set, never in
+  front of it. A release or withdrawal names the record it ends — hash and
+  holder, inside the signed message — because the law resolves the signer from
+  the record, and the hash alone now names a slot rather than a record. A
+  venue-naming lock names its own holder among its parties (§C1's "all sign"),
+  which bounds what a commit converts: every lock under its attempt whose
+  parties it satisfies, checked and settled as one act. An attempt id then
+  names one attempt on one backing **for its holder**: once their venue-naming
+  lock under it has settled or withdrawn there, a retry names a fresh id, since
+  a commit binds its id and nothing else.
 
 ## What the parties must do, that no code here enforces
 

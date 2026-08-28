@@ -17,8 +17,11 @@
 //   moe/commitment/v1          an operator committing to served state
 //   moe/demand/v1              a holder presenting claims for payment
 //   moe/acceptance/v1          a backer answering a demand
-//   moe/release/v1             a holder settling an accepted demand
-//   moe/withdrawal/v1          a holder ending an unanswered demand
+//   moe/release/v2             a holder settling an accepted demand
+//   moe/withdrawal/v2          a holder ending an unanswered demand
+//                              (v2 added the record's holder: a lock is keyed
+//                              by (attempt, holder), so the message has to name
+//                              which record it ends and not only its hash)
 //   moe/lock/v1                a holder reserving units for an atomic attempt
 //   moe/commit/v1              a holder committing one attempt, at every sequencer
 //   moe/replacement/v1         E's rule naming a successor operator
@@ -35,8 +38,8 @@ export const RECEIPT_CONTEXT = tag("moe/receipt/v2");
 export const COMMITMENT_CONTEXT = tag("moe/commitment/v1");
 export const DEMAND_CONTEXT = tag("moe/demand/v1");
 export const ACCEPTANCE_CONTEXT = tag("moe/acceptance/v1");
-export const RELEASE_CONTEXT = tag("moe/release/v1");
-export const WITHDRAWAL_CONTEXT = tag("moe/withdrawal/v1");
+export const RELEASE_CONTEXT = tag("moe/release/v2");
+export const WITHDRAWAL_CONTEXT = tag("moe/withdrawal/v2");
 export const LOCK_CONTEXT = tag("moe/lock/v1");
 export const COMMIT_CONTEXT = tag("moe/commit/v1");
 export const REPLACEMENT_CONTEXT = tag("moe/replacement/v1");

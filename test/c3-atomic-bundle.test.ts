@@ -124,7 +124,7 @@ function prepare(venue: LocalVenue, one: Sequencer, two: Sequencer, eur: Backing
 
 /** The holder frees its own reservation under `attempt` at that sequencer. */
 function withdrawLock(sequencer: Sequencer, backing: Backing, attempt: Uint8Array) {
-  const op = { backing, demandHash: attempt, nonce: sequencer.nextNonce(KEYS.alice, backing) };
+  const op = { backing, demandHash: attempt, holder: KEYS.alice, nonce: sequencer.nextNonce(KEYS.alice, backing) };
   return sequencer.submitWithdrawal(op, ed25519.sign(encodeWithdrawal(op), SECRETS.alice));
 }
 
@@ -505,11 +505,11 @@ describe("§C3: an attempt id names one attempt on one backing, for the locks a 
     // The retry under the same id is refused by the law, on both backings.
     const again = lockFor(two, gold, venue, 90n, ATTEMPT, 300n);
     expect(() => two.submitLock(again, ed25519.sign(encodeLock(again), SECRETS.alice))).toThrow(
-      /already been used on this backing/,
+      /already used that attempt id on this backing/,
     );
     const againEur = lockFor(one, eur, venue, 40n, ATTEMPT, 300n);
     expect(() => one.submitLock(againEur, ed25519.sign(encodeLock(againEur), SECRETS.alice))).toThrow(
-      /already been used on this backing/,
+      /already used that attempt id on this backing/,
     );
     // So the withheld object, published now, reaches nothing on either.
     venue.publishCommit(withheld);
@@ -611,10 +611,10 @@ describe("§C3: a venue-naming lock retires its id by every exit, the release in
     const lock = { ...lockFor(two, gold, venue, 40n, ATTEMPT, 500n), nonce: 0n };
     const entry = (op: LockOp, nonce: bigint) => ({ kind: "lock" as const, attemptId: op.attemptId, holder: op.holder, beneficiary: op.beneficiary, quantity: op.quantity, timeout: op.timeout, decisionVenue: op.decisionVenue, parties: op.parties, nonce, signature: ed25519.sign(encodeLock({ ...op, nonce }), SECRETS.alice) });
     ledger.apply(gold, entry(lock, 0n), 0n);
-    const rel = { backing: gold, demandHash: ATTEMPT, nonce: 1n };
-    ledger.apply(gold, { kind: "release", demandHash: ATTEMPT, nonce: 1n, signature: ed25519.sign(encodeRelease(rel), SECRETS.alice) }, 0n);
+    const rel = { backing: gold, demandHash: ATTEMPT, holder: KEYS.alice, nonce: 1n };
+    ledger.apply(gold, { kind: "release", demandHash: ATTEMPT, holder: KEYS.alice, nonce: 1n, signature: ed25519.sign(encodeRelease(rel), SECRETS.alice) }, 0n);
     expect(ledger.balance(gold, KEYS.bob)).toBe(40n);
-    expect(() => ledger.apply(gold, entry({ ...lock, quantity: 10n }, 2n), 0n)).toThrow(/already been used/);
+    expect(() => ledger.apply(gold, entry({ ...lock, quantity: 10n }, 2n), 0n)).toThrow(/already used that attempt id/);
     expect(replayLog(gold, [...ledger.opLog(gold), { ...entry({ ...lock, quantity: 10n }, 2n), position: ledger.opLog(gold).length }])).toBeUndefined();
   });
 });
