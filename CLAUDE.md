@@ -183,13 +183,23 @@ traversal.
   stranger's lock under a demand's hash is a record beside the set, never in
   front of it. A release or withdrawal names the record it ends — hash and
   holder, inside the signed message — because the law resolves the signer from
-  the record, and the hash alone now names a slot rather than a record. A
+  the record, and the hash alone now names a slot rather than a record. **A leg
+  ends the record the set names**, so the door binds each leg's holder to the
+  set's own terms; unbound, the law settled whatever record the caller named
+  and a decoy under the hash was converted while the true leg stood. A
   venue-naming lock names its own holder among its parties (§C1's "all sign"),
   which bounds what a commit converts: every lock under its attempt whose
-  parties it satisfies, checked and settled as one act. An attempt id then
-  names one attempt on one backing **for its holder**: once their venue-naming
-  lock under it has settled or withdrawn there, a retry names a fresh id, since
-  a commit binds its id and nothing else.
+  parties it satisfies, checked and settled as one act. **A set leg is never in
+  that match set** — it names no venue and settles with its set — and is
+  excluded rather than thrown for, or one leg bricks every venue-naming lock
+  sharing its id. **Every venue-naming lock under one attempt carries one
+  timeout**, because a commit converts its match set or none of it, and locks
+  dying at different indices leave a window with no exit open. An attempt id
+  then names one attempt on one backing **for its holder**: once their
+  venue-naming lock under it has settled or withdrawn there, a retry names a
+  fresh id, since a commit binds its id and nothing else — and a commit's
+  *receipt* is identified by its whole object, signatures included, since two
+  objects can settle two locks under one attempt.
 
 ## What the parties must do, that no code here enforces
 

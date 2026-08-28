@@ -745,6 +745,42 @@ describe("regression: two disjoint objects under one attempt each settle, and ne
   });
 });
 
+describe("regression: every venue-naming lock under one attempt carries one timeout", () => {
+  it("a second lock under the attempt with a different timeout is refused", () => {
+    // The deadlock the uniform rule closes: locks dying at different indices
+    // leave a window where the object settles nothing (all-or-nothing across the
+    // match set) and the live lock's holder cannot withdraw either —
+    // committedInTime says "settle it", settle refuses, no exit is open at any
+    // index (review-match-set-not-fixed). Decided with the maintainer 2026-08-28:
+    // one exchange, one clock, one deadline — §C1 reads an exchange "against the
+    // same timeout predicate".
+    const { venue, sequencer, gold } = setup();
+    const both = keySet(KEYS.alice, KEYS.mallory);
+    lock(sequencer, bundleLock(sequencer, gold, venue, "alice", 40n, ATTEMPT, both), "alice");
+    const shorter = { ...bundleLock(sequencer, gold, venue, "mallory", 10n, ATTEMPT, both), timeout: TIMEOUT - 10n };
+    expect(() => lock(sequencer, shorter, "mallory")).toThrow(/one attempt carries one timeout/);
+    // The honest path it leaves open: the same timeout, and the exchange stands.
+    const agreed = bundleLock(sequencer, gold, venue, "mallory", 10n, ATTEMPT, both);
+    expect(lock(sequencer, agreed, "mallory")).toBeDefined();
+    venue.advance(3n);
+    venue.publishCommit(countersignCommit(signCommit(SECRETS.alice, ATTEMPT), SECRETS.mallory));
+    sequencer.settle(gold, ATTEMPT);
+    expect(sequencer.balance(gold, KEYS.bob)).toBe(50n);
+  });
+
+  it("and a set leg keeps its own term, because no commit reaches it", () => {
+    // Scoped like its sibling rule: the demand's leg names no decision venue and
+    // settles with its set, so its timeout is the holder's own to set even where
+    // a venue-naming lock stands under the same hash.
+    const { venue, sequencer, eur, gold } = setup();
+    const p = present(sequencer, eur, gold, 40n);
+    lock(sequencer, bundleLock(sequencer, gold, venue, "mallory", 10n, p.hash), "mallory");
+    // Alice's leg under the same hash, its own timeout, filed with her demand.
+    sequencer.submitDemand(p.demand, p.signature, [{ op: p.leg, signature: p.legSignature }]);
+    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(120n);
+  });
+});
+
 describe("regression: a set leg sharing an attempt id does not brick a venue-naming lock's commit", () => {
   it("the venue lock settles and the set leg stays standing", () => {
     // A set leg's parties are [holder], so any object that holder signs matched

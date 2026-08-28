@@ -708,6 +708,28 @@ export function applyEntry(
       ) {
         throw new LedgerError("a lock naming a decision venue names its own holder among its parties");
       }
+      // **Every venue-naming lock under one attempt on one backing carries one
+      // timeout.** §C3 settles on "one predicate against the same object" and
+      // §C1 reads an exchange "against the same timeout predicate" — one
+      // exchange, one clock, one deadline. A commit converts its whole match set
+      // or none of it (a set settled in part would pay one leg and not the
+      // other), so locks that die at different indices leave a window where the
+      // object settles nothing and the live lock's holder cannot withdraw either
+      // — `committedInTime` says "settle it", `settle` refuses, and no exit is
+      // open at any index (found regression-reviewing this slice; the maintainer
+      // chose this over making committedInTime all-or-nothing). Live or dead
+      // together, the two readings agree again.
+      //
+      // Scoped like its sibling above: a set leg names no venue, settles with
+      // its set, and keeps its own term.
+      if (compareBytes(entry.decisionVenue, NO_DECISION_VENUE) !== 0) {
+        const sibling = locksUnder(state, entry.attemptId).find(
+          (lock) => compareBytes(lock.decisionVenue, NO_DECISION_VENUE) !== 0,
+        );
+        if (sibling !== undefined && sibling.timeout !== entry.timeout) {
+          throw new LedgerError("every venue-naming lock under one attempt carries one timeout");
+        }
+      }
       // The third credit path, and the only one that was not checked (found by
       // the 2026-08-22 audit): a key that signs nothing is still checked, or the
       // units land under a point no signature can ever move, still outstanding.
