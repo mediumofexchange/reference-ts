@@ -732,6 +732,23 @@ describe("regression: two disjoint objects under one attempt each settle, and ne
     expect(sequencer.availableBalance(gold, KEYS.mallory)).toBe(190n);
   });
 
+  it("and a stranger's fresh lock under a settled attempt cannot hide the receipt", () => {
+    // The release-receipt blockade, resurfaced at `settle`: the venue-free repeat
+    // answer was reachable only while NO lock stood, so a stranger locking one
+    // unit under a settled attempt put the honest holder's receipt permanently
+    // out of reach — one unit, one nonce (found regression-reviewing the fixes).
+    // A repeat is a read of the receipt book, so it answers before the refusal.
+    const { venue, sequencer, gold } = setup();
+    lock(sequencer, bundleLock(sequencer, gold, venue, "alice", 40n), "alice");
+    venue.advance(3n);
+    venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
+    const mine = sequencer.settle(gold, ATTEMPT);
+    // Mallory's own record under the same attempt, satisfied by no object here.
+    const hers = { ...bundleLock(sequencer, gold, venue, "mallory", 1n), timeout: TIMEOUT + 100n };
+    lock(sequencer, hers, "mallory");
+    expect(sequencer.settle(gold, ATTEMPT)).toEqual(mine);
+  });
+
   it("and settling one object twice returns its receipt venue-free, not a second payment", () => {
     // The idempotence the object-keyed receipt must keep: once every lock has
     // resolved, a repeat is answered from the attempt's own mark without the venue.

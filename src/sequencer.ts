@@ -779,10 +779,11 @@ export class Sequencer {
     // that settles them is any one of their parties' — the law converts every
     // lock the object satisfies, and this only has to find the object.
     const locks = this.ledger.locksFor(held, attemptId);
-    if (locks.length > 0 && locks.every((l) => compareBytes(l.decisionVenue, NO_DECISION_VENUE) === 0)) {
-      throw new SequencerError("a set leg settles with its set on the holder's release, not on a commit");
-    }
-    // No lock stands: this attempt has already resolved here, or never existed.
+    // The locks a commit can reach, filtered exactly as the law filters its match
+    // set: a set leg names no decision venue and settles with its set on the
+    // holder's release, so no object reaches it.
+    const reachable = locks.filter((l) => compareBytes(l.decisionVenue, NO_DECISION_VENUE) !== 0);
+    // Nothing here for a commit to settle — resolved already, or never existed.
     // Invariant 26 wants a repeat answered with the identical prior receipt
     // without reading the venue (the 2026-08-22 audit: a commits-refusing view
     // threw before that answer could be given). The mark is keyed by the attempt
@@ -790,19 +791,42 @@ export class Sequencer {
     // signatures — and holds the FIRST commit settled here, set below. `submit`
     // keys the receipt by the object (its signatures), which this branch cannot
     // reconstruct without the venue, so the venue-free answer needs its own mark.
+    //
+    // **Before either refusal**, since a repeat is a read of the receipt book and
+    // not an act: a settled attempt whose set leg still stands is reachable now
+    // that a set leg is excluded rather than thrown for, and the refusal below
+    // was answering it (found regression-reviewing the fixes).
+    //
+    // Residual, recorded rather than fixed: where two objects settled two locks,
+    // the mark holds the FIRST, so a later caller is answered with a receipt that
+    // does not cover its own object. `settle` names no object — it reads the
+    // venue for one — so there is nothing here to key a second answer by; giving
+    // it one is an API question for the maintainer.
     const settledMark = this.receiptKey(held, sha256(commitMessage(attemptId)));
-    if (locks.length === 0) {
+    if (reachable.length === 0) {
       const prior = this.receipts.get(settledMark);
       if (prior !== undefined) return copyReceipt(prior);
+      if (locks.length > 0) {
+        throw new SequencerError("a set leg settles with its set on the holder's release, not on a commit");
+      }
       throw new SequencerError("no lock for that attempt stands here");
     }
     // Earliest witnessing wins, across the locks as within one: a commit
     // republished later cannot un-commit what the record already showed.
-    const witnessed = locks
+    const witnessed = reachable
       .map((lock) => witnessedCommitFor(this.venue, lock))
       .filter((w): w is WitnessedCommit => w !== undefined)
       .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))[0];
     if (witnessed === undefined) {
+      // Nothing standing here has an object — but this attempt may already have
+      // settled, and a receipt the operator co-signed stays obtainable whatever
+      // stands beside it now. A stranger's fresh lock under a settled attempt
+      // re-entered this branch and made the honest holder's receipt unreachable
+      // forever: one unit, one nonce, and the release-receipt blockade was back
+      // at `settle` (found regression-reviewing the fixes). The repeat is a read
+      // of the receipt book, so it answers before the refusal.
+      const prior = this.receipts.get(settledMark);
+      if (prior !== undefined) return copyReceipt(prior);
       // Two answers, not one (above and here): a caller told the commit is
       // missing would go to the venue for an object that is there.
       throw new SequencerError("no commit for that attempt is witnessed at this venue");

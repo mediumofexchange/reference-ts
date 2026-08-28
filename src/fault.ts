@@ -70,7 +70,7 @@ import { verifySignatureStrict } from "./keys.js";
 import { applyEntry, emptyState, lockIn, replayLog, signerFromTerms } from "./ledger.js";
 import { demandHash as hashOfDemand, legMismatch, type LegTerms } from "./presentation.js";
 import { committedInTime } from "./recovery.js";
-import { opMessageOfEntry, type PublishedOp } from "./oplog.js";
+import { opIdentityOfEntry, opMessageOfEntry, type PublishedOp } from "./oplog.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
 import { receiptCovers, receiptStatus, isOperatorReceipt, type Receipt } from "./receipt.js";
 import { successionOf, type Succession } from "./replacement.js";
@@ -349,8 +349,12 @@ export function isRewrittenHistory(
     if (earlier.kind === "dropped") return false;
     if (later.opLog.length < earlier.opLog.length) return true;
     for (let i = 0; i < earlier.opLog.length; i++) {
-      const before = opMessageOfEntry(backing.name, earlier.opLog[i] as PublishedOp);
-      const after = opMessageOfEntry(backing.name, later.opLog[i] as PublishedOp);
+      // The entry's identity, not merely its message: a commit's signature set
+      // decides which locks it converted, so two objects at one position are two
+      // different histories and the prefix comparison has to see it (the same
+      // reading the root takes — commitment.ts).
+      const before = opIdentityOfEntry(backing.name, earlier.opLog[i] as PublishedOp);
+      const after = opIdentityOfEntry(backing.name, later.opLog[i] as PublishedOp);
       if (compareBytes(before, after) !== 0) return true;
     }
     return false;
@@ -517,7 +521,22 @@ export function settledInPart(
             filed = { holder: entry.holder, quantity: entry.quantity };
           }
         }
-        if (entry.kind === "release" && compareBytes(entry.demandHash, demandHash) === 0) {
+        // **The DEMAND's release, not any release under its hash**, read exactly
+        // as the law reads it: the record is (hash, holder), and where a lock of
+        // that holder's stands here the law resolves lock-first, so the release
+        // ends the lock and not the demand. Counting any release under the hash
+        // read both directions of this proof wrongly — a hostile operator hid a
+        // real half-settlement behind a one-unit decoy lock and its release
+        // (direction 2), and an honest heir inheriting such a log was named for a
+        // settlement that never happened (direction 1). The demand is always
+        // filed before it can be released, so `filed` is set by then.
+        if (
+          entry.kind === "release" &&
+          compareBytes(entry.demandHash, demandHash) === 0 &&
+          filed !== undefined &&
+          compareBytes(entry.holder, filed.holder) === 0 &&
+          lockIn(state, entry.demandHash, entry.holder) === undefined
+        ) {
           headReleased = true;
         }
         applyEntry(state, backing, entry, undefined);

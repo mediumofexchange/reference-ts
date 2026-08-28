@@ -876,6 +876,62 @@ describe("a set settled in part is the operator's fault, read across one commitm
     expect(compareBytes(proven as Uint8Array, f.gold.name)).toBe(0);
   });
 
+  it("a decoy lock and its release under the demand's hash do not pass for the head's release", () => {
+    // The head read asked only "a release under this hash", where its sibling leg
+    // read asks which RECORD was ended. Under the (attempt, holder) key a release
+    // on the demanded backing can end a lock instead of the demand, so a hostile
+    // operator hid a real half-settlement — the payout taken, the demand still
+    // standing — behind a one-unit lock of its own and a release of it, on a log
+    // that still replays. Found regression-reviewing slice 31's fixes; the head
+    // read resolves lock-first now, exactly as the law does.
+    const f = world();
+    const hash = fileAndAccept(f);
+    const n = f.sequencer.nextNonce(KEYS.backer, f.eur);
+    f.sequencer.submitIssue(
+      { backing: f.eur, recipient: KEYS.mallory, quantity: 1n, nonce: n },
+      ed25519.sign(encodeIssuanceMessage(f.eur.name, KEYS.mallory, 1n, n), SECRETS.backer),
+    );
+    const decoy: LockOp = {
+      backing: f.eur,
+      attemptId: hash,
+      holder: KEYS.mallory,
+      beneficiary: KEYS.mallory,
+      quantity: 1n,
+      timeout: 200n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.mallory],
+      nonce: f.sequencer.nextNonce(KEYS.mallory, f.eur),
+    };
+    const base = f.sequencer.opLog(f.eur).length;
+    const decoyLock: OpLogEntry = {
+      position: base,
+      kind: "lock",
+      attemptId: decoy.attemptId,
+      holder: decoy.holder,
+      beneficiary: decoy.beneficiary,
+      quantity: decoy.quantity,
+      timeout: decoy.timeout,
+      decisionVenue: decoy.decisionVenue,
+      parties: decoy.parties,
+      nonce: decoy.nonce,
+      signature: ed25519.sign(encodeLock(decoy), SECRETS.mallory),
+    };
+    const rOp = { backing: f.eur, demandHash: hash, holder: KEYS.mallory, nonce: decoy.nonce + 1n };
+    const decoyRelease: OpLogEntry = {
+      position: base + 1,
+      kind: "release",
+      demandHash: hash,
+      holder: KEYS.mallory,
+      nonce: rOp.nonce,
+      signature: ed25519.sign(encodeRelease(rOp), SECRETS.mallory),
+    };
+    // The leg's accompaniment surrendered; the head demand never released.
+    const served = serveBoth(f, [decoyLock, decoyRelease], [releaseEntry(f, f.gold, hash)]);
+    const proven = settledInPart(f.eur, f.venue, f.terms, served, hash);
+    expect(proven).toBeDefined();
+    expect(compareBytes(proven as Uint8Array, f.gold.name)).toBe(0);
+  });
+
   it("an honest settlement shows both halves and proves nothing", () => {
     const f = world();
     const hash = fileAndAccept(f);

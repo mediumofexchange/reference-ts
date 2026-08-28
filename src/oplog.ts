@@ -234,30 +234,47 @@ export function opMessageOfEntry(backingName: Uint8Array, entry: PublishedOp): U
 }
 
 /**
- * The operation hash a receipt is bound to: sha256 of the signed message.
+ * **What identifies an entry's effect**, and the one answer both the receipt and
+ * the committed root are built on.
  *
- * A commit is the exception, and binds its **signatures** too. Each party signs
- * `commitMessage` — the attempt and nothing else — but under the (attempt,
- * holder) lock key two DIFFERENT objects (different signer sets) settle DIFFERENT
- * locks under one attempt. Keyed by the attempt alone, the second settlement was
- * answered with the first's receipt, applied nothing, and froze its lock (found
- * reviewing slice 31). The signatures live in the committed entry, so a verifier
- * reconstructs this from the log exactly as for any other op — "the committed
- * entry reconstructs to the receipt's op hash" still holds. The committed ROOT
- * stays the attempt message alone (commitment.ts): a commit binds its attempt id
- * and nothing else, and the object's effect is bound by the state its settlement
- * leaves. This identity is the receipt's and the gap-adoption set's, not the
- * root's.
+ * For every kind but one it is the signed message, exactly as before: one signer,
+ * one signature, and the message plus the signer the law resolves from it decide
+ * what the entry does. The signature itself is served rather than committed
+ * because it adds nothing the message does not already fix.
+ *
+ * **A commit is the exception, and its signatures are effect-bearing.** Each
+ * party signs `commitMessage` — the attempt and nothing else — but the object
+ * converts every lock under that attempt whose parties it satisfies, and under
+ * the (attempt, holder) key several locks can stand there with different party
+ * sets. So two objects differing only in who signed settle DIFFERENT lock sets
+ * from one log prefix. Identified by the attempt alone, that cost twice:
+ *
+ *   - the second settlement was answered with the first's receipt, applied
+ *     nothing, and froze a lock its holder could not withdraw; and
+ *   - two lawful logs folding to different balances rooted IDENTICALLY, so one
+ *     operator signature covered two states with no provable fault — exactly
+ *     what invariant 22 forbids, and what commitment.ts calls the root's
+ *     injectivity (found regression-reviewing the first fix, which bound the
+ *     receipt and left the root).
+ *
+ * The signatures live in the served entry, so a verifier holding the log
+ * reconstructs this and both readings agree again. This is the ONE identity: a
+ * second one beside it is how the two came apart in the first place.
  */
-export function opHashOfEntry(backingName: Uint8Array, entry: PublishedOp): Uint8Array {
+export function opIdentityOfEntry(backingName: Uint8Array, entry: PublishedOp): Uint8Array {
   if (entry.kind === "commit") {
     const w = new ByteWriter();
     w.context(COMMIT_CONTEXT);
     w.key32(entry.attemptId, "attempt id");
     writeCommitSignatures(w, entry.signatures);
-    return sha256(w.finish());
+    return w.finish();
   }
-  return sha256(opMessageOfEntry(backingName, entry));
+  return opMessageOfEntry(backingName, entry);
+}
+
+/** The operation hash a receipt is bound to: sha256 of the entry's identity. */
+export function opHashOfEntry(backingName: Uint8Array, entry: PublishedOp): Uint8Array {
+  return sha256(opIdentityOfEntry(backingName, entry));
 }
 
 /**

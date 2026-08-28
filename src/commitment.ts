@@ -46,7 +46,7 @@ import { backingName, type Backing } from "./backing.js";
 import type { BackingSnapshot } from "./ledger.js";
 import { isAnOperator } from "./replacement.js";
 import { answering, type Venue } from "./venue.js";
-import { opMessageOfEntry, type OpLogEntry } from "./oplog.js";
+import { opIdentityOfEntry, type OpLogEntry } from "./oplog.js";
 
 export type { BackingSnapshot } from "./ledger.js";
 
@@ -68,6 +68,14 @@ export interface Commitment {
  * re-description of it, "the committed entry reconstructs to the receipt's op
  * hash" holds by construction, and no kind tag is needed: every message opens
  * with its own domain tag, and contexts.ts asserts those are prefix-free.
+ *
+ * `opIdentityOfEntry` rather than the message, for the one kind where they
+ * differ: a commit's signature SET decides which locks it converts, so two
+ * objects under one attempt fold to different states from one log prefix. Rooted
+ * by the message alone they rooted identically — one operator signature over two
+ * lawful states, which is exactly the injectivity this root exists to have
+ * (found regression-reviewing the receipt fix, which bound the object's identity
+ * for the receipt and left it unbound here).
  */
 function writeOpEntry(w: ByteWriter, name: Uint8Array, entry: OpLogEntry, index: number): void {
   // The position is pinned to the array index, not merely well-formed. A
@@ -79,7 +87,7 @@ function writeOpEntry(w: ByteWriter, name: Uint8Array, entry: OpLogEntry, index:
   if (entry.position !== index) {
     throw new EncodingError("op-log position does not match its index");
   }
-  w.lengthPrefixed(opMessageOfEntry(name, entry));
+  w.lengthPrefixed(opIdentityOfEntry(name, entry));
 }
 
 function encodeSnapshot(snapshot: BackingSnapshot): Uint8Array {
