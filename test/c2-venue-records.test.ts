@@ -13,6 +13,7 @@ import {
   encodeReleaseMessage,
   encodeWithdrawalMessage,
   encodeLock,
+  NO_ATTEMPT_SALT,
   NO_DECISION_VENUE,
   signCommit,
   type LockOp,
@@ -198,6 +199,7 @@ describe("the two record kinds the first table left out: a lock and a commit", (
       decisionVenue: op.decisionVenue,
       parties: op.parties,
       nonce: op.nonce,
+      salt: op.salt ?? NO_ATTEMPT_SALT,
       signature: ed25519.sign(encodeLock(op), SECRETS.alice),
     };
   };

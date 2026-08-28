@@ -4,6 +4,7 @@ import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { compareBytes } from "../src/bytes.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import {
+  attemptIdOf,
   countersignCommit,
   demandHash,
   encodeDemand,
@@ -11,6 +12,7 @@ import {
   signCommit,
   type DemandOp,
   type LockOp,
+  NO_ATTEMPT_SALT,
   NO_DECISION_VENUE,
 } from "../src/presentation.js";
 import { type PublishedOp } from "../src/oplog.js";
@@ -88,19 +90,34 @@ function lockRequest(
   nonce: bigint,
   over: Partial<LockOp> = {},
 ): Extract<PublishedOp, { kind: "lock" }> {
-  const op: LockOp = {
+  // A venue-naming lock names its own holder among its parties (the lock-keying
+  // slice), and its id is its terms' hash (this one): a request the law would
+  // refuse for either reason is not non-service.
+  const parties = [KEYS.alice, KEYS.bob].sort(compareBytes);
+  const salt = new Uint8Array(32).fill(0x50 + Number(nonce));
+  const base: LockOp = {
     backing,
-    attemptId: new Uint8Array(32).fill(0x50 + Number(nonce)),
+    attemptId: attemptIdOf(salt, venue.id, 10_000n, parties),
+    salt,
     holder: KEYS.alice,
     beneficiary: KEYS.bob,
     quantity,
     timeout: 10_000n,
     decisionVenue: venue.id,
-    // A venue-naming lock names its own holder among its parties (the
-    // lock-keying slice): a request the law would refuse is not non-service.
-    parties: [KEYS.alice, KEYS.bob].sort(compareBytes),
+    parties,
     nonce,
-    ...over,
+  };
+  // An override of a term re-derives the id, so a fixture cannot accidentally
+  // build a lock whose id does not name its own terms — only deliberately, by
+  // overriding attemptId itself.
+  const merged = { ...base, ...over };
+  const op: LockOp = {
+    ...merged,
+    attemptId:
+      over.attemptId ??
+      (compareBytes(merged.decisionVenue, NO_DECISION_VENUE) === 0
+        ? merged.attemptId
+        : attemptIdOf(merged.salt ?? salt, merged.decisionVenue, merged.timeout, merged.parties)),
   };
   return {
     kind: "lock",
@@ -112,6 +129,7 @@ function lockRequest(
     decisionVenue: op.decisionVenue,
     parties: op.parties,
     nonce: op.nonce,
+    salt: op.salt ?? NO_ATTEMPT_SALT,
     signature: ed25519.sign(encodeLock(op), SECRETS.alice),
   };
 }
@@ -166,6 +184,7 @@ describe("§C2b: non-service is counted on service, not on publication", () => {
       decisionVenue: junk.decisionVenue,
       parties: junk.parties,
       nonce: junk.nonce,
+      salt: NO_ATTEMPT_SALT,
       signature: new Uint8Array(64),
     });
     venue.advance(NON_SERVICE.duration + 1n);
@@ -397,6 +416,7 @@ describe("§C3: a lock request left unserved is §C2b's non-service object", () 
       decisionVenue: one.decisionVenue,
       parties: [...one.parties],
       nonce: one.nonce,
+      salt: one.salt,
     };
     sequencer.submitLock(op, one.signature);
     venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
@@ -496,7 +516,9 @@ describe("§C3: a lock request left unserved is §C2b's non-service object", () 
     };
     sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice));
     const served = servedBy(sequencer);
-    const one = lockRequest(venue, backing, 20n, 0n, { attemptId: demandHash(demand) });
+    // Its own attempt, as every venue-naming lock now has: the id is its terms'
+    // hash, so it could not name the demand's hash even if a squatter wanted to.
+    const one = lockRequest(venue, backing, 20n, 0n);
     venue.publishOp(backing.name, one);
     venue.advance(NON_SERVICE.duration + 1n);
     expect(unservedRequests(venue, backing, served)).toHaveLength(1);
@@ -510,6 +532,7 @@ describe("§C3: a lock request left unserved is §C2b's non-service object", () 
       decisionVenue: one.decisionVenue,
       parties: [...one.parties],
       nonce: one.nonce,
+      salt: one.salt,
     };
     sequencer.submitLock(op, one.signature); // the door agrees: no slot here
     venue.advance(1n); // one commitment per witnessed index
@@ -561,9 +584,11 @@ describe("§C3: a lock request left unserved is §C2b's non-service object", () 
   it("a lock under a standing demand's hash is a request like any other, and counts until served", () => {
     // This was the law's squat refusal ("a lock and a demand never share a
     // hash"), and the fold agreed the door had no lawful move. The lock-keying
-    // slice deleted the door: the lock is the holder's own record beside her own
-    // demand (the documented residual), the operator can serve it, and a stall
-    // is non-service like any other.
+    // slice deleted the door and made it the holder's own record beside her own
+    // demand, countable like any other. Naming the attempt by its terms goes
+    // further: a venue-naming lock CANNOT carry a demand's hash, so the shape is
+    // not a request the operator failed to serve — it is one the law refuses, and
+    // the fold must not count it against an operator with no lawful move.
     const { venue, sequencer, backing } = setup();
     const demand: DemandOp = {
       backing,
@@ -575,24 +600,26 @@ describe("§C3: a lock request left unserved is §C2b's non-service object", () 
     };
     sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice));
     const served = servedBy(sequencer);
-    const one = lockRequest(venue, backing, 1n, 1n, { attemptId: demandHash(demand) });
-    venue.publishOp(backing.name, one);
+    const squat = lockRequest(venue, backing, 1n, 1n, { attemptId: demandHash(demand) });
+    venue.publishOp(backing.name, squat);
     venue.advance(NON_SERVICE.duration + 1n);
-    expect(unservedRequests(venue, backing, served)).toHaveLength(1);
+    expect(unservedRequests(venue, backing, served)).toHaveLength(0);
+    // And the door refuses it too, so fold and door agree.
     const op: LockOp = {
       backing,
-      attemptId: one.attemptId,
-      holder: one.holder,
-      beneficiary: one.beneficiary,
-      quantity: one.quantity,
-      timeout: one.timeout,
-      decisionVenue: one.decisionVenue,
-      parties: [...one.parties],
-      nonce: one.nonce,
+      attemptId: squat.attemptId,
+      holder: squat.holder,
+      beneficiary: squat.beneficiary,
+      quantity: squat.quantity,
+      timeout: squat.timeout,
+      decisionVenue: squat.decisionVenue,
+      parties: [...squat.parties],
+      nonce: squat.nonce,
+      salt: squat.salt,
     };
-    sequencer.submitLock(op, one.signature); // the door agrees: served
-    venue.advance(1n); // one commitment per witnessed index
-    expect(unservedRequests(venue, backing, servedBy(sequencer))).toHaveLength(0);
+    expect(() => sequencer.submitLock(op, squat.signature)).toThrow(
+      /not the hash of this attempt's terms/,
+    );
   });
 
   it("a request the record itself has answered does not count: its attempt is committed at the venue", () => {

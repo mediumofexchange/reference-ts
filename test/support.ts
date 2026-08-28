@@ -8,6 +8,7 @@ import {
   type WitnessingTerms,
 } from "../src/backing.js";
 import { TransparentLedger } from "../src/ledger.js";
+import { attemptIdOf } from "../src/presentation.js";
 import { LocalVenue, type Venue } from "../src/venue.js";
 
 // Shared fixtures for the claim-layer tests. Every key is a real Ed25519
@@ -83,4 +84,22 @@ export function register(
 export function advanceWitnessedIndex(venue: LocalVenue, to: bigint): void {
   const now = venue.witnessedIndex();
   if (to > now) venue.advance(to - now);
+}
+
+/**
+ * A venue-naming attempt: its salt and the id that salt and terms hash to.
+ *
+ * A bundle's id is no longer 32 bytes a test picks — it IS the attempt's terms
+ * (`attemptIdOf`), so a fixture has to derive it from the venue, the timeout and
+ * the party set it is about to lock under. `salt` is a fixture's free choice and
+ * distinguishes two attempts on otherwise identical terms, exactly as a random
+ * one does for a wallet.
+ */
+export function attempt(
+  venue: Venue,
+  timeout: bigint,
+  parties: readonly Uint8Array[],
+  salt: Uint8Array = new Uint8Array(32).fill(0x51),
+): { salt: Uint8Array; attemptId: Uint8Array } {
+  return { salt, attemptId: attemptIdOf(salt, venue.id, timeout, parties) };
 }

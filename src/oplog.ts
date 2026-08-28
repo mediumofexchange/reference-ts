@@ -138,6 +138,8 @@ export type PublishedOp =
       readonly decisionVenue: Uint8Array;
       readonly parties: readonly Uint8Array[];
       readonly nonce: bigint;
+      /** See LockOp: the attempt's own term, so the id can be its terms' hash. */
+      readonly salt: Uint8Array;
       readonly signature: Uint8Array;
     }
   | {
@@ -224,6 +226,7 @@ export function opMessageOfEntry(backingName: Uint8Array, entry: PublishedOp): U
         entry.decisionVenue,
         entry.parties,
         entry.nonce,
+        entry.salt,
       );
     // The backing name is not written, and that is the point: the same bytes are
     // this operation in every backing of the bundle.
@@ -404,6 +407,9 @@ export function decodePublishedOp(bytes: Uint8Array): {
         const beneficiary = r.raw(32);
         const quantity = readQuantity(r);
         const timeout = r.u64();
+        // Field order is the encoder's: the salt is written last, after the
+        // nonce, so it is read last. (Property order in this literal IS the read
+        // order — the reader is stateful.)
         return {
           kind,
           attemptId,
@@ -414,6 +420,7 @@ export function decodePublishedOp(bytes: Uint8Array): {
           decisionVenue: r.raw(32),
           parties: readKeySet(r, "lock parties"),
           nonce: r.u64(),
+          salt: r.raw(32),
           signature,
         };
       }
@@ -464,6 +471,7 @@ export function copyOp(entry: PublishedOp): PublishedOp {
       return {
         ...entry,
         attemptId: copyBytes(entry.attemptId),
+        salt: copyBytes(entry.salt),
         holder: copyBytes(entry.holder),
         beneficiary: copyBytes(entry.beneficiary),
         decisionVenue: copyBytes(entry.decisionVenue),

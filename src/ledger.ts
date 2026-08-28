@@ -54,7 +54,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { makeBacking, verifyBackingSignature, type Backing } from "./backing.js";
 import { compareBytes, copyBytes, MAX_QUANTITY_EXCLUSIVE } from "./bytes.js";
-import { commitSatisfies, NO_DECISION_VENUE, soleParty } from "./presentation.js";
+import { attemptIdOf, commitSatisfies, NO_ATTEMPT_SALT, NO_DECISION_VENUE, soleParty } from "./presentation.js";
 import { isValidPublicKey, verifySignatureStrict } from "./keys.js";
 import {
   copyOp,
@@ -708,26 +708,34 @@ export function applyEntry(
       ) {
         throw new LedgerError("a lock naming a decision venue names its own holder among its parties");
       }
-      // **Every venue-naming lock under one attempt on one backing carries one
-      // timeout.** §C3 settles on "one predicate against the same object" and
-      // §C1 reads an exchange "against the same timeout predicate" — one
-      // exchange, one clock, one deadline. A commit converts its whole match set
-      // or none of it (a set settled in part would pay one leg and not the
-      // other), so locks that die at different indices leave a window where the
-      // object settles nothing and the live lock's holder cannot withdraw either
-      // — `committedInTime` says "settle it", `settle` refuses, and no exit is
-      // open at any index (found regression-reviewing this slice; the maintainer
-      // chose this over making committedInTime all-or-nothing). Live or dead
-      // together, the two readings agree again.
+      // **A venue-naming attempt is named by the hash of its terms** (§C3 step 4,
+      // "one attempt carries one timeout, at every sequencer and for every
+      // participant"; §C1, "the timeout unlocks everywhere... read against the
+      // same timeout predicate"). The id IS the venue, the timeout and the party
+      // set, so a lock standing under it cannot carry different ones and every
+      // sequencer in an exchange reads one predicate whether or not it can see
+      // the others' books.
       //
-      // Scoped like its sibling above: a set leg names no venue, settles with
-      // its set, and keeps its own term.
-      if (compareBytes(entry.decisionVenue, NO_DECISION_VENUE) !== 0) {
-        const sibling = locksUnder(state, entry.attemptId).find(
-          (lock) => compareBytes(lock.decisionVenue, NO_DECISION_VENUE) !== 0,
-        );
-        if (sibling !== undefined && sibling.timeout !== entry.timeout) {
-          throw new LedgerError("every venue-naming lock under one attempt carries one timeout");
+      // This replaced a sibling scan comparing timeouts within one backing. That
+      // scan held the property only where two locks sat on ONE backing — §C1's
+      // clearing ring puts one on each of three, and half-settled past it at a
+      // single operator — while creating a denial of service of its own, since
+      // its predicate read a record the applicant did not own: a stranger locking
+      // one refunded unit under an observed id refused the victim's own leg. A
+      // refusal that reads only the applicant's own message can refuse nobody
+      // else, which is why this one is the honest shape.
+      //
+      // Set legs are the same rule rather than an exception: an attempt's id is
+      // its terms' hash, and a set leg's attempt is its demand, whose hash the
+      // demand itself fixes. Its salt is zero, so the record has one spelling.
+      if (compareBytes(entry.decisionVenue, NO_DECISION_VENUE) === 0) {
+        if (compareBytes(entry.salt, NO_ATTEMPT_SALT) !== 0) {
+          throw new LedgerError("a set leg's attempt is its demand: it carries no salt");
+        }
+      } else {
+        const named = attemptIdOf(entry.salt, entry.decisionVenue, entry.timeout, entry.parties);
+        if (compareBytes(named, entry.attemptId) !== 0) {
+          throw new LedgerError("attempt id is not the hash of this attempt's terms");
         }
       }
       // The third credit path, and the only one that was not checked (found by

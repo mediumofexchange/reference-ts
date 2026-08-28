@@ -16,7 +16,7 @@ import { isRewrittenHistory } from "../src/fault.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import { receiptStatus } from "../src/receipt.js";
 import { gapLegsFor, isOverdue, isSilent, snapshotRedemptions, stateIsAuthentic } from "../src/recovery.js";
-import { demandHash, encodeAcceptance, encodeDemand, encodeLock, encodeRelease, encodeWithdrawal, NO_DECISION_VENUE } from "../src/presentation.js";
+import { attemptIdOf, demandHash, encodeAcceptance, encodeDemand, encodeLock, encodeRelease, encodeWithdrawal, NO_DECISION_VENUE } from "../src/presentation.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
 import { LocalVenue, VenueError, type Venue } from "../src/venue.js";
 import { KEYS, pub, SECRETS } from "./support.js";
@@ -792,9 +792,11 @@ describe("§C2: a retired operator still answers a repeat, and refuses a new act
       { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
       ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
     );
+    const salt = new Uint8Array(32).fill(0x4e);
     const lock = {
       backing,
-      attemptId: new Uint8Array(32).fill(0x4e),
+      attemptId: attemptIdOf(salt, venue.id, 500n, [KEYS.alice]),
+      salt,
       holder: KEYS.alice,
       beneficiary: KEYS.bob,
       quantity: 10n,
@@ -950,7 +952,8 @@ describe("§C2: what a door asks of a backing it touches, and of one it only rea
       { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
       ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
     );
-    const lock = { backing, attemptId: new Uint8Array(32).fill(0x3a), holder: KEYS.alice, beneficiary: KEYS.bob, quantity: 10n, timeout: 500n, decisionVenue: venue.id, parties: [KEYS.alice], nonce: 0n };
+    const lockSalt = new Uint8Array(32).fill(0x3a);
+    const lock = { backing, attemptId: attemptIdOf(lockSalt, venue.id, 500n, [KEYS.alice]), salt: lockSalt, holder: KEYS.alice, beneficiary: KEYS.bob, quantity: 10n, timeout: 500n, decisionVenue: venue.id, parties: [KEYS.alice], nonce: 0n };
     incumbent.submitLock(lock, ed25519.sign(encodeLock(lock), SECRETS.alice));
     const served = { snapshots: incumbent.snapshot(), commitment: incumbent.commit() };
     other.publish(served.commitment);

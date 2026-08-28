@@ -96,6 +96,7 @@ import {
   commitMessage,
   demandHash,
   legMismatch,
+  NO_ATTEMPT_SALT,
   NO_DECISION_VENUE,
   type LegTerms,
   type AcceptanceOp,
@@ -129,6 +130,7 @@ function lockEntry(op: LockOp, signature: Uint8Array): PublishedOp {
     decisionVenue: op.decisionVenue,
     parties: op.parties,
     nonce: op.nonce,
+    salt: op.salt ?? NO_ATTEMPT_SALT,
     signature,
   };
 }

@@ -9,12 +9,14 @@ import { type OpLogEntry } from "../src/oplog.js";
 import { encodeBurnMessage, encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import { type PublishedOp } from "../src/oplog.js";
 import {
+  attemptIdOf,
   encodeAcceptanceMessage,
   encodeDemandMessage,
   encodeLock,
   encodeLockMessage,
   encodeReleaseMessage,
   encodeWithdrawalMessage,
+  NO_ATTEMPT_SALT,
   NO_DECISION_VENUE,
   signCommit,
   type LockOp,
@@ -210,8 +212,10 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     const claim = demandOp(eur, SECRETS.alice, KEYS.alice, 40n, 0n, 90n, 0n);
     const leg: LockOp = { backing: gold, attemptId: claim.hash, holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout: 8n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: 0n };
     sequencer.submitDemand(claim.op, claim.signature, [signed(leg, encodeLock(leg), SECRETS.alice)]);
-    const attempt = new Uint8Array(32).fill(0x5e);
-    const bundle: LockOp = { backing: gold, attemptId: attempt, holder: KEYS.alice, beneficiary: KEYS.bob, quantity: 10n, timeout: 100n, decisionVenue: venue.id, parties: [KEYS.alice], nonce: 1n };
+    const salt = new Uint8Array(32).fill(0x5e);
+    // A venue-naming attempt is named by its terms, so the id is derived.
+    const attempt = attemptIdOf(salt, venue.id, 100n, [KEYS.alice]);
+    const bundle: LockOp = { backing: gold, attemptId: attempt, salt, holder: KEYS.alice, beneficiary: KEYS.bob, quantity: 10n, timeout: 100n, decisionVenue: venue.id, parties: [KEYS.alice], nonce: 1n };
     sequencer.submitLock(bundle, ed25519.sign(encodeLock(bundle), SECRETS.alice));
     // A committed transfer and burn, for the repeats below.
     const paid = transferOp(eur, SECRETS.carol, KEYS.carol, KEYS.bob, 3n, 0n);
@@ -228,7 +232,8 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     at(() => sequencer.submitBurn({ backing: eur, holder: KEYS.alice, quantity: 1n, nonce: 1n }, ed25519.sign(encodeBurnMessage(eur.name, KEYS.alice, 1n, 1n), SECRETS.alice)));
     const plain = demandOp(gold, SECRETS.alice, KEYS.alice, 5n, 11n, 50n, 2n);
     at(() => sequencer.submitDemand(plain.op, plain.signature));
-    const another: LockOp = { ...bundle, attemptId: new Uint8Array(32).fill(0x5f), nonce: 2n };
+    const otherSalt = new Uint8Array(32).fill(0x5f);
+    const another: LockOp = { ...bundle, salt: otherSalt, attemptId: attemptIdOf(otherSalt, venue.id, 100n, [KEYS.alice]), nonce: 2n };
     at(() => sequencer.submitLock(another, ed25519.sign(encodeLock(another), SECRETS.alice)));
     // The leg's timeout (8) has passed, so a re-prepare is the holder's honest
     // move — refused here by the gap, ahead of the law.
@@ -394,7 +399,7 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     });
     const claim = demandOp(eur, SECRETS.alice, KEYS.alice, 40n, 0n, 90n, 0n);
     const legMessage = encodeLockMessage(gold.name, claim.hash, KEYS.alice, KEYS.backer, 80n, 20n, NO_DECISION_VENUE, [KEYS.alice], 0n);
-    const legOp: PublishedOp = { kind: "lock", attemptId: claim.hash, holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout: 20n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: 0n, signature: ed25519.sign(legMessage, SECRETS.alice) };
+    const legOp: PublishedOp = { kind: "lock", attemptId: claim.hash, holder: KEYS.alice, beneficiary: KEYS.backer, quantity: 80n, timeout: 20n, decisionVenue: NO_DECISION_VENUE, parties: [KEYS.alice], nonce: 0n, salt: NO_ATTEMPT_SALT, signature: ed25519.sign(legMessage, SECRETS.alice) };
     const snapshots = [
       { name: eur.name, opLog: [entry(eur, 0, issueOf(eur)), entry(eur, 1, claim.published)] },
       { name: gold.name, opLog: [entry(gold, 0, issueOf(gold)), entry(gold, 1, legOp)] },

@@ -8,6 +8,7 @@ import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js
 import { opHashOfEntry, type PublishedOp } from "../src/oplog.js";
 import { encodeDemandMessage, encodeReleaseMessage } from "../src/presentation.js";
 import {
+  attemptIdOf,
   demandHash,
   encodeAcceptance,
   encodeDemand,
@@ -18,6 +19,7 @@ import {
   type AcceptanceOp,
   type DemandOp,
   type LockOp,
+  NO_ATTEMPT_SALT,
   NO_DECISION_VENUE,
 } from "../src/presentation.js";
 import { makeBacking } from "../src/backing.js";
@@ -27,7 +29,7 @@ import { signCommitment, stateRoot, type ServedState } from "../src/commitment.j
 import { type OpLogEntry } from "../src/oplog.js";
 import { receiptCovers, signReceipt, type Receipt } from "../src/receipt.js";
 import { Sequencer } from "../src/sequencer.js";
-import { LocalVenue, type Venue } from "../src/venue.js";
+import { LocalVenue, UNNAMED_VENUE, type Venue } from "../src/venue.js";
 import { KEYS, makeTransparentBacking, pub, SECRETS } from "./support.js";
 
 // What can be proven, against whom, without trusting anybody.
@@ -418,7 +420,8 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
   // commit is witnessed at or before it — witnessing is shared, so the pair
   // cannot happen honestly, whichever order the operator claims.
 
-  const ATTEMPT = new Uint8Array(32).fill(0x5a);
+  const ATTEMPT_SALT = new Uint8Array(32).fill(0x5a);
+  const ATTEMPT = attemptIdOf(ATTEMPT_SALT, UNNAMED_VENUE, 40n, [KEYS.alice]);
 
   function world() {
     const venue = new LocalVenue();
@@ -438,9 +441,10 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
   }
 
   function lockedBy(f: ReturnType<typeof world>, over: Partial<LockOp> = {}) {
-    const lock: LockOp = {
+    const base: LockOp = {
       backing: f.backing,
       attemptId: ATTEMPT,
+      salt: ATTEMPT_SALT,
       holder: KEYS.alice,
       beneficiary: KEYS.bob,
       quantity: 90n,
@@ -450,6 +454,11 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
       nonce: 0n,
       ...over,
     };
+    // The id follows the terms unless a caller names one deliberately.
+    const lock: LockOp =
+      over.attemptId === undefined
+        ? { ...base, attemptId: attemptIdOf(base.salt ?? ATTEMPT_SALT, base.decisionVenue, base.timeout, base.parties) }
+        : base;
     return { lock, signature: ed25519.sign(encodeLock(lock), SECRETS.alice) };
   }
 
@@ -519,6 +528,7 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
       decisionVenue: lock.decisionVenue,
       parties: lock.parties,
       nonce: lock.nonce,
+      salt: lock.salt ?? NO_ATTEMPT_SALT,
       signature,
     };
     f.venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
@@ -553,7 +563,8 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
     // view the whole log is built by hand: the reader's behaviour is the claim.
     const lock: LockOp = {
       backing,
-      attemptId: ATTEMPT,
+      attemptId: attemptIdOf(ATTEMPT_SALT, venue.id, 40n, [KEYS.alice]),
+      salt: ATTEMPT_SALT,
       holder: KEYS.alice,
       beneficiary: KEYS.bob,
       quantity: 90n,
@@ -574,6 +585,7 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
       decisionVenue: lock.decisionVenue,
       parties: lock.parties,
       nonce: 0n,
+      salt: lock.salt ?? NO_ATTEMPT_SALT,
       signature: ed25519.sign(encodeLock(lock), SECRETS.alice),
     };
     venue.advance(50n);
@@ -639,10 +651,12 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
 
   it("the first proven withdrawal is the one named", () => {
     const f = world();
-    const second = new Uint8Array(32).fill(0x6b);
+    // A second attempt is a second SALT: same terms otherwise, different id.
+    const secondSalt = new Uint8Array(32).fill(0x6b);
+    const second = attemptIdOf(secondSalt, f.venue.id, 40n, [KEYS.alice]);
     const { lock, signature } = lockedBy(f);
     f.sequencer.submitLock(lock, signature);
-    const other: LockOp = { ...lock, attemptId: second, quantity: 50n, nonce: 1n };
+    const other: LockOp = { ...lock, attemptId: second, salt: secondSalt, quantity: 50n, nonce: 1n };
     f.sequencer.submitLock(other, ed25519.sign(encodeLock(other), SECRETS.alice));
     f.venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
     f.venue.publishCommit(signCommit(SECRETS.alice, second));
@@ -684,7 +698,8 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
     );
     const lock: LockOp = {
       backing,
-      attemptId: ATTEMPT,
+      attemptId: attemptIdOf(ATTEMPT_SALT, venue.id, 40n, [KEYS.alice]),
+      salt: ATTEMPT_SALT,
       holder: KEYS.alice,
       beneficiary: KEYS.bob,
       quantity: 90n,
@@ -914,6 +929,7 @@ describe("a set settled in part is the operator's fault, read across one commitm
       decisionVenue: decoy.decisionVenue,
       parties: decoy.parties,
       nonce: decoy.nonce,
+      salt: decoy.salt ?? NO_ATTEMPT_SALT,
       signature: ed25519.sign(encodeLock(decoy), SECRETS.mallory),
     };
     const rOp = { backing: f.eur, demandHash: hash, holder: KEYS.mallory, nonce: decoy.nonce + 1n };
@@ -1111,6 +1127,7 @@ describe("a set settled in part is the operator's fault, read across one commitm
       decisionVenue: NO_DECISION_VENUE,
       parties: [KEYS.backer],
       nonce: wNonce + 1n,
+      salt: NO_ATTEMPT_SALT,
       signature: ed25519.sign(encodeLock(decoyOp), SECRETS.backer),
     };
     const rNonce = wNonce + 2n;

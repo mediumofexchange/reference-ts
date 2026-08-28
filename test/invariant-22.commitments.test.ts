@@ -10,7 +10,7 @@ import {
   type Commitment,
 } from "../src/commitment.js";
 import { encodeIssuance } from "../src/messages.js";
-import { countersignCommit, encodeLock, signCommit, type LockOp } from "../src/presentation.js";
+import { attemptIdOf, countersignCommit, encodeLock, signCommit, type LockOp } from "../src/presentation.js";
 import { Sequencer } from "../src/sequencer.js";
 import { compareBytes, EncodingError } from "../src/bytes.js";
 import { stateProvesCommitment } from "../src/commitment.js";
@@ -394,11 +394,14 @@ describe("invariant 22: the root binds WHICH object settled an attempt", () => {
       const issue = { backing, recipient: KEYS[who], quantity: 100n, nonce: BigInt(who === "alice" ? 0 : 1) };
       sequencer.submitIssue(issue, ed25519.sign(encodeIssuance(issue), SECRETS.backer));
     }
-    const attempt = new Uint8Array(32).fill(0x77);
+    const salt = new Uint8Array(32).fill(0x77);
     const both = [KEYS.alice, KEYS.bob].sort(compareBytes);
+    // One exchange, so one party set and one id — the terms are the id now.
+    const attempt = attemptIdOf(salt, venue.id, 50n, both);
     const lockOp = (who: "alice" | "bob", quantity: bigint, parties: Uint8Array[]): LockOp => ({
       backing,
-      attemptId: attempt,
+      attemptId: attemptIdOf(salt, venue.id, 50n, parties),
+      salt,
       holder: KEYS[who],
       beneficiary: KEYS.carol,
       quantity,

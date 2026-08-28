@@ -6,6 +6,7 @@ import { replayLog } from "../src/ledger.js";
 import { decodePublishedOp, encodePublishedOp, type PublishedOp } from "../src/oplog.js";
 import { encodeIssuanceMessage } from "../src/messages.js";
 import {
+  attemptIdOf,
   commitSatisfies,
   countersignCommit,
   decodeCommit,
@@ -17,7 +18,7 @@ import {
   type LockOp,
 } from "../src/presentation.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
-import { LocalVenue } from "../src/venue.js";
+import { LocalVenue, UNNAMED_VENUE } from "../src/venue.js";
 import { KEYS, SECRETS } from "./support.js";
 
 // §C1's swap: "The n-party atomic exchange is first-class, and the paper quietly
@@ -40,7 +41,14 @@ import { KEYS, SECRETS } from "./support.js";
 // the one that settles on fewer signatures.
 
 const TIMEOUT = 50n;
-const ATTEMPT = new Uint8Array(32).fill(0x51);
+// The id is the attempt's terms, so it is per PARTY SET: an exchange among two
+// and an exchange among three are different attempts even on one salt, which is
+// what makes agreeing the terms the same act as agreeing the id.
+const ATTEMPT_SALT = new Uint8Array(32).fill(0x51);
+const attemptFor = (parties: readonly Uint8Array[]) =>
+  attemptIdOf(ATTEMPT_SALT, UNNAMED_VENUE, TIMEOUT, parties);
+const PAIR = [KEYS.alice, KEYS.bob].sort(compareBytes);
+const ATTEMPT = attemptFor(PAIR);
 
 /** Two backings at two operators, one venue. Alice holds EUR, Bob holds GOLD. */
 function setup() {
@@ -81,11 +89,14 @@ function lock(
   beneficiary: Uint8Array,
   quantity: bigint,
   parties: Uint8Array[],
-  attempt = ATTEMPT,
+  salt = ATTEMPT_SALT,
 ) {
   const op: LockOp = {
     backing,
-    attemptId: attempt,
+    // One exchange, one id: every participant hashes the same venue, timeout and
+    // party set, so agreeing the terms IS agreeing the id.
+    attemptId: attemptIdOf(salt, venue.id, TIMEOUT, parties),
+    salt,
     holder: KEYS[holder],
     beneficiary,
     quantity,
@@ -159,16 +170,19 @@ describe("§C1: a ring of three, and what the object tolerates", () => {
       );
     }
     const parties = sorted(KEYS.alice, KEYS.bob, KEYS.carol);
+    // Three parties are a different attempt from two, on the same salt: the id
+    // is the terms, and the party set is one of them.
+    const ring = attemptFor(parties);
     for (const [who, backing, to] of holders) lock(sequencer, backing, venue, who, to, 10n, parties);
 
-    const twoOfThree = countersignCommit(signCommit(SECRETS.alice, ATTEMPT), SECRETS.bob);
+    const twoOfThree = countersignCommit(signCommit(SECRETS.alice, ring), SECRETS.bob);
     venue.advance(2n);
     venue.publishCommit(twoOfThree);
-    for (const [, backing] of holders) expect(() => sequencer.settle(backing, ATTEMPT)).toThrow(SequencerError);
+    for (const [, backing] of holders) expect(() => sequencer.settle(backing, ring)).toThrow(SequencerError);
 
     venue.advance(1n);
     venue.publishCommit(countersignCommit(twoOfThree, SECRETS.carol));
-    for (const [, backing] of holders) sequencer.settle(backing, ATTEMPT);
+    for (const [, backing] of holders) sequencer.settle(backing, ring);
     expect(sequencer.balance(a, KEYS.bob)).toBe(10n);
     expect(sequencer.balance(b, KEYS.carol)).toBe(10n);
     expect(sequencer.balance(c, KEYS.alice)).toBe(10n);
@@ -228,8 +242,10 @@ describe("§C1: a ring of three, and what the object tolerates", () => {
     const g = setup();
     lock(g.one, g.eur, g.venue, "alice", KEYS.bob, 40n, [KEYS.alice]);
     const one = g.one.opLog(g.eur);
-    const rel1 = { backing: g.eur, demandHash: ATTEMPT, holder: KEYS.alice, nonce: g.one.nextNonce(KEYS.alice, g.eur) };
-    const release1 = { ...release, nonce: rel1.nonce, signature: ed25519.sign(encodeRelease(rel1), SECRETS.alice), position: one.length };
+    // Alice alone is her own attempt: a different party set, a different id.
+    const solo = attemptFor([KEYS.alice]);
+    const rel1 = { backing: g.eur, demandHash: solo, holder: KEYS.alice, nonce: g.one.nextNonce(KEYS.alice, g.eur) };
+    const release1 = { ...release, demandHash: solo, nonce: rel1.nonce, signature: ed25519.sign(encodeRelease(rel1), SECRETS.alice), position: one.length };
     expect(replayLog(g.eur, [...one, release1])).toBeDefined();
   });
 

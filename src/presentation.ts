@@ -39,6 +39,7 @@ import { EncodingError, compareBytes, bigintToMinimalBytes, ByteReader, ByteWrit
 import { verifySignatureStrict } from "./keys.js";
 import {
   ACCEPTANCE_CONTEXT,
+  ATTEMPT_CONTEXT,
   DEMAND_CONTEXT,
   RELEASE_CONTEXT,
   WITHDRAWAL_CONTEXT,
@@ -131,6 +132,21 @@ export interface LockOp {
    * units spoken for by an attempt that will either commit or expire.
    */
   readonly attemptId: Uint8Array;
+  /**
+   * The one term of a venue-naming attempt that is not already in this message.
+   *
+   * `attemptId` must equal `attemptIdOf(salt, decisionVenue, timeout, parties)`,
+   * so the id IS the terms and a lock under it cannot carry different ones. Drawn
+   * at random, once per attempt: it is what keeps an id published at a venue from
+   * being a searchable index of who traded with whom, and what keeps a repeat
+   * trade on the same terms from being the same attempt.
+   *
+   * **Omitted is `NO_ATTEMPT_SALT`**, which is what a set leg carries: its
+   * attempt is its demand, whose hash the demand itself fixes, so there is no
+   * salt to draw. A venue-naming lock that omits one fails the equation and is
+   * refused — the field is optional, never the property.
+   */
+  readonly salt?: Uint8Array;
   readonly holder: Uint8Array;
   /** Where these units go if the attempt commits. */
   readonly beneficiary: Uint8Array;
@@ -350,6 +366,48 @@ export function encodeWithdrawalMessage(
   return endOfDemandMessage(WITHDRAWAL_CONTEXT, backingName, demandHash, holder, nonce);
 }
 
+/**
+ * **A venue-naming attempt is named by the hash of its terms**, as invariant 1
+ * names a backing by the hash of (K, P, R, E). The attempt is the other object
+ * several parties must agree on and none may edit alone, and naming it by 32
+ * bytes somebody picked was what let a stranger stand a lock beside yours on
+ * terms of their own — the whole squat family, and the cross-backing theft the
+ * per-backing timeout rule could not reach.
+ *
+ * The terms are the decision venue, the timeout and the party set: everything a
+ * sequencer must read the same way as every other sequencer in the exchange.
+ * Quantity and beneficiary are deliberately NOT here — they differ per lock, and
+ * an id fixing them could not name one attempt across several.
+ *
+ * **The salt is the one term not already in the lock message, and it is a hiding
+ * term rather than decoration.** A commit names its attempt id and nothing else,
+ * so without a salt the id published at a venue is a searchable index of who
+ * traded with whom: a dictionary over a key directory and a timeout window
+ * recovers the party set in seconds. Draw it at random, once per attempt — a
+ * derived salt makes a repeat trade on the same terms the *same* attempt, which
+ * is the id-reuse hazard a random id avoided by default.
+ *
+ * A set leg names no decision venue and takes its demand's own hash, which the
+ * demand already fixes; its salt is zero, so a record has one spelling.
+ */
+export function attemptIdOf(
+  salt: Uint8Array,
+  decisionVenue: Uint8Array,
+  timeout: bigint,
+  parties: readonly Uint8Array[],
+): Uint8Array {
+  const w = new ByteWriter();
+  w.context(ATTEMPT_CONTEXT);
+  w.key32(salt, "attempt salt");
+  w.key32(decisionVenue, "decision venue");
+  w.u64(timeout);
+  writeKeySet(w, parties, "attempt parties");
+  return sha256(w.finish());
+}
+
+/** The salt a set leg carries: none, and one spelling for it. */
+export const NO_ATTEMPT_SALT = new Uint8Array(32);
+
 export function encodeLockMessage(
   backingName: Uint8Array,
   attemptId: Uint8Array,
@@ -360,6 +418,7 @@ export function encodeLockMessage(
   decisionVenue: Uint8Array,
   parties: readonly Uint8Array[],
   nonce: bigint,
+  salt: Uint8Array = NO_ATTEMPT_SALT,
 ): Uint8Array {
   validateQuantity(quantity, "lock quantity");
   const w = new ByteWriter();
@@ -373,6 +432,7 @@ export function encodeLockMessage(
   w.key32(decisionVenue, "decision venue");
   writeKeySet(w, parties, "lock parties");
   w.u64(nonce);
+  w.key32(salt, "attempt salt");
   return w.finish();
 }
 
@@ -519,6 +579,7 @@ export function encodeLock(op: LockOp): Uint8Array {
     op.decisionVenue,
     op.parties,
     op.nonce,
+    op.salt,
   );
 }
 

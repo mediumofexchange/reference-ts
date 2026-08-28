@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { signCommitment, stateProvesCommitment, type Commitment } from "../src/commitment.js";
 import { encodeIssuance, encodeTransfer } from "../src/messages.js";
-import { demandHash, encodeAcceptance, encodeDemand, encodeLock, encodeRelease, encodeWithdrawal } from "../src/presentation.js";
+import { attemptIdOf, demandHash, encodeAcceptance, encodeDemand, encodeLock, encodeRelease, encodeWithdrawal } from "../src/presentation.js";
 import { isSilent, provesHolding, quietFor, redemptionIsOpen, snapshotRedemptions } from "../src/recovery.js";
 import { Sequencer } from "../src/sequencer.js";
 import { LocalVenue, type Venue } from "../src/venue.js";
@@ -281,9 +281,11 @@ describe("§C2b: a proved holding is what the law would let the holder commit", 
     // so redemptionIsOpen said yes to 100 of which 20 were locked, and the fold
     // settled nothing. One subtraction, the law's, for both.
     const { venue, sequencer, backing } = setup();
+    const salt = new Uint8Array(32).fill(0x2c);
     const lock = {
       backing,
-      attemptId: new Uint8Array(32).fill(0x2c),
+      attemptId: attemptIdOf(salt, venue.id, 500n, [KEYS.alice]),
+      salt,
       holder: KEYS.alice,
       beneficiary: KEYS.bob,
       quantity: 20n,
@@ -329,7 +331,8 @@ describe("§C2b: what a proved holding subtracts, and what the fold does with a 
     // redemption for his own 30 in the gap; Alice withdraws her lapsed lock there.
     const issue = { backing, recipient: KEYS.bob, quantity: 30n, nonce: 1n };
     sequencer.submitIssue(issue, ed25519.sign(encodeIssuance(issue), SECRETS.backer));
-    const lock = { backing, attemptId: new Uint8Array(32).fill(0x2d), holder: KEYS.alice, beneficiary: KEYS.bob, quantity: 20n, timeout: 5n, decisionVenue: venue.id, parties: [KEYS.alice], nonce: 0n };
+    const lockSalt = new Uint8Array(32).fill(0x2d);
+    const lock = { backing, attemptId: attemptIdOf(lockSalt, venue.id, 5n, [KEYS.alice]), salt: lockSalt, holder: KEYS.alice, beneficiary: KEYS.bob, quantity: 20n, timeout: 5n, decisionVenue: venue.id, parties: [KEYS.alice], nonce: 0n };
     sequencer.submitLock(lock, ed25519.sign(encodeLock(lock), SECRETS.alice));
     const state = served(sequencer);
     other.publish(state.commitment);

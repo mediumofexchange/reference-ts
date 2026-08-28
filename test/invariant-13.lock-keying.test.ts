@@ -5,6 +5,7 @@ import { compareBytes } from "../src/bytes.js";
 import { LedgerError } from "../src/ledger.js";
 import { encodeIssuanceMessage } from "../src/messages.js";
 import {
+  attemptIdOf,
   countersignCommit,
   demandHash,
   encodeAcceptance,
@@ -19,7 +20,7 @@ import {
   NO_DECISION_VENUE,
 } from "../src/presentation.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
-import { LocalVenue } from "../src/venue.js";
+import { LocalVenue, UNNAMED_VENUE } from "../src/venue.js";
 import { advanceWitnessedIndex, KEYS, SECRETS } from "./support.js";
 
 // **A lock is keyed by the attempt AND the holder whose units it reserves.**
@@ -55,7 +56,10 @@ import { advanceWitnessedIndex, KEYS, SECRETS } from "./support.js";
 
 const TIMEOUT = 50n;
 const DEADLINE = 100n;
-const ATTEMPT = new Uint8Array(32).fill(0xa7);
+// A fixture picks the salt; the id is what the salt and the terms hash to. The
+// default is Alice's solo attempt at TIMEOUT on the unnamed venue.
+const ATTEMPT_SALT = new Uint8Array(32).fill(0xa7);
+const ATTEMPT = attemptIdOf(ATTEMPT_SALT, UNNAMED_VENUE, TIMEOUT, [KEYS.alice]);
 
 /** Parties on the wire are a strictly ascending set (validateKeySet). */
 function keySet(...keys: Uint8Array[]): Uint8Array[] {
@@ -130,26 +134,34 @@ function payoutSetup() {
   return { venue, sequencer, eur, gold };
 }
 
-/** A venue-naming (bundle) lock: settles on a witnessed commit, or times out. */
+/**
+ * A venue-naming (bundle) lock: settles on a witnessed commit, or times out.
+ *
+ * Its id is derived, not chosen — so two holders share an attempt only by
+ * sharing its terms, which for a venue-naming lock means sharing the party set.
+ * That is §C1's exchange, and it is now the only way into one.
+ */
 function bundleLock(
   sequencer: Sequencer,
   backing: Backing,
   venue: LocalVenue,
   holder: keyof typeof SECRETS,
   quantity: bigint,
-  attempt: Uint8Array = ATTEMPT,
+  salt: Uint8Array = ATTEMPT_SALT,
   parties?: Uint8Array[],
 ): LockOp {
   const key = KEYS[holder];
+  const set = parties ?? [key];
   return {
     backing,
-    attemptId: attempt,
+    attemptId: attemptIdOf(salt, venue.id, TIMEOUT, set),
+    salt,
     holder: key,
     beneficiary: KEYS.bob,
     quantity,
     timeout: TIMEOUT,
     decisionVenue: venue.id,
-    parties: parties ?? [key],
+    parties: set,
     nonce: sequencer.nextNonce(key, backing),
   };
 }
@@ -301,18 +313,23 @@ describe("the squat family, ended at the source", () => {
     // under X, lets it expire and withdraws — retiring X for Mallory alone.
     // Keyed by the id alone, that spent X on this backing for everybody.
     const { venue, sequencer, gold } = setup();
-    lock(sequencer, bundleLock(sequencer, gold, venue, "mallory", 1n), "mallory");
+    const hers = bundleLock(sequencer, gold, venue, "mallory", 1n);
+    lock(sequencer, hers, "mallory");
+    // Her attempt is not Alice's to begin with: the party set is in the id, so
+    // a stranger's lock is under a different attempt however she copies the salt.
+    expect(compareBytes(hers.attemptId, ATTEMPT)).not.toBe(0);
     advanceWitnessedIndex(venue, TIMEOUT + 1n);
     const free = {
       backing: gold,
-      demandHash: ATTEMPT,
+      demandHash: hers.attemptId,
       holder: KEYS.mallory,
       nonce: sequencer.nextNonce(KEYS.mallory, gold),
     };
     sequencer.submitWithdrawal(free, ed25519.sign(encodeWithdrawal(free), SECRETS.mallory));
-    // Alice's timeout has to be ahead of the index the clock now stands at.
-    const mine = { ...bundleLock(sequencer, gold, venue, "alice", 40n), timeout: TIMEOUT + 100n };
-    lock(sequencer, mine, "alice");
+    // Alice's own attempt, at a timeout ahead of where the clock now stands.
+    const mine = bundleLock(sequencer, gold, venue, "alice", 40n, ATTEMPT_SALT);
+    const later = { ...mine, timeout: TIMEOUT + 100n };
+    lock(sequencer, { ...later, attemptId: attemptIdOf(ATTEMPT_SALT, venue.id, TIMEOUT + 100n, [KEYS.alice]) }, "alice");
     expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(160n);
   });
 
@@ -344,11 +361,14 @@ describe("§C3's commit, under a key it cannot name", () => {
     // by attempt and parties.
     const { venue, sequencer, gold } = setup();
     const both = keySet(KEYS.alice, KEYS.mallory);
-    lock(sequencer, bundleLock(sequencer, gold, venue, "alice", 40n, ATTEMPT, both), "alice");
-    lock(sequencer, bundleLock(sequencer, gold, venue, "mallory", 10n, ATTEMPT, both), "mallory");
+    // One attempt because one set of TERMS: same salt, same venue, same timeout,
+    // same party set. Sharing an id is now exactly sharing the exchange.
+    const shared = attemptIdOf(ATTEMPT_SALT, venue.id, TIMEOUT, both);
+    lock(sequencer, bundleLock(sequencer, gold, venue, "alice", 40n, ATTEMPT_SALT, both), "alice");
+    lock(sequencer, bundleLock(sequencer, gold, venue, "mallory", 10n, ATTEMPT_SALT, both), "mallory");
     venue.advance(3n);
-    venue.publishCommit(countersignCommit(signCommit(SECRETS.alice, ATTEMPT), SECRETS.mallory));
-    sequencer.settle(gold, ATTEMPT);
+    venue.publishCommit(countersignCommit(signCommit(SECRETS.alice, shared), SECRETS.mallory));
+    sequencer.settle(gold, shared);
     expect(sequencer.balance(gold, KEYS.bob)).toBe(50n);
     expect(sequencer.balance(gold, KEYS.alice)).toBe(160n);
     expect(sequencer.balance(gold, KEYS.mallory)).toBe(190n);
@@ -543,17 +563,16 @@ describe("a release and a withdrawal name the record they end", () => {
   });
 });
 
-describe("the residual: one holder, one hash, two records", () => {
-  it("resolves lock-first, and the demand is reachable at the next nonce", () => {
-    // Nothing stops a holder naming her own demand's hash as an attempt id on
-    // the demanded backing. Refusing it would mean keeping the two law doors
-    // this slice deletes, to guard a property the key already provides against
-    // everyone but yourself. So it is documented rather than refused: the
-    // release ends the lock, and the demand is still there for the next one.
-    // Self-inflicted, deterministic, and no third party is involved.
+describe("the residual this closes: one holder, one hash, two records", () => {
+  it("a venue-naming lock cannot name a demand's hash at all", () => {
+    // The (attempt, holder) slice documented this rather than refusing it:
+    // nothing stopped a holder naming her own demand's hash as her own attempt
+    // id on the demanded backing, so her demand's exits sat behind her lock
+    // until it resolved. Refusing it then would have meant keeping the two law
+    // doors that slice deleted. The id being its terms' hash refuses it for
+    // free — a demand's hash is not H(salt‖venue‖timeout‖parties), and no salt
+    // makes it one short of a preimage. Closed, not documented.
     const { venue, sequencer, eur, gold } = setup();
-    // The lock is filed first and names the hash the demand will have, so the
-    // demand carries the nonce after it.
     const base = sequencer.nextNonce(KEYS.alice, eur);
     const demand: DemandOp = {
       backing: eur,
@@ -563,10 +582,10 @@ describe("the residual: one holder, one hash, two records", () => {
       deadline: DEADLINE,
       nonce: base + 1n,
     };
-    const hash = demandHash(demand);
     const mine: LockOp = {
       backing: eur,
-      attemptId: hash,
+      attemptId: demandHash(demand),
+      salt: ATTEMPT_SALT,
       holder: KEYS.alice,
       beneficiary: KEYS.bob,
       quantity: 5n,
@@ -575,52 +594,15 @@ describe("the residual: one holder, one hash, two records", () => {
       parties: [KEYS.alice],
       nonce: base,
     };
-    lock(sequencer, mine, "alice");
-    const leg: LockOp = {
-      backing: gold,
-      attemptId: hash,
-      holder: KEYS.alice,
-      beneficiary: KEYS.backer,
-      quantity: 80n,
-      timeout: TIMEOUT,
-      decisionVenue: NO_DECISION_VENUE,
-      parties: [KEYS.alice],
-      nonce: sequencer.nextNonce(KEYS.alice, gold),
-    };
-    sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice), [
-      { op: leg, signature: ed25519.sign(encodeLock(leg), SECRETS.alice) },
-    ]);
-    // Her own lock and her own demand both stand under one hash on EUR.
-    expect(sequencer.availableBalance(eur, KEYS.alice)).toBe(155n);
-
-    // Lock-first, so while the lock is live her withdrawal reaches it and is
-    // refused — the demand behind it is unreachable until the term she set.
-    advanceWitnessedIndex(venue, 10n);
-    const free = (nonce: bigint) => ({ backing: eur, demandHash: hash, holder: KEYS.alice, nonce });
-    const early = free(sequencer.nextNonce(KEYS.alice, eur));
-    expect(() =>
-      sequencer.submitWithdrawal(early, ed25519.sign(encodeWithdrawal(early), SECRETS.alice)),
-    ).toThrow(LedgerError);
-
-    // Past the timeout the lock frees, and the demand is still standing.
-    advanceWitnessedIndex(venue, TIMEOUT + 1n);
-    const first = free(sequencer.nextNonce(KEYS.alice, eur));
-    sequencer.submitWithdrawal(first, ed25519.sign(encodeWithdrawal(first), SECRETS.alice));
-    expect(sequencer.availableBalance(eur, KEYS.alice)).toBe(160n);
-
-    // And the next one reaches the demand: nothing is lost, only reordered.
-    const second = free(sequencer.nextNonce(KEYS.alice, eur));
-    const legOut = {
-      backing: gold,
-      demandHash: hash,
-      holder: KEYS.alice,
-      nonce: sequencer.nextNonce(KEYS.alice, gold),
-    };
-    sequencer.submitWithdrawal(second, ed25519.sign(encodeWithdrawal(second), SECRETS.alice), [
-      { op: legOut, signature: ed25519.sign(encodeWithdrawal(legOut), SECRETS.alice) },
-    ]);
-    expect(sequencer.availableBalance(eur, KEYS.alice)).toBe(200n);
+    expect(() => lock(sequencer, mine, "alice")).toThrow(/not the hash of this attempt's terms/);
+    // A SET LEG still names its demand's hash, and that is the same rule rather
+    // than an exception: an attempt's id is its terms, and a set leg's attempt
+    // is its demand, whose hash the demand itself fixes.
+    const p = present(sequencer, eur, gold, 40n);
+    sequencer.submitDemand(p.demand, p.signature, [{ op: p.leg, signature: p.legSignature }]);
+    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(120n);
   });
+
 });
 
 describe("the doors this slice deletes leave the honest path open", () => {
@@ -711,66 +693,31 @@ describe("regression: a leg release ends the set's OWN record, not a decoy under
   });
 });
 
-describe("regression: two disjoint objects under one attempt each settle, and neither freezes", () => {
-  it("the second settlement is not swallowed by the first's receipt", () => {
-    // A commit's receipt was keyed by the attempt alone, so two objects settling
-    // two locks under one attempt collided: the second `settle` was answered with
-    // the first's receipt, applied nothing, and left a lock `committedInTime`
-    // would not let its holder withdraw — frozen (review-settle-receipt-collision).
+describe("one attempt has one object, so a receipt cannot be captured", () => {
+  it("two objects cannot settle two locks under one attempt: the terms are the id", () => {
+    // The (attempt, holder) slice let two DISJOINT party sets stand under one id,
+    // and that was the generator for every receipt defect this file records: a
+    // second settlement swallowed by the first's receipt, a stranger's fresh lock
+    // hiding an honest receipt, and a one-unit decoy settled first capturing it
+    // forever (sec31-q2-receipt-hijack). All three needed locks with different
+    // parties under one attempt. The party set is IN the id now, so an attempt
+    // has one party set, so any object satisfying one of its locks satisfies all
+    // — one attempt, one settling object, and nothing to capture.
     const { venue, sequencer, gold } = setup();
-    lock(sequencer, bundleLock(sequencer, gold, venue, "alice", 40n), "alice");
-    lock(sequencer, bundleLock(sequencer, gold, venue, "mallory", 10n), "mallory");
+    const mine = bundleLock(sequencer, gold, venue, "alice", 40n);
+    lock(sequencer, mine, "alice");
+    // Mallory's own party set is her own attempt, whatever salt she copies.
+    const hers = bundleLock(sequencer, gold, venue, "mallory", 1n);
+    expect(compareBytes(hers.attemptId, mine.attemptId)).not.toBe(0);
+    // And she cannot join Alice's: its terms name only Alice.
+    const intruder = { ...bundleLock(sequencer, gold, venue, "alice", 1n), holder: KEYS.mallory, nonce: sequencer.nextNonce(KEYS.mallory, gold) };
+    expect(() => lock(sequencer, intruder, "mallory")).toThrow(/names its own holder among its parties/);
     venue.advance(3n);
-    venue.publishCommit(signCommit(SECRETS.mallory, ATTEMPT)); // witnessed earlier
-    venue.advance(2n);
-    venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT)); // witnessed later
-    const first = sequencer.settle(gold, ATTEMPT); // earliest object: Mallory's
-    const second = sequencer.settle(gold, ATTEMPT); // Alice's, a distinct object
-    expect(second.position).not.toBe(first.position);
-    expect(sequencer.balance(gold, KEYS.bob)).toBe(50n); // both settled to bob
-    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(160n);
-    expect(sequencer.availableBalance(gold, KEYS.mallory)).toBe(190n);
-  });
-
-  it("and a stranger's fresh lock under a settled attempt cannot hide the receipt", () => {
-    // The release-receipt blockade, resurfaced at `settle`: a stranger locking one
-    // unit under a settled attempt put the honest holder's receipt out of reach
-    // (found regression-reviewing the fixes). Naming the object answers it — the
-    // caller asks about its own record, and no record of anyone else's can shadow
-    // one it names.
-    const { venue, sequencer, gold } = setup();
-    lock(sequencer, bundleLock(sequencer, gold, venue, "alice", 40n), "alice");
-    venue.advance(3n);
-    const object = signCommit(SECRETS.alice, ATTEMPT);
-    venue.publishCommit(object);
-    const mine = sequencer.settle(gold, ATTEMPT);
-    // Mallory's own record under the same attempt, satisfied by no object here.
-    const hers = { ...bundleLock(sequencer, gold, venue, "mallory", 1n), timeout: TIMEOUT + 100n };
-    lock(sequencer, hers, "mallory");
-    expect(sequencer.settle(gold, ATTEMPT, object)).toEqual(mine);
-  });
-
-  it("and a decoy settled first cannot capture the honest party's receipt", () => {
-    // The hijack the attempt-keyed mark allowed: Mallory buys a lock for one unit,
-    // settles her own object FIRST, and every later repeat was answered with her
-    // receipt forever — the honest party's own, which §C2b calls "the only
-    // evidence outside the operator's log", permanently unreachable. Each object
-    // now answers for itself (scratch/sec31-q2-receipt-hijack).
-    const { venue, sequencer, gold } = setup();
-    lock(sequencer, bundleLock(sequencer, gold, venue, "alice", 40n), "alice");
-    lock(sequencer, bundleLock(sequencer, gold, venue, "mallory", 1n), "mallory");
-    venue.advance(2n);
-    const decoy = signCommit(SECRETS.mallory, ATTEMPT);
-    venue.publishCommit(decoy); // witnessed first
-    venue.advance(2n);
-    const honest = signCommit(SECRETS.alice, ATTEMPT);
-    venue.publishCommit(honest);
-    const hers = sequencer.settle(gold, ATTEMPT); // earliest: Mallory's
-    const mine = sequencer.settle(gold, ATTEMPT); // then Alice's
-    expect(mine.opHash).not.toEqual(hers.opHash);
-    // Each party re-obtains its OWN receipt, whichever settled first.
-    expect(sequencer.settle(gold, ATTEMPT, honest)).toEqual(mine);
-    expect(sequencer.settle(gold, ATTEMPT, decoy)).toEqual(hers);
+    venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
+    const first = sequencer.settle(gold, ATTEMPT);
+    expect(sequencer.balance(gold, KEYS.bob)).toBe(40n);
+    // The one object's receipt, re-obtained by naming it.
+    expect(sequencer.settle(gold, ATTEMPT, signCommit(SECRETS.alice, ATTEMPT))).toEqual(first);
   });
 
   it("and an object naming another attempt is refused, not answered", () => {
@@ -786,26 +733,31 @@ describe("regression: two disjoint objects under one attempt each settle, and ne
   });
 });
 
-describe("regression: every venue-naming lock under one attempt carries one timeout", () => {
-  it("a second lock under the attempt with a different timeout is refused", () => {
-    // The deadlock the uniform rule closes: locks dying at different indices
-    // leave a window where the object settles nothing (all-or-nothing across the
-    // match set) and the live lock's holder cannot withdraw either —
-    // committedInTime says "settle it", settle refuses, no exit is open at any
-    // index (review-match-set-not-fixed). Decided with the maintainer 2026-08-28:
-    // one exchange, one clock, one deadline — §C1 reads an exchange "against the
-    // same timeout predicate".
+describe("one attempt carries one timeout, because the timeout is IN the attempt", () => {
+  it("a lock at another timeout is another attempt, not a refusal", () => {
+    // This was a door refusal comparing a new lock's timeout against a standing
+    // sibling's — and it held the property only where two locks sat on ONE
+    // backing, while creating a denial of service of its own, since its predicate
+    // read a record the applicant did not own (a stranger's refunded unit refused
+    // the victim's leg). The id being its terms' hash retires it: a different
+    // timeout is a different attempt, so there is nothing to compare and nobody
+    // to refuse. §C1's "the timeout unlocks everywhere" and §C3 step 4's "one
+    // attempt carries one timeout" are now true by construction, across backings
+    // and operators alike, which the sibling scan could never reach.
     const { venue, sequencer, gold } = setup();
     const both = keySet(KEYS.alice, KEYS.mallory);
-    lock(sequencer, bundleLock(sequencer, gold, venue, "alice", 40n, ATTEMPT, both), "alice");
-    const shorter = { ...bundleLock(sequencer, gold, venue, "mallory", 10n, ATTEMPT, both), timeout: TIMEOUT - 10n };
-    expect(() => lock(sequencer, shorter, "mallory")).toThrow(/one attempt carries one timeout/);
-    // The honest path it leaves open: the same timeout, and the exchange stands.
-    const agreed = bundleLock(sequencer, gold, venue, "mallory", 10n, ATTEMPT, both);
+    const shared = attemptIdOf(ATTEMPT_SALT, venue.id, TIMEOUT, both);
+    lock(sequencer, bundleLock(sequencer, gold, venue, "alice", 40n, ATTEMPT_SALT, both), "alice");
+    // Mallory's shorter timeout: a different id, so it never enters Alice's
+    // match set and cannot strand her half.
+    const shorter = { ...bundleLock(sequencer, gold, venue, "mallory", 10n, ATTEMPT_SALT, both), timeout: TIMEOUT - 10n };
+    expect(() => lock(sequencer, shorter, "mallory")).toThrow(/not the hash of this attempt's terms/);
+    // The honest path: the same terms, and the exchange stands.
+    const agreed = bundleLock(sequencer, gold, venue, "mallory", 10n, ATTEMPT_SALT, both);
     expect(lock(sequencer, agreed, "mallory")).toBeDefined();
     venue.advance(3n);
-    venue.publishCommit(countersignCommit(signCommit(SECRETS.alice, ATTEMPT), SECRETS.mallory));
-    sequencer.settle(gold, ATTEMPT);
+    venue.publishCommit(countersignCommit(signCommit(SECRETS.alice, shared), SECRETS.mallory));
+    sequencer.settle(gold, shared);
     expect(sequencer.balance(gold, KEYS.bob)).toBe(50n);
   });
 
@@ -822,22 +774,26 @@ describe("regression: every venue-naming lock under one attempt carries one time
   });
 });
 
-describe("regression: a set leg sharing an attempt id does not brick a venue-naming lock's commit", () => {
-  it("the venue lock settles and the set leg stays standing", () => {
-    // A set leg's parties are [holder], so any object that holder signs matched
-    // it; the law threw for the whole entry, bricking a genuine venue-naming lock
-    // that shared the attempt id — no exit at any index (review-match-set). A set
-    // leg is excluded from the match set now, not thrown for.
+describe("a set leg and a venue-naming lock cannot share an attempt at all", () => {
+  it("a venue-naming lock under a demand's hash is refused, so the brick is unreachable", () => {
+    // A set leg's parties are [holder], so any object that holder signed matched
+    // it, and the law threw for the whole entry — bricking a genuine venue-naming
+    // lock that shared the attempt id, with no exit at any index
+    // (review-match-set). That fix (exclude a set leg from the match set rather
+    // than throw) stays as the law's guard on an inherited log, but the shape
+    // cannot be built through a door any more: a set leg's id is its demand's
+    // hash, a venue-naming lock's is its terms' hash, and one is not the other
+    // short of a preimage.
     const { venue, sequencer, eur, gold } = setup();
     const p = present(sequencer, eur, gold, 40n);
     sequencer.submitDemand(p.demand, p.signature, [{ op: p.leg, signature: p.legSignature }]);
     const both = keySet(KEYS.alice, KEYS.mallory);
-    lock(sequencer, bundleLock(sequencer, gold, venue, "mallory", 10n, p.hash, both), "mallory");
-    venue.advance(3n);
-    venue.publishCommit(countersignCommit(signCommit(SECRETS.alice, p.hash), SECRETS.mallory));
-    sequencer.settle(gold, p.hash);
-    expect(sequencer.balance(gold, KEYS.bob)).toBe(10n); // Mallory's venue lock settled
-    // Alice's 80-GOLD set leg still stands; her demand is unsettled.
+    const sharing: LockOp = {
+      ...bundleLock(sequencer, gold, venue, "mallory", 10n, ATTEMPT_SALT, both),
+      attemptId: p.hash, // the set leg's attempt, claimed by a venue-naming lock
+    };
+    expect(() => lock(sequencer, sharing, "mallory")).toThrow(/not the hash of this attempt's terms/);
+    // Alice's leg is untouched, and her demand still stands.
     expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(120n);
     expect(sequencer.openDemands(eur)).toHaveLength(1);
   });

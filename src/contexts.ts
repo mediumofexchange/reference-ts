@@ -22,7 +22,11 @@
 //                              (v2 added the record's holder: a lock is keyed
 //                              by (attempt, holder), so the message has to name
 //                              which record it ends and not only its hash)
-//   moe/lock/v1                a holder reserving units for an atomic attempt
+//   moe/lock/v2                a holder reserving units for an atomic attempt
+//                              (v2 added the salt: a venue-naming lock's attempt
+//                              id is the hash of the attempt's terms, and the
+//                              salt is the one term not already in the message)
+//   moe/attempt/v1             the terms an attempt id is the hash of
 //   moe/commit/v1              a holder committing one attempt, at every sequencer
 //   moe/replacement/v1         E's rule naming a successor operator
 //   moe/revocation/v1          K withdrawing its own authority to issue
@@ -40,7 +44,8 @@ export const DEMAND_CONTEXT = tag("moe/demand/v1");
 export const ACCEPTANCE_CONTEXT = tag("moe/acceptance/v1");
 export const RELEASE_CONTEXT = tag("moe/release/v2");
 export const WITHDRAWAL_CONTEXT = tag("moe/withdrawal/v2");
-export const LOCK_CONTEXT = tag("moe/lock/v1");
+export const LOCK_CONTEXT = tag("moe/lock/v2");
+export const ATTEMPT_CONTEXT = tag("moe/attempt/v1");
 export const COMMIT_CONTEXT = tag("moe/commit/v1");
 export const REPLACEMENT_CONTEXT = tag("moe/replacement/v1");
 export const REVOCATION_CONTEXT = tag("moe/revocation/v1");
@@ -68,6 +73,7 @@ const ALL_CONTEXTS = [
   RELEASE_CONTEXT,
   WITHDRAWAL_CONTEXT,
   LOCK_CONTEXT,
+  ATTEMPT_CONTEXT,
   COMMIT_CONTEXT,
   REPLACEMENT_CONTEXT,
   REVOCATION_CONTEXT,
