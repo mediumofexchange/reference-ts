@@ -184,17 +184,17 @@ traversal.
   terms. A venue-naming lock names its own holder among its parties (§C1's "all
   sign"), which bounds what a commit converts: every lock under its attempt whose
   parties it satisfies, settled as one act. **A set leg is never in that match
-  set** — it names no venue — and is excluded rather than thrown for, or one leg
-  bricks every venue-naming lock sharing its id. An attempt id names one attempt
-  on one backing **for its holder**: once their venue-naming lock under it has
-  settled or withdrawn, a retry names a fresh id.
+  set** — it names no venue — and is excluded rather than thrown for. An attempt
+  id names one attempt on one backing **for its holder**: once theirs has settled
+  or withdrawn, a retry names a fresh id.
 - **A venue-naming attempt is named by the hash of its terms** —
   `H(salt ‖ venue ‖ timeout ‖ parties)` (`attemptIdOf`, checked in the law):
   invariant 1's move, applied to the other object parties must agree on and none
   may edit alone. A matching id IS matching terms, so one attempt carries one
   timeout across backings and operators alike, and a stranger's differing terms
-  are a different attempt. The salt is mandatory and random; a set leg is the
-  same rule — its attempt is its demand — and carries none.
+  are a different attempt. Drawing the salt at random is the party's to do; a set
+  leg is the same rule — its attempt is its demand — and carries none, which is
+  the law's.
 - **An entry's identity is what decides its effect**, and one answer serves the
   receipt, the committed root and the rewritten-history comparison
   (`opIdentityOfEntry`): the signed message, plus — for a commit alone — its

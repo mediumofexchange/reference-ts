@@ -356,7 +356,7 @@ describe("§C3: the other doors to the payout, closed", () => {
     expect(f.sequencer.availableBalance(f.gold, KEYS.backer)).toBe(500n);
   });
 
-  it("nobody squats the paying slot: a stranger's lock under the demand's hash reserves only their own units", () => {
+  it("nobody squats the paying slot: a stranger's lock claiming the demand's hash is refused", () => {
     // The slot the acceptance takes is (demand hash, OBLIGOR) — a lock is keyed
     // by (attempt, holder) — so the gate that refused any venue-naming lock
     // under a standing demand's hash is deleted with the squat it guarded
@@ -436,7 +436,7 @@ describe("§C3: set legs come only with their set", () => {
 });
 
 describe("§C3: the paying slot cannot be taken before the demand either", () => {
-  it("a holder's own lock under her predicted hash on the paying backing leaves the backer's answer open", () => {
+  it("a holder cannot claim her own predicted hash on the paying backing, so the answer stays open", () => {
     // The attack this door guarded: a holder who predicted her own next hash
     // locked the paying slot first, filed, and left the backer no way to answer
     // — a dishonour she manufactured. Keyed by (attempt, holder) the slot the
@@ -585,7 +585,7 @@ describe("§C3: every co-signed operation's receipt can be obtained by repeating
 });
 
 describe("§C3: a repeat is a repeat of this request, and it is answered before a door refusal", () => {
-  it("the release repeat is answered after a stranger locks under the settled demand's hash", () => {
+  it("the release repeat is answered, and a stranger cannot claim the settled demand's hash", () => {
     // Found in the audit slice's last regression pass: the "that backing is a
     // leg, not the head" refusal ran before the repeat, so a one-unit squat under
     // a settled hash — free once the set applied, and never retired (no

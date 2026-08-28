@@ -581,7 +581,7 @@ describe("§C3: a lock request left unserved is §C2b's non-service object", () 
     expect(() => unservedRequests(venue, backing, served)).toThrow(VenueError);
   });
 
-  it("a lock under a standing demand's hash is a request like any other, and counts until served", () => {
+  it("a lock claiming a standing demand's hash is no request: the law refuses it, and the fold does not count it", () => {
     // This was the law's squat refusal ("a lock and a demand never share a
     // hash"), and the fold agreed the door had no lawful move. The lock-keying
     // slice deleted the door and made it the holder's own record beside her own

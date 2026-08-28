@@ -6,6 +6,7 @@ import { LedgerError } from "../src/ledger.js";
 import { encodeIssuanceMessage } from "../src/messages.js";
 import {
   attemptIdOf,
+  commitSatisfies,
   countersignCommit,
   demandHash,
   encodeAcceptance,
@@ -792,15 +793,23 @@ describe("regression: a leg release ends the set's OWN record, not a decoy under
 });
 
 describe("one attempt has one object, so a receipt cannot be captured", () => {
-  it("two objects cannot settle two locks under one attempt: the terms are the id", () => {
+  it("many objects can satisfy one attempt, and they all settle the same set", () => {
     // The (attempt, holder) slice let two DISJOINT party sets stand under one id,
     // and that was the generator for every receipt defect this file records: a
     // second settlement swallowed by the first's receipt, a stranger's fresh lock
     // hiding an honest receipt, and a one-unit decoy settled first capturing it
     // forever (sec31-q2-receipt-hijack). All three needed locks with different
-    // parties under one attempt. The party set is IN the id now, so an attempt
-    // has one party set, so any object satisfying one of its locks satisfies all
-    // — one attempt, one settling object, and nothing to capture.
+    // parties under one attempt, and the party set is IN the id now.
+    //
+    // What is NOT true — and the slice's decision entry claimed it before a
+    // review round caught it — is "one attempt, one settling object".
+    // `commitSatisfies` asks that every party be PRESENT among the signatures,
+    // not that the sets be equal, so any superset of signatures satisfies too and
+    // an attempt has unboundedly many satisfying objects. The closure does not
+    // rest on that: every one of them converts the SAME lock set, because the id
+    // fixes the parties and the law converts every lock those parties satisfy.
+    // So the settlement is identical whichever is witnessed first, and there is
+    // no second settlement to swallow a receipt.
     const { venue, sequencer, gold } = setup();
     const mine = bundleLock(sequencer, gold, venue, "alice", 40n);
     lock(sequencer, mine, "alice");
@@ -811,11 +820,23 @@ describe("one attempt has one object, so a receipt cannot be captured", () => {
     const intruder = { ...bundleLock(sequencer, gold, venue, "alice", 1n), holder: KEYS.mallory, nonce: sequencer.nextNonce(KEYS.mallory, gold) };
     expect(() => lock(sequencer, intruder, "mallory")).toThrow(/names its own holder among its parties/);
     venue.advance(3n);
-    venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
-    const first = sequencer.settle(gold, ATTEMPT);
+    // TWO satisfying objects for Alice's one-party attempt: her own, and hers
+    // with a stranger's signature added. Both satisfy [alice]; they are
+    // different operations, with different op hashes.
+    const plain = signCommit(SECRETS.alice, ATTEMPT);
+    const superset = countersignCommit(plain, SECRETS.mallory);
+    expect(commitSatisfies(superset, [KEYS.alice])).toBe(true);
+    venue.publishCommit(superset); // witnessed first
+    venue.advance(1n);
+    venue.publishCommit(plain);
+    const settled = sequencer.settle(gold, ATTEMPT);
+    // One settlement, whichever object carried it: 40 to Bob and no more.
     expect(sequencer.balance(gold, KEYS.bob)).toBe(40n);
-    // The one object's receipt, re-obtained by naming it.
-    expect(sequencer.settle(gold, ATTEMPT, signCommit(SECRETS.alice, ATTEMPT))).toEqual(first);
+    expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(160n);
+    // The settling object's receipt is re-obtainable by naming that object.
+    expect(sequencer.settle(gold, ATTEMPT, superset)).toEqual(settled);
+    // And nothing settles twice.
+    expect(sequencer.balance(gold, KEYS.bob)).toBe(40n);
   });
 
   it("and an object naming another attempt is refused, not answered", () => {

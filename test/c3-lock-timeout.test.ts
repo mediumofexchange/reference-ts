@@ -1120,7 +1120,7 @@ describe("§C3: re-prepare reads the record first, and the window's last index",
     expect(sequencer.availableBalance(gold, KEYS.alice)).toBe(200n);
   });
 
-  it("a slot only its own holder can take: her lock under her predicted hash refuses her leg, and a stranger's refuses nothing", () => {
+  it("her own lock under her predicted hash is refused, and her filing goes through", () => {
     // The door that refused any filing whose hash a lock had predicted — "re-file
     // with a fresh nonce" — is deleted with the squat family: a lock is keyed by
     // (attempt, holder), so only the holder herself can occupy her leg's slot.
@@ -1235,7 +1235,7 @@ describe("§C3: every door is ready, then answers a repeat, then refuses — in 
     expect(sequencer.submitLock(lock, leg.signature)).toEqual(receipt);
   });
 
-  it("a squat the venue freed while the operator was dark does not refuse the filing: the record first", () => {
+  it("a filing across a gap reads the record after adoption, and no squat can stand in its slot", () => {
     const { venue, sequencer, eur, gold } = gapPair();
     const demand: DemandOp = { backing: eur, holder: KEYS.alice, quantity: 40n, instant: 0n, deadline: 300n, nonce: 0n };
     const hash = demandHash(demand);

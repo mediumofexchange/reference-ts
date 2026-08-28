@@ -806,8 +806,10 @@ export function applyEntry(
         // All-or-nothing across the set: excluding a timed-out lock and settling
         // the rest would half-settle a swap, so a dead lock throws the whole
         // entry, and the exit is the withdrawal its own holder takes past the
-        // timeout. (The heterogeneous-timeout deadlock this can still reach is a
-        // separate question — see DECISIONS.)
+        // timeout. Every lock here shares one attempt id, and the id derives
+        // from the timeout, so they are live or dead together — the throw cannot
+        // strand a live lock beside a dead one. That was a real deadlock while
+        // the id said nothing about terms; naming the attempt by them retired it.
         if (clock !== undefined && !lockIsLive(lock, clock)) {
           throw new LedgerError("the commit was witnessed past the lock timeout");
         }

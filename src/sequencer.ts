@@ -784,13 +784,19 @@ export class Sequencer {
     // decoy object first, and every later repeat is answered with the decoy's
     // receipt forever: the honest party's own receipt, which §C2b makes "the only
     // evidence outside the operator's log", becomes permanently unreachable
-    // (scratch/sec31-q2-receipt-hijack). Naming the object answers exactly, and
-    // needs no venue — the object is the caller's own artefact, published at the
-    // venue by §C1 for anyone to hold.
+    // (scratch/sec31-q2-receipt-hijack). Naming the object answers from the
+    // receipt book without the venue — the object is the caller's own artefact,
+    // published at the venue by §C1 for anyone to hold.
     //
     // It selects nothing: which object SETTLES is the record's to say (earliest
     // witnessing, below), never the caller's, or a late republication would
-    // un-commit an attempt.
+    // un-commit an attempt. So naming an object that did NOT settle falls
+    // through to the ordinary path and answers with the settling object's
+    // receipt — there is no other, since that object is the only one applied.
+    // An attempt has many satisfying objects, not one: `commitSatisfies` asks
+    // that each party be present among the signatures, so every superset
+    // satisfies too. They all convert the same lock set, which is why the
+    // settlement is one whichever of them the venue witnessed first.
     if (commit !== undefined) {
       if (compareBytes(commit.attemptId, attemptId) !== 0) {
         throw new SequencerError("that object names another attempt");
