@@ -279,11 +279,11 @@ construction — which is why they are rules here rather than code.
   attempt costs nothing, and an unpredictable one costs nothing either: one
   attempt on one backing carries one timeout, so a stranger who guesses your id
   and locks first fixes yours.
-- **One timeout for the whole attempt, at every operator.** The law holds only
-  the locks it serves to one timeout; a bundle's halves may sit at operators
-  that cannot see each other, and halves dying at different indices half-settle
-  — one leg converted, the other refused. §C3's timeout "unlocks everywhere",
-  singular. Check the counterparty's lock before signing an object.
+- **One timeout for the whole attempt, everywhere.** The law compares only locks
+  under one attempt on ONE BACKING, so a ring or a bundle spread across backings
+  escapes it — even at one operator, which is §C1's own clearing case — and
+  halves dying at different indices half-settle: one leg converted, the other
+  refused. §C3's timeout "unlocks everywhere", singular. Check every lock.
 
 A receipt proves **acceptance, not a holding**: a payee who was paid and paid
 onward still holds the receipt for what they received. Reading it as a holding
