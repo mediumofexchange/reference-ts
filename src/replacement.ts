@@ -296,19 +296,23 @@ export function successionOf(backing: Backing, venue: Venue): Succession[] {
         }
       }
 
+      // At each witnessed index, exactly ONE candidate is considered — the
+      // lesser hash, which the sort put first — and the rest at that index are
+      // not "the later" of anything: that tie resolved at the sort. Letting a
+      // same-index sibling supersede handed the win to the GREATER hash
+      // whenever the winner declared any lead time, and letting one follow a
+      // revocation reset made a revocation lose every tie however its hash
+      // sorted (both found reviewing this slice). Skipped, not broken on: a
+      // candidate at a genuinely later index can still supersede or, after a
+      // revocation, stand fresh.
       let chosen: (typeof witnessed)[number] | undefined;
+      let consideredAt: bigint | undefined;
       for (const candidate of candidates) {
-        if (chosen !== undefined) {
-          // Past the standing candidate's effective index the link has moved
-          // on, and nothing witnessed later reaches it.
-          if (candidate.at >= chosen.replacement.effective) break;
-          // A same-index sibling is not "the later" — that tie resolved at the
-          // sort, and letting the sibling supersede here handed the win to the
-          // GREATER hash whenever the winner declared any lead time (found
-          // reviewing this slice). Skipped, not broken on: a candidate at a
-          // genuinely later index can still supersede.
-          if (candidate.at === chosen.at) continue;
-        }
+        if (consideredAt !== undefined && candidate.at === consideredAt) continue;
+        // Past the standing candidate's effective index the link has moved
+        // on, and nothing witnessed later reaches it.
+        if (chosen !== undefined && candidate.at >= chosen.replacement.effective) break;
+        consideredAt = candidate.at;
         chosen =
           compareBytes(candidate.replacement.successor, incumbent.operator) === 0
             ? undefined
@@ -377,18 +381,30 @@ export function termOf(
   operator: Uint8Array,
   sequence: bigint,
 ): number | undefined {
+  let named = 0;
   for (let i = 0; i < chain.length; i++) {
     const link = chain[i] as Succession;
     if (compareBytes(link.operator, operator) !== 0) continue;
-    // Bounded above only where the term has CLOSED: by the last commitment this
+    named++;
+    // Bounded above where the term has CLOSED: by the last commitment this
     // key had witnessed when its successor took force — a sequence past that
-    // was published after the term ended. The tip is unbounded, deliberately:
-    // in force, there is no excuse, and a state an operator SERVED but never
-    // published must still rank here, or rewriting is free as long as the
-    // rewrite stays unwitnessed. That is the same asymmetry the boundary read
-    // always had; this is it per term instead of per key.
+    // was published after the term ended. The tip of a key's ONLY term is
+    // unbounded, deliberately: in force, there is no excuse, and a state an
+    // operator served but never published must still rank here, or rewriting
+    // is free as long as the rewrite stays unwitnessed. But a re-appointed
+    // key's tip is bounded by what it has had WITNESSED: an unwitnessed
+    // sequence above that is indistinguishable, by the record, from its old
+    // term's dead tail — placed at the tip, an honest operator's pre-handover
+    // serving sorted after its successor's genuinely later state, read as a
+    // shrink, and became a permanent fault it armed by consenting to its own
+    // re-appointment (found reviewing this slice). Ambiguous places nowhere.
     const end = termEnd(chain, i);
-    if (end !== undefined) {
+    // A term whose end precedes its own start is empty — two links seated at
+    // one index, the rule-holder's own degenerate record — and holds nothing.
+    // Skipped before the venue is asked, which also keeps a negative index
+    // (a link seated at genesis) off the Venue interface.
+    if (end !== undefined && end < link.from) continue;
+    if (end !== undefined || named > 1) {
       const last = venue.latestFor(operator, end);
       if (last === undefined || sequence > last.sequence) continue;
     }
@@ -432,6 +448,14 @@ export function termOf(
  * backing's clock alive, and a successor's own commitments inside the lead time
  * do not start it early. Undefined where no such commitment exists, which every
  * caller reads as index zero — never publishing at all must not read as punctual.
+ *
+ * One boundary case is the spec's own strictness, worth knowing: a predecessor's
+ * commitment witnessed exactly AT the effective index belongs to neither term
+ * (§C2 pins the handover to what was witnessed "strictly before" it, and at that
+ * index the party in force is the successor), so a handover at precisely the
+ * predecessor's last-commitment index ages this clock by one commitment. The
+ * rule-holder aging its own backing's clock fires a grade against itself, which
+ * is the collusion case §C2b already declines to distinguish from rescue.
  */
 export function lastCommitmentInForce(
   chain: readonly Succession[],
@@ -442,6 +466,9 @@ export function lastCommitmentInForce(
   for (let i = 0; i < chain.length; i++) {
     const link = chain[i] as Succession;
     const end = termEnd(chain, i, asOf);
+    // An empty term (two links at one index) holds nothing, and the guard is
+    // also what keeps a negative index off the Venue interface.
+    if (end !== undefined && end < link.from) continue;
     const at = venue.witnessedAtFor(link.operator, end);
     // Committed only before it held the role: not this backing's.
     if (at === undefined || at < link.from) continue;
@@ -471,20 +498,9 @@ export function operatorAt(backing: Backing, venue: Venue, index: bigint): Uint8
  * backing, and both counts are the adversary's to grow.
  */
 export function operatorIn(chain: readonly Succession[], index: bigint): Uint8Array {
-  return copyBytes(linkIn(chain, index).operator);
-}
-
-/**
- * The same walk, answering the whole link rather than only the key — because
- * **when** an operator took the role is a fact about it too, and one reader
- * needs it: silence runs from the index a party took the role, never from index
- * zero, or a successor is born already dark (`publishedInGap`). At genesis the
- * link's `from` IS zero, so that is one rule and not a special case.
- */
-export function linkIn(chain: readonly Succession[], index: bigint): Succession {
   let inForce = chain[0] as Succession;
   for (const link of chain) if (link.from <= index) inForce = link;
-  return inForce;
+  return copyBytes(inForce.operator);
 }
 
 /**

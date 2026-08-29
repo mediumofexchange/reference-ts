@@ -8,7 +8,7 @@ import { opHashOfEntry, type OpLogEntry, type PublishedOp } from "../src/oplog.j
 import { encodeDemandMessage } from "../src/presentation.js";
 import { receiptStatus, signReceipt } from "../src/receipt.js";
 import { eraLapsed } from "../src/recovery.js";
-import { replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
+import { replacementHash, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
 import { Sequencer } from "../src/sequencer.js";
 import { LocalVenue } from "../src/venue.js";
 import { KEYS, makeTransparentBacking, pub, SECRETS, advanceWitnessedIndex } from "./support.js";
@@ -331,5 +331,80 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
       15n, // the live era
     );
     expect(isDoublePosition(backing, venue, record, adopted, lie)).toBe(true);
+  });
+});
+
+describe("§C2b: an era begins no earlier than its signer took the role", () => {
+  // §C2 seats a successor before it has committed, so its receipts honestly
+  // say `after = 0` — and both of eraLapsed's arms measured from `after`.
+  // Every heir on a venue older than one duration read lapsed, the handover
+  // arm found the very handover that seated the heir's own predecessor, and a
+  // lapsed era is the excuse the fault pair reads: a punctual heir's two
+  // receipts at one position were unprovable (found reviewing this slice).
+
+  const HEIR2_SECRET = new Uint8Array(32).fill(0x0c);
+  const HEIR2 = pub(HEIR2_SECRET);
+
+  /** A replaceable backing and a venue old enough for `after = 0` to mislead. */
+  function replaceable() {
+    const venue = new LocalVenue();
+    const eur = makeBacking({
+      obligor: KEYS.backer,
+      payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: { setting: "transparent", operator: KEYS.operator, silence: SILENCE, replacementRule: KEYS.backer },
+    });
+    return { venue, eur };
+  }
+
+  it("a punctual heir's first era is live, and its own late one still lapses", () => {
+    const { venue, eur } = replaceable();
+    advanceWitnessedIndex(venue, 5n);
+    venue.publish(signCommitment(SECRETS.operator, 0n, stateRoot([])));
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 8n));
+    advanceWitnessedIndex(venue, 12n);
+    venue.publish(signCommitment(SUCCESSOR_SECRET, 0n, stateRoot([])));
+    advanceWitnessedIndex(venue, 14n);
+    // Seated at 8, committed at 12: four indices of an era, not twelve.
+    expect(eraLapsed(venue, eur, SUCCESSOR, 0n)).toBe(false);
+
+    // And the floor is a floor, not immunity: seated at 8, committing only at
+    // 25 is an era of seventeen against a duration of ten.
+    const late = replaceable();
+    advanceWitnessedIndex(late.venue, 5n);
+    late.venue.publish(signCommitment(SECRETS.operator, 0n, stateRoot([])));
+    late.venue.publishReplacement(late.eur.name, replacementBy(late.eur, SECRETS.backer, SUCCESSOR_SECRET, late.eur.name, 8n));
+    advanceWitnessedIndex(late.venue, 25n);
+    late.venue.publish(signCommitment(SUCCESSOR_SECRET, 0n, stateRoot([])));
+    expect(eraLapsed(late.venue, late.eur, SUCCESSOR, 0n)).toBe(true);
+  });
+
+  it("a second heir's era does not lapse on the handover that seated the first", () => {
+    const { venue, eur } = replaceable();
+    advanceWitnessedIndex(venue, 5n);
+    venue.publish(signCommitment(SECRETS.operator, 0n, stateRoot([])));
+    const first = replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 8n);
+    venue.publishReplacement(eur.name, first);
+    advanceWitnessedIndex(venue, 12n);
+    venue.publish(signCommitment(SUCCESSOR_SECRET, 0n, stateRoot([])));
+    venue.publishReplacement(
+      eur.name,
+      replacementBy(eur, SECRETS.backer, HEIR2_SECRET, replacementHash(eur.name, first), 16n),
+    );
+    advanceWitnessedIndex(venue, 18n);
+    venue.publish(signCommitment(HEIR2_SECRET, 0n, stateRoot([])));
+    // The handover at 8 predates HEIR2's whole tenure; its own era ran 16..18.
+    expect(eraLapsed(venue, eur, HEIR2, 0n)).toBe(false);
+  });
+
+  it("still lapses the era a handover really ended", () => {
+    // The genesis operator signed before ever committing, and a successor took
+    // force before it did: that era genuinely died at the handover, and its
+    // dead tail stays excused.
+    const { venue, eur } = replaceable();
+    advanceWitnessedIndex(venue, 5n);
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 8n));
+    advanceWitnessedIndex(venue, 12n);
+    expect(eraLapsed(venue, eur, KEYS.operator, 0n)).toBe(true);
   });
 });

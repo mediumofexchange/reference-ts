@@ -4,7 +4,7 @@ import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { signCommitment, stateRoot, type ServedState } from "../src/commitment.js";
 import { isRewrittenHistory } from "../src/fault.js";
 import { gapOpen, isOverdue, isSilent } from "../src/recovery.js";
-import { encodeIssuanceMessage } from "../src/messages.js";
+import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import {
   decodeReplacement,
   encodeReplacement,
@@ -332,21 +332,40 @@ describe("§C2b: a seated successor is graded on the backing's clock, not a cloc
   });
 
   it("an heir seated into a silence inherits the remainder, and commits its way out", () => {
-    // The cost §C2b states, and the honest exit beside it: the grade stands
-    // through the handover — no reader can tell a rescuer from a rule-holder
-    // colluding with itself — and the heir's own first commitment is what
-    // closes it.
+    // The cost §C2b states, and the honest exit beside it, WALKED: the grade
+    // stands through the handover — no reader can tell a rescuer from a
+    // rule-holder colluding with itself — and the heir's own commitment is
+    // what closes it, after which its doors serve. The lead time is what the
+    // book moves in; a replacement leaving none is the 35d lockout, and this
+    // is the path §C2 keeps open beside it.
     const venue = new LocalVenue();
     const eur = backingFor(venue);
-    serving(venue, eur);
+    const { state } = serving(venue, eur);
 
     at(venue, 100n);
-    venue.publishReplacement(eur.name, replacementBy(eur, HEIR, 101n, eur.name, SECRETS.backer, HEIR_SECRET));
-    at(venue, 102n);
-    // The predecessor's last commitment was at genesis, so the backing is dark
-    // already, heir or no heir.
+    venue.publishReplacement(eur.name, replacementBy(eur, HEIR, 103n, eur.name, SECRETS.backer, HEIR_SECRET));
+    const heir = new Sequencer(HEIR_SECRET, venue);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
+    at(venue, 101n);
+    heir.takeOver(eur, state);
+    at(venue, 103n);
+    // Seated, and dark: the predecessor's last commitment was at genesis, so
+    // the inherited window is long spent, heir or no heir.
+    expect(operatorAt(eur, venue, 103n)).toEqual(HEIR);
     expect(isSilent(venue, eur)).toBe(true);
     expect(gapOpen(venue, eur)).toBeDefined();
+
+    const committed = heir.commit();
+    expect(committed.snapshots).toHaveLength(1);
+    at(venue, 104n);
+    expect(isSilent(venue, eur)).toBe(false);
+    expect(gapOpen(venue, eur)).toBeUndefined();
+    const move = { backing: eur, from: KEYS.alice, to: KEYS.bob, quantity: 10n, nonce: 0n };
+    const receipt = heir.submitTransfer(
+      move,
+      ed25519.sign(encodeTransferMessage(eur.name, KEYS.alice, KEYS.bob, 10n, 0n), SECRETS.alice),
+    );
+    expect(receipt.position).toBeGreaterThanOrEqual(0n);
   });
 
   it("and does go dark once the duration runs with nothing committed", () => {

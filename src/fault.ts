@@ -314,14 +314,24 @@ export function isRewrittenHistory(
     if (first === undefined || second === undefined) return false;
 
     const chain = successionOf(backing, venue);
-    // **Ranked by TERM, not by key.** Which term a state belongs to is what
-    // orders two of them across a handover — a key ranked at its first link put
-    // a re-appointed operator's second-term state BEHIND its own successor's,
-    // so a shrink read as growth and the fault was unprovable in both argument
-    // orders. Undefined means the state belongs to no term of this backing, and
-    // this file says nothing rather than accusing.
-    const rankA = termOf(chain, venue, a.commitment.operator, first.sequence);
-    const rankB = termOf(chain, venue, b.commitment.operator, second.sequence);
+    // **One signer needs no ranking at all**: a key's own sequence field is its
+    // own assertion of order, so two of its states compare directly, witnessed
+    // or not — which is what keeps its unwitnessed rewrite provable however the
+    // chain grew after it signed. A first draft ranked same-signer pairs
+    // through `termOf` too, and one published replacement then closed the
+    // predecessor's term, made its real rewrite unplaceable, and erased a
+    // provable fault for one free record (found reviewing this slice).
+    //
+    // **Across keys, a state ranks by the term the record places it in**, and
+    // one the record cannot place ranks nowhere and accuses nobody: an honest
+    // operator's served-but-never-published state from before its handover is
+    // indistinguishable, by sequence alone, from a state it signed in a later
+    // term — ranked there, its OLD serving sorted after its successor's
+    // genuinely later state and read as a shrink, a permanent fault the
+    // operator armed by consenting to its own re-appointment (same round).
+    const sameSigner = compareBytes(a.commitment.operator, b.commitment.operator) === 0;
+    const rankA = sameSigner ? 0 : termOf(chain, venue, a.commitment.operator, first.sequence);
+    const rankB = sameSigner ? 0 : termOf(chain, venue, b.commitment.operator, second.sequence);
     if (rankA === undefined || rankB === undefined) return false;
 
     if (rankA === rankB && first.sequence === second.sequence) return false;
