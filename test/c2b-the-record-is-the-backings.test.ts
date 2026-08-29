@@ -475,6 +475,40 @@ describe("§C2: a term of the chain is the unit of obligation and of fault", () 
     expect(isRewrittenHistory(backing, venue, xTail, yState)).toBe(false);
   });
 
+  it("an unwitnessed drop convicts a genesis operator, and nobody once a succession exists", () => {
+    // The uniform policy the regression review forced, pinned with its price.
+    // While the chain is the genesis link alone, nothing this key signed could
+    // belong to a period out of force, so its served-but-unpublished dropped
+    // state places at the tip and the fault fires. Once ANY succession exists,
+    // every key has had a period out of force, and a shared operator's honest
+    // service in it produces signed states that drop this backing — by
+    // sequence alone indistinguishable, so nothing is said. What that costs,
+    // priced in DECISIONS: past the first handover, this pair alone no longer
+    // proves an in-force operator's unwitnessed drop — the witnessed drop and
+    // the non-service grade are the reach there.
+    const { venue, sequencer, backing } = setup();
+    const full = sequencer.commit();
+    const dropped: ServedState = {
+      snapshots: [],
+      commitment: signCommitment(SECRETS.operator, full.commitment.sequence + 1n, stateRoot([])),
+    };
+    expect(isRewrittenHistory(backing, venue, full, dropped)).toBe(true);
+
+    // Out to a throwaway and back: the same two states, and the record can no
+    // longer place the unwitnessed one.
+    const out = replacementBy(backing, THROWAWAY_SECRET, backing.name, 6n);
+    at(venue, 6n);
+    venue.publishReplacement(backing.name, out);
+    at(venue, 9n);
+    venue.publishReplacement(
+      backing.name,
+      replacementBy(backing, SECRETS.operator, replacementHash(backing.name, out), 9n),
+    );
+    at(venue, 12n);
+    expect(operatorAt(backing, venue, 12n)).toEqual(KEYS.operator);
+    expect(isRewrittenHistory(backing, venue, full, dropped)).toBe(false);
+  });
+
   it("a re-appointed key's honest second term accuses nobody either", () => {
     // The honest path beside the launder test: the re-appointed operator
     // re-commits the book WHOLE in its second term, and no pairing of the

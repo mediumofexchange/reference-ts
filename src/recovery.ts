@@ -823,7 +823,6 @@ export function eraLapsed(
     if (!(operator instanceof Uint8Array) || operator.length !== 32) return false;
     if (typeof after !== "bigint" || after < 0n) return false;
     if (!venueIsDeclared(venue, backing)) return false;
-    const next = venue.firstCommitmentFor(operator, after + 1n);
     const chain = successionOf(backing, venue);
     // **The era can begin no earlier than the signer took the role.** §C2 seats
     // a successor before it has committed, so its receipts honestly say
@@ -834,14 +833,24 @@ export function eraLapsed(
     // equivocation was unprovable (found reviewing this slice). The signer's
     // FIRST term, because `after = 0` says only that it had not committed when
     // it signed, and the earliest index it could have signed in force is the
-    // conservative floor — for a key named twice with no commitment anywhere,
-    // that reads toward the excuse, which is this predicate's direction.
+    // conservative floor. That reads toward the excuse for a key the
+    // rule-holder has named twice — a receipt whose `after` predates the
+    // key's second seat may have been signed in either term, and the earlier
+    // one's ending lapses it — which is this predicate's direction, and the
+    // regression review priced it: the excuse holds only while the key stays
+    // dark, and `isSilent` names that state for what it is.
     let from = after;
     for (const link of chain) {
       if (compareBytes(link.operator, operator) !== 0) continue;
       if (link.from > from) from = link.from;
       break;
     }
+    // The era's END is measured from where it BEGAN — the same floor. Keyed on
+    // `after` alone, a commitment the key made before its seat (for anything
+    // else it operates) stood in as "next", both arms went dead, and an era
+    // that genuinely died read as live: the accusing direction (found
+    // regression-reviewing the fix round).
+    const next = venue.firstCommitmentFor(operator, from + 1n);
     // The first force taken after the era began, by anyone else, ends it.
     let handover: bigint | undefined;
     for (const link of chain) {

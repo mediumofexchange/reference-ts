@@ -289,9 +289,18 @@ export function isDoublePosition(
  * `isRewrittenHistory` needs to ORDER two states, so it is one mechanism serving
  * both rather than two. See DECISIONS.md.
  *
- * A state belonging to no term at all — a successor's own commitment inside its
- * lead time, when §C2 forbids it to carry this backing — answers false, which is
- * this file's direction when it cannot tell: say nothing rather than accuse.
+ * A state belonging to no term at all answers false, which is this file's
+ * direction when it cannot tell: say nothing rather than accuse. That covers a
+ * successor's own commitment inside its lead time, when §C2 forbids it to
+ * carry this backing — and, past the first handover, EVERY key's unwitnessed
+ * sequences above its witnessed record, because a shared operator's ordinary
+ * service while out of force produces signed states that drop this backing
+ * honestly, and the record cannot tell those from an in-force key's
+ * unwitnessed drop. So an unwitnessed dropped state proves this fault only
+ * against a never-replaced genesis operator; everywhere else the witnessed
+ * drop and the non-service grade are the reach. Priced in DECISIONS — the
+ * regression review of the fix round is where the two policies this replaced
+ * were found to be one ambiguity treated two ways.
  */
 function committedWhileInForce(
   chain: readonly Succession[],

@@ -374,6 +374,21 @@ function termEnd(chain: readonly Succession[], i: number, bound?: bigint): bigin
  * punctual multi-backing successor's own commitments there are obedience, not a
  * drop. Read as its term's, every one of them manufactured a permanent,
  * stranger-checkable fault proof against an honest heir.
+ *
+ * **An unwitnessed sequence places at the tip only while the chain is the
+ * genesis link alone.** Once ANY succession exists, every key on the record has
+ * had a period out of force — before its seat, after a replacement, between two
+ * namings — and a shared operator's ordinary service in such a period produces
+ * signed states that drop this backing honestly. By sequence alone those are
+ * indistinguishable from an in-force key's unwitnessed drop, so the ambiguous
+ * case places nowhere and accuses nobody. The line is drawn at the CHAIN and
+ * not at the key: a first draft bounded only keys named twice, which made the
+ * policy a key gets purchasable — two records with a zero-width term bought the
+ * bound — and treated one ambiguity two ways (found regression-reviewing this
+ * slice's fix round). What the uniform line costs, priced in DECISIONS: past
+ * the first handover, an in-force operator's UNWITNESSED dropped state is not
+ * provable by this pair alone — the witnessed drop still is, and the
+ * non-service grade still reaches the dropper.
  */
 export function termOf(
   chain: readonly Succession[],
@@ -381,30 +396,24 @@ export function termOf(
   operator: Uint8Array,
   sequence: bigint,
 ): number | undefined {
-  let named = 0;
   for (let i = 0; i < chain.length; i++) {
     const link = chain[i] as Succession;
     if (compareBytes(link.operator, operator) !== 0) continue;
-    named++;
     // Bounded above where the term has CLOSED: by the last commitment this
     // key had witnessed when its successor took force — a sequence past that
-    // was published after the term ended. The tip of a key's ONLY term is
-    // unbounded, deliberately: in force, there is no excuse, and a state an
-    // operator served but never published must still rank here, or rewriting
-    // is free as long as the rewrite stays unwitnessed. But a re-appointed
-    // key's tip is bounded by what it has had WITNESSED: an unwitnessed
-    // sequence above that is indistinguishable, by the record, from its old
-    // term's dead tail — placed at the tip, an honest operator's pre-handover
-    // serving sorted after its successor's genuinely later state, read as a
-    // shrink, and became a permanent fault it armed by consenting to its own
-    // re-appointment (found reviewing this slice). Ambiguous places nowhere.
+    // was published after the term ended. The genesis-only tip is unbounded,
+    // deliberately: no succession exists, so nothing this key signed could
+    // belong to a period out of force, and a state it served but never
+    // published must still place here, or rewriting is free as long as the
+    // rewrite stays unwitnessed. Any longer chain bounds every tip by what its
+    // key has had WITNESSED — the docstring says why the line is the chain's.
     const end = termEnd(chain, i);
     // A term whose end precedes its own start is empty — two links seated at
     // one index, the rule-holder's own degenerate record — and holds nothing.
     // Skipped before the venue is asked, which also keeps a negative index
     // (a link seated at genesis) off the Venue interface.
     if (end !== undefined && end < link.from) continue;
-    if (end !== undefined || named > 1) {
+    if (end !== undefined || chain.length > 1) {
       const last = venue.latestFor(operator, end);
       if (last === undefined || sequence > last.sequence) continue;
     }

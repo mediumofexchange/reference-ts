@@ -397,6 +397,26 @@ describe("§C2b: an era begins no earlier than its signer took the role", () => 
     expect(eraLapsed(venue, eur, HEIR2, 0n)).toBe(false);
   });
 
+  it("a pre-seat commitment for something else does not stand in for the era's end", () => {
+    // The era's end is measured from where it BEGAN. Keyed on `after` alone, a
+    // commitment the heir's key made BEFORE its seat — ordinary service for
+    // anything else it operates — stood in as "next", both arms went dead, and
+    // an era that genuinely died read as live: the heir's dead tail then read
+    // contradicted, which is the accusing direction (found regression-reviewing
+    // the fix round).
+    const { venue, eur } = replaceable();
+    advanceWitnessedIndex(venue, 3n);
+    venue.publish(signCommitment(SUCCESSOR_SECRET, 0n, stateRoot([])));
+    advanceWitnessedIndex(venue, 5n);
+    venue.publish(signCommitment(SECRETS.operator, 0n, stateRoot([])));
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 8n));
+    advanceWitnessedIndex(venue, 25n);
+    venue.publish(signCommitment(SUCCESSOR_SECRET, 1n, stateRoot([])));
+    // Seated at 8, first commitment as operator of record at 25, duration 10:
+    // the era died, alien commitment at 3 or none.
+    expect(eraLapsed(venue, eur, SUCCESSOR, 0n)).toBe(true);
+  });
+
   it("still lapses the era a handover really ended", () => {
     // The genesis operator signed before ever committing, and a successor took
     // force before it did: that era genuinely died at the handover, and its
