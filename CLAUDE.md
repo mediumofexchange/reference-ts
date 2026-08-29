@@ -384,6 +384,12 @@ for speed anywhere else; this is a reference implementation, not a product.
   simplicity, security, practicality, and whether it consolidates with a mechanism
   that already exists. Decided 2026-08-29, after a slice whose shape was chosen
   solo and whose review round then found the shape itself unbuildable.
+  **One angle inventories what the mechanism being REPLACED was silently
+  guaranteeing**, and it is not optional. The first panel run under this rule
+  chose a sound mechanism and shipped four blocking defects, every one of them a
+  reader that had quietly depended on the old rule's incidental promise. Four
+  angles argued about the new mechanism and none asked what the old one was
+  holding up.
 - **Tests first, named for invariants.** Test files follow
   `invariant-07.issuance-paths.test.ts`. Each test carries a one-line
   plain-language statement of what it checks. the maintainer reviews the tests; the
@@ -392,6 +398,16 @@ for speed anywhere else; this is a reference implementation, not a product.
   exploit, and the fix by that same script failing to exploit it. An argument
   that code is wrong is a hypothesis; only a run settles it. Scratch scripts are
   gitignored `.mjs` files in `scratch/`.
+- **A fix is a change, and gets everything a change gets.** Its own review
+  round, and a panel where it turns on a design decision rather than a typo —
+  not an exemption because it is small, urgent, or in code just reasoned about.
+  On 2026-08-29 three fixes were made in one day, each confidently, each about
+  something just thought through, and all three were wrong: one patched
+  downstream of a circularity, one used a fallback where the rule needed a
+  maximum and touched one reader of three, and its replacement opened a remote
+  cancellation of the only remedy holders have against a dark operator. Every
+  one was caught by a reviewer rather than its author. Fixes are where an
+  author's confidence is least earned, so they get MORE scrutiny, not less.
 - **Regression-review the fixes.** After fixing review findings, review the
   fixes themselves. Every round so far has found a real bug there, and the
   recurring shape is a fix that bounded one input and left the other open.
