@@ -4,12 +4,14 @@
 // DECISIONS.md is an index precisely so that nobody has to read the whole log.
 // Both drifted once; prose alone did not hold them, so this does.
 //
-// If a check here fails, the fix is almost never to raise the limit. It is to
-// move the reasoning into decisions/ and leave the rule behind.
+// If a check here fails, the fix is not to raise the limit. It is to move the
+// reasoning into decisions/ and leave the rule behind. 500 is the ceiling the
+// maintainer set on 2026-08-29, having already moved it once from 420. It is a
+// limit rather than a target, and it does not move again without them.
 
 import { readFileSync, readdirSync } from "node:fs";
 
-const CLAUDE_MD_MAX_LINES = 420;
+const CLAUDE_MD_MAX_LINES = 500;
 
 const problems = [];
 const fail = (msg) => problems.push(msg);
@@ -30,7 +32,8 @@ if (claudeLines > CLAUDE_MD_MAX_LINES) {
   fail(
     `CLAUDE.md is ${claudeLines} lines, over the ${CLAUDE_MD_MAX_LINES}-line budget.\n` +
       `      It is read into every session. Move the reasoning to a decisions/ entry\n` +
-      `      and leave the rule, rather than raising the budget.`,
+      `      and leave the rule. The budget is the maintainer's ceiling, not a\n` +
+      `      number to raise.`,
   );
 }
 
