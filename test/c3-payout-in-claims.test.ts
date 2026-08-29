@@ -13,6 +13,7 @@ import {
   type AcceptanceOp,
   type DemandOp,
   type LockOp,
+  NO_ATTEMPT_SALT,
   NO_DECISION_VENUE,
 } from "../src/presentation.js";
 import { dishonourOf, payoutOf } from "../src/presentability.js";
@@ -129,8 +130,10 @@ function accept(
 
 /** The holder's release of the set: the demand and the payout, one act, one signer. */
 function release(f: ReturnType<typeof setup>, hash: Uint8Array, withPayout = true) {
-  const head = { backing: f.eur, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
-  const pay = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
+  const head = { backing: f.eur, demandHash: hash, holder: KEYS.alice, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
+  // The payout leg names the BACKER's record — the paying lock is the obligor's
+  // own units — while Alice signs: the one record whose holder is not its converter.
+  const pay = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
   return f.sequencer.submitRelease(
     head,
     ed25519.sign(encodeRelease(head), SECRETS.alice),
@@ -198,7 +201,7 @@ describe("§C3: the backer cannot take the set and not pay, and the holder canno
     const f = setup();
     const { hash } = file(f, 40n);
     accept(f, hash, 40n);
-    const pay = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
+    const pay = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
     expect(() =>
       f.sequencer.submitRelease(pay, ed25519.sign(encodeRelease(pay), SECRETS.alice)),
     ).toThrow(/leg of this demand/);
@@ -210,10 +213,10 @@ describe("§C3: the backer cannot take the set and not pay, and the holder canno
     const { hash } = file(f, 40n);
     accept(f, hash, 40n);
     f.venue.advance(95n);
-    const early = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
+    const early = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
     expect(() => f.sequencer.submitWithdrawal(early, ed25519.sign(encodeWithdrawal(early), SECRETS.backer))).toThrow(/expired/);
     f.venue.advance(1n);
-    const back = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
+    const back = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
     f.sequencer.submitWithdrawal(back, ed25519.sign(encodeWithdrawal(back), SECRETS.backer));
     expect(f.sequencer.availableBalance(f.gold, KEYS.backer)).toBe(500n);
     // The demand still stands for the holder to withdraw: the answer lapsed, the claims did not move.
@@ -348,30 +351,46 @@ describe("§C3: the other doors to the payout, closed", () => {
     expect(replayLog(f.gold, [...f.sequencer.opLog(f.gold), { ...bare, position: f.sequencer.opLog(f.gold).length }])).toBeUndefined();
     // And the backer's own exit is untouched by that object: past the timeout it withdraws.
     f.venue.advance(94n);
-    const back = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
+    const back = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
     f.sequencer.submitWithdrawal(back, ed25519.sign(encodeWithdrawal(back), SECRETS.backer));
     expect(f.sequencer.availableBalance(f.gold, KEYS.backer)).toBe(500n);
   });
 
-  it("nobody squats the paying slot: a lock naming a venue under a standing demand's hash is refused", () => {
+  it("nobody squats the paying slot: a stranger's lock claiming the demand's hash is refused", () => {
+    // The slot the acceptance takes is (demand hash, OBLIGOR) — a lock is keyed
+    // by (attempt, holder) — so the gate that refused any venue-naming lock
+    // under a standing demand's hash is deleted with the squat it guarded
+    // against: a stranger who predicts the hash reserves nothing the answer
+    // needs. The one party who can occupy the paying slot is the backer itself,
+    // and the law's own key-collision refusal reads that back to it — its lock,
+    // its withdrawal, its problem (the residual family, invariant-13.lock-keying).
     const f = setup();
     const { hash } = file(f, 40n);
+    const n = f.sequencer.nextNonce(KEYS.backer, f.gold);
+    f.sequencer.submitIssue(
+      { backing: f.gold, recipient: KEYS.mallory, quantity: 1n, nonce: n },
+      ed25519.sign(encodeIssuanceMessage(f.gold.name, KEYS.mallory, 1n, n), SECRETS.backer),
+    );
     const squat: LockOp = {
       backing: f.gold,
       attemptId: hash,
-      holder: KEYS.backer,
-      beneficiary: KEYS.backer,
+      holder: KEYS.mallory,
+      beneficiary: KEYS.mallory,
       quantity: 1n,
       timeout: 10_000n,
       decisionVenue: f.venue.id,
-      parties: [KEYS.backer],
-      nonce: f.sequencer.nextNonce(KEYS.backer, f.gold),
+      parties: [KEYS.mallory],
+      nonce: f.sequencer.nextNonce(KEYS.mallory, f.gold),
     };
-    expect(() => f.sequencer.submitLock(squat, ed25519.sign(encodeLock(squat), SECRETS.backer))).toThrow(
-      /standing demand/,
-    );
+    // She cannot even build it: a venue-naming lock's id is its own terms' hash,
+    // and a demand's hash is not one. The paying slot was already hers to miss —
+    // it is keyed to the OBLIGOR — and now the id refuses her one step earlier.
+    expect(() =>
+      f.sequencer.submitLock(squat, ed25519.sign(encodeLock(squat), SECRETS.mallory)),
+    ).toThrow(/not the hash of this attempt's terms/);
     accept(f, hash, 40n);
     expect(f.sequencer.availableBalance(f.gold, KEYS.backer)).toBe(420n);
+    expect(f.sequencer.availableBalance(f.gold, KEYS.mallory)).toBe(1n);
   });
 
   it("in a gap the head's release and the paying lock's release are both refused, and the verifier agrees", () => {
@@ -381,10 +400,10 @@ describe("§C3: the other doors to the payout, closed", () => {
     const commitment = f.sequencer.commit();
     const served = { snapshots: f.sequencer.snapshot(), commitment };
     f.venue.advance(30n);
-    const head = { backing: f.eur, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
-    f.venue.publishOp(f.eur.name, { kind: "release", demandHash: hash, nonce: head.nonce, signature: ed25519.sign(encodeRelease(head), SECRETS.alice) });
-    const pay = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
-    f.venue.publishOp(f.gold.name, { kind: "release", demandHash: hash, nonce: pay.nonce, signature: ed25519.sign(encodeRelease(pay), SECRETS.alice) });
+    const head = { backing: f.eur, demandHash: hash, holder: KEYS.alice, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
+    f.venue.publishOp(f.eur.name, { kind: "release", demandHash: hash, holder: KEYS.alice, nonce: head.nonce, signature: ed25519.sign(encodeRelease(head), SECRETS.alice) });
+    const pay = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
+    f.venue.publishOp(f.gold.name, { kind: "release", demandHash: hash, holder: KEYS.backer, nonce: pay.nonce, signature: ed25519.sign(encodeRelease(pay), SECRETS.alice) });
     f.venue.advance(1n);
     f.sequencer.commit();
     expect(f.sequencer.openDemands(f.eur)).toHaveLength(1);
@@ -417,10 +436,13 @@ describe("§C3: set legs come only with their set", () => {
 });
 
 describe("§C3: the paying slot cannot be taken before the demand either", () => {
-  it("a demand whose paying slot already holds a lock is refused at filing: re-file with a fresh nonce", () => {
-    // Found regression-reviewing the review: the gate refused a lock under a
-    // STANDING demand's hash, so a holder who predicted her own next hash could
-    // lock the paying slot first, file, and leave the backer no way to answer.
+  it("a holder cannot claim her own predicted hash on the paying backing, so the answer stays open", () => {
+    // The attack this door guarded: a holder who predicted her own next hash
+    // locked the paying slot first, filed, and left the backer no way to answer
+    // — a dishonour she manufactured. Keyed by (attempt, holder) the slot the
+    // acceptance takes is the OBLIGOR's own, so her lock reserves her own unit
+    // and the answer goes through; the filing door that refused her with
+    // "re-file with a fresh nonce" is deleted with the attack.
     const f = setup();
     const demand: DemandOp = {
       backing: f.eur,
@@ -447,11 +469,16 @@ describe("§C3: the paying slot cannot be taken before the demand either", () =>
       parties: [KEYS.alice],
       nonce: f.sequencer.nextNonce(KEYS.alice, f.gold),
     };
-    f.sequencer.submitLock(first, ed25519.sign(encodeLock(first), SECRETS.alice));
-    expect(() => f.sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice))).toThrow(
-      /re-file with a fresh nonce/,
-    );
-    expect(f.sequencer.openDemands(f.eur)).toHaveLength(0);
+    // She cannot take the slot at all: her lock names a venue, so its id must be
+    // its own terms' hash, and the hash she predicted is her demand's. The
+    // manufactured dishonour needed a slot she can no longer occupy.
+    expect(() =>
+      f.sequencer.submitLock(first, ed25519.sign(encodeLock(first), SECRETS.alice)),
+    ).toThrow(/not the hash of this attempt's terms/);
+    f.sequencer.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice));
+    accept(f, hash, 40n);
+    expect(f.sequencer.openDemands(f.eur)[0]?.acceptedDeadline).toBe(90n);
+    expect(f.sequencer.availableBalance(f.gold, KEYS.backer)).toBe(420n);
   });
 });
 
@@ -504,8 +531,8 @@ describe("§C3: what the 2026-08-22 audit found around the paying lock", () => {
     const f = setup();
     const { hash } = file(f, 40n);
     accept(f, hash, 40n);
-    const head = { backing: f.eur, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
-    const pay = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
+    const head = { backing: f.eur, demandHash: hash, holder: KEYS.alice, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
+    const pay = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
     const legs = [{ op: pay, signature: ed25519.sign(encodeRelease(pay), SECRETS.alice) }];
     const signature = ed25519.sign(encodeRelease(head), SECRETS.alice);
     const first = f.sequencer.submitRelease(head, signature, legs);
@@ -516,7 +543,7 @@ describe("§C3: what the 2026-08-22 audit found around the paying lock", () => {
 
     const g = setup();
     const w = file(g, 40n);
-    const out = { backing: g.eur, demandHash: w.hash, nonce: g.sequencer.nextNonce(KEYS.alice, g.eur) };
+    const out = { backing: g.eur, demandHash: w.hash, holder: KEYS.alice, nonce: g.sequencer.nextNonce(KEYS.alice, g.eur) };
     const outSig = ed25519.sign(encodeWithdrawal(out), SECRETS.alice);
     const once = g.sequencer.submitWithdrawal(out, outSig, []);
     expect(g.sequencer.submitWithdrawal(out, outSig, [])).toEqual(once);
@@ -548,7 +575,12 @@ describe("§C3: every co-signed operation's receipt can be obtained by repeating
     };
     const signature = ed25519.sign(encodeLock(lock), SECRETS.backer);
     const receipt = f.sequencer.submitLock(lock, signature);
-    expect(receiptCovers(f.gold.name, { kind: "lock", ...lock, signature } as never, receipt)).toBe(true);
+    // The ENTRY carries the salt as a required field — a set leg's zero — where
+    // the op left it optional: the record has one spelling, asserted like every
+    // other field of the message.
+    expect(
+      receiptCovers(f.gold.name, { kind: "lock", ...lock, salt: NO_ATTEMPT_SALT, signature } as never, receipt),
+    ).toBe(true);
     expect(receipt.operator).toEqual(KEYS.operator);
     // The same bytes again: the same receipt. Fresh bytes: the bare door.
     expect(f.sequencer.submitLock(lock, signature)).toEqual(receipt);
@@ -558,7 +590,7 @@ describe("§C3: every co-signed operation's receipt can be obtained by repeating
 });
 
 describe("§C3: a repeat is a repeat of this request, and it is answered before a door refusal", () => {
-  it("the release repeat is answered after a stranger locks under the settled demand's hash", () => {
+  it("the release repeat is answered, and a stranger cannot claim the settled demand's hash", () => {
     // Found in the audit slice's last regression pass: the "that backing is a
     // leg, not the head" refusal ran before the repeat, so a one-unit squat under
     // a settled hash — free once the set applied, and never retired (no
@@ -567,8 +599,8 @@ describe("§C3: a repeat is a repeat of this request, and it is answered before 
     const f = setup();
     const { hash } = file(f, 40n);
     accept(f, hash, 40n);
-    const head = { backing: f.eur, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
-    const pay = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
+    const head = { backing: f.eur, demandHash: hash, holder: KEYS.alice, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
+    const pay = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
     const legs = [{ op: pay, signature: ed25519.sign(encodeRelease(pay), SECRETS.alice) }];
     const signature = ed25519.sign(encodeRelease(head), SECRETS.alice);
     const receipt = f.sequencer.submitRelease(head, signature, legs);
@@ -576,7 +608,13 @@ describe("§C3: a repeat is a repeat of this request, and it is answered before 
     const n = f.sequencer.nextNonce(KEYS.backer, f.eur);
     f.sequencer.submitIssue({ backing: f.eur, recipient: KEYS.mallory, quantity: 1n, nonce: n }, ed25519.sign(encodeIssuanceMessage(f.eur.name, KEYS.mallory, 1n, n), SECRETS.backer));
     const squat: LockOp = { backing: f.eur, attemptId: hash, holder: KEYS.mallory, beneficiary: KEYS.mallory, quantity: 1n, timeout: 9000n, decisionVenue: f.venue.id, parties: [KEYS.mallory], nonce: 0n };
-    f.sequencer.submitLock(squat, ed25519.sign(encodeLock(squat), SECRETS.mallory));
+    // The squat that made the receipt unobtainable cannot be built any more: a
+    // venue-naming lock's id is its own terms' hash. The repeat is answered
+    // either way, which is what this test is for — the ordering it pins outlives
+    // the shape that exposed it.
+    expect(() =>
+      f.sequencer.submitLock(squat, ed25519.sign(encodeLock(squat), SECRETS.mallory)),
+    ).toThrow(/not the hash of this attempt's terms/);
     expect(f.sequencer.submitRelease(head, signature, legs)).toEqual(receipt);
   });
 
@@ -653,6 +691,7 @@ describe("§C3: dishonour where P pays in claims — the branch where no accepta
       decisionVenue: base.decisionVenue,
       parties: base.parties,
       nonce: base.nonce,
+      salt: base.salt ?? NO_ATTEMPT_SALT,
       signature: ed25519.sign(encodeLock(base), SECRETS.backer),
     };
   };
@@ -770,6 +809,7 @@ describe("§C3: dishonour where P pays in claims — the branch where no accepta
       decisionVenue: NO_DECISION_VENUE,
       parties: [KEYS.alice],
       nonce: 1n,
+      salt: NO_ATTEMPT_SALT,
       signature: ed25519.sign(encodeLock(shortLock), SECRETS.backer),
     };
     const answer = { backing: f.eur, demandHash: hash, instant: 0n, deadline: 90n, nonce: 1n };

@@ -8,6 +8,7 @@ import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js
 import { opHashOfEntry, type PublishedOp } from "../src/oplog.js";
 import { encodeDemandMessage, encodeReleaseMessage } from "../src/presentation.js";
 import {
+  attemptIdOf,
   demandHash,
   encodeAcceptance,
   encodeDemand,
@@ -18,6 +19,7 @@ import {
   type AcceptanceOp,
   type DemandOp,
   type LockOp,
+  NO_ATTEMPT_SALT,
   NO_DECISION_VENUE,
 } from "../src/presentation.js";
 import { makeBacking } from "../src/backing.js";
@@ -27,7 +29,7 @@ import { signCommitment, stateRoot, type ServedState } from "../src/commitment.j
 import { type OpLogEntry } from "../src/oplog.js";
 import { receiptCovers, signReceipt, type Receipt } from "../src/receipt.js";
 import { Sequencer } from "../src/sequencer.js";
-import { LocalVenue, type Venue } from "../src/venue.js";
+import { LocalVenue, UNNAMED_VENUE, type Venue } from "../src/venue.js";
 import { KEYS, makeTransparentBacking, pub, SECRETS } from "./support.js";
 
 // What can be proven, against whom, without trusting anybody.
@@ -153,10 +155,11 @@ describe("a signer who authorised two operations at one nonce", () => {
     // needs that demand too. Asserting the signer instead would let an accuser
     // choose who is at fault.
     const spend = op("transfer", SECRETS.alice, backing, { to: KEYS.bob, nonce: 0n });
-    const message = encodeReleaseMessage(backing.name, sha256(new Uint8Array(1)), 0n);
+    const message = encodeReleaseMessage(backing.name, sha256(new Uint8Array(1)), KEYS.alice, 0n);
     const release: PublishedOp = {
       kind: "release",
       demandHash: sha256(new Uint8Array(1)),
+      holder: KEYS.alice,
       nonce: 0n,
       signature: ed25519.sign(message, SECRETS.alice),
     };
@@ -417,7 +420,8 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
   // commit is witnessed at or before it — witnessing is shared, so the pair
   // cannot happen honestly, whichever order the operator claims.
 
-  const ATTEMPT = new Uint8Array(32).fill(0x5a);
+  const ATTEMPT_SALT = new Uint8Array(32).fill(0x5a);
+  const ATTEMPT = attemptIdOf(ATTEMPT_SALT, UNNAMED_VENUE, 40n, [KEYS.alice]);
 
   function world() {
     const venue = new LocalVenue();
@@ -437,9 +441,10 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
   }
 
   function lockedBy(f: ReturnType<typeof world>, over: Partial<LockOp> = {}) {
-    const lock: LockOp = {
+    const base: LockOp = {
       backing: f.backing,
       attemptId: ATTEMPT,
+      salt: ATTEMPT_SALT,
       holder: KEYS.alice,
       beneficiary: KEYS.bob,
       quantity: 90n,
@@ -449,16 +454,22 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
       nonce: 0n,
       ...over,
     };
+    // The id follows the terms unless a caller names one deliberately.
+    const lock: LockOp =
+      over.attemptId === undefined
+        ? { ...base, attemptId: attemptIdOf(base.salt ?? ATTEMPT_SALT, base.decisionVenue, base.timeout, base.parties) }
+        : base;
     return { lock, signature: ed25519.sign(encodeLock(lock), SECRETS.alice) };
   }
 
   /** The operator's story: the log with a withdrawal of `attempt` appended, committed. */
   function servedWithWithdrawal(f: ReturnType<typeof world>, log: OpLogEntry[], nonce: bigint): ServedState {
-    const op = { backing: f.backing, demandHash: ATTEMPT, nonce };
+    const op = { backing: f.backing, demandHash: ATTEMPT, holder: KEYS.alice, nonce };
     const entry: OpLogEntry = {
       position: log.length,
       kind: "withdrawal",
       demandHash: ATTEMPT,
+      holder: KEYS.alice,
       nonce,
       signature: ed25519.sign(encodeWithdrawal(op), SECRETS.alice),
     };
@@ -517,6 +528,7 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
       decisionVenue: lock.decisionVenue,
       parties: lock.parties,
       nonce: lock.nonce,
+      salt: lock.salt ?? NO_ATTEMPT_SALT,
       signature,
     };
     f.venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
@@ -551,7 +563,8 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
     // view the whole log is built by hand: the reader's behaviour is the claim.
     const lock: LockOp = {
       backing,
-      attemptId: ATTEMPT,
+      attemptId: attemptIdOf(ATTEMPT_SALT, venue.id, 40n, [KEYS.alice]),
+      salt: ATTEMPT_SALT,
       holder: KEYS.alice,
       beneficiary: KEYS.bob,
       quantity: 90n,
@@ -572,14 +585,16 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
       decisionVenue: lock.decisionVenue,
       parties: lock.parties,
       nonce: 0n,
+      salt: lock.salt ?? NO_ATTEMPT_SALT,
       signature: ed25519.sign(encodeLock(lock), SECRETS.alice),
     };
     venue.advance(50n);
-    const op = { backing, demandHash: ATTEMPT, nonce: 1n };
+    const op = { backing, demandHash: ATTEMPT, holder: KEYS.alice, nonce: 1n };
     const entry: OpLogEntry = {
       position: log.length + 1,
       kind: "withdrawal",
       demandHash: ATTEMPT,
+      holder: KEYS.alice,
       nonce: 1n,
       signature: ed25519.sign(encodeWithdrawal(op), SECRETS.alice),
     };
@@ -599,11 +614,12 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
     f.venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
     f.venue.advance(50n);
     const log = f.sequencer.opLog(f.backing);
-    const op = { backing: f.backing, demandHash: ATTEMPT, nonce: 1n };
+    const op = { backing: f.backing, demandHash: ATTEMPT, holder: KEYS.alice, nonce: 1n };
     const withdrawal: OpLogEntry = {
       position: log.length,
       kind: "withdrawal",
       demandHash: ATTEMPT,
+      holder: KEYS.alice,
       nonce: 1n,
       signature: ed25519.sign(encodeWithdrawal(op), SECRETS.alice),
     };
@@ -611,6 +627,7 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
       position: log.length + 1,
       kind: "withdrawal",
       demandHash: new Uint8Array(32).fill(0x66),
+      holder: new Uint8Array(32).fill(0x66),
       nonce: 9n,
       signature: new Uint8Array(64),
     };
@@ -634,10 +651,12 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
 
   it("the first proven withdrawal is the one named", () => {
     const f = world();
-    const second = new Uint8Array(32).fill(0x6b);
+    // A second attempt is a second SALT: same terms otherwise, different id.
+    const secondSalt = new Uint8Array(32).fill(0x6b);
+    const second = attemptIdOf(secondSalt, f.venue.id, 40n, [KEYS.alice]);
     const { lock, signature } = lockedBy(f);
     f.sequencer.submitLock(lock, signature);
-    const other: LockOp = { ...lock, attemptId: second, quantity: 50n, nonce: 1n };
+    const other: LockOp = { ...lock, attemptId: second, salt: secondSalt, quantity: 50n, nonce: 1n };
     f.sequencer.submitLock(other, ed25519.sign(encodeLock(other), SECRETS.alice));
     f.venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
     f.venue.publishCommit(signCommit(SECRETS.alice, second));
@@ -647,8 +666,9 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
       position,
       kind: "withdrawal",
       demandHash: hash,
+      holder: KEYS.alice,
       nonce,
-      signature: ed25519.sign(encodeWithdrawal({ backing: f.backing, demandHash: hash, nonce }), SECRETS.alice),
+      signature: ed25519.sign(encodeWithdrawal({ backing: f.backing, demandHash: hash, holder: KEYS.alice, nonce }), SECRETS.alice),
     });
     const snapshots = [
       { name: f.backing.name, opLog: [...log, w(second, 2n, log.length), w(ATTEMPT, 3n, log.length + 1)] },
@@ -678,7 +698,8 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
     );
     const lock: LockOp = {
       backing,
-      attemptId: ATTEMPT,
+      attemptId: attemptIdOf(ATTEMPT_SALT, venue.id, 40n, [KEYS.alice]),
+      salt: ATTEMPT_SALT,
       holder: KEYS.alice,
       beneficiary: KEYS.bob,
       quantity: 90n,
@@ -690,11 +711,12 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
     sequencer.submitLock(lock, ed25519.sign(encodeLock(lock), SECRETS.alice));
     venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
     venue.advance(50n);
-    const op = { backing, demandHash: ATTEMPT, nonce: 1n };
+    const op = { backing, demandHash: ATTEMPT, holder: KEYS.alice, nonce: 1n };
     const entry: OpLogEntry = {
       position: sequencer.opLog(backing).length,
       kind: "withdrawal",
       demandHash: ATTEMPT,
+      holder: KEYS.alice,
       nonce: 1n,
       signature: ed25519.sign(encodeWithdrawal(op), SECRETS.alice),
     };
@@ -737,11 +759,12 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
     f.venue.publishCommit(signCommit(SECRETS.alice, demandHash(demand)));
     f.venue.advance(50n);
     const hash = demandHash(demand);
-    const op = { backing: f.backing, demandHash: hash, nonce: 1n };
+    const op = { backing: f.backing, demandHash: hash, holder: KEYS.alice, nonce: 1n };
     const entry: OpLogEntry = {
       position: f.sequencer.opLog(f.backing).length,
       kind: "withdrawal",
       demandHash: hash,
+      holder: KEYS.alice,
       nonce: 1n,
       signature: ed25519.sign(encodeWithdrawal(op), SECRETS.alice),
     };
@@ -826,11 +849,15 @@ describe("a set settled in part is the operator's fault, read across one commitm
 
   function releaseEntry(f: ReturnType<typeof world>, backing: Backing, hash: Uint8Array): OpLogEntry {
     const nonce = f.sequencer.nextNonce(KEYS.alice, backing);
-    const op = { backing, demandHash: hash, nonce };
+    // The record this release ends: Alice's demand on EUR, the backer's paying
+    // lock on GOLD. Alice signs both (§C3: void only on the holder's release).
+    const holder = compareBytes(backing.name, f.gold.name) === 0 ? KEYS.backer : KEYS.alice;
+    const op = { backing, demandHash: hash, holder, nonce };
     return {
       position: f.sequencer.opLog(backing).length,
       kind: "release",
       demandHash: hash,
+      holder,
       nonce,
       signature: ed25519.sign(encodeRelease(op), SECRETS.alice),
     };
@@ -864,11 +891,68 @@ describe("a set settled in part is the operator's fault, read across one commitm
     expect(compareBytes(proven as Uint8Array, f.gold.name)).toBe(0);
   });
 
+  it("a decoy lock and its release under the demand's hash do not pass for the head's release", () => {
+    // The head read asked only "a release under this hash", where its sibling leg
+    // read asks which RECORD was ended. Under the (attempt, holder) key a release
+    // on the demanded backing can end a lock instead of the demand, so a hostile
+    // operator hid a real half-settlement — the payout taken, the demand still
+    // standing — behind a one-unit lock of its own and a release of it, on a log
+    // that still replays. Found regression-reviewing slice 31's fixes; the head
+    // read resolves lock-first now, exactly as the law does.
+    const f = world();
+    const hash = fileAndAccept(f);
+    const n = f.sequencer.nextNonce(KEYS.backer, f.eur);
+    f.sequencer.submitIssue(
+      { backing: f.eur, recipient: KEYS.mallory, quantity: 1n, nonce: n },
+      ed25519.sign(encodeIssuanceMessage(f.eur.name, KEYS.mallory, 1n, n), SECRETS.backer),
+    );
+    const decoy: LockOp = {
+      backing: f.eur,
+      attemptId: hash,
+      holder: KEYS.mallory,
+      beneficiary: KEYS.mallory,
+      quantity: 1n,
+      timeout: 200n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.mallory],
+      nonce: f.sequencer.nextNonce(KEYS.mallory, f.eur),
+    };
+    const base = f.sequencer.opLog(f.eur).length;
+    const decoyLock: OpLogEntry = {
+      position: base,
+      kind: "lock",
+      attemptId: decoy.attemptId,
+      holder: decoy.holder,
+      beneficiary: decoy.beneficiary,
+      quantity: decoy.quantity,
+      timeout: decoy.timeout,
+      decisionVenue: decoy.decisionVenue,
+      parties: decoy.parties,
+      nonce: decoy.nonce,
+      salt: decoy.salt ?? NO_ATTEMPT_SALT,
+      signature: ed25519.sign(encodeLock(decoy), SECRETS.mallory),
+    };
+    const rOp = { backing: f.eur, demandHash: hash, holder: KEYS.mallory, nonce: decoy.nonce + 1n };
+    const decoyRelease: OpLogEntry = {
+      position: base + 1,
+      kind: "release",
+      demandHash: hash,
+      holder: KEYS.mallory,
+      nonce: rOp.nonce,
+      signature: ed25519.sign(encodeRelease(rOp), SECRETS.mallory),
+    };
+    // The leg's accompaniment surrendered; the head demand never released.
+    const served = serveBoth(f, [decoyLock, decoyRelease], [releaseEntry(f, f.gold, hash)]);
+    const proven = settledInPart(f.eur, f.venue, f.terms, served, hash);
+    expect(proven).toBeDefined();
+    expect(compareBytes(proven as Uint8Array, f.gold.name)).toBe(0);
+  });
+
   it("an honest settlement shows both halves and proves nothing", () => {
     const f = world();
     const hash = fileAndAccept(f);
-    const head = { backing: f.eur, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
-    const pay = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
+    const head = { backing: f.eur, demandHash: hash, holder: KEYS.alice, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
+    const pay = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
     f.sequencer.submitRelease(head, ed25519.sign(encodeRelease(head), SECRETS.alice), [
       { op: pay, signature: ed25519.sign(encodeRelease(pay), SECRETS.alice) },
     ]);
@@ -892,7 +976,7 @@ describe("a set settled in part is the operator's fault, read across one commitm
     // Past the lock's own timeout the backer's withdrawal needs nobody's
     // cooperation; the head demand still stands, and nothing settled anywhere.
     f.venue.advance(96n);
-    const op = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
+    const op = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
     f.sequencer.submitWithdrawal(op, ed25519.sign(encodeWithdrawal(op), SECRETS.backer));
     const commitment = f.sequencer.commit();
     const served = { snapshots: f.sequencer.snapshot(), commitment };
@@ -958,11 +1042,12 @@ describe("a set settled in part is the operator's fault, read across one commitm
     };
     sequencer.submitAcceptance(answer, ed25519.sign(encodeAcceptance(answer), SECRETS.backer), []);
     const headNonce = sequencer.nextNonce(KEYS.alice, eur);
-    const headOp = { backing: eur, demandHash: hash, nonce: headNonce };
+    const headOp = { backing: eur, demandHash: hash, holder: KEYS.alice, nonce: headNonce };
     const headRelease: OpLogEntry = {
       position: sequencer.opLog(eur).length,
       kind: "release",
       demandHash: hash,
+      holder: KEYS.alice,
       nonce: headNonce,
       signature: ed25519.sign(encodeRelease(headOp), SECRETS.alice),
     };
@@ -987,11 +1072,12 @@ describe("a set settled in part is the operator's fault, read across one commitm
     const f = world();
     const hash = fileAndAccept(f);
     const wNonce = f.sequencer.nextNonce(KEYS.alice, f.eur);
-    const wOp = { backing: f.eur, demandHash: hash, nonce: wNonce };
+    const wOp = { backing: f.eur, demandHash: hash, holder: KEYS.alice, nonce: wNonce };
     const headWithdrawal: OpLogEntry = {
       position: f.sequencer.opLog(f.eur).length,
       kind: "withdrawal",
       demandHash: hash,
+      holder: KEYS.alice,
       nonce: wNonce,
       signature: ed25519.sign(encodeWithdrawal(wOp), SECRETS.alice),
     };
@@ -1010,11 +1096,12 @@ describe("a set settled in part is the operator's fault, read across one commitm
     const hash = fileAndAccept(f);
     const gold = f.gold;
     const wNonce = f.sequencer.nextNonce(KEYS.backer, gold);
-    const wOp = { backing: gold, demandHash: hash, nonce: wNonce };
+    const wOp = { backing: gold, demandHash: hash, holder: KEYS.backer, nonce: wNonce };
     const takeBack: OpLogEntry = {
       position: f.sequencer.opLog(gold).length,
       kind: "withdrawal",
       demandHash: hash,
+      holder: KEYS.backer,
       nonce: wNonce,
       signature: ed25519.sign(encodeWithdrawal(wOp), SECRETS.backer),
     };
@@ -1040,14 +1127,16 @@ describe("a set settled in part is the operator's fault, read across one commitm
       decisionVenue: NO_DECISION_VENUE,
       parties: [KEYS.backer],
       nonce: wNonce + 1n,
+      salt: NO_ATTEMPT_SALT,
       signature: ed25519.sign(encodeLock(decoyOp), SECRETS.backer),
     };
     const rNonce = wNonce + 2n;
-    const rOp = { backing: gold, demandHash: hash, nonce: rNonce };
+    const rOp = { backing: gold, demandHash: hash, holder: KEYS.backer, nonce: rNonce };
     const decoyRelease: OpLogEntry = {
       position: f.sequencer.opLog(gold).length + 2,
       kind: "release",
       demandHash: hash,
+      holder: KEYS.backer,
       nonce: rNonce,
       signature: ed25519.sign(encodeRelease(rOp), SECRETS.backer),
     };
@@ -1063,9 +1152,9 @@ describe("a set settled in part is the operator's fault, read across one commitm
     f.venue.advance(96n); // past the paying lock's own timeout
     // Each half is its signer's own one-sided exit: the holder walks the
     // demand, the backer takes back its expired reservation.
-    const head = { backing: f.eur, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
+    const head = { backing: f.eur, demandHash: hash, holder: KEYS.alice, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
     f.sequencer.submitWithdrawal(head, ed25519.sign(encodeWithdrawal(head), SECRETS.alice));
-    const leg = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
+    const leg = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
     f.sequencer.submitWithdrawal(leg, ed25519.sign(encodeWithdrawal(leg), SECRETS.backer));
     const commitment = f.sequencer.commit();
     const served = { snapshots: f.sequencer.snapshot(), commitment };
@@ -1087,6 +1176,7 @@ describe("a set settled in part is the operator's fault, read across one commitm
       position: f.sequencer.opLog(f.gold).length,
       kind: "withdrawal",
       demandHash: new Uint8Array(32).fill(0x71),
+      holder: new Uint8Array(32).fill(0x71),
       nonce: 9n,
       signature: new Uint8Array(64),
     };
@@ -1184,11 +1274,14 @@ describe("a set settled in part is the operator's fault, read across one commitm
     // each leg as its converter.
     const release = (backing: Backing): OpLogEntry => {
       const nonce = sequencer.nextNonce(KEYS.alice, backing);
-      const op = { backing, demandHash: hash, nonce };
+      // The record each half ends: alice's demand and reliance leg, the backer's paying lock.
+      const holder = compareBytes(backing.name, silver.name) === 0 ? KEYS.backer : KEYS.alice;
+      const op = { backing, demandHash: hash, holder, nonce };
       return {
         position: sequencer.opLog(backing).length,
         kind: "release",
         demandHash: hash,
+        holder,
         nonce,
         signature: ed25519.sign(encodeRelease(op), SECRETS.alice),
       };
@@ -1290,8 +1383,8 @@ describe("a set settled in part is the operator's fault, read across one commitm
     f.sequencer.commit(); // the set committed whole, sequence 0
     const eurCommitted = f.sequencer.opLog(f.eur).length;
     const goldCommitted = f.sequencer.opLog(f.gold).length;
-    const head = { backing: f.eur, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
-    const pay = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
+    const head = { backing: f.eur, demandHash: hash, holder: KEYS.alice, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
+    const pay = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
     f.sequencer.submitRelease(head, ed25519.sign(encodeRelease(head), SECRETS.alice), [
       { op: pay, signature: ed25519.sign(encodeRelease(pay), SECRETS.alice) },
     ]); // both halves co-signed, in the tail
@@ -1335,8 +1428,8 @@ describe("a set settled in part is the operator's fault, read across one commitm
     // would let one artefact be reported as two.
     const f = replaceableWorld();
     const hash = fileAndAccept(f);
-    const head = { backing: f.eur, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
-    const pay = { backing: f.gold, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
+    const head = { backing: f.eur, demandHash: hash, holder: KEYS.alice, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
+    const pay = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.alice, f.gold) };
     f.sequencer.submitRelease(head, ed25519.sign(encodeRelease(head), SECRETS.alice), [
       { op: pay, signature: ed25519.sign(encodeRelease(pay), SECRETS.alice) },
     ]);

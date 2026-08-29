@@ -73,12 +73,12 @@ function accept(
 }
 
 function release(ledger: TransparentLedger, backing: Backing, hash: Uint8Array, at = 6n) {
-  const op = { backing, demandHash: hash, nonce: ledger.nextNonce(KEYS.alice, backing) };
+  const op = { backing, demandHash: hash, holder: KEYS.alice, nonce: ledger.nextNonce(KEYS.alice, backing) };
   return ledger.release(op, ed25519.sign(encodeRelease(op), SECRETS.alice), at);
 }
 
 function withdraw(ledger: TransparentLedger, backing: Backing, hash: Uint8Array, at = 6n) {
-  const op = { backing, demandHash: hash, nonce: ledger.nextNonce(KEYS.alice, backing) };
+  const op = { backing, demandHash: hash, holder: KEYS.alice, nonce: ledger.nextNonce(KEYS.alice, backing) };
   return ledger.withdraw(op, ed25519.sign(encodeWithdrawal(op), SECRETS.alice), at);
 }
 
@@ -117,7 +117,7 @@ describe("invariant 27: settlement takes two signatures", () => {
     const { hash } = present(ledger, backing, 40n);
     accept(ledger, backing, hash);
     const nonceBefore = ledger.nextNonce(KEYS.alice, backing);
-    const op = { backing, demandHash: hash, nonce: nonceBefore };
+    const op = { backing, demandHash: hash, holder: KEYS.alice, nonce: nonceBefore };
     expect(() => ledger.release(op, ed25519.sign(encodeRelease(op), SECRETS.backer), 6n)).toThrow(
       /only the holder releases/,
     );
@@ -264,7 +264,7 @@ describe("§C3: an unanswered demand stands, and withdrawal is the way out", () 
     const { ledger, backing } = setup();
     const { hash } = present(ledger, backing, 80n);
     const nonceBefore = ledger.nextNonce(KEYS.alice, backing);
-    const op = { backing, demandHash: hash, nonce: nonceBefore };
+    const op = { backing, demandHash: hash, holder: KEYS.alice, nonce: nonceBefore };
     expect(() =>
       ledger.withdraw(op, ed25519.sign(encodeWithdrawal(op), SECRETS.backer), 6n),
     ).toThrow(/only the holder withdraws/);

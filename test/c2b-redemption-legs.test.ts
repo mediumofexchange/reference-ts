@@ -105,9 +105,10 @@ function release(
   secret: Uint8Array,
   demandHash: Uint8Array,
   nonce: bigint,
+  holder: Uint8Array = KEYS.alice, // the record's holder — Alice's demand, throughout this file
 ): PublishedOp {
-  const message = encodeReleaseMessage(backing.name, demandHash, nonce);
-  return { kind: "release", demandHash, nonce, signature: ed25519.sign(message, secret) };
+  const message = encodeReleaseMessage(backing.name, demandHash, holder, nonce);
+  return { kind: "release", demandHash, holder, nonce, signature: ed25519.sign(message, secret) };
 }
 
 function withdrawal(
@@ -115,9 +116,10 @@ function withdrawal(
   secret: Uint8Array,
   demandHash: Uint8Array,
   nonce: bigint,
+  holder: Uint8Array = KEYS.alice,
 ): PublishedOp {
-  const message = encodeWithdrawalMessage(backing.name, demandHash, nonce);
-  return { kind: "withdrawal", demandHash, nonce, signature: ed25519.sign(message, secret) };
+  const message = encodeWithdrawalMessage(backing.name, demandHash, holder, nonce);
+  return { kind: "withdrawal", demandHash, holder, nonce, signature: ed25519.sign(message, secret) };
 }
 
 function transfer(
@@ -798,6 +800,7 @@ describe("§C2b: the venue carries evidence, never a second claim layer", () => 
       venue.publishOp(backing.name, {
         kind: "release",
         demandHash: new Uint8Array(31),
+        holder: new Uint8Array(32),
         nonce: 0n,
         signature: new Uint8Array(64),
       }),
@@ -924,7 +927,7 @@ describe("§C2b: a returning sequencer adopts what was witnessed during the gap"
     // Asked once the operator serves again: the commit, then the next index.
     sequencer.commit();
     venue.advance(1n);
-    const receipt = sequencer.submitRelease({ backing, demandHash: claim.hash, nonce: 1n }, new Uint8Array(64));
+    const receipt = sequencer.submitRelease({ backing, demandHash: claim.hash, holder: KEYS.alice, nonce: 1n }, new Uint8Array(64));
     expect(verifyReceipt(receipt)).toBe(true);
     expect(receipt.position).toBe(3n);
     expect(receiptProvenBy(receipt, sequencer.snapshot()[0]!)).toBe(true);
@@ -953,9 +956,9 @@ describe("§C2b: a returning sequencer adopts what was witnessed during the gap"
     // The ordinary way, from the index after the return commitment.
     venue.advance(1n);
 
-    const message = encodeReleaseMessage(backing.name, claim.hash, 1n);
+    const message = encodeReleaseMessage(backing.name, claim.hash, KEYS.alice, 1n);
     sequencer.submitRelease(
-      { backing, demandHash: claim.hash, nonce: 1n },
+      { backing, demandHash: claim.hash, holder: KEYS.alice, nonce: 1n },
       ed25519.sign(message, SECRETS.alice),
     );
     expect(sequencer.balance(backing, KEYS.backer)).toBe(100n);
@@ -1057,7 +1060,7 @@ describe("§C2b: what the record shows when redemption cannot complete", () => {
     const served = goDark(venue, sequencer);
     redeemAtVenue(venue, backing);
     const poisoned: ServedState = {
-      snapshots: [{ name: backing.name, opLog: [{ position: 0, kind: "release", demandHash: new Uint8Array(0), nonce: -1n, signature: new Uint8Array(0) }] }],
+      snapshots: [{ name: backing.name, opLog: [{ position: 0, kind: "release", demandHash: new Uint8Array(0), holder: new Uint8Array(0), nonce: -1n, signature: new Uint8Array(0) }] }],
       commitment: served.commitment,
     };
     expect(() => snapshotRedemptions(venue, backing, poisoned)).not.toThrow();

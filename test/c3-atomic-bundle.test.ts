@@ -3,15 +3,18 @@ import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import {
+  attemptIdOf,
   encodeCommit,
   encodeLock,
   encodeRelease,
   encodeWithdrawal,
+  NO_ATTEMPT_SALT,
   signCommit,
   type LockOp,
 } from "../src/presentation.js";
+import { compareBytes } from "../src/bytes.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
-import { LocalVenue, VenueError } from "../src/venue.js";
+import { LocalVenue, UNNAMED_VENUE, VenueError } from "../src/venue.js";
 import { committedInTime, witnessedCommitFor } from "../src/recovery.js";
 import { replayLog, TransparentLedger } from "../src/ledger.js";
 import { advanceWitnessedIndex, KEYS, SECRETS } from "./support.js";
@@ -90,19 +93,26 @@ function setup() {
   return { venue, one, two, eur, gold };
 }
 
-const ATTEMPT = new Uint8Array(32).fill(0xa7);
+// An attempt id is its terms' hash now, so a fixture picks a SALT and derives.
+// Every LocalVenue here is the unnamed one, and every bundle lock in this file
+// is Alice's alone at TIMEOUT, so the default id is a constant like before.
+const ATTEMPT_SALT = new Uint8Array(32).fill(0xa7);
+const ATTEMPT = attemptIdOf(ATTEMPT_SALT, UNNAMED_VENUE, TIMEOUT, [KEYS.alice]);
 
 function lockFor(
   sequencer: Sequencer,
   backing: Backing,
   venue: LocalVenue,
   quantity: bigint,
-  attempt = ATTEMPT,
+  salt = ATTEMPT_SALT,
   timeout = TIMEOUT,
 ): LockOp {
   return {
     backing,
-    attemptId: attempt,
+    // Derived, never supplied: the id IS these terms, so a lock cannot carry a
+    // timeout its id does not name.
+    attemptId: attemptIdOf(salt, venue.id, timeout, [KEYS.alice]),
+    salt,
     holder: KEYS.alice,
     beneficiary: KEYS.bob,
     quantity,
@@ -124,7 +134,7 @@ function prepare(venue: LocalVenue, one: Sequencer, two: Sequencer, eur: Backing
 
 /** The holder frees its own reservation under `attempt` at that sequencer. */
 function withdrawLock(sequencer: Sequencer, backing: Backing, attempt: Uint8Array) {
-  const op = { backing, demandHash: attempt, nonce: sequencer.nextNonce(KEYS.alice, backing) };
+  const op = { backing, demandHash: attempt, holder: KEYS.alice, nonce: sequencer.nextNonce(KEYS.alice, backing) };
   return sequencer.submitWithdrawal(op, ed25519.sign(encodeWithdrawal(op), SECRETS.alice));
 }
 
@@ -293,9 +303,12 @@ describe("§C3: half a bundle is still not a bundle", () => {
     const { venue, one, two, eur, gold } = setup();
     prepare(venue, one, two, eur, gold);
     venue.advance(3n);
-    venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
+    const object = signCommit(SECRETS.alice, ATTEMPT);
+    venue.publishCommit(object);
     const first = one.settle(eur, ATTEMPT);
-    const again = one.settle(eur, ATTEMPT);
+    // The repeat names the object it is asking about: this door takes an attempt
+    // but the act is an object, and the receipt is the object's.
+    const again = one.settle(eur, ATTEMPT, object);
     expect(again.opHash).toEqual(first.opHash);
     expect(one.balance(eur, KEYS.bob)).toBe(40n);
   });
@@ -319,26 +332,43 @@ describe("§C3: half a bundle is still not a bundle", () => {
 });
 
 describe("§C3: what an attempt id is and is not", () => {
-  it("two holders may reuse one id without touching each other's half", () => {
-    // An attempt id is the holder's own label, not a registered name, so nothing
-    // stops a stranger reusing one. Each sequencer resolves a commit against the
-    // holder of ITS OWN lock, so ids cannot collide across them.
+  it("a stranger's attempt is a different id, and cannot become yours", () => {
+    // This once read "two holders may reuse one id without touching each other's
+    // half" — true, and weaker than what the id being its terms' hash now gives.
+    // A stranger who wants to stand under YOUR id must carry your venue, your
+    // timeout and your party set; carrying anything else is a different attempt,
+    // and carrying yours leaves them refused by "names its own holder among its
+    // parties" unless you named them. Reuse is bounded to the exchange its
+    // parties agreed, which is what §C1's "all sign" always meant.
     const { venue, one, two, eur, gold } = setup();
     const mine = lockFor(one, eur, venue, 40n);
     one.submitLock(mine, ed25519.sign(encodeLock(mine), SECRETS.alice));
     const theirs: LockOp = {
       ...lockFor(two, gold, venue, 90n),
+      attemptId: attemptIdOf(ATTEMPT_SALT, venue.id, TIMEOUT, [KEYS.mallory]),
       holder: KEYS.mallory,
       parties: [KEYS.mallory],
       nonce: two.nextNonce(KEYS.mallory, gold),
     };
     two.submitLock(theirs, ed25519.sign(encodeLock(theirs), SECRETS.mallory));
+    // Her own party set makes it her own attempt, whatever salt she copied.
+    expect(compareBytes(theirs.attemptId, ATTEMPT)).not.toBe(0);
+    // And she cannot enter Alice's: those terms name only Alice, so a lock under
+    // that id is refused for the holder it does not name.
+    const intruder: LockOp = {
+      ...lockFor(two, gold, venue, 1n),
+      holder: KEYS.mallory,
+      nonce: two.nextNonce(KEYS.mallory, gold),
+    };
+    expect(() =>
+      two.submitLock(intruder, ed25519.sign(encodeLock(intruder), SECRETS.mallory)),
+    ).toThrow(/names its own holder among its parties/);
 
     venue.advance(2n);
     venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
     one.settle(eur, ATTEMPT);
     expect(one.balance(eur, KEYS.bob)).toBe(40n);
-    // Alice's signature says nothing about Mallory's reservation.
+    // Alice's object names an attempt Mallory's lock was never under.
     expect(() => two.settle(gold, ATTEMPT)).toThrow(SequencerError);
     expect(two.balance(gold, KEYS.bob)).toBe(0n);
   });
@@ -380,7 +410,9 @@ describe("§C3: what an attempt id is and is not", () => {
     venue.advance(3n);
     venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
     one.settle(eur, ATTEMPT);
-    const again = lockFor(one, eur, venue, 10n, ATTEMPT, 200n);
+    // The same terms, so genuinely the same attempt: a different timeout would
+    // be a different id and so a different attempt entirely.
+    const again = lockFor(one, eur, venue, 10n);
     expect(() => one.submitLock(again, ed25519.sign(encodeLock(again), SECRETS.alice))).toThrow(
       /already committed/,
     );
@@ -416,29 +448,32 @@ describe("§C3: a half the record committed cannot be taken back", () => {
     // exits, not the fixture.
     const { venue, one, eur } = setup();
     const probes = [TIMEOUT - 1n, TIMEOUT, TIMEOUT + 1n];
-    const ids = probes.map((_, i) => ({
+    // Distinct SALTS now, since a distinct id is what a distinct salt buys: the
+    // terms are identical across all six locks, so only the salt separates them.
+    const salts = probes.map((_, i) => ({
       settle: new Uint8Array(32).fill(0x10 + i),
       walk: new Uint8Array(32).fill(0x20 + i),
     }));
-    for (const pair of ids) {
-      for (const id of [pair.settle, pair.walk]) {
-        const lock = lockFor(one, eur, venue, 10n, id);
+    const idOf = (salt: Uint8Array) => attemptIdOf(salt, venue.id, TIMEOUT, [KEYS.alice]);
+    for (const pair of salts) {
+      for (const salt of [pair.settle, pair.walk]) {
+        const lock = lockFor(one, eur, venue, 10n, salt);
         one.submitLock(lock, ed25519.sign(encodeLock(lock), SECRETS.alice));
       }
     }
     probes.forEach((at, i) => {
-      const pair = ids[i] as { settle: Uint8Array; walk: Uint8Array };
+      const pair = salts[i] as { settle: Uint8Array; walk: Uint8Array };
       advanceWitnessedIndex(venue, at);
-      venue.publishCommit(signCommit(SECRETS.alice, pair.settle));
+      venue.publishCommit(signCommit(SECRETS.alice, idOf(pair.settle)));
       let committed: string | true = true;
       try {
-        one.settle(eur, pair.settle);
+        one.settle(eur, idOf(pair.settle));
       } catch (e) {
         committed = (e as Error).message;
       }
       let withdrew: string | true = true;
       try {
-        withdrawLock(one, eur, pair.walk);
+        withdrawLock(one, eur, idOf(pair.walk));
       } catch (e) {
         withdrew = (e as Error).message;
       }
@@ -502,14 +537,18 @@ describe("§C3: an attempt id names one attempt on one backing, for the locks a 
     advanceWitnessedIndex(venue, TIMEOUT + 1n);
     withdrawLock(one, eur, ATTEMPT);
     withdrawLock(two, gold, ATTEMPT);
-    // The retry under the same id is refused by the law, on both backings.
-    const again = lockFor(two, gold, venue, 90n, ATTEMPT, 300n);
+    // The retry under the same id is refused on both backings — and now by the
+    // timeout inside the id itself: an attempt whose timeout has passed cannot be
+    // locked under again at any index, because its id names that timeout and the
+    // law refuses a lock whose timeout is not ahead of the clock. The `retired`
+    // set answers the same question one index earlier; this is the id doing it.
+    const again = lockFor(two, gold, venue, 90n);
     expect(() => two.submitLock(again, ed25519.sign(encodeLock(again), SECRETS.alice))).toThrow(
-      /already been used on this backing/,
+      /already used that attempt id on this backing/,
     );
-    const againEur = lockFor(one, eur, venue, 40n, ATTEMPT, 300n);
+    const againEur = lockFor(one, eur, venue, 40n);
     expect(() => one.submitLock(againEur, ed25519.sign(encodeLock(againEur), SECRETS.alice))).toThrow(
-      /already been used on this backing/,
+      /already used that attempt id on this backing/,
     );
     // So the withheld object, published now, reaches nothing on either.
     venue.publishCommit(withheld);
@@ -526,7 +565,7 @@ describe("§C3: an attempt id names one attempt on one backing, for the locks a 
     venue.publishCommit(signCommit(SECRETS.alice, ATTEMPT));
     one.settle(eur, ATTEMPT);
     two.settle(gold, ATTEMPT);
-    const relock = lockFor(two, gold, venue, 10n, ATTEMPT, 300n);
+    const relock = lockFor(two, gold, venue, 10n);
     // At the sequencer the gate answers first (24c: the venue shows the attempt
     // committed); in the law the retired id answers — pinned through the replay,
     // since the gate stands in front of the door.
@@ -543,6 +582,7 @@ describe("§C3: an attempt id names one attempt on one backing, for the locks a 
       decisionVenue: relock.decisionVenue,
       parties: relock.parties,
       nonce: relock.nonce,
+      salt: relock.salt ?? NO_ATTEMPT_SALT,
       signature: ed25519.sign(encodeLock(relock), SECRETS.alice),
       position: two.opLog(gold).length,
     };
@@ -558,7 +598,9 @@ describe("§C3: an attempt id names one attempt on one backing, for the locks a 
     prepare(venue, one, two, eur, gold);
     advanceWitnessedIndex(venue, TIMEOUT + 1n);
     withdrawLock(two, gold, ATTEMPT);
-    const again = lockFor(two, gold, venue, 90n, ATTEMPT, 300n);
+    // Hand-built, because no door would co-sign it: the same attempt's terms, so
+    // the same id, after that id has been spent on this backing.
+    const again = lockFor(two, gold, venue, 90n);
     const entry = {
       kind: "lock" as const,
       attemptId: again.attemptId,
@@ -569,6 +611,7 @@ describe("§C3: an attempt id names one attempt on one backing, for the locks a 
       decisionVenue: again.decisionVenue,
       parties: again.parties,
       nonce: again.nonce,
+      salt: again.salt ?? NO_ATTEMPT_SALT,
       signature: ed25519.sign(encodeLock(again), SECRETS.alice),
       position: two.opLog(gold).length,
     };
@@ -608,13 +651,14 @@ describe("§C3: a venue-naming lock retires its id by every exit, the release in
     const ledger = new TransparentLedger();
     ledger.register(gold, signBacking(SECRETS.backer, gold));
     ledger.issue({ backing: gold, recipient: KEYS.alice, quantity: 100n, nonce: 0n }, ed25519.sign(encodeIssuanceMessage(gold.name, KEYS.alice, 100n, 0n), SECRETS.backer));
-    const lock = { ...lockFor(two, gold, venue, 40n, ATTEMPT, 500n), nonce: 0n };
-    const entry = (op: LockOp, nonce: bigint) => ({ kind: "lock" as const, attemptId: op.attemptId, holder: op.holder, beneficiary: op.beneficiary, quantity: op.quantity, timeout: op.timeout, decisionVenue: op.decisionVenue, parties: op.parties, nonce, signature: ed25519.sign(encodeLock({ ...op, nonce }), SECRETS.alice) });
+    const lock = { ...lockFor(two, gold, venue, 40n, ATTEMPT_SALT, 500n), nonce: 0n };
+    const attemptId = lock.attemptId; // its terms' hash, timeout 500 and all
+    const entry = (op: LockOp, nonce: bigint) => ({ kind: "lock" as const, attemptId: op.attemptId, holder: op.holder, beneficiary: op.beneficiary, quantity: op.quantity, timeout: op.timeout, decisionVenue: op.decisionVenue, parties: op.parties, nonce, salt: op.salt ?? NO_ATTEMPT_SALT, signature: ed25519.sign(encodeLock({ ...op, nonce }), SECRETS.alice) });
     ledger.apply(gold, entry(lock, 0n), 0n);
-    const rel = { backing: gold, demandHash: ATTEMPT, nonce: 1n };
-    ledger.apply(gold, { kind: "release", demandHash: ATTEMPT, nonce: 1n, signature: ed25519.sign(encodeRelease(rel), SECRETS.alice) }, 0n);
+    const rel = { backing: gold, demandHash: attemptId, holder: KEYS.alice, nonce: 1n };
+    ledger.apply(gold, { kind: "release", demandHash: attemptId, holder: KEYS.alice, nonce: 1n, signature: ed25519.sign(encodeRelease(rel), SECRETS.alice) }, 0n);
     expect(ledger.balance(gold, KEYS.bob)).toBe(40n);
-    expect(() => ledger.apply(gold, entry({ ...lock, quantity: 10n }, 2n), 0n)).toThrow(/already been used/);
+    expect(() => ledger.apply(gold, entry({ ...lock, quantity: 10n }, 2n), 0n)).toThrow(/already used that attempt id/);
     expect(replayLog(gold, [...ledger.opLog(gold), { ...entry({ ...lock, quantity: 10n }, 2n), position: ledger.opLog(gold).length }])).toBeUndefined();
   });
 });

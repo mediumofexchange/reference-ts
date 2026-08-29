@@ -12,6 +12,7 @@ import {
   encodeWithdrawal,
   type DemandOp,
   type LockOp,
+  NO_ATTEMPT_SALT,
   NO_DECISION_VENUE,
 } from "../src/presentation.js";
 import { type PublishedOp } from "../src/oplog.js";
@@ -143,6 +144,7 @@ function bareLock(
     decisionVenue: full.decisionVenue,
     parties: [full.holder],
     nonce: full.nonce,
+    salt: full.salt ?? NO_ATTEMPT_SALT,
     signature: ed25519.sign(encodeLock(full), secret),
   };
 }
@@ -406,6 +408,7 @@ describe("invariant 13: a leg is accompaniment only if the holder's release conv
       decisionVenue: full.decisionVenue,
       parties: full.parties,
       nonce: full.nonce,
+      salt: full.salt ?? NO_ATTEMPT_SALT,
       signature: ed25519.sign(encodeLock(full), SECRETS.alice),
     };
   }
@@ -436,7 +439,7 @@ describe("invariant 13: a leg is accompaniment only if the holder's release conv
     advanceWitnessedIndex(venue, 91n);
     expect(accompanimentOf(eur, venue, terms, state, hash)).toBe("unaccompanied");
     // Re-prepared — withdrawn alone, locked again — it reads accompanied again.
-    const out = { backing: gold, demandHash: hash, nonce: sequencer.nextNonce(KEYS.alice, gold) };
+    const out = { backing: gold, demandHash: hash, holder: KEYS.alice, nonce: sequencer.nextNonce(KEYS.alice, gold) };
     sequencer.submitWithdrawal(out, ed25519.sign(encodeWithdrawal(out), SECRETS.alice));
     const again: LockOp = {
       backing: gold,
@@ -468,11 +471,18 @@ describe("invariant 13: what the readers say when nothing can answer the set any
     expect(accompanimentOf(eur, venue, terms, state, hash)).toBe("unaccompanied");
   });
 
-  it("a leg naming a decision venue reads unaccompanied, whatever its other terms: a set leg names none", () => {
+  it("a leg naming a decision venue makes the log unreadable, which is not a verdict about the backer", () => {
     // Found regression-reviewing slice 27: the venue was checked at both doors
     // and by neither reader, so a lock carrying the set's every other term and a
-    // venue read as accompanied — and converted alone on a commit. The venue is
-    // part of the one definition (legMismatch) now.
+    // venue read as accompanied — and converted alone on a commit. The venue
+    // became part of the one definition (legMismatch), and the reader answered
+    // "unaccompanied".
+    //
+    // Naming an attempt by its terms goes further: such a lock carries a
+    // venue-naming id that is a demand's hash, which the law refuses, so the log
+    // is not a history and does not replay at all. The reader's third answer is
+    // the honest one — "I could not read this", never "the backer took in a set
+    // it cannot unwind", which is exactly the distinction this file exists for.
     const { venue, sequencer, eur, gold, terms } = setup();
     const { hash, op } = bareDemand(sequencer, eur, 40n);
     const full: LockOp = {
@@ -496,13 +506,14 @@ describe("invariant 13: what the readers say when nothing can answer the set any
       decisionVenue: full.decisionVenue,
       parties: full.parties,
       nonce: full.nonce,
+      salt: full.salt ?? NO_ATTEMPT_SALT,
       signature: ed25519.sign(encodeLock(full), SECRETS.alice),
     };
     const state = commitWith(venue, sequencer, [
       { backing: eur, op },
       { backing: gold, op: venueLeg },
     ]);
-    expect(accompanimentOf(eur, venue, terms, state, hash)).toBe("unaccompanied");
+    expect(accompanimentOf(eur, venue, terms, state, hash)).toBe("unreadable");
   });
 });
 
@@ -516,7 +527,7 @@ describe("invariant 13: the snapshot a reader folds is the one it checked the na
     const { hash } = file(sequencer, venue, eur, gold, 40n);
     const state = served(sequencer);
     advanceWitnessedIndex(venue, 91n);
-    const out = { backing: gold, demandHash: hash, nonce: sequencer.nextNonce(KEYS.alice, gold) };
+    const out = { backing: gold, demandHash: hash, holder: KEYS.alice, nonce: sequencer.nextNonce(KEYS.alice, gold) };
     sequencer.submitWithdrawal(out, ed25519.sign(encodeWithdrawal(out), SECRETS.alice));
     const short = served(sequencer);
     const liar = { ...gold, name: eur.name, nameHex: eur.nameHex } as Backing;

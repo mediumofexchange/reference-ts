@@ -18,5 +18,13 @@ export default defineConfig({
   test: {
     testTimeout: 30_000,
     hookTimeout: 30_000,
+    // `scratch/` is gitignored and is where a proof script is compiled to run
+    // against `./src/*.js` — which puts a full copy of `test/` there too. Those
+    // copies are inside vitest's default include, so a suite run collected them
+    // as well: 1620 tests instead of 810, and two "failures" from a stale build
+    // that no longer matched the source. It cost two reviewers an afternoon
+    // each. Excluded here rather than remembered, since the build step is in
+    // CLAUDE.md and will be followed again.
+    exclude: ["**/node_modules/**", "**/dist/**", "scratch/**"],
   },
 });

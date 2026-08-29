@@ -117,8 +117,9 @@ function redeemAt(v: LocalVenue, backing: Backing): void {
   v.publishOp(backing.name, {
     kind: "release",
     demandHash: hash,
+    holder: KEYS.alice,
     nonce: 1n,
-    signature: ed25519.sign(encodeReleaseMessage(backing.name, hash, 1n), SECRETS.alice),
+    signature: ed25519.sign(encodeReleaseMessage(backing.name, hash, KEYS.alice, 1n), SECRETS.alice),
   });
 }
 

@@ -74,6 +74,7 @@ function tryWithdraw(f: ReturnType<typeof setup>, hash: Uint8Array): boolean {
   const op = {
     backing: f.backing,
     demandHash: hash,
+    holder: KEYS.alice,
     nonce: f.sequencer.nextNonce(KEYS.alice, f.backing),
   };
   try {
@@ -160,6 +161,7 @@ describe("invariant 21: the witnessed clock is the venue's, not the operator's",
     const op = {
       backing: f.backing,
       demandHash: hash,
+      holder: KEYS.alice,
       nonce: f.sequencer.nextNonce(KEYS.alice, f.backing),
     };
     expect(() =>

@@ -141,33 +141,30 @@ traversal.
 - **A demand reserves each leg with a `lock` in that leg's own log**, so every
   backing stays replayable alone, and the sequencer takes the demand and its
   locks as one act or none (§C3's single-phase).
-- **Two-phase across operators is `submitLock` + `settle`.** The holder
-  reserves at each sequencer, publishes ONE commit at a decision venue, and
-  each sequencer settles its own half against that witnessed object without
-  hearing from the others. §C1's n-party exchange is the same mechanism: one
-  object carries every signature, and a sequencer converts its lock only when
-  every party its lock names has signed — so a partial object settles nothing
-  anywhere.
+- **Two-phase across operators is `submitLock` + `settle`.** The holder reserves
+  at each sequencer, publishes ONE commit at a decision venue, and each settles
+  its own half against that witnessed object without hearing from the others.
+  §C1's n-party exchange is the same mechanism: a sequencer converts its lock
+  only when every party the lock names has signed, so a partial object settles
+  nothing anywhere.
 - **A lock names who may convert it.** One party converts on their release or
   their commit, several only on the witnessed object. A set leg names no
   decision venue (`NO_DECISION_VENUE`), so no commit reaches it; it is not
   retired, and it comes and settles only with its set — at filing, or
   re-prepared for a standing demand by its holder.
 - **A bundle lock is prepared only where the sequencer can read the commits it
-  may settle on**, and only for an attempt the record does not already show
-  committed.
+  may settle on**, and only for an attempt the record does not show committed.
 - **Two-phase is not the only honest answer.** §C2's partial-and-retry is the
   ordinary transfer path and covers every trade where both sides have recourse.
   Which branch a trade uses is the parties' choice, not the implementation's.
 - **Where P pays in claims**, the backer's acceptance reserves the payout — its
   lock on the paying backing, to the holder, convertible by the holder alone —
-  and the holder's release settles surrendered set and payout as one act.
-  `payoutOf` is the holder's read of it, as `accompanimentOf` is the backer's.
+  and the release settles set and payout as one act (`payoutOf` reads it).
 - **The law stays per backing.** Whether a demand's legs were locked is read
   across the served state by `accompanimentOf`, which the backer asks before it
   signs an acceptance. Converter and venue are one definition, `LegTerms`, for
-  the sequencer and both readers; liveness is the law's question at the doors
-  and each reader's own on the venue's clock.
+  the sequencer and both readers; liveness is the law's at the doors and each
+  reader's own on the venue's clock.
 - **A lock carries §C3's timeout, and `lockIsLive` is the one predicate both
   exits read.** At or before it a commit can still settle the set and no
   withdrawal is accepted; a commit witnessed past it does not reach it, and
@@ -179,16 +176,35 @@ traversal.
   demand through `submitLeg`, one leg per call (§C3's "a demand outlives its
   locks"). A demand's deadline, like a lock's timeout, is strictly ahead of the
   witnessed index at filing — the same index is not a window.
-- **An attempt id names one attempt on one backing** for the locks a commit can
-  reach: once a venue-naming lock under it has settled or withdrawn there, no
-  other stands there, since a commit binds its id and nothing else. A lock and
-  a demand never share a hash on one backing.
+- **A lock is keyed by (attempt, holder)**: a slot is its holder's own, so a
+  stranger's lock is a record beside the set, never in front of it. A release or
+  withdrawal names the record it ends — hash and holder, inside the signed
+  message — because the law resolves the signer from the record, and **a leg ends
+  the record the set names**, the door binding each leg's holder to the set's
+  terms. A venue-naming lock names its own holder among its parties (§C1's "all
+  sign"), which bounds what a commit converts: every lock under its attempt whose
+  parties it satisfies, settled as one act. **A set leg is never in that match
+  set** — it names no venue — and is excluded rather than thrown for. An attempt
+  id names one attempt on one backing **for its holder**: once theirs has settled
+  or withdrawn, a retry names a fresh id.
+- **A venue-naming attempt is named by the hash of its terms** —
+  `H(salt ‖ venue ‖ timeout ‖ parties)` (`attemptIdOf`, checked in the law):
+  invariant 1's move, applied to the other object parties must agree on and none
+  may edit alone. A matching id IS matching terms, so one attempt carries one
+  timeout across backings and operators alike, and a stranger's differing terms
+  are a different attempt. Drawing the salt at RANDOM is the party's; the law
+  refuses only the value an omission produces. A set leg is the same rule — its
+  attempt is its demand — and carries none, which the law does check.
+- **An entry's identity is what decides its effect**, and one answer serves the
+  receipt, the committed root and the rewritten-history comparison
+  (`opIdentityOfEntry`): the signed message, plus — for a commit alone — its
+  signatures, since those decide which locks it converts.
 
 ## What the parties must do, that no code here enforces
 
-Seven rules the protocol cannot check but the reference implementation must not
+Eight rules the protocol cannot check but the reference implementation must not
 leave unsaid. Each was reached by asking what a failing sequencer costs
-somebody, and each is recorded in the decision log with its reasoning.
+somebody, and is recorded in the decision log with its reasoning.
 
 The three holder rules are load-bearing. §C2b's recovery path does not protect a
 holder who ignores them, and every mechanism that would reach further either
@@ -251,26 +267,29 @@ construction — which is why they are rules here rather than code.
   no tail (`takeOver`), so perform only against the witnessed whole. What was
   co-signed after the last commitment and before the silence is dead, and the
   receipt makes that readable: it names its era (`after`); an era ended by a
-  return or a handover lapses its receipts (`eraLapsed`, `receiptStatus`
-  answering `lapsed`), where one ended at an ordinary commitment carried its
-  whole tail — so an attested operation missing then is `contradicted`, and a
-  pair of receipts one log cannot hold is a fault (`isDoublePosition`,
-  `isDoubleAcceptance`, both excusing a lapsed era). The exposure is the
-  interval since the last commitment, which is why §C2 makes it "a signed field
-  rather than operational discretion": E carries it with the venue it is read
-  on, under evidence tags 0x03 and 0x04, so a payee can tell a fast operator
-  running late from a slow one running on time (`isOverdue`).
-- **Never reuse an attempt id you have signed a commit for.** A commit binds
-  its attempt id and nothing else, so an object you signed for one attempt
-  converts any later lock under that id whose parties you are among — on
-  another backing too, where the law cannot see the first. A fresh id per
-  attempt costs nothing.
+  return or a handover lapses its receipts (`eraLapsed`, `receiptStatus`), where
+  one ended at an ordinary commitment carried its whole tail — so an attested
+  operation missing then is `contradicted`, and a pair one log cannot hold is a
+  fault (`isDoublePosition`, `isDoubleAcceptance`, both excusing a lapsed era).
+  §C2 makes the exposure "a signed field rather than operational discretion": E
+  carries the interval with the venue it is read on, so a payee can tell a fast
+  operator running late from a slow one running on time (`isOverdue`).
+- **Draw a fresh random salt per attempt** — what "never reuse an attempt id you
+  signed a commit for" became. A commit binds its id and nothing else, so an
+  object you signed converts any later lock under that id whose parties you are
+  among, on another backing too. The id is its terms' hash now, so a *derived*
+  salt makes a repeat trade the same attempt; randomness also keeps the venue
+  from reading your party set off the id.
+- **Check that a lock of your counterparty's stands under the attempt you
+  agreed** before you sign the object. One timeout per attempt is the law's now,
+  so passing that check implies their terms are yours; nothing helps a party who
+  does not check.
 
 A receipt proves **acceptance, not a holding**: a payee who was paid and paid
-onward still holds the receipt for what they received. Reading it as a holding
-is how a redemption pays a party that has already spent. The durable form, and
-the one that decides what may be built on a receipt: **it attributes an act to
-the operator, and never proves a value to a holder.** A chain of receipts back
+onward still holds the receipt for what they received, and reading it as a
+holding is how a redemption pays a party that has already spent. The durable
+form, and the one that decides what may be built on a receipt: **it attributes
+an act to the operator, and never proves a value to a holder.** A chain of receipts back
 to committed state would prove the value — and that is provenance, which is
 precisely what blinding exists to destroy, so it is ruled out here rather than
 deferred.
@@ -373,13 +392,13 @@ for speed anywhere else; this is a reference implementation, not a product.
 - **Review agents run on Opus.** Every agent spawned for a review — the
   `/code-review` finder angles, the verify pass, the regression reviews of a
   fix round — is started with `model: "opus"`; the session model does the
-  synthesis, the verdicts and the fixes. A review is judgement work and a
-  weaker model would miss the shape these rounds keep finding, but it does not
-  need the session model's cost at every angle. **The session model decides
-  which angles to run and how many**, sized to what the slice touches — the
-  law, an encoding, a reader, a door — rather than to a fixed count; it says in
-  DECISIONS which it ran. Decided 2026-08-22: a fixed count spends most of its
-  effort on angles the slice never touched.
+  synthesis, the verdicts and the fixes. A review is judgement work and a weaker
+  model would miss the shape these rounds keep finding, but it does not need the
+  session model's cost at every angle. **The session model decides which angles
+  to run and how many**, sized to what the slice touches — the law, an encoding,
+  a reader, a door — rather than to a fixed count; it says in DECISIONS which it
+  ran. Decided 2026-08-22: a fixed count spends its effort on angles the slice
+  never touched.
 
 ## Toolchain
 

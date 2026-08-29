@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EncodingError } from "../src/bytes.js";
 import { LedgerError, TransparentLedger } from "../src/ledger.js";
 import { encodeBurn, encodeIssuance, encodeTransfer } from "../src/messages.js";
-import { encodeLock, NO_DECISION_VENUE } from "../src/presentation.js";
+import { encodeLock, NO_ATTEMPT_SALT, NO_DECISION_VENUE } from "../src/presentation.js";
 import { KEYS, register, SECRETS } from "./support.js";
 
 // The law: nothing you owe (your written maximum) grows without your
@@ -142,6 +142,7 @@ describe("the law: nothing you hold leaves without your signature", () => {
       decisionVenue: op.decisionVenue,
       parties: op.parties,
       nonce: op.nonce,
+      salt: NO_ATTEMPT_SALT,
       signature: ed25519.sign(encodeLock(op), SECRETS.alice),
     };
     expect(() => ledger.apply(backing, entry, 0n)).toThrow(/not a valid Ed25519 point/);

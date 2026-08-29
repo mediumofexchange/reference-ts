@@ -115,12 +115,16 @@ export type PublishedOp =
   | {
       readonly kind: "release";
       readonly demandHash: Uint8Array;
+      /** The holder of the record this ends — see ReleaseOp. */
+      readonly holder: Uint8Array;
       readonly nonce: bigint;
       readonly signature: Uint8Array;
     }
   | {
       readonly kind: "withdrawal";
       readonly demandHash: Uint8Array;
+      /** The holder of the record this ends — see ReleaseOp. */
+      readonly holder: Uint8Array;
       readonly nonce: bigint;
       readonly signature: Uint8Array;
     }
@@ -134,6 +138,8 @@ export type PublishedOp =
       readonly decisionVenue: Uint8Array;
       readonly parties: readonly Uint8Array[];
       readonly nonce: bigint;
+      /** See LockOp: the attempt's own term, so the id can be its terms' hash. */
+      readonly salt: Uint8Array;
       readonly signature: Uint8Array;
     }
   | {
@@ -206,9 +212,9 @@ export function opMessageOfEntry(backingName: Uint8Array, entry: PublishedOp): U
         entry.nonce,
       );
     case "release":
-      return encodeReleaseMessage(backingName, entry.demandHash, entry.nonce);
+      return encodeReleaseMessage(backingName, entry.demandHash, entry.holder, entry.nonce);
     case "withdrawal":
-      return encodeWithdrawalMessage(backingName, entry.demandHash, entry.nonce);
+      return encodeWithdrawalMessage(backingName, entry.demandHash, entry.holder, entry.nonce);
     case "lock":
       return encodeLockMessage(
         backingName,
@@ -220,6 +226,7 @@ export function opMessageOfEntry(backingName: Uint8Array, entry: PublishedOp): U
         entry.decisionVenue,
         entry.parties,
         entry.nonce,
+        entry.salt,
       );
     // The backing name is not written, and that is the point: the same bytes are
     // this operation in every backing of the bundle.
@@ -229,9 +236,48 @@ export function opMessageOfEntry(backingName: Uint8Array, entry: PublishedOp): U
   return unknownOpKind(entry);
 }
 
-/** The operation hash a receipt is bound to: sha256 of the signed message. */
+/**
+ * **What identifies an entry's effect**, and the one answer both the receipt and
+ * the committed root are built on.
+ *
+ * For every kind but one it is the signed message, exactly as before: one signer,
+ * one signature, and the message plus the signer the law resolves from it decide
+ * what the entry does. The signature itself is served rather than committed
+ * because it adds nothing the message does not already fix.
+ *
+ * **A commit is the exception, and its signatures are effect-bearing.** Each
+ * party signs `commitMessage` — the attempt and nothing else — but the object
+ * converts every lock under that attempt whose parties it satisfies, and under
+ * the (attempt, holder) key several locks can stand there with different party
+ * sets. So two objects differing only in who signed settle DIFFERENT lock sets
+ * from one log prefix. Identified by the attempt alone, that cost twice:
+ *
+ *   - the second settlement was answered with the first's receipt, applied
+ *     nothing, and froze a lock its holder could not withdraw; and
+ *   - two lawful logs folding to different balances rooted IDENTICALLY, so one
+ *     operator signature covered two states with no provable fault — exactly
+ *     what invariant 22 forbids, and what commitment.ts calls the root's
+ *     injectivity (found regression-reviewing the first fix, which bound the
+ *     receipt and left the root).
+ *
+ * The signatures live in the served entry, so a verifier holding the log
+ * reconstructs this and both readings agree again. This is the ONE identity: a
+ * second one beside it is how the two came apart in the first place.
+ */
+export function opIdentityOfEntry(backingName: Uint8Array, entry: PublishedOp): Uint8Array {
+  if (entry.kind === "commit") {
+    const w = new ByteWriter();
+    w.context(COMMIT_CONTEXT);
+    w.key32(entry.attemptId, "attempt id");
+    writeCommitSignatures(w, entry.signatures);
+    return w.finish();
+  }
+  return opMessageOfEntry(backingName, entry);
+}
+
+/** The operation hash a receipt is bound to: sha256 of the entry's identity. */
 export function opHashOfEntry(backingName: Uint8Array, entry: PublishedOp): Uint8Array {
-  return sha256(opMessageOfEntry(backingName, entry));
+  return sha256(opIdentityOfEntry(backingName, entry));
 }
 
 /**
@@ -354,13 +400,16 @@ export function decodePublishedOp(bytes: Uint8Array): {
       }
       case "release":
       case "withdrawal":
-        return { kind, demandHash: r.raw(32), nonce: r.u64(), signature };
+        return { kind, demandHash: r.raw(32), holder: r.raw(32), nonce: r.u64(), signature };
       case "lock": {
         const attemptId = r.raw(32);
         const holder = r.raw(32);
         const beneficiary = r.raw(32);
         const quantity = readQuantity(r);
         const timeout = r.u64();
+        // Field order is the encoder's: the salt is written last, after the
+        // nonce, so it is read last. (Property order in this literal IS the read
+        // order — the reader is stateful.)
         return {
           kind,
           attemptId,
@@ -371,6 +420,7 @@ export function decodePublishedOp(bytes: Uint8Array): {
           decisionVenue: r.raw(32),
           parties: readKeySet(r, "lock parties"),
           nonce: r.u64(),
+          salt: r.raw(32),
           signature,
         };
       }
@@ -404,17 +454,24 @@ export function copyOp(entry: PublishedOp): PublishedOp {
     case "demand":
       return { ...entry, holder: copyBytes(entry.holder), signature: copyBytes(entry.signature) };
     case "acceptance":
+      return {
+        ...entry,
+        demandHash: copyBytes(entry.demandHash),
+        signature: copyBytes(entry.signature),
+      };
     case "release":
     case "withdrawal":
       return {
         ...entry,
         demandHash: copyBytes(entry.demandHash),
+        holder: copyBytes(entry.holder),
         signature: copyBytes(entry.signature),
       };
     case "lock":
       return {
         ...entry,
         attemptId: copyBytes(entry.attemptId),
+        salt: copyBytes(entry.salt),
         holder: copyBytes(entry.holder),
         beneficiary: copyBytes(entry.beneficiary),
         decisionVenue: copyBytes(entry.decisionVenue),

@@ -80,7 +80,7 @@ function accept(f: Fixture, hash: Uint8Array, deadline = 8n) {
 }
 
 function releaseOp({ sequencer, backing }: Fixture, hash: Uint8Array) {
-  return { backing, demandHash: hash, nonce: sequencer.nextNonce(KEYS.alice, backing) };
+  return { backing, demandHash: hash, holder: KEYS.alice, nonce: sequencer.nextNonce(KEYS.alice, backing) };
 }
 
 function release(f: Fixture, hash: Uint8Array) {
@@ -90,7 +90,7 @@ function release(f: Fixture, hash: Uint8Array) {
 }
 
 function withdraw(f: Fixture, hash: Uint8Array) {
-  const op = { backing: f.backing, demandHash: hash, nonce: f.sequencer.nextNonce(KEYS.alice, f.backing) };
+  const op = { backing: f.backing, demandHash: hash, holder: KEYS.alice, nonce: f.sequencer.nextNonce(KEYS.alice, f.backing) };
   const signature = ed25519.sign(encodeWithdrawal(op), SECRETS.alice);
   return { op, signature, receipt: f.sequencer.submitWithdrawal(op, signature) };
 }

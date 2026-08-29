@@ -15,7 +15,7 @@
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { paysInClaims, backingName, type Backing } from "./backing.js";
 import { legMismatch } from "./presentation.js";
-import { acceptanceIsLive, isDishonoured, lockIsLive, replayLog } from "./ledger.js";
+import { acceptanceIsLive, isDishonoured, lockIn, lockIsLive, replayLog } from "./ledger.js";
 import { compareBytes, isValidQuantity } from "./bytes.js";
 import { type Terms } from "./closure.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
@@ -101,7 +101,12 @@ export function accompanimentOf(
       const legState = replayServedState(leg, venue, served);
       if (legState === undefined) return "unreadable";
 
-      const lock = legState.locks.get(bytesToHex(demandHash));
+      // The DEMAND HOLDER'S lock under the hash, asked for directly: a lock's
+      // slot is its holder's own, so a stranger's lock under this hash is a
+      // record about the stranger's units and is not an answer to this
+      // question. That used to be a comparison after the fact, and before the
+      // key was fixed a squat in the slot read as the leg (found reviewing 24c).
+      const lock = lockIn(legState, demandHash, demand.holder);
       if (lock === undefined) return "unaccompanied";
       // The set's terms for this leg, the one definition the sequencer took it by:
       // q times c of the target, the demanding holder's own units, to the obligor.
@@ -148,7 +153,9 @@ export function payoutOf(
     if (compareBytes(backingName(paying), backing.payout.backing) !== 0) return "unreadable";
     const payingState = replayServedState(paying, venue, served);
     if (payingState === undefined) return "unreadable";
-    const lock = payingState.locks.get(bytesToHex(demandHash));
+    // The BACKER'S lock: the payout is reserved out of the obligor's own units,
+    // which is what makes it the one record whose holder is not its converter.
+    const lock = lockIn(payingState, demandHash, backing.obligor);
     if (lock === undefined) return "unreserved";
     const want = { quantity: demand.quantity * backing.payout.perUnit, holder: backing.obligor, beneficiary: demand.holder, converter: demand.holder };
     if (legMismatch(lock, want) !== undefined) return "unreserved";

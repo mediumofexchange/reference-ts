@@ -137,6 +137,7 @@ describe("invariant 10: outstanding = issued - burned at every moment", () => {
     const settle = {
       backing,
       demandHash: demandHash(demand),
+      holder: KEYS.alice,
       nonce: sequencer.nextNonce(KEYS.alice, backing),
     };
     sequencer.submitRelease(settle, ed25519.sign(encodeRelease(settle), SECRETS.alice));

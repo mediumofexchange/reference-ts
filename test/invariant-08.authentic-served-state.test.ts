@@ -201,6 +201,7 @@ describe("invariant 8: a served state cannot move claims nobody signed away", ()
     const settle = {
       backing: f.backing,
       demandHash: demandHash(demand),
+      holder: KEYS.alice,
       nonce: f.sequencer.nextNonce(KEYS.alice, f.backing),
     };
     f.sequencer.submitRelease(settle, ed25519.sign(encodeRelease(settle), SECRETS.alice));
@@ -278,6 +279,7 @@ describe("the signer of a presentation entry comes from the log, not the operato
     const settle = {
       backing: f.backing,
       demandHash: f.hash,
+      holder: KEYS.alice,
       nonce: f.sequencer.nextNonce(KEYS.alice, f.backing),
     };
     f.sequencer.submitRelease(settle, ed25519.sign(encodeRelease(settle), SECRETS.alice));
@@ -309,6 +311,7 @@ describe("the signer of a presentation entry comes from the log, not the operato
     const walk = {
       backing: f.backing,
       demandHash: demandHash(demand),
+      holder: KEYS.alice,
       nonce: f.sequencer.nextNonce(KEYS.alice, f.backing),
     };
     f.sequencer.submitWithdrawal(walk, ed25519.sign(encodeWithdrawal(walk), SECRETS.alice));
@@ -354,6 +357,7 @@ describe("a served log must be a history the law could have produced", () => {
     const walk = {
       backing: f.backing,
       demandHash: demandHash(demand),
+      holder: KEYS.alice,
       nonce: f.sequencer.nextNonce(KEYS.alice, f.backing),
     };
     f.sequencer.submitWithdrawal(walk, ed25519.sign(encodeWithdrawal(walk), SECRETS.alice));
@@ -370,6 +374,7 @@ describe("a served log must be a history the law could have produced", () => {
     const settle = {
       backing: f.backing,
       demandHash: f.hash,
+      holder: KEYS.alice,
       nonce: f.sequencer.nextNonce(KEYS.alice, f.backing),
     };
     const signature = ed25519.sign(encodeRelease(settle), SECRETS.alice);
@@ -385,6 +390,7 @@ describe("a served log must be a history the law could have produced", () => {
             position: snapshot.opLog.length,
             kind: "release" as const,
             demandHash: f.hash,
+            holder: KEYS.alice,
             nonce: 2n,
             signature,
           },
@@ -623,6 +629,7 @@ describe("a served log must be a history the law could have produced", () => {
     const settle = {
       backing: f.backing,
       demandHash: demandHash(demand),
+      holder: KEYS.alice,
       nonce: f.sequencer.nextNonce(KEYS.alice, f.backing),
     };
     f.sequencer.submitRelease(settle, ed25519.sign(encodeRelease(settle), SECRETS.alice));
@@ -640,7 +647,7 @@ describe("authenticity verifiers return false on hostile input, never throw", ()
     const { backing, venue } = setup();
     const junk = [
       { position: 0, kind: "burn" as const, holder: new Uint8Array(3), quantity: 1n, nonce: 0n, signature: new Uint8Array(0) },
-      { position: 1, kind: "release" as const, demandHash: new Uint8Array(1), nonce: -1n, signature: new Uint8Array(64) },
+      { position: 1, kind: "release" as const, demandHash: new Uint8Array(1), holder: new Uint8Array(2), nonce: -1n, signature: new Uint8Array(64) },
     ];
     expect(replayLog(backing, junk)).toBeUndefined();
     expect(
@@ -708,6 +715,7 @@ describe("the law is applied once, so the ledger and the replay cannot drift", (
     const settle = {
       backing: f.backing,
       demandHash: demandHash(demand),
+      holder: KEYS.alice,
       nonce: f.sequencer.nextNonce(KEYS.alice, f.backing),
     };
     const signature = ed25519.sign(encodeRelease(settle), SECRETS.alice);
@@ -720,6 +728,7 @@ describe("the law is applied once, so the ledger and the replay cannot drift", (
         position: snapshot.opLog.length,
         kind: "release" as const,
         demandHash: demandHash(demand),
+        holder: KEYS.alice,
         nonce: settle.nonce,
         signature,
       },
@@ -784,6 +793,7 @@ describe("the law is applied once, so the ledger and the replay cannot drift", (
     const settle = {
       backing: f.backing,
       demandHash: demandHash(demand),
+      holder: KEYS.alice,
       nonce: f.sequencer.nextNonce(KEYS.alice, f.backing),
     };
     f.sequencer.submitRelease(settle, ed25519.sign(encodeRelease(settle), SECRETS.alice));
@@ -810,6 +820,7 @@ describe("the law is applied once, so the ledger and the replay cannot drift", (
     const walk = {
       backing: f.backing,
       demandHash: demandHash(demand),
+      holder: KEYS.alice,
       nonce: f.sequencer.nextNonce(KEYS.alice, f.backing),
     };
     f.sequencer.submitWithdrawal(walk, ed25519.sign(encodeWithdrawal(walk), SECRETS.alice));

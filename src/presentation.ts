@@ -39,6 +39,7 @@ import { EncodingError, compareBytes, bigintToMinimalBytes, ByteReader, ByteWrit
 import { verifySignatureStrict } from "./keys.js";
 import {
   ACCEPTANCE_CONTEXT,
+  ATTEMPT_CONTEXT,
   DEMAND_CONTEXT,
   RELEASE_CONTEXT,
   WITHDRAWAL_CONTEXT,
@@ -74,6 +75,23 @@ export interface AcceptanceOp {
 export interface ReleaseOp {
   readonly backing: Backing;
   readonly demandHash: Uint8Array;
+  /**
+   * **Which record this ends**, not who signs it.
+   *
+   * A lock is keyed by (attempt, holder), so the hash alone no longer names one
+   * record — that is the whole point of the key, and it is what ends the squat
+   * family. The law has to resolve the signer before it can check a signature,
+   * and for a withdrawal the signer IS the holder, so the lookup cannot wait
+   * for the signature to tell it. The message carries it instead.
+   *
+   * The record's holder rather than the signer's key, because §C3's paying lock
+   * is held by the OBLIGOR and converted by the demand holder alone ("void only
+   * on the holder's release"): a field naming the signer could not express that
+   * record at all. Naming a key you do not control buys nothing — the law
+   * resolves the signer from the record this selects, so the signature is then
+   * checked against a party you are not.
+   */
+  readonly holder: Uint8Array;
   readonly nonce: bigint;
 }
 
@@ -105,15 +123,35 @@ export interface LockOp {
   /** The backing whose units are reserved. */
   readonly backing: Backing;
   /**
-   * The atomic attempt these units are reserved for, named by the holder.
+   * The atomic attempt these units are reserved for, **named by its terms**.
    *
    * **A presentation's attempt is its demand**, so the id is that demand's hash
-   * and everything about reliance legs reads unchanged. A bundle transfer picks
-   * its own id, and nothing else about the mechanism differs — the reservation,
-   * the timeout and the exit are one set of rules, because they are one property:
-   * units spoken for by an attempt that will either commit or expire.
+   * and everything about reliance legs reads unchanged. A bundle transfer's is
+   * `attemptIdOf(salt, decisionVenue, timeout, parties)` — nobody picks it, and
+   * the law refuses a lock that claims one. Nothing else about the mechanism
+   * differs: the reservation, the timeout and the exit are one set of rules,
+   * because they are one property — units spoken for by an attempt that will
+   * either commit or expire.
    */
   readonly attemptId: Uint8Array;
+  /**
+   * The one term of a venue-naming attempt that is not already in this message.
+   *
+   * `attemptId` must equal `attemptIdOf(salt, decisionVenue, timeout, parties)`,
+   * so the id IS the terms and a lock under it cannot carry different ones. Drawn
+   * at random, once per attempt: it is what keeps an id published at a venue from
+   * being a searchable index of who traded with whom, and what keeps a repeat
+   * trade on the same terms from being the same attempt.
+   *
+   * **Omitted is `NO_ATTEMPT_SALT`**, which is what a set leg carries: its
+   * attempt is its demand, whose hash the demand itself fixes, so there is no
+   * salt to draw. A venue-naming lock is refused for carrying that value — not
+   * because it is the only guessable salt (a counter or a hash of the terms
+   * passes, and both are recomputable), but because it is the one an omission
+   * produces, and omitting it is the mistake this API invites. Drawing a random
+   * one is the party's, and no code here checks it.
+   */
+  readonly salt?: Uint8Array;
   readonly holder: Uint8Array;
   /** Where these units go if the attempt commits. */
   readonly beneficiary: Uint8Array;
@@ -252,6 +290,8 @@ export interface Commit {
 export interface WithdrawalOp {
   readonly backing: Backing;
   readonly demandHash: Uint8Array;
+  /** Which record this ends. Same field, same reason: see ReleaseOp. */
+  readonly holder: Uint8Array;
   readonly nonce: bigint;
 }
 
@@ -292,17 +332,23 @@ export function encodeAcceptanceMessage(
   return w.finish();
 }
 
-/** Release and withdrawal are the same shape: one demand, one nonce. */
+/**
+ * Release and withdrawal are the same shape: one record, one nonce. The record
+ * is (hash, holder) — under a lock key of (attempt, holder) the hash alone
+ * names a slot rather than a record, so the holder is inside the signed bytes.
+ */
 function endOfDemandMessage(
   context: Uint8Array,
   backingName: Uint8Array,
   demandHash: Uint8Array,
+  holder: Uint8Array,
   nonce: bigint,
 ): Uint8Array {
   const w = new ByteWriter();
   w.context(context);
   w.key32(backingName, "backing name");
   w.key32(demandHash, "demand hash");
+  w.key32(holder, "record holder key");
   w.u64(nonce);
   return w.finish();
 }
@@ -310,18 +356,62 @@ function endOfDemandMessage(
 export function encodeReleaseMessage(
   backingName: Uint8Array,
   demandHash: Uint8Array,
+  holder: Uint8Array,
   nonce: bigint,
 ): Uint8Array {
-  return endOfDemandMessage(RELEASE_CONTEXT, backingName, demandHash, nonce);
+  return endOfDemandMessage(RELEASE_CONTEXT, backingName, demandHash, holder, nonce);
 }
 
 export function encodeWithdrawalMessage(
   backingName: Uint8Array,
   demandHash: Uint8Array,
+  holder: Uint8Array,
   nonce: bigint,
 ): Uint8Array {
-  return endOfDemandMessage(WITHDRAWAL_CONTEXT, backingName, demandHash, nonce);
+  return endOfDemandMessage(WITHDRAWAL_CONTEXT, backingName, demandHash, holder, nonce);
 }
+
+/**
+ * **A venue-naming attempt is named by the hash of its terms**, as invariant 1
+ * names a backing by the hash of (K, P, R, E). The attempt is the other object
+ * several parties must agree on and none may edit alone, and naming it by 32
+ * bytes somebody picked was what let a stranger stand a lock beside yours on
+ * terms of their own — the whole squat family, and the cross-backing theft the
+ * per-backing timeout rule could not reach.
+ *
+ * The terms are the decision venue, the timeout and the party set: everything a
+ * sequencer must read the same way as every other sequencer in the exchange.
+ * Quantity and beneficiary are deliberately NOT here — they differ per lock, and
+ * an id fixing them could not name one attempt across several.
+ *
+ * **The salt is the one term not already in the lock message, and it is a hiding
+ * term rather than decoration.** A commit names its attempt id and nothing else,
+ * so without a salt the id published at a venue is a searchable index of who
+ * traded with whom: a dictionary over a key directory and a timeout window
+ * recovers the party set in seconds. Draw it at random, once per attempt — a
+ * derived salt makes a repeat trade on the same terms the *same* attempt, which
+ * is the id-reuse hazard a random id avoided by default.
+ *
+ * A set leg names no decision venue and takes its demand's own hash, which the
+ * demand already fixes; its salt is zero, so a record has one spelling.
+ */
+export function attemptIdOf(
+  salt: Uint8Array,
+  decisionVenue: Uint8Array,
+  timeout: bigint,
+  parties: readonly Uint8Array[],
+): Uint8Array {
+  const w = new ByteWriter();
+  w.context(ATTEMPT_CONTEXT);
+  w.key32(salt, "attempt salt");
+  w.key32(decisionVenue, "decision venue");
+  w.u64(timeout);
+  writeKeySet(w, parties, "attempt parties");
+  return sha256(w.finish());
+}
+
+/** The salt a set leg carries: none, and one spelling for it. */
+export const NO_ATTEMPT_SALT = new Uint8Array(32);
 
 export function encodeLockMessage(
   backingName: Uint8Array,
@@ -333,6 +423,15 @@ export function encodeLockMessage(
   decisionVenue: Uint8Array,
   parties: readonly Uint8Array[],
   nonce: bigint,
+  // No default. Optionality is `LockOp`'s, and it is applied once, where that
+  // type is turned into bytes (`encodeLock`) or into a record (`lockEntry`). A
+  // default here also served `opMessageOfEntry`, whose entry has the salt as a
+  // REQUIRED field — so an entry missing it encoded as a zero salt, and two
+  // distinct entries shared one identity (found reviewing this slice). Absent,
+  // it now fails in the writer like any other missing field; that failure is a
+  // TypeError rather than a named boundary, which is what every absent field
+  // does here and is why callers of the verifiers catch broadly.
+  salt: Uint8Array,
 ): Uint8Array {
   validateQuantity(quantity, "lock quantity");
   const w = new ByteWriter();
@@ -346,6 +445,7 @@ export function encodeLockMessage(
   w.key32(decisionVenue, "decision venue");
   writeKeySet(w, parties, "lock parties");
   w.u64(nonce);
+  w.key32(salt, "attempt salt");
   return w.finish();
 }
 
@@ -492,6 +592,7 @@ export function encodeLock(op: LockOp): Uint8Array {
     op.decisionVenue,
     op.parties,
     op.nonce,
+    op.salt ?? NO_ATTEMPT_SALT,
   );
 }
 
@@ -522,9 +623,9 @@ export function encodeAcceptance(op: AcceptanceOp): Uint8Array {
 }
 
 export function encodeRelease(op: ReleaseOp): Uint8Array {
-  return encodeReleaseMessage(op.backing.name, op.demandHash, op.nonce);
+  return encodeReleaseMessage(op.backing.name, op.demandHash, op.holder, op.nonce);
 }
 
 export function encodeWithdrawal(op: WithdrawalOp): Uint8Array {
-  return encodeWithdrawalMessage(op.backing.name, op.demandHash, op.nonce);
+  return encodeWithdrawalMessage(op.backing.name, op.demandHash, op.holder, op.nonce);
 }

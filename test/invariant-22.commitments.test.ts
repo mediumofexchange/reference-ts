@@ -10,8 +10,9 @@ import {
   type Commitment,
 } from "../src/commitment.js";
 import { encodeIssuance } from "../src/messages.js";
+import { attemptIdOf, countersignCommit, encodeLock, signCommit, type LockOp } from "../src/presentation.js";
 import { Sequencer } from "../src/sequencer.js";
-import { EncodingError } from "../src/bytes.js";
+import { compareBytes, EncodingError } from "../src/bytes.js";
 import { stateProvesCommitment } from "../src/commitment.js";
 import { receiptProvenBy, verifyReceipt } from "../src/receipt.js";
 import { LocalVenue, VenueError, type Venue } from "../src/venue.js";
@@ -309,7 +310,7 @@ describe("invariant 22: hostile presentation entries fail the proof, never throw
 
   it("rejects a logged presentation entry with a negative nonce or instant", () => {
     expect(() =>
-      stateRoot(withLog({ position: 0, kind: "withdrawal", demandHash: name, nonce: -1n, signature: new Uint8Array(64) })),
+      stateRoot(withLog({ position: 0, kind: "withdrawal", demandHash: name, holder, nonce: -1n, signature: new Uint8Array(64) })),
     ).toThrow(EncodingError);
     expect(() =>
       stateRoot(
@@ -352,6 +353,7 @@ describe("invariant 22: hostile presentation entries fail the proof, never throw
       position: 0,
       kind: "withdrawal" as const,
       demandHash: holder,
+      holder,
       nonce: 0n,
       signature: new Uint8Array(64),
     };
@@ -370,5 +372,62 @@ describe("invariant 22: the proof never throws, whatever it is handed", () => {
     for (const junk of [undefined, null, {}, { root: null }, { root: 5, sequence: 1n, operator: KEYS.operator, signature: new Uint8Array(64) }]) {
       expect(stateProvesCommitment(snapshots, junk as never)).toBe(false);
     }
+  });
+});
+
+describe("invariant 22: the root binds WHICH object settled an attempt", () => {
+  it("two commit objects under one attempt do not root alike", () => {
+    // The root must be injective, or one operator signature covers two states.
+    // A commit's signature set decides which locks it converts — since a lock is
+    // keyed by (attempt, holder), several stand under one attempt — so two
+    // objects settle two different lock sets from one log prefix. Rooted by the
+    // commit's message alone (the attempt and nothing else) they rooted
+    // identically: a stranger could drop a signature from a served log, keep it
+    // replaying and root-proving, and turn an honest holder's receipt into a
+    // fault verdict. Found regression-reviewing the receipt fix, which bound the
+    // object's identity for the receipt and left it unbound here.
+    const venue = new LocalVenue();
+    const sequencer = new Sequencer(SECRETS.operator, venue);
+    const backing = makeTransparentBacking(SECRETS.backer);
+    sequencer.register(backing, signBacking(SECRETS.backer, backing));
+    for (const who of ["alice", "bob"] as const) {
+      const issue = { backing, recipient: KEYS[who], quantity: 100n, nonce: BigInt(who === "alice" ? 0 : 1) };
+      sequencer.submitIssue(issue, ed25519.sign(encodeIssuance(issue), SECRETS.backer));
+    }
+    const salt = new Uint8Array(32).fill(0x77);
+    const both = [KEYS.alice, KEYS.bob].sort(compareBytes);
+    // One exchange, so one party set and one id — the terms are the id now.
+    const attempt = attemptIdOf(salt, venue.id, 50n, both);
+    const lockOp = (who: "alice" | "bob", quantity: bigint, parties: Uint8Array[]): LockOp => ({
+      backing,
+      attemptId: attemptIdOf(salt, venue.id, 50n, parties),
+      salt,
+      holder: KEYS[who],
+      beneficiary: KEYS.carol,
+      quantity,
+      timeout: 50n,
+      decisionVenue: venue.id,
+      parties,
+      nonce: sequencer.nextNonce(KEYS[who], backing),
+    });
+    // Alice's lock converts on her signature alone; Bob's needs both.
+    const a = lockOp("alice", 40n, [KEYS.alice]);
+    sequencer.submitLock(a, ed25519.sign(encodeLock(a), SECRETS.alice));
+    const b = lockOp("bob", 30n, both);
+    sequencer.submitLock(b, ed25519.sign(encodeLock(b), SECRETS.bob));
+    venue.advance(3n);
+    const solo = signCommit(SECRETS.alice, attempt);
+    const full = countersignCommit(solo, SECRETS.bob);
+    // The two objects, as the log would carry them at one position.
+    const entryOf = (commit: { attemptId: Uint8Array; signatures: readonly { signer: Uint8Array; signature: Uint8Array }[] }) => ({
+      position: sequencer.opLog(backing).length,
+      kind: "commit" as const,
+      attemptId: commit.attemptId,
+      signatures: commit.signatures,
+    });
+    const prefix = sequencer.opLog(backing);
+    const rootWith = (commit: Parameters<typeof entryOf>[0]) =>
+      bytesToHex(stateRoot([{ name: backing.name, opLog: [...prefix, entryOf(commit)] }]));
+    expect(rootWith(solo)).not.toBe(rootWith(full));
   });
 });

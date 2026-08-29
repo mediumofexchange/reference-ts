@@ -13,6 +13,7 @@ import {
   encodeReleaseMessage,
   encodeWithdrawalMessage,
   encodeLock,
+  NO_ATTEMPT_SALT,
   NO_DECISION_VENUE,
   signCommit,
   type LockOp,
@@ -90,10 +91,10 @@ describe("a venue's records have one canonical spelling", () => {
         signature: sign(encodeDemandMessage(n, KEYS.alice, 40n, 3n, 9n, 2n), SECRETS.alice) },
       { kind: "acceptance", demandHash: h, instant: 3n, deadline: 9n, nonce: 1n,
         signature: sign(encodeAcceptanceMessage(n, h, 3n, 9n, 1n), SECRETS.backer) },
-      { kind: "release", demandHash: h, nonce: 3n,
-        signature: sign(encodeReleaseMessage(n, h, 3n), SECRETS.alice) },
-      { kind: "withdrawal", demandHash: h, nonce: 4n,
-        signature: sign(encodeWithdrawalMessage(n, h, 4n), SECRETS.alice) },
+      { kind: "release", demandHash: h, holder: KEYS.alice, nonce: 3n,
+        signature: sign(encodeReleaseMessage(n, h, KEYS.alice, 3n), SECRETS.alice) },
+      { kind: "withdrawal", demandHash: h, holder: KEYS.alice, nonce: 4n,
+        signature: sign(encodeWithdrawalMessage(n, h, KEYS.alice, 4n), SECRETS.alice) },
     ];
     expect(new Set(ops.map((o) => o.kind)).size).toBe(7);
     for (const op of ops) {
@@ -176,10 +177,16 @@ describe("the two record kinds the first table left out: a lock and a commit", (
   /** `n` distinct valid keys in canonical order. */
   const parties = (n: number) =>
     Array.from({ length: n }, (_, i) => pub(new Uint8Array(32).fill(0x10 + i))).sort(compareBytes);
+  // A NON-ZERO salt, because a zero one round-trips whether or not the codec
+  // carries the field at all: with `salt: op.salt ?? NO_ATTEMPT_SALT` below, a
+  // codec that dropped the salt entirely still produced a matching record. The
+  // review round's mutation pass caught that this test could not see it.
+  const SALT = new Uint8Array(32).fill(0x6d);
   const lockOp = (keys: readonly Uint8Array[]): PublishedOp => {
     const op: LockOp = {
       backing,
       attemptId: attempt,
+      salt: SALT,
       holder: KEYS.alice,
       beneficiary: KEYS.bob,
       quantity: 9n,
@@ -198,6 +205,7 @@ describe("the two record kinds the first table left out: a lock and a commit", (
       decisionVenue: op.decisionVenue,
       parties: op.parties,
       nonce: op.nonce,
+      salt: op.salt ?? NO_ATTEMPT_SALT,
       signature: ed25519.sign(encodeLock(op), SECRETS.alice),
     };
   };
@@ -210,6 +218,9 @@ describe("the two record kinds the first table left out: a lock and a commit", (
       expect(decoded.op).toEqual(op);
       expect(decoded.backingName).toEqual(name);
       expect(encodePublishedOp(name, decoded.op)).toEqual(bytes);
+      // Named, not merely covered by the deep compare: the salt is what a
+      // verifier re-checks the attempt id against, so it has to survive the wire.
+      expect((decoded.op as Extract<PublishedOp, { kind: "lock" }>).salt).toEqual(SALT);
     }
     const commit = signCommit(SECRETS.alice, attempt);
     const op: PublishedOp = { kind: "commit", attemptId: commit.attemptId, signatures: commit.signatures };
