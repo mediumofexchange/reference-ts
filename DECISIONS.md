@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-08-29` [The force rule: a replacement is co-signed, and takes effect at its effective index](decisions/2026-08.md#2026-08-29--the-force-rule-a-replacement-is-co-signed-and-takes-effect-at-its-effective-index)
 - `2026-08-28` [Slice 32: an attempt is named by the hash of its terms](decisions/2026-08.md#2026-08-28--slice-32-an-attempt-is-named-by-the-hash-of-its-terms)
 - `2026-08-28` [Slice 31: locks keyed by (attempt, holder), and the squat family ends](decisions/2026-08.md#2026-08-28--slice-31-locks-keyed-by-attempt-holder-and-the-squat-family-ends)
 - `2026-08-27` [Venues: Ergo is queued, Bitcoin is the direction after it](decisions/2026-08.md#2026-08-27--venues-ergo-is-queued-bitcoin-is-the-direction-after-it)

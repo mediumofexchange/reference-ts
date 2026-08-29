@@ -367,6 +367,13 @@ for speed anywhere else; this is a reference implementation, not a product.
 
 - **Plan before code.** For each slice: propose the approach, wait for the maintainer's
   approval, then build.
+- **A design decision gets a panel before it is implemented.** Where a slice turns
+  on a choice — a mechanism, a boundary, what a rule should be — run independent
+  angles on the CHOICE and let the recommendation come out of them, rather than
+  proposing an answer and asking a panel to bless it. Angles where applicable:
+  simplicity, security, practicality, and whether it consolidates with a mechanism
+  that already exists. Decided 2026-08-29, after a slice whose shape was chosen
+  solo and whose review round then found the shape itself unbuildable.
 - **Tests first, named for invariants.** Test files follow
   `invariant-07.issuance-paths.test.ts`. Each test carries a one-line
   plain-language statement of what it checks. the maintainer reviews the tests; the
@@ -389,6 +396,11 @@ for speed anywhere else; this is a reference implementation, not a product.
   clever code everywhere — an auditor reads this once and has to be convinced.
 - **Small commits, one slice per branch.** Run `/code-review` before merging
   to main. Never push without asking.
+- **Every change gets a review round**, not only the ones that feel large enough
+  to warrant one. A slice does not merge with the round owed; a session that
+  cannot run one has a reason to stop, not a reason to ship. If the harness a
+  session runs under forbids spawning agents, say so when reading this file
+  rather than at the end of the slice.
 - **Review agents run on Opus.** Every agent spawned for a review — the
   `/code-review` finder angles, the verify pass, the regression reviews of a
   fix round — is started with `model: "opus"`; the session model does the
