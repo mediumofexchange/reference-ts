@@ -406,7 +406,7 @@ describe("§C2: a successor serves, and only once it is in force", () => {
       { backing, from: KEYS.alice, to: KEYS.bob, quantity: 40n, nonce: 0n },
       ed25519.sign(encodeTransferMessage(backing.name, KEYS.alice, KEYS.bob, 40n, 0n), SECRETS.alice),
     );
-    const commitment = server.commit();
+    const { commitment } = server.commit();
     return { server, issued, served: { snapshots: server.snapshot(), commitment } };
   }
 
@@ -547,7 +547,7 @@ describe("§C2: a successor that does not serve the state in full", () => {
       { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
       ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
     );
-    const served = { snapshots: incumbent.snapshot(), commitment: incumbent.commit() };
+    const served = incumbent.commit();
 
     at(venue, 5n);
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 5n));
@@ -643,7 +643,7 @@ describe("§C2: a retired operator still answers a repeat, and refuses a new act
     };
     const signature = ed25519.sign(encodeLock(lock), SECRETS.alice);
     const receipt = incumbent.submitLock(lock, signature);
-    const served = { snapshots: incumbent.snapshot(), commitment: incumbent.commit() };
+    const served = incumbent.commit();
     at(venue, 5n);
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 8n));
     const successor = new Sequencer(SUCCESSOR_SECRET, venue);
@@ -676,10 +676,10 @@ describe("§C2: a publication is judged against the record that governed at its 
       { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
       ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
     );
-    let served = { snapshots: incumbent.snapshot(), commitment: incumbent.commit() };
+    let served = incumbent.commit();
     for (let i = 5n; i <= lastCommit; i += 5n) {
       at(venue, i);
-      served = { snapshots: incumbent.snapshot(), commitment: incumbent.commit() };
+      served = incumbent.commit();
     }
     // Published where the venue already stands, effective at the handover
     // index: the gap between the two is §C2's lead time, and it is what the
@@ -795,7 +795,7 @@ describe("§C2: what a door asks of a backing it touches, and of one it only rea
     const lockSalt = new Uint8Array(32).fill(0x3a);
     const lock = { backing, attemptId: attemptIdOf(lockSalt, venue.id, 500n, [KEYS.alice]), salt: lockSalt, holder: KEYS.alice, beneficiary: KEYS.bob, quantity: 10n, timeout: 500n, decisionVenue: venue.id, parties: [KEYS.alice], nonce: 0n };
     incumbent.submitLock(lock, ed25519.sign(encodeLock(lock), SECRETS.alice));
-    const served = { snapshots: incumbent.snapshot(), commitment: incumbent.commit() };
+    const served = incumbent.commit();
     other.publish(served.commitment);
     at(venue, 5n); at(other, 5n);
     // Effective ahead of witnessing, so both takeovers happen in the lead time.

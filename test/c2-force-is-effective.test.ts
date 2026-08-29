@@ -112,7 +112,7 @@ function serving(
     { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
     ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), obligorSecret),
   );
-  const commitment = sequencer.commit();
+  const { commitment } = sequencer.commit();
   const state: ServedState = { snapshots: sequencer.snapshot(), commitment };
   return { sequencer, state };
 }

@@ -1,7 +1,7 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
-import { signCommitment, stateProvesCommitment, type Commitment } from "../src/commitment.js";
+import { signCommitment, stateProvesCommitment, type Commitment, type ServedState } from "../src/commitment.js";
 import { encodeIssuance, encodeTransfer } from "../src/messages.js";
 import { attemptIdOf, demandHash, encodeAcceptance, encodeDemand, encodeLock, encodeRelease, encodeWithdrawal } from "../src/presentation.js";
 import { isSilent, provesHolding, quietFor, redemptionIsOpen, snapshotRedemptions } from "../src/recovery.js";
@@ -46,9 +46,11 @@ function setup(silence: typeof SILENCE | null = SILENCE) {
 }
 
 /** The served state and the commitment it proves against — what a holder is handed. */
-function served(sequencer: Sequencer) {
-  const snapshots = sequencer.snapshot();
-  return { snapshots, commitment: sequencer.commit() };
+/** The pair a verifier is handed: `commit` returns exactly what it rooted. */
+function served(sequencer: Sequencer): ServedState {
+  // Was: snapshot BEFORE commit — which read the log before the commit's own
+  // catch-up could change it, and built the pair out of two reads besides.
+  return sequencer.commit();
 }
 
 describe("§C2b: silence is a public fact, measured on the venue's clock", () => {

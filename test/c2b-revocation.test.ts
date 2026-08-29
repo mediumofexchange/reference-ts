@@ -89,7 +89,7 @@ function issue(sequencer: Sequencer, backing: Backing, quantity: bigint) {
 }
 
 function commitAll(sequencer: Sequencer): ServedState {
-  return { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+  return sequencer.commit();
 }
 
 describe("§C2b: a revocation is K's own signature over K", () => {

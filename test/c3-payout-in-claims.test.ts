@@ -229,7 +229,7 @@ describe("§C3: reading the payout, and the gap", () => {
     const f = setup();
     const { hash } = file(f, 40n);
     const terms = (name: Uint8Array) => (compareBytes(name, f.gold.name) === 0 ? f.gold : undefined);
-    const served = () => ({ snapshots: f.sequencer.snapshot(), commitment: f.sequencer.commit() });
+    const served = () => (f.sequencer.commit());
     expect(payoutOf(f.eur, f.venue, terms, served(), hash)).toBe("unreserved");
     accept(f, hash, 40n);
     advanceWitnessedIndex(f.venue, 1n); // one commitment per witnessed index (28b: eras end legibly)
@@ -397,7 +397,7 @@ describe("§C3: the other doors to the payout, closed", () => {
     const f = setup(true);
     const { hash } = file(f, 40n);
     accept(f, hash, 40n);
-    const commitment = f.sequencer.commit();
+    const { commitment } = f.sequencer.commit();
     const served = { snapshots: f.sequencer.snapshot(), commitment };
     f.venue.advance(30n);
     const head = { backing: f.eur, demandHash: hash, holder: KEYS.alice, nonce: f.sequencer.nextNonce(KEYS.alice, f.eur) };
@@ -647,7 +647,7 @@ describe("§C3: dishonour where P pays in claims — the branch where no accepta
   const gold = (f: ReturnType<typeof setup>) => (name: Uint8Array) =>
     compareBytes(name, f.gold.name) === 0 ? f.gold : undefined;
   const servedOf = (f: ReturnType<typeof setup>): ServedState => {
-    const commitment = f.sequencer.commit();
+    const { commitment } = f.sequencer.commit();
     return { snapshots: f.sequencer.snapshot(), commitment };
   };
 

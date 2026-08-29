@@ -36,14 +36,14 @@ function setup() {
 describe("invariant 22: state proves against the latest commitment", () => {
   it("the published commitment verifies under the operator key", () => {
     const { sequencer, venue } = setup();
-    const commitment = sequencer.commit();
+    const { commitment } = sequencer.commit();
     expect(verifyCommitment(commitment)).toBe(true);
     expect(venue.latestFor(sequencer.operator)).toEqual(commitment);
   });
 
   it("a commitment with a mutated root or sequence does not verify", () => {
     const { sequencer } = setup();
-    const commitment = sequencer.commit();
+    const { commitment } = sequencer.commit();
     const mutatedRoot = commitment.root.slice();
     mutatedRoot[0] = (mutatedRoot[0] as number) ^ 0xff;
     expect(verifyCommitment({ ...commitment, root: mutatedRoot })).toBe(false);
@@ -52,7 +52,7 @@ describe("invariant 22: state proves against the latest commitment", () => {
 
   it("the venue rejects an unsigned commitment and a non-extending sequence", () => {
     const { sequencer, venue } = setup();
-    const first = sequencer.commit();
+    const { commitment: first } = sequencer.commit();
     const forged = { ...first, signature: new Uint8Array(64) };
     expect(() => venue.publish(forged)).toThrow(VenueError);
     // Re-publishing the same sequence does not extend the operator's history.
@@ -65,7 +65,7 @@ describe("invariant 22: state proves against the latest commitment", () => {
     // published. Copy in, copy out — otherwise an operator can retroactively
     // deny its own commitment, which is exactly what the venue exists to stop.
     const { sequencer, venue } = setup();
-    const mine = sequencer.commit();
+    const { commitment: mine } = sequencer.commit();
     mine.root.fill(0xff);
     mine.signature.fill(0xff);
     mine.operator.fill(0xff);
@@ -83,13 +83,13 @@ describe("invariant 22: state proves against the latest commitment", () => {
 
   it("the served state recomputes to the committed root", () => {
     const { sequencer } = setup();
-    const commitment = sequencer.commit();
+    const { commitment } = sequencer.commit();
     expect(stateRoot(sequencer.snapshot())).toEqual(commitment.root);
   });
 
   it("a tampered state does not match the commitment", () => {
     const { sequencer } = setup();
-    const commitment = sequencer.commit();
+    const { commitment } = sequencer.commit();
     const snapshot = sequencer.snapshot();
     // Retarget the issuance in the log — the log is the whole of what is
     // committed, so the root is what has to catch it.
@@ -104,7 +104,7 @@ describe("invariant 22: state proves against the latest commitment", () => {
 
   it("two different roots at one sequence by one operator are equivocation", () => {
     const { sequencer } = setup();
-    const honest = sequencer.commit();
+    const { commitment: honest } = sequencer.commit();
     // A second, conflicting commitment at the same sequence.
     const forgedRoot = new Uint8Array(32).fill(0xab);
     const conflicting = signCommitment(SECRETS.operator, honest.sequence, forgedRoot);
@@ -113,16 +113,16 @@ describe("invariant 22: state proves against the latest commitment", () => {
 
   it("distinct roots at distinct sequences are not equivocation", () => {
     const { venue, sequencer } = setup();
-    const first = sequencer.commit();
+    const { commitment: first } = sequencer.commit();
     venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
-    const second = sequencer.commit();
+    const { commitment: second } = sequencer.commit();
     expect(second.sequence).toBe(first.sequence + 1n);
     expect(isEquivocation(first, second)).toBe(false);
   });
 
   it("a commitment signed by a different key is not the operator's equivocation", () => {
     const { sequencer } = setup();
-    const honest = sequencer.commit();
+    const { commitment: honest } = sequencer.commit();
     const impostor = signCommitment(SECRETS.mallory, honest.sequence, new Uint8Array(32).fill(0xcd));
     expect(isEquivocation(honest, impostor)).toBe(false);
   });
@@ -134,7 +134,7 @@ describe("invariant 22: state proves against the latest commitment", () => {
     // them, so an absent field raised a TypeError naming no boundary — the one
     // fault predicate that lacked the guard the others have.
     const { sequencer } = setup();
-    const honest = sequencer.commit();
+    const { commitment: honest } = sequencer.commit();
     const malformed = [
       { ...honest, operator: undefined },
       { ...honest, root: undefined },

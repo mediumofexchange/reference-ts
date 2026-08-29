@@ -53,9 +53,9 @@ function issue(sequencer: Sequencer, backing: Backing, to: Uint8Array, quantity:
 }
 
 /** Committed first, then snapshotted (a return commit restores and adopts before it publishes). */
+/** The pair a verifier is handed: `commit` returns exactly what it rooted. */
 function served(sequencer: Sequencer): ServedState {
-  const commitment = sequencer.commit();
-  return { snapshots: sequencer.snapshot(), commitment };
+  return sequencer.commit();
 }
 
 function transferOp(backing: Backing, secret: Uint8Array, from: Uint8Array, to: Uint8Array, quantity: bigint, nonce: bigint) {
@@ -200,7 +200,7 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     // operation into a position its log already gave away.
     const { venue, sequencer, backing } = setup();
     issue(sequencer, backing, KEYS.alice, 100n, 0n);
-    const c0 = sequencer.commit(); // at 0
+    const { commitment: c0 } = sequencer.commit(); // at 0
     const state0 = { snapshots: sequencer.snapshot(), commitment: c0 };
     advanceWitnessedIndex(venue, 1n);
     const spend = transferOp(backing, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
@@ -235,7 +235,7 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     // the honest operator this excuse exists for is 28a's, whose dead tail
     // beside its adopted gap otherwise proved isDoublePosition against it.
     advanceWitnessedIndex(venue, 15n);
-    const cr = sequencer.commit(); // the return closes the era with a gap
+    const { commitment: cr } = sequencer.commit(); // the return closes the era with a gap
     const after = { snapshots: sequencer.snapshot(), commitment: cr };
     expect(eraLapsed(venue, backing, KEYS.operator, honest.after)).toBe(true);
     expect(isDoublePosition(backing, venue, after, honest, lie)).toBe(false);
@@ -317,7 +317,7 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     advanceWitnessedIndex(venue, 11n);
     venue.publishOp(backing.name, claim.published);
     advanceWitnessedIndex(venue, 15n);
-    const cr = sequencer.commit(); // the return adopts the demand
+    const { commitment: cr } = sequencer.commit(); // the return adopts the demand
     const record = { snapshots: sequencer.snapshot(), commitment: cr };
     advanceWitnessedIndex(venue, 16n);
     const adopted = sequencer.submitDemand(claim.op, claim.published.signature); // the repeat: the adoption's receipt

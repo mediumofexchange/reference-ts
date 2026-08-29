@@ -175,16 +175,16 @@ describe("§C2: a commitment's sequence is the operator's own count", () => {
     const f = setup();
     f.venue.advance(100n);
     // First commitment ever: sequence 0, at witnessed index 100.
-    expect(f.sequencer.commit().sequence).toBe(0n);
+    expect(f.sequencer.commit().commitment.sequence).toBe(0n);
     f.venue.advance(50n);
-    expect(f.sequencer.commit().sequence).toBe(1n);
+    expect(f.sequencer.commit().commitment.sequence).toBe(1n);
     expect(f.sequencer.witnessedIndex()).toBe(150n);
   });
 
   it("equivocation is still two roots at one sequence, whatever the clock says", () => {
     const f = setup();
     f.venue.advance(20n);
-    const honest = f.sequencer.commit();
+    const { commitment: honest } = f.sequencer.commit();
     const conflicting = signCommitment(
       SECRETS.operator,
       honest.sequence,
@@ -194,7 +194,7 @@ describe("§C2: a commitment's sequence is the operator's own count", () => {
     f.venue.advance(5n);
     // A later commitment at the next sequence is not equivocation, even though
     // the venue has moved on in between.
-    expect(isEquivocation(honest, f.sequencer.commit())).toBe(false);
+    expect(isEquivocation(honest, f.sequencer.commit().commitment)).toBe(false);
   });
 
   it("the venue records when each commitment was witnessed", () => {
@@ -229,7 +229,7 @@ describe("§C2: a commitment's sequence is the operator's own count", () => {
 
   it("the venue still refuses a sequence that does not extend the operator's history", () => {
     const f = setup();
-    const first = f.sequencer.commit();
+    const { commitment: first } = f.sequencer.commit();
     f.venue.advance(3n);
     expect(() => f.venue.publish(first)).toThrow(/does not extend/);
   });

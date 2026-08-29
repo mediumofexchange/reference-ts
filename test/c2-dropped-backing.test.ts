@@ -81,7 +81,7 @@ function setup(replaceable = true) {
 /** The state as the operator serves it now, committed and published. */
 function commitAll(sequencer: Sequencer): ServedState {
   // Committed first, then snapshotted: the commit adopts before it publishes.
-  const commitment = sequencer.commit();
+  const { commitment } = sequencer.commit();
   return { snapshots: sequencer.snapshot(), commitment };
 }
 
@@ -289,7 +289,7 @@ describe("§C2: the log that vanished is the log that shrank", () => {
     heir.register(eur, signBacking(SECRETS.backer, eur));
     heir.takeOver(eur, beforeHandover);
     venue.advance(2n);
-    const inForce = { snapshots: heir.snapshot(), commitment: heir.commit() };
+    const inForce = heir.commit();
 
     const dropped = {
       snapshots: [],
@@ -476,7 +476,7 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     const heir = appoint(venue, eur);
     heir.takeOver(eur, lastGood, droppedLatest);
     venue.advance(1n); // force arrives at the effective index
-    const served = { snapshots: heir.snapshot(), commitment: heir.commit() };
+    const served = heir.commit();
     expect(provesHolding(venue, eur, served, KEYS.alice, 100n)).toBe(true);
   });
 
@@ -555,7 +555,7 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     const heir = appoint(venue, eur);
     heir.takeOver(eur, first, droppedLatest);
     venue.advance(1n); // force arrives at the effective index
-    const successorState = { snapshots: heir.snapshot(), commitment: heir.commit() };
+    const successorState = heir.commit();
     expect(isRewrittenHistory(eur, venue, second, successorState)).toBe(true);
   });
 

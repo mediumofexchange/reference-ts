@@ -2,6 +2,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { compareBytes } from "../src/bytes.js";
+import { type ServedState } from "../src/commitment.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import {
   attemptIdOf,
@@ -134,10 +135,9 @@ function lockRequest(
   };
 }
 
-function servedBy(sequencer: Sequencer) {
-  // Committed first, then snapshotted: the commit adopts before it publishes.
-  const commitment = sequencer.commit();
-  return { snapshots: sequencer.snapshot(), commitment };
+/** The pair a verifier is handed: `commit` returns exactly what it rooted. */
+function servedBy(sequencer: Sequencer): ServedState {
+  return sequencer.commit();
 }
 
 describe("§C2b: non-service is counted on service, not on publication", () => {

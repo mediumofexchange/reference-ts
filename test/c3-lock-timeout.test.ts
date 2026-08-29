@@ -520,7 +520,7 @@ function lockAndCommit(f: ReturnType<typeof gapGold>, salt: Uint8Array) {
     nonce: f.sequencer.nextNonce(KEYS.alice, f.gold),
   };
   f.sequencer.submitLock(lock, ed25519.sign(encodeLock(lock), SECRETS.alice));
-  const commitment = f.sequencer.commit();
+  const { commitment } = f.sequencer.commit();
   return { lock, commitment };
 }
 

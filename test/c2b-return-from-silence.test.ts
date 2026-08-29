@@ -3,7 +3,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { compareBytes } from "../src/bytes.js";
-import { signCommitment, stateRoot } from "../src/commitment.js";
+import { signCommitment, stateRoot, type ServedState } from "../src/commitment.js";
 import { TransparentLedger } from "../src/ledger.js";
 import { type OpLogEntry } from "../src/oplog.js";
 import { encodeBurnMessage, encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
@@ -110,9 +110,9 @@ function issue(sequencer: Sequencer, backing: Backing, to: Uint8Array, quantity:
  * book and adopts the gap before it publishes, so a snapshot taken ahead of it
  * would be of a state the commitment does not root.
  */
-function served(sequencer: Sequencer) {
-  const commitment = sequencer.commit();
-  return { snapshots: sequencer.snapshot(), commitment };
+/** The pair a verifier is handed: `commit` returns exactly what it rooted. */
+function served(sequencer: Sequencer): ServedState {
+  return sequencer.commit();
 }
 
 function transferOp(backing: Backing, secret: Uint8Array, from: Uint8Array, to: Uint8Array, quantity: bigint, nonce: bigint) {

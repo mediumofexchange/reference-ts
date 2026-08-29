@@ -68,7 +68,7 @@ function setup() {
 }
 
 function served(sequencer: Sequencer): ServedState {
-  return { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+  return sequencer.commit();
 }
 
 /**

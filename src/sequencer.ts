@@ -108,7 +108,7 @@ import {
 } from "./presentation.js";
 import { copyReceipt, signReceipt, type Receipt } from "./receipt.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
-import { isNamedSuccessor, operatorAt } from "./replacement.js";
+import { isNamedSuccessor, operatorAt, successionOf, type Succession } from "./replacement.js";
 import { admittedInGap, committedInTime, gapLegsFor, gapOpen, venueIsDeclared, witnessedCommitFor } from "./recovery.js";
 import { withdrawnAgainstCommit } from "./fault.js";
 import { revokedAt } from "./revocation.js";
@@ -164,6 +164,13 @@ export class Sequencer {
   // which would be handing out the obligor key that authorises issuance.
   private readonly backings = new Map<string, Backing>();
 
+  // Backing name hex, for each backing whose BOOK this operator holds: the
+  // genesis operator, which had no predecessor to take one from, and any
+  // successor that has taken one on (`takeOver`). Registration alone is not it
+  // — a named successor may register long before it takes the state on, and in
+  // between it holds an empty log that is not the backing's history.
+  private readonly holdsBook = new Set<string>();
+
   private readonly operatorSecret: Uint8Array;
   private readonly operatorKey: Uint8Array;
 
@@ -213,6 +220,13 @@ export class Sequencer {
     }
     this.ledger.register(backing, backingSignature);
     this.backings.set(backing.nameHex, makeBacking(backing));
+    // The operator E itself names, before any handover: there is no predecessor
+    // to take a book from, so registering IS holding it, empty as it starts.
+    // Anyone else reaches the book through `takeOver`.
+    const chain = successionOf(backing, this.venue);
+    if (chain.length === 1 && compareBytes((chain[0] as Succession).operator, this.operatorKey) === 0) {
+      this.holdsBook.add(backing.nameHex);
+    }
   }
 
   /**
@@ -227,6 +241,34 @@ export class Sequencer {
         this.operatorKey,
       ) === 0
     );
+  }
+
+  /**
+   * Whether this operator may assert this backing's log in a commitment of its
+   * own — §C2's "a shared operator publishes one transaction over a root of ITS
+   * backings' commitments".
+   *
+   * **In force, and holding the book.** Both halves are needed and neither is
+   * enough. In force alone roots a book this operator may never have seen: §C2
+   * seats a successor at its effective index whether or not it took the state
+   * on, which is the cost that section now states. Holding the book alone roots
+   * it in the lead time, beside the predecessor that is still serving — two
+   * operators asserting one log at one index, which is what the root is supposed
+   * to make impossible.
+   *
+   * This is stable across `commit`, which the previous attempt at this rule was
+   * not: force used to arrive on the successor's first commitment, so publishing
+   * changed the answer mid-call and the pair a verifier is handed did not prove
+   * itself. Force is a signed field now, so nothing this method reads is
+   * anything this method's caller writes.
+   */
+  private serves(backing: Backing): boolean {
+    return this.isInForce(backing) && this.holdsBook.has(backing.nameHex);
+  }
+
+  /** This operator's backings, in the sense `serves` gives that word. */
+  private servedBackings(): Backing[] {
+    return [...this.backings.values()].filter((backing) => this.serves(backing));
   }
 
   /**
@@ -343,6 +385,8 @@ export class Sequencer {
     // on is committed, and nothing past it is — and a restore of this operator's
     // own book (its own silence on another backing) must leave it whole.
     this.ledger.markCommitted(held);
+    // And this operator now holds the book, which is the other half of `serves`.
+    this.holdsBook.add(held.nameHex);
   }
 
   /**
@@ -1191,7 +1235,7 @@ export class Sequencer {
    * (§C2b; the module header). The index comes from the venue's record of this
    * operator, so a failed publish does not burn one.
    */
-  commit(): Commitment {
+  commit(): ServedState {
     // One commitment per witnessed index: the venue's clock cannot order two,
     // and the era a receipt names — the index of the operator's last commitment
     // — must name one record, not the earlier of two (found reviewing this
@@ -1205,19 +1249,25 @@ export class Sequencer {
       );
     }
     this.caughtUp([...this.backings.values()]);
+    // **Read once, and used three times.** The served set decides what is
+    // rooted, what is marked, and what is handed back — and a venue read sits
+    // between the first and the last (`nextSequenceFor`), so asking again could
+    // answer differently on a chain whose index moves. Asking once is also what
+    // makes the returned pair prove itself.
+    const served = this.servedBackings();
+    const snapshots = this.snapshotOf(served);
     const commitment = signCommitment(
       this.operatorSecret,
       this.venue.nextSequenceFor(this.operatorKey),
-      stateRoot(this.snapshot()),
+      stateRoot(snapshots),
     );
     this.venue.publish(commitment);
     // Witnessed now: every log this commitment roots is committed to its end,
-    // and the tail is empty. Marked on every backing the root carries, which is
-    // every registered one; a restore reaches a backing only at its own open
-    // gap, in force (caughtUp), so on the others the mark is a record of what
-    // this signature rooted and nothing more.
-    for (const backing of this.backings.values()) this.ledger.markCommitted(backing);
-    return commitment;
+    // and the tail is empty. Marked on exactly the backings the root carried —
+    // the mark is what `restore` treats as the part no caller can take back, and
+    // it must not claim more than this signature covers.
+    for (const backing of served) this.ledger.markCommitted(backing);
+    return { snapshots, commitment };
   }
 
   /**
@@ -1230,9 +1280,23 @@ export class Sequencer {
     return this.venue.witnessedIndex();
   }
 
-  /** The served state, as it would be published for a verifier (invariant 23). */
+  /**
+   * The served state, as it would be published for a verifier (invariant 23) —
+   * the backings this operator serves, and no others (`serves`).
+   *
+   * A verifier is handed this beside a commitment and proves one against the
+   * other, so the two must be one read. `commit` hands back the pair it rooted
+   * for exactly that reason; this method answers the question at the moment it
+   * is asked, which is the honest answer to a different question.
+   */
   snapshot(): BackingSnapshot[] {
-    return this.ledger.snapshotAll();
+    return this.snapshotOf(this.servedBackings());
+  }
+
+  /** The ledger's serialization, narrowed to a set of backings this holds. */
+  private snapshotOf(served: readonly Backing[]): BackingSnapshot[] {
+    const names = new Set(served.map((backing) => backing.nameHex));
+    return this.ledger.snapshotAll().filter((s) => names.has(bytesToHex(s.name)));
   }
 
   outstanding(backing: Backing): bigint {

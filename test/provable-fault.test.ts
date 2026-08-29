@@ -220,7 +220,7 @@ describe("an operator that co-signed a history one nonce cannot hold", () => {
       // The record the excuse is read against (28b): the fault pairs excuse a
       // receipt exactly where the record reads it lapsed, and this backing has
       // no silence clause and no replacement rule, so nothing here ever lapses.
-      served: (() => { const commitment = one.commit(); return { snapshots: one.snapshot(), commitment }; })(),
+      served: (() => { const { commitment } = one.commit(); return { snapshots: one.snapshot(), commitment }; })(),
     };
   }
 
@@ -291,7 +291,7 @@ describe("an operator that co-signed a history one nonce cannot hold", () => {
     );
 
     expect(equivocatingSigner(backing, toBob, toAlice2)).toBeDefined();
-    const commitment = server.commit();
+    const { commitment } = server.commit();
     const served = { snapshots: server.snapshot(), commitment };
     expect(
       isDoubleAcceptance(backing, venue, served, { op: toBob, receipt: here }, { op: toAlice2, receipt: elsewhere }),
@@ -340,7 +340,7 @@ describe("an operator that co-signed a history one nonce cannot hold", () => {
     );
     const a = { op: issueOp(backing, KEYS.alice, 100n, 0n), receipt: first };
     const b = { op: op("transfer", SECRETS.alice, backing, { to: KEYS.bob, quantity: 30n, nonce: 0n }), receipt: second };
-    const commitment = server.commit();
+    const { commitment } = server.commit();
     const served = { snapshots: server.snapshot(), commitment };
     expect(isDoubleAcceptance(backing, venue, served, a, b)).toBe(false);
     expect(isDoublePosition(backing, venue, served, a.receipt, b.receipt)).toBe(false);
@@ -960,7 +960,7 @@ describe("a set settled in part is the operator's fault, read across one commitm
     f.sequencer.submitRelease(head, ed25519.sign(encodeRelease(head), SECRETS.alice), [
       { op: pay, signature: ed25519.sign(encodeRelease(pay), SECRETS.alice) },
     ]);
-    const commitment = f.sequencer.commit();
+    const { commitment } = f.sequencer.commit();
     const served = { snapshots: f.sequencer.snapshot(), commitment };
     expect(settledInPart(f.eur, f.venue, f.terms, served, hash)).toBeUndefined();
   });
@@ -982,7 +982,7 @@ describe("a set settled in part is the operator's fault, read across one commitm
     f.venue.advance(96n);
     const op = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
     f.sequencer.submitWithdrawal(op, ed25519.sign(encodeWithdrawal(op), SECRETS.backer));
-    const commitment = f.sequencer.commit();
+    const { commitment } = f.sequencer.commit();
     const served = { snapshots: f.sequencer.snapshot(), commitment };
     expect(settledInPart(f.eur, f.venue, f.terms, served, hash)).toBeUndefined();
   });
@@ -1160,7 +1160,7 @@ describe("a set settled in part is the operator's fault, read across one commitm
     f.sequencer.submitWithdrawal(head, ed25519.sign(encodeWithdrawal(head), SECRETS.alice));
     const leg = { backing: f.gold, demandHash: hash, holder: KEYS.backer, nonce: f.sequencer.nextNonce(KEYS.backer, f.gold) };
     f.sequencer.submitWithdrawal(leg, ed25519.sign(encodeWithdrawal(leg), SECRETS.backer));
-    const commitment = f.sequencer.commit();
+    const { commitment } = f.sequencer.commit();
     const served = { snapshots: f.sequencer.snapshot(), commitment };
     expect(settledInPart(f.eur, f.venue, f.terms, served, hash)).toBeUndefined();
   });
@@ -1444,7 +1444,7 @@ describe("a set settled in part is the operator's fault, read across one commitm
     f.sequencer.submitRelease(head, ed25519.sign(encodeRelease(head), SECRETS.alice), [
       { op: pay, signature: ed25519.sign(encodeRelease(pay), SECRETS.alice) },
     ]);
-    const commitment = f.sequencer.commit(); // the predecessor's honest whole
+    const { commitment } = f.sequencer.commit(); // the predecessor's honest whole
     const served = { snapshots: f.sequencer.snapshot(), commitment };
     expect(settledInPart(f.eur, f.venue, f.terms, served, hash)).toBeUndefined();
 
@@ -1454,7 +1454,7 @@ describe("a set settled in part is the operator's fault, read across one commitm
     for (const backing of [f.eur, f.gold]) heir.register(backing, signBacking(SECRETS.backer, backing));
     heir.takeOver(f.eur, served);
     f.venue.advance(1n);
-    const heirCommitment = heir.commit();
+    const { commitment: heirCommitment } = heir.commit();
     const heirServed = { snapshots: heir.snapshot(), commitment: heirCommitment };
     expect(settledInPart(f.eur, f.venue, f.terms, heirServed, hash)).toBeUndefined();
   });

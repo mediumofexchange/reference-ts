@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-08-29` [Slice 34b: commit scope, on a force rule that no longer moves](decisions/2026-08.md#2026-08-29--slice-34b-commit-scope-on-a-force-rule-that-no-longer-moves)
 - `2026-08-29` [Slice 34: the force rule built, and the sweep it cost](decisions/2026-08.md#2026-08-29--slice-34-the-force-rule-built-and-the-sweep-it-cost)
 - `2026-08-29` [The force rule: a replacement is co-signed, and takes effect at its effective index](decisions/2026-08.md#2026-08-29--the-force-rule-a-replacement-is-co-signed-and-takes-effect-at-its-effective-index)
 - `2026-08-28` [Slice 32: an attempt is named by the hash of its terms](decisions/2026-08.md#2026-08-28--slice-32-an-attempt-is-named-by-the-hash-of-its-terms)
