@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { signCommitment, stateRoot, type ServedState } from "../src/commitment.js";
 import { isRewrittenHistory } from "../src/fault.js";
+import { gapOpen, isOverdue, isSilent } from "../src/recovery.js";
 import { encodeIssuanceMessage } from "../src/messages.js";
 import {
   decodeReplacement,
@@ -281,5 +282,63 @@ describe("§C2: two replacements naming one predecessor", () => {
     expect(operatorAt(eur, venue, 25n)).toEqual(HEIR);
     // And the reading at 15 is exactly what it was before the second appeared.
     expect(operatorAt(eur, venue, 15n)).toEqual(HEIR);
+  });
+});
+
+describe("§C2: a seated successor is graded on a clock that starts when it was seated", () => {
+  // Force no longer implies a commitment, so every reader that measured an
+  // operator's quiet time from its last commitment — or from genesis where it
+  // had none — was counting time before it held the role. A punctual successor
+  // read as dark the index after it took force, and every door refuses a dark
+  // operator. One rule now (`clockStart`), read by isSilent, isOverdue and the
+  // gap. See DECISIONS.md.
+
+  it("is neither silent nor overdue the index after it takes force", () => {
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    serving(venue, eur);
+
+    at(venue, 100n);
+    venue.publishReplacement(eur.name, replacementBy(eur, HEIR, 101n, eur.name, SECRETS.backer, HEIR_SECRET));
+    at(venue, 102n);
+
+    expect(operatorAt(eur, venue, 102n)).toEqual(HEIR);
+    expect(isSilent(venue, eur)).toBe(false);
+    expect(isOverdue(venue, eur)).toBe(false);
+  });
+
+  it("nor where its own key committed long ago for a different backing", () => {
+    // The later of the two indices, not a fallback to the seat: a key that
+    // operates something else HAS a commitment, so a fallback never fires and
+    // its unrelated index is used instead.
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    const usd = backingFor(venue, "USD", HEIR);
+    serving(venue, eur);
+    const elsewhere = new Sequencer(HEIR_SECRET, venue);
+    elsewhere.register(usd, signBacking(SECRETS.backer, usd));
+    elsewhere.commit();
+
+    at(venue, 100n);
+    venue.publishReplacement(eur.name, replacementBy(eur, HEIR, 101n, eur.name, SECRETS.backer, HEIR_SECRET));
+    at(venue, 102n);
+
+    expect(operatorAt(eur, venue, 102n)).toEqual(HEIR);
+    expect(gapOpen(venue, eur)).toBeUndefined();
+  });
+
+  it("and does go dark once its own duration has run from the seat", () => {
+    // The honest path the rule leaves open, walked: the clock starts at the
+    // seat, it does not stop there.
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    serving(venue, eur);
+
+    at(venue, 100n);
+    venue.publishReplacement(eur.name, replacementBy(eur, HEIR, 101n, eur.name, SECRETS.backer, HEIR_SECRET));
+    at(venue, 101n + SILENCE.noCommitmentDuration + 1n);
+
+    expect(isSilent(venue, eur)).toBe(true);
+    expect(gapOpen(venue, eur)).toBeDefined();
   });
 });

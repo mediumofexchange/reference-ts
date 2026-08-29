@@ -127,6 +127,37 @@ function operatorNow(venue: Venue, backing: Backing): Uint8Array {
   return operatorAt(backing, venue, venue.witnessedIndex());
 }
 
+/**
+ * The index an operator's clock for THIS backing starts at: the later of its
+ * last commitment and the index it took the role.
+ *
+ * **Force no longer implies a commitment**, which is what makes this a rule
+ * rather than an accident. §C2 (2026-08-29) seats a successor at its declared
+ * effective index, having published nothing — so a clock read from its last
+ * commitment counts time before it held the role, and one read from genesis
+ * counts time before it existed. Either way a punctual successor is dark the
+ * index after it is seated, and every door refuses it for silence it had no
+ * chance to break.
+ *
+ * The "or from genesis" half is not a special case: the original attester's
+ * link has `from` zero, so this is one expression for both.
+ *
+ * A key that operates something ELSE is why the later of the two is needed
+ * rather than a fallback. Such a key HAS a commitment, so a fallback never
+ * fires and its unrelated index is used — which is the shape a first draft of
+ * this rule shipped with, and it is worse than the bug it replaced.
+ */
+function clockStart(venue: Venue, link: Succession, asOf?: bigint): bigint {
+  const last = venue.witnessedAtFor(link.operator, asOf) ?? 0n;
+  return last > link.from ? last : link.from;
+}
+
+/** How long the operator in force for this backing has been quiet ON IT. */
+function quietOn(venue: Venue, backing: Backing): bigint {
+  const now = venue.witnessedIndex();
+  return now - clockStart(venue, linkIn(successionOf(backing, venue), now));
+}
+
 export { venueIsDeclared };
 
 /**
@@ -157,9 +188,10 @@ export function isSilent(venue: Venue, backing: Backing): boolean {
   if (!venueIsDeclared(venue, backing)) return false;
   // The operator in force now, not the key E names: §C2's "a wallet verifies the
   // chain rather than the key it remembers". Accrual against a replaced
-  // incumbent stops at the handover, because the successor's own first
-  // commitment is what gave it force — so its quiet time starts there.
-  return quietFor(venue, operatorNow(venue, backing)) > clause.noCommitmentDuration;
+  // incumbent stops at the handover, and the successor's own clock starts at the
+  // index it took the role — which used to be the same thing as its first
+  // commitment, and is not any more (`clockStart`).
+  return quietOn(venue, backing) > clause.noCommitmentDuration;
 }
 
 /**
@@ -185,7 +217,8 @@ export function isOverdue(venue: Venue, backing: Backing): boolean {
   const terms = backing.evidence.witnessing;
   if (terms === undefined) return false;
   if (!venueIsDeclared(venue, backing)) return false;
-  return quietFor(venue, operatorNow(venue, backing)) > terms.interval;
+  // On this backing's clock, which starts where this operator took the role.
+  return quietOn(venue, backing) > terms.interval;
 }
 
 /**
@@ -672,15 +705,10 @@ function publishedInGap(
   // which is the same rule the publication itself is judged by. The chain is
   // walked once by the caller: it is the same chain at every index, and walking
   // it costs a signature verification per published replacement.
-  // **From the last commitment, or from the index this operator took the role.**
-  // A successor takes force at its effective index without having published
-  // anything (§C2, 2026-08-29), so measuring from zero would open its gap at the
-  // moment it was seated and refuse it at every door for a silence it had no
-  // chance to break. The original attester's link has `from` zero, so this is
-  // the same rule generalised rather than a case beside it.
-  const link = linkIn(chain, before(at));
-  const last = venue.witnessedAtFor(link.operator, before(at)) ?? link.from;
-  return at - last > clause.noCommitmentDuration;
+  // The later of this operator's last commitment and the index it took the
+  // role, which is `clockStart` — the same rule `isSilent` and `isOverdue` read,
+  // in one place rather than three.
+  return at - clockStart(venue, linkIn(chain, before(at)), before(at)) > clause.noCommitmentDuration;
 }
 
 /**
