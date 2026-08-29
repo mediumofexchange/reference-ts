@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-08-29` [Panel: the clock is the backing's, and identity is the term](decisions/2026-08.md#2026-08-29--panel-the-clock-is-the-backings-and-identity-is-the-term)
 - `2026-08-29` [Handoff: what force stopped guaranteeing, and the work it left](decisions/2026-08.md#2026-08-29--handoff-what-force-stopped-guaranteeing-and-the-work-it-left)
 - `2026-08-29` [The force-rule round: thirteen findings, one root, and a panel that did not look down](decisions/2026-08.md#2026-08-29--the-force-rule-round-thirteen-findings-one-root-and-a-panel-that-did-not-look-down)
 - `2026-08-29` [Slice 34b: commit scope, on a force rule that no longer moves](decisions/2026-08.md#2026-08-29--slice-34b-commit-scope-on-a-force-rule-that-no-longer-moves)
