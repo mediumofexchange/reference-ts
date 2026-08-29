@@ -77,9 +77,23 @@ function commitLog(backing: Backing, opLog: readonly OpLogEntry[], sequence: big
   return { snapshots, commitment: signCommitment(SECRETS.operator, sequence, stateRoot(snapshots)) };
 }
 
-function replacementBy(backing: Backing, ruleSecret: Uint8Array, successor: Uint8Array, predecessor: Uint8Array, effective: bigint): Replacement {
-  const unsigned = { role: ROLE_OPERATOR, successor, predecessor, effective, signature: new Uint8Array(64) };
-  return { ...unsigned, signature: ed25519.sign(replacementMessage(backing.name, unsigned), ruleSecret) };
+function replacementBy(backing: Backing, ruleSecret: Uint8Array, successorSecret: Uint8Array, predecessor: Uint8Array, effective: bigint): Replacement {
+  // §C2's replacement is co-signed, so the fixture needs the successor's own
+  // key: one it has not signed is not a weaker replacement, it is a naming.
+  const unsigned = {
+    role: ROLE_OPERATOR,
+    successor: ed25519.getPublicKey(successorSecret),
+    predecessor,
+    effective,
+    signature: new Uint8Array(64),
+    successorSignature: new Uint8Array(64),
+  };
+  const message = replacementMessage(backing.name, unsigned);
+  return {
+    ...unsigned,
+    signature: ed25519.sign(message, ruleSecret),
+    successorSignature: ed25519.sign(message, successorSecret),
+  };
 }
 
 describe("28b: a receipt names its era, and the era is the record's to verify", () => {
@@ -169,10 +183,13 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     const spend = transferOp(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
     const tail = incumbent.submitTransfer(spend.op, spend.signature); // dies at the handover
     advanceWitnessedIndex(venue, 3n);
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR, eur.name, 3n));
+    // Effective at 5, witnessed at 3: force is the effective index now, so the
+    // takeover happens in the lead time between the two (§C2).
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 5n));
     const successor = new Sequencer(SUCCESSOR_SECRET, venue);
     successor.register(eur, signBacking(SECRETS.backer, eur));
     successor.takeOver(eur, before);
+    advanceWitnessedIndex(venue, 5n);
     const theirs = served(successor); // at 3: force, and the record of note
     expect(eraLapsed(venue, eur, KEYS.operator, tail.after)).toBe(true);
     expect(receiptStatus(eur, venue, tail, theirs)).toBe("lapsed");
@@ -276,11 +293,13 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     const shortened = commitLog(eur, [honest[0]!], 0n);
     venue.publish(shortened.commitment);
     advanceWitnessedIndex(venue, 8n);
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR, eur.name, 8n));
+    // The takeover goes in the lead time; force lands at 10.
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 10n));
     const successor = new Sequencer(SUCCESSOR_SECRET, venue);
     successor.register(eur, signBacking(SECRETS.backer, eur));
     successor.takeOver(eur, shortened);
-    const theirs = served(successor); // at 8
+    advanceWitnessedIndex(venue, 10n);
+    const theirs = served(successor); // at 10
     expect(eraLapsed(venue, eur, KEYS.operator, receipt.after)).toBe(false);
     expect(receiptStatus(eur, venue, receipt, theirs)).toBe("contradicted");
   });

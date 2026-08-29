@@ -140,19 +140,24 @@ function request(backing: Backing, quantity: bigint, nonce: bigint): PublishedOp
 function replacementBy(
   backing: Backing,
   ruleSecret: Uint8Array,
-  successor: Uint8Array,
+  successorSecret: Uint8Array,
   effective: bigint,
 ): Replacement {
+  // Co-signed (§C2): the fixture needs the successor's own key, because a
+  // replacement it has not signed is a naming rather than a handover.
   const unsigned = {
     role: ROLE_OPERATOR,
-    successor,
+    successor: ed25519.getPublicKey(successorSecret),
     predecessor: backing.name,
     effective,
     signature: new Uint8Array(64),
+    successorSignature: new Uint8Array(64),
   };
+  const message = replacementMessage(backing.name, unsigned);
   return {
     ...unsigned,
-    signature: ed25519.sign(replacementMessage(backing.name, unsigned), ruleSecret),
+    signature: ed25519.sign(message, ruleSecret),
+    successorSignature: ed25519.sign(message, successorSecret),
   };
 }
 
@@ -249,11 +254,11 @@ describe("§C2: the log that vanished is the log that shrank", () => {
     const beforeHandover = commitAll(sequencer);
     venue.advance(1n);
     const effective = venue.witnessedIndex() + 1n;
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, KEYS.carol, effective));
-    venue.advance(2n);
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, effective));
     const heir = new Sequencer(SECRETS.carol, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));
     heir.takeOver(eur, beforeHandover);
+    venue.advance(2n);
     heir.commit();
 
     // The retired predecessor carries on with USD alone, exactly as it should.
@@ -279,11 +284,11 @@ describe("§C2: the log that vanished is the log that shrank", () => {
     const beforeHandover = commitAll(sequencer);
     venue.advance(1n);
     const effective = venue.witnessedIndex() + 1n;
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, KEYS.carol, effective));
-    venue.advance(2n);
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, effective));
     const heir = new Sequencer(SECRETS.carol, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));
     heir.takeOver(eur, beforeHandover);
+    venue.advance(2n);
     const inForce = { snapshots: heir.snapshot(), commitment: heir.commit() };
 
     const dropped = {
@@ -313,11 +318,11 @@ describe("§C2: the log that vanished is the log that shrank", () => {
 
     // Now the remedy runs: a successor is appointed and takes force.
     const effective = venue.witnessedIndex() + 1n;
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, KEYS.carol, effective));
-    venue.advance(2n);
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, effective));
     const heir = new Sequencer(SECRETS.carol, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));
     heir.takeOver(eur, carried, dropped);
+    venue.advance(2n);
     heir.commit();
 
     expect(isRewrittenHistory(eur, venue, carried, dropped)).toBe(true);
@@ -441,10 +446,15 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     return { venue, sequencer, eur, usd, lastGood, droppedLatest };
   }
 
+  /**
+   * The heir, named and registered but NOT yet in force: force is the effective
+   * index (§C2), and the callers below take the state on in the lead time before
+   * it arrives, which is what the lead time is for.
+   */
   function appoint(venue: LocalVenue, eur: Backing) {
-    const effective = venue.witnessedIndex() + 1n;
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, KEYS.carol, effective));
-    venue.advance(2n);
+    const effective = venue.witnessedIndex() + 2n;
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, effective));
+    venue.advance(1n);
     const heir = new Sequencer(SECRETS.carol, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));
     return heir;
@@ -465,6 +475,7 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     const { venue, eur, lastGood, droppedLatest } = toHandover();
     const heir = appoint(venue, eur);
     heir.takeOver(eur, lastGood, droppedLatest);
+    venue.advance(1n); // force arrives at the effective index
     const served = { snapshots: heir.snapshot(), commitment: heir.commit() };
     expect(provesHolding(venue, eur, served, KEYS.alice, 100n)).toBe(true);
   });
@@ -543,6 +554,7 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
 
     const heir = appoint(venue, eur);
     heir.takeOver(eur, first, droppedLatest);
+    venue.advance(1n); // force arrives at the effective index
     const successorState = { snapshots: heir.snapshot(), commitment: heir.commit() };
     expect(isRewrittenHistory(eur, venue, second, successorState)).toBe(true);
   });

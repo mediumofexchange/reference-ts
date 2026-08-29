@@ -75,7 +75,7 @@ import { unknownOpKind, type PublishedOp } from "./oplog.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { opHashOfEntry } from "./oplog.js";
-import { operatorAt, operatorIn, successionOf, type Succession } from "./replacement.js";
+import { linkIn, operatorAt, operatorIn, successionOf, type Succession } from "./replacement.js";
 import { revokedAt } from "./revocation.js";
 import { answering, venueIsDeclared, Venue, VenueError, type WitnessedCommit, type WitnessedOp } from "./venue.js";
 import { commitSatisfies, NO_DECISION_VENUE } from "./presentation.js";
@@ -672,7 +672,14 @@ function publishedInGap(
   // which is the same rule the publication itself is judged by. The chain is
   // walked once by the caller: it is the same chain at every index, and walking
   // it costs a signature verification per published replacement.
-  const last = venue.witnessedAtFor(operatorIn(chain, before(at)), before(at)) ?? 0n;
+  // **From the last commitment, or from the index this operator took the role.**
+  // A successor takes force at its effective index without having published
+  // anything (§C2, 2026-08-29), so measuring from zero would open its gap at the
+  // moment it was seated and refuse it at every door for a silence it had no
+  // chance to break. The original attester's link has `from` zero, so this is
+  // the same rule generalised rather than a case beside it.
+  const link = linkIn(chain, before(at));
+  const last = venue.witnessedAtFor(link.operator, before(at)) ?? link.from;
   return at - last > clause.noCommitmentDuration;
 }
 

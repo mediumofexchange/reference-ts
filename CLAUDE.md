@@ -101,6 +101,16 @@ that produced it is in the decision log — reach it through the index in
   spent set, running totals and the standing demand record (inv 23). The root
   must be injective, or one signature covers two states and equivocation is
   unprovable.
+- **A replacement is co-signed by its successor, and force is the effective
+  index** (§C2). Naming somebody is not a power over them: signed by the
+  rule-holder alone, one published record seated any commitment-publishing key
+  as the operator of record of any backing, and its own next punctual commitment
+  then proved a fault against it. Both signatures go over one message, so there
+  is one record and one tag. Force being a signed field and nothing else is what
+  keeps the succession walk a pure function of the venue record — condition it
+  on served state and two readers disagree about who is at fault, which
+  `fault.ts` forbids outright. `successionOf` stops at the last link whose index
+  has arrived, so the chain's tip and the operator in force are one thing.
 - **Every operation is signed by the party the law names, over that backing's
   own message, at that signer's next nonce — except the commit.** §C3's commit
   names no backing, carries no nonce, and is signed by every party the lock

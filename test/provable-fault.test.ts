@@ -730,12 +730,16 @@ describe("an operator that co-signs a withdrawal where the venue shows an in-tim
       role: ROLE_OPERATOR,
       successor: KEYS.carol,
       predecessor: backing.name,
-      effective: venue.witnessedIndex(),
+      // Ahead of the clock: the takeover this test exercises happens in the
+      // lead time, before force arrives at the effective index (§C2).
+      effective: venue.witnessedIndex() + 1n,
       signature: new Uint8Array(64),
+      successorSignature: new Uint8Array(64),
     };
     const replacement: Replacement = {
       ...unsigned,
       signature: ed25519.sign(replacementMessage(backing.name, unsigned), SECRETS.backer),
+      successorSignature: ed25519.sign(replacementMessage(backing.name, unsigned), SECRETS.carol),
     };
     venue.publishReplacement(backing.name, replacement);
     const heir = new Sequencer(SECRETS.carol, venue);
@@ -1358,21 +1362,28 @@ describe("a set settled in part is the operator's fault, read across one commitm
     return { venue, sequencer, eur, gold, terms };
   }
 
-  /** The rule-holder hands `backing` to carol; her bare commitment takes force
-   * unless the test's heir will take over and commit properly itself. */
+  /** The rule-holder hands `backing` to carol, effective at once. Force is the
+   * effective index (§C2), so `commit` no longer confers it — it is there for
+   * the tests that need carol to have a committed state of her own. */
   function handToCarol(venue: LocalVenue, backing: Backing, commit = true): void {
     const unsigned = {
       role: ROLE_OPERATOR,
       successor: KEYS.carol,
       predecessor: backing.name,
-      effective: venue.witnessedIndex(),
+      // One index of lead time: force is the effective index now, so a heir
+      // that means to take the state on needs a window before it arrives.
+      effective: venue.witnessedIndex() + 1n,
       signature: new Uint8Array(64),
+      successorSignature: new Uint8Array(64),
     };
+    const message = replacementMessage(backing.name, unsigned);
     venue.publishReplacement(backing.name, {
       ...unsigned,
-      signature: ed25519.sign(replacementMessage(backing.name, unsigned), SECRETS.backer),
+      signature: ed25519.sign(message, SECRETS.backer),
+      successorSignature: ed25519.sign(message, SECRETS.carol),
     });
     if (commit) {
+      venue.advance(1n);
       venue.publish(signCommitment(SECRETS.carol, venue.nextSequenceFor(KEYS.carol), stateRoot([])));
     }
   }
