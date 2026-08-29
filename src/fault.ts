@@ -73,7 +73,7 @@ import { committedInTime } from "./recovery.js";
 import { opIdentityOfEntry, opMessageOfEntry, type PublishedOp } from "./oplog.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
 import { receiptCovers, receiptStatus, isOperatorReceipt, type Receipt } from "./receipt.js";
-import { successionOf, type Succession } from "./replacement.js";
+import { successionOf, termOf, type Succession } from "./replacement.js";
 import { answering, type Venue } from "./venue.js";
 
 /** An operation and the operator co-signature that accepted it. */
@@ -279,13 +279,19 @@ export function isDoublePosition(
  * sequence is above that boundary, or it collides with a published one, and a
  * collision is isEquivocation's to name.
  *
- * **One case it deliberately misses, and it misses it safely.** A key can appear
- * in the chain twice — the rule-holder may re-appoint a former operator, and only
- * succeeding ITSELF is refused — and this reads that key's first term only. A
- * drop during a second term therefore answers false. That is the direction this
- * file always takes when it cannot tell: say nothing rather than accuse. Closing
- * it means per-term sequence windows, which is a lot of arithmetic for a case
- * that costs a missed fault rather than a wrong one. See DECISIONS.md.
+ * **A key that appears in the chain twice answers for each term separately.**
+ * The rule-holder may re-appoint a former operator, and only succeeding ITSELF is
+ * refused. This used to read that key's FIRST term only, which was not the safe
+ * direction it was recorded as: it made every re-appointed key exempt from the
+ * fault by construction, and a stale pre-handover book re-asserted in a second
+ * term read as growth. `termOf` is the per-term sequence window that entry said
+ * would cost a lot of arithmetic; it costs one loop, and it is the same read
+ * `isRewrittenHistory` needs to ORDER two states, so it is one mechanism serving
+ * both rather than two. See DECISIONS.md.
+ *
+ * A state belonging to no term at all — a successor's own commitment inside its
+ * lead time, when §C2 forbids it to carry this backing — answers false, which is
+ * this file's direction when it cannot tell: say nothing rather than accuse.
  */
 function committedWhileInForce(
   chain: readonly Succession[],
@@ -293,13 +299,7 @@ function committedWhileInForce(
   operator: Uint8Array,
   sequence: bigint,
 ): boolean {
-  const link = chain.findIndex((step) => compareBytes(step.operator, operator) === 0);
-  if (link < 0) return false;
-  const successor = chain[link + 1];
-  // Nobody after it in the chain, so it is in force and has no excuse.
-  if (successor === undefined) return true;
-  const before = venue.latestFor(operator, successor.from - 1n);
-  return before !== undefined && sequence <= before.sequence;
+  return termOf(chain, venue, operator, sequence) !== undefined;
 }
 
 export function isRewrittenHistory(
@@ -314,11 +314,15 @@ export function isRewrittenHistory(
     if (first === undefined || second === undefined) return false;
 
     const chain = successionOf(backing, venue);
-    const rank = (operator: Uint8Array) =>
-      chain.findIndex((link) => compareBytes(link.operator, operator) === 0);
-    const rankA = rank(a.commitment.operator);
-    const rankB = rank(b.commitment.operator);
-    if (rankA < 0 || rankB < 0) return false;
+    // **Ranked by TERM, not by key.** Which term a state belongs to is what
+    // orders two of them across a handover — a key ranked at its first link put
+    // a re-appointed operator's second-term state BEHIND its own successor's,
+    // so a shrink read as growth and the fault was unprovable in both argument
+    // orders. Undefined means the state belongs to no term of this backing, and
+    // this file says nothing rather than accusing.
+    const rankA = termOf(chain, venue, a.commitment.operator, first.sequence);
+    const rankB = termOf(chain, venue, b.commitment.operator, second.sequence);
+    if (rankA === undefined || rankB === undefined) return false;
 
     if (rankA === rankB && first.sequence === second.sequence) return false;
     const secondIsEarlier =

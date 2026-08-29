@@ -24,6 +24,8 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-08-29` [Slice 35: the record is the backing's, and the grade names the incumbent](decisions/2026-08.md#2026-08-29--slice-35-the-record-is-the-backings-and-the-grade-names-the-incumbent)
+- `2026-08-29` [The revocation count: the operator picks the number, deferred to its own slice](decisions/2026-08.md#2026-08-29--the-revocation-count-the-operator-picks-the-number-deferred-to-its-own-slice)
 - `2026-08-29` [Panel: identity is the link, and it is already in the code](decisions/2026-08.md#2026-08-29--panel-identity-is-the-link-and-it-is-already-in-the-code)
 - `2026-08-29` [Panel: the book is a possession with a provenance, and it only grows](decisions/2026-08.md#2026-08-29--panel-the-book-is-a-possession-with-a-provenance-and-it-only-grows)
 - `2026-08-29` [Panel: the clock is the backing's, and identity is the term](decisions/2026-08.md#2026-08-29--panel-the-clock-is-the-backings-and-identity-is-the-term)

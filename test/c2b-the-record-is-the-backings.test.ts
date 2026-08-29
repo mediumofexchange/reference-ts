@@ -6,7 +6,7 @@ import { signCommitment, stateRoot, type ServedState } from "../src/commitment.j
 import { isRewrittenHistory } from "../src/fault.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import { type PublishedOp } from "../src/oplog.js";
-import { isNonServing, isSilent, provesHolding, redemptionIsOpen, unservedRequests } from "../src/recovery.js";
+import { isNonServing, isSilent, nonServingOperator, provesHolding, redemptionIsOpen, unservedRequests } from "../src/recovery.js";
 import {
   operatorAt,
   replacementHash,
@@ -249,13 +249,8 @@ describe("§C2: a term of the chain is the unit of obligation and of fault", () 
     at(venue, 10n);
     const out = replacementBy(backing, HEIR_SECRET, backing.name, 10n);
     venue.publishReplacement(backing.name, out);
-    at(venue, 20n);
-    venue.publishReplacement(
-      backing.name,
-      replacementBy(backing, SECRETS.operator, replacementHash(backing.name, out), 20n),
-    );
-    // The heir serves its term and commits the book whole — the state of record
-    // for as long as it holds the role.
+    // The heir serves its term — INSIDE it, at 12 — and commits the book whole:
+    // the state of record for as long as it holds the role.
     at(venue, 12n);
     const heirSnapshots = [{ name: backing.name, opLog: fullLog }];
     const heirCommitment = signCommitment(
@@ -266,6 +261,11 @@ describe("§C2: a term of the chain is the unit of obligation and of fault", () 
     venue.publish(heirCommitment);
     const heirFull: ServedState = { snapshots: heirSnapshots, commitment: heirCommitment };
 
+    at(venue, 20n);
+    venue.publishReplacement(
+      backing.name,
+      replacementBy(backing, SECRETS.operator, replacementHash(backing.name, out), 20n),
+    );
     at(venue, 25n);
     expect(operatorAt(backing, venue, 25n)).toEqual(KEYS.operator);
 
@@ -320,15 +320,19 @@ describe("§C2: a term of the chain is the unit of obligation and of fault", () 
   });
 });
 
-describe("§C2b: a request grades the term that was obliged to serve it", () => {
-  it("does not grade a retired operator with requests witnessed after its term ended", () => {
-    // Live on main, and not this branch's doing. The fold never asks WHEN a
-    // request arrived relative to the term. §C2 already says it of the refusal
-    // aggregate — "a refusal counts only where the sequencer was obliged to
-    // serve the request" — and the obligation is a term's, not a key's. Without
-    // the gate a holder acting ALONE manufactures a grade against an honest
-    // operator's own honest state, twenty indices after its duty ended, and
-    // §15 prices a key's history, so it is worth manufacturing.
+describe("§C2b: the count stands against the backing, and the grade names the incumbent", () => {
+  it("does not grade a retired operator with requests witnessed after its duty ended", () => {
+    // Live on main, and not this branch's doing. The defect is the SUBJECT:
+    // isNonServing named no party, so a reader supplied the only one in the
+    // call — whoever signed the evidence. A holder acting alone published two
+    // requests twenty indices after the handover, folded them onto the retired
+    // operator's own honest state, and the grade read true against a party
+    // whose duty had ended. §15 prices a key's history, so that is worth
+    // manufacturing. The count does not move — a boundary the rule-holder
+    // draws must not partition a count of absences, or one publication per
+    // (m−1) requests resets the aggregate forever — the NAME does: the grade
+    // is the incumbent's, and the retired key is never a present reading's
+    // subject.
     const { venue, sequencer, backing } = setup();
     const honest = sequencer.commit();
 
@@ -341,14 +345,15 @@ describe("§C2b: a request grades the term that was obliged to serve it", () => 
     venue.publishOp(backing.name, request(backing, 20n, 1n));
 
     at(venue, 45n);
-    expect(unservedRequests(venue, backing, honest)).toHaveLength(0);
-    expect(isNonServing(venue, backing, honest)).toBe(false);
+    expect(unservedRequests(venue, backing, honest)).toHaveLength(2);
+    expect(nonServingOperator(venue, backing, honest)).toEqual(HEIR);
   });
 
-  it("still grades an operator for requests witnessed inside its own term", () => {
-    // The honest path the gate leaves open, and the case the grade exists for.
-    // A door closed to one party is a door closed to everyone who used it, so
-    // the refusal above is only right if this still fires.
+  it("still grades the operator that was handed the requests and sat on them", () => {
+    // The honest path the naming leaves open, and the case the grade exists
+    // for: a stalling operator that publishes on time. A door closed to one
+    // party is a door closed to everyone who used it, so the renaming above is
+    // only right if this still fires — and fires against the staller.
     const { venue, sequencer, backing } = setup();
     const honest = sequencer.commit();
 
@@ -358,7 +363,30 @@ describe("§C2b: a request grades the term that was obliged to serve it", () => 
 
     at(venue, 45n);
     expect(unservedRequests(venue, backing, honest)).toHaveLength(2);
+    expect(nonServingOperator(venue, backing, honest)).toEqual(KEYS.operator);
     expect(isNonServing(venue, backing, honest)).toBe(true);
+  });
+
+  it("a successor inherits the standing requests, and clears them only by serving them", () => {
+    // The two halves of the inheritance, walked. The grade names the heir the
+    // index it takes force — it co-signed the replacement with the standing
+    // requests in view, which is what makes naming it fair — and no
+    // publication clears the count: only serving does. An heir that takes the
+    // book over, replays the requests and commits reads a count of zero
+    // against its own state, because a served request leaves the count.
+    const { venue, sequencer, backing } = setup();
+    const honest = sequencer.commit();
+
+    at(venue, 5n);
+    venue.publishOp(backing.name, request(backing, 10n, 0n));
+    venue.publishOp(backing.name, request(backing, 20n, 1n));
+
+    at(venue, 30n);
+    venue.publishReplacement(backing.name, replacementBy(backing, HEIR_SECRET, backing.name, 30n));
+    at(venue, 40n);
+    // The handover moved the name and not the count.
+    expect(unservedRequests(venue, backing, honest)).toHaveLength(2);
+    expect(nonServingOperator(venue, backing, honest)).toEqual(HEIR);
   });
 });
 

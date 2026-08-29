@@ -44,6 +44,9 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { type Backing } from "./backing.js";
+// Type-only: `commitment.ts` imports this module, and a value import here would
+// close that into a runtime cycle. Erased at compile time, so it does not.
+import type { Commitment } from "./commitment.js";
 import { ByteReader, ByteWriter, compareBytes, copyBytes } from "./bytes.js";
 import { REPLACEMENT_CONTEXT } from "./contexts.js";
 import { verifySignatureStrict } from "./keys.js";
@@ -220,6 +223,11 @@ export interface Succession {
  * is what keeps a past reading from ever moving. Naming the incumbent is not a
  * handover and never becomes one, but it supersedes like any other candidate,
  * which is how a rule-holder revokes a successor it regrets.
+ *
+ * **Two witnessed at one index resolve to the lesser record hash** (§C2):
+ * witnessing pins order, and where it pins nothing the rule lives in the
+ * objects' own names, so every reader answers alike from the records and none
+ * from the order they arrived.
  */
 export function successionOf(backing: Backing, venue: Venue): Succession[] {
   const chain: Succession[] = [
@@ -231,13 +239,18 @@ export function successionOf(backing: Backing, venue: Venue): Succession[] {
   return answering(() => {
     if (backing.evidence.replacementRule === undefined) return chain;
     const now = venue.witnessedIndex();
+    // Hashed once for the whole walk rather than once per link: the hash is the
+    // record's identity for the dedup AND for the same-index tie below, and
+    // anyone may publish a replacement for free, so the number of records is the
+    // adversary's to grow.
     const witnessed = venue
       .replacementsFor(backing.name)
       .filter((w) => isSignedReplacement(backing, w.replacement))
       // A replacement cannot take force before it was witnessed (§C2), and one
       // declaring an earlier index is refused rather than corrected: the
       // rule-holder does not get to backdate a handover.
-      .filter((w) => w.replacement.effective >= w.at);
+      .filter((w) => w.replacement.effective >= w.at)
+      .map((w) => ({ ...w, hash: replacementHash(backing.name, w.replacement) }));
 
     const seen = new Set<string>([bytesToHex(backing.name)]);
     let link = backing.name;
@@ -253,27 +266,49 @@ export function successionOf(backing: Backing, venue: Venue): Succession[] {
       // backwards, two operators in force at one index), so letting it revoke a
       // live candidate would hand the rule-holder's mistake more effect than its
       // intent.
-      const candidates: WitnessedReplacement[] = [];
+      //
+      // **Two witnessed at ONE index resolve to the lesser record hash** (§C2).
+      // Witnessing pins order, and at one index it pins nothing, so the rule
+      // has to live in the objects' own names — sorted on the index alone, two
+      // honest readers holding the SAME two records disagreed permanently about
+      // who was operator at a past index, which is the hazard `fault.ts`
+      // forbids, reached through publication order rather than served state.
+      // The hash is grindable — the rule-holder varies the successor key or the
+      // effective index until its preferred record's name is lesser — and that
+      // is priced rather than fought: the rule-holder signed BOTH records in
+      // every reachable tie, so grinding buys it an outcome §C2 already gives
+      // it for free by publishing one record alone. A tie between two DIFFERENT
+      // rule-holders cannot be built while E's replacementRule is one key;
+      // if that ever changes, this rule is the one to reopen. See DECISIONS.md.
+      const candidates: typeof witnessed = [];
       {
         const distinct = new Set<string>();
         for (const w of witnessed
           .filter((w) => compareBytes(w.replacement.predecessor, link) === 0)
           .filter((w) => w.replacement.effective >= incumbent.from)
-          .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))) {
-          const hash = bytesToHex(replacementHash(backing.name, w.replacement));
+          .sort((a, b) =>
+            a.at < b.at ? -1 : a.at > b.at ? 1 : compareBytes(a.hash, b.hash),
+          )) {
+          const hash = bytesToHex(w.hash);
           if (distinct.has(hash)) continue;
           distinct.add(hash);
           candidates.push(w);
         }
       }
 
-      let chosen: WitnessedReplacement | undefined;
+      let chosen: (typeof witnessed)[number] | undefined;
       for (const candidate of candidates) {
-        const supersedes =
-          chosen === undefined || candidate.at < chosen.replacement.effective;
-        // Past the standing candidate's effective index the link has moved on,
-        // and nothing witnessed later reaches it.
-        if (!supersedes) break;
+        if (chosen !== undefined) {
+          // Past the standing candidate's effective index the link has moved
+          // on, and nothing witnessed later reaches it.
+          if (candidate.at >= chosen.replacement.effective) break;
+          // A same-index sibling is not "the later" — that tie resolved at the
+          // sort, and letting the sibling supersede here handed the win to the
+          // GREATER hash whenever the winner declared any lead time (found
+          // reviewing this slice). Skipped, not broken on: a candidate at a
+          // genuinely later index can still supersede.
+          if (candidate.at === chosen.at) continue;
+        }
         chosen =
           compareBytes(candidate.replacement.successor, incumbent.operator) === 0
             ? undefined
@@ -286,7 +321,7 @@ export function successionOf(backing: Backing, venue: Venue): Succession[] {
       // does, so the chain ends here and the tip is the operator in force.
       if (from > now) return chain;
 
-      const hash = replacementHash(backing.name, chosen.replacement);
+      const hash = chosen.hash;
       // A hash cycle cannot be built (invariant 5's reasoning), so this guards a
       // malformed record rather than a real cycle — and it guarantees the walk
       // terminates on any input at all, which a verifier needs.
@@ -297,6 +332,125 @@ export function successionOf(backing: Backing, venue: Venue): Succession[] {
       link = hash;
     }
   }, chain);
+}
+
+/**
+ * The last index of a link's term: the index before its successor takes force,
+ * and unbounded at the tip. A term is what a key holds the backing FOR, and the
+ * two functions below are the only readers that need both ends of one.
+ */
+function termEnd(chain: readonly Succession[], i: number, bound?: bigint): bigint | undefined {
+  const next = chain[i + 1];
+  if (next === undefined) return bound;
+  const end = next.from - 1n;
+  return bound === undefined || end < bound ? end : bound;
+}
+
+/**
+ * **Which TERM of the chain a committed state belongs to**, or undefined where
+ * it belongs to none — §C2: "A term of the chain, rather than a key, is the unit
+ * of obligation, of accrual and of fault."
+ *
+ * Read from the record, never asserted: a commitment carries a sequence and no
+ * venue index by design (slice 13), so the term is that sequence placed against
+ * the commitments this operator had witnessed at each end of each of its terms.
+ * Letting the operator name its own term would hand the choice to the party with
+ * the motive.
+ *
+ * **A key the rule-holder names twice holds two terms and answers for each
+ * separately.** Ranking a key by its FIRST link — which is what
+ * `chain.findIndex` did — made every re-appointed key exempt by construction: its
+ * second-term state read as older than its successor's, so shrinking the book
+ * back to a stale pre-handover copy read as growth and was unprovable in both
+ * argument orders. That is the serious half of the stale-latch defect.
+ *
+ * **A commitment inside the lead time belongs to no term**, and that is the
+ * answer rather than an edge case. §C2 gives a successor a lead time and forbids
+ * it to carry the backing in it — the predecessor is still serving — so a
+ * punctual multi-backing successor's own commitments there are obedience, not a
+ * drop. Read as its term's, every one of them manufactured a permanent,
+ * stranger-checkable fault proof against an honest heir.
+ */
+export function termOf(
+  chain: readonly Succession[],
+  venue: Venue,
+  operator: Uint8Array,
+  sequence: bigint,
+): number | undefined {
+  for (let i = 0; i < chain.length; i++) {
+    const link = chain[i] as Succession;
+    if (compareBytes(link.operator, operator) !== 0) continue;
+    // Bounded above only where the term has CLOSED: by the last commitment this
+    // key had witnessed when its successor took force — a sequence past that
+    // was published after the term ended. The tip is unbounded, deliberately:
+    // in force, there is no excuse, and a state an operator SERVED but never
+    // published must still rank here, or rewriting is free as long as the
+    // rewrite stays unwitnessed. That is the same asymmetry the boundary read
+    // always had; this is it per term instead of per key.
+    const end = termEnd(chain, i);
+    if (end !== undefined) {
+      const last = venue.latestFor(operator, end);
+      if (last === undefined || sequence > last.sequence) continue;
+    }
+    // And bounded below by the last it had witnessed before the term opened,
+    // which the genesis link has none of. A sequence at or below that was
+    // published before the term did — a successor's own commitments in its
+    // lead time are its obedience, not its term's.
+    const before = link.from === 0n ? undefined : venue.latestFor(operator, link.from - 1n);
+    if (before !== undefined && sequence <= before.sequence) continue;
+    return i;
+  }
+  return undefined;
+}
+
+/**
+ * **The backing's own last commitment**: the last one the venue witnessed from a
+ * party that was in force for this backing when it published it (§C2b).
+ *
+ * One answer, and every reader that used to ask a KEY asks this instead — the
+ * silence grade, whether an operator is overdue, which snapshot a redemption
+ * runs against, the outstanding count a revocation freezes, and which state is
+ * latest at a past index.
+ *
+ * **Why a key cannot be the subject.** Under the retired two-stage rule force
+ * arrived on a commitment, so "the party in force" always had one and
+ * `latestFor(inForce)` was total. §C2 seats a successor on a signed field, so it
+ * may have published nothing — and then a holder's redemption proof, which is the
+ * only checkable remedy §C2b gives against a dark operator, is destroyed by ONE
+ * published record naming a key the rule-holder can generate and co-sign itself.
+ * The rule-holder is the backer by default: the party that owes the money.
+ *
+ * **And why the clock cannot reset on a handover.** A replacement costs one
+ * publication, so any clock resetting on a rule-holder-chosen event is
+ * cancellable by the rule-holder — hopping to a FRESH key every duration defeats
+ * every per-key clock there is. This one never asks who is in force now, only
+ * what was witnessed from whoever was, so a handover neither opens a gap nor
+ * closes one and only a commitment closes one.
+ *
+ * Bounded at BOTH ends per link, which is the whole content of "then in force":
+ * a retired key's later commitments for its other backings do not keep this
+ * backing's clock alive, and a successor's own commitments inside the lead time
+ * do not start it early. Undefined where no such commitment exists, which every
+ * caller reads as index zero — never publishing at all must not read as punctual.
+ */
+export function lastCommitmentInForce(
+  chain: readonly Succession[],
+  venue: Venue,
+  asOf?: bigint,
+): { readonly commitment: Commitment; readonly at: bigint } | undefined {
+  let best: { commitment: Commitment; at: bigint } | undefined;
+  for (let i = 0; i < chain.length; i++) {
+    const link = chain[i] as Succession;
+    const end = termEnd(chain, i, asOf);
+    const at = venue.witnessedAtFor(link.operator, end);
+    // Committed only before it held the role: not this backing's.
+    if (at === undefined || at < link.from) continue;
+    if (best !== undefined && at <= best.at) continue;
+    const commitment = venue.latestFor(link.operator, end);
+    if (commitment === undefined) continue;
+    best = { commitment, at };
+  }
+  return best;
 }
 
 /**

@@ -504,8 +504,14 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     const more = transferOp(usd, SECRETS.carol, KEYS.carol, KEYS.bob, 10n, 1n);
     expect(verifyReceipt(successor.submitTransfer(more.op, more.signature))).toBe(true);
     expect(kinds(successor, usd)).toEqual(["issue", "transfer", "transfer"]);
-    // From 16 EUR is served too, and the next commitment carries everything.
+    // The seat does not close the gap — the clock is the backing's, and only a
+    // commitment closes one. Seated, the successor commits (its commitment now
+    // carries EUR), and serves EUR from the index after.
     advanceWitnessedIndex(venue, 16n);
+    expect(() => successor.submitTransfer(spend.op, spend.signature)).toThrow(RETURNING);
+    successor.commit();
+    advanceWitnessedIndex(venue, 17n);
+    expect(gapOpen(venue, eur)).toBeUndefined();
     expect(verifyReceipt(successor.submitTransfer(spend.op, spend.signature))).toBe(true);
     const after = served(successor);
     expect(kinds(successor, usd)).toEqual(["issue", "transfer", "transfer"]);

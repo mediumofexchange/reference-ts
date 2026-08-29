@@ -285,20 +285,23 @@ describe("§C2: two replacements naming one predecessor", () => {
   });
 });
 
-describe("§C2: a seated successor is graded on a clock that starts when it was seated", () => {
-  // Force no longer implies a commitment, so every reader that measured an
-  // operator's quiet time from its last commitment — or from genesis where it
-  // had none — was counting time before it held the role. A punctual successor
-  // read as dark the index after it took force, and every door refuses a dark
-  // operator. One rule now (`clockStart`), read by isSilent, isOverdue and the
-  // gap. See DECISIONS.md.
+describe("§C2b: a seated successor is graded on the backing's clock, not a clock of its own", () => {
+  // This block once pinned the rule it replaced: the clock started at the seat.
+  // But the seat is an index the RULE-HOLDER writes, and the rule-holder is the
+  // backer by default — so a standing grade was cancellable by two published
+  // records and no commitment anywhere. The clock is the backing's now: it runs
+  // from the backing's own last commitment, and a handover neither starts it
+  // nor stops it. What kept an honest heir from being born dark under the old
+  // rule is, under this one, its predecessor's punctuality — which is what the
+  // lead time is for on the heir's side. See DECISIONS.md.
 
-  it("is neither silent nor overdue the index after it takes force", () => {
+  it("an heir after a punctual predecessor is neither silent nor overdue", () => {
     const venue = new LocalVenue();
     const eur = backingFor(venue);
-    serving(venue, eur);
+    const { sequencer } = serving(venue, eur);
 
     at(venue, 100n);
+    sequencer.commit();
     venue.publishReplacement(eur.name, replacementBy(eur, HEIR, 101n, eur.name, SECRETS.backer, HEIR_SECRET));
     at(venue, 102n);
 
@@ -307,19 +310,20 @@ describe("§C2: a seated successor is graded on a clock that starts when it was 
     expect(isOverdue(venue, eur)).toBe(false);
   });
 
-  it("nor where its own key committed long ago for a different backing", () => {
-    // The later of the two indices, not a fallback to the seat: a key that
-    // operates something else HAS a commitment, so a fallback never fires and
-    // its unrelated index is used instead.
+  it("and its own key's old commitment for a different backing counts for nothing here", () => {
+    // The clock is per backing, bounded at both ends of each term: the heir's
+    // key HAS a commitment, made long before it held this role, and that index
+    // neither starts this backing's clock nor keeps it alive.
     const venue = new LocalVenue();
     const eur = backingFor(venue);
     const usd = backingFor(venue, "USD", HEIR);
-    serving(venue, eur);
+    const { sequencer } = serving(venue, eur);
     const elsewhere = new Sequencer(HEIR_SECRET, venue);
     elsewhere.register(usd, signBacking(SECRETS.backer, usd));
     elsewhere.commit();
 
     at(venue, 100n);
+    sequencer.commit();
     venue.publishReplacement(eur.name, replacementBy(eur, HEIR, 101n, eur.name, SECRETS.backer, HEIR_SECRET));
     at(venue, 102n);
 
@@ -327,16 +331,36 @@ describe("§C2: a seated successor is graded on a clock that starts when it was 
     expect(gapOpen(venue, eur)).toBeUndefined();
   });
 
-  it("and does go dark once its own duration has run from the seat", () => {
-    // The honest path the rule leaves open, walked: the clock starts at the
-    // seat, it does not stop there.
+  it("an heir seated into a silence inherits the remainder, and commits its way out", () => {
+    // The cost §C2b states, and the honest exit beside it: the grade stands
+    // through the handover — no reader can tell a rescuer from a rule-holder
+    // colluding with itself — and the heir's own first commitment is what
+    // closes it.
     const venue = new LocalVenue();
     const eur = backingFor(venue);
     serving(venue, eur);
 
     at(venue, 100n);
     venue.publishReplacement(eur.name, replacementBy(eur, HEIR, 101n, eur.name, SECRETS.backer, HEIR_SECRET));
-    at(venue, 101n + SILENCE.noCommitmentDuration + 1n);
+    at(venue, 102n);
+    // The predecessor's last commitment was at genesis, so the backing is dark
+    // already, heir or no heir.
+    expect(isSilent(venue, eur)).toBe(true);
+    expect(gapOpen(venue, eur)).toBeDefined();
+  });
+
+  it("and does go dark once the duration runs with nothing committed", () => {
+    // The honest path the rule leaves open, walked: inheriting a live clock is
+    // not immunity, and an heir that never commits meets the grade like any
+    // other operator.
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    const { sequencer } = serving(venue, eur);
+
+    at(venue, 100n);
+    sequencer.commit();
+    venue.publishReplacement(eur.name, replacementBy(eur, HEIR, 101n, eur.name, SECRETS.backer, HEIR_SECRET));
+    at(venue, 100n + SILENCE.noCommitmentDuration + 1n);
 
     expect(isSilent(venue, eur)).toBe(true);
     expect(gapOpen(venue, eur)).toBeDefined();
