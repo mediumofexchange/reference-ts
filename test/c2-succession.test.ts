@@ -228,6 +228,72 @@ describe("§C2: two replacements naming one predecessor, and revocation before f
     expect(operatorAt(backing, venue, 10n)).toEqual(SUCCESSOR);
   });
 
+  it("ignores one witnessed AT the standing candidate's effective index, not only after it", () => {
+    // The boundary itself, which nothing exercised. §C2: a later replacement
+    // supersedes "where it was witnessed STRICTLY BEFORE the earlier one's
+    // effective index", and "one witnessed AT or after that index names a link
+    // the chain has already left". At the index force arrives the successor is
+    // the incumbent, so a replacement naming its predecessor is too late by one.
+    //
+    // The test reads the same past index on both sides of the publication,
+    // because the property the strictness buys is that no reading ever moves.
+    const { venue, backing } = setup();
+    at(venue, 5n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 20n));
+    at(venue, 20n);
+    expect(operatorAt(backing, venue, 20n)).toEqual(SUCCESSOR);
+
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD_SECRET, backing.name, 20n));
+    expect(operatorAt(backing, venue, 20n)).toEqual(SUCCESSOR);
+    expect(isAnOperator(backing, venue, THIRD)).toBe(false);
+  });
+
+  it("does not seat a chain running backwards: a candidate effective before the link it names took force is void", () => {
+    // A replacement naming the successor's own link, dated BEHIND the index that
+    // successor takes force at. It can never take force — two operators would be
+    // in force at one index and the chain would run backwards — so it is void
+    // rather than superseding, and the rule-holder's mistake gets no more effect
+    // than its intent.
+    const { venue, backing } = setup();
+    at(venue, 3n);
+    const first = replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 10n);
+    venue.publishReplacement(backing.name, first);
+    at(venue, 5n);
+    venue.publishReplacement(
+      backing.name,
+      replacementBy(backing, SECRETS.backer, THIRD_SECRET, replacementHash(backing.name, first), 7n),
+    );
+
+    at(venue, 20n);
+    expect(operatorsOf(backing, venue)).toHaveLength(2);
+    // Before the real handover the genesis operator still governs; after it, the
+    // successor does. Neither index reads as the party dated behind them both.
+    expect(operatorAt(backing, venue, 8n)).toEqual(KEYS.operator);
+    expect(operatorAt(backing, venue, 20n)).toEqual(SUCCESSOR);
+  });
+
+  it("a stranger republishing the rule-holder's own record does not undo a revocation", () => {
+    // A candidate is dated by its FIRST witnessing. A replacement is one act of
+    // the rule-holder, and `publishReplacement` verifies no signature, so anyone
+    // may republish its bytes for free. Without the dedup the replay is a second
+    // candidate witnessed late enough to supersede the revocation that passed the
+    // original over — and a party holding no key at all reinstates an operator
+    // the rule-holder took back.
+    const { venue, backing } = setup();
+    at(venue, 5n);
+    const heir = replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 20n);
+    venue.publishReplacement(backing.name, heir);
+    at(venue, 12n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD_SECRET, backing.name, 30n));
+
+    at(venue, 15n);
+    venue.publishReplacement(backing.name, heir);
+
+    at(venue, 30n);
+    expect(operatorAt(backing, venue, 30n)).toEqual(THIRD);
+    expect(isAnOperator(backing, venue, SUCCESSOR)).toBe(false);
+  });
+
   it("a passed-over candidate may prepare and never serve: named is a permission, force is the chain's alone", () => {
     // isNamedSuccessor survives the change: it is the authorization half, and
     // it still answers true for a candidate the rule-holder went on to revoke.
