@@ -46,6 +46,8 @@ const SILENCE = { noCommitmentDuration: 10n, challengeWindow: 5n };
 const SUCCESSOR_SECRET = new Uint8Array(32).fill(0x0b);
 const SUCCESSOR = pub(SUCCESSOR_SECRET);
 const THIRD_SECRET = new Uint8Array(32).fill(0x0c);
+const FOURTH_SECRET = new Uint8Array(32).fill(0x0d);
+const FOURTH = pub(FOURTH_SECRET);
 const THIRD = pub(THIRD_SECRET);
 
 /** A backing whose replacement rule is the backer's own key — §C2's default. */
@@ -164,13 +166,17 @@ describe("§C2: the chain from the original terms is walkable", () => {
 
 describe("§C2: two replacements naming one predecessor, and revocation before force", () => {
   // What replaced the qualification window. Force is the effective index, so
-  // there is nothing for a successor to qualify for, and the whole
-  // usable-candidate family retires with the stage it fenced: the window, the
-  // same-index tie, the strictly-after boundary, the replay-manufactured
-  // boundary guard. What is left is one rule — a later replacement at a link
-  // supersedes an earlier one only where it was witnessed strictly before the
-  // earlier's effective index — and it is enough for everything that family
-  // was built to handle. See DECISIONS.md.
+  // there is nothing for a successor to qualify for, and the usable-candidate
+  // walk retires with the stage it fenced. The rule left is one sentence — a
+  // later replacement at a link supersedes an earlier one only where it was
+  // witnessed strictly before the earlier's effective index.
+  //
+  // **Two of that family were NOT fences and did not retire**, which this block
+  // once claimed they did: the strictly-before boundary and the first-witnessing
+  // dedup are both live, and the tests below hold them. The SAME-INDEX TIE is
+  // still open — two witnessed at one index resolve by arrival order, so two
+  // readers can disagree about a past index — and it is open because the obvious
+  // rule is grindable by the rule-holder. See DECISIONS.md.
 
   it("naming the incumbent is not a handover, and does not freeze the chain", () => {
     const { venue, backing } = setup();
@@ -244,7 +250,12 @@ describe("§C2: two replacements naming one predecessor, and revocation before f
     expect(operatorAt(backing, venue, 20n)).toEqual(SUCCESSOR);
 
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD_SECRET, backing.name, 20n));
+    // Read from further on, so index 20 really is a PAST index on the second
+    // read: the property strictness buys is that a settled reading cannot move,
+    // and reading it only at `now` does not show that.
+    at(venue, 25n);
     expect(operatorAt(backing, venue, 20n)).toEqual(SUCCESSOR);
+    expect(operatorAt(backing, venue, 25n)).toEqual(SUCCESSOR);
     expect(isAnOperator(backing, venue, THIRD)).toBe(false);
   });
 
@@ -258,18 +269,27 @@ describe("§C2: two replacements naming one predecessor, and revocation before f
     at(venue, 3n);
     const first = replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 10n);
     venue.publishReplacement(backing.name, first);
+    const link = replacementHash(backing.name, first);
     at(venue, 5n);
-    venue.publishReplacement(
-      backing.name,
-      replacementBy(backing, SECRETS.backer, THIRD_SECRET, replacementHash(backing.name, first), 7n),
-    );
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD_SECRET, link, 7n));
+    // **Void, not superseding**, which is the half the single-candidate fixture
+    // could not show: a later good candidate at the same link must still be
+    // seated. Letting the void one block the link would hand the rule-holder's
+    // mistake more effect than its intent — and that variant passes every other
+    // test in this file.
+    at(venue, 8n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, FOURTH_SECRET, link, 30n));
 
     at(venue, 20n);
-    expect(operatorsOf(backing, venue)).toHaveLength(2);
     // Before the real handover the genesis operator still governs; after it, the
     // successor does. Neither index reads as the party dated behind them both.
     expect(operatorAt(backing, venue, 8n)).toEqual(KEYS.operator);
     expect(operatorAt(backing, venue, 20n)).toEqual(SUCCESSOR);
+
+    at(venue, 40n);
+    expect(operatorsOf(backing, venue)).toHaveLength(3);
+    expect(operatorAt(backing, venue, 40n)).toEqual(FOURTH);
+    expect(isAnOperator(backing, venue, THIRD)).toBe(false);
   });
 
   it("a stranger republishing the rule-holder's own record does not undo a revocation", () => {
@@ -283,14 +303,18 @@ describe("§C2: two replacements naming one predecessor, and revocation before f
     at(venue, 5n);
     const heir = replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 20n);
     venue.publishReplacement(backing.name, heir);
+    // A revocation, in this file's sense and the code's: re-naming the
+    // INCUMBENT. An ordinary supersession would leave the replay undoing a
+    // superseded candidate rather than a live revocation, which is the milder
+    // harm and not the one this test's name claims.
     at(venue, 12n);
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD_SECRET, backing.name, 30n));
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 12n));
 
     at(venue, 15n);
     venue.publishReplacement(backing.name, heir);
 
     at(venue, 30n);
-    expect(operatorAt(backing, venue, 30n)).toEqual(THIRD);
+    expect(operatorAt(backing, venue, 30n)).toEqual(KEYS.operator);
     expect(isAnOperator(backing, venue, SUCCESSOR)).toBe(false);
   });
 
