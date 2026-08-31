@@ -486,16 +486,27 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     expect(() => heir.takeOver(eur, lastGood)).toThrow(SequencerError);
   });
 
-  it("refuses evidence that is not the incumbent's latest commitment", () => {
+  it("refuses evidence that is not the pinned commitment: the backing's last before the effective index", () => {
     const { venue, sequencer, eur, lastGood } = toHandover();
-    const heir = appoint(venue, eur);
-    // A state the incumbent really committed, and really drops the backing, but
-    // superseded — so it says nothing about what the incumbent serves now.
+    // Named four indices out, so the incumbent commits twice more BEFORE the
+    // effective index: its commitments up to then move the target (§C2), and
+    // the evidence must be the target, not merely one dropped state it once
+    // signed — a superseded drop says nothing about what the book held at the
+    // handover, since the next commitment may have picked the backing up again.
+    const effective = venue.witnessedIndex() + 4n;
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, effective));
+    venue.advance(1n);
     const stale = commitWithout(venue, sequencer, eur);
     const older = { snapshots: stale.snapshots, commitment: stale.commitment };
     venue.advance(1n);
-    commitWithout(venue, sequencer, eur);
+    const pinned = commitWithout(venue, sequencer, eur);
+    venue.advance(2n);
+    const heir = new Sequencer(SECRETS.carol, venue);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
     expect(() => heir.takeOver(eur, lastGood, older)).toThrow(SequencerError);
+    // The pinned commitment itself is exactly the evidence the door asks for.
+    heir.takeOver(eur, lastGood, { snapshots: pinned.snapshots, commitment: pinned.commitment });
+    expect(heir.opLog(eur)).toHaveLength(lastGood.snapshots[0]!.opLog.length);
   });
 
   it("refuses evidence that still carries the backing", () => {

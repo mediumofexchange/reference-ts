@@ -32,6 +32,7 @@ import {
   lastCommitmentInForce,
   operatorAt,
   operatorsOf,
+  successionAhead,
   successionOf,
   termOf,
 } from "../src/replacement.js";
@@ -192,6 +193,7 @@ function surface() {
     ["redemptionIsOpen", () => redemptionIsOpen(refusing, backing, served, KEYS.alice, 1n)],
     ["snapshotRedemptions", () => snapshotRedemptions(refusing, backing, served)],
     ["successionOf", () => successionOf(backing, refusing)],
+    ["successionAhead", () => successionAhead(backing, refusing)],
     // A two-link chain, asked about the CLOSED term: the tip is deliberately
     // venue-free (unbounded above, genesis below), so only a closed term's
     // boundary read can meet the refusal at all.

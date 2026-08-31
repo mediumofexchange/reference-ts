@@ -598,7 +598,7 @@ describe("§C2: a successor serves, and only once it is in force", () => {
     expect(isRewrittenHistory(backing, venue, incumbent.served, theirs)).toBe(false);
   });
 
-  it("refuses a takeover of anything but the incumbent's latest committed state", () => {
+  it("refuses a state nobody committed, and re-takes the pinned state as a no-op", () => {
     const { venue, backing, incumbent, successor } = handedOver();
     // A state nobody committed.
     expect(() =>
@@ -607,11 +607,15 @@ describe("§C2: a successor serves, and only once it is in force", () => {
         commitment: signCommitment(SECRETS.mallory, 0n, stateRoot(incumbent.served.snapshots)),
       }),
     ).toThrow(SequencerError);
-    // And once in force, there is nothing left to take over.
+    // And once in force and committed, re-taking the pinned state is ordinary
+    // re-syncing with an empty delta, not an error (35d retired the one-shot
+    // rule): the book already carries it, and nothing changes.
     successor.takeOver(backing, incumbent.served);
     at(venue, HANDOVER_AT);
     successor.commit();
-    expect(() => successor.takeOver(backing, incumbent.served)).toThrow(SequencerError);
+    const before = successor.opLog(backing).length;
+    successor.takeOver(backing, incumbent.served);
+    expect(successor.opLog(backing)).toHaveLength(before);
   });
 
   it("refuses a sequencer that is neither in force nor named", () => {

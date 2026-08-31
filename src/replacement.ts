@@ -230,14 +230,45 @@ export interface Succession {
  * from the order they arrived.
  */
 export function successionOf(backing: Backing, venue: Venue): Succession[] {
+  return walkSuccession(backing, venue).chain;
+}
+
+/**
+ * The chain **and the link chosen at its tip whose effective index has not yet
+ * arrived** — one more element than `successionOf` exactly while a handover is
+ * in its lead time, and the same array otherwise.
+ *
+ * This is the possession question where `successionOf` is the force question:
+ * a successor takes the book on IN the lead time (§C2, that is what the lead
+ * time is for), so the reader that finds "my seat, and the links before it"
+ * has to answer identically before and after the effective index. Asking the
+ * clock instead — "who is in force right now" — is what made the takeover
+ * reachable only strictly inside a lead time §C2 does not guarantee exists.
+ *
+ * The pending link is the walk's own chosen candidate, held to every rule an
+ * arrived link is held to (signatures, supersession, the tie); the ONLY thing
+ * not yet true of it is that its index has come. Whether it ever takes force
+ * is still the chain's question, answered then.
+ */
+export function successionAhead(backing: Backing, venue: Venue): Succession[] {
+  const { chain, pending } = walkSuccession(backing, venue);
+  return pending === undefined ? chain : [...chain, pending];
+}
+
+function walkSuccession(
+  backing: Backing,
+  venue: Venue,
+): { chain: Succession[]; pending?: Succession } {
   const chain: Succession[] = [
     { operator: copyBytes(backing.evidence.operator), from: 0n, link: copyBytes(backing.name) },
   ];
   // The fallback is the chain as far as it got, which at minimum is the key E
   // names — and `answering` is what stops a venue's refusal being mistaken for
-  // that, since the genesis chain is a real answer about who serves.
+  // that, since the genesis chain is a real answer about who serves. The
+  // fallback closes over the same array the body grows.
+  const fallback = { chain };
   return answering(() => {
-    if (backing.evidence.replacementRule === undefined) return chain;
+    if (backing.evidence.replacementRule === undefined) return { chain };
     const now = venue.witnessedIndex();
     // Hashed once for the whole walk rather than once per link: the hash is the
     // record's identity for the dedup AND for the same-index tie below, and
@@ -318,24 +349,31 @@ export function successionOf(backing: Backing, venue: Venue): Succession[] {
             ? undefined
             : candidate;
       }
-      if (chosen === undefined) return chain;
+      if (chosen === undefined) return { chain };
 
       const from = chosen.replacement.effective;
-      // Named, and its index not yet reached: the predecessor governs until it
-      // does, so the chain ends here and the tip is the operator in force.
-      if (from > now) return chain;
-
       const hash = chosen.hash;
+      const next: Succession = {
+        operator: copyBytes(chosen.replacement.successor),
+        from,
+        link: copyBytes(hash),
+      };
+      // Named, and its index not yet reached: the predecessor governs until it
+      // does, so the chain ends here and the tip is the operator in force —
+      // and the chosen link is the PENDING one, which is the possession
+      // reader's answer (successionAhead).
+      if (from > now) return { chain, pending: next };
+
       // A hash cycle cannot be built (invariant 5's reasoning), so this guards a
       // malformed record rather than a real cycle — and it guarantees the walk
       // terminates on any input at all, which a verifier needs.
-      if (seen.has(bytesToHex(hash))) return chain;
+      if (seen.has(bytesToHex(hash))) return { chain };
       seen.add(bytesToHex(hash));
 
-      chain.push({ operator: copyBytes(chosen.replacement.successor), from, link: copyBytes(hash) });
+      chain.push(next);
       link = hash;
     }
-  }, chain);
+  }, fallback);
 }
 
 /**
