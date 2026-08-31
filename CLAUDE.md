@@ -111,6 +111,12 @@ that produced it is in the decision log — reach it through the index in
   on served state and two readers disagree about who is at fault, which
   `fault.ts` forbids outright. `successionOf` stops at the last link whose index
   has arrived, so the chain's tip and the operator in force are one thing.
+  **What a handover takes on is a fixed object** — the backing's last
+  commitment strictly before the effective index — **and the book only grows**:
+  `takeOver` is a fast-forward from the chain, not a one-shot from the clock,
+  a dead era's tail drops to the mark first, and the book is seated per chain
+  link, so `serves` (custody AND force, asked at every co-signing door) is one
+  comparison of the seat against the tip and a stale seat detects itself.
 - **Every operation is signed by the party the law names, over that backing's
   own message, at that signer's next nonce — except the commit.** §C3's commit
   names no backing, carries no nonce, and is signed by every party the lock
