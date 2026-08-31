@@ -370,6 +370,61 @@ describe("§C2: the move is a fast-forward", () => {
     expect(heir.outstanding(eur)).toBe(100n);
   });
 
+  it("a pinned target that rewrites the book held is refused: the poisoned book is not carried", () => {
+    // The sharpest case: the heir's ONLY commitment is a law-valid rewrite of
+    // what the original operator itself committed — so the rewrite IS the
+    // pinned target, and nothing upstream of the prefix comparison can refuse
+    // it. Taking it would rewind this operator's own committed entries, and
+    // its next commitment would then prove a rewrite against ITSELF; the
+    // heir's fault stays the heir's (isRewrittenHistory already names it),
+    // and this book does not carry it.
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    const { sequencer: original, state } = serving(venue, eur);
+
+    at(venue, 10n);
+    const first = replacementBy(eur, HEIR_SECRET, 12n);
+    venue.publishReplacement(eur.name, first);
+    at(venue, 13n);
+    // The heir never takes over; it signs a DIFFERENT law-valid history —
+    // the same issuance to Bob instead of Alice — and commits only that.
+    const rewritten = [
+      {
+        name: eur.name,
+        opLog: [
+          {
+            kind: "issue" as const,
+            recipient: KEYS.bob,
+            quantity: 100n,
+            nonce: 0n,
+            position: 0,
+            signature: ed25519.sign(
+              encodeIssuanceMessage(eur.name, KEYS.bob, 100n, 0n),
+              SECRETS.backer,
+            ),
+          },
+        ],
+      },
+    ];
+    const poisoned: ServedState = {
+      snapshots: rewritten,
+      commitment: signCommitment(HEIR_SECRET, 0n, stateRoot(rewritten)),
+    };
+    venue.publish(poisoned.commitment);
+
+    at(venue, 20n);
+    venue.publishReplacement(
+      eur.name,
+      replacementBy(eur, SECRETS.operator, 25n, replacementHash(eur.name, first)),
+    );
+    at(venue, 25n);
+    const held = original.opLog(eur).length;
+    expect(() => original.takeOver(eur, poisoned)).toThrow(/extension|rewinding/);
+    expect(original.opLog(eur)).toHaveLength(held);
+    expect(original.balance(eur, KEYS.alice)).toBe(100n);
+    void state;
+  });
+
   it("a state that is not an extension of the book held is refused, and nothing sticks", () => {
     // Rewinding is refused without asking who is in force. The heir here signs
     // a perfectly law-valid alternative history — same issuance, different
