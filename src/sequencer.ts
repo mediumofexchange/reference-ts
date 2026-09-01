@@ -208,6 +208,17 @@ export class Sequencer {
    * walked once per venue state rather than once per question.
    */
   private walked(backing: Backing): readonly Succession[] {
+    // A backing with no replacement rule has the genesis chain forever, and
+    // pays no venue read for it — the walk's own first answer, taken before
+    // the cache key would cost one witnessedIndex and one replacementsFor per
+    // door call on a record an adversary grows for free (the round's N1).
+    if (backing.evidence.replacementRule === undefined) {
+      const cached = this.walks.get(backing.nameHex);
+      if (cached !== undefined) return cached.chain;
+      const chain = successionAhead(backing, this.venue);
+      this.walks.set(backing.nameHex, { at: -1n, count: -1, chain });
+      return chain;
+    }
     const at = this.venue.witnessedIndex();
     const count = this.venue.replacementsFor(backing.name).length;
     const cached = this.walks.get(backing.nameHex);
@@ -251,6 +262,11 @@ export class Sequencer {
    * signature over its name.
    */
   register(backing: Backing, backingSignature: Uint8Array): void {
+    // This sequencer's OWN copy, first: every check and every write below
+    // reads it, so a caller's object with a lying `.name` field beside real
+    // fields steers nothing — makeBacking re-derives the name (the round's
+    // N6; the walk, the seat and the cache are all keyed off it now).
+    const stored = makeBacking(backing);
     // makeBacking has already established that the operator key is a valid
     // non-small-order point; the only question left here is whether it is mine.
     // In force, or named to take over. §C2 gives a successor force only from
@@ -258,9 +274,9 @@ export class Sequencer {
     // allowed to take on — so being named is what lets it serve, and being in
     // force is what lets it co-sign (submit, below).
     if (
-      compareBytes(operatorAt(backing, this.venue, this.venue.witnessedIndex()), this.operatorKey) !==
+      compareBytes(operatorAt(stored, this.venue, this.venue.witnessedIndex()), this.operatorKey) !==
         0 &&
-      !isNamedSuccessor(backing, this.venue, this.operatorKey)
+      !isNamedSuccessor(stored, this.venue, this.operatorKey)
     ) {
       throw new SequencerError("this sequencer does not serve that backing");
     }
@@ -268,22 +284,22 @@ export class Sequencer {
     // this sequencer does not publish at would have its commitments witnessed
     // somewhere its own terms do not name, so nobody reading correctly could
     // find them — and the operator would look permanently silent to everyone.
-    if (!venueIsDeclared(this.venue, backing)) {
+    if (!venueIsDeclared(this.venue, stored)) {
       throw new SequencerError("this sequencer does not publish at that backing's venue");
     }
-    this.ledger.register(backing, backingSignature);
-    this.backings.set(backing.nameHex, makeBacking(backing));
+    this.ledger.register(stored, backingSignature);
+    this.backings.set(stored.nameHex, stored);
     // The operator E itself names, before any handover: there is no predecessor
     // to take a book from, so registering IS holding it, empty as it starts —
     // seated for the genesis link, which is the backing itself. Anyone else
     // reaches the book through `takeOver`. The chain IN FORCE, deliberately: a
     // pending successor does not unseat the genesis operator, which §C2 keeps
     // serving through the lead time.
-    const chain = this.walkedInForce(backing);
+    const chain = this.walkedInForce(stored);
     if (chain.length === 1 && compareBytes((chain[0] as Succession).operator, this.operatorKey) === 0) {
       // The genesis seat pins nothing: there is no predecessor, so there is no
       // taken-on commitment — the same shape as the empty book at a handover.
-      this.seatedFor.set(backing.nameHex, {
+      this.seatedFor.set(stored.nameHex, {
         link: bytesToHex((chain[0] as Succession).link),
         pin: undefined,
       });
@@ -471,9 +487,9 @@ export class Sequencer {
     // believes something this door must not adopt.
     const chain = this.walkedInForce(held);
     const target = lastCommitmentInForce(chain, this.venue, seat.from - 1n);
-    if (target === undefined && served !== undefined) {
+    if (target === undefined && (served !== undefined || incumbentLatest !== undefined)) {
       throw new SequencerError(
-        "the record pins no commitment before this handover: the book to take on is empty, and takes no offered state",
+        "the record pins no commitment before this handover: the book to take on is empty, and takes no offered state or evidence",
       );
     }
     if (target !== undefined && served === undefined) {
@@ -520,7 +536,7 @@ export class Sequencer {
     // key, carrying its predecessor's artefact with no way to shed it —
     // dropping the entry later is isRewrittenHistory (found reviewing this
     // slice: the heir's only other exit was refusing the backing entirely).
-    if (withdrawnAgainstCommit(held, this.venue, served) !== undefined) {
+      if (withdrawnAgainstCommit(held, this.venue, served) !== undefined) {
         throw new SequencerError(
           "that log carries a withdrawal the record refutes: the fault is its signer's to keep",
         );
@@ -574,6 +590,14 @@ export class Sequencer {
       }
     }
     if (!reSync && heldLog.length > mark) this.restore(held);
+    // The delta cannot throw: replayLog above proved the WHOLE offered log
+    // lawful from empty, and every clock rule in applyEntry is a refusal
+    // gated on a defined clock — this replay passes none — so the held fold
+    // plus the delta cannot diverge from the clean fold. If a clock rule ever
+    // becomes a state branch rather than a refusal, this loop becomes a
+    // partial-mutation window on a FAILED takeover (the restore above has
+    // already run), which is why the property is stated here and probed in
+    // the round rather than assumed.
     for (const entry of offeredLog.slice(keep)) {
       this.ledger.apply(held, entry, undefined);
     }
@@ -690,7 +714,13 @@ export class Sequencer {
    * operator's shortest duration. What keeps a set whole now is the door: the
    * sequencer takes a set only over backings that declare one silence duration
    * (`sameDuration`), so its backings' gaps open together — one operator means
-   * one last commitment — and its halves die together or not at all.
+   * one last commitment — and its halves die together or not at all — **except
+   * through a handover, which is per backing**: a re-appointment on one
+   * backing of a set drops that backing's half of an uncommitted set tail and
+   * leaves the sibling's (the 35d round probed it: bounded, since the holder
+   * withdraws the stranded half past its timeout, and CLAUDE.md's "a handover
+   * takes no tail" is the party rule that prices it). A test for that shape
+   * is owed.
    *
    * A dropped operation is resubmittable by anyone holding the signed request
    * once the operator serves again, and is then a fresh act with a fresh
@@ -1476,13 +1506,28 @@ export class Sequencer {
     // silent drop was a fault against an honest heir (its inventory probe).
     // `awaitingTakeover` is the same condition as a readable list.
     const acknowledged = new Set((options?.dropping ?? []).map((backing) => backing.nameHex));
+    // Membership in the ONE read, not a second `serves` pass: re-deriving here
+    // was the TOCTOU the comment above claims closed — on a venue whose clock
+    // moves mid-call, a backing could flip between the two reads and be
+    // neither rooted nor refused (found regression-reviewing the fix).
+    const servedNames = new Set(served.map((backing) => backing.nameHex));
     const abandoned = [...this.backings.values()].filter(
-      (backing) =>
-        this.isInForce(backing) &&
-        !this.serves(backing) &&
-        !acknowledged.has(backing.nameHex),
+      (backing) => !servedNames.has(backing.nameHex) && this.isInForce(backing),
     );
-    if (abandoned.length > 0) {
+    // The acknowledgement is strict in both directions: every abandoned
+    // backing is named, and every name IS an abandoned backing — an
+    // acknowledgement of a backing this commitment would not drop asserts
+    // something false, and a typo'd name must not read as accepted (found
+    // regression-reviewing the fix).
+    const abandonedNames = new Set(abandoned.map((backing) => backing.nameHex));
+    for (const name of acknowledged) {
+      if (!abandonedNames.has(name)) {
+        throw new SequencerError(
+          "`dropping` names a backing this commitment would not drop: name only what is in force and not served",
+        );
+      }
+    }
+    if (abandoned.some((backing) => !acknowledged.has(backing.nameHex))) {
       throw new SequencerError(
         "this commitment would drop a backing this operator is in force for: it takes the state over first (takeOver), or names it in `dropping` to drop it deliberately",
       );
@@ -1637,15 +1682,20 @@ export class Sequencer {
           "this operator is returning from silence: it commits first, and serves from the index after its commitment",
         );
       }
-      // §C2: a key seated anew co-signs nothing in its new term until it has
-      // committed in it — its receipts would name an era that ended with its
-      // old term, and a lapsed era is the excuse the operator-fault pair
-      // reads, so the window between seat and first commitment minted
-      // equivocations nothing could prove (the fix round's F3). Same door,
-      // same remedy. A fresh heir is untouched (era 0's floor is its own
-      // first seat), and the check never runs at commit or adoption — placed
-      // there it refused the cure itself (probed: the return commit adopts
-      // before it publishes).
+      // A key whose own current era already reads LAPSED commits before it
+      // co-signs — the window between a re-appointed key's seat and its first
+      // new-term commitment minted equivocations nothing could prove, since a
+      // lapsed era is the excuse the operator-fault pair reads (the fix
+      // round's F3). Same door, same remedy as the return from silence. A
+      // fresh heir is untouched (era 0's floor is its own first seat), and
+      // the check never runs at commit or adoption — placed there it refused
+      // the cure itself (probed: the return commit adopts before it
+      // publishes). What this door deliberately does NOT enforce is the wider
+      // §C2 sentence: a re-appointed key whose era stayed LIVE by committing
+      // for its other backings passes here — its fault pair is not excused,
+      // so nothing is mintable — and its stale-era receipts are the payee's
+      // to refuse by the seat-aware freshness rule (CLAUDE.md; found
+      // regression-reviewing the fix round).
       if (eraLapsed(this.venue, backing, this.operatorKey, this.era(), chain)) {
         throw new SequencerError(
           "this operator's era ended with its old term: it commits first, and serves from the index after its commitment",

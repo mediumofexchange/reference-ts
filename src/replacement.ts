@@ -245,10 +245,13 @@ export function successionOf(backing: Backing, venue: Venue): Succession[] {
  * clock instead — "who is in force right now" — is what made the takeover
  * reachable only strictly inside a lead time §C2 does not guarantee exists.
  *
- * The pending link is the walk's own chosen candidate, held to every rule an
- * arrived link is held to (signatures, supersession, the tie); the ONLY thing
- * not yet true of it is that its index has come. Whether it ever takes force
- * is still the chain's question, answered then.
+ * The pending link is the walk's own chosen candidate, held to the admission
+ * rules an arrived link is held to — signatures, supersession, the void rule,
+ * the tie — with one stated exception: it is returned before the `seen` cycle
+ * guard, which an arrived link passes on push. Unreachable in practice (a
+ * pending hash already seen needs a hash collision), but the docstring should
+ * not claim more than the code checks. Whether it ever takes force is still
+ * the chain's question, answered then.
  */
 export function successionAhead(backing: Backing, venue: Venue): Succession[] {
   const { chain, pending } = walkSuccession(backing, venue);
@@ -305,7 +308,12 @@ function walkSuccession(
       // candidate naming the incumbent itself — that is a revocation, not a
       // handover, and a co-signed revocation at the boundary must still
       // revoke (found by the fix panel's inventory angle: without it, the
-      // revoked successor took force).
+      // revoked successor took force). The exemption is deliberately wider
+      // than the boundary case: a self-naming record dated anywhere the
+      // witnessed filter allows is admitted, including inside the incumbent's
+      // own lead time — no new power, since the same two signatures could
+      // always void the slot with a later-dated record, but the width is
+      // stated rather than implied (the regression round's W-1).
       //
       // **Two witnessed at ONE index resolve to the lesser record hash** (§C2).
       // Witnessing pins order, and at one index it pins nothing, so the rule

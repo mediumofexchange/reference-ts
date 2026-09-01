@@ -837,8 +837,18 @@ export function eraLapsed(
     // Walking verifies a signature per published record and anyone may publish
     // one for free, so a caller that has already walked passes its chain — the
     // sequencer's doors ask this per submission, and 35d's fix round measured
-    // the unthreaded walks at seconds per door call under junk records.
-    const chain = walked ?? successionOf(backing, venue);
+    // the unthreaded walks at seconds per door call under junk records. The
+    // chain must be the FORCE chain, and a pending tip is sliced off rather
+    // than trusted away: handed `successionAhead`, this predicate read the
+    // pending link as a handover that had already ended the era and answered
+    // true for the whole lead time — every door shut (found regression-
+    // reviewing the fix round; gapOpen and gapLegsFor are indifferent to the
+    // extra link, probed, and this one is not).
+    let chain = walked ?? successionOf(backing, venue);
+    const now = venue.witnessedIndex();
+    while (chain.length > 0 && (chain[chain.length - 1] as Succession).from > now) {
+      chain = chain.slice(0, -1);
+    }
     // **The era can begin no earlier than the signer took the role.** §C2 seats
     // a successor before it has committed, so its receipts honestly say
     // `after = 0` — measured from index zero, every heir on a venue older than

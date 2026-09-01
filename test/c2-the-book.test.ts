@@ -8,7 +8,9 @@ import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js
 import {
   encodeAcceptanceMessage,
   encodeDemandMessage,
+  encodeLock,
   encodeReleaseMessage,
+  NO_DECISION_VENUE,
 } from "../src/presentation.js";
 import { gapOpen, stateIsAuthentic } from "../src/recovery.js";
 import {
@@ -576,7 +578,7 @@ describe("§C2: the fast-forward and the tail — the interleavings, probed befo
     // term (§C2, the fix round's F3): its receipts would name an era that
     // ended with its old one, and a lapsed era is the excuse the fault pair
     // reads. The door names the remedy, and the remedy is one commit away.
-    expect(() => original.submitTransfer(dead.op, dead.signature)).toThrow(/commits first/);
+    expect(() => original.submitTransfer(dead.op, dead.signature)).toThrow(/era ended with its old term/);
     at(venue, 21n);
     const { commitment: resumedCommitment } = original.commit();
     const resumed: ServedState = { snapshots: original.snapshot(), commitment: resumedCommitment };
@@ -777,6 +779,36 @@ describe("§C2: the mark, the gate, and the walk cache — the round's killers",
     heir.commit();
     at(venue, 27n);
     expect(heir.submitTransfer(move.op, move.signature).position).toBe(1n);
+  });
+
+  it("the same order stands at submitLeg's door: the takeover is named, not the commit", () => {
+    // The door-order swap is duplicated at submitLeg, and the shared-gate
+    // killer above cannot reach it — this one walks the same in-force
+    // bookless heir through the leg door and pins which refusal speaks.
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    serving(venue, eur); // commits at 0, then dark
+    at(venue, 25n);
+    venue.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 26n));
+    at(venue, 26n);
+    const heir = new Sequencer(HEIR_SECRET, venue);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
+    expect(gapOpen(venue, eur)).toBeDefined();
+    const hash = sha256(new Uint8Array([1]));
+    const leg = {
+      backing: eur,
+      attemptId: hash,
+      holder: KEYS.alice,
+      beneficiary: KEYS.backer,
+      quantity: 1n,
+      timeout: 200n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: 0n,
+    };
+    expect(() =>
+      heir.submitLeg(eur, hash, { op: leg, signature: ed25519.sign(encodeLock(leg), SECRETS.alice) }),
+    ).toThrow(/takeOver/);
   });
 
   it("a retired operator cannot take the book back without being named again", () => {
