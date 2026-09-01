@@ -227,11 +227,23 @@ describe("§C2: the log that vanished is the log that shrank", () => {
   it("a backing appearing in a later state is not a rewrite", () => {
     // An operator that had not yet registered the backing committed states
     // without it. Growing from nothing is growth, and naming it a fault would
-    // accuse every operator of its own first commitment.
+    // accuse every operator of its own first commitment. Both states are
+    // hand-rooted: a hand-published root desyncs the live process's seats by
+    // design now (the record moved past them — the resume rule), and this
+    // test's claim is the VERIFIER's, needing no door.
     const { venue, sequencer, eur } = setup();
     const before = commitWithout(venue, sequencer, eur);
     venue.advance(1n);
-    const after = commitAll(sequencer);
+    const snapshots = sequencer.snapshot();
+    const after = {
+      snapshots,
+      commitment: signCommitment(
+        SECRETS.operator,
+        venue.nextSequenceFor(KEYS.operator),
+        stateRoot(snapshots),
+      ),
+    };
+    venue.publish(after.commitment);
     expect(isRewrittenHistory(eur, venue, before, after)).toBe(false);
   });
 
@@ -369,8 +381,9 @@ describe("§C2: a receipt read against a state that dropped the backing", () => 
     // operator did — the fault is isRewrittenHistory's to name, and it needs two
     // states to order them.
     const { venue, sequencer, eur } = setup();
-    const early = commitWithout(venue, sequencer, eur);
-    venue.advance(1n);
+    // The receipt first, then the hand-rooted early state: a hand-published
+    // root desyncs the live process's seats by design now (the resume rule),
+    // and what this test orders is the STATES, not the fixture's calls.
     const receipt = sequencer.submitTransfer(
       { backing: eur, from: KEYS.alice, to: KEYS.bob, quantity: 40n, nonce: 0n },
       ed25519.sign(
@@ -378,8 +391,23 @@ describe("§C2: a receipt read against a state that dropped the backing", () => 
         SECRETS.alice,
       ),
     );
+    const early = commitWithout(venue, sequencer, eur);
+    venue.advance(1n);
+    // Hand-rooted, as `early` is: a hand-published root desyncs the live
+    // process's seats by design now (the resume rule), and the claim here is
+    // the VERIFIER's ordering of two states, needing no door.
+    const snapshots = sequencer.snapshot();
+    const carried = {
+      snapshots,
+      commitment: signCommitment(
+        SECRETS.operator,
+        venue.nextSequenceFor(KEYS.operator),
+        stateRoot(snapshots),
+      ),
+    };
+    venue.publish(carried.commitment);
     expect(receiptStatus(eur, venue, receipt, early)).toBe("dropped");
-    expect(isRewrittenHistory(eur, venue, early, commitAll(sequencer))).toBe(false);
+    expect(isRewrittenHistory(eur, venue, early, carried)).toBe(false);
   });
 
   it("still says unrelated for a state that is not this operator's", () => {
@@ -563,14 +591,17 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     // The heir signs, in its OWN term, a law-valid TRUNCATION of the book: the
     // issuance kept, Bob's 40 gone. The drop evidence is genuine, the state
     // roots, the replay is lawful — only its TERM refuses it: an earlier state
-    // is one from a term at or before the pin's, and the heir's is after.
+    // is one from a term at or before the record's last, and the heir's is
+    // after. UNPUBLISHED, deliberately: published, the truncation would BE
+    // the record's last commitment, poisoning the walk-back entirely — the
+    // heir's own fault closing its own door, which the resume rule makes the
+    // price of publishing a rewrite (slice 36).
     const { venue, eur, heir, carried, dropped, eurLog } = evidenceLicenses();
     const truncated = [{ name: eur.name, opLog: [eurLog[0]!] }];
     const ownTerm: ServedState = {
       snapshots: truncated,
       commitment: signCommitment(SECRETS.carol, 0n, stateRoot(truncated)),
     };
-    venue.publish(ownTerm.commitment);
     expect(() => heir.takeOver(eur, ownTerm, dropped)).toThrow(SequencerError);
     expect(heir.opLog(eur)).toHaveLength(0);
     // The honest path the door leaves open: the last state that carried it.

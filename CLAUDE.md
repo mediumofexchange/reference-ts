@@ -124,7 +124,13 @@ that produced it is in the decision log — reach it through the index in
   commits before it co-signs (`shut`, the same door as the return from
   silence), and a commitment never drops an in-force backing silently
   (`commit`'s per-call `dropping`; `awaitingTakeover` is the same condition
-  as a question).
+  as a question). **The pin is a floor, and a seat serves the book the
+  record's last commitment stands on**: a fresh process resumes from its own
+  latest witnessed commitment, from a seat holding what the handover pinned;
+  registering is holding the book only where the record pins nothing, genesis
+  included; and a book behind the record serves nothing until raised — which
+  makes a lost book, a superseded twin process and a stale handover copy one
+  detectable condition (`serves` unbounded; `commit` rewrites the pin).
 - **Every operation is signed by the party the law names, over that backing's
   own message, at that signer's next nonce — except the commit.** §C3's commit
   names no backing, carries no nonce, and is signed by every party the lock
@@ -235,6 +241,13 @@ holder who ignores them, and every mechanism that would reach further either
 fails to close its own hole or does not survive the move to a blinded
 construction — which is why they are rules here rather than code.
 
+- **A restarted process resumes before its commit timer fires.** The resume
+  window closes at the first commitment the schedule publishes over a stale
+  book, so the boot sequence holds the timer until every registered backing
+  serves — `awaitingTakeover` is the checklist, and the raise needs the last
+  served state from a replica or a holder (the holder rule below is what
+  guarantees one exists). Restarting never broke the one-writer rule; losing
+  the race to a twin is detected, not excused.
 - **One writer at a time**, or a threshold key. Two live servers holding one
   operator key co-sign conflicting operations, and `fault.ts` proves that
   against the operator exactly as if it were malice — the protocol cannot tell

@@ -296,9 +296,19 @@ export class Sequencer {
     // pending successor does not unseat the genesis operator, which §C2 keeps
     // serving through the lead time.
     const chain = this.walkedInForce(stored);
-    if (chain.length === 1 && compareBytes((chain[0] as Succession).operator, this.operatorKey) === 0) {
-      // The genesis seat pins nothing: there is no predecessor, so there is no
-      // taken-on commitment — the same shape as the empty book at a handover.
+    if (
+      chain.length === 1 &&
+      compareBytes((chain[0] as Succession).operator, this.operatorKey) === 0 &&
+      // **Registering is holding the book only where the record pins
+      // nothing** (§C2, the resume panel): a restarted genesis process used
+      // to be seated here over an EMPTY ledger — serves true, awaitingTakeover
+      // empty, takeOver refusing — and its next scheduled commit zeroed every
+      // balance in its own voice, with no repair path at all where E names no
+      // replacement rule. Where the record holds any in-force commitment,
+      // the seat comes through takeOver like every other: the empty-book
+      // anchor, then the raise to this operator's own latest.
+      lastCommitmentInForce(chain, this.venue) === undefined
+    ) {
       this.seatedFor.set(stored.nameHex, {
         link: bytesToHex((chain[0] as Succession).link),
         pin: undefined,
@@ -356,8 +366,18 @@ export class Sequencer {
     const chain = this.walkedInForce(backing);
     const tip = chain[chain.length - 1] as Succession;
     if (seat.link !== bytesToHex(tip.link)) return false;
-    const pin = lastCommitmentInForce(chain, this.venue, tip.from - 1n);
-    return seat.pin === (pin === undefined ? undefined : commitmentIdentity(pin.commitment));
+    // The pin the seat keeps is the identity of the commitment the BOOK
+    // stands on — written by takeOver for what was taken, REWRITTEN by commit
+    // for what was published — and the record's answer here is UNBOUNDED: a
+    // seat serves only the book the record's last commitment stands on
+    // (§C2, the resume panel). Bounded at the seat's own effective index,
+    // this comparison detected a predecessor moving the pin and was blind to
+    // this operator's own commitments — so a restarted process's stale book,
+    // a superseded twin, and a stale handover copy were three silent
+    // conditions; unbounded, they are one detectable one, and the losing
+    // side of a one-writer race stops serving instead of co-signing on.
+    const latest = lastCommitmentInForce(chain, this.venue);
+    return seat.pin === (latest === undefined ? undefined : commitmentIdentity(latest.commitment));
   }
 
   /** This operator's backings, in the sense `serves` gives that word. */
@@ -466,58 +486,94 @@ export class Sequencer {
       );
     }
     const seat = ahead[seatIndex] as Succession;
-    // The operator E itself names, before any handover: there is no
-    // predecessor and no state to take on — registering is holding the book.
-    // The seat's own identity decides, not the chain's length: a pending
-    // successor at the genesis link must not change what the genesis operator
-    // is told (found by the fix panel's inventory angle — the length proxy
-    // let `seat.from - 1n` go negative and a guard two files away catch it).
-    if (seatIndex === 0) {
-      throw new SequencerError("the genesis operator has no predecessor: registering is holding the book");
-    }
-    // **The pinned target — or, where the record pins nothing, the EMPTY
-    // book.** No commitment by a party then in force stands strictly before
-    // this seat, so nothing was ever final, and never publishing must not
-    // read as having published (§C2; `lastCommitmentInForce`'s own contract,
-    // which this door was the one caller to violate). The emptiness is the
-    // RECORD's answer, not the heir's claim — and it means "empty" only
-    // because the walk voids the record class that emptied a committed term
-    // retroactively (the eraser; §C2's strictly-later rule). Offering a state
-    // when nothing is pinned is refused rather than ignored: the caller
-    // believes something this door must not adopt.
+    // **The anchor is the handover's pin; the raise is this operator's own
+    // latest witnessed commitment; the empty book is what the record licenses
+    // where neither stands** (§C2, the resume panel: the pinned object is a
+    // floor, not a ceiling). The genesis seat is no longer refused here — it
+    // is simply the seat whose anchor is undefined, resumed by the same two
+    // calls as any other. The raise is licensed ONLY from a seat already
+    // holding this link (the reSync gate): that is what makes the existing
+    // fast-forward's prefix loop the extension proof, keeps the
+    // heir-may-not-license-its-own-commitment guard shut (that fixture holds
+    // nothing), and refuses the downgrade — the raised target is the
+    // RECORD's, venue-derived, never the caller's, so an older own state and
+    // an unpublished own-signed forgery both fail the identity.
     const chain = this.walkedInForce(held);
-    const target = lastCommitmentInForce(chain, this.venue, seat.from - 1n);
-    if (target === undefined && (served !== undefined || incumbentLatest !== undefined)) {
-      throw new SequencerError(
-        "the record pins no commitment before this handover: the book to take on is empty, and takes no offered state or evidence",
-      );
-    }
-    if (target !== undefined && served === undefined) {
-      throw new SequencerError("this handover pins a committed state: offer it");
-    }
+    const anchor = seat.from === 0n ? undefined : lastCommitmentInForce(chain, this.venue, seat.from - 1n);
+    const latest = lastCommitmentInForce(chain, this.venue);
+    const reSync = this.seatedFor.get(held.nameHex)?.link === bytesToHex(seat.link);
+    const raised = reSync ? latest : undefined;
+    // The identity of the commitment the taken book will STAND ON — what the
+    // seat stores as its pin, and what `serves` re-derives unbounded.
+    let standsOn: string | undefined;
     let offeredLog: readonly OpLogEntry[] = [];
-    if (target !== undefined && served !== undefined) {
+    if (served === undefined) {
+      if (incumbentLatest !== undefined) {
+        // **The empty book, by evidence**: the record's LAST commitment
+        // exists and carries nothing for this backing — exhibited, it
+        // licenses the empty book and is what the book then stands on. One
+        // arm for the never-carried backing (the round's W1), the successor
+        // whose pin dropped it with nothing earlier to walk back to, and the
+        // operator re-taking a backing it deliberately dropped.
+        if (latest === undefined) {
+          throw new SequencerError("no commitment stands for this backing: there is nothing to exhibit");
+        }
+        this.requireDroppedBy(held, incumbentLatest, latest.commitment);
+        standsOn = commitmentIdentity(latest.commitment);
+      } else if (anchor === undefined) {
+        // The pure empty anchor: the handover pins nothing. Where the record's
+        // last commitment ALSO does not exist, this seat serves from nothing
+        // (the fresh genesis, the F2 heir); where it does exist, this seat
+        // serves NOTHING until raised — which is the detection.
+        standsOn = undefined;
+      } else {
+        throw new SequencerError(
+          "this handover pins a committed state: offer it — or, from a seat already holding this link, this operator's own latest witnessed commitment",
+        );
+      }
+    } else {
       const committed = committedLogFor(held, this.venue, served);
       if (committed === undefined || committed.kind === "dropped") {
         throw new SequencerError("that is not a state this backing's operator committed");
       }
-      if (commitmentIdentity(served.commitment) !== commitmentIdentity(target.commitment)) {
-        this.requireDroppedBy(held, incumbentLatest, target.commitment);
+      const offered = commitmentIdentity(served.commitment);
+      if (incumbentLatest === undefined && anchor !== undefined && offered === commitmentIdentity(anchor.commitment)) {
+        standsOn = commitmentIdentity(anchor.commitment);
+      } else if (incumbentLatest === undefined && raised !== undefined && offered === commitmentIdentity(raised.commitment)) {
+        standsOn = commitmentIdentity(raised.commitment);
+      } else if (incumbentLatest === undefined && anchor === undefined && raised === undefined) {
+        throw new SequencerError(
+          "the record pins no commitment before this handover: the book to take on is empty, and takes no offered state",
+        );
+      } else if (incumbentLatest !== undefined && latest !== undefined) {
+        // **The carrying walk-back, by evidence**: the record's last
+        // commitment carries nothing (exhibited), so the book's CONTENT is
+        // the last earlier state that carried it — and its STANDING is the
+        // exhibited commitment, vacuously, which is what lets the taken seat
+        // serve (the anchor's own drop, a predecessor's, or this operator's
+        // acknowledged one alike; the reference moved from the anchor to the
+        // record's last when the resume panel unbound the pin).
+        this.requireDroppedBy(held, incumbentLatest, latest.commitment);
         // And it must really precede the target. Within one term the signer's
         // own sequence orders states; across terms the chain does (`termOf`,
         // the same rank isRewrittenHistory reads). A state at or past the
         // target is not an earlier one this evidence excuses, and one that
         // places in no term accuses nobody and licenses nothing.
-        const targetTerm = termOf(chain, this.venue, target.commitment.operator, target.commitment.sequence);
+        const targetTerm = termOf(chain, this.venue, latest.commitment.operator, latest.commitment.sequence);
         const offeredTerm = termOf(chain, this.venue, served.commitment.operator, served.commitment.sequence);
         if (
           targetTerm === undefined ||
           offeredTerm === undefined ||
           offeredTerm > targetTerm ||
-          (offeredTerm === targetTerm && committed.sequence >= target.commitment.sequence)
+          (offeredTerm === targetTerm && committed.sequence >= latest.commitment.sequence)
         ) {
           throw new SequencerError("that state does not precede the handover's pinned target");
         }
+        standsOn = commitmentIdentity(latest.commitment);
+      } else {
+        throw new SequencerError(
+          "that is not a state this handover can take on: offer the pinned state, or — from a seat already holding this link — this operator's own latest witnessed commitment",
+        );
       }
       // All or nothing. committedLogFor checks the root and the signature and
       // deliberately does not replay the law, so a well-rooted log that is not
@@ -571,8 +627,7 @@ export class Sequencer {
     // book is measured — carried instead, this operator's next commitment
     // would root acts of a dead era as this term's own. On a re-sync of the
     // seat already held the tail is the LIVE term's own, and no takeover may
-    // touch it.
-    const reSync = this.seatedFor.get(held.nameHex)?.link === bytesToHex(seat.link);
+    // touch it. (`reSync` was computed above: it is also the raise's licence.)
     const mark = this.ledger.committedLength(held);
     const heldLog = this.ledger.opLog(held);
     const keep = reSync ? heldLog.length : mark;
@@ -611,14 +666,24 @@ export class Sequencer {
     // mark says so.)
     if (offeredLog.length >= keep) this.ledger.markCommitted(held);
     // And this operator is seated for ITS link — the record that names it —
-    // WITH the provenance of what it took on: the pin, rewritten on every
-    // re-sync, is the other half of what `serves` re-checks. The link says
-    // whose the book is; the pin says which book it is (the fix round's F4:
-    // under a link-only seat, the pin moved in the lead time and the heir's
-    // first commitment was a shrink fault with both parties honest).
+    // WITH the provenance of what the book now STANDS ON: the anchor, the
+    // raised own commitment, the exhibited drop, or nothing at all. `commit`
+    // rewrites it for what it publishes, and `serves` re-derives the record's
+    // unbounded answer and compares — the link says whose the book is; the
+    // pin says which book it is, and a book behind the record serves nothing
+    // until raised (§C2, the resume panel).
+    // A re-sync that offered a state the book is already PAST applied nothing
+    // and moves nothing: the book still stands where it stood, and regressing
+    // the pin here would un-serve a current book for a no-op call (found
+    // building this slice: the pin write ran unconditionally and a re-offer
+    // of the old anchor left the seat behind its own commitment).
+    const settled =
+      reSync && offeredLog.length < keep
+        ? this.seatedFor.get(held.nameHex)?.pin
+        : standsOn;
     this.seatedFor.set(held.nameHex, {
       link: bytesToHex(seat.link),
-      pin: target === undefined ? undefined : commitmentIdentity(target.commitment),
+      pin: settled,
     });
   }
 
@@ -1545,6 +1610,22 @@ export class Sequencer {
     // the mark is what `restore` treats as the part no caller can take back, and
     // it must not claim more than this signature covers.
     for (const backing of served) this.ledger.markCommitted(backing);
+    // And each served seat's pin moves to THIS commitment: the pin is the
+    // identity of the commitment the book stands on, and the book now stands
+    // on this one. Left behind, this operator's own next read of `serves`
+    // would find the record past its seat — which is the fate reserved for a
+    // process that did NOT publish this commitment (the superseded twin, the
+    // restart): the one writer that keeps writing is the one whose pin keeps
+    // up (§C2, the resume panel).
+    for (const backing of served) {
+      const seat = this.seatedFor.get(backing.nameHex);
+      if (seat !== undefined) {
+        this.seatedFor.set(backing.nameHex, {
+          link: seat.link,
+          pin: commitmentIdentity(commitment),
+        });
+      }
+    }
     return { snapshots, commitment };
   }
 

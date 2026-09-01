@@ -912,10 +912,14 @@ describe("§C2b: the return commit restores the book to the last commitment, the
     // commitment and then misses the next: the new backing's whole book is tail.
     const { venue, sequencer, backing: eur } = setup();
     issue(sequencer, eur, KEYS.alice, 100n, 0n);
-    sequencer.commit(); // at 0
+    const own = sequencer.commit(); // at 0
     advanceWitnessedIndex(venue, 1n);
     const gold = makeTransparentBacking(SECRETS.backer2, "GOLD", [], SILENCE);
     sequencer.register(gold, signBacking(SECRETS.backer2, gold));
+    // Registered AFTER its last commitment, the record's last stands and
+    // carries nothing for GOLD — exhibited, it licenses the empty book (the
+    // resume rule: registering is holding only where the record pins nothing).
+    sequencer.takeOver(gold, undefined, own);
     issue(sequencer, gold, KEYS.bob, 30n, 0n, SECRETS.backer2);
     advanceWitnessedIndex(venue, 11n);
     sequencer.commit(); // the return
