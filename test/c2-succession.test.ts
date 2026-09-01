@@ -617,10 +617,13 @@ describe("§C2: a successor serves, and only once it is in force", () => {
     // rule): the book already carries it, and nothing changes.
     successor.takeOver(backing, incumbent.served);
     at(venue, HANDOVER_AT);
-    successor.commit();
+    const own = successor.commit();
     const before = successor.opLog(backing).length;
-    successor.takeOver(backing, incumbent.served);
+    successor.takeOver(backing, own);
     expect(successor.opLog(backing)).toHaveLength(before);
+    // "No-op" is a claim about serving, not a log length (the slice-36
+    // round's B1): still seated, still serving.
+    expect(successor.awaitingTakeover()).toHaveLength(0);
   });
 
   it("refuses a sequencer that is neither in force nor named", () => {

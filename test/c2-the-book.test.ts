@@ -370,8 +370,15 @@ describe("§C2: the move is a fast-forward", () => {
     at(venue, 12n);
     heir.takeOver(eur, state);
     expect(heir.opLog(eur)).toHaveLength(before);
-    heir.commit();
-    heir.takeOver(eur, state);
+    const own = heir.commit();
+    expect(heir.awaitingTakeover()).toHaveLength(0);
+    // A superseded state is a refusal, not a silent no-op; the record's own
+    // last is the no-op — and "no-op" is a claim about SERVING, not a log
+    // length (the slice-36 round's B1 hid behind this test's assertions).
+    expect(() => heir.takeOver(eur, state)).toThrow(/the record stands on/);
+    expect(heir.awaitingTakeover()).toHaveLength(0);
+    heir.takeOver(eur, own);
+    expect(heir.awaitingTakeover()).toHaveLength(0);
     expect(heir.opLog(eur)).toHaveLength(before);
     expect(heir.outstanding(eur)).toBe(100n);
   });
@@ -443,13 +450,13 @@ describe("§C2: the move is a fast-forward", () => {
     const { venue, eur, original, theirs } = reappointed();
     original.takeOver(eur, theirs);
     at(venue, 26n);
-    original.commit();
+    const own = original.commit();
     // A live tail this term co-signed and has NOT committed.
     const tail = transferBy(eur, SECRETS.bob, KEYS.bob, KEYS.carol, 5n, 0n);
     original.submitTransfer(tail.op, tail.signature);
     expect(original.opLog(eur)).toHaveLength(3);
-    // The re-sync against the older target must leave the tail a TAIL.
-    original.takeOver(eur, theirs);
+    // The re-sync against the record's own last must leave the tail a TAIL.
+    original.takeOver(eur, own);
     at(venue, 60n); // the operator's own silence opens a gap
     original.commit(); // returning from silence restores to the mark first
     expect(original.opLog(eur)).toHaveLength(2);
@@ -667,7 +674,7 @@ describe("§C2: the fast-forward and the tail — the interleavings, probed befo
 
     at(venue, 31n);
     expect(gapOpen(venue, eur)).toBeUndefined();
-    heir.takeOver(eur, state);
+    heir.takeOver(eur, returned);
     expect(heir.opLog(eur)).toHaveLength(4);
     expect(heir.balance(eur, KEYS.alice)).toBe(95n);
     // And the heir serves, on the book the return built.
