@@ -747,9 +747,15 @@ function before(at: bigint): bigint {
  * backing's declared venue gives nothing force (as every clause reader reads
  * it), and a venue's refusal propagates, as everywhere.
  */
-export function gapOpen(venue: Venue, backing: Backing): Uint8Array | undefined {
+export function gapOpen(
+  venue: Venue,
+  backing: Backing,
+  walked?: readonly Succession[],
+): Uint8Array | undefined {
   if (!venueIsDeclared(venue, backing)) return undefined;
-  const chain = successionOf(backing, venue);
+  // A pre-walked chain, where the caller has one: the sequencer asks this at
+  // every door, and the walk's cost is the adversary's to grow (35d fix round).
+  const chain = walked ?? successionOf(backing, venue);
   const now = venue.witnessedIndex();
   if (!publishedInGap(venue, backing, chain, now)) return undefined;
   return copyBytes(operatorIn(chain, before(now)));
@@ -778,9 +784,13 @@ function publishedInGap(
  * redemption walk folds — exported so the two read one definition of what a
  * publication can do, rather than two that have to agree.
  */
-export function gapLegsFor(venue: Venue, backing: Backing): WitnessedOp[] {
+export function gapLegsFor(
+  venue: Venue,
+  backing: Backing,
+  walked?: readonly Succession[],
+): WitnessedOp[] {
   if (!venueIsDeclared(venue, backing)) return [];
-  const chain = successionOf(backing, venue);
+  const chain = walked ?? successionOf(backing, venue);
   return venue
     .publishedOpsFor(backing.name)
     .filter((w) => isLeg(w.op) && publishedInGap(venue, backing, chain, w.at));
@@ -818,12 +828,17 @@ export function eraLapsed(
   backing: Backing,
   operator: Uint8Array,
   after: bigint,
+  walked?: readonly Succession[],
 ): boolean {
   return answering(() => {
     if (!(operator instanceof Uint8Array) || operator.length !== 32) return false;
     if (typeof after !== "bigint" || after < 0n) return false;
     if (!venueIsDeclared(venue, backing)) return false;
-    const chain = successionOf(backing, venue);
+    // Walking verifies a signature per published record and anyone may publish
+    // one for free, so a caller that has already walked passes its chain — the
+    // sequencer's doors ask this per submission, and 35d's fix round measured
+    // the unthreaded walks at seconds per door call under junk records.
+    const chain = walked ?? successionOf(backing, venue);
     // **The era can begin no earlier than the signer took the role.** §C2 seats
     // a successor before it has committed, so its receipts honestly say
     // `after = 0` — measured from index zero, every heir on a venue older than

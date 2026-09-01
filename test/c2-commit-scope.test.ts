@@ -148,9 +148,12 @@ describe("§C2: one operator asserts one book at one index", () => {
 });
 
 describe("§C2: the cost the section states", () => {
-  it("roots nothing for a backing the heir was seated on without taking the book", () => {
-    // Force is the effective index, so a successor that never takes the state on
-    // is seated holding nothing. §C2 says so and names the price.
+  it("roots nothing for a backing the heir was seated on without taking the book — and only when it says so", () => {
+    // Force is the effective index, so a successor that never takes the state
+    // on is seated holding nothing. §C2 says so and names the price — and the
+    // 35d fix round made the price a CHOICE: a commitment that would silently
+    // drop a backing this operator is in force for is refused with the honest
+    // path named, and the deliberate drop is acknowledged per call.
     const { venue, sequencer, eur } = setup();
     sequencer.commit();
     at(venue, 5n);
@@ -160,7 +163,8 @@ describe("§C2: the cost the section states", () => {
 
     at(venue, 20n);
     expect(operatorAt(eur, venue, 20n)).toEqual(HEIR);
-    expect(carries(heir.commit(), eur, venue)).toBe(false);
+    expect(() => heir.commit()).toThrow(/takes the state over first|dropping/);
+    expect(carries(heir.commit({ dropping: [eur] }), eur, venue)).toBe(false);
   });
 
   it("and answers for it, which the co-signature is what makes just", () => {
@@ -175,6 +179,6 @@ describe("§C2: the cost the section states", () => {
     heir.register(eur, signBacking(SECRETS.backer, eur));
 
     at(venue, 20n);
-    expect(isRewrittenHistory(eur, venue, carrying, heir.commit())).toBe(true);
+    expect(isRewrittenHistory(eur, venue, carrying, heir.commit({ dropping: [eur] }))).toBe(true);
   });
 });

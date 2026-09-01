@@ -112,11 +112,19 @@ that produced it is in the decision log — reach it through the index in
   `fault.ts` forbids outright. `successionOf` stops at the last link whose index
   has arrived, so the chain's tip and the operator in force are one thing.
   **What a handover takes on is a fixed object** — the backing's last
-  commitment strictly before the effective index — **and the book only grows**:
-  `takeOver` is a fast-forward from the chain, not a one-shot from the clock,
-  a dead era's tail drops to the mark first, and the book is seated per chain
-  link, so `serves` (custody AND force, asked at every co-signing door) is one
-  comparison of the seat against the tip and a stale seat detects itself.
+  commitment strictly before the effective index, or the EMPTY book where the
+  record pins nothing — **and the book only grows**: `takeOver` is a
+  fast-forward from this operator's OWN link of the chain (in force or
+  pending, never merely the walk's last element), a dead era's tail drops to
+  the mark first, and the seat is a link WITH a provenance, so `serves`
+  (custody AND force, asked at every co-signing door) compares the seat to
+  the tip and the stored pin to the recomputed one — staleness of either
+  detects itself. A replacement not strictly later than the link it replaces
+  is void unless it names the incumbent (a revocation). A key seated anew
+  commits before it co-signs (`shut`, the same door as the return from
+  silence), and a commitment never drops an in-force backing silently
+  (`commit`'s per-call `dropping`; `awaitingTakeover` is the same condition
+  as a question).
 - **Every operation is signed by the party the law names, over that backing's
   own message, at that signer's next nonce — except the commit.** §C3's commit
   names no backing, carries no nonce, and is signed by every party the lock
@@ -248,7 +256,9 @@ construction — which is why they are rules here rather than code.
   `submitTransfer` returns the receipt to whoever submitted, normally the
   payer. Read the receipt's era when taking it — `after` names the operator's
   last commitment, and one naming anything but the latest at payment time is
-  stale on its face.
+  stale on its face — as is one naming an era before the operator's current
+  seat, however recently that key last committed: a key seated anew commits
+  before its receipts can be fresh, and the seat is readable from the chain.
 - **Claims go illiquid while the operator is dark. Do not accept one.** A
   transfer published at the venue is evidence, never an operation, so nothing
   moves until the operator returns or a successor takes over; the operator

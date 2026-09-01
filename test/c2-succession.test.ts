@@ -470,13 +470,18 @@ describe("§C2: the venue records a replacement and judges nothing", () => {
 
   it("carries a successor that has never committed, once its index has come", () => {
     const { venue, backing } = setup();
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 0n));
+    // Effective one index past the incumbent's force: a record whose effective
+    // index does not advance past its predecessor's is void (§C2's
+    // strictly-later rule — the 35d fix round's eraser), so the earliest a
+    // genesis handover can land is index 1.
+    at(venue, 1n);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 1n));
     // Published, co-signed, and effective now — so it is in force now. Under
     // the retired rule this same record left the successor outside the chain
     // until it published a commitment of its own, which is what let a key that
     // never touched the backing be seated by its own unrelated business.
     expect(venue.replacementsFor(backing.name)).toHaveLength(1);
-    expect(operatorAt(backing, venue, 0n)).toEqual(SUCCESSOR);
+    expect(operatorAt(backing, venue, 1n)).toEqual(SUCCESSOR);
     expect(isAnOperator(backing, venue, SUCCESSOR)).toBe(true);
     expect(venue.firstCommitmentFor(SUCCESSOR)).toBeUndefined();
   });

@@ -12,6 +12,7 @@ import {
 } from "../src/presentation.js";
 import { gapOpen, stateIsAuthentic } from "../src/recovery.js";
 import {
+  operatorAt,
   replacementHash,
   replacementMessage,
   ROLE_OPERATOR,
@@ -487,11 +488,14 @@ describe("§C2: the book is seated for a link", () => {
 
     // In force again, holding its own first-term copy, NOT re-synced: the
     // stale seat must exclude the backing from what this operator asserts —
-    // the stale BOOK is never rooted. What it commits instead is a state that
-    // DROPS a backing it is in force for, and that is the ordinary
-    // drop-while-in-force fault, not a new excuse: the fast-forward stood
-    // open, and it committed past it.
-    const committed = original.commit();
+    // the stale BOOK is never rooted. Committing past the stale seat is
+    // refused until the drop is NAMED (the fix round: a silent drop was the
+    // ordinary drop-while-in-force fault, manufactured by a door that never
+    // said a word); named, what it commits is a state that drops a backing it
+    // is in force for, and that is the fault the record already prices — the
+    // fast-forward stood open, and it committed past it, on purpose.
+    expect(() => original.commit()).toThrow(/takes the state over first|dropping/);
+    const committed = original.commit({ dropping: [eur] });
     expect(committed.snapshots).toHaveLength(0);
     const resumed: ServedState = { snapshots: [], commitment: committed.commitment };
     expect(isRewrittenHistory(eur, venue, theirs, resumed)).toBe(true);
@@ -568,17 +572,21 @@ describe("§C2: the fast-forward and the tail — the interleavings, probed befo
     original.takeOver(eur, theirs);
     expect(original.opLog(eur).map((entry) => entry.kind)).toEqual(["issue", "issue"]);
     expect(original.balance(eur, KEYS.alice)).toBe(100n);
-    // The same signed request, accepted afresh at the book's next position.
-    expect(original.submitTransfer(dead.op, dead.signature).position).toBe(2n);
-    // And the resumed operator's next commitment is clean on the record: no
-    // fault in either order, and the fold authenticates it — the assertions
-    // that motivated the drop, carried from the probe.
+    // A key seated anew co-signs nothing until it has committed in its new
+    // term (§C2, the fix round's F3): its receipts would name an era that
+    // ended with its old one, and a lapsed era is the excuse the fault pair
+    // reads. The door names the remedy, and the remedy is one commit away.
+    expect(() => original.submitTransfer(dead.op, dead.signature)).toThrow(/commits first/);
     at(venue, 21n);
     const { commitment: resumedCommitment } = original.commit();
     const resumed: ServedState = { snapshots: original.snapshot(), commitment: resumedCommitment };
     expect(isRewrittenHistory(eur, venue, theirs, resumed)).toBe(false);
     expect(isRewrittenHistory(eur, venue, resumed, theirs)).toBe(false);
     expect(stateIsAuthentic(eur, venue, resumed)).toBe(true);
+    // The same signed request, accepted afresh at the book's next position —
+    // in the resumed operator's NEW era.
+    at(venue, 22n);
+    expect(original.submitTransfer(dead.op, dead.signature).position).toBe(2n);
   });
 
   it("a taken-on book survives its holder's own slow return: the takeover marks what it applied", () => {
@@ -744,7 +752,7 @@ describe("§C2: the mark, the gate, and the walk cache — the round's killers",
     // stands open, so a force-gated catch-up would restore this book.
     at(venue, 40n);
     expect(gapOpen(venue, eur)).toBeDefined();
-    expect(original.commit().snapshots).toHaveLength(0);
+    expect(original.commit({ dropping: [eur] }).snapshots).toHaveLength(0);
     expect(original.opLog(eur)).toHaveLength(2);
   });
 
@@ -792,7 +800,12 @@ describe("§C2: the mark, the gate, and the walk cache — the round's killers",
       replacementBy(eur, SECRETS.operator, 25n, replacementHash(eur.name, first)),
     );
     at(venue, 25n);
-    // The chain has moved past the heir's link: it is neither tip nor pending.
+    // The chain has moved past the heir's link: it is neither in force nor
+    // pending. Offered its OWN old pinned target — the one state nothing
+    // downstream could refuse — so this bound is the only thing that stands
+    // between a retired key and its stale seat's door (and the tail drop
+    // behind it, whose receipts priorReceipt deliberately keeps answerable).
+    expect(() => heir.takeOver(eur, state)).toThrow(/neither in force nor pending/);
     expect(() => heir.takeOver(eur, theirs)).toThrow(SequencerError);
     expect(heir.opLog(eur)).toHaveLength(1);
   });
@@ -800,10 +813,14 @@ describe("§C2: the mark, the gate, and the walk cache — the round's killers",
   it("a record published without the clock moving is seen at the next door", () => {
     // The walk cache's key is (witnessed index, record count) — BOTH halves.
     // A venue can witness a record without its clock moving, and the door must
-    // see it: the count half of the key is what this test kills.
+    // see it: the count half of the key is what this test kills. The venue
+    // sits at 5 so the record's effective index advances past the incumbent's
+    // force (§C2's strictly-later rule) — the point is the unmoved clock
+    // BETWEEN the two submissions, not a degenerate record.
     const venue = new LocalVenue();
     const eur = backingFor(venue);
     const { sequencer: original } = serving(venue, eur);
+    at(venue, 5n);
     const first = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
     expect(original.submitTransfer(first.op, first.signature).position).toBe(1n);
     // Seated and effective at THIS index, with the clock unmoved.
@@ -842,6 +859,196 @@ describe("§C2: the mark, the gate, and the walk cache — the round's killers",
     at(venue, 30n);
     const second = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 1n);
     expect(() => heir.submitTransfer(second.op, second.signature)).toThrow(/not yet in force/);
+  });
+});
+
+describe("§C2: the fix round — the seat is a link and a provenance, and every refusal leaves a live path", () => {
+  it("a queued rotation does not lock the heir out of its own term", () => {
+    // The seat is this operator's OWN link, not the walk's last element. With
+    // the next rotation pre-scheduled at the heir's link — invisible until the
+    // heir's own force arrives, then standing at the walk's tip — the heir
+    // takes its book over at force, commits, and serves through its term.
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    const { state } = serving(venue, eur);
+    at(venue, 10n);
+    const first = replacementBy(eur, HEIR_SECRET, 12n);
+    venue.publishReplacement(eur.name, first);
+    venue.publishReplacement(
+      eur.name,
+      replacementBy(eur, RESCUER_SECRET, 90n, replacementHash(eur.name, first)),
+    );
+    at(venue, 12n); // in force, with the rotation queued at its own link
+    const heir = new Sequencer(HEIR_SECRET, venue);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
+    heir.takeOver(eur, state);
+    expect(heir.commit().snapshots).toHaveLength(1);
+    at(venue, 13n);
+    const move = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
+    expect(heir.submitTransfer(move.op, move.signature).position).toBe(1n);
+  });
+
+  it("a backing nobody ever committed for seats its heir with the empty book", () => {
+    // Nothing was ever final, and never publishing must not read as having
+    // published (§C2): the record pins no commitment, so the takeover is
+    // called with no state and seats over nothing — where a refusal here left
+    // the backing unservable by every party forever. The uncommitted tail the
+    // original held died unwitnessed, exactly as finality always priced it.
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    const original = new Sequencer(SECRETS.operator, venue);
+    original.register(eur, signBacking(SECRETS.backer, eur));
+    original.submitIssue(
+      { backing: eur, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
+      ed25519.sign(encodeIssuanceMessage(eur.name, KEYS.alice, 100n, 0n), SECRETS.backer),
+    ); // co-signed, never committed, dark
+    at(venue, 30n);
+    venue.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 31n));
+    at(venue, 31n);
+    const heir = new Sequencer(HEIR_SECRET, venue);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
+    // Offering a state is refused — the record pins nothing to check it
+    // against; the empty book is the record's answer, not the caller's.
+    expect(() =>
+      heir.takeOver(eur, { snapshots: original.snapshot(), commitment: signCommitment(SECRETS.operator, 0n, stateRoot([])) }),
+    ).toThrow(/empty/);
+    heir.takeOver(eur);
+    heir.commit(); // the return: the backing was silent from index zero
+    at(venue, 32n);
+    expect(heir.outstanding(eur)).toBe(0n);
+    const issue = { backing: eur, recipient: KEYS.alice, quantity: 5n, nonce: 0n };
+    expect(
+      heir.submitIssue(
+        issue,
+        ed25519.sign(encodeIssuanceMessage(eur.name, KEYS.alice, 5n, 0n), SECRETS.backer),
+      ).position,
+    ).toBe(0n);
+  });
+
+  it("a replacement whose effective index does not advance past its predecessor's is void, and erases nothing", () => {
+    // The eraser, dead: one record witnessed at 0 with effective 0 used to
+    // empty the genesis term retroactively — the committed book placed in no
+    // term, proved nothing, accused nobody, and no key the record could name
+    // could ever serve it. Void, the incumbent stays in force, its book stays
+    // its book, and the reading at every index is what it always was.
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    const { sequencer: original } = serving(venue, eur);
+    venue.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 0n));
+    expect(operatorAt(eur, venue, venue.witnessedIndex())).toEqual(KEYS.operator);
+    at(venue, 5n);
+    const move = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
+    expect(original.submitTransfer(move.op, move.signature).position).toBe(1n);
+  });
+
+  it("a revocation at the boundary still revokes: naming the incumbent is exempt from the strictly-later rule", () => {
+    // A revocation is a candidate naming the incumbent at its own link, and
+    // the rule-holder may date it AT the incumbent's force index — it is not
+    // a handover and seats nobody, so it cannot erase a term. Reachable only
+    // pre-armed (a record's effective index is no earlier than its
+    // witnessing), so the whole drama is published inside the predecessor's
+    // term: the heir's seat, its queued successor, and the revocation of that
+    // successor dated at the heir's own force index. Without the exemption
+    // the walk voided the revocation silently and the revoked successor took
+    // force (the fix panel's inventory probe).
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    serving(venue, eur);
+    at(venue, 5n);
+    const first = replacementBy(eur, HEIR_SECRET, 10n);
+    venue.publishReplacement(eur.name, first);
+    at(venue, 7n);
+    venue.publishReplacement(
+      eur.name,
+      replacementBy(eur, RESCUER_SECRET, 40n, replacementHash(eur.name, first)),
+    );
+    at(venue, 9n);
+    // The revocation: the rule-holder re-names the heir at the heir's own
+    // link, dated at the heir's own force index — the boundary.
+    venue.publishReplacement(
+      eur.name,
+      replacementBy(eur, HEIR_SECRET, 10n, replacementHash(eur.name, first)),
+    );
+    at(venue, 40n);
+    expect(operatorAt(eur, venue, 40n)).toEqual(HEIR);
+  });
+
+  it("an heir that synced early re-syncs once at force, told by the door, and no fault exists anywhere", () => {
+    // The pin: the heir takes the book on early in the lead time — what the
+    // lead time is for — and the predecessor then legitimately commits again
+    // before the effective index. The seat's provenance goes stale, the door
+    // says so instead of letting the heir's first commitment become a shrink
+    // fault, the reader lists the backing, and one re-sync at force is the
+    // whole cure.
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    const { sequencer: original, state } = serving(venue, eur);
+    at(venue, 10n);
+    venue.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 20n));
+    const heir = new Sequencer(HEIR_SECRET, venue);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
+    heir.takeOver(eur, state); // early — the pin will move under this seat
+    at(venue, 12n);
+    const move = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 40n, 0n);
+    original.submitTransfer(move.op, move.signature);
+    at(venue, 13n);
+    const { commitment } = original.commit(); // the pin moves, legitimately
+    const pinned: ServedState = { snapshots: original.snapshot(), commitment };
+
+    at(venue, 20n);
+    expect(heir.awaitingTakeover().map((b) => b.nameHex)).toEqual([eur.nameHex]);
+    const next = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.carol, 5n, 1n);
+    expect(() => heir.submitTransfer(next.op, next.signature)).toThrow(/takes the state over first/);
+    heir.takeOver(eur, pinned); // one re-sync, at force: the pin is frozen now
+    expect(heir.awaitingTakeover()).toHaveLength(0);
+    const returned = heir.commit();
+    expect(heir.balance(eur, KEYS.bob)).toBe(40n);
+    expect(isRewrittenHistory(eur, venue, pinned, returned)).toBe(false);
+    expect(isRewrittenHistory(eur, venue, returned, pinned)).toBe(false);
+    at(venue, 21n);
+    expect(heir.submitTransfer(next.op, next.signature).position).toBe(2n);
+  });
+
+  it("one un-takeable backing does not hold the others hostage: the drop is named and the healthy backing commits", () => {
+    // The panel's security probe: an unconditional commit refusal was a
+    // cross-backing stall lever — a withholding predecessor on ONE backing
+    // silenced the operator's whole book. The acknowledgement threads it: the
+    // operator names the drop it cannot avoid, and everything else commits.
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    const usd = backingFor(venue, "USD");
+    const original = new Sequencer(SECRETS.operator, venue);
+    for (const backing of [eur, usd]) {
+      original.register(backing, signBacking(SECRETS.backer, backing));
+    }
+    original.submitIssue(
+      { backing: usd, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
+      ed25519.sign(encodeIssuanceMessage(usd.name, KEYS.alice, 100n, 0n), SECRETS.backer),
+    );
+    const state = original.commit();
+    // EUR is handed over and comes back; the intermediate state is withheld,
+    // so the re-appointed operator cannot re-sync EUR — and must still serve USD.
+    at(venue, 10n);
+    const first = replacementBy(eur, HEIR_SECRET, 12n);
+    venue.publishReplacement(eur.name, first);
+    const heir = new Sequencer(HEIR_SECRET, venue);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
+    heir.takeOver(eur, state);
+    at(venue, 12n);
+    heir.commit(); // the book EUR's pin now names, and nobody will serve it back
+    at(venue, 15n);
+    venue.publishReplacement(
+      eur.name,
+      replacementBy(eur, SECRETS.operator, 16n, replacementHash(eur.name, first)),
+    );
+    at(venue, 16n);
+    expect(original.awaitingTakeover().map((b) => b.nameHex)).toEqual([eur.nameHex]);
+    expect(() => original.commit()).toThrow(/dropping/);
+    const committed = original.commit({ dropping: [eur] });
+    expect(committed.snapshots).toHaveLength(1); // USD, committed on time
+    at(venue, 17n);
+    const move = transferBy(usd, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
+    expect(original.submitTransfer(move.op, move.signature).position).toBe(1n);
   });
 });
 

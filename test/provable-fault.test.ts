@@ -1454,7 +1454,9 @@ describe("a set settled in part is the operator's fault, read across one commitm
     for (const backing of [f.eur, f.gold]) heir.register(backing, signBacking(SECRETS.backer, backing));
     heir.takeOver(f.eur, served);
     f.venue.advance(1n);
-    const { commitment: heirCommitment } = heir.commit();
+    // The heir deliberately never takes GOLD's book on — the absent leg log is
+    // this test's subject — so the drop is named rather than silent (35d).
+    const { commitment: heirCommitment } = heir.commit({ dropping: [f.gold] });
     const heirServed = { snapshots: heir.snapshot(), commitment: heirCommitment };
     expect(settledInPart(f.eur, f.venue, f.terms, heirServed, hash)).toBeUndefined();
   });

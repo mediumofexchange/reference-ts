@@ -39,6 +39,7 @@
 
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import { ByteReader, ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
 import { COMMITMENT_CONTEXT } from "./contexts.js";
 import { verifySignatureStrict } from "./keys.js";
@@ -214,6 +215,18 @@ export function committedLogFor(
     if (snapshot === undefined) return { kind: "dropped", sequence };
     return { kind: "log", sequence, opLog: snapshot.opLog };
   }, undefined);
+}
+
+/**
+ * A commitment's identity as one comparable value: operator, sequence, root —
+ * the triple every reader that asks "is this THAT commitment" compares. Three
+ * sites compared the fields inline and a fourth (the seat's pin, 35d's fix
+ * round) joined them, so the comparison lives once. A string rather than
+ * bytes, deliberately: it is compared and stored in private maps, never
+ * signed or hashed, and a string retains no live reference to the arrays.
+ */
+export function commitmentIdentity(commitment: Commitment): string {
+  return `${bytesToHex(commitment.operator)}:${commitment.sequence.toString()}:${bytesToHex(commitment.root)}`;
 }
 
 function commitmentMessage(sequence: bigint, root: Uint8Array): Uint8Array {

@@ -292,11 +292,20 @@ function walkSuccession(
       // bytes, so dating a candidate by a replay would let a stranger move a
       // handover with the rule-holder's own signature.
       //
-      // One whose effective index precedes the incumbent's force is void rather
-      // than superseding: it can never take force (the chain would run
-      // backwards, two operators in force at one index), so letting it revoke a
-      // live candidate would hand the rule-holder's mistake more effect than its
-      // intent.
+      // One whose effective index is not STRICTLY later than the incumbent's
+      // force is void rather than superseding (§C2): at or before it, the chain
+      // would run backwards or seat two operators at one index — and a record
+      // seating a zero-width term was an eraser, not merely a mistake: it
+      // emptied the incumbent's term retroactively, so `termOf` placed its
+      // committed states nowhere, `operatorAt` moved at an already-read index,
+      // and a witnessed book could neither serve nor accuse (the 35d fix
+      // round, probe-proven from three angles). Letting it revoke a live
+      // candidate would hand the rule-holder's mistake more effect than its
+      // intent; letting it SEAT handed it an amnesty. The one exemption is a
+      // candidate naming the incumbent itself — that is a revocation, not a
+      // handover, and a co-signed revocation at the boundary must still
+      // revoke (found by the fix panel's inventory angle: without it, the
+      // revoked successor took force).
       //
       // **Two witnessed at ONE index resolve to the lesser record hash** (§C2).
       // Witnessing pins order, and at one index it pins nothing, so the rule
@@ -316,7 +325,11 @@ function walkSuccession(
         const distinct = new Set<string>();
         for (const w of witnessed
           .filter((w) => compareBytes(w.replacement.predecessor, link) === 0)
-          .filter((w) => w.replacement.effective >= incumbent.from)
+          .filter(
+            (w) =>
+              w.replacement.effective > incumbent.from ||
+              compareBytes(w.replacement.successor, incumbent.operator) === 0,
+          )
           .sort((a, b) =>
             a.at < b.at ? -1 : a.at > b.at ? 1 : compareBytes(a.hash, b.hash),
           )) {
@@ -446,10 +459,11 @@ export function termOf(
     // rewrite stays unwitnessed. Any longer chain bounds every tip by what its
     // key has had WITNESSED — the docstring says why the line is the chain's.
     const end = termEnd(chain, i);
-    // A term whose end precedes its own start is empty — two links seated at
-    // one index, the rule-holder's own degenerate record — and holds nothing.
-    // Skipped before the venue is asked, which also keeps a negative index
-    // (a link seated at genesis) off the Venue interface.
+    // A term whose end precedes its own start is empty and holds nothing. The
+    // walk voids the record that would build one (§C2's strictly-later rule),
+    // so a chain from `successionOf` cannot carry it — but the chain is the
+    // CALLER's parameter, and the guard is what keeps a malformed one from
+    // putting a negative index on the Venue interface.
     if (end !== undefined && end < link.from) continue;
     if (end !== undefined || chain.length > 1) {
       const last = venue.latestFor(operator, end);
