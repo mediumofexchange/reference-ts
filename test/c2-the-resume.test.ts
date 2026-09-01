@@ -138,6 +138,11 @@ describe("§C2: a fresh process resumes the book its record stands on", () => {
     // does it serve — with invariant 26's promises intact.
     const { venue, eur, fresh, pinned, latest, move } = heirMidTerm();
 
+    // The raise is licensed only FROM the anchor: a seatless process offering
+    // the record's latest directly is refused — the anchor is what makes the
+    // fast-forward's prefix loop the extension proof, and skipping it would
+    // let a self-published truncation be resumed onto with nothing checked.
+    expect(() => fresh.takeOver(eur, latest)).toThrow(/holding this link|pinned state/);
     fresh.takeOver(eur, pinned); // the anchor
     // Detection: the seat holds a book the record is past.
     expect(fresh.awaitingTakeover().map((b) => b.nameHex)).toEqual([eur.nameHex]);
@@ -231,7 +236,10 @@ describe("§C2: registering is holding the book only where the record pins nothi
     const spend = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.carol, 100n, 1n);
     expect(() => fresh.submitTransfer(spend.op, spend.signature)).toThrow(/takes the state over first/);
     // The anchor at a genesis seat is the empty book; the raise is its own
-    // latest witnessed commitment.
+    // latest witnessed commitment. Registering did NOT seat it (the record
+    // pins its own commitment), so a direct raise is refused — it anchors
+    // first, exactly as any other seat does.
+    expect(() => fresh.takeOver(eur, latest)).toThrow(/empty|pins no commitment/);
     fresh.takeOver(eur);
     fresh.takeOver(eur, latest);
     expect(fresh.balance(eur, KEYS.bob)).toBe(40n);
