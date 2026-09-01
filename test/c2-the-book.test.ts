@@ -6,10 +6,13 @@ import { signCommitment, stateRoot, type ServedState } from "../src/commitment.j
 import { isRewrittenHistory } from "../src/fault.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import {
+  demandHash,
   encodeAcceptanceMessage,
+  encodeDemand,
   encodeDemandMessage,
   encodeLock,
   encodeReleaseMessage,
+  encodeWithdrawal,
   NO_DECISION_VENUE,
 } from "../src/presentation.js";
 import { gapOpen, stateIsAuthentic } from "../src/recovery.js";
@@ -1081,6 +1084,98 @@ describe("§C2: the fix round — the seat is a link and a provenance, and every
     at(venue, 17n);
     const move = transferBy(usd, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
     expect(original.submitTransfer(move.op, move.signature).position).toBe(1n);
+  });
+});
+
+describe("§C2: a handover tears a set's tail per backing, and the stranded half has its exit", () => {
+  it("a re-appointment on one backing drops its half of an uncommitted set, leaves the sibling's, and the holder withdraws it past the timeout", () => {
+    // "Its halves die together or not at all" holds for the SILENCE restore,
+    // and deliberately not across a handover, which is per backing (the 35d
+    // round's probe; the restore docstring states the exception and owes this
+    // test). The demanded backing's half dies with its era; the leg's half
+    // stands in the sibling's book; the resubmitted set meets the surviving
+    // half's spent nonce; and the holder's exit is the withdrawal alone, past
+    // the timeout — bounded, not lost.
+    const venue = new LocalVenue();
+    const mk = (thing: string, reliance: { target: Uint8Array; count: bigint }[] = []) =>
+      makeBacking({
+        obligor: KEYS.backer,
+        payout: { thing, quantumExponent: -2, perUnit: 100n },
+        reliance,
+        evidence: {
+          setting: "transparent",
+          operator: KEYS.operator,
+          ...(thing === "EUR" ? { replacementRule: KEYS.backer } : {}),
+        },
+      });
+    const gold = mk("GOLD");
+    const eur = mk("EUR", [{ target: gold.name, count: 2n }]);
+    const original = new Sequencer(SECRETS.operator, venue);
+    for (const backing of [gold, eur]) {
+      original.register(backing, signBacking(SECRETS.backer, backing));
+      original.submitIssue(
+        { backing, recipient: KEYS.alice, quantity: 200n, nonce: 0n },
+        ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 200n, 0n), SECRETS.backer),
+      );
+    }
+    const state = original.commit(); // both books committed: the future pin
+
+    // The set, co-signed into the TAIL: a demand on EUR, its leg on GOLD.
+    const demand = {
+      backing: eur,
+      holder: KEYS.alice,
+      quantity: 100n,
+      instant: 0n,
+      deadline: 100n,
+      nonce: 0n,
+    };
+    const hash = demandHash(demand);
+    const lock = {
+      backing: gold,
+      attemptId: hash,
+      holder: KEYS.alice,
+      beneficiary: KEYS.backer,
+      quantity: 200n,
+      timeout: 90n,
+      decisionVenue: NO_DECISION_VENUE,
+      parties: [KEYS.alice],
+      nonce: 0n,
+    };
+    original.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice), [
+      { op: lock, signature: ed25519.sign(encodeLock(lock), SECRETS.alice) },
+    ]);
+    expect(original.availableBalance(gold, KEYS.alice)).toBe(0n);
+
+    // EUR alone is handed over and comes back; GOLD never moves.
+    at(venue, 5n);
+    const first = replacementBy(eur, HEIR_SECRET, 10n);
+    venue.publishReplacement(eur.name, first);
+    at(venue, 20n);
+    venue.publishReplacement(
+      eur.name,
+      replacementBy(eur, SECRETS.operator, 25n, replacementHash(eur.name, first)),
+    );
+    at(venue, 25n);
+    original.takeOver(eur, state); // walk-back past the dark heir; EUR's tail drops
+    expect(original.opLog(eur).map((entry) => entry.kind)).toEqual(["issue"]);
+    expect(original.opLog(gold).map((entry) => entry.kind)).toEqual(["issue", "lock"]);
+    // The surviving half still reserves the holder's units.
+    expect(original.availableBalance(gold, KEYS.alice)).toBe(0n);
+
+    original.commit(); // the new term's first commitment: the era door opens
+    at(venue, 26n);
+    // The set cannot simply be refiled: the surviving half's nonce is spent.
+    expect(() =>
+      original.submitDemand(demand, ed25519.sign(encodeDemand(demand), SECRETS.alice), [
+        { op: lock, signature: ed25519.sign(encodeLock(lock), SECRETS.alice) },
+      ]),
+    ).toThrow();
+
+    // The stranded half's exit: withdrawn alone, past its timeout.
+    at(venue, 95n);
+    const legOut = { backing: gold, demandHash: hash, holder: KEYS.alice, nonce: 1n };
+    original.submitWithdrawal(legOut, ed25519.sign(encodeWithdrawal(legOut), SECRETS.alice));
+    expect(original.availableBalance(gold, KEYS.alice)).toBe(200n);
   });
 });
 
