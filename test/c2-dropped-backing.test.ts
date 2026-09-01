@@ -81,7 +81,7 @@ function setup(replaceable = true) {
 /** The state as the operator serves it now, committed and published. */
 function commitAll(sequencer: Sequencer): ServedState {
   // Committed first, then snapshotted: the commit adopts before it publishes.
-  const commitment = sequencer.commit();
+  const { commitment } = sequencer.commit();
   return { snapshots: sequencer.snapshot(), commitment };
 }
 
@@ -140,19 +140,24 @@ function request(backing: Backing, quantity: bigint, nonce: bigint): PublishedOp
 function replacementBy(
   backing: Backing,
   ruleSecret: Uint8Array,
-  successor: Uint8Array,
+  successorSecret: Uint8Array,
   effective: bigint,
 ): Replacement {
+  // Co-signed (§C2): the fixture needs the successor's own key, because a
+  // replacement it has not signed is a naming rather than a handover.
   const unsigned = {
     role: ROLE_OPERATOR,
-    successor,
+    successor: ed25519.getPublicKey(successorSecret),
     predecessor: backing.name,
     effective,
     signature: new Uint8Array(64),
+    successorSignature: new Uint8Array(64),
   };
+  const message = replacementMessage(backing.name, unsigned);
   return {
     ...unsigned,
-    signature: ed25519.sign(replacementMessage(backing.name, unsigned), ruleSecret),
+    signature: ed25519.sign(message, ruleSecret),
+    successorSignature: ed25519.sign(message, successorSecret),
   };
 }
 
@@ -249,11 +254,11 @@ describe("§C2: the log that vanished is the log that shrank", () => {
     const beforeHandover = commitAll(sequencer);
     venue.advance(1n);
     const effective = venue.witnessedIndex() + 1n;
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, KEYS.carol, effective));
-    venue.advance(2n);
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, effective));
     const heir = new Sequencer(SECRETS.carol, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));
     heir.takeOver(eur, beforeHandover);
+    venue.advance(2n);
     heir.commit();
 
     // The retired predecessor carries on with USD alone, exactly as it should.
@@ -279,12 +284,12 @@ describe("§C2: the log that vanished is the log that shrank", () => {
     const beforeHandover = commitAll(sequencer);
     venue.advance(1n);
     const effective = venue.witnessedIndex() + 1n;
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, KEYS.carol, effective));
-    venue.advance(2n);
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, effective));
     const heir = new Sequencer(SECRETS.carol, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));
     heir.takeOver(eur, beforeHandover);
-    const inForce = { snapshots: heir.snapshot(), commitment: heir.commit() };
+    venue.advance(2n);
+    const inForce = heir.commit();
 
     const dropped = {
       snapshots: [],
@@ -313,11 +318,11 @@ describe("§C2: the log that vanished is the log that shrank", () => {
 
     // Now the remedy runs: a successor is appointed and takes force.
     const effective = venue.witnessedIndex() + 1n;
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, KEYS.carol, effective));
-    venue.advance(2n);
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, effective));
     const heir = new Sequencer(SECRETS.carol, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));
     heir.takeOver(eur, carried, dropped);
+    venue.advance(2n);
     heir.commit();
 
     expect(isRewrittenHistory(eur, venue, carried, dropped)).toBe(true);
@@ -441,10 +446,15 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     return { venue, sequencer, eur, usd, lastGood, droppedLatest };
   }
 
+  /**
+   * The heir, named and registered but NOT yet in force: force is the effective
+   * index (§C2), and the callers below take the state on in the lead time before
+   * it arrives, which is what the lead time is for.
+   */
   function appoint(venue: LocalVenue, eur: Backing) {
-    const effective = venue.witnessedIndex() + 1n;
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, KEYS.carol, effective));
-    venue.advance(2n);
+    const effective = venue.witnessedIndex() + 2n;
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, effective));
+    venue.advance(1n);
     const heir = new Sequencer(SECRETS.carol, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));
     return heir;
@@ -465,7 +475,8 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     const { venue, eur, lastGood, droppedLatest } = toHandover();
     const heir = appoint(venue, eur);
     heir.takeOver(eur, lastGood, droppedLatest);
-    const served = { snapshots: heir.snapshot(), commitment: heir.commit() };
+    venue.advance(1n); // force arrives at the effective index
+    const served = heir.commit();
     expect(provesHolding(venue, eur, served, KEYS.alice, 100n)).toBe(true);
   });
 
@@ -475,16 +486,27 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     expect(() => heir.takeOver(eur, lastGood)).toThrow(SequencerError);
   });
 
-  it("refuses evidence that is not the incumbent's latest commitment", () => {
+  it("refuses evidence that is not the pinned commitment: the backing's last before the effective index", () => {
     const { venue, sequencer, eur, lastGood } = toHandover();
-    const heir = appoint(venue, eur);
-    // A state the incumbent really committed, and really drops the backing, but
-    // superseded — so it says nothing about what the incumbent serves now.
+    // Named four indices out, so the incumbent commits twice more BEFORE the
+    // effective index: its commitments up to then move the target (§C2), and
+    // the evidence must be the target, not merely one dropped state it once
+    // signed — a superseded drop says nothing about what the book held at the
+    // handover, since the next commitment may have picked the backing up again.
+    const effective = venue.witnessedIndex() + 4n;
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, effective));
+    venue.advance(1n);
     const stale = commitWithout(venue, sequencer, eur);
     const older = { snapshots: stale.snapshots, commitment: stale.commitment };
     venue.advance(1n);
-    commitWithout(venue, sequencer, eur);
+    const pinned = commitWithout(venue, sequencer, eur);
+    venue.advance(2n);
+    const heir = new Sequencer(SECRETS.carol, venue);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
     expect(() => heir.takeOver(eur, lastGood, older)).toThrow(SequencerError);
+    // The pinned commitment itself is exactly the evidence the door asks for.
+    heir.takeOver(eur, lastGood, { snapshots: pinned.snapshots, commitment: pinned.commitment });
+    expect(heir.opLog(eur)).toHaveLength(lastGood.snapshots[0]!.opLog.length);
   });
 
   it("refuses evidence that still carries the backing", () => {
@@ -509,6 +531,94 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     const { venue, eur, droppedLatest } = toHandover();
     const heir = appoint(venue, eur);
     expect(() => heir.takeOver(eur, droppedLatest, droppedLatest)).toThrow(SequencerError);
+  });
+
+  /**
+   * The incumbent serves a two-entry book, commits it, then commits a state
+   * that drops the backing; an heir is seated after that. The pinned target
+   * carries no log, so the evidence path licenses an EARLIER state — and each
+   * test below offers one only the term-precedence rule can refuse. Every
+   * fixture then walks the honest path the refusal leaves open (35d's round:
+   * three of these four conditions had no mutation that died).
+   */
+  function evidenceLicenses() {
+    const { venue, sequencer, eur } = setup();
+    sequencer.submitTransfer(
+      { backing: eur, from: KEYS.alice, to: KEYS.bob, quantity: 40n, nonce: 0n },
+      ed25519.sign(encodeTransferMessage(eur.name, KEYS.alice, KEYS.bob, 40n, 0n), SECRETS.alice),
+    );
+    const carried = commitAll(sequencer); // seq 0 at index 0: EUR [issue, transfer]
+    venue.advance(10n);
+    const dropped = commitWithout(venue, sequencer, eur); // seq 1 at 10: the pin
+    venue.advance(5n);
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, 15n));
+    venue.advance(1n);
+    const heir = new Sequencer(SECRETS.carol, venue);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
+    const eurLog = carried.snapshots.find((s) => compareBytes(s.name, eur.name) === 0)!.opLog;
+    return { venue, eur, heir, carried, dropped, eurLog };
+  }
+
+  it("the heir may not license its own commitment as the earlier state", () => {
+    // The heir signs, in its OWN term, a law-valid TRUNCATION of the book: the
+    // issuance kept, Bob's 40 gone. The drop evidence is genuine, the state
+    // roots, the replay is lawful — only its TERM refuses it: an earlier state
+    // is one from a term at or before the pin's, and the heir's is after.
+    const { venue, eur, heir, carried, dropped, eurLog } = evidenceLicenses();
+    const truncated = [{ name: eur.name, opLog: [eurLog[0]!] }];
+    const ownTerm: ServedState = {
+      snapshots: truncated,
+      commitment: signCommitment(SECRETS.carol, 0n, stateRoot(truncated)),
+    };
+    venue.publish(ownTerm.commitment);
+    expect(() => heir.takeOver(eur, ownTerm, dropped)).toThrow(SequencerError);
+    expect(heir.opLog(eur)).toHaveLength(0);
+    // The honest path the door leaves open: the last state that carried it.
+    heir.takeOver(eur, carried, dropped);
+    expect(heir.balance(eur, KEYS.bob)).toBe(40n);
+  });
+
+  it("a state the predecessor published out of force is not an earlier state", () => {
+    // The retired incumbent signs the same truncation AFTER losing force. It
+    // places in no term — and a state that places nowhere accuses nobody and
+    // licenses nothing.
+    const { venue, eur, heir, carried, dropped, eurLog } = evidenceLicenses();
+    venue.advance(1n);
+    const truncated = [{ name: eur.name, opLog: [eurLog[0]!] }];
+    const outOfForce: ServedState = {
+      snapshots: truncated,
+      commitment: signCommitment(
+        SECRETS.operator,
+        venue.nextSequenceFor(KEYS.operator),
+        stateRoot(truncated),
+      ),
+    };
+    venue.publish(outOfForce.commitment);
+    expect(() => heir.takeOver(eur, outOfForce, dropped)).toThrow(SequencerError);
+    expect(heir.opLog(eur)).toHaveLength(0);
+    heir.takeOver(eur, carried, dropped);
+    expect(heir.balance(eur, KEYS.bob)).toBe(40n);
+  });
+
+  it("a twin signed at the pinned commitment's own sequence is not an earlier state", () => {
+    // The incumbent equivocated: a second state at the sequence it published
+    // the drop at, this one carrying the backing. It roots, it is the
+    // incumbent's own signature, it places in the incumbent's own term — only
+    // "strictly before the target's sequence" refuses it, and taking it would
+    // seat the heir on one arm of an equivocation isEquivocation names.
+    const { eur, heir, carried, dropped } = evidenceLicenses();
+    const twin: ServedState = {
+      snapshots: carried.snapshots,
+      commitment: signCommitment(
+        SECRETS.operator,
+        dropped.commitment.sequence,
+        stateRoot(carried.snapshots),
+      ),
+    };
+    expect(() => heir.takeOver(eur, twin, dropped)).toThrow(SequencerError);
+    expect(heir.opLog(eur)).toHaveLength(0);
+    heir.takeOver(eur, carried, dropped);
+    expect(heir.balance(eur, KEYS.bob)).toBe(40n);
   });
 
   it("still refuses a state that is not the incumbent's", () => {
@@ -543,7 +653,8 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
 
     const heir = appoint(venue, eur);
     heir.takeOver(eur, first, droppedLatest);
-    const successorState = { snapshots: heir.snapshot(), commitment: heir.commit() };
+    venue.advance(1n); // force arrives at the effective index
+    const successorState = heir.commit();
     expect(isRewrittenHistory(eur, venue, second, successorState)).toBe(true);
   });
 

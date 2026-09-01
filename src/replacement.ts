@@ -44,6 +44,9 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { type Backing } from "./backing.js";
+// Type-only: `commitment.ts` imports this module, and a value import here would
+// close that into a runtime cycle. Erased at compile time, so it does not.
+import type { Commitment } from "./commitment.js";
 import { ByteReader, ByteWriter, compareBytes, copyBytes } from "./bytes.js";
 import { REPLACEMENT_CONTEXT } from "./contexts.js";
 import { verifySignatureStrict } from "./keys.js";
@@ -63,6 +66,15 @@ export interface Replacement {
   readonly effective: bigint;
   /** The signature of the key E's replacement clause names. */
   readonly signature: Uint8Array;
+  /**
+   * The successor's own signature, over the SAME message (§C2, 2026-08-29).
+   * Naming somebody is not a power over them: signed by the rule-holder alone,
+   * one published record made any commitment-publishing key the operator of
+   * record of any backing, and its own next punctual commitment then proved a
+   * fault against it. One message rather than two, so there is one record, one
+   * domain tag and nothing that can fall out of step with itself.
+   */
+  readonly successorSignature: Uint8Array;
 }
 
 /** A replacement together with the venue's own word on when it was witnessed. */
@@ -109,6 +121,7 @@ export function encodeReplacement(
   w.key32(replacement.predecessor, "predecessor");
   w.u64(replacement.effective);
   w.fixed(replacement.signature, 64, "signature");
+  w.fixed(replacement.successorSignature, 64, "successor signature");
   return w.finish();
 }
 
@@ -127,8 +140,12 @@ export function decodeReplacement(bytes: Uint8Array): {
   const predecessor = r.raw(32);
   const effective = r.u64();
   const signature = r.raw(64);
+  const successorSignature = r.raw(64);
   r.expectEnd();
-  return { backingName, replacement: { role, successor, predecessor, effective, signature } };
+  return {
+    backingName,
+    replacement: { role, successor, predecessor, effective, signature, successorSignature },
+  };
 }
 
 /**
@@ -138,6 +155,12 @@ export function decodeReplacement(bytes: Uint8Array): {
  * A backing whose E declares no replacement clause cannot be replaced at all
  * (§C2b: "Whether a sequencer can be replaced at all is answered in E"), so
  * every replacement of it answers false however well it is signed.
+ *
+ * **And the successor's own signature, over the same message.** Both halves or
+ * it is not a replacement — a record carrying only the rule-holder's is not a
+ * weaker replacement, it is a naming, and naming is not a power over the named.
+ * The successor key is inside the message, so a consent obtained for one
+ * handover cannot be lifted into another.
  */
 export function isSignedReplacement(backing: Backing, replacement: Replacement): boolean {
   try {
@@ -145,7 +168,10 @@ export function isSignedReplacement(backing: Backing, replacement: Replacement):
     if (rule === undefined) return false;
     if (replacement.role !== ROLE_OPERATOR) return false;
     const message = replacementMessage(backing.name, replacement);
-    return verifySignatureStrict(replacement.signature, message, rule);
+    return (
+      verifySignatureStrict(replacement.signature, message, rule) &&
+      verifySignatureStrict(replacement.successorSignature, message, replacement.successor)
+    );
   } catch {
     return false;
   }
@@ -165,154 +191,362 @@ export interface Succession {
 
 /**
  * The chain of operators this backing has had, in force order, starting with the
- * key E names.
+ * key E names, and ending with the one in force NOW.
  *
- * Walked forward from the backing itself, taking at each step the **earliest
- * USABLE** replacement that names the current link as its predecessor: the
- * earliest whose successor qualified — committed at or after its witnessing,
- * no later than the index at which the next distinct candidate at the link was
- * witnessed, and with a force index no earlier than the incumbent's (a replay
- * of a candidate's bytes is the same candidate at its first witnessing, so a
- * stranger manufactures no boundary with the rule-holder's own signature).
- * Earliest still wins
- * where it qualified (§C2, witnessing pins order: the one the rule-holder
- * published first is the one it chose first), but a successor that never
- * qualifies no longer ends the chain: its window closes the moment the
- * rule-holder names another, and the walk passes over it — so naming a dead
- * successor is recoverable, and re-naming the incumbent is the rule-holder's
- * revocation of a successor it regrets (the 2026-08-22 audit, question 2).
- * The chain extends and no past read ever moves; what still ends the walk
- * with the incumbent governing is the one candidate whose window is open —
- * the last, uncommitted — and a malformed record (the cycle guard).
+ * Walked forward from the backing itself. **A link takes force at its declared
+ * effective index** (§C2, 2026-08-29) — one index, from a signed field of a
+ * witnessed object, and nothing else decides it.
  *
- * A link takes force at the LATER of two indices, which is §C2's own two-stage
- * rule: the effective index it declares, and the first index at which the
- * successor published a commitment of its own. "Until then the predecessor's
- * last commitment governs."
+ * The rule it replaces gave force at the later of that index and the successor's
+ * first commitment, which was §C2's own two-stage handover. That stage could not
+ * be checked where force is read: whether a commitment carries this backing is
+ * unreadable from a root, and this walk has no served state to check it against.
+ * So what it actually asked was "has this key published ANY commitment" — and
+ * then one fact, "the named key's commitment does not carry this backing's log",
+ * both conferred force here and proved the fault in `isRewrittenHistory`. The act
+ * granting the role was the act proving the violation. §C0a rule 2 decided it:
+ * the qualification window, the usable-candidate walk, the same-index sibling
+ * rule and the replay-manufactured-boundary guard were all fences around that
+ * stage, and they retire with it. A successor that consents and then does not
+ * serve is answered by the non-service grade like any other operator.
  *
- * What is not checked, and cannot be from the venue alone: that the successor's
- * commitment is "over a spent set it serves in full". A commitment is a root, so
- * whether it carries this backing is unreadable without the served state — §C2
- * now says so, on invariant 23's standing rule that anything checked against a
- * commitment has to be served. committedLogFor answers exactly that question, but
- * only of a state it is handed, and this walk has none, so the bound stays the
- * bound.
+ * **The walk stops at the last link whose effective index has arrived**, so the
+ * chain's tip and the operator in force are one thing. Every predicate that reads
+ * the tip and every predicate that reads force then agree by construction, which
+ * they did not while a successor could sit at the tip un-forced.
  *
- * What IS checked is that the commitment came at or after the handover was
- * witnessed, so it is at least one the successor could have made for this
- * backing. Slice 13 found that bound necessary and §C2 now carries it: "without
- * that bound a successor already operating something else answers with a
- * commitment made before anyone named it."
+ * **Two replacements naming one predecessor** resolve by supersession before
+ * force: a later one displaces an earlier only where it was witnessed strictly
+ * before the earlier's effective index. One witnessed at or after that index
+ * names a link the chain has already left, and is ignored — past force, the
+ * successor is the incumbent, and replacing it is a replacement naming it. That
+ * is what keeps a past reading from ever moving. Naming the incumbent is not a
+ * handover and never becomes one, but it supersedes like any other candidate,
+ * which is how a rule-holder revokes a successor it regrets.
+ *
+ * **Two witnessed at one index resolve to the lesser record hash** (§C2):
+ * witnessing pins order, and where it pins nothing the rule lives in the
+ * objects' own names, so every reader answers alike from the records and none
+ * from the order they arrived.
  */
 export function successionOf(backing: Backing, venue: Venue): Succession[] {
+  return walkSuccession(backing, venue).chain;
+}
+
+/**
+ * The chain **and the link chosen at its tip whose effective index has not yet
+ * arrived** — one more element than `successionOf` exactly while a handover is
+ * in its lead time, and the same array otherwise.
+ *
+ * This is the possession question where `successionOf` is the force question:
+ * a successor takes the book on IN the lead time (§C2, that is what the lead
+ * time is for), so the reader that finds "my seat, and the links before it"
+ * has to answer identically before and after the effective index. Asking the
+ * clock instead — "who is in force right now" — is what made the takeover
+ * reachable only strictly inside a lead time §C2 does not guarantee exists.
+ *
+ * The pending link is the walk's own chosen candidate, held to the admission
+ * rules an arrived link is held to — signatures, supersession, the void rule,
+ * the tie — with one stated exception: it is returned before the `seen` cycle
+ * guard, which an arrived link passes on push. Unreachable in practice (a
+ * pending hash already seen needs a hash collision), but the docstring should
+ * not claim more than the code checks. Whether it ever takes force is still
+ * the chain's question, answered then.
+ */
+export function successionAhead(backing: Backing, venue: Venue): Succession[] {
+  const { chain, pending } = walkSuccession(backing, venue);
+  return pending === undefined ? chain : [...chain, pending];
+}
+
+function walkSuccession(
+  backing: Backing,
+  venue: Venue,
+): { chain: Succession[]; pending?: Succession } {
   const chain: Succession[] = [
     { operator: copyBytes(backing.evidence.operator), from: 0n, link: copyBytes(backing.name) },
   ];
   // The fallback is the chain as far as it got, which at minimum is the key E
   // names — and `answering` is what stops a venue's refusal being mistaken for
-  // that, since the genesis chain is a real answer about who serves.
+  // that, since the genesis chain is a real answer about who serves. The
+  // fallback closes over the same array the body grows.
+  const fallback = { chain };
   return answering(() => {
-    if (backing.evidence.replacementRule === undefined) return chain;
+    if (backing.evidence.replacementRule === undefined) return { chain };
+    const now = venue.witnessedIndex();
+    // Hashed once for the whole walk rather than once per link: the hash is the
+    // record's identity for the dedup AND for the same-index tie below, and
+    // anyone may publish a replacement for free, so the number of records is the
+    // adversary's to grow.
     const witnessed = venue
       .replacementsFor(backing.name)
       .filter((w) => isSignedReplacement(backing, w.replacement))
       // A replacement cannot take force before it was witnessed (§C2), and one
       // declaring an earlier index is refused rather than corrected: the
       // rule-holder does not get to backdate a handover.
-      .filter((w) => w.replacement.effective >= w.at);
+      .filter((w) => w.replacement.effective >= w.at)
+      .map((w) => ({ ...w, hash: replacementHash(backing.name, w.replacement) }));
 
     const seen = new Set<string>([bytesToHex(backing.name)]);
     let link = backing.name;
     for (;;) {
-      // **The earliest USABLE candidate at this link** — a dead successor does
-      // not end the chain (the 2026-08-22 audit, question 2; the maintainer's decision:
-      // usable is "a link that committed before the next candidate at the same
-      // predecessor was witnessed"). The old walk took the earliest candidate
-      // outright and stopped wherever its successor never committed, so a
-      // second replacement at the same link was unreachable forever and the
-      // rule-holder could not recover from naming a dead successor
-      // (audit-B-3).
+      const incumbent = chain[chain.length - 1] as Succession;
+      // The DISTINCT replacements at this link, each at its FIRST witnessing: a
+      // replacement is one act of the rule-holder, and anyone may republish its
+      // bytes, so dating a candidate by a replay would let a stranger move a
+      // handover with the rule-holder's own signature.
       //
-      // A candidate's window is [its witnessing, the NEXT candidate's
-      // witnessing) — the next in the venue's own order, a sibling at the very
-      // same index included, so a same-index sibling leaves a ONE-INDEX
-      // window (the review round's first draft gave same-index candidates a
-      // shared window, and a later naming then unlocked one RETROACTIVELY,
-      // moving force at a past index — the very instability this rule exists
-      // to forbid). And the window closes only against a commitment STRICTLY
-      // AFTER its boundary's index: a qualification standing at the boundary's
-      // own index stands, since the boundary is judged against the record
-      // strictly before its index and must not kill what stood beside it —
-      // the tie goes against the party with the motive to close (slice 8's
-      // direction; the review round showed the other tie erasing a successor
-      // that had already taken over and served, orphaning its receipts). A
-      // candidate is passed over where it is conclusively decided:
-      //   - it names the incumbent — not a handover, and never one ("the old
-      //     attester's co-signatures stop counting" must never mean its own);
-      //     as the next candidate it still bounds earlier windows, which is
-      //     the rule-holder's one way to revoke a successor it regrets;
-      //   - its first commitment (at or after its own witnessing — one made
-      //     before anyone named it cannot be the one §C2 asks for) landed
-      //     strictly after the next candidate's index, or never: the next
-      //     replacement was made against a record in which this successor had
-      //     not qualified;
-      //   - or its force index would precede the incumbent's (a rule-holder's
-      //     effective-index mistake): force is fixed once the commitment is,
-      //     so this too is decided, and a later candidate with an effective at
-      //     or past the incumbent's force can still recover the link.
-      // The last candidate uncommitted is merely undecided, and ends the walk
-      // with the incumbent governing: every window before it is closed, and
-      // its own is still open.
+      // One whose effective index is not STRICTLY later than the incumbent's
+      // force is void rather than superseding (§C2): at or before it, the chain
+      // would run backwards or seat two operators at one index — and a record
+      // seating a zero-width term was an eraser, not merely a mistake: it
+      // emptied the incumbent's term retroactively, so `termOf` placed its
+      // committed states nowhere, `operatorAt` moved at an already-read index,
+      // and a witnessed book could neither serve nor accuse (the 35d fix
+      // round, probe-proven from three angles). Letting it revoke a live
+      // candidate would hand the rule-holder's mistake more effect than its
+      // intent; letting it SEAT handed it an amnesty. The one exemption is a
+      // candidate naming the incumbent itself — that is a revocation, not a
+      // handover, and a co-signed revocation at the boundary must still
+      // revoke (found by the fix panel's inventory angle: without it, the
+      // revoked successor took force). The exemption is deliberately wider
+      // than the boundary case: a self-naming record dated anywhere the
+      // witnessed filter allows is admitted, including inside the incumbent's
+      // own lead time — no new power, since the same two signatures could
+      // always void the slot with a later-dated record, but the width is
+      // stated rather than implied (the regression round's W-1).
       //
-      // Once the next candidate is witnessed, whether this one qualified is
-      // fixed forever — and a candidate becomes usable only at its own
-      // commitment, never before any index a reader has already read — so
-      // the walk is stable: the chain extends, and no past read ever moves.
-      //
-      // Candidates are the DISTINCT replacements at this link, each at its
-      // FIRST witnessing: a replacement is one act of the rule-holder, and
-      // anyone may republish its bytes — dated by the replay, a stranger
-      // could manufacture a boundary and kill an honest successor's window
-      // with the rule-holder's own signature (found reviewing this slice).
-      const candidates: WitnessedReplacement[] = [];
+      // **Two witnessed at ONE index resolve to the lesser record hash** (§C2).
+      // Witnessing pins order, and at one index it pins nothing, so the rule
+      // has to live in the objects' own names — sorted on the index alone, two
+      // honest readers holding the SAME two records disagreed permanently about
+      // who was operator at a past index, which is the hazard `fault.ts`
+      // forbids, reached through publication order rather than served state.
+      // The hash is grindable — the rule-holder varies the successor key or the
+      // effective index until its preferred record's name is lesser — and that
+      // is priced rather than fought: the rule-holder signed BOTH records in
+      // every reachable tie, so grinding buys it an outcome §C2 already gives
+      // it for free by publishing one record alone. A tie between two DIFFERENT
+      // rule-holders cannot be built while E's replacementRule is one key;
+      // if that ever changes, this rule is the one to reopen. See DECISIONS.md.
+      const candidates: typeof witnessed = [];
       {
         const distinct = new Set<string>();
         for (const w of witnessed
           .filter((w) => compareBytes(w.replacement.predecessor, link) === 0)
-          .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))) {
-          const hash = bytesToHex(replacementHash(backing.name, w.replacement));
+          .filter(
+            (w) =>
+              w.replacement.effective > incumbent.from ||
+              compareBytes(w.replacement.successor, incumbent.operator) === 0,
+          )
+          .sort((a, b) =>
+            a.at < b.at ? -1 : a.at > b.at ? 1 : compareBytes(a.hash, b.hash),
+          )) {
+          const hash = bytesToHex(w.hash);
           if (distinct.has(hash)) continue;
           distinct.add(hash);
           candidates.push(w);
         }
       }
-      const incumbent = chain[chain.length - 1] as Succession;
-      let chosen: { successor: Uint8Array; hash: Uint8Array; from: bigint } | undefined;
-      for (let i = 0; i < candidates.length && chosen === undefined; i++) {
-        const candidate = candidates[i] as WitnessedReplacement;
-        const successor = candidate.replacement.successor;
-        if (compareBytes(successor, incumbent.operator) === 0) continue;
-        const boundary = candidates[i + 1]?.at;
-        const committed = venue.firstCommitmentFor(successor, candidate.at);
-        if (committed === undefined || (boundary !== undefined && committed > boundary)) continue;
-        const from = candidate.replacement.effective > committed ? candidate.replacement.effective : committed;
-        // In force no earlier than the incumbent: a chain that went backwards
-        // would have two operators in force at one index.
-        if (from < incumbent.from) continue;
-        chosen = { successor, hash: replacementHash(backing.name, candidate.replacement), from };
+
+      // At each witnessed index, exactly ONE candidate is considered — the
+      // lesser hash, which the sort put first — and the rest at that index are
+      // not "the later" of anything: that tie resolved at the sort. Letting a
+      // same-index sibling supersede handed the win to the GREATER hash
+      // whenever the winner declared any lead time, and letting one follow a
+      // revocation reset made a revocation lose every tie however its hash
+      // sorted (both found reviewing this slice). Skipped, not broken on: a
+      // candidate at a genuinely later index can still supersede or, after a
+      // revocation, stand fresh.
+      let chosen: (typeof witnessed)[number] | undefined;
+      let consideredAt: bigint | undefined;
+      for (const candidate of candidates) {
+        if (consideredAt !== undefined && candidate.at === consideredAt) continue;
+        // Past the standing candidate's effective index the link has moved
+        // on, and nothing witnessed later reaches it.
+        if (chosen !== undefined && candidate.at >= chosen.replacement.effective) break;
+        consideredAt = candidate.at;
+        chosen =
+          compareBytes(candidate.replacement.successor, incumbent.operator) === 0
+            ? undefined
+            : candidate;
       }
-      if (chosen === undefined) return chain;
+      if (chosen === undefined) return { chain };
+
+      const from = chosen.replacement.effective;
+      const hash = chosen.hash;
+      const next: Succession = {
+        operator: copyBytes(chosen.replacement.successor),
+        from,
+        link: copyBytes(hash),
+      };
+      // Named, and its index not yet reached: the predecessor governs until it
+      // does, so the chain ends here and the tip is the operator in force —
+      // and the chosen link is the PENDING one, which is the possession
+      // reader's answer (successionAhead).
+      if (from > now) return { chain, pending: next };
 
       // A hash cycle cannot be built (invariant 5's reasoning), so this guards a
       // malformed record rather than a real cycle — and it guarantees the walk
       // terminates on any input at all, which a verifier needs.
-      if (seen.has(bytesToHex(chosen.hash))) return chain;
-      seen.add(bytesToHex(chosen.hash));
+      if (seen.has(bytesToHex(hash))) return { chain };
+      seen.add(bytesToHex(hash));
 
-      chain.push({ operator: copyBytes(chosen.successor), from: chosen.from, link: copyBytes(chosen.hash) });
-      link = chosen.hash;
+      chain.push(next);
+      link = hash;
     }
-  }, chain);
+  }, fallback);
+}
+
+/**
+ * The last index of a link's term: the index before its successor takes force,
+ * and unbounded at the tip. A term is what a key holds the backing FOR, and the
+ * two functions below are the only readers that need both ends of one.
+ */
+function termEnd(chain: readonly Succession[], i: number, bound?: bigint): bigint | undefined {
+  const next = chain[i + 1];
+  if (next === undefined) return bound;
+  const end = next.from - 1n;
+  return bound === undefined || end < bound ? end : bound;
+}
+
+/**
+ * **Which TERM of the chain a committed state belongs to**, or undefined where
+ * it belongs to none — §C2: "A term of the chain, rather than a key, is the unit
+ * of obligation, of accrual and of fault."
+ *
+ * Read from the record, never asserted: a commitment carries a sequence and no
+ * venue index by design (slice 13), so the term is that sequence placed against
+ * the commitments this operator had witnessed at each end of each of its terms.
+ * Letting the operator name its own term would hand the choice to the party with
+ * the motive.
+ *
+ * **A key the rule-holder names twice holds two terms and answers for each
+ * separately.** Ranking a key by its FIRST link — which is what
+ * `chain.findIndex` did — made every re-appointed key exempt by construction: its
+ * second-term state read as older than its successor's, so shrinking the book
+ * back to a stale pre-handover copy read as growth and was unprovable in both
+ * argument orders. That is the serious half of the stale-latch defect.
+ *
+ * **A commitment inside the lead time belongs to no term**, and that is the
+ * answer rather than an edge case. §C2 gives a successor a lead time and forbids
+ * it to carry the backing in it — the predecessor is still serving — so a
+ * punctual multi-backing successor's own commitments there are obedience, not a
+ * drop. Read as its term's, every one of them manufactured a permanent,
+ * stranger-checkable fault proof against an honest heir.
+ *
+ * **An unwitnessed sequence places at the tip only while the chain is the
+ * genesis link alone.** Once ANY succession exists, every key on the record has
+ * had a period out of force — before its seat, after a replacement, between two
+ * namings — and a shared operator's ordinary service in such a period produces
+ * signed states that drop this backing honestly. By sequence alone those are
+ * indistinguishable from an in-force key's unwitnessed drop, so the ambiguous
+ * case places nowhere and accuses nobody. The line is drawn at the CHAIN and
+ * not at the key: a first draft bounded only keys named twice, which made the
+ * policy a key gets purchasable — two records with a zero-width term bought the
+ * bound — and treated one ambiguity two ways (found regression-reviewing this
+ * slice's fix round). What the uniform line costs, priced in DECISIONS: past
+ * the first handover, an in-force operator's UNWITNESSED dropped state is not
+ * provable by this pair alone — the witnessed drop still is, and the
+ * non-service grade still reaches the dropper.
+ */
+export function termOf(
+  chain: readonly Succession[],
+  venue: Venue,
+  operator: Uint8Array,
+  sequence: bigint,
+): number | undefined {
+  for (let i = 0; i < chain.length; i++) {
+    const link = chain[i] as Succession;
+    if (compareBytes(link.operator, operator) !== 0) continue;
+    // Bounded above where the term has CLOSED: by the last commitment this
+    // key had witnessed when its successor took force — a sequence past that
+    // was published after the term ended. The genesis-only tip is unbounded,
+    // deliberately: no succession exists, so nothing this key signed could
+    // belong to a period out of force, and a state it served but never
+    // published must still place here, or rewriting is free as long as the
+    // rewrite stays unwitnessed. Any longer chain bounds every tip by what its
+    // key has had WITNESSED — the docstring says why the line is the chain's.
+    const end = termEnd(chain, i);
+    // A term whose end precedes its own start is empty and holds nothing. The
+    // walk voids the record that would build one (§C2's strictly-later rule),
+    // so a chain from `successionOf` cannot carry it — but the chain is the
+    // CALLER's parameter, and the guard is what keeps a malformed one from
+    // putting a negative index on the Venue interface.
+    if (end !== undefined && end < link.from) continue;
+    if (end !== undefined || chain.length > 1) {
+      const last = venue.latestFor(operator, end);
+      if (last === undefined || sequence > last.sequence) continue;
+    }
+    // And bounded below by the last it had witnessed before the term opened,
+    // which the genesis link has none of. A sequence at or below that was
+    // published before the term did — a successor's own commitments in its
+    // lead time are its obedience, not its term's.
+    const before = link.from === 0n ? undefined : venue.latestFor(operator, link.from - 1n);
+    if (before !== undefined && sequence <= before.sequence) continue;
+    return i;
+  }
+  return undefined;
+}
+
+/**
+ * **The backing's own last commitment**: the last one the venue witnessed from a
+ * party that was in force for this backing when it published it (§C2b).
+ *
+ * One answer, and every reader that used to ask a KEY asks this instead — the
+ * silence grade, whether an operator is overdue, which snapshot a redemption
+ * runs against, the outstanding count a revocation freezes, and which state is
+ * latest at a past index.
+ *
+ * **Why a key cannot be the subject.** Under the retired two-stage rule force
+ * arrived on a commitment, so "the party in force" always had one and
+ * `latestFor(inForce)` was total. §C2 seats a successor on a signed field, so it
+ * may have published nothing — and then a holder's redemption proof, which is the
+ * only checkable remedy §C2b gives against a dark operator, is destroyed by ONE
+ * published record naming a key the rule-holder can generate and co-sign itself.
+ * The rule-holder is the backer by default: the party that owes the money.
+ *
+ * **And why the clock cannot reset on a handover.** A replacement costs one
+ * publication, so any clock resetting on a rule-holder-chosen event is
+ * cancellable by the rule-holder — hopping to a FRESH key every duration defeats
+ * every per-key clock there is. This one never asks who is in force now, only
+ * what was witnessed from whoever was, so a handover neither opens a gap nor
+ * closes one and only a commitment closes one.
+ *
+ * Bounded at BOTH ends per link, which is the whole content of "then in force":
+ * a retired key's later commitments for its other backings do not keep this
+ * backing's clock alive, and a successor's own commitments inside the lead time
+ * do not start it early. Undefined where no such commitment exists, which every
+ * caller reads as index zero — never publishing at all must not read as punctual.
+ *
+ * One boundary case is the spec's own strictness, worth knowing: a predecessor's
+ * commitment witnessed exactly AT the effective index belongs to neither term
+ * (§C2 pins the handover to what was witnessed "strictly before" it, and at that
+ * index the party in force is the successor), so a handover at precisely the
+ * predecessor's last-commitment index ages this clock by one commitment. The
+ * rule-holder aging its own backing's clock fires a grade against itself, which
+ * is the collusion case §C2b already declines to distinguish from rescue.
+ */
+export function lastCommitmentInForce(
+  chain: readonly Succession[],
+  venue: Venue,
+  asOf?: bigint,
+): { readonly commitment: Commitment; readonly at: bigint } | undefined {
+  let best: { commitment: Commitment; at: bigint } | undefined;
+  for (let i = 0; i < chain.length; i++) {
+    const link = chain[i] as Succession;
+    const end = termEnd(chain, i, asOf);
+    // An empty term (two links at one index) holds nothing, and the guard is
+    // also what keeps a negative index off the Venue interface.
+    if (end !== undefined && end < link.from) continue;
+    const at = venue.witnessedAtFor(link.operator, end);
+    // Committed only before it held the role: not this backing's.
+    if (at === undefined || at < link.from) continue;
+    if (best !== undefined && at <= best.at) continue;
+    const commitment = venue.latestFor(link.operator, end);
+    if (commitment === undefined) continue;
+    best = { commitment, at };
+  }
+  return best;
 }
 
 /**

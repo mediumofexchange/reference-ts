@@ -73,7 +73,7 @@ import { committedInTime } from "./recovery.js";
 import { opIdentityOfEntry, opMessageOfEntry, type PublishedOp } from "./oplog.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
 import { receiptCovers, receiptStatus, isOperatorReceipt, type Receipt } from "./receipt.js";
-import { successionOf, type Succession } from "./replacement.js";
+import { successionOf, termOf, type Succession } from "./replacement.js";
 import { answering, type Venue } from "./venue.js";
 
 /** An operation and the operator co-signature that accepted it. */
@@ -279,13 +279,28 @@ export function isDoublePosition(
  * sequence is above that boundary, or it collides with a published one, and a
  * collision is isEquivocation's to name.
  *
- * **One case it deliberately misses, and it misses it safely.** A key can appear
- * in the chain twice — the rule-holder may re-appoint a former operator, and only
- * succeeding ITSELF is refused — and this reads that key's first term only. A
- * drop during a second term therefore answers false. That is the direction this
- * file always takes when it cannot tell: say nothing rather than accuse. Closing
- * it means per-term sequence windows, which is a lot of arithmetic for a case
- * that costs a missed fault rather than a wrong one. See DECISIONS.md.
+ * **A key that appears in the chain twice answers for each term separately.**
+ * The rule-holder may re-appoint a former operator, and only succeeding ITSELF is
+ * refused. This used to read that key's FIRST term only, which was not the safe
+ * direction it was recorded as: it made every re-appointed key exempt from the
+ * fault by construction, and a stale pre-handover book re-asserted in a second
+ * term read as growth. `termOf` is the per-term sequence window that entry said
+ * would cost a lot of arithmetic; it costs one loop, and it is the same read
+ * `isRewrittenHistory` needs to ORDER two states, so it is one mechanism serving
+ * both rather than two. See DECISIONS.md.
+ *
+ * A state belonging to no term at all answers false, which is this file's
+ * direction when it cannot tell: say nothing rather than accuse. That covers a
+ * successor's own commitment inside its lead time, when §C2 forbids it to
+ * carry this backing — and, past the first handover, EVERY key's unwitnessed
+ * sequences above its witnessed record, because a shared operator's ordinary
+ * service while out of force produces signed states that drop this backing
+ * honestly, and the record cannot tell those from an in-force key's
+ * unwitnessed drop. So an unwitnessed dropped state proves this fault only
+ * against a never-replaced genesis operator; everywhere else the witnessed
+ * drop and the non-service grade are the reach. Priced in DECISIONS — the
+ * regression review of the fix round is where the two policies this replaced
+ * were found to be one ambiguity treated two ways.
  */
 function committedWhileInForce(
   chain: readonly Succession[],
@@ -293,13 +308,7 @@ function committedWhileInForce(
   operator: Uint8Array,
   sequence: bigint,
 ): boolean {
-  const link = chain.findIndex((step) => compareBytes(step.operator, operator) === 0);
-  if (link < 0) return false;
-  const successor = chain[link + 1];
-  // Nobody after it in the chain, so it is in force and has no excuse.
-  if (successor === undefined) return true;
-  const before = venue.latestFor(operator, successor.from - 1n);
-  return before !== undefined && sequence <= before.sequence;
+  return termOf(chain, venue, operator, sequence) !== undefined;
 }
 
 export function isRewrittenHistory(
@@ -314,11 +323,25 @@ export function isRewrittenHistory(
     if (first === undefined || second === undefined) return false;
 
     const chain = successionOf(backing, venue);
-    const rank = (operator: Uint8Array) =>
-      chain.findIndex((link) => compareBytes(link.operator, operator) === 0);
-    const rankA = rank(a.commitment.operator);
-    const rankB = rank(b.commitment.operator);
-    if (rankA < 0 || rankB < 0) return false;
+    // **One signer needs no ranking at all**: a key's own sequence field is its
+    // own assertion of order, so two of its states compare directly, witnessed
+    // or not — which is what keeps its unwitnessed rewrite provable however the
+    // chain grew after it signed. A first draft ranked same-signer pairs
+    // through `termOf` too, and one published replacement then closed the
+    // predecessor's term, made its real rewrite unplaceable, and erased a
+    // provable fault for one free record (found reviewing this slice).
+    //
+    // **Across keys, a state ranks by the term the record places it in**, and
+    // one the record cannot place ranks nowhere and accuses nobody: an honest
+    // operator's served-but-never-published state from before its handover is
+    // indistinguishable, by sequence alone, from a state it signed in a later
+    // term — ranked there, its OLD serving sorted after its successor's
+    // genuinely later state and read as a shrink, a permanent fault the
+    // operator armed by consenting to its own re-appointment (same round).
+    const sameSigner = compareBytes(a.commitment.operator, b.commitment.operator) === 0;
+    const rankA = sameSigner ? 0 : termOf(chain, venue, a.commitment.operator, first.sequence);
+    const rankB = sameSigner ? 0 : termOf(chain, venue, b.commitment.operator, second.sequence);
+    if (rankA === undefined || rankB === undefined) return false;
 
     if (rankA === rankB && first.sequence === second.sequence) return false;
     const secondIsEarlier =

@@ -14,6 +14,7 @@ import {
   gapOpen,
   quietFor,
   isNonServing,
+  nonServingOperator,
   isOverdue,
   isSilent,
   provesHolding,
@@ -28,9 +29,12 @@ import {
 import {
   isAnOperator,
   isNamedSuccessor,
+  lastCommitmentInForce,
   operatorAt,
   operatorsOf,
+  successionAhead,
   successionOf,
+  termOf,
 } from "../src/replacement.js";
 import { accompanimentOf, dishonourOf, payoutOf } from "../src/presentability.js";
 import { revokedAt } from "../src/revocation.js";
@@ -159,6 +163,10 @@ function surface() {
   const { refusing, backing, paying, served, other, receipt, op, op2 } = fixtures();
   const accepted = { op, receipt };
   const accepted2 = { op: op2, receipt };
+  const twoLinks = [
+    { operator: KEYS.operator, from: 0n, link: backing.name },
+    { operator: KEYS.carol, from: 5n, link: new Uint8Array(32) },
+  ];
   return [
     ["committedLogFor", () => committedLogFor(backing, refusing, served)],
     ["isOperatorReceipt", () => isOperatorReceipt(backing, refusing, receipt)],
@@ -177,6 +185,7 @@ function surface() {
     ["isOverdue", () => isOverdue(refusing, backing)],
     ["unservedRequests", () => unservedRequests(refusing, backing, served)],
     ["isNonServing", () => isNonServing(refusing, backing, served)],
+    ["nonServingOperator", () => nonServingOperator(refusing, backing, served)],
     ["stateIsAuthentic", () => stateIsAuthentic(backing, refusing, served)],
     ["provesHolding", () => provesHolding(refusing, backing, served, KEYS.alice, 1n)],
     ["committedOutstanding", () => committedOutstanding(backing, refusing, served)],
@@ -184,6 +193,12 @@ function surface() {
     ["redemptionIsOpen", () => redemptionIsOpen(refusing, backing, served, KEYS.alice, 1n)],
     ["snapshotRedemptions", () => snapshotRedemptions(refusing, backing, served)],
     ["successionOf", () => successionOf(backing, refusing)],
+    ["successionAhead", () => successionAhead(backing, refusing)],
+    // A two-link chain, asked about the CLOSED term: the tip is deliberately
+    // venue-free (unbounded above, genesis below), so only a closed term's
+    // boundary read can meet the refusal at all.
+    ["termOf", () => termOf(twoLinks, refusing, KEYS.operator, 0n)],
+    ["lastCommitmentInForce", () => lastCommitmentInForce(twoLinks, refusing)],
     ["gapLegsFor", () => gapLegsFor(refusing, backing)],
     ["gapOpen", () => gapOpen(refusing, backing)],
     ["eraLapsed", () => eraLapsed(refusing, backing, KEYS.operator, 0n)],

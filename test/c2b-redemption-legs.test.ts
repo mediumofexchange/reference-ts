@@ -61,7 +61,7 @@ function goDark(venue: LocalVenue, sequencer: Sequencer): ServedState {
   // Committed first, then snapshotted: a commit adopts (and on a return,
   // restores) before it publishes, so the snapshot a commitment roots is the one
   // taken after it (c2b-return-from-silence's `served`).
-  const commitment = sequencer.commit();
+  const { commitment } = sequencer.commit();
   const snapshots = sequencer.snapshot();
   venue.advance(SILENCE.noCommitmentDuration + 1n);
   return { snapshots, commitment };
@@ -221,7 +221,7 @@ describe("§C2b: the venue's stamp is the clock every leg is judged against", ()
     // publishing a leg at the venue does nothing at all.
     const { venue, sequencer, backing } = setup();
     const snapshots = sequencer.snapshot();
-    const commitment = sequencer.commit();
+    const { commitment } = sequencer.commit();
     const served = { snapshots, commitment };
     // Only three indices quiet: the declared duration is ten.
     const claim = demand(backing, SECRETS.alice, KEYS.alice, 100n, 1n, 40n, 0n);
@@ -533,7 +533,7 @@ describe("§C2b: the challenge window substitutes the payee, and voids nothing",
     // only the first and the second payee's units are paid to the claimant who
     // signed them away.
     const { venue, sequencer, backing } = setup();
-    const served = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const served = sequencer.commit();
     for (const [to, quantity, nonce] of [
       [KEYS.bob, 30n, 0n],
       [KEYS.carol, 20n, 1n],
@@ -669,7 +669,7 @@ describe("§C2b: the challenge window substitutes the payee, and voids nothing",
     // first, and must not decide who is paid. Only two requests at ONE nonce
     // are a race, and there the earlier witnessed one wins.
     const { venue, sequencer, backing } = setup();
-    const served = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const served = sequencer.commit();
     for (const [to, quantity, nonce] of [
       [KEYS.bob, 30n, 0n],
       [KEYS.carol, 20n, 1n],
@@ -988,7 +988,7 @@ describe("§C2b: what the record shows when redemption cannot complete", () => {
     // proves the state that shows them — the same reason provesHolding demands
     // the last witnessed snapshot, and here it would be paid for.
     const { venue, sequencer, backing } = setup();
-    const stale = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const stale = sequencer.commit();
     sequencer.submitTransfer(
       { backing, from: KEYS.alice, to: KEYS.bob, quantity: 100n, nonce: 0n },
       ed25519.sign(encodeTransferMessage(backing.name, KEYS.alice, KEYS.bob, 100n, 0n), SECRETS.alice),
@@ -1029,7 +1029,7 @@ describe("§C2b: what the record shows when redemption cannot complete", () => {
     // The operator returns, adopts, commits — then goes dark a second time.
     sequencer.commit();
     venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
-    const served = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const served = sequencer.commit();
     venue.advance(SILENCE.noCommitmentDuration + 1n);
 
     const again = demand(backing, SECRETS.alice, KEYS.alice, 100n, 30n, 60n, 2n);
@@ -1048,7 +1048,7 @@ describe("§C2b: what the record shows when redemption cannot complete", () => {
       { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
       ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
     );
-    const served = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const served = sequencer.commit();
     venue.advance(SILENCE.noCommitmentDuration + 1n);
     redeemAtVenue(venue, backing);
     expect(isSilent(venue, backing)).toBe(false);

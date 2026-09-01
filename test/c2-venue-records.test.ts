@@ -129,9 +129,11 @@ describe("a venue's records have one canonical spelling", () => {
       predecessor: backing.name,
       effective: 12n,
       signature: ed25519.sign(new Uint8Array(8), SECRETS.backer),
+      successorSignature: ed25519.sign(new Uint8Array(8), SECRETS.operator),
     };
     const bytes = encodeReplacement(backing.name, replacement);
-    expect(bytes).toHaveLength(32 + 1 + 32 + 32 + 8 + 64);
+    // Two signatures: the rule-holder's and the successor's, over one message.
+    expect(bytes).toHaveLength(32 + 1 + 32 + 32 + 8 + 64 + 64);
     const decoded = decodeReplacement(bytes);
     expect(decoded.replacement).toEqual(replacement);
     expect(decoded.backingName).toEqual(backing.name);

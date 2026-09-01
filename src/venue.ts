@@ -184,6 +184,19 @@ export interface WitnessedOp {
  * production is not a venue's to offer, it is the thing no participant controls,
  * and only the local stand-in can pretend otherwise.
  */
+/**
+ * What every implementation of this interface promises, beyond the method
+ * shapes (the 35d round pinned both, because a reader now leans on each):
+ *
+ *   - **Append-only.** A record once witnessed at an index stays, and the pair
+ *     (witnessed index, records filed for a key) never revisits an earlier
+ *     state — the sequencer's walk cache is keyed on exactly that pair, and a
+ *     view that re-gathers (ErgoVenue's sync) must only ever move it forward.
+ *   - **Reads answer or throw `VenueError`.** A read that throws anything else
+ *     is out of contract: verifiers wrap their bodies in `answering`, which
+ *     converts a foreign throw into a false — and at a door a false is
+ *     consent, which is the one direction a venue failure must never point.
+ */
 export interface Venue {
   /** This venue's identity, as a copy — the value E declares to name it. */
   readonly id: Uint8Array;

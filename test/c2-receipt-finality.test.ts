@@ -99,7 +99,7 @@ describe("§C2: a receipt's fate — witnessed, pending, lapsed, or contradicted
   it("reads witnessed once the operation is in a committed log", () => {
     const { venue, sequencer, backing } = setup();
     const { moveReceipt } = twoOperations(sequencer, backing);
-    const served = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const served = sequencer.commit();
     expect(receiptStatus(backing, venue, moveReceipt, served)).toBe("witnessed");
   });
 
@@ -108,7 +108,7 @@ describe("§C2: a receipt's fate — witnessed, pending, lapsed, or contradicted
     // its own unpublished log says so. This is the state a payee must not read
     // as settled.
     const { venue, sequencer, backing } = setup();
-    const served = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const served = sequencer.commit();
     const { moveReceipt } = twoOperations(sequencer, backing);
     expect(receiptStatus(backing, venue, moveReceipt, served)).toBe("pending");
   });
@@ -119,14 +119,14 @@ describe("§C2: a receipt's fate — witnessed, pending, lapsed, or contradicted
     // A holding can be spent afterwards; an accepted operation cannot un-happen.
     const { venue, sequencer, backing } = setup();
     const { issueReceipt } = twoOperations(sequencer, backing);
-    const early = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const early = sequencer.commit();
     venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     const move = { backing, from: KEYS.alice, to: KEYS.carol, quantity: 5n, nonce: 1n };
     sequencer.submitTransfer(
       move,
       ed25519.sign(encodeTransferMessage(backing.name, KEYS.alice, KEYS.carol, 5n, 1n), SECRETS.alice),
     );
-    const late = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const late = sequencer.commit();
     expect(receiptStatus(backing, venue, issueReceipt, early)).toBe("witnessed");
     expect(receiptStatus(backing, venue, issueReceipt, late)).toBe("witnessed");
   });
@@ -173,14 +173,14 @@ describe("§C2: a receipt that is not this backing's operator's accuses nobody",
       ed25519.sign(encodeIssuanceMessage(other.name, KEYS.alice, 100n, 0n), SECRETS.backer2),
     );
     twoOperations(sequencer, backing);
-    const served = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const served = sequencer.commit();
     expect(receiptStatus(backing, venue, elsewhere, served)).toBe("unrelated");
   });
 
   it("reads unrelated for a receipt a stranger signed", () => {
     const { venue, sequencer, backing } = setup();
     const { moveReceipt } = twoOperations(sequencer, backing);
-    const served = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const served = sequencer.commit();
     const impostor: Receipt = {
       ...moveReceipt,
       operator: ed25519.getPublicKey(SECRETS.mallory),
@@ -203,7 +203,7 @@ describe("§C2: a receipt that is not this backing's operator's accuses nobody",
   it("answers, rather than throwing, on malformed input", () => {
     const { venue, sequencer, backing } = setup();
     const { moveReceipt } = twoOperations(sequencer, backing);
-    const served = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const served = sequencer.commit();
     const malformed = [
       { ...moveReceipt, opHash: undefined },
       { ...moveReceipt, position: -1n },
@@ -223,7 +223,7 @@ describe("invariant 22: a later commitment must extend the earlier one", () => {
   it("names the fault where a returning operator commits a shorter log", () => {
     const { venue, sequencer, backing } = setup();
     twoOperations(sequencer, backing);
-    const full = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const full = sequencer.commit();
     const restored = commitLog(backing, [full.snapshots[0]!.opLog[0]!], 1n);
     expect(isRewrittenHistory(backing, venue, full, restored)).toBe(true);
   });
@@ -231,7 +231,7 @@ describe("invariant 22: a later commitment must extend the earlier one", () => {
   it("names the fault where an earlier entry changed under a longer log", () => {
     const { venue, sequencer, backing } = setup();
     twoOperations(sequencer, backing);
-    const full = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const full = sequencer.commit();
     const log = full.snapshots[0]!.opLog;
     const diverged = commitLog(backing,
       [log[0]!, otherEntry(backing, 1, 0n), otherEntry(backing, 2, 1n)],
@@ -243,14 +243,14 @@ describe("invariant 22: a later commitment must extend the earlier one", () => {
   it("is silent on ordinary growth", () => {
     const { venue, sequencer, backing } = setup();
     twoOperations(sequencer, backing);
-    const early = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const early = sequencer.commit();
     venue.advance(1n); // one commitment per witnessed index (28b: eras end legibly)
     const move = { backing, from: KEYS.alice, to: KEYS.carol, quantity: 5n, nonce: 1n };
     sequencer.submitTransfer(
       move,
       ed25519.sign(encodeTransferMessage(backing.name, KEYS.alice, KEYS.carol, 5n, 1n), SECRETS.alice),
     );
-    const late = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const late = sequencer.commit();
     expect(isRewrittenHistory(backing, venue, early, late)).toBe(false);
   });
 
@@ -260,7 +260,7 @@ describe("invariant 22: a later commitment must extend the earlier one", () => {
     // asserted.
     const { venue, sequencer, backing } = setup();
     twoOperations(sequencer, backing);
-    const full = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const full = sequencer.commit();
     const restored = commitLog(backing, [full.snapshots[0]!.opLog[0]!], 1n);
     expect(isRewrittenHistory(backing, venue, restored, full)).toBe(true);
     expect(isRewrittenHistory(backing, venue, full, restored)).toBe(true);
@@ -269,7 +269,7 @@ describe("invariant 22: a later commitment must extend the earlier one", () => {
   it("is silent on two states at one sequence, which is equivocation's case", () => {
     const { venue, sequencer, backing } = setup();
     twoOperations(sequencer, backing);
-    const full = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const full = sequencer.commit();
     const sameSequence = commitLog(backing,
       [full.snapshots[0]!.opLog[0]!],
       full.commitment.sequence,
@@ -280,7 +280,7 @@ describe("invariant 22: a later commitment must extend the earlier one", () => {
   it("accuses nobody on a stranger's state, or on malformed input", () => {
     const { venue, sequencer, backing } = setup();
     twoOperations(sequencer, backing);
-    const full = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const full = sequencer.commit();
     const snapshots = [{ name: backing.name, opLog: [full.snapshots[0]!.opLog[0]!] }];
     const stranger = {
       snapshots,
@@ -308,7 +308,7 @@ describe("§C2: the operator that dropped the backing instead of shrinking the l
     const other = makeTransparentBacking(SECRETS.backer2, "USD");
     sequencer.register(other, signBacking(SECRETS.backer2, other));
     const { moveReceipt } = twoOperations(sequencer, backing);
-    const honest = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const honest = sequencer.commit();
 
     const withoutIt = sequencer.snapshot().filter((s) => compareBytes(s.name, backing.name) !== 0);
     const dropped = {

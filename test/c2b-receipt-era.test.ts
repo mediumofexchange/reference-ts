@@ -8,7 +8,7 @@ import { opHashOfEntry, type OpLogEntry, type PublishedOp } from "../src/oplog.j
 import { encodeDemandMessage } from "../src/presentation.js";
 import { receiptStatus, signReceipt } from "../src/receipt.js";
 import { eraLapsed } from "../src/recovery.js";
-import { replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
+import { replacementHash, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
 import { Sequencer } from "../src/sequencer.js";
 import { LocalVenue } from "../src/venue.js";
 import { KEYS, makeTransparentBacking, pub, SECRETS, advanceWitnessedIndex } from "./support.js";
@@ -53,9 +53,9 @@ function issue(sequencer: Sequencer, backing: Backing, to: Uint8Array, quantity:
 }
 
 /** Committed first, then snapshotted (a return commit restores and adopts before it publishes). */
+/** The pair a verifier is handed: `commit` returns exactly what it rooted. */
 function served(sequencer: Sequencer): ServedState {
-  const commitment = sequencer.commit();
-  return { snapshots: sequencer.snapshot(), commitment };
+  return sequencer.commit();
 }
 
 function transferOp(backing: Backing, secret: Uint8Array, from: Uint8Array, to: Uint8Array, quantity: bigint, nonce: bigint) {
@@ -77,9 +77,23 @@ function commitLog(backing: Backing, opLog: readonly OpLogEntry[], sequence: big
   return { snapshots, commitment: signCommitment(SECRETS.operator, sequence, stateRoot(snapshots)) };
 }
 
-function replacementBy(backing: Backing, ruleSecret: Uint8Array, successor: Uint8Array, predecessor: Uint8Array, effective: bigint): Replacement {
-  const unsigned = { role: ROLE_OPERATOR, successor, predecessor, effective, signature: new Uint8Array(64) };
-  return { ...unsigned, signature: ed25519.sign(replacementMessage(backing.name, unsigned), ruleSecret) };
+function replacementBy(backing: Backing, ruleSecret: Uint8Array, successorSecret: Uint8Array, predecessor: Uint8Array, effective: bigint): Replacement {
+  // §C2's replacement is co-signed, so the fixture needs the successor's own
+  // key: one it has not signed is not a weaker replacement, it is a naming.
+  const unsigned = {
+    role: ROLE_OPERATOR,
+    successor: ed25519.getPublicKey(successorSecret),
+    predecessor,
+    effective,
+    signature: new Uint8Array(64),
+    successorSignature: new Uint8Array(64),
+  };
+  const message = replacementMessage(backing.name, unsigned);
+  return {
+    ...unsigned,
+    signature: ed25519.sign(message, ruleSecret),
+    successorSignature: ed25519.sign(message, successorSecret),
+  };
 }
 
 describe("28b: a receipt names its era, and the era is the record's to verify", () => {
@@ -169,10 +183,13 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     const spend = transferOp(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
     const tail = incumbent.submitTransfer(spend.op, spend.signature); // dies at the handover
     advanceWitnessedIndex(venue, 3n);
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR, eur.name, 3n));
+    // Effective at 5, witnessed at 3: force is the effective index now, so the
+    // takeover happens in the lead time between the two (§C2).
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 5n));
     const successor = new Sequencer(SUCCESSOR_SECRET, venue);
     successor.register(eur, signBacking(SECRETS.backer, eur));
     successor.takeOver(eur, before);
+    advanceWitnessedIndex(venue, 5n);
     const theirs = served(successor); // at 3: force, and the record of note
     expect(eraLapsed(venue, eur, KEYS.operator, tail.after)).toBe(true);
     expect(receiptStatus(eur, venue, tail, theirs)).toBe("lapsed");
@@ -183,7 +200,7 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     // operation into a position its log already gave away.
     const { venue, sequencer, backing } = setup();
     issue(sequencer, backing, KEYS.alice, 100n, 0n);
-    const c0 = sequencer.commit(); // at 0
+    const { commitment: c0 } = sequencer.commit(); // at 0
     const state0 = { snapshots: sequencer.snapshot(), commitment: c0 };
     advanceWitnessedIndex(venue, 1n);
     const spend = transferOp(backing, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
@@ -218,7 +235,7 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     // the honest operator this excuse exists for is 28a's, whose dead tail
     // beside its adopted gap otherwise proved isDoublePosition against it.
     advanceWitnessedIndex(venue, 15n);
-    const cr = sequencer.commit(); // the return closes the era with a gap
+    const { commitment: cr } = sequencer.commit(); // the return closes the era with a gap
     const after = { snapshots: sequencer.snapshot(), commitment: cr };
     expect(eraLapsed(venue, backing, KEYS.operator, honest.after)).toBe(true);
     expect(isDoublePosition(backing, venue, after, honest, lie)).toBe(false);
@@ -276,11 +293,13 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     const shortened = commitLog(eur, [honest[0]!], 0n);
     venue.publish(shortened.commitment);
     advanceWitnessedIndex(venue, 8n);
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR, eur.name, 8n));
+    // The takeover goes in the lead time; force lands at 10.
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 10n));
     const successor = new Sequencer(SUCCESSOR_SECRET, venue);
     successor.register(eur, signBacking(SECRETS.backer, eur));
     successor.takeOver(eur, shortened);
-    const theirs = served(successor); // at 8
+    advanceWitnessedIndex(venue, 10n);
+    const theirs = served(successor); // at 10
     expect(eraLapsed(venue, eur, KEYS.operator, receipt.after)).toBe(false);
     expect(receiptStatus(eur, venue, receipt, theirs)).toBe("contradicted");
   });
@@ -298,7 +317,7 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     advanceWitnessedIndex(venue, 11n);
     venue.publishOp(backing.name, claim.published);
     advanceWitnessedIndex(venue, 15n);
-    const cr = sequencer.commit(); // the return adopts the demand
+    const { commitment: cr } = sequencer.commit(); // the return adopts the demand
     const record = { snapshots: sequencer.snapshot(), commitment: cr };
     advanceWitnessedIndex(venue, 16n);
     const adopted = sequencer.submitDemand(claim.op, claim.published.signature); // the repeat: the adoption's receipt
@@ -312,5 +331,100 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
       15n, // the live era
     );
     expect(isDoublePosition(backing, venue, record, adopted, lie)).toBe(true);
+  });
+});
+
+describe("§C2b: an era begins no earlier than its signer took the role", () => {
+  // §C2 seats a successor before it has committed, so its receipts honestly
+  // say `after = 0` — and both of eraLapsed's arms measured from `after`.
+  // Every heir on a venue older than one duration read lapsed, the handover
+  // arm found the very handover that seated the heir's own predecessor, and a
+  // lapsed era is the excuse the fault pair reads: a punctual heir's two
+  // receipts at one position were unprovable (found reviewing this slice).
+
+  const HEIR2_SECRET = new Uint8Array(32).fill(0x0c);
+  const HEIR2 = pub(HEIR2_SECRET);
+
+  /** A replaceable backing and a venue old enough for `after = 0` to mislead. */
+  function replaceable() {
+    const venue = new LocalVenue();
+    const eur = makeBacking({
+      obligor: KEYS.backer,
+      payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: { setting: "transparent", operator: KEYS.operator, silence: SILENCE, replacementRule: KEYS.backer },
+    });
+    return { venue, eur };
+  }
+
+  it("a punctual heir's first era is live, and its own late one still lapses", () => {
+    const { venue, eur } = replaceable();
+    advanceWitnessedIndex(venue, 5n);
+    venue.publish(signCommitment(SECRETS.operator, 0n, stateRoot([])));
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 8n));
+    advanceWitnessedIndex(venue, 12n);
+    venue.publish(signCommitment(SUCCESSOR_SECRET, 0n, stateRoot([])));
+    advanceWitnessedIndex(venue, 14n);
+    // Seated at 8, committed at 12: four indices of an era, not twelve.
+    expect(eraLapsed(venue, eur, SUCCESSOR, 0n)).toBe(false);
+
+    // And the floor is a floor, not immunity: seated at 8, committing only at
+    // 25 is an era of seventeen against a duration of ten.
+    const late = replaceable();
+    advanceWitnessedIndex(late.venue, 5n);
+    late.venue.publish(signCommitment(SECRETS.operator, 0n, stateRoot([])));
+    late.venue.publishReplacement(late.eur.name, replacementBy(late.eur, SECRETS.backer, SUCCESSOR_SECRET, late.eur.name, 8n));
+    advanceWitnessedIndex(late.venue, 25n);
+    late.venue.publish(signCommitment(SUCCESSOR_SECRET, 0n, stateRoot([])));
+    expect(eraLapsed(late.venue, late.eur, SUCCESSOR, 0n)).toBe(true);
+  });
+
+  it("a second heir's era does not lapse on the handover that seated the first", () => {
+    const { venue, eur } = replaceable();
+    advanceWitnessedIndex(venue, 5n);
+    venue.publish(signCommitment(SECRETS.operator, 0n, stateRoot([])));
+    const first = replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 8n);
+    venue.publishReplacement(eur.name, first);
+    advanceWitnessedIndex(venue, 12n);
+    venue.publish(signCommitment(SUCCESSOR_SECRET, 0n, stateRoot([])));
+    venue.publishReplacement(
+      eur.name,
+      replacementBy(eur, SECRETS.backer, HEIR2_SECRET, replacementHash(eur.name, first), 16n),
+    );
+    advanceWitnessedIndex(venue, 18n);
+    venue.publish(signCommitment(HEIR2_SECRET, 0n, stateRoot([])));
+    // The handover at 8 predates HEIR2's whole tenure; its own era ran 16..18.
+    expect(eraLapsed(venue, eur, HEIR2, 0n)).toBe(false);
+  });
+
+  it("a pre-seat commitment for something else does not stand in for the era's end", () => {
+    // The era's end is measured from where it BEGAN. Keyed on `after` alone, a
+    // commitment the heir's key made BEFORE its seat — ordinary service for
+    // anything else it operates — stood in as "next", both arms went dead, and
+    // an era that genuinely died read as live: the heir's dead tail then read
+    // contradicted, which is the accusing direction (found regression-reviewing
+    // the fix round).
+    const { venue, eur } = replaceable();
+    advanceWitnessedIndex(venue, 3n);
+    venue.publish(signCommitment(SUCCESSOR_SECRET, 0n, stateRoot([])));
+    advanceWitnessedIndex(venue, 5n);
+    venue.publish(signCommitment(SECRETS.operator, 0n, stateRoot([])));
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 8n));
+    advanceWitnessedIndex(venue, 25n);
+    venue.publish(signCommitment(SUCCESSOR_SECRET, 1n, stateRoot([])));
+    // Seated at 8, first commitment as operator of record at 25, duration 10:
+    // the era died, alien commitment at 3 or none.
+    expect(eraLapsed(venue, eur, SUCCESSOR, 0n)).toBe(true);
+  });
+
+  it("still lapses the era a handover really ended", () => {
+    // The genesis operator signed before ever committing, and a successor took
+    // force before it did: that era genuinely died at the handover, and its
+    // dead tail stays excused.
+    const { venue, eur } = replaceable();
+    advanceWitnessedIndex(venue, 5n);
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 8n));
+    advanceWitnessedIndex(venue, 12n);
+    expect(eraLapsed(venue, eur, KEYS.operator, 0n)).toBe(true);
   });
 });

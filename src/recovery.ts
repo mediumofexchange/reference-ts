@@ -75,7 +75,7 @@ import { unknownOpKind, type PublishedOp } from "./oplog.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { opHashOfEntry } from "./oplog.js";
-import { operatorAt, operatorIn, successionOf, type Succession } from "./replacement.js";
+import { lastCommitmentInForce, operatorAt, operatorIn, successionOf, type Succession } from "./replacement.js";
 import { revokedAt } from "./revocation.js";
 import { answering, venueIsDeclared, Venue, VenueError, type WitnessedCommit, type WitnessedOp } from "./venue.js";
 import { commitSatisfies, NO_DECISION_VENUE } from "./presentation.js";
@@ -105,9 +105,12 @@ type WitnessedRequest = WitnessedOp & {
 };
 
 /**
- * How many witnessed indices this operator has been quiet. Measured from its
- * latest commitment, or from the venue's genesis where it has never published —
- * otherwise never publishing at all would be the way to escape the grade.
+ * How many witnessed indices this KEY has been quiet, across everything it
+ * operates. Measured from its latest commitment, or from the venue's genesis
+ * where it has never published. A fact about a key, deliberately: the grades
+ * read `quietOn`, the backing's own clock, and a reader that graded a backing
+ * on this number would be handing a shared operator's other backings the power
+ * to keep this one's clock alive.
  */
 export function quietFor(venue: Venue, operator: Uint8Array): bigint {
   // The operator key is the reader's own validated object (a Backing's, or a
@@ -125,6 +128,45 @@ export function quietFor(venue: Venue, operator: Uint8Array): bigint {
 /** The operator in force at the venue's present index. */
 function operatorNow(venue: Venue, backing: Backing): Uint8Array {
   return operatorAt(backing, venue, venue.witnessedIndex());
+}
+
+/**
+ * The index this backing's clock starts at: where its own last commitment was
+ * witnessed, and genesis where it has never had one.
+ *
+ * **The clock is the backing's, not a key's** (§C2b). The rule it replaces read
+ * the later of the operator in force's last commitment and the index it took the
+ * role — and the index it took the role is a field the RULE-HOLDER writes, which
+ * is the backer by default. So a standing grade was cancellable by two published
+ * records and no commitment anywhere: hop to a throwaway key the rule-holder
+ * generates and co-signs itself, then hop back. Sharper than it looks — hopping
+ * to a FRESH key every duration defeats any clock read per key at all, so no
+ * amount of making the reset harder could work. This one never asks who is in
+ * force now, only what was witnessed from whoever was.
+ *
+ * **What that does NOT close**, and §C2b already conceded it: "the grade fires on
+ * the operator publishing nothing, not on it covering nothing". A rule-holder can
+ * still name a key that commits for its own OTHER backings, and that commitment
+ * closes this backing's gap while serving it nothing — AND, the other half of
+ * the same concession, closing the gap closes the snapshot redemption that was
+ * open on it, so the holder's live remedy dies with the grade. The remedy for
+ * that party is the non-service grade, read against the last state that did
+ * carry the backing — and it is the HOLDER's to arm, by publishing requests the
+ * operator must then serve or wear. That is the division of labour §C2b draws,
+ * not a hole this opens; it was true of the old clock too, and the cost of it
+ * is stated here because the fallback does not fire on its own.
+ *
+ * Genesis where there is none, or never publishing at all would be the way to
+ * read punctual forever.
+ */
+function clockStart(venue: Venue, chain: readonly Succession[], asOf?: bigint): bigint {
+  return lastCommitmentInForce(chain, venue, asOf)?.at ?? 0n;
+}
+
+/** How long this backing has been without a commitment of its own. */
+function quietOn(venue: Venue, backing: Backing): bigint {
+  const now = venue.witnessedIndex();
+  return now - clockStart(venue, successionOf(backing, venue));
 }
 
 export { venueIsDeclared };
@@ -157,9 +199,10 @@ export function isSilent(venue: Venue, backing: Backing): boolean {
   if (!venueIsDeclared(venue, backing)) return false;
   // The operator in force now, not the key E names: §C2's "a wallet verifies the
   // chain rather than the key it remembers". Accrual against a replaced
-  // incumbent stops at the handover, because the successor's own first
-  // commitment is what gave it force — so its quiet time starts there.
-  return quietFor(venue, operatorNow(venue, backing)) > clause.noCommitmentDuration;
+  // incumbent stops at the handover, and the successor's own clock starts at the
+  // index it took the role — which used to be the same thing as its first
+  // commitment, and is not any more (`clockStart`).
+  return quietOn(venue, backing) > clause.noCommitmentDuration;
 }
 
 /**
@@ -185,13 +228,23 @@ export function isOverdue(venue: Venue, backing: Backing): boolean {
   const terms = backing.evidence.witnessing;
   if (terms === undefined) return false;
   if (!venueIsDeclared(venue, backing)) return false;
-  return quietFor(venue, operatorNow(venue, backing)) > terms.interval;
+  // On this backing's clock, which starts where this operator took the role.
+  return quietOn(venue, backing) > terms.interval;
 }
 
 /**
- * The requests this operator has left unserved, as §C2b counts them: "a signed
- * transfer request, published where demands are, left unserved past the declared
- * duration and counted only while still unserved."
+ * The requests standing unserved against this BACKING, as §C2b counts them: "a
+ * signed transfer request, published where demands are, left unserved past the
+ * declared duration and counted only while still unserved."
+ *
+ * The backing's, not an operator's — the count stands through a handover, a
+ * successor inherits the standing requests and clears them by serving them
+ * (served requests leave the count through `servedAlready`, whoever serves).
+ * Scoped to a term instead, the count was resettable: a term boundary is the
+ * rule-holder's to draw for one publication and a key it generates itself, and
+ * a boundary drawn through a count of absences makes every piece smaller than
+ * *m*. WHO the standing count grades is `nonServingOperator`'s question, not
+ * this one's.
  *
  * This is the grade **measured on service rather than publication**, and it is
  * the one that reaches the party the aggravated grade cannot: "A stalling
@@ -348,12 +401,29 @@ export function unservedRequests(
 }
 
 /**
- * §C2b's non-service grade: at least *m* distinct requests standing unserved
- * within the window the backing declares.
+ * §C2b's non-service grade, and WHO it names: the operator in force at the
+ * reading index, where at least *m* distinct requests stand unserved within the
+ * window the backing declares. Undefined where the record does not show it.
  *
- * **False means this record does not show it**, on the same terms as isSilent: a
- * backing that conceded no non-service grade is never non-serving, and a state
- * that is not this backing's operator's says nothing either way.
+ * **The count stands against the backing; the grade names the incumbent.** The
+ * count never asks who was in force when a request landed — a boundary the
+ * rule-holder draws must not partition a count of absences — and the party
+ * graded is never read off the served state, which is evidence and not a
+ * subject: a retired operator's honest state folds tomorrow's requests exactly
+ * as it folded yesterday's, and reading its signer as the accused let a holder
+ * acting alone grade a party whose duty had ended (found reviewing this
+ * slice, live on main). §C2 already says whose the accrual is — "accrual
+ * against the incumbent continues... and stops there" — and the co-signature is
+ * what makes naming the incumbent fair: no key holds the role without having
+ * signed for it. Signed for the ROLE, with its obligations running: the
+ * standing requests were in view, and ones published between its consent and
+ * its force were not — those it inherits sight unseen, exactly as it inherits
+ * the remainder of the silence window, and for the same reason (a boundary the
+ * rule-holder draws must not shed either).
+ *
+ * A key, not a boolean, for the same reason `equivocatingSigner` returns one:
+ * naming the party is what the answer is for, and a bare boolean is how a
+ * reader came to supply the wrong one.
  *
  * **What firing does here, and what it deliberately does not.** §C2b says it
  * outright now: "Firing makes the case for E's replacement rule, which stands
@@ -366,10 +436,20 @@ export function unservedRequests(
  * E names no rule at all" - the second of those is the OPEN case pinned in
  * c2-dropped-backing. See DECISIONS.md.
  */
-export function isNonServing(venue: Venue, backing: Backing, served: ServedState): boolean {
+export function nonServingOperator(
+  venue: Venue,
+  backing: Backing,
+  served: ServedState,
+): Uint8Array | undefined {
   const terms = backing.evidence.nonService;
-  if (terms === undefined) return false;
-  return BigInt(unservedRequests(venue, backing, served).length) >= terms.count;
+  if (terms === undefined) return undefined;
+  if (BigInt(unservedRequests(venue, backing, served).length) < terms.count) return undefined;
+  return operatorNow(venue, backing);
+}
+
+/** The same grade as a fact rather than a name, for a reader that has one. */
+export function isNonServing(venue: Venue, backing: Backing, served: ServedState): boolean {
+  return nonServingOperator(venue, backing, served) !== undefined;
 }
 
 /**
@@ -454,8 +534,22 @@ function replayLatestState(
   served: ServedState,
 ): LedgerState | undefined {
   if (!venueIsDeclared(venue, backing)) return undefined;
-  const latest = venue.latestFor(operatorNow(venue, backing));
+  // **The snapshot is the backing's rather than a key's** (§C2b): the last
+  // commitment witnessed from a party that was in force for this backing when
+  // it published it. Asked of whoever is in force NOW, one published record
+  // naming a key that has committed nothing answered undefined — and the
+  // holder's redemption proof, the only checkable remedy §C2b gives against a
+  // dark operator, died on a record the rule-holder publishes for free. The
+  // rule-holder is the backer by default: the party that owes the money.
+  const latest = lastCommitmentInForce(successionOf(backing, venue), venue)?.commitment;
   if (latest === undefined) return undefined;
+  // The ROOT is the comparison, not the signer: the root is injective over
+  // states (invariant 22), and committedLogFor already refuses a key that is
+  // not one of this backing's operators. Requiring the signer to match refused
+  // a byte-identical state of record after an orderly handover — an heir that
+  // re-commits the predecessor's book verbatim carries the same root at its
+  // own key, and the holder keeping the predecessor's copy is following the
+  // rule this file tells them to follow (found reviewing this slice).
   if (latest.sequence !== served.commitment.sequence) return undefined;
   if (compareBytes(latest.root, served.commitment.root) !== 0) return undefined;
   return replayServedState(backing, venue, served);
@@ -525,10 +619,12 @@ export function standingOutstanding(
     const revoked = revokedAt(venue, backing);
     if (revoked === undefined) return undefined;
     const before = revoked - 1n;
-    // Whoever was in force just before the boundary — a handover and a
-    // revocation are independent axes, and this reads the same chain everything
-    // else does rather than assuming the key E names.
-    const last = venue.latestFor(operatorAt(backing, venue, before), before);
+    // The backing's last commitment as of just before the boundary — a handover
+    // and a revocation are independent axes, and asking the key in force AT that
+    // index made the number unreadable after one replacement: a freshly seated
+    // heir had committed nothing, and invariant 19's stop-loss number vanished
+    // on a record the rule-holder publishes for free.
+    const last = lastCommitmentInForce(successionOf(backing, venue), venue, before)?.commitment;
     if (last === undefined) return undefined;
     if (
       boundary.commitment.sequence !== last.sequence ||
@@ -651,9 +747,15 @@ function before(at: bigint): bigint {
  * backing's declared venue gives nothing force (as every clause reader reads
  * it), and a venue's refusal propagates, as everywhere.
  */
-export function gapOpen(venue: Venue, backing: Backing): Uint8Array | undefined {
+export function gapOpen(
+  venue: Venue,
+  backing: Backing,
+  walked?: readonly Succession[],
+): Uint8Array | undefined {
   if (!venueIsDeclared(venue, backing)) return undefined;
-  const chain = successionOf(backing, venue);
+  // A pre-walked chain, where the caller has one: the sequencer asks this at
+  // every door, and the walk's cost is the adversary's to grow (35d fix round).
+  const chain = walked ?? successionOf(backing, venue);
   const now = venue.witnessedIndex();
   if (!publishedInGap(venue, backing, chain, now)) return undefined;
   return copyBytes(operatorIn(chain, before(now)));
@@ -668,12 +770,12 @@ function publishedInGap(
 ): boolean {
   const clause = backing.evidence.silence;
   if (clause === undefined) return false;
-  // Judged against whoever was in force at the index the publication landed at,
-  // which is the same rule the publication itself is judged by. The chain is
-  // walked once by the caller: it is the same chain at every index, and walking
-  // it costs a signature verification per published replacement.
-  const last = venue.witnessedAtFor(operatorIn(chain, before(at)), before(at)) ?? 0n;
-  return at - last > clause.noCommitmentDuration;
+  // The backing's clock as it stood strictly before the publication landed —
+  // `clockStart`, the same rule `isSilent` and `isOverdue` read, in one place
+  // rather than three. The chain is walked once by the caller: it is the same
+  // chain at every index, and walking it costs a signature verification per
+  // published replacement.
+  return at - clockStart(venue, chain, before(at)) > clause.noCommitmentDuration;
 }
 
 /**
@@ -682,9 +784,13 @@ function publishedInGap(
  * redemption walk folds — exported so the two read one definition of what a
  * publication can do, rather than two that have to agree.
  */
-export function gapLegsFor(venue: Venue, backing: Backing): WitnessedOp[] {
+export function gapLegsFor(
+  venue: Venue,
+  backing: Backing,
+  walked?: readonly Succession[],
+): WitnessedOp[] {
   if (!venueIsDeclared(venue, backing)) return [];
-  const chain = successionOf(backing, venue);
+  const chain = walked ?? successionOf(backing, venue);
   return venue
     .publishedOpsFor(backing.name)
     .filter((w) => isLeg(w.op) && publishedInGap(venue, backing, chain, w.at));
@@ -722,24 +828,65 @@ export function eraLapsed(
   backing: Backing,
   operator: Uint8Array,
   after: bigint,
+  walked?: readonly Succession[],
 ): boolean {
   return answering(() => {
     if (!(operator instanceof Uint8Array) || operator.length !== 32) return false;
     if (typeof after !== "bigint" || after < 0n) return false;
     if (!venueIsDeclared(venue, backing)) return false;
-    const next = venue.firstCommitmentFor(operator, after + 1n);
-    // The first force taken after `after` by anyone else ends the era too.
-    const chain = successionOf(backing, venue);
+    // Walking verifies a signature per published record and anyone may publish
+    // one for free, so a caller that has already walked passes its chain — the
+    // sequencer's doors ask this per submission, and 35d's fix round measured
+    // the unthreaded walks at seconds per door call under junk records. The
+    // chain must be the FORCE chain, and a pending tip is sliced off rather
+    // than trusted away: handed `successionAhead`, this predicate read the
+    // pending link as a handover that had already ended the era and answered
+    // true for the whole lead time — every door shut (found regression-
+    // reviewing the fix round; gapOpen and gapLegsFor are indifferent to the
+    // extra link, probed, and this one is not).
+    let chain = walked ?? successionOf(backing, venue);
+    const now = venue.witnessedIndex();
+    while (chain.length > 0 && (chain[chain.length - 1] as Succession).from > now) {
+      chain = chain.slice(0, -1);
+    }
+    // **The era can begin no earlier than the signer took the role.** §C2 seats
+    // a successor before it has committed, so its receipts honestly say
+    // `after = 0` — measured from index zero, every heir on a venue older than
+    // one duration read lapsed, its handover arm found the very handover that
+    // seated the heir's predecessor, and a lapsed era is the excuse the fault
+    // pair reads: two receipts at one position from a punctual heir, and the
+    // equivocation was unprovable (found reviewing this slice). The signer's
+    // FIRST term, because `after = 0` says only that it had not committed when
+    // it signed, and the earliest index it could have signed in force is the
+    // conservative floor. That reads toward the excuse for a key the
+    // rule-holder has named twice — a receipt whose `after` predates the
+    // key's second seat may have been signed in either term, and the earlier
+    // one's ending lapses it — which is this predicate's direction, and the
+    // regression review priced it: the excuse holds only while the key stays
+    // dark, and `isSilent` names that state for what it is.
+    let from = after;
+    for (const link of chain) {
+      if (compareBytes(link.operator, operator) !== 0) continue;
+      if (link.from > from) from = link.from;
+      break;
+    }
+    // The era's END is measured from where it BEGAN — the same floor. Keyed on
+    // `after` alone, a commitment the key made before its seat (for anything
+    // else it operates) stood in as "next", both arms went dead, and an era
+    // that genuinely died read as live: the accusing direction (found
+    // regression-reviewing the fix round).
+    const next = venue.firstCommitmentFor(operator, from + 1n);
+    // The first force taken after the era began, by anyone else, ends it.
     let handover: bigint | undefined;
     for (const link of chain) {
-      if (link.from > after && compareBytes(link.operator, operator) !== 0) {
+      if (link.from > from && compareBytes(link.operator, operator) !== 0) {
         handover = link.from;
         break;
       }
     }
     if (handover !== undefined && (next === undefined || handover <= next)) return true;
     const duration = backing.evidence.silence?.noCommitmentDuration;
-    return next !== undefined && duration !== undefined && next - after > duration;
+    return next !== undefined && duration !== undefined && next - from > duration;
   }, false);
 }
 
@@ -1049,7 +1196,7 @@ function inSequenceOrder(requests: readonly WitnessedOp[], holder: Uint8Array): 
     });
 }
 
-/** Whether the served state was this operator's latest commitment before `at`. */
+/** Whether the served state was the backing's latest commitment before `at`. */
 function isLatestAt(
   venue: Venue,
   backing: Backing,
@@ -1057,7 +1204,13 @@ function isLatestAt(
   served: ServedState,
   at: bigint,
 ): boolean {
-  const latest = venue.latestFor(operatorIn(chain, before(at)), before(at));
+  // The backing's, not the party-then-in-force's: an heir seated with nothing
+  // published would otherwise make every redemption in its predecessor's gap
+  // unresolvable, and being unresolvable is exactly what its operator wants.
+  // And the root is the comparison, never the signer — replayLatestState says
+  // why, and the two must agree or a leg resolves for one reader and not the
+  // other.
+  const latest = lastCommitmentInForce(chain, venue, before(at))?.commitment;
   if (latest === undefined) return false;
   if (latest.sequence !== served.commitment.sequence) return false;
   return compareBytes(latest.root, served.commitment.root) === 0;

@@ -101,6 +101,30 @@ that produced it is in the decision log — reach it through the index in
   spent set, running totals and the standing demand record (inv 23). The root
   must be injective, or one signature covers two states and equivocation is
   unprovable.
+- **A replacement is co-signed by its successor, and force is the effective
+  index** (§C2). Naming somebody is not a power over them: signed by the
+  rule-holder alone, one published record seated any commitment-publishing key
+  as the operator of record of any backing, and its own next punctual commitment
+  then proved a fault against it. Both signatures go over one message, so there
+  is one record and one tag. Force being a signed field and nothing else is what
+  keeps the succession walk a pure function of the venue record — condition it
+  on served state and two readers disagree about who is at fault, which
+  `fault.ts` forbids outright. `successionOf` stops at the last link whose index
+  has arrived, so the chain's tip and the operator in force are one thing.
+  **What a handover takes on is a fixed object** — the backing's last
+  commitment strictly before the effective index, or the EMPTY book where the
+  record pins nothing — **and the book only grows**: `takeOver` is a
+  fast-forward from this operator's OWN link of the chain (in force or
+  pending, never merely the walk's last element), a dead era's tail drops to
+  the mark first, and the seat is a link WITH a provenance, so `serves`
+  (custody AND force, asked at every co-signing door) compares the seat to
+  the tip and the stored pin to the recomputed one — staleness of either
+  detects itself. A replacement not strictly later than the link it replaces
+  is void unless it names the incumbent (a revocation). A key seated anew
+  commits before it co-signs (`shut`, the same door as the return from
+  silence), and a commitment never drops an in-force backing silently
+  (`commit`'s per-call `dropping`; `awaitingTakeover` is the same condition
+  as a question).
 - **Every operation is signed by the party the law names, over that backing's
   own message, at that signer's next nonce — except the commit.** §C3's commit
   names no backing, carries no nonce, and is signed by every party the lock
@@ -232,7 +256,9 @@ construction — which is why they are rules here rather than code.
   `submitTransfer` returns the receipt to whoever submitted, normally the
   payer. Read the receipt's era when taking it — `after` names the operator's
   last commitment, and one naming anything but the latest at payment time is
-  stale on its face.
+  stale on its face — as is one naming an era before the operator's current
+  seat, however recently that key last committed: a key seated anew commits
+  before its receipts can be fresh, and the seat is readable from the chain.
 - **Claims go illiquid while the operator is dark. Do not accept one.** A
   transfer published at the venue is evidence, never an operation, so nothing
   moves until the operator returns or a successor takes over; the operator
@@ -374,6 +400,12 @@ for speed anywhere else; this is a reference implementation, not a product.
   simplicity, security, practicality, and whether it consolidates with a mechanism
   that already exists. Decided 2026-08-29, after a slice whose shape was chosen
   solo and whose review round then found the shape itself unbuildable.
+  **One angle inventories what the mechanism being REPLACED was silently
+  guaranteeing**, and it is not optional. The first panel run under this rule
+  chose a sound mechanism and shipped four blocking defects, every one of them a
+  reader that had quietly depended on the old rule's incidental promise. Four
+  angles argued about the new mechanism and none asked what the old one was
+  holding up.
 - **Tests first, named for invariants.** Test files follow
   `invariant-07.issuance-paths.test.ts`. Each test carries a one-line
   plain-language statement of what it checks. the maintainer reviews the tests; the
@@ -382,6 +414,16 @@ for speed anywhere else; this is a reference implementation, not a product.
   exploit, and the fix by that same script failing to exploit it. An argument
   that code is wrong is a hypothesis; only a run settles it. Scratch scripts are
   gitignored `.mjs` files in `scratch/`.
+- **A fix is a change, and gets everything a change gets.** Its own review
+  round, and a panel where it turns on a design decision rather than a typo —
+  not an exemption because it is small, urgent, or in code just reasoned about.
+  On 2026-08-29 three fixes were made in one day, each confidently, each about
+  something just thought through, and all three were wrong: one patched
+  downstream of a circularity, one used a fallback where the rule needed a
+  maximum and touched one reader of three, and its replacement opened a remote
+  cancellation of the only remedy holders have against a dark operator. Every
+  one was caught by a reviewer rather than its author. Fixes are where an
+  author's confidence is least earned, so they get MORE scrutiny, not less.
 - **Regression-review the fixes.** After fixing review findings, review the
   fixes themselves. Every round so far has found a real bug there, and the
   recurring shape is a fix that bounded one input and left the other open.

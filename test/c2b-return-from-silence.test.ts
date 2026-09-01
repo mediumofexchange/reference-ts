@@ -3,7 +3,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { compareBytes } from "../src/bytes.js";
-import { signCommitment, stateRoot } from "../src/commitment.js";
+import { signCommitment, stateRoot, type ServedState } from "../src/commitment.js";
 import { TransparentLedger } from "../src/ledger.js";
 import { type OpLogEntry } from "../src/oplog.js";
 import { encodeBurnMessage, encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
@@ -110,9 +110,9 @@ function issue(sequencer: Sequencer, backing: Backing, to: Uint8Array, quantity:
  * book and adopts the gap before it publishes, so a snapshot taken ahead of it
  * would be of a state the commitment does not root.
  */
-function served(sequencer: Sequencer) {
-  const commitment = sequencer.commit();
-  return { snapshots: sequencer.snapshot(), commitment };
+/** The pair a verifier is handed: `commit` returns exactly what it rooted. */
+function served(sequencer: Sequencer): ServedState {
+  return sequencer.commit();
 }
 
 function transferOp(backing: Backing, secret: Uint8Array, from: Uint8Array, to: Uint8Array, quantity: bigint, nonce: bigint) {
@@ -164,9 +164,23 @@ function redeemAtVenue(venue: LocalVenue, backing: Backing, from: bigint, holder
   return claim;
 }
 
-function replacementBy(backing: Backing, ruleSecret: Uint8Array, successor: Uint8Array, predecessor: Uint8Array, effective: bigint): Replacement {
-  const unsigned = { role: ROLE_OPERATOR, successor, predecessor, effective, signature: new Uint8Array(64) };
-  return { ...unsigned, signature: ed25519.sign(replacementMessage(backing.name, unsigned), ruleSecret) };
+function replacementBy(backing: Backing, ruleSecret: Uint8Array, successorSecret: Uint8Array, predecessor: Uint8Array, effective: bigint): Replacement {
+  // §C2's replacement is co-signed, so the fixture needs the successor's own
+  // key: one it has not signed is not a weaker replacement, it is a naming.
+  const unsigned = {
+    role: ROLE_OPERATOR,
+    successor: ed25519.getPublicKey(successorSecret),
+    predecessor,
+    effective,
+    signature: new Uint8Array(64),
+    successorSignature: new Uint8Array(64),
+  };
+  const message = replacementMessage(backing.name, unsigned);
+  return {
+    ...unsigned,
+    signature: ed25519.sign(message, ruleSecret),
+    successorSignature: ed25519.sign(message, successorSecret),
+  };
 }
 
 const kinds = (sequencer: Sequencer, backing: Backing) => sequencer.opLog(backing).map((entry) => entry.kind);
@@ -407,13 +421,13 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     const commitment = signCommitment(SECRETS.operator, 0n, stateRoot(snapshots));
     venue.publish(commitment);
     const before = { snapshots, commitment };
-    advanceWitnessedIndex(venue, 2n);
-    for (const b of [gold, eur]) venue.publishReplacement(b.name, replacementBy(b, SECRETS.backer, SUCCESSOR, b.name, 2n));
+    for (const b of [gold, eur]) venue.publishReplacement(b.name, replacementBy(b, SECRETS.backer, SUCCESSOR_SECRET, b.name, 2n));
     const successor = new Sequencer(SUCCESSOR_SECRET, venue);
     for (const b of [gold, eur]) {
       successor.register(b, signBacking(SECRETS.backer, b));
       successor.takeOver(b, before);
     }
+    advanceWitnessedIndex(venue, 2n);
     successor.commit(); // at 2: in force for both, the mixed set standing
     advanceWitnessedIndex(venue, 3n);
     // The backer's answer is one act and goes through.
@@ -472,7 +486,7 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     // The backer names the successor at 12, effective at 15; the successor's
     // commitment at 12 is what will give it force — from 15.
     advanceWitnessedIndex(venue, 12n);
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR, eur.name, 15n));
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 15n));
     successor.register(eur, signBacking(SECRETS.backer, eur));
     successor.takeOver(eur, before);
     successor.commit(); // at 12
@@ -490,8 +504,14 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     const more = transferOp(usd, SECRETS.carol, KEYS.carol, KEYS.bob, 10n, 1n);
     expect(verifyReceipt(successor.submitTransfer(more.op, more.signature))).toBe(true);
     expect(kinds(successor, usd)).toEqual(["issue", "transfer", "transfer"]);
-    // From 16 EUR is served too, and the next commitment carries everything.
+    // The seat does not close the gap — the clock is the backing's, and only a
+    // commitment closes one. Seated, the successor commits (its commitment now
+    // carries EUR), and serves EUR from the index after.
     advanceWitnessedIndex(venue, 16n);
+    expect(() => successor.submitTransfer(spend.op, spend.signature)).toThrow(RETURNING);
+    successor.commit();
+    advanceWitnessedIndex(venue, 17n);
+    expect(gapOpen(venue, eur)).toBeUndefined();
     expect(verifyReceipt(successor.submitTransfer(spend.op, spend.signature))).toBe(true);
     const after = served(successor);
     expect(kinds(successor, usd)).toEqual(["issue", "transfer", "transfer"]);
@@ -511,14 +531,15 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     incumbent.register(eur, signBacking(SECRETS.backer, eur));
     const receipt = issue(incumbent, eur, KEYS.alice, 100n, 0n);
     const before = served(incumbent); // at 0
-    advanceWitnessedIndex(venue, 5n);
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR, eur.name, 5n));
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 5n));
     const successor = new Sequencer(SUCCESSOR_SECRET, venue);
     successor.register(eur, signBacking(SECRETS.backer, eur));
     successor.takeOver(eur, before);
-    // Named and not yet committed: refused at the in-force door, in its own words.
+    // Named and not yet in force — its effective index has not arrived — so it
+    // is refused at the in-force door, in its own words.
     const spend = transferOp(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
     expect(() => successor.submitTransfer(spend.op, spend.signature)).toThrow(/not yet in force/);
+    advanceWitnessedIndex(venue, 5n);
     successor.commit(); // at 5: in force from here
     // The successor then goes dark past the duration. The RETIRED operator still
     // answers the repeat of what it co-signed in force: a read of its own book.
@@ -553,10 +574,10 @@ describe("§C2b: while its own gap is open the operator co-signs nothing, and it
     successor.register(usd, signBacking(SECRETS.backer2, usd));
     issue(successor, usd, KEYS.carol, 100n, 0n, SECRETS.backer2);
     successor.commit(); // at 0
-    advanceWitnessedIndex(venue, 2n);
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR, eur.name, 2n));
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 2n));
     successor.register(eur, signBacking(SECRETS.backer, eur));
     successor.takeOver(eur, before);
+    advanceWitnessedIndex(venue, 2n);
     // The successor goes quiet past USD's duration without ever committing EUR.
     advanceWitnessedIndex(venue, 20n);
     successor.commit(); // its return: USD restored; EUR, taken on committed, untouched
@@ -596,19 +617,20 @@ describe("§C2b: the fixes reviewed — the door that reads, the retired book, a
     incumbent.submitDemand(claim.op, claim.signature, [signed(leg, encodeLock(leg), SECRETS.alice)]);
     const before = served(incumbent); // at 0; the incumbent goes dark
     // GOLD goes to the successor early, which serves it punctually.
-    advanceWitnessedIndex(venue, 2n);
-    venue.publishReplacement(gold.name, replacementBy(gold, SECRETS.backer, SUCCESSOR, gold.name, 2n));
+    venue.publishReplacement(gold.name, replacementBy(gold, SECRETS.backer, SUCCESSOR_SECRET, gold.name, 2n));
     const successor = new Sequencer(SUCCESSOR_SECRET, venue);
     successor.register(gold, signBacking(SECRETS.backer, gold));
     successor.takeOver(gold, before);
+    advanceWitnessedIndex(venue, 2n);
     successor.commit(); // at 2: in force for GOLD
     advanceWitnessedIndex(venue, 8n);
     successor.commit(); // GOLD stays punctual
     // EUR arrives at 12, its handover index, carrying the predecessor's silence.
-    advanceWitnessedIndex(venue, 12n);
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR, eur.name, 12n));
+    // Witnessed at 8 to leave the lead time the takeover needs.
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 12n));
     successor.register(eur, signBacking(SECRETS.backer, eur));
     successor.takeOver(eur, before);
+    advanceWitnessedIndex(venue, 12n);
     successor.commit(); // at 12: in force for EUR too
     // At 12, EUR's gap is the predecessor's and GOLD's is not open at all.
     expect(compareBytes(gapOpen(venue, eur) as Uint8Array, KEYS.operator)).toBe(0);
@@ -655,11 +677,11 @@ describe("§C2b: the fixes reviewed — the door that reads, the retired book, a
     const eurReceipt = incumbent.submitTransfer(onEur.op, onEur.signature);
     const onUsd = transferOp(usd, SECRETS.carol, KEYS.carol, KEYS.bob, 10n, 0n);
     incumbent.submitTransfer(onUsd.op, onUsd.signature);
-    advanceWitnessedIndex(venue, 3n);
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR, eur.name, 3n));
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 3n));
     const successor = new Sequencer(SUCCESSOR_SECRET, venue);
     successor.register(eur, signBacking(SECRETS.backer, eur));
     successor.takeOver(eur, before);
+    advanceWitnessedIndex(venue, 3n);
     successor.commit(); // at 3: EUR is the successor's
     // The incumbent goes quiet on USD past its duration and returns.
     advanceWitnessedIndex(venue, 15n);

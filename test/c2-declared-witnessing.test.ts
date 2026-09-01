@@ -213,7 +213,7 @@ describe("§C2b: a grade is read on the backing's OWN declared venue", () => {
 
   it("proves no holding against a venue the backing does not declare", () => {
     const { venue, sequencer, backing } = setup();
-    const served = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const served = sequencer.commit();
     expect(provesHolding(venue, backing, served, KEYS.alice, 100n)).toBe(true);
 
     const stranger = new LocalVenue(OTHER_VENUE);
@@ -228,7 +228,7 @@ describe("§C2b: a grade is read on the backing's OWN declared venue", () => {
     // give. Both venues carry identical publications, so an empty answer here
     // cannot come from an empty record.
     const { venue, sequencer, backing } = setup();
-    const served = { snapshots: sequencer.snapshot(), commitment: sequencer.commit() };
+    const served = sequencer.commit();
     const stranger = new LocalVenue(OTHER_VENUE);
     stranger.publish(served.commitment);
     for (const v of [venue, stranger]) redeemAt(v, backing);
