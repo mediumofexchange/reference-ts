@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-01` [Handoff: slice 36 is built and owes its review round](decisions/2026-09.md#2026-09-01--handoff-slice-36-is-built-and-owes-its-review-round)
 - `2026-09-01` [Panel: the resume — the pin is a floor, the raise is from a held seat, and the pin the seat keeps is the book's own](decisions/2026-09.md#2026-09-01--panel-the-resume--the-pin-is-a-floor-the-raise-is-from-a-held-seat-and-the-pin-the-seat-keeps-is-the-books-own)
 - `2026-09-01` [The 35d round and its fix panel: the seat is a link and a provenance, and every refusal must leave a live path](decisions/2026-09.md#2026-09-01--the-35d-round-and-its-fix-panel-the-seat-is-a-link-and-a-provenance-and-every-refusal-must-leave-a-live-path)
 - `2026-08-31` [Slice 35d: the book built, and what building it decided](decisions/2026-08.md#2026-08-31--slice-35d-the-book-built-and-what-building-it-decided)
