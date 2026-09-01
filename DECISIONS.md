@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-01` [The 35d round and its fix panel: the seat is a link and a provenance, and every refusal must leave a live path](decisions/2026-09.md#2026-09-01--the-35d-round-and-its-fix-panel-the-seat-is-a-link-and-a-provenance-and-every-refusal-must-leave-a-live-path)
 - `2026-08-31` [Slice 35d: the book built, and what building it decided](decisions/2026-08.md#2026-08-31--slice-35d-the-book-built-and-what-building-it-decided)
 - `2026-08-29` [The 35c round: ordering is not obligation, and an era starts where its signer did](decisions/2026-08.md#2026-08-29--the-35c-round-ordering-is-not-obligation-and-an-era-starts-where-its-signer-did)
 - `2026-08-29` [Slice 35: the record is the backing's, and the grade names the incumbent](decisions/2026-08.md#2026-08-29--slice-35-the-record-is-the-backings-and-the-grade-names-the-incumbent)

@@ -533,6 +533,94 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     expect(() => heir.takeOver(eur, droppedLatest, droppedLatest)).toThrow(SequencerError);
   });
 
+  /**
+   * The incumbent serves a two-entry book, commits it, then commits a state
+   * that drops the backing; an heir is seated after that. The pinned target
+   * carries no log, so the evidence path licenses an EARLIER state — and each
+   * test below offers one only the term-precedence rule can refuse. Every
+   * fixture then walks the honest path the refusal leaves open (35d's round:
+   * three of these four conditions had no mutation that died).
+   */
+  function evidenceLicenses() {
+    const { venue, sequencer, eur } = setup();
+    sequencer.submitTransfer(
+      { backing: eur, from: KEYS.alice, to: KEYS.bob, quantity: 40n, nonce: 0n },
+      ed25519.sign(encodeTransferMessage(eur.name, KEYS.alice, KEYS.bob, 40n, 0n), SECRETS.alice),
+    );
+    const carried = commitAll(sequencer); // seq 0 at index 0: EUR [issue, transfer]
+    venue.advance(10n);
+    const dropped = commitWithout(venue, sequencer, eur); // seq 1 at 10: the pin
+    venue.advance(5n);
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, 15n));
+    venue.advance(1n);
+    const heir = new Sequencer(SECRETS.carol, venue);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
+    const eurLog = carried.snapshots.find((s) => compareBytes(s.name, eur.name) === 0)!.opLog;
+    return { venue, eur, heir, carried, dropped, eurLog };
+  }
+
+  it("the heir may not license its own commitment as the earlier state", () => {
+    // The heir signs, in its OWN term, a law-valid TRUNCATION of the book: the
+    // issuance kept, Bob's 40 gone. The drop evidence is genuine, the state
+    // roots, the replay is lawful — only its TERM refuses it: an earlier state
+    // is one from a term at or before the pin's, and the heir's is after.
+    const { venue, eur, heir, carried, dropped, eurLog } = evidenceLicenses();
+    const truncated = [{ name: eur.name, opLog: [eurLog[0]!] }];
+    const ownTerm: ServedState = {
+      snapshots: truncated,
+      commitment: signCommitment(SECRETS.carol, 0n, stateRoot(truncated)),
+    };
+    venue.publish(ownTerm.commitment);
+    expect(() => heir.takeOver(eur, ownTerm, dropped)).toThrow(SequencerError);
+    expect(heir.opLog(eur)).toHaveLength(0);
+    // The honest path the door leaves open: the last state that carried it.
+    heir.takeOver(eur, carried, dropped);
+    expect(heir.balance(eur, KEYS.bob)).toBe(40n);
+  });
+
+  it("a state the predecessor published out of force is not an earlier state", () => {
+    // The retired incumbent signs the same truncation AFTER losing force. It
+    // places in no term — and a state that places nowhere accuses nobody and
+    // licenses nothing.
+    const { venue, eur, heir, carried, dropped, eurLog } = evidenceLicenses();
+    venue.advance(1n);
+    const truncated = [{ name: eur.name, opLog: [eurLog[0]!] }];
+    const outOfForce: ServedState = {
+      snapshots: truncated,
+      commitment: signCommitment(
+        SECRETS.operator,
+        venue.nextSequenceFor(KEYS.operator),
+        stateRoot(truncated),
+      ),
+    };
+    venue.publish(outOfForce.commitment);
+    expect(() => heir.takeOver(eur, outOfForce, dropped)).toThrow(SequencerError);
+    expect(heir.opLog(eur)).toHaveLength(0);
+    heir.takeOver(eur, carried, dropped);
+    expect(heir.balance(eur, KEYS.bob)).toBe(40n);
+  });
+
+  it("a twin signed at the pinned commitment's own sequence is not an earlier state", () => {
+    // The incumbent equivocated: a second state at the sequence it published
+    // the drop at, this one carrying the backing. It roots, it is the
+    // incumbent's own signature, it places in the incumbent's own term — only
+    // "strictly before the target's sequence" refuses it, and taking it would
+    // seat the heir on one arm of an equivocation isEquivocation names.
+    const { eur, heir, carried, dropped } = evidenceLicenses();
+    const twin: ServedState = {
+      snapshots: carried.snapshots,
+      commitment: signCommitment(
+        SECRETS.operator,
+        dropped.commitment.sequence,
+        stateRoot(carried.snapshots),
+      ),
+    };
+    expect(() => heir.takeOver(eur, twin, dropped)).toThrow(SequencerError);
+    expect(heir.opLog(eur)).toHaveLength(0);
+    heir.takeOver(eur, carried, dropped);
+    expect(heir.balance(eur, KEYS.bob)).toBe(40n);
+  });
+
   it("still refuses a state that is not the incumbent's", () => {
     const { venue, eur, lastGood, droppedLatest } = toHandover();
     const heir = appoint(venue, eur);
