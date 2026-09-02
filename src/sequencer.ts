@@ -538,7 +538,7 @@ export class Sequencer {
     if (served === undefined) {
       if (carrying !== undefined) {
         throw new SequencerError(
-          "the record stands on a commitment for this backing: offer its state, keeping every drop already exhibited — takeOver(backing, thatState, ...the same drops) — or, where it carries nothing for this backing, exhibit it too and offer what stands behind it — takeOver(backing, theEarlierState, ...the same drops, thatState); a backing the record never carried is opened in this operator's next commitment instead — commit({ opening: [{ backing, record: thatState }] })",
+          "the record stands on a commitment for this backing: offer its state, keeping every drop already exhibited — takeOver(backing, thatState, ...the same drops) — or, where it carries nothing for this backing, exhibit it too and offer what stands behind it — takeOver(backing, theEarlierState, ...the same drops, thatState); a backing the record never carried is opened in this operator's next commitment instead, on the record's LAST commitment rather than this step — commit({ opening: [{ backing, record: theRecordsLastState }] })",
         );
       }
     } else {
@@ -550,7 +550,7 @@ export class Sequencer {
       const committed = this.recorded(held, served, carrying.commitment);
       if (committed.kind === "dropped") {
         throw new SequencerError(
-          "that commitment carries no log for this backing: exhibit it and offer what the walk reaches behind it — the exhibits are the record's own drops, newest first and none skipped, so the ones already exhibited come before it: takeOver(backing, theEarlierState, ...the drops above it, thatState) — or, where the record never carried this backing, open it in this operator's next commitment — commit({ opening: [{ backing, record: thatState }] })",
+          "that commitment carries no log for this backing: exhibit it and offer what the walk reaches behind it — the exhibits are the record's own drops, newest first and none skipped, so the ones already exhibited come before it: takeOver(backing, theEarlierState, ...the drops above it, thatState) — or, where the record never carried this backing, open it in this operator's next commitment, exhibiting the record's LAST commitment there rather than this step's — commit({ opening: [{ backing, record: theRecordsLastState }] })",
         );
       }
       // All or nothing. committedLogFor checks the root and the signature and
@@ -675,7 +675,15 @@ export class Sequencer {
     // signature made an explicit `undefined` exhibit reachable from JavaScript
     // (found regression-reviewing the fix), and a boot loop that catches
     // SequencerError to try its next call must not crash instead.
-    if (typeof state !== "object" || state === null || typeof state.commitment !== "object" || state.commitment === null) {
+    if (
+      typeof state !== "object" ||
+      state === null ||
+      typeof state.commitment !== "object" ||
+      state.commitment === null ||
+      !(state.commitment.operator instanceof Uint8Array) ||
+      typeof state.commitment.sequence !== "bigint" ||
+      !(state.commitment.root instanceof Uint8Array)
+    ) {
       throw new SequencerError(
         "that is not a served state: an exhibit and an offered state are each a commitment with the snapshots it roots",
       );
@@ -690,7 +698,7 @@ export class Sequencer {
     const committed = committedLogFor(backing, this.venue, state);
     if (committed === undefined) {
       throw new SequencerError(
-        "that state does not re-root to the commitment the record holds here: offer the served state the operator published with it — the snapshots it signed, not a reconstruction",
+        "that state does not re-root to the commitment the record holds here: offer the served state the operator published with it — the snapshots it signed, not a reconstruction — takeOver(backing, thatState, ...the drops above it)",
       );
     }
     return committed;
@@ -1559,7 +1567,15 @@ export class Sequencer {
     // predecessor one publication (the fix panel's security probe), and a
     // silent drop was a fault against an honest heir (its inventory probe).
     // `awaitingTakeover` is the same condition as a readable list.
-    const acknowledged = new Set((options?.dropping ?? []).map((backing) => backing.nameHex));
+    // Lists, in the door's voice: a caller on the previous shape (`opening`
+    // took bare backings) is told the new one rather than crashed (the fix
+    // batch's review).
+    const droppings = options?.dropping ?? [];
+    const openings = options?.opening ?? [];
+    if (!Array.isArray(droppings) || !Array.isArray(openings)) {
+      throw new SequencerError("`dropping` and `opening` are lists: backings to drop, and { backing, record } pairs to open");
+    }
+    const acknowledged = new Set(droppings.map((backing) => backing.nameHex));
     // Membership in the ONE read, not a second `serves` pass: re-deriving here
     // was the TOCTOU the comment above claims closed — on a venue whose clock
     // moves mid-call, a backing could flip between the two reads and be
@@ -1594,7 +1610,13 @@ export class Sequencer {
     // force and its next commitment rooted a book it did not serve (the
     // fix's regression round). One read, kept — as the served pin loop keeps
     // its stored link.
-    const opened = (options?.opening ?? []).map(({ backing, record }) => {
+    const opened = openings.map((entry) => {
+      if (typeof entry !== "object" || entry === null || typeof entry.backing !== "object" || entry.backing === null) {
+        throw new SequencerError(
+          "`opening` takes { backing, record } pairs: the backing, and the record's last commitment for it as the served state it published",
+        );
+      }
+      const { backing, record } = entry;
       const held = this.served(backing);
       const chain = this.walkedInForce(held);
       const tip = chain[chain.length - 1] as Succession;
@@ -1641,7 +1663,7 @@ export class Sequencer {
     }
     if (abandoned.some((backing) => !acknowledged.has(backing.nameHex))) {
       throw new SequencerError(
-        "this commitment would drop a backing this operator is in force for: it takes the state over first (takeOver), opens it here as a book the record never carried (`opening`), or names it in `dropping` to drop it deliberately",
+        "this commitment would drop a backing this operator is in force for: it takes the state over first (takeOver); a backing the record never carried is opened here (`opening`); a backing this operator means to stop serving is named in `dropping` — a drop of a book the record carried is a rewritten history against this key, and opening the backing against that drop afterwards is the wipe, signed twice",
       );
     }
     this.caughtUp(served);

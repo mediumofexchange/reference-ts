@@ -621,7 +621,7 @@ describe("§C2: the empty book the walk cannot pay for is a signed claim (`openi
     // `commit` hands every running process. Growth from nothing is no fault.
     const { venue, eur, sequencer, first, second } = withHistory();
     expect(serving(sequencer, eur)).toBe(false);
-    expect(() => sequencer.commit()).toThrow(/opens it here/);
+    expect(() => sequencer.commit()).toThrow(/is opened here/);
     expect(() => issue(sequencer, eur, 1n, 0n)).toThrow(/opens it in its next commitment/);
     // A stale exhibit is not the record's last, and is refused by name.
     expect(() => sequencer.commit({ opening: [{ backing: eur, record: stateOf(first) }] })).toThrow(/at this step/);
@@ -670,7 +670,7 @@ describe("§C2: the empty book the walk cannot pay for is a signed claim (`openi
     expect(twin.balance(eur, KEYS.bob)).toBe(40n);
   });
 
-  it("opening is strict in both directions: a served backing, a book held, one not in force, one also dropped, one the record holds nothing for, and one not registered are refused", () => {
+  it("opening is strict: a served backing, one also dropped, one not registered, and one not yet in force are refused, a held book counts as served, and from its effective index the heir's opening is the honest one", () => {
     const { venue, usd, eur, sequencer, first, second } = withHistory();
     // Served: USD is seated and serving.
     expect(() => sequencer.commit({ opening: [{ backing: usd, record: stateOf(second) }] })).toThrow(/cannot open/);

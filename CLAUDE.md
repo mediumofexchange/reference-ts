@@ -121,7 +121,7 @@ that produced it is in the decision log — reach it through the index in
   record's unbounded answer, so a lost book, a superseded twin and a stale
   handover copy are one detectable condition. **Currency is `serves`**: a
   current seat keeps its uncommitted tail, a stale one drops it to the mark —
-  never below it, so a seat serves no LESS than the book the record stands on.
+  never below it: a takeOver serves no LESS than the book the record stands on.
   A replacement not strictly later than the link it replaces is void unless
   it names the incumbent (a revocation). A key seated anew commits before it
   co-signs (`shut`, the same door as the return from silence), and a
@@ -256,10 +256,10 @@ the move to a blinded construction — which is why they are rules, not code.
   every committed state from the last carrying one forward, so an operator's
   replica keeps its own committed states, all of them. Naming an un-resumed
   backing in `dropping` instead roots a drop of a book the record carried —
-  a rewritten history against this key forever: `dropping` is for a backing
-  this operator means to stop serving, never a way past a resume. Losing the
-  race to a twin is detected, not excused: the repair drops the loser's tail
-  with its receipts, and the payee's signed request makes each a fresh act.
+  a rewritten history against this key forever, and the dropped backing is
+  then openable against that very drop — the wipe, two signed faults away:
+  `dropping` is for a backing this operator means to stop serving, never a
+  way past a resume; a losing twin is detected, not excused, and its tail drops.
 - **One writer at a time**, or a threshold key. Two live servers holding one
   operator key co-sign conflicting operations, and `fault.ts` proves that
   against the operator exactly as if it were malice — the protocol cannot tell
@@ -300,8 +300,8 @@ the move to a blinded construction — which is why they are rules, not code.
   perfectly live, and a stranger reading a root cannot tell which backings it
   covers. Every path against that operator runs through the last state that
   *did* carry the backing — the non-service grade (`isNonServing`), the fault
-  (`isRewrittenHistory`), the successor's takeover (`takeOver`, which needs
-  every drop above that state as well — the boot rule above). The party who
+  (`isRewrittenHistory`), the successor's takeover (`takeOver`, plus every
+  drop above that state — the boot rule). The party who
   would otherwise serve it on request is the one with the motive not to, which
   is the same shape as the receipt rule above: obtain the evidence while the
   party holding it still has a reason to give it to you.
