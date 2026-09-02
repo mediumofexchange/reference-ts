@@ -173,10 +173,13 @@ describe("§C2: two replacements naming one predecessor, and revocation before f
   //
   // **Two of that family were NOT fences and did not retire**, which this block
   // once claimed they did: the strictly-before boundary and the first-witnessing
-  // dedup are both live, and the tests below hold them. The SAME-INDEX TIE is
-  // still open — two witnessed at one index resolve by arrival order, so two
-  // readers can disagree about a past index — and it is open because the obvious
-  // rule is grindable by the rule-holder. See DECISIONS.md.
+  // dedup are both live, and the tests below hold them. The SAME-INDEX TIE was
+  // open when this block was written — two witnessed at one index resolved by
+  // arrival order, so two readers could disagree about a past index — and it
+  // is closed now: they resolve to the lesser record hash, grindable by the
+  // rule-holder and priced as such (the walk's docstring; DECISIONS.md). This
+  // comment said "still open" for a slice longer than it was true (found by the
+  // slice-37 panel's inventory angle).
 
   it("naming the incumbent is not a handover, and does not freeze the chain", () => {
     const { venue, backing } = setup();

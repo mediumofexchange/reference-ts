@@ -57,7 +57,7 @@ import {
 } from "./commitment.js";
 import { utf8Encoder } from "./contexts.js";
 import { decodePublishedOp, type PublishedOp } from "./oplog.js";
-import { decodeReplacement, type Replacement, type WitnessedReplacement } from "./replacement.js";
+import { decodeReplacement, type Replacement, type WitnessedReplacement, encodeReplacement } from "./replacement.js";
 import {
   decodeRevocation,
   isSignedRevocation,
@@ -265,6 +265,15 @@ export class ErgoVenue implements Venue {
       await this.syncRevocations(node, backing.obligor);
       this.revoked.add(bytesToHex(backing.obligor));
     }
+    // The height and every covered backing's records are in place: the view
+    // answers the clock from here. Marked BEFORE the frontier walk below,
+    // because that walk reads `witnessedIndex`, which refuses on an unsynced
+    // view — so a first sync of any backing declaring a replacement rule
+    // threw its own VenueError out of sync() (found by the slice-37 panel's
+    // inventory angle; the Ergo tests had only ever re-synced a view whose
+    // flag was already set). An operator not yet fetched is still refused
+    // per key by `requireFetched`, which is the guard the frontier widens.
+    this.synced = true;
     // Then every operator the backing has had, not only the key E names. The
     // chain is only walkable once the replacements are in, and each successor's
     // commitments have to be in before the walk can tell whether it took force —
@@ -283,7 +292,6 @@ export class ErgoVenue implements Venue {
         }
       }
     }
-    this.synced = true;
   }
 
   /**
@@ -474,7 +482,16 @@ export class ErgoVenue implements Venue {
   replacementsFor(backingName: Uint8Array): WitnessedReplacement[] {
     this.requireCovered(backingName);
     const log = this.replacements.get(bytesToHex(backingName)) ?? [];
-    return log.map((w) => ({ replacement: w.value, at: w.at }));
+    // Copies on the way out, through the record's own canonical encoding —
+    // the interface promises them, LocalVenue keeps it, and this view handed
+    // out its stored objects: one reader overwriting a field it was given
+    // rewrote succession for every later reader in the process (found by the
+    // slice-37 panel's inventory angle). The walk's memo retains what the
+    // venue hands it, so the copy is what keeps that memo the reader's own.
+    return log.map((w) => ({
+      replacement: decodeReplacement(encodeReplacement(backingName, w.value)).replacement,
+      at: w.at,
+    }));
   }
 
   latestFor(operator: Uint8Array, asOf?: bigint): Commitment | undefined {

@@ -16,7 +16,7 @@ import { demandHash, encodeDemand, encodeLock, type DemandOp, type LockOp } from
 import { Sequencer, SequencerError } from "../src/sequencer.js";
 import { isSilent, provesHolding, quietFor } from "../src/recovery.js";
 import { VenueError } from "../src/venue.js";
-import { operatorAt } from "../src/replacement.js";
+import { encodeReplacement, operatorAt, replacementMessage, ROLE_OPERATOR } from "../src/replacement.js";
 import { KEYS, SECRETS } from "./support.js";
 
 // Ergo read as a witness venue. The chain witnesses and adjudicates nothing, so
@@ -407,6 +407,79 @@ describe("a view answers only for what it was synced for", () => {
     await v.sync(new FakeNode().at(100n).putCommitment(commitment(0n, 0xaa), 40n), [backing]);
     expect(() => v.latestFor(KEYS.operator)).not.toThrow();
     expect(v.latestFor(KEYS.operator)?.sequence).toBe(0n);
+  });
+
+  it("a FIRST sync of a backing that declares a replacement rule completes, and its chain reads", async () => {
+    // The frontier loop walks the chain, the walk reads the clock, and the
+    // clock refused on an unsynced view — so the first sync of any backing
+    // with a rule threw its own VenueError out of sync(). Every earlier test
+    // re-synced a view whose flag was already set by a rule-less backing
+    // (found by the slice-37 panel's inventory angle).
+    const ruled = makeBacking({
+      obligor: KEYS.backer2,
+      payout: { thing: "USD", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: {
+        setting: "transparent",
+        operator: KEYS.operator,
+        silence: { noCommitmentDuration: 10n, challengeWindow: 5n },
+        replacementRule: KEYS.backer2,
+        witnessing: { venue: VENUE_ID, interval: 5n },
+      },
+    });
+    const v = venue();
+    await v.sync(new FakeNode().at(200n).putCommitment(commitment(0n, 0xaa), 195n), [ruled]);
+    expect(operatorAt(ruled, v, v.witnessedIndex())).toEqual(KEYS.operator);
+    expect(isSilent(v, ruled)).toBe(false);
+  });
+
+  it("hands out replacement records as copies: a reader that overwrites one does not rewrite succession", async () => {
+    // The interface promises copies and LocalVenue keeps it; this view handed
+    // out its stored objects, so one reader mutating a field it was given
+    // changed who is in force for every later reader in the process (found
+    // by the slice-37 panel's inventory angle). The walk's memo retains what
+    // the venue hands it, which is what makes this load-bearing now.
+    const ruled = makeBacking({
+      obligor: KEYS.backer2,
+      payout: { thing: "USD", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: {
+        setting: "transparent",
+        operator: KEYS.operator,
+        silence: { noCommitmentDuration: 1000n, challengeWindow: 5n },
+        replacementRule: KEYS.backer2,
+        witnessing: { venue: VENUE_ID, interval: 5n },
+      },
+    });
+    const unsigned = {
+      role: ROLE_OPERATOR,
+      successor: KEYS.alice,
+      predecessor: ruled.name,
+      effective: 150n,
+      signature: new Uint8Array(64),
+      successorSignature: new Uint8Array(64),
+    };
+    const message = replacementMessage(ruled.name, unsigned);
+    const replacement = {
+      ...unsigned,
+      signature: ed25519.sign(message, SECRETS.backer2),
+      successorSignature: ed25519.sign(message, SECRETS.alice),
+    };
+    const node = new FakeNode()
+      .at(200n)
+      .putCommitment(commitment(0n, 0xaa), 100n)
+      .put(ADDRESSING.publications(ruled.name), {
+        inclusionHeight: 140n,
+        registers: { R4: ruled.name, R5: encodeReplacement(ruled.name, replacement) },
+      });
+    const v = venue();
+    await v.sync(node, [ruled]);
+    const [first] = v.replacementsFor(ruled.name);
+    const [second] = v.replacementsFor(ruled.name);
+    expect(first!.replacement).not.toBe(second!.replacement);
+    expect(operatorAt(ruled, v, v.witnessedIndex())).toEqual(KEYS.alice);
+    first!.replacement.successor.fill(0);
+    expect(operatorAt(ruled, v, v.witnessedIndex())).toEqual(KEYS.alice);
   });
 });
 
