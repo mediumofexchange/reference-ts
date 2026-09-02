@@ -530,6 +530,42 @@ describe("§C2: the walk — the book is what the record's descent reaches", () 
     expect(serving(fresh, eur)).toBe(true);
   });
 
+  it("a malformed commitment, opening element, or option list is refused in the door's own voice too", () => {
+    // The review of the fix batch: the first guard was one level deep, so a
+    // commitment with a string operator, a number sequence or no root
+    // reached commitmentIdentity and threw a raw Error; `opening`'s element
+    // shape — the pre-fix bare backing among them — and a non-list option
+    // threw TypeErrors out of commit. Each is a refusal now, from either
+    // door, and nothing is mutated on the way out.
+    const { venue, eur, fresh, c2, d1, d2 } = droppedTwice();
+    const loose = fresh as unknown as { takeOver: (...args: unknown[]) => void; commit: (o: unknown) => unknown };
+    const D2 = stateOf(d2);
+    const D1 = stateOf(d1);
+    for (const commitment of [
+      { ...c2.commitment, operator: "x" },
+      { ...c2.commitment, sequence: 0 },
+      { ...c2.commitment, root: undefined },
+    ]) {
+      expect(() => loose.takeOver(eur, { snapshots: c2.snapshots, commitment })).toThrow(/not a served state/);
+      expect(() => loose.takeOver(eur, c2, { snapshots: D2.snapshots, commitment }, D1)).toThrow(/not a served state/);
+    }
+    const usd = backingFor(venue, "USD");
+    fresh.register(usd, signBacking(SECRETS.backer, usd));
+    at(venue, 7n); // past the fixture's last commitment index, so the door's list guards are what answer
+    expect(() => loose.commit({ opening: [usd] })).toThrow(/takes \{ backing, record \} pairs/);
+    expect(() => loose.commit({ opening: [undefined] })).toThrow(/takes \{ backing, record \} pairs/);
+    expect(() => loose.commit({ opening: [{ backing: null, record: D2 }] })).toThrow(/takes \{ backing, record \} pairs/);
+    expect(() => loose.commit({ opening: 5 })).toThrow(/are lists/);
+    expect(() => loose.commit({ dropping: "eur" })).toThrow(/are lists/);
+    expect(() => loose.commit({ opening: [{ backing: usd, record: { snapshots: D2.snapshots, commitment: { ...d2.commitment, sequence: 0 } } }] })).toThrow(/not a served state/);
+    expect(fresh.opLog(eur)).toHaveLength(0);
+    expect(venue.nextSequenceFor(KEYS.operator)).toBe(d2.commitment.sequence + 1n); // nothing published
+    // The honest calls still stand.
+    fresh.takeOver(eur, c2, D2, D1);
+    fresh.commit({ opening: [{ backing: usd, record: D2 }] });
+    expect(serving(fresh, usd)).toBe(true);
+  });
+
   it("the wipe is refused at a pinned seat: the empty book is not licensed off one exhibit where the history carries the book", () => {
     // The round's A3: the empty-book-by-evidence arm licensed the empty book
     // off the record's LAST commitment with no reference to what stood
