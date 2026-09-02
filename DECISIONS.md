@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-02` [Handoff: slice 36 is fixed, reviewed twice over, and waits on the maintainer](decisions/2026-09.md#2026-09-02--handoff-slice-36-is-fixed-reviewed-twice-over-and-waits-on-the-maintainer)
 - `2026-09-02` [The walk's regression round: two blockers in the opening claim, both the recurring shape, and the fixes](decisions/2026-09.md#2026-09-02--the-walks-regression-round-two-blockers-in-the-opening-claim-both-the-recurring-shape-and-the-fixes)
 - `2026-09-02` [Panel: the walk — the book is what the record's descent reaches, the empty book is a signed claim, and currency is `serves`](decisions/2026-09.md#2026-09-02--panel-the-walk--the-book-is-what-the-records-descent-reaches-the-empty-book-is-a-signed-claim-and-currency-is-serves)
 - `2026-09-01` [The slice-36 round: the raise is sound, its evidence arms are not, and a "no-op" that un-serves](decisions/2026-09.md#2026-09-01--the-slice-36-round-the-raise-is-sound-its-evidence-arms-are-not-and-a-no-op-that-un-serves)
