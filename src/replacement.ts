@@ -258,6 +258,111 @@ export function successionAhead(backing: Backing, venue: Venue): Succession[] {
   return pending === undefined ? chain : [...chain, pending];
 }
 
+/**
+ * A record the rule-holder really signed, with its hash: everything the walk
+ * needs about a published replacement that does not depend on the clock.
+ */
+interface Admitted extends WitnessedReplacement {
+  readonly hash: Uint8Array;
+}
+
+/**
+ * The walk's expensive step, taken once per record and held for as long as the
+ * venue that answered it is.
+ *
+ * **Two signature verifications decide whether a record counts; byte compares
+ * decide everything after.** `isSignedReplacement` is a pure function of
+ * (backing, record): the rule-holder's key comes from inside the name, the
+ * message from the record's own fields, so a verdict never changes and never
+ * needs asking twice. Which link a record names, whether it supersedes, which of
+ * two at one index has the lesser hash — all of that is a comparison over the
+ * handful of records that passed. Anyone may publish a record for free and the
+ * venue takes no view, so the expensive step is the adversary's to multiply and
+ * the cheap one is the honest record's. Measured on this machine: one strict
+ * Ed25519 verification is ~5 ms and a link comparison is well under a
+ * microsecond, so a walk that verifies before it compares prices its reader at
+ * the stranger's flood — seconds per door call per backing, and minutes of the
+ * boot window the resume rule holds open until every registered backing serves.
+ *
+ * **The memo keeps only what it ADMITTED.** A junk record leaves nothing behind
+ * but the count of records already judged, so a flood costs this map one integer
+ * rather than a key per record: the memory bound is the honest record's, which
+ * is the same thing the cost is. And nothing here needs an eviction rule — a
+ * `WeakMap` on the venue holds the memo exactly as long as the records it
+ * describes are reachable, and a second venue holding different records for one
+ * backing name gets its own memo rather than this one's answers.
+ *
+ * **What it leans on is the Venue contract's append-only clause — for WHO IS
+ * IN FORCE, not merely for freshness.** Positions 0 up to `through` have been
+ * judged and are never judged again for the life of the venue object, so a
+ * view that re-gathers must only ever move that count forward (`ErgoVenue.sync`'s
+ * finalised prefix is exactly that promise). A view that LOST records is out of
+ * contract and is judged again from scratch rather than trusted; a view that
+ * CHANGED a record in place at the same length — a reorganisation below the
+ * declared depth, a third-party adapter — is not detected, and no later append
+ * heals it: an operator seated from a record the venue no longer holds stays
+ * seated for this reader. That is the price, stated here because it is the
+ * only one (the slice-37 panel; the per-record verdict memo that removes it
+ * costs fourteen times the per-walk residual and is the fallback if the clause
+ * is ever weakened). The sequencer's walk cache already keys on this clause;
+ * this holds the same assumption one layer down, where every reader shares it
+ * instead of only the one that thought to cache.
+ *
+ * **The verify is first, and nothing unverified is hashed.** `isSignedReplacement`
+ * carries its own try/catch, so a malformed record a venue adapter hands out
+ * drops itself here; hashed first, it would throw inside `answering` and
+ * collapse the whole walk to the genesis chain — the retired operator back in
+ * force for that reader. And every record the walk's later rules compare — the
+ * fields-hash dedup, the same-index tie, supersession, the self-naming
+ * exemption — has passed here: a junk twin of an honest record (its fields, a
+ * stranger's signatures) published first would otherwise take the dedup slot
+ * and then fail, and the signed handover would vanish (the panel's probes).
+ */
+const EMPTY_RULE = new Uint8Array(0);
+const admittedByVenue = new WeakMap<Venue, Map<string, { through: number; records: Admitted[] }>>();
+
+function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
+  const published = venue.replacementsFor(backing.name);
+  let byBacking = admittedByVenue.get(venue);
+  if (byBacking === undefined) {
+    byBacking = new Map();
+    admittedByVenue.set(venue, byBacking);
+  }
+  // The key carries every input the admission is a function of: the backing
+  // NAME (inside the signed message) and the RULE KEY (what the first
+  // signature is checked against). The Backing brand is a phantom type with
+  // no runtime property, so an object carrying the real name and another
+  // rule key is a Backing at runtime — and under a name-only key its admitted
+  // records were served to the real backing (the panel, twice over). One hex
+  // string per backing, nothing per record.
+  const memoKey = backing.nameHex + ":" + bytesToHex(backing.evidence.replacementRule ?? EMPTY_RULE);
+  let memo = byBacking.get(memoKey);
+  if (memo === undefined || memo.through > published.length) {
+    memo = { through: 0, records: [] };
+    byBacking.set(memoKey, memo);
+  }
+  // Judged into a local list, then both writes together with nothing that can
+  // throw between them: a memo whose records ran ahead of its count, or
+  // behind it, would judge a position twice or never.
+  const fresh: Admitted[] = [];
+  for (let i = memo.through; i < published.length; i++) {
+    const w = published[i] as WitnessedReplacement;
+    if (!isSignedReplacement(backing, w.replacement)) continue;
+    // A replacement cannot take force before it was witnessed (§C2), and one
+    // declaring an earlier index is refused rather than corrected: the
+    // rule-holder does not get to backdate a handover. Clock-free like the
+    // signature — it compares the record against its own witnessing — so it
+    // belongs to the step that is taken once.
+    if (w.replacement.effective < w.at) continue;
+    // Hashed here rather than once per link: the hash is the record's identity
+    // for the dedup AND for the same-index tie the walk resolves below.
+    fresh.push({ ...w, hash: replacementHash(backing.name, w.replacement) });
+  }
+  memo.records.push(...fresh);
+  memo.through = published.length;
+  return memo.records;
+}
+
 function walkSuccession(
   backing: Backing,
   venue: Venue,
@@ -273,18 +378,7 @@ function walkSuccession(
   return answering(() => {
     if (backing.evidence.replacementRule === undefined) return { chain };
     const now = venue.witnessedIndex();
-    // Hashed once for the whole walk rather than once per link: the hash is the
-    // record's identity for the dedup AND for the same-index tie below, and
-    // anyone may publish a replacement for free, so the number of records is the
-    // adversary's to grow.
-    const witnessed = venue
-      .replacementsFor(backing.name)
-      .filter((w) => isSignedReplacement(backing, w.replacement))
-      // A replacement cannot take force before it was witnessed (§C2), and one
-      // declaring an earlier index is refused rather than corrected: the
-      // rule-holder does not get to backdate a handover.
-      .filter((w) => w.replacement.effective >= w.at)
-      .map((w) => ({ ...w, hash: replacementHash(backing.name, w.replacement) }));
+    const witnessed = admitted(backing, venue);
 
     const seen = new Set<string>([bytesToHex(backing.name)]);
     let link = backing.name;
@@ -328,7 +422,7 @@ function walkSuccession(
       // it for free by publishing one record alone. A tie between two DIFFERENT
       // rule-holders cannot be built while E's replacementRule is one key;
       // if that ever changes, this rule is the one to reopen. See DECISIONS.md.
-      const candidates: typeof witnessed = [];
+      const candidates: Admitted[] = [];
       {
         const distinct = new Set<string>();
         for (const w of witnessed
@@ -357,7 +451,7 @@ function walkSuccession(
       // sorted (both found reviewing this slice). Skipped, not broken on: a
       // candidate at a genuinely later index can still supersede or, after a
       // revocation, stand fresh.
-      let chosen: (typeof witnessed)[number] | undefined;
+      let chosen: Admitted | undefined;
       let consideredAt: bigint | undefined;
       for (const candidate of candidates) {
         if (consideredAt !== undefined && candidate.at === consideredAt) continue;
@@ -607,15 +701,11 @@ export function isNamedSuccessor(backing: Backing, venue: Venue, key: Uint8Array
     const chain = successionOf(backing, venue);
     const tip = chain[chain.length - 1] as Succession;
     if (compareBytes(tip.operator, key) === 0) return false;
-    return venue
-      .replacementsFor(backing.name)
-      .some(
-        (w) =>
-          isSignedReplacement(backing, w.replacement) &&
-          w.replacement.effective >= w.at &&
-          compareBytes(w.replacement.predecessor, tip.link) === 0 &&
-          compareBytes(w.replacement.successor, key) === 0,
-      );
+    return admitted(backing, venue).some(
+      (w) =>
+        compareBytes(w.replacement.predecessor, tip.link) === 0 &&
+        compareBytes(w.replacement.successor, key) === 0,
+    );
   }, false);
 }
 
