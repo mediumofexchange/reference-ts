@@ -433,6 +433,156 @@ describe("a view answers only for what it was synced for", () => {
     expect(isSilent(v, ruled)).toBe(false);
   });
 
+  it("a half-fetched operator refuses rather than reading as never having committed: on a node error, and inside the fetch", async () => {
+    // The frontier loop marked an operator fetched BEFORE awaiting its fetch,
+    // so with the view answering from before that loop, a punctual heir read
+    // `latestFor` as nothing — never committed — for the whole round trip,
+    // and forever if the node erred: a false silence grade (the slice-37
+    // review's blocker). Marked after, the guard refuses in both windows.
+    const ruled = makeBacking({
+      obligor: KEYS.backer2,
+      payout: { thing: "USD", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: {
+        setting: "transparent",
+        operator: KEYS.operator,
+        silence: { noCommitmentDuration: 10n, challengeWindow: 5n },
+        replacementRule: KEYS.backer2,
+        witnessing: { venue: VENUE_ID, interval: 5n },
+      },
+    });
+    const unsigned = {
+      role: ROLE_OPERATOR,
+      successor: KEYS.alice,
+      predecessor: ruled.name,
+      effective: 150n,
+      signature: new Uint8Array(64),
+      successorSignature: new Uint8Array(64),
+    };
+    const message = replacementMessage(ruled.name, unsigned);
+    const replacement = {
+      ...unsigned,
+      signature: ed25519.sign(message, SECRETS.backer2),
+      successorSignature: ed25519.sign(message, SECRETS.alice),
+    };
+    const heirsBoxes = ADDRESSING.commitments(KEYS.alice);
+    const heirs = signCommitment(SECRETS.alice, 0n, stateRoot([]));
+    const fill = (node: FakeNode) =>
+      node
+        .at(200n)
+        .putCommitment(commitment(0n, 0xaa), 100n)
+        .put(ADDRESSING.publications(ruled.name), {
+          inclusionHeight: 140n,
+          registers: { R4: ruled.name, R5: encodeReplacement(ruled.name, replacement) },
+        })
+        .putCommitment(heirs, 190n);
+    // (a) the node errs on the heir's commitments: sync rejects, and the heir
+    // is refused, not read as silent.
+    class Errs extends FakeNode {
+      override async boxesByAddress(address: string) {
+        if (address === heirsBoxes) throw new Error("node: connection reset");
+        return super.boxesByAddress(address);
+      }
+    }
+    const v = venue();
+    await expect(v.sync(fill(new Errs()), [ruled])).rejects.toThrow(/connection reset/);
+    expect(() => v.witnessedIndex()).toThrow(VenueError); // the view is un-marked again
+    expect(() => v.latestFor(KEYS.alice)).toThrow(VenueError);
+    expect(() => isSilent(v, ruled)).toThrow(VenueError);
+    // (b) the window inside the heir's fetch: a concurrent reader is refused
+    // there too, and answered once the fetch has landed.
+    const seen: string[] = [];
+    const w = venue();
+    class Observes extends FakeNode {
+      override async boxesByAddress(address: string) {
+        if (address === heirsBoxes) {
+          try {
+            seen.push(String(isSilent(w, ruled)));
+          } catch (e) {
+            seen.push(e instanceof VenueError ? "refused" : "other");
+          }
+        }
+        return super.boxesByAddress(address);
+      }
+    }
+    await w.sync(fill(new Observes()), [ruled]);
+    expect(seen).toEqual(["refused"]);
+    expect(isSilent(w, ruled)).toBe(false);
+  });
+
+  it("a view being re-gathered refuses even its clock: un-marked on entry, not only on failure", async () => {
+    // Every record read already refuses mid-sync through the per-key guards
+    // (covered and fetched are cleared first); the clock had no such guard,
+    // so a reader asking only the index got the new height over the old
+    // view's absence. Un-marked on entry, the clock refuses too.
+    const v = venue();
+    await v.sync(new FakeNode().at(100n).putCommitment(commitment(0n, 0xaa), 95n), [backing]);
+    expect(v.witnessedIndex()).toBe(97n);
+    const seen: string[] = [];
+    class Peeks extends FakeNode {
+      override async indexedHeight() {
+        try {
+          seen.push(String(v.witnessedIndex()));
+        } catch (e) {
+          seen.push(e instanceof VenueError ? "refused" : "other");
+        }
+        return super.indexedHeight();
+      }
+    }
+    await v.sync(new Peeks().at(120n).putCommitment(commitment(0n, 0xaa), 95n), [backing]);
+    expect(seen).toEqual(["refused"]);
+    expect(v.witnessedIndex()).toBe(117n);
+  });
+
+  it("a re-gathered view judges its records again: the walk's memo does not survive a sync that replaced them", async () => {
+    // The memo is the venue object's, and a re-synced view is the same
+    // object over different records at the same count — the one change the
+    // memo's positional count cannot see. sync says so (the review's ADV-2).
+    const ruled = makeBacking({
+      obligor: KEYS.backer2,
+      payout: { thing: "USD", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: {
+        setting: "transparent",
+        operator: KEYS.operator,
+        silence: { noCommitmentDuration: 1000n, challengeWindow: 5n },
+        replacementRule: KEYS.backer2,
+        witnessing: { venue: VENUE_ID, interval: 5n },
+      },
+    });
+    const naming = (successor: Uint8Array, successorSecret: Uint8Array) => {
+      const unsigned = {
+        role: ROLE_OPERATOR,
+        successor,
+        predecessor: ruled.name,
+        effective: 150n,
+        signature: new Uint8Array(64),
+        successorSignature: new Uint8Array(64),
+      };
+      const message = replacementMessage(ruled.name, unsigned);
+      return {
+        ...unsigned,
+        signature: ed25519.sign(message, SECRETS.backer2),
+        successorSignature: ed25519.sign(message, successorSecret),
+      };
+    };
+    const nodeFor = (r: ReturnType<typeof naming>, secret: Uint8Array) =>
+      new FakeNode()
+        .at(200n)
+        .putCommitment(commitment(0n, 0xaa), 100n)
+        .put(ADDRESSING.publications(ruled.name), {
+          inclusionHeight: 140n,
+          registers: { R4: ruled.name, R5: encodeReplacement(ruled.name, r) },
+        })
+        .putCommitment(signCommitment(secret, 0n, stateRoot([])), 190n);
+    const v = venue();
+    await v.sync(nodeFor(naming(KEYS.alice, SECRETS.alice), SECRETS.alice), [ruled]);
+    expect(operatorAt(ruled, v, v.witnessedIndex())).toEqual(KEYS.alice);
+    await v.sync(nodeFor(naming(KEYS.bob, SECRETS.bob), SECRETS.bob), [ruled]);
+    expect(operatorAt(ruled, v, v.witnessedIndex())).toEqual(KEYS.bob);
+    expect(isSilent(v, ruled)).toBe(false);
+  });
+
   it("hands out replacement records as copies: a reader that overwrites one does not rewrite succession", async () => {
     // The interface promises copies and LocalVenue keeps it; this view handed
     // out its stored objects, so one reader mutating a field it was given

@@ -192,9 +192,12 @@ export class Sequencer {
   private readonly seatedFor = new Map<string, { link: string; pin: string | undefined }>();
 
   // Backing name hex -> the succession walk, memoised against the venue state
-  // it was walked at. Walking verifies a signature per published replacement
-  // and anyone may publish one for free, so the walk's cost is the adversary's
-  // to grow — and `serves` sits on the hottest path in this file. Both halves
+  // it was walked at. Walking used to verify a signature per published
+  // replacement on every call; since slice 37 the walk's own memo does that
+  // once per record, and what this cache saves is the venue's decode of the
+  // record and the sort over the admitted ones — still the adversary's to
+  // grow by publishing, and `serves` sits on the hottest path in this file
+  // (measured: deleting this cache costs ~14× on a still-clock door). Both halves
   // of the key matter: the witnessed index alone is not enough, because a
   // record can be published without the clock moving. The cached links are
   // never handed out (the lesson `linkIn`'s deletion recorded): every reader

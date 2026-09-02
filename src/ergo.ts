@@ -57,7 +57,7 @@ import {
 } from "./commitment.js";
 import { utf8Encoder } from "./contexts.js";
 import { decodePublishedOp, type PublishedOp } from "./oplog.js";
-import { decodeReplacement, type Replacement, type WitnessedReplacement, encodeReplacement } from "./replacement.js";
+import { copyReplacement, decodeReplacement, forgetAdmitted, type Replacement, type WitnessedReplacement } from "./replacement.js";
 import {
   decodeRevocation,
   isSignedRevocation,
@@ -245,6 +245,10 @@ export class ErgoVenue implements Venue {
    * local venue takes toward a publication it cannot read.
    */
   async sync(node: ErgoNode, backings: readonly Backing[]): Promise<void> {
+    // Un-marked on entry: while the view is being replaced it answers nothing,
+    // and a re-sync that fails leaves it refusing rather than answering from
+    // half of two views (the slice-37 review; it had only ever been set).
+    this.synced = false;
     const indexed = await node.indexedHeight();
     this.height = indexed > this.depth ? indexed - this.depth : 0n;
     this.commitments.clear();
@@ -254,6 +258,9 @@ export class ErgoVenue implements Venue {
     this.fetched.clear();
     this.revocations.clear();
     this.revoked.clear();
+    // The walk's memo of admitted replacement records is this view's, and this
+    // view is being replaced whole: judged again against what is gathered now.
+    forgetAdmitted(this);
 
     for (const backing of backings) {
       await this.syncPublications(node, backing.name);
@@ -279,18 +286,31 @@ export class ErgoVenue implements Venue {
     // commitments have to be in before the walk can tell whether it took force —
     // so the frontier widens until it stops revealing anyone new. Bounded by the
     // chain's own length, which is bounded by the replacements published.
-    for (const backing of backings) {
-      for (;;) {
-        const chain = successionOf(backing, this);
-        const missing = chain
-          .map((link) => link.operator)
-          .filter((operator) => !this.fetched.has(bytesToHex(operator)));
-        if (missing.length === 0) break;
-        for (const operator of missing) {
-          this.fetched.add(bytesToHex(operator));
-          await this.syncCommitments(node, operator);
+    try {
+      for (const backing of backings) {
+        for (;;) {
+          const chain = successionOf(backing, this);
+          const missing = chain
+            .map((link) => link.operator)
+            .filter((operator) => !this.fetched.has(bytesToHex(operator)));
+          if (missing.length === 0) break;
+          for (const operator of missing) {
+            // Marked fetched AFTER the fetch: marked before it, a half-fetched
+            // operator answered `latestFor` with nothing — read everywhere as
+            // "never committed" — for the whole round trip, and forever if the
+            // node erred (the slice-37 review's blocker: a punctual operator
+            // graded silent out of not having looked).
+            await this.syncCommitments(node, operator);
+            this.fetched.add(bytesToHex(operator));
+          }
         }
       }
+    } catch (cause) {
+      // A frontier that failed part-way is a view answering from half of two
+      // pictures: un-marked again, so it refuses until a sync completes (the
+      // review's B1 — a failed FIRST sync graded a punctual operator silent).
+      this.synced = false;
+      throw cause;
     }
   }
 
@@ -482,16 +502,13 @@ export class ErgoVenue implements Venue {
   replacementsFor(backingName: Uint8Array): WitnessedReplacement[] {
     this.requireCovered(backingName);
     const log = this.replacements.get(bytesToHex(backingName)) ?? [];
-    // Copies on the way out, through the record's own canonical encoding —
-    // the interface promises them, LocalVenue keeps it, and this view handed
-    // out its stored objects: one reader overwriting a field it was given
-    // rewrote succession for every later reader in the process (found by the
-    // slice-37 panel's inventory angle). The walk's memo retains what the
-    // venue hands it, so the copy is what keeps that memo the reader's own.
-    return log.map((w) => ({
-      replacement: decodeReplacement(encodeReplacement(backingName, w.value)).replacement,
-      at: w.at,
-    }));
+    // Copies on the way out — the interface promises them, LocalVenue keeps
+    // it, and this view handed out its stored objects: one reader overwriting
+    // a field it was given rewrote succession for every later reader in the
+    // process (found by the slice-37 panel's inventory angle). Field-wise,
+    // not through the canonical encoding: the same guarantee at a fourteenth
+    // of the cost, on the read every walk makes (the review's ADV-11).
+    return log.map((w) => ({ replacement: copyReplacement(w.value), at: w.at }));
   }
 
   latestFor(operator: Uint8Array, asOf?: bigint): Commitment | undefined {
