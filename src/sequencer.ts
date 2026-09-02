@@ -698,7 +698,7 @@ export class Sequencer {
     const committed = committedLogFor(backing, this.venue, state);
     if (committed === undefined) {
       throw new SequencerError(
-        "that state does not re-root to the commitment the record holds here: offer the served state the operator published with it — the snapshots it signed, not a reconstruction — takeOver(backing, thatState, ...the drops above it)",
+        "that state does not re-root to the commitment the record holds here: give the served state the operator published with it — the snapshots it signed, not a reconstruction — in the slot the walk asked for, offered or exhibited",
       );
     }
     return committed;
@@ -1570,10 +1570,21 @@ export class Sequencer {
     // Lists, in the door's voice: a caller on the previous shape (`opening`
     // took bare backings) is told the new one rather than crashed (the fix
     // batch's review).
-    const droppings = options?.dropping ?? [];
-    const openings = options?.opening ?? [];
-    if (!Array.isArray(droppings) || !Array.isArray(openings)) {
+    const rawDropping = options?.dropping ?? [];
+    const rawOpening = options?.opening ?? [];
+    if (!Array.isArray(rawDropping) || !Array.isArray(rawOpening)) {
       throw new SequencerError("`dropping` and `opening` are lists: backings to drop, and { backing, record } pairs to open");
+    }
+    // Array.from turns a hole into an undefined the element checks see —
+    // `.map` skips a hole and the spread into the rooted set puts it back
+    // (the fix batch's verification) — and `dropping`'s elements are checked
+    // as `opening`'s are.
+    const droppings = Array.from(rawDropping);
+    const openings = Array.from(rawOpening);
+    for (const backing of droppings) {
+      if (typeof backing !== "object" || backing === null) {
+        throw new SequencerError("`dropping` takes backings");
+      }
     }
     const acknowledged = new Set(droppings.map((backing) => backing.nameHex));
     // Membership in the ONE read, not a second `serves` pass: re-deriving here
@@ -1599,9 +1610,12 @@ export class Sequencer {
     // booted opened a LIVE operator's book empty while the record's last
     // commitment plainly still carried it (the fix's regression round: the
     // recurring shape, one input bounded and the other open). What the door
-    // still cannot tell is exactly the indistinguishable case — the record's
-    // last DROPS the backing and something earlier carried it — and that is
-    // what the signature answers for.
+    // cannot tell, on a record already in the indistinguishable case — the
+    // record's last DROPS the backing and something earlier carried it — is
+    // the honest new backing from the lost book; and a caller can put the
+    // record there in one prior commitment, itself a provable rewritten
+    // history, so this is a possession check with a commitment's cost, not
+    // a bound (the fix batch's review). The signature answers for the rest.
     //
     // The seat's LINK is read here, before the publish, from the same chain
     // the force check reads, and never re-walked after: a clock tick between

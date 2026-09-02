@@ -557,6 +557,17 @@ describe("§C2: the walk — the book is what the record's descent reaches", () 
     expect(() => loose.commit({ opening: [{ backing: null, record: D2 }] })).toThrow(/takes \{ backing, record \} pairs/);
     expect(() => loose.commit({ opening: 5 })).toThrow(/are lists/);
     expect(() => loose.commit({ dropping: "eur" })).toThrow(/are lists/);
+    // `dropping`'s elements, and a HOLE in either list — which `.map` would
+    // skip and the spread into the rooted set would put back as undefined
+    // past the guards (the fix batch's verification).
+    expect(() => loose.commit({ dropping: [undefined] })).toThrow(/takes backings/);
+    expect(() => loose.commit({ dropping: [null] })).toThrow(/takes backings/);
+    const holed: unknown[] = [{ backing: usd, record: D2 }];
+    holed.length = 2;
+    expect(() => loose.commit({ opening: holed })).toThrow(/takes \{ backing, record \} pairs/);
+    const holedDrop: unknown[] = [];
+    holedDrop.length = 1;
+    expect(() => loose.commit({ dropping: holedDrop })).toThrow(/takes backings/);
     expect(() => loose.commit({ opening: [{ backing: usd, record: { snapshots: D2.snapshots, commitment: { ...d2.commitment, sequence: 0 } } }] })).toThrow(/not a served state/);
     expect(fresh.opLog(eur)).toHaveLength(0);
     expect(venue.nextSequenceFor(KEYS.operator)).toBe(d2.commitment.sequence + 1n); // nothing published
