@@ -656,6 +656,37 @@ describe("§C2: the walk — the book is what the record's descent reaches", () 
     sequencer.takeOver(eur, undefined, stateOf(only));
     expect(serving(sequencer, eur)).toBe(true);
   });
+
+  it("a seat taken from the pending link holds the book and serves nothing until force: the snapshot omits it, adoption is a no-op, and no door opens", () => {
+    // Every takeOver of an IN-FORCE link serves or throws. The one seat that
+    // holds a book without serving is the pending one — §C2 opens no door
+    // before the effective index, and the predecessor is still serving — and
+    // the readers of that state were never asserted (the fix panel's
+    // inventory, promise 3): the root must not carry the backing, and
+    // adopting the gap's legs must wait for force.
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    const original = new Sequencer(SECRETS.operator, venue);
+    original.register(eur, signBacking(SECRETS.backer, eur));
+    issue(original, eur, 100n, 0n);
+    const pinned = original.commit();
+    at(venue, 10n);
+    venue.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 12n));
+    const heir = new Sequencer(HEIR_SECRET, venue);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
+    heir.takeOver(eur, pinned);
+    expect(heir.opLog(eur)).toHaveLength(1); // the book is held
+    expect(heir.snapshot().some((s) => Buffer.from(s.name).equals(Buffer.from(eur.name)))).toBe(false);
+    expect(() => heir.adopt(eur)).not.toThrow();
+    expect(heir.opLog(eur)).toHaveLength(1); // and nothing was adopted onto it
+    expect(heir.awaitingTakeover()).toHaveLength(0); // not in force: not awaiting either
+    const move = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 5n, 0n);
+    expect(() => heir.submitTransfer(move.op, move.signature)).toThrow(/not yet in force/);
+    at(venue, 12n);
+    expect(carries({ snapshots: heir.snapshot(), commitment: pinned.commitment }, eur)).toBe(true);
+    expect(serving(heir, eur)).toBe(true);
+    expect(heir.submitTransfer(move.op, move.signature).position).toBe(1n);
+  });
 });
 
 describe("§C2: the empty book the walk cannot pay for is a signed claim (`opening`)", () => {
