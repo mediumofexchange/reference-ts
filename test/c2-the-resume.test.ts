@@ -678,6 +678,30 @@ describe("§C2: registering is holding the book only where the record pins nothi
     expect(serving(sequencer, eur)).toBe(true);
   });
 
+  it("registering a backing again on a live genesis operator does not un-seat it: the guard is the writer's rule", () => {
+    // The ledger's register is idempotent, so a repeat reaches the seat.
+    // Registering seats only where the record pins nothing; seated
+    // unconditionally, a repeat would overwrite a live seat with an empty
+    // pin and un-serve the operator mid-term — which `serves` would then
+    // detect, and no call but a takeover would cure. The guard is what keeps
+    // a writer's own repeat from moving its own seat (the slice-36 round's
+    // mutation sweep: this is the guard's one observable content).
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    const sequencer = new Sequencer(SECRETS.operator, venue);
+    sequencer.register(eur, signBacking(SECRETS.backer, eur));
+    issue(sequencer, eur, 100n, 0n);
+    at(venue, 1n);
+    sequencer.commit();
+    const tail = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 5n, 0n);
+    sequencer.submitTransfer(tail.op, tail.signature);
+    sequencer.register(eur, signBacking(SECRETS.backer, eur)); // the repeat
+    expect(serving(sequencer, eur)).toBe(true);
+    expect(sequencer.opLog(eur)).toHaveLength(2);
+    at(venue, 2n);
+    expect(sequencer.commit().snapshots).toHaveLength(1);
+  });
+
   it("the empty-pin wipe is closed: an heir's own committed book is not handed back empty", () => {
     // The heir took the EMPTY book (its handover pinned nothing) and then
     // committed a real log. Its fresh process used to be re-handed the empty
