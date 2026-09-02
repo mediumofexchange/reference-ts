@@ -370,8 +370,15 @@ describe("§C2: the move is a fast-forward", () => {
     at(venue, 12n);
     heir.takeOver(eur, state);
     expect(heir.opLog(eur)).toHaveLength(before);
-    heir.commit();
-    heir.takeOver(eur, state);
+    const own = heir.commit();
+    expect(heir.awaitingTakeover()).toHaveLength(0);
+    // A superseded state is a refusal, not a silent no-op; the record's own
+    // last is the no-op — and "no-op" is a claim about SERVING, not a log
+    // length (the slice-36 round's B1 hid behind this test's assertions).
+    expect(() => heir.takeOver(eur, state)).toThrow(/the record stands on/);
+    expect(heir.awaitingTakeover()).toHaveLength(0);
+    heir.takeOver(eur, own);
+    expect(heir.awaitingTakeover()).toHaveLength(0);
     expect(heir.opLog(eur)).toHaveLength(before);
     expect(heir.outstanding(eur)).toBe(100n);
   });
@@ -443,13 +450,13 @@ describe("§C2: the move is a fast-forward", () => {
     const { venue, eur, original, theirs } = reappointed();
     original.takeOver(eur, theirs);
     at(venue, 26n);
-    original.commit();
+    const own = original.commit();
     // A live tail this term co-signed and has NOT committed.
     const tail = transferBy(eur, SECRETS.bob, KEYS.bob, KEYS.carol, 5n, 0n);
     original.submitTransfer(tail.op, tail.signature);
     expect(original.opLog(eur)).toHaveLength(3);
-    // The re-sync against the older target must leave the tail a TAIL.
-    original.takeOver(eur, theirs);
+    // The re-sync against the record's own last must leave the tail a TAIL.
+    original.takeOver(eur, own);
     at(venue, 60n); // the operator's own silence opens a gap
     original.commit(); // returning from silence restores to the mark first
     expect(original.opLog(eur)).toHaveLength(2);
@@ -501,12 +508,17 @@ describe("§C2: the book is seated for a link", () => {
     // fast-forward stood open, and it committed past it, on purpose.
     expect(() => original.commit()).toThrow(/takes the state over first|dropping/);
     const committed = original.commit({ dropping: [eur] });
+    const droppedState: ServedState = { snapshots: committed.snapshots, commitment: committed.commitment };
     expect(committed.snapshots).toHaveLength(0);
     const resumed: ServedState = { snapshots: [], commitment: committed.commitment };
     expect(isRewrittenHistory(eur, venue, theirs, resumed)).toBe(true);
 
-    // Re-synced, the same operator's next commitment carries the whole book.
-    original.takeOver(eur, theirs);
+    // Re-synced — the record's last commitment is now the operator's OWN
+    // acknowledged drop, so re-taking the carrying book exhibits it (the
+    // resume rule: the book's standing is the record's last, and a drop is
+    // walked back through the same evidence door a predecessor's is). The
+    // next commitment then carries the whole book.
+    original.takeOver(eur, theirs, droppedState);
     at(venue, 26n);
     expect(original.commit().snapshots).toHaveLength(1);
     expect(original.balance(eur, KEYS.bob)).toBe(40n);
@@ -662,7 +674,7 @@ describe("§C2: the fast-forward and the tail — the interleavings, probed befo
 
     at(venue, 31n);
     expect(gapOpen(venue, eur)).toBeUndefined();
-    heir.takeOver(eur, state);
+    heir.takeOver(eur, returned);
     expect(heir.opLog(eur)).toHaveLength(4);
     expect(heir.balance(eur, KEYS.alice)).toBe(95n);
     // And the heir serves, on the book the return built.
@@ -943,9 +955,15 @@ describe("§C2: the fix round — the seat is a link and a provenance, and every
     const heir = new Sequencer(HEIR_SECRET, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));
     // Offering a state is refused — the record pins nothing to check it
-    // against; the empty book is the record's answer, not the caller's.
+    // against; the empty book is the record's answer, not the caller's. The
+    // offered state is well-formed and proven, so the refusal is the empty
+    // rule's own and not the malformedness check's.
+    const offered = [{ name: eur.name, opLog: [] }];
     expect(() =>
-      heir.takeOver(eur, { snapshots: original.snapshot(), commitment: signCommitment(SECRETS.operator, 0n, stateRoot([])) }),
+      heir.takeOver(eur, {
+        snapshots: offered,
+        commitment: signCommitment(SECRETS.operator, 0n, stateRoot(offered)),
+      }),
     ).toThrow(/empty/);
     heir.takeOver(eur);
     heir.commit(); // the return: the backing was silent from index zero

@@ -102,29 +102,39 @@ that produced it is in the decision log — reach it through the index in
   must be injective, or one signature covers two states and equivocation is
   unprovable.
 - **A replacement is co-signed by its successor, and force is the effective
-  index** (§C2). Naming somebody is not a power over them: signed by the
-  rule-holder alone, one published record seated any commitment-publishing key
-  as the operator of record of any backing, and its own next punctual commitment
-  then proved a fault against it. Both signatures go over one message, so there
-  is one record and one tag. Force being a signed field and nothing else is what
-  keeps the succession walk a pure function of the venue record — condition it
-  on served state and two readers disagree about who is at fault, which
-  `fault.ts` forbids outright. `successionOf` stops at the last link whose index
+  index** (§C2). Both signatures go over one message, so there is one record
+  and one tag. `successionOf` stops at the last link whose index
   has arrived, so the chain's tip and the operator in force are one thing.
-  **What a handover takes on is a fixed object** — the backing's last
-  commitment strictly before the effective index, or the EMPTY book where the
-  record pins nothing — **and the book only grows**: `takeOver` is a
-  fast-forward from this operator's OWN link of the chain (in force or
-  pending, never merely the walk's last element), a dead era's tail drops to
-  the mark first, and the seat is a link WITH a provenance, so `serves`
-  (custody AND force, asked at every co-signing door) compares the seat to
-  the tip and the stored pin to the recomputed one — staleness of either
-  detects itself. A replacement not strictly later than the link it replaces
-  is void unless it names the incumbent (a revocation). A key seated anew
-  commits before it co-signs (`shut`, the same door as the return from
-  silence), and a commitment never drops an in-force backing silently
-  (`commit`'s per-call `dropping`; `awaitingTakeover` is the same condition
-  as a question).
+  **What a seat takes on is the book the record stands on, and the book only
+  grows**: `takeOver` is one WALK down the record from this operator's OWN
+  link (in force or pending) — from the backing's last in-force commitment,
+  each step `lastCommitmentInForce` asked again before it, each step past a
+  commitment paid with an EXHIBIT (that commitment's served state, matched to
+  the venue's answer by identity and shown to carry nothing) — ending at the
+  state offered (matched by identity, carrying) or at the empty book where
+  the record runs out. The handover and the resume are the zero-exhibit
+  case, §C2b's walk-back the k-exhibit case, and nothing the door compares
+  against is the caller's. The seat is a link WITH a provenance — the pin is
+  the identity of the commitment the record stands on, written by `takeOver`
+  and rewritten by `commit` — and `serves` (custody AND force, asked at every
+  co-signing door) compares the seat to the chain's tip and the pin to the
+  record's unbounded answer, so a lost book, a superseded twin and a stale
+  handover copy are one detectable condition. **Currency is `serves`**: a
+  current seat keeps its uncommitted tail, a stale one drops it to the mark —
+  never below it: a takeOver serves no LESS than the book the record stands on.
+  A replacement not strictly later than the link it replaces is void unless
+  it names the incumbent (a revocation). A key seated anew commits before it
+  co-signs (`shut`, the same door as the return from silence), and a
+  commitment never drops an in-force backing silently (`commit`'s per-call
+  `dropping`; `awaitingTakeover` is the same condition as a question). **The
+  empty book the walk cannot pay for is a signed claim**: the walk licenses
+  it where the record genuinely runs out; elsewhere no door can tell a
+  backing the record never carried from a lost book, so `commit({ opening })`
+  roots it empty for one exhibit — the record's last commitment, shown to
+  carry nothing for it — and the operator's signature for the rest, where a
+  false claim is a witnessed rewritten history any holder proves;
+  registering is holding the book only where the record pins nothing,
+  genesis included.
 - **Every operation is signed by the party the law names, over that backing's
   own message, at that signer's next nonce — except the commit.** §C3's commit
   names no backing, carries no nonce, and is signed by every party the lock
@@ -226,15 +236,30 @@ traversal.
 
 ## What the parties must do, that no code here enforces
 
-Eight rules the protocol cannot check but the reference implementation must not
+Nine rules the protocol cannot check but the reference implementation must not
 leave unsaid. Each was reached by asking what a failing sequencer costs
 somebody, and is recorded in the decision log with its reasoning.
 
-The three holder rules are load-bearing. §C2b's recovery path does not protect a
-holder who ignores them, and every mechanism that would reach further either
-fails to close its own hole or does not survive the move to a blinded
-construction — which is why they are rules here rather than code.
+The three holder rules are load-bearing: §C2b's recovery path does not protect
+a holder who ignores them, and no mechanism that would reach further survives
+the move to a blinded construction — which is why they are rules, not code.
 
+- **A restarted process registers every backing it serves, then resumes each,
+  before its commit timer fires.** The resume window closes at the first
+  commitment the schedule publishes over a stale book — and a process never
+  scans a backing it did not register, so a commit made between
+  registrations drops the rest with no warning at all. The boot sequence
+  registers everything, holds the timer until every registered backing
+  serves or is named in the first commitment's `opening` (`awaitingTakeover`
+  is the checklist), and resumes each from its own latest committed state;
+  where the record's last commitment dropped the backing, the walk needs
+  every committed state from the last carrying one forward, so an operator's
+  replica keeps its own committed states, all of them. Naming an un-resumed
+  backing in `dropping` instead roots a drop of a book the record carried —
+  a rewritten history against this key forever, and the dropped backing is
+  then openable against that very drop — the wipe, two signed faults away:
+  `dropping` is for a backing this operator means to stop serving, never a
+  way past a resume; a losing twin is detected, not excused, and its tail drops.
 - **One writer at a time**, or a threshold key. Two live servers holding one
   operator key co-sign conflicting operations, and `fault.ts` proves that
   against the operator exactly as if it were malice — the protocol cannot tell
@@ -275,7 +300,8 @@ construction — which is why they are rules here rather than code.
   perfectly live, and a stranger reading a root cannot tell which backings it
   covers. Every path against that operator runs through the last state that
   *did* carry the backing — the non-service grade (`isNonServing`), the fault
-  (`isRewrittenHistory`), the successor's takeover (`takeOver`). The party who
+  (`isRewrittenHistory`), the successor's takeover (`takeOver`, plus every
+  drop above that state — the boot rule). The party who
   would otherwise serve it on request is the one with the motive not to, which
   is the same shape as the receipt rule above: obtain the evidence while the
   party holding it still has a reason to give it to you.

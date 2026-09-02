@@ -24,6 +24,12 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-02` [Handoff: slice 36 is fixed, reviewed twice over, and waits on the maintainer](decisions/2026-09.md#2026-09-02--handoff-slice-36-is-fixed-reviewed-twice-over-and-waits-on-the-maintainer)
+- `2026-09-02` [The walk's regression round: two blockers in the opening claim, both the recurring shape, and the fixes](decisions/2026-09.md#2026-09-02--the-walks-regression-round-two-blockers-in-the-opening-claim-both-the-recurring-shape-and-the-fixes)
+- `2026-09-02` [Panel: the walk — the book is what the record's descent reaches, the empty book is a signed claim, and currency is `serves`](decisions/2026-09.md#2026-09-02--panel-the-walk--the-book-is-what-the-records-descent-reaches-the-empty-book-is-a-signed-claim-and-currency-is-serves)
+- `2026-09-01` [The slice-36 round: the raise is sound, its evidence arms are not, and a "no-op" that un-serves](decisions/2026-09.md#2026-09-01--the-slice-36-round-the-raise-is-sound-its-evidence-arms-are-not-and-a-no-op-that-un-serves)
+- `2026-09-01` [Handoff: slice 36 is built and owes its review round](decisions/2026-09.md#2026-09-01--handoff-slice-36-is-built-and-owes-its-review-round)
+- `2026-09-01` [Panel: the resume — the pin is a floor, the raise is from a held seat, and the pin the seat keeps is the book's own](decisions/2026-09.md#2026-09-01--panel-the-resume--the-pin-is-a-floor-the-raise-is-from-a-held-seat-and-the-pin-the-seat-keeps-is-the-books-own)
 - `2026-09-01` [The 35d round and its fix panel: the seat is a link and a provenance, and every refusal must leave a live path](decisions/2026-09.md#2026-09-01--the-35d-round-and-its-fix-panel-the-seat-is-a-link-and-a-provenance-and-every-refusal-must-leave-a-live-path)
 - `2026-08-31` [Slice 35d: the book built, and what building it decided](decisions/2026-08.md#2026-08-31--slice-35d-the-book-built-and-what-building-it-decided)
 - `2026-08-29` [The 35c round: ordering is not obligation, and an era starts where its signer did](decisions/2026-08.md#2026-08-29--the-35c-round-ordering-is-not-obligation-and-an-era-starts-where-its-signer-did)

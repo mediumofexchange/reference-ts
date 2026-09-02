@@ -107,13 +107,12 @@ import {
   type WithdrawalOp,
 } from "./presentation.js";
 import { copyReceipt, signReceipt, type Receipt } from "./receipt.js";
-import { commitmentIdentity, committedLogFor, type ServedState } from "./commitment.js";
+import { commitmentIdentity, committedLogFor, type CommittedLog, type ServedState } from "./commitment.js";
 import {
   isNamedSuccessor,
   lastCommitmentInForce,
   operatorAt,
   successionAhead,
-  termOf,
   type Succession,
 } from "./replacement.js";
 import { admittedInGap, committedInTime, eraLapsed, gapLegsFor, gapOpen, venueIsDeclared, witnessedCommitFor } from "./recovery.js";
@@ -175,15 +174,18 @@ export class Sequencer {
   // the succession chain (hex of `Succession.link`) — the genesis link for the
   // operator E names, which had no predecessor to take one from, or the link
   // that seated a successor which has taken the state on (`takeOver`) — AND
-  // the PIN, the identity of the commitment taken on (undefined where the
-  // record pinned nothing: genesis, and the empty book). Registration alone is
-  // not a seat — a named successor may register long before it takes the state
-  // on, and in between it holds an empty log that is not the backing's
-  // history. Both halves are record identities rather than flags, and `serves`
-  // re-checks both on every read: a seat the chain has moved past, and a book
-  // the pin has moved under (a predecessor legitimately committing inside the
-  // lead time), each detect their own staleness instead of asserting
-  // possession. The link-only form let a re-appointed operator's first-term
+  // the PIN, the identity of the commitment the record STANDS ON (undefined
+  // only where the record holds no in-force commitment at all — a genesis
+  // seat before anything was published; the empty book reached at the walk's
+  // bottom pins the record's last). Registration alone is not a seat — a
+  // named successor may register long before it takes the state on, and in
+  // between it holds an empty log that is not the backing's history. Both
+  // halves are record identities rather than flags, and `serves` re-checks
+  // both on every read: a seat the chain has moved past, and a book the
+  // record has moved under (a predecessor inside the lead time, this
+  // operator's own commitment for another backing, or a twin's), each detect
+  // their own staleness instead of asserting possession. The link-only form
+  // let a re-appointed operator's first-term
   // copy root as current; the pin-less form let an early-synced heir's first
   // commitment become a shrink fault with both parties honest (the fix
   // round's F4).
@@ -296,9 +298,20 @@ export class Sequencer {
     // pending successor does not unseat the genesis operator, which §C2 keeps
     // serving through the lead time.
     const chain = this.walkedInForce(stored);
-    if (chain.length === 1 && compareBytes((chain[0] as Succession).operator, this.operatorKey) === 0) {
-      // The genesis seat pins nothing: there is no predecessor, so there is no
-      // taken-on commitment — the same shape as the empty book at a handover.
+    if (
+      chain.length === 1 &&
+      compareBytes((chain[0] as Succession).operator, this.operatorKey) === 0 &&
+      // **Registering is holding the book only where the record pins
+      // nothing** (§C2, the resume panel): a restarted genesis process used
+      // to be seated here over an EMPTY ledger — serves true, awaitingTakeover
+      // empty, takeOver refusing — and its next scheduled commit zeroed every
+      // balance in its own voice, with no repair path at all where E names no
+      // replacement rule. Where the record holds any in-force commitment,
+      // the seat comes through takeOver like every other — the walk to the
+      // book the record stands on — or, for a backing the record never
+      // carried, through `opening` at this operator's next commitment.
+      lastCommitmentInForce(chain, this.venue) === undefined
+    ) {
       this.seatedFor.set(stored.nameHex, {
         link: bytesToHex((chain[0] as Succession).link),
         pin: undefined,
@@ -340,15 +353,17 @@ export class Sequencer {
    * naming this operator (registration at genesis, `takeOver` at a
    * succession), so link = tip implies the tip names this key, which is force.
    * The pin is possession WITH provenance: the link says whose the book is,
-   * the pin says WHICH book — the backing's last commitment strictly before
-   * the tip's own effective index. It is recomputed rather than cached (it can
+   * the pin says WHICH book — the identity of the record's LAST in-force
+   * commitment, asked UNBOUNDED. It is recomputed rather than cached (it can
    * move at an unchanged walk-cache key, since commitments do not touch the
-   * key; measured flat and sub-2% of a door call on the already-walked chain)
-   * and it is frozen from the tip's effective index, so a mismatch means
-   * exactly one thing: the predecessor committed after this seat was taken,
-   * the book grew under the seat, and the fast-forward is one takeOver away.
-   * A seat the chain moved past and a book the pin moved under each stop
-   * matching on their own — nothing needs remembering to clear.
+   * key; measured flat and sub-2% of a door call on the already-walked
+   * chain). Unbounded is what makes one comparison cover four conditions
+   * where the bounded form saw only the first: a predecessor committing
+   * inside the lead time, this operator's own commitment for another
+   * backing, a superseded twin, and a restarted process's stale book (§C2,
+   * the resume panel). A seat the chain moved past and a book the record
+   * moved under each stop matching on their own — nothing needs remembering
+   * to clear, and the repair is one takeOver.
    */
   private serves(backing: Backing): boolean {
     const seat = this.seatedFor.get(backing.nameHex);
@@ -356,8 +371,18 @@ export class Sequencer {
     const chain = this.walkedInForce(backing);
     const tip = chain[chain.length - 1] as Succession;
     if (seat.link !== bytesToHex(tip.link)) return false;
-    const pin = lastCommitmentInForce(chain, this.venue, tip.from - 1n);
-    return seat.pin === (pin === undefined ? undefined : commitmentIdentity(pin.commitment));
+    // The pin the seat keeps is the identity of the commitment the BOOK
+    // stands on — written by takeOver for what was taken, REWRITTEN by commit
+    // for what was published — and the record's answer here is UNBOUNDED: a
+    // seat serves only the book the record's last commitment stands on
+    // (§C2, the resume panel). Bounded at the seat's own effective index,
+    // this comparison detected a predecessor moving the pin and was blind to
+    // this operator's own commitments — so a restarted process's stale book,
+    // a superseded twin, and a stale handover copy were three silent
+    // conditions; unbounded, they are one detectable one, and the losing
+    // side of a one-writer race stops serving instead of co-signing on.
+    const latest = lastCommitmentInForce(chain, this.venue);
+    return seat.pin === (latest === undefined ? undefined : commitmentIdentity(latest.commitment));
   }
 
   /** This operator's backings, in the sense `serves` gives that word. */
@@ -374,39 +399,62 @@ export class Sequencer {
   }
 
   /**
-   * Take on the state this backing's chain last committed, so that this
-   * operator serves it as its own — **before or after its effective index
-   * alike**, because the answer to every question here comes from the chain
-   * and the record, never from the clock.
+   * Take on the book this backing's record stands on, so that this operator
+   * serves it as its own — **before or after its effective index alike**,
+   * because the answer to every question here comes from the chain and the
+   * record, never from the clock.
    *
-   * **The book is a possession with a provenance, and it only grows** (§C2,
-   * 2026-08-29; the panel entry in DECISIONS.md):
+   * **One rule.** The book a seat takes on is the one the record's last
+   * in-force commitment stands on: the content of the last in-force commitment
+   * that CARRIES this backing, and the empty book where none does. The record
+   * is walked backward from its last commitment — `lastCommitmentInForce`
+   * asked again at `at - 1n`, which is the whole of the walk — and each step
+   * past a commitment costs an EXHIBIT: that commitment's own served state,
+   * matched to it by identity and shown to carry no log for this backing. What
+   * the walk stops at is what must be offered.
    *
-   *   - **The seat comes from the chain, and it is this operator's OWN link**
-   *     — the last one in the walk naming it, required to be the link in
-   *     force or the link pending. Asking "who is in force right now" made
-   *     the takeover reachable only strictly inside a lead time §C2 does not
-   *     guarantee exists; asking for the walk's LAST element made a queued
-   *     rotation displace the in-force heir for its whole term (the fix
-   *     round's F1).
-   *   - **The target is a fixed object**: the backing's last commitment
-   *     witnessed strictly before the seat's effective index (§C2 — the
-   *     predecessor's own in every ordinary case, and §C2b's walk-back where a
-   *     link never committed: "a chain whose middle operator never committed
-   *     reaches past it to the last that did"). The predecessor's commitments
-   *     up to the effective index move the target; past it nothing anybody
-   *     publishes does. **Where the record pins nothing, the book is EMPTY**
-   *     (§C2): nothing was ever final, so the takeover is called with no
-   *     state and seats over nothing — never publishing must not read as
-   *     having published, and a wall here left the backing unservable by
-   *     every party forever (the fix round's F2).
-   *   - **The move is a fast-forward.** The offered log must extend the log
-   *     held, entry for entry by `opIdentityOfEntry`, and only the delta is
-   *     applied. Re-syncing is ordinary — a re-appointed operator resumes by
-   *     growing its first-term copy to what its successor committed, where the
-   *     retired one-shot rule forced it to manufacture a shrink fault by
-   *     rooting its stale book. Rewinding is refused without asking who is in
-   *     force.
+   *   - The ordinary handover is the ZERO-exhibit case: the record's last
+   *     commitment is the predecessor's own, and it carries the book.
+   *   - So is the resume: a fresh process's record ends at its OWN latest
+   *     witnessed commitment, and it is the same call — there is no separate
+   *     raise (§C2, the resume panel made the pinned object a floor rather
+   *     than a ceiling; the walk is what replaced both).
+   *   - §C2b's walk-back is the k-exhibit case: an operator that dropped this
+   *     backing from its commitments carries no log for it, and refusing on
+   *     that ground made §C2b's own remedy unexecutable — so the drops are
+   *     exhibited, one per step, and the book is the last state that did
+   *     carry it.
+   *   - The empty book is the case where the walk runs OUT: nothing the record
+   *     holds carries this backing, so nothing was ever final and the seat
+   *     takes on nothing. Never publishing at all must not read as having
+   *     published (the fix round's F2), and a wall here left a backing
+   *     unservable by every party forever (the round's W1). Where the walk
+   *     cannot be paid — a backing registered on an operator with a history,
+   *     which no door can tell from a lost book — the empty book is CLAIMED
+   *     instead, in this operator's next commitment (`commit`'s `opening`),
+   *     where a false claim is a provable fault.
+   *
+   * **Nothing the door compares against is the caller's to choose.** Every
+   * commitment in the walk comes from the venue through the chain, so an older
+   * own state, an unpublished forgery signed by a retired key, a stranger's
+   * state and a skipped drop all fail one identity check — which is the venue
+   * check `committedLogFor` does not make, asked once for the offered state and
+   * once per exhibit. WHICH backings a commitment carries is not readable from
+   * its root (invariant 23), which is why a drop costs an exhibit rather than a
+   * lookup, and why the empty book costs the whole walk.
+   *
+   * **The seat comes from the chain, and it is this operator's OWN link** —
+   * the last one in the walk naming it, required to be the link in force or
+   * the link pending. Asking "who is in force right now" made the takeover
+   * reachable only strictly inside a lead time §C2 does not guarantee exists;
+   * asking for the walk's LAST element made a queued rotation displace the
+   * in-force heir for its whole term (the fix round's F1).
+   *
+   * **The move is a fast-forward.** The offered log must extend the log held,
+   * entry for entry by `opIdentityOfEntry`, and only the delta is applied.
+   * Re-syncing is ordinary — a re-appointed operator resumes by growing its
+   * first-term copy to what its successor committed. Rewinding is refused
+   * without asking who is in force.
    *
    * **The whole committed log, replayed through the same law.** Every entry
    * goes through the one door `apply`, so a state that could not have happened
@@ -421,23 +469,16 @@ export class Sequencer {
    * rather than co-signed, and an operation the predecessor accepted and never
    * committed died with it in every construction (CLAUDE.md).
    *
-   * **`incumbentLatest` is evidence, and it is needed in exactly one case.**
-   * Normally the state taken on must be the target, or an older one would
-   * silently drop everything committed since. But a target that dropped this
-   * backing from its commitments carries no log for it, and refusing on that
-   * ground made §C2b's own remedy unexecutable: the non-service grade fires,
-   * opens E's replacement rule, and the successor could take nothing. So an
-   * earlier state is licensed by exhibiting the target and showing it carries
-   * no log for this backing.
-   *
-   * **Bounded rather than checked**, which is the same limit slice 13 recorded.
-   * WHICH state was the last to carry the backing is not readable from a root,
-   * so a successor could take an earlier one than it should. That is not
-   * licensed here, it is provable: any holder of the later state shows it with
-   * isRewrittenHistory, against the successor, which is exactly why slice 14
-   * extended that predicate across a handover.
+   * **Checked, where it used to be bounded.** WHICH state was the last to
+   * carry the backing is not readable from a root (slice 13's limit), so the
+   * retired door licensed ANY earlier state and relied on a fault proof after
+   * the fact — the window the fix panel closed. The walk reaches exactly the
+   * last carrying state or the bottom: a drop can only be stepped past by
+   * exhibiting it, a carrying commitment cannot be exhibited, and the offered
+   * state must be the one the walk stands at. What is still not checked is
+   * the CLAIM `opening` makes, and that is provable instead (`commit`).
    */
-  takeOver(backing: Backing, served?: ServedState, incumbentLatest?: ServedState): void {
+  takeOver(backing: Backing, served?: ServedState, ...dropped: readonly ServedState[]): void {
     this.requireServed(backing);
     const held = this.backings.get(backing.nameHex) as Backing;
     // **The seat is this operator's OWN link** — the LAST one in the walk
@@ -466,58 +507,51 @@ export class Sequencer {
       );
     }
     const seat = ahead[seatIndex] as Succession;
-    // The operator E itself names, before any handover: there is no
-    // predecessor and no state to take on — registering is holding the book.
-    // The seat's own identity decides, not the chain's length: a pending
-    // successor at the genesis link must not change what the genesis operator
-    // is told (found by the fix panel's inventory angle — the length proxy
-    // let `seat.from - 1n` go negative and a guard two files away catch it).
-    if (seatIndex === 0) {
-      throw new SequencerError("the genesis operator has no predecessor: registering is holding the book");
-    }
-    // **The pinned target — or, where the record pins nothing, the EMPTY
-    // book.** No commitment by a party then in force stands strictly before
-    // this seat, so nothing was ever final, and never publishing must not
-    // read as having published (§C2; `lastCommitmentInForce`'s own contract,
-    // which this door was the one caller to violate). The emptiness is the
-    // RECORD's answer, not the heir's claim — and it means "empty" only
-    // because the walk voids the record class that emptied a committed term
-    // retroactively (the eraser; §C2's strictly-later rule). Offering a state
-    // when nothing is pinned is refused rather than ignored: the caller
-    // believes something this door must not adopt.
     const chain = this.walkedInForce(held);
-    const target = lastCommitmentInForce(chain, this.venue, seat.from - 1n);
-    if (target === undefined && (served !== undefined || incumbentLatest !== undefined)) {
-      throw new SequencerError(
-        "the record pins no commitment before this handover: the book to take on is empty, and takes no offered state or evidence",
-      );
-    }
-    if (target !== undefined && served === undefined) {
-      throw new SequencerError("this handover pins a committed state: offer it");
+    // **Where the record stands**: its last in-force commitment. This is the
+    // object `serves` re-derives and compares the seat's pin against, so it is
+    // also what the taken book must stand on — and it is the head of the walk.
+    const record = lastCommitmentInForce(chain, this.venue);
+    // **The walk.** Each exhibit is the commitment the walk stands at, shown
+    // to carry no log for this backing; the walk then steps to the one before
+    // it. Everything the step reads is the venue's, through the chain, so the
+    // caller chooses only how FAR back to go and never what is there — and
+    // stateRoot is injective, so a commitment that carries this backing
+    // cannot be exhibited as dropped: nobody walks past the last carrying
+    // state (the fix panel's adversarial angle: eleven attacks, ten refused,
+    // the honest one accepted).
+    let carrying = record;
+    for (const exhibit of dropped) {
+      if (carrying === undefined) {
+        throw new SequencerError(
+          "the record holds no commitment before the last one exhibited: the walk has reached its bottom, and the book to take on is empty — takeOver(backing, undefined, ...drops) with exactly the record's own drops",
+        );
+      }
+      if (this.recorded(held, exhibit, carrying.commitment).kind !== "dropped") {
+        throw new SequencerError(
+          "that commitment carries this backing: it is the state to offer, not one to exhibit — takeOver(backing, thatState, ...the drops above it)",
+        );
+      }
+      carrying = lastCommitmentInForce(chain, this.venue, carrying.at - 1n);
     }
     let offeredLog: readonly OpLogEntry[] = [];
-    if (target !== undefined && served !== undefined) {
-      const committed = committedLogFor(held, this.venue, served);
-      if (committed === undefined || committed.kind === "dropped") {
-        throw new SequencerError("that is not a state this backing's operator committed");
+    if (served === undefined) {
+      if (carrying !== undefined) {
+        throw new SequencerError(
+          "the record stands on a commitment for this backing: offer its state, keeping every drop already exhibited — takeOver(backing, thatState, ...the same drops) — or, where it carries nothing for this backing, exhibit it too and offer what stands behind it — takeOver(backing, theEarlierState, ...the same drops, thatState); a backing the record never carried is opened in this operator's next commitment instead, on the record's LAST commitment rather than this step — commit({ opening: [{ backing, record: theRecordsLastState }] })",
+        );
       }
-      if (commitmentIdentity(served.commitment) !== commitmentIdentity(target.commitment)) {
-        this.requireDroppedBy(held, incumbentLatest, target.commitment);
-        // And it must really precede the target. Within one term the signer's
-        // own sequence orders states; across terms the chain does (`termOf`,
-        // the same rank isRewrittenHistory reads). A state at or past the
-        // target is not an earlier one this evidence excuses, and one that
-        // places in no term accuses nobody and licenses nothing.
-        const targetTerm = termOf(chain, this.venue, target.commitment.operator, target.commitment.sequence);
-        const offeredTerm = termOf(chain, this.venue, served.commitment.operator, served.commitment.sequence);
-        if (
-          targetTerm === undefined ||
-          offeredTerm === undefined ||
-          offeredTerm > targetTerm ||
-          (offeredTerm === targetTerm && committed.sequence >= target.commitment.sequence)
-        ) {
-          throw new SequencerError("that state does not precede the handover's pinned target");
-        }
+    } else {
+      if (carrying === undefined) {
+        throw new SequencerError(
+          "the record stands on no commitment that carries this backing: the book to take on is empty, and takes no offered state — takeOver(backing, undefined, ...drops)",
+        );
+      }
+      const committed = this.recorded(held, served, carrying.commitment);
+      if (committed.kind === "dropped") {
+        throw new SequencerError(
+          "that commitment carries no log for this backing: exhibit it and offer what the walk reaches behind it — the exhibits are the record's own drops, newest first and none skipped, so the ones already exhibited come before it: takeOver(backing, theEarlierState, ...the drops above it, thatState) — or, where the record never carried this backing, open it in this operator's next commitment, exhibiting the record's LAST commitment there rather than this step's — commit({ opening: [{ backing, record: theRecordsLastState }] })",
+        );
       }
       // All or nothing. committedLogFor checks the root and the signature and
       // deliberately does not replay the law, so a well-rooted log that is not
@@ -556,26 +590,28 @@ export class Sequencer {
       offeredLog = committed.opLog;
     }
     // **The fast-forward.** The book only grows: the offered state either IS
-    // this book up to some length — a book already current, or already past a
-    // walk-back target, and there is nothing to do — or it extends it, and only
-    // the delta is applied. Anything else is a rewind, refused without asking
-    // who is in force. This one rule replaces both retired guards.
+    // this book up to some length — a book already current, and there is
+    // nothing to do — or it extends it, and only the delta is applied.
+    // Anything else is a rewind, refused without asking who is in force. This
+    // one rule replaces both retired guards.
     //
-    // What "this book" measures depends on whose era its tail belongs to. A
-    // takeover to a NEW seat means this operator's previous term closed at an
-    // intermediate link (a handover to the incumbent is refused, so a
-    // re-appointment always has one), and whatever it co-signed past its mark
-    // died with that era in every construction (§C2b; slice 28b: an era ended
-    // by a handover lapses its receipts). It is dropped to the mark exactly as
-    // a return from silence drops it, receipts included, before the new term's
-    // book is measured — carried instead, this operator's next commitment
-    // would root acts of a dead era as this term's own. On a re-sync of the
-    // seat already held the tail is the LIVE term's own, and no takeover may
-    // touch it.
-    const reSync = this.seatedFor.get(held.nameHex)?.link === bytesToHex(seat.link);
+    // What "this book" measures depends on whose era its tail belongs to, and
+    // that is the question `serves` already answers: a seat holding the book
+    // the record stands on is the live writer, and its tail is this term's
+    // own — no takeover may touch it. A seat that does NOT (the chain moved
+    // past it, or the record did) is a dead era or a superseded process, and
+    // whatever it co-signed past its mark died with that era in every
+    // construction (§C2b; slice 28b: an era ended by a handover lapses its
+    // receipts). It is dropped to the mark exactly as a return from silence
+    // drops it, receipts included, before the new book is measured — carried
+    // instead, this operator's next commitment would root acts of a dead era
+    // as this term's own. Keyed on the LENGTH of the offered log instead, a
+    // live re-sync un-served itself and a stale one reported success having
+    // changed nothing (the round's B1 and B2).
+    const current = this.serves(held);
     const mark = this.ledger.committedLength(held);
     const heldLog = this.ledger.opLog(held);
-    const keep = reSync ? heldLog.length : mark;
+    const keep = current ? heldLog.length : mark;
     const shared = Math.min(keep, offeredLog.length);
     for (let i = 0; i < shared; i++) {
       if (
@@ -589,7 +625,7 @@ export class Sequencer {
         );
       }
     }
-    if (!reSync && heldLog.length > mark) this.restore(held);
+    if (!current && heldLog.length > mark) this.restore(held);
     // The delta cannot throw: replayLog above proved the WHOLE offered log
     // lawful from empty, and every clock rule in applyEntry is a refusal
     // gated on a defined clock — this replay passes none — so the held fold
@@ -604,52 +640,68 @@ export class Sequencer {
     // The taken-on commitment is the last one this book has: what was taken on
     // is committed, and nothing past it is — and a restore of this operator's
     // own book (its own silence on another backing) must leave it whole. The
-    // mark advances only where the offered state covers the whole book; a
-    // walk-back target the book was already past leaves the mark where this
-    // operator's own commitments put it, and a live re-sync tail stays a tail.
-    // (An empty book marks vacuously at zero: nothing was committed, and the
-    // mark says so.)
+    // mark advances only where the offered state covers the whole book; a live
+    // re-sync tail stays a tail. (An empty book marks vacuously at zero:
+    // nothing was committed, and the mark says so.)
     if (offeredLog.length >= keep) this.ledger.markCommitted(held);
     // And this operator is seated for ITS link — the record that names it —
-    // WITH the provenance of what it took on: the pin, rewritten on every
-    // re-sync, is the other half of what `serves` re-checks. The link says
-    // whose the book is; the pin says which book it is (the fix round's F4:
-    // under a link-only seat, the pin moved in the lead time and the heir's
-    // first commitment was a shrink fault with both parties honest).
+    // WITH the provenance of what the book now STANDS ON, which after the walk
+    // is always where the RECORD stands: the link says whose the book is, the
+    // pin says which book it is. `commit` rewrites it for what it publishes,
+    // and `serves` re-derives the same object and compares, so a seat the
+    // chain moved past and a book the record moved under each stop matching on
+    // their own (§C2, the resume panel).
     this.seatedFor.set(held.nameHex, {
       link: bytesToHex(seat.link),
-      pin: target === undefined ? undefined : commitmentIdentity(target.commitment),
+      pin: record === undefined ? undefined : commitmentIdentity(record.commitment),
     });
   }
 
   /**
-   * The evidence that licenses taking on an earlier state: the handover's
-   * pinned commitment — the backing's last, witnessed strictly before the
-   * effective index — exhibited as a served state carrying no log for this
-   * backing.
+   * A served state read as the record's own commitment: matched to it by
+   * IDENTITY first, then decoded for what it carries.
    *
-   * It has to be the **pinned** commitment, not merely one its signer once
-   * made. A superseded state that dropped the backing says nothing about what
-   * the book held at the handover — it may have been picked up again in the
-   * next commitment — so holding the evidence to the record the index pins is
-   * what keeps the exception as narrow as the case that forced it.
+   * The identity is the venue check `committedLogFor` does not make and by its
+   * own contract cannot — "anyone can sign a valid commitment over any state
+   * they like", so membership and a matching root are all it can ask. The
+   * target here is never the caller's: it is `lastCommitmentInForce`'s answer
+   * at some bound, so a never-published state, a state of an earlier sequence,
+   * and a state of a key that once served all fail on the same line. One
+   * helper for the offered state and for every exhibit, because they are the
+   * same question asked of the same walk.
    */
-  private requireDroppedBy(
-    backing: Backing,
-    evidence: ServedState | undefined,
-    target: Commitment,
-  ): void {
-    if (evidence === undefined) {
-      throw new SequencerError("that is not the state the handover pins: the backing's last commitment before the effective index");
+  private recorded(backing: Backing, state: ServedState, target: Commitment): CommittedLog {
+    // A door refuses in its own voice, never with a TypeError: the rest-args
+    // signature made an explicit `undefined` exhibit reachable from JavaScript
+    // (found regression-reviewing the fix), and a boot loop that catches
+    // SequencerError to try its next call must not crash instead.
+    if (
+      typeof state !== "object" ||
+      state === null ||
+      typeof state.commitment !== "object" ||
+      state.commitment === null ||
+      !(state.commitment.operator instanceof Uint8Array) ||
+      typeof state.commitment.sequence !== "bigint" ||
+      !(state.commitment.root instanceof Uint8Array)
+    ) {
+      throw new SequencerError(
+        "that is not a served state: an exhibit and an offered state are each a commitment with the snapshots it roots",
+      );
     }
-    if (commitmentIdentity(evidence.commitment) !== commitmentIdentity(target)) {
-      throw new SequencerError("that evidence is not the handover's pinned commitment");
+    if (commitmentIdentity(state.commitment) !== commitmentIdentity(target)) {
+      throw new SequencerError(
+        "that is not the commitment the record stands on at this step of the walk — each step is the venue's own commitment, newest first, and a state the record does not hold there (older, unpublished, or another key's) is refused by name: offer the commitment the record stands on — takeOver(backing, thatState) — or, where it carries nothing for this backing, exhibit it and offer what stands behind it, the drops newest first — takeOver(backing, theEarlierState, ...the drops above it, thatState)",
+      );
     }
-    // committedLogFor re-roots the evidence against its own commitment, so a
-    // state that merely claims the pinned root does not pass.
-    if (committedLogFor(backing, this.venue, evidence)?.kind !== "dropped") {
-      throw new SequencerError("the handover's pinned commitment still carries this backing");
+    // committedLogFor re-roots the state against its own commitment, so one
+    // that merely claims the record's root does not pass.
+    const committed = committedLogFor(backing, this.venue, state);
+    if (committed === undefined) {
+      throw new SequencerError(
+        "that state does not re-root to the commitment the record holds here: give the served state the operator published with it — the snapshots it signed, not a reconstruction — in the slot the walk asked for, offered or exhibited",
+      );
     }
+    return committed;
   }
 
   /**
@@ -1473,8 +1525,18 @@ export class Sequencer {
    * adopted, so what this roots is the history the verifier's fold reads
    * (§C2b; the module header). The index comes from the venue's record of this
    * operator, so a failed publish does not burn one.
+   *
+   * Two per-call acknowledgements, each strict in both directions and each a
+   * signed claim about a backing this operator is in force for and does not
+   * serve: `dropping` publishes without it, `opening` publishes it EMPTY. An
+   * opening costs one exhibit — the record's last commitment for that
+   * backing, shown to carry nothing for it — and the signature claims the
+   * rest.
    */
-  commit(options?: { readonly dropping?: readonly Backing[] }): ServedState {
+  commit(options?: {
+    readonly dropping?: readonly Backing[];
+    readonly opening?: readonly { readonly backing: Backing; readonly record: ServedState }[];
+  }): ServedState {
     // One commitment per witnessed index: the venue's clock cannot order two,
     // and the era a receipt names — the index of the operator's last commitment
     // — must name one record, not the earlier of two (found reviewing this
@@ -1505,14 +1567,100 @@ export class Sequencer {
     // predecessor one publication (the fix panel's security probe), and a
     // silent drop was a fault against an honest heir (its inventory probe).
     // `awaitingTakeover` is the same condition as a readable list.
-    const acknowledged = new Set((options?.dropping ?? []).map((backing) => backing.nameHex));
+    // Lists, in the door's voice: a caller on the previous shape (`opening`
+    // took bare backings) is told the new one rather than crashed (the fix
+    // batch's review).
+    const rawDropping = options?.dropping ?? [];
+    const rawOpening = options?.opening ?? [];
+    if (!Array.isArray(rawDropping) || !Array.isArray(rawOpening)) {
+      throw new SequencerError("`dropping` and `opening` are lists: backings to drop, and { backing, record } pairs to open");
+    }
+    // Array.from turns a hole into an undefined the element checks see —
+    // `.map` skips a hole and the spread into the rooted set puts it back
+    // (the fix batch's verification) — and `dropping`'s elements are checked
+    // as `opening`'s are.
+    const droppings = Array.from(rawDropping);
+    const openings = Array.from(rawOpening);
+    for (const backing of droppings) {
+      if (typeof backing !== "object" || backing === null) {
+        throw new SequencerError("`dropping` takes backings");
+      }
+    }
+    const acknowledged = new Set(droppings.map((backing) => backing.nameHex));
     // Membership in the ONE read, not a second `serves` pass: re-deriving here
     // was the TOCTOU the comment above claims closed — on a venue whose clock
     // moves mid-call, a backing could flip between the two reads and be
     // neither rooted nor refused (found regression-reviewing the fix).
     const servedNames = new Set(served.map((backing) => backing.nameHex));
+    // **A backing the record never carried is OPENED here, by this operator's
+    // signature — never taken at a door.** A door cannot tell "never had it"
+    // from "lost its book": both read as a seat with history above it and an
+    // empty ledger, so any door that seats the honest new backing also wipes a
+    // lost one (the fix panel: information-theoretic, not a bug). The claim
+    // is made where a wrong one is provable instead. Rooting an empty log for
+    // a backing the record carried is a witnessed rewritten history, signed,
+    // which any holder of the earlier state proves forever; rooting it for a
+    // genuinely new backing is growth from nothing, which isRewrittenHistory
+    // already reads as no fault. The dual of `dropping`, strict the same way:
+    // registered, in force, not served, holding NO operation — a book held is
+    // a book to take over, not to open — and not also named as dropped. AND
+    // one exhibit: the record's last commitment for the backing, shown to
+    // carry nothing for it — the walk's own step check, asked once. Bounded
+    // against this process's state alone, a second process that merely
+    // booted opened a LIVE operator's book empty while the record's last
+    // commitment plainly still carried it (the fix's regression round: the
+    // recurring shape, one input bounded and the other open). What the door
+    // cannot tell, on a record already in the indistinguishable case — the
+    // record's last DROPS the backing and something earlier carried it — is
+    // the honest new backing from the lost book; and a caller can put the
+    // record there in one prior commitment, itself a provable rewritten
+    // history, so this is a possession check with a commitment's cost, not
+    // a bound (the fix batch's review). The signature answers for the rest.
+    //
+    // The seat's LINK is read here, before the publish, from the same chain
+    // the force check reads, and never re-walked after: a clock tick between
+    // this guard and the seating below re-walked at the next index and seated
+    // a retired key on its successor's link, so `serves` read true out of
+    // force and its next commitment rooted a book it did not serve (the
+    // fix's regression round). One read, kept — as the served pin loop keeps
+    // its stored link.
+    const opened = openings.map((entry) => {
+      if (typeof entry !== "object" || entry === null || typeof entry.backing !== "object" || entry.backing === null) {
+        throw new SequencerError(
+          "`opening` takes { backing, record } pairs: the backing, and the record's last commitment for it as the served state it published",
+        );
+      }
+      const { backing, record } = entry;
+      const held = this.served(backing);
+      const chain = this.walkedInForce(held);
+      const tip = chain[chain.length - 1] as Succession;
+      const last = lastCommitmentInForce(chain, this.venue);
+      if (
+        servedNames.has(held.nameHex) ||
+        compareBytes(tip.operator, this.operatorKey) !== 0 ||
+        this.ledger.opLog(held).length !== 0 ||
+        acknowledged.has(held.nameHex)
+      ) {
+        throw new SequencerError(
+          "`opening` names a backing this commitment cannot open: name only what is in force, not served, holding no operation, and not also named in `dropping` — a backing already served needs no opening, one holding a book is taken over (takeOver), one not yet in force waits for its effective index",
+        );
+      }
+      if (last === undefined) {
+        throw new SequencerError(
+          "`opening` names a backing the record holds no commitment for: nothing needs opening — takeOver(backing) takes the empty book",
+        );
+      }
+      if (this.recorded(held, record, last.commitment).kind !== "dropped") {
+        throw new SequencerError(
+          "`opening` names a backing the record's last commitment still carries: that is a book to take over, not to open — takeOver(backing, thatState)",
+        );
+      }
+      return { backing: held, link: bytesToHex(tip.link) };
+    });
+    const openedNames = new Set(opened.map(({ backing }) => backing.nameHex));
     const abandoned = [...this.backings.values()].filter(
-      (backing) => !servedNames.has(backing.nameHex) && this.isInForce(backing),
+      (backing) =>
+        !servedNames.has(backing.nameHex) && !openedNames.has(backing.nameHex) && this.isInForce(backing),
     );
     // The acknowledgement is strict in both directions: every abandoned
     // backing is named, and every name IS an abandoned backing — an
@@ -1529,11 +1677,14 @@ export class Sequencer {
     }
     if (abandoned.some((backing) => !acknowledged.has(backing.nameHex))) {
       throw new SequencerError(
-        "this commitment would drop a backing this operator is in force for: it takes the state over first (takeOver), or names it in `dropping` to drop it deliberately",
+        "this commitment would drop a backing this operator is in force for: it takes the state over first (takeOver); a backing the record never carried is opened here (`opening`); a backing this operator means to stop serving is named in `dropping` — a drop of a book the record carried is a rewritten history against this key, and opening the backing against that drop afterwards is the wipe, signed twice",
       );
     }
     this.caughtUp(served);
-    const snapshots = this.snapshotOf(served);
+    // What this commitment roots: the books served, and the books opened —
+    // each empty, each this operator's claim that the record never carried it.
+    const rooted = [...served, ...opened.map(({ backing }) => backing)];
+    const snapshots = this.snapshotOf(rooted);
     const commitment = signCommitment(
       this.operatorSecret,
       this.venue.nextSequenceFor(this.operatorKey),
@@ -1544,7 +1695,30 @@ export class Sequencer {
     // and the tail is empty. Marked on exactly the backings the root carried —
     // the mark is what `restore` treats as the part no caller can take back, and
     // it must not claim more than this signature covers.
-    for (const backing of served) this.ledger.markCommitted(backing);
+    for (const backing of rooted) this.ledger.markCommitted(backing);
+    // And each served seat's pin moves to THIS commitment: the pin is the
+    // identity of the commitment the book stands on, and the book now stands
+    // on this one. Left behind, this operator's own next read of `serves`
+    // would find the record past its seat — which is the fate reserved for a
+    // process that did NOT publish this commitment (the superseded twin, the
+    // restart): the one writer that keeps writing is the one whose pin keeps
+    // up (§C2, the resume panel).
+    for (const backing of served) {
+      const seat = this.seatedFor.get(backing.nameHex);
+      if (seat !== undefined) {
+        this.seatedFor.set(backing.nameHex, {
+          link: seat.link,
+          pin: commitmentIdentity(commitment),
+        });
+      }
+    }
+    // And an opened backing is SEATED on this commitment — for the link the
+    // guard above read, which named this key before the publish — exactly as
+    // a takeOver seats: the record now stands on a commitment that carries it,
+    // and the seat's pin is that commitment's identity.
+    for (const { backing, link } of opened) {
+      this.seatedFor.set(backing.nameHex, { link, pin: commitmentIdentity(commitment) });
+    }
     return { snapshots, commitment };
   }
 
@@ -1579,11 +1753,13 @@ export class Sequencer {
 
   /**
    * The backings this operator is in force for and does not hold the current
-   * book of — each exactly one `takeOver` away from serving. The same
+   * book of — each exactly one `takeOver` away from serving, or one
+   * `commit({ opening })` where the record never carried it. The same
    * condition the doors refuse on and `commit` refuses to drop silently,
    * exposed as a question so an operator asks it instead of discovering a
-   * refusal: a stale seat (the chain moved), a stale pin (the predecessor
-   * committed inside the lead time), and a skipped takeover all land here.
+   * refusal: a stale seat (the chain moved), a stale pin (the record moved: a
+   * predecessor inside the lead time, this operator's own commitment for
+   * another backing, or a twin's), and a skipped takeover all land here.
    * Copies, as everywhere: no accessor hands out a write path into state.
    */
   awaitingTakeover(): Backing[] {
@@ -1728,7 +1904,7 @@ export class Sequencer {
       // any index.
       if (!this.serves(backing)) {
         throw new SequencerError(
-          "this operator is in force and does not hold the book: it takes the state over first (takeOver), then serves",
+          "this operator is in force and does not hold the book: it takes the state over first (takeOver) — or, for a backing the record never carried, opens it in its next commitment (`opening`) — then serves",
         );
       }
     }

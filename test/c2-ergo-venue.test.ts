@@ -422,9 +422,16 @@ describe("a sequencer on this venue refuses to prepare", () => {
     // clock and the record answer, and the commits probe is what refuses (the
     // door readies — adopts — before it probes).
     const v = venue();
-    await v.sync(new FakeNode().at(100n).putCommitment(commitment(0n, 0xaa), 95n), [backing]);
+    // The operator's own recent commitment keeps its clock; its root is the
+    // EMPTY state's, so the fresh process can exhibit it and take its seat —
+    // the resume rule seats a registering operator only where the record pins
+    // nothing of its own, and these tests' subject is the door behaviour
+    // beyond the seat.
+    const recent = signCommitment(SECRETS.operator, 0n, stateRoot([]));
+    await v.sync(new FakeNode().at(100n).putCommitment(recent, 95n), [backing]);
     const sequencer = new Sequencer(SECRETS.operator, v);
     sequencer.register(backing, signBacking(SECRETS.backer, backing));
+    sequencer.takeOver(backing, undefined, { snapshots: [], commitment: recent });
     const lock: LockOp = {
       backing,
       attemptId: new Uint8Array(32).fill(0xe7),
@@ -512,9 +519,16 @@ describe("settle answers in the sequencer's own voice where the venue is not nee
     // — and the receipt a repeat needs is the sequencer's own, no venue required.
     const v = venue();
     // One recent commitment by this operator: it is serving, not returning.
-    await v.sync(new FakeNode().at(100n).putCommitment(commitment(0n, 0xaa), 95n), [backing]);
+    // The operator's own recent commitment keeps its clock; its root is the
+    // EMPTY state's, so the fresh process can exhibit it and take its seat —
+    // the resume rule seats a registering operator only where the record pins
+    // nothing of its own, and these tests' subject is the door behaviour
+    // beyond the seat.
+    const recent = signCommitment(SECRETS.operator, 0n, stateRoot([]));
+    await v.sync(new FakeNode().at(100n).putCommitment(recent, 95n), [backing]);
     const sequencer = new Sequencer(SECRETS.operator, v);
     sequencer.register(backing, signBacking(SECRETS.backer, backing));
+    sequencer.takeOver(backing, undefined, { snapshots: [], commitment: recent });
     expect(() => sequencer.settle(backing, new Uint8Array(32).fill(0xd1))).toThrow(SequencerError);
     expect(() => sequencer.settle(backing, new Uint8Array(32).fill(0xd1))).toThrow(/no lock for that attempt/);
   });

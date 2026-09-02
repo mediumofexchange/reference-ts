@@ -113,13 +113,13 @@ function keepCommittingWithout(
   sequencer: Sequencer,
   dropped: Backing,
   rounds: number,
-): ServedState {
-  let last!: ServedState;
+): ServedState[] {
+  const drops: ServedState[] = [];
   for (let i = 0; i < rounds; i++) {
     venue.advance(5n);
-    last = commitWithout(venue, sequencer, dropped);
+    drops.unshift(commitWithout(venue, sequencer, dropped));
   }
-  return last;
+  return drops;
 }
 
 /** Alice's signed request to move `quantity` to Bob at her nonce `nonce`. */
@@ -206,7 +206,8 @@ describe("§C2b: what the venue alone still cannot see", () => {
   it("no holding proves against a state that dropped the backing", () => {
     const { venue, sequencer, eur } = setup();
     commitAll(sequencer);
-    const dropped = keepCommittingWithout(venue, sequencer, eur, 20);
+    const drops = keepCommittingWithout(venue, sequencer, eur, 20);
+    const dropped = drops[0]!;
     expect(provesHolding(venue, eur, dropped, KEYS.alice, 100n)).toBe(false);
   });
 });
@@ -227,11 +228,29 @@ describe("§C2: the log that vanished is the log that shrank", () => {
   it("a backing appearing in a later state is not a rewrite", () => {
     // An operator that had not yet registered the backing committed states
     // without it. Growing from nothing is growth, and naming it a fault would
-    // accuse every operator of its own first commitment.
+    // accuse every operator of its own first commitment. Both states are
+    // hand-rooted: a hand-published root desyncs the live process's seats by
+    // design now (the record moved past them — the resume rule), and this
+    // test's claim is the VERIFIER's, needing no door.
     const { venue, sequencer, eur } = setup();
+    // The carrying snapshots are taken while the process still serves: a
+    // hand-published root desyncs its seats (the record moved past them),
+    // so taken afterwards `snapshot()` is EMPTY and the "later state"
+    // carries nothing — the slice-36 round's Root C, a fixture that had
+    // stopped exercising its name. Asserted, so it cannot happen twice.
+    const snapshots = sequencer.snapshot();
+    expect(snapshots.some((s) => compareBytes(s.name, eur.name) === 0)).toBe(true);
     const before = commitWithout(venue, sequencer, eur);
     venue.advance(1n);
-    const after = commitAll(sequencer);
+    const after = {
+      snapshots,
+      commitment: signCommitment(
+        SECRETS.operator,
+        venue.nextSequenceFor(KEYS.operator),
+        stateRoot(snapshots),
+      ),
+    };
+    venue.publish(after.commitment);
     expect(isRewrittenHistory(eur, venue, before, after)).toBe(false);
   });
 
@@ -313,7 +332,8 @@ describe("§C2: the log that vanished is the log that shrank", () => {
     // forever or it is not one.
     const { venue, sequencer, eur } = setup();
     const carried = commitAll(sequencer);
-    const dropped = keepCommittingWithout(venue, sequencer, eur, 3);
+    const drops = keepCommittingWithout(venue, sequencer, eur, 3);
+    const dropped = drops[0]!;
     expect(isRewrittenHistory(eur, venue, carried, dropped)).toBe(true);
 
     // Now the remedy runs: a successor is appointed and takes force.
@@ -321,7 +341,7 @@ describe("§C2: the log that vanished is the log that shrank", () => {
     venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, effective));
     const heir = new Sequencer(SECRETS.carol, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));
-    heir.takeOver(eur, carried, dropped);
+    heir.takeOver(eur, carried, ...drops);
     venue.advance(2n);
     heir.commit();
 
@@ -369,8 +389,9 @@ describe("§C2: a receipt read against a state that dropped the backing", () => 
     // operator did — the fault is isRewrittenHistory's to name, and it needs two
     // states to order them.
     const { venue, sequencer, eur } = setup();
-    const early = commitWithout(venue, sequencer, eur);
-    venue.advance(1n);
+    // The receipt first, then the hand-rooted early state: a hand-published
+    // root desyncs the live process's seats by design now (the resume rule),
+    // and what this test orders is the STATES, not the fixture's calls.
     const receipt = sequencer.submitTransfer(
       { backing: eur, from: KEYS.alice, to: KEYS.bob, quantity: 40n, nonce: 0n },
       ed25519.sign(
@@ -378,8 +399,25 @@ describe("§C2: a receipt read against a state that dropped the backing", () => 
         SECRETS.alice,
       ),
     );
+    // The carrying snapshots BEFORE the hand-published drop, which desyncs
+    // the live process's seats (the record moves past them) and would leave
+    // `snapshot()` empty — so `carried` really carries (the slice-36 round's
+    // Root C). The claim here is the VERIFIER's ordering of two states.
+    const snapshots = sequencer.snapshot();
+    expect(snapshots.some((s) => compareBytes(s.name, eur.name) === 0)).toBe(true);
+    const early = commitWithout(venue, sequencer, eur);
+    venue.advance(1n);
+    const carried = {
+      snapshots,
+      commitment: signCommitment(
+        SECRETS.operator,
+        venue.nextSequenceFor(KEYS.operator),
+        stateRoot(snapshots),
+      ),
+    };
+    venue.publish(carried.commitment);
     expect(receiptStatus(eur, venue, receipt, early)).toBe("dropped");
-    expect(isRewrittenHistory(eur, venue, early, commitAll(sequencer))).toBe(false);
+    expect(isRewrittenHistory(eur, venue, early, carried)).toBe(false);
   });
 
   it("still says unrelated for a state that is not this operator's", () => {
@@ -424,7 +462,8 @@ describe("§C2b: the grade that does fire, and the state it must be asked agains
     // this answer and must know to reach for the last one that carried it.
     const { venue, sequencer, eur } = setup();
     commitAll(sequencer);
-    const dropped = keepCommittingWithout(venue, sequencer, eur, 20);
+    const drops = keepCommittingWithout(venue, sequencer, eur, 20);
+    const dropped = drops[0]!;
     venue.publishOp(eur.name, request(eur, 10n, 0n));
     venue.publishOp(eur.name, request(eur, 20n, 1n));
     venue.advance(NON_SERVICE.duration + 1n);
@@ -439,11 +478,12 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
   function toHandover(replaceable = true) {
     const { venue, sequencer, eur, usd } = setup(replaceable);
     const lastGood = commitAll(sequencer);
-    const droppedLatest = keepCommittingWithout(venue, sequencer, eur, 20);
+    const drops = keepCommittingWithout(venue, sequencer, eur, 20);
+    const droppedLatest = drops[0]!;
     venue.publishOp(eur.name, request(eur, 10n, 0n));
     venue.publishOp(eur.name, request(eur, 20n, 1n));
     venue.advance(NON_SERVICE.duration + 1n);
-    return { venue, sequencer, eur, usd, lastGood, droppedLatest };
+    return { venue, sequencer, eur, usd, lastGood, droppedLatest, drops };
   }
 
   /**
@@ -461,9 +501,9 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
   }
 
   it("takes on the last state that carried it, on evidence the latest drops it", () => {
-    const { venue, eur, lastGood, droppedLatest } = toHandover();
+    const { venue, eur, lastGood, drops } = toHandover();
     const heir = appoint(venue, eur);
-    heir.takeOver(eur, lastGood, droppedLatest);
+    heir.takeOver(eur, lastGood, ...drops);
     expect(heir.opLog(eur)).toHaveLength(lastGood.snapshots[0]!.opLog.length);
   });
 
@@ -472,9 +512,9 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     // E's replacement rule, not snapshot redemption: the aggravated grade never
     // fired here, so there is no snapshot path to open. What restores the holder
     // is a successor serving.
-    const { venue, eur, lastGood, droppedLatest } = toHandover();
+    const { venue, eur, lastGood, drops } = toHandover();
     const heir = appoint(venue, eur);
-    heir.takeOver(eur, lastGood, droppedLatest);
+    heir.takeOver(eur, lastGood, ...drops);
     venue.advance(1n); // force arrives at the effective index
     const served = heir.commit();
     expect(provesHolding(venue, eur, served, KEYS.alice, 100n)).toBe(true);
@@ -486,13 +526,14 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     expect(() => heir.takeOver(eur, lastGood)).toThrow(SequencerError);
   });
 
-  it("refuses evidence that is not the pinned commitment: the backing's last before the effective index", () => {
-    const { venue, sequencer, eur, lastGood } = toHandover();
+  it("the walk takes every drop newest first — the pinned one, the stale one, the run before them — and refuses a skipped step", () => {
+    const { venue, sequencer, eur, lastGood, drops } = toHandover();
     // Named four indices out, so the incumbent commits twice more BEFORE the
-    // effective index: its commitments up to then move the target (§C2), and
-    // the evidence must be the target, not merely one dropped state it once
-    // signed — a superseded drop says nothing about what the book held at the
-    // handover, since the next commitment may have picked the backing up again.
+    // effective index: its commitments up to then move the target (§C2). The
+    // walk starts at the record's last — the pinned drop — and takes each
+    // earlier drop in turn; a stale drop offered in the pinned one's place is
+    // not the record's next step and is refused by name (the fix panel: the
+    // retired door held the exhibit to the pin and let the offer float).
     const effective = venue.witnessedIndex() + 4n;
     venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, effective));
     venue.advance(1n);
@@ -504,8 +545,9 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     const heir = new Sequencer(SECRETS.carol, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));
     expect(() => heir.takeOver(eur, lastGood, older)).toThrow(SequencerError);
-    // The pinned commitment itself is exactly the evidence the door asks for.
-    heir.takeOver(eur, lastGood, { snapshots: pinned.snapshots, commitment: pinned.commitment });
+    // The whole run, newest first, reaches exactly the last carrying state.
+    heir.takeOver(eur, lastGood, { snapshots: pinned.snapshots, commitment: pinned.commitment }, older, ...drops);
+    expect(heir.awaitingTakeover()).toHaveLength(0);
     expect(heir.opLog(eur)).toHaveLength(lastGood.snapshots[0]!.opLog.length);
   });
 
@@ -528,9 +570,13 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
   });
 
   it("refuses a state that never carried the backing either", () => {
+    // Offered with no exhibit, the drop IS the commitment the record stands
+    // on, so it is refused for what it is: a state carrying no log. (Offered
+    // beside itself as an exhibit it would be refused one step down, by
+    // identity — a different claim, which the walk's own tests make.)
     const { venue, eur, droppedLatest } = toHandover();
     const heir = appoint(venue, eur);
-    expect(() => heir.takeOver(eur, droppedLatest, droppedLatest)).toThrow(SequencerError);
+    expect(() => heir.takeOver(eur, droppedLatest)).toThrow(/carries no log for this backing/);
   });
 
   /**
@@ -556,33 +602,39 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     const heir = new Sequencer(SECRETS.carol, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));
     const eurLog = carried.snapshots.find((s) => compareBytes(s.name, eur.name) === 0)!.opLog;
-    return { venue, eur, heir, carried, dropped, eurLog };
+    return { venue, eur, heir, carried, dropped, eurLog, drops: [dropped] };
   }
 
   it("the heir may not license its own commitment as the earlier state", () => {
     // The heir signs, in its OWN term, a law-valid TRUNCATION of the book: the
     // issuance kept, Bob's 40 gone. The drop evidence is genuine, the state
-    // roots, the replay is lawful — only its TERM refuses it: an earlier state
-    // is one from a term at or before the pin's, and the heir's is after.
-    const { venue, eur, heir, carried, dropped, eurLog } = evidenceLicenses();
+    // roots, the replay is lawful — and the walk refuses it by IDENTITY: the
+    // state offered must be the commitment the record stands on at that
+    // step, and an unpublished own-signed state is on no step at all (the
+    // fix panel retired the term rule that used to hold this line).
+    // UNPUBLISHED, deliberately: published, the truncation would BE the
+    // record's last commitment and the walk would reach it — the heir's own
+    // witnessed fault, resumed onto in one call and provable forever
+    // (c2-the-resume).
+    const { venue, eur, heir, carried, dropped, eurLog, drops } = evidenceLicenses();
     const truncated = [{ name: eur.name, opLog: [eurLog[0]!] }];
     const ownTerm: ServedState = {
       snapshots: truncated,
       commitment: signCommitment(SECRETS.carol, 0n, stateRoot(truncated)),
     };
-    venue.publish(ownTerm.commitment);
     expect(() => heir.takeOver(eur, ownTerm, dropped)).toThrow(SequencerError);
     expect(heir.opLog(eur)).toHaveLength(0);
     // The honest path the door leaves open: the last state that carried it.
-    heir.takeOver(eur, carried, dropped);
+    heir.takeOver(eur, carried, ...drops);
     expect(heir.balance(eur, KEYS.bob)).toBe(40n);
   });
 
   it("a state the predecessor published out of force is not an earlier state", () => {
     // The retired incumbent signs the same truncation AFTER losing force. It
-    // places in no term — and a state that places nowhere accuses nobody and
-    // licenses nothing.
-    const { venue, eur, heir, carried, dropped, eurLog } = evidenceLicenses();
+    // is on no step of the walk — the record's in-force commitments are the
+    // only steps — so identity refuses it; a state that places nowhere
+    // accuses nobody and licenses nothing.
+    const { venue, eur, heir, carried, dropped, eurLog, drops } = evidenceLicenses();
     venue.advance(1n);
     const truncated = [{ name: eur.name, opLog: [eurLog[0]!] }];
     const outOfForce: ServedState = {
@@ -596,7 +648,7 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     venue.publish(outOfForce.commitment);
     expect(() => heir.takeOver(eur, outOfForce, dropped)).toThrow(SequencerError);
     expect(heir.opLog(eur)).toHaveLength(0);
-    heir.takeOver(eur, carried, dropped);
+    heir.takeOver(eur, carried, ...drops);
     expect(heir.balance(eur, KEYS.bob)).toBe(40n);
   });
 
@@ -604,9 +656,10 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     // The incumbent equivocated: a second state at the sequence it published
     // the drop at, this one carrying the backing. It roots, it is the
     // incumbent's own signature, it places in the incumbent's own term — only
-    // "strictly before the target's sequence" refuses it, and taking it would
+    // identity against the walk's step refuses it (a twin at one sequence has
+    // a different root), and taking it would
     // seat the heir on one arm of an equivocation isEquivocation names.
-    const { eur, heir, carried, dropped } = evidenceLicenses();
+    const { eur, heir, carried, dropped, drops } = evidenceLicenses();
     const twin: ServedState = {
       snapshots: carried.snapshots,
       commitment: signCommitment(
@@ -617,7 +670,7 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     };
     expect(() => heir.takeOver(eur, twin, dropped)).toThrow(SequencerError);
     expect(heir.opLog(eur)).toHaveLength(0);
-    heir.takeOver(eur, carried, dropped);
+    heir.takeOver(eur, carried, ...drops);
     expect(heir.balance(eur, KEYS.bob)).toBe(40n);
   });
 
@@ -632,12 +685,13 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     expect(() => heir.takeOver(eur, forged, droppedLatest)).toThrow(SequencerError);
   });
 
-  it("a successor that takes too old a state is caught by the same fault", () => {
-    // The bound, and it is the honest one: which state was the LAST to carry the
-    // backing is not readable from a root, so a successor could take an earlier
-    // one. That is not licensed, it is provable — by anyone holding the later
-    // state, against the successor, exactly as slice 14 extended the predicate
-    // across a handover.
+  it("a successor cannot take too old a state: the walk reaches exactly one", () => {
+    // Which state was the LAST to carry the backing is not readable from a
+    // root, so the retired door licensed any earlier state and relied on a
+    // fault proof after the fact. The walk reaches exactly one — the drops
+    // above the last carrying state are exhibited, and a carrying state
+    // cannot be — so the older state is refused by name, and the successor's
+    // first commitment is no rewrite of anything.
     const { venue, sequencer, eur } = setup();
     const first = commitAll(sequencer);
     venue.advance(1n);
@@ -649,13 +703,15 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
       ),
     );
     const second = commitAll(sequencer);
-    const droppedLatest = keepCommittingWithout(venue, sequencer, eur, 5);
+    const drops = keepCommittingWithout(venue, sequencer, eur, 5);
+    const droppedLatest = drops[0]!;
 
     const heir = appoint(venue, eur);
-    heir.takeOver(eur, first, droppedLatest);
+    expect(() => heir.takeOver(eur, first, droppedLatest)).toThrow(SequencerError);
+    heir.takeOver(eur, second, ...drops);
     venue.advance(1n); // force arrives at the effective index
     const successorState = heir.commit();
-    expect(isRewrittenHistory(eur, venue, second, successorState)).toBe(true);
+    expect(isRewrittenHistory(eur, venue, second, successorState)).toBe(false);
   });
 
   it("OPEN: a backing whose E names no replacement rule has no exit", () => {
