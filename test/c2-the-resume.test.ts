@@ -1,7 +1,7 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
-import { signCommitment, stateRoot, type ServedState } from "../src/commitment.js";
+import { signCommitment, stateRoot, type Commitment, type ServedState } from "../src/commitment.js";
 import { isRewrittenHistory } from "../src/fault.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import {
@@ -32,11 +32,13 @@ import { KEYS, pub, SECRETS } from "./support.js";
 // by identity — and the empty book where the walk runs out of record. The
 // ordinary handover and the resume are the zero-exhibit case; §C2b's walk-back
 // is the k-exhibit case. Where the walk cannot be paid — a backing registered
-// on an operator with a history, which no door can tell from a lost book — the
-// empty book is CLAIMED in the operator's next commitment (`opening`), where a
-// false claim is a provable fault. Currency is `serves`: a seat holding the
-// book the record stands on keeps its tail; one that does not drops it to the
-// mark. Every `takeOver` either serves or throws.
+// on an operator with a history, which no door can tell from a lost book once
+// the record's last commitment drops it — the empty book is CLAIMED in the
+// operator's next commitment (`opening`), for one exhibit and a signature,
+// where a false claim is a provable fault. Currency is `serves`: a seat
+// holding the book the record stands on keeps its tail; one that does not
+// drops it to the mark. Every `takeOver` of an in-force link either serves or
+// throws.
 
 const SILENCE = { noCommitmentDuration: 20n, challengeWindow: 5n };
 const HEIR_SECRET = new Uint8Array(32).fill(0x0b);
@@ -112,6 +114,10 @@ const stateOf = (committed: ServedState): ServedState => ({
   commitment: committed.commitment,
 });
 
+/** The names a served state carries, for asserting what a root covers. */
+const carries = (state: ServedState, backing: Backing): boolean =>
+  state.snapshots.some((s) => Buffer.from(s.name).equals(Buffer.from(backing.name)));
+
 /**
  * A commitment this key publishes over NOTHING — a drop of every backing it
  * is in force for, hand-rooted because a live process refuses to drop a
@@ -119,10 +125,26 @@ const stateOf = (committed: ServedState): ServedState => ({
  * predecessor's drop takes in every remedy test.
  */
 function publishDrop(venue: LocalVenue, secret: Uint8Array): ServedState {
-  const snapshots: ServedState["snapshots"] = [];
+  return publishOver(venue, secret, []);
+}
+
+/** A commitment this key publishes over exactly these snapshots, hand-rooted. */
+function publishOver(venue: LocalVenue, secret: Uint8Array, snapshots: ServedState["snapshots"]): ServedState {
   const commitment = signCommitment(secret, venue.nextSequenceFor(pub(secret)), stateRoot(snapshots));
   venue.publish(commitment);
   return { snapshots, commitment };
+}
+
+/**
+ * A venue whose clock ticks as it witnesses a commitment: the block that
+ * carries a publication is the next index, which LocalVenue's fixed clock does
+ * not model and a real chain always does.
+ */
+class TickingVenue extends LocalVenue {
+  override publish(commitment: Commitment): void {
+    super.publish(commitment);
+    this.advance(1n);
+  }
 }
 
 /**
@@ -188,6 +210,22 @@ function droppedTwice() {
   return { venue, eur, fresh, c0, c1, c2, d1, d2, toCarol };
 }
 
+/** An operator with two commitments carrying USD only, about to register EUR. */
+function withHistory() {
+  const venue = new LocalVenue();
+  const usd = backingFor(venue, "USD");
+  const eur = backingFor(venue);
+  const sequencer = new Sequencer(SECRETS.operator, venue);
+  sequencer.register(usd, signBacking(SECRETS.backer, usd));
+  issue(sequencer, usd, 100n, 0n);
+  const first = sequencer.commit();
+  at(venue, 1n);
+  const second = sequencer.commit();
+  at(venue, 2n);
+  sequencer.register(eur, signBacking(SECRETS.backer, eur));
+  return { venue, usd, eur, sequencer, first, second };
+}
+
 describe("§C2: a fresh process resumes the book its record stands on", () => {
   it("the stale book is detected, refused at every door, and resumed in one call", () => {
     // The record stands on this operator's own later commitment, so the
@@ -241,6 +279,50 @@ describe("§C2: a fresh process resumes the book its record stands on", () => {
     };
     expect(() => fresh.takeOver(eur, above)).toThrow(SequencerError);
     expect(fresh.opLog(eur)).toHaveLength(0);
+  });
+
+  it("a witnessed own rewrite — a truncation, or the empty log — is resumed onto in one call, provable forever, and the honest earlier book is then refused", () => {
+    // Kept on purpose (the fix panel: F9). The record stands where it
+    // stands; publishing the rewrite was already a permanent
+    // stranger-checkable fault, and an honest fresh process serving the book
+    // the record stands on beats an honest process dark. The 35d guard's
+    // surviving content — an UNWITNESSED own-signed state is not licensed —
+    // is the previous test. What this one records is the price: there is no
+    // public call back to the fuller book.
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    const original = new Sequencer(SECRETS.operator, venue);
+    original.register(eur, signBacking(SECRETS.backer, eur));
+    issue(original, eur, 100n, 0n);
+    const move = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 40n, 0n);
+    original.submitTransfer(move.op, move.signature);
+    at(venue, 1n);
+    const carried = original.commit(); // [issue, ->bob]
+    at(venue, 2n);
+    const truncated = publishOver(venue, SECRETS.operator, [
+      { name: eur.name, opLog: [carried.snapshots[0]!.opLog[0]!] },
+    ]);
+    expect(isRewrittenHistory(eur, venue, carried, truncated)).toBe(true);
+
+    at(venue, 5n);
+    const fresh = new Sequencer(SECRETS.operator, venue);
+    fresh.register(eur, signBacking(SECRETS.backer, eur));
+    fresh.takeOver(eur, truncated);
+    expect(serving(fresh, eur)).toBe(true);
+    expect(fresh.balance(eur, KEYS.bob)).toBe(0n);
+    expect(() => fresh.takeOver(eur, carried)).toThrow(/the record stands on at this step/);
+
+    // And the empty log — a commitment that CARRIES the backing with nothing
+    // in it — is the limit of the same shape: served, every nonce free.
+    at(venue, 6n);
+    const emptied = publishOver(venue, SECRETS.operator, [{ name: eur.name, opLog: [] }]);
+    at(venue, 7n);
+    const again = new Sequencer(SECRETS.operator, venue);
+    again.register(eur, signBacking(SECRETS.backer, eur));
+    again.takeOver(eur, emptied);
+    expect(serving(again, eur)).toBe(true);
+    expect(again.outstanding(eur)).toBe(0n);
+    expect(isRewrittenHistory(eur, venue, carried, emptied)).toBe(true);
   });
 
   it("the one-writer twin fails closed on the losing side, and repairs in one call that drops its dead tail", () => {
@@ -429,6 +511,25 @@ describe("§C2: the walk — the book is what the record's descent reaches", () 
     expect(() => fresh.submitTransfer(toCarol.op, toCarol.signature)).toThrow(/nonce/);
   });
 
+  it("a malformed exhibit or offer is refused in the door's own voice, never with a TypeError", () => {
+    // The rest-args signature made an explicit `undefined` exhibit reachable
+    // from JavaScript, and the retired helper's `undefined` guard went with
+    // it (the fix's regression round). A boot loop that catches
+    // SequencerError to try its next call must not crash instead — and
+    // nothing is mutated on the way out.
+    const { eur, fresh, c2, d1, d2 } = droppedTwice();
+    const loose = fresh as unknown as { takeOver: (...args: unknown[]) => void };
+    expect(() => loose.takeOver(eur, c2, undefined)).toThrow(/not a served state/);
+    expect(() => loose.takeOver(eur, c2, stateOf(d2), null, stateOf(d1))).toThrow(/not a served state/);
+    expect(() => loose.takeOver(eur, c2, stateOf(d2), stateOf(d1), {})).toThrow(/not a served state/);
+    expect(() => loose.takeOver(eur, null)).toThrow(/not a served state/);
+    expect(() => loose.takeOver(eur, { snapshots: c2.snapshots })).toThrow(/not a served state/);
+    expect(fresh.opLog(eur)).toHaveLength(0);
+    expect(serving(fresh, eur)).toBe(false);
+    fresh.takeOver(eur, c2, stateOf(d2), stateOf(d1));
+    expect(serving(fresh, eur)).toBe(true);
+  });
+
   it("the wipe is refused at a pinned seat: the empty book is not licensed off one exhibit where the history carries the book", () => {
     // The round's A3: the empty-book-by-evidence arm licensed the empty book
     // off the record's LAST commitment with no reference to what stood
@@ -461,8 +562,9 @@ describe("§C2: the walk — the book is what the record's descent reaches", () 
   it("the empty book is the walk's bottom: a backing the record never carried is taken with every commitment exhibited", () => {
     // The round's W1, at depth one and at depth two. One exhibit reaches the
     // bottom of a one-commitment history and licenses the empty book; at
-    // depth two it does not, and the second commitment must be exhibited as
-    // well — which is what keeps the wipe out.
+    // depth two it does not, a skipped middle does not, and the whole run —
+    // every commitment the record holds, newest first — does. That is what
+    // keeps the wipe out, and the price the panel took for it.
     const venue = new LocalVenue();
     const usd = backingFor(venue, "USD");
     const eur = backingFor(venue);
@@ -477,21 +579,21 @@ describe("§C2: the walk — the book is what the record's descent reaches", () 
     expect(serving(sequencer, eur)).toBe(true);
     expect(issue(sequencer, eur, 10n, 0n).position).toBe(0n);
     at(venue, 6n);
-    expect(sequencer.commit().snapshots).toHaveLength(2);
+    const middle = sequencer.commit();
+    expect(middle.snapshots).toHaveLength(2);
 
     const gold = backingFor(venue, "GOLD");
     at(venue, 7n);
-    const second = sequencer.commit(); // two commitments now, neither carrying GOLD
+    const second = sequencer.commit(); // three commitments now, none carrying GOLD
     at(venue, 8n);
     sequencer.register(gold, signBacking(SECRETS.backer, gold));
     expect(() => sequencer.takeOver(gold, undefined, stateOf(second))).toThrow(/offer its state/);
     expect(() => sequencer.takeOver(gold, undefined, stateOf(second), stateOf(first))).toThrow(/at this step/);
-    const ones = sequencer.opLog(usd); // the middle commitment carried USD and EUR
-    expect(ones).toHaveLength(1);
-    // The middle commitment, as a reader holds it: its snapshots are what
-    // that commit returned, which this fixture did not keep — so the walk is
-    // paid at depth two by the operator's own kept states, and this test
-    // keeps the refusal only. (The affordable path is the next describe.)
+    sequencer.takeOver(gold, undefined, stateOf(second), stateOf(middle), stateOf(first));
+    expect(serving(sequencer, gold)).toBe(true);
+    expect(sequencer.opLog(gold)).toHaveLength(0);
+    at(venue, 9n);
+    expect(sequencer.commit().snapshots).toHaveLength(3);
   });
 
   it("more exhibits than the record holds is refused: the walk has a bottom", () => {
@@ -509,29 +611,23 @@ describe("§C2: the walk — the book is what the record's descent reaches", () 
   });
 });
 
-describe("§C2: the empty book at a seat with history is a signed claim (`opening`)", () => {
-  it("a backing registered on an operator with a history is opened in its next commitment, and then serves", () => {
-    // A door cannot tell "never had this backing" from "lost its book" —
-    // both read as a seat with history above it and an empty ledger — so the
-    // claim moves to where a wrong one is provable: the operator's own
-    // signature on the record. Growth from nothing is no fault.
-    const venue = new LocalVenue();
-    const usd = backingFor(venue, "USD");
-    const eur = backingFor(venue);
-    const sequencer = new Sequencer(SECRETS.operator, venue);
-    sequencer.register(usd, signBacking(SECRETS.backer, usd));
-    issue(sequencer, usd, 100n, 0n);
-    const first = sequencer.commit();
-    at(venue, 1n);
-    sequencer.commit();
-    at(venue, 2n);
-    sequencer.register(eur, signBacking(SECRETS.backer, eur));
+describe("§C2: the empty book the walk cannot pay for is a signed claim (`opening`)", () => {
+  it("a backing registered on an operator with a history is opened in its next commitment, for one exhibit, and then serves", () => {
+    // A door cannot tell "never had this backing" from "lost its book" once
+    // the record's last commitment drops it — both read as a seat with
+    // history above it and an empty ledger — so the claim moves to where a
+    // wrong one is provable: the operator's own signature on the record. The
+    // exhibit is the record's last commitment, shown to carry nothing, which
+    // `commit` hands every running process. Growth from nothing is no fault.
+    const { venue, eur, sequencer, first, second } = withHistory();
     expect(serving(sequencer, eur)).toBe(false);
     expect(() => sequencer.commit()).toThrow(/opens it here/);
     expect(() => issue(sequencer, eur, 1n, 0n)).toThrow(/opens it in its next commitment/);
-    const opened = sequencer.commit({ opening: [eur] });
+    // A stale exhibit is not the record's last, and is refused by name.
+    expect(() => sequencer.commit({ opening: [{ backing: eur, record: stateOf(first) }] })).toThrow(/at this step/);
+    const opened = sequencer.commit({ opening: [{ backing: eur, record: stateOf(second) }] });
     expect(opened.snapshots).toHaveLength(2);
-    expect(opened.snapshots.some((s) => s.opLog.length === 0)).toBe(true);
+    expect(carries(opened, eur)).toBe(true);
     expect(serving(sequencer, eur)).toBe(true);
     expect(isRewrittenHistory(eur, venue, first, opened)).toBe(false);
     expect(isRewrittenHistory(eur, venue, opened, first)).toBe(false);
@@ -548,45 +644,84 @@ describe("§C2: the empty book at a seat with history is a signed claim (`openin
     expect(fresh.outstanding(eur)).toBe(10n);
   });
 
-  it("opening is strict in both directions: a served backing, a book held, one not in force, one also dropped, and one not registered are refused", () => {
+  it("a backing the record's last commitment still carries cannot be opened: that is a book to take over", () => {
+    // The fix's regression round: bounded against this process's state alone
+    // — registered, in force, unserved, empty — a second process that merely
+    // booted opened a LIVE operator's book empty while the record's last
+    // commitment plainly still carried it. The exhibit is what the door can
+    // tell, and it refuses; the walk is the call that works.
     const venue = new LocalVenue();
-    const usd = backingFor(venue, "USD");
     const eur = backingFor(venue);
-    const gold = backingFor(venue, "GOLD");
-    const sequencer = new Sequencer(SECRETS.operator, venue);
-    sequencer.register(usd, signBacking(SECRETS.backer, usd));
-    const first = sequencer.commit();
+    const original = new Sequencer(SECRETS.operator, venue);
+    original.register(eur, signBacking(SECRETS.backer, eur));
+    issue(original, eur, 100n, 0n);
+    const move = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 40n, 0n);
+    original.submitTransfer(move.op, move.signature);
     at(venue, 1n);
+    const carried = original.commit();
+    at(venue, 5n);
+    const twin = new Sequencer(SECRETS.operator, venue); // merely booted
+    twin.register(eur, signBacking(SECRETS.backer, eur));
+    expect(() => twin.commit({ opening: [{ backing: eur, record: stateOf(carried) }] })).toThrow(/still carries/);
+    expect(serving(twin, eur)).toBe(false);
+    expect(serving(original, eur)).toBe(true);
+    expect(original.balance(eur, KEYS.bob)).toBe(40n);
+    twin.takeOver(eur, carried);
+    expect(twin.balance(eur, KEYS.bob)).toBe(40n);
+  });
+
+  it("opening is strict in both directions: a served backing, a book held, one not in force, one also dropped, one the record holds nothing for, and one not registered are refused", () => {
+    const { venue, usd, eur, sequencer, first, second } = withHistory();
     // Served: USD is seated and serving.
-    expect(() => sequencer.commit({ opening: [usd] })).toThrow(/cannot open/);
-    // Not registered.
-    expect(() => sequencer.commit({ opening: [eur] })).toThrow(/not served by this sequencer/);
-    sequencer.register(eur, signBacking(SECRETS.backer, eur));
+    expect(() => sequencer.commit({ opening: [{ backing: usd, record: stateOf(second) }] })).toThrow(/cannot open/);
     // Also named as dropped: one claim contradicts the other.
-    expect(() => sequencer.commit({ opening: [eur], dropping: [eur] })).toThrow(/cannot open/);
-    // A book held: taken at the walk's bottom, then an operation co-signed —
-    // that is a book to take over, not to open. (It serves, so it is refused
-    // as served; a held book on an unserved seat is the twin's shape, below.)
-    sequencer.takeOver(eur, undefined, stateOf(first));
+    expect(() => sequencer.commit({ opening: [{ backing: eur, record: stateOf(second) }], dropping: [eur] })).toThrow(/cannot open/);
+    // Not registered.
+    const gold = backingFor(venue, "GOLD");
+    expect(() => sequencer.commit({ opening: [{ backing: gold, record: stateOf(second) }] })).toThrow(/not served by this sequencer/);
+    // Not in force: a named heir inside its lead time may register, and may
+    // not open — no door opens before force, this one included. From its
+    // effective index the same call is the honest successor's opening of a
+    // backing its predecessor never carried: the record's last for GOLD is
+    // the predecessor's, exhibited as carrying nothing for it.
+    at(venue, 10n);
+    venue.publishReplacement(gold.name, replacementBy(gold, HEIR_SECRET, 20n));
+    const heir = new Sequencer(HEIR_SECRET, venue);
+    heir.register(gold, signBacking(SECRETS.backer, gold));
+    const pending = { backing: gold, record: stateOf(second) };
+    expect(() => heir.commit({ opening: [pending] })).toThrow(/cannot open/);
+    at(venue, 20n);
+    heir.commit({ opening: [pending] });
+    expect(serving(heir, gold)).toBe(true);
+    // A book held: EUR taken at the walk's bottom, then an operation
+    // co-signed — that is a book to take over, not to open. (It serves, so it
+    // is refused as served; a held book on an UNSERVED seat is the twin's
+    // shape, the next test.)
+    sequencer.takeOver(eur, undefined, stateOf(second), stateOf(first));
+    expect(serving(sequencer, eur)).toBe(true);
     issue(sequencer, eur, 5n, 0n);
-    expect(() => sequencer.commit({ opening: [eur] })).toThrow(/cannot open/);
-    // Not in force: GOLD names a different operator.
-    const foreign = makeBacking({
-      obligor: KEYS.backer,
-      payout: { thing: "AG", quantumExponent: -2, perUnit: 100n },
-      reliance: [],
-      evidence: {
-        setting: "transparent",
-        operator: HEIR,
-        silence: SILENCE,
-        witnessing: { venue: venue.id, interval: 5n },
-        replacementRule: KEYS.backer,
-      },
-    });
-    expect(() => sequencer.register(foreign, signBacking(SECRETS.backer, foreign))).toThrow(/does not serve/);
-    void gold;
-    // The honest commit still goes through after every refusal.
-    expect(sequencer.commit().snapshots).toHaveLength(2);
+    at(venue, 21n);
+    expect(() => sequencer.commit({ opening: [{ backing: eur, record: stateOf(second) }] })).toThrow(/cannot open/);
+  });
+
+  it("a backing the record holds no commitment for needs no opening: the empty book is one takeOver away", () => {
+    // The F2 heir: its handover pins nothing, and nothing later stands.
+    // There is nothing to exhibit and nothing to claim — the walk's bottom
+    // is where it starts, and `takeOver(backing)` takes the empty book.
+    const venue = new LocalVenue();
+    const eur = backingFor(venue);
+    const original = new Sequencer(SECRETS.operator, venue);
+    original.register(eur, signBacking(SECRETS.backer, eur));
+    at(venue, 30n);
+    venue.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 31n));
+    at(venue, 31n);
+    const heir = new Sequencer(HEIR_SECRET, venue);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
+    const nothing: ServedState = { snapshots: [], commitment: signCommitment(HEIR_SECRET, 0n, stateRoot([])) };
+    expect(() => heir.commit({ opening: [{ backing: eur, record: nothing }] })).toThrow(/nothing needs opening/);
+    heir.takeOver(eur);
+    expect(serving(heir, eur)).toBe(true);
+    expect(heir.commit().snapshots).toHaveLength(1);
   });
 
   it("a stale seat holding a book is not openable: the twin's shape is a takeover, and the walk repairs it", () => {
@@ -600,16 +735,18 @@ describe("§C2: the empty book at a seat with history is a signed claim (`openin
     const twins = fresh.commit();
     at(venue, 22n);
     expect(serving(heir, eur)).toBe(false);
-    expect(() => heir.commit({ opening: [eur] })).toThrow(/cannot open/);
+    expect(() => heir.commit({ opening: [{ backing: eur, record: stateOf(twins) }] })).toThrow(/cannot open/);
     heir.takeOver(eur, twins);
     expect(serving(heir, eur)).toBe(true);
   });
 
-  it("a false opening — a backing the record carried — is a witnessed rewritten history, provable by any holder of the earlier state", () => {
-    // The door cannot tell the honest new backing from the lost book, and
-    // does not try: the claim is signed, and a wrong one is the ordinary
-    // shrink fault, checkable by any stranger holding the carrying state,
-    // forever. This is what moving the claim out of the door buys.
+  it("a false opening is refused where the record's last still carries the book; where it does not, the claim is signed and provable by any holder of the earlier state", () => {
+    // The door tells the two apart exactly as far as one exhibit reaches.
+    // Past that — the record's last drops the backing, something earlier
+    // carried it — it does not try: the claim is signed, and a wrong one is
+    // the ordinary shrink fault, checkable by any stranger holding the
+    // carrying state, forever. This is what moving the claim out of the door
+    // buys, and what it still costs.
     const venue = new LocalVenue();
     const eur = backingFor(venue);
     const original = new Sequencer(SECRETS.operator, venue);
@@ -619,11 +756,54 @@ describe("§C2: the empty book at a seat with history is a signed claim (`openin
     at(venue, 5n);
     const fresh = new Sequencer(SECRETS.operator, venue); // lost its book
     fresh.register(eur, signBacking(SECRETS.backer, eur));
-    const claimed = fresh.commit({ opening: [eur] });
+    expect(() => fresh.commit({ opening: [{ backing: eur, record: stateOf(carried) }] })).toThrow(/still carries/);
+    const dropped = fresh.commit({ dropping: [eur] }); // already a fault, on the record
+    expect(isRewrittenHistory(eur, venue, carried, dropped)).toBe(true);
+    at(venue, 6n);
+    const claimed = fresh.commit({ opening: [{ backing: eur, record: stateOf(dropped) }] });
     expect(serving(fresh, eur)).toBe(true);
     expect(fresh.outstanding(eur)).toBe(0n);
     expect(isRewrittenHistory(eur, venue, carried, claimed)).toBe(true);
     expect(isRewrittenHistory(eur, venue, claimed, carried)).toBe(true);
+    // A holder who kept only the drop proves nothing: the party rule is to
+    // keep the last state that CARRIED the backing.
+    expect(isRewrittenHistory(eur, venue, dropped, claimed)).toBe(false);
+  });
+
+  it("an opened seat is written for the link the guard read, not one a later read finds: a clock tick inside the commit cannot seat a retired key on its successor's link", () => {
+    // The fix's regression round: the opened seat re-walked the chain AFTER
+    // the publish, so a venue whose clock ticked as it witnessed the
+    // commitment — every real chain — seated the outgoing operator on its
+    // heir's link, `serves` read true out of force, and its next commitment
+    // rooted a book it did not serve, in no term, accusing nobody. The link
+    // is read once, before the publish, from the chain the force check reads.
+    const venue = new TickingVenue();
+    const usd = backingFor(venue, "USD");
+    const gold = backingFor(venue, "GOLD");
+    const original = new Sequencer(SECRETS.operator, venue);
+    original.register(usd, signBacking(SECRETS.backer, usd));
+    issue(original, usd, 100n, 0n);
+    const last = original.commit(); // witnessed at 0; the clock is now 1
+    at(venue, 4n);
+    venue.publishReplacement(gold.name, replacementBy(gold, HEIR_SECRET, 6n));
+    at(venue, 5n);
+    original.register(gold, signBacking(SECRETS.backer, gold));
+    // In force for GOLD until 6; the opening commit is witnessed at 5 and
+    // the clock ticks to 6 as it lands — the heir is in force from here.
+    const opened = original.commit({ opening: [{ backing: gold, record: stateOf(last) }] });
+    expect(carries(opened, gold)).toBe(true);
+    expect(venue.witnessedIndex()).toBe(6n);
+    expect(original.snapshot().some((s) => Buffer.from(s.name).equals(Buffer.from(gold.name)))).toBe(false);
+    at(venue, 7n);
+    const next = original.commit();
+    expect(carries(next, usd)).toBe(true);
+    expect(carries(next, gold)).toBe(false);
+    // And the heir takes GOLD's empty book where the record stands — the
+    // opening commitment, which carries it.
+    const heir = new Sequencer(HEIR_SECRET, venue);
+    heir.register(gold, signBacking(SECRETS.backer, gold));
+    heir.takeOver(gold, opened);
+    expect(serving(heir, gold)).toBe(true);
   });
 });
 

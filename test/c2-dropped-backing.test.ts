@@ -570,9 +570,13 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
   });
 
   it("refuses a state that never carried the backing either", () => {
-    const { venue, eur, lastGood, droppedLatest } = toHandover();
+    // Offered with no exhibit, the drop IS the commitment the record stands
+    // on, so it is refused for what it is: a state carrying no log. (Offered
+    // beside itself as an exhibit it would be refused one step down, by
+    // identity — a different claim, which the walk's own tests make.)
+    const { venue, eur, droppedLatest } = toHandover();
     const heir = appoint(venue, eur);
-    expect(() => heir.takeOver(eur, droppedLatest, droppedLatest)).toThrow(SequencerError);
+    expect(() => heir.takeOver(eur, droppedLatest)).toThrow(/carries no log for this backing/);
   });
 
   /**
@@ -604,12 +608,14 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
   it("the heir may not license its own commitment as the earlier state", () => {
     // The heir signs, in its OWN term, a law-valid TRUNCATION of the book: the
     // issuance kept, Bob's 40 gone. The drop evidence is genuine, the state
-    // roots, the replay is lawful — only its TERM refuses it: an earlier state
-    // is one from a term at or before the record's last, and the heir's is
-    // after. UNPUBLISHED, deliberately: published, the truncation would BE
-    // the record's last commitment, poisoning the walk-back entirely — the
-    // heir's own fault closing its own door, which the resume rule makes the
-    // price of publishing a rewrite (slice 36).
+    // roots, the replay is lawful — and the walk refuses it by IDENTITY: the
+    // state offered must be the commitment the record stands on at that
+    // step, and an unpublished own-signed state is on no step at all (the
+    // fix panel retired the term rule that used to hold this line).
+    // UNPUBLISHED, deliberately: published, the truncation would BE the
+    // record's last commitment and the walk would reach it — the heir's own
+    // witnessed fault, resumed onto in one call and provable forever
+    // (c2-the-resume).
     const { venue, eur, heir, carried, dropped, eurLog, drops } = evidenceLicenses();
     const truncated = [{ name: eur.name, opLog: [eurLog[0]!] }];
     const ownTerm: ServedState = {
@@ -625,8 +631,9 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
 
   it("a state the predecessor published out of force is not an earlier state", () => {
     // The retired incumbent signs the same truncation AFTER losing force. It
-    // places in no term — and a state that places nowhere accuses nobody and
-    // licenses nothing.
+    // is on no step of the walk — the record's in-force commitments are the
+    // only steps — so identity refuses it; a state that places nowhere
+    // accuses nobody and licenses nothing.
     const { venue, eur, heir, carried, dropped, eurLog, drops } = evidenceLicenses();
     venue.advance(1n);
     const truncated = [{ name: eur.name, opLog: [eurLog[0]!] }];
@@ -649,7 +656,8 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     // The incumbent equivocated: a second state at the sequence it published
     // the drop at, this one carrying the backing. It roots, it is the
     // incumbent's own signature, it places in the incumbent's own term — only
-    // "strictly before the target's sequence" refuses it, and taking it would
+    // identity against the walk's step refuses it (a twin at one sequence has
+    // a different root), and taking it would
     // seat the heir on one arm of an equivocation isEquivocation names.
     const { eur, heir, carried, dropped, drops } = evidenceLicenses();
     const twin: ServedState = {
@@ -678,11 +686,12 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
   });
 
   it("a successor cannot take too old a state: the walk reaches exactly one", () => {
-    // The bound, and it is the honest one: which state was the LAST to carry the
-    // backing is not readable from a root, so a successor could take an earlier
-    // one. That is not licensed, it is provable — by anyone holding the later
-    // state, against the successor, exactly as slice 14 extended the predicate
-    // across a handover.
+    // Which state was the LAST to carry the backing is not readable from a
+    // root, so the retired door licensed any earlier state and relied on a
+    // fault proof after the fact. The walk reaches exactly one — the drops
+    // above the last carrying state are exhibited, and a carrying state
+    // cannot be — so the older state is refused by name, and the successor's
+    // first commitment is no rewrite of anything.
     const { venue, sequencer, eur } = setup();
     const first = commitAll(sequencer);
     venue.advance(1n);
