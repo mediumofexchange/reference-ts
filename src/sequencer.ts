@@ -274,10 +274,11 @@ export class Sequencer {
     const stored = makeBacking(backing);
     // makeBacking has already established that the operator key is a valid
     // non-small-order point; the only question left here is whether it is mine.
-    // In force, or named to take over. §C2 gives a successor force only from
-    // its own first commitment, and it cannot commit a state it was never
-    // allowed to take on — so being named is what lets it serve, and being in
-    // force is what lets it co-sign (submit, below).
+    // In force, or named to take over. §C2 seats a successor at its effective
+    // index and has it take the book on in the lead time before it, and it
+    // cannot commit a state it was never allowed to take on — so being named
+    // is what lets it prepare, and being in force is what lets it co-sign
+    // (submit, below).
     if (
       compareBytes(operatorAt(stored, this.venue, this.venue.witnessedIndex()), this.operatorKey) !==
         0 &&
@@ -299,7 +300,8 @@ export class Sequencer {
     // seated for the genesis link, which is the backing itself. Anyone else
     // reaches the book through `takeOver`. The chain IN FORCE, deliberately: a
     // pending successor does not unseat the genesis operator, which §C2 keeps
-    // serving through the lead time.
+    // in possession through the lead time — its co-signing door is `inForce`'s
+    // question, and closes the venue's lag early (`retiring`).
     const chain = this.walkedInForce(stored);
     if (
       chain.length === 1 &&
@@ -342,8 +344,12 @@ export class Sequencer {
    * rather than `walkedInForce`, because the link asked about has not arrived.
    * Possession is untouched, and so is what a commitment carries: a retiring
    * operator's commitment still carries the book, and one witnessed past the
-   * index is harmless because it is not the book. Zero-width on a venue with
-   * no lag, where the clock and the landing index are one.
+   * index is harmless because it is not the book. And every commitment it
+   * publishes from here lands at or past the index too — out of its term, so
+   * neither the book nor a cure for its own silence; this door is asked before
+   * `shut`, so a retiring operator in a gap is told to hand over rather than
+   * to commit into a term it no longer has. Zero-width on a venue with no lag,
+   * where the clock and the landing index are one.
    */
   private retiring(backing: Backing): boolean {
     const ahead = this.walked(backing);
@@ -1904,10 +1910,12 @@ export class Sequencer {
   }
 
   /**
-   * §C2: "Until then the predecessor's last commitment governs, no new
-   * co-signatures issue" — a successor that has taken over the state but not
-   * yet committed it is not the operator yet, and a replaced one is not any
-   * more. Asked of every backing an ACT touches, after the repeat is answered:
+   * §C2: "From the effective index the old attester's co-signatures stop
+   * counting" — a successor before its index is not the operator yet, however
+   * much of the book it holds, and a replaced one is not any more; and where
+   * an act signed now is first witnessed past that index, the pen there is
+   * already the successor's (`retiring`). Asked of every backing an ACT
+   * touches, after the repeat is answered:
    * a repeat is a read of the receipt book, not an act, and a retired operator
    * re-serving a receipt it gave in force is no new co-signature — refusing it
    * would deny the payee the one evidence the successor cannot produce. A

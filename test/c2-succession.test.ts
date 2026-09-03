@@ -372,7 +372,10 @@ describe("§C2: a replacement counts only on the terms E set", () => {
     const { venue, backing } = setup();
     venue.publishReplacement(
       backing.name,
-      replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, new Uint8Array(32).fill(0xee), 0n),
+      // Dated past the void rule and the floor, so the predecessor filter is
+      // the refusal (a pre-existing fixture the review's inventory angle found
+      // refused by the void rule before its own rule was reached).
+      replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, new Uint8Array(32).fill(0xee), 1n),
     );
     commitAs(venue, SUCCESSOR_SECRET);
     at(venue, 10n);
@@ -392,11 +395,14 @@ describe("§C2: a replacement counts only on the terms E set", () => {
   });
 
   it("refuses a handover to the incumbent itself", () => {
+    // Dated past the floor (slice 38), so the walk's own rule is what refuses
+    // it — the review's inventory angle found the floor reaching this fixture
+    // first and the rule with one killer fewer.
     const { venue, backing } = setup();
     at(venue, 5n);
     venue.publishReplacement(
       backing.name,
-      replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 5n),
+      replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 6n),
     );
     commitAs(venue, SECRETS.operator);
     at(venue, 10n);

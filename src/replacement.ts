@@ -488,8 +488,8 @@ function walkSuccession(
       // handover, and a co-signed revocation at the boundary must still
       // revoke (found by the fix panel's inventory angle: without it, the
       // revoked successor took force). The exemption is deliberately wider
-      // than the boundary case: a self-naming record dated anywhere the
-      // witnessed filter allows is admitted, including inside the incumbent's
+      // than the boundary case: a self-naming record dated anywhere the lead
+      // floor allows is admitted, including inside the incumbent's
       // own lead time — no new power, since the same two signatures could
       // always void the slot with a later-dated record, but the width is
       // stated rather than implied (the regression round's W-1).

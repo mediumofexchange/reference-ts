@@ -1,7 +1,7 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
-import type { ServedState } from "../src/commitment.js";
+import { isRewrittenHistory } from "../src/fault.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import {
   isNamedSuccessor,
@@ -105,8 +105,10 @@ function serving(venue: Venue, backing: Backing) {
     { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
     ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
   );
-  const { commitment } = sequencer.commit();
-  const state: ServedState = { snapshots: sequencer.snapshot(), commitment };
+  // The commit's own return value, not `snapshot()` afterwards: on a lagging
+  // view the seat reads stale until the commitment is readable, and a stale
+  // seat serves nothing.
+  const state = sequencer.commit();
   return { sequencer, state };
 }
 
@@ -346,5 +348,83 @@ describe("§C2: a door reads force where an act signed now is first witnessed", 
     expect(heir.awaitingTakeover().map((b) => b.nameHex)).toEqual([eur.nameHex]);
     heir.takeOver(eur, handed);
     expect(heir.submitTransfer(second.op, second.signature).position).toBe(2n);
+  });
+});
+
+describe("§C2: the door's boundary, and what a retiring operator's commitment is", () => {
+  for (const lag of [1n, 2n]) {
+    it(`the incumbent's co-signing door is open at effective − lag − 1 and shut at effective − lag, and the successor's is shut at effective − 1 and open at effective (lag ${lag})`, () => {
+      // The interval, pinned by itself: the decisive test above asserts it
+      // among fifteen other things, and the review's inventory angle found
+      // three structurally different breakages of the door failing that one
+      // test alone. The record is witnessed at 10, effective at the floor.
+      const chain = new LocalVenue();
+      const view = new LaggingView(chain, lag);
+      const eur = backingFor(view);
+      chainAt(chain, lag);
+      const { sequencer: incumbent, state } = serving(view, eur);
+      const effective = 10n + lag + 1n;
+      chainAt(chain, 10n);
+      chain.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, effective));
+      chainAt(chain, 10n + lag); // clock 10: the record is readable
+      const heir = new Sequencer(HEIR_SECRET, view);
+      heir.register(eur, signBacking(SECRETS.backer, eur));
+      heir.takeOver(eur, state);
+
+      // Clock effective − lag − 1 = 10: the record is readable, and an act
+      // signed now lands at effective − 1, inside the incumbent's term.
+      const act = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
+      expect(incumbent.submitTransfer(act.op, act.signature).position).toBe(1n);
+      // Clock effective − lag: an act signed now lands at the index itself. A
+      // FRESH act, because a repeat is answered with its receipt before any
+      // door is asked (invariant 26).
+      chainAt(chain, 11n + lag);
+      const next = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 1n);
+      expect(() => incumbent.submitTransfer(next.op, next.signature)).toThrow(/first witnessed/);
+      // The successor: shut at effective − 1, open at effective.
+      chainAt(chain, effective - 1n + lag);
+      expect(() => heir.submitTransfer(act.op, act.signature)).toThrow(/not yet in force/);
+      chainAt(chain, effective + lag);
+      expect(heir.submitTransfer(act.op, act.signature).position).toBe(1n);
+    });
+  }
+
+  it("a retiring operator's commitment still carries the book, lands out of its term, is not the book, and accuses nobody", () => {
+    // The claim the door's safety rests on, pinned: only the co-signing door
+    // asks `retiring`. Candidate C was rejected because its retiring operator
+    // dropped the handed-over backing from its next batch commitment; the
+    // review's inventory angle found a mutation that made this operator do
+    // the same surviving the whole suite. Depth 2, record at 12, effective 15.
+    const chain = new LocalVenue();
+    const view = new LaggingView(chain, 2n);
+    const heirsView = new LaggingView(chain, 2n);
+    const eur = backingFor(view);
+    chainAt(chain, 2n);
+    const { sequencer: incumbent, state: inTerm } = serving(view, eur);
+    chainAt(chain, 12n);
+    chain.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 15n));
+    // Clock 13: retiring (15 ≤ 13 + 2). The incumbent's last commitment is
+    // the genesis one at 2, so its seat is current; it commits on its
+    // cadence, and the commitment carries the backing.
+    chainAt(chain, 15n);
+    const retiring = incumbent.commit();
+    expect(retiring.snapshots.some((s) => s.name.every((b, i) => b === eur.name[i]))).toBe(true);
+    expect(chain.witnessedAtFor(KEYS.operator)).toBe(15n);
+
+    // Clock 16: witnessed at 15, the index itself. Not the book, placed in no
+    // term, not a rewrite in either order — and the heir takes the in-term
+    // commitment, not this one.
+    chainAt(chain, 18n);
+    const walked = successionOf(eur, heirsView);
+    expect(walked).toHaveLength(2);
+    expect(lastCommitmentInForce(walked, heirsView)?.commitment.sequence).toBe(inTerm.commitment.sequence);
+    expect(termOf(walked, heirsView, KEYS.operator, retiring.commitment.sequence)).toBeUndefined();
+    expect(isRewrittenHistory(eur, heirsView, inTerm, retiring)).toBe(false);
+    expect(isRewrittenHistory(eur, heirsView, retiring, inTerm)).toBe(false);
+    const heir = new Sequencer(HEIR_SECRET, heirsView);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
+    expect(() => heir.takeOver(eur, retiring)).toThrow(SequencerError);
+    heir.takeOver(eur, inTerm);
+    expect(heir.outstanding(eur)).toBe(100n);
   });
 });

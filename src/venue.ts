@@ -484,15 +484,15 @@ export class LocalVenue implements Venue {
 
   /**
    * The index at which this key first published a commitment here at or after
-   * `notBefore`, or undefined if it never has. §C2 gives a successor force only
-   * "from the first index at which it has published its own commitment", so this
-   * is the second half of the two-stage handover.
+   * `notBefore`, or undefined if it never has. Force is a signed field now
+   * (§C2, 2026-08-29), so this no longer decides a handover; its one reader is
+   * `eraLapsed`, which asks for the first commitment a key made after its era
+   * began.
    *
-   * The bound matters: asked from genesis, a successor that already operates
-   * some other backing answers with a commitment it made long before anyone
-   * named it, and the second stage means nothing. Asked from the index the
-   * handover was witnessed at, the commitment is at least one it could have made
-   * for this handover.
+   * The bound matters: asked from genesis, a key that already operates some
+   * other backing answers with a commitment it made long before the era in
+   * question, and the answer means nothing. Asked from the era's own floor,
+   * the commitment is at least one made inside it.
    */
   firstCommitmentFor(operator: Uint8Array, notBefore = 0n): bigint | undefined {
     const log = this.byOperator.get(bytesToHex(operator)) ?? [];

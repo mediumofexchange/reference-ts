@@ -208,16 +208,20 @@ describe("§C2b: the clock is the backing's, and only a commitment closes a gap"
     at(venue, 20n);
     expect(isSilent(venue, backing)).toBe(true);
 
-    const out = replacementBy(backing, THROWAWAY_SECRET, backing.name, 20n);
+    // Each record dated the floor ahead of its witnessing (slice 38): the hop
+    // has to really happen for the test to say anything, and the review's
+    // inventory angle found this fixture passing with nobody hopped at all.
+    const out = replacementBy(backing, THROWAWAY_SECRET, backing.name, 21n);
     venue.publishReplacement(backing.name, out);
     at(venue, 21n);
     venue.publishReplacement(
       backing.name,
-      replacementBy(backing, SECRETS.operator, replacementHash(backing.name, out), 21n),
+      replacementBy(backing, SECRETS.operator, replacementHash(backing.name, out), 22n),
     );
-    at(venue, 22n);
+    at(venue, 23n);
 
-    expect(operatorAt(backing, venue, 22n)).toEqual(KEYS.operator);
+    expect(operatorAt(backing, venue, 21n)).toEqual(THROWAWAY);
+    expect(operatorAt(backing, venue, 23n)).toEqual(KEYS.operator);
     expect(isSilent(venue, backing)).toBe(true);
   });
 
