@@ -333,6 +333,26 @@ export class Sequencer {
   }
 
   /**
+   * Whether a handover takes force between the clock and the index an act
+   * signed now is first witnessed — the venue's lag ahead (§C2, slice 38).
+   * Asked after `isInForce`, so the pending link is somebody else's: what this
+   * operator co-signs from here could only be witnessed in its successor's
+   * term, which is no term of its own — the erasure the lead floor closes on
+   * the rule-holder's side, reached here by the incumbent's own hand. `walked`
+   * rather than `walkedInForce`, because the link asked about has not arrived.
+   * Possession is untouched, and so is what a commitment carries: a retiring
+   * operator's commitment still carries the book, and one witnessed past the
+   * index is harmless because it is not the book. Zero-width on a venue with
+   * no lag, where the clock and the landing index are one.
+   */
+  private retiring(backing: Backing): boolean {
+    const ahead = this.walked(backing);
+    const tip = ahead[ahead.length - 1] as Succession;
+    const now = this.venue.witnessedIndex();
+    return tip.from > now && tip.from <= now + this.venue.lag();
+  }
+
+  /**
    * Whether this operator may assert this backing's log in a commitment of its
    * own — §C2's "a shared operator publishes one transaction over a root of ITS
    * backings' commitments".
@@ -1899,6 +1919,17 @@ export class Sequencer {
     for (const backing of backings) {
       if (!this.isInForce(backing)) {
         throw new SequencerError("this sequencer is not yet in force for that backing");
+      }
+      // In force at the clock is not in force where the act lands. An act
+      // signed now is first witnessed the venue's lag ahead, and past a
+      // handover's effective index the pen there is the successor's, so a
+      // co-signature given here could only be witnessed in no term (slice
+      // 38). The door closes the lag early and names the honest path; a venue
+      // with no lag never reaches this line.
+      if (this.retiring(backing)) {
+        throw new SequencerError(
+          "this sequencer is in force for that backing at the clock but not where an act signed now is first witnessed: a handover takes force within the venue's lag, and the successor serves from its effective index",
+        );
       }
       // In force is not custody. An heir that skipped the takeover used to
       // pass this door and co-sign onto an empty log — two live claims on one

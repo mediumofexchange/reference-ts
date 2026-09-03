@@ -34,7 +34,11 @@
 // the past. The depth is not a client setting: §C2 names a venue "together with
 // its finality rule... That is a floor under the interval, or two sequencers
 // answer §C3's release predicate differently." So the venue's own id commits to
-// it (see `ergoVenueId`), and naming the venue is agreeing the depth.
+// it (see `ergoVenueId`), and naming the venue is agreeing the depth. The same
+// depth fixes the venue's lag (`lag()`): a transaction submitted now is included
+// at the next height at the earliest, so an act signed at clock c is witnessed
+// at c + depth + 1 or later — the number §C2's lead floor and the sequencer's
+// doors read.
 //
 // Reading requires a node with `extraIndex` enabled, since the /blockchain
 // routes exist only then. That is a real floor under "retrievable by a
@@ -221,6 +225,16 @@ export class ErgoVenue implements Venue {
 
   get id(): Uint8Array {
     return copyBytes(this.venueId);
+  }
+
+  /**
+   * The depth plus one: the clock reads `depth` behind the indexed height, and
+   * a transaction submitted now is included at the next height at the
+   * earliest, so an act signed at clock `c` is witnessed at `c + depth + 1` or
+   * later. A constant of the id, not of the view, so it answers unsynced.
+   */
+  lag(): bigint {
+    return this.depth + 1n;
   }
 
   /**

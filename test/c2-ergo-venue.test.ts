@@ -762,3 +762,60 @@ describe("settle answers in the sequencer's own voice where the venue is not nee
     expect(() => sequencer.settle(backing, new Uint8Array(32).fill(0xd1))).toThrow(/no lock for that attempt/);
   });
 });
+
+describe("§C2: the venue's lag, and the floor it puts under a replacement's lead", () => {
+  it("is the depth plus one: the clock reads the depth behind the chain, and a transaction is included at the next height", () => {
+    // A constant of the id, so it answers before any sync — a reader that
+    // walks a chain on an unsynced view is refused by the records, not here.
+    expect(venue().lag()).toBe(DEPTH + 1n);
+  });
+
+  it("a record witnessed at 140 takes force at 145 and not at 144: the lead is floored at the lag plus one", async () => {
+    // Slice 38: the record must precede, on every party's clock, every act it
+    // can void. On this venue an act signed at clock c lands at c + 4 or later,
+    // so a lead of 4 lets the incumbent's last commitment land at the effective
+    // index in no term; a lead of 5 does not.
+    const ruled = makeBacking({
+      obligor: KEYS.backer2,
+      payout: { thing: "USD", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: {
+        setting: "transparent",
+        operator: KEYS.operator,
+        silence: { noCommitmentDuration: 1000n, challengeWindow: 5n },
+        replacementRule: KEYS.backer2,
+        witnessing: { venue: VENUE_ID, interval: 5n },
+      },
+    });
+    const naming = (effective: bigint) => {
+      const unsigned = {
+        role: ROLE_OPERATOR,
+        successor: KEYS.alice,
+        predecessor: ruled.name,
+        effective,
+        signature: new Uint8Array(64),
+        successorSignature: new Uint8Array(64),
+      };
+      const message = replacementMessage(ruled.name, unsigned);
+      return {
+        ...unsigned,
+        signature: ed25519.sign(message, SECRETS.backer2),
+        successorSignature: ed25519.sign(message, SECRETS.alice),
+      };
+    };
+    const nodeFor = (effective: bigint) =>
+      new FakeNode()
+        .at(200n)
+        .putCommitment(commitment(0n, 0xaa), 100n)
+        .put(ADDRESSING.publications(ruled.name), {
+          inclusionHeight: 140n,
+          registers: { R4: ruled.name, R5: encodeReplacement(ruled.name, naming(effective)) },
+        });
+    const short = venue();
+    await short.sync(nodeFor(144n), [ruled]);
+    expect(operatorAt(ruled, short, short.witnessedIndex())).toEqual(KEYS.operator);
+    const enough = venue();
+    await enough.sync(nodeFor(145n), [ruled]);
+    expect(operatorAt(ruled, enough, enough.witnessedIndex())).toEqual(KEYS.alice);
+  });
+});

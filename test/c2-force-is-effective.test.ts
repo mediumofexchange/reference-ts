@@ -169,7 +169,7 @@ describe("§C2: a replacement is co-signed by its successor", () => {
     // it cannot produce is the victim's own signature.
     venue.publishReplacement(
       junk.name,
-      replacementBy(junk, KEYS.operator, 10n, junk.name, OTHER_SECRET),
+      replacementBy(junk, KEYS.operator, 11n, junk.name, OTHER_SECRET),
     );
 
     // The victim publishes an ordinary commitment of its own, for its own book.

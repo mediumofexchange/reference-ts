@@ -317,7 +317,7 @@ describe("§C2: a term of the chain is the unit of obligation and of fault", () 
     expect(fullLog).toHaveLength(2);
 
     at(venue, 10n);
-    const out = replacementBy(backing, HEIR_SECRET, backing.name, 10n);
+    const out = replacementBy(backing, HEIR_SECRET, backing.name, 11n);
     venue.publishReplacement(backing.name, out);
     // The heir serves its term — INSIDE it, at 12 — and commits the book whole:
     // the state of record for as long as it holds the role.
@@ -334,7 +334,7 @@ describe("§C2: a term of the chain is the unit of obligation and of fault", () 
     at(venue, 20n);
     venue.publishReplacement(
       backing.name,
-      replacementBy(backing, SECRETS.operator, replacementHash(backing.name, out), 20n),
+      replacementBy(backing, SECRETS.operator, replacementHash(backing.name, out), 21n),
     );
     at(venue, 25n);
     expect(operatorAt(backing, venue, 25n)).toEqual(KEYS.operator);
@@ -459,14 +459,15 @@ describe("§C2: a term of the chain is the unit of obligation and of fault", () 
       snapshots: yFull,
       commitment: signCommitment(THROWAWAY_SECRET, 0n, stateRoot(yFull)),
     };
-    const second = replacementBy(backing, THROWAWAY_SECRET, replacementHash(backing.name, first), 10n);
+    const second = replacementBy(backing, THROWAWAY_SECRET, replacementHash(backing.name, first), 11n);
     at(venue, 10n);
     venue.publishReplacement(backing.name, second);
+    at(venue, 11n);
     venue.publish(yState.commitment);
     at(venue, 20n);
     venue.publishReplacement(
       backing.name,
-      replacementBy(backing, HEIR_SECRET, replacementHash(backing.name, second), 20n),
+      replacementBy(backing, HEIR_SECRET, replacementHash(backing.name, second), 21n),
     );
     at(venue, 25n);
     expect(operatorAt(backing, venue, 25n)).toEqual(HEIR);
@@ -496,13 +497,13 @@ describe("§C2: a term of the chain is the unit of obligation and of fault", () 
 
     // Out to a throwaway and back: the same two states, and the record can no
     // longer place the unwitnessed one.
-    const out = replacementBy(backing, THROWAWAY_SECRET, backing.name, 6n);
+    const out = replacementBy(backing, THROWAWAY_SECRET, backing.name, 7n);
     at(venue, 6n);
     venue.publishReplacement(backing.name, out);
     at(venue, 9n);
     venue.publishReplacement(
       backing.name,
-      replacementBy(backing, SECRETS.operator, replacementHash(backing.name, out), 9n),
+      replacementBy(backing, SECRETS.operator, replacementHash(backing.name, out), 10n),
     );
     at(venue, 12n);
     expect(operatorAt(backing, venue, 12n)).toEqual(KEYS.operator);
@@ -519,7 +520,7 @@ describe("§C2: a term of the chain is the unit of obligation and of fault", () 
     const fullLog = sequencer.opLog(backing);
     const full = [{ name: backing.name, opLog: fullLog }];
 
-    const first = replacementBy(backing, HEIR_SECRET, backing.name, 10n);
+    const first = replacementBy(backing, HEIR_SECRET, backing.name, 11n);
     at(venue, 10n);
     venue.publishReplacement(backing.name, first);
     at(venue, 12n);
@@ -531,7 +532,7 @@ describe("§C2: a term of the chain is the unit of obligation and of fault", () 
     at(venue, 20n);
     venue.publishReplacement(
       backing.name,
-      replacementBy(backing, SECRETS.operator, replacementHash(backing.name, first), 20n),
+      replacementBy(backing, SECRETS.operator, replacementHash(backing.name, first), 21n),
     );
     at(venue, 25n);
     const resumed: ServedState = {
@@ -562,8 +563,9 @@ describe("§C2b: the count stands against the backing, and the grade names the i
     const honest = sequencer.commit();
 
     at(venue, 10n);
-    venue.publishReplacement(backing.name, replacementBy(backing, HEIR_SECRET, backing.name, 10n));
-    expect(operatorAt(backing, venue, 10n)).toEqual(HEIR);
+    venue.publishReplacement(backing.name, replacementBy(backing, HEIR_SECRET, backing.name, 11n));
+    at(venue, 11n);
+    expect(operatorAt(backing, venue, 11n)).toEqual(HEIR);
 
     at(venue, 30n);
     venue.publishOp(backing.name, request(backing, 10n, 0n));
@@ -652,8 +654,8 @@ describe("§C2: two replacements witnessed at one index", () => {
     // readers disagree about who is at fault" hazard fault.ts forbids outright,
     // arriving through publication order instead of served state.
     const a = backingFor("EUR");
-    const first = replacementBy(a, HEIR_SECRET, a.name, 5n);
-    const second = replacementBy(a, THROWAWAY_SECRET, a.name, 5n);
+    const first = replacementBy(a, HEIR_SECRET, a.name, 6n);
+    const second = replacementBy(a, THROWAWAY_SECRET, a.name, 6n);
     const lesser =
       compareBytes(replacementHash(a.name, first), replacementHash(a.name, second)) < 0 ? HEIR : THROWAWAY;
 
@@ -661,22 +663,26 @@ describe("§C2: two replacements witnessed at one index", () => {
     forward.advance(5n);
     forward.publishReplacement(a.name, first);
     forward.publishReplacement(a.name, second);
+    forward.advance(1n);
 
     const backward = new LocalVenue();
     backward.advance(5n);
     backward.publishReplacement(a.name, second);
     backward.publishReplacement(a.name, first);
+    backward.advance(1n);
 
-    expect(operatorAt(a, forward, 5n)).toEqual(lesser);
-    expect(operatorAt(a, backward, 5n)).toEqual(lesser);
+    expect(operatorAt(a, forward, 6n)).toEqual(lesser);
+    expect(operatorAt(a, backward, 6n)).toEqual(lesser);
   });
 
   it("resolve to the lesser hash under a lead time too, in both arrival orders", () => {
-    // The tie above declares effective == witnessed, so the supersession
-    // window is already shut when the sibling is read and the loop's own
-    // same-index rule is never exercised. With a lead time it is: a sibling
-    // that could displace the sorted winner handed the win to the GREATER hash
-    // (found reviewing this slice), and this is the fixture that reaches it.
+    // The tie above declares the least lead the floor allows (slice 38 — it
+    // used to declare effective == witnessed, which shut the supersession
+    // window before the sibling was read, so the loop's own same-index rule
+    // went unexercised there). With a longer lead the window is wide open: a
+    // sibling that could displace the sorted winner handed the win to the
+    // GREATER hash (found reviewing this slice), and this is the fixture that
+    // reached it.
     const a = backingFor("EUR");
     const first = replacementBy(a, HEIR_SECRET, a.name, 20n);
     const second = replacementBy(a, THROWAWAY_SECRET, a.name, 20n);

@@ -1,16 +1,16 @@
 // Succession (§C2): who serves a backing, once the key E names no longer does.
 //
 // "**A replacement is itself a witnessed object.** It is signed by whoever
-// **E**'s rule names, the backer by default, states the role, the successor and
-// the effective index, and is published always at the successor venue and at the
-// old one while it serves. Each replacement names its predecessor, so the chain
-// from the original terms is walkable. Its effective index is no earlier than
-// the index at which it is itself witnessed, and it takes effect only from the
-// first index at which it has published its own commitment over a spent set it
-// serves in full. Until then the predecessor's last commitment governs, no new
-// co-signatures issue, and accrual against the incumbent continues... From the
-// effective index the old attester's co-signatures stop counting, which is why a
-// wallet verifies the chain rather than the key it remembers."
+// **E**'s rule names, the backer by default, and co-signed by the successor,
+// states the role, the successor and the effective index, and is published
+// always at the successor venue and at the old one while it serves. Each
+// replacement names its predecessor, so the chain from the original terms is
+// walkable... Its effective index is later than the index at which it is
+// itself witnessed by at least the venue's lag plus one — a record below that
+// floor is not a replacement — and it takes effect there... Until the
+// effective index the predecessor governs and goes on serving... From the
+// effective index the old attester's co-signatures stop counting, which is why
+// a wallet verifies the chain rather than the key it remembers."
 //
 // **E's operator is the genesis value, not a mutable field.** It sits inside the
 // name and invariant 1 forbids an edit, so a replacement does not change it — it
@@ -401,12 +401,26 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
   for (let i = memo.through; i < published.length; i++) {
     const w = published[i] as WitnessedReplacement;
     if (!isSignedReplacement(backing, w.replacement)) continue;
-    // A replacement cannot take force before it was witnessed (§C2), and one
-    // declaring an earlier index is refused rather than corrected: the
-    // rule-holder does not get to backdate a handover. Clock-free like the
-    // signature — it compares the record against its own witnessing — so it
+    // **A replacement's lead is floored at the venue's lag plus one** (§C2,
+    // slice 38): effective ≥ witnessed + lag + 1, and a record below the floor
+    // is not a replacement — refused rather than corrected, as a backdated one
+    // always was, since the rule-holder does not get to date a handover. The
+    // floor is what makes the record precede, on every party's clock, every
+    // act it can void: an act witnessed at or past the effective index was
+    // signed no later than that index less the lag, which the floor puts
+    // strictly after the record's own witnessing — so a commitment the
+    // predecessor signed before it could read the record lands inside its
+    // term, and one it signs after is its own choice (its doors refuse it:
+    // `Sequencer.retiring`). Without the floor a record effective at its own
+    // witnessing — or, under a finality depth, one pre-armed by the depth and
+    // aimed at the cadence E declares — put the incumbent's newest commitment
+    // in no term: not the book, placed nowhere, every fault predicate false,
+    // and a witnessed payment in it dead and re-spendable for one record from
+    // the rule-holder (slice 36's F4; the slice-38 panel, three angles).
+    // Clock-free like the signature — the lag is a constant of the venue's
+    // identity, and the record is compared against its own witnessing — so it
     // belongs to the step that is taken once.
-    if (w.replacement.effective < w.at) continue;
+    if (w.replacement.effective < w.at + venue.lag() + 1n) continue;
     // Hashed here rather than once per link: the hash is the record's identity
     // for the dedup AND for the same-index tie the walk resolves below.
     // The reader's own copy: the memo is validated state, and what a venue
@@ -759,12 +773,11 @@ export function operatorsOf(backing: Backing, venue: Venue): Uint8Array[] {
  * passed-over candidate that registers, takes over and commits has co-signed
  * noise and is refused at every door (`inForce`), harming nobody.
  *
- * §C2's two-stage handover has a gap between the two stages that somebody has to
- * live in: "it takes effect only from the first index at which it has published
- * its own commitment", and a successor cannot publish a commitment over a state
- * it was never allowed to take on. So a named successor may serve — take over
- * the predecessor's committed state and commit it — while "no new co-signatures
- * issue" until it is in force.
+ * §C2's lead time is what a named successor takes the book on in — "until the
+ * effective index the predecessor governs and goes on serving" — and a successor
+ * cannot publish a commitment over a state it was never allowed to take on. So
+ * a named successor may prepare — take over the predecessor's committed state —
+ * while it co-signs nothing, and carries nothing, until it is in force.
  */
 export function isNamedSuccessor(backing: Backing, venue: Venue, key: Uint8Array): boolean {
   return answering(() => {

@@ -199,6 +199,12 @@ export interface WitnessedOp {
  *   - **Witnessed order.** Records come out in the order they were witnessed:
  *     the walk's memo keeps a record's first POSITION as its first witnessing,
  *     which the walk's own sort used to normalise (the slice-37 verification).
+ *   - **A declared lag.** `lag()` is a constant of the venue's finality rule
+ *     — the least number of indices by which an act signed at its clock is
+ *     witnessed after it — never a view's state, so it answers unsynced. The
+ *     walk floors a replacement's lead on it and the sequencer's doors read
+ *     force the lag ahead (§C2, slice 38); a venue declaring less than it
+ *     lags reopens the erasure those two close.
  *   - **Reads answer or throw `VenueError`.** A read that throws anything else
  *     is out of contract: verifiers wrap their bodies in `answering`, which
  *     converts a foreign throw into a false — and at a door a false is
@@ -208,6 +214,20 @@ export interface Venue {
   /** This venue's identity, as a copy — the value E declares to name it. */
   readonly id: Uint8Array;
   witnessedIndex(): bigint;
+  /**
+   * This venue's **lag**: the least number of indices by which an act a party
+   * signs, reading this venue's clock, is witnessed after that clock — zero
+   * where publication lands at the clock's own index (this local stand-in),
+   * the finality depth plus one where a chain includes in its next block and
+   * the venue reads behind the chain by that depth (`ErgoVenue`). A constant
+   * of the venue's finality rule, so naming the venue agrees it; never a
+   * view's state, so it answers on an unsynced view. Two readers, both §C2's
+   * (slice 38): the walk floors a replacement's lead at the lag plus one
+   * (`replacement.ts`), and the sequencer's doors read force the lag ahead
+   * (`Sequencer.retiring`) — so the record precedes, on every party's
+   * clock, every act it can void.
+   */
+  lag(): bigint;
   publish(commitment: Commitment): void;
   publishOp(backingName: Uint8Array, op: PublishedOp): void;
   publishReplacement(backingName: Uint8Array, replacement: Replacement): void;
@@ -276,6 +296,11 @@ export class LocalVenue implements Venue {
    */
   witnessedIndex(): bigint {
     return this.height;
+  }
+
+  /** Publication lands at the clock's own index here, so the lag is zero. */
+  lag(): bigint {
+    return 0n;
   }
 
   /**
