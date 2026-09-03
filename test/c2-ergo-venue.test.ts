@@ -510,23 +510,29 @@ describe("a view answers only for what it was synced for", () => {
     expect(isSilent(w, ruled)).toBe(false);
   });
 
-  it("a view being re-gathered refuses even its clock: un-marked on entry, not only on failure", async () => {
+  it("a view being re-gathered refuses even its clock: un-marked as the replacement begins, not only on failure", async () => {
     // Every record read already refuses mid-sync through the per-key guards
     // (covered and fetched are cleared first); the clock had no such guard,
     // so a reader asking only the index got the new height over the old
-    // view's absence. Un-marked on entry, the clock refuses too.
+    // view's absence. Un-marked after the height read — not before it, so a
+    // node that cannot answer the height leaves a coherent view answering
+    // — the clock refuses from the first record fetch on.
     const v = venue();
     await v.sync(new FakeNode().at(100n).putCommitment(commitment(0n, 0xaa), 95n), [backing]);
     expect(v.witnessedIndex()).toBe(97n);
     const seen: string[] = [];
     class Peeks extends FakeNode {
-      override async indexedHeight() {
-        try {
-          seen.push(String(v.witnessedIndex()));
-        } catch (e) {
-          seen.push(e instanceof VenueError ? "refused" : "other");
+      private peeked = false;
+      override async boxesByAddress(address: string) {
+        if (!this.peeked) {
+          this.peeked = true;
+          try {
+            seen.push(String(v.witnessedIndex()));
+          } catch (e) {
+            seen.push(e instanceof VenueError ? "refused" : "other");
+          }
         }
-        return super.indexedHeight();
+        return super.boxesByAddress(address);
       }
     }
     await v.sync(new Peeks().at(120n).putCommitment(commitment(0n, 0xaa), 95n), [backing]);

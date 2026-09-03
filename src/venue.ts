@@ -196,6 +196,9 @@ export interface WitnessedOp {
  *     replacement records (`replacement.ts`) never judges a position below
  *     its count again, so a view that replaces its records says so
  *     (`forgetAdmitted`, which ErgoVenue's sync calls) or is out of contract.
+ *   - **Witnessed order.** Records come out in the order they were witnessed:
+ *     the walk's memo keeps a record's first POSITION as its first witnessing,
+ *     which the walk's own sort used to normalise (the slice-37 verification).
  *   - **Reads answer or throw `VenueError`.** A read that throws anything else
  *     is out of contract: verifiers wrap their bodies in `answering`, which
  *     converts a foreign throw into a false — and at a door a false is

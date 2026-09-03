@@ -245,11 +245,14 @@ export class ErgoVenue implements Venue {
    * local venue takes toward a publication it cannot read.
    */
   async sync(node: ErgoNode, backings: readonly Backing[]): Promise<void> {
-    // Un-marked on entry: while the view is being replaced it answers nothing,
+    const indexed = await node.indexedHeight();
+    // Un-marked once the replacement begins — after the height read, so a
+    // node that cannot answer it leaves a coherent view answering rather than
+    // refusing (the verification's V-5) — and every clear below follows with
+    // no await between: while the view is being replaced it answers nothing,
     // and a re-sync that fails leaves it refusing rather than answering from
     // half of two views (the slice-37 review; it had only ever been set).
     this.synced = false;
-    const indexed = await node.indexedHeight();
     this.height = indexed > this.depth ? indexed - this.depth : 0n;
     this.commitments.clear();
     this.ops.clear();

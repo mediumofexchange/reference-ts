@@ -43,7 +43,7 @@
 
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { type Backing } from "./backing.js";
+import { backingName, type Backing } from "./backing.js";
 // Type-only: `commitment.ts` imports this module, and a value import here would
 // close that into a runtime cycle. Erased at compile time, so it does not.
 import type { Commitment } from "./commitment.js";
@@ -357,38 +357,42 @@ export function copyReplacement(replacement: Replacement): Replacement {
  * and then fail, and the signed handover would vanish (the panel's probes).
  */
 function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
-  const published = venue.replacementsFor(backing.name);
-  // A backing the venue holds no records for is memoised as nothing at all:
-  // a name is a hash, minted for free, and the local venue answers `[]` for
-  // any name, so every invented backing a verifier is asked about would
-  // otherwise retain an entry for the venue's life (the review's ADV-12).
-  if (published.length === 0) return NONE;
+  // By the RECOMPUTED name, as committedLogFor picks a snapshot: `readonly` is
+  // erased at runtime and the Backing brand is a phantom type, so an object
+  // carrying a real backing's `.name` beside other fields — another rule
+  // key, another `nameHex` — is a Backing at runtime. Looked up by its
+  // `.name` it read that backing's records, judged them under its own rule,
+  // and took a memo entry per ask, ~2 kB each with no venue write (the
+  // review's ADV-6, the verification's V-1). Looked up by the name its fields
+  // derive, it reads the records of the backing it IS — none, for a
+  // hand-built object — and the key needs no rule beside the name, because
+  // the name binds E. One hash per walk.
+  const name = backingName(backing);
+  const published = venue.replacementsFor(name);
   let byBacking = admittedByVenue.get(venue);
   if (byBacking === undefined) {
     byBacking = new Map();
     admittedByVenue.set(venue, byBacking);
   }
-  // The key carries every input the admission is a function of: the backing
-  // NAME (inside the signed message) and the RULE KEY (what the first
-  // signature is checked against). The Backing brand is a phantom type with
-  // no runtime property, so an object carrying the real name and another
-  // rule key is a Backing at runtime — and under a name-only key its admitted
-  // records were served to the real backing (the panel, twice over). One hex
-  // string per backing, nothing per record.
-  // Both call sites return before this for a backing with no rule; asked here
-  // rather than defaulted, so the key never carries an empty rule.
-  const rule = backing.evidence.replacementRule;
-  if (rule === undefined) return NONE;
-  // The NAME the admission reads — `backing.name`, the bytes inside the signed
-  // message — not `nameHex`, a separate field a hand-built object can set to
-  // another backing's and so write its own count into that backing's slot
-  // (the review's ADV-6).
-  const memoKey = bytesToHex(backing.name) + ":" + bytesToHex(rule);
+  const memoKey = bytesToHex(name);
   let memo = byBacking.get(memoKey);
   if (memo === undefined || memo.through > published.length) {
     memo = { through: 0, seen: new Set(), records: [] };
     byBacking.set(memoKey, memo);
   }
+  // A backing the venue holds no records for is memoised as nothing at all —
+  // a name is a hash, minted for free, and the local venue answers `[]` for
+  // any name (the review's ADV-12) — and it is asked AFTER the shrink guard
+  // above, so a view that lost every record is re-judged when it refills
+  // rather than served from the memo it emptied into (the verification's
+  // V-2, a regression the first placement had made).
+  if (published.length === 0) {
+    byBacking.delete(memoKey);
+    return NONE;
+  }
+  // Both call sites return before this for a backing with no rule; asked here
+  // rather than defaulted, so a third caller would get the same answer.
+  if (backing.evidence.replacementRule === undefined) return NONE;
   // Judged into a local list, then both writes together with nothing that can
   // throw between them: a memo whose records ran ahead of its count, or
   // behind it, would judge a position twice or never.
@@ -410,7 +414,7 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
     // written afterwards would seat a successor no signature covers, where
     // the uncached walk merely stopped verifying the record (the review's
     // ADV-3).
-    const hash = replacementHash(backing.name, w.replacement);
+    const hash = replacementHash(name, w.replacement);
     const hashHex = bytesToHex(hash);
     // A republished copy of a record already held — the rule-holder's own
     // bytes, which anyone may republish — is not held again: the walk keeps a

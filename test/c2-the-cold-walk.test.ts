@@ -175,19 +175,22 @@ describe("§C2: a published replacement is judged once, against the venue that a
     expect(chainOf(eur2, late)).toEqual(["operator", "heir"]);
   });
 
-  it("a hand-built backing with the real name and another rule key does not poison the real backing's walk, in either order", () => {
+  it("a hand-built backing with the real name and another rule key reads no records, and does not poison the real backing's walk, in either order", () => {
     // The Backing brand is a phantom type: an object carrying the real name
-    // and a substituted rule key is a Backing at runtime, and its admitted
-    // records are its own — never the real backing's, and never served to it.
+    // and a substituted rule key is a Backing at runtime. Looked up by the
+    // name its fields derive, it reads the records of the backing it IS —
+    // none — so a record signed under ITS rule against the real name is
+    // nothing to it and junk to the real backing; and the real backing's
+    // memo is never its to write.
     const venue = new LocalVenue();
     const eur = backingFor(venue);
     const forged = { ...eur, evidence: { ...eur.evidence, replacementRule: MALLORY } } as Backing;
     venue.publishReplacement(eur.name, signed(eur, MALLORY_SECRET, MALLORY_SECRET, 5n));
     venue.publishReplacement(eur.name, signed(eur, SECRETS.backer, HEIR_SECRET, 10n));
     at(venue, 10n);
-    expect(chainOf(forged, venue)).toEqual(["operator", "mallory"]); // its own rule, its own answer
+    expect(chainOf(forged, venue)).toEqual(["operator"]); // not a backing: no records
     expect(chainOf(eur, venue)).toEqual(["operator", "heir"]);
-    expect(chainOf(forged, venue)).toEqual(["operator", "mallory"]);
+    expect(chainOf(forged, venue)).toEqual(["operator"]);
     expect(operatorAt(eur, venue, 10n)).toEqual(HEIR);
   });
 
@@ -320,6 +323,49 @@ describe("§C2: a published replacement is judged once, against the venue that a
     expect(successionAhead(eur, venue).map((link) => `${link.from}`)).toEqual(["0", "10"]);
     at(venue, 10n);
     expect(chainOf(eur, venue)).toEqual(["operator", "heir"]);
+  });
+
+  it("a hand-built object is not a backing: it reads no records, costs no verifies, and takes no memo entry", () => {
+    // The records are looked up by the name the fields derive, as
+    // committedLogFor picks a snapshot — so an object carrying a real
+    // backing's `.name` beside another rule key reads the records of the
+    // backing it IS: none. Looked up by `.name`, it read the victim's records,
+    // judged them under its own rule (one verify each), and took a memo entry
+    // per ask, ~2 kB with no venue write (the verification's V-1).
+    const venue = new LocalVenue();
+    const victim = backingFor(venue);
+    for (let i = 0; i < 50; i++) venue.publishReplacement(victim.name, junk(victim, i));
+    at(venue, 3n);
+    venue.publishReplacement(victim.name, signed(victim, SECRETS.backer, HEIR_SECRET, 10n));
+    at(venue, 10n);
+    const forged = { ...victim, evidence: { ...victim.evidence, replacementRule: MALLORY } } as Backing;
+    vi.mocked(verifySignatureStrict).mockClear();
+    expect(chainOf(forged, venue)).toEqual(["operator"]);
+    expect(verifies()).toBe(0);
+    expect(chainOf(victim, venue)).toEqual(["operator", "heir"]);
+    expect(verifies()).toBe(52); // fifty junk, one each; the heir's, two
+  });
+
+  it("a view that lost every record and refilled is judged again, not served from the memo it emptied into", () => {
+    // The empty-records return first sat above the shrink guard, so the one
+    // read at which a loss is total was the one read that no longer recorded
+    // it (the verification's V-2, a regression). It follows the guard now,
+    // and drops the entry.
+    let records: WitnessedReplacement[] = [];
+    class Reorg extends LocalVenue {
+      override replacementsFor(): WitnessedReplacement[] {
+        return records.map((w) => ({ ...w }));
+      }
+    }
+    const venue = new Reorg();
+    const eur = backingFor(venue);
+    records = [{ replacement: signed(eur, SECRETS.backer, HEIR_SECRET, 10n), at: 3n }];
+    at(venue, 12n);
+    expect(chainOf(eur, venue)).toEqual(["operator", "heir"]);
+    records = [];
+    expect(chainOf(eur, venue)).toEqual(["operator"]);
+    records = [{ replacement: signed(eur, SECRETS.backer, MALLORY_SECRET, 10n), at: 3n }];
+    expect(chainOf(eur, venue)).toEqual(["operator", "mallory"]);
   });
 
   it("a malformed record a venue hands out drops itself, not the walk", () => {
