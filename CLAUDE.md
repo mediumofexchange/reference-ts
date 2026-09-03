@@ -123,7 +123,13 @@ that produced it is in the decision log — reach it through the index in
   current seat keeps its uncommitted tail, a stale one drops it to the mark —
   never below it: a takeOver serves no LESS than the book the record stands on.
   A replacement not strictly later than the link it replaces is void unless
-  it names the incumbent (a revocation). A key seated anew commits before it
+  it names the incumbent (a revocation). **A replacement's lead is floored at
+  the venue's lag plus one** (`lag()`, a constant of the venue's identity;
+  `admitted` refuses below it), so the record precedes, on every party's
+  clock, every act it can void; and **a door reads force where an act signed
+  now is first witnessed** as well as at the clock (`retiring`): an
+  incumbent's doors close the lag before the index, a successor's open at
+  it. A key seated anew commits before it
   co-signs (`shut`, the same door as the return from silence), and a
   commitment never drops an in-force backing silently (`commit`'s per-call
   `dropping`; `awaitingTakeover` is the same condition as a question). **The
@@ -236,7 +242,7 @@ traversal.
 
 ## What the parties must do, that no code here enforces
 
-Nine rules the protocol cannot check but the reference implementation must not
+Ten rules the protocol cannot check but the reference implementation must not
 leave unsaid. Each was reached by asking what a failing sequencer costs
 somebody, and is recorded in the decision log with its reasoning.
 
@@ -326,6 +332,9 @@ the move to a blinded construction — which is why they are rules, not code.
   §C2 makes the exposure "a signed field rather than operational discretion": E
   carries the interval with the venue it is read on, so a payee can tell a fast
   operator running late from a slow one running on time (`isOverdue`).
+- **Commit the moment you read a handover naming you; read a pending handover
+  before you treat a payment as final.** The floor puts the record before every
+  act it can void; what you still hold uncommitted then is a slow block's cost.
 - **Draw a fresh random salt per attempt** — what "never reuse an attempt id you
   signed a commit for" became. A commit binds its id and nothing else, so an
   object you signed converts any later lock under that id whose parties you are
@@ -410,10 +419,8 @@ collision is a signature-forgery class; the full list must be readable on one
 screen.
 
 **Efficiency where it is free.** Prefer the direct algorithm over a clever one,
-and the allocation-free form over the allocating one, when it is no less
-readable — exact-integer arithmetic over string round-trips, one buffer over
-per-item allocation, a keyed lookup over a linear scan. Do not trade clarity
-for speed anywhere else; this is a reference implementation, not a product.
+and the allocation-free form over the allocating one, when no less readable.
+Do not trade clarity for speed elsewhere; this is a reference, not a product.
 
 ## Workflow
 
@@ -482,18 +489,11 @@ for speed anywhere else; this is a reference implementation, not a product.
 
 ## Toolchain
 
-Node 24, TypeScript (strict), Vitest.
+Node 24, TypeScript (strict), Vitest: `npm test`, `npm run typecheck`.
 
-```
-npm test           # run all tests
-npm run typecheck  # tsc --noEmit
-```
-
-Scratch scripts (`scratch/*.mjs`, gitignored) import `./src/*.js`, so they run
-against a compiled copy: `npx tsc --noEmit false --outDir <build> --rootDir .`
-from the repo, then copy the script beside `<build>/src`, link `node_modules`
-there, and `node` it from `<build>`.
+Scratch scripts (`scratch/*.mjs`, gitignored) import `./src/*.js`, so build a
+copy first — `npx tsc --noEmit false --outDir <build> --rootDir .` — then put
+the script beside `<build>/src`, link `node_modules` there, and `node` it.
 
 `npm run check:docs` holds CLAUDE.md to its line budget and keeps the decision
-index and `decisions/` in agreement. CI runs it, along with typecheck, the
-tests on Node 20 and 24, and a `npm pack` of what would be published.
+index and `decisions/` in agreement; CI runs it, typecheck, tests, `npm pack`.
