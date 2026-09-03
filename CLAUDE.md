@@ -124,9 +124,9 @@ that produced it is in the decision log — reach it through the index in
   never below it: a takeOver serves no LESS than the book the record stands on.
   A replacement not strictly later than the link it replaces is void unless
   it names the incumbent (a revocation). **A replacement's lead is floored at
-  the venue's lag plus one** (`lag()`, a constant of the venue's identity;
-  `admitted` refuses below it), so the record precedes, on every party's
-  clock, every act it can void; and **a door reads force where an act signed
+  the venue's lag plus one** (`lag()`, which the venue's id must bind;
+  `admitted` refuses below it), so every party reads the record before the
+  last act it can still land in the incumbent's term; and **a door reads force where an act signed
   now is first witnessed** as well as at the clock (`retiring`): an
   incumbent's doors close the lag before the index, a successor's open at
   it. A key seated anew commits before it
@@ -332,9 +332,9 @@ the move to a blinded construction — which is why they are rules, not code.
   §C2 makes the exposure "a signed field rather than operational discretion": E
   carries the interval with the venue it is read on, so a payee can tell a fast
   operator running late from a slow one running on time (`isOverdue`).
-- **Commit the moment you read a handover naming you; read a pending handover
-  before you treat a payment as final.** The floor puts the record before every
-  act it can void; what you still hold uncommitted then is a slow block's cost.
+- **Commit at the first clock you can read a handover replacing you, and read
+  a pending handover before you treat a payment as final.** The floor buys one
+  index of notice; what you still hold uncommitted then is a slow block's cost.
 - **Draw a fresh random salt per attempt** — what "never reuse an attempt id you
   signed a commit for" became. A commit binds its id and nothing else, so an
   object you signed converts any later lock under that id whose parties you are

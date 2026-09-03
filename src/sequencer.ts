@@ -756,7 +756,11 @@ export class Sequencer {
     // adoption is co-signing onto the book, so it also waits for the book:
     // an in-force successor that has not taken the state on would otherwise
     // co-sign the gap's legs onto an empty log, which is the locked-out-heir
-    // defect at a different door. `serves` is both halves in one read.
+    // defect at a different door. `serves` is force at the clock and custody
+    // in one read — not force where the act lands (`retiring`), which
+    // adoption does not ask: what it co-signs already has force from the
+    // venue, and the successor adopts it again from its own book (the
+    // slice-38 review's security angle, S5).
     //
     // Asked once rather than per leg: the answer is the same for all of them,
     // and asking walks the chain, which verifies a signature per published

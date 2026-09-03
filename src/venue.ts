@@ -199,12 +199,17 @@ export interface WitnessedOp {
  *   - **Witnessed order.** Records come out in the order they were witnessed:
  *     the walk's memo keeps a record's first POSITION as its first witnessing,
  *     which the walk's own sort used to normalise (the slice-37 verification).
- *   - **A declared lag.** `lag()` is a constant of the venue's finality rule
- *     — the least number of indices by which an act signed at its clock is
- *     witnessed after it — never a view's state, so it answers unsynced. The
- *     walk floors a replacement's lead on it and the sequencer's doors read
- *     force the lag ahead (§C2, slice 38); a venue declaring less than it
- *     lags reopens the erasure those two close.
+ *   - **A declared lag, bound to the id.** `lag()` is a constant of the
+ *     venue's finality rule — the least number of indices by which an act
+ *     signed at its clock is witnessed after it — never a view's state, so it
+ *     answers unsynced, and the id a backing declares must determine it, as
+ *     `ergoVenueId` does. The walk floors a replacement's lead on it and the
+ *     sequencer's co-signing door reads force the lag ahead (§C2, slice 38).
+ *     Nothing here can check the number: a view declaring less than the venue
+ *     lags reopens the erasure those two close, one declaring more holds a
+ *     retired key in force, and two views answering one id with two lags put
+ *     two honest readers permanently at odds about a past index (the slice-38
+ *     review's security angle, S6).
  *   - **Reads answer or throw `VenueError`.** A read that throws anything else
  *     is out of contract: verifiers wrap their bodies in `answering`, which
  *     converts a foreign throw into a false — and at a door a false is
@@ -220,12 +225,13 @@ export interface Venue {
    * where publication lands at the clock's own index (this local stand-in),
    * the finality depth plus one where a chain includes in its next block and
    * the venue reads behind the chain by that depth (`ErgoVenue`). A constant
-   * of the venue's finality rule, so naming the venue agrees it; never a
-   * view's state, so it answers on an unsynced view. Two readers, both §C2's
-   * (slice 38): the walk floors a replacement's lead at the lag plus one
-   * (`replacement.ts`), and the sequencer's doors read force the lag ahead
-   * (`Sequencer.retiring`) — so the record precedes, on every party's
-   * clock, every act it can void.
+   * of the venue's finality rule, which the venue's id must commit to — as
+   * `ergoVenueId` commits to the depth — so that naming the venue agrees it;
+   * never a view's state, so it answers on an unsynced view. Two readers,
+   * both §C2's (slice 38): the walk floors a replacement's lead at the lag
+   * plus one (`replacement.ts`), and the sequencer's co-signing door reads
+   * force the lag ahead (`Sequencer.retiring`) — so every party reads the
+   * record before the last act it can still land in the incumbent's term.
    */
   lag(): bigint;
   publish(commitment: Commitment): void;

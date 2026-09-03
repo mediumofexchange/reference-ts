@@ -405,13 +405,17 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
     // slice 38): effective ≥ witnessed + lag + 1, and a record below the floor
     // is not a replacement — refused rather than corrected, as a backdated one
     // always was, since the rule-holder does not get to date a handover. The
-    // floor is what makes the record precede, on every party's clock, every
-    // act it can void: an act witnessed at or past the effective index was
-    // signed no later than that index less the lag, which the floor puts
-    // strictly after the record's own witnessing — so a commitment the
-    // predecessor signed before it could read the record lands inside its
-    // term, and one it signs after is its own choice (its doors refuse it:
-    // `Sequencer.retiring`). Without the floor a record effective at its own
+    // floor is what gives every party the record before the last clock at
+    // which an act it signs can still be witnessed in the incumbent's term —
+    // at the venue's own speed: an act witnessed at or past the effective
+    // index was signed no later than that index less the lag, which the
+    // floor puts strictly after the record's own witnessing, so a commitment
+    // the predecessor signed before it could read the record lands inside
+    // its term where the venue includes at its lag, and one it signs after
+    // is its own choice (its co-signing door refuses it: `Sequencer.retiring`).
+    // Inclusion is bounded below by the lag and above by nothing: the floor
+    // buys one index of notice, and a slow block is the party's cost (the
+    // slice-38 review, the spec angle's S2 and the security angle's S2). Without the floor a record effective at its own
     // witnessing — or, under a finality depth, one pre-armed by the depth and
     // aimed at the cadence E declares — put the incumbent's newest commitment
     // in no term: not the book, placed nowhere, every fault predicate false,
