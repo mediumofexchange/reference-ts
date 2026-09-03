@@ -43,7 +43,7 @@
 
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { type Backing } from "./backing.js";
+import { backingName, type Backing } from "./backing.js";
 // Type-only: `commitment.ts` imports this module, and a value import here would
 // close that into a runtime cycle. Erased at compile time, so it does not.
 import type { Commitment } from "./commitment.js";
@@ -258,6 +258,182 @@ export function successionAhead(backing: Backing, venue: Venue): Succession[] {
   return pending === undefined ? chain : [...chain, pending];
 }
 
+/**
+ * A record the rule-holder really signed, with its hash: everything the walk
+ * needs about a published replacement that does not depend on the clock.
+ */
+interface Admitted extends WitnessedReplacement {
+  readonly hash: Uint8Array;
+}
+
+const NONE: readonly Admitted[] = Object.freeze([]);
+const admittedByVenue = new WeakMap<Venue, Map<string, { through: number; seen: Set<string>; records: Admitted[] }>>();
+
+/**
+ * Drop everything this memo holds for a venue: the call a venue makes when it
+ * replaces its whole view (`ErgoVenue.sync`), so that positions it judged
+ * against the old view are judged again against the new. Not a verifier — it
+ * answers nothing — which is why it is not on the refusal surface.
+ */
+export function forgetAdmitted(venue: Venue): void {
+  admittedByVenue.delete(venue);
+}
+
+/** A replacement as the reader's own: every byte array copied. */
+export function copyReplacement(replacement: Replacement): Replacement {
+  return {
+    role: replacement.role,
+    successor: copyBytes(replacement.successor),
+    predecessor: copyBytes(replacement.predecessor),
+    effective: replacement.effective,
+    signature: copyBytes(replacement.signature),
+    successorSignature: copyBytes(replacement.successorSignature),
+  };
+}
+
+/**
+ * The walk's expensive step, taken once per record and held for as long as the
+ * venue that answered it is.
+ *
+ * Returns every admitted record for this backing at this venue, in witnessed
+ * order and each with its hash, one per distinct record — unfiltered by link:
+ * the walk's own rules do that, per call.
+ *
+ * **Two signature verifications decide whether a record counts; byte compares
+ * decide everything after.** `isSignedReplacement` is a pure function of
+ * (backing, record): the rule-holder's key comes from inside the name, the
+ * message from the record's own fields, so a verdict never changes and never
+ * needs asking twice. Which link a record names, whether it supersedes, which of
+ * two at one index has the lesser hash — all of that is a comparison over the
+ * handful of records that passed. Anyone may publish a record for free and the
+ * venue takes no view, so the expensive step is the adversary's to multiply and
+ * the cheap one is the honest record's. Measured on this machine: one strict
+ * Ed25519 verification is ~5 ms and a link comparison is well under a
+ * microsecond, so a walk that verifies before it compares prices its reader at
+ * the stranger's flood — seconds per door call per backing, and minutes of the
+ * boot window the resume rule holds open until every registered backing serves.
+ *
+ * **The memo keeps only what it ADMITTED, once.** A junk record leaves nothing
+ * behind but the count of records already judged, and a republished copy of a
+ * record already held leaves nothing either (the review's S1: retained, each
+ * copy cost ~1.5 kB for the venue's life and a sort per walk, at a stranger's
+ * price), so a flood costs this map one integer rather than a key per record:
+ * the memory bound is the DISTINCT honest record's, which is the same thing the
+ * cost is. And nothing here needs an eviction rule — a `WeakMap` on the venue
+ * holds the memo exactly as long as the venue object is (`forgetAdmitted` is
+ * how a venue that re-gathers ends it sooner), and a second venue holding
+ * different records for one backing name gets its own memo rather than this
+ * one's answers.
+ *
+ * **What it leans on is the Venue contract's append-only clause — for WHO IS
+ * IN FORCE, not merely for freshness.** Positions 0 up to `through` have been
+ * judged and are never judged again for the life of the venue object, so a
+ * view that re-gathers must only ever move that count forward (`ErgoVenue.sync`'s
+ * finalised prefix is exactly that promise). A view that LOST records is out of
+ * contract and is judged again from scratch rather than trusted; a view that
+ * CHANGED a record below that count, at any length no shorter — a
+ * reorganisation below the
+ * declared depth, a third-party adapter — is not detected, and no later append
+ * heals it, in EITHER direction: an operator seated from a record the venue no
+ * longer holds stays seated for this reader, and a co-signed handover written
+ * over a position once judged junk stays invisible, the retired key still in
+ * force. That is the price, stated here because it is the only one (the
+ * slice-37 panel and its review; the per-record verdict memo that removes it
+ * costs fourteen times the per-walk residual and is the fallback if the clause
+ * is ever weakened). A venue that re-gathers its whole view says so —
+ * `forgetAdmitted` — and `ErgoVenue.sync` does, because its own frontier walk
+ * is this memo's first reader and would otherwise widen on the stale chain. The sequencer's walk cache already keys on this clause;
+ * this holds the same assumption one layer down, where every reader shares it
+ * instead of only the one that thought to cache.
+ *
+ * **The verify is first, and nothing unverified is hashed.** `isSignedReplacement`
+ * carries its own try/catch, so a malformed record a venue adapter hands out
+ * drops itself here; hashed first, it would throw inside `answering` and
+ * collapse the whole walk to the genesis chain — the retired operator back in
+ * force for that reader. And every record the walk's later rules compare — the
+ * fields-hash dedup, the same-index tie, supersession, the self-naming
+ * exemption — has passed here: a junk twin of an honest record (its fields, a
+ * stranger's signatures) published first would otherwise take the dedup slot
+ * and then fail, and the signed handover would vanish (the panel's probes).
+ */
+function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
+  // By the RECOMPUTED name, as committedLogFor picks a snapshot: `readonly` is
+  // erased at runtime and the Backing brand is a phantom type, so an object
+  // carrying a real backing's `.name` beside other fields — another rule
+  // key, another `nameHex` — is a Backing at runtime. Looked up by its
+  // `.name` it read that backing's records, judged them under its own rule,
+  // and took a memo entry per ask, ~2 kB each with no venue write (the
+  // review's ADV-6, the verification's V-1). Looked up by the name its fields
+  // derive, it reads the records of the backing it IS — none, for a
+  // hand-built object — and the key needs no rule beside the name, because
+  // the name binds E. One hash per walk.
+  const name = backingName(backing);
+  const published = venue.replacementsFor(name);
+  let byBacking = admittedByVenue.get(venue);
+  if (byBacking === undefined) {
+    byBacking = new Map();
+    admittedByVenue.set(venue, byBacking);
+  }
+  const memoKey = bytesToHex(name);
+  let memo = byBacking.get(memoKey);
+  if (memo === undefined || memo.through > published.length) {
+    memo = { through: 0, seen: new Set(), records: [] };
+    byBacking.set(memoKey, memo);
+  }
+  // A backing the venue holds no records for is memoised as nothing at all —
+  // a name is a hash, minted for free, and the local venue answers `[]` for
+  // any name (the review's ADV-12) — and it is asked AFTER the shrink guard
+  // above, so a view that lost every record is re-judged when it refills
+  // rather than served from the memo it emptied into (the verification's
+  // V-2, a regression the first placement had made).
+  if (published.length === 0) {
+    byBacking.delete(memoKey);
+    return NONE;
+  }
+  // Both call sites return before this for a backing with no rule; asked here
+  // rather than defaulted, so a third caller would get the same answer.
+  if (backing.evidence.replacementRule === undefined) return NONE;
+  // Judged into a local list, then both writes together with nothing that can
+  // throw between them: a memo whose records ran ahead of its count, or
+  // behind it, would judge a position twice or never.
+  const fresh: { record: Admitted; hashHex: string }[] = [];
+  const seenNow = new Set<string>();
+  for (let i = memo.through; i < published.length; i++) {
+    const w = published[i] as WitnessedReplacement;
+    if (!isSignedReplacement(backing, w.replacement)) continue;
+    // A replacement cannot take force before it was witnessed (§C2), and one
+    // declaring an earlier index is refused rather than corrected: the
+    // rule-holder does not get to backdate a handover. Clock-free like the
+    // signature — it compares the record against its own witnessing — so it
+    // belongs to the step that is taken once.
+    if (w.replacement.effective < w.at) continue;
+    // Hashed here rather than once per link: the hash is the record's identity
+    // for the dedup AND for the same-index tie the walk resolves below.
+    // The reader's own copy: the memo is validated state, and what a venue
+    // hands out is the venue's to overwrite — retained uncopied, a field
+    // written afterwards would seat a successor no signature covers, where
+    // the uncached walk merely stopped verifying the record (the review's
+    // ADV-3).
+    const hash = replacementHash(name, w.replacement);
+    const hashHex = bytesToHex(hash);
+    // A republished copy of a record already held — the rule-holder's own
+    // bytes, which anyone may republish — is not held again: the walk keeps a
+    // record's FIRST witnessing, positions are witnessed order, so the copy
+    // already held is the one that counts. Retained, each copy cost ~1.5 kB
+    // for the venue's life and a sort per walk, at a stranger's price (the
+    // review's S1): junk and republication now leave the same nothing behind.
+    if (memo.seen.has(hashHex) || seenNow.has(hashHex)) continue;
+    seenNow.add(hashHex);
+    fresh.push({ record: { replacement: copyReplacement(w.replacement), at: w.at, hash }, hashHex });
+  }
+  for (const { record, hashHex } of fresh) {
+    memo.seen.add(hashHex);
+    memo.records.push(record); // no spread: it has a stack bound, and its throw is answering's fallback
+  }
+  memo.through = published.length;
+  return memo.records;
+}
+
 function walkSuccession(
   backing: Backing,
   venue: Venue,
@@ -273,18 +449,7 @@ function walkSuccession(
   return answering(() => {
     if (backing.evidence.replacementRule === undefined) return { chain };
     const now = venue.witnessedIndex();
-    // Hashed once for the whole walk rather than once per link: the hash is the
-    // record's identity for the dedup AND for the same-index tie below, and
-    // anyone may publish a replacement for free, so the number of records is the
-    // adversary's to grow.
-    const witnessed = venue
-      .replacementsFor(backing.name)
-      .filter((w) => isSignedReplacement(backing, w.replacement))
-      // A replacement cannot take force before it was witnessed (§C2), and one
-      // declaring an earlier index is refused rather than corrected: the
-      // rule-holder does not get to backdate a handover.
-      .filter((w) => w.replacement.effective >= w.at)
-      .map((w) => ({ ...w, hash: replacementHash(backing.name, w.replacement) }));
+    const witnessed = admitted(backing, venue);
 
     const seen = new Set<string>([bytesToHex(backing.name)]);
     let link = backing.name;
@@ -328,7 +493,7 @@ function walkSuccession(
       // it for free by publishing one record alone. A tie between two DIFFERENT
       // rule-holders cannot be built while E's replacementRule is one key;
       // if that ever changes, this rule is the one to reopen. See DECISIONS.md.
-      const candidates: typeof witnessed = [];
+      const candidates: Admitted[] = [];
       {
         const distinct = new Set<string>();
         for (const w of witnessed
@@ -357,7 +522,7 @@ function walkSuccession(
       // sorted (both found reviewing this slice). Skipped, not broken on: a
       // candidate at a genuinely later index can still supersede or, after a
       // revocation, stand fresh.
-      let chosen: (typeof witnessed)[number] | undefined;
+      let chosen: Admitted | undefined;
       let consideredAt: bigint | undefined;
       for (const candidate of candidates) {
         if (consideredAt !== undefined && candidate.at === consideredAt) continue;
@@ -607,15 +772,11 @@ export function isNamedSuccessor(backing: Backing, venue: Venue, key: Uint8Array
     const chain = successionOf(backing, venue);
     const tip = chain[chain.length - 1] as Succession;
     if (compareBytes(tip.operator, key) === 0) return false;
-    return venue
-      .replacementsFor(backing.name)
-      .some(
-        (w) =>
-          isSignedReplacement(backing, w.replacement) &&
-          w.replacement.effective >= w.at &&
-          compareBytes(w.replacement.predecessor, tip.link) === 0 &&
-          compareBytes(w.replacement.successor, key) === 0,
-      );
+    return admitted(backing, venue).some(
+      (w) =>
+        compareBytes(w.replacement.predecessor, tip.link) === 0 &&
+        compareBytes(w.replacement.successor, key) === 0,
+    );
   }, false);
 }
 

@@ -1043,7 +1043,10 @@ function walkGap(
 ): Settlement[] {
   const settlements: Settlement[] = [];
   const chain = successionOf(backing, venue);
-  for (const witnessed of gapLegsFor(venue, backing)) {
+  // The chain this walk already holds, threaded — walked once here and once
+  // inside gapLegsFor, the same record was verified twice per call (found by
+  // the slice-37 panel's inventory angle).
+  for (const witnessed of gapLegsFor(venue, backing, chain)) {
     // "Redemption against the LAST witnessed snapshot": the snapshot in hand
     // must be the one that was last when this leg was published. Asked about the
     // present instead, an operator that would rather a redemption were

@@ -238,7 +238,9 @@ function surface() {
  * The exceptions, named rather than omitted: these take a Venue and read nothing
  * a partial view could be missing, so there is no refusal for them to swallow.
  */
-const NEVER_REFUSES = new Set(["venueIsDeclared"]);
+// `forgetAdmitted` takes a venue to drop the walk's memo for it, and answers
+// nothing: not a verifier, so not a refusal.
+const NEVER_REFUSES = new Set(["venueIsDeclared", "forgetAdmitted"]);
 
 /**
  * Every exported function in `src` whose signature takes a Venue, read out of
