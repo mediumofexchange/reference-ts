@@ -300,8 +300,8 @@ export class Sequencer {
     // seated for the genesis link, which is the backing itself. Anyone else
     // reaches the book through `takeOver`. The chain IN FORCE, deliberately: a
     // pending successor does not unseat the genesis operator, which §C2 keeps
-    // in possession through the lead time — its co-signing door is `inForce`'s
-    // question, and closes the venue's lag early (`retiring`).
+    // in possession through the lead time; its co-signing door is `inForce`'s
+    // question, force at the clock.
     const chain = this.walkedInForce(stored);
     if (
       chain.length === 1 &&
@@ -332,30 +332,6 @@ export class Sequencer {
   private isInForce(backing: Backing): boolean {
     const chain = this.walkedInForce(backing);
     return compareBytes((chain[chain.length - 1] as Succession).operator, this.operatorKey) === 0;
-  }
-
-  /**
-   * Whether a handover takes force between the clock and the index an act
-   * signed now is first witnessed — the venue's lag ahead (§C2, slice 38).
-   * Asked after `isInForce`, so the pending link is somebody else's: what this
-   * operator co-signs from here could only be witnessed in its successor's
-   * term, which is no term of its own — the erasure the lead floor closes on
-   * the rule-holder's side, reached here by the incumbent's own hand. `walked`
-   * rather than `walkedInForce`, because the link asked about has not arrived.
-   * Possession is untouched, and so is what a commitment carries: a retiring
-   * operator's commitment still carries the book, and one witnessed past the
-   * index is harmless because it is not the book. And every commitment it
-   * publishes from here lands at or past the index too — out of its term, so
-   * neither the book nor a cure for its own silence; this door is asked before
-   * `shut`, so a retiring operator in a gap is told to hand over rather than
-   * to commit into a term it no longer has. Zero-width on a venue with no lag,
-   * where the clock and the landing index are one.
-   */
-  private retiring(backing: Backing): boolean {
-    const ahead = this.walked(backing);
-    const tip = ahead[ahead.length - 1] as Succession;
-    const now = this.venue.witnessedIndex();
-    return tip.from > now && tip.from <= now + this.venue.lag();
   }
 
   /**
@@ -756,11 +732,7 @@ export class Sequencer {
     // adoption is co-signing onto the book, so it also waits for the book:
     // an in-force successor that has not taken the state on would otherwise
     // co-sign the gap's legs onto an empty log, which is the locked-out-heir
-    // defect at a different door. `serves` is force at the clock and custody
-    // in one read — not force where the act lands (`retiring`), which
-    // adoption does not ask: what it co-signs already has force from the
-    // venue, and the successor adopts it again from its own book (the
-    // slice-38 review's security angle, S5).
+    // defect at a different door. `serves` is both halves in one read.
     //
     // Asked once rather than per leg: the answer is the same for all of them,
     // and asking walks the chain, which verifies a signature per published
@@ -1916,10 +1888,14 @@ export class Sequencer {
   /**
    * §C2: "From the effective index the old attester's co-signatures stop
    * counting" — a successor before its index is not the operator yet, however
-   * much of the book it holds, and a replaced one is not any more; and where
-   * an act signed now is first witnessed past that index, the pen there is
-   * already the successor's (`retiring`). Asked of every backing an ACT
-   * touches, after the repeat is answered:
+   * much of the book it holds, and a replaced one is not any more. Force at
+   * the CLOCK, deliberately: where an act signed now is first witnessed past
+   * that index (the venue's lag ahead) what this door co-signs dies with the
+   * handover, and that is the incumbent's and the payee's to read from the
+   * record (CLAUDE.md's party rule) — a door that shut on it was a lever any
+   * rule-holder's record could pull, one record per lag, superseding each
+   * before it arrived (slice 38's review and fix panel). Asked of every
+   * backing an ACT touches, after the repeat is answered:
    * a repeat is a read of the receipt book, not an act, and a retired operator
    * re-serving a receipt it gave in force is no new co-signature — refusing it
    * would deny the payee the one evidence the successor cannot produce. A
@@ -1931,17 +1907,6 @@ export class Sequencer {
     for (const backing of backings) {
       if (!this.isInForce(backing)) {
         throw new SequencerError("this sequencer is not yet in force for that backing");
-      }
-      // In force at the clock is not in force where the act lands. An act
-      // signed now is first witnessed the venue's lag ahead, and past a
-      // handover's effective index the pen there is the successor's, so a
-      // co-signature given here could only be witnessed in no term (slice
-      // 38). The door closes the lag early and names the honest path; a venue
-      // with no lag never reaches this line.
-      if (this.retiring(backing)) {
-        throw new SequencerError(
-          "this sequencer is in force for that backing at the clock but not where an act signed now is first witnessed: a handover takes force within the venue's lag, and the successor serves from its effective index",
-        );
       }
       // In force is not custody. An heir that skipped the takeover used to
       // pass this door and co-sign onto an empty log — two live claims on one

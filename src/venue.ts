@@ -203,13 +203,12 @@ export interface WitnessedOp {
  *     venue's finality rule — the least number of indices by which an act
  *     signed at its clock is witnessed after it — never a view's state, so it
  *     answers unsynced, and the id a backing declares must determine it, as
- *     `ergoVenueId` does. The walk floors a replacement's lead on it and the
- *     sequencer's co-signing door reads force the lag ahead (§C2, slice 38).
- *     Nothing here can check the number: a view declaring less than the venue
- *     lags reopens the erasure those two close, one declaring more holds a
- *     retired key in force, and two views answering one id with two lags put
- *     two honest readers permanently at odds about a past index (the slice-38
- *     review's security angle, S6).
+ *     `ergoVenueId` does. The walk floors a replacement's lead on it (§C2,
+ *     slice 38). Nothing here can check the number: a view declaring less
+ *     than the venue lags reopens the erasure the floor closes, one declaring
+ *     more holds a retired key in force, and two views answering one id with
+ *     two lags put two honest readers permanently at odds about a past index
+ *     (the slice-38 review's security angle, S6).
  *   - **Reads answer or throw `VenueError`.** A read that throws anything else
  *     is out of contract: verifiers wrap their bodies in `answering`, which
  *     converts a foreign throw into a false — and at a door a false is
@@ -227,11 +226,12 @@ export interface Venue {
    * the venue reads behind the chain by that depth (`ErgoVenue`). A constant
    * of the venue's finality rule, which the venue's id must commit to — as
    * `ergoVenueId` commits to the depth — so that naming the venue agrees it;
-   * never a view's state, so it answers on an unsynced view. Two readers,
-   * both §C2's (slice 38): the walk floors a replacement's lead at the lag
-   * plus one (`replacement.ts`), and the sequencer's co-signing door reads
-   * force the lag ahead (`Sequencer.retiring`) — so every party reads the
-   * record before the last act it can still land in the incumbent's term.
+   * never a view's state, so it answers on an unsynced view. One reader,
+   * §C2's (slice 38): the walk floors a replacement's lead at the lag plus
+   * one (`replacement.ts`), so every party reads the record before the last
+   * act it can still land in the incumbent's term; what a party does with
+   * that is CLAUDE.md's party rule, since a door a rule-holder's record can
+   * shut is a lever (the slice-38 review).
    */
   lag(): bigint;
   publish(commitment: Commitment): void;

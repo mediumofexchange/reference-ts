@@ -20,7 +20,7 @@ import { chainAt, LaggingView } from "./lagging-view.js";
 import { KEYS, pub, SECRETS } from "./support.js";
 
 // §C2, slice 38: **a replacement's lead is floored at the venue's lag plus
-// one, and a door reads force where an act signed now is first witnessed.**
+// one.**
 //
 // The finding (slice 36's F4, re-measured by the slice-38 panel): a commitment
 // the predecessor publishes at or past the effective index belongs to no term
@@ -37,17 +37,20 @@ import { KEYS, pub, SECRETS } from "./support.js";
 //
 //   - **The floor.** effective ≥ witnessed + lag + 1, judged once per record
 //     against the venue that answered it. A record below it is no replacement.
-//     So the record precedes, on every party's clock, every act it can void:
-//     a commitment signed before the record could be read lands inside the
-//     predecessor's term, and one signed after is its own choice.
-//   - **The door.** An operator co-signs only what can still be witnessed
-//     while it is in force: in force at its clock AND at its clock plus the
-//     lag. A predecessor's doors close the lag before the effective index; a
-//     successor's open at the index itself, once nothing the predecessor could
-//     still land in its term is unread. On a venue with no lag the two
-//     questions are one and nothing moves.
+//     So every party reads the record before the last clock at which an act
+//     it signs can still be witnessed in the incumbent's term — one index of
+//     notice, at the venue's own speed.
+//   - **What the parties do with it is theirs** (CLAUDE.md's party rule): the
+//     incumbent commits at the first clock it can read the record and co-signs
+//     nothing for the backing once the lag reaches the index; the payee reads
+//     the same record. The slice first built that as a door, and its review
+//     found the door a lever: a rule-holder held it shut, one record per lag,
+//     by superseding each before it arrived, with nothing to grade. A door
+//     only its own conduct can shut is the shape a door may have.
 //
-// See DECISIONS.md, "Panel: the lead time".
+// The lagging double lands writes in the NEXT block, as a chain does: an act
+// signed at clock c is witnessed at c + depth + 1. See DECISIONS.md, "Panel:
+// the lead time" and the round that followed it.
 
 const SILENCE = { noCommitmentDuration: 1000n, challengeWindow: 5n };
 const HEIR_SECRET = new Uint8Array(32).fill(0x0b);
@@ -97,7 +100,12 @@ function at(venue: LocalVenue, index: bigint): void {
   if (index > now) venue.advance(index - now);
 }
 
-/** The incumbent serving `backing` on `venue`, with one issuance to Alice, committed. */
+/**
+ * The incumbent serving `backing` on `venue`, with one issuance to Alice,
+ * committed. The state is the commit's own return value, not `snapshot()`
+ * afterwards: on a lagging view the seat reads stale until the commitment is
+ * readable, and a stale seat serves nothing.
+ */
 function serving(venue: Venue, backing: Backing) {
   const sequencer = new Sequencer(SECRETS.operator, venue);
   sequencer.register(backing, signBacking(SECRETS.backer, backing));
@@ -105,9 +113,6 @@ function serving(venue: Venue, backing: Backing) {
     { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
     ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
   );
-  // The commit's own return value, not `snapshot()` afterwards: on a lagging
-  // view the seat reads stale until the commitment is readable, and a stale
-  // seat serves nothing.
   const state = sequencer.commit();
   return { sequencer, state };
 }
@@ -127,6 +132,18 @@ function transferBy(
       secret,
     ),
   };
+}
+
+/**
+ * The party rule, computed from the public readers alone: may an act signed
+ * now still be witnessed in the term of the operator in force at the clock?
+ * `successionAhead` carries the pending link, `lag()` the venue's constant.
+ */
+function actNow(backing: Backing, venue: Venue): boolean {
+  const ahead = successionAhead(backing, venue);
+  const tip = ahead[ahead.length - 1]!;
+  const now = venue.witnessedIndex();
+  return tip.from <= now || tip.from > now + venue.lag();
 }
 
 describe("§C2: a replacement's lead is floored at the venue's lag plus one", () => {
@@ -194,10 +211,11 @@ describe("§C2: a replacement's lead is floored at the venue's lag plus one", ()
   it("a revocation dated at its own witnessing is no record, so the successor it meant to revoke takes force", () => {
     // The floor is read once per record, before any link is, so a self-naming
     // record — a revocation, exempt from the strictly-later rule at the
-    // walk — is held to it like any other. Its index is otherwise inert: a
-    // self-naming candidate never becomes a link, and supersession is decided
-    // by its witnessing. The width the exemption states is now "anywhere the
-    // floor allows", and this is the row that shows the floor is in front.
+    // walk — is held to it like any other. Its index is otherwise inert as a
+    // date: a self-naming candidate never becomes a link, and supersession is
+    // decided by its witnessing. The width the exemption states is now
+    // "anywhere the floor allows", and this is the row that shows the floor
+    // is in front.
     const venue = new LocalVenue();
     const eur = backingFor(venue);
     serving(venue, eur);
@@ -221,34 +239,39 @@ describe("§C2: a replacement's lead is floored at the venue's lag plus one", ()
     expect(operatorAt(eur, venue, 20n)).toEqual(KEYS.operator);
   });
 
-  it("the floor is the venue's: one record, two views of one chain, admitted where the lag is short and refused where it is long", () => {
+  it("the floor is the venue's, which is why the venue's id must bind the lag: one record, two views of one chain declaring two lags, admitted by one and refused by the other", () => {
     // A record is judged against the venue that answered it (slice 37), and
-    // the lag is that venue's constant. The same chain read through a view
-    // with depth 1 admits a lead of 2; read through a view with depth 2 it
-    // does not — and each view's memo holds its own verdict.
+    // the lag is that venue's constant. Read through a view declaring depth 1
+    // (lag 2) a lead of 3 is admitted; through one declaring depth 2 (lag 3)
+    // it is not — and the two views share one id, so this is the hazard the
+    // Venue contract forbids, built to be seen: two honest readers of one
+    // declared venue disagreeing about who is in force at a past index. A
+    // real venue's id commits to its finality rule (`ergoVenueId`), so honest
+    // readers of it share a lag; a view that declares another is out of
+    // contract (the slice-38 review's security angle, S6).
     const chain = new LocalVenue();
     const near = new LaggingView(chain, 1n);
     const far = new LaggingView(chain, 2n);
     const eur = backingFor(near);
     chainAt(chain, 10n);
-    chain.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 12n));
+    chain.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 13n));
     chainAt(chain, 20n);
-    expect(near.lag()).toBe(1n);
-    expect(far.lag()).toBe(2n);
+    expect(near.lag()).toBe(2n);
+    expect(far.lag()).toBe(3n);
     expect(operatorAt(eur, near, 18n)).toEqual(HEIR);
     expect(operatorAt(eur, far, 18n)).toEqual(KEYS.operator);
   });
 });
 
-describe("§C2: a door reads force where an act signed now is first witnessed", () => {
-  it("closes the pre-armed erasure on a lagging venue: the incumbent's doors close the lag before the index, its commitment on reading the record lands in term, and the successor's doors open at the index", () => {
-    // The panel's decisive row. A view that reads two behind the chain: an act
-    // signed at clock c lands at chain height c + 2. The rule-holder dates its
-    // record the floor ahead of its own witnessing — 3 = lag + 1 — so the
-    // incumbent reads it at clock 12, one index before any act it signs could
-    // land at the effective index 15. Before the floor and the door, the same
-    // record dated one index earlier put a commitment the incumbent signed at
-    // clock 13 in no term, with carol's payment in it.
+describe("§C2: the floor on a lagging venue, and what the parties do with the index it buys", () => {
+  it("an incumbent that commits at the first clock it can read the record keeps every payment in term, and the successor serves them from the effective index", () => {
+    // The panel's decisive row, under the party rule. Depth 2, so the lag is
+    // 3: an act signed at clock c lands at c + 3. The rule-holder dates its
+    // record the floor ahead of its own witnessing — 4 — so the incumbent
+    // reads it at clock 12, and a commitment it signs there lands at 15,
+    // inside its term. Before the floor, the same record dated one index
+    // earlier put a commitment the incumbent signed at clock 13 in no term,
+    // with carol's payment in it.
     const chain = new LocalVenue();
     const incumbentsView = new LaggingView(chain, 2n);
     const heirsView = new LaggingView(chain, 2n);
@@ -256,55 +279,46 @@ describe("§C2: a door reads force where an act signed now is first witnessed", 
     chainAt(chain, 2n); // the clock reads 0, and the lag is honest from here
     const { sequencer: incumbent } = serving(incumbentsView, eur);
 
-    // The rule-holder pre-arms: witnessed at 12, effective 15.
+    // The rule-holder pre-arms: witnessed at 12, effective 16.
     chainAt(chain, 12n);
-    chain.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 15n));
+    chain.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 16n));
 
-    // Clock 11: the record is two indices ahead of what the incumbent can
-    // read. It co-signs carol's payment in good faith.
+    // Clock 11: the record is ahead of what the incumbent can read. It
+    // co-signs carol's payment in good faith, and the rule says act.
     chainAt(chain, 13n);
     expect(successionAhead(eur, incumbentsView)).toHaveLength(1);
+    expect(actNow(eur, incumbentsView)).toBe(true);
     const paid = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.carol, 30n, 0n);
     expect(incumbent.submitTransfer(paid.op, paid.signature).position).toBe(1n);
 
-    // Clock 12: the record is readable. The door is still open — an act
-    // signed now lands at 14, inside the term — and the incumbent commits at
-    // once, which is the party rule: the commitment lands at 14, in term.
+    // Clock 12: the record is readable; an act signed now lands at 15, inside
+    // the term, and the rule still says act. The incumbent co-signs one more
+    // and commits at once — the party rule — and the commitment lands at 15.
     chainAt(chain, 14n);
     expect(successionAhead(eur, incumbentsView)).toHaveLength(2);
+    expect(actNow(eur, incumbentsView)).toBe(true);
     const more = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 1n);
     expect(incumbent.submitTransfer(more.op, more.signature).position).toBe(2n);
     const handed = incumbent.commit();
-    const last = handed.commitment;
-    expect(chain.witnessedAtFor(KEYS.operator)).toBe(14n);
-
-    // Clock 13: an act signed now is first witnessed at 15, where the pen is
-    // the successor's. The door closes and names it.
     chainAt(chain, 15n);
-    const late = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 2n);
-    expect(() => incumbent.submitTransfer(late.op, late.signature)).toThrow(/first witnessed/);
-    expect(() => incumbent.submitTransfer(late.op, late.signature)).toThrow(/successor/);
+    expect(chain.witnessedAtFor(KEYS.operator)).toBe(15n);
 
-    // Clock 14: the incumbent's own commitment is readable again, so its seat
-    // is current and nothing awaits repair — a closed door is not a stale
-    // seat — and the door is still closed. (At 12 and 13 the seat read stale
-    // for a different reason: a commitment is unreadable for the lag after it
-    // lands, the blind window the slice-38 security angle recorded as F11,
-    // which is not this slice's.) The heir prepares on its own view, and its
-    // doors stay shut until the index itself: at clock 14 the predecessor
-    // could still have landed a commitment in its term that this view has
-    // not read.
-    chainAt(chain, 16n);
-    expect(incumbent.awaitingTakeover()).toHaveLength(0);
-    expect(() => incumbent.submitTransfer(late.op, late.signature)).toThrow(/first witnessed/);
+    // Clock 13: an act signed now is first witnessed at 16, where the pen is
+    // the successor's. The rule says stop.
+    expect(actNow(eur, incumbentsView)).toBe(false);
+
+    // The heir prepares on its own view once the incumbent's last is readable
+    // (clock 15), and its door stays shut until the index itself.
+    chainAt(chain, 17n);
     const heir = new Sequencer(HEIR_SECRET, heirsView);
     heir.register(eur, signBacking(SECRETS.backer, eur));
     heir.takeOver(eur, handed);
+    const late = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 2n);
     expect(() => heir.submitTransfer(late.op, late.signature)).toThrow(/not yet in force/);
 
-    // Clock 15: in force, holding the book the record stands on — the
-    // incumbent's commitment at 14, carol's payment inside it — and serving.
-    chainAt(chain, 17n);
+    // Clock 16: in force, holding the book the record stands on — the
+    // incumbent's commitment at 15, carol's payment inside it — and serving.
+    chainAt(chain, 18n);
     expect(heir.submitTransfer(late.op, late.signature).position).toBe(3n);
     expect(heir.balance(eur, KEYS.carol)).toBe(30n);
     const respend = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.mallory, 30n, 0n);
@@ -313,15 +327,88 @@ describe("§C2: a door reads force where an act signed now is first witnessed", 
     // And every verifier places the incumbent's last where the book is.
     const walked = successionOf(eur, heirsView);
     expect(walked).toHaveLength(2);
-    expect(lastCommitmentInForce(walked, heirsView)?.commitment.sequence).toBe(last.sequence);
-    expect(termOf(walked, heirsView, KEYS.operator, last.sequence)).toBe(0);
+    expect(lastCommitmentInForce(walked, heirsView)?.commitment.sequence).toBe(handed.commitment.sequence);
+    expect(termOf(walked, heirsView, KEYS.operator, handed.commitment.sequence)).toBe(0);
   });
 
-  it("on a venue with no lag the doors are what they were: the predecessor serves to the index before force, and the successor from it", () => {
-    // Lag zero: the clock and the index an act is first witnessed at are one,
-    // so the door's second question is its first. This pins that the lookahead
-    // costs a venue with immediate publication nothing — no stall, no early
-    // close — which is every test in this suite that was written before it.
+  it("an act co-signed once the lag reaches the index dies with the handover, and the party rule reads that at every clock from the public readers", () => {
+    // The cost of not following the rule, measured, and the rule itself: at
+    // clock 13 the record has been readable for two clocks, the pending link
+    // takes force at 16, and an act signed now lands at 16 — in the
+    // successor's term. The reference implementation's door is open there
+    // (a door a rule-holder's record could shut was a lever, the review
+    // found), so the incumbent co-signs, commits, and both die.
+    const chain = new LocalVenue();
+    const view = new LaggingView(chain, 2n);
+    const heirsView = new LaggingView(chain, 2n);
+    const eur = backingFor(view);
+    chainAt(chain, 2n);
+    const { sequencer: incumbent, state } = serving(view, eur);
+    chainAt(chain, 12n);
+    chain.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 16n));
+
+    chainAt(chain, 15n); // clock 13
+    expect(actNow(eur, view)).toBe(false);
+    const doomed = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
+    expect(incumbent.submitTransfer(doomed.op, doomed.signature).position).toBe(1n);
+    const past = incumbent.commit();
+    chainAt(chain, 16n);
+    expect(chain.witnessedAtFor(KEYS.operator)).toBe(16n);
+
+    // Clock 16: the record's last in-force commitment is the genesis one; the
+    // commitment at 16 is neither the book nor placed, and accuses nobody.
+    chainAt(chain, 18n);
+    const walked = successionOf(eur, heirsView);
+    expect(walked).toHaveLength(2);
+    expect(lastCommitmentInForce(walked, heirsView)?.commitment.sequence).toBe(state.commitment.sequence);
+    expect(termOf(walked, heirsView, KEYS.operator, past.commitment.sequence)).toBeUndefined();
+    expect(isRewrittenHistory(eur, heirsView, state, past)).toBe(false);
+    expect(isRewrittenHistory(eur, heirsView, past, state)).toBe(false);
+    const heir = new Sequencer(HEIR_SECRET, heirsView);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
+    expect(() => heir.takeOver(eur, past)).toThrow(SequencerError);
+    heir.takeOver(eur, state);
+    // The doomed act is gone: alice's nonce is free again at the successor.
+    expect(heir.submitTransfer(doomed.op, doomed.signature).position).toBe(1n);
+    expect(actNow(eur, heirsView)).toBe(true);
+  });
+
+  for (const depth of [1n, 2n]) {
+    it(`the doors move at the effective index and nowhere else: the incumbent's shut at it, the successor's open at it, on a venue reading ${depth} behind`, () => {
+      // Pinned against a door that would close early: the incumbent's
+      // co-signature at effective − 1 is accepted (and dies — the rule's
+      // cost), refused at effective for force alone; the successor's is
+      // refused at effective − 1 and accepted at effective. The record is
+      // witnessed at 10, effective at the floor.
+      const chain = new LocalVenue();
+      const view = new LaggingView(chain, depth);
+      const lag = view.lag();
+      const eur = backingFor(view);
+      chainAt(chain, depth);
+      const { sequencer: incumbent, state } = serving(view, eur);
+      const effective = 10n + lag + 1n;
+      chainAt(chain, 10n);
+      chain.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, effective));
+      chainAt(chain, 10n + depth); // clock 10: the record is readable
+      const heir = new Sequencer(HEIR_SECRET, view);
+      heir.register(eur, signBacking(SECRETS.backer, eur));
+      heir.takeOver(eur, state);
+
+      // Clock effective − 1.
+      chainAt(chain, effective - 1n + depth);
+      const first = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
+      expect(incumbent.submitTransfer(first.op, first.signature).position).toBe(1n);
+      expect(() => heir.submitTransfer(first.op, first.signature)).toThrow(/not yet in force/);
+      // Clock effective.
+      chainAt(chain, effective + depth);
+      const second = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 1n);
+      expect(() => incumbent.submitTransfer(second.op, second.signature)).toThrow(/not yet in force/);
+      expect(heir.submitTransfer(first.op, first.signature).position).toBe(1n);
+    });
+  }
+
+  it("on a venue with no lag nothing moves: the predecessor serves to the index before force, and the successor from it", () => {
+    // Lag zero: the clock and the index an act is first witnessed at are one.
     const venue = new LocalVenue();
     const eur = backingFor(venue);
     const { sequencer: incumbent, state } = serving(venue, eur);
@@ -332,15 +419,13 @@ describe("§C2: a door reads force where an act signed now is first witnessed", 
     heir.takeOver(eur, state);
 
     at(venue, 11n);
+    expect(actNow(eur, venue)).toBe(true);
     const first = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
     expect(incumbent.submitTransfer(first.op, first.signature).position).toBe(1n);
     const handed = incumbent.commit();
     expect(() => heir.submitTransfer(first.op, first.signature)).toThrow(/not yet in force/);
 
     at(venue, 12n);
-    // At 12 the heir is in force at the clock itself, so the incumbent is
-    // refused by the question the doors always asked; the lookahead is never
-    // reached at lag zero, which is the point.
     const second = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 1n);
     expect(() => incumbent.submitTransfer(second.op, second.signature)).toThrow(/not yet in force/);
     // The incumbent's commitment at 11 moved the book; the heir re-syncs once,
@@ -349,52 +434,14 @@ describe("§C2: a door reads force where an act signed now is first witnessed", 
     heir.takeOver(eur, handed);
     expect(heir.submitTransfer(second.op, second.signature).position).toBe(2n);
   });
-});
 
-describe("§C2: the door's boundary, and what a retiring operator's commitment is", () => {
-  for (const lag of [1n, 2n]) {
-    it(`the incumbent's co-signing door is open at effective − lag − 1 and shut at effective − lag, and the successor's is shut at effective − 1 and open at effective (lag ${lag})`, () => {
-      // The interval, pinned by itself: the decisive test above asserts it
-      // among fifteen other things, and the review's inventory angle found
-      // three structurally different breakages of the door failing that one
-      // test alone. The record is witnessed at 10, effective at the floor.
-      const chain = new LocalVenue();
-      const view = new LaggingView(chain, lag);
-      const eur = backingFor(view);
-      chainAt(chain, lag);
-      const { sequencer: incumbent, state } = serving(view, eur);
-      const effective = 10n + lag + 1n;
-      chainAt(chain, 10n);
-      chain.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, effective));
-      chainAt(chain, 10n + lag); // clock 10: the record is readable
-      const heir = new Sequencer(HEIR_SECRET, view);
-      heir.register(eur, signBacking(SECRETS.backer, eur));
-      heir.takeOver(eur, state);
-
-      // Clock effective − lag − 1 = 10: the record is readable, and an act
-      // signed now lands at effective − 1, inside the incumbent's term.
-      const act = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
-      expect(incumbent.submitTransfer(act.op, act.signature).position).toBe(1n);
-      // Clock effective − lag: an act signed now lands at the index itself. A
-      // FRESH act, because a repeat is answered with its receipt before any
-      // door is asked (invariant 26).
-      chainAt(chain, 11n + lag);
-      const next = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 1n);
-      expect(() => incumbent.submitTransfer(next.op, next.signature)).toThrow(/first witnessed/);
-      // The successor: shut at effective − 1, open at effective.
-      chainAt(chain, effective - 1n + lag);
-      expect(() => heir.submitTransfer(act.op, act.signature)).toThrow(/not yet in force/);
-      chainAt(chain, effective + lag);
-      expect(heir.submitTransfer(act.op, act.signature).position).toBe(1n);
-    });
-  }
-
-  it("a retiring operator's commitment still carries the book, lands out of its term, is not the book, and accuses nobody", () => {
-    // The claim the door's safety rests on, pinned: only the co-signing door
-    // asks `retiring`. Candidate C was rejected because its retiring operator
-    // dropped the handed-over backing from its next batch commitment; the
-    // review's inventory angle found a mutation that made this operator do
-    // the same surviving the whole suite. Depth 2, record at 12, effective 15.
+  it("an incumbent's commitment witnessed at the effective index still carries the book, lands out of its term, is not the book, and accuses nobody", () => {
+    // What a commitment landing past the index IS — the claim the whole
+    // boundary decision rests on (the panel rejected every re-attribution of
+    // it): not the book, placed in no term, not a rewrite in either order,
+    // refused as a takeOver offer. Depth 2, record at 12, effective 16; the
+    // incumbent's last commitment is the genesis one, so its seat is current
+    // and its commit at clock 13 goes through — and lands at 16.
     const chain = new LocalVenue();
     const view = new LaggingView(chain, 2n);
     const heirsView = new LaggingView(chain, 2n);
@@ -402,28 +449,23 @@ describe("§C2: the door's boundary, and what a retiring operator's commitment i
     chainAt(chain, 2n);
     const { sequencer: incumbent, state: inTerm } = serving(view, eur);
     chainAt(chain, 12n);
-    chain.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 15n));
-    // Clock 13: retiring (15 ≤ 13 + 2). The incumbent's last commitment is
-    // the genesis one at 2, so its seat is current; it commits on its
-    // cadence, and the commitment carries the backing.
+    chain.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 16n));
     chainAt(chain, 15n);
-    const retiring = incumbent.commit();
-    expect(retiring.snapshots.some((s) => s.name.every((b, i) => b === eur.name[i]))).toBe(true);
-    expect(chain.witnessedAtFor(KEYS.operator)).toBe(15n);
+    const past = incumbent.commit();
+    expect(past.snapshots.some((s) => s.name.every((b, i) => b === eur.name[i]))).toBe(true);
+    chainAt(chain, 16n);
+    expect(chain.witnessedAtFor(KEYS.operator)).toBe(16n);
 
-    // Clock 16: witnessed at 15, the index itself. Not the book, placed in no
-    // term, not a rewrite in either order — and the heir takes the in-term
-    // commitment, not this one.
     chainAt(chain, 18n);
     const walked = successionOf(eur, heirsView);
     expect(walked).toHaveLength(2);
     expect(lastCommitmentInForce(walked, heirsView)?.commitment.sequence).toBe(inTerm.commitment.sequence);
-    expect(termOf(walked, heirsView, KEYS.operator, retiring.commitment.sequence)).toBeUndefined();
-    expect(isRewrittenHistory(eur, heirsView, inTerm, retiring)).toBe(false);
-    expect(isRewrittenHistory(eur, heirsView, retiring, inTerm)).toBe(false);
+    expect(termOf(walked, heirsView, KEYS.operator, past.commitment.sequence)).toBeUndefined();
+    expect(isRewrittenHistory(eur, heirsView, inTerm, past)).toBe(false);
+    expect(isRewrittenHistory(eur, heirsView, past, inTerm)).toBe(false);
     const heir = new Sequencer(HEIR_SECRET, heirsView);
     heir.register(eur, signBacking(SECRETS.backer, eur));
-    expect(() => heir.takeOver(eur, retiring)).toThrow(SequencerError);
+    expect(() => heir.takeOver(eur, past)).toThrow(SequencerError);
     heir.takeOver(eur, inTerm);
     expect(heir.outstanding(eur)).toBe(100n);
   });

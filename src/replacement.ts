@@ -412,7 +412,8 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
     // floor puts strictly after the record's own witnessing, so a commitment
     // the predecessor signed before it could read the record lands inside
     // its term where the venue includes at its lag, and one it signs after
-    // is its own choice (its co-signing door refuses it: `Sequencer.retiring`).
+    // is its own choice — and its payee's, reading the same record
+    // (CLAUDE.md's party rule).
     // Inclusion is bounded below by the lag and above by nothing: the floor
     // buys one index of notice, and a slow block is the party's cost (the
     // slice-38 review, the spec angle's S2 and the security angle's S2). Without the floor a record effective at its own

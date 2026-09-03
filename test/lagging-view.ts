@@ -1,3 +1,4 @@
+import { compareBytes } from "../src/bytes.js";
 import type { Commitment } from "../src/commitment.js";
 import type { PublishedOp } from "../src/oplog.js";
 import type { Commit } from "../src/presentation.js";
@@ -5,31 +6,41 @@ import type { Replacement, WitnessedReplacement } from "../src/replacement.js";
 import type { Revocation, WitnessedRevocation } from "../src/revocation.js";
 import type { LocalVenue, Venue, WitnessedCommit, WitnessedOp } from "../src/venue.js";
 
+/** Writes submitted through a view, waiting for the chain's next block. */
+const pending = new WeakMap<LocalVenue, (() => void)[]>();
+
 /**
  * A venue VIEW with a finality depth, over a `LocalVenue` standing in for the
- * chain — `ErgoVenue`'s two read properties and nothing else:
+ * chain — `ErgoVenue`'s read and write properties and nothing else:
  *
  *   - the clock a reader gets is the chain's height less the depth
  *     (`ErgoVenue.sync`: "the height is the indexed height less the declared
  *     depth");
  *   - a record is read only once its witnessed index is at or below that
  *     clock (`finalised`: nothing above the height is read at all), and its
- *     `at` is the index the chain witnessed it at.
+ *     `at` is the index the chain witnessed it at;
+ *   - a write is included in the chain's NEXT block: queued here, landed by
+ *     `chainAt` after each advance.
  *
- * Writes land at the chain's real height, `depth` ahead of this clock — which
- * is the view's **lag**: an act signed at clock `c` is witnessed at `c + depth`.
- * (`ErgoVenue`'s own lag is one more, since a chain includes in its NEXT
- * block; this double lands in the current one, as `LocalVenue` does.) Each
- * party holds its own view, as each holds its own `ErgoVenue`, and so gets its
- * own memo of admitted replacement records. `ErgoVenue` itself refuses to
+ * So an act signed at clock `c` is witnessed at `c + depth + 1`, and the
+ * view's lag is `depth + 1` — `ErgoVenue.lag()`'s own number. (The slice-38
+ * review's security angle found the first version of this double landing
+ * writes in the current block, one less than the venue it models, and the
+ * slice's decisive test passing at a lead below a real venue's floor.) Each
+ * party holds its own view, as each holds its own `ErgoVenue`, and so gets
+ * its own memo of admitted replacement records. `ErgoVenue` itself refuses to
  * publish, so a `Sequencer` cannot be driven over it; this is how the tests
  * drive one over a lagging clock.
  *
- * The clock must have reached the depth before anything is published, or an
+ * The chain must have reached the depth before anything is published, or an
  * act lands nearer its clock than the lag says: fixtures advance the chain to
- * the depth first.
+ * the depth first. Records a fixture publishes on the CHAIN directly (the
+ * rule-holder's, typically) land at once, at the chain's height.
  */
 export class LaggingView implements Venue {
+  /** Commitments this view has submitted, whether or not landed yet. */
+  private readonly submitted: Commitment[] = [];
+
   constructor(
     private readonly chain: LocalVenue,
     private readonly depth: bigint,
@@ -40,7 +51,7 @@ export class LaggingView implements Venue {
   }
 
   lag(): bigint {
-    return this.depth;
+    return this.depth + 1n;
   }
 
   witnessedIndex(): bigint {
@@ -48,20 +59,26 @@ export class LaggingView implements Venue {
     return height > this.depth ? height - this.depth : 0n;
   }
 
+  private queue(write: () => void): void {
+    const q = pending.get(this.chain);
+    if (q === undefined) pending.set(this.chain, [write]);
+    else q.push(write);
+  }
   publish(commitment: Commitment): void {
-    this.chain.publish(commitment);
+    this.submitted.push(commitment);
+    this.queue(() => this.chain.publish(commitment));
   }
   publishOp(backingName: Uint8Array, op: PublishedOp): void {
-    this.chain.publishOp(backingName, op);
+    this.queue(() => this.chain.publishOp(backingName, op));
   }
   publishReplacement(backingName: Uint8Array, replacement: Replacement): void {
-    this.chain.publishReplacement(backingName, replacement);
+    this.queue(() => this.chain.publishReplacement(backingName, replacement));
   }
   publishRevocation(revocation: Revocation): void {
-    this.chain.publishRevocation(revocation);
+    this.queue(() => this.chain.publishRevocation(revocation));
   }
   publishCommit(commit: Commit): void {
-    this.chain.publishCommit(commit);
+    this.queue(() => this.chain.publishCommit(commit));
   }
 
   private final<T extends { readonly at: bigint }>(list: T[]): T[] {
@@ -96,15 +113,27 @@ export class LaggingView implements Venue {
     return first === undefined || first > this.witnessedIndex() ? undefined : first;
   }
   nextSequenceFor(operator: Uint8Array): bigint {
-    // From the chain, as an operator derives its own next sequence from the
-    // record it holds: a commitment inside the unfinalised zone is one it
-    // published itself and has not yet seen confirmed.
-    return this.chain.nextSequenceFor(operator);
+    // The chain's word, and this view's own in-flight commitments beside it:
+    // an operator knows what it has signed before the chain shows it.
+    const latest = this.chain.latestFor(operator);
+    let next = latest === undefined ? 0n : latest.sequence + 1n;
+    for (const c of this.submitted) {
+      if (compareBytes(c.operator, operator) === 0 && c.sequence >= next) next = c.sequence + 1n;
+    }
+    return next;
   }
 }
 
-/** Move the chain to height `to` — the view's clock then reads `to − depth`. */
+/**
+ * Move the chain to height `to`, one block at a time, landing after each
+ * advance the writes queued before it — the view's clock then reads
+ * `to − depth`.
+ */
 export function chainAt(chain: LocalVenue, to: bigint): void {
-  const now = chain.witnessedIndex();
-  if (to > now) chain.advance(to - now);
+  while (chain.witnessedIndex() < to) {
+    const queued = pending.get(chain) ?? [];
+    pending.set(chain, []);
+    chain.advance(1n);
+    for (const write of queued) write();
+  }
 }
