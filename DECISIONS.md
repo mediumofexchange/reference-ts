@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-03` [Handoff: slice 37 is built and reviewed, and waits on the maintainer](decisions/2026-09.md#2026-09-03--handoff-slice-37-is-built-and-reviewed-and-waits-on-the-maintainer)
 - `2026-09-02` [The cold walk's round: the memo held, the venue beside it did not, and the fixes](decisions/2026-09.md#2026-09-02--the-cold-walks-round-the-memo-held-the-venue-beside-it-did-not-and-the-fixes)
 - `2026-09-02` [Panel: the cold walk — a record is judged once, against the venue that answered it, and junk leaves nothing behind](decisions/2026-09.md#2026-09-02--panel-the-cold-walk--a-record-is-judged-once-against-the-venue-that-answered-it-and-junk-leaves-nothing-behind)
 - `2026-09-02` [Handoff: slice 36 is fixed, reviewed twice over, and waits on the maintainer](decisions/2026-09.md#2026-09-02--handoff-slice-36-is-fixed-reviewed-twice-over-and-waits-on-the-maintainer)
