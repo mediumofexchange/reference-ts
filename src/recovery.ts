@@ -22,11 +22,10 @@
 //      venue, checked against the last committed balance state, stands in for
 //      the nullifier."
 //
-// Under transparent the whole served state is rehashed against the root, which
-// is already how a receipt proves, so **serving everything IS the
-// non-membership proof** — the Merkle machinery is what a construction needs
-// when it cannot serve everything, and belongs with the shielded ones. See
-// DECISIONS.md.
+// Transparent proofs authenticate the complete name/digest directory and replay
+// the relevant backing's log. Unrelated logs need not be served. Absence from
+// the directory proves omission; a named but withheld log is unavailable evidence.
+// This compact representation does not establish availability or continuity.
 //
 // **The payment path is those legs, published somewhere else.** §C2b:
 // "Snapshot redemption publishes the claim's nullifier at the witness venue as

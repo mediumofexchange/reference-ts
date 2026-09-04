@@ -16,7 +16,7 @@
 //                              where v2 named the index that commitment was
 //                              witnessed at: same width, different meaning,
 //                              which is the collision a tag exists to prevent)
-//   moe/commitment/v1          an operator committing to served state
+//   moe/commitment/v2          an operator committing to a named snapshot directory
 //   moe/demand/v1              a holder presenting claims for payment
 //   moe/acceptance/v1          a backer answering a demand
 //   moe/release/v2             a holder settling an accepted demand
@@ -41,7 +41,7 @@ export const ISSUANCE_CONTEXT = tag("moe/issuance/v1");
 export const TRANSFER_CONTEXT = tag("moe/transfer/v1");
 export const BURN_CONTEXT = tag("moe/burn/v1");
 export const RECEIPT_CONTEXT = tag("moe/receipt/v3");
-export const COMMITMENT_CONTEXT = tag("moe/commitment/v1");
+export const COMMITMENT_CONTEXT = tag("moe/commitment/v2");
 export const DEMAND_CONTEXT = tag("moe/demand/v1");
 export const ACCEPTANCE_CONTEXT = tag("moe/acceptance/v1");
 export const RELEASE_CONTEXT = tag("moe/release/v2");

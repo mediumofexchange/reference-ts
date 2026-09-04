@@ -27,15 +27,10 @@
 // variable-length field is length-prefixed. Writing keys raw is what breaks
 // it: a 31-byte and a 33-byte key concatenate exactly like two 32-byte keys.
 //
-// The root is over the whole served state, which a verifier must be given to
-// check (the spec's availability point: "somebody has to serve" the trail).
-// That is also why invariant 23's per-element non-membership proofs are not
-// here: under transparent the whole state is served and rehashed, so serving
-// everything IS the proof. The Merkle machinery is what a construction needs
-// when it cannot serve everything, which is the shielded ones — and, as reading
-// Basis showed, any construction whose verifier is a CONTRACT rather than a
-// person, since a contract cannot be served a log. Harmless while the venue only
-// witnesses; it bites the moment a contract adjudicates. See DECISIONS.md.
+// The root authenticates a complete directory of names and snapshot digests.
+// A reader needs only the relevant logs plus that directory. A missing name
+// proves omission; a named log that was not supplied is unavailable evidence.
+// Neither the directory nor its digest proves availability or continuity.
 
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -47,7 +42,7 @@ import { backingName, type Backing } from "./backing.js";
 import type { BackingSnapshot } from "./ledger.js";
 import { isAnOperator } from "./replacement.js";
 import { answering, type Venue } from "./venue.js";
-import { opIdentityOfEntry, type OpLogEntry } from "./oplog.js";
+import { copyOpEntry, opIdentityOfEntry, type OpLogEntry } from "./oplog.js";
 
 export type { BackingSnapshot } from "./ledger.js";
 
@@ -99,26 +94,44 @@ function encodeSnapshot(snapshot: BackingSnapshot): Uint8Array {
   return w.finish();
 }
 
-/**
- * The deterministic root over a set of served backings. Sorted by backing name
- * so the root is independent of the order the sequencer iterates, and two
- * snapshots for one backing are rejected rather than silently order-dependent.
- * Throws EncodingError on a malformed state; use stateProvesCommitment when
- * checking state from an untrusted source.
- */
-export function stateRoot(snapshots: readonly BackingSnapshot[]): Uint8Array {
+/** One entry in the complete authenticated directory, ordered by backing name. */
+export interface SnapshotDigest {
+  readonly name: Uint8Array;
+  readonly digest: Uint8Array;
+}
+
+/** Derive a canonical directory, copying its names and rejecting duplicate snapshots. */
+export function directoryOf(snapshots: readonly BackingSnapshot[]): SnapshotDigest[] {
   const sorted = [...snapshots].sort((a, b) => compareBytes(a.name, b.name));
   for (let i = 1; i < sorted.length; i++) {
     if (compareBytes((sorted[i - 1] as BackingSnapshot).name, (sorted[i] as BackingSnapshot).name) === 0) {
       throw new EncodingError("duplicate backing in state");
     }
   }
+  return sorted.map((snapshot) => ({ name: copyBytes(snapshot.name), digest: sha256(encodeSnapshot(snapshot)) }));
+}
+
+/** Hash the strict canonical directory; never sort or repair external evidence. */
+export function directoryRoot(directory: readonly SnapshotDigest[]): Uint8Array {
   const w = new ByteWriter();
-  w.u32(sorted.length);
-  for (const snapshot of sorted) {
-    w.key32(sha256(encodeSnapshot(snapshot)), "snapshot digest");
+  w.fixed(new Uint8Array([0x4d, 0x4f, 0x45, 0x44]), 4, "directory magic"); // MOED
+  w.u8(1);
+  w.u32(directory.length);
+  let previous: Uint8Array | undefined;
+  for (const entry of directory) {
+    w.key32(entry.name, "backing name");
+    w.key32(entry.digest, "snapshot digest");
+    if (previous !== undefined && compareBytes(previous, entry.name) >= 0) {
+      throw new EncodingError("directory names must be strictly increasing");
+    }
+    previous = entry.name;
   }
   return sha256(w.finish());
+}
+
+/** Deterministic root over all snapshots. External proofs use stateProvesCommitment. */
+export function stateRoot(snapshots: readonly BackingSnapshot[]): Uint8Array {
+  return directoryRoot(directoryOf(snapshots));
 }
 
 /**
@@ -128,11 +141,21 @@ export function stateRoot(snapshots: readonly BackingSnapshot[]): Uint8Array {
 export function stateProvesCommitment(
   snapshots: readonly BackingSnapshot[],
   commitment: Commitment,
+  directory?: readonly SnapshotDigest[],
 ): boolean {
   // The whole body, not only the root: a malformed COMMITMENT threw past the
   // guard (found by the 2026-08-22 audit).
   try {
-    return compareBytes(stateRoot(snapshots), commitment.root) === 0 && verifyCommitment(commitment);
+    const supplied = directoryOf(snapshots);
+    const complete = directory === undefined ? supplied : directory;
+    if (compareBytes(directoryRoot(complete), commitment.root) !== 0 || !verifyCommitment(commitment)) {
+      return false;
+    }
+    const digests = new Map(complete.map((entry) => [bytesToHex(entry.name), entry.digest]));
+    return supplied.every((entry) => {
+      const expected = digests.get(bytesToHex(entry.name));
+      return expected !== undefined && compareBytes(entry.digest, expected) === 0;
+    });
   } catch {
     return false;
   }
@@ -142,6 +165,26 @@ export function stateProvesCommitment(
 export interface ServedState {
   readonly snapshots: readonly BackingSnapshot[];
   readonly commitment: Commitment;
+  /** Complete authenticated directory when unrelated logs have been omitted. */
+  readonly directory?: readonly SnapshotDigest[];
+}
+
+/** Keep requested logs and the complete directory, with no mutable input aliases. */
+export function compactState(served: ServedState, names: readonly Uint8Array[]): ServedState {
+  if (!stateProvesCommitment(served.snapshots, served.commitment, served.directory)) {
+    throw new EncodingError("served state does not prove its commitment");
+  }
+  const wanted = new Set(names.map(bytesToHex));
+  return {
+    snapshots: served.snapshots.filter((snapshot) => wanted.has(bytesToHex(snapshot.name))).map((snapshot) => ({
+      name: copyBytes(snapshot.name),
+      opLog: snapshot.opLog.map(copyOpEntry),
+    })),
+    commitment: decodeCommitment(encodeCommitment(served.commitment)),
+    directory: (served.directory ?? directoryOf(served.snapshots)).map((entry) => ({
+      name: copyBytes(entry.name), digest: copyBytes(entry.digest),
+    })),
+  };
 }
 
 /**
@@ -150,7 +193,7 @@ export interface ServedState {
  *   - `log`       this operator's committed operation log for the backing.
  *   - `dropped`   genuinely this operator's committed state, well-rooted, and it
  *                 carries no entry for this backing at all.
- *   - `undefined` not a state one of this backing's own operators committed.
+ *   - `undefined` invalid evidence, wrong operator, or a named but withheld log.
  *
  * **The middle answer is the slice.** It used to be merged into `undefined`, and
  * the two are not the same fact: one says "you are asking the wrong party", the
@@ -205,14 +248,18 @@ export function committedLogFor(
 ): CommittedLog | undefined {
   return answering(() => {
     if (!isAnOperator(backing, venue, served.commitment.operator)) return undefined;
-    if (!stateProvesCommitment(served.snapshots, served.commitment)) return undefined;
+    if (!stateProvesCommitment(served.snapshots, served.commitment, served.directory)) return undefined;
     const sequence = served.commitment.sequence;
     // By the RECOMPUTED name: a resolver's object carrying another backing's
     // `.name` field steered every reader into that backing's state after the
     // hash check had passed (found in the last regression pass) — the one place a
     // snapshot is picked, so every reader inherits it.
-    const snapshot = served.snapshots.find((s) => compareBytes(s.name, backingName(backing)) === 0);
-    if (snapshot === undefined) return { kind: "dropped", sequence };
+    const name = backingName(backing);
+    const snapshot = served.snapshots.find((s) => compareBytes(s.name, name) === 0);
+    if (snapshot === undefined) {
+      if (served.directory?.some((entry) => compareBytes(entry.name, name) === 0)) return undefined;
+      return { kind: "dropped", sequence };
+    }
     return { kind: "log", sequence, opLog: snapshot.opLog };
   }, undefined);
 }
