@@ -418,9 +418,9 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
     // buys one index of notice, and a slow block is the party's cost (the
     // slice-38 review, the spec angle's S2 and the security angle's S2).
     // Without the floor a record effective at its own witnessing — or, under
-    // a finality depth, one pre-armed by the depth and
-    // aimed at the cadence E declares — put the incumbent's newest commitment
-    // in no term: not the book, placed nowhere, every fault predicate false,
+    // a finality depth, one pre-armed by the depth and aimed at the cadence E
+    // declares — put the incumbent's newest commitment in no term: not the
+    // book, placed nowhere, every fault predicate false,
     // and a witnessed payment in it dead and re-spendable for one record from
     // the rule-holder (slice 36's F4; the slice-38 panel, three angles).
     // Clock-free like the signature — the lag is a constant of the venue's

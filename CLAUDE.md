@@ -126,19 +126,18 @@ that produced it is in the decision log — reach it through the index in
   it names the incumbent (a revocation). **A replacement's lead is floored at
   the venue's lag plus one** (`lag()`, which the venue's id must bind;
   `admitted` refuses below it), so every party reads the record before the
-  last act it can still land in the incumbent's term; no door here reads a
-  pending record. A key seated anew commits before it
-  co-signs (`shut`, the same door as the return from silence), and a
-  commitment never drops an in-force backing silently (`commit`'s per-call
-  `dropping`; `awaitingTakeover` is the same condition as a question). **The
-  empty book the walk cannot pay for is a signed claim**: the walk licenses
-  it where the record genuinely runs out; elsewhere no door can tell a
-  backing the record never carried from a lost book, so `commit({ opening })`
-  roots it empty for one exhibit — the record's last commitment, shown to
-  carry nothing for it — and the operator's signature for the rest, where a
-  false claim is a witnessed rewritten history any holder proves;
-  registering is holding the book only where the record pins nothing,
-  genesis included.
+  last act it can still land in the incumbent's term; no door here shuts on
+  a pending record. A key seated anew commits before it co-signs (`shut`, the
+  same door as the return from silence), and a commitment never drops an
+  in-force backing silently (`commit`'s per-call `dropping`; `awaitingTakeover`
+  is the same condition as a question). **The empty book the walk cannot pay
+  for is a signed claim**: the walk licenses it where the record genuinely
+  runs out; elsewhere no door can tell a backing the record never carried
+  from a lost book, so `commit({ opening })` roots it empty for one exhibit —
+  the record's last commitment, shown to carry nothing for it — and the
+  operator's signature for the rest, where a false claim is a witnessed
+  rewritten history any holder proves; registering is holding the book only
+  where the record pins nothing, genesis included.
 - **Every operation is signed by the party the law names, over that backing's
   own message, at that signer's next nonce — except the commit.** §C3's commit
   names no backing, carries no nonce, and is signed by every party the lock
@@ -334,7 +333,8 @@ the move to a blinded construction — which is why they are rules, not code.
   nothing on or under that backing once the venue's lag reaches its index, and
   read a pending handover before you treat a payment as final.** The floor buys
   one index of notice; what you still hold uncommitted then is a slow block's
-  cost.
+  cost — and a record rolled before it arrives freezes only a party that stops
+  on every pending one, so the caution is yours to decline (§C2).
 - **Draw a fresh random salt per attempt** — what "never reuse an attempt id you
   signed a commit for" became. A commit binds its id and nothing else, so an
   object you signed converts any later lock under that id whose parties you are

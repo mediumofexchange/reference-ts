@@ -36,7 +36,9 @@ const pending = new WeakMap<LocalVenue, (() => void)[]>();
  * this view's own in-flight commitments, where `ErgoVenue` answers from the
  * finalised height alone and would sign two roots at one sequence once a
  * write side exists (the slice-38 verification's V7; the Ergo write-side
- * slice's to settle).
+ * slice's to settle). Its `id` is the chain's, too — which is how one chain
+ * answers two lags in the two-views test, and exactly the divergence the
+ * Venue contract's lag bullet forbids of a real view.
  *
  * The chain must have reached the depth before anything is published, or an
  * act lands nearer its clock than the lag says: fixtures advance the chain to

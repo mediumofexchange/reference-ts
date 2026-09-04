@@ -42,11 +42,15 @@ import { KEYS, pub, SECRETS } from "./support.js";
 //     notice, at the venue's own speed.
 //   - **What the parties do with it is theirs** (CLAUDE.md's party rule): the
 //     incumbent commits at the first clock it can read the record and co-signs
-//     nothing for the backing once the lag reaches the index; the payee reads
-//     the same record. The slice first built that as a door, and its review
-//     found the door a lever: a rule-holder held it shut, one record per lag,
-//     by superseding each before it arrived, with nothing to grade. A door
-//     only its own conduct can shut is the shape a door may have.
+//     nothing on or under the backing once the lag reaches the index; the
+//     payee reads the same record. The slice first built that as a door, and
+//     its review found the door a lever: a rule-holder held it shut, one
+//     record per lag, by superseding each before it arrived, with nothing to
+//     grade. A door shut only by its holder's own conduct is the shape a door
+//     may have — and a rule can be declined where a door cannot: a party that
+//     stops on every pending record can be stopped the same way, one that
+//     reads a link re-armed as re-armed keeps serving at the price of one
+//     window of dead co-signatures should the next record be real.
 //
 // The lagging double lands writes in the NEXT block, as a chain does: an act
 // signed at clock c is witnessed at c + depth + 1. See DECISIONS.md, "Panel:
