@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-04` [The slice-39 round: the window held, the era did not, and the fix panel that found the record's third answer](decisions/2026-09.md#2026-09-04--the-slice-39-round-the-window-held-the-era-did-not-and-the-fix-panel-that-found-the-records-third-answer)
 - `2026-09-04` [Panel: the blind window — an operator serves the book its own signature put the record on, and a receipt names the commitment rather than the index](decisions/2026-09.md#2026-09-04--panel-the-blind-window--an-operator-serves-the-book-its-own-signature-put-the-record-on-and-a-receipt-names-the-commitment-rather-than-the-index)
 - `2026-09-04` [Handoff: slice 38 is built, reviewed, fixed five times over, and waits on the maintainer](decisions/2026-09.md#2026-09-04--handoff-slice-38-is-built-reviewed-fixed-five-times-over-and-waits-on-the-maintainer)
 - `2026-09-04` [The slice-38 round: the floor held, the door was a lever, and the fixes](decisions/2026-09.md#2026-09-04--the-slice-38-round-the-floor-held-the-door-was-a-lever-and-the-fixes)
