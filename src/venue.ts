@@ -552,10 +552,14 @@ export class LocalVenue implements Venue {
   }
 
   /**
-   * The sequence number this operator's next commitment must carry. Derived from
-   * the record rather than from sequencer memory, so a failed publish does not
-   * burn one (which would let the operator sign two roots at one sequence and
-   * frame itself for equivocation) and a restart resumes where it left off.
+   * The sequence number the RECORD says this operator's next commitment must
+   * carry — the floor, not the answer. A sequencer takes the greater of this
+   * and one past what it has itself signed (slice 39): on a venue that reads
+   * behind its chain the record is stale for the lag, and a commitment still
+   * in flight or dropped altogether would otherwise have its sequence signed
+   * twice over two roots, which is the equivocation invariant 22 forbids.
+   * A restart has no such memory, and waits the lag before it commits so that
+   * this answer is current again.
    */
   nextSequenceFor(operator: Uint8Array): bigint {
     const latest = this.latestWitnessedFor(operator);

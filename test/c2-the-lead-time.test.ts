@@ -110,9 +110,19 @@ function at(venue: LocalVenue, index: bigint): void {
  * afterwards: on a lagging view the seat reads stale until the commitment is
  * readable, and a stale seat serves nothing.
  */
-function serving(venue: Venue, backing: Backing) {
+function serving(venue: Venue, backing: Backing, chain?: LocalVenue) {
   const sequencer = new Sequencer(SECRETS.operator, venue);
   sequencer.register(backing, signBacking(SECRETS.backer, backing));
+  // A process commits nothing until the venue's lag has passed since it
+  // registered (slice 39), so that whatever it published before it died is
+  // readable or gone. Zero-width on a venue with no lag, where these fixtures
+  // pass no chain.
+  if (chain !== undefined) {
+    const start = venue.witnessedIndex();
+    while (venue.witnessedIndex() < start + venue.lag()) {
+      chainAt(chain, chain.witnessedIndex() + 1n);
+    }
+  }
   sequencer.submitIssue(
     { backing, recipient: KEYS.alice, quantity: 100n, nonce: 0n },
     ed25519.sign(encodeIssuanceMessage(backing.name, KEYS.alice, 100n, 0n), SECRETS.backer),
@@ -281,7 +291,7 @@ describe("§C2: the floor on a lagging venue, and what the parties do with the i
     const heirsView = new LaggingView(chain, 2n);
     const eur = backingFor(incumbentsView);
     chainAt(chain, 2n); // the clock reads 0, and the lag is honest from here
-    const { sequencer: incumbent } = serving(incumbentsView, eur);
+    const { sequencer: incumbent } = serving(incumbentsView, eur, chain);
 
     // The rule-holder pre-arms: witnessed at 12, effective 16.
     chainAt(chain, 12n);
@@ -349,7 +359,7 @@ describe("§C2: the floor on a lagging venue, and what the parties do with the i
     const heirsView = new LaggingView(chain, 2n);
     const eur = backingFor(view);
     chainAt(chain, 2n);
-    const { sequencer: incumbent, state } = serving(view, eur);
+    const { sequencer: incumbent, state } = serving(view, eur, chain);
     chainAt(chain, 12n);
     chain.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 16n));
 
@@ -391,7 +401,7 @@ describe("§C2: the floor on a lagging venue, and what the parties do with the i
       const lag = view.lag();
       const eur = backingFor(view);
       chainAt(chain, depth);
-      const { sequencer: incumbent, state } = serving(view, eur);
+      const { sequencer: incumbent, state } = serving(view, eur, chain);
       const effective = 10n + lag + 1n;
       chainAt(chain, 10n);
       chain.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, effective));
@@ -453,7 +463,7 @@ describe("§C2: the floor on a lagging venue, and what the parties do with the i
     const heirsView = new LaggingView(chain, 2n);
     const eur = backingFor(view);
     chainAt(chain, 2n);
-    const { sequencer: incumbent, state: inTerm } = serving(view, eur);
+    const { sequencer: incumbent, state: inTerm } = serving(view, eur, chain);
     chainAt(chain, 12n);
     chain.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 16n));
     chainAt(chain, 15n);

@@ -189,7 +189,60 @@ export class Sequencer {
   // copy root as current; the pin-less form let an early-synced heir's first
   // commitment become a shrink fault with both parties honest (the fix
   // round's F4).
-  private readonly seatedFor = new Map<string, { link: string; pin: string | undefined }>();
+  private readonly seatedFor = new Map<
+    string,
+    { link: string; pin: string | undefined; over: string | undefined }
+  >();
+
+  /**
+   * The commitment this operator has signed and published and the venue has
+   * not shown yet, with the clock it was signed at — its own knowledge, never
+   * the venue's, because a verifier must learn what was witnessed and never
+   * what an operator submitted.
+   *
+   * On a venue that reads behind its chain (`Venue.lag`) this is every
+   * commitment for the venue's lag after it is signed. Before slice 39 the
+   * seat's pin moved to it and `serves` compared that against the record, so
+   * the operator went dark for the lag after every commit: measured on Ergo at
+   * depth 3, ten minutes of every sixteen, with every grade reading healthy —
+   * and a transaction the chain never took made it dark for ever, on the same
+   * signal a superseded twin gives.
+   */
+  private published: { commitment: Commitment; signedAt: bigint } | undefined;
+
+  /** The highest sequence this process has ever signed, whether or not it landed. */
+  private signed = -1n;
+
+  /** The venue's index when this process first registered a backing. */
+  private bootedAt: bigint | undefined;
+
+  /**
+   * The commitment this operator published that the venue has still not shown
+   * — undefined once the record holds it, and undefined once the venue's lag
+   * has passed without the record holding it.
+   *
+   * **The expiry is what makes a dropped transaction a stale seat rather than
+   * a brick.** Inclusion is bounded below by the lag and above by nothing
+   * (§C2), so a commitment the chain has not taken by then is one this
+   * operator can no longer assume: the seat goes stale on its own and the
+   * repair is one `takeOver`, which is the same shape every other stale seat
+   * has. It also bounds what a reader must resolve: at most one commitment
+   * past the record, which is what lets `eraIndex` refuse anything further as
+   * a forgery.
+   */
+  private inFlight(): { commitment: Commitment; signedAt: bigint } | undefined {
+    const flying = this.published;
+    if (flying === undefined) return undefined;
+    const shown = this.venue.latestFor(this.operatorKey);
+    if (
+      (shown !== undefined && shown.sequence >= flying.commitment.sequence) ||
+      this.venue.witnessedIndex() >= flying.signedAt + this.venue.lag()
+    ) {
+      this.published = undefined;
+      return undefined;
+    }
+    return flying;
+  }
 
   // Backing name hex -> the succession walk, memoised against the venue state
   // it was walked at. Walking used to verify a signature per published
@@ -293,6 +346,11 @@ export class Sequencer {
     if (!venueIsDeclared(this.venue, stored)) {
       throw new SequencerError("this sequencer does not publish at that backing's venue");
     }
+    // When this process started serving, for the commit wait below: whatever
+    // it published before it died is readable or gone once the venue's lag has
+    // passed (slice 39). The first registration is the boot rule's own first
+    // act, and the clock is read here where it is read anyway.
+    this.bootedAt ??= this.venue.witnessedIndex();
     this.ledger.register(stored, backingSignature);
     this.backings.set(stored.nameHex, stored);
     // The operator E itself names, before any handover: there is no predecessor
@@ -320,6 +378,7 @@ export class Sequencer {
       this.seatedFor.set(stored.nameHex, {
         link: bytesToHex((chain[0] as Succession).link),
         pin: undefined,
+        over: undefined,
       });
     }
   }
@@ -387,7 +446,23 @@ export class Sequencer {
     // conditions; unbounded, they are one detectable one, and the losing
     // side of a one-writer race stops serving instead of co-signing on.
     const latest = lastCommitmentInForce(chain, this.venue);
-    return seat.pin === (latest === undefined ? undefined : commitmentIdentity(latest.commitment));
+    const record = latest === undefined ? undefined : commitmentIdentity(latest.commitment);
+    if (seat.pin === record) return true;
+    // **Or the book this operator's own signature put the record on** (slice
+    // 39): a commitment it published that the venue has not shown yet is not a
+    // book BEHIND the record — §C2's phrase for what serves nothing — it is
+    // one ahead of it, and the operator holds exactly the log it committed to.
+    // The seat's `over` is what that commitment stood on, so the record moving
+    // to anything else — a twin's publication, a predecessor's commitment in
+    // the lead time — still takes the seat, at the same index it always did:
+    // this is the unbounded comparison, asked about the pin's own provenance
+    // rather than the pin.
+    const flying = this.inFlight();
+    return (
+      flying !== undefined &&
+      seat.pin === commitmentIdentity(flying.commitment) &&
+      seat.over === record
+    );
   }
 
   /** This operator's backings, in the sense `serves` gives that word. */
@@ -406,6 +481,8 @@ export class Sequencer {
    * is added by `commit` in the same slice.
    */
   private era(): bigint {
+    const flying = this.inFlight();
+    if (flying !== undefined) return flying.commitment.sequence + 1n;
     const latest = this.venue.latestFor(this.operatorKey);
     return latest === undefined ? 0n : latest.sequence + 1n;
   }
@@ -666,6 +743,10 @@ export class Sequencer {
     this.seatedFor.set(held.nameHex, {
       link: bytesToHex(seat.link),
       pin: record === undefined ? undefined : commitmentIdentity(record.commitment),
+      // What the book stands on IS the record here, which is what a takeOver
+      // is: the provenance only decides the in-flight arm of serves, and this
+      // seat has nothing in flight.
+      over: record === undefined ? undefined : commitmentIdentity(record.commitment),
     });
   }
 
@@ -1549,16 +1630,50 @@ export class Sequencer {
     readonly dropping?: readonly Backing[];
     readonly opening?: readonly { readonly backing: Backing; readonly record: ServedState }[];
   }): ServedState {
-    // One commitment per witnessed index: the venue's clock cannot order two,
-    // and the era a receipt names — the index of the operator's last commitment
-    // — must name one record, not the earlier of two (found reviewing this
-    // slice: eras are keyed by index, and a second commitment at one index is
-    // invisible to `firstCommitmentFor(operator, after + 1)`, so a reader's
-    // missed era-end reads in the excusing direction — a missed fault). The
-    // honest path is the next index: the venue advances on its own.
-    if (this.venue.witnessedAtFor(this.operatorKey) === this.venue.witnessedIndex()) {
+    // **One commitment in flight** (slice 39), which replaces the rule that
+    // one commitment went per witnessed index. That rule read the RECORD, so
+    // on a venue that reads behind its chain it fired at the clock the
+    // PREVIOUS commitment became readable and was blind to one in flight — two
+    // signed at one clock landed at one index anyway, and nothing in the
+    // estate noticed. Waiting for the record to show the last one subsumes it
+    // at every lag: at lag zero the record shows a commitment at the index it
+    // was published, so the next goes at the next index exactly as before, and
+    // above it two can never land together. It is also what bounds the era a
+    // reader must resolve to one commitment past the record (`eraIndex`).
+    // **The record must show this operator's last commitment, at an index
+    // before where this one would land.** Two arms, and exactly one is live on
+    // any venue: where publication lands at the clock's own index nothing is
+    // ever in flight and the second arm is the retired rule exactly, one
+    // commitment per witnessed index; where the venue reads behind its chain
+    // the first arm covers it and the second never fires, since a commitment
+    // the record shows is at or before the clock and this one lands a lag
+    // later. Found by this slice's own tests: the in-flight arm alone let two
+    // commitments land at one index at lag zero.
+    if (this.inFlight() !== undefined) {
       throw new SequencerError(
-        "this operator already committed at this witnessed index: the next commitment goes at the next",
+        "this operator has a commitment in flight: the next commitment goes once the venue shows this one",
+      );
+    }
+    const shownAt = this.venue.witnessedAtFor(this.operatorKey);
+    if (shownAt !== undefined && shownAt >= this.venue.witnessedIndex() + this.venue.lag()) {
+      throw new SequencerError(
+        "the venue has not shown this operator's last commitment at an index before this one would land: the next commitment goes at the next index",
+      );
+    }
+    // **And a process commits nothing until the venue's lag has passed since
+    // it registered.** A restart cannot see what it published just before it
+    // died, so it resumes on its own pre-flight book and signs its next
+    // commitment at a sequence the record has already seen — an equivocation
+    // against its own key, with no attacker, by following the boot rule
+    // exactly (slice 39's panel). Waiting the lag makes whatever it published
+    // either readable or gone. Zero-width where publication lands at the
+    // clock's own index.
+    if (
+      this.bootedAt !== undefined &&
+      this.venue.witnessedIndex() < this.bootedAt + this.venue.lag()
+    ) {
+      throw new SequencerError(
+        "this operator started within the venue's lag: it commits once the venue has shown whatever it published before",
       );
     }
     // **Read once, and used four times.** The served set decides what is
@@ -1667,7 +1782,11 @@ export class Sequencer {
           "`opening` names a backing the record's last commitment still carries: that is a book to take over, not to open — takeOver(backing, thatState)",
         );
       }
-      return { backing: held, link: bytesToHex(tip.link) };
+      return {
+        backing: held,
+        link: bytesToHex(tip.link),
+        over: commitmentIdentity(last.commitment),
+      };
     });
     const openedNames = new Set(opened.map(({ backing }) => backing.nameHex));
     const abandoned = [...this.backings.values()].filter(
@@ -1697,12 +1816,21 @@ export class Sequencer {
     // each empty, each this operator's claim that the record never carried it.
     const rooted = [...served, ...opened.map(({ backing }) => backing)];
     const snapshots = this.snapshotOf(rooted);
-    const commitment = signCommitment(
-      this.operatorSecret,
-      this.venue.nextSequenceFor(this.operatorKey),
-      stateRoot(snapshots),
-    );
+    // **The sequence is this operator's own count, never below the record's**
+    // (slice 39). Read from the record alone it repeats a sequence this
+    // operator has already signed whenever a transaction is dropped or still
+    // in flight, and two roots at one sequence is the equivocation invariant
+    // 22 forbids — manufactured against an operator that did nothing wrong.
+    // Taken before the publish, so a publish that fails leaves a hole in the
+    // record rather than a sequence this process might sign twice; a hole is
+    // nothing any reader orders by, and the alternative is the fault.
+    const fromRecord = this.venue.nextSequenceFor(this.operatorKey);
+    const next = fromRecord > this.signed + 1n ? fromRecord : this.signed + 1n;
+    const commitment = signCommitment(this.operatorSecret, next, stateRoot(snapshots));
+    this.signed = next;
     this.venue.publish(commitment);
+    // Published, and this operator's own until the venue shows it.
+    this.published = { commitment, signedAt: this.venue.witnessedIndex() };
     // Witnessed now: every log this commitment roots is committed to its end,
     // and the tail is empty. Marked on exactly the backings the root carried —
     // the mark is what `restore` treats as the part no caller can take back, and
@@ -1721,6 +1849,11 @@ export class Sequencer {
         this.seatedFor.set(backing.nameHex, {
           link: seat.link,
           pin: commitmentIdentity(commitment),
+          // What the new pin stands ON is the pin it replaces, which is where
+          // the record stood when this commitment was signed. While the venue
+          // has not shown the commitment, that is the only thing `serves` can
+          // compare the record against.
+          over: seat.pin,
         });
       }
     }
@@ -1728,8 +1861,8 @@ export class Sequencer {
     // guard above read, which named this key before the publish — exactly as
     // a takeOver seats: the record now stands on a commitment that carries it,
     // and the seat's pin is that commitment's identity.
-    for (const { backing, link } of opened) {
-      this.seatedFor.set(backing.nameHex, { link, pin: commitmentIdentity(commitment) });
+    for (const { backing, link, over } of opened) {
+      this.seatedFor.set(backing.nameHex, { link, pin: commitmentIdentity(commitment), over });
     }
     return { snapshots, commitment };
   }
