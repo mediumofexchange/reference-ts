@@ -68,6 +68,8 @@ Choose a coherent outcome-sized slice rather than one file or one tiny edit. A s
 
 Prefer an existing mechanism over a parallel abstraction. Remove accidental complexity when doing so is within scope, but do not combine unrelated cleanup with a security-sensitive protocol change.
 
+Notice recurring friction and opportunities to simplify the repository or its workflow. Implement a low-risk improvement when it is clearly within the current goal; otherwise add a concise `Improvement opportunities` note to `WORK.md` with its expected benefit and cost. Suggestions are welcome, but they must not derail or silently broaden the active protocol slice.
+
 ## Implementation and verification
 
 - Inspect before editing. Preserve unrelated user changes.

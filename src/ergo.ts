@@ -191,20 +191,26 @@ interface Witnessed<T> {
  * chain took it. It is a position in a record, never evidence: an
  * equivocation is proved from two signatures and needs no venue at all.
  *
- * **Two commitments of one key in one block need no tiebreak here**, which is
- * worth saying because the first draft had one. Whichever of them a node hands
- * back first is the one kept, and the other is skipped — but no reader can
- * tell: `latestFor` and `witnessedAtFor` answer with the latest at or before an
- * index, and a commitment sharing its index with a higher one is never that.
- * So both orders give every reader the same answers, and a sort would be a
- * second mechanism for a property this one already has (the fix round's own
- * sweep, where the tiebreak's mutant had no killer because it has no effect).
- * What no reader can name either way is the LOWER of the two: its era reads
- * `"died"`, which is the safe direction and a recorded residue.
+ * Sorted by index and then sequence before filtering. Several increasing
+ * commitments may share one index, and `witnessedAtSequence` makes each one a
+ * readable fact; the ordering therefore has to be independent of the order in
+ * which a node returns boxes. A repeated or decreasing sequence is still
+ * skipped by the one extending rule below.
  */
 function extending(gathered: Witnessed<Commitment>[]): Witnessed<Commitment>[] {
+  const ordered = [...gathered].sort((a, b) =>
+    a.at < b.at
+      ? -1
+      : a.at > b.at
+        ? 1
+        : a.value.sequence < b.value.sequence
+          ? -1
+          : a.value.sequence > b.value.sequence
+            ? 1
+            : 0,
+  );
   const kept: Witnessed<Commitment>[] = [];
-  for (const witnessed of gathered) {
+  for (const witnessed of ordered) {
     const top = kept[kept.length - 1];
     if (top !== undefined && witnessed.value.sequence <= top.value.sequence) continue;
     kept.push(witnessed);
@@ -575,6 +581,14 @@ export class ErgoVenue implements Venue {
   witnessedAtFor(operator: Uint8Array, asOf?: bigint): bigint | undefined {
     this.requireFetched(operator);
     return this.latestWitnessedFor(operator, asOf)?.at;
+  }
+
+  witnessedAtSequence(operator: Uint8Array, sequence: bigint): bigint | undefined {
+    this.requireFetched(operator);
+    for (const witnessed of this.commitments.get(bytesToHex(operator)) ?? []) {
+      if (witnessed.value.sequence === sequence) return witnessed.at;
+    }
+    return undefined;
   }
 
   firstCommitmentFor(operator: Uint8Array, notBefore = 0n): bigint | undefined {

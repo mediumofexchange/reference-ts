@@ -865,7 +865,8 @@ describe("§C2: a venue's record for one key rises in sequence as it rises in in
   it("reads two commitments of one key in one block the same way whatever order the node hands them back", async () => {
     // Otherwise the record is a fact about which node you asked: two honest
     // readers resolve one era two ways, permanently (the fix panel's security
-    // angle). Sorted by index and then by sequence before the filter.
+    // angle). Sorted by index and then by sequence before the filter, and each
+    // kept sequence remains exactly readable even though both share an index.
     const forward = new FakeNode().at(200n).putCommitment(commitment(0n, 0xb0), 10n);
     const backward = new FakeNode().at(200n).putCommitment(commitment(0n, 0xb0), 10n);
     forward.putCommitment(commitment(1n, 0xb1), 20n).putCommitment(commitment(2n, 0xb2), 20n);
@@ -874,21 +875,19 @@ describe("§C2: a venue's record for one key rises in sequence as it rises in in
     const b = venue();
     await a.sync(forward, [backing]);
     await b.sync(backward, [backing]);
-    // The extend rule is the whole of it: whichever of the two a node hands
-    // back first is the one kept, and no reader can tell, because the record
-    // only ever answers with the latest commitment at or before an index and
-    // one sharing its index with a higher one is never that. So both readers
-    // agree everywhere — which is the property, the record not being a fact
-    // about which node you asked.
     expect(ordered(a)).toBe(2n);
     expect(ordered(b)).toBe(2n);
     expect(a.witnessedAtFor(KEYS.operator)).toBe(b.witnessedAtFor(KEYS.operator));
+    for (const v of [a, b]) {
+      expect(v.witnessedAtSequence(KEYS.operator, 0n)).toBe(10n);
+      expect(v.witnessedAtSequence(KEYS.operator, 1n)).toBe(20n);
+      expect(v.witnessedAtSequence(KEYS.operator, 2n)).toBe(20n);
+    }
     for (const era of [1n, 2n, 3n, 4n]) {
       expect(eraIndex(b, KEYS.operator, era)).toEqual(eraIndex(a, KEYS.operator, era));
     }
-    // And what neither can name is the LOWER of the two: its era reads as a
-    // commitment the record moved past, which is the excusing direction and a
-    // recorded residue — a read by sequence would name it exactly.
-    expect(eraIndex(a, KEYS.operator, 2n)).toBe("died");
+    // The lower same-index commitment was witnessed, so its era is final at
+    // that index; only a sequence the record did not keep may read `died`.
+    expect(eraIndex(a, KEYS.operator, 2n)).toBe(20n);
   });
 });

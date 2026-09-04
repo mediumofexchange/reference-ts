@@ -152,6 +152,10 @@ describe("holding bytes makes copy-in copy-out structural", () => {
     venue.publish(commitment);
     commitment.root.fill(0xff);
     expect(venue.latestFor(KEYS.operator)?.root).toEqual(new Uint8Array(32).fill(0x11));
+    expect(venue.witnessedAtSequence(KEYS.operator, commitment.sequence)).toBe(
+      venue.witnessedIndex(),
+    );
+    expect(venue.witnessedAtSequence(KEYS.operator, commitment.sequence + 1n)).toBeUndefined();
 
     const op = transferOp();
     venue.publishOp(backing.name, op);

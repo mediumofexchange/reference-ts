@@ -44,8 +44,9 @@ through the index in `DECISIONS.md` rather than restated here.
 - **A receipt names the commitment its operator last SIGNED**, never the index
   that commitment was witnessed at, and the record answers three ways
   (`eraIndex`): it holds it, it has not reached it, or it moved past it
-  without ever holding it — the last being a return from silence under the
-  declared duration, which is what a dropped commitment leaves.
+  without ever holding it — the last being the in-flight expiry a dropped
+  commitment leaves. “Holds” is an exact sequence read: a higher commitment
+  witnessed at the same index does not erase the lower one's era.
 - **An unaccompanied claim is inert, never invalid, and still transferable**
   (inv 17).
 - **Time is a witnessed index, never a clock** (inv 21, 24). Every instant a

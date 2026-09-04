@@ -6,39 +6,40 @@ This file is the operational handoff. Replace stale status; do not append a sess
 
 ## Goal
 
-Finish slice 39 (the blind window) as a reviewed, merge-ready protocol slice, while keeping the repository workflow usable by both Claude and Codex agents.
+No protocol slice is currently active. Slice 39 (the blind window) is complete; begin the next security improvement from updated `main` in a new coherent branch.
 
 ## Status
 
-- Repository branch: `slice/39-the-blind-window`
-- Protocol HEAD before workflow maintenance: `274e1e9` (`Handoff: slice 39 implementation + review fixes complete; owes one verification`)
-- Companion specification branch: `spec/the-blind-window`
-- The implementation, first adversarial review, and review fixes are complete.
-- The shared Claude/Codex workflow, live handoff, progressive protocol-rule loading, CI guardrails, and cross-platform build command are implemented and verified as one maintenance change.
-- Slice 39 still owes independent verification of the review fixes before it is merge-ready.
+- Slice 39 and its companion specification are reviewed, verified, and merged into `main` on 2026-09-04.
+- The shared Claude/Codex workflow and cross-platform build command are also on `main`.
+- The final verification added an exact commitment-sequence read so two commitments witnessed at one index cannot make a final receipt appear lapsed.
+- There is no known blocking finding against slice 39.
 
 ## Evidence
 
-Verified on 2026-09-04 against the current implementation:
-
 - `npm run check`: passed, including documentation checks, typecheck, all 48 test files / 962 tests, and the package build.
-- The build uses a cross-platform Node cleanup rather than Unix-only `rm`.
-- The local mutation sweep is under `scratch/panel39/mutants/`; it contains one surviving era-related probe that needs interpretation during independent verification.
+- Focused venue, era, blind-window, receipt, fault, and refusal run: 6 files / 166 tests passed.
+- The independent slice-39 verification probes were rerun against current source. Every kept sequence resolves to its exact witnessed index, including six commitments sharing one index.
+- `v2-cheap-park.mjs` confirms the remaining indistinguishability: a sequence the record truly skipped lapses, whether its signed commitment was dropped or withheld. Such a receipt was pending, never final.
 
 ## Next
 
-1. Independently review the slice 39 fix range after `10fb705`, concentrating on authorization, finality, recovery, copy isolation, and the surviving era mutation.
-2. Add `scratch/panel39/review/verify.md` or summarize equivalent review evidence here.
-3. Run `npm run check` after any resulting change.
-4. If no critical finding remains, mark slice 39 merge-ready and request maintainer authorization before pushing or merging.
+1. Fetch `main`, create a new branch, and confirm this handoff is still current.
+2. Take one of the security recommendations already recorded on 2026-09-03: the platform Ed25519 verifier or commitment-root framing. Prefer the smaller coherent slice after inspecting both.
+3. Update this file when that slice starts, naming its goal, branch, evidence, and next action.
 
 ## Open questions
 
-- Does the surviving mutation represent an equivalent implementation, a missing assertion, or a protocol gap?
-- Does the companion specification branch contain every normative clarification assumed by the implementation?
-- Git push authentication works through the configured remote, but GitHub CLI authentication was invalid when last checked; use Git for an authorized push unless CLI access is repaired.
+- A future holes-per-commitment grade could make deliberate sequence gaps publicly costly; it is policy visibility, not a slice-39 correctness dependency.
+- The Ergo write side remains where durable operator sequence state ultimately belongs.
+
+## Improvement opportunities
+
+- Build future verification probes through a small relative-path harness instead of copying repositories and dependency trees into scratch.
+- Keep final review evidence concise and tracked; leave executable probes in ignored scratch rather than recording session handoffs in the decision log.
+- Git push authentication works. GitHub CLI authentication should be repaired only when PR-specific automation is needed.
 
 ## Relevant decisions
 
-- `DECISIONS.md`: Slice 39 design review — blind-window closure and guarded same-epoch renewal.
-- `DECISIONS.md`: Slice 39 handoff — implementation and review fixes complete; independent verification still owed.
+- `DECISIONS.md`: Slice 39 verification — exact sequence reads and pending receipts.
+- `DECISIONS.md`: Four recommendations decided — platform verifier and root framing next.

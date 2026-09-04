@@ -199,6 +199,10 @@ export interface WitnessedOp {
  *   - **Witnessed order.** Records come out in the order they were witnessed:
  *     the walk's memo keeps a record's first POSITION as its first witnessing,
  *     which the walk's own sort used to normalise (the slice-37 verification).
+ *   - **Exact sequence reads.** Every commitment the venue kept remains
+ *     addressable by its sequence, including when several increasing
+ *     sequences share one witnessed index. A missing sequence is therefore a
+ *     real hole, not an artefact of asking only for that index's latest.
  *   - **A declared lag, bound to the id.** `lag()` is a constant of the
  *     venue's finality rule — the least number of indices by which an act
  *     signed at its clock is witnessed after it — never a view's state, so it
@@ -256,6 +260,8 @@ export interface Venue {
   commitsFor(attemptId: Uint8Array): WitnessedCommit[];
   latestFor(operator: Uint8Array, asOf?: bigint): Commitment | undefined;
   witnessedAtFor(operator: Uint8Array, asOf?: bigint): bigint | undefined;
+  /** The index of this exact commitment sequence, or undefined if the record never held it. */
+  witnessedAtSequence(operator: Uint8Array, sequence: bigint): bigint | undefined;
   firstCommitmentFor(operator: Uint8Array, notBefore?: bigint): bigint | undefined;
   nextSequenceFor(operator: Uint8Array): bigint;
 }
@@ -535,6 +541,19 @@ export class LocalVenue implements Venue {
    */
   witnessedAtFor(operator: Uint8Array, asOf?: bigint): bigint | undefined {
     return this.latestWitnessedFor(operator, asOf)?.at;
+  }
+
+  /**
+   * The witnessed index of one exact sequence. Several commitments may share
+   * an index; each one the venue accepted remains a held commitment rather
+   * than becoming an apparent hole behind that index's latest answer.
+   */
+  witnessedAtSequence(operator: Uint8Array, sequence: bigint): bigint | undefined {
+    const log = this.byOperator.get(bytesToHex(operator)) ?? [];
+    for (const witnessed of log) {
+      if (decodeCommitment(witnessed.bytes).sequence === sequence) return witnessed.at;
+    }
+    return undefined;
   }
 
   private latestWitnessedFor(operator: Uint8Array, asOf?: bigint): Witnessed | undefined {

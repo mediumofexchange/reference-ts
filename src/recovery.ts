@@ -810,12 +810,11 @@ export function gapLegsFor(
  * void the receipt, since inclusion is bounded below by the venue's lag and
  * above by nothing (§C2).
  *
- * **The fast path is the era a live operator names**, its own latest — one
- * venue read, which is what the door pays. An older era is a stale receipt in
- * a verifier's hands, and costs a binary search over `latestFor`, whose
- * sequence is monotone in `asOf` because the record is append-only. A
- * sequence the record skips answers `undefined` rather than the neighbouring
- * commitment's index: the era named a commitment that is not there.
+ * **The fast path is the era a live operator names**, its own latest. An older
+ * era is resolved by exact sequence, because several commitments may share a
+ * witnessed index and every one the venue kept must remain nameable. A
+ * sequence the record skips answers `"died"` rather than borrowing a
+ * neighbouring commitment's index.
  *
  * **Three answers, because the record has three things to say** (slice 39's
  * fix panel). It HOLDS the commitment, and the era began where that
@@ -859,21 +858,12 @@ export function eraIndex(
     // The live operator's own era: its latest, which is what a fresh receipt
     // names and what the sequencer's own doors ask about.
     if (target === highest) return venue.witnessedAtFor(operator);
-    let low = 0n;
-    let high = venue.witnessedIndex();
-    while (low < high) {
-      const mid = low + (high - low) / 2n;
-      const at = venue.latestFor(operator, mid);
-      if (at !== undefined && at.sequence >= target) high = mid;
-      else low = mid + 1n;
-    }
-    const found = venue.latestFor(operator, low);
+    const exact = venue.witnessedAtSequence(operator, target);
     // The record moved past this sequence without ever holding it: the
-    // commitment died. Sound only because a venue's record for one key rises
-    // in sequence as it rises in index (the `Venue` contract), so a sequence
-    // the search steps over is one the record never had.
-    if (found === undefined || found.sequence !== target) return "died";
-    return venue.witnessedAtFor(operator, low);
+    // commitment died. Sound because the exact read distinguishes a real
+    // same-index commitment from a gap, while the Venue contract keeps the
+    // sequence monotone across indices.
+    return exact ?? "died";
   }, undefined);
 }
 
@@ -904,9 +894,11 @@ export function eraIndex(
  *
  * Readable from this backing's own terms, which is why the restore is per
  * backing and a set spans one silence clause (DECISIONS, slice 28b). A backing
- * declaring no silence clause has no return to lapse into — only a handover —
- * and a record the backing does not declare shows nothing, as every clause
- * reader answers. A venue's refusal propagates, as everywhere.
+ * declaring no silence clause has no duration-based return, but an in-flight
+ * commitment still expires at the venue's lag: an exact missing sequence can
+ * therefore lapse its tail. A record the backing does not declare shows
+ * nothing, as every clause reader answers. A venue's refusal propagates, as
+ * everywhere.
  */
 export function eraLapsed(
   venue: Venue,
