@@ -770,11 +770,12 @@ describe("§C2: the venue's lag, and the floor it puts under a replacement's lea
     expect(venue().lag()).toBe(DEPTH + 1n);
   });
 
-  it("a record witnessed at 140 takes force at 145 and not at 144: the lead is floored at the lag plus one", async () => {
-    // Slice 38: the record must precede, on every party's clock, every act it
-    // can void. On this venue an act signed at clock c lands at c + 4 or later,
-    // so a lead of 4 lets the incumbent's last commitment land at the effective
-    // index in no term; a lead of 5 does not.
+  it("a record witnessed at 140 takes force at 149 and not at 148: the lead is floored at twice the lag plus one", async () => {
+    // Slices 38 and 39: the record must reach every party before the last act
+    // it can still land in the incumbent's term. On this venue an act signed at
+    // clock c lands at c + 4 or later, and the incumbent holds one commitment
+    // in flight, so it may wait a lag to be free and then a lag to land: a lead
+    // of 8 can leave it no clock at all, and 9 cannot.
     const ruled = makeBacking({
       obligor: KEYS.backer2,
       payout: { thing: "USD", quantumExponent: -2, perUnit: 100n },
@@ -812,10 +813,10 @@ describe("§C2: the venue's lag, and the floor it puts under a replacement's lea
           registers: { R4: ruled.name, R5: encodeReplacement(ruled.name, naming(effective)) },
         });
     const short = venue();
-    await short.sync(nodeFor(144n), [ruled]);
+    await short.sync(nodeFor(148n), [ruled]);
     expect(operatorAt(ruled, short, short.witnessedIndex())).toEqual(KEYS.operator);
     const enough = venue();
-    await enough.sync(nodeFor(145n), [ruled]);
+    await enough.sync(nodeFor(149n), [ruled]);
     expect(operatorAt(ruled, enough, enough.witnessedIndex())).toEqual(KEYS.alice);
   });
 });

@@ -124,7 +124,7 @@ that produced it is in the decision log — reach it through the index in
   never below it: a takeOver serves no LESS than the book the record stands on.
   A replacement not strictly later than the link it replaces is void unless
   it names the incumbent (a revocation). **A replacement's lead is floored at
-  the venue's lag plus one** (`lag()`, which the venue's id must bind;
+  twice the venue's lag plus one** (`lag()`, which the venue's id must bind;
   `admitted` refuses below it), so every party reads the record before the
   last act it can still land in the incumbent's term; no door here shuts on
   a pending record. A key seated anew commits before it co-signs (`shut`, the

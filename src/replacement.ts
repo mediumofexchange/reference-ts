@@ -401,8 +401,9 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
   for (let i = memo.through; i < published.length; i++) {
     const w = published[i] as WitnessedReplacement;
     if (!isSignedReplacement(backing, w.replacement)) continue;
-    // **A replacement's lead is floored at the venue's lag plus one** (§C2,
-    // slice 38): effective ≥ witnessed + lag + 1, and a record below the floor
+    // **A replacement's lead is floored at twice the venue's lag plus one**
+    // (§C2, slices 38 and 39): effective ≥ witnessed + 2·lag + 1, and a record
+    // below the floor
     // is not a replacement — refused rather than corrected, as a backdated one
     // always was, since the rule-holder does not get to date a handover. The
     // floor is what gives every party the record by the last clock at which
@@ -413,7 +414,15 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
     // the predecessor signed before it could read the record lands inside
     // its term where the venue includes at its lag, and one it signs after
     // is its own choice — and its payee's, reading the same record
-    // (CLAUDE.md's party rule).
+    // (CLAUDE.md's party rule). **Twice the lag** because an operator holds one
+    // commitment in flight and is free to sign the next only when the record
+    // shows it (slice 39): reading the record buys nothing if the incumbent
+    // cannot act for another lag, so the floor gives it a lag of range to
+    // become free in and a lag to land in. Measured against this build over
+    // every alignment (`scratch/panel39/probes/floor-sweep.mjs`): at the old
+    // floor the rule-holder could aim its record so that no clock at all let
+    // the incumbent land a commitment inside its own term. At lag zero
+    // nothing is ever in flight and the floor is the one index it always was.
     // Inclusion is bounded below by the lag and above by nothing: the floor
     // buys one index of notice, and a slow block is the party's cost (the
     // slice-38 review, the spec angle's S2 and the security angle's S2).
@@ -426,7 +435,7 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
     // Clock-free like the signature — the lag is a constant of the venue's
     // identity, and the record is compared against its own witnessing — so it
     // belongs to the step that is taken once.
-    if (w.replacement.effective < w.at + venue.lag() + 1n) continue;
+    if (w.replacement.effective < w.at + 2n * venue.lag() + 1n) continue;
     // Hashed here rather than once per link: the hash is the record's identity
     // for the dedup AND for the same-index tie the walk resolves below.
     // The reader's own copy: the memo is validated state, and what a venue
