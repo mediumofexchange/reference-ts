@@ -9,6 +9,7 @@ import { isOperatorReceipt, receiptStatus, type Receipt } from "../src/receipt.j
 import {
   committedInTime,
   committedOutstanding,
+  eraIndex,
   eraLapsed,
   gapLegsFor,
   gapOpen,
@@ -201,6 +202,7 @@ function surface() {
     ["lastCommitmentInForce", () => lastCommitmentInForce(twoLinks, refusing)],
     ["gapLegsFor", () => gapLegsFor(refusing, backing)],
     ["gapOpen", () => gapOpen(refusing, backing)],
+    ["eraIndex", () => eraIndex(refusing, KEYS.operator, 1n)],
     ["eraLapsed", () => eraLapsed(refusing, backing, KEYS.operator, 0n)],
     ["quietFor", () => quietFor(refusing, KEYS.operator)],
     ["replayServedState", () => replayServedState(backing, refusing, served)],

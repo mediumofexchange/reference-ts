@@ -797,12 +797,75 @@ export function gapLegsFor(
 }
 
 /**
+ * **Where the record puts the commitment a receipt's era names**, or the reason
+ * it cannot: `"ahead"` for the one commitment the operator may have signed and
+ * published without the venue showing it yet (slice 39's in-flight bound),
+ * `undefined` for an era the operator's record can never answer for.
+ *
+ * An era is one MORE than the sequence of the commitment it names, so zero
+ * still means "this operator had signed none" — the sentinel every reader
+ * already treats conservatively. Naming the commitment rather than the index
+ * is what lets an operator co-sign between signing a commitment and reading
+ * it: the index does not exist yet, and predicting it makes one slow block
+ * void the receipt, since inclusion is bounded below by the venue's lag and
+ * above by nothing (§C2).
+ *
+ * **The fast path is the era a live operator names**, its own latest — one
+ * venue read, which is what the door pays. An older era is a stale receipt in
+ * a verifier's hands, and costs a binary search over `latestFor`, whose
+ * sequence is monotone in `asOf` because the record is append-only. A
+ * sequence the record skips answers `undefined` rather than the neighbouring
+ * commitment's index: the era named a commitment that is not there.
+ *
+ * **More than one ahead is not reachable and reads `undefined`.** One
+ * commitment in flight is the sequencer's own rule, so an era two past the
+ * record is a claim no honest operator can make — and left as `"ahead"` it
+ * would be a forgery indistinguishable from an honest pending receipt
+ * (slice 39's security angle).
+ */
+export function eraIndex(
+  venue: Venue,
+  operator: Uint8Array,
+  after: bigint,
+): bigint | "ahead" | undefined {
+  return answering(() => {
+    if (!(operator instanceof Uint8Array) || operator.length !== 32) return undefined;
+    if (typeof after !== "bigint" || after < 0n) return undefined;
+    // The genesis era names no commitment, and index zero is where every
+    // reader already measures it from.
+    if (after === 0n) return 0n;
+    const target = after - 1n;
+    const latest = venue.latestFor(operator);
+    const highest = latest === undefined ? -1n : latest.sequence;
+    if (target > highest) return target === highest + 1n ? "ahead" : undefined;
+    // The live operator's own era: its latest, which is what a fresh receipt
+    // names and what the sequencer's own doors ask about.
+    if (target === highest) return venue.witnessedAtFor(operator);
+    let low = 0n;
+    let high = venue.witnessedIndex();
+    while (low < high) {
+      const mid = low + (high - low) / 2n;
+      const at = venue.latestFor(operator, mid);
+      if (at !== undefined && at.sequence >= target) high = mid;
+      else low = mid + 1n;
+    }
+    const found = venue.latestFor(operator, low);
+    if (found === undefined || found.sequence !== target) return undefined;
+    return venue.witnessedAtFor(operator, low);
+  }, undefined);
+}
+
+/**
  * Whether the era a receipt was signed in ended without carrying its tail — so
  * that an operation the receipt attests, absent from the record, was dropped
  * with license rather than lied about.
  *
- * A receipt names its era: `after`, the witnessed index of the operator's last
- * commitment when it co-signed (0 where it had none). The era ends at the
+ * A receipt names its era: `after`, one more than the sequence of the last
+ * commitment its operator had SIGNED when it co-signed (0 where it had signed
+ * none), which `eraIndex` puts on the record. An era whose commitment the
+ * venue has not shown yet has not ended — nothing can have ended it — so it
+ * answers false, which is also what the operator's own door asks while its
+ * commitment is in flight. The era ends at the
  * operator's next commitment, or at a successor taking force, whichever the
  * record shows first — and how it ends decides what the receipt is worth:
  *
@@ -864,7 +927,11 @@ export function eraLapsed(
     // one's ending lapses it — which is this predicate's direction, and the
     // regression review priced it: the excuse holds only while the key stays
     // dark, and `isSilent` names that state for what it is.
-    let from = after;
+    // The era's own commitment, on the record. An era still in flight cannot
+    // have ended, and one the record cannot answer for accuses nobody.
+    const at = eraIndex(venue, operator, after);
+    if (at === "ahead" || at === undefined) return false;
+    let from = at;
     for (const link of chain) {
       if (compareBytes(link.operator, operator) !== 0) continue;
       if (link.from > from) from = link.from;

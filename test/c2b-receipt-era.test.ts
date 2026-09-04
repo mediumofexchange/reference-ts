@@ -7,14 +7,18 @@ import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js
 import { opHashOfEntry, type OpLogEntry, type PublishedOp } from "../src/oplog.js";
 import { encodeDemandMessage } from "../src/presentation.js";
 import { receiptStatus, signReceipt } from "../src/receipt.js";
-import { eraLapsed } from "../src/recovery.js";
+import { eraIndex, eraLapsed } from "../src/recovery.js";
 import { replacementHash, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
 import { Sequencer } from "../src/sequencer.js";
 import { LocalVenue } from "../src/venue.js";
 import { KEYS, makeTransparentBacking, pub, SECRETS, advanceWitnessedIndex } from "./support.js";
 
-// The receipt names its era (28b): `after`, the witnessed index of the
-// operator's last commitment when it co-signed, 0 where it had none. A receipt
+// The receipt names its era (28b): `after`, one more than the sequence of the
+// last commitment its operator had SIGNED when it co-signed, 0 where it had
+// signed none — the COMMITMENT rather than the index it was witnessed at,
+// since slice 39, because on a venue that reads behind its chain the operator
+// co-signs between signing a commitment and reading it and that index does not
+// exist yet. `eraIndex` puts it back on the record. A receipt
 // records an operation and a position and never when it was signed, so before
 // this a reader could not tell a tail that died with a gap or a handover from a
 // lie about the log — and an honest operator returning from silence was
@@ -97,22 +101,46 @@ function replacementBy(backing: Backing, ruleSecret: Uint8Array, successorSecret
 }
 
 describe("28b: a receipt names its era, and the era is the record's to verify", () => {
-  it("carries the witnessed index of the operator's last commitment at signing — 0 where it had none — and one naming an index it never committed at reads unrelated", () => {
+  it("names the last commitment its operator SIGNED — 0 where it had signed none — and the record puts that commitment where it was witnessed", () => {
     const { venue, sequencer, backing } = setup();
     const before = issue(sequencer, backing, KEYS.alice, 100n, 0n);
     expect(before.after).toBe(0n);
     advanceWitnessedIndex(venue, 3n);
-    sequencer.commit(); // at 3
+    sequencer.commit(); // sequence 0, witnessed at 3
     advanceWitnessedIndex(venue, 4n);
     const spend = transferOp(backing, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
     const after = sequencer.submitTransfer(spend.op, spend.signature);
-    expect(after.after).toBe(3n);
-    // A forged era: signed by the true operator, naming an index with no
-    // commitment. The record cannot answer for it.
+    // One more than the sequence, so 0 keeps meaning "signed none" — and the
+    // record resolves it to the index the era used to carry.
+    expect(after.after).toBe(1n);
+    expect(eraIndex(venue, KEYS.operator, after.after)).toBe(3n);
+    expect(eraIndex(venue, KEYS.operator, 0n)).toBe(0n);
     const state = served(sequencer);
-    const forged = signReceipt(SECRETS.operator, backing.name, after.opHash, after.position, 2n);
-    expect(receiptStatus(backing, venue, forged, state)).toBe("unrelated");
     expect(receiptStatus(backing, venue, after, state)).toBe("witnessed");
+  });
+
+  it("reads an era one commitment past the record as pending, and anything further as unrelated", () => {
+    // The bound the in-flight rule buys (slice 39): an operator may have one
+    // commitment signed and published that the venue has not shown, so an era
+    // ONE past the record is the honest pending receipt — and one further is a
+    // claim no operator can make, which must not read as pending or a forgery
+    // is indistinguishable from an honest receipt in flight.
+    const { venue, sequencer, backing } = setup();
+    const issued = issue(sequencer, backing, KEYS.alice, 100n, 0n);
+    advanceWitnessedIndex(venue, 3n);
+    const state = sequencer.commit(); // sequence 0, witnessed at 3
+    advanceWitnessedIndex(venue, 4n);
+
+    expect(eraIndex(venue, KEYS.operator, 2n)).toBe("ahead");
+    expect(eraIndex(venue, KEYS.operator, 3n)).toBeUndefined();
+    const ahead = signReceipt(SECRETS.operator, backing.name, new Uint8Array(32).fill(0x77), 9n, 2n);
+    expect(receiptStatus(backing, venue, ahead, state)).toBe("pending");
+    const forged = signReceipt(SECRETS.operator, backing.name, new Uint8Array(32).fill(0x77), 9n, 3n);
+    expect(receiptStatus(backing, venue, forged, state)).toBe("unrelated");
+    // And an era one ahead does not excuse a lie about a position the record
+    // already holds: the operation is there, so the receipt reads witnessed.
+    const covered = signReceipt(SECRETS.operator, backing.name, issued.opHash, issued.position, 2n);
+    expect(receiptStatus(backing, venue, covered, state)).toBe("witnessed");
   });
 
   it("witnessed needs no era: a tail operation resubmitted onto its old position keeps its dead receipt readable as witnessed", () => {
@@ -321,14 +349,14 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     const record = { snapshots: sequencer.snapshot(), commitment: cr };
     advanceWitnessedIndex(venue, 16n);
     const adopted = sequencer.submitDemand(claim.op, claim.published.signature); // the repeat: the adoption's receipt
-    expect(adopted.after).toBe(0n); // signed in the era the return closed
+    expect(adopted.after).toBe(1n); // signed in the era the return closed: the commitment at 0
     expect(receiptStatus(backing, venue, adopted, record)).toBe("witnessed");
     const lie = signReceipt(
       SECRETS.operator,
       backing.name,
       new Uint8Array(32).fill(0x66),
       adopted.position,
-      15n, // the live era
+      2n, // the live era: the return commitment, sequence 1
     );
     expect(isDoublePosition(backing, venue, record, adopted, lie)).toBe(true);
   });

@@ -396,11 +396,18 @@ export class Sequencer {
   }
 
   /**
-   * The era a receipt this operator signs right now names: the witnessed index
-   * of its last commitment, 0 where it has none (receipt.ts, `after`).
+   * The era a receipt this operator signs right now names: one more than the
+   * sequence of the last commitment it SIGNED, 0 where it has signed none
+   * (receipt.ts, `after`).
+   *
+   * The commitment rather than the index it lands at, because on a venue that
+   * reads behind its chain those are different moments and the index does not
+   * exist yet (slice 39). Read from the record here; the in-flight commitment
+   * is added by `commit` in the same slice.
    */
   private era(): bigint {
-    return this.venue.witnessedAtFor(this.operatorKey) ?? 0n;
+    const latest = this.venue.latestFor(this.operatorKey);
+    return latest === undefined ? 0n : latest.sequence + 1n;
   }
 
   /**
