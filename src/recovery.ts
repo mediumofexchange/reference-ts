@@ -817,17 +817,35 @@ export function gapLegsFor(
  * sequence the record skips answers `undefined` rather than the neighbouring
  * commitment's index: the era named a commitment that is not there.
  *
- * **More than one ahead is not reachable and reads `undefined`.** One
- * commitment in flight is the sequencer's own rule, so an era two past the
- * record is a claim no honest operator can make — and left as `"ahead"` it
- * would be a forgery indistinguishable from an honest pending receipt
- * (slice 39's security angle).
+ * **Three answers, because the record has three things to say** (slice 39's
+ * fix panel). It HOLDS the commitment, and the era began where that
+ * commitment was witnessed. It has NOT REACHED it — `"ahead"` — and nothing
+ * has ended the era, so an operation it attests is still on its way to one.
+ * Or it MOVED PAST it without ever holding it — `"died"` — and that
+ * commitment is one the venue never took: the era it opened ended with it,
+ * exactly as §C2b's return from silence ends one, an expiry being a
+ * sub-duration return.
+ *
+ * **Merging the last two is what the first draft did, and it shut the
+ * operator's own door**: `shut` asks `eraLapsed` about the era this operator
+ * is stamping right now, and a blanket lapse over both answers made that era
+ * lapse from the second dropped commitment onward, refusing every act — the
+ * blind window back by another road (the fix panel's inventory angle). The
+ * operator's own era is never `"died"`: `era()` is one past what it has
+ * signed, so its target is either the record's highest or beyond it.
+ *
+ * **And `"ahead"` is unbounded.** The first draft allowed one, on the reading
+ * that one commitment in flight bounds the gap. It does not: the sequence a
+ * commitment carries is one past what the operator SIGNED, so every dropped
+ * transaction widens the gap by one, permanently, and an honest operator's own
+ * receipts read `unrelated` from the second drop on. No sound bound is
+ * available from the record, and an unsound one accuses the honest.
  */
 export function eraIndex(
   venue: Venue,
   operator: Uint8Array,
   after: bigint,
-): bigint | "ahead" | undefined {
+): bigint | "ahead" | "died" | undefined {
   return answering(() => {
     if (!(operator instanceof Uint8Array) || operator.length !== 32) return undefined;
     if (typeof after !== "bigint" || after < 0n) return undefined;
@@ -837,7 +855,7 @@ export function eraIndex(
     const target = after - 1n;
     const latest = venue.latestFor(operator);
     const highest = latest === undefined ? -1n : latest.sequence;
-    if (target > highest) return target === highest + 1n ? "ahead" : undefined;
+    if (target > highest) return "ahead";
     // The live operator's own era: its latest, which is what a fresh receipt
     // names and what the sequencer's own doors ask about.
     if (target === highest) return venue.witnessedAtFor(operator);
@@ -850,7 +868,11 @@ export function eraIndex(
       else low = mid + 1n;
     }
     const found = venue.latestFor(operator, low);
-    if (found === undefined || found.sequence !== target) return undefined;
+    // The record moved past this sequence without ever holding it: the
+    // commitment died. Sound only because a venue's record for one key rises
+    // in sequence as it rises in index (the `Venue` contract), so a sequence
+    // the search steps over is one the record never had.
+    if (found === undefined || found.sequence !== target) return "died";
     return venue.witnessedAtFor(operator, low);
   }, undefined);
 }
@@ -931,6 +953,11 @@ export function eraLapsed(
     // have ended, and one the record cannot answer for accuses nobody.
     const at = eraIndex(venue, operator, after);
     if (at === "ahead" || at === undefined) return false;
+    // A commitment the venue never took ended the era it opened, and took its
+    // tail with it — §C2b's return from silence, under the declared duration.
+    // The operator's own era never reads this (see `eraIndex`), so this
+    // answer belongs to a reader and never shuts a door.
+    if (at === "died") return true;
     let from = at;
     for (const link of chain) {
       if (compareBytes(link.operator, operator) !== 0) continue;

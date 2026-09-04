@@ -119,27 +119,67 @@ describe("28b: a receipt names its era, and the era is the record's to verify", 
     expect(receiptStatus(backing, venue, after, state)).toBe("witnessed");
   });
 
-  it("reads an era one commitment past the record as pending, and anything further as unrelated", () => {
-    // The bound the in-flight rule buys (slice 39): an operator may have one
-    // commitment signed and published that the venue has not shown, so an era
-    // ONE past the record is the honest pending receipt — and one further is a
-    // claim no operator can make, which must not read as pending or a forgery
-    // is indistinguishable from an honest receipt in flight.
+  it("reads an era the record has not reached as pending, however far past it", () => {
+    // Amended by the fix panel (slice 39's fix round). The first draft allowed
+    // one commitment ahead and called anything further a forgery, reasoning
+    // that one commitment in flight bounds the gap. It does not: the sequence
+    // a commitment carries is one past what the operator SIGNED, so every
+    // dropped transaction widens the gap by one, permanently — and an honest
+    // operator's own receipts then read `unrelated` from its second drop on,
+    // while its doors are open. No sound bound is available from the record,
+    // and an unsound one accuses the honest. Reading it `pending` excuses
+    // nothing: only `lapsed` excuses, and this is not it.
     const { venue, sequencer, backing } = setup();
     const issued = issue(sequencer, backing, KEYS.alice, 100n, 0n);
     advanceWitnessedIndex(venue, 3n);
     const state = sequencer.commit(); // sequence 0, witnessed at 3
     advanceWitnessedIndex(venue, 4n);
 
-    expect(eraIndex(venue, KEYS.operator, 2n)).toBe("ahead");
-    expect(eraIndex(venue, KEYS.operator, 3n)).toBeUndefined();
-    const ahead = signReceipt(SECRETS.operator, backing.name, new Uint8Array(32).fill(0x77), 9n, 2n);
-    expect(receiptStatus(backing, venue, ahead, state)).toBe("pending");
-    const forged = signReceipt(SECRETS.operator, backing.name, new Uint8Array(32).fill(0x77), 9n, 3n);
-    expect(receiptStatus(backing, venue, forged, state)).toBe("unrelated");
-    // And an era one ahead does not excuse a lie about a position the record
+    for (const after of [2n, 3n, 99n]) {
+      expect(eraIndex(venue, KEYS.operator, after)).toBe("ahead");
+      const ahead = signReceipt(SECRETS.operator, backing.name, new Uint8Array(32).fill(0x77), 9n, after);
+      expect(receiptStatus(backing, venue, ahead, state)).toBe("pending");
+    }
+    // And an era ahead does not excuse a lie about a position the record
     // already holds: the operation is there, so the receipt reads witnessed.
     const covered = signReceipt(SECRETS.operator, backing.name, issued.opHash, issued.position, 2n);
+    expect(receiptStatus(backing, venue, covered, state)).toBe("witnessed");
+  });
+
+  it("reads an era the record moved PAST without ever holding as lapsed: the commitment died and took its tail", () => {
+    // The record's third answer (slice 39's fix round). A commitment the venue
+    // never took ended the era it opened — §C2b's return from silence, under
+    // the declared duration, which is what an expiry is. Read `unrelated`
+    // instead, an operator whose transaction was dropped had its own honest
+    // receipts convict it: `unrelated` does not excuse, so the position the
+    // dead act held, re-let after the repair, was a provable double position
+    // against a party that did nothing.
+    const { venue, sequencer, backing } = setup();
+    issue(sequencer, backing, KEYS.alice, 100n, 0n);
+    advanceWitnessedIndex(venue, 3n);
+    sequencer.commit(); // sequence 0
+    // The operator's next commitment is dropped, so the record skips one: it
+    // holds 0 and then 2, and nothing was ever witnessed at 1.
+    advanceWitnessedIndex(venue, 8n);
+    const snapshots = sequencer.snapshot();
+    const skipped = signCommitment(SECRETS.operator, 2n, stateRoot(snapshots));
+    venue.publish(skipped);
+    const state: ServedState = { snapshots, commitment: skipped };
+
+    expect(eraIndex(venue, KEYS.operator, 2n)).toBe("died"); // the commitment at sequence 1
+    expect(eraLapsed(venue, backing, KEYS.operator, 2n)).toBe(true);
+    const dead = signReceipt(SECRETS.operator, backing.name, new Uint8Array(32).fill(0x88), 9n, 2n);
+    expect(receiptStatus(backing, venue, dead, state)).toBe("lapsed");
+    // And a died era does not bury an operation a later commitment carried:
+    // the witnessed check runs first.
+    const carried = sequencer.opLog(backing)[0]!;
+    const covered = signReceipt(
+      SECRETS.operator,
+      backing.name,
+      opHashOfEntry(backing.name, carried),
+      0n,
+      2n,
+    );
     expect(receiptStatus(backing, venue, covered, state)).toBe("witnessed");
   });
 

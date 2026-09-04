@@ -477,14 +477,23 @@ export class Sequencer {
    *
    * The commitment rather than the index it lands at, because on a venue that
    * reads behind its chain those are different moments and the index does not
-   * exist yet (slice 39). Read from the record here; the in-flight commitment
-   * is added by `commit` in the same slice.
+   * exist yet (slice 39).
+   *
+   * **One past what this operator has SIGNED, never merely one past the
+   * record's** — the same quantity `commit` writes. Read from the record
+   * alone, an operator that lost a commitment stamped a LOWER era after the
+   * repair than the one it stamped before, so its own era went backwards in
+   * time and a payee applying the freshness rule took the dead receipt and
+   * refused the live one; and the act co-signed in the window then read
+   * `contradicted` against the state that followed (the fix panel, both
+   * angles).
    */
   private era(): bigint {
     const flying = this.inFlight();
     if (flying !== undefined) return flying.commitment.sequence + 1n;
     const latest = this.venue.latestFor(this.operatorKey);
-    return latest === undefined ? 0n : latest.sequence + 1n;
+    const fromRecord = latest === undefined ? 0n : latest.sequence + 1n;
+    return fromRecord > this.signed + 1n ? fromRecord : this.signed + 1n;
   }
 
   /**
@@ -1660,6 +1669,14 @@ export class Sequencer {
         "the venue has not shown this operator's last commitment at an index before this one would land: the next commitment goes at the next index",
       );
     }
+    // Armed here as well as at `register`, because a process that commits
+    // before it has registered anything is exactly the boot the rule is for —
+    // and it publishes a root carrying nothing, which is a rewritten history
+    // against its own key wherever the record shows it carrying a backing (the
+    // fix panel's security angle). Holding it for the lag is a narrowing
+    // rather than a closure: what the hole really wants is its own door, and
+    // that is recorded rather than built here.
+    this.bootedAt ??= this.venue.witnessedIndex();
     // **And a process commits nothing until the venue's lag has passed since
     // it registered.** A restart cannot see what it published just before it
     // died, so it resumes on its own pre-flight book and signs its next

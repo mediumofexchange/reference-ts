@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { compareBytes } from "../src/bytes.js";
 import { signCommitment, stateRoot, type Commitment } from "../src/commitment.js";
+import { isDoublePosition } from "../src/fault.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import { receiptStatus } from "../src/receipt.js";
 import { eraIndex } from "../src/recovery.js";
@@ -372,5 +373,95 @@ describe("§C2b: a receipt co-signed inside the window", () => {
     const carrying = operator.commit();
     advanceClock(chain, view, view.lag());
     expect(receiptStatus(eur, view, receipt, carrying)).toBe("witnessed");
+  });
+});
+
+describe("§C2b: what a dropped commitment costs the operator that lost it", () => {
+  it("its window receipts read lapsed, and the position the dead act held is not a fault when the repair re-lets it", () => {
+    // The fix round's headline. The slice opened the door across the window
+    // and left the case the expiry exists for: the record keeps a permanent
+    // hole where the dropped commitment's sequence would have been, an era
+    // naming that hole read `unrelated`, and `unrelated` does not excuse — so
+    // the operator's own honest receipt convicted it of a double position the
+    // moment the repair re-let the position. No attacker anywhere.
+    const chain = new LocalVenue();
+    class DropsOne extends LaggingView {
+      dropping = true;
+      override publish(commitment: Commitment): void {
+        if (this.dropping) return; // the chain never took it
+        super.publish(commitment);
+      }
+    }
+    const view = new DropsOne(chain, 2n);
+    const eur = backingFor(view);
+    const operator = serving(chain, view, eur);
+    operator.commit(); // sequence 0, dropped
+
+    // Co-signed in the window, on the book that commitment stands on.
+    const paid = transferBy(eur, KEYS.carol, 30n, 0n);
+    const dead = operator.submitTransfer(paid.op, paid.signature);
+    advanceClock(chain, view, view.lag());
+    expect(operator.awaitingTakeover().map((b) => b.nameHex)).toEqual([eur.nameHex]);
+
+    // The repair: take over what the record holds — nothing — and commit. The
+    // dropped sequence is never re-used, so the record skips it for ever.
+    view.dropping = false;
+    operator.takeOver(eur);
+    const repair = operator.commit();
+    advanceClock(chain, view, view.lag());
+    expect(repair.commitment.sequence).toBe(1n);
+    expect(eraIndex(view, KEYS.operator, dead.after)).toBe("died");
+    expect(receiptStatus(eur, view, dead, repair)).toBe("lapsed");
+
+    // The position the dead act held is free, and the operator re-lets it.
+    const relet = transferBy(eur, KEYS.bob, 10n, 0n);
+    const live = operator.submitTransfer(relet.op, relet.signature);
+    expect(live.position).toBe(dead.position);
+    expect(isDoublePosition(eur, view, repair, dead, live)).toBe(false);
+    // And the era it stamps now is LATER than the dead one's, not earlier:
+    // read from the record alone it went backwards, and a payee applying the
+    // freshness rule took the dead receipt and refused the live one.
+    expect(live.after).toBeGreaterThan(dead.after);
+  });
+
+  it("the operator's own era is never one the record moved past, so repeated drops never shut its own door", () => {
+    // The first draft of the fix merged "the record has not reached it" with
+    // "the record moved past it" into one lapsed answer — and `shut` asks
+    // that same predicate about the era this operator is stamping right now,
+    // so from the second dropped commitment onward every act was refused: the
+    // blind window back by another road.
+    const chain = new LocalVenue();
+    class DropsAll extends LaggingView {
+      override publish(): void {
+        /* the chain never takes any of them */
+      }
+    }
+    const view = new DropsAll(chain, 2n);
+    const eur = backingFor(view);
+    const operator = serving(chain, view, eur);
+
+    for (let drop = 0n; drop < 4n; drop++) {
+      operator.commit();
+      advanceClock(chain, view, view.lag());
+      operator.takeOver(eur);
+      // The era is one past what it has SIGNED, so it runs ahead of the
+      // record's — which holds nothing at all — and never reads as died.
+      expect(eraIndex(view, KEYS.operator, operator.snapshot().length === 0 ? 1n : 1n)).toBe("ahead");
+      expect(doorOpen(operator, eur, drop)).toBe(true);
+    }
+  });
+
+  it("a process that commits before it registers anything waits the venue's lag too", () => {
+    // The boot wait was armed at `register`, so the one boot it is named for
+    // — a process that commits before registering what it serves — went
+    // unheld, and published a root carrying nothing: a rewritten history
+    // against its own key wherever the record shows it carrying a backing.
+    const chain = new LocalVenue();
+    const view = new LaggingView(chain, 2n);
+    chainAt(chain, 2n);
+    const fresh = new Sequencer(SECRETS.operator, view);
+    expect(() => fresh.commit()).toThrow(/started within the venue's lag/);
+    advanceClock(chain, view, view.lag());
+    expect(fresh.commit().commitment.sequence).toBe(0n);
   });
 });

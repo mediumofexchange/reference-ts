@@ -820,3 +820,62 @@ describe("§C2: the venue's lag, and the floor it puts under a replacement's lea
     expect(operatorAt(ruled, enough, enough.witnessedIndex())).toEqual(KEYS.alice);
   });
 });
+
+describe("§C2: a venue's record for one key rises in sequence as it rises in index", () => {
+  const ordered = (v: ErgoVenue) => v.latestFor(KEYS.operator)?.sequence;
+
+  it("skips a commitment that does not extend the highest it already holds, so a replay anybody can copy off the chain does not move the record's last", async () => {
+    // A chain orders nothing: any decodable box at the address whose signature
+    // verifies is a record. An old commitment delayed in the mempool, or a
+    // replay of one — bytes already public, no key needed — would otherwise BE
+    // the record's last, and the last is what an era resolves against, what a
+    // seat pins against, and what the next sequence is taken from. One replay
+    // turned a lapsed pair into a fault proof against an honest operator and
+    // an honest restart into an equivocation against its own key (slice 39's
+    // review, both angles).
+    const node = new FakeNode()
+      .at(200n)
+      .putCommitment(commitment(0n, 0xa0), 10n)
+      .putCommitment(commitment(1n, 0xa1), 20n)
+      .putCommitment(commitment(2n, 0xa2), 30n)
+      .putCommitment(commitment(0n, 0xa0), 40n); // the replay
+    const v = venue();
+    await v.sync(node, [backing]);
+    expect(ordered(v)).toBe(2n);
+    expect(v.witnessedAtFor(KEYS.operator)).toBe(30n);
+    expect(v.nextSequenceFor(KEYS.operator)).toBe(3n);
+  });
+
+  it("skips a second commitment at a sequence it already holds, so one sequence stands at one index", async () => {
+    // Strictly extending, not merely non-decreasing: two roots at one sequence
+    // is the equivocation invariant 22 forbids, and admitting the second would
+    // put one sequence at two indices — which is the shape every era
+    // resolution assumes away.
+    const node = new FakeNode()
+      .at(200n)
+      .putCommitment(commitment(0n, 0xc0), 10n)
+      .putCommitment(commitment(1n, 0xc1), 20n)
+      .putCommitment(commitment(1n, 0xc9), 30n); // the same sequence, another root
+    const v = venue();
+    await v.sync(node, [backing]);
+    expect(ordered(v)).toBe(1n);
+    expect(v.witnessedAtFor(KEYS.operator)).toBe(20n);
+  });
+
+  it("reads two commitments of one key in one block the same way whatever order the node hands them back", async () => {
+    // Otherwise the record is a fact about which node you asked: two honest
+    // readers resolve one era two ways, permanently (the fix panel's security
+    // angle). Sorted by index and then by sequence before the filter.
+    const forward = new FakeNode().at(200n).putCommitment(commitment(0n, 0xb0), 10n);
+    const backward = new FakeNode().at(200n).putCommitment(commitment(0n, 0xb0), 10n);
+    forward.putCommitment(commitment(1n, 0xb1), 20n).putCommitment(commitment(2n, 0xb2), 20n);
+    backward.putCommitment(commitment(2n, 0xb2), 20n).putCommitment(commitment(1n, 0xb1), 20n);
+    const a = venue();
+    const b = venue();
+    await a.sync(forward, [backing]);
+    await b.sync(backward, [backing]);
+    expect(ordered(a)).toBe(2n);
+    expect(ordered(b)).toBe(2n);
+    expect(a.witnessedAtFor(KEYS.operator)).toBe(b.witnessedAtFor(KEYS.operator));
+  });
+});

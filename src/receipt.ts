@@ -313,6 +313,13 @@ export function receiptStatus(
     // still on its way to a commitment. Read past this, every arm below would
     // measure an era that has not begun on the record (slice 39).
     if (era === "ahead") return "pending";
+    // Or the venue never took it, and the era ended with it — the tail died
+    // with license, exactly as a return from silence kills one. BELOW the
+    // witnessed check above, deliberately: an operation a later commitment
+    // carried is witnessed whatever became of the commitment its receipt was
+    // signed under (the fix panel's inventory angle, whose mutation of this
+    // ordering is what pins it).
+    if (era === "died") return "lapsed";
     // Not carried here, so the era decides what that means. An era that ended
     // in a return or a handover dropped its tail with license: the receipt
     // attests an act that died unwitnessed, and accuses nobody.
