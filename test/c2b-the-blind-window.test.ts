@@ -1,6 +1,8 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
+import { compareBytes } from "../src/bytes.js";
+import { signCommitment, stateRoot, type Commitment } from "../src/commitment.js";
 import { encodeIssuanceMessage, encodeTransferMessage } from "../src/messages.js";
 import { receiptStatus } from "../src/receipt.js";
 import { eraIndex } from "../src/recovery.js";
@@ -260,6 +262,84 @@ describe("§C2: what the window does not excuse", () => {
     expect(view.latestFor(KEYS.operator)?.sequence).toBe(inFlight.commitment.sequence);
     restart.takeOver(eur, inFlight);
     expect(restart.commit().commitment.sequence).toBe(inFlight.commitment.sequence + 1n);
+  });
+});
+
+/**
+ * A chain whose record is not monotone in sequence: it takes any commitment
+ * that verifies, at the index it lands, as `ErgoVenue` does — a record there is
+ * any decodable, verifying box at the address, and nothing orders two of them
+ * by sequence. `LocalVenue` refuses a sequence that does not extend, which is a
+ * courtesy the `Venue` contract does not require of an implementation.
+ */
+class PermissiveChain extends LocalVenue {
+  private readonly taken: { commitment: Commitment; at: bigint }[] = [];
+
+  override publish(commitment: Commitment): void {
+    this.taken.push({ commitment, at: this.witnessedIndex() });
+  }
+
+  private lastFor(operator: Uint8Array, asOf?: bigint) {
+    const limit = asOf ?? this.witnessedIndex();
+    for (let i = this.taken.length - 1; i >= 0; i--) {
+      const held = this.taken[i]!;
+      if (held.at <= limit && compareBytes(held.commitment.operator, operator) === 0) return held;
+    }
+    return undefined;
+  }
+
+  override latestFor(operator: Uint8Array, asOf?: bigint): Commitment | undefined {
+    return this.lastFor(operator, asOf)?.commitment;
+  }
+  override witnessedAtFor(operator: Uint8Array, asOf?: bigint): bigint | undefined {
+    return this.lastFor(operator, asOf)?.at;
+  }
+  override firstCommitmentFor(operator: Uint8Array, notBefore = 0n): bigint | undefined {
+    for (const held of this.taken) {
+      if (held.at >= notBefore && compareBytes(held.commitment.operator, operator) === 0) return held.at;
+    }
+    return undefined;
+  }
+  override nextSequenceFor(operator: Uint8Array): bigint {
+    const last = this.lastFor(operator);
+    return last === undefined ? 0n : last.commitment.sequence + 1n;
+  }
+}
+
+describe("§C2: the seat's pin carries what it stands on", () => {
+  it("a stale commitment landing late takes the seat of an operator whose own is still in flight, on a record that is not monotone in sequence", () => {
+    // What the provenance is for, and the only shape that reaches it: the
+    // in-flight arm of `serves` is otherwise cleared the moment the record
+    // shows a commitment at or past this operator's own sequence, which on a
+    // record ordered by sequence is every way it can move. `ErgoVenue` orders
+    // nothing: an old commitment delayed in the mempool, or a twin's replay of
+    // one, lands now and IS the record's last. The operator's own commitment
+    // is still in flight, so the sequence never rises — and without the
+    // provenance it would go on serving a book the record no longer stands on.
+    const chain = new PermissiveChain();
+    const view = new LaggingView(chain, 2n);
+    const eur = backingFor(view);
+    const operator = serving(chain, view, eur);
+    const first = operator.commit(); // sequence 0
+    advanceClock(chain, view, view.lag());
+    expect(operator.awaitingTakeover()).toHaveLength(0);
+
+    // A second commitment, in flight: sequence 1, not yet shown.
+    operator.commit();
+    expect(view.latestFor(KEYS.operator)?.sequence).toBe(first.commitment.sequence);
+    expect(operator.awaitingTakeover()).toHaveLength(0);
+
+    // And a stale one — this operator's own sequence 0 over another root —
+    // lands under it, in the block the second was signed in. It becomes
+    // readable a depth later, which is one clock before the in-flight
+    // commitment expires: the window where the record has moved and the
+    // operator's own sequence has not risen.
+    const stale = signCommitment(SECRETS.operator, 0n, stateRoot([]));
+    chain.publish(stale);
+    chainAt(chain, chain.witnessedIndex() + 2n); // the depth
+    expect(view.latestFor(KEYS.operator)?.root).toEqual(stale.root);
+    expect(operator.awaitingTakeover().map((b) => b.nameHex)).toEqual([eur.nameHex]);
+    expect(doorOpen(operator, eur, 11n)).toBe(false);
   });
 });
 
