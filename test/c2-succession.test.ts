@@ -22,14 +22,15 @@ import { LocalVenue, VenueError, type Venue } from "../src/venue.js";
 import { KEYS, pub, SECRETS } from "./support.js";
 
 // §C2, succession: "A replacement is itself a witnessed object. It is signed by
-// whoever E's rule names, the backer by default, states the role, the successor
-// and the effective index... Each replacement names its predecessor, so the
-// chain from the original terms is walkable. Its effective index is no earlier
-// than the index at which it is itself witnessed, and it takes effect only from
-// the first index at which it has published its own commitment... Until then the
-// predecessor's last commitment governs... From the effective index the old
-// attester's co-signatures stop counting, which is why a wallet verifies the
-// chain rather than the key it remembers."
+// whoever E's rule names, the backer by default, and co-signed by the
+// successor, states the role, the successor and the effective index... Each
+// replacement names its predecessor, so the chain from the original terms is
+// walkable. Its effective index is later than the index at which it is itself
+// witnessed by at least the venue's lag plus one... and it takes effect
+// there... Until the effective index the predecessor governs and goes on
+// serving... From the effective index the old attester's co-signatures stop
+// counting, which is why a wallet verifies the chain rather than the key it
+// remembers."
 //
 // E's operator sits inside the name and invariant 1 forbids an edit, so a
 // replacement does not change it — it supersedes it on a record anyone can walk.
@@ -785,8 +786,8 @@ describe("§C2: a publication is judged against the record that governed at its 
   // the index a successor takes force it had nothing before, the quiet time
   // read from the venue's genesis, and an orderly handover opened one gap index
   // in which the operator adopted legs no verifier could resolve. The operator
-  // in force just before the index is whose record governed: "Until then the
-  // predecessor's last commitment governs."
+  // in force just before the index is whose record governed: "Until the
+  // effective index the predecessor governs and goes on serving."
   function punctualThenHandedOver(lastCommit: bigint, handoverAt: bigint) {
     const { venue, backing } = setup();
     const incumbent = new Sequencer(SECRETS.operator, venue);

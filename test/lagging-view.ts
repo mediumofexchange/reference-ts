@@ -32,6 +32,12 @@ const pending = new WeakMap<LocalVenue, (() => void)[]>();
  * publish, so a `Sequencer` cannot be driven over it; this is how the tests
  * drive one over a lagging clock.
  *
+ * `nextSequenceFor` is the one method that is NOT `ErgoVenue`'s: it counts
+ * this view's own in-flight commitments, where `ErgoVenue` answers from the
+ * finalised height alone and would sign two roots at one sequence once a
+ * write side exists (the slice-38 verification's V7; the Ergo write-side
+ * slice's to settle).
+ *
  * The chain must have reached the depth before anything is published, or an
  * act lands nearer its clock than the lag says: fixtures advance the chain to
  * the depth first. Records a fixture publishes on the CHAIN directly (the

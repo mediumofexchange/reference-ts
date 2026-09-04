@@ -37,8 +37,8 @@ import { KEYS, pub, SECRETS } from "./support.js";
 //
 //   - **The floor.** effective ≥ witnessed + lag + 1, judged once per record
 //     against the venue that answered it. A record below it is no replacement.
-//     So every party reads the record before the last clock at which an act
-//     it signs can still be witnessed in the incumbent's term — one index of
+//     So every party reads the record by the last clock at which an act it
+//     signs can still be witnessed in the incumbent's term — one index of
 //     notice, at the venue's own speed.
 //   - **What the parties do with it is theirs** (CLAUDE.md's party rule): the
 //     incumbent commits at the first clock it can read the record and co-signs
@@ -300,6 +300,8 @@ describe("§C2: the floor on a lagging venue, and what the parties do with the i
     const more = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 1n);
     expect(incumbent.submitTransfer(more.op, more.signature).position).toBe(2n);
     const handed = incumbent.commit();
+    // The view knows its own in-flight commitment before the chain shows it.
+    expect(incumbentsView.nextSequenceFor(KEYS.operator)).toBe(handed.commitment.sequence + 1n);
     chainAt(chain, 15n);
     expect(chain.witnessedAtFor(KEYS.operator)).toBe(15n);
 
@@ -331,7 +333,7 @@ describe("§C2: the floor on a lagging venue, and what the parties do with the i
     expect(termOf(walked, heirsView, KEYS.operator, handed.commitment.sequence)).toBe(0);
   });
 
-  it("an act co-signed once the lag reaches the index dies with the handover, and the party rule reads that at every clock from the public readers", () => {
+  it("an act co-signed once the lag reaches the index dies with the handover, and the party rule reads that from the public readers", () => {
     // The cost of not following the rule, measured, and the rule itself: at
     // clock 13 the record has been readable for two clocks, the pending link
     // takes force at 16, and an act signed now lands at 16 — in the
@@ -374,7 +376,7 @@ describe("§C2: the floor on a lagging venue, and what the parties do with the i
   });
 
   for (const depth of [1n, 2n]) {
-    it(`the doors move at the effective index and nowhere else: the incumbent's shut at it, the successor's open at it, on a venue reading ${depth} behind`, () => {
+    it(`the doors move at the effective index: the incumbent's open the clock before and shut at it, the successor's shut the clock before and open at it, on a venue reading ${depth} behind`, () => {
       // Pinned against a door that would close early: the incumbent's
       // co-signature at effective − 1 is accepted (and dies — the rule's
       // cost), refused at effective for force alone; the successor's is

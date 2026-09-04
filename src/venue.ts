@@ -203,7 +203,8 @@ export interface WitnessedOp {
  *     venue's finality rule — the least number of indices by which an act
  *     signed at its clock is witnessed after it — never a view's state, so it
  *     answers unsynced, and the id a backing declares must determine it, as
- *     `ergoVenueId` does. The walk floors a replacement's lead on it (§C2,
+ *     `ergoVenueId` does; the index a view reports a record at is the same
+ *     kind of word. The walk floors a replacement's lead on it (§C2,
  *     slice 38). Nothing here can check the number: a view declaring less
  *     than the venue lags reopens the erasure the floor closes, one declaring
  *     more holds a retired key in force, and two views answering one id with

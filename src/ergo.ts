@@ -37,8 +37,8 @@
 // it (see `ergoVenueId`), and naming the venue is agreeing the depth. The same
 // depth fixes the venue's lag (`lag()`): a transaction submitted now is included
 // at the next height at the earliest, so an act signed at clock c is witnessed
-// at c + depth + 1 or later — the number §C2's lead floor and the sequencer's
-// doors read.
+// at c + depth + 1 or later — the number §C2's lead floor reads, and the
+// parties' own rule for a handover.
 //
 // Reading requires a node with `extraIndex` enabled, since the /blockchain
 // routes exist only then. That is a real floor under "retrievable by a

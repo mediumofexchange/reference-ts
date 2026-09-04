@@ -126,9 +126,8 @@ that produced it is in the decision log — reach it through the index in
   it names the incumbent (a revocation). **A replacement's lead is floored at
   the venue's lag plus one** (`lag()`, which the venue's id must bind;
   `admitted` refuses below it), so every party reads the record before the
-  last act it can still land in the incumbent's term; what it does with that
-  is the party rule below, since a door a rule-holder's record could shut is
-  a lever (the slice-38 review). A key seated anew commits before it
+  last act it can still land in the incumbent's term; no door here reads a
+  pending record. A key seated anew commits before it
   co-signs (`shut`, the same door as the return from silence), and a
   commitment never drops an in-force backing silently (`commit`'s per-call
   `dropping`; `awaitingTakeover` is the same condition as a question). **The
@@ -332,9 +331,10 @@ the move to a blinded construction — which is why they are rules, not code.
   carries the interval with the venue it is read on, so a payee can tell a fast
   operator running late from a slow one running on time (`isOverdue`).
 - **Commit at the first clock you can read a handover replacing you, co-sign
-  nothing for that backing once the venue's lag reaches its index, and read a
-  pending handover before you treat a payment as final.** The floor buys one
-  index of notice; what you still hold uncommitted then is a slow block's cost.
+  nothing on or under that backing once the venue's lag reaches its index, and
+  read a pending handover before you treat a payment as final.** The floor buys
+  one index of notice; what you still hold uncommitted then is a slow block's
+  cost.
 - **Draw a fresh random salt per attempt** — what "never reuse an attempt id you
   signed a commit for" became. A commit binds its id and nothing else, so an
   object you signed converts any later lock under that id whose parties you are

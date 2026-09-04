@@ -326,8 +326,8 @@ export class Sequencer {
 
   /**
    * Whether this operator is the one in force for this backing right now — the
-   * question §C2 answers with "until then the predecessor's last commitment
-   * governs, no new co-signatures issue".
+   * question §C2 answers with "from the effective index the old attester's
+   * co-signatures stop counting".
    */
   private isInForce(backing: Backing): boolean {
     const chain = this.walkedInForce(backing);
@@ -728,7 +728,7 @@ export class Sequencer {
   adopt(backing: Backing): void {
     this.requireServed(backing);
     const served = this.backings.get(backing.nameHex) as Backing;
-    // "No new co-signatures issue" until this operator is in force — and
+    // The successor "co-signs nothing" until its effective index (§C2) — and
     // adoption is co-signing onto the book, so it also waits for the book:
     // an in-force successor that has not taken the state on would otherwise
     // co-sign the gap's legs onto an empty log, which is the locked-out-heir
@@ -1810,7 +1810,7 @@ export class Sequencer {
   /**
    * Caught up with what the venue witnessed against these backings while this
    * operator was dark — adopted, which an operator not in force skips by itself
-   * ("no new co-signatures issue"). Done at every door before a repeat is
+   * (§C2: "the successor co-signs nothing"). Done at every door before a repeat is
    * answered: adoption co-signs the gap's legs and writes their receipts, so a
    * holder asking for the receipt of a leg the venue took for her must find it
    * on the first ask, not after a refusal that adopted as a side effect (found

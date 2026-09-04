@@ -405,8 +405,8 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
     // slice 38): effective ≥ witnessed + lag + 1, and a record below the floor
     // is not a replacement — refused rather than corrected, as a backdated one
     // always was, since the rule-holder does not get to date a handover. The
-    // floor is what gives every party the record before the last clock at
-    // which an act it signs can still be witnessed in the incumbent's term —
+    // floor is what gives every party the record by the last clock at which
+    // an act it signs can still be witnessed in the incumbent's term —
     // at the venue's own speed: an act witnessed at or past the effective
     // index was signed no later than that index less the lag, which the
     // floor puts strictly after the record's own witnessing, so a commitment
@@ -416,8 +416,9 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
     // (CLAUDE.md's party rule).
     // Inclusion is bounded below by the lag and above by nothing: the floor
     // buys one index of notice, and a slow block is the party's cost (the
-    // slice-38 review, the spec angle's S2 and the security angle's S2). Without the floor a record effective at its own
-    // witnessing — or, under a finality depth, one pre-armed by the depth and
+    // slice-38 review, the spec angle's S2 and the security angle's S2).
+    // Without the floor a record effective at its own witnessing — or, under
+    // a finality depth, one pre-armed by the depth and
     // aimed at the cadence E declares — put the incumbent's newest commitment
     // in no term: not the book, placed nowhere, every fault predicate false,
     // and a witnessed payment in it dead and re-spendable for one record from
