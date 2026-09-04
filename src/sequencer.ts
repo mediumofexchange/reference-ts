@@ -274,10 +274,11 @@ export class Sequencer {
     const stored = makeBacking(backing);
     // makeBacking has already established that the operator key is a valid
     // non-small-order point; the only question left here is whether it is mine.
-    // In force, or named to take over. §C2 gives a successor force only from
-    // its own first commitment, and it cannot commit a state it was never
-    // allowed to take on — so being named is what lets it serve, and being in
-    // force is what lets it co-sign (submit, below).
+    // In force, or named to take over. §C2 seats a successor at its effective
+    // index and has it take the book on in the lead time before it, and it
+    // cannot commit a state it was never allowed to take on — so being named
+    // is what lets it prepare, and being in force is what lets it co-sign
+    // (submit, below).
     if (
       compareBytes(operatorAt(stored, this.venue, this.venue.witnessedIndex()), this.operatorKey) !==
         0 &&
@@ -299,7 +300,8 @@ export class Sequencer {
     // seated for the genesis link, which is the backing itself. Anyone else
     // reaches the book through `takeOver`. The chain IN FORCE, deliberately: a
     // pending successor does not unseat the genesis operator, which §C2 keeps
-    // serving through the lead time.
+    // in possession through the lead time; its co-signing door is `inForce`'s
+    // question, force at the clock.
     const chain = this.walkedInForce(stored);
     if (
       chain.length === 1 &&
@@ -324,8 +326,8 @@ export class Sequencer {
 
   /**
    * Whether this operator is the one in force for this backing right now — the
-   * question §C2 answers with "until then the predecessor's last commitment
-   * governs, no new co-signatures issue".
+   * question §C2 answers with "from the effective index the old attester's
+   * co-signatures stop counting".
    */
   private isInForce(backing: Backing): boolean {
     const chain = this.walkedInForce(backing);
@@ -726,7 +728,7 @@ export class Sequencer {
   adopt(backing: Backing): void {
     this.requireServed(backing);
     const served = this.backings.get(backing.nameHex) as Backing;
-    // "No new co-signatures issue" until this operator is in force — and
+    // The successor "co-signs nothing" until its effective index (§C2) — and
     // adoption is co-signing onto the book, so it also waits for the book:
     // an in-force successor that has not taken the state on would otherwise
     // co-sign the gap's legs onto an empty log, which is the locked-out-heir
@@ -1808,7 +1810,7 @@ export class Sequencer {
   /**
    * Caught up with what the venue witnessed against these backings while this
    * operator was dark — adopted, which an operator not in force skips by itself
-   * ("no new co-signatures issue"). Done at every door before a repeat is
+   * (§C2: "the successor co-signs nothing"). Done at every door before a repeat is
    * answered: adoption co-signs the gap's legs and writes their receipts, so a
    * holder asking for the receipt of a leg the venue took for her must find it
    * on the first ask, not after a refusal that adopted as a side effect (found
@@ -1884,10 +1886,16 @@ export class Sequencer {
   }
 
   /**
-   * §C2: "Until then the predecessor's last commitment governs, no new
-   * co-signatures issue" — a successor that has taken over the state but not
-   * yet committed it is not the operator yet, and a replaced one is not any
-   * more. Asked of every backing an ACT touches, after the repeat is answered:
+   * §C2: "From the effective index the old attester's co-signatures stop
+   * counting" — a successor before its index is not the operator yet, however
+   * much of the book it holds, and a replaced one is not any more. Force at
+   * the CLOCK, deliberately: where an act signed now is first witnessed past
+   * that index (the venue's lag ahead) what this door co-signs dies with the
+   * handover, and that is the incumbent's and the payee's to read from the
+   * record (CLAUDE.md's party rule) — a door that shut on it was a lever any
+   * rule-holder's record could pull, one record per lag, superseding each
+   * before it arrived (slice 38's review and fix panel). Asked of every
+   * backing an ACT touches, after the repeat is answered:
    * a repeat is a read of the receipt book, not an act, and a retired operator
    * re-serving a receipt it gave in force is no new co-signature — refusing it
    * would deny the payee the one evidence the successor cannot produce. A

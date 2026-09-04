@@ -22,14 +22,15 @@ import { LocalVenue, VenueError, type Venue } from "../src/venue.js";
 import { KEYS, pub, SECRETS } from "./support.js";
 
 // §C2, succession: "A replacement is itself a witnessed object. It is signed by
-// whoever E's rule names, the backer by default, states the role, the successor
-// and the effective index... Each replacement names its predecessor, so the
-// chain from the original terms is walkable. Its effective index is no earlier
-// than the index at which it is itself witnessed, and it takes effect only from
-// the first index at which it has published its own commitment... Until then the
-// predecessor's last commitment governs... From the effective index the old
-// attester's co-signatures stop counting, which is why a wallet verifies the
-// chain rather than the key it remembers."
+// whoever E's rule names, the backer by default, and co-signed by the
+// successor, states the role, the successor and the effective index... Each
+// replacement names its predecessor, so the chain from the original terms is
+// walkable. Its effective index is later than the index at which it is itself
+// witnessed by at least the venue's lag plus one... and it takes effect
+// there... Until the effective index the predecessor governs and goes on
+// serving... From the effective index the old attester's co-signatures stop
+// counting, which is why a wallet verifies the chain rather than the key it
+// remembers."
 //
 // E's operator sits inside the name and invariant 1 forbids an edit, so a
 // replacement does not change it — it supersedes it on a record anyone can walk.
@@ -143,21 +144,23 @@ describe("§C2: the chain from the original terms is walkable", () => {
 
   it("walks a chain of two handovers", () => {
     const { venue, backing } = setup();
-    const first = replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 5n);
+    const first = replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 6n);
     at(venue, 5n);
     venue.publishReplacement(backing.name, first);
+    at(venue, 6n);
     commitAs(venue, SUCCESSOR_SECRET);
     at(venue, 20n);
     venue.publishReplacement(
       backing.name,
-      replacementBy(backing, SECRETS.backer, THIRD_SECRET, replacementHash(backing.name, first), 20n),
+      replacementBy(backing, SECRETS.backer, THIRD_SECRET, replacementHash(backing.name, first), 21n),
     );
+    at(venue, 21n);
     commitAs(venue, THIRD_SECRET);
 
     expect(operatorsOf(backing, venue)).toHaveLength(3);
-    expect(operatorAt(backing, venue, 4n)).toEqual(KEYS.operator);
-    expect(operatorAt(backing, venue, 19n)).toEqual(SUCCESSOR);
-    expect(operatorAt(backing, venue, 20n)).toEqual(THIRD);
+    expect(operatorAt(backing, venue, 5n)).toEqual(KEYS.operator);
+    expect(operatorAt(backing, venue, 20n)).toEqual(SUCCESSOR);
+    expect(operatorAt(backing, venue, 21n)).toEqual(THIRD);
     expect(isAnOperator(backing, venue, KEYS.operator)).toBe(true);
     expect(isAnOperator(backing, venue, THIRD)).toBe(true);
     expect(isAnOperator(backing, venue, KEYS.mallory)).toBe(false);
@@ -184,10 +187,11 @@ describe("§C2: two replacements naming one predecessor, and revocation before f
   it("naming the incumbent is not a handover, and does not freeze the chain", () => {
     const { venue, backing } = setup();
     at(venue, 5n);
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 5n));
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 6n));
     at(venue, 8n);
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD_SECRET, backing.name, 8n));
-    expect(operatorAt(backing, venue, 8n)).toEqual(THIRD);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD_SECRET, backing.name, 9n));
+    at(venue, 9n);
+    expect(operatorAt(backing, venue, 9n)).toEqual(THIRD);
   });
 
   it("re-naming the incumbent revokes a successor not yet in force", () => {
@@ -198,7 +202,7 @@ describe("§C2: two replacements naming one predecessor, and revocation before f
     at(venue, 5n);
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 20n));
     at(venue, 9n);
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 9n));
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 10n));
 
     at(venue, 25n);
     expect(operatorAt(backing, venue, 25n)).toEqual(KEYS.operator);
@@ -212,7 +216,7 @@ describe("§C2: two replacements naming one predecessor, and revocation before f
     at(venue, 5n);
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 20n));
     at(venue, 9n);
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 9n));
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 10n));
     at(venue, 15n);
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD_SECRET, backing.name, 30n));
 
@@ -252,7 +256,7 @@ describe("§C2: two replacements naming one predecessor, and revocation before f
     at(venue, 20n);
     expect(operatorAt(backing, venue, 20n)).toEqual(SUCCESSOR);
 
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD_SECRET, backing.name, 20n));
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD_SECRET, backing.name, 21n));
     // Read from further on, so index 20 really is a PAST index on the second
     // read: the property strictness buys is that a settled reading cannot move,
     // and reading it only at `now` does not show that.
@@ -311,7 +315,7 @@ describe("§C2: two replacements naming one predecessor, and revocation before f
     // superseded candidate rather than a live revocation, which is the milder
     // harm and not the one this test's name claims.
     at(venue, 12n);
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 12n));
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 13n));
 
     at(venue, 15n);
     venue.publishReplacement(backing.name, heir);
@@ -328,7 +332,7 @@ describe("§C2: two replacements naming one predecessor, and revocation before f
     at(venue, 5n);
     venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 20n));
     at(venue, 9n);
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 9n));
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 10n));
 
     expect(isNamedSuccessor(backing, venue, SUCCESSOR)).toBe(true);
     at(venue, 25n);
@@ -369,7 +373,10 @@ describe("§C2: a replacement counts only on the terms E set", () => {
     const { venue, backing } = setup();
     venue.publishReplacement(
       backing.name,
-      replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, new Uint8Array(32).fill(0xee), 0n),
+      // Dated past the void rule and the floor, so the predecessor filter is
+      // the refusal (a pre-existing fixture the review's inventory angle found
+      // refused by the void rule before its own rule was reached).
+      replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, new Uint8Array(32).fill(0xee), 1n),
     );
     commitAs(venue, SUCCESSOR_SECRET);
     at(venue, 10n);
@@ -389,11 +396,14 @@ describe("§C2: a replacement counts only on the terms E set", () => {
   });
 
   it("refuses a handover to the incumbent itself", () => {
+    // Dated past the floor (slice 38), so the walk's own rule is what refuses
+    // it — the review's inventory angle found the floor reaching this fixture
+    // first and the rule with one killer fewer.
     const { venue, backing } = setup();
     at(venue, 5n);
     venue.publishReplacement(
       backing.name,
-      replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 5n),
+      replacementBy(backing, SECRETS.backer, SECRETS.operator, backing.name, 6n),
     );
     commitAs(venue, SECRETS.operator);
     at(venue, 10n);
@@ -408,10 +418,11 @@ describe("§C2: a replacement counts only on the terms E set", () => {
     // second was witnessed (the dead-successor rule, below).
     const { venue, backing } = setup();
     at(venue, 5n);
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 5n));
-    commitAs(venue, SUCCESSOR_SECRET);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 6n));
     at(venue, 6n);
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD_SECRET, backing.name, 6n));
+    commitAs(venue, SUCCESSOR_SECRET);
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, THIRD_SECRET, backing.name, 7n));
+    at(venue, 7n);
     commitAs(venue, THIRD_SECRET);
     at(venue, 20n);
     expect(operatorAt(backing, venue, 20n)).toEqual(SUCCESSOR);
@@ -422,7 +433,8 @@ describe("§C2: the grade follows the incumbent", () => {
   it("measures silence on the operator in force, not the key E names", () => {
     const { venue, backing } = setup();
     at(venue, 5n);
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 5n));
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 6n));
+    at(venue, 6n);
     commitAs(venue, SUCCESSOR_SECRET);
     // The genesis operator has published nothing at all and would be silent;
     // the successor just committed, so the backing is not.
@@ -434,9 +446,10 @@ describe("§C2: the grade follows the incumbent", () => {
   it("grades the successor once IT goes quiet", () => {
     const { venue, backing } = setup();
     at(venue, 5n);
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 5n));
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 6n));
+    at(venue, 6n);
     commitAs(venue, SUCCESSOR_SECRET);
-    at(venue, 5n + SILENCE.noCommitmentDuration + 1n);
+    at(venue, 6n + SILENCE.noCommitmentDuration + 1n);
     expect(operatorAt(backing, venue, venue.witnessedIndex())).toEqual(SUCCESSOR);
     expect(isSilent(venue, backing)).toBe(true);
   });
@@ -473,18 +486,19 @@ describe("§C2: the venue records a replacement and judges nothing", () => {
 
   it("carries a successor that has never committed, once its index has come", () => {
     const { venue, backing } = setup();
-    // Effective one index past the incumbent's force: a record whose effective
-    // index does not advance past its predecessor's is void (§C2's
-    // strictly-later rule — the 35d fix round's eraser), so the earliest a
-    // genesis handover can land is index 1.
+    // Witnessed at 1, effective 2: the least lead this venue's floor allows
+    // (slice 38 — one more than its lag of zero), and past the incumbent's
+    // force at 0 as §C2's strictly-later rule requires. The earliest a
+    // genesis handover can land here is index 2.
     at(venue, 1n);
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 1n));
-    // Published, co-signed, and effective now — so it is in force now. Under
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 2n));
+    at(venue, 2n);
+    // Published, co-signed, and its index come — so it is in force now. Under
     // the retired rule this same record left the successor outside the chain
     // until it published a commitment of its own, which is what let a key that
     // never touched the backing be seated by its own unrelated business.
     expect(venue.replacementsFor(backing.name)).toHaveLength(1);
-    expect(operatorAt(backing, venue, 1n)).toEqual(SUCCESSOR);
+    expect(operatorAt(backing, venue, 2n)).toEqual(SUCCESSOR);
     expect(isAnOperator(backing, venue, SUCCESSOR)).toBe(true);
     expect(venue.firstCommitmentFor(SUCCESSOR)).toBeUndefined();
   });
@@ -655,9 +669,10 @@ describe("§C2: a successor that does not serve the state in full", () => {
     const served = incumbent.commit();
 
     at(venue, 5n);
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 5n));
-    // The successor commits an EMPTY log for this backing rather than the one
-    // it was handed, and takes force on it.
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 6n));
+    at(venue, 6n);
+    // The successor, in force, commits an EMPTY log for this backing rather
+    // than the one it was handed.
     const dropped = [{ name: backing.name, opLog: [] }];
     const theirs = {
       snapshots: dropped,
@@ -707,7 +722,7 @@ describe("§C2: a takeover is all or nothing", () => {
     venue.publish(rooted.commitment);
 
     at(venue, 5n);
-    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 5n));
+    venue.publishReplacement(backing.name, replacementBy(backing, SECRETS.backer, SUCCESSOR_SECRET, backing.name, 6n));
     const successor = new Sequencer(SUCCESSOR_SECRET, venue);
     successor.register(backing, signBacking(SECRETS.backer, backing));
 
@@ -771,8 +786,8 @@ describe("§C2: a publication is judged against the record that governed at its 
   // the index a successor takes force it had nothing before, the quiet time
   // read from the venue's genesis, and an orderly handover opened one gap index
   // in which the operator adopted legs no verifier could resolve. The operator
-  // in force just before the index is whose record governed: "Until then the
-  // predecessor's last commitment governs."
+  // in force just before the index is whose record governed: "Until the
+  // effective index the predecessor governs and goes on serving."
   function punctualThenHandedOver(lastCommit: bigint, handoverAt: bigint) {
     const { venue, backing } = setup();
     const incumbent = new Sequencer(SECRETS.operator, venue);
@@ -875,7 +890,8 @@ describe("§C2: what a door asks of a backing it touches, and of one it only rea
     incumbent.commit();
     // GOLD, and only GOLD, goes to a successor that takes force.
     at(venue, 5n);
-    venue.publishReplacement(gold.name, replacementBy(gold, SECRETS.backer, SUCCESSOR_SECRET, gold.name, 5n));
+    venue.publishReplacement(gold.name, replacementBy(gold, SECRETS.backer, SUCCESSOR_SECRET, gold.name, 6n));
+    at(venue, 6n);
     commitAs(venue, SUCCESSOR_SECRET);
     expect(operatorAt(gold, venue, venue.witnessedIndex())).toEqual(SUCCESSOR);
     expect(operatorAt(eur, venue, venue.witnessedIndex())).toEqual(KEYS.operator);
@@ -944,13 +960,14 @@ describe("§C2: a re-prepare is written against the demanded backing's record, s
     old.commit();
     // EUR — and only EUR — goes to a successor, which takes force.
     at(venue, 20n);
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 20n));
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SUCCESSOR_SECRET, eur.name, 21n));
+    at(venue, 21n);
     commitAs(venue, SUCCESSOR_SECRET);
     expect(operatorAt(eur, venue, venue.witnessedIndex())).toEqual(SUCCESSOR);
     // The old operator has been quiet past GOLD's duration: it commits before it
     // serves GOLD again, from the next index (c2b-return-from-silence).
     old.commit();
-    at(venue, 21n);
+    at(venue, 22n);
     // The lapsed leg is withdrawn at the old operator (still GOLD's).
     const out = { backing: gold, demandHash: hash, holder: KEYS.alice, nonce: 1n };
     old.submitWithdrawal(out, ed25519.sign(encodeWithdrawal(out), SECRETS.alice));

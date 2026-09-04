@@ -597,7 +597,7 @@ describe("§C2: the remedy, and the successor that can now take it", () => {
     venue.advance(10n);
     const dropped = commitWithout(venue, sequencer, eur); // seq 1 at 10: the pin
     venue.advance(5n);
-    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, 15n));
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.backer, SECRETS.carol, 16n));
     venue.advance(1n);
     const heir = new Sequencer(SECRETS.carol, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));

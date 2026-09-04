@@ -24,6 +24,10 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-04` [Handoff: slice 38 is built, reviewed, fixed five times over, and waits on the maintainer](decisions/2026-09.md#2026-09-04--handoff-slice-38-is-built-reviewed-fixed-five-times-over-and-waits-on-the-maintainer)
+- `2026-09-04` [The slice-38 round: the floor held, the door was a lever, and the fixes](decisions/2026-09.md#2026-09-04--the-slice-38-round-the-floor-held-the-door-was-a-lever-and-the-fixes)
+- `2026-09-03` [Panel: the lead time — the floor is the venue's lag plus one, and a door reads force where an act signed now is first witnessed](decisions/2026-09.md#2026-09-03--panel-the-lead-time--the-floor-is-the-venues-lag-plus-one-and-a-door-reads-force-where-an-act-signed-now-is-first-witnessed)
+- `2026-09-03` [Four recommendations, decided: the lead time now, the platform verifier and the root framing next, the count method and the drifting clock deferred](decisions/2026-09.md#2026-09-03--four-recommendations-decided-the-lead-time-now-the-platform-verifier-and-the-root-framing-next-the-count-method-and-the-drifting-clock-deferred)
 - `2026-09-03` [Handoff: slice 37 is built and reviewed, and waits on the maintainer](decisions/2026-09.md#2026-09-03--handoff-slice-37-is-built-and-reviewed-and-waits-on-the-maintainer)
 - `2026-09-02` [The cold walk's round: the memo held, the venue beside it did not, and the fixes](decisions/2026-09.md#2026-09-02--the-cold-walks-round-the-memo-held-the-venue-beside-it-did-not-and-the-fixes)
 - `2026-09-02` [Panel: the cold walk — a record is judged once, against the venue that answered it, and junk leaves nothing behind](decisions/2026-09.md#2026-09-02--panel-the-cold-walk--a-record-is-judged-once-against-the-venue-that-answered-it-and-junk-leaves-nothing-behind)

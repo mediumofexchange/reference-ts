@@ -123,18 +123,21 @@ that produced it is in the decision log — reach it through the index in
   current seat keeps its uncommitted tail, a stale one drops it to the mark —
   never below it: a takeOver serves no LESS than the book the record stands on.
   A replacement not strictly later than the link it replaces is void unless
-  it names the incumbent (a revocation). A key seated anew commits before it
-  co-signs (`shut`, the same door as the return from silence), and a
-  commitment never drops an in-force backing silently (`commit`'s per-call
-  `dropping`; `awaitingTakeover` is the same condition as a question). **The
-  empty book the walk cannot pay for is a signed claim**: the walk licenses
-  it where the record genuinely runs out; elsewhere no door can tell a
-  backing the record never carried from a lost book, so `commit({ opening })`
-  roots it empty for one exhibit — the record's last commitment, shown to
-  carry nothing for it — and the operator's signature for the rest, where a
-  false claim is a witnessed rewritten history any holder proves;
-  registering is holding the book only where the record pins nothing,
-  genesis included.
+  it names the incumbent (a revocation). **A replacement's lead is floored at
+  the venue's lag plus one** (`lag()`, which the venue's id must bind;
+  `admitted` refuses below it), so every party reads the record before the
+  last act it can still land in the incumbent's term; no door here shuts on
+  a pending record. A key seated anew commits before it co-signs (`shut`, the
+  same door as the return from silence), and a commitment never drops an
+  in-force backing silently (`commit`'s per-call `dropping`; `awaitingTakeover`
+  is the same condition as a question). **The empty book the walk cannot pay
+  for is a signed claim**: the walk licenses it where the record genuinely
+  runs out; elsewhere no door can tell a backing the record never carried
+  from a lost book, so `commit({ opening })` roots it empty for one exhibit —
+  the record's last commitment, shown to carry nothing for it — and the
+  operator's signature for the rest, where a false claim is a witnessed
+  rewritten history any holder proves; registering is holding the book only
+  where the record pins nothing, genesis included.
 - **Every operation is signed by the party the law names, over that backing's
   own message, at that signer's next nonce — except the commit.** §C3's commit
   names no backing, carries no nonce, and is signed by every party the lock
@@ -236,7 +239,7 @@ traversal.
 
 ## What the parties must do, that no code here enforces
 
-Nine rules the protocol cannot check but the reference implementation must not
+Ten rules the protocol cannot check but the reference implementation must not
 leave unsaid. Each was reached by asking what a failing sequencer costs
 somebody, and is recorded in the decision log with its reasoning.
 
@@ -326,6 +329,12 @@ the move to a blinded construction — which is why they are rules, not code.
   §C2 makes the exposure "a signed field rather than operational discretion": E
   carries the interval with the venue it is read on, so a payee can tell a fast
   operator running late from a slow one running on time (`isOverdue`).
+- **Commit at the first clock you can read a handover replacing you, co-sign
+  nothing on or under that backing once the venue's lag reaches its index, and
+  read a pending handover before you treat a payment as final.** The floor buys
+  one index of notice; what you still hold uncommitted then is a slow block's
+  cost — and a record rolled before it arrives freezes only a party that stops
+  on every pending one, so the caution is yours to decline (§C2).
 - **Draw a fresh random salt per attempt** — what "never reuse an attempt id you
   signed a commit for" became. A commit binds its id and nothing else, so an
   object you signed converts any later lock under that id whose parties you are
@@ -410,10 +419,8 @@ collision is a signature-forgery class; the full list must be readable on one
 screen.
 
 **Efficiency where it is free.** Prefer the direct algorithm over a clever one,
-and the allocation-free form over the allocating one, when it is no less
-readable — exact-integer arithmetic over string round-trips, one buffer over
-per-item allocation, a keyed lookup over a linear scan. Do not trade clarity
-for speed anywhere else; this is a reference implementation, not a product.
+and the allocation-free form over the allocating one, when no less readable.
+Do not trade clarity for speed elsewhere; this is a reference, not a product.
 
 ## Workflow
 
@@ -482,18 +489,11 @@ for speed anywhere else; this is a reference implementation, not a product.
 
 ## Toolchain
 
-Node 24, TypeScript (strict), Vitest.
+Node 24, TypeScript (strict), Vitest: `npm test`, `npm run typecheck`.
 
-```
-npm test           # run all tests
-npm run typecheck  # tsc --noEmit
-```
-
-Scratch scripts (`scratch/*.mjs`, gitignored) import `./src/*.js`, so they run
-against a compiled copy: `npx tsc --noEmit false --outDir <build> --rootDir .`
-from the repo, then copy the script beside `<build>/src`, link `node_modules`
-there, and `node` it from `<build>`.
+Scratch scripts (`scratch/*.mjs`, gitignored) import `./src/*.js`, so build a
+copy first — `npx tsc --noEmit false --outDir <build> --rootDir .` — then put
+the script beside `<build>/src`, link `node_modules` there, and `node` it.
 
 `npm run check:docs` holds CLAUDE.md to its line budget and keeps the decision
-index and `decisions/` in agreement. CI runs it, along with typecheck, the
-tests on Node 20 and 24, and a `npm pack` of what would be published.
+index and `decisions/` in agreement; CI runs it, typecheck, tests, `npm pack`.

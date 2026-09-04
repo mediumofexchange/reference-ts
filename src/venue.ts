@@ -199,6 +199,17 @@ export interface WitnessedOp {
  *   - **Witnessed order.** Records come out in the order they were witnessed:
  *     the walk's memo keeps a record's first POSITION as its first witnessing,
  *     which the walk's own sort used to normalise (the slice-37 verification).
+ *   - **A declared lag, bound to the id.** `lag()` is a constant of the
+ *     venue's finality rule — the least number of indices by which an act
+ *     signed at its clock is witnessed after it — never a view's state, so it
+ *     answers unsynced, and the id a backing declares must determine it, as
+ *     `ergoVenueId` does; the index a view reports a record at is the same
+ *     kind of word. The walk floors a replacement's lead on it (§C2,
+ *     slice 38). Nothing here can check the number: a view declaring less
+ *     than the venue lags reopens the erasure the floor closes, one declaring
+ *     more holds a retired key in force, and two views answering one id with
+ *     two lags put two honest readers permanently at odds about a past index
+ *     (the slice-38 review's security angle, S6).
  *   - **Reads answer or throw `VenueError`.** A read that throws anything else
  *     is out of contract: verifiers wrap their bodies in `answering`, which
  *     converts a foreign throw into a false — and at a door a false is
@@ -208,6 +219,22 @@ export interface Venue {
   /** This venue's identity, as a copy — the value E declares to name it. */
   readonly id: Uint8Array;
   witnessedIndex(): bigint;
+  /**
+   * This venue's **lag**: the least number of indices by which an act a party
+   * signs, reading this venue's clock, is witnessed after that clock — zero
+   * where publication lands at the clock's own index (this local stand-in),
+   * the finality depth plus one where a chain includes in its next block and
+   * the venue reads behind the chain by that depth (`ErgoVenue`). A constant
+   * of the venue's finality rule, which the venue's id must commit to — as
+   * `ergoVenueId` commits to the depth — so that naming the venue agrees it;
+   * never a view's state, so it answers on an unsynced view. One reader,
+   * §C2's (slice 38): the walk floors a replacement's lead at the lag plus
+   * one (`replacement.ts`), so every party reads the record before the last
+   * act it can still land in the incumbent's term; what a party does with
+   * that is CLAUDE.md's party rule, since a door a rule-holder's record can
+   * shut is a lever (the slice-38 review).
+   */
+  lag(): bigint;
   publish(commitment: Commitment): void;
   publishOp(backingName: Uint8Array, op: PublishedOp): void;
   publishReplacement(backingName: Uint8Array, replacement: Replacement): void;
@@ -276,6 +303,11 @@ export class LocalVenue implements Venue {
    */
   witnessedIndex(): bigint {
     return this.height;
+  }
+
+  /** Publication lands at the clock's own index here, so the lag is zero. */
+  lag(): bigint {
+    return 0n;
   }
 
   /**
@@ -459,15 +491,15 @@ export class LocalVenue implements Venue {
 
   /**
    * The index at which this key first published a commitment here at or after
-   * `notBefore`, or undefined if it never has. §C2 gives a successor force only
-   * "from the first index at which it has published its own commitment", so this
-   * is the second half of the two-stage handover.
+   * `notBefore`, or undefined if it never has. Force is a signed field now
+   * (§C2, 2026-08-29), so this no longer decides a handover; its one reader is
+   * `eraLapsed`, which asks for the first commitment a key made after its era
+   * began.
    *
-   * The bound matters: asked from genesis, a successor that already operates
-   * some other backing answers with a commitment it made long before anyone
-   * named it, and the second stage means nothing. Asked from the index the
-   * handover was witnessed at, the commitment is at least one it could have made
-   * for this handover.
+   * The bound matters: asked from genesis, a key that already operates some
+   * other backing answers with a commitment it made long before the era in
+   * question, and the answer means nothing. Asked from the era's own floor,
+   * the commitment is at least one made inside it.
    */
   firstCommitmentFor(operator: Uint8Array, notBefore = 0n): bigint | undefined {
     const log = this.byOperator.get(bytesToHex(operator)) ?? [];

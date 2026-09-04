@@ -209,23 +209,28 @@ describe("§C2b: a dark heir does not brick the backing", () => {
   });
 });
 
-describe("§C2: zero lead time hands over late, never locked out", () => {
-  it("the heir takes the pinned state on at or after the effective index", () => {
-    // A replacement leaving no lead time hands over to an operator that is
+describe("§C2: the least lead hands over late, never locked out", () => {
+  it("the heir takes the pinned state on at the effective index, one index after the record", () => {
+    // A replacement leaving only the floor hands over to an operator that is
     // LATE, which is graded — not to one that is locked out, which is
     // terminal. Under the retired rule the in-force guard fired here and the
     // heir's one move, an empty commitment, killed the holder's redemption.
+    // (This block once declared ZERO lead — effective at the record's own
+    // index — which slice 38's floor made no record at all; the claim is the
+    // same one index later.)
     const venue = new LocalVenue();
     const eur = backingFor(venue);
     const { state } = serving(venue, eur);
 
     at(venue, 10n);
-    // Effective the index it is witnessed at: zero lead time — and the heir
-    // acts AT that index, which is the boundary the name claims.
-    venue.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 10n));
+    // Effective one index after it is witnessed: the floor on a venue with no
+    // lag — and the heir acts AT that index, which is the boundary the name
+    // claims.
+    venue.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 11n));
 
     const heir = new Sequencer(HEIR_SECRET, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));
+    at(venue, 11n);
     heir.takeOver(eur, state);
     heir.commit();
 
@@ -860,23 +865,25 @@ describe("§C2: the mark, the gate, and the walk cache — the round's killers",
   it("a record published without the clock moving is seen at the next door", () => {
     // The walk cache's key is (witnessed index, record count) — BOTH halves.
     // A venue can witness a record without its clock moving, and the door must
-    // see it: the count half of the key is what this test kills. The venue
-    // sits at 5 so the record's effective index advances past the incumbent's
-    // force (§C2's strictly-later rule) — the point is the unmoved clock
-    // BETWEEN the two submissions, not a degenerate record.
+    // see it: the count half of the key is what this test kills. An heir named
+    // at 3 takes the book on at 5 — the possession door, which reads the
+    // walk — and the rule-holder revokes it at 5 with the clock unmoved: the
+    // next door reads the revocation, or the heir goes on holding a seat it
+    // lost. (Before slice 38 this used the incumbent's own door and a record
+    // seated at its own index; force cannot arrive at an unmoved clock now,
+    // so possession is the door that can still change there.)
     const venue = new LocalVenue();
     const eur = backingFor(venue);
-    const { sequencer: original } = serving(venue, eur);
+    const { state } = serving(venue, eur);
+    at(venue, 3n);
+    venue.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 20n));
+    const heir = new Sequencer(HEIR_SECRET, venue);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
     at(venue, 5n);
-    const first = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
-    expect(original.submitTransfer(first.op, first.signature).position).toBe(1n);
-    // Seated and effective at THIS index, with the clock unmoved.
-    venue.publishReplacement(
-      eur.name,
-      replacementBy(eur, HEIR_SECRET, venue.witnessedIndex()),
-    );
-    const second = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 1n);
-    expect(() => original.submitTransfer(second.op, second.signature)).toThrow(SequencerError);
+    heir.takeOver(eur, state);
+    // Revoked at THIS index, with the clock unmoved.
+    venue.publishReplacement(eur.name, replacementBy(eur, SECRETS.operator, 6n));
+    expect(() => heir.takeOver(eur, state)).toThrow(/neither in force nor pending/);
   });
 
   it("a rotation beyond the pending horizon is seen when its index arrives, with no new record published", () => {
@@ -979,19 +986,39 @@ describe("§C2: the fix round — the seat is a link and a provenance, and every
   });
 
   it("a replacement whose effective index does not advance past its predecessor's is void, and erases nothing", () => {
-    // The eraser, dead: one record witnessed at 0 with effective 0 used to
-    // empty the genesis term retroactively — the committed book placed in no
-    // term, proved nothing, accused nobody, and no key the record could name
-    // could ever serve it. Void, the incumbent stays in force, its book stays
-    // its book, and the reading at every index is what it always was.
+    // The eraser, dead: one record dated a link's own force index used to
+    // empty that term retroactively — the committed book placed in no term,
+    // proved nothing, accused nobody, and no key the record could name could
+    // ever serve it. Pre-armed, because that is the only shape left: slice
+    // 38's floor makes a record dated its own index no record at all, so a
+    // record dated AT a link's force index has to be published before that
+    // index arrives (the inventory angle proved the floor otherwise reached
+    // this fixture first and left the void rule with no killer). The heir's
+    // seat at 10 is named at 5; at 9 the rule-holder names a rescuer at the
+    // heir's own link, effective 10 — the heir's force index. Void: the heir
+    // takes force at 10 and keeps it, serves, and the reading at every index
+    // is what it always was.
     const venue = new LocalVenue();
     const eur = backingFor(venue);
-    const { sequencer: original } = serving(venue, eur);
-    venue.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 0n));
-    expect(operatorAt(eur, venue, venue.witnessedIndex())).toEqual(KEYS.operator);
+    const { state } = serving(venue, eur);
     at(venue, 5n);
+    const first = replacementBy(eur, HEIR_SECRET, 10n);
+    venue.publishReplacement(eur.name, first);
+    const heir = new Sequencer(HEIR_SECRET, venue);
+    heir.register(eur, signBacking(SECRETS.backer, eur));
+    heir.takeOver(eur, state);
+    at(venue, 9n);
+    venue.publishReplacement(
+      eur.name,
+      replacementBy(eur, RESCUER_SECRET, 10n, replacementHash(eur.name, first)),
+    );
+    at(venue, 10n);
+    expect(operatorAt(eur, venue, 10n)).toEqual(HEIR);
     const move = transferBy(eur, SECRETS.alice, KEYS.alice, KEYS.bob, 10n, 0n);
-    expect(original.submitTransfer(move.op, move.signature).position).toBe(1n);
+    expect(heir.submitTransfer(move.op, move.signature).position).toBe(1n);
+    at(venue, 15n);
+    expect(operatorAt(eur, venue, 15n)).toEqual(HEIR);
+    expect(operatorAt(eur, venue, 9n)).toEqual(KEYS.operator);
   });
 
   it("a revocation at the boundary still revokes: naming the incumbent is exempt from the strictly-later rule", () => {
@@ -1198,11 +1225,13 @@ describe("§C2: a handover tears a set's tail per backing, and the stranded half
 });
 
 describe("§C2b: the emergency handover executes at the effective index", () => {
-  it("a successor takes an earlier state on evidence the pinned commitment dropped the backing, with zero lead time", () => {
+  it("a successor takes an earlier state on evidence the pinned commitment dropped the backing, with the least lead", () => {
     // The one remedy §C2b gives a holder against an operator that dropped
     // their backing was gated on a lead time §C2 does not guarantee exists.
     // With the target pinned by index, the evidence path opens at the
-    // effective index like everywhere else.
+    // effective index like everywhere else — here one index after the record,
+    // the floor (this test once declared zero lead, which slice 38 made no
+    // record at all).
     const venue = new LocalVenue();
     const eur = backingFor(venue);
     const { state } = serving(venue, eur);
@@ -1220,12 +1249,13 @@ describe("§C2b: the emergency handover executes at the effective index", () => 
     venue.publish(droppedState.commitment);
 
     at(venue, 15n);
-    // Zero lead time: seated the index it is witnessed — and everything below
-    // happens AT that index, which is the boundary the name claims.
-    venue.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 15n));
+    // The least lead: seated one index after it is witnessed — and everything
+    // below happens AT that index, which is the boundary the name claims.
+    venue.publishReplacement(eur.name, replacementBy(eur, HEIR_SECRET, 16n));
 
     const heir = new Sequencer(HEIR_SECRET, venue);
     heir.register(eur, signBacking(SECRETS.backer, eur));
+    at(venue, 16n);
     heir.takeOver(eur, state, droppedState);
     heir.commit();
     expect(heir.outstanding(eur)).toBe(100n);
