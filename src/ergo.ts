@@ -191,24 +191,20 @@ interface Witnessed<T> {
  * chain took it. It is a position in a record, never evidence: an
  * equivocation is proved from two signatures and needs no venue at all.
  *
- * Sorted by index and then by SEQUENCE before the filter, so that two
- * commitments of one key in one block are read the same way by every reader
- * whatever order a node hands them back.
+ * **Two commitments of one key in one block need no tiebreak here**, which is
+ * worth saying because the first draft had one. Whichever of them a node hands
+ * back first is the one kept, and the other is skipped — but no reader can
+ * tell: `latestFor` and `witnessedAtFor` answer with the latest at or before an
+ * index, and a commitment sharing its index with a higher one is never that.
+ * So both orders give every reader the same answers, and a sort would be a
+ * second mechanism for a property this one already has (the fix round's own
+ * sweep, where the tiebreak's mutant had no killer because it has no effect).
+ * What no reader can name either way is the LOWER of the two: its era reads
+ * `"died"`, which is the safe direction and a recorded residue.
  */
 function extending(gathered: Witnessed<Commitment>[]): Witnessed<Commitment>[] {
-  const ordered = [...gathered].sort((a, b) =>
-    a.at < b.at
-      ? -1
-      : a.at > b.at
-        ? 1
-        : a.value.sequence < b.value.sequence
-          ? -1
-          : a.value.sequence > b.value.sequence
-            ? 1
-            : 0,
-  );
   const kept: Witnessed<Commitment>[] = [];
-  for (const witnessed of ordered) {
+  for (const witnessed of gathered) {
     const top = kept[kept.length - 1];
     if (top !== undefined && witnessed.value.sequence <= top.value.sequence) continue;
     kept.push(witnessed);

@@ -451,6 +451,38 @@ describe("§C2b: what a dropped commitment costs the operator that lost it", () 
     }
   });
 
+  it("stamps the commitment it last SIGNED even where the record holds none, so an act taken between an expiry and the repair is not stamped as the genesis era", () => {
+    // `era()` read from the record alone, and after an expiry the record holds
+    // nothing this operator signed — so it stamped era 0, which says "I had
+    // committed nothing" and is false. What follows from that is the accusing
+    // direction: era 0 resolves to index zero, the repair commitment becomes
+    // an ordinary end to it, and an act the repair does not carry reads
+    // `contradicted` rather than lapsing with the commitment that died.
+    const chain = new LocalVenue();
+    class DropsFirst extends LaggingView {
+      dropping = true;
+      override publish(commitment: Commitment): void {
+        if (this.dropping) return;
+        super.publish(commitment);
+      }
+    }
+    const view = new DropsFirst(chain, 2n);
+    const eur = backingFor(view);
+    const operator = serving(chain, view, eur);
+    const lost = operator.commit(); // sequence 0, dropped
+    advanceClock(chain, view, view.lag());
+    expect(view.latestFor(KEYS.operator)).toBeUndefined();
+
+    // The repair's first half: take over what the record holds — nothing — and
+    // co-sign before committing again.
+    view.dropping = false;
+    operator.takeOver(eur);
+    const paid = transferBy(eur, KEYS.carol, 30n, 0n);
+    const receipt = operator.submitTransfer(paid.op, paid.signature);
+    expect(receipt.after).toBe(lost.commitment.sequence + 1n);
+    expect(receipt.after).not.toBe(0n);
+  });
+
   it("a process that commits before it registers anything waits the venue's lag too", () => {
     // The boot wait was armed at `register`, so the one boot it is named for
     // — a process that commits before registering what it serves — went

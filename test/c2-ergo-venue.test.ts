@@ -14,7 +14,7 @@ import { encodePublishedOp } from "../src/oplog.js";
 import { encodeTransferMessage } from "../src/messages.js";
 import { demandHash, encodeDemand, encodeLock, type DemandOp, type LockOp } from "../src/presentation.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
-import { isSilent, provesHolding, quietFor } from "../src/recovery.js";
+import { eraIndex, isSilent, provesHolding, quietFor } from "../src/recovery.js";
 import { VenueError } from "../src/venue.js";
 import { encodeReplacement, operatorAt, replacementMessage, ROLE_OPERATOR } from "../src/replacement.js";
 import { KEYS, SECRETS } from "./support.js";
@@ -874,8 +874,21 @@ describe("§C2: a venue's record for one key rises in sequence as it rises in in
     const b = venue();
     await a.sync(forward, [backing]);
     await b.sync(backward, [backing]);
+    // The extend rule is the whole of it: whichever of the two a node hands
+    // back first is the one kept, and no reader can tell, because the record
+    // only ever answers with the latest commitment at or before an index and
+    // one sharing its index with a higher one is never that. So both readers
+    // agree everywhere — which is the property, the record not being a fact
+    // about which node you asked.
     expect(ordered(a)).toBe(2n);
     expect(ordered(b)).toBe(2n);
     expect(a.witnessedAtFor(KEYS.operator)).toBe(b.witnessedAtFor(KEYS.operator));
+    for (const era of [1n, 2n, 3n, 4n]) {
+      expect(eraIndex(b, KEYS.operator, era)).toEqual(eraIndex(a, KEYS.operator, era));
+    }
+    // And what neither can name is the LOWER of the two: its era reads as a
+    // commitment the record moved past, which is the excusing direction and a
+    // recorded residue — a read by sequence would name it exactly.
+    expect(eraIndex(a, KEYS.operator, 2n)).toBe("died");
   });
 });
