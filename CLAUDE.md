@@ -3,23 +3,20 @@
 TypeScript reference implementation of the **Medium of Exchange Protocol**:
 one object `B = (K, P, R, E)`, claims held against it, wallets, and the law.
 
-Published to npm as `@mediumofexchange/reference`, under the `next` dist-tag
-while the API moves.
+Published to npm as `@mediumofexchange/reference` under the `next` dist-tag.
 
 Three names, three jobs, so it is clear which one a change belongs to:
-
-- **Money from First Principles** — the paper. Why the object is what it is.
-  Keeps its own name; it is an argument, and arguments are cited, not
-  versioned.
-- **Medium of Exchange Protocol** — what `construction.md` and `extensions.md`
-  define. The thing that gets built, and the thing an implementation tracks.
-- **reference-ts** — this repository. One way to build it.
+**Money from First Principles** is the paper — why the object is what it is,
+cited rather than versioned. The **Medium of Exchange Protocol** is what
+`construction.md` and `extensions.md` define: the thing built, and the thing
+an implementation tracks. **reference-ts** is this repository, one way to
+build it.
 
 ## The spec is a reference, not gospel
 
-- Spec: https://github.com/mediumofexchange/money-from-first-principles
-  (the derivation is in `money-from-first-principles.md`, the build machinery
-  in `construction.md`, optional profiles in `extensions.md`).
+- Spec: https://github.com/mediumofexchange/money-from-first-principles — the
+  derivation in `money-from-first-principles.md`, the build machinery in
+  `construction.md`, optional profiles in `extensions.md`.
 - The code tracks the spec as it stands, not a snapshot. When the spec
   changes in a way that touches implemented code, the code changes to match;
   divergence between the two is a bug in one of them. Check the spec repo for
@@ -50,15 +47,12 @@ triggers, pro-rata. Cryptography is limited to hashes and signatures
 Construction.md §C0 says: an implementation that violates an invariant is a
 different system. These are the ones that bind every line of code here.
 
-None of them is sacred. Any rule below can change — but a change needs a very
-good reason, stated explicitly and agreed with the maintainer, and it happens by editing
-this file (and the spec, where the spec is the source). What is never
-acceptable is silent drift: code that quietly stops following a rule while the
-rule still stands.
-
-Each rule says what must hold and names the code that holds it. The reasoning
-that produced it is in the decision log — reach it through the index in
-`DECISIONS.md` rather than restating it here.
+None of them is sacred. Any rule below can change — with a good reason, agreed
+with the maintainer, by editing this file and the spec where the spec is the
+source. What is never acceptable is silent drift: code that quietly stops
+following a rule while the rule still stands. Each rule says what must hold and
+names the code that holds it; the reasoning is in the decision log, reached
+through the index in `DECISIONS.md` rather than restated here.
 
 - **All quantities, counts, and payout arithmetic use `bigint`.** The
   JavaScript `number` type is a float; a rounding error in this system is a
@@ -84,6 +78,11 @@ that produced it is in the decision log — reach it through the index in
 - **`outstanding = issued − burned`**, in claim quantity, per backing, at every
   published moment (inv 10). Presentation destroys nothing; only a burn lowers
   the count.
+- **A receipt names the commitment its operator last SIGNED**, never the index
+  that commitment was witnessed at, and the record answers three ways
+  (`eraIndex`): it holds it, it has not reached it, or it moved past it
+  without ever holding it — the last being a return from silence under the
+  declared duration, which is what a dropped commitment leaves.
 - **An unaccompanied claim is inert, never invalid, and still transferable**
   (inv 17).
 - **Time is a witnessed index, never a clock** (inv 21, 24). Every instant a
@@ -112,14 +111,15 @@ that produced it is in the decision log — reach it through the index in
   commitment paid with an EXHIBIT (that commitment's served state, matched to
   the venue's answer by identity and shown to carry nothing) — ending at the
   state offered (matched by identity, carrying) or at the empty book where
-  the record runs out. The handover and the resume are the zero-exhibit
-  case, §C2b's walk-back the k-exhibit case, and nothing the door compares
-  against is the caller's. The seat is a link WITH a provenance — the pin is
-  the identity of the commitment the record stands on, written by `takeOver`
-  and rewritten by `commit` — and `serves` (custody AND force, asked at every
-  co-signing door) compares the seat to the chain's tip and the pin to the
-  record's unbounded answer, so a lost book, a superseded twin and a stale
-  handover copy are one detectable condition. **Currency is `serves`**: a
+  the record runs out, and nothing the door compares against is the caller's. The seat is a link WITH a provenance — the pin is
+  the commitment the record stands on, `over` the one it stood on, written by
+  `takeOver` and rewritten by `commit` — and `serves` (custody AND force, at
+  every co-signing door) compares the seat to the chain's tip and the pin to
+  the record's unbounded answer, **or to this operator's own published-and-
+  unread commitment while the record has not moved off `over`**: a book its
+  own signature put the record on is AHEAD of the record, not behind it. So a
+  lost book, a superseded twin and a stale handover copy are one detectable
+  condition, at the index they always were. **Currency is `serves`**: a
   current seat keeps its uncommitted tail, a stale one drops it to the mark —
   never below it: a takeOver serves no LESS than the book the record stands on.
   A replacement not strictly later than the link it replaces is void unless
@@ -127,7 +127,15 @@ that produced it is in the decision log — reach it through the index in
   twice the venue's lag plus one** (`lag()`, which the venue's id must bind;
   `admitted` refuses below it), so every party reads the record before the
   last act it can still land in the incumbent's term; no door here shuts on
-  a pending record. A key seated anew commits before it co-signs (`shut`, the
+  a pending record. **One commitment stands in flight**: the next waits for the
+  record to show it or for the lag to pass (`inFlight`), which turns a dropped
+  transaction into a stale seat one `takeOver` from repair; its sequence is one
+  past the highest this operator has SIGNED, or a transaction the chain
+  declined frames the operator that signed it. **A venue's record for one key
+  rises in sequence as it rises in index** — a chain orders nothing, so
+  `ErgoVenue` keeps only what strictly extends — or a commitment anyone can
+  copy off the chain and re-post moves the record's last, and every reading
+  taken against it. A key seated anew commits before it co-signs (`shut`, the
   same door as the return from silence), and a commitment never drops an
   in-force backing silently (`commit`'s per-call `dropping`; `awaitingTakeover`
   is the same condition as a question). **The empty book the walk cannot pay
@@ -228,10 +236,9 @@ traversal.
   `H(salt ‖ venue ‖ timeout ‖ parties)` (`attemptIdOf`, checked in the law):
   invariant 1's move, applied to the other object parties must agree on and none
   may edit alone. A matching id IS matching terms, so one attempt carries one
-  timeout across backings and operators alike, and a stranger's differing terms
-  are a different attempt. Drawing the salt at RANDOM is the party's; the law
-  refuses only the value an omission produces. A set leg is the same rule — its
-  attempt is its demand — and carries none, which the law does check.
+  timeout across backings and operators alike. Drawing the salt at RANDOM is
+  the party's; the law refuses only the value an omission produces. A set leg
+  is the same rule — its attempt is its demand — and carries none, checked.
 - **An entry's identity is what decides its effect**, and one answer serves the
   receipt, the committed root and the rewritten-history comparison
   (`opIdentityOfEntry`): the signed message, plus — for a commit alone — its
@@ -252,9 +259,12 @@ the move to a blinded construction — which is why they are rules, not code.
   commitment the schedule publishes over a stale book — and a process never
   scans a backing it did not register, so a commit made between
   registrations drops the rest with no warning at all. The boot sequence
-  registers everything, holds the timer until every registered backing
-  serves or is named in the first commitment's `opening` (`awaitingTakeover`
-  is the checklist), and resumes each from its own latest committed state;
+  registers everything, commits nothing until the venue's lag has passed since
+  it started — what it published just before it stopped is neither readable nor
+  yet abandoned, and signing over that sequence is an equivocation against its
+  own key with nobody attacking it — holds the timer until every registered
+  backing serves or is named in `opening` (`awaitingTakeover` is the
+  checklist), and resumes each from its OWN latest committed state;
   where the record's last commitment dropped the backing, the walk needs
   every committed state from the last carrying one forward, so an operator's
   replica keeps its own committed states, all of them. Naming an un-resumed
@@ -267,9 +277,8 @@ the move to a blinded construction — which is why they are rules, not code.
   operator key co-sign conflicting operations, and `fault.ts` proves that
   against the operator exactly as if it were malice — the protocol cannot tell
   a botched failover from collusion and does not try. A t-of-n threshold with
-  t > n/2 removes the possibility rather than recording it; aggregated to one
-  Ed25519 key it is invisible here, so the name, E and strict verification are
-  untouched.
+  t > n/2 removes the possibility rather than recording it, and aggregated to
+  one Ed25519 key it is invisible here.
 - **A threshold K, or theft is unbounded.** §C2b: a stolen backer key does
   damage that is "unbounded and permanent, since K alone authorises issuance
   and nothing expires", and revocation is a stop-loss rather than a remedy.
@@ -282,9 +291,11 @@ the move to a blinded construction — which is why they are rules, not code.
   dies with a gap: the operation is resubmittable by anyone holding the request
   once the operator serves again, and a payee holding only the receipt cannot.
   `submitTransfer` returns the receipt to whoever submitted, normally the
-  payer. Read the receipt's era when taking it — `after` names the operator's
-  last commitment, and one naming anything but the latest at payment time is
-  stale on its face — as is one naming an era before the operator's current
+  payer. Read the receipt's era when taking it — `after` names the last
+  commitment its operator SIGNED, so a fresh one names the record's highest
+  sequence or one past it where the operator has one in flight (`eraIndex`
+  tells you which), and one naming less is stale on its face — as is one
+  naming an era before the operator's current
   seat, however recently that key last committed: a key seated anew commits
   before its receipts can be fresh, and the seat is readable from the chain.
 - **Claims go illiquid while the operator is dark. Do not accept one.** A
@@ -304,10 +315,9 @@ the move to a blinded construction — which is why they are rules, not code.
   covers. Every path against that operator runs through the last state that
   *did* carry the backing — the non-service grade (`isNonServing`), the fault
   (`isRewrittenHistory`), the successor's takeover (`takeOver`, plus every
-  drop above that state — the boot rule). The party who
-  would otherwise serve it on request is the one with the motive not to, which
-  is the same shape as the receipt rule above: obtain the evidence while the
-  party holding it still has a reason to give it to you.
+  drop above that state — the boot rule). The party who would otherwise serve
+  it on request is the one with the motive not to: obtain the evidence while
+  the party holding it still has a reason to give it to you.
 - **A payment is final when witnessed, not when co-signed.** §C2: "Finality
   means witnessed rather than co-signed", and §C3 applies it to the release. An
   operation accepted after the operator's last commitment lives only in its
@@ -321,20 +331,22 @@ the move to a blinded construction — which is why they are rules, not code.
   only over backings that declare one silence duration — and a handover takes
   no tail (`takeOver`), so perform only against the witnessed whole. What was
   co-signed after the last commitment and before the silence is dead, and the
-  receipt makes that readable: it names its era (`after`); an era ended by a
-  return or a handover lapses its receipts (`eraLapsed`, `receiptStatus`), where
-  one ended at an ordinary commitment carried its whole tail — so an attested
+  receipt makes that readable: an era ended by a return, a handover, or a
+  commitment the venue never took lapses its receipts (`eraLapsed`), where one
+  ended at an ordinary commitment carried its whole tail — so an attested
   operation missing then is `contradicted`, and a pair one log cannot hold is a
   fault (`isDoublePosition`, `isDoubleAcceptance`, both excusing a lapsed era).
   §C2 makes the exposure "a signed field rather than operational discretion": E
   carries the interval with the venue it is read on, so a payee can tell a fast
   operator running late from a slow one running on time (`isOverdue`).
-- **Commit at the first clock you can read a handover replacing you, co-sign
-  nothing on or under that backing once the venue's lag reaches its index, and
-  read a pending handover before you treat a payment as final.** The floor buys
-  one index of notice; what you still hold uncommitted then is a slow block's
-  cost — and a record rolled before it arrives freezes only a party that stops
-  on every pending one, so the caution is yours to decline (§C2).
+- **Commit at the first clock you are FREE to from the one you can read a
+  handover replacing you, co-sign nothing on or under that backing once the
+  venue's lag reaches its index, and read a pending handover before you treat a
+  payment as final.** You hold one commitment in flight, so you are free once
+  per lag and the floor leaves you a window of them; what you still hold
+  uncommitted at your clock is a slow block's cost — and a record rolled before
+  it arrives freezes only a party that stops on every pending one, so the
+  caution is yours to decline (§C2).
 - **Draw a fresh random salt per attempt** — what "never reuse an attempt id you
   signed a commit for" became. A commit binds its id and nothing else, so an
   object you signed converts any later lock under that id whose parties you are
@@ -350,10 +362,7 @@ A receipt proves **acceptance, not a holding**: a payee who was paid and paid
 onward still holds the receipt for what they received, and reading it as a
 holding is how a redemption pays a party that has already spent. The durable
 form, and the one that decides what may be built on a receipt: **it attributes
-an act to the operator, and never proves a value to a holder.** A chain of receipts back
-to committed state would prove the value — and that is provenance, which is
-precisely what blinding exists to destroy, so it is ruled out here rather than
-deferred.
+an act to the operator, and never proves a value to a holder.**
 
 ## Design rules
 
@@ -431,14 +440,11 @@ Do not trade clarity for speed elsewhere; this is a reference, not a product.
   angles on the CHOICE and let the recommendation come out of them, rather than
   proposing an answer and asking a panel to bless it. Angles where applicable:
   simplicity, security, practicality, and whether it consolidates with a mechanism
-  that already exists. Decided 2026-08-29, after a slice whose shape was chosen
-  solo and whose review round then found the shape itself unbuildable.
-  **One angle inventories what the mechanism being REPLACED was silently
-  guaranteeing**, and it is not optional. The first panel run under this rule
-  chose a sound mechanism and shipped four blocking defects, every one of them a
-  reader that had quietly depended on the old rule's incidental promise. Four
-  angles argued about the new mechanism and none asked what the old one was
-  holding up.
+  that already exists. **One angle inventories what the mechanism being
+  REPLACED was silently guaranteeing**, and it is not optional: panels that
+  skipped it have twice shipped blocking defects, each a reader quietly
+  depending on the old rule's incidental promise (decision log, 2026-08-29 and
+  slice 39).
 - **Tests first, named for invariants.** Test files follow
   `invariant-07.issuance-paths.test.ts`. Each test carries a one-line
   plain-language statement of what it checks. the maintainer reviews the tests; the
@@ -450,20 +456,14 @@ Do not trade clarity for speed elsewhere; this is a reference, not a product.
 - **A fix is a change, and gets everything a change gets.** Its own review
   round, and a panel where it turns on a design decision rather than a typo —
   not an exemption because it is small, urgent, or in code just reasoned about.
-  On 2026-08-29 three fixes were made in one day, each confidently, each about
-  something just thought through, and all three were wrong: one patched
-  downstream of a circularity, one used a fallback where the rule needed a
-  maximum and touched one reader of three, and its replacement opened a remote
-  cancellation of the only remedy holders have against a dark operator. Every
-  one was caught by a reviewer rather than its author. Fixes are where an
-  author's confidence is least earned, so they get MORE scrutiny, not less.
+  Three fixes made confidently in one day on 2026-08-29 were all three wrong,
+  every one caught by a reviewer rather than its author (decision log). Fixes
+  are where an author's confidence is least earned, so they get MORE scrutiny.
 - **Regression-review the fixes.** After fixing review findings, review the
   fixes themselves. Every round so far has found a real bug there, and the
   recurring shape is a fix that bounded one input and left the other open.
 - **A refusal added at a door names the honest path it leaves open, and a test
-  walks it.** Slice 26 closed a stranger's door and the holder's re-prepare with
-  it; the regression review asked "what else does this refuse?" only about
-  strangers. A door closed to one party is a door closed to everyone who used it.
+  walks it.** A door closed to one party is closed to everyone who used it.
 - **A test's name is a claim the test must exercise.** A test titled "can be
   relocked" that never relocks is how a behaviour retires unnoticed.
 - **Explain, don't just produce.** When asked to explain, walk through the code
