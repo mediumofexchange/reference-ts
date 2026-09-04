@@ -54,7 +54,7 @@
 // Everything here is a verifier: it answers questions about state an untrusted
 // operator served, so it returns false on any malformed input and never throws —
 // with two exceptions: a venue's refusal propagates rather than being answered
-// (CLAUDE.md, `answering`; witnessedCommitFor raises one for a record that is
+// (docs/PROTOCOL_RULES.md, `answering`; witnessedCommitFor raises one for a record that is
 // not the lock's venue), and quietFor refuses a malformed operator key, which
 // is the reader's own validated object and never adversary bytes.
 
@@ -591,7 +591,7 @@ export function committedOutstanding(
  * committedOutstanding gives one number — how far the committed supply exceeds
  * what stands — and that number is a fact about the BACKING. It is never a
  * verdict about a holding. Which units descend from a void issuance is
- * provenance, which CLAUDE.md rules out rather than defers and which no blinded
+ * provenance, which docs/PROTOCOL_RULES.md rules out rather than defers and which no blinded
  * construction could answer anyway; and allocation was settled in P before
  * anyone accepted, since invariant 19 forbids a payout reading holder identity
  * and §18 excludes "discretion after the fact".

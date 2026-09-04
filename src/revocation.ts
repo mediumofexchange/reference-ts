@@ -12,7 +12,7 @@
 // prevents the loss is a threshold K, which §C2b calls "the strongest argument"
 // for one, and which is invisible here: t-of-n aggregated to a single Ed25519
 // key leaves the name, E and strict verification untouched. That is the same
-// shape as CLAUDE.md's one-writer rule for the operator, one role along.
+// shape as docs/PROTOCOL_RULES.md's one-writer rule for the operator, one role along.
 //
 // **It revokes a KEY, not a backing**, which makes it the one venue record that
 // does not name a backing. §C2b: "published by K to every venue its backings

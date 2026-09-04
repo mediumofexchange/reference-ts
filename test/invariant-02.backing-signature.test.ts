@@ -30,7 +30,7 @@ function fields(overrides?: Partial<BackingFields>): BackingFields {
 }
 
 describe("verifiers never throw, at the function they all funnel through", () => {
-  // CLAUDE.md states it without exception: anything answering a question about
+  // docs/PROTOCOL_RULES.md states it without exception: anything answering a question about
   // adversary-supplied data returns false on ANY malformed input. The length
   // checks here were written for exactly that and left the adjacent case open —
   // an absent field reaches this typed as bytes, and reading .length off it

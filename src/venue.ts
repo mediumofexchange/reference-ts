@@ -89,7 +89,7 @@ export class VenueError extends Error {}
  * The verifiers here catch broadly on purpose, because everything they read —
  * served states, receipts, commitments, published operations — comes from
  * whoever exhibits it, so a wrong length or a missing field has to be a failed
- * check rather than a crash (CLAUDE.md: verifiers never throw). A `VenueError`
+ * check rather than a crash (docs/PROTOCOL_RULES.md: verifiers never throw). A `VenueError`
  * is the one thing reaching those catches that is not that. It means the caller
  * holds a partial view and asked it something it was not synced for, and turning
  * it into `false`, `undefined` or `"unrelated"` states a fact about a party
@@ -231,7 +231,7 @@ export interface Venue {
    * §C2's (slice 38): the walk floors a replacement's lead at the lag plus
    * one (`replacement.ts`), so every party reads the record before the last
    * act it can still land in the incumbent's term; what a party does with
-   * that is CLAUDE.md's party rule, since a door a rule-holder's record can
+   * that is docs/PROTOCOL_RULES.md's party rule, since a door a rule-holder's record can
    * shut is a lever (the slice-38 review).
    */
   lag(): bigint;

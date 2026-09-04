@@ -13,7 +13,7 @@ import { KEYS, makeTransparentBacking, SECRETS } from "./support.js";
 
 // §C2's receipts, and invariant 22, from the holder's side.
 //
-// CLAUDE.md now carries the rule this file makes usable: **a payment is final
+// docs/PROTOCOL_RULES.md now carries the rule this file makes usable: **a payment is final
 // when witnessed, not when co-signed.** §C2: "Finality means witnessed rather
 // than co-signed"; §C3 applies it to the release, "a release nobody witnessed
 // did not happen". A payee holding a receipt therefore has a question to ask,

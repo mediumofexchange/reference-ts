@@ -414,7 +414,7 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
     // the predecessor signed before it could read the record lands inside
     // its term where the venue includes at its lag, and one it signs after
     // is its own choice — and its payee's, reading the same record
-    // (CLAUDE.md's party rule). **Twice the lag** because an operator holds one
+    // (docs/PROTOCOL_RULES.md's party rule). **Twice the lag** because an operator holds one
     // commitment in flight and is free to sign the next only when the record
     // shows it, which is once every lag (slice 39): reading the record buys
     // nothing if the incumbent is mid-flight then, so the lead must cover the

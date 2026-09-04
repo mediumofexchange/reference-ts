@@ -169,7 +169,7 @@ describe("§C2b: the snapshot is the backing's, not a key's", () => {
     // commitment can carry the predecessor's book byte-identically — same log,
     // same root, its own key, and a fresh key's first sequence is the
     // predecessor's first too. The holder keeping the predecessor's copy is
-    // following the rule CLAUDE.md gives them, and the root is injective over
+    // following the rule docs/PROTOCOL_RULES.md gives them, and the root is injective over
     // states (inv 22), so refusing on the SIGNER refused the state of record
     // itself (found reviewing this slice).
     const { venue, sequencer, backing } = setup();

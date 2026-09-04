@@ -3,7 +3,7 @@
 //
 // Invariant 1 requires "same fields, same bytes, on every machine, forever",
 // and commitment roots require the converse: two different values must never
-// produce one byte string. Both come from one rule (CLAUDE.md, Design rules):
+// produce one byte string. Both come from one rule (docs/PROTOCOL_RULES.md, Design rules):
 // **every field is fixed-width and asserted, or length-prefixed. Nothing
 // variable-length is ever written raw.** Adjacent unframed fields silently
 // destroy injectivity — 31+33 bytes concatenate exactly like 32+32.

@@ -56,7 +56,7 @@ export interface Receipt {
 
 /**
  * A snapshot of a receipt's bytes. `readonly` is erased at runtime, so anything
- * that stores or serves a receipt copies it (CLAUDE.md: copy on the way in, copy
+ * that stores or serves a receipt copies it (docs/PROTOCOL_RULES.md: copy on the way in, copy
  * on the way out). Without it whoever holds a receipt can mutate the one the
  * sequencer kept, and invariant 26's "identical prior response" stops being
  * something the operator controls.
@@ -221,7 +221,7 @@ export function isOperatorReceipt(backing: Backing, venue: Venue, receipt: Recei
 }
 
 /**
- * What a committed state says about a receipt — the question behind CLAUDE.md's
+ * What a committed state says about a receipt — the question behind docs/PROTOCOL_RULES.md's
  * rule that **a payment is final when witnessed, not when co-signed** (§C2:
  * "Finality means witnessed rather than co-signed").
  *
@@ -231,7 +231,7 @@ export function isOperatorReceipt(backing: Backing, venue: Venue, receipt: Recei
  *   - `lapsed`       the era ended in a return or a handover (eraLapsed), so
  *                    the operation died unwitnessed with the tail it sat in —
  *                    a fact about the operator's silence, not a lie, and the
- *                    signed request is resubmittable (CLAUDE.md's payee rule).
+ *                    signed request is resubmittable (docs/PROTOCOL_RULES.md's payee rule).
  *   - `contradicted` the record is past the era's end, or already held the
  *                    position otherwise, so one of the operator's two
  *                    signatures is a lie about its own log.
@@ -296,7 +296,7 @@ export function receiptStatus(
     // late, which no reader can tell apart (a first fix here refused every
     // late-first-commitment genesis era and called 28a's own honest
     // first-commit-wipe receipts forged). What answers the stamp is the
-    // payee's freshness rule (CLAUDE.md): a receipt naming anything but the
+    // payee's freshness rule (docs/PROTOCOL_RULES.md): a receipt naming anything but the
     // operator's latest commitment at payment time is stale on its face.
     const committed = committedLogFor(backing, venue, served);
     if (committed === undefined) return "unrelated";

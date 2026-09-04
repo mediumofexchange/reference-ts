@@ -43,12 +43,13 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "check:docs": "node scripts/check-docs.mjs",
-    "prepublishOnly": "npm run typecheck && npm run test && npm run check:docs && npm run build"
+    "check": "npm run check:docs && npm run typecheck && npm test && npm run build",
+    "prepublishOnly": "npm run check"
   },
   "publishConfig": {
     "access": "public",

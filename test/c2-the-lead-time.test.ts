@@ -40,7 +40,7 @@ import { KEYS, pub, SECRETS } from "./support.js";
 //     So every party reads the record by the last clock at which an act it
 //     signs can still be witnessed in the incumbent's term — one index of
 //     notice, at the venue's own speed.
-//   - **What the parties do with it is theirs** (CLAUDE.md's party rule): the
+//   - **What the parties do with it is theirs** (docs/PROTOCOL_RULES.md's party rule): the
 //     incumbent commits at the first clock it can read the record and co-signs
 //     nothing on or under the backing once the lag reaches the index; the
 //     payee reads the same record. The slice first built that as a door, and

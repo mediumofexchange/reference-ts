@@ -1,8 +1,8 @@
 name: CI
 
 # Runs on every push and pull request. The point is that nobody has to
-# remember: a session that forgets `npm test`, or that lets CLAUDE.md and the
-# decision index drift apart, finds out here rather than three slices later.
+# remember: a session that forgets `npm test`, or that lets the agent handoff
+# and decision index drift, finds out here rather than three slices later.
 
 on:
   push:
@@ -13,9 +13,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -43,7 +48,7 @@ jobs:
       - name: Docs stay readable
         # Cheap and deterministic, so it only needs to run once.
         if: matrix.node == 24
-        run: node scripts/check-docs.mjs
+        run: npm run check:docs
 
       - name: Package builds and publishes what it claims
         if: matrix.node == 24

@@ -49,7 +49,7 @@
 // holding one operator key, with no leader election between them, produce
 // exactly these artefacts. The protocol cannot distinguish that from malice and
 // does not try, which is the same standard it already applies to a self-framing
-// commitment equivocation — see CLAUDE.md on the one-writer obligation, and on
+// commitment equivocation — see docs/PROTOCOL_RULES.md on the one-writer obligation, and on
 // why a threshold construction prevents this rather than merely recording it.
 //
 // **The signer is derived, never asserted.** A caller who could name the signer

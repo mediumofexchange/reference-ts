@@ -565,7 +565,7 @@ export class Sequencer {
    * What is NOT taken on is the predecessor's uncommitted tail. That is not a
    * transparent problem and is not rescued: a payment is final when witnessed
    * rather than co-signed, and an operation the predecessor accepted and never
-   * committed died with it in every construction (CLAUDE.md).
+   * committed died with it in every construction (docs/PROTOCOL_RULES.md).
    *
    * **Checked, where it used to be bounded.** WHICH state was the last to
    * carry the backing is not readable from a root (slice 13's limit), so the
@@ -872,7 +872,7 @@ export class Sequencer {
    * through a handover, which is per backing**: a re-appointment on one
    * backing of a set drops that backing's half of an uncommitted set tail and
    * leaves the sibling's (the 35d round probed it: bounded, since the holder
-   * withdraws the stranded half past its timeout, and CLAUDE.md's "a handover
+   * withdraws the stranded half past its timeout, and docs/PROTOCOL_RULES.md's "a handover
    * takes no tail" is the party rule that prices it). A test for that shape
    * is owed.
    *
@@ -1516,7 +1516,7 @@ export class Sequencer {
         const want = terms.get(legBacking.nameHex) as LegTerms;
         const lock = this.ledger.lockOf(legBacking, op.demandHash, want.holder);
         // No lock: the law refuses the leg itself, and relabelling that here is
-        // the pre-check CLAUDE.md forbids.
+        // the pre-check docs/PROTOCOL_RULES.md forbids.
         if (lock !== undefined) {
           const why = legMismatch(lock, want);
           if (why !== undefined) throw new SequencerError(why);
@@ -2032,7 +2032,7 @@ export class Sequencer {
       // §C2 sentence: a re-appointed key whose era stayed LIVE by committing
       // for its other backings passes here — its fault pair is not excused,
       // so nothing is mintable — and its stale-era receipts are the payee's
-      // to refuse by the seat-aware freshness rule (CLAUDE.md; found
+      // to refuse by the seat-aware freshness rule (docs/PROTOCOL_RULES.md; found
       // regression-reviewing the fix round).
       if (eraLapsed(this.venue, backing, this.operatorKey, this.era(), chain)) {
         throw new SequencerError(
@@ -2049,7 +2049,7 @@ export class Sequencer {
    * the CLOCK, deliberately: where an act signed now is first witnessed past
    * that index (the venue's lag ahead) what this door co-signs dies with the
    * handover, and that is the incumbent's and the payee's to read from the
-   * record (CLAUDE.md's party rule) — a door that shut on it was a lever any
+   * record (docs/PROTOCOL_RULES.md's party rule) — a door that shut on it was a lever any
    * rule-holder's record could pull, one record per lag, superseding each
    * before it arrived (slice 38's review and fix panel). Asked of every
    * backing an ACT touches, after the repeat is answered:

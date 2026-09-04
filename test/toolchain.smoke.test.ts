@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-// Toolchain smoke test — and a demonstration of why CLAUDE.md forbids
+// Toolchain smoke test — and a demonstration of why docs/PROTOCOL_RULES.md forbids
 // `number` for quantities.
 
 describe("toolchain", () => {
