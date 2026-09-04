@@ -416,13 +416,19 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
     // is its own choice — and its payee's, reading the same record
     // (CLAUDE.md's party rule). **Twice the lag** because an operator holds one
     // commitment in flight and is free to sign the next only when the record
-    // shows it (slice 39): reading the record buys nothing if the incumbent
-    // cannot act for another lag, so the floor gives it a lag of range to
-    // become free in and a lag to land in. Measured against this build over
-    // every alignment (`scratch/panel39/probes/floor-sweep.mjs`): at the old
-    // floor the rule-holder could aim its record so that no clock at all let
-    // the incumbent land a commitment inside its own term. At lag zero
-    // nothing is ever in flight and the floor is the one index it always was.
+    // shows it, which is once every lag (slice 39): reading the record buys
+    // nothing if the incumbent is mid-flight then, so the lead must cover the
+    // wait for a free clock as well as the lag that clock's commitment takes
+    // to land. Measured over every alignment the rule-holder can pick — the
+    // review's `scratch/panel39/review/spec/build/sp2-floor-alignment.mjs`,
+    // which sweeps the record's index over a full period of the incumbent's
+    // cadence — the least lead with a safe clock at EVERY alignment is exactly
+    // twice the lag, at lags 2, 3, 4 and 7; the old floor of one lag plus one
+    // has none at any of them. The extra index here is slack, and it is what
+    // keeps lag zero the single index it has always been without a special
+    // case. (`scratch/panel39/probes/floor-sweep.mjs` fixed the record's index
+    // and swept the incumbent's cadence instead, which is why it read the
+    // minimum one index high.)
     // Inclusion is bounded below by the lag and above by nothing: the floor
     // buys one index of notice, and a slow block is the party's cost (the
     // slice-38 review, the spec angle's S2 and the security angle's S2).

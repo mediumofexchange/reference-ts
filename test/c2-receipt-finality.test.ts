@@ -36,8 +36,9 @@ import { KEYS, makeTransparentBacking, SECRETS } from "./support.js";
 // party — the finding slice 9 made twice. Answering "contradicted" for a
 // stranger's receipt is exactly that bug.
 //
-// Since 28b the receipt names its era (the witnessed index of the operator's
-// last commitment at signing), so a stale restore — a SHORTER log committed at
+// Since 28b the receipt names its era — since slice 39, one more than the
+// sequence of the operator's last SIGNED commitment — so a stale restore — a
+// SHORTER log committed at
 // an era's ordinary end — is caught by the receipt on one state, where before
 // only isRewrittenHistory's pair of commitments could see it.
 
