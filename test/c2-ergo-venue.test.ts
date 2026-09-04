@@ -17,6 +17,7 @@ import { Sequencer, SequencerError } from "../src/sequencer.js";
 import { eraIndex, isSilent, provesHolding, quietFor } from "../src/recovery.js";
 import { VenueError } from "../src/venue.js";
 import { encodeReplacement, operatorAt, replacementMessage, ROLE_OPERATOR } from "../src/replacement.js";
+import { encodeRevocation, signRevocation } from "../src/revocation.js";
 import { KEYS, SECRETS } from "./support.js";
 
 // Ergo read as a witness venue. The chain witnesses and adjudicates nothing, so
@@ -99,6 +100,181 @@ function commitment(sequence: bigint, fill: number): Commitment {
 function venue(): ErgoVenue {
   return new ErgoVenue("ergo-testnet", DEPTH, SCRIPT, ADDRESSING);
 }
+
+function signal(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+describe("a refresh owns its clock and records until it settles", () => {
+  it.each(["height", "publications"] as const)("copies the requested backing set before awaiting %s", async pauseAt => {
+    const v = venue(), entered = signal(), resume = signal();
+    const input = makeBacking(backing), requested = [input];
+    const publicationAddress = ADDRESSING.publications(backing.name);
+    const op = { kind: "transfer" as const, from: KEYS.alice, to: KEYS.bob,
+      quantity: 1n, nonce: 0n, signature: new Uint8Array(64).fill(0xab) };
+    class Pauses extends FakeNode {
+      override async indexedHeight() {
+        if (pauseAt === "height") { entered.resolve(); await resume.promise; }
+        return super.indexedHeight();
+      }
+      override async boxesByAddress(address: string) {
+        if (pauseAt === "publications" && address === publicationAddress) {
+          entered.resolve(); await resume.promise;
+        }
+        return super.boxesByAddress(address);
+      }
+    }
+    const node = new Pauses().at(100n).putCommitment(commitment(0n, 0xaa), 95n)
+      .put(publicationAddress, { inclusionHeight: 90n,
+        registers: { R5: encodePublishedOp(backing.name, op) } });
+    const refresh = v.sync(node, requested);
+    await entered.promise;
+    try {
+      input.name.fill(0);
+      input.obligor.set(KEYS.mallory);
+      input.evidence.operator.set(KEYS.bob);
+      requested.length = 0;
+    } finally {
+      resume.resolve();
+      await refresh;
+    }
+    expect(v.publishedOpsFor(backing.name)).toEqual([{ op, at: 90n }]);
+    expect(v.revocationsFor(KEYS.backer)).toEqual([]);
+    expect(v.latestFor(KEYS.operator)?.sequence).toBe(0n);
+    expect(isSilent(v, backing)).toBe(false);
+  });
+
+  it.each(["height", "commitments"] as const)("rejects overlap during %s without changing either view", async (pauseAt) => {
+    const v = venue();
+    await v.sync(new FakeNode().at(100n).putCommitment(commitment(0n, 0xaa), 95n), [backing]);
+    const entered = signal();
+    const resume = signal();
+    class Pauses extends FakeNode {
+      override async indexedHeight() {
+        if (pauseAt === "height") {
+          entered.resolve();
+          await resume.promise;
+        }
+        return super.indexedHeight();
+      }
+      override async boxesByAddress(address: string) {
+        if (pauseAt === "commitments" && address === ADDRESSING.commitments(KEYS.operator)) {
+          entered.resolve();
+          await resume.promise;
+        }
+        return super.boxesByAddress(address);
+      }
+    }
+    const refresh = v.sync(new Pauses().at(110n).putCommitment(commitment(1n, 0xbb), 105n), [backing]);
+    await entered.promise;
+    const newer = new FakeNode().at(200n).putCommitment(commitment(2n, 0xcc), 195n);
+    try {
+      if (pauseAt === "height") {
+        expect(v.witnessedIndex()).toBe(97n);
+        expect(isSilent(v, backing)).toBe(false);
+      } else {
+        expect(() => isSilent(v, backing)).toThrow(VenueError);
+      }
+      await expect(v.sync(newer, [backing])).rejects.toThrow("a sync is already in progress");
+      // A rejected overlap must not release the first caller's guard.
+      await expect(v.sync(newer, [backing])).rejects.toThrow(VenueError);
+    } finally {
+      resume.resolve();
+      await refresh;
+    }
+    expect(v.witnessedIndex()).toBe(107n);
+    expect(v.latestFor(KEYS.operator)?.sequence).toBe(1n);
+    expect(isSilent(v, backing)).toBe(false);
+    await v.sync(newer, [backing]);
+    expect(v.witnessedIndex()).toBe(197n);
+    expect(v.latestFor(KEYS.operator)?.sequence).toBe(2n);
+    expect(isSilent(v, backing)).toBe(false);
+  });
+
+  it.each(["height", "commitments"] as const)("allows retry after a failed %s fetch", async (failAt) => {
+    const v = venue();
+    await v.sync(new FakeNode().at(100n).putCommitment(commitment(0n, 0xaa), 95n), [backing]);
+    class Fails extends FakeNode {
+      override async indexedHeight() {
+        if (failAt === "height") throw new Error("node offline");
+        return super.indexedHeight();
+      }
+      override async boxesByAddress(address: string) {
+        if (failAt === "commitments" && address === ADDRESSING.commitments(KEYS.operator)) {
+          throw new Error("node offline");
+        }
+        return super.boxesByAddress(address);
+      }
+    }
+    await expect(v.sync(new Fails().at(110n), [backing])).rejects.toThrow("node offline");
+    if (failAt === "height") {
+      expect(v.witnessedIndex()).toBe(97n);
+      expect(isSilent(v, backing)).toBe(false);
+    } else {
+      expect(() => v.witnessedIndex()).toThrow(VenueError);
+      expect(() => isSilent(v, backing)).toThrow(VenueError);
+    }
+    await v.sync(new FakeNode().at(110n).putCommitment(commitment(1n, 0xbb), 105n), [backing]);
+    expect(v.witnessedIndex()).toBe(107n);
+    expect(isSilent(v, backing)).toBe(false);
+  });
+});
+
+describe("a reader cannot mutate the stored venue evidence", () => {
+  it("copies commitment keys, roots and signatures", async () => {
+    const v = venue();
+    const original = commitment(0n, 0xaa);
+    await v.sync(new FakeNode().at(100n).putCommitment(original, 95n), [backing]);
+    const read = v.latestFor(KEYS.operator)!;
+    read.root.fill(0);
+    read.operator.fill(0);
+    read.signature.fill(0);
+    expect(v.latestFor(KEYS.operator)).toEqual(original);
+    expect(v.latestFor(KEYS.operator, 95n)).toEqual(original);
+  });
+
+  it("copies signed revocations", async () => {
+    const v = venue();
+    const original = signRevocation(SECRETS.backer);
+    await v.sync(new FakeNode().at(100n).put(ADDRESSING.revocations(KEYS.backer), {
+      inclusionHeight: 20n,
+      registers: { R5: encodeRevocation(original) },
+    }), [backing]);
+    const read = v.revocationsFor(KEYS.backer)[0]!.revocation;
+    read.obligor.fill(0);
+    read.signature.fill(0);
+    expect(v.revocationsFor(KEYS.backer)).toEqual([{ revocation: original, at: 20n }]);
+  });
+
+  it("copies nested publication bytes, including lock parties", async () => {
+    const v = venue();
+    const original = {
+      kind: "lock" as const,
+      attemptId: new Uint8Array(32).fill(0xe7),
+      salt: new Uint8Array(32).fill(0xe8),
+      holder: KEYS.alice,
+      beneficiary: KEYS.bob,
+      quantity: 1n,
+      timeout: 100n,
+      decisionVenue: VENUE_ID,
+      parties: [KEYS.alice],
+      nonce: 0n,
+      signature: new Uint8Array(64).fill(0xab),
+    };
+    await v.sync(new FakeNode().at(100n).put(ADDRESSING.publications(backing.name), {
+      inclusionHeight: 20n,
+      registers: { R5: encodePublishedOp(backing.name, original) },
+    }), [backing]);
+    const read = v.publishedOpsFor(backing.name)[0]!.op;
+    expect(read.kind).toBe("lock");
+    if (read.kind !== "lock") throw new Error("expected a lock publication");
+    for (const bytes of [read.attemptId, read.salt, read.holder, read.beneficiary,
+      read.decisionVenue, read.signature, ...read.parties]) bytes.fill(0);
+    expect(v.publishedOpsFor(backing.name)).toEqual([{ op: original, at: 20n }]);
+  });
+});
 
 describe("a venue's identity commits to its finality rule", () => {
   it("changes with the depth, so naming the venue agrees the depth", () => {

@@ -6,11 +6,10 @@
 //
 // A Backing is produced only by makeBacking, which validates every field,
 // canonicalizes the reliance list, copies all bytes, computes the name once,
-// and freezes the result. The type is branded so the rest of the system cannot
-// fabricate an unvalidated backing structurally; encode/hash/sign trust it.
-// Because the name is a stored field rather than a recomputation, identity is
-// fixed at construction: a later (unsupported) mutation of the raw key bytes
-// cannot re-home an already-registered backing.
+// and freezes the result. The brand prevents accidental structural fabrication
+// in TypeScript; it cannot validate external objects or freeze typed arrays.
+// Signing, verification and registration derive identity from validated terms.
+// Registries own copies so later caller mutation cannot change stored terms.
 //
 // Canonical encoding v1 (all lengths u32 big-endian, hash = SHA-256):
 //
@@ -247,8 +246,8 @@ declare const validated: unique symbol;
 
 /**
  * A validated, canonical backing with its identity already computed. Only
- * makeBacking (and decodeBacking, which routes through it) can produce one, so
- * any Backing value is safe to encode, hash, and sign without re-checking.
+ * makeBacking (and decodeBacking, which routes through it) produces one. The
+ * brand is only a compile-time guarantee; trust boundaries revalidate terms.
  */
 export type Backing = BackingFields & {
   /** SHA-256 of the canonical encoding (invariant 1), computed once. */
@@ -472,8 +471,8 @@ export function makeBacking(fields: BackingFields): Backing {
   // Freeze the object graph so a validated backing cannot be structurally
   // mutated (e.g. reliance.push) into terms its name no longer describes. Raw
   // bytes inside a Uint8Array cannot be frozen in JS; mutating them is
-  // unsupported (see DECISIONS.md) and harmless to identity, which is the
-  // stored name below.
+  // unsupported (see DECISIONS.md). Trust boundaries derive the name again
+  // and keep their own copies instead of trusting these cached identity fields.
   const canonical: BackingFields = {
     obligor: copyBytes(fields.obligor),
     payout: Object.freeze(
@@ -637,23 +636,30 @@ function signedMessage(name: Uint8Array): Uint8Array {
 
 /** Sign a backing's name with the obligor's secret key (invariant 2). */
 export function signBacking(secretKey: Uint8Array, backing: Backing): Uint8Array {
+  const canonical = makeBacking(backing);
   let publicKey: Uint8Array;
   try {
     publicKey = ed25519.getPublicKey(secretKey);
   } catch {
     throw new SigningError("invalid secret key");
   }
-  if (compareBytes(publicKey, backing.obligor) !== 0) {
+  if (compareBytes(publicKey, canonical.obligor) !== 0) {
     throw new SigningError("secret key does not belong to the obligor");
   }
-  return ed25519.sign(signedMessage(backing.name), secretKey);
+  return ed25519.sign(signedMessage(canonical.name), secretKey);
 }
 
 /**
  * A backing without this check passing does not exist (invariant 2): anyone
  * could publish well-formed terms naming somebody else's key as obligor.
- * Returns false (never throws) for any malformed signature or key.
+ * Cached name fields are not evidence: derive the signed identity from the
+ * presented terms. Returns false for malformed terms, signatures or keys.
  */
 export function verifyBackingSignature(backing: Backing, signature: Uint8Array): boolean {
-  return verifySignatureStrict(signature, signedMessage(backing.name), backing.obligor);
+  try {
+    const canonical = makeBacking(backing);
+    return verifySignatureStrict(signature, signedMessage(canonical.name), canonical.obligor);
+  } catch {
+    return false;
+  }
 }

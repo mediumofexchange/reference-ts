@@ -60,9 +60,10 @@ import {
   type Commitment,
 } from "./commitment.js";
 import { utf8Encoder } from "./contexts.js";
-import { decodePublishedOp, type PublishedOp } from "./oplog.js";
+import { copyOp, decodePublishedOp, type PublishedOp } from "./oplog.js";
 import { copyReplacement, decodeReplacement, forgetAdmitted, type Replacement, type WitnessedReplacement } from "./replacement.js";
 import {
+  copyRevocation,
   decodeRevocation,
   isSignedRevocation,
   type Revocation,
@@ -70,7 +71,7 @@ import {
 } from "./revocation.js";
 import { successionOf } from "./replacement.js";
 import { UNNAMED_VENUE, VenueError, type Venue, type WitnessedOp } from "./venue.js";
-import { type Backing } from "./backing.js";
+import { makeBacking, type Backing } from "./backing.js";
 
 /**
  * One box, as the node's indexed API returns it, reduced to what a venue reads.
@@ -240,6 +241,8 @@ export class ErgoVenue implements Venue {
   private height = 0n;
   /** Whether `sync` has run: until it has, the clock is nothing this view can answer. */
   private synced = false;
+  /** Held before the height request, so two refreshes cannot interleave views. */
+  private syncing = false;
   /** Operator hex -> its commitments, in witnessed order. */
   private readonly commitments = new Map<string, Witnessed<Commitment>[]>();
   /** Backing name hex -> operations, in witnessed order. */
@@ -302,8 +305,22 @@ export class ErgoVenue implements Venue {
    * A box that does not decode is skipped rather than fatal. Anyone may create a
    * box at these addresses, so noise there is ordinary — the same posture the
    * local venue takes toward a publication it cannot read.
+   * Concurrent calls are rejected; retry once the current call settles.
    */
   async sync(node: ErgoNode, backings: readonly Backing[]): Promise<void> {
+    if (this.syncing) throw new VenueError("a sync is already in progress");
+    this.syncing = true;
+    try {
+      // Own both the set and its terms before the first await. Otherwise a
+      // caller can change a name between address selection and record filtering.
+      const requested = backings.map(backing => makeBacking(backing));
+      await this.syncView(node, requested);
+    } finally {
+      this.syncing = false;
+    }
+  }
+
+  private async syncView(node: ErgoNode, backings: readonly Backing[]): Promise<void> {
     const indexed = await node.indexedHeight();
     // Un-marked once the replacement begins — after the height read, so a
     // node that cannot answer it leaves a coherent view answering rather than
@@ -546,7 +563,7 @@ export class ErgoVenue implements Venue {
   revocationsFor(obligor: Uint8Array): WitnessedRevocation[] {
     this.requireRevoked(obligor);
     const log = this.revocations.get(bytesToHex(obligor)) ?? [];
-    return log.map((w) => ({ revocation: w.value, at: w.at }));
+    return log.map((w) => ({ revocation: copyRevocation(w.value), at: w.at }));
   }
 
   private requireRevoked(obligor: Uint8Array): void {
@@ -558,7 +575,7 @@ export class ErgoVenue implements Venue {
   publishedOpsFor(backingName: Uint8Array): WitnessedOp[] {
     this.requireCovered(backingName);
     const log = this.ops.get(bytesToHex(backingName)) ?? [];
-    return log.map((w) => ({ op: w.value, at: w.at }));
+    return log.map((w) => ({ op: copyOp(w.value), at: w.at }));
   }
 
   replacementsFor(backingName: Uint8Array): WitnessedReplacement[] {
@@ -575,7 +592,13 @@ export class ErgoVenue implements Venue {
 
   latestFor(operator: Uint8Array, asOf?: bigint): Commitment | undefined {
     this.requireFetched(operator);
-    return this.latestWitnessedFor(operator, asOf)?.value;
+    const value = this.latestWitnessedFor(operator, asOf)?.value;
+    return value === undefined ? undefined : {
+      sequence: value.sequence,
+      root: copyBytes(value.root),
+      operator: copyBytes(value.operator),
+      signature: copyBytes(value.signature),
+    };
   }
 
   witnessedAtFor(operator: Uint8Array, asOf?: bigint): bigint | undefined {

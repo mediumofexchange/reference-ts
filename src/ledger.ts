@@ -1001,17 +1001,20 @@ export class TransparentLedger {
    * no-op: by invariant 1, same name means same terms.
    */
   register(backing: Backing, signature: Uint8Array): void {
-    if (!verifyBackingSignature(backing, signature)) {
+    // Normalize before checking or indexing: caller-supplied cached names must
+    // never select the stored identity independently of the signed terms.
+    const stored = makeBacking(backing);
+    if (!verifyBackingSignature(stored, signature)) {
       throw new LedgerError("backing signature invalid");
     }
-    if (this.states.has(backing.nameHex)) return;
+    if (this.states.has(stored.nameHex)) return;
     // Store the ledger's OWN copy. Object.freeze does not freeze the bytes
     // inside a Uint8Array, and issuance reads authority from the registered
     // obligor — so keeping the caller's object would leave a live write path
     // to the key that authorises issuance. makeBacking re-copies every field
     // and yields the same name (invariant 1).
-    this.states.set(backing.nameHex, {
-      backing: makeBacking(backing),
+    this.states.set(stored.nameHex, {
+      backing: stored,
       state: emptyState(),
       opLog: [],
       committed: 0,
