@@ -90,7 +90,7 @@ describe("the law: nothing you hold leaves without your signature", () => {
 
   it("a malformed signer key is an EncodingError, from the encoder that saw it", () => {
     // The ledger used to pre-check signer keys and raise a LedgerError, which is
-    // the one thing CLAUDE.md's boundary rule forbids: "does not pre-check in
+    // the one thing docs/PROTOCOL_RULES.md's boundary rule forbids: "does not pre-check in
     // order to relabel an error — give the lower layer a distinguishable error
     // type instead." It also made the two entry points disagree, since the
     // sequencer encodes first and so always surfaced the encoder's refusal.

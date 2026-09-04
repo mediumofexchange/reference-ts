@@ -401,8 +401,9 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
   for (let i = memo.through; i < published.length; i++) {
     const w = published[i] as WitnessedReplacement;
     if (!isSignedReplacement(backing, w.replacement)) continue;
-    // **A replacement's lead is floored at the venue's lag plus one** (§C2,
-    // slice 38): effective ≥ witnessed + lag + 1, and a record below the floor
+    // **A replacement's lead is floored at twice the venue's lag plus one**
+    // (§C2, slices 38 and 39): effective ≥ witnessed + 2·lag + 1, and a record
+    // below the floor
     // is not a replacement — refused rather than corrected, as a backdated one
     // always was, since the rule-holder does not get to date a handover. The
     // floor is what gives every party the record by the last clock at which
@@ -413,7 +414,21 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
     // the predecessor signed before it could read the record lands inside
     // its term where the venue includes at its lag, and one it signs after
     // is its own choice — and its payee's, reading the same record
-    // (CLAUDE.md's party rule).
+    // (docs/PROTOCOL_RULES.md's party rule). **Twice the lag** because an operator holds one
+    // commitment in flight and is free to sign the next only when the record
+    // shows it, which is once every lag (slice 39): reading the record buys
+    // nothing if the incumbent is mid-flight then, so the lead must cover the
+    // wait for a free clock as well as the lag that clock's commitment takes
+    // to land. Measured over every alignment the rule-holder can pick — the
+    // review's `scratch/panel39/review/spec/build/sp2-floor-alignment.mjs`,
+    // which sweeps the record's index over a full period of the incumbent's
+    // cadence — the least lead with a safe clock at EVERY alignment is exactly
+    // twice the lag, at lags 2, 3, 4 and 7; the old floor of one lag plus one
+    // has none at any of them. The extra index here is slack, and it is what
+    // keeps lag zero the single index it has always been without a special
+    // case. (`scratch/panel39/probes/floor-sweep.mjs` fixed the record's index
+    // and swept the incumbent's cadence instead, which is why it read the
+    // minimum one index high.)
     // Inclusion is bounded below by the lag and above by nothing: the floor
     // buys one index of notice, and a slow block is the party's cost (the
     // slice-38 review, the spec angle's S2 and the security angle's S2).
@@ -426,7 +441,7 @@ function admitted(backing: Backing, venue: Venue): readonly Admitted[] {
     // Clock-free like the signature — the lag is a constant of the venue's
     // identity, and the record is compared against its own witnessing — so it
     // belongs to the step that is taken once.
-    if (w.replacement.effective < w.at + venue.lag() + 1n) continue;
+    if (w.replacement.effective < w.at + 2n * venue.lag() + 1n) continue;
     // Hashed here rather than once per link: the hash is the record's identity
     // for the dedup AND for the same-index tie the walk resolves below.
     // The reader's own copy: the memo is validated state, and what a venue

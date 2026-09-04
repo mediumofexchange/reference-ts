@@ -10,10 +10,12 @@
 //   moe/issuance/v1            a backer authorising issuance
 //   moe/transfer/v1            a holder moving units
 //   moe/burn/v1                a holder destroying units
-//   moe/receipt/v2             an operator co-signing an accepted operation
-//                              (v2 added the era — the witnessed index of the
-//                              operator's last commitment at signing; no v1
-//                              receipt was ever issued outside this repository)
+//   moe/receipt/v3             an operator co-signing an accepted operation
+//                              (v3 makes the era the COMMITMENT — one more
+//                              than the sequence its operator last signed —
+//                              where v2 named the index that commitment was
+//                              witnessed at: same width, different meaning,
+//                              which is the collision a tag exists to prevent)
 //   moe/commitment/v1          an operator committing to served state
 //   moe/demand/v1              a holder presenting claims for payment
 //   moe/acceptance/v1          a backer answering a demand
@@ -38,7 +40,7 @@ export const BACKING_SIGNATURE_CONTEXT = tag("moe/backing-signature/v1");
 export const ISSUANCE_CONTEXT = tag("moe/issuance/v1");
 export const TRANSFER_CONTEXT = tag("moe/transfer/v1");
 export const BURN_CONTEXT = tag("moe/burn/v1");
-export const RECEIPT_CONTEXT = tag("moe/receipt/v2");
+export const RECEIPT_CONTEXT = tag("moe/receipt/v3");
 export const COMMITMENT_CONTEXT = tag("moe/commitment/v1");
 export const DEMAND_CONTEXT = tag("moe/demand/v1");
 export const ACCEPTANCE_CONTEXT = tag("moe/acceptance/v1");

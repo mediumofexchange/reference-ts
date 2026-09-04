@@ -14,7 +14,7 @@ import { encodePublishedOp } from "../src/oplog.js";
 import { encodeTransferMessage } from "../src/messages.js";
 import { demandHash, encodeDemand, encodeLock, type DemandOp, type LockOp } from "../src/presentation.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
-import { isSilent, provesHolding, quietFor } from "../src/recovery.js";
+import { eraIndex, isSilent, provesHolding, quietFor } from "../src/recovery.js";
 import { VenueError } from "../src/venue.js";
 import { encodeReplacement, operatorAt, replacementMessage, ROLE_OPERATOR } from "../src/replacement.js";
 import { KEYS, SECRETS } from "./support.js";
@@ -770,11 +770,12 @@ describe("§C2: the venue's lag, and the floor it puts under a replacement's lea
     expect(venue().lag()).toBe(DEPTH + 1n);
   });
 
-  it("a record witnessed at 140 takes force at 145 and not at 144: the lead is floored at the lag plus one", async () => {
-    // Slice 38: the record must precede, on every party's clock, every act it
-    // can void. On this venue an act signed at clock c lands at c + 4 or later,
-    // so a lead of 4 lets the incumbent's last commitment land at the effective
-    // index in no term; a lead of 5 does not.
+  it("a record witnessed at 140 takes force at 149 and not at 148: the lead is floored at twice the lag plus one", async () => {
+    // Slices 38 and 39: the record must reach every party before the last act
+    // it can still land in the incumbent's term. On this venue an act signed at
+    // clock c lands at c + 4 or later, and the incumbent holds one commitment
+    // in flight, so it may wait a lag to be free and then a lag to land: a lead
+    // of 8 can leave it no clock at all, and 9 cannot.
     const ruled = makeBacking({
       obligor: KEYS.backer2,
       payout: { thing: "USD", quantumExponent: -2, perUnit: 100n },
@@ -812,10 +813,81 @@ describe("§C2: the venue's lag, and the floor it puts under a replacement's lea
           registers: { R4: ruled.name, R5: encodeReplacement(ruled.name, naming(effective)) },
         });
     const short = venue();
-    await short.sync(nodeFor(144n), [ruled]);
+    await short.sync(nodeFor(148n), [ruled]);
     expect(operatorAt(ruled, short, short.witnessedIndex())).toEqual(KEYS.operator);
     const enough = venue();
-    await enough.sync(nodeFor(145n), [ruled]);
+    await enough.sync(nodeFor(149n), [ruled]);
     expect(operatorAt(ruled, enough, enough.witnessedIndex())).toEqual(KEYS.alice);
+  });
+});
+
+describe("§C2: a venue's record for one key rises in sequence as it rises in index", () => {
+  const ordered = (v: ErgoVenue) => v.latestFor(KEYS.operator)?.sequence;
+
+  it("skips a commitment that does not extend the highest it already holds, so a replay anybody can copy off the chain does not move the record's last", async () => {
+    // A chain orders nothing: any decodable box at the address whose signature
+    // verifies is a record. An old commitment delayed in the mempool, or a
+    // replay of one — bytes already public, no key needed — would otherwise BE
+    // the record's last, and the last is what an era resolves against, what a
+    // seat pins against, and what the next sequence is taken from. One replay
+    // turned a lapsed pair into a fault proof against an honest operator and
+    // an honest restart into an equivocation against its own key (slice 39's
+    // review, both angles).
+    const node = new FakeNode()
+      .at(200n)
+      .putCommitment(commitment(0n, 0xa0), 10n)
+      .putCommitment(commitment(1n, 0xa1), 20n)
+      .putCommitment(commitment(2n, 0xa2), 30n)
+      .putCommitment(commitment(0n, 0xa0), 40n); // the replay
+    const v = venue();
+    await v.sync(node, [backing]);
+    expect(ordered(v)).toBe(2n);
+    expect(v.witnessedAtFor(KEYS.operator)).toBe(30n);
+    expect(v.nextSequenceFor(KEYS.operator)).toBe(3n);
+  });
+
+  it("skips a second commitment at a sequence it already holds, so one sequence stands at one index", async () => {
+    // Strictly extending, not merely non-decreasing: two roots at one sequence
+    // is the equivocation invariant 22 forbids, and admitting the second would
+    // put one sequence at two indices — which is the shape every era
+    // resolution assumes away.
+    const node = new FakeNode()
+      .at(200n)
+      .putCommitment(commitment(0n, 0xc0), 10n)
+      .putCommitment(commitment(1n, 0xc1), 20n)
+      .putCommitment(commitment(1n, 0xc9), 30n); // the same sequence, another root
+    const v = venue();
+    await v.sync(node, [backing]);
+    expect(ordered(v)).toBe(1n);
+    expect(v.witnessedAtFor(KEYS.operator)).toBe(20n);
+  });
+
+  it("reads two commitments of one key in one block the same way whatever order the node hands them back", async () => {
+    // Otherwise the record is a fact about which node you asked: two honest
+    // readers resolve one era two ways, permanently (the fix panel's security
+    // angle). Sorted by index and then by sequence before the filter, and each
+    // kept sequence remains exactly readable even though both share an index.
+    const forward = new FakeNode().at(200n).putCommitment(commitment(0n, 0xb0), 10n);
+    const backward = new FakeNode().at(200n).putCommitment(commitment(0n, 0xb0), 10n);
+    forward.putCommitment(commitment(1n, 0xb1), 20n).putCommitment(commitment(2n, 0xb2), 20n);
+    backward.putCommitment(commitment(2n, 0xb2), 20n).putCommitment(commitment(1n, 0xb1), 20n);
+    const a = venue();
+    const b = venue();
+    await a.sync(forward, [backing]);
+    await b.sync(backward, [backing]);
+    expect(ordered(a)).toBe(2n);
+    expect(ordered(b)).toBe(2n);
+    expect(a.witnessedAtFor(KEYS.operator)).toBe(b.witnessedAtFor(KEYS.operator));
+    for (const v of [a, b]) {
+      expect(v.witnessedAtSequence(KEYS.operator, 0n)).toBe(10n);
+      expect(v.witnessedAtSequence(KEYS.operator, 1n)).toBe(20n);
+      expect(v.witnessedAtSequence(KEYS.operator, 2n)).toBe(20n);
+    }
+    for (const era of [1n, 2n, 3n, 4n]) {
+      expect(eraIndex(b, KEYS.operator, era)).toEqual(eraIndex(a, KEYS.operator, era));
+    }
+    // The lower same-index commitment was witnessed, so its era is final at
+    // that index; only a sequence the record did not keep may read `died`.
+    expect(eraIndex(a, KEYS.operator, 2n)).toBe(20n);
   });
 });

@@ -173,6 +173,51 @@ interface Witnessed<T> {
   readonly at: bigint;
 }
 
+/**
+ * The commitments a venue keeps for one key: **strictly rising in sequence as
+ * they rise in index**, which is what the Venue contract requires of every
+ * implementation and what nine readers already assumed (slice 39s fix panel).
+ *
+ * A chain orders nothing. Any decodable box at the address whose signature
+ * verifies is a record here, so an old commitment delayed in the mempool, or a
+ * replay of one anybody can copy off the chain, lands now and would otherwise
+ * BE the record last: it moves the tip backwards, and the tip is what the era
+ * resolves against, what the seat pins against, and what the next sequence is
+ * taken from. One keyless replay could turn a lapsed pair into a fault proof
+ * against an honest operator, and an honest restart into an equivocation
+ * against its own key.
+ *
+ * A box skipped here is a commitment its own signer superseded before the
+ * chain took it. It is a position in a record, never evidence: an
+ * equivocation is proved from two signatures and needs no venue at all.
+ *
+ * Sorted by index and then sequence before filtering. Several increasing
+ * commitments may share one index, and `witnessedAtSequence` makes each one a
+ * readable fact; the ordering therefore has to be independent of the order in
+ * which a node returns boxes. A repeated or decreasing sequence is still
+ * skipped by the one extending rule below.
+ */
+function extending(gathered: Witnessed<Commitment>[]): Witnessed<Commitment>[] {
+  const ordered = [...gathered].sort((a, b) =>
+    a.at < b.at
+      ? -1
+      : a.at > b.at
+        ? 1
+        : a.value.sequence < b.value.sequence
+          ? -1
+          : a.value.sequence > b.value.sequence
+            ? 1
+            : 0,
+  );
+  const kept: Witnessed<Commitment>[] = [];
+  for (const witnessed of ordered) {
+    const top = kept[kept.length - 1];
+    if (top !== undefined && witnessed.value.sequence <= top.value.sequence) continue;
+    kept.push(witnessed);
+  }
+  return kept;
+}
+
 function register(box: ErgoBoxView, name: string): Uint8Array {
   const bytes = box.registers[name];
   if (bytes === undefined) throw new EncodingError(`box has no ${name}`);
@@ -381,7 +426,7 @@ export class ErgoVenue implements Venue {
     const commitmentBoxes = await node.boxesByAddress(this.addressing.commitments(operator));
     this.commitments.set(
       bytesToHex(operator),
-      this.finalised(commitmentBoxes, (box) => {
+      extending(this.finalised(commitmentBoxes, (box) => {
         // Reassembled in the record's own order, which the table gives.
         const record = new Uint8Array(136);
         for (const [name, start, end] of COMMITMENT_LAYOUT) {
@@ -398,7 +443,7 @@ export class ErgoVenue implements Venue {
         }
         if (!verifyCommitment(commitment)) throw new EncodingError("commitment does not verify");
         return commitment;
-      }),
+      })),
     );
 
   }
@@ -536,6 +581,14 @@ export class ErgoVenue implements Venue {
   witnessedAtFor(operator: Uint8Array, asOf?: bigint): bigint | undefined {
     this.requireFetched(operator);
     return this.latestWitnessedFor(operator, asOf)?.at;
+  }
+
+  witnessedAtSequence(operator: Uint8Array, sequence: bigint): bigint | undefined {
+    this.requireFetched(operator);
+    for (const witnessed of this.commitments.get(bytesToHex(operator)) ?? []) {
+      if (witnessed.value.sequence === sequence) return witnessed.at;
+    }
+    return undefined;
   }
 
   firstCommitmentFor(operator: Uint8Array, notBefore = 0n): bigint | undefined {

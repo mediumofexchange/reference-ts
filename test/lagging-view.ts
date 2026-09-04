@@ -116,6 +116,10 @@ export class LaggingView implements Venue {
   witnessedAtFor(operator: Uint8Array, asOf?: bigint): bigint | undefined {
     return this.chain.witnessedAtFor(operator, this.bound(asOf));
   }
+  witnessedAtSequence(operator: Uint8Array, sequence: bigint): bigint | undefined {
+    const at = this.chain.witnessedAtSequence(operator, sequence);
+    return at === undefined || at > this.witnessedIndex() ? undefined : at;
+  }
   firstCommitmentFor(operator: Uint8Array, notBefore?: bigint): bigint | undefined {
     const first = this.chain.firstCommitmentFor(operator, notBefore);
     return first === undefined || first > this.witnessedIndex() ? undefined : first;

@@ -1,22 +1,30 @@
-// Keeps the two documents that every session reads from growing back.
+// Keeps the documents that agents use to resume work small and trustworthy.
 //
-// CLAUDE.md is loaded into every session, so its size is a per-session tax.
+// AGENTS.md is loaded into every coding-agent session, so its size is a
+// per-session tax. CLAUDE.md only imports it.
+// WORK.md carries only the current operational handoff.
 // DECISIONS.md is an index precisely so that nobody has to read the whole log.
-// Both drifted once; prose alone did not hold them, so this does.
+// These boundaries are checked because prose alone did not keep them intact.
 //
 // If a check here fails, the fix is not to raise the limit. It is to move the
-// reasoning into decisions/ and leave the rule behind. 500 is the ceiling the
-// maintainer set on 2026-08-29, having already moved it once from 420. It is a
-// limit rather than a target, and it does not move again without them.
+// durable reasoning into decisions/, leave the active rule in AGENTS.md, and
+// keep only current state in WORK.md.
 
 import { readFileSync, readdirSync } from "node:fs";
 
-const CLAUDE_MD_MAX_LINES = 500;
+const AGENTS_MD_MAX_LINES = 200;
+const WORK_MD_MAX_LINES = 100;
 
 const problems = [];
 const fail = (msg) => problems.push(msg);
 
 const lines = (path) => readFileSync(path, "utf8").split("\n");
+
+// Claude Code reads CLAUDE.md and follows this import; other agents read
+// AGENTS.md directly. Keep the shim exact so the two never drift.
+if (readFileSync("CLAUDE.md", "utf8").trim() !== "@AGENTS.md") {
+  fail("CLAUDE.md must contain only @AGENTS.md so every agent shares one source.");
+}
 
 // GitHub's heading-anchor rule: lowercase, drop everything but letters,
 // digits, spaces and hyphens, then spaces become hyphens.
@@ -26,18 +34,58 @@ const anchorOf = (heading) =>
     .replace(/[^a-z0-9 -]/g, "")
     .replace(/ /g, "-");
 
-// 1. CLAUDE.md stays a quick reference.
-const claudeLines = lines("CLAUDE.md").length;
-if (claudeLines > CLAUDE_MD_MAX_LINES) {
+// 1. AGENTS.md stays a quick reference.
+const agentLines = lines("AGENTS.md").length;
+if (agentLines > AGENTS_MD_MAX_LINES) {
   fail(
-    `CLAUDE.md is ${claudeLines} lines, over the ${CLAUDE_MD_MAX_LINES}-line budget.\n` +
-      `      It is read into every session. Move the reasoning to a decisions/ entry\n` +
-      `      and leave the rule. The budget is the maintainer's ceiling, not a\n` +
-      `      number to raise.`,
+    `AGENTS.md is ${agentLines} lines, over the ${AGENTS_MD_MAX_LINES}-line budget.\n` +
+      `      It is read into every session. Move detailed rules to\n` +
+      `      docs/PROTOCOL_RULES.md, rationale to decisions/, and leave the\n` +
+      `      concise rule. The budget is a ceiling, not a number to raise.`,
   );
 }
 
-// 2. DECISIONS.md stays an index — entries live in decisions/.
+// 2. WORK.md stays a concise, structured handoff rather than a session log.
+const workLines = lines("WORK.md");
+if (workLines.length > WORK_MD_MAX_LINES) {
+  fail(
+    `WORK.md is ${workLines.length} lines, over the ${WORK_MD_MAX_LINES}-line budget.\n` +
+      `      Replace stale state and move durable reasoning to decisions/.`,
+  );
+}
+
+for (const heading of [
+  "## Goal",
+  "## Status",
+  "## Evidence",
+  "## Next",
+  "## Open questions",
+]) {
+  if (!workLines.includes(heading)) {
+    fail(`WORK.md is missing the required heading: ${heading}`);
+  }
+}
+
+if (!workLines.some((line) => /^Updated: \d{4}-\d{2}-\d{2}$/.test(line))) {
+  fail("WORK.md needs an Updated: YYYY-MM-DD line.");
+}
+
+const protocolRuleLines = lines("docs/PROTOCOL_RULES.md");
+for (const heading of [
+  "## Binding rules",
+  "## What the parties must do, that no code here enforces",
+  "## Design rules",
+]) {
+  if (!protocolRuleLines.includes(heading)) {
+    fail(`docs/PROTOCOL_RULES.md is missing the required heading: ${heading}`);
+  }
+}
+
+if (protocolRuleLines.includes("## Workflow")) {
+  fail("Workflow rules belong in AGENTS.md, not docs/PROTOCOL_RULES.md.");
+}
+
+// 3. DECISIONS.md stays an index — entries live in decisions/.
 const indexLines = lines("DECISIONS.md");
 const strayEntries = indexLines.filter((l) => /^## \d{4}-\d{2}-\d{2}/.test(l));
 if (strayEntries.length) {
@@ -48,7 +96,7 @@ if (strayEntries.length) {
   );
 }
 
-// 3. Collect every real entry heading, per month file.
+// 4. Collect every real entry heading, per month file.
 const headingsByFile = new Map();
 for (const file of readdirSync("decisions").filter((f) => f.endsWith(".md"))) {
   const headings = lines(`decisions/${file}`)
@@ -57,7 +105,7 @@ for (const file of readdirSync("decisions").filter((f) => f.endsWith(".md"))) {
   headingsByFile.set(`decisions/${file}`, headings);
 }
 
-// 4. Every index link points at a heading that exists.
+// 5. Every index link points at a heading that exists.
 const indexed = new Set();
 let indexCount = 0;
 for (const line of indexLines) {
@@ -82,7 +130,7 @@ for (const line of indexLines) {
   indexed.add(`${file}::${match}`);
 }
 
-// 5. Every entry is reachable from the index — an unindexed entry is invisible.
+// 6. Every entry is reachable from the index — an unindexed entry is invisible.
 for (const [file, headings] of headingsByFile) {
   for (const h of headings) {
     if (!indexed.has(`${file}::${h}`)) {
@@ -103,6 +151,7 @@ if (problems.length) {
 }
 
 console.log(
-  `Docs OK — CLAUDE.md ${claudeLines}/${CLAUDE_MD_MAX_LINES} lines, ` +
+  `Docs OK — AGENTS.md ${agentLines}/${AGENTS_MD_MAX_LINES} lines, ` +
+    `WORK.md ${workLines.length}/${WORK_MD_MAX_LINES} lines, ` +
     `${indexCount} index entries covering ${total} decisions.`,
 );

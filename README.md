@@ -42,7 +42,7 @@ succession, recovery, and the conservation arithmetic. Out of scope for now:
 blinding, the accumulator and pooled constructions, the Chaumian profile,
 shielded anything, external references, triggers, pro-rata.
 
-784 tests, covering the invariants one file at a time — `test/invariant-*.ts`
+The test suite covers the invariants one file at a time — `test/invariant-*.ts`
 is the readable index of what the code promises.
 
 ## What this is for
@@ -66,20 +66,23 @@ Two files are worth opening first:
 | **`src/contexts.ts`** | Every domain-separation tag in the system on one screen, with the prefix-free property asserted at load rather than assumed. |
 | **`src/backing.ts`** | The canonical encoding — the byte layout that every name in the system is a hash of. |
 
-`CLAUDE.md` states the invariants that bind every line. `DECISIONS.md` indexes
-the resolved questions — one line each, with the entries in `decisions/` — so
-reopening one is done knowingly rather than by forgetting it was ever decided.
+`WORK.md` is the current handoff for anyone continuing the implementation.
+`AGENTS.md` is the short, shared engineering contract, and `CLAUDE.md` imports
+it for Claude Code. `docs/PROTOCOL_RULES.md` holds detailed invariants for
+on-demand reading. `DECISIONS.md` indexes durable choices — one line each,
+with the entries in `decisions/` — so agents load only the history relevant to
+the current work.
 
 ## Working on it
 
 ```
-npm install
-npm test          # vitest, 784 tests
-npm run typecheck
-npm run build     # tsc -> dist, with declarations
+npm ci
+npm run check     # docs, types, tests, and package build
 ```
 
-Requires Node 20 or newer.
+Requires Node 20 or newer. Before changing the implementation, read `WORK.md`
+and `AGENTS.md`; follow the linked specification and decision entries only as
+needed for the current slice.
 
 ## The wire format is not stable
 

@@ -322,7 +322,7 @@ function encodeFields(b: BackingFields): Uint8Array {
       tag: CLAUSE_NON_SERVICE,
       write: () => {
         w.u64(terms.duration);
-        // A count, so bigint in the object (CLAUDE.md); a u32 on the wire, which
+        // A count, so bigint in the object (docs/PROTOCOL_RULES.md); a u32 on the wire, which
         // the writer asserts.
         if (terms.count < 0n || terms.count > 0xffff_ffffn) throw new EncodingError("non-service count out of u32 range");
         w.u32(Number(terms.count));

@@ -89,7 +89,7 @@ export class VenueError extends Error {}
  * The verifiers here catch broadly on purpose, because everything they read —
  * served states, receipts, commitments, published operations — comes from
  * whoever exhibits it, so a wrong length or a missing field has to be a failed
- * check rather than a crash (CLAUDE.md: verifiers never throw). A `VenueError`
+ * check rather than a crash (docs/PROTOCOL_RULES.md: verifiers never throw). A `VenueError`
  * is the one thing reaching those catches that is not that. It means the caller
  * holds a partial view and asked it something it was not synced for, and turning
  * it into `false`, `undefined` or `"unrelated"` states a fact about a party
@@ -199,6 +199,10 @@ export interface WitnessedOp {
  *   - **Witnessed order.** Records come out in the order they were witnessed:
  *     the walk's memo keeps a record's first POSITION as its first witnessing,
  *     which the walk's own sort used to normalise (the slice-37 verification).
+ *   - **Exact sequence reads.** Every commitment the venue kept remains
+ *     addressable by its sequence, including when several increasing
+ *     sequences share one witnessed index. A missing sequence is therefore a
+ *     real hole, not an artefact of asking only for that index's latest.
  *   - **A declared lag, bound to the id.** `lag()` is a constant of the
  *     venue's finality rule — the least number of indices by which an act
  *     signed at its clock is witnessed after it — never a view's state, so it
@@ -231,7 +235,7 @@ export interface Venue {
    * §C2's (slice 38): the walk floors a replacement's lead at the lag plus
    * one (`replacement.ts`), so every party reads the record before the last
    * act it can still land in the incumbent's term; what a party does with
-   * that is CLAUDE.md's party rule, since a door a rule-holder's record can
+   * that is docs/PROTOCOL_RULES.md's party rule, since a door a rule-holder's record can
    * shut is a lever (the slice-38 review).
    */
   lag(): bigint;
@@ -256,6 +260,8 @@ export interface Venue {
   commitsFor(attemptId: Uint8Array): WitnessedCommit[];
   latestFor(operator: Uint8Array, asOf?: bigint): Commitment | undefined;
   witnessedAtFor(operator: Uint8Array, asOf?: bigint): bigint | undefined;
+  /** The index of this exact commitment sequence, or undefined if the record never held it. */
+  witnessedAtSequence(operator: Uint8Array, sequence: bigint): bigint | undefined;
   firstCommitmentFor(operator: Uint8Array, notBefore?: bigint): bigint | undefined;
   nextSequenceFor(operator: Uint8Array): bigint;
 }
@@ -537,6 +543,19 @@ export class LocalVenue implements Venue {
     return this.latestWitnessedFor(operator, asOf)?.at;
   }
 
+  /**
+   * The witnessed index of one exact sequence. Several commitments may share
+   * an index; each one the venue accepted remains a held commitment rather
+   * than becoming an apparent hole behind that index's latest answer.
+   */
+  witnessedAtSequence(operator: Uint8Array, sequence: bigint): bigint | undefined {
+    const log = this.byOperator.get(bytesToHex(operator)) ?? [];
+    for (const witnessed of log) {
+      if (decodeCommitment(witnessed.bytes).sequence === sequence) return witnessed.at;
+    }
+    return undefined;
+  }
+
   private latestWitnessedFor(operator: Uint8Array, asOf?: bigint): Witnessed | undefined {
     const log = this.byOperator.get(bytesToHex(operator));
     if (log === undefined) return undefined;
@@ -552,10 +571,14 @@ export class LocalVenue implements Venue {
   }
 
   /**
-   * The sequence number this operator's next commitment must carry. Derived from
-   * the record rather than from sequencer memory, so a failed publish does not
-   * burn one (which would let the operator sign two roots at one sequence and
-   * frame itself for equivocation) and a restart resumes where it left off.
+   * The sequence number the RECORD says this operator's next commitment must
+   * carry — the floor, not the answer. A sequencer takes the greater of this
+   * and one past what it has itself signed (slice 39): on a venue that reads
+   * behind its chain the record is stale for the lag, and a commitment still
+   * in flight or dropped altogether would otherwise have its sequence signed
+   * twice over two roots, which is the equivocation invariant 22 forbids.
+   * A restart has no such memory, and waits the lag before it commits so that
+   * this answer is current again.
    */
   nextSequenceFor(operator: Uint8Array): bigint {
     const latest = this.latestWitnessedFor(operator);

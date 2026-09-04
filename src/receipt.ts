@@ -17,7 +17,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import type { Backing } from "./backing.js";
 import { ByteWriter, compareBytes, copyBytes } from "./bytes.js";
 import { committedLogFor, type ServedState } from "./commitment.js";
-import { eraLapsed } from "./recovery.js";
+import { eraIndex, eraLapsed } from "./recovery.js";
 import { isAnOperator, successionOf } from "./replacement.js";
 import { answering, type Venue } from "./venue.js";
 import { RECEIPT_CONTEXT } from "./contexts.js";
@@ -31,14 +31,23 @@ export interface Receipt {
   /** The operation's position in the backing's operation log. */
   readonly position: bigint;
   /**
-   * The era the receipt was signed in: the witnessed index of the operator's
-   * last commitment at signing, 0 where it had none. What the record says the
-   * operator's book stood on when it co-signed — which is what lets a reader
-   * tell a tail that died with a gap or a handover (`lapsed`) from a lie about
-   * the log (`contradicted`), where a position alone cannot (slice 28b; the
-   * receipt records an operation and a position and never when it was signed).
-   * 0 is a sentinel and collides with a commitment witnessed at index 0; the
-   * readers treat that era conservatively — a missed fault, never a wrong one.
+   * The era the receipt was signed in: one MORE than the sequence of the last
+   * commitment the operator had SIGNED when it co-signed, 0 where it had
+   * signed none. Which book the operator's signature stood on — what lets a
+   * reader tell a tail that died with a gap or a handover (`lapsed`) from a
+   * lie about the log (`contradicted`), where a position alone cannot (slice
+   * 28b; the receipt records an operation and a position and never when it was
+   * signed).
+   *
+   * **The commitment, not the index it was witnessed at** (slice 39). On a
+   * venue that reads behind its chain the operator co-signs between signing a
+   * commitment and reading it, and that commitment's index does not exist yet;
+   * naming the previous one made every such receipt a stranger-checkable lie
+   * about the operator's own log the moment the commitment landed, and
+   * predicting the index made one slow block void the receipt for ever.
+   * `eraIndex` puts it back on the record. 0 is a sentinel and says only that
+   * the operator had committed nothing; the readers treat it conservatively —
+   * a missed fault, never a wrong one.
    */
   readonly after: bigint;
   readonly operator: Uint8Array;
@@ -47,7 +56,7 @@ export interface Receipt {
 
 /**
  * A snapshot of a receipt's bytes. `readonly` is erased at runtime, so anything
- * that stores or serves a receipt copies it (CLAUDE.md: copy on the way in, copy
+ * that stores or serves a receipt copies it (docs/PROTOCOL_RULES.md: copy on the way in, copy
  * on the way out). Without it whoever holds a receipt can mutate the one the
  * sequencer kept, and invariant 26's "identical prior response" stops being
  * something the operator controls.
@@ -212,7 +221,7 @@ export function isOperatorReceipt(backing: Backing, venue: Venue, receipt: Recei
 }
 
 /**
- * What a committed state says about a receipt — the question behind CLAUDE.md's
+ * What a committed state says about a receipt — the question behind docs/PROTOCOL_RULES.md's
  * rule that **a payment is final when witnessed, not when co-signed** (§C2:
  * "Finality means witnessed rather than co-signed").
  *
@@ -222,14 +231,16 @@ export function isOperatorReceipt(backing: Backing, venue: Venue, receipt: Recei
  *   - `lapsed`       the era ended in a return or a handover (eraLapsed), so
  *                    the operation died unwitnessed with the tail it sat in —
  *                    a fact about the operator's silence, not a lie, and the
- *                    signed request is resubmittable (CLAUDE.md's payee rule).
+ *                    signed request is resubmittable (docs/PROTOCOL_RULES.md's payee rule).
  *   - `contradicted` the record is past the era's end, or already held the
  *                    position otherwise, so one of the operator's two
  *                    signatures is a lie about its own log.
  *   - `dropped`      this IS the operator's committed state, and it carries no
  *                    log for this backing at all, so it answers nothing.
  *   - `unrelated`    not this backing's operator's receipt, not its state, or
- *                    an era the operator's record never had.
+ *                    an era the operator's record can never answer for — a
+ *                    commitment it never signed, or more than the one it may
+ *                    have in flight.
  *
  * **`dropped` is not an accusation, and is not `unrelated` either.** A commitment
  * made before this backing was registered carries no log for it innocently, and a
@@ -272,21 +283,20 @@ export function receiptStatus(
 ): ReceiptStatus {
   return answering(() => {
     if (!isOperatorReceipt(backing, venue, receipt)) return "unrelated";
-    // The era the receipt names must be real: `after` is the witnessed index of
-    // the operator's last commitment at signing, or 0 where it had none. One
-    // naming an index this operator committed nothing at is not a receipt its
-    // record can answer for.
+    // The era the receipt names must be real: `after` names the last
+    // commitment this operator had signed, and one naming a commitment it
+    // never signed — or more than the single commitment it may have in flight
+    // — is not a receipt its record can answer for.
     if (typeof receipt.after !== "bigint" || receipt.after < 0n) return "unrelated";
-    if (receipt.after > 0n && venue.witnessedAtFor(receipt.operator, receipt.after) !== receipt.after) {
-      return "unrelated";
-    }
+    const era = eraIndex(venue, receipt.operator, receipt.after);
+    if (era === undefined) return "unrelated";
     // The genesis era (after = 0) is not further verifiable: the doors are open
     // from the venue's genesis through the declared duration, so honest
     // receipts carry it — and so can a lie stamped by an operator that arrived
     // late, which no reader can tell apart (a first fix here refused every
     // late-first-commitment genesis era and called 28a's own honest
     // first-commit-wipe receipts forged). What answers the stamp is the
-    // payee's freshness rule (CLAUDE.md): a receipt naming anything but the
+    // payee's freshness rule (docs/PROTOCOL_RULES.md): a receipt naming anything but the
     // operator's latest commitment at payment time is stale on its face.
     const committed = committedLogFor(backing, venue, served);
     if (committed === undefined) return "unrelated";
@@ -298,6 +308,18 @@ export function receiptStatus(
     if (entry !== undefined && compareBytes(opHashOfEntry(backing.name, entry), receipt.opHash) === 0) {
       return "witnessed";
     }
+    // The era's own commitment is signed and published and the venue has not
+    // shown it: nothing has ended this era, and the operation it attests is
+    // still on its way to a commitment. Read past this, every arm below would
+    // measure an era that has not begun on the record (slice 39).
+    if (era === "ahead") return "pending";
+    // Or the venue never took it, and the era ended with it — the tail died
+    // with license, exactly as a return from silence kills one. BELOW the
+    // witnessed check above, deliberately: an operation a later commitment
+    // carried is witnessed whatever became of the commitment its receipt was
+    // signed under (the fix panel's inventory angle, whose mutation of this
+    // ordering is what pins it).
+    if (era === "died") return "lapsed";
     // Not carried here, so the era decides what that means. An era that ended
     // in a return or a handover dropped its tail with license: the receipt
     // attests an act that died unwitnessed, and accuses nobody.
@@ -310,11 +332,10 @@ export function receiptStatus(
     // append-only), and one it does not reach yet is simply not there yet.
     const sameOperator = compareBytes(served.commitment.operator, receipt.operator) === 0;
     const past = sameOperator
-      ? served.commitment.sequence > (venue.latestFor(receipt.operator, receipt.after)?.sequence ?? -1n)
+      ? served.commitment.sequence > (venue.latestFor(receipt.operator, era)?.sequence ?? -1n)
       : successionOf(backing, venue).some(
           (link) =>
-            link.from > receipt.after &&
-            compareBytes(link.operator, served.commitment.operator) === 0,
+            link.from > era && compareBytes(link.operator, served.commitment.operator) === 0,
         );
     if (past) return "contradicted";
     return entry === undefined ? "pending" : "contradicted";

@@ -38,7 +38,7 @@ import { KEYS, makeTransparentBacking, pub, SECRETS, advanceWitnessedIndex } fro
 // during the gap" until it has closed the gap, and only its commitment closes
 // it. Returning from silence is committing. And what the operator co-signed
 // after its last commitment and before the silence was never witnessed: "a
-// payment is final when witnessed, not when co-signed" (CLAUDE.md, §C2), so it
+// payment is final when witnessed, not when co-signed" (docs/PROTOCOL_RULES.md, §C2), so it
 // died with the gap, exactly as a predecessor's tail dies when a successor takes
 // over from the committed state (takeOver). The verifier's fold (walkGap) has
 // always read the gap that way; until this slice the operator did not, so the
@@ -656,7 +656,7 @@ describe("§C2b: the fixes reviewed — the door that reads, the retired book, a
     // Found regression-reviewing the review round: restoreAll swept every
     // registered backing, so an operator returning from its own silence on USD
     // forgot the receipt book of the EUR it had handed over — the one evidence
-    // the successor cannot produce (CLAUDE.md's retired-operator rule).
+    // the successor cannot produce (docs/PROTOCOL_RULES.md's retired-operator rule).
     const venue = new LocalVenue();
     const eur = makeBacking({
       obligor: KEYS.backer,

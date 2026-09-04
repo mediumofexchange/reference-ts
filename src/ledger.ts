@@ -33,7 +33,7 @@
 // fully applies or throws with no state change. Every operation — the three that
 // move value, the four of presentation and the two of an atomic attempt —
 // appends exactly one entry to the operation log, and every one but the commit
-// consumes exactly one nonce (CLAUDE.md names that departure), both in `apply`,
+// consumes exactly one nonce (docs/PROTOCOL_RULES.md names that departure), both in `apply`,
 // so there is one place where an operation becomes a fact. A signer's nonce is per
 // (signer, backing).
 //
@@ -745,7 +745,7 @@ export function applyEntry(
           throw new LedgerError("attempt id is not the hash of this attempt's terms");
         }
         // **The value reachable by omission is not a salt**, and that is the
-        // whole of what this checks. It is not "a salt was drawn" — CLAUDE.md
+        // whole of what this checks. It is not "a salt was drawn" — docs/PROTOCOL_RULES.md
         // lists drawing a fresh random one under what no code here enforces, and
         // salt = 1 or a hash of the terms passes this happily. What it closes is
         // the mistake the API invites: derive the id from the op you are about
@@ -801,7 +801,7 @@ export function applyEntry(
       // A set leg's parties are `[holder]`, so any object that holder signs
       // satisfies it; throwing for the whole entry (as the first draft did) let
       // one set leg brick every genuine venue-naming lock sharing the attempt id,
-      // with no exit at any index — the deadlock CLAUDE.md's "exactly one exit is
+      // with no exit at any index — the deadlock docs/PROTOCOL_RULES.md's "exactly one exit is
       // open at every index" forbids (found reviewing slice 31). Excluded, not
       // thrown; the venue-naming locks settle and the set leg stays standing.
       const reachable = matched.filter(
@@ -1186,7 +1186,7 @@ export class TransparentLedger {
    * (found regression-reviewing the review round). What the
    * restore drops is the operator's own co-signatures that no commitment ever
    * carried — "a payment is final when witnessed, not when co-signed"
-   * (CLAUDE.md) — which is what takeOver drops of a predecessor's. §C2b's return
+   * (docs/PROTOCOL_RULES.md) — which is what takeOver drops of a predecessor's. §C2b's return
    * from silence is why it exists (Sequencer.adopt).
    *
    * The state is the fold of the kept prefix and nothing else — not what the

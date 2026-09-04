@@ -9,6 +9,7 @@ import { isOperatorReceipt, receiptStatus, type Receipt } from "../src/receipt.j
 import {
   committedInTime,
   committedOutstanding,
+  eraIndex,
   eraLapsed,
   gapLegsFor,
   gapOpen,
@@ -82,6 +83,9 @@ class RefusesEverything extends LocalVenue {
     throw new VenueError("this view was not synced for that operator");
   }
   override witnessedAtFor(): never {
+    throw new VenueError("this view was not synced for that operator");
+  }
+  override witnessedAtSequence(): never {
     throw new VenueError("this view was not synced for that operator");
   }
   override commitsFor(): never {
@@ -201,6 +205,7 @@ function surface() {
     ["lastCommitmentInForce", () => lastCommitmentInForce(twoLinks, refusing)],
     ["gapLegsFor", () => gapLegsFor(refusing, backing)],
     ["gapOpen", () => gapOpen(refusing, backing)],
+    ["eraIndex", () => eraIndex(refusing, KEYS.operator, 1n)],
     ["eraLapsed", () => eraLapsed(refusing, backing, KEYS.operator, 0n)],
     ["quietFor", () => quietFor(refusing, KEYS.operator)],
     ["replayServedState", () => replayServedState(backing, refusing, served)],

@@ -13,7 +13,7 @@ import { KEYS, makeTransparentBacking, SECRETS } from "./support.js";
 
 // §C2's receipts, and invariant 22, from the holder's side.
 //
-// CLAUDE.md now carries the rule this file makes usable: **a payment is final
+// docs/PROTOCOL_RULES.md now carries the rule this file makes usable: **a payment is final
 // when witnessed, not when co-signed.** §C2: "Finality means witnessed rather
 // than co-signed"; §C3 applies it to the release, "a release nobody witnessed
 // did not happen". A payee holding a receipt therefore has a question to ask,
@@ -36,8 +36,9 @@ import { KEYS, makeTransparentBacking, SECRETS } from "./support.js";
 // party — the finding slice 9 made twice. Answering "contradicted" for a
 // stranger's receipt is exactly that bug.
 //
-// Since 28b the receipt names its era (the witnessed index of the operator's
-// last commitment at signing), so a stale restore — a SHORTER log committed at
+// Since 28b the receipt names its era — since slice 39, one more than the
+// sequence of the operator's last SIGNED commitment — so a stale restore — a
+// SHORTER log committed at
 // an era's ordinary end — is caught by the receipt on one state, where before
 // only isRewrittenHistory's pair of commitments could see it.
 

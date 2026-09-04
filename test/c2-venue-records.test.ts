@@ -144,7 +144,7 @@ describe("a venue's records have one canonical spelling", () => {
 
 describe("holding bytes makes copy-in copy-out structural", () => {
   it("does not let a publisher rewrite what it published", () => {
-    // The rule CLAUDE.md states without exception, and it used to need three
+    // The rule docs/PROTOCOL_RULES.md states without exception, and it used to need three
     // explicit copy functions. Encoding on the way in is the same guarantee
     // with nothing to forget: the record is bytes the publisher never held.
     const venue = new LocalVenue();
@@ -152,6 +152,10 @@ describe("holding bytes makes copy-in copy-out structural", () => {
     venue.publish(commitment);
     commitment.root.fill(0xff);
     expect(venue.latestFor(KEYS.operator)?.root).toEqual(new Uint8Array(32).fill(0x11));
+    expect(venue.witnessedAtSequence(KEYS.operator, commitment.sequence)).toBe(
+      venue.witnessedIndex(),
+    );
+    expect(venue.witnessedAtSequence(KEYS.operator, commitment.sequence + 1n)).toBeUndefined();
 
     const op = transferOp();
     venue.publishOp(backing.name, op);
@@ -229,7 +233,7 @@ describe("the two record kinds the first table left out: a lock and a commit", (
     const bytes = encodePublishedOp(name, op);
     const decoded = decodePublishedOp(bytes);
     expect(decoded.op).toEqual(op);
-    // A commit names no backing, by design (CLAUDE.md): the record says so.
+    // A commit names no backing, by design (docs/PROTOCOL_RULES.md): the record says so.
     expect(decoded.backingName).toBeUndefined();
   });
 

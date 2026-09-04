@@ -474,7 +474,7 @@ function validateKeySet(keys: readonly Uint8Array[], what: string): void {
 
 /**
  * A key set on the wire: u8 count, then the keys — framed, as every
- * variable-length field is (CLAUDE.md). The reader is its strict inverse and
+ * variable-length field is (docs/PROTOCOL_RULES.md). The reader is its strict inverse and
  * validates the same way, so a record has one spelling; the first version wrote
  * no count and the one reader expected one, so a lock record could not be read
  * at all (found by the 2026-08-22 audit).

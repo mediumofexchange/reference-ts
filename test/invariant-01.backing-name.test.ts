@@ -485,7 +485,7 @@ describe("P has one shape at a time", () => {
 
 describe("E's non-service count is a count, on a u32 wire", () => {
   it("refuses a count outside the u32 range, and round-trips the largest one", () => {
-    // A bigint in the object (CLAUDE.md: counts are bigint), a u32 on the wire —
+    // A bigint in the object (docs/PROTOCOL_RULES.md: counts are bigint), a u32 on the wire —
     // the one bound the type no longer enforces (found reviewing the audit slice).
     const fields = (count: bigint) => ({
       obligor: KEYS.backer,

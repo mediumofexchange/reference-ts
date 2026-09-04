@@ -39,7 +39,7 @@ import { KEYS, makeTransparentBacking, SECRETS } from "./support.js";
 //   - **The interval.** §C2: "Short intervals cost fees, long ones cost
 //     exposure, and there is no third option, which is why the interval is a
 //     signed field rather than operational discretion." A payment is final when
-//     witnessed rather than co-signed (CLAUDE.md, and §C2's own "Finality means
+//     witnessed rather than co-signed (docs/PROTOCOL_RULES.md, and §C2's own "Finality means
 //     witnessed rather than co-signed"), so a payee waiting for the next
 //     commitment needs to know how long that is. Without it they can measure
 //     how stale the last commitment is and cannot tell a fast operator running

@@ -42,7 +42,7 @@ import { KEYS, SECRETS } from "./support.js";
 // out". What prevention looks like is a threshold K — §C2b: "That is the
 // strongest argument for a threshold K" — which is invisible here, since t-of-n
 // aggregated to one Ed25519 key leaves the name, E and strict verification
-// untouched. The same shape as CLAUDE.md's one-writer rule for the operator.
+// untouched. The same shape as docs/PROTOCOL_RULES.md's one-writer rule for the operator.
 //
 // **Where the boundary lives.** An issuance is witnessed when a commitment
 // carrying it is witnessed, and a log entry records no index of its own — so the
@@ -52,7 +52,7 @@ import { KEYS, SECRETS } from "./support.js";
 //
 // **What is NOT done, and it is the whole of decision 3.** Nothing is unwound
 // and no holder is told their units are void. Which units descend from a void
-// issuance is provenance, ruled out in CLAUDE.md rather than deferred, and
+// issuance is provenance, ruled out in docs/PROTOCOL_RULES.md rather than deferred, and
 // impossible under blinding anyway. So the code publishes ONE number about the
 // BACKING — how far its committed supply exceeds what stands — and never a
 // verdict about anyone's holding. Allocation was settled in P before anyone

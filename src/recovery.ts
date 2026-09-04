@@ -54,7 +54,7 @@
 // Everything here is a verifier: it answers questions about state an untrusted
 // operator served, so it returns false on any malformed input and never throws —
 // with two exceptions: a venue's refusal propagates rather than being answered
-// (CLAUDE.md, `answering`; witnessedCommitFor raises one for a record that is
+// (docs/PROTOCOL_RULES.md, `answering`; witnessedCommitFor raises one for a record that is
 // not the lock's venue), and quietFor refuses a malformed operator key, which
 // is the reader's own validated object and never adversary bytes.
 
@@ -591,7 +591,7 @@ export function committedOutstanding(
  * committedOutstanding gives one number — how far the committed supply exceeds
  * what stands — and that number is a fact about the BACKING. It is never a
  * verdict about a holding. Which units descend from a void issuance is
- * provenance, which CLAUDE.md rules out rather than defers and which no blinded
+ * provenance, which docs/PROTOCOL_RULES.md rules out rather than defers and which no blinded
  * construction could answer anyway; and allocation was settled in P before
  * anyone accepted, since invariant 19 forbids a payout reading holder identity
  * and §18 excludes "discretion after the fact".
@@ -797,12 +797,87 @@ export function gapLegsFor(
 }
 
 /**
+ * **Where the record puts the commitment a receipt's era names**, or the reason
+ * it cannot: `"ahead"` for the one commitment the operator may have signed and
+ * published without the venue showing it yet (slice 39's in-flight bound),
+ * `undefined` for an era the operator's record can never answer for.
+ *
+ * An era is one MORE than the sequence of the commitment it names, so zero
+ * still means "this operator had signed none" — the sentinel every reader
+ * already treats conservatively. Naming the commitment rather than the index
+ * is what lets an operator co-sign between signing a commitment and reading
+ * it: the index does not exist yet, and predicting it makes one slow block
+ * void the receipt, since inclusion is bounded below by the venue's lag and
+ * above by nothing (§C2).
+ *
+ * **The fast path is the era a live operator names**, its own latest. An older
+ * era is resolved by exact sequence, because several commitments may share a
+ * witnessed index and every one the venue kept must remain nameable. A
+ * sequence the record skips answers `"died"` rather than borrowing a
+ * neighbouring commitment's index.
+ *
+ * **Three answers, because the record has three things to say** (slice 39's
+ * fix panel). It HOLDS the commitment, and the era began where that
+ * commitment was witnessed. It has NOT REACHED it — `"ahead"` — and nothing
+ * has ended the era, so an operation it attests is still on its way to one.
+ * Or it MOVED PAST it without ever holding it — `"died"` — and that
+ * commitment is one the venue never took: the era it opened ended with it,
+ * exactly as §C2b's return from silence ends one, an expiry being a
+ * sub-duration return.
+ *
+ * **Merging the last two is what the first draft did, and it shut the
+ * operator's own door**: `shut` asks `eraLapsed` about the era this operator
+ * is stamping right now, and a blanket lapse over both answers made that era
+ * lapse from the second dropped commitment onward, refusing every act — the
+ * blind window back by another road (the fix panel's inventory angle). The
+ * operator's own era is never `"died"`: `era()` is one past what it has
+ * signed, so its target is either the record's highest or beyond it.
+ *
+ * **And `"ahead"` is unbounded.** The first draft allowed one, on the reading
+ * that one commitment in flight bounds the gap. It does not: the sequence a
+ * commitment carries is one past what the operator SIGNED, so every dropped
+ * transaction widens the gap by one, permanently, and an honest operator's own
+ * receipts read `unrelated` from the second drop on. No sound bound is
+ * available from the record, and an unsound one accuses the honest.
+ */
+export function eraIndex(
+  venue: Venue,
+  operator: Uint8Array,
+  after: bigint,
+): bigint | "ahead" | "died" | undefined {
+  return answering(() => {
+    if (!(operator instanceof Uint8Array) || operator.length !== 32) return undefined;
+    if (typeof after !== "bigint" || after < 0n) return undefined;
+    // The genesis era names no commitment, and index zero is where every
+    // reader already measures it from.
+    if (after === 0n) return 0n;
+    const target = after - 1n;
+    const latest = venue.latestFor(operator);
+    const highest = latest === undefined ? -1n : latest.sequence;
+    if (target > highest) return "ahead";
+    // The live operator's own era: its latest, which is what a fresh receipt
+    // names and what the sequencer's own doors ask about.
+    if (target === highest) return venue.witnessedAtFor(operator);
+    const exact = venue.witnessedAtSequence(operator, target);
+    // The record moved past this sequence without ever holding it: the
+    // commitment died. Sound because the exact read distinguishes a real
+    // same-index commitment from a gap, while the Venue contract keeps the
+    // sequence monotone across indices.
+    return exact ?? "died";
+  }, undefined);
+}
+
+/**
  * Whether the era a receipt was signed in ended without carrying its tail — so
  * that an operation the receipt attests, absent from the record, was dropped
  * with license rather than lied about.
  *
- * A receipt names its era: `after`, the witnessed index of the operator's last
- * commitment when it co-signed (0 where it had none). The era ends at the
+ * A receipt names its era: `after`, one more than the sequence of the last
+ * commitment its operator had SIGNED when it co-signed (0 where it had signed
+ * none), which `eraIndex` puts on the record. An era whose commitment the
+ * venue has not shown yet has not ended — nothing can have ended it — so it
+ * answers false, which is also what the operator's own door asks while its
+ * commitment is in flight. The era ends at the
  * operator's next commitment, or at a successor taking force, whichever the
  * record shows first — and how it ends decides what the receipt is worth:
  *
@@ -819,9 +894,11 @@ export function gapLegsFor(
  *
  * Readable from this backing's own terms, which is why the restore is per
  * backing and a set spans one silence clause (DECISIONS, slice 28b). A backing
- * declaring no silence clause has no return to lapse into — only a handover —
- * and a record the backing does not declare shows nothing, as every clause
- * reader answers. A venue's refusal propagates, as everywhere.
+ * declaring no silence clause has no duration-based return, but an in-flight
+ * commitment still expires at the venue's lag: an exact missing sequence can
+ * therefore lapse its tail. A record the backing does not declare shows
+ * nothing, as every clause reader answers. A venue's refusal propagates, as
+ * everywhere.
  */
 export function eraLapsed(
   venue: Venue,
@@ -864,7 +941,16 @@ export function eraLapsed(
     // one's ending lapses it — which is this predicate's direction, and the
     // regression review priced it: the excuse holds only while the key stays
     // dark, and `isSilent` names that state for what it is.
-    let from = after;
+    // The era's own commitment, on the record. An era still in flight cannot
+    // have ended, and one the record cannot answer for accuses nobody.
+    const at = eraIndex(venue, operator, after);
+    if (at === "ahead" || at === undefined) return false;
+    // A commitment the venue never took ended the era it opened, and took its
+    // tail with it — §C2b's return from silence, under the declared duration.
+    // The operator's own era never reads this (see `eraIndex`), so this
+    // answer belongs to a reader and never shuts a door.
+    if (at === "died") return true;
+    let from = at;
     for (const link of chain) {
       if (compareBytes(link.operator, operator) !== 0) continue;
       if (link.from > from) from = link.from;
