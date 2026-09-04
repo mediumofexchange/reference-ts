@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -28,6 +28,10 @@ jobs:
         # If the floor ever stops holding, the engines field is the thing that
         # is wrong, not the test.
         node: [20, 24]
+        os: [ubuntu-latest]
+        include:
+          - node: 24
+            os: windows-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -39,19 +43,5 @@ jobs:
 
       - run: npm ci
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Tests
-        run: npm test
-
-      - name: Docs stay readable
-        # Cheap and deterministic, so it only needs to run once.
-        if: matrix.node == 24
-        run: npm run check:docs
-
-      - name: Package builds and publishes what it claims
-        if: matrix.node == 24
-        run: |
-          npm run build
-          npm pack --dry-run
+      - name: Reference, installed package and durable payment acceptance
+        run: npm run check

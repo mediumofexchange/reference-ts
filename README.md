@@ -5,9 +5,17 @@ The TypeScript reference implementation of the
 one backing object `B = (K, P, R, E)`, claims held against it, wallets, and the
 law.
 
+The package is not published to npm. Build and check the source with Node.js
+20 or newer:
+
+```sh
+git clone https://github.com/mediumofexchange/reference-ts.git
+cd reference-ts
+npm ci
+npm run check
 ```
-npm install @mediumofexchange/reference@next
-```
+
+After building, the package exports are available within this checkout:
 
 ```ts
 import { makeBacking, backingName } from "@mediumofexchange/reference";
@@ -32,9 +40,8 @@ import { REPLACEMENT_CONTEXT } from "@mediumofexchange/reference/contexts";
 
 ## Status
 
-**Early, and the API moves.** Published under the `next` dist-tag, so
-`npm install @mediumofexchange/reference` without a tag will not pick it up
-until there is something worth calling `latest`.
+**Experimental; the API and wire format can change.** Source is the supported
+way to try the implementation. There is no published npm release.
 
 The transparent setting only. In scope: canonical encoding of backings,
 hashing, signatures, issuance, swaps, presentation, sequencing, dishonour,
@@ -45,12 +52,28 @@ shielded anything, external references, triggers, pro-rata.
 The test suite covers the invariants one file at a time — `test/invariant-*.ts`
 is the readable index of what the code promises.
 
+The compact commitment format and local pilot profile follow specification
+revision [`c3f4b0f`](https://github.com/mediumofexchange/money-from-first-principles/tree/c3f4b0f99f00f60edb3305e83f7359346c8805d9).
+
+## Try the local payment pilot
+
+With Node.js 24, run the optional durable pilot after the source setup above:
+
+```sh
+npm run pilot:demo
+```
+
+The scenario exercises two clients, a local operator and witness, payment
+verification, restart, retries, and redemption. See [the pilot guide](docs/PILOT.md)
+for its storage and trust assumptions. The witness is local and trusted; this
+is an integration demonstration, not a deployed payment service.
+
 ## What this is for
 
 The paper derives the object and argues for it. The protocol says what to
-build. This says one way to build it, in code you can read — it is a reference,
-not a product. Nothing here has been deployed, audited, or used for anything
-that matters, and the cryptography is deliberately limited to hashes and
+build. This says one way to build it, in code you can read. The reference and
+local pilot are experimental and have not undergone a completed security
+audit. The cryptography is deliberately limited to hashes and
 signatures (`@noble/hashes`, `@noble/curves`, and nothing else).
 
 ## Reading it
@@ -77,17 +100,24 @@ the current work.
 
 ```
 npm ci
-npm run check     # docs, types, tests, and package build
+npm run check     # docs, types, tests, built package consumer, and Node 24 pilot
 ```
 
-Requires Node 20 or newer. Before changing the implementation, read `WORK.md`
+The core requires Node 20 or newer; the optional durable pilot requires Node 24.
+Before changing the implementation, read `WORK.md`
 and `AGENTS.md`; follow the linked specification and decision entries only as
 needed for the current slice.
 
 ## The wire format is not stable
 
-Backing names, venue ids and signatures are hashes over byte layouts that are
-still free to change, and one already has: the domain-separation namespace and
+Shared commitments now authenticate a directory of backing names and snapshot
+digests. A verifier can fetch the relevant log without unrelated histories;
+a named but withheld log is unavailable evidence, never proof of absence.
+This changes the commitment signature context to `moe/commitment/v2` and is
+incompatible with earlier commitments.
+
+Backing names, venue ids and signatures use byte layouts that are
+still free to change. Earlier, the domain-separation namespace and
 the canonical encoding's magic bytes moved from `mfp/` and `"MFPB"` to `moe/`
 and `"MOEB"` when the project took the `mediumofexchange` name. There is no
 compatibility path across that change and none is planned — accepting two

@@ -4,7 +4,7 @@ This repository is the executable reference implementation of the Medium protoco
 
 ## Sources of truth
 
-- The normative specification lives in the companion `medium-of-exchange-protocol` repository. If code and specification disagree, do not silently choose one: identify the exact conflict and fix or escalate the specification first.
+- The normative specification lives in the companion `money-from-first-principles` repository. The README pins its implemented revision. If code and specification disagree, identify the exact conflict and fix or escalate the specification first.
 - `WORK.md` is the current operational handoff. Replace stale status instead of appending a diary.
 - `DECISIONS.md` is the index of durable design decisions. Read the index, then only the entries relevant to the work at hand.
 - `docs/PROTOCOL_RULES.md` preserves detailed invariants and party obligations referenced by the code. Load only the relevant section when changing that mechanism.

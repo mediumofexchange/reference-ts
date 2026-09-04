@@ -23,6 +23,23 @@ security audit. No protocol or implementation behavior was changed by it.
 
 ## Baseline and evidence
 
+Implementation follow-up on `feat/durable-transparent-pilot` (2026-09-04):
+
+| Finding | Disposition |
+| --- | --- |
+| 1. Cached backing identity | Fixed at signing, verification and ledger registration; regression tests. |
+| 2–3. Ergo coherence and mutable records | Overlapping refreshes rejected, input terms copied before awaits, output records copied; regression tests. |
+| 4. Installation | Source instructions replace unavailable npm installation; CI installs and exercises the built tarball. |
+| 5. Backing-specific evidence | Named digest directory implemented with commitment-v2 domain. Per-backing checkpoints remain future work. |
+| 6. Fixed view and publication | Pilot captures a read-only local view. General asynchronous external publication remains future work. |
+| 7. Signing durability | SQLite journal, exact retry, serialized writers and crash acceptance tests implemented for the local pilot. External outbox and rollback protection remain future work. |
+| 8. Transition specification | Pilot scope and transition table added. A complete extraction of C2's larger state machine remains future work. |
+| 9. Prevention/evidence/recovery | C4 wording corrected; pilot makes local witness trust explicit. |
+| 10. Profile/version | `transparent-pilot/v0-directory-v1`, bounded to one root and 10,000 commands; companion spec revision pinned. |
+
+See [the runnable pilot and limits](PILOT.md). The following assessment and
+baseline evidence describe the original reviewed commits.
+
 All four working trees were clean at review start. Local `main` matched live
 GitHub `HEAD` and `refs/heads/main`, checked with `git ls-remote`:
 

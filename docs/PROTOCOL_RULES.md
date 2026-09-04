@@ -64,6 +64,12 @@ through the index in `DECISIONS.md` rather than restated here.
   spent set, running totals and the standing demand record (inv 23). The root
   must be injective, or one signature covers two states and equivocation is
   unprovable.
+- **Transparent commitment v2 authenticates a complete sorted directory of
+  backing names and snapshot digests.** Relevant snapshots may be supplied
+  without unrelated histories. A name present without its matching log is
+  unavailable evidence; only authenticated non-membership proves a drop.
+  Directory framing is version 1 (`MOED`); signatures use `moe/commitment/v2`.
+  Legacy roots are incompatible.
 - **A replacement is co-signed by its successor, and force is the effective
   index** (§C2). Both signatures go over one message, so there is one record
   and one tag. `successionOf` stops at the last link whose index
@@ -377,14 +383,17 @@ a stolen key as live. So a `VenueError` propagates where everything else is
 caught. That is one rule, in one place — `answering` in `src/venue.ts` — because
 it was written by hand three times and forgotten four, each time one layer above
 the last. `venue-refusal.test.ts` holds every verifier that takes a `Venue` to
-it; a new one belongs in that list.
+it; a new one belongs in that list. The optional pilot application boundary
+`verifyPilotPayment` translates `VenueError` into the distinct `unavailable`
+result, never `invalid` or `final`; its regression is in `pilot-store.test.ts`.
 
 **An error names the boundary that refused.** `EncodingError` = these bytes or
 fields are not well-formed. `SigningError` = you asked me to sign with a key
 that is not yours. `LedgerError` = the law refuses (`NonceError` = this nonce
 is not the signer's next). `SequencerError` = this operator declines to serve
 you. `VenueError` = the record will not accept this. Do not add a sixth
-without a new boundary to name.
+without a new boundary to name. `PilotError` names the optional durable service
+boundary: command identity conflicts, profile limits and storage refusal.
 
 **Domain tags live in one file.** Every context string that separates one
 signed message type from another is declared in `src/contexts.ts`. A tag

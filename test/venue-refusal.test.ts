@@ -1,10 +1,13 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
-import { makeBacking } from "../src/backing.js";
+import { encodeBacking, makeBacking, signBacking } from "../src/backing.js";
 import { committedLogFor, signCommitment, stateRoot, type ServedState } from "../src/commitment.js";
 import { isDoubleAcceptance, isDoublePosition, isRewrittenHistory, settledInPart, withdrawnAgainstCommit } from "../src/fault.js";
-import { encodeTransferMessage } from "../src/messages.js";
+import { encodeIssuance, encodeTransferMessage } from "../src/messages.js";
+import { encodePublishedOp } from "../src/oplog.js";
+import { verifyPilotPayment } from "../src/pilot-wire.js";
+import { Sequencer } from "../src/sequencer.js";
 import { isOperatorReceipt, receiptStatus, type Receipt } from "../src/receipt.js";
 import {
   committedInTime,
@@ -247,6 +250,30 @@ function surface() {
 // nothing: not a verifier, so not a refusal.
 const NEVER_REFUSES = new Set(["venueIsDeclared", "forgetAdmitted"]);
 
+/** Application boundaries may name unavailability, but must never turn it into
+ * an invalid payment or final acceptance. Exercise them in the surface check. */
+function applicationSurface() {
+  const venue = new LocalVenue(), sequencer = new Sequencer(SECRETS.operator, venue);
+  const backing = makeBacking({ obligor: KEYS.backer,
+    payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n }, reliance: [],
+    evidence: { setting: "transparent", operator: KEYS.operator,
+      witnessing: { venue: venue.id, interval: 1n } } });
+  const termsSignature = signBacking(SECRETS.backer, backing);
+  sequencer.register(backing, termsSignature);
+  const issue = { backing, recipient: KEYS.alice, quantity: 10n, nonce: 0n };
+  sequencer.submitIssue(issue, ed25519.sign(encodeIssuance(issue), SECRETS.backer));
+  const transfer = { backing, from: KEYS.alice, to: KEYS.bob, quantity: 10n, nonce: 0n };
+  const signature = ed25519.sign(encodeTransferMessage(backing.name, KEYS.alice, KEYS.bob, 10n, 0n), SECRETS.alice);
+  const receipt = sequencer.submitTransfer(transfer, signature), state = sequencer.commit();
+  const args = { terms: encodeBacking(backing), termsSignature,
+    operation: encodePublishedOp(backing.name, { ...transfer, kind: "transfer" as const, signature }),
+    receipt, state, operator: KEYS.operator, recipient: KEYS.bob, quantity: 10n };
+  return [["verifyPilotPayment", () => {
+    expect(verifyPilotPayment({ ...args, venue }).status).toBe("final");
+    return verifyPilotPayment({ ...args, venue: new RefusesEverything(venue.id) });
+  }]] as const;
+}
+
 /**
  * Every exported function in `src` whose signature takes a Venue, read out of
  * the source rather than remembered.
@@ -293,11 +320,17 @@ describe("a venue that declines to answer is never a verdict", () => {
       expect(call).toThrow(VenueError);
     });
   }
+  for (const [name, call] of applicationSurface()) {
+    it(`${name} reports unavailability without a payment verdict`, () => {
+      expect(call().status).toBe("unavailable");
+    });
+  }
 });
 
 describe("and the list is the whole surface, checked rather than trusted", () => {
   it("covers every exported function that takes a Venue", () => {
-    const covered = new Set<string>([...surface().map(([name]) => name), ...NEVER_REFUSES]);
+    const covered = new Set<string>([...surface().map(([name]) => name),
+      ...applicationSurface().map(([name]) => name), ...NEVER_REFUSES]);
     const missing = exportedVenueReaders().filter((name) => !covered.has(name));
     expect(missing).toEqual([]);
   });
