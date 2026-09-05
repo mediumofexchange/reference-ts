@@ -41,5 +41,6 @@ export * from "./revocation.js";
 export * from "./recovery.js";
 export * from "./fault.js";
 
-// An external venue, as one worked example of the venue interface.
-export * from "./ergo.js";
+// The Ergo read-only venue adapter is not part of the root surface. It is the
+// venue direction, kept until the commitment format is final, and reachable on
+// its own subpath: `@mediumofexchange/reference/ergo`.

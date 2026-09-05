@@ -1,3 +1,7 @@
+// FROZEN: the transparent profile (Extensions). A differential oracle and case library
+// while the shielded pool (Construction §C1.2) is built; not extended, deleted when
+// superseded. See AGENTS.md "Scope and direction" and docs/PROTOCOL_RULES.md.
+
 // The transparent sequencer (§C2).
 //
 // A sequencer serves the backings whose E field names its operator key. It is

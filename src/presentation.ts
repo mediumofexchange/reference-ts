@@ -1,3 +1,7 @@
+// FROZEN: the transparent profile (Extensions). A differential oracle and case library
+// while the shielded pool (Construction §C1.2) is built; not extended, deleted when
+// superseded. See AGENTS.md "Scope and direction" and docs/PROTOCOL_RULES.md.
+
 // Presentation and dishonour (§C3): the signed messages.
 //
 // Consent between the parties is demand–accept–release. This slice implements

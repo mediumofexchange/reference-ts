@@ -1,3 +1,7 @@
+// FROZEN: the transparent profile (Extensions). A differential oracle and case library
+// while the shielded pool (Construction §C1.2) is built; not extended, deleted when
+// superseded. See AGENTS.md "Scope and direction" and docs/PROTOCOL_RULES.md.
+
 // What can be proven, against whom, on one screen.
 //
 // The system's posture everywhere is that misbehaviour is made **provable**

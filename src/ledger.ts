@@ -1,3 +1,7 @@
+// FROZEN: the transparent profile (Extensions). A differential oracle and case library
+// while the shielded pool (Construction §C1.2) is built; not extended, deleted when
+// superseded. See AGENTS.md "Scope and direction" and docs/PROTOCOL_RULES.md.
+
 // The transparent claim layer (§C1): a per-backing public ledger of
 // key-controlled balances, transfer by holder signature.
 //

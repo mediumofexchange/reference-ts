@@ -1,3 +1,7 @@
+// FROZEN: the transparent profile (Extensions). A differential oracle and case library
+// while the shielded pool (Construction §C1.2) is built; not extended, deleted when
+// superseded. See AGENTS.md "Scope and direction" and docs/PROTOCOL_RULES.md.
+
 // Succession (§C2): who serves a backing, once the key E names no longer does.
 //
 // "**A replacement is itself a witnessed object.** It is signed by whoever
