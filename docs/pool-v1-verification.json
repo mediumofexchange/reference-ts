@@ -1,0 +1,236 @@
+{
+  "construction": "moe/pool/v1",
+  "node": "v24.6.0",
+  "platform": "win32",
+  "arch": "x64",
+  "compileMs": 4442.9252,
+  "pins": {
+    "construction": "moe/pool/v1",
+    "toolchain": {
+      "@aztec/bb.js": "5.2.0",
+      "@noir-lang/noir_js": "1.0.0-beta.26",
+      "@noir-lang/noir_wasm": "1.0.0-beta.26"
+    },
+    "verifierTarget": "noir-recursive",
+    "sources": {
+      "notes.nr": "371c7f8e165ea2651f223017b8efc7d09367fe85c0a19fdfcffb78715d37cff7",
+      "issue.nr": "02aabb2bf8717821729eafe826158477814f39a8fe5fb7a8e427f07774524dab",
+      "spend.nr": "34fcd327c6d3d6d397a0ad8bd57bbeba617d87c6b394a8178ac0771ade2f82a0",
+      "burn.nr": "a6c698bc22a993dde8eef7f7d624c284cbe647024b224bdc5884d352f98e1238",
+      "vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"
+    },
+    "circuits": {
+      "issue": {
+        "bytecode": "d87c8ae466473d65662fc7dc659e610caacc831aedb169a78e9f9ff2b917133d",
+        "vk": "fe0fdfa50ed959ffb763781edb80b6193071adf5dd0166182d058734e5bf6150"
+      },
+      "spend": {
+        "bytecode": "f10c097539ef00969dc97c357a511e24299dc7c851a5f7314ffcd4a4ebed237a",
+        "vk": "82760b387581485a3251f585b144488bca8fa5f1268aaace5341a0ba321949de"
+      },
+      "burn": {
+        "bytecode": "57b0bad342c763f472a95c630af12a95dd70513588d9f45b55339da99002c69a",
+        "vk": "a941aa939de2188d81a4bd469cc25e0ab721aece6d2283f77c16725e98ffaad2"
+      }
+    }
+  },
+  "parameterCache": {
+    "bn254_g1.dat": {
+      "bytes": 33554432,
+      "sha256": "ea7b37bb4e1840b5632675fb2d79873ac0a1598374d3087344ba0e980736b8ac"
+    },
+    "bn254_g1_compressed.dat": {
+      "bytes": 16777216,
+      "sha256": "1d03ebeb73e1a6d426e44a2ccc88b04125ca185ab9d1679817380502a723fa80"
+    },
+    "bn254_g2.dat": {
+      "bytes": 128,
+      "sha256": "01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f"
+    },
+    "grumpkin_g1_v2.flat.dat": {
+      "bytes": 4194304,
+      "sha256": "64236c9455e75aeea77a94587ea607eed2e978d2609a421d66bf10bb9698b8fd"
+    }
+  },
+  "checks": [
+    "authorized-relation issuance",
+    "one real input plus padding",
+    "two real inputs, same backing",
+    "two backings conserve separately",
+    "partial burn with padding",
+    "issue zero quantity",
+    "issue quantity overflow",
+    "issue wrong commitment",
+    "issue zero commitment",
+    "issue zero owner",
+    "issue zero rho",
+    "issue changed backing",
+    "issue pool limb overflow",
+    "issue backing limb overflow",
+    "unauthorized input slot 0",
+    "zero secret slot 0",
+    "zero input rho slot 0",
+    "input value overflow slot 0",
+    "input limb overflow slot 0",
+    "wrong nullifier slot 0",
+    "zero nullifier slot 0",
+    "wrong output slot 0",
+    "zero output slot 0",
+    "zero output owner slot 0",
+    "zero output rho slot 0",
+    "output value overflow slot 0",
+    "foreign output backing slot 0",
+    "unauthorized input slot 1",
+    "zero secret slot 1",
+    "zero input rho slot 1",
+    "input value overflow slot 1",
+    "input limb overflow slot 1",
+    "wrong nullifier slot 1",
+    "zero nullifier slot 1",
+    "wrong output slot 1",
+    "zero output slot 1",
+    "zero output owner slot 1",
+    "zero output rho slot 1",
+    "output value overflow slot 1",
+    "foreign output backing slot 1",
+    "wrong low sibling",
+    "wrong high sibling",
+    "wrong path direction",
+    "wrong anchor",
+    "padding from foreign backing",
+    "inflation with correct output hashes",
+    "both padding",
+    "duplicate nullifiers with conserved value",
+    "duplicate outputs",
+    "changed pool with recomputed nullifiers and outputs",
+    "cross-backing inflation with unchanged global total",
+    "padding needs no membership",
+    "both input and output orders",
+    "first output may be zero",
+    "second output may be zero",
+    "all right-child bits including bit 31",
+    "wrong high direction bit",
+    "two maximum u64 inputs conserve in u128",
+    "u64-wrapped conservation refused",
+    "new anchor preserves both nullifiers",
+    "zero burn with conserved value",
+    "excessive burn",
+    "burn quantity overflow",
+    "burn wrong public backing",
+    "burn foreign change",
+    "burn foreign padding",
+    "burn zero change rho",
+    "burn zero change owner",
+    "burn duplicate nullifiers with conserved value",
+    "burn bad membership",
+    "full burn with zero change",
+    "burn widens quantity plus change",
+    "issue binds public input 0",
+    "issue binds public input 1",
+    "issue binds public input 2",
+    "issue binds public input 3",
+    "issue binds public input 4",
+    "issue binds public input 5",
+    "issue rejects corrupted proof",
+    "spend binds public input 0",
+    "spend binds public input 1",
+    "spend binds public input 2",
+    "spend binds public input 3",
+    "spend binds public input 4",
+    "spend binds public input 5",
+    "spend binds public input 6",
+    "spend rejects corrupted proof",
+    "burn binds public input 0",
+    "burn binds public input 1",
+    "burn binds public input 2",
+    "burn binds public input 3",
+    "burn binds public input 4",
+    "burn binds public input 5",
+    "burn binds public input 6",
+    "burn binds public input 7",
+    "burn binds public input 8",
+    "burn rejects corrupted proof"
+  ],
+  "metrics": [
+    {
+      "label": "authorized-relation issuance",
+      "kind": "issue",
+      "executionMs": 90.3868999999977,
+      "proveMs": 801.049799999997,
+      "verifyMs": 86.19150000000081,
+      "proofBytes": 14656
+    },
+    {
+      "label": "one real input plus padding",
+      "kind": "spend",
+      "executionMs": 76.66359999999986,
+      "proveMs": 3252.3650000000016,
+      "verifyMs": 63.39259999999922,
+      "proofBytes": 14656
+    },
+    {
+      "label": "two real inputs, same backing",
+      "kind": "spend",
+      "executionMs": 64.51169999999911,
+      "proveMs": 2912.216700000001,
+      "verifyMs": 72.03019999999742,
+      "proofBytes": 14656
+    },
+    {
+      "label": "two backings conserve separately",
+      "kind": "spend",
+      "executionMs": 49.91400000000067,
+      "proveMs": 3539.738300000001,
+      "verifyMs": 79.20200000000114,
+      "proofBytes": 14656
+    },
+    {
+      "label": "partial burn with padding",
+      "kind": "burn",
+      "executionMs": 31.454900000000634,
+      "proveMs": 3478.3924000000006,
+      "verifyMs": 73.82549999999901,
+      "proofBytes": 14656
+    },
+    {
+      "label": "all right-child bits including bit 31",
+      "kind": "spend",
+      "executionMs": 85.11809999999969,
+      "proveMs": 8487.546600000001,
+      "verifyMs": 92.52210000000196,
+      "proofBytes": 14656
+    },
+    {
+      "label": "two maximum u64 inputs conserve in u128",
+      "kind": "spend",
+      "executionMs": 46.606800000001385,
+      "proveMs": 3000.0659999999916,
+      "verifyMs": 63.245999999999185,
+      "proofBytes": 14656
+    },
+    {
+      "label": "new anchor preserves both nullifiers",
+      "kind": "spend",
+      "executionMs": 29.760800000003655,
+      "proveMs": 3008.2337000000116,
+      "verifyMs": 63.01959999999963,
+      "proofBytes": 14656
+    },
+    {
+      "label": "full burn with zero change",
+      "kind": "burn",
+      "executionMs": 28.541700000001583,
+      "proveMs": 2832.395900000003,
+      "verifyMs": 81.08729999999923,
+      "proofBytes": 14656
+    },
+    {
+      "label": "burn widens quantity plus change",
+      "kind": "burn",
+      "executionMs": 22.19770000000426,
+      "proveMs": 3044.8041999999987,
+      "verifyMs": 66.18829999999434,
+      "proofBytes": 14656
+    }
+  ]
+}

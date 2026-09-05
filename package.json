@@ -39,6 +39,7 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
+    "src/pool/circuits",
     "README.md",
     "LICENSE"
   ],
@@ -52,6 +53,7 @@
     "check:pilot": "node scripts/pilot-demo.mjs",
     "pilot:demo": "npm run build && npm run check:pilot",
     "check:privacy": "npm run build && npm --prefix experiments/private-payment run check",
+    "check:pool": "node scripts/pool/check.mjs",
     "check": "npm run check:docs && npm run typecheck && npm test && npm run build && npm run check:package && npm run check:pilot",
     "prepublishOnly": "npm run check"
   },
@@ -60,6 +62,9 @@
     "tag": "next"
   },
   "devDependencies": {
+    "@aztec/bb.js": "5.2.0",
+    "@noir-lang/noir_js": "1.0.0-beta.26",
+    "@noir-lang/noir_wasm": "1.0.0-beta.26",
     "@types/node": "^24.13.3",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"

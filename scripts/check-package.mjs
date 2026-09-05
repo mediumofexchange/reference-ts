@@ -20,6 +20,11 @@ try {
   if (packed[0].files.some(file => file.path.startsWith('experiments/'))) {
     throw new Error('Research code must not ship as a supported package API');
   }
+  for (const name of ['issue.nr', 'spend.nr', 'burn.nr', 'notes.nr', 'manifest.json', 'vendor/poseidon2.nr', 'vendor/LICENSE']) {
+    if (!packed[0].files.some(file => file.path === 'src/pool/circuits/' + name)) {
+      throw new Error('Missing pinned pool circuit source: ' + name);
+    }
+  }
   const consumer = join(directory, 'consumer');
   mkdirSync(consumer);
   writeFileSync(join(consumer, 'package.json'), JSON.stringify({ name: 'moe-package-consumer', private: true, type: 'module' }));
@@ -27,11 +32,18 @@ try {
   writeFileSync(join(consumer, 'check.mjs'), `
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { sep } from 'node:path';
+import { sep, dirname, join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import * as core from '@mediumofexchange/reference';
 import { makeBacking, encodeBacking, decodeBacking, signBacking, verifyBackingSignature } from '@mediumofexchange/reference/backing';
 import { PILOT_PROFILE } from '@mediumofexchange/reference/pilot-wire';
 import { ed25519 } from '@noble/curves/ed25519.js';
+const circuits = join(dirname(fileURLToPath(import.meta.resolve('@mediumofexchange/reference/package.json'))), 'src/pool/circuits');
+const manifest = JSON.parse(readFileSync(join(circuits, 'manifest.json'), 'utf8'));
+for (const [name, expected] of Object.entries(manifest.sources)) {
+  assert.equal(createHash('sha256').update(readFileSync(join(circuits, name))).digest('hex'), expected, name);
+}
 for (const specifier of ['@mediumofexchange/reference', '@noble/curves/ed25519.js', '@noble/hashes/sha2.js']) {
   assert.ok(fileURLToPath(import.meta.resolve(specifier)).startsWith(process.cwd() + sep), 'dependency escaped installed consumer: ' + specifier);
 }

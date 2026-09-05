@@ -18,15 +18,20 @@ tests agree.
   `model/sequencing.ts`, twelve checks, two rules earned (C2.6.1, C2.8).
   Decision "pool-v1 pins the shielded pool, and the sequencing model earns two
   rules" (`DECISIONS.md`).
-- Implementation branch `feat/sequencing-model` on `main` (`4efe773`).
-  Companion specification branch `spec/pool-v1` at `4172c5b`, on `main`
-  (`8d5055e`). Both local, unmerged. Merge order: spec first.
-- The transparent path stays frozen; the experiment stays until the v1
-  circuits replace it.
+- The model/specification work is already on both local `main` branches:
+  implementation `6c223b3`, specification `4172c5b`.
+- Active implementation branch `feat/pool-v1-circuits`, based on `6c223b3`:
+  pool-v1 issue/spend/burn sources, depth-32 membership, 2-in/2-out padding,
+  per-backing conservation, reproducible source/bytecode/VK manifest, real
+  proof tests, package source verification and Linux/Windows CI jobs.
+- Companion branch `spec/pool-v1-circuit-pins`, based on `4172c5b`: pin table
+  awaits the implementation source commit. Both branches remain local.
+- The transparent path stays frozen. The experiment remains until admission,
+  replay and crash cases move into the pool implementation too.
 
 ## Evidence
 
-- `npx vitest run model/sequencing.test.ts`: 12 passed (27 s, Node 24.6.0).
+- The model's 12 checks passed again inside `npm run check` (Node 24.6.0).
   Eight rule-following configurations (honest; slow blocks; drops; crash and
   restart; darkness; withholding; everything at lag 2; lag 0) over 60 seeds
   each: no violation of P1 continuity, P2 double spend, P3 contradicted
@@ -34,18 +39,25 @@ tests agree.
   departures each found their counterexample within 300 seeds and are kept as
   regression vectors: `leadFloor: 1` gives P5 (the same-block erasure);
   `restartFrom: "witnessed"` gives P3 (the dropped tail).
-- `npx tsc --noEmit` clean with `model/` included.
-- Spec links OK (`scripts/check-links.mjs`).
-- Full `npm run check` last run on `main` `4efe773` (green on CI, three jobs).
+- `npm run check:pool`: 97 checks, 10 real ZK proofs, 14,656 bytes each;
+  fresh compilation reproduced every source, bytecode and VK identity.
+  Full evidence and parameter-cache hashes: `docs/pool-v1-verification.json`.
+- Independent circuit review found no circuit defects. Test review found
+  two sets of non-isolating hostile witnesses; fixed, rerun and independently
+  confirmed. No circuit-review findings remain.
+- `npm run check`: 51 files / 1,012 tests passed (95.38 s), typecheck/build,
+  docs, installed tarball including source hashes, and pilot all passed.
+  Vitest needed execution outside the sandbox after a parent-directory
+  access denial; no check was weakened. New CI jobs have not run remotely.
+- `npm run check:privacy`: 8 journal tests, 38 experiment checks and 9 real
+  proofs passed; shared compiler extraction preserved all experiment pins.
 
 ## Next
 
-1. Promote the circuits: write `src/pool/circuits/{notes,issue,spend,burn}.nr`
-   to pool-v1's layouts (2-in/2-out with padding, per-backing conservation,
-   depth 32), compile with the pinned toolchain, record source hashes,
-   `bytecode(k)` and `vk(k)` in pool-v1 §12. Adversarial review
-   (circuit-sensitive).
-2. The pool's claim layer in `src/pool/`: note tree, SHA-256 spent-set SMT with
+1. Commit the circuit slice and fill pool-v1
+   §12 with the source revision and hashes. Update this handoff and README
+   with the companion specification commit.
+2. The rest of the pool's claim layer in `src/pool/`: note tree, SHA-256 spent-set SMT with
    compressed proofs, statement frames, admission against one committed view,
    history hash, snapshot digest, receipt fields, with pool-v1 as the test
    oracle and the experiment's adversarial cases ported.
@@ -61,4 +73,5 @@ tests agree.
   and swap together. Decide whether v1 backings should exist at all before v2,
   given the non-atomic crossing.
 - Spent-set proof cost on a phone; flat versus tree directory in the profile.
-- Proof backend and setup provenance remain provisional.
+- Proof backend and setup provenance remain provisional. The recorded SRS
+  hashes describe cached files, not ceremony provenance or consumed prefixes.

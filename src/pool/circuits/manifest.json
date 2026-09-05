@@ -1,0 +1,30 @@
+{
+  "construction": "moe/pool/v1",
+  "toolchain": {
+    "@aztec/bb.js": "5.2.0",
+    "@noir-lang/noir_js": "1.0.0-beta.26",
+    "@noir-lang/noir_wasm": "1.0.0-beta.26"
+  },
+  "verifierTarget": "noir-recursive",
+  "sources": {
+    "notes.nr": "371c7f8e165ea2651f223017b8efc7d09367fe85c0a19fdfcffb78715d37cff7",
+    "issue.nr": "02aabb2bf8717821729eafe826158477814f39a8fe5fb7a8e427f07774524dab",
+    "spend.nr": "34fcd327c6d3d6d397a0ad8bd57bbeba617d87c6b394a8178ac0771ade2f82a0",
+    "burn.nr": "a6c698bc22a993dde8eef7f7d624c284cbe647024b224bdc5884d352f98e1238",
+    "vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"
+  },
+  "circuits": {
+    "issue": {
+      "bytecode": "d87c8ae466473d65662fc7dc659e610caacc831aedb169a78e9f9ff2b917133d",
+      "vk": "fe0fdfa50ed959ffb763781edb80b6193071adf5dd0166182d058734e5bf6150"
+    },
+    "spend": {
+      "bytecode": "f10c097539ef00969dc97c357a511e24299dc7c851a5f7314ffcd4a4ebed237a",
+      "vk": "82760b387581485a3251f585b144488bca8fa5f1268aaace5341a0ba321949de"
+    },
+    "burn": {
+      "bytecode": "57b0bad342c763f472a95c630af12a95dd70513588d9f45b55339da99002c69a",
+      "vk": "a941aa939de2188d81a4bd469cc25e0ab721aece6d2283f77c16725e98ffaad2"
+    }
+  }
+}

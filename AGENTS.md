@@ -28,7 +28,8 @@ What the repository holds today:
 - **Primitives that carry forward as-is:** canonical encoding and naming (`backing.ts`, `bytes.ts`, `keys.ts`, `contexts.ts`), commitments and their directory (`commitment.ts`), the venue interface and local venue (`venue.ts`), the durable command journal pattern (`pilot-store.ts`).
 - **The transparent path, frozen:** `ledger.ts`, `sequencer.ts`, `presentation.ts`, `replacement.ts`, `recovery.ts`, `fault.ts` and their tests implement the transparent *profile* (Extensions). It is a differential oracle and a library of adversarial cases for the pool path. Do not extend it; port its cases as each rule lands over notes, and delete it when the pool path passes them. Two of its mechanisms are retired by the specification (`docs/PROTOCOL_RULES.md` marks them) and must not be ported.
 - **The Ergo read-only venue adapter** (`ergo.ts`): kept as the venue direction, not exported from the root barrel, rewritten when the commitment format is final.
-- **`experiments/private-payment/`:** the real-proof feasibility check for the pool, with its research contract in `RESEARCH.md`. Excluded from the package. It is promoted into `src/` when the normative statement layouts are final, and retired then.
+- **`experiments/private-payment/`:** the real-proof feasibility check for the pool, with its research contract in `RESEARCH.md`. Excluded from the package. Its remaining cases move into `src/` as their normative objects are built, then it is retired.
+- **`src/pool/circuits/`:** the pool-v1 issue, spend and burn relations, with pinned sources, bytecode and verification keys. `npm run check:pool` compiles and proves them independently of the TypeScript checks. The experiment remains until its admission, replay and crash cases have also moved to the pool path.
 - **The sequencing model** (`model/sequencing.ts`): an executable adversarial model of Construction §C2/§C2b over notes, with the properties the rules claim and the counterexamples the departures produce. Extend it before changing a sequencing rule; a rule the model cannot express is not finished.
 - **The local pilot** (`docs/PILOT.md`): the transparent path across two processes with a trusted local witness. An integration harness that proves the protocol runs end to end; its transport and CLI go when a pool equivalent exists.
 
@@ -96,7 +97,7 @@ Notice recurring friction and opportunities to simplify the repository or its wo
 
 - Inspect before editing. Preserve unrelated user changes.
 - Specification first: a rule the code needs and the specification lacks is written in Construction, cleared under §C0a, and committed there before the code that depends on it.
-- For changed behavior or a bug, add the smallest test that would have exposed the problem. Documentation-only and mechanical changes do not need ceremonial tests.
+- For changed behavior or a bug, add the smallest test that would have exposed the problem. Hostile witnesses must otherwise satisfy the relation, so an unrelated constraint cannot hide a missing guard. Documentation-only and mechanical changes do not need ceremonial tests.
 - Run focused checks while iterating. Before declaring a code, packaging, or CI change ready, run `npm run check`; report exact failures instead of weakening a check. `npm run check:privacy` exercises the real-proof experiment separately.
 - Exercise hostile inputs, replay, aliasing, overflow, boundary indices, withheld data, and wrong-context proofs where relevant.
 - Keep recoverable scratch work small. Promote lasting evidence to a test, decision, or concise note in `WORK.md`, then remove bulky clones, dependency trees, and duplicate artifacts.

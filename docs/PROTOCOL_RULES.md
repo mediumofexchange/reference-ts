@@ -25,6 +25,9 @@ rule while the rule still stands.
 
 | Rule | Spec | Code | Test | Scope |
 |---|---|---|---|---|
+| Notes bind pool, backing, value, owner and rho; ownership and an anchor-independent nullifier are proven for real and padding inputs. Positive inputs prove depth-32 membership with child-level node tags. | pool-v1 §§1, 3–5 | `pool/circuits/notes.nr` | `scripts/pool/check.mjs` | core |
+| Issue, spend and burn expose exactly 6, 7 and 9 fields. Spend conserves each backing in widened integer sums, restricts padding to the real input's backing, and requires distinct nullifiers and outputs. Burn destroys a positive public quantity of one backing. | pool-v1 §5 | `pool/circuits/{issue,spend,burn}.nr` | `scripts/pool/check.mjs` | core (circuit relation; admission remains to build) |
+| Circuit sources, compiled bytecode and ZK verification keys match the recorded identities under the pinned toolchain. | pool-v1 §§2, 9 | `pool/circuits/manifest.json` | `npm run check:pool` | core |
 | Quantities, counts, positions and payout arithmetic are `bigint`; `number` only for lengths and indices. | — | everywhere | `encoding-primitives` | core |
 | A backing's name is the hash of the canonical encoding of (K, P, R, E); same fields, same bytes, on every machine. | inv 1 | `backing.ts` `backingName` | `invariant-01` | core |
 | A backing exists only with a valid strict (non-ZIP215) signature by K over its own name; K is a non-small-order point; identity is recomputed at signing, verification and registration, never trusted from a cached field. | inv 2 | `backing.ts`, `keys.ts` `verifySignatureStrict` | `invariant-02` | core |

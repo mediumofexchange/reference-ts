@@ -60,19 +60,23 @@ deadline. What the repository holds today:
   of adversarial cases for the pool path, and it is deleted when superseded.
 - **A real-proof experiment for the pool** (`experiments/private-payment/`,
   contract in `RESEARCH.md`): Noir circuits, ZK-enabled UltraHonk proofs,
-  public-only supply replay. Excluded from the package; promoted when the
-  specification pins the concrete layouts.
+  public-only supply replay. Excluded from the package and retained until
+  its admission, replay and crash cases have moved to the pool path.
+- **The pool-v1 circuits** ([sources and verification](src/pool/circuits/README.md)):
+  issue, two-input/two-output spend with per-backing conservation and padding,
+  and burn, with depth-32 membership. `npm run check:pool` checks the pinned
+  identities and exercises real ZK proofs and adversarial witnesses.
 - **A local two-process pilot** on the frozen path (`docs/PILOT.md`): durable
   commands, exact retries, crash recovery, a trusted local witness. An
   integration harness, not a product.
 
-Out of scope until their step: the pool's claim layer in `src/`, note
+Out of scope until their step: the rest of the pool's claim layer, note
 delivery and backups, the wallet, an external witness's write side, and
 every Extensions profile.
 
 The implementation follows specification revision
 [`4172c5b`](https://github.com/mediumofexchange/money-from-first-principles/tree/4172c5b)
-on branch `spec/pool-v1`, which adds `pool-v1.md`, the core construction bit for bit. `docs/PROTOCOL_RULES.md` maps each binding rule
+on `main`, which adds `pool-v1.md`, the core construction bit for bit. `docs/PROTOCOL_RULES.md` maps each binding rule
 to its specification rule, code and test, and marks what is frozen.
 
 ## Try the local pilot
