@@ -1011,6 +1011,13 @@ export class TransparentLedger {
     if (!verifyBackingSignature(stored, signature)) {
       throw new LedgerError("backing signature invalid");
     }
+    // The transparent profile serves transparent evidence only. A backing whose
+    // E names a construction is served in that construction's pool (pool/),
+    // and admitting it here would spend its claims under rules its name does
+    // not declare.
+    if (stored.evidence.setting !== "transparent") {
+      throw new LedgerError("this ledger serves the transparent profile only");
+    }
     if (this.states.has(stored.nameHex)) return;
     // Store the ledger's OWN copy. Object.freeze does not freeze the bytes
     // inside a Uint8Array, and issuance reads authority from the registered

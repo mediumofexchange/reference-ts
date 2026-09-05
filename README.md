@@ -24,7 +24,10 @@ const backing = makeBacking({
   obligor: obligorKey,                                    // K — who owes
   payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },  // P — what a unit pays
   reliance: [],                                           // R — what travels with it
-  evidence: { setting: "transparent", operator: operatorKey },   // E — who says it is unspent
+  evidence: {                                             // E — who says it is unspent, and how
+    setting: "pool", operator: operatorKey,
+    construction: "moe/pool/v1", configuration: configHash,
+  },
 });
 
 backingName(backing); // the hash of the canonical encoding of all four fields
@@ -62,22 +65,29 @@ deadline. What the repository holds today:
   contract in `RESEARCH.md`): Noir circuits, ZK-enabled UltraHonk proofs,
   public-only supply replay. Excluded from the package and retained until
   its admission, replay and crash cases have moved to the pool path.
-- **The pool-v1 circuits** ([sources and verification](src/pool/circuits/README.md)):
-  issue, two-input/two-output spend with per-backing conservation and padding,
-  and burn, with depth-32 membership. `npm run check:pool` checks the pinned
-  identities and exercises real ZK proofs and adversarial witnesses.
+- **The pool's claim layer** (`src/pool/`, pool-v1 §§1–8): the field and
+  the in-circuit hash on the host, notes with their commitments and
+  nullifiers, the depth-32 note tree, the spent-set accumulator with
+  membership and non-membership proofs, the configuration, statement, history
+  and snapshot frames, **E**'s declaration of the construction, and admission
+  against one committed view with replay from genesis. The
+  [pool-v1 circuits](src/pool/circuits/README.md) — issue, two-input/two-output
+  spend with per-backing conservation and padding, and burn — are the pinned
+  sources; `npm run check:pool` checks their identities, exercises real ZK
+  proofs and adversarial witnesses, and drives the claim layer with real
+  proofs through the Barretenberg verifier.
 - **A local two-process pilot** on the frozen path (`docs/PILOT.md`): durable
   commands, exact retries, crash recovery, a trusted local witness. An
   integration harness, not a product.
 
-Out of scope until their step: the rest of the pool's claim layer, note
-delivery and backups, the wallet, an external witness's write side, and
-every Extensions profile.
+Out of scope until their step: the receipt and commitment envelopes over the
+pool's fields (sequencing over notes), note delivery and backups, the wallet,
+an external witness's write side, and every Extensions profile.
 
 The implementation follows specification revision
-[`1d38815`](https://github.com/mediumofexchange/money-from-first-principles/tree/1d38815)
-on branch `spec/pool-v1-circuit-pins`, which records the implemented circuits
-and keys in `pool-v1.md`. `docs/PROTOCOL_RULES.md` maps each binding rule
+[`1d38815`](https://github.com/mediumofexchange/money-from-first-principles/tree/1d38815),
+whose `pool-v1.md` pins the construction bit for bit and records the
+implemented circuits and keys. `docs/PROTOCOL_RULES.md` maps each binding rule
 to its specification rule, code and test, and marks what is frozen.
 
 ## Try the local pilot
@@ -97,10 +107,11 @@ real-proof experiment runs separately with `npm run check:privacy`; see
 ## What this is for
 
 The paper derives the object and argues for it. The protocol says what to
-build. This says one way to build it, in code you can read. The shipped
-package's cryptography is limited to hashes and signatures (`@noble/hashes`,
-`@noble/curves`); the pool's proof system is pinned by the experiment and will
-be declared in **E** when it is promoted.
+build. This says one way to build it, in code you can read. The package's
+own cryptography is hashes and signatures (`@noble/hashes`, `@noble/curves`)
+and the pool's Poseidon2 in plain TypeScript; the proof system **E** declares
+is Barretenberg's UltraHonk, reached through the optional peer dependency
+`@aztec/bb.js` on the `pool/barretenberg` subpath only.
 
 ## Reading it
 
@@ -140,9 +151,10 @@ current slice.
 
 Shared commitments authenticate a directory of backing names and snapshot
 digests (signature context `moe/commitment/v2`, directory version 1). The
-pool's statements, its **E** declaration and its commitment content are not
-yet fixed, and fixing them will change signed bytes again. Anything you sign
-with this package today should be treated as disposable. There is no
+pool's frames follow `pool-v1.md` and **E**'s declaration is evidence clause
+`0x05`, but the receipt and commitment envelopes over the pool's fields are
+not yet fixed, and fixing them will change signed bytes again. Anything you
+sign with this package today should be treated as disposable. There is no
 compatibility path across format changes and none is planned — accepting two
 namespaces would defeat the separation the domain tags exist to provide.
 

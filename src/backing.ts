@@ -37,6 +37,14 @@
 //                     || 32-byte key that may sign a successor
 //                   u8 0x04 non-service aggregate
 //                     || u64 duration || u32 count m || u64 window W
+//                   u8 0x05 construction (Construction §C1.3)
+//                     || u32 length || construction ("moe/pool/v1", UTF-8)
+//                     || 32-byte configuration hash (pool-v1 §2)
+//
+// With no construction clause the backing is served under the transparent
+// profile (Extensions); with one it is served in the named construction's
+// pool under that configuration and no other. The construction is inside the
+// name, so a change of construction or version is a successor (§C1.3).
 //
 // **A list, not a tag per combination.** E's clauses are independent — a backer
 // may promise a schedule without conceding a grade, and §C2 has several more to
@@ -54,8 +62,8 @@
 // an unknown evidence tag is.
 //
 // Tags not listed (threshold obligors, the payout expression language,
-// chain-asset reliance targets, shielded evidence settings) are future slices;
-// a strict decoder rejects them today rather than guessing.
+// chain-asset reliance targets, other constructions) are future slices; a
+// strict decoder rejects them today rather than guessing.
 
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -86,8 +94,12 @@ const CLAUSE_SILENCE = 0x01;
 const CLAUSE_WITNESSING = 0x02;
 const CLAUSE_REPLACEMENT = 0x03;
 const CLAUSE_NON_SERVICE = 0x04;
+const CLAUSE_CONSTRUCTION = 0x05;
 /** E has a handful of blocks in the paper, not a stream of them. */
 const MAX_EVIDENCE_CLAUSES = 16;
+/** The one construction this reference knows how to serve and to check (pool-v1). */
+export const POOL_CONSTRUCTION = "moe/pool/v1";
+const MAX_CONSTRUCTION_BYTES = 64;
 
 const NAME_LENGTH = 32;
 const MAX_THING_BYTES = 1024;
@@ -230,6 +242,28 @@ export interface TransparentEvidence {
   readonly silence?: SilenceClause;
 }
 
+/**
+ * E naming the core construction (Construction §C1.3; pool-v1 §2): the
+ * backing is served in this operator's shielded pool under the configuration
+ * whose hash is `configuration`, and no other. The clauses beside it mean
+ * what they mean for the transparent setting. A change to the construction,
+ * its version or its configuration is a new E, hence a successor backing.
+ */
+export interface PoolEvidence {
+  readonly setting: "pool";
+  /** The operator whose pool serves this backing; equals the configuration's operator. */
+  readonly operator: Uint8Array;
+  readonly construction: typeof POOL_CONSTRUCTION;
+  /** configHash (pool-v1 §2), 32 bytes. */
+  readonly configuration: Uint8Array;
+  readonly witnessing?: WitnessingTerms;
+  readonly replacementRule?: Uint8Array;
+  readonly nonService?: NonServiceTerms;
+  readonly silence?: SilenceClause;
+}
+
+export type Evidence = TransparentEvidence | PoolEvidence;
+
 /** The unvalidated input shape accepted by makeBacking. */
 export interface BackingFields {
   /** K: the Ed25519 verification key that owes. */
@@ -238,8 +272,8 @@ export interface BackingFields {
   readonly payout: Payout;
   /** R: what must be handed over alongside a claim. May be empty. */
   readonly reliance: readonly RelianceEntry[];
-  /** E: who says a claim has not already been spent. */
-  readonly evidence: TransparentEvidence;
+  /** E: who says a claim has not already been spent, and under which construction. */
+  readonly evidence: Evidence;
 }
 
 declare const validated: unique symbol;
@@ -329,6 +363,16 @@ function encodeFields(b: BackingFields): Uint8Array {
       },
     });
   }
+  if (b.evidence.setting === "pool") {
+    const { construction, configuration } = b.evidence;
+    clauses.push({
+      tag: CLAUSE_CONSTRUCTION,
+      write: () => {
+        w.lengthPrefixed(utf8Encoder.encode(construction));
+        w.key32(configuration, "configuration hash");
+      },
+    });
+  }
   clauses.sort((x, y) => x.tag - y.tag);
   // Asserted where they are written, not only where they are read back. Sorting
   // does not deduplicate, and a clause added later under a tag another already
@@ -356,13 +400,11 @@ function encodeFields(b: BackingFields): Uint8Array {
 }
 
 /** Field by field, so nothing rides along on a spread of caller input. */
-function canonicalEvidence(evidence: TransparentEvidence): TransparentEvidence {
+function canonicalEvidence(evidence: Evidence): Evidence {
   const { silence, witnessing, replacementRule, nonService } = evidence;
   // Spread rather than branch: two independent optional blocks are four arms as
   // an if/else, and exactOptionalPropertyTypes forbids an explicit undefined.
-  return {
-    setting: "transparent",
-    operator: copyBytes(evidence.operator),
+  const clauses = {
     ...(witnessing === undefined
       ? {}
       : {
@@ -390,6 +432,16 @@ function canonicalEvidence(evidence: TransparentEvidence): TransparentEvidence {
           }),
         }),
   };
+  if (evidence.setting === "pool") {
+    return {
+      setting: "pool",
+      operator: copyBytes(evidence.operator),
+      construction: POOL_CONSTRUCTION,
+      configuration: copyBytes(evidence.configuration),
+      ...clauses,
+    };
+  }
+  return { setting: "transparent", operator: copyBytes(evidence.operator), ...clauses };
 }
 
 /**
@@ -405,8 +457,19 @@ export function makeBacking(fields: BackingFields): Backing {
     throw new EncodingError("obligor key is not a valid non-small-order Ed25519 point");
   }
 
-  if (fields.evidence.setting !== "transparent") {
-    throw new EncodingError(`unsupported evidence setting ${String(fields.evidence.setting)}`);
+  const setting: unknown = fields.evidence.setting;
+  if (setting !== "transparent" && setting !== "pool") {
+    throw new EncodingError(`unsupported evidence setting ${String(setting)}`);
+  }
+  if (fields.evidence.setting === "pool") {
+    // The construction is checked as a value, not a type: `readonly` and
+    // literal types are erased, and E names what the pool checks against.
+    if ((fields.evidence.construction as unknown) !== POOL_CONSTRUCTION) {
+      throw new EncodingError("unsupported construction");
+    }
+    if (!(fields.evidence.configuration instanceof Uint8Array) || fields.evidence.configuration.length !== NAME_LENGTH) {
+      throw new EncodingError("configuration hash must be 32 bytes");
+    }
   }
   // The same rule as K, at the same boundary. It was once length-only here and
   // point-checked at the sequencer instead, on the ground that checking it here
@@ -572,6 +635,7 @@ export function decodeBacking(bytes: Uint8Array): Backing {
   let witnessing: WitnessingTerms | undefined;
   let replacementRule: Uint8Array | undefined;
   let nonService: NonServiceTerms | undefined;
+  let configuration: Uint8Array | undefined;
   if (tag === TAG_EVIDENCE_CLAUSES) {
     const count = r.u32();
     // An empty list is tag 0x01's spelling, and two spellings of one backing
@@ -593,6 +657,18 @@ export function decodeBacking(bytes: Uint8Array): Backing {
         replacementRule = r.raw(KEY_LENGTH);
       } else if (clause === CLAUSE_NON_SERVICE) {
         nonService = { duration: r.u64(), count: BigInt(r.u32()), window: r.u64() };
+      } else if (clause === CLAUSE_CONSTRUCTION) {
+        // A construction this reader cannot serve or check is refused, as an
+        // unknown clause is: a name it cannot verify against is not terms.
+        const constructionBytes = r.lengthPrefixed(MAX_CONSTRUCTION_BYTES);
+        let construction: string;
+        try {
+          construction = utf8Decoder.decode(constructionBytes);
+        } catch {
+          throw new EncodingError("construction is not valid UTF-8");
+        }
+        if (construction !== POOL_CONSTRUCTION) throw new EncodingError(`unsupported construction ${construction}`);
+        configuration = r.raw(NAME_LENGTH);
       } else {
         // Not skipped: a reader reporting terms it cannot check is worse than
         // one reporting none.
@@ -602,18 +678,20 @@ export function decodeBacking(bytes: Uint8Array): Backing {
   }
 
   r.expectEnd();
+  const clauses = {
+    ...(witnessing === undefined ? {} : { witnessing }),
+    ...(silence === undefined ? {} : { silence }),
+    ...(replacementRule === undefined ? {} : { replacementRule }),
+    ...(nonService === undefined ? {} : { nonService }),
+  };
   return makeBacking({
     obligor,
     payout,
     reliance,
-    evidence: {
-      setting: "transparent",
-      operator,
-      ...(witnessing === undefined ? {} : { witnessing }),
-      ...(silence === undefined ? {} : { silence }),
-      ...(replacementRule === undefined ? {} : { replacementRule }),
-      ...(nonService === undefined ? {} : { nonService }),
-    },
+    evidence:
+      configuration === undefined
+        ? { setting: "transparent", operator, ...clauses }
+        : { setting: "pool", operator, construction: POOL_CONSTRUCTION, configuration, ...clauses },
   });
 }
 

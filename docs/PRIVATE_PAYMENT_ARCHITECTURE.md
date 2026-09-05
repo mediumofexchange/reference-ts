@@ -25,9 +25,13 @@ This repository builds that core, in this order:
    safety and conditional progress separately and keeping counterexamples as
    regression vectors. This replaces panel rounds with checks that re-run. Built for §C2/§C2b:
    `model/sequencing.ts` and its twelve checks; §C3 joins it with v2.
-3. **The pool's claim layer** in `src/`: circuits promoted from the experiment
-   to the normative layouts, the note tree, the spent-set accumulator,
-   admission against one committed view.
+3. **The pool's claim layer** in `src/pool/`: circuits promoted from the
+   experiment to the normative layouts, the note tree, the spent-set
+   accumulator, admission against one committed view. Built: the circuits are
+   pinned (`pool-v1.md` §12), and `Pool` admits, serves and replays with the
+   Barretenberg verifier behind an interface; **E** declares the construction
+   as evidence clause `0x05`. Left to step 4: the receipt and commitment
+   envelopes over the pool's fields, and the durable journal.
 4. **Sequencing, recovery and presentation over notes**, rule by rule,
    porting each adversarial case from the frozen transparent suite as its rule
    lands, and deleting the transparent code when the pool path passes them.
@@ -99,13 +103,13 @@ deployment.
 
 | Existing part | Treatment |
 |---|---|
-| `backing.ts`, `bytes.ts`, `keys.ts`, `contexts.ts`, canonical identity tests | Retain. Add the pool's **E** declaration (construction, version, circuit and verification-key identities, pool identity) before issuing pool backings. Never reuse old identifiers with new rules. |
+| `backing.ts`, `bytes.ts`, `keys.ts`, `contexts.ts`, canonical identity tests | Retained. **E** now declares the construction and its configuration hash (evidence clause `0x05`), and the configuration names the pool, operator, circuit and key identities and bounds (pool-v1 §2). Never reuse old identifiers with new rules. |
 | `commitment.ts`, `commitment-directory` tests | Retain the directory. The pool's commitment adds the note-tree root, the spent-set root and the statement-log binding (invariant 23). |
 | `venue.ts`, `LocalVenue` | Retain the interface: finality rule, lag, record rises in sequence, exact-sequence read (§C2.3). |
 | `pilot-store.ts` journal pattern | Carry forward: durable commands, exact retries, transactional admission. The pilot's `pilot-wire.ts`, `pilot-http.ts` and CLI are retired with a pool equivalent. |
 | `ledger.ts`, `oplog.ts`, `messages.ts`, `sequencer.ts`, `presentation.ts`, `replacement.ts`, `recovery.ts`, `fault.ts` and their tests | **Frozen.** The transparent profile's implementation. A differential oracle and case library; each case is ported as its rule lands over notes; the code is deleted when the pool path passes them. Do not port the exhibit walk or the opening claim (retired, Construction Appendix). |
 | `ergo.ts` and its tests | Keep as the venue direction; not exported from the root barrel; rewritten for the final commitment format at step 6. |
-| Research circuits, `host.mjs`, `journal.mjs` | Promote the relation into `src/` at step 3 against the normative layouts; keep the adversarial cases; retire the standalone host and receiver APIs then. Do not keep a second storage framework. |
+| Research circuits, `host.mjs`, `journal.mjs` | The relation and the host's admission and replay are promoted into `src/pool/` against the normative layouts, with their adversarial cases (`test/pool-admission.test.ts`, `scripts/pool/admission.mjs`). The journal's crash and retry cases move with the durable pool journal; the standalone host and receiver APIs retire then. Do not keep a second storage framework. |
 | Website and organization profile | Describe the direction and the experimental status accurately; change the onboarding story only when a wallet exists. |
 
 No live-value migration is assumed. If any implementation is later used with

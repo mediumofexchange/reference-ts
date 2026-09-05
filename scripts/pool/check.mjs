@@ -198,6 +198,10 @@ try {
     assert.equal(await verifier.verifyProof({ ...proof, proof: corrupt, verificationKey: circuits[kind].vk }, options), false);
     checks.push(`${kind} rejects corrupted proof`);
   }
+  // The claim layer over these circuits, with real proofs, through dist/pool.
+  const { checkAdmission } = await import("./admission.mjs");
+  await checkAdmission({ api, circuits, pins, checks, metrics });
+  console.log("PASS: real-proof admission, refusal and replay through the claim layer.");
   // Snapshot of cache files, not a claim about consumed prefixes or provenance.
   const parameterCache = {};
   for (const name of readdirSync(crsPath).filter(name => name.endsWith('.dat')).sort()) {

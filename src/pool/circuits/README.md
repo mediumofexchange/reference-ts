@@ -1,10 +1,12 @@
 # pool-v1 circuits
 
 These sources implement the issue, spend and burn relations in the companion
-specification's `pool-v1.md` §§1, 3–5. They are the first promoted part of the
-pool claim layer. Admission, signing, the spent set, history and sequencing
-are still separate work; a valid circuit proof alone does not authorize an
-issuance or establish that an anchor belongs to accepted history.
+specification's `pool-v1.md` §§1, 3–5. The rest of the claim layer — the
+host hash, notes, the note tree, the spent set, the frames, and admission
+with replay — is the TypeScript beside them in `src/pool/`. A valid circuit
+proof alone does not authorize an issuance or establish that an anchor
+belongs to accepted history; `pool.ts` does that (§6), and the sequencing
+layer's receipt envelope is still separate work.
 
 Run from the repository root after `npm ci`:
 
@@ -12,12 +14,19 @@ Run from the repository root after `npm ci`:
 npm run check:pool
 ```
 
-The check compiles all three circuits with Noir `1.0.0-beta.26`, derives
-Barretenberg `5.2.0` UltraHonk keys with `verifierTarget: noir-recursive`
-(zero knowledge), compares source/bytecode/key SHA-256s to `manifest.json`,
-and exercises real proofs, every public input's binding, and hostile
-witnesses. The seven-field spend permits two backings, two inputs including
-padding, and two outputs; burn has nine fields and one change output.
+The check builds the package, compiles all three circuits with Noir
+`1.0.0-beta.26`, derives Barretenberg `5.2.0` UltraHonk keys with
+`verifierTarget: noir-recursive` (zero knowledge), compares
+source/bytecode/key SHA-256s to `manifest.json`, and exercises real proofs,
+every public input's binding, and hostile witnesses. The seven-field spend
+permits two backings, two inputs including padding, and two outputs; burn
+has nine fields and one change output. It then runs
+`scripts/pool/admission.mjs`: the wallet side derives owners, commitments,
+nullifiers and paths with `dist/pool`'s host functions, proves with these
+circuits, and `Pool` admits, refuses and replays through
+`pool/barretenberg.ts`'s verifier — issuance under K's signature, a padded
+spend, a re-proven resubmission, respends and unaccepted roots, a burn,
+corrupted and cross-kind proofs, and replay by a second verifier.
 
 `scripts/pool/fixtures.mjs` builds synthetic depth-32 paths with the backend's
 host Poseidon2 hash. It is test tooling, including roots that exercise high
@@ -35,8 +44,9 @@ was used; they do not establish ceremony provenance or production trust.
 
 The recorded Windows/Node 24.6.0 run is
 [`docs/pool-v1-verification.json`](../../../docs/pool-v1-verification.json):
-97 checks and ten real proofs, each 14,656 bytes. Its timings are desktop
-observations, not a phone/browser budget or a production performance claim.
+106 checks and seventeen real proofs, each 14,656 bytes, including the
+claim-layer run. Its timings are desktop observations, not a phone/browser
+budget or a production performance claim.
 
 To review a deliberate source change before these identities are normative:
 

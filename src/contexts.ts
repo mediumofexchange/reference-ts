@@ -32,6 +32,18 @@
 //   moe/commit/v1              a holder committing one attempt, at every sequencer
 //   moe/replacement/v1         E's rule naming a successor operator
 //   moe/revocation/v1          K withdrawing its own authority to issue
+//
+// The shielded pool's construction (pool-v1) hashes and signs under its own
+// family, none a prefix of another or of the tags above:
+//
+//   moe/pool/v1/config         the configuration E's hash names (§2)
+//   moe/pool/v1/pool           the pool identity (§2)
+//   moe/pool/v1/statement      what a statement asserts; K signs it for an issuance (§5)
+//   moe/pool/v1/genesis        historyHash_0 (§7)
+//   moe/pool/v1/history        historyHash_i (§7)
+//   moe/pool/v1/snapshot       a backing's snapshot digest in the directory (§7)
+//   moe/pool/v1/spent/leaf     a spent-set leaf (§8)
+//   moe/pool/v1/spent/node     a spent-set node (§8)
 
 const encoder = new TextEncoder();
 const tag = (s: string): Uint8Array => encoder.encode(s);
@@ -51,6 +63,14 @@ export const ATTEMPT_CONTEXT = tag("moe/attempt/v1");
 export const COMMIT_CONTEXT = tag("moe/commit/v1");
 export const REPLACEMENT_CONTEXT = tag("moe/replacement/v1");
 export const REVOCATION_CONTEXT = tag("moe/revocation/v1");
+export const POOL_CONFIG_CONTEXT = tag("moe/pool/v1/config");
+export const POOL_IDENTITY_CONTEXT = tag("moe/pool/v1/pool");
+export const POOL_STATEMENT_CONTEXT = tag("moe/pool/v1/statement");
+export const POOL_GENESIS_CONTEXT = tag("moe/pool/v1/genesis");
+export const POOL_HISTORY_CONTEXT = tag("moe/pool/v1/history");
+export const POOL_SNAPSHOT_CONTEXT = tag("moe/pool/v1/snapshot");
+export const POOL_SPENT_LEAF_CONTEXT = tag("moe/pool/v1/spent/leaf");
+export const POOL_SPENT_NODE_CONTEXT = tag("moe/pool/v1/spent/node");
 
 /** Shared UTF-8 codecs. The decoder is strict and BOM-preserving so that
  *  decode(encode(s)) === s for every well-formed string. */
@@ -79,6 +99,14 @@ const ALL_CONTEXTS = [
   COMMIT_CONTEXT,
   REPLACEMENT_CONTEXT,
   REVOCATION_CONTEXT,
+  POOL_CONFIG_CONTEXT,
+  POOL_IDENTITY_CONTEXT,
+  POOL_STATEMENT_CONTEXT,
+  POOL_GENESIS_CONTEXT,
+  POOL_HISTORY_CONTEXT,
+  POOL_SNAPSHOT_CONTEXT,
+  POOL_SPENT_LEAF_CONTEXT,
+  POOL_SPENT_NODE_CONTEXT,
 ];
 
 export function contextsArePrefixFree(tags: readonly Uint8Array[] = ALL_CONTEXTS): boolean {

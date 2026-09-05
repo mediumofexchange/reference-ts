@@ -3,7 +3,7 @@
   "node": "v24.6.0",
   "platform": "win32",
   "arch": "x64",
-  "compileMs": 4442.9252,
+  "compileMs": 4959.0435,
   "pins": {
     "construction": "moe/pool/v1",
     "toolchain": {
@@ -149,87 +149,152 @@
     "burn binds public input 6",
     "burn binds public input 7",
     "burn binds public input 8",
-    "burn rejects corrupted proof"
+    "burn rejects corrupted proof",
+    "the claim layer derives the pinned circuit identities",
+    "host Poseidon2 agrees with the backend for one to eight inputs",
+    "a real issuance is admitted under K's signature and refused under another key",
+    "a wallet-built spend with a padding input is admitted",
+    "a re-proven resubmission returns the prior record without changing state",
+    "valid proofs are refused for a spent nullifier and for an unaccepted root",
+    "a real burn lowers outstanding and spends its inputs",
+    "corrupted, cross-kind and truncated proofs are refused for a new statement; an accepted one answers with its record",
+    "a separate verifier replays the trail to the same history; a prefix proves only itself"
   ],
   "metrics": [
     {
       "label": "authorized-relation issuance",
       "kind": "issue",
-      "executionMs": 90.3868999999977,
-      "proveMs": 801.049799999997,
-      "verifyMs": 86.19150000000081,
+      "executionMs": 95.52189999999973,
+      "proveMs": 892.0153000000028,
+      "verifyMs": 89.14220000000205,
       "proofBytes": 14656
     },
     {
       "label": "one real input plus padding",
       "kind": "spend",
-      "executionMs": 76.66359999999986,
-      "proveMs": 3252.3650000000016,
-      "verifyMs": 63.39259999999922,
+      "executionMs": 131.1785000000018,
+      "proveMs": 3346.7543000000005,
+      "verifyMs": 116.25959999999759,
       "proofBytes": 14656
     },
     {
       "label": "two real inputs, same backing",
       "kind": "spend",
-      "executionMs": 64.51169999999911,
-      "proveMs": 2912.216700000001,
-      "verifyMs": 72.03019999999742,
+      "executionMs": 61.09569999999803,
+      "proveMs": 3070.9894999999997,
+      "verifyMs": 69.93059999999969,
       "proofBytes": 14656
     },
     {
       "label": "two backings conserve separately",
       "kind": "spend",
-      "executionMs": 49.91400000000067,
-      "proveMs": 3539.738300000001,
-      "verifyMs": 79.20200000000114,
+      "executionMs": 38.293900000000576,
+      "proveMs": 3093.582699999999,
+      "verifyMs": 66.41400000000067,
       "proofBytes": 14656
     },
     {
       "label": "partial burn with padding",
       "kind": "burn",
-      "executionMs": 31.454900000000634,
-      "proveMs": 3478.3924000000006,
-      "verifyMs": 73.82549999999901,
+      "executionMs": 26.16610000000219,
+      "proveMs": 3068.167999999998,
+      "verifyMs": 68.25890000000072,
       "proofBytes": 14656
     },
     {
       "label": "all right-child bits including bit 31",
       "kind": "spend",
-      "executionMs": 85.11809999999969,
-      "proveMs": 8487.546600000001,
-      "verifyMs": 92.52210000000196,
+      "executionMs": 38.454499999999825,
+      "proveMs": 3816.2035000000033,
+      "verifyMs": 107.91599999999744,
       "proofBytes": 14656
     },
     {
       "label": "two maximum u64 inputs conserve in u128",
       "kind": "spend",
-      "executionMs": 46.606800000001385,
-      "proveMs": 3000.0659999999916,
-      "verifyMs": 63.245999999999185,
+      "executionMs": 35.72799999999552,
+      "proveMs": 4019.1730000000025,
+      "verifyMs": 93.056700000001,
       "proofBytes": 14656
     },
     {
       "label": "new anchor preserves both nullifiers",
       "kind": "spend",
-      "executionMs": 29.760800000003655,
-      "proveMs": 3008.2337000000116,
-      "verifyMs": 63.01959999999963,
+      "executionMs": 38.06620000000112,
+      "proveMs": 3844.666299999997,
+      "verifyMs": 74.3808999999892,
       "proofBytes": 14656
     },
     {
       "label": "full burn with zero change",
       "kind": "burn",
-      "executionMs": 28.541700000001583,
-      "proveMs": 2832.395900000003,
-      "verifyMs": 81.08729999999923,
+      "executionMs": 35.11839999999211,
+      "proveMs": 3337.215200000006,
+      "verifyMs": 73.71849999998813,
       "proofBytes": 14656
     },
     {
       "label": "burn widens quantity plus change",
       "kind": "burn",
-      "executionMs": 22.19770000000426,
-      "proveMs": 3044.8041999999987,
-      "verifyMs": 66.18829999999434,
+      "executionMs": 26.49199999999837,
+      "proveMs": 3852.093000000008,
+      "verifyMs": 70.13190000000759,
+      "proofBytes": 14656
+    },
+    {
+      "label": "claim layer issue",
+      "kind": "issue",
+      "executionMs": 1.0426000000006752,
+      "proveMs": 925.6781000000046,
+      "verifyMs": 0,
+      "proofBytes": 14656
+    },
+    {
+      "label": "claim layer spend",
+      "kind": "spend",
+      "executionMs": 28.805200000002515,
+      "proveMs": 3156.258600000001,
+      "verifyMs": 0,
+      "proofBytes": 14656
+    },
+    {
+      "label": "claim layer spend",
+      "kind": "spend",
+      "executionMs": 34.63189999999304,
+      "proveMs": 3321.5852999999915,
+      "verifyMs": 0,
+      "proofBytes": 14656
+    },
+    {
+      "label": "claim layer spend",
+      "kind": "spend",
+      "executionMs": 27.039199999999255,
+      "proveMs": 3887.4380999999994,
+      "verifyMs": 0,
+      "proofBytes": 14656
+    },
+    {
+      "label": "claim layer spend",
+      "kind": "spend",
+      "executionMs": 36.13890000000538,
+      "proveMs": 4563.283800000005,
+      "verifyMs": 0,
+      "proofBytes": 14656
+    },
+    {
+      "label": "claim layer burn",
+      "kind": "burn",
+      "executionMs": 34.72480000001087,
+      "proveMs": 4221.689300000013,
+      "verifyMs": 0,
+      "proofBytes": 14656
+    },
+    {
+      "label": "claim layer burn",
+      "kind": "burn",
+      "executionMs": 25.97520000000077,
+      "proveMs": 4269.770499999999,
+      "verifyMs": 0,
       "proofBytes": 14656
     }
   ]

@@ -53,13 +53,21 @@
     "check:pilot": "node scripts/pilot-demo.mjs",
     "pilot:demo": "npm run build && npm run check:pilot",
     "check:privacy": "npm run build && npm --prefix experiments/private-payment run check",
-    "check:pool": "node scripts/pool/check.mjs",
+    "check:pool": "npm run build && node scripts/pool/check.mjs",
     "check": "npm run check:docs && npm run typecheck && npm test && npm run build && npm run check:package && npm run check:pilot",
     "prepublishOnly": "npm run check"
   },
   "publishConfig": {
     "access": "public",
     "tag": "next"
+  },
+  "peerDependencies": {
+    "@aztec/bb.js": "5.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@aztec/bb.js": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@aztec/bb.js": "5.2.0",
