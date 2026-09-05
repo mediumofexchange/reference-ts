@@ -16,14 +16,15 @@ This repository builds that core, in this order:
 
 1. **Specification.** Pin the pool's concrete statement layouts, hash
    functions, spent-set accumulator, multi-input shape and proof-system
-   identity in Construction, from the experiment's evidence. Done in part
-   (§C1.2–C1.4, numbered §C2/§C2b); the concrete layouts are the next spec
-   slice.
+   identity in Construction, from the experiment's evidence. Done: `pool-v1.md`
+   pins them, reviewed once; its §12 lists what is recorded when the circuits
+   are promoted.
 2. **Adversarial model.** An executable model of §C2, §C2b and §C3 over the
    pool representation — two operators, two backings, a holder, delayed and
    dropped publications, replacement, restart, incomplete views — checking
    safety and conditional progress separately and keeping counterexamples as
-   regression vectors. This replaces panel rounds with checks that re-run.
+   regression vectors. This replaces panel rounds with checks that re-run. Built for §C2/§C2b:
+   `model/sequencing.ts` and its twelve checks; §C3 joins it with v2.
 3. **The pool's claim layer** in `src/`: circuits promoted from the experiment
    to the normative layouts, the note tree, the spent-set accumulator,
    admission against one committed view.

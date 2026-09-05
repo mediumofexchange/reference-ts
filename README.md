@@ -71,8 +71,8 @@ delivery and backups, the wallet, an external witness's write side, and
 every Extensions profile.
 
 The implementation follows specification revision
-[`8d5055e`](https://github.com/mediumofexchange/money-from-first-principles/tree/8d5055ebd0ff1dbebf9f72d716735d3486e643e0)
-on branch `spec/pooled-core`. `docs/PROTOCOL_RULES.md` maps each binding rule
+[`4172c5b`](https://github.com/mediumofexchange/money-from-first-principles/tree/4172c5b)
+on branch `spec/pool-v1`, which adds `pool-v1.md`, the core construction bit for bit. `docs/PROTOCOL_RULES.md` maps each binding rule
 to its specification rule, code and test, and marks what is frozen.
 
 ## Try the local pilot

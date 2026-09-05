@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-05` [pool-v1 pins the shielded pool, and the sequencing model earns two rules](decisions/2026-09.md#2026-09-05--pool-v1-pins-the-shielded-pool-and-the-sequencing-model-earns-two-rules)
 - `2026-09-05` [The finished protocol: the shielded pool is the core, the lit settings are profiles, and C2 is re-derived against the directory](decisions/2026-09.md#2026-09-05--the-finished-protocol-the-shielded-pool-is-the-core-the-lit-settings-are-profiles-and-c2-is-re-derived-against-the-directory)
 - `2026-09-05` [One private product and real-proof feasibility](decisions/2026-09.md#2026-09-05--one-private-product-and-real-proof-feasibility)
 - `2026-09-04` [Durable transparent pilot and named commitment directory](decisions/2026-09.md#2026-09-04--durable-transparent-pilot-and-named-commitment-directory)

@@ -13,61 +13,52 @@ tests agree.
 
 ## Status
 
-- The 2026-09-05 meta review is applied: decision "The finished protocol: the
-  shielded pool is the core, the lit settings are profiles, and C2 is
-  re-derived against the directory" (`DECISIONS.md`).
-- Implementation branch `chore/pooled-core-scope`, on top of
-  `research/private-payment-architecture` → `feat/durable-transparent-pilot`
-  → `review/project-practicality-2026-09-04`. All local, unmerged.
-- Companion specification branch `spec/pooled-core` at `8d5055e`, on top of
-  `spec/private-payment-architecture` → `spec/durable-transparent-pilot`.
-  The README pins `8d5055e`. Merge order when authorized: spec first, then
-  reference-ts, then `site` and `orgprofile` (`docs/durable-pilot`).
-- The transparent path is frozen (banner at each module head); `ergo.ts` is
-  no longer exported from the root barrel; the pilot is a harness; the
-  experiment stays until the layouts are pinned.
-- Decision log: 15 session/round entries archived to `decisions/archive/`;
-  66 decisions indexed. `docs/PROJECT_REVIEW_2026-09-04.md` removed; its
-  findings live in `docs/PRODUCTION_REQUIREMENTS.md`.
-- No push, merge, publication or PR authorized.
+- Step 1 (specification) delivered: `pool-v1.md` pins `moe/pool/v1` bit for
+  bit, one adversarial review applied. Step 2 (model) delivered for §C2/§C2b:
+  `model/sequencing.ts`, twelve checks, two rules earned (C2.6.1, C2.8).
+  Decision "pool-v1 pins the shielded pool, and the sequencing model earns two
+  rules" (`DECISIONS.md`).
+- Implementation branch `feat/sequencing-model` on `main` (`4efe773`).
+  Companion specification branch `spec/pool-v1` at `4172c5b`, on `main`
+  (`8d5055e`). Both local, unmerged. Merge order: spec first.
+- The transparent path stays frozen; the experiment stays until the v1
+  circuits replace it.
 
 ## Evidence
 
-- `npm run check` on Node 24.6.0 (2026-09-05): docs OK, typecheck, 50 files /
-  1000 tests, build, installed-package consumer, pilot crash scenario.
-- `npm run check:privacy`: 9 real proofs, 38 named checks, 8 journal tests;
-  572 MiB peak RSS.
-- Markdown links and anchors checked across both repositories
-  (`scratch/check-links.mjs`, disposable).
-- Construction §C2 rewritten as numbered rules; every guarantee recorded in
-  decisions 2026-08-29 … 2026-09-04 maps to a rule or is retired in the
-  Appendix with its cost.
+- `npx vitest run model/sequencing.test.ts`: 12 passed (27 s, Node 24.6.0).
+  Eight rule-following configurations (honest; slow blocks; drops; crash and
+  restart; darkness; withholding; everything at lag 2; lag 0) over 60 seeds
+  each: no violation of P1 continuity, P2 double spend, P3 contradicted
+  receipt, P4 one in flight, P5 every receipt final (clean setting). Two
+  departures each found their counterexample within 300 seeds and are kept as
+  regression vectors: `leadFloor: 1` gives P5 (the same-block erasure);
+  `restartFrom: "witnessed"` gives P3 (the dropped tail).
+- `npx tsc --noEmit` clean with `model/` included.
+- Spec links OK (`scripts/check-links.mjs`).
+- Full `npm run check` last run on `main` `4efe773` (green on CI, three jobs).
 
 ## Next
 
-1. **Spec slice:** pin the pool's concrete statement layouts, hash functions,
-   spent-set accumulator with non-membership, multi-input shape, and what
-   **E** declares (§C1.2–C1.4), from `experiments/private-payment/RESEARCH.md`.
-   Clear §C0a; independent adversarial review (statement layouts are
-   parser- and circuit-sensitive).
-2. **Adversarial model:** executable model of §C2, §C2b and §C3 over notes —
-   two operators, two backings, a holder, delayed and dropped publications,
-   replacement, restart, incomplete views; safety and progress checked
-   separately; counterexamples kept as regression vectors.
-3. **Pool claim layer** in `src/`, promoting the experiment's circuits to the
-   normative layouts; then rules over notes, porting cases from the frozen
-   suite as each lands.
+1. Promote the circuits: write `src/pool/circuits/{notes,issue,spend,burn}.nr`
+   to pool-v1's layouts (2-in/2-out with padding, per-backing conservation,
+   depth 32), compile with the pinned toolchain, record source hashes,
+   `bytecode(k)` and `vk(k)` in pool-v1 §12. Adversarial review
+   (circuit-sensitive).
+2. The pool's claim layer in `src/pool/`: note tree, SHA-256 spent-set SMT with
+   compressed proofs, statement frames, admission against one committed view,
+   history hash, snapshot digest, receipt fields, with pool-v1 as the test
+   oracle and the experiment's adversarial cases ported.
+3. Extend the model with the pool's admission (nullifier set, anchors), then
+   §C3 over notes when v2 defines its objects.
 
 ## Open questions
 
-- Review still owed: the C2 re-derivation against the directory (C2.4.5,
-  C2.7) was written by one author; it is protocol-sensitive and needs an
-  independent adversarial read before code depends on it.
-- Spent-set accumulator choice and its proof cost on a phone.
-- Flat directory or tree with logarithmic proofs in the pool profile (§C0b
-  leaves it to the profile).
-- Proof backend and setup provenance are provisional (Noir/Barretenberg
-  pinned in the experiment; Halo2/snarkjs remain alternatives).
-- Branches `feat/durable-transparent-pilot` and
-  `review/project-practicality-2026-09-04` are ancestors of the work branch;
-  delete after merge. Remote merged branches need the maintainer's push.
+- Review still owed: the C2 re-derivation against the directory (C2.4.5, C2.7)
+  has been exercised by the model but not read independently.
+- v1 leaves the non-service grade inert and snapshot redemption without a
+  venue leg (pool-v1 §5.4); v2 must define the demand, lock, adoption record
+  and swap together. Decide whether v1 backings should exist at all before v2,
+  given the non-atomic crossing.
+- Spent-set proof cost on a phone; flat versus tree directory in the profile.
+- Proof backend and setup provenance remain provisional.
