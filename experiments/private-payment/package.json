@@ -1,0 +1,12 @@
+{
+  "name": "moe-private-payment-experiment",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": { "check": "node --test journal.test.mjs && node run.mjs" },
+  "dependencies": {
+    "@aztec/bb.js": "5.2.0",
+    "@noir-lang/noir_js": "1.0.0-beta.26",
+    "@noir-lang/noir_wasm": "1.0.0-beta.26"
+  }
+}

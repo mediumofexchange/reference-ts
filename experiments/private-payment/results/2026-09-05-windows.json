@@ -1,0 +1,155 @@
+{
+  "date": "2026-09-05T06:15:11.546Z",
+  "profile": "moe-private-payment-research/v1",
+  "environment": {
+    "node": "v24.6.0",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+    "logicalCpus": 4,
+    "memoryBytes": 17048907776,
+    "backend": "WasmWorker",
+    "threads": 1
+  },
+  "dependencies": {
+    "noir": "1.0.0-beta.26",
+    "barretenberg": "5.2.0",
+    "poseidonSourceSha256": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"
+  },
+  "proofOptions": {
+    "verifierTarget": "noir-recursive"
+  },
+  "pins": {
+    "issue": {
+      "bytecode": "8c216004ed6467f4999d80fd582cece3f1c9fd9c59eb5c9470391fb45b8fbb17",
+      "verificationKey": "a4b1d07ddb337a7d2096e03f0660609e044878290b629e31c088563cd867f4d0"
+    },
+    "spend": {
+      "bytecode": "c88e1e57cd53f58365e67bcd53ae524bd5cbd5f1f7025401b100cf13c94310bf",
+      "verificationKey": "75041ba4ee35365f793f5269e9077c8d7dd67cbe98d5c8c278b6330542f99b55"
+    },
+    "burn": {
+      "bytecode": "1031c27007cf4c6e78c4898553b7ca0d99cbfed17ebaaed36f9f49439ec0021f",
+      "verificationKey": "5e197323f138fa3f1fde819083f1f92405ff960011c83267a01599044ede3e36"
+    }
+  },
+  "compileMs": 7775.126000000001,
+  "setupMs": 29800.5985,
+  "proofs": [
+    {
+      "kind": "issue",
+      "executionMs": 210.39880000000267,
+      "proveMs": 1620.4374000000025,
+      "proofBytes": 14656
+    },
+    {
+      "kind": "issue",
+      "executionMs": 5.494399999995949,
+      "proveMs": 1444.2785999999978,
+      "proofBytes": 14656
+    },
+    {
+      "kind": "spend",
+      "executionMs": 23.348799999999756,
+      "proveMs": 1608.726999999999,
+      "proofBytes": 14656
+    },
+    {
+      "kind": "spend",
+      "executionMs": 23.7954000000027,
+      "proveMs": 1522.248099999997,
+      "proofBytes": 14656
+    },
+    {
+      "kind": "issue",
+      "executionMs": 3.4161000000021886,
+      "proveMs": 1080.0662999999986,
+      "proofBytes": 14656
+    },
+    {
+      "kind": "spend",
+      "executionMs": 19.411299999999756,
+      "proveMs": 1628.5996999999988,
+      "proofBytes": 14656
+    },
+    {
+      "kind": "spend",
+      "executionMs": 6.394700000004377,
+      "proveMs": 1359.5146000000095,
+      "proofBytes": 14656
+    },
+    {
+      "kind": "spend",
+      "executionMs": 12.250499999994645,
+      "proveMs": 1274.967300000004,
+      "proofBytes": 14656
+    },
+    {
+      "kind": "burn",
+      "executionMs": 10.177599999995437,
+      "proveMs": 1437.4239000000089,
+      "proofBytes": 14656
+    }
+  ],
+  "warmSpendVerifyMs": 96.17520000001241,
+  "separateAuditMs": 9746.77930000001,
+  "crsCachePresentAtStart": false,
+  "publicJournalBytes": 103392,
+  "peakRssKiB": 572492,
+  "events": 5,
+  "checks": [
+    "two authorized issuances under distinct 256-bit backing IDs",
+    "unauthorized input owner",
+    "wrong Merkle path",
+    "altered nullifier",
+    "cross-asset substitution",
+    "inflation through changed payment",
+    "u64 overflow",
+    "u128 asset alias",
+    "zero payment",
+    "altered receiver commitment",
+    "issuance quantity does not open output",
+    "issuance asset does not open output",
+    "public root tampering",
+    "wrong pool",
+    "extra public input",
+    "missing public input",
+    "noncanonical field alias",
+    "trailing proof bytes",
+    "corrupted proof",
+    "wrong pinned circuit",
+    "rejected authorization/proofs leave journal unchanged",
+    "valid membership proof under an unaccepted root is rejected",
+    "valid authorized issuance cannot duplicate an existing commitment",
+    "valid histories with identical note roots bind different spent sets in history hashes",
+    "concurrent double spend rejected",
+    "saved proof retry after restart",
+    "receiver verifies opening and records one invoice acceptance",
+    "valid proof cannot respend note under newer accepted anchor",
+    "payer cannot spend receiver-generated secret",
+    "actual writer process death before and after commit",
+    "redemption preserves outstanding count",
+    "burn wrong asset",
+    "burn exceeds input",
+    "operator evidence contains no note secrets/openings",
+    "supply A=60 B=80 after issuer burn",
+    "separate process reconstructs all roots and supply from public evidence",
+    "valid prefix is rejected against a separately supplied expected checkpoint",
+    "valid alternate spent history with the same note root and count is rejected against the history checkpoint"
+  ],
+  "crs": {
+    "bn254_g1.dat": "ea7b37bb4e1840b5632675fb2d79873ac0a1598374d3087344ba0e980736b8ac",
+    "bn254_g1_compressed.dat": "1d03ebeb73e1a6d426e44a2ccc88b04125ca185ab9d1679817380502a723fa80",
+    "bn254_g2.dat": "01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f",
+    "grumpkin_g1_v2.flat.dat": "64236c9455e75aeea77a94587ea607eed2e978d2609a421d66bf10bb9698b8fd",
+    "grumpkin_size": "0f255ec16482c343fd099ba9668863778be40dc166a6856b1d470e0bc97cc6fd"
+  },
+  "limitations": [
+    "Desktop measurements, not phone/browser measurements",
+    "Tiny synthetic anonymity set; no metadata protection",
+    "Local journal and caller-pinned head are not independent witnessing",
+    "Public-history replay cost grows; no production checkpoint/recovery protocol",
+    "Custom research circuits and host are not audited production cryptography",
+    "Redemption transfer models holder consent; external performance and demand protocol are not implemented"
+  ]
+}

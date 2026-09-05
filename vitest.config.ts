@@ -25,6 +25,8 @@ export default defineConfig({
     // that no longer matched the source. It cost two reviewers an afternoon
     // each. Excluded here rather than remembered, since the build step is in
     // AGENTS.md and will be followed again.
-    exclude: ["**/node_modules/**", "**/dist/**", "scratch/**"],
+    // Research uses its own Node 24 test runner and pinned proof dependencies;
+    // exercise it explicitly with `npm run check:privacy`.
+    exclude: ["**/node_modules/**", "**/dist/**", "scratch/**", "experiments/**"],
   },
 });

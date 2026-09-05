@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-05` [One private product and real-proof feasibility](decisions/2026-09.md#2026-09-05--one-private-product-and-real-proof-feasibility)
 - `2026-09-04` [Durable transparent pilot and named commitment directory](decisions/2026-09.md#2026-09-04--durable-transparent-pilot-and-named-commitment-directory)
 - `2026-09-04` [Slice 39 verification: a venue answers an exact sequence; pending receipts remain non-final](decisions/2026-09.md#2026-09-04--slice-39-verification-a-venue-answers-an-exact-sequence-pending-receipts-remain-non-final)
 - `2026-09-04` [Handoff: slice 39 is built, reviewed, fixed by panel, and owes one verification](decisions/2026-09.md#2026-09-04--handoff-slice-39-is-built-reviewed-fixed-by-panel-and-owes-one-verification)

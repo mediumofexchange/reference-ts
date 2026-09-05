@@ -1,57 +1,67 @@
 # Current work
 
-Updated: 2026-09-04
+Updated: 2026-09-05
 
 ## Goal
 
-Implement the maintainer-approved smaller durable payment system and the
-whole-project review's security, proof and workflow improvements.
+Deliver the approved release contract and real private-payment experiment,
+then define consolidation into one product with privacy and public supply
+verification. The transparent pilot is an integration harness.
 
 ## Status
 
-- Implementation branch: `feat/durable-transparent-pilot`, after review commit
-  `2762b3b`; security fixes `b019815`, directory format `1dfcc50`, pilot at HEAD.
-  All work is local. No push, merge, publication or PR is authorized.
-- Companion spec: `money-from-first-principles`, branch
-  `spec/durable-transparent-pilot`, commits `5f1663d` and `c3f4b0f` (README pin).
-  Site and org profile: `docs/durable-pilot`, commits `87a15b6` and `da7288b`.
-- Backing identity, Ergo refresh serialization and mutable boundaries fixed.
-  Independently reviewed, with regressions.
-- Commitment v2 authenticates a sorted digest directory and selected logs.
-  Authenticated absence differs from withholding; independently reviewed.
-- Durable Node 24 SQLite store, local signing CLI, HTTP and payment checker
-  implemented. Independent critical review findings addressed.
-- Built-package process demo passes payment, crash/restart, exact retry and
-  redemption. Package consumer install/import/signature check passes.
-- CI and public docs updated. This implementation slice is complete and verified.
-- See [pilot guide](docs/PILOT.md) and [review](docs/PROJECT_REVIEW_2026-09-04.md).
+- Slice complete, independently reviewed and verified; local commits only.
+- Implementation: `research/private-payment-architecture`, based on `f8eea32`.
+  Companion spec: `spec/private-payment-architecture`, commit `edbc3f3`.
+  The supported transparent implementation still pins normative `c3f4b0f`.
+- [Release contract](docs/PRODUCTION_REQUIREMENTS.md) and
+  [architecture/consolidation](docs/PRIVATE_PAYMENT_ARCHITECTURE.md) define the
+  single product and the components to retain, replace or retire.
+- [Real-proof experiment](experiments/private-payment/README.md) implements
+  shared issue/spend/burn note rules, SQLite admission, receiver checks and
+  public-history audit. It is excluded from the shipped package.
+- Companion non-normative `private-payment-research.md` states exact relations,
+  public input/signature layouts and production gaps. No normative claim of
+  a private evidence setting or production deployment is made.
+- No push, merge, publication or PR authorized.
 
 ## Evidence
 
-- Final `npm run check` on local Windows / Node 24.6.0: all 50 files / 1,000
-  tests passed (98.61 seconds); docs, typecheck, build, installed tarball consumer
-  and multi-process pilot passed. Initial surface-inventory failure was fixed
-  by testing the pilot's explicit unavailable result alongside core refusal.
-- Pilot passed, including process.exit(71) at applied,
-  stored and committed; final balances Alice60/Bob0/issuer40, outstanding100.
-- CI now runs the same gate on Ubuntu Node 20/24 and Windows Node 24; these
-  remote jobs have not run locally. Node 20 explicitly skips the SQLite pilot.
-- Independent critical reviews and final self-review completed; scratch clean.
+- Final `npm run check:privacy`: 8 journal tests, 9 actual ZK proofs and all
+  38 named checks passed on Windows / Node 24.6.0. Includes valid unaccepted
+  roots, repeated commitments, new-anchor double spending, process death,
+  exact retries, public-only supply replay, prefixes and alternate histories.
+- Found and fixed a checkpoint gap: identical note roots can hide different
+  spent sets. Configuration-seeded ordered statement hashes now bind history;
+  independently reviewed and exercised with two valid conflicting histories.
+- [Measured run](experiments/private-payment/results/2026-09-05-windows.json):
+  proofs 14,656 bytes, proving 1.1-1.7 seconds, warm verification 96 ms,
+  peak process RSS 559 MiB; fresh setup including download 29.8 seconds.
+- Final `npm run check`: 50 files / 1,000 tests passed (81.03 seconds), plus
+  docs, types, build, installed-package and process-crash pilot checks.
+  An initial runner-discovery conflict was fixed: the research Node tests run
+  under `check:privacy`, separately from the supported Vitest suite.
+- Independent circuit/host/journal review and focused checkpoint-fix review
+  completed. Disposable probes and generated scratch artifacts removed.
 
 ## Next
 
-1. Maintainer can run `npm run pilot:demo` with Node 24 and inspect the guide.
-2. Next proposed slice: measure realistic pilot loads and define receiver invoice
-   persistence before adding independent witness publication or more profiles.
-3. Push/merge/publication require separate maintainer approval.
+1. Specify private evidence identity, immutable circuit/version policy and
+   finality assumptions in the normative protocol.
+2. Build one durable wallet/operator path with private note delivery, invoices,
+   restore and bounded multi-input payments; move the useful pilot/experiment
+   tests and retire their superseded public paths as replacements work.
+3. Prove independent publication, availability and private redemption/recovery,
+   and measure supported phones/browsers before allowing live deployment.
+4. Push/merge/publication still require maintainer authorization.
 
 ## Open questions
 
-- Pilot trusts the cohosted local witness; no hostile-operator recovery or
-  independent witnessing. External publication needs signer reservation/outbox.
-- Journal is bounded at 10,000 commands and one root. Checkpoints and realistic
-  load measurement remain future scaling work.
-- Database rollback/copies and loss of key/history are outside recovery scope.
-- Payment checker proves inclusion, not invoice freshness. Receiving apps must
-  durably deduplicate fulfillment. No merchant checkout app is included.
-- This work includes independent defensive review, not an external security audit.
+- Research backend selection is provisional, not production crypto approval.
+  Setup trust/distribution, phone/browser performance and audits remain gates.
+- Caller-pinned history does not supply global freshness or independent finality.
+  No authenticated checkpoint service, replication or hostile-operator recovery.
+- No production note delivery/backup, metadata protection or multi-input shape.
+- Signed transparent backing names are research asset mappings only.
+- Returning notes to the issuer preserves supply; burn is separate. Full
+  demand/accept/release and external performance are outside this experiment.

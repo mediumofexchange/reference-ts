@@ -30,7 +30,10 @@ The reference implementation currently contains the transparent protocol path, i
 - lock and receipt verification; and
 - the supported in-memory venue.
 
-Privacy-preserving or encrypted protocol variants are not yet implemented.
+The shipped implementation is transparent. `experiments/private-payment/`
+contains an unshipped real-proof feasibility check, not a conforming private
+profile. Production requirements and consolidation are in
+`docs/PRODUCTION_REQUIREMENTS.md` and `docs/PRIVATE_PAYMENT_ARCHITECTURE.md`.
 
 ## Engineering contract
 

@@ -17,6 +17,9 @@ function run(args, cwd) {
 }
 try {
   const packed = JSON.parse(run([npm, 'pack', '--json', '--ignore-scripts', '--pack-destination', directory], process.cwd()));
+  if (packed[0].files.some(file => file.path.startsWith('experiments/'))) {
+    throw new Error('Research code must not ship as a supported package API');
+  }
   const consumer = join(directory, 'consumer');
   mkdirSync(consumer);
   writeFileSync(join(consumer, 'package.json'), JSON.stringify({ name: 'moe-package-consumer', private: true, type: 'module' }));

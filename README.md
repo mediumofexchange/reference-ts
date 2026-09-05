@@ -43,11 +43,19 @@ import { REPLACEMENT_CONTEXT } from "@mediumofexchange/reference/contexts";
 **Experimental; the API and wire format can change.** Source is the supported
 way to try the implementation. There is no published npm release.
 
-The transparent setting only. In scope: canonical encoding of backings,
+The shipped package implements the transparent setting only. In scope: canonical encoding of backings,
 hashing, signatures, issuance, swaps, presentation, sequencing, dishonour,
 succession, recovery, and the conservation arithmetic. Out of scope for now:
 blinding, the accumulator and pooled constructions, the Chaumian profile,
-shielded anything, external references, triggers, pro-rata.
+production shielded payments, external references, triggers, pro-rata.
+
+The intended product requires both private payments and public supply
+verification. See [production requirements](docs/PRODUCTION_REQUIREMENTS.md)
+and [the architecture decision](docs/PRIVATE_PAYMENT_ARCHITECTURE.md).
+A [real private-payment experiment](experiments/private-payment/README.md)
+tests issuance, private transfer and burn with actual zero-knowledge proofs;
+it is excluded from the package and does not yet implement a private protocol
+profile. The transparent pilot remains an integration harness for that product.
 
 The test suite covers the invariants one file at a time — `test/invariant-*.ts`
 is the readable index of what the code promises.
@@ -73,7 +81,7 @@ is an integration demonstration, not a deployed payment service.
 The paper derives the object and argues for it. The protocol says what to
 build. This says one way to build it, in code you can read. The reference and
 local pilot are experimental and have not undergone a completed security
-audit. The cryptography is deliberately limited to hashes and
+audit. The shipped package's cryptography is limited to hashes and
 signatures (`@noble/hashes`, `@noble/curves`, and nothing else).
 
 ## Reading it

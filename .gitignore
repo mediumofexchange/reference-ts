@@ -5,6 +5,6 @@ dist/
 
 # Scratch verification scripts — the .mjs probes that prove a bug and then
 # prove the fix. Gitignored, and kept in scratch/ so the repo root shows only
-# the dozen files that matter. Real code is .ts.
+# the durable project files. Supported implementation code lives in src/.
 /scratch/
 /*.mjs
