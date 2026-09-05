@@ -7,6 +7,8 @@ wallet, service or supported protocol profile.
 
 Read [the architecture decision](../../docs/PRIVATE_PAYMENT_ARCHITECTURE.md)
 and [production requirements](../../docs/PRODUCTION_REQUIREMENTS.md) first.
+The experiment's own contract — relations, layouts, admission rules and
+promotion blockers — is [RESEARCH.md](RESEARCH.md).
 
 ## Run
 

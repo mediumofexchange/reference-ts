@@ -4,64 +4,70 @@ Updated: 2026-09-05
 
 ## Goal
 
-Deliver the approved release contract and real private-payment experiment,
-then define consolidation into one product with privacy and public supply
-verification. The transparent pilot is an integration harness.
+A finished, working protocol whose claim layer is Construction's shielded pool
+(§C1.2), built in this order: specification → executable adversarial model of
+§C2/§C2b/§C3 over notes → the pool's claim layer → sequencing, recovery and
+presentation over notes → wallet → witness venue write side. No release
+deadline; each step is done when its rule, its model check and its adversarial
+tests agree.
 
 ## Status
 
-- Slice complete, independently reviewed and verified; local commits only.
-- Implementation: `research/private-payment-architecture`, based on `f8eea32`.
-  Companion spec: `spec/private-payment-architecture`, commit `edbc3f3`.
-  The supported transparent implementation still pins normative `c3f4b0f`.
-- [Release contract](docs/PRODUCTION_REQUIREMENTS.md) and
-  [architecture/consolidation](docs/PRIVATE_PAYMENT_ARCHITECTURE.md) define the
-  single product and the components to retain, replace or retire.
-- [Real-proof experiment](experiments/private-payment/README.md) implements
-  shared issue/spend/burn note rules, SQLite admission, receiver checks and
-  public-history audit. It is excluded from the shipped package.
-- Companion non-normative `private-payment-research.md` states exact relations,
-  public input/signature layouts and production gaps. No normative claim of
-  a private evidence setting or production deployment is made.
+- The 2026-09-05 meta review is applied: decision "The finished protocol: the
+  shielded pool is the core, the lit settings are profiles, and C2 is
+  re-derived against the directory" (`DECISIONS.md`).
+- Implementation branch `chore/pooled-core-scope`, on top of
+  `research/private-payment-architecture` → `feat/durable-transparent-pilot`
+  → `review/project-practicality-2026-09-04`. All local, unmerged.
+- Companion specification branch `spec/pooled-core` at `8d5055e`, on top of
+  `spec/private-payment-architecture` → `spec/durable-transparent-pilot`.
+  The README pins `8d5055e`. Merge order when authorized: spec first, then
+  reference-ts, then `site` and `orgprofile` (`docs/durable-pilot`).
+- The transparent path is frozen (banner at each module head); `ergo.ts` is
+  no longer exported from the root barrel; the pilot is a harness; the
+  experiment stays until the layouts are pinned.
+- Decision log: 15 session/round entries archived to `decisions/archive/`;
+  66 decisions indexed. `docs/PROJECT_REVIEW_2026-09-04.md` removed; its
+  findings live in `docs/PRODUCTION_REQUIREMENTS.md`.
 - No push, merge, publication or PR authorized.
 
 ## Evidence
 
-- Final `npm run check:privacy`: 8 journal tests, 9 actual ZK proofs and all
-  38 named checks passed on Windows / Node 24.6.0. Includes valid unaccepted
-  roots, repeated commitments, new-anchor double spending, process death,
-  exact retries, public-only supply replay, prefixes and alternate histories.
-- Found and fixed a checkpoint gap: identical note roots can hide different
-  spent sets. Configuration-seeded ordered statement hashes now bind history;
-  independently reviewed and exercised with two valid conflicting histories.
-- [Measured run](experiments/private-payment/results/2026-09-05-windows.json):
-  proofs 14,656 bytes, proving 1.1-1.7 seconds, warm verification 96 ms,
-  peak process RSS 559 MiB; fresh setup including download 29.8 seconds.
-- Final `npm run check`: 50 files / 1,000 tests passed (81.03 seconds), plus
-  docs, types, build, installed-package and process-crash pilot checks.
-  An initial runner-discovery conflict was fixed: the research Node tests run
-  under `check:privacy`, separately from the supported Vitest suite.
-- Independent circuit/host/journal review and focused checkpoint-fix review
-  completed. Disposable probes and generated scratch artifacts removed.
+- `npm run check` on Node 24.6.0 (2026-09-05): docs OK, typecheck, 50 files /
+  1000 tests, build, installed-package consumer, pilot crash scenario.
+- `npm run check:privacy`: 9 real proofs, 38 named checks, 8 journal tests;
+  572 MiB peak RSS.
+- Markdown links and anchors checked across both repositories
+  (`scratch/check-links.mjs`, disposable).
+- Construction §C2 rewritten as numbered rules; every guarantee recorded in
+  decisions 2026-08-29 … 2026-09-04 maps to a rule or is retired in the
+  Appendix with its cost.
 
 ## Next
 
-1. Specify private evidence identity, immutable circuit/version policy and
-   finality assumptions in the normative protocol.
-2. Build one durable wallet/operator path with private note delivery, invoices,
-   restore and bounded multi-input payments; move the useful pilot/experiment
-   tests and retire their superseded public paths as replacements work.
-3. Prove independent publication, availability and private redemption/recovery,
-   and measure supported phones/browsers before allowing live deployment.
-4. Push/merge/publication still require maintainer authorization.
+1. **Spec slice:** pin the pool's concrete statement layouts, hash functions,
+   spent-set accumulator with non-membership, multi-input shape, and what
+   **E** declares (§C1.2–C1.4), from `experiments/private-payment/RESEARCH.md`.
+   Clear §C0a; independent adversarial review (statement layouts are
+   parser- and circuit-sensitive).
+2. **Adversarial model:** executable model of §C2, §C2b and §C3 over notes —
+   two operators, two backings, a holder, delayed and dropped publications,
+   replacement, restart, incomplete views; safety and progress checked
+   separately; counterexamples kept as regression vectors.
+3. **Pool claim layer** in `src/`, promoting the experiment's circuits to the
+   normative layouts; then rules over notes, porting cases from the frozen
+   suite as each lands.
 
 ## Open questions
 
-- Research backend selection is provisional, not production crypto approval.
-  Setup trust/distribution, phone/browser performance and audits remain gates.
-- Caller-pinned history does not supply global freshness or independent finality.
-  No authenticated checkpoint service, replication or hostile-operator recovery.
-- No production note delivery/backup, metadata protection or multi-input shape.
-- Signed transparent backing names are research asset mappings only.
-- Returning notes to the issuer preserves supply; burn is separate. Full
-  demand/accept/release and external performance are outside this experiment.
+- Review still owed: the C2 re-derivation against the directory (C2.4.5,
+  C2.7) was written by one author; it is protocol-sensitive and needs an
+  independent adversarial read before code depends on it.
+- Spent-set accumulator choice and its proof cost on a phone.
+- Flat directory or tree with logarithmic proofs in the pool profile (§C0b
+  leaves it to the profile).
+- Proof backend and setup provenance are provisional (Noir/Barretenberg
+  pinned in the experiment; Halo2/snarkjs remain alternatives).
+- Branches `feat/durable-transparent-pilot` and
+  `review/project-practicality-2026-09-04` are ancestors of the work branch;
+  delete after merge. Remote merged branches need the maintainer's push.

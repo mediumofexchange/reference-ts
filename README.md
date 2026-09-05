@@ -2,8 +2,8 @@
 
 The TypeScript reference implementation of the
 **[Medium of Exchange Protocol](https://github.com/mediumofexchange/money-from-first-principles)**:
-one backing object `B = (K, P, R, E)`, claims held against it, wallets, and the
-law.
+one backing object `B = (K, P, R, E)`, claims held against it as notes in a
+shielded pool, wallets, and the law.
 
 The package is not published to npm. Build and check the source with Node.js
 20 or newer:
@@ -41,54 +41,68 @@ import { REPLACEMENT_CONTEXT } from "@mediumofexchange/reference/contexts";
 ## Status
 
 **Experimental; the API and wire format can change.** Source is the supported
-way to try the implementation. There is no published npm release.
+way to try the implementation. There is no published npm release, no
+deployment, and no completed security audit.
 
-The shipped package implements the transparent setting only. In scope: canonical encoding of backings,
-hashing, signatures, issuance, swaps, presentation, sequencing, dishonour,
-succession, recovery, and the conservation arithmetic. Out of scope for now:
-blinding, the accumulator and pooled constructions, the Chaumian profile,
-production shielded payments, external references, triggers, pro-rata.
+Construction's core claim layer is the **shielded pool**: ownership, amounts and
+histories hidden, supply proven at the pool's lit boundary. This repository
+builds it, in this order: specification → an executable adversarial model of
+the rules → the pool's claim layer → sequencing, recovery and presentation
+over notes → the wallet → the witness venue's write side. There is no release
+deadline. What the repository holds today:
 
-The intended product requires both private payments and public supply
-verification. See [production requirements](docs/PRODUCTION_REQUIREMENTS.md)
-and [the architecture decision](docs/PRIVATE_PAYMENT_ARCHITECTURE.md).
-A [real private-payment experiment](experiments/private-payment/README.md)
-tests issuance, private transfer and burn with actual zero-knowledge proofs;
-it is excluded from the package and does not yet implement a private protocol
-profile. The transparent pilot remains an integration harness for that product.
+- **Primitives that carry forward:** canonical encoding and naming, strict
+  Ed25519 signatures, commitments and their authenticated directory, the venue
+  interface and local venue, the durable command journal.
+- **A frozen transparent path** — the transparent *profile* from Extensions:
+  ledger, sequencer, presentation, replacement, recovery and provable fault,
+  with one test file per invariant. It is a differential oracle and a library
+  of adversarial cases for the pool path, and it is deleted when superseded.
+- **A real-proof experiment for the pool** (`experiments/private-payment/`,
+  contract in `RESEARCH.md`): Noir circuits, ZK-enabled UltraHonk proofs,
+  public-only supply replay. Excluded from the package; promoted when the
+  specification pins the concrete layouts.
+- **A local two-process pilot** on the frozen path (`docs/PILOT.md`): durable
+  commands, exact retries, crash recovery, a trusted local witness. An
+  integration harness, not a product.
 
-The test suite covers the invariants one file at a time — `test/invariant-*.ts`
-is the readable index of what the code promises.
+Out of scope until their step: the pool's claim layer in `src/`, note
+delivery and backups, the wallet, an external witness's write side, and
+every Extensions profile.
 
-The compact commitment format and local pilot profile follow specification
-revision [`c3f4b0f`](https://github.com/mediumofexchange/money-from-first-principles/tree/c3f4b0f99f00f60edb3305e83f7359346c8805d9).
+The implementation follows specification revision
+[`8d5055e`](https://github.com/mediumofexchange/money-from-first-principles/tree/8d5055ebd0ff1dbebf9f72d716735d3486e643e0)
+on branch `spec/pooled-core`. `docs/PROTOCOL_RULES.md` maps each binding rule
+to its specification rule, code and test, and marks what is frozen.
 
-## Try the local payment pilot
+## Try the local pilot
 
-With Node.js 24, run the optional durable pilot after the source setup above:
+With Node.js 24, after the source setup above:
 
 ```sh
 npm run pilot:demo
 ```
 
-The scenario exercises two clients, a local operator and witness, payment
-verification, restart, retries, and redemption. See [the pilot guide](docs/PILOT.md)
-for its storage and trust assumptions. The witness is local and trusted; this
-is an integration demonstration, not a deployed payment service.
+Two clients, a local operator and witness, payment verification, restart,
+retries, and redemption on the frozen transparent path. See
+[the pilot guide](docs/PILOT.md) for its storage and trust assumptions. The
+real-proof experiment runs separately with `npm run check:privacy`; see
+[its README](experiments/private-payment/README.md).
 
 ## What this is for
 
 The paper derives the object and argues for it. The protocol says what to
-build. This says one way to build it, in code you can read. The reference and
-local pilot are experimental and have not undergone a completed security
-audit. The shipped package's cryptography is limited to hashes and
-signatures (`@noble/hashes`, `@noble/curves`, and nothing else).
+build. This says one way to build it, in code you can read. The shipped
+package's cryptography is limited to hashes and signatures (`@noble/hashes`,
+`@noble/curves`); the pool's proof system is pinned by the experiment and will
+be declared in **E** when it is promoted.
 
 ## Reading it
 
 The build order is the reading order, and `src/index.ts` lists the modules in
 it: primitives, then the object, then what moves it, then sequencing, then
-failure and recovery.
+failure and recovery. Modules marked `FROZEN` at their head are the transparent
+path.
 
 Two files are worth opening first:
 
@@ -99,10 +113,11 @@ Two files are worth opening first:
 
 `WORK.md` is the current handoff for anyone continuing the implementation.
 `AGENTS.md` is the short, shared engineering contract, and `CLAUDE.md` imports
-it for Claude Code. `docs/PROTOCOL_RULES.md` holds detailed invariants for
-on-demand reading. `DECISIONS.md` indexes durable choices — one line each,
+it for Claude Code. `DECISIONS.md` indexes durable choices — one line each,
 with the entries in `decisions/` — so agents load only the history relevant to
-the current work.
+the current work. `docs/PRODUCTION_REQUIREMENTS.md` is the release contract
+and `docs/PRIVATE_PAYMENT_ARCHITECTURE.md` the order of steps and the
+consolidation map.
 
 ## Working on it
 
@@ -111,26 +126,20 @@ npm ci
 npm run check     # docs, types, tests, built package consumer, and Node 24 pilot
 ```
 
-The core requires Node 20 or newer; the optional durable pilot requires Node 24.
-Before changing the implementation, read `WORK.md`
-and `AGENTS.md`; follow the linked specification and decision entries only as
-needed for the current slice.
+The core requires Node 20 or newer; the optional durable pilot requires Node
+24. Before changing the implementation, read `WORK.md` and `AGENTS.md`; follow
+the linked specification rules and decision entries only as needed for the
+current slice.
 
 ## The wire format is not stable
 
-Shared commitments now authenticate a directory of backing names and snapshot
-digests. A verifier can fetch the relevant log without unrelated histories;
-a named but withheld log is unavailable evidence, never proof of absence.
-This changes the commitment signature context to `moe/commitment/v2` and is
-incompatible with earlier commitments.
-
-Backing names, venue ids and signatures use byte layouts that are
-still free to change. Earlier, the domain-separation namespace and
-the canonical encoding's magic bytes moved from `mfp/` and `"MFPB"` to `moe/`
-and `"MOEB"` when the project took the `mediumofexchange` name. There is no
-compatibility path across that change and none is planned — accepting two
-namespaces would defeat the separation the tags exist to provide. Anything you
-sign with this package today should be treated as disposable.
+Shared commitments authenticate a directory of backing names and snapshot
+digests (signature context `moe/commitment/v2`, directory version 1). The
+pool's statements, its **E** declaration and its commitment content are not
+yet fixed, and fixing them will change signed bytes again. Anything you sign
+with this package today should be treated as disposable. There is no
+compatibility path across format changes and none is planned — accepting two
+namespaces would defeat the separation the domain tags exist to provide.
 
 ## Licence
 
