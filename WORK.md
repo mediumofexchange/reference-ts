@@ -20,12 +20,15 @@ tests agree.
   rules" (`DECISIONS.md`).
 - The model/specification work is already on both local `main` branches:
   implementation `6c223b3`, specification `4172c5b`.
-- Active implementation branch `feat/pool-v1-circuits`, based on `6c223b3`:
+- Active implementation branch `feat/pool-v1-circuits`, circuit commit
+  `b90eb4a` on `main` `6c223b3`:
   pool-v1 issue/spend/burn sources, depth-32 membership, 2-in/2-out padding,
   per-backing conservation, reproducible source/bytecode/VK manifest, real
   proof tests, package source verification and Linux/Windows CI jobs.
-- Companion branch `spec/pool-v1-circuit-pins`, based on `4172c5b`: pin table
-  awaits the implementation source commit. Both branches remain local.
+- Companion branch `spec/pool-v1-circuit-pins` at `1d38815`, based on
+  `main` `4172c5b`: pool-v1 §12 records the source revision and all source,
+  bytecode and VK hashes. README pins it. Both branches remain local,
+  unpushed and unmerged; merge order: specification first.
 - The transparent path stays frozen. The experiment remains until admission,
   replay and crash cases move into the pool implementation too.
 
@@ -54,14 +57,12 @@ tests agree.
 
 ## Next
 
-1. Commit the circuit slice and fill pool-v1
-   §12 with the source revision and hashes. Update this handoff and README
-   with the companion specification commit.
-2. The rest of the pool's claim layer in `src/pool/`: note tree, SHA-256 spent-set SMT with
+1. The rest of the pool's claim layer in `src/pool/`: canonical fields and
+   statement/configuration frames, note tree, SHA-256 spent-set SMT with
    compressed proofs, statement frames, admission against one committed view,
    history hash, snapshot digest, receipt fields, with pool-v1 as the test
    oracle and the experiment's adversarial cases ported.
-3. Extend the model with the pool's admission (nullifier set, anchors), then
+2. Extend the model with the pool's admission (nullifier set, anchors), then
    §C3 over notes when v2 defines its objects.
 
 ## Open questions
