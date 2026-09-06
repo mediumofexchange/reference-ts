@@ -18,6 +18,7 @@ export * from "./scope.js";
 export * from "./statement.js";
 export * from "./segment.js";
 export * from "./receipt.js";
+export * from "./receipt-record.js";
 export * from "./schedule.js";
 export * from "./authority.js";
 export * from "./descent.js";

@@ -7,7 +7,7 @@ import { decodeCommitment, directoryRoot, encodeCommitment, verifyCommitment, ty
 import { VenueError, type Venue } from "../venue.js";
 import { PoolAuthorityView } from "./authority.js";
 import { readPoolPredecessor, type PoolSnapshotEvidence } from "./descent.js";
-import { PoolError, Segment, type Checkpoint, type FinalizedPrefix, type SegmentTrail, type StatementVerifier } from "./segment.js";
+import { PoolError, Segment, type AcceptedStatement, type Checkpoint, type FinalizedPrefix, type SegmentTrail, type StatementVerifier } from "./segment.js";
 import { configurationHash, copyConfiguration, copySegmentHeader, copyStatement, segmentIdentity,
   type OpeningCheckpoint, type PoolConfiguration } from "./statement.js";
 
@@ -23,12 +23,15 @@ export type PoolCheckpointFailure =
   | { readonly kind: "unavailable"; readonly commitment: OpeningCheckpoint; readonly evidence: "directory" | "scope" | "history" }
   | { readonly kind: "invalid"; readonly reason: string };
 
+/** `accepted` contains owned local records from this replay. Its evidence
+ * hashes describe the supplied replay bytes, not necessarily the evidence
+ * originally admitted by the operator; receipts attest that separately. */
 export type PoolCheckpointResult = PoolCheckpointFailure
-  | { readonly kind: "final"; readonly prefix: FinalizedPrefix; readonly at: bigint; readonly witnessedIndex: bigint };
+  | { readonly kind: "final"; readonly prefix: FinalizedPrefix; readonly accepted: readonly AcceptedStatement[]; readonly at: bigint; readonly witnessedIndex: bigint };
 
 export type PoolCheckpointsResult = PoolCheckpointFailure
   | { readonly kind: "final"; readonly checkpoints: readonly {
-      readonly commitment: Commitment; readonly prefix: FinalizedPrefix; readonly at: bigint;
+      readonly commitment: Commitment; readonly prefix: FinalizedPrefix; readonly accepted: readonly AcceptedStatement[]; readonly at: bigint;
     }[]; readonly witnessedIndex: bigint };
 
 interface CheckpointReadArguments {
@@ -93,7 +96,7 @@ export async function readPoolCheckpoint(args: CheckpointReadArguments & { reado
   const result = await readPoolCheckpoints({ ...args, checkpoints: [args.checkpoint] });
   if (result.kind !== "final") return result;
   const verified = result.checkpoints[0]!;
-  return { kind: "final", prefix: verified.prefix, at: verified.at, witnessedIndex: result.witnessedIndex };
+  return { kind: "final", prefix: verified.prefix, accepted: verified.accepted, at: verified.at, witnessedIndex: result.witnessedIndex };
 }
 
 /** Validate several distinct held checkpoints in one plan. Own all required
@@ -193,6 +196,7 @@ export async function readPoolCheckpoints(args: CheckpointReadArguments & { read
     }
     stable();
     const verified = new Map<string, FinalizedPrefix>();
+    const accepted = new Map<string, readonly AcceptedStatement[]>();
     for (const id of order) {
       const node = planned.get(id)!, { trail } = node.evidence.history;
       const imports = node.imports.map(parent => {
@@ -203,9 +207,12 @@ export async function readPoolCheckpoints(args: CheckpointReadArguments & { read
       const segment = new Segment(configuration, trail.header, imports, verifier);
       for (const b of trail.backings) segment.register(b.backing, b.signature);
       let position = 0n;
+      const records: AcceptedStatement[] = [];
       for (const statement of trail.statements) {
         position++;
-        requireThat((await segment.admit(statement)).position === position, "checkpoint history repeats a statement");
+        const record = await segment.admit(statement);
+        requireThat(record.position === position, "checkpoint history repeats a statement");
+        if (requested.has(id)) records.push(record);
       }
       const prefix = segment.prefix(), directory = node.evidence.directory;
       requireThat(prefix.directory.length === directory.length && prefix.directory.every((d, i) =>
@@ -217,9 +224,11 @@ export async function readPoolCheckpoints(args: CheckpointReadArguments & { read
           "checkpoint rewrites or truncates its finalized prefix");
       }
       verified.set(id, prefix);
+      if (requested.has(id)) accepted.set(id, records);
     }
     stable();
-    return { kind: "final", checkpoints: targets.map(c => ({ commitment: c, prefix: verified.get(key(c))!, at: planned.get(key(c))!.at })), witnessedIndex: now };
+    return { kind: "final", checkpoints: targets.map(c => ({ commitment: c, prefix: verified.get(key(c))!,
+      accepted: accepted.get(key(c))!, at: planned.get(key(c))!.at })), witnessedIndex: now };
   } catch (cause) {
     stable();
     if (cause instanceof VerifierFailure) throw cause.cause;

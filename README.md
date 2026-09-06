@@ -124,6 +124,11 @@ deadline. What the repository holds today:
   local history. Its next sequence comes from the operator's durable signed
   counter, including unsuccessful publications. Preparation neither reserves
   that sequence nor authorizes abandoning receipts or activating service.
+- **Pool receipt record readers** ([API and limits](docs/POOL_RECEIPTS.md)):
+  resolve exact signed sequences and complete scope terms, and check receipt
+  inclusion in a supplied source checkpoint through canonical replay. Missing
+  history stays unavailable after replacement. Global receipt classification
+  and revocation/silence recovery remain next.
 - **Durable pool sequencing** ([PoolStore](docs/POOL_STORE.md), Node 24):
   atomically journals canonical openings, admitted statements, original receipts
   and signed checkpoints, including failed publications. It fences earlier

@@ -8,6 +8,20 @@ import { KEYS, SECRETS } from "./support.js";
 import { evidence, fixture, issue, open, read, replace, terms } from "./pool-record-support.js";
 
 describe("C2.10.3–5 whole-scope checkpoint validation", () => {
+  it("returns owned replay admission records without aliasing the prefix or later reads", async () => {
+    const f = await fixture(), result = await read(f.venue, f.base, [], f.oracle);
+    expect(result.kind).toBe("final");
+    if (result.kind !== "final") throw new Error("fixture checkpoint must validate");
+    expect(result.accepted).toHaveLength(2);
+    expect(result.accepted[0]!.statementHash).toEqual(result.prefix.events[0]!.statementHash);
+    const original = result.accepted[0]!.statementHash.slice();
+    result.accepted[0]!.statementHash.fill(0);
+    result.accepted[0]!.historyHash.fill(0);
+    result.accepted[0]!.proofHash.fill(0);
+    expect(result.prefix.events[0]!.statementHash).toEqual(original);
+    expect(await read(f.venue, f.base, [], f.oracle)).toMatchObject({ kind: "final",
+      accepted: [{ statementHash: original }, {}] });
+  });
   it("finalizes the whole scope from genesis and verifies each shared checkpoint once", async () => {
     const f = await fixture();
     const next = open(f.venue, [f.x, f.y], f.oracle, 2n, [{ checkpoint: f.base, segment: f.segment }]);
