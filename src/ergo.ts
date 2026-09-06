@@ -244,19 +244,19 @@ export class ErgoVenue implements Venue {
   /** Held before the height request, so two refreshes cannot interleave views. */
   private syncing = false;
   /** Operator hex -> its commitments, in witnessed order. */
-  private readonly commitments = new Map<string, Witnessed<Commitment>[]>();
+  private commitments = new Map<string, Witnessed<Commitment>[]>();
   /** Backing name hex -> operations, in witnessed order. */
-  private readonly ops = new Map<string, Witnessed<PublishedOp>[]>();
+  private ops = new Map<string, Witnessed<PublishedOp>[]>();
   /** Backing name hex -> replacements, in witnessed order. */
-  private readonly replacements = new Map<string, Witnessed<Replacement>[]>();
+  private replacements = new Map<string, Witnessed<Replacement>[]>();
   /** The backings this view was gathered for. Anything else it will not answer. */
-  private readonly covered = new Set<string>();
+  private covered = new Set<string>();
   /** The operators it fetched — every one in a covered backing's chain. */
-  private readonly fetched = new Set<string>();
+  private fetched = new Set<string>();
   /** Obligor key hex -> that key's revocation records. */
-  private readonly revocations = new Map<string, Witnessed<Revocation>[]>();
+  private revocations = new Map<string, Witnessed<Revocation>[]>();
   /** The obligor keys it fetched revocations for. */
-  private readonly revoked = new Set<string>();
+  private revoked = new Set<string>();
 
   /**
    * The id is derived here from the chain, the depth and the publication script,
@@ -264,7 +264,7 @@ export class ErgoVenue implements Venue {
    * read on two clocks — the exact fork `ergoVenueId` exists to rule out (found
    * by the 2026-08-22 audit, twice).
    */
-  constructor(chain: string, depth: bigint, publicationScript: string, addressing: ErgoAddressing) {
+  constructor(private readonly chain: string, depth: bigint, private readonly publicationScript: string, addressing: ErgoAddressing) {
     if (depth < 0n) throw new VenueError("a finality depth cannot be negative");
     this.venueId = ergoVenueId(chain, depth, publicationScript);
     this.depth = depth;
@@ -305,7 +305,10 @@ export class ErgoVenue implements Venue {
    * A box that does not decode is skipped rather than fatal. Anyone may create a
    * box at these addresses, so noise there is ordinary — the same posture the
    * local venue takes toward a publication it cannot read.
-   * Concurrent calls are rejected; retry once the current call settles.
+   * Concurrent calls and record reads during refresh are rejected. The next
+   * snapshot becomes visible only after its entire operator frontier is fetched.
+   * A failed refresh leaves the last successful snapshot intact at its old index;
+   * failure on the first sync leaves the view unavailable.
    */
   async sync(node: ErgoNode, backings: readonly Backing[]): Promise<void> {
     if (this.syncing) throw new VenueError("a sync is already in progress");
@@ -314,7 +317,23 @@ export class ErgoVenue implements Venue {
       // Own both the set and its terms before the first await. Otherwise a
       // caller can change a name between address selection and record filtering.
       const requested = backings.map(backing => makeBacking(backing));
-      await this.syncView(node, requested);
+      // The frontier walk needs a readable clock and replacement records before
+      // every operator is fetched. Give it a private view: those intermediate
+      // facts must never escape through this public Venue, even on failure.
+      const next = new ErgoVenue(this.chain, this.depth, this.publicationScript, this.addressing);
+      await next.syncView(node, requested);
+      // No await or external callback inside publication. Invalidate the old
+      // replacement memo only when its complete replacement is ready.
+      forgetAdmitted(this);
+      this.height = next.height;
+      this.commitments = next.commitments;
+      this.ops = next.ops;
+      this.replacements = next.replacements;
+      this.covered = next.covered;
+      this.fetched = next.fetched;
+      this.revocations = next.revocations;
+      this.revoked = next.revoked;
+      this.synced = true;
     } finally {
       this.syncing = false;
     }
@@ -322,24 +341,8 @@ export class ErgoVenue implements Venue {
 
   private async syncView(node: ErgoNode, backings: readonly Backing[]): Promise<void> {
     const indexed = await node.indexedHeight();
-    // Un-marked once the replacement begins — after the height read, so a
-    // node that cannot answer it leaves a coherent view answering rather than
-    // refusing (the verification's V-5) — and every clear below follows with
-    // no await between: while the view is being replaced it answers nothing,
-    // and a re-sync that fails leaves it refusing rather than answering from
-    // half of two views (the slice-37 review; it had only ever been set).
-    this.synced = false;
+    if (typeof indexed !== "bigint" || indexed < 0n) throw new VenueError("invalid indexed height");
     this.height = indexed > this.depth ? indexed - this.depth : 0n;
-    this.commitments.clear();
-    this.ops.clear();
-    this.replacements.clear();
-    this.covered.clear();
-    this.fetched.clear();
-    this.revocations.clear();
-    this.revoked.clear();
-    // The walk's memo of admitted replacement records is this view's, and this
-    // view is being replaced whole: judged again against what is gathered now.
-    forgetAdmitted(this);
 
     for (const backing of backings) {
       await this.syncPublications(node, backing.name);
@@ -351,45 +354,22 @@ export class ErgoVenue implements Venue {
       await this.syncRevocations(node, backing.obligor);
       this.revoked.add(bytesToHex(backing.obligor));
     }
-    // The height and every covered backing's records are in place: the view
-    // answers the clock from here. Marked BEFORE the frontier walk below,
-    // because that walk reads `witnessedIndex`, which refuses on an unsynced
-    // view — so a first sync of any backing declaring a replacement rule
-    // threw its own VenueError out of sync() (found by the slice-37 panel's
-    // inventory angle; the Ergo tests had only ever re-synced a view whose
-    // flag was already set). An operator not yet fetched is still refused
-    // per key by `requireFetched`, which is the guard the frontier widens.
+    // Only the private frontier walk can read this intermediate snapshot.
     this.synced = true;
-    // Then every operator the backing has had, not only the key E names. The
-    // chain is only walkable once the replacements are in, and each successor's
-    // commitments have to be in before the walk can tell whether it took force —
-    // so the frontier widens until it stops revealing anyone new. Bounded by the
-    // chain's own length, which is bounded by the replacements published.
-    try {
-      for (const backing of backings) {
-        for (;;) {
-          const chain = successionOf(backing, this);
-          const missing = chain
-            .map((link) => link.operator)
-            .filter((operator) => !this.fetched.has(bytesToHex(operator)));
-          if (missing.length === 0) break;
-          for (const operator of missing) {
-            // Marked fetched AFTER the fetch: marked before it, a half-fetched
-            // operator answered `latestFor` with nothing — read everywhere as
-            // "never committed" — for the whole round trip, and forever if the
-            // node erred (the slice-37 review's blocker: a punctual operator
-            // graded silent out of not having looked).
-            await this.syncCommitments(node, operator);
-            this.fetched.add(bytesToHex(operator));
-          }
+    // Fetch every operator in each witnessed chain before publishing the view.
+    // A failure discards this private candidate, including its replacement memo.
+    for (const backing of backings) {
+      for (;;) {
+        const chain = successionOf(backing, this);
+        const missing = chain
+          .map((link) => link.operator)
+          .filter((operator) => !this.fetched.has(bytesToHex(operator)));
+        if (missing.length === 0) break;
+        for (const operator of missing) {
+          await this.syncCommitments(node, operator);
+          this.fetched.add(bytesToHex(operator));
         }
       }
-    } catch (cause) {
-      // A frontier that failed part-way is a view answering from half of two
-      // pictures: un-marked again, so it refuses until a sync completes (the
-      // review's B1 — a failed FIRST sync graded a punctual operator silent).
-      this.synced = false;
-      throw cause;
     }
   }
 
@@ -418,6 +398,7 @@ export class ErgoVenue implements Venue {
    * silence — an accusation built out of not having looked.
    */
   private requireCovered(backingName: Uint8Array): void {
+    this.requireSettled();
     if (!this.covered.has(bytesToHex(backingName))) {
       throw new VenueError("this view was not synced for that backing");
     }
@@ -432,6 +413,7 @@ export class ErgoVenue implements Venue {
    * unaffected.
    */
   private requireFetched(operator: Uint8Array): void {
+    this.requireSettled();
     if (!this.fetched.has(bytesToHex(operator))) {
       throw new VenueError("this view was not synced for that operator");
     }
@@ -510,11 +492,12 @@ export class ErgoVenue implements Venue {
   }
 
   witnessedIndex(): bigint {
-    // The one read that had no guard (found by the 2026-08-22 audit): a view
-    // that has not synced answered 0, so every lock read live, every acceptance
-    // live, nothing dishonoured — absence of data as an exoneration.
-    if (!this.synced) throw new VenueError("this view has not been synced");
+    this.requireSettled();
     return this.height;
+  }
+
+  private requireSettled(): void {
+    if (this.syncing || !this.synced) throw new VenueError("this view has no settled snapshot");
   }
 
   publish(): void {
@@ -567,6 +550,7 @@ export class ErgoVenue implements Venue {
   }
 
   private requireRevoked(obligor: Uint8Array): void {
+    this.requireSettled();
     if (!this.revoked.has(bytesToHex(obligor))) {
       throw new VenueError("this view was not synced for that obligor key");
     }
@@ -595,9 +579,6 @@ export class ErgoVenue implements Venue {
   }
 
   previousFor(operator: Uint8Array, beforeSequence: bigint, asOf?: bigint): Commitment | undefined {
-    // Descent needs one settled view of the whole replacement frontier. A key
-    // already fetched during a refresh cannot stand for that unfinished view.
-    if (this.syncing || !this.synced) throw new VenueError("this view has no settled snapshot");
     return this.readCommitment(operator, asOf, beforeSequence);
   }
 

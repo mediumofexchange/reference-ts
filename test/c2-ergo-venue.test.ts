@@ -19,6 +19,8 @@ import { VenueError } from "../src/venue.js";
 import { encodeReplacement, operatorAt, replacementMessage, ROLE_OPERATOR } from "../src/replacement.js";
 import { encodeRevocation, signRevocation } from "../src/revocation.js";
 import { KEYS, SECRETS } from "./support.js";
+import { PoolAuthorityView } from "../src/pool/authority.js";
+import { CONFIG, DOMAIN } from "./pool-support.js";
 
 // Ergo read as a witness venue. The chain witnesses and adjudicates nothing, so
 // there is no contract here and nothing verifies a signature on-chain — a
@@ -171,12 +173,8 @@ describe("a refresh owns its clock and records until it settles", () => {
     await entered.promise;
     const newer = new FakeNode().at(200n).putCommitment(commitment(2n, 0xcc), 195n);
     try {
-      if (pauseAt === "height") {
-        expect(v.witnessedIndex()).toBe(97n);
-        expect(isSilent(v, backing)).toBe(false);
-      } else {
-        expect(() => isSilent(v, backing)).toThrow(VenueError);
-      }
+      expect(() => v.witnessedIndex()).toThrow(VenueError);
+      expect(() => isSilent(v, backing)).toThrow(VenueError);
       await expect(v.sync(newer, [backing])).rejects.toThrow("a sync is already in progress");
       // A rejected overlap must not release the first caller's guard.
       await expect(v.sync(newer, [backing])).rejects.toThrow(VenueError);
@@ -209,16 +207,99 @@ describe("a refresh owns its clock and records until it settles", () => {
       }
     }
     await expect(v.sync(new Fails().at(110n), [backing])).rejects.toThrow("node offline");
-    if (failAt === "height") {
-      expect(v.witnessedIndex()).toBe(97n);
-      expect(isSilent(v, backing)).toBe(false);
-    } else {
-      expect(() => v.witnessedIndex()).toThrow(VenueError);
-      expect(() => isSilent(v, backing)).toThrow(VenueError);
-    }
+    expect(v.witnessedIndex()).toBe(97n);
+    expect(isSilent(v, backing)).toBe(false);
     await v.sync(new FakeNode().at(110n).putCommitment(commitment(1n, 0xbb), 105n), [backing]);
     expect(v.witnessedIndex()).toBe(107n);
     expect(isSilent(v, backing)).toBe(false);
+  });
+});
+
+describe("pool readers see only a complete Ergo snapshot", () => {
+  const x = makeBacking({ ...backing, evidence: { setting: "pool", operator: KEYS.operator,
+    construction: "moe/pool/v2", configuration: DOMAIN, replacementRule: KEYS.backer,
+    witnessing: { venue: VENUE_ID, interval: 1n } } });
+  const y = makeBacking({ ...x, obligor: KEYS.backer2, evidence: { ...x.evidence, operator: KEYS.alice } });
+  const signed = { backing: x, signature: signBacking(SECRETS.backer, x) };
+  const replacementFields = { role: ROLE_OPERATOR, successor: KEYS.bob, predecessor: x.name, effective: 16n,
+    signature: new Uint8Array(64), successorSignature: new Uint8Array(64) };
+  const message = replacementMessage(x.name, replacementFields);
+  const replacement = { ...replacementFields, signature: ed25519.sign(message, SECRETS.backer),
+    successorSignature: ed25519.sign(message, SECRETS.bob) };
+  const first = commitment(1n, 1), second = commitment(2n, 2);
+  const oldNode = () => new FakeNode().at(13n).putCommitment(first, 9n);
+  const newNode = <T extends FakeNode>(node: T): T => {
+    node.at(23n).putCommitment(first, 9n).putCommitment(second, 18n)
+      .put(ADDRESSING.publications(x.name), { inclusionHeight: 7n,
+        registers: { R4: x.name, R5: encodeReplacement(x.name, replacement) } })
+      .put(ADDRESSING.revocations(x.obligor), { inclusionHeight: 18n,
+        registers: { R5: encodeRevocation(signRevocation(SECRETS.backer)) } });
+    return node;
+  };
+  const phases = ["height", "publications", "revocations", "frontier"] as const;
+  for (const initial of [true, false]) {
+    for (const fail of [true, false]) {
+      it.each(phases)(`${initial ? "first sync" : "refresh"} ${fail ? "failure" : "success"} at %s exposes no partial records`, async phase => {
+        const v = venue(), entered = signal(), resume = signal(), offline = new Error("fetch failed");
+        if (!initial) {
+          await v.sync(oldNode(), [x, y]);
+          // Prime the memo that must survive failure and be invalidated on success.
+          expect(new PoolAuthorityView(CONFIG, v, [signed]).term(x.name)?.operator).toEqual(KEYS.operator);
+        }
+        const target = phase === "publications" ? ADDRESSING.publications(y.name)
+          : phase === "revocations" ? ADDRESSING.revocations(y.obligor) : ADDRESSING.commitments(KEYS.alice);
+        class Pauses extends FakeNode {
+          private async pause() { entered.resolve(); await resume.promise; if (fail) throw offline; }
+          override async indexedHeight() {
+            if (phase === "height") await this.pause();
+            return super.indexedHeight();
+          }
+          override async boxesByAddress(address: string) {
+            if (phase !== "height" && address === target) await this.pause();
+            return super.boxesByAddress(address);
+          }
+        }
+        const pending = v.sync(newNode(new Pauses()), [x, y]);
+        const outcome = pending.then(() => undefined, error => error);
+        await entered.promise;
+        const reads = [
+          () => v.witnessedIndex(), () => v.latestFor(KEYS.operator),
+          () => v.previousFor(KEYS.operator, 3n), () => v.witnessedAtFor(KEYS.operator),
+          () => v.witnessedAtSequence(KEYS.operator, 1n), () => v.firstCommitmentFor(KEYS.operator),
+          () => v.nextSequenceFor(KEYS.operator), () => v.publishedOpsFor(x.name),
+          () => v.replacementsFor(x.name), () => v.revocationsFor(x.obligor),
+          () => new PoolAuthorityView(CONFIG, v, [signed]),
+        ];
+        try {
+          for (const read of reads) expect(read).toThrow(VenueError);
+          expect(v.id).toEqual(VENUE_ID); expect(v.lag()).toBe(4n);
+        } finally { resume.resolve(); }
+        expect(await outcome).toBe(fail ? offline : undefined);
+        if (fail && initial) {
+          for (const read of reads) expect(read).toThrow(VenueError);
+        } else {
+          expect(v.witnessedIndex()).toBe(fail ? 10n : 20n);
+          expect(v.latestFor(KEYS.operator)).toEqual(fail ? first : second);
+          expect(v.witnessedAtSequence(KEYS.operator, 2n)).toBe(fail ? undefined : 18n);
+          expect(v.replacementsFor(x.name)).toHaveLength(fail ? 0 : 1);
+          expect(v.revocationsFor(x.obligor)).toHaveLength(fail ? 0 : 1);
+          expect(new PoolAuthorityView(CONFIG, v, [signed]).term(x.name)?.operator).toEqual(fail ? KEYS.operator : KEYS.bob);
+        }
+        if (fail) {
+          await v.sync(newNode(new FakeNode()), [x, y]);
+          expect(v.witnessedIndex()).toBe(20n);
+          expect(new PoolAuthorityView(CONFIG, v, [signed]).term(x.name)?.operator).toEqual(KEYS.bob);
+        }
+      });
+    }
+  }
+
+  it.each([-1n, 1, undefined])("refuses malformed indexed height %s without replacing a snapshot", async height => {
+    const v = venue(); await v.sync(oldNode(), [x]);
+    const node = { indexedHeight: async () => height as bigint, boxesByAddress: async () => [] };
+    await expect(v.sync(node, [x])).rejects.toThrow(VenueError);
+    expect(v.witnessedIndex()).toBe(10n);
+    expect(v.latestFor(KEYS.operator)).toEqual(first);
   });
 });
 
@@ -686,13 +767,7 @@ describe("a view answers only for what it was synced for", () => {
     expect(isSilent(w, ruled)).toBe(false);
   });
 
-  it("a view being re-gathered refuses even its clock: un-marked as the replacement begins, not only on failure", async () => {
-    // Every record read already refuses mid-sync through the per-key guards
-    // (covered and fetched are cleared first); the clock had no such guard,
-    // so a reader asking only the index got the new height over the old
-    // view's absence. Un-marked after the height read — not before it, so a
-    // node that cannot answer the height leaves a coherent view answering
-    // — the clock refuses from the first record fetch on.
+  it("a view being re-gathered refuses its clock until the complete snapshot is ready", async () => {
     const v = venue();
     await v.sync(new FakeNode().at(100n).putCommitment(commitment(0n, 0xaa), 95n), [backing]);
     expect(v.witnessedIndex()).toBe(97n);

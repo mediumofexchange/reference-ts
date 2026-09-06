@@ -162,22 +162,54 @@ describe("C2.5/C2.10: scope authority is read from signed terms and the witnesse
   });
 
   it("propagates unavailable venue data instead of granting genesis authority", () => {
+    const unavailable = new VenueError("record unavailable");
     class Unavailable extends ClockVenue {
-      override replacementsFor(): never { throw new VenueError("record unavailable"); }
+      override replacementsFor(): never { throw unavailable; }
     }
     const venue = new Unavailable(), x = terms(venue);
-    expect(() => view(venue, [x])).toThrow(VenueError);
+    expect(() => view(venue, [x])).toThrow(unavailable);
   });
 
-  it("refuses a venue whose witnessed clock changes during the authority read", () => {
+  it.each(["index", "lag", "identity"] as const)("classifies a changed %s as unavailable venue data", field => {
     class Moving extends ClockVenue {
+      changed = false;
+      override lag() { return this.changed && field === "lag" ? 1n : super.lag(); }
+      override get id() { return this.changed && field === "identity" ? new Uint8Array(32) : super.id; }
       override replacementsFor(name: Uint8Array) {
         const records = super.replacementsFor(name);
-        this.advance();
+        this.changed = true;
+        if (field === "index") this.advance();
         return records;
       }
     }
     const venue = new Moving(), x = terms(venue);
-    expect(() => view(venue, [x])).toThrow("venue view changed");
+    expect(() => view(venue, [x])).toThrow(VenueError);
+  });
+
+  it("checks the clock even when a later scope entry is invalid", () => {
+    class Moving extends ClockVenue {
+      override replacementsFor(name: Uint8Array) { this.advance(); return super.replacementsFor(name); }
+    }
+    const venue = new Moving(), x = terms(venue);
+    expect(() => view(venue, [x, x])).toThrow(VenueError);
+  });
+
+  it.each(["identity", "replacements"] as const)("owns every requested backing before the adapter's %s callback", phase => {
+    let mutate = () => {};
+    class Mutates extends ClockVenue {
+      override get id() { if (phase === "identity") mutate(); return super.id; }
+      override replacementsFor(name: Uint8Array) { if (phase === "replacements") mutate(); return super.replacementsFor(name); }
+    }
+    const venue = new Mutates(), x = terms(venue), y = terms(venue, "USD"), z = terms(venue, "GBP");
+    const yName = Uint8Array.from(y.backing.name), requested = [x, { ...y, signature: Buffer.from(y.signature) }];
+    mutate = () => {
+      requested[1]!.signature.fill(0);
+      y.backing.evidence.operator.fill(0);
+      requested.splice(1, 1, z);
+    };
+    const v = view(venue, requested);
+    expect(v.term(yName)?.operator).toEqual(KEYS.operator);
+    expect(v.term(z.backing.name)).toBeUndefined();
+    expect(v.scope(KEYS.operator)).toHaveLength(2);
   });
 });

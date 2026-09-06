@@ -125,15 +125,18 @@ it("unavailable Ergo reads remain VenueError even for an empty sequence range", 
   const read = () => answering(() => venue.previousFor(KEYS.operator, 0n), undefined);
   expect(read).toThrow(VenueError);
   await venue.sync(nodeFor([]), [terms(venue)]);
+  const index = venue.witnessedIndex();
   expect(read()).toBeUndefined();
   expect(() => venue.previousFor(KEYS.alice, MAX)).toThrow(VenueError);
   await expect(venue.sync({ indexedHeight: async () => { throw new Error("offline"); },
     boxesByAddress: async () => [] }, [terms(venue)])).rejects.toThrow();
-  // Failure before replacing the snapshot preserves its coherent old answer.
+  // Failure at any fetch preserves the complete old snapshot at its old index.
   expect(read()).toBeUndefined();
   await expect(venue.sync({ indexedHeight: async () => 12n,
     boxesByAddress: async () => { throw new Error("offline"); } }, [terms(venue)])).rejects.toThrow();
-  expect(read).toThrow(VenueError);
+  expect(read()).toBeUndefined();
+  expect(venue.witnessedIndex()).toBe(index);
+  expect(() => venue.previousFor(KEYS.alice, MAX)).toThrow(VenueError);
 });
 
 it("the captured pilot view exposes the bounded read and independent outputs", () => {
@@ -153,6 +156,7 @@ it("Ergo refuses predecessor reads from a partially fetched multi-operator refre
   const venue = ergo(), backings = [terms(venue), terms(venue, KEYS.alice)];
   const base = nodeFor(records);
   await venue.sync(base, backings);
+  const index = venue.witnessedIndex();
   let entered!: () => void, rejectFetch!: (error: Error) => void;
   const fetchingAlice = new Promise<void>(resolve => { entered = resolve; });
   const unavailable = new Promise<never>((_, reject) => { rejectFetch = reject; });
@@ -166,7 +170,9 @@ it("Ergo refuses predecessor reads from a partially fetched multi-operator refre
   for (const bound of [0n, MAX]) expect(() => venue.previousFor(KEYS.operator, bound)).toThrow(VenueError);
   rejectFetch(new Error("offline"));
   await failed;
-  for (const bound of [0n, MAX]) expect(() => venue.previousFor(KEYS.operator, bound)).toThrow(VenueError);
+  expect(venue.witnessedIndex()).toBe(index);
+  expect(venue.previousFor(KEYS.operator, 0n)).toBeUndefined();
+  expect(venue.previousFor(KEYS.operator, MAX)).toEqual(records[2]!.commitment);
   await venue.sync(base, backings);
   expect(venue.previousFor(KEYS.operator, MAX)).toEqual(records[2]!.commitment);
 });

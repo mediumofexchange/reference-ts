@@ -8,7 +8,7 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { makeBacking, verifyBackingSignature } from "../backing.js";
 import { compareBytes, copyBytes, EncodingError } from "../bytes.js";
 import { successionAhead, type Succession } from "../replacement.js";
-import { type Venue } from "../venue.js";
+import { VenueError, type Venue } from "../venue.js";
 import { PoolError, type SignedBacking } from "./segment.js";
 import { ScopeTree, type ScopeEntry } from "./scope.js";
 import { scopeSchedule, type ScopeSchedule } from "./schedule.js";
@@ -42,35 +42,41 @@ export class PoolAuthorityView {
 
   constructor(configuration: PoolConfiguration, venue: Venue, backings: readonly SignedBacking[]) {
     this.domain = configurationHash(configuration);
+    if (!Array.isArray(backings) || backings.length === 0 || backings.length > 2 ** 16) {
+      throw new PoolError("BACKING", "a scope needs one through 2^16 signed backings");
+    }
+    // Own the whole request before calling a venue adapter. A callback while
+    // reading one backing must not replace or mutate the next backing's terms.
+    const requested = backings.map(signed => ({ backing: makeBacking(signed.backing), signature: copyBytes(signed.signature) }));
     this.venueId = copyBytes(venue.id);
     if (this.venueId.length !== 32) throw new EncodingError("venue identity must be 32 bytes");
     this.at = venue.witnessedIndex(); this.delay = venue.lag();
     index(this.at); index(this.delay);
-    if (!Array.isArray(backings) || backings.length === 0 || backings.length > 2 ** 16) {
-      throw new PoolError("BACKING", "a scope needs one through 2^16 signed backings");
-    }
     const names: Uint8Array[] = [];
-    for (const signed of backings) {
-      const backing = makeBacking(signed.backing);
-      if (!verifyBackingSignature(backing, signed.signature)) throw new PoolError("BACKING", "invalid backing signature");
-      const e = backing.evidence;
-      if (e.setting !== "pool" || e.construction !== POOL_CONSTRUCTION || compareBytes(e.configuration, this.domain) !== 0) {
-        throw new PoolError("BACKING", "backing declares another construction or configuration");
+    try {
+      for (const signed of requested) {
+        const backing = signed.backing;
+        if (!verifyBackingSignature(backing, signed.signature)) throw new PoolError("BACKING", "invalid backing signature");
+        const e = backing.evidence;
+        if (e.setting !== "pool" || e.construction !== POOL_CONSTRUCTION || compareBytes(e.configuration, this.domain) !== 0) {
+          throw new PoolError("BACKING", "backing declares another construction or configuration");
+        }
+        // A production scope has a declared clock. The transparent profile's
+        // undeclared-venue fallback is not C2.10.2's shared-pool authority.
+        if (e.witnessing === undefined || compareBytes(e.witnessing.venue, this.venueId) !== 0) {
+          throw new PoolError("BACKING", "every scope backing must declare this venue");
+        }
+        if (this.chains.has(backing.nameHex)) throw new PoolError("BACKING", "duplicate scope backing");
+        const chain = successionAhead(backing, venue);
+        this.chains.set(backing.nameHex, chain.map(t => ({ operator: copyBytes(t.operator), link: copyBytes(t.link), from: t.from })));
+        names.push(copyBytes(backing.name));
       }
-      // A production scope has a declared clock. The transparent profile's
-      // undeclared-venue fallback is not C2.10.2's shared-pool authority.
-      if (e.witnessing === undefined || compareBytes(e.witnessing.venue, this.venueId) !== 0) {
-        throw new PoolError("BACKING", "every scope backing must declare this venue");
+    } finally {
+      // Check failed reads too: changed-view failures are unavailable venue data,
+      // not invalid scope evidence that a higher-level reader could classify.
+      if (venue.witnessedIndex() !== this.at || venue.lag() !== this.delay || compareBytes(venue.id, this.venueId) !== 0) {
+        throw new VenueError("venue view changed while reading scope authority");
       }
-      if (this.chains.has(backing.nameHex)) throw new PoolError("BACKING", "duplicate scope backing");
-      const chain = successionAhead(backing, venue);
-      this.chains.set(backing.nameHex, chain.map(t => ({ operator: copyBytes(t.operator), link: copyBytes(t.link), from: t.from })));
-      names.push(copyBytes(backing.name));
-    }
-    // Venue reads are synchronous and its finalized prefix is append-only.
-    // A view that changed clocks mid-read cannot be served as one snapshot.
-    if (venue.witnessedIndex() !== this.at || venue.lag() !== this.delay || compareBytes(venue.id, this.venueId) !== 0) {
-      throw new PoolError("SEGMENT", "venue view changed while reading scope authority");
     }
     this.names = names.sort(compareBytes);
   }

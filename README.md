@@ -95,11 +95,17 @@ deadline. What the repository holds today:
   an immutable read of signed backing terms and the witnessed replacement
   chain checks every scoped term, distinguishes same-key reappointments,
   and derives the scheduler's deadlines. It requires an explicitly declared
-  common venue. It does not authenticate a header or finalize its openings.
+  common venue, owns the complete backing request before adapter callbacks,
+  and reports clock/view changes as venue errors. It does not authenticate
+  a header or finalize its openings.
 - **Bounded commitment predecessor reads** (`Venue.previousFor`, C2.7.2):
   the local and Ergo venues locate prior held sequences, including at the same
   witnessed index, with logarithmic lookup across sparse histories. Custom
   `Venue` adapters must implement this required read.
+- **Complete Ergo read snapshots** (`src/ergo.ts`): every record API refuses
+  during refresh. The new index and all records become visible together after
+  the whole operator frontier is fetched. A failed refresh preserves the last
+  successful snapshot at its old index; a failed first sync remains unavailable.
 - **Exact directory descent** (`readPoolPredecessor`, C2.7/C2.10.4): selects
   a candidate before replay, relative to a held child checkpoint. Authenticated
   directory absence and public whole-scope lapse permit descent; missing
