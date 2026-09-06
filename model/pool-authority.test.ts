@@ -44,6 +44,23 @@ function reunite(f: ReturnType<typeof fixture>, py: Service, override?: Readonly
 }
 
 describe("C1.2/C2.10 private scope authority and finalized import", () => {
+  it("derives deadlines from every current scope term and rejects the old scope after same-key reappointment", () => {
+    const { w, p } = fixture();
+    expect(w.boundaries(p.scope)).toEqual([]);
+    w.replace("X", "Q", w.now + 4n);
+    w.replace("Y", "R", w.now + 8n);
+    expect(w.boundaries(p.scope)).toEqual([w.now + 4n, w.now + 8n]);
+    const oldAt = w.now;
+    w.tick(4n);
+    expect(w.current(p.scope)).toBe(false);
+    expect(w.current(p.scope, oldAt)).toBe(true);
+    expect(() => w.boundaries(p.scope)).toThrow("scope term ended");
+    w.replace("X", "P"); w.tick(3n);
+    expect(w.term("X").operator).toBe("P");
+    expect(w.current(p.scope)).toBe(false); // the key returned; the original link did not
+    expect(() => w.boundaries(p.scope)).toThrow("scope term ended");
+  });
+
   it("splits and rejoins shared history once, with distinct input anchors and immutable nullifiers", () => {
     const f = fixture(), { w, x, y } = f, { q, py } = split(f);
     const xp = payment(w, q, x), yp = payment(w, py, y);

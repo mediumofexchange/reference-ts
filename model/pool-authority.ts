@@ -182,6 +182,14 @@ export class World {
   current(scope: Scope, at = this.now): boolean {
     return scope.entries.every(e => { const current = this.term(e.backing, at); return current.operator === scope.operator && current.link === e.link; });
   }
+  /** C2.10.9: only the currently held terms can supply a service deadline. */
+  boundaries(scope: Scope): readonly bigint[] {
+    requireThat(this.current(scope), "scope term ended");
+    return scope.entries.flatMap(e => {
+      const next = this.chains.get(e.backing)!.find(t => t.from > this.now);
+      return next === undefined ? [] : [next.from];
+    });
+  }
   latestFor(backing: Id): Id | null { return this.latest.get(backing) ?? null; }
   record(id: Id): Recorded { const record = this.records.find(r => r.checkpoint.id === id); requireThat(record !== undefined, "checkpoint not held"); return record; }
   import(id: Id, checked = new Set<Id>()): State {
