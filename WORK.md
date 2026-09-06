@@ -10,53 +10,61 @@ The maintainer explicitly authorized pushing and merging reviewed, verified work
 
 ## Status
 
-- Merged into `main`: `e68d9db`, from `feat/pool-checkpoint-finality` (base
-  `fceb9ff`). Whole-scope checkpoint validation is implemented, independently
-  reviewed and fully verified. Next is opening construction for new service.
-- `readPoolCheckpoint` validates an exact held checkpoint and all required
-  canonical imports. Every backing's predecessor is selected before proof
-  replay; later checkpoints of the same segment preserve its finalized prefix.
-- The iterative dependency plan checks local witnessed ranks, verifies each
-  checkpoint once, and imports only prefixes computed by this validator.
-  Complete replayed directories and historical authority finalize the scope
-  together. A later term ending does not undo historical finality.
-- Missing directory, scope or history evidence stops validation. Invalid live
-  history never licenses fallback. Authenticated absence and whole-scope lapse
-  need no usable history. Required bytes are owned before proof verification;
-  changed venue views and unexpected verifier exceptions remain visible.
-- This is a read-only historical finality API, not current spendability or a
-  signing service. Canonical opening construction for new service remains next.
+- Merged into `main`: `1bf2453`, from `feat/pool-opening-construction` (base
+  `4d9fe64`). Canonical opening construction is implemented, independently
+  reviewed and fully verified. Durable activation/admission/signing is next.
+- `preparePoolOpening` derives current scope and exact opening checkpoints
+  before a child commitment exists, validates all required histories, and
+  returns a computed Segment with empty local history and imported spentness.
+- `readPoolCurrent` shares exact descent with held-child reads, including every
+  eligible same-index held sequence and excluding ended historical terms.
+  `readPoolCheckpoints` plans multiple roots before any verifier callback and
+  verifies shared ancestry once. Historical single-checkpoint behavior stays
+  unchanged; malformed outer arguments still return invalid.
+- The next sequence is the durable operator-wide highest signed plus one,
+  including declined publications. A counter behind any held sequence or one
+  exhausted at u64 is refused. The venue cannot certify an unwitnessed counter.
+- Clock/view changes and same-index operator publications during proof replay
+  refuse preparation. Backend exceptions retain their identity; caller-owned
+  input mutation cannot rewrite another root or its required ancestry.
+- Preparation does not reserve a sequence, discard a live tail, sign, publish
+  or authorize admission. Durable activation still owes currency/authority and
+  schedule checks, one in-flight commitment, and opening commit before receipts.
 - Companion specification: `money-from-first-principles/main` at `ba8fe21`.
-  No normative, circuit or proof-key changes; existing authority model rules
-  already express this slice (C2.10.3–5, pool-v2 §10).
+  No normative, circuit or proof-key changes. The authority model now uses
+  current evidence descent when constructing openings (C2.7.3/C2.10.4–7).
 
 ## Evidence
 
-- Full `npm run check` passed: 67 files / 1,224 tests, docs, typecheck, build,
-  installed tarball consumer (including checkpoint export), crash/restart pilot
+- Full `npm run check` passed: 68 files / 1,253 tests, docs, typecheck, build,
+  installed tarball consumer (including all new exports), crash/restart pilot
   and witness retry checks. The updated handoff also passed `check:docs`.
-- Initial focused suite passed: 4 files / 101 tests; the full check includes
-  four additional boundary cases and verifier exception variants.
-- Independent adversarial source review covered canonical selection, transitive
-  imports, iterative traversal/ranks, continuity, snapshot binding, copying and
-  venue stability. Its verifier-exception diagnostic finding was fixed and
-  independently rechecked; no blockers remain. Reviewer ran no tests.
-- 27 runtime cases cover genesis, missing first signed sequence, exact held
-  identity, selective scope, stale openings, rewritten/truncated prefixes,
-  proof variants, withheld/invalid ancestors, split/rejoin and reappointment,
-  lapse, takeover index, duplicate/tampered preimages, malformed lengths,
-  repeated statements, aliasing, and venue/backend failures.
+- Focused suite passed: 4 files / 121 tests; full verification includes four
+  additional malformed-argument regression cases from independent review.
+- Independent adversarial source review found no protocol/security blockers in
+  bounds, scope authority, shared planning, input ownership or backend failures.
+  Its malformed-wrapper regression finding was fixed and independently rechecked.
+  Reviewer ran no tests; review is complete.
+- 28 opening/batch cases cover genesis, current same-index state, durable signed
+  counters, omitted/lapsed sequence consumption, u64 boundaries, missing/invalid
+  ancestry, selective scope, replacement force, split/rejoin and reappointment,
+  imported spentness, live-tail preservation, all-root callback mutation,
+  same-index publication races, malformed arguments and venue/backend failures.
+- Existing 27 checkpoint cases and 31 descent cases run unchanged in the focused
+  suite; shared record fixtures now live in `test/pool-record-support.ts`.
 - Prior unchanged circuit evidence: 153 circuit/proof checks and 24 real ZK
   proofs in `docs/pool-v2-verification.json`. Circuits were not rerun.
 
 ## Next
 
-1. Construct canonical openings for new segments before any child checkpoint
-   exists, and integrate admission/signing with record-derived authority and
-   the schedule. Keep historical checkpoint finality distinct from currency.
-2. Integrate receipt classification and durable admission/receipt/commitment
-   journaling, then port the experiment's crash/retry cases. Presentation,
-   note delivery and wallet sync follow their specified objects.
+1. Build durable pool activation/admission/signing around prepared openings,
+   record currency, scope authority and the schedule. An elective scope change
+   must finish its live tail and latest signed commitment first; restart is not
+   a scope reset. Journal the operator-wide signed counter and one in-flight
+   commitment before exposing signatures or receipts.
+2. Integrate receipt classification and recovery, then port the experiment's
+   crash/retry cases. Presentation, note delivery and wallet sync follow their
+   specified objects.
 
 ## Open questions
 
@@ -64,9 +72,9 @@ The maintainer explicitly authorized pushing and merging reviewed, verified work
 - Existing Ergo latest/exact reads may expose partially fetched refreshes;
   bounded predecessor reads refuse unsettled views. Snapshot isolation and
   consistent changed-view errors in standalone PoolAuthorityView remain owed.
-- Checkpoint planning reuses the descent reader per backing, including its
-  evidence copies and authority reads. Profile large shared histories before
-  adding a reusable immutable read context; do not weaken per-backing checks.
+- Per-backing descent still repeats evidence copies and authority reads. Shared
+  checkpoint roots now verify once in a batch; profile large histories before
+  introducing a reusable immutable read context for further optimization.
 - Full C2 re-derivation against the directory, authenticated setup/build
   provenance, target measurements, note delivery and transitive history
   availability remain release requirements.
