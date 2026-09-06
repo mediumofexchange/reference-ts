@@ -1,8 +1,13 @@
 # Pool sequencing: the replacement boundary
 
-Status: unresolved protocol choice, independently confirmed on 2026-09-06.
+Status: diagnosed and independently confirmed on 2026-09-06; the maintainer
+approved preserving privacy and independent replacement later that day.
 Implementation inspected: `53c9719`; specification inspected: `81516ba`.
-This note is diagnostic, not a normative amendment or an accepted decision.
+This note retains the historical diagnosis. The selected design is the
+[authority and history contract](https://github.com/mediumofexchange/money-from-first-principles/blob/a219aad/pool-authority.md),
+modeled in [pool-authority.ts](../model/pool-authority.ts), and recorded in
+[the decision log](../decisions/2026-09.md#2026-09-06--private-service-scopes-import-only-finalized-shared-history).
+It requires a new construction; the v1 runtime and its pins remain unchanged.
 
 ## The conflict
 
@@ -99,7 +104,7 @@ explicitly retained operator replacement. The [pool-v1 decision](../decisions/20
 pinned the operator-bearing configuration and hidden two-backing spends.
 Neither supplies the missing relation.
 
-## Options requiring a maintainer decision
+## Options considered
 
 | Direction | Required change | Cost |
 |---|---|---|
@@ -123,6 +128,9 @@ not an already-proven mechanism. Its acceptance criteria are:
 - The model expresses those objects and fails on departures from those rules;
   a reviewed specification lands before the code and circuit changes.
 
-No option has been selected by this note. Independent source review confirmed
-the contradiction and these tradeoffs; it did not run the host probe or prove
-a proposed redesign. Normative files and implementation behavior are unchanged.
+The maintainer selected the first direction. Independent authority and history
+reviews shaped its contract; the new model checks its local safety rules and
+counterexamples. It does not implement wire formats, real proofs, persistent
+journaling, a complete receipt classifier or the C2.6 handover scheduler.
+The older model remains the scheduling evidence, with the scope limitation
+above. The v1 implementation remains historical fixed-operator evidence.

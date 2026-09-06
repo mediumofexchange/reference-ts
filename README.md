@@ -89,14 +89,18 @@ Out of scope until their step: the pool sequencer and its commitment schedule,
 durable receipt issuance and recovery, note delivery and backups, the wallet,
 an external witness's write side, and every Extensions profile.
 
-The next sequencing step has an unresolved
-[replacement boundary](docs/POOL_SEQUENCING_BOUNDARY.md): v1 binds its
-configuration to the original operator while promising independent backing
-replacement, and its hidden spends do not expose the routing label the
-sequencing model uses. The specification and model need to resolve this
-before the pool sequencer can implement takeover.
+The [replacement boundary](docs/POOL_SEQUENCING_BOUNDARY.md) is resolved at
+the specification and model level by the
+[authority and history contract](https://github.com/mediumofexchange/money-from-first-principles/blob/a219aad/pool-authority.md).
+It separates immutable note identity from current operator authority, proves
+private membership in a public service scope, and imports only finalized
+shared histories. [The adversarial model](model/pool-authority.ts) exercises
+splits, reunions, replay and scope changes. It uses ideal cryptography and a
+local journal abstraction; new frames, circuits and production sequencing
+remain to be built. The current v1 runtime is fixed to its original operator
+and cannot deploy this replacement contract.
 
-The implementation follows specification revision
+The existing v1 runtime follows specification revision
 [`81516ba`](https://github.com/mediumofexchange/money-from-first-principles/tree/81516ba),
 whose `pool-v1.md` pins the construction bit for bit and records the
 implemented circuits and keys, including the §7 receipt bytes signed here.

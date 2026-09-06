@@ -4,91 +4,77 @@ Updated: 2026-09-06
 
 ## Goal
 
-A finished, working protocol whose claim layer is Construction's shielded pool
-(§C1.2), built in this order: specification → executable adversarial model of
-§C2/§C2b/§C3 over notes → the pool's claim layer → sequencing, recovery and
-presentation over notes → wallet → witness venue write side. No release
-deadline; each step is done when its rule, its model check and its adversarial
-tests agree.
+Build the shielded-pool protocol: specification → adversarial model → claim
+layer → sequencing/recovery/presentation → wallet → witness write side.
+The maintainer approved preserving private spends and independent per-backing
+operator replacement, and authorized merge/push when satisfied.
 
 ## Status
 
-- Steps 1–3 are merged and pushed. Implementation main at 7ac47c4 holds
-  the sequencing model, pinned pool-v1 circuits, and src/pool/ admission,
-  served trail and replay, including both claim-layer adversarial reviews.
-  E declares the construction as clause 0x05; the transparent path refuses
-  pool backings. Relevant decision: "The claim layer…" (DECISIONS.md).
-- Specification main at 81516ba is pinned in the README. The companion
-  spec/pool-v1-receipt branch was already merged: pool-v1 §7 fixes the
-  receipt bytes and the commitment's directory contents. No specification
-  change was needed for the receipt milestone.
-- Step 4's receipt milestone is merged and pushed as main 53c9719
-  (feat/pool-receipts): pool/receipt.ts signs §7's exact frame under
-  moe/pool/v1/receipt, with after the last signed commitment's sequence
-  directly (0 for none). Verification pins the caller's configuration and
-  operator. Statement identity, exact admitted evidence, and inclusion in
-  replayed history have separate predicates; none asserts witnessed finality.
-- signPoolReceipt is a low-level envelope over a trusted Pool.admit
-  result. Its caller must retain the original receipt on retries and make
-  admission/receipts durable before exposing them. The pool sequencer,
-  commitment schedule, journal and finality checks remain to be built.
-- PoolSequencer investigation found a material specification conflict,
-  recorded on docs/pool-sequencing-boundary in
-  docs/POOL_SEQUENCING_BOUNDARY.md. Immutable original-operator binding
-  conflicts with replacement; hidden mixed-backing spends and shared history
-  lack authority/continuation rules for independent backing replacements.
-  The model's public backing label abstracts away this problem. No normative
-  change or sequencing implementation has been selected.
+- Completed implementation slice: feat/pool-authority-model, based on main
+  aa72c09. Companion spec/pool-authority is merged and pushed to specification
+  main b9f8beb; normative contract f842335 through a219aad. The reference
+  slice is reviewed, checked and ready for the authorized merge/push.
+- The new pool-authority.md contract defines immutable construction domains,
+  private membership in public service scopes, whole-scope finality, exact
+  canonical predecessor imports, deduplicated shared history and a forest of
+  certified roots with combined spentness. Elective scope changes finish live
+  receipts; forced lapse retains historical evidence. See the 2026-09-06
+  decision in DECISIONS.md for alternatives, costs and scope limits.
+- model/pool-authority.ts models these rules with ideal proof/signature/hash
+  tokens, one venue, valid replacement chains and local journal ownership.
+  The host/replayer never read hidden backing labels to route spends.
+  Counterexample switches remove six individual guards. This is a bounded
+  executable abstraction, not a formal proof, circuit or production service.
+- The older model/sequencing.ts remains the timing/election/drop/silence
+  evidence; its public backing labels and separate histories do not establish
+  shared-pool compatibility. The new model does not implement its full timer,
+  election conflicts, receipt classification or redemption logic.
+- Existing src/pool/ remains the historical fixed-operator v1 implementation,
+  with claim-layer admission/replay and receipt envelopes (main 53c9719).
+  Runtime specification pin stays 81516ba; new contract pin is a219aad.
+  New layouts/circuits/keys are required before implementing PoolSequencer.
 
 ## Evidence
 
-- A Node 24.6.0 host probe reproduced the conflict: a valid witnessed
-  replacement names Q, while changing the pool operator refuses the backing,
-  retaining the configuration refuses Q's receipts, and spend inputs name no
-  backing. No proof verifier was invoked; exact limits are in the note.
-  Independent specification review confirmed the conflict and options.
-- Diagnostic documentation and model comments: npm run check:docs passed
-  (19 linked files); git diff --check passed. Runtime behavior is unchanged.
-- The receipt suite covers literal byte framing, every signed field, u64
-  bounds, wrong domain/configuration/operator, malformed inputs, strict
-  signatures (including a small-order forgery), Buffer ownership, all three
-  statement kinds, exact evidence, re-proven retries and replayed prefixes.
-- Receipt milestone's npm run check passed: 58 files / 1,079 tests, docs/links, typecheck,
-  build, tarball consumer (including receipt imports) and local pilot.
-- npm run check:pool passed; docs/pool-v1-verification.json: 111 checks,
-  17 real ZK proofs of 14,656 bytes, including host/backend Poseidon2 agreement,
-  admission/refusal and replay. The harness additionally signs and
-  verifies receipts and replays a different valid proof of the same statement.
-- Independent adversarial source review found no concrete security or
-  correctness defects in the envelope, context/exports and receipt tests.
-  Its separate test attempt was blocked by the sandbox; the successful
-  full checks above provide execution evidence. Sequencing is outside this
-  review's scope; the real-proof harness changes received self-review.
+- npm run check passed: 59 files / 1,108 tests, including 29 authority-model
+  tests; docs/links, typecheck, build, tarball consumer and local pilot passed.
+- Cases cover split/rejoin, mixed anchors, unchanged nullifiers, shared
+  issuance/burn accounting, padding/domain/issuance authority, replay,
+  abandoned roots, withheld ancestors, invalid carriage, signed token copying,
+  restarts and retired journals. Six departure switches produce counterexamples;
+  16 deterministic spend-order patterns each exercise four split/rejoin rounds.
+- Independent authority/history design reviews addressed scope membership,
+  imported ancestry, per-backing descent, same-index predecessors, lapse across
+  all state readers, and live receipt continuity. Independent source review
+  found journal retirement, mutable signed inputs, immutable header replay and
+  invalid-scope/lapse ordering defects; regressions cover the repairs. Final
+  focused review found no remaining defects. Reviewers did not execute tests.
+- Specification links passed across 8 files; spec git diff --check passed.
+- Prior unchanged runtime evidence: npm run check passed 58 files / 1,079 tests;
+  check:pool passed 111 checks and 17 real proofs, recorded in
+  docs/pool-v1-verification.json. No claim that v1 implements the new relations.
 
 ## Next
 
-1. Maintainer decision on docs/POOL_SEQUENCING_BOUNDARY.md. Recommendation:
-   preserve private spends and independent backing replacement; repair the
-   configuration/authority/history boundary in the specification and model
-   before implementing PoolSequencer. The other directions change the trust
-   or liveness model and must not be silently chosen.
-2. After that repair: PoolSequencer over Pool and LocalVenue, retained
-   receipts, directory commitments, one in flight, handover and restart.
-   Port C2 cases using directory absence proofs, never the retired opening
-   claims or whole-state exhibits. Commitment sequences start at 1.
-3. The durable pool journal (the experiment's crash/retry cases) and the
-   receiver's acceptance check, retiring the experiment's host.
+1. Specify the replacement-capable construction's exact configuration, scope,
+   segment, multi-anchor statement, receipt, history/import and snapshot frames.
+   Pin circuit relations and test vectors before changing runtime code. Existing
+   v1 objects retain their original meaning; do not patch operator checks alone.
+2. Implement new claim relations and replay, then integrate C2.6 scheduling,
+   receipt classification, exact directory descent and local durable journaling.
+   Port frozen-path cases, never its retired opening claims/whole-state exhibits.
+3. Receiver acceptance, note delivery and wallet sync follow. Cross-operator
+   presentation/exchange and snapshot adoption require complete specified objects.
 
 ## Open questions
 
-- Review still owed from before: the C2 re-derivation against the directory
-  (C2.4.5, C2.7) has been exercised by the model but not read independently.
-- Performance: host Poseidon2 costs about 1 ms per hash; appendAll makes
-  wallet sync about two hashes per leaf and an operator's append 32 hashes.
-  Montgomery arithmetic or the backend hash can address deployment needs.
-- Nullifiers can be ground to share prefixes; the compact spent-set trie's
-  resulting single-child chains are bounded by the grinding work.
-- v1 leaves the non-service grade inert and snapshot redemption without a
-  venue leg (pool-v1 §5.4); v2 must define the demand, lock, adoption record
-  and swap together.
-- Proof backend and setup provenance remain provisional.
+- No authority choice remains for this slice. New construction layout/version,
+  circuit artifacts and setup provenance remain unpinned; it is not deployable.
+- Shared history creates permanent transitive availability dependencies and
+  scope-wide tail loss at forced boundaries. The contract states these costs;
+  independent replacement does not promise independent historic data access.
+- Full C2 re-derivation review against the directory remains owed beyond this
+  slice; the reviews here cover C2.10 and its affected state readers.
+- Performance/device measurements and note delivery remain future work.
+  Cross-venue movement requires a separate bridge, not index comparison.
