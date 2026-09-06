@@ -10,71 +10,69 @@ The maintainer explicitly authorized pushing and merging reviewed, verified work
 
 ## Status
 
-- Merged into `main`: `1bf2453`, from `feat/pool-opening-construction` (base
-  `4d9fe64`). Canonical opening construction is implemented, independently
-  reviewed and fully verified. Durable activation/admission/signing is next.
-- `preparePoolOpening` derives current scope and exact opening checkpoints
-  before a child commitment exists, validates all required histories, and
-  returns a computed Segment with empty local history and imported spentness.
-- `readPoolCurrent` shares exact descent with held-child reads, including every
-  eligible same-index held sequence and excluding ended historical terms.
-  `readPoolCheckpoints` plans multiple roots before any verifier callback and
-  verifies shared ancestry once. Historical single-checkpoint behavior stays
-  unchanged; malformed outer arguments still return invalid.
-- The next sequence is the durable operator-wide highest signed plus one,
-  including declined publications. A counter behind any held sequence or one
-  exhausted at u64 is refused. The venue cannot certify an unwitnessed counter.
-- Clock/view changes and same-index operator publications during proof replay
-  refuse preparation. Backend exceptions retain their identity; caller-owned
-  input mutation cannot rewrite another root or its required ancestry.
-- Preparation does not reserve a sequence, discard a live tail, sign, publish
-  or authorize admission. Durable activation still owes currency/authority and
-  schedule checks, one in-flight commitment, and opening commit before receipts.
+- Merged into `main`: `862d92e`, from `fix/pool-record-snapshots` (base
+  `36a4004`). Record snapshot isolation is implemented, independently reviewed
+  and fully verified. Durable activation/admission/signing remains next.
+- Ergo refresh builds a private candidate. Every public record/clock read
+  refuses from the start of refresh until the complete operator frontier is
+  fetched. The new clock, records and coverage become visible together.
+- Failed refreshes preserve the previous complete snapshot at its original
+  index and its admitted-replacement memo. Failed first syncs remain unavailable.
+  Successful refreshes invalidate the old memo; malformed indexed heights fail.
+- `PoolAuthorityView` owns all requested backing terms and signatures before
+  calling the adapter. Index, lag and venue identity changes raise `VenueError`,
+  including when another input validation failure interrupts construction.
+- Previously merged opening construction (`1bf2453`) remains unchanged:
+  canonical current imports, empty local history, operator-wide durable signed
+  sequence assertion, no signing or tail-discard authority.
 - Companion specification: `money-from-first-principles/main` at `ba8fe21`.
-  No normative, circuit or proof-key changes. The authority model now uses
-  current evidence descent when constructing openings (C2.7.3/C2.10.4–7).
+  No normative, signed-byte, circuit or proof-key changes.
 
 ## Evidence
 
-- Full `npm run check` passed: 68 files / 1,253 tests, docs, typecheck, build,
-  installed tarball consumer (including all new exports), crash/restart pilot
-  and witness retry checks. The updated handoff also passed `check:docs`.
-- Focused suite passed: 4 files / 121 tests; full verification includes four
-  additional malformed-argument regression cases from independent review.
-- Independent adversarial source review found no protocol/security blockers in
-  bounds, scope authority, shared planning, input ownership or backend failures.
-  Its malformed-wrapper regression finding was fixed and independently rechecked.
-  Reviewer ran no tests; review is complete.
-- 28 opening/batch cases cover genesis, current same-index state, durable signed
-  counters, omitted/lapsed sequence consumption, u64 boundaries, missing/invalid
-  ancestry, selective scope, replacement force, split/rejoin and reappointment,
-  imported spentness, live-tail preservation, all-root callback mutation,
-  same-index publication races, malformed arguments and venue/backend failures.
-- Existing 27 checkpoint cases and 31 descent cases run unchanged in the focused
-  suite; shared record fixtures now live in `test/pool-record-support.ts`.
+- Full `npm run check` passed: 68 files / 1,277 tests, docs, typecheck, build,
+  installed tarball consumer, crash/restart pilot and witness retry checks.
+- Focused suite passed: 5 files / 159 tests, covering Ergo, pool authority,
+  opening, checkpoint and descent. Full verification also covers predecessor
+  reads; two existing post-failure tests now assert the retained old snapshot.
+- New regression coverage: all public record APIs and pool authority refuse
+  across height/publication/revocation/frontier fetches; first-sync and refresh
+  success/failure; exact error identity, retry, old snapshot/memo retention,
+  malformed node heights, whole-request callback mutation and changed-view
+  classification on both successful and interrupted authority reads.
+- Independent adversarial source review found no protocol/security blockers.
+  The reviewer ran no tests. Focused self-review and `git diff --check` passed.
+  Windows esbuild requires running checks outside the restricted sandbox to
+  read the existing Vitest configuration.
 - Prior unchanged circuit evidence: 153 circuit/proof checks and 24 real ZK
-  proofs in `docs/pool-v2-verification.json`. Circuits were not rerun.
+  proofs in `docs/pool-v2-verification.json`. Circuits were not rerun locally.
 
 ## Next
 
 1. Build durable pool activation/admission/signing around prepared openings,
-   record currency, scope authority and the schedule. An elective scope change
-   must finish its live tail and latest signed commitment first; restart is not
-   a scope reset. Journal the operator-wide signed counter and one in-flight
-   commitment before exposing signatures or receipts.
-2. Integrate receipt classification and recovery, then port the experiment's
-   crash/retry cases. Presentation, note delivery and wallet sync follow their
-   specified objects.
+   current record authority and the schedule. Elective scope changes must
+   witness their live tail and latest signed commitment; restart is no reset.
+   Journal the operator-wide signed counter and one in-flight commitment before
+   exposing signatures or receipts; preserve the restart lag and writer ownership.
+2. Reuse the SQLite command transaction pattern from `pilot-store.ts` and
+   canonical segment/header/statement/commitment encodings. Recover through
+   `Segment.replay`, retaining original receipt bytes and exact admitted evidence.
+   Port the experiment's crash-before/after-commit, retry, racing-writer,
+   identity, corruption and response-replay cases; do not add a second framework.
+3. Integrate receipt classification/recovery, then presentation, note delivery
+   and wallet synchronization over their specified objects.
 
 ## Open questions
 
-- No protocol choice or independent review remains unresolved for this slice.
-- Existing Ergo latest/exact reads may expose partially fetched refreshes;
-  bounded predecessor reads refuse unsettled views. Snapshot isolation and
-  consistent changed-view errors in standalone PoolAuthorityView remain owed.
+- The snapshot fix preserves an older successful read after refresh failure;
+  callers must handle the failed refresh and must not treat it as fresh evidence.
+  Pool authority remains a synchronous snapshot, not a durable admission capability.
+- Same-index replacement appends during custom adapter callbacks are a pre-existing
+  limitation of the clock-only authority guard. The replacement lead floor keeps
+  current authority safe; refresh the view before acting on later record state.
 - Per-backing descent still repeats evidence copies and authority reads. Shared
-  checkpoint roots now verify once in a batch; profile large histories before
-  introducing a reusable immutable read context for further optimization.
+  checkpoint roots verify once in a batch; profile large histories before adding
+  a reusable immutable read context.
 - Full C2 re-derivation against the directory, authenticated setup/build
   provenance, target measurements, note delivery and transitive history
   availability remain release requirements.
