@@ -90,13 +90,18 @@ deadline. What the repository holds today:
 - **Shared-scope scheduling** (`src/pool/schedule.ts`, C2.6.1/C2.10.9):
   bigint time checks for the earliest term boundary, the operator-wide
   commitment in flight and restart lag, checked against an enumerated
-  calendar model. Record authority and durable execution remain to be built.
+  calendar model. Durable execution and the remaining entry checks are pending.
+- **Record-derived scope authority** (`src/pool/authority.ts`, C2.5/C2.10):
+  an immutable read of signed backing terms and the witnessed replacement
+  chain checks every scoped term, distinguishes same-key reappointments,
+  and derives the scheduler's deadlines. It requires an explicitly declared
+  common venue. It does not authenticate a header or finalize its openings.
 - **A local two-process pilot** on the frozen path (`docs/PILOT.md`): durable
   commands, exact retries, crash recovery, a trusted local witness. An
   integration harness, not a product.
 
 Out of scope until their step: the pool sequencer over the witnessed record
-(scope derivation, schedule integration, whole-scope finality, lapse, descent,
+(canonical openings, whole-scope finality, lapse, descent,
 restart), durable receipt issuance and recovery, note delivery and backups,
 the wallet, an external witness's write side, and every Extensions profile.
 

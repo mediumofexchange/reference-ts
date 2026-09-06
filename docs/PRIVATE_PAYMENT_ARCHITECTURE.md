@@ -39,7 +39,10 @@ This repository builds that core, in this order:
    lands, and deleting the transparent code when the pool path passes them.
    The first time checks are built in `pool/schedule.ts`: the earliest scope
    boundary, the operator-wide signing wait and restart lag, validated against
-   `model/pool-schedule.ts`. Record derivation and durable execution remain.
+   `model/pool-schedule.ts`. `pool/authority.ts` now derives the scope's current
+   links and deadlines from signed backings and the witnessed replacement
+   chain. Canonical opening descent, whole-scope finality and durable execution
+   remain; an authority check alone does not authenticate a header or history.
 5. **The wallet**: a balance, a send button, a policy list (Construction §C5);
    note delivery, backups, restore, note selection and consolidation.
 6. **The witness venue's write side** (Ergo), once the commitment format is
