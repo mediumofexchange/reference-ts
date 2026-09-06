@@ -72,12 +72,16 @@ venue redemption nullifiers require recovery validation. Revoked issuance cannot
 admitted or committed. Movement of locally witnessed pre-revocation issuance
 continues; late witnessing cannot turn revoked issuance into valid value.
 
-Import currently requires each ancestor containing issuance to have its own
-checkpoint witnessed strictly before that issuance key's revocation. A later
-checkpoint may carry issuance already finalized earlier in the same segment;
-recognizing that case needs the forthcoming recovery reader. The store returns
-`UNSUPPORTED` instead of admitting that history. Imported shared histories are
-checked even for backings outside the new scope.
+Canonical checkpoint validation now proves that every issuance first appears
+strictly before revocation, including through an earlier checkpoint of the same
+segment. Late issuance invalidates the checkpoint before activation can use it.
+The store still conservatively requires each retained ancestor containing
+issuance to have its own checkpoint before revocation: it currently retains
+header import ancestry, not the complete predecessor and descent evidence used
+by canonical validation. Safely enabling later checkpoints carrying old
+issuance requires retaining that evidence through restart. The store returns
+`UNSUPPORTED` for this valid-but-unretained case. Shared histories are checked
+even for backings outside the new scope.
 
 The synchronous venue must provide the complete record its index represents.
 Record changes during verification or append abort the operation. This store

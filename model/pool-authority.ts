@@ -39,6 +39,7 @@ export interface Departures {
   readonly skipLiveInvalid?: boolean;
   readonly skipSameIndex?: boolean;
   readonly trustShownScope?: boolean;
+  readonly ignoreRevocation?: boolean;
 }
 export class Refusal extends Error {}
 function requireThat(ok: boolean, message: string): asserts ok { if (!ok) throw new Refusal(message); }
@@ -165,6 +166,8 @@ export class World {
   readonly shownScopes = new Map<Id, Scope>();
   private readonly chains = new Map<Id, Term[]>();
   private readonly domains = new Map<Id, Id>();
+  private readonly obligors = new Map<Id, Id>();
+  private readonly revocations = new Map<Id, bigint>();
   private readonly highestSigned = new Map<Id, bigint>();
   private readonly inFlight = new Map<Id, Checkpoint>();
   private readonly signatures = new Set<Checkpoint>();
@@ -173,10 +176,29 @@ export class World {
   private serial = 0n;
 
   constructor(readonly lag = 1n, readonly departures: Departures = {}) {}
-  register(backing: Id, operator: Id, domain = "D"): void {
+  register(backing: Id, operator: Id, domain = "D", obligor = backing): void {
     requireThat(!this.chains.has(backing), "duplicate backing");
     this.chains.set(backing, [Object.freeze({ backing, operator, link: `genesis:${backing}`, from: 0n })]);
     this.domains.set(backing, domain);
+    this.obligors.set(backing, obligor);
+  }
+  /** C2b.1: one irrevocable, venue-local cutoff per obligor, not per backing. */
+  revoke(obligor: Id): void { if (!this.revocations.has(obligor)) this.revocations.set(obligor, this.now); }
+  /** Independent ideal first-inclusion oracle over the model's record. The
+   * runtime must establish this through supplied canonical predecessor evidence,
+   * rather than a global search. Re-read after same-index revocation appends. */
+  private checkRevocations(state: State, at: bigint): void {
+    if (this.departures.ignoreRevocation) return;
+    for (const event of state.events.values()) {
+      if (event.statement.kind !== "issue") continue;
+      const revoked = this.revocations.get(this.obligors.get(event.statement.lit!.backing)!);
+      if (revoked === undefined || at < revoked) continue;
+      const prior = this.records.find(r => r.status === "final" && r.at < revoked &&
+        r.checkpoint.events.some(e => e.id === event.id && e.statement.id === event.statement.id));
+      requireThat(prior !== undefined, "revoked issuance");
+      requireThat(!this.withheld.has(prior.checkpoint.id) && !this.withheldDirectories.has(prior.checkpoint.id) &&
+        !this.withheldScopes.has(prior.checkpoint.id), "unavailable pre-revocation evidence");
+    }
   }
   tick(n = 1n): void { requireThat(n > 0n, "clock"); this.now += n; }
   replace(backing: Id, operator: Id, effective = this.now + 2n * this.lag + 1n): void {
@@ -249,6 +271,7 @@ export class World {
     requireThat(!this.withheld.has(id), "unavailable history");
     const record = this.record(id);
     requireThat(record.status === "final" && record.state !== undefined, "not finalized");
+    this.checkRevocations(record.state, record.at);
     if (!checked.has(id)) {
       checked.add(id);
       for (const [, parent] of record.checkpoint.openings) if (parent !== null) this.import(parent, checked);
@@ -365,6 +388,7 @@ export class World {
         leaves.push(...event.statement.outputs);
         state.roots.set(`${checkpoint.segment}:${i + 1}`, Object.freeze([...leaves]));
       }
+      this.checkRevocations(state, this.now);
       const record: Recorded = { checkpoint, at: this.now, status: "final", state };
       this.records.push(record);
       for (const e of selected) this.latest.set(e.backing, checkpoint.id);

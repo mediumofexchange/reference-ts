@@ -29,6 +29,62 @@ function fixture(departures: Departures = {}) {
   const base = p.commit(); settle(w, base);
   return { w, p, x, y, base };
 }
+
+describe("C2b.1 prospective revocation over shared pool history", () => {
+  it("retains old issuance through continued spend, burn and replacement", () => {
+    const f = fixture(); f.w.tick(); f.w.revoke("X");
+    const pay = payment(f.w, f.p, f.x); f.p.submit(pay.statement); settle(f.w, f.p.commit());
+    const padding = f.w.oracle.note("X", 0n), change = f.w.oracle.note("X", 60n), root = anchor(f.p, pay.out);
+    f.p.submit(f.w.oracle.prove(f.p, "burn", [pay.out, padding], [change], [root, root], { backing: "X", quantity: 40n }));
+    const later = f.p.commit(); settle(f.w, later);
+    const { q } = split(f);
+    expect(q.view().totals.get("X")).toBe(60n);
+    expect(f.w.import(later.id).totals.get("X")).toBe(60n);
+  });
+
+  it.each([0n, 1n])("refuses a signed batch first witnessed %s indices after revocation", delay => {
+    const f = fixture(); issue(f.w, f.p, "X"); const late = f.p.commit();
+    f.w.tick(); f.w.revoke("X"); if (delay > 0n) f.w.tick(delay);
+    expect(f.w.include(late)).toBe("invalid");
+    expect(() => f.w.import(late.id)).toThrow("not finalized");
+    expect(() => f.p.change(["X", "Y"])).toThrow();
+  });
+
+  it("a higher same-index sequence cannot repair newly revoked issuance", () => {
+    const w = new World(0n); w.register("X", "P");
+    const p = w.open("P", ["X"]); settle(w, p.commit()); w.tick(); w.revoke("X");
+    issue(w, p, "X"); expect(w.include(p.commit())).toBe("invalid");
+    // A hostile operator bypasses the honest service's current-evidence gate.
+    expect(w.include(w.sign(p))).toBe("invalid");
+  });
+
+  it("a revocation appended at the same index changes a fresh historical read", () => {
+    const f = fixture(); f.w.revoke("X");
+    expect(() => f.w.import(f.base.id)).toThrow("revoked issuance");
+  });
+
+  it("revokes all backings of one obligor only on this venue, and never moves the cutoff", () => {
+    const w = new World(0n); w.register("X", "P", "D", "K"); w.register("Y", "P", "D", "K");
+    const p = w.open("P", ["X", "Y"]); settle(w, p.commit());
+    w.tick(); w.revoke("K"); w.tick(); w.revoke("K");
+    issue(w, p, "Y"); expect(w.include(p.commit())).toBe("invalid");
+    const other = new World(0n); other.register("Y", "P", "D", "K");
+    const service = other.open("P", ["Y"]); settle(other, service.commit()); issue(other, service, "Y");
+    settle(other, service.commit());
+  });
+
+  it("withholding earlier final history blocks import rather than licensing fallback", () => {
+    const f = fixture(); f.w.tick(); f.w.revoke("X");
+    const later = f.p.commit(); settle(f.w, later); f.w.withheld.add(f.base.id);
+    expect(() => f.w.import(later.id)).toThrow("unavailable pre-revocation evidence");
+  });
+
+  it("the departure admitting revoked issuance produces a concrete invalid supply", () => {
+    const f = fixture({ ignoreRevocation: true }); f.w.tick(); f.w.revoke("X");
+    issue(f.w, f.p, "X"); const late = f.p.commit(); settle(f.w, late);
+    expect(f.w.import(late.id).totals.get("X")).toBe(200n);
+  });
+});
 function split(f: ReturnType<typeof fixture>) {
   const { w, p } = f;
   w.replace("X", "Q"); w.tick(2n * w.lag + 1n);

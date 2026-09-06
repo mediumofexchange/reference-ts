@@ -114,8 +114,8 @@ export type PoolReceiptCheckpointResult = PoolCheckpointFailure
  * `not-included` only describes this checkpoint: an earlier checkpoint may
  * predate acceptance and another checkpoint may include it. It is never a
  * global pending, lapse or fault verdict. `included` proves C2.10 inclusion,
- * not a holding or recovery-valid value: C2b revocation and silence recovery
- * remain separate, unsupported questions. No current-term or `after` test can
+ * with C2b.1 prospective revocation checked, not a holding or complete recovery
+ * validity: silence recovery remains outside pool-v2. No current-term or `after` test can
  * erase inclusion, and missing history remains unavailable after replacement.
  */
 export async function readPoolReceiptCheckpoint(args: ReceiptArguments & {

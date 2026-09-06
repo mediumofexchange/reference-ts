@@ -1,14 +1,15 @@
-// C2.10.3–5: whole-scope finality and transitive canonical imports.
+// C2.10.3–5 / C2b.1: whole-scope finality, canonical imports and prospective revocation.
 // Selection reads the record before proofs run; replay cannot select a fallback.
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { makeBacking } from "../backing.js";
+import { makeBacking, type Backing } from "../backing.js";
 import { compareBytes, copyBytes, EncodingError } from "../bytes.js";
 import { decodeCommitment, directoryRoot, encodeCommitment, verifyCommitment, type Commitment } from "../commitment.js";
 import { VenueError, type Venue } from "../venue.js";
+import { revokedAt } from "../revocation.js";
 import { PoolAuthorityView } from "./authority.js";
 import { readPoolPredecessor, type PoolSnapshotEvidence } from "./descent.js";
 import { PoolError, Segment, type AcceptedStatement, type Checkpoint, type FinalizedPrefix, type SegmentTrail, type StatementVerifier } from "./segment.js";
-import { configurationHash, copyConfiguration, copySegmentHeader, copyStatement, segmentIdentity,
+import { configurationHash, copyConfiguration, copySegmentHeader, copyStatement, ISSUE, parsePublicInputs, segmentIdentity,
   type OpeningCheckpoint, type PoolConfiguration } from "./statement.js";
 
 /** Directory/scope evidence can be served without history, including for
@@ -46,9 +47,9 @@ function key(c: OpeningCheckpoint): string { return `${bytesToHex(c.operator)}:$
 function requireThat(ok: boolean, reason: string): asserts ok {
   if (!ok) throw new PoolError("SEGMENT", reason);
 }
-// A trusted verifier's exception is not malformed external evidence, even
+// A trusted callback's exception is not malformed external evidence, even
 // when its programming failure uses TypeError, RangeError or PoolError.
-class VerifierFailure {
+class CallbackFailure {
   constructor(readonly cause: unknown) {}
 }
 function ownEvidence(e: PoolCheckpointEvidence): PoolCheckpointEvidence {
@@ -86,6 +87,10 @@ interface Planned {
  * their witnessed ranks decrease, so no whole-history graph is discovered.
  * Checkpoints are verified once per call. The computed prefixes passed to
  * Segment are private results of this validation, never caller assertions.
+ * Newly checkpointed issuance must precede its obligor's revocation. Earlier
+ * validated prefixes and imported events retain their original finality;
+ * replay never removes revoked events to repair an invalid history. Silence
+ * redemption/nullifier adoption remains outside pool-v2 (pool-v2 §7.4).
  *
  * Missing evidence stops with unavailable; malformed or invalid evidence with
  * invalid. Venue failures (including a changed view) throw VenueError, as do
@@ -114,7 +119,7 @@ export async function readPoolCheckpoints(args: CheckpointReadArguments & { read
       ...(backend.identities === undefined ? {} : { identities: backend.identities }),
       verify: async (kind, inputs, proof) => {
         try { return await backend.verify(kind, inputs, proof); }
-        catch (cause) { throw new VerifierFailure(cause); }
+        catch (cause) { throw new CallbackFailure(cause); }
       },
     };
     const supplied = new Map<string, PoolCheckpointEvidence>();
@@ -123,9 +128,22 @@ export async function readPoolCheckpoints(args: CheckpointReadArguments & { read
       supplied.set(key(item.commitment), item);
     }
     const venue = args.venue, now = venue.witnessedIndex(), lag = venue.lag(), venueId = copyBytes(venue.id);
+    const revocations = new Map<string, { backing: Backing; at: bigint | undefined }>();
+    const readRevocation = (backing: Backing): bigint | undefined => {
+      try { return revokedAt(venue, makeBacking(backing)); }
+      catch (cause) { throw new CallbackFailure(cause); }
+    };
     stable = (): void => {
       if (venue.witnessedIndex() !== now || venue.lag() !== lag || !same(venue.id, venueId)) {
         throw new VenueError("venue view changed during checkpoint validation");
+      }
+      // A revocation can be appended at an already observed index. Clock-only
+      // stability would turn that cutoff into a stale clean bill of health.
+      for (const saved of revocations.values()) {
+        if (readRevocation(saved.backing) !== saved.at) throw new VenueError("revocation record changed during checkpoint validation");
+      }
+      if (venue.witnessedIndex() !== now || venue.lag() !== lag || !same(venue.id, venueId)) {
+        throw new VenueError("venue view changed during revocation validation");
       }
     };
     requireThat(targets.every(verifyCommitment), "invalid checkpoint signature");
@@ -156,6 +174,14 @@ export async function readPoolCheckpoints(args: CheckpointReadArguments & { read
           "checkpoint does not carry the whole scope");
         const authority = new PoolAuthorityView(configuration, venue, trail.backings);
         requireThat(authority.authorizes(h, at), "whole scope is not in force at checkpoint index");
+        for (const { backing } of trail.backings) {
+          const obligor = bytesToHex(backing.obligor);
+          if (!revocations.has(obligor)) {
+            const cutoff = readRevocation(backing);
+            if (cutoff !== undefined && (typeof cutoff !== "bigint" || cutoff < 0n || cutoff > now)) throw new VenueError("inconsistent revocation index");
+            revocations.set(obligor, { backing: makeBacking(backing), at: cutoff });
+          }
+        }
         const terms = new Map(trail.backings.map(b => [bytesToHex(b.backing.name), b]));
         const predecessors: (OpeningCheckpoint | undefined)[] = [];
         let previous: string | undefined;
@@ -206,20 +232,27 @@ export async function readPoolCheckpoints(args: CheckpointReadArguments & { read
       });
       const segment = new Segment(configuration, trail.header, imports, verifier);
       for (const b of trail.backings) segment.register(b.backing, b.signature);
+      const previous = node.previous === undefined ? undefined : verified.get(node.previous);
+      if (node.previous !== undefined && previous === undefined) throw new Error("checkpoint predecessor was not verified");
       let position = 0n;
       const records: AcceptedStatement[] = [];
       for (const statement of trail.statements) {
         position++;
         const record = await segment.admit(statement);
         requireThat(record.position === position, "checkpoint history repeats a statement");
+        if (statement.kind === ISSUE && position > (previous?.length ?? 0n)) {
+          const inputs = parsePublicInputs(statement.kind, statement.publicInputs);
+          if (inputs.kind !== ISSUE) throw new Error("issuance parse mismatch");
+          const backing = segment.backing(inputs.backing)!.backing;
+          const cutoff = revocations.get(bytesToHex(backing.obligor))!.at;
+          requireThat(cutoff === undefined || node.at < cutoff, "issuance first witnessed at or after revocation");
+        }
         if (requested.has(id)) records.push(record);
       }
       const prefix = segment.prefix(), directory = node.evidence.directory;
       requireThat(prefix.directory.length === directory.length && prefix.directory.every((d, i) =>
         same(d.name, directory[i]!.name) && same(d.digest, directory[i]!.digest)), "checkpoint directory does not match replay");
-      if (node.previous !== undefined) {
-        const previous = verified.get(node.previous);
-        if (previous === undefined) throw new Error("checkpoint predecessor was not verified");
+      if (previous !== undefined) {
         requireThat(previous.length <= prefix.length && same(segment.prefix(previous.length).historyHash, previous.historyHash),
           "checkpoint rewrites or truncates its finalized prefix");
       }
@@ -230,8 +263,9 @@ export async function readPoolCheckpoints(args: CheckpointReadArguments & { read
     return { kind: "final", checkpoints: targets.map(c => ({ commitment: c, prefix: verified.get(key(c))!,
       accepted: accepted.get(key(c))!, at: planned.get(key(c))!.at })), witnessedIndex: now };
   } catch (cause) {
-    stable();
-    if (cause instanceof VerifierFailure) throw cause.cause;
+    try { stable(); }
+    catch (error) { if (error instanceof CallbackFailure) throw error.cause; throw error; }
+    if (cause instanceof CallbackFailure) throw cause.cause;
     if (cause instanceof PoolError || cause instanceof EncodingError || cause instanceof TypeError || cause instanceof RangeError) {
       return { kind: "invalid", reason: cause.message };
     }

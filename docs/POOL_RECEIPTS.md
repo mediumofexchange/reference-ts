@@ -52,14 +52,22 @@ may include it, and an earlier checkpoint may predate its acceptance.
 
 ## Recovery boundary
 
-`included` establishes C2.10 checkpoint inclusion, not a current holding or
-recovery-valid value. General C2b revocation and silence recovery are not yet
-implemented by these readers. The [store's restrictions](POOL_STORE.md#current-limits)
+`included` establishes C2.10 checkpoint inclusion with C2b.1 prospective
+revocation checked, not a current holding or complete recovery validity.
+Every issuance must first appear in a canonical checkpoint witnessed strictly
+before its obligor's revocation. Later checkpoints may preserve an already
+validated prefix, and imported events keep their original finality. Required
+earlier evidence must be available; a reader cannot assume a cutoff or remove
+invalid issuance from a committed history. Same-index revocation changes
+during verification cause a venue-view failure.
+
+Silence redemption and venue-nullifier adoption remain outside pool-v2
+(pool-v2 §7.4). The [store's restrictions](POOL_STORE.md#current-limits)
 remain in force. No result authorizes tail discard, note resubmission, service
 activation, or an accusation of operator fault.
 
 The next classifier must check historical inclusion and historical live-scope
-contradictions before lapse (C2.10.9), with the required revocation and silence
-evidence. Missing evidence cannot be interpreted as an absent payment. Venue
+contradictions before lapse (C2.10.9), building on the revocation check and the
+later construction's silence objects. Missing evidence cannot be interpreted as an absent payment. Venue
 refusals and changing views throw `VenueError`; unexpected proof-backend
 failures also propagate instead of becoming invalid external evidence.

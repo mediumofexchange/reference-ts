@@ -10,67 +10,71 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Status
 
-- Merged into `main`: `40e9484`, from `feat/pool-receipt-record` (base
-  `03dca8f`). Receipt record facts and exact source-checkpoint inclusion are
-  independently reviewed and fully verified.
-- `readPoolReceiptRecord` authenticates the complete header and signed scope
-  terms, resolves exact held/not-reached/moved-past sequences, and reports
-  current scope term bounds. Reappointment never revives an old link.
-- `readPoolReceiptCheckpoint` compares position, statement and history identity
-  against one exact source checkpoint after canonical whole-scope replay.
-  Inclusion survives later term endings; missing history stays unavailable.
-  Checkpoint results expose owned local replay admission records as `accepted`.
-- These are separate record facts, not a global receipt classifier. They do
-  not authorize discard, accuse fault or establish recovery-valid value.
-  API boundaries are in `docs/POOL_RECEIPTS.md`.
-- The durable store from `51f8442` remains unchanged: openings, admissions,
-  original receipts, signed sequences and publication outbox survive restart;
-  earlier handles are fenced, restart waits the lag, elective scope changes
-  preserve live tails. Revocation/silence restrictions remain in force.
+- Active branch: `fix/pool-prospective-revocation`, base `49395d8` on `main`.
+  Independently reviewed and fully verified; ready to merge and push.
+- Canonical checkpoint replay now enforces C2b.1: newly finalized local ISSUE
+  must be witnessed strictly before its obligor's revocation. Already validated
+  same-segment prefixes and imported events retain their original finality.
+  Exact prefix comparison prevents rewriting earlier positions to launder
+  issuance. Invalid live history blocks the candidate; missing evidence stops
+  validation, with no filtering, repair or fallback.
+- Revocation cutoffs are read for every required scope, including shared
+  ancestors outside the requested scope, before proof callbacks. Final checks
+  detect same-index cutoff changes. Venue/proof callback failures propagate.
+- Opening preparation and receipt inclusion inherit this check. The pool
+  authority model uses an independent first-inclusion oracle, with a departure
+  demonstrating that ignoring revocation creates invalid supply.
+- The store keeps its conservative import restriction. `requiredImports`
+  retains header import references but omits same-segment predecessor evidence
+  and other descent evidence. The reader can now validate later checkpoints
+  carrying old issuance; safely enabling them in the journal needs that full
+  proof retained across restart, not an asserted cutoff stored as metadata.
+- Receipt record facts/inclusion from `40e9484` and durable sequencing from
+  `51f8442` remain the base. Global receipt classification is still next.
 - Companion specification: `money-from-first-principles/main` at `ba8fe21`.
-  No normative, sequencing-rule, signed-byte, circuit or proof-key changes.
+  No normative, signed-byte, circuit or proof-key changes. Pool-v2 §7.4
+  explicitly excludes silence redemption and venue-nullifier adoption;
+  those objects must be specified together in a later construction version.
 
 ## Evidence
 
-- Full `npm run check` passed: 71 files / 1,337 tests, docs, typecheck, build,
+- New model cases cover pre-revocation value, late/tied batches, same-index
+  record updates, shared obligor keys, withheld proof and an unsafe departure.
+- Runtime regressions cover continued spend/burn, replacement imports, prefix
+  rewriting, missing predecessors, invalid out-of-scope ancestry, receipt and
+  opening reads, cutoff races, wrong indices and callback failures.
+- Independent adversarial review found no blockers. Sequential reads cannot
+  provide an atomic generation token for deliberately mutating custom venue
+  callbacks; stable adapter records remain a trust requirement.
+- Full `npm run check` passed: 72 files / 1,365 tests, docs, typecheck, build,
   installed tarball consumer, pilot and pool-store crash harness. This includes
-  24 new receipt-record tests and the accepted-record ownership regression.
-- Independent adversarial source review found no blockers. Its two notes are
-  addressed: replay evidence hashes are documented separately from original
-  receipt attribution, and output ownership has a direct regression.
-- Pilot and pool-store child-process checks passed all applied/stored/committed
-  crash phases, original-byte retries, rollback and monotonic signed counters.
-- Windows esbuild still requires checks outside the restricted sandbox to read
-  its existing configuration. Real circuits are unchanged and were not rerun
-  locally; pinned evidence remains `docs/pool-v2-verification.json`.
+  20 new runtime revocation tests and 8 new model cases.
+- A store regression now expects `UNAVAILABLE`
+  because invalid late issuance is rejected during canonical opening validation,
+  before the store's older `UNSUPPORTED` guard is reached.
+- Windows esbuild requires execution outside the restricted sandbox. Real
+  circuits are unchanged and were not rerun locally; pinned evidence remains
+  `docs/pool-v2-verification.json`.
 
 ## Next
 
-1. Extend the pool authority model and build the global receipt/recovery
-   classifier: check historical inclusion and live-scope contradictions before
-   lapse, preserve prospective revocation, validate silence recovery. Bind a
-   held `after` commitment to its segment before treating it as an operative era.
-2. Recognize imported issuance finalized before revocation even when carried
-   by a later checkpoint; then enable only histories the recovery reader proves.
-3. Add presentation, note delivery and wallet synchronization; then service
-   transport and the external witness write side.
+1. Commit, merge and push this reviewed and verified slice.
+2. Retain the complete canonical validation evidence needed by each durable
+   opening, including same-segment predecessors and descent directory/scope
+   evidence. Revalidate on restart; then lift the conservative import refusal.
+3. Extend the model and build global receipt classification: authenticate the
+   held `after` commitment's segment and check historical inclusion and
+   live-scope contradictions before lapse. Keep missing evidence distinct.
+4. Specify later-version silence/presentation objects before implementing
+   recovery, presentation, delivery, wallet synchronization and service transport.
 
 ## Open questions
 
 - SQLite ownership assumes one journal per operator key on its venue. Copied
-  keys/databases and coordinated backup rollback require custody and backup
-  procedures; SQLite cannot provide an external coordination authority.
-- General revocation recovery and silence clauses remain unsupported by the
-  store, including required shared ancestry outside the new scope.
-- Profile large retained histories before designing compaction or read caches.
-- Same-index replacement appends in custom adapter callbacks remain a
-  clock-only snapshot limitation; adapters must expose complete stable records.
+  keys/databases and coordinated backup rollback need custody/backup procedures.
+- Scope authority still assumes a complete, stable venue snapshot; same-index
+  mutation during synchronous custom adapter callbacks has no generation token.
+- Profile large histories before designing compaction or immutable read caches.
 - Full C2 re-derivation, authenticated setup/build provenance, target
   measurements, note delivery and transitive history availability remain
   release requirements.
-
-## Improvement opportunities
-
-- Additional repository security scans could complement protocol review;
-  evaluate Codex Security access/cost before adding it. Existing Git/gh,
-  repository instructions and npm checks cover this slice without a new MCP.

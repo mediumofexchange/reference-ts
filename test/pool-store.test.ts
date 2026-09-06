@@ -278,7 +278,9 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     venue.advance(); venue.publishRevocation(signRevocation(SECRETS.backer));
     venue.advance(); venue.publish(base.commitment); venue.advance();
     const s = store(path(), venue, oracle, undefined, SECRETS.carol);
-    await expect(s.activate("inherit", [x], [base])).rejects.toMatchObject({ code: "UNSUPPORTED" });
+    // Canonical checkpoint validation now rejects the late issuance before
+    // the store reaches its conservative import-support check.
+    await expect(s.activate("inherit", [x], [base])).rejects.toMatchObject({ code: "UNAVAILABLE" });
     expect((await s.view()).highestSignedSequence).toBe(0n);
   });
 

@@ -115,7 +115,9 @@ deadline. What the repository holds today:
 - **Whole-scope checkpoint validation** (`readPoolCheckpoint`, C2.10.3–5):
   checks an exact held checkpoint and its transitive canonical imports,
   selecting every backing's predecessor before replay. Continued segments
-  preserve their finalized prefix. Missing evidence stops validation;
+  preserve their finalized prefix. New issuance must be witnessed strictly
+  before revocation; later checkpoints can retain proven earlier issuance.
+  Missing evidence stops validation;
   historical finality survives later term endings. The reader returns a
   verified prefix, not permission to open service or spend a note.
 - **Canonical opening construction** (`preparePoolOpening`, C2.7/C2.10.4–7):
@@ -128,7 +130,7 @@ deadline. What the repository holds today:
   resolve exact signed sequences and complete scope terms, and check receipt
   inclusion in a supplied source checkpoint through canonical replay. Missing
   history stays unavailable after replacement. Global receipt classification
-  and revocation/silence recovery remain next.
+  and silence recovery remain next; prospective revocation is checked during replay.
 - **Durable pool sequencing** ([PoolStore](docs/POOL_STORE.md), Node 24):
   atomically journals canonical openings, admitted statements, original receipts
   and signed checkpoints, including failed publications. It fences earlier
