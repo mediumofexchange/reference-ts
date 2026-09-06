@@ -7,6 +7,7 @@ import { decodeCommitment, directoryRoot, encodeCommitment, verifyCommitment, ty
 import { VenueError, type Venue } from "../venue.js";
 import { revokedAt } from "../revocation.js";
 import { PoolAuthorityView } from "./authority.js";
+import { mergePoolEvidence, replayedPoolEvidence } from "./evidence.js";
 import { readPoolPredecessor, type PoolSnapshotEvidence } from "./descent.js";
 import { PoolError, Segment, type AcceptedStatement, type Checkpoint, type FinalizedPrefix, type SegmentTrail, type StatementVerifier } from "./segment.js";
 import { configurationHash, copyConfiguration, copySegmentHeader, copyStatement, ISSUE, parsePublicInputs, segmentIdentity,
@@ -28,12 +29,13 @@ export type PoolCheckpointFailure =
  * hashes describe the supplied replay bytes, not necessarily the evidence
  * originally admitted by the operator; receipts attest that separately. */
 export type PoolCheckpointResult = PoolCheckpointFailure
-  | { readonly kind: "final"; readonly prefix: FinalizedPrefix; readonly accepted: readonly AcceptedStatement[]; readonly at: bigint; readonly witnessedIndex: bigint };
+  | { readonly kind: "final"; readonly prefix: FinalizedPrefix; readonly accepted: readonly AcceptedStatement[]; readonly at: bigint; readonly witnessedIndex: bigint;
+      readonly evidence: readonly PoolCheckpointEvidence[] };
 
 export type PoolCheckpointsResult = PoolCheckpointFailure
   | { readonly kind: "final"; readonly checkpoints: readonly {
       readonly commitment: Commitment; readonly prefix: FinalizedPrefix; readonly accepted: readonly AcceptedStatement[]; readonly at: bigint;
-    }[]; readonly witnessedIndex: bigint };
+    }[]; readonly witnessedIndex: bigint; readonly evidence: readonly PoolCheckpointEvidence[] };
 
 interface CheckpointReadArguments {
   readonly configuration: PoolConfiguration;
@@ -101,12 +103,15 @@ export async function readPoolCheckpoint(args: CheckpointReadArguments & { reado
   const result = await readPoolCheckpoints({ ...args, checkpoints: [args.checkpoint] });
   if (result.kind !== "final") return result;
   const verified = result.checkpoints[0]!;
-  return { kind: "final", prefix: verified.prefix, accepted: verified.accepted, at: verified.at, witnessedIndex: result.witnessedIndex };
+  return { kind: "final", prefix: verified.prefix, accepted: verified.accepted, at: verified.at, witnessedIndex: result.witnessedIndex, evidence: result.evidence };
 }
 
 /** Validate several distinct held checkpoints in one plan. Own all required
  * histories before any verifier callback, and verify common ancestry once.
- * Results follow request order; any unavailable/invalid root stops the batch. */
+ * Results follow request order; any unavailable/invalid root stops the batch.
+ * Successful evidence contains exactly the used descent steps and replayed
+ * prefixes, with derived snapshots. It can be retained and supplied on a later
+ * read; it is evidence to revalidate, not a substitute for the venue record. */
 export async function readPoolCheckpoints(args: CheckpointReadArguments & { readonly checkpoints: readonly Commitment[] }): Promise<PoolCheckpointsResult> {
   let stable = (): void => {};
   try {
@@ -148,6 +153,7 @@ export async function readPoolCheckpoints(args: CheckpointReadArguments & { read
     };
     requireThat(targets.every(verifyCommitment), "invalid checkpoint signature");
     const planned = new Map<string, Planned>(), order: string[] = [];
+    const retained: PoolCheckpointEvidence[] = [];
     const pending: { reference: OpeningCheckpoint; child?: Planned; finish?: boolean }[] = targets.map(reference => ({ reference }));
     while (pending.length !== 0) {
       const step = pending.pop()!, id = key(step.reference);
@@ -194,6 +200,8 @@ export async function readPoolCheckpoints(args: CheckpointReadArguments & { read
               return { commitment: item.commitment, directory: item.directory, ...(matches[0] === undefined ? {} : { snapshot: matches[0] }) };
             }) });
           if (selection.kind === "invalid" || selection.kind === "unavailable") { stable(); return selection; }
+          retained.push(...selection.evidence.map(e => ({ commitment: e.commitment, directory: e.directory,
+            ...(e.snapshot === undefined ? {} : { snapshots: [e.snapshot] }) })));
           const predecessor = selection.kind === "candidate" ? selection.checkpoint.commitment : undefined;
           predecessors.push(predecessor);
           if (selection.kind === "candidate" && same(segmentIdentity(selection.header), segmentIdentity(h))) previous = key(selection.checkpoint.commitment);
@@ -257,11 +265,13 @@ export async function readPoolCheckpoints(args: CheckpointReadArguments & { read
           "checkpoint rewrites or truncates its finalized prefix");
       }
       verified.set(id, prefix);
+      retained.push(replayedPoolEvidence(node.evidence.commitment, segment));
       if (requested.has(id)) accepted.set(id, records);
     }
     stable();
     return { kind: "final", checkpoints: targets.map(c => ({ commitment: c, prefix: verified.get(key(c))!,
-      accepted: accepted.get(key(c))!, at: planned.get(key(c))!.at })), witnessedIndex: now };
+      accepted: accepted.get(key(c))!, at: planned.get(key(c))!.at })), witnessedIndex: now,
+      evidence: mergePoolEvidence(retained) };
   } catch (cause) {
     try { stable(); }
     catch (error) { if (error instanceof CallbackFailure) throw error.cause; throw error; }

@@ -6,13 +6,15 @@ import { compareBytes, copyBytes, EncodingError } from "../bytes.js";
 import { encodeCommitment, verifyCommitment, type Commitment } from "../commitment.js";
 import { VenueError, type Venue } from "../venue.js";
 import { PoolAuthorityView } from "./authority.js";
+import { mergePoolEvidence } from "./evidence.js";
 import { readPoolCheckpoints, type PoolCheckpointEvidence, type PoolCheckpointFailure } from "./checkpoint.js";
 import { readPoolCurrent } from "./descent.js";
 import { PoolError, Segment, type SignedBacking, type StatementVerifier } from "./segment.js";
 import { configurationHash, copyConfiguration, copySegmentHeader, type PoolConfiguration } from "./statement.js";
 
 export type PoolOpeningResult = PoolCheckpointFailure
-  | { readonly kind: "prepared"; readonly segment: Segment; readonly witnessedIndex: bigint };
+  | { readonly kind: "prepared"; readonly segment: Segment; readonly witnessedIndex: bigint;
+      readonly evidence: readonly PoolCheckpointEvidence[] };
 
 const SEQUENCE_BOUND = 1n << 64n;
 function same(a: Uint8Array, b: Uint8Array): boolean { return compareBytes(a, b) === 0; }
@@ -24,6 +26,8 @@ function requireThat(ok: boolean, reason: string): asserts ok {
 /** Prepare the computed opening of a new segment over the supplied scope.
  * Every selected checkpoint is final across its whole scope, and shared
  * ancestry is verified once. The returned Segment has no local statements.
+ * Returned evidence includes current descent and the full checkpoint proof
+ * ancestry, suitable for durable retention and later revalidation.
  *
  * highestSignedSequence is an assertion from the operator's durable journal
  * over ALL its segments on this venue, including unsuccessful publications.
@@ -59,6 +63,7 @@ export async function preparePoolOpening(args: {
   let backings: SignedBacking[];
   let witnessedIndex: bigint;
   let stable = (): void => {};
+  const retained: PoolCheckpointEvidence[] = [];
   try {
     configuration = copyConfiguration(args.configuration);
     const operator = copyBytes(args.operator), highest = args.highestSignedSequence;
@@ -101,6 +106,8 @@ export async function preparePoolOpening(args: {
           return { commitment: item.commitment, directory: item.directory, ...(snapshots[0] === undefined ? {} : { snapshot: snapshots[0] }) };
         }) });
       if (selected.kind === "invalid" || selected.kind === "unavailable") { stable(); return selected; }
+      retained.push(...selected.evidence.map(e => ({ commitment: e.commitment, directory: e.directory,
+        ...(e.snapshot === undefined ? {} : { snapshots: [e.snapshot] }) })));
       const opening = selected.kind === "candidate" ? selected.checkpoint.commitment : undefined;
       if (opening !== undefined) checkpoints.set(key(opening), opening);
       entries.push({ ...entry, ...(opening === undefined ? {} : { opening }) });
@@ -125,7 +132,7 @@ export async function preparePoolOpening(args: {
     const segment = new Segment(configuration, segmentHeader, result?.checkpoints.map(c => c.prefix) ?? [], verifier);
     for (const b of backings) segment.register(b.backing, b.signature);
     stable();
-    return { kind: "prepared", segment, witnessedIndex };
+    return { kind: "prepared", segment, witnessedIndex, evidence: mergePoolEvidence([...retained, ...(result?.evidence ?? [])]) };
   } catch (cause) {
     if (cause instanceof PoolError || cause instanceof EncodingError || cause instanceof TypeError || cause instanceof RangeError) {
       return { kind: "invalid", reason: cause.message };

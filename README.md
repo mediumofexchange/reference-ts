@@ -135,9 +135,10 @@ deadline. What the repository holds today:
   atomically journals canonical openings, admitted statements, original receipts
   and signed checkpoints, including failed publications. It fences earlier
   handles on restart, waits the venue lag, preserves live tails across elective
-  scope changes and retries publication from the durable outbox. Required import
-  ancestry remains available after restart. Recovery-dependent histories are
-  explicitly unsupported in this first storage slice.
+  scope changes and retries publication from the durable outbox. Complete used
+  checkpoint evidence survives restart and is revalidated before new service,
+  so later checkpoints carrying proven pre-revocation issuance remain importable. Silence recovery
+  remains unsupported.
 - **A local two-process pilot** on the frozen path (`docs/PILOT.md`): durable
   commands, exact retries, crash recovery, a trusted local witness. An
   integration harness, not a product.

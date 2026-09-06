@@ -62,6 +62,9 @@ describe("C2.7/C2.10: canonical openings before a child commitment exists", () =
     const result = await prepare(f.venue, [f.x], 7n, [f.base, omitted], f.oracle);
     if (result.kind !== "prepared") throw new Error("expected opening");
     expect(result.segment.header.sequence).toBe(8n); expect(result.segment.header.entries[0]!.opening?.sequence).toBe(1n);
+    const retained = result.evidence.find(e => e.commitment.sequence === 7n)!;
+    expect(retained.history).toBeUndefined();
+    expect(retained.snapshots).toBeUndefined();
   });
 
   it.each([-1n, 1n << 64n, (1n << 64n) - 1n, 0 as never])("rejects invalid or exhausted durable counter %s", async highest => {
@@ -120,6 +123,10 @@ describe("C2.7/C2.10: canonical openings before a child commitment exists", () =
     const result = await prepare(f.venue, [f.y], 7n, [f.base, late], f.oracle);
     if (result.kind !== "prepared") throw new Error("expected opening");
     expect(result.segment.header.sequence).toBe(8n); expect(result.segment.header.entries[0]!.opening?.sequence).toBe(1n);
+    const retained = result.evidence.find(e => e.commitment.sequence === 7n)!;
+    expect(retained.history).toBeUndefined();
+    expect(retained.snapshots).toHaveLength(1);
+    expect(retained.snapshots![0]!.backing).toEqual(f.y.backing.name);
   });
 
   it("does not copy an unfinalized local tail or modify the existing segment", async () => {

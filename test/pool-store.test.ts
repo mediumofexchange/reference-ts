@@ -4,8 +4,10 @@ import { join, resolve, sep } from "node:path";
 import { makeBacking, signBacking } from "../src/backing.js";
 import { directoryRoot, signCommitment, type Commitment } from "../src/commitment.js";
 import { poolReceiptAttestsEvidence, poolReceiptInHistory } from "../src/pool/receipt.js";
+import type { PoolCheckpointEvidence } from "../src/pool/checkpoint.js";
 import { Segment } from "../src/pool/segment.js";
 import { segmentAuthority } from "../src/pool/statement.js";
+import { decodeStoredOpening, encodeStoredOpening, encodeStoredReceipt } from "../src/pool/store-codec.js";
 import type { PoolStore as Store, PoolStoreCheckpoint } from "../src/pool/store.js";
 import { LocalVenue } from "../src/venue.js";
 import { signRevocation } from "../src/revocation.js";
@@ -51,6 +53,51 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     const trail = (await s.view()).trail!;
     const issue = (output = 101n) => oracle.accept(issueStatement(segmentAuthority(trail.header), x.backing.name, 10n, output, SECRETS.backer));
     return { file, venue, oracle, x, y, s, opening, trail, issue };
+  }
+
+  async function importedRevocation() {
+    const venue = new LocalVenue(VENUE), oracle = new Oracle(), x = terms("EUR"), y = terms("USD");
+    const ancestor = openSegment(venue, [x, y], oracle);
+    await ancestor.admit(oracle.accept(issueStatement(ancestor.authority(), x.backing.name, 10n, 101n, SECRETS.backer)));
+    const base = evidence(ancestor); venue.publish(base.commitment);
+    venue.advance(); venue.publishRevocation(signRevocation(SECRETS.backer));
+    const later = evidence(ancestor, 2n); venue.publish(later.commitment);
+    replace(venue, x, SECRETS.carol, 2n); venue.advance();
+    const file = path(), s = store(file, venue, oracle, undefined, SECRETS.carol);
+    await s.activate("inherit", [x], [base, later]); await s.publish();
+    return { file, venue, oracle, x, ancestor, base, later, s };
+  }
+
+  async function importedDescent(kind: "absence" | "lapse") {
+    const venue = new LocalVenue(VENUE), oracle = new Oracle(), x = terms("EUR"), y = terms("USD");
+    const ancestor = openSegment(venue, [x, y], oracle);
+    await ancestor.admit(oracle.accept(issueStatement(ancestor.authority(), y.backing.name, 10n, 101n, SECRETS.backer)));
+    const base = evidence(ancestor); venue.publish(base.commitment);
+    let skipped: PoolCheckpointEvidence;
+    if (kind === "absence") {
+      skipped = { commitment: signCommitment(SECRETS.operator, 2n, directoryRoot([])), directory: [] };
+    } else {
+      replace(venue, x, SECRETS.alice, 1n); venue.advance();
+      const { history: _history, ...withoutHistory } = evidence(ancestor, 2n);
+      skipped = withoutHistory;
+    }
+    venue.publish(skipped.commitment);
+    replace(venue, y, SECRETS.carol, 2n); venue.advance(2n - venue.witnessedIndex());
+    const file = path(), s = store(file, venue, oracle, undefined, SECRETS.carol);
+    await s.activate("inherit", [y], [base, skipped]); await s.publish();
+    return { file, venue, oracle, y, ancestor, skipped, s };
+  }
+
+  function alterValidation(file: string, change: (evidence: readonly PoolCheckpointEvidence[]) => readonly PoolCheckpointEvidence[]) {
+    const db = new DatabaseSync(file);
+    try {
+      const row = db.prepare("SELECT seq,command FROM events WHERE id='command:inherit'").get()!;
+      const command = JSON.parse(row.command as string) as { opening: string };
+      const saved = decodeStoredOpening(command.opening, CONFIG);
+      expect(saved.validation).toBeDefined();
+      command.opening = encodeStoredOpening(saved.trail, saved.evidence, change(saved.validation!));
+      db.prepare("UPDATE events SET command=? WHERE seq=?").run(JSON.stringify(command), row.seq!);
+    } finally { db.close(); }
   }
 
   it("journals the opening before publication and returns the original receipt through restart and reproof", async () => {
@@ -236,6 +283,36 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     expect((await resumed.view()).highestSignedSequence).toBe(2n);
   });
 
+  it("retains original replies and publication after same-index revocation invalidates an imported opening", async () => {
+    const f = await fixture(); await f.s.publish();
+    const statement = f.issue(), receipt = await f.s.submit(statement), receiptBytes = encodeStoredReceipt(receipt);
+    const issued = await f.s.commit("issued"); await f.s.publish();
+    const inherited = await f.s.activate("inherit", [f.x]); await f.s.publish();
+    const nextAuthority = segmentAuthority((await f.s.view()).trail!.header);
+    const next = f.oracle.accept(issueStatement(nextAuthority, f.x.backing.name, 10n, 102n, SECRETS.backer));
+    f.venue.publishRevocation(signRevocation(SECRETS.backer));
+
+    for (const restarted of [false, true]) {
+      if (restarted) f.s.close();
+      const s = restarted ? store(f.file, f.venue, f.oracle) : f.s;
+      const retried = await s.submit({ ...statement, proof: new Uint8Array(32).fill(99) });
+      expect(retried).toEqual(receipt); expect(encodeStoredReceipt(retried)).toBe(receiptBytes);
+      retried.signature.fill(0);
+      expect(encodeStoredReceipt(await s.submit(statement))).toBe(receiptBytes);
+      expect(await s.activate("opening", [f.x, f.y])).toEqual(f.opening);
+      expect(await s.commit("issued")).toEqual(issued);
+      expect(await s.activate("inherit", [f.x])).toEqual(inherited);
+      expect(await s.publish()).toEqual(inherited);
+      expect(await s.view()).toMatchObject({ highestSignedSequence: 3n, latest: inherited });
+
+      await expect(s.commit("new-commit")).rejects.toMatchObject({ code: "UNAVAILABLE" });
+      await expect(s.submit(next)).rejects.toMatchObject({ code: "UNAVAILABLE" });
+      await expect(s.activate("new-opening", [f.x])).rejects.toMatchObject({ code: "UNAVAILABLE" });
+      expect(encodeStoredReceipt(await s.submit(statement))).toBe(receiptBytes);
+      expect((await s.view()).highestSignedSequence).toBe(3n);
+    }
+  });
+
   it("revocation preserves movement of issuance witnessed before revocation", async () => {
     const f = await fixture(); await f.s.publish();
     const note = walletNote(f.x.backing.name, 10n, 1n);
@@ -278,8 +355,6 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     venue.advance(); venue.publishRevocation(signRevocation(SECRETS.backer));
     venue.advance(); venue.publish(base.commitment); venue.advance();
     const s = store(path(), venue, oracle, undefined, SECRETS.carol);
-    // Canonical checkpoint validation now rejects the late issuance before
-    // the store reaches its conservative import-support check.
     await expect(s.activate("inherit", [x], [base])).rejects.toMatchObject({ code: "UNAVAILABLE" });
     expect((await s.view()).highestSignedSequence).toBe(0n);
   });
@@ -299,6 +374,86 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     const imports = view.checkpoints.map(e => ({ checkpoint: e, trail: e.history!.trail, length: e.history!.length }));
     const replayed = await Segment.replay(view.trail!, oracle, imports);
     expect(replayed.isAnchor(ancestor.noteRoot())).toBe(true);
+  });
+
+  it("retains same-segment pre-revocation finality through replacement, restart and movement", async () => {
+    const f = await importedRevocation(); f.s.close();
+    const resumed = store(f.file, f.venue, f.oracle, undefined, SECRETS.carol);
+    const view = await resumed.view();
+    for (const checkpoint of [f.base, f.later]) {
+      expect(view.checkpoints.some(e => Buffer.from(e.commitment.signature).equals(checkpoint.commitment.signature))).toBe(true);
+    }
+    const authority = segmentAuthority(view.trail!.header), root = f.ancestor.noteRoot();
+    const spend = f.oracle.accept(spendStatement(authority, [root, root], [201n, 202n], [301n, 302n]));
+    expect((await resumed.submit(spend)).position).toBe(1n);
+    await resumed.commit("moved"); await resumed.publish();
+    expect((await resumed.activate("next", [f.x])).sequence).toBe(3n);
+    await resumed.publish(); resumed.close();
+    const again = store(f.file, f.venue, f.oracle, undefined, SECRETS.carol);
+    expect((await again.activate("again", [f.x])).sequence).toBe(4n);
+    expect(await again.submit(spend)).toMatchObject({ position: 1n });
+  });
+
+  it.each(["absence", "lapse"] as const)("retains history-free %s evidence through restart and another opening", async kind => {
+    const f = await importedDescent(kind); f.s.close();
+    const resumed = store(f.file, f.venue, f.oracle, undefined, SECRETS.carol);
+    const retained = (await resumed.view()).checkpoints.find(e => Buffer.from(e.commitment.signature).equals(f.skipped.commitment.signature));
+    expect(retained).toBeDefined(); expect(retained!.history).toBeUndefined();
+    if (kind === "lapse") expect(retained!.snapshots?.some(s => Buffer.from(s.backing).equals(f.y.backing.name))).toBe(true);
+    expect((await resumed.activate("next", [f.y])).sequence).toBe(2n);
+    await resumed.publish(); resumed.close();
+    const again = store(f.file, f.venue, f.oracle, undefined, SECRETS.carol);
+    expect((await again.activate("again", [f.y])).sequence).toBe(3n);
+  });
+
+  it("enriches retained absence evidence with supplied history when its scope expands", async () => {
+    const venue = new LocalVenue(VENUE), oracle = new Oracle(), x = terms("EUR"), y = terms("USD");
+    const ancestor = openSegment(venue, [y], oracle);
+    await ancestor.admit(oracle.accept(issueStatement(ancestor.authority(), y.backing.name, 10n, 101n, SECRETS.backer)));
+    const base = evidence(ancestor); venue.publish(base.commitment);
+    replace(venue, x, SECRETS.carol, 1n); venue.advance();
+    const file = path(), s = store(file, venue, oracle, undefined, SECRETS.carol);
+    await s.activate("x", [x], [{ commitment: base.commitment, directory: base.directory }]); await s.publish();
+    const heldBase = (checkpoints: readonly PoolCheckpointEvidence[]) => checkpoints.find(e =>
+      Buffer.from(e.commitment.signature).equals(base.commitment.signature));
+    const absent = heldBase((await s.view()).checkpoints);
+    expect(absent).toBeDefined(); expect(absent!.history).toBeUndefined();
+    replace(venue, y, SECRETS.carol, 2n); venue.advance();
+    expect((await s.activate("expand", [x, y], [base])).sequence).toBe(2n);
+    await s.publish(); s.close();
+    const resumed = store(file, venue, oracle, undefined, SECRETS.carol);
+    const enriched = heldBase((await resumed.view()).checkpoints);
+    expect(enriched!.history?.length).toBe(1n);
+    expect(enriched!.snapshots?.some(snapshot => Buffer.from(snapshot.backing).equals(y.backing.name))).toBe(true);
+    expect((await resumed.activate("next", [x, y])).sequence).toBe(3n);
+  });
+
+  it.each(["predecessor", "absence", "lapse"] as const)("retains a readable journal but refuses new signing when %s validation evidence is removed", async kind => {
+    const f = kind === "predecessor" ? await importedRevocation() : await importedDescent(kind);
+    f.s.close();
+    alterValidation(f.file, validation => kind === "lapse"
+      ? validation.map(e => e.commitment.sequence === 2n ? { ...e, snapshots: [] } : e)
+      : validation.filter(e => e.commitment.sequence !== (kind === "predecessor" ? 1n : 2n)));
+    const resumed = store(f.file, f.venue, f.oracle, undefined, SECRETS.carol);
+    expect((await resumed.view()).highestSignedSequence).toBe(1n);
+    await expect(resumed.commit("new-commit")).rejects.toMatchObject({ code: "UNAVAILABLE" });
+    expect((await resumed.view()).highestSignedSequence).toBe(1n);
+  });
+
+  it.each(["applied", "stored"] as const)("same-index imported revocation during %s rolls back opening signing", async phase => {
+    const venue = new LocalVenue(VENUE); let armed = false;
+    const f = await fixture(venue, at => {
+      if (armed && at === phase) {
+        armed = false;
+        venue.publishRevocation(signRevocation(SECRETS.backer));
+      }
+    });
+    await f.s.publish(); await f.s.submit(f.issue()); await f.s.commit("issued"); await f.s.publish();
+    armed = true;
+    await expect(f.s.activate("inherit", [f.x])).rejects.toThrow("revocation record changed during journal operation");
+    expect(armed).toBe(false);
+    expect((await f.s.view()).highestSignedSequence).toBe(2n);
+    expect(venue.latestFor(KEYS.operator)?.sequence).toBe(2n);
   });
 
   it("refuses silence recovery in a required shared ancestor even outside the new scope", async () => {

@@ -5,19 +5,20 @@
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { encodeBacking, makeBacking } from "../backing.js";
+import { encodeBacking, makeBacking, type Backing } from "../backing.js";
 import { compareBytes, copyBytes } from "../bytes.js";
 import { decodeCommitment, directoryRoot, encodeCommitment, signCommitment, verifyCommitment, type Commitment } from "../commitment.js";
 import { revokedAt } from "../revocation.js";
 import { VenueError, type Venue } from "../venue.js";
 import { PoolAuthorityView } from "./authority.js";
-import { readPoolCheckpoint, type PoolCheckpointEvidence } from "./checkpoint.js";
+import { readPoolCheckpoint, readPoolCheckpoints, type PoolCheckpointEvidence } from "./checkpoint.js";
+import { mergePoolEvidence, replayedPoolEvidence } from "./evidence.js";
 import { preparePoolOpening } from "./opening.js";
 import { poolReceiptInHistory, poolReceiptAttestsEvidence, signPoolReceipt, type PoolReceipt } from "./receipt.js";
 import { Segment, type ImportEvidence, type SegmentTrail, type SignedBacking, type StatementVerifier } from "./segment.js";
 import { configurationHash, copyConfiguration, copySegmentHeader, decodeStatement, encodeStatement, ISSUE,
   parsePublicInputs, statementHash, type OpeningCheckpoint, type PoolConfiguration, type SegmentHeader, type Statement } from "./statement.js";
-import { decodeStoredOpening, decodeStoredReceipt, encodeStoredOpening, encodeStoredReceipt } from "./store-codec.js";
+import { copyPoolCheckpointEvidence, decodeStoredOpening, decodeStoredReceipt, encodeStoredOpening, encodeStoredReceipt } from "./store-codec.js";
 
 const PROFILE = "pool-store/v2";
 const U64 = 1n << 64n;
@@ -53,9 +54,6 @@ function scopeRequest(backings: readonly SignedBacking[]): string {
 function uniqueImports(evidence: readonly ImportEvidence[]): ImportEvidence[] {
   return [...new Map(evidence.map(e => [encoded(e.checkpoint.commitment), e])).values()];
 }
-function uniqueCheckpoints(evidence: readonly PoolCheckpointEvidence[]): PoolCheckpointEvidence[] {
-  return [...new Map(evidence.map(e => [encoded(e.commitment), e])).values()];
-}
 function requiredImports(header: SegmentHeader, evidence: readonly ImportEvidence[]): ImportEvidence[] {
   const key = (c: OpeningCheckpoint) => `${bytesToHex(c.operator)}:${c.sequence}:${bytesToHex(c.root)}`;
   const supplied = new Map(evidence.map(e => [key(e.checkpoint.commitment), e]));
@@ -71,6 +69,10 @@ function requiredImports(header: SegmentHeader, evidence: readonly ImportEvidenc
   }
   return [...required.values()];
 }
+function historyImports(evidence: readonly PoolCheckpointEvidence[]): ImportEvidence[] {
+  return evidence.flatMap(e => e.history === undefined ? [] : [{ checkpoint: { commitment: e.commitment, directory: e.directory },
+    trail: e.history.trail, length: e.history.length }]);
+}
 
 interface Signed {
   commitment: Commitment;
@@ -84,6 +86,8 @@ interface Engine {
   revision: bigint;
   segment?: Segment;
   imports: ImportEvidence[];
+  validation: PoolCheckpointEvidence[];
+  recheckImports: () => void;
   signed: Signed[];
   receipts: Map<string, PoolReceipt>;
 }
@@ -97,7 +101,8 @@ export interface PoolStoreView {
   readonly highestSignedSequence: bigint;
   readonly trail?: SegmentTrail;
   readonly latest?: Commitment;
-  /** Local checkpoints and their retained imported ancestry, including retired segments. */
+  /** Local checkpoints and retained validation evidence, including directory-
+   * or snapshot-only descent steps and retired segments. */
   readonly checkpoints: readonly PoolCheckpointEvidence[];
 }
 /** Fault injection only; uncommitted signatures are never passed to the hook. */
@@ -203,7 +208,7 @@ export class PoolStore {
       const q = this.db.prepare("SELECT seq,id,request,command,response FROM events ORDER BY seq"); q.setReadBigInts(true);
       return q.all();
     });
-    const engine: Engine = { revision: 0n, imports: [], signed: [], receipts: new Map() };
+    const engine: Engine = { revision: 0n, imports: [], validation: [], recheckImports: () => {}, signed: [], receipts: new Map() };
     for (const row of rows) {
       requireThat(row.seq === engine.revision + 1n && typeof row.command === "string" && typeof row.response === "string", "STORAGE", "invalid journal row");
       const command = JSON.parse(row.command) as Command;
@@ -229,6 +234,11 @@ export class PoolStore {
       requireThat(saved.trail.statements.length === 0, "STORAGE", "an opening has local statements");
       engine.segment = await Segment.replay(saved.trail, this.verifier, saved.evidence);
       engine.imports = uniqueImports([...engine.imports, ...saved.evidence]);
+      // Older envelopes held only import trails. Reconstruct their snapshots
+      // for the same record validation before NEW service. Historical signed
+      // replies remain available even if finality can no longer be established.
+      engine.validation = mergePoolEvidence([...engine.validation,
+        ...(saved.validation ?? await this.importedEvidence(engine))]);
     }
     if (command.kind === "open" || command.kind === "commit") {
       const segment = engine.segment;
@@ -341,25 +351,54 @@ export class PoolStore {
         return inputs.kind === ISSUE && same(inputs.backing, backing.name);
       }), "UNSUPPORTED", "active history contains issuance without pre-revocation finality; recovery is required");
     }
-    this.checkImportSupport(requiredImports(segment.header, engine.imports));
+    engine.recheckImports();
   }
   private checkImportSupport(imports: readonly ImportEvidence[]): void {
     for (const item of imports) for (const { backing } of item.trail.backings) {
       // A shared ancestor's out-of-scope backing can affect mixed spends.
       // Without recovery, its venue redemption nullifiers cannot be checked.
       requireThat(backing.evidence.silence === undefined, "UNSUPPORTED", "imported pool silence recovery is not implemented");
-      const revoked = revokedAt(this.venue, backing); if (revoked === undefined) continue;
-      const issued = item.trail.statements.slice(0, Number(item.length)).some(statement => {
-        const inputs = parsePublicInputs(statement.kind, statement.publicInputs);
-        return inputs.kind === ISSUE && same(inputs.backing, backing.name);
-      });
-      if (!issued) continue;
-      const c = item.checkpoint.commitment, at = this.venue.witnessedAtSequence(c.operator, c.sequence);
-      // This first durable slice supports import when this exact checkpoint
-      // proves issuance predates revocation. Finding an earlier checkpoint of
-      // the same local history is part of the forthcoming recovery reader.
-      requireThat(at !== undefined && at < revoked, "UNSUPPORTED", "imported issuance needs a pre-revocation checkpoint; recovery is required");
     }
+  }
+
+  private revocationView(evidence: readonly PoolCheckpointEvidence[]): () => void {
+    const cutoffs = new Map<string, { backing: Backing; at: bigint | undefined }>();
+    for (const e of evidence) for (const { backing } of e.history?.trail.backings ?? []) {
+      const key = bytesToHex(backing.obligor);
+      if (!cutoffs.has(key)) cutoffs.set(key, { backing: makeBacking(backing), at: revokedAt(this.venue, backing) });
+    }
+    return () => {
+      for (const { backing, at } of cutoffs.values()) {
+        if (revokedAt(this.venue, backing) !== at) throw new VenueError("revocation record changed during journal operation");
+      }
+    };
+  }
+
+  /** Re-establish historical import finality from retained bytes. An opening
+   * that is held under its full scope also proves its own canonical descent.
+   * Unpublished or publicly lapsed openings retain their journal and receipts;
+   * ready() still gates service by currency and whole-scope authority. Run
+   * before new service, after exact retry lookup: finality failure cannot
+   * erase a previously signed receipt, checkpoint or publication outbox. */
+  private async validateOpening(engine: Engine, segment: Segment): Promise<void> {
+    const available = mergePoolEvidence([...engine.validation, ...this.localEvidence(engine)]);
+    const recheck = this.revocationView(available);
+    const targets = requiredImports(segment.header, historyImports(available)).map(e => e.checkpoint.commitment);
+    const opening = engine.signed.find(s => s.segment === segment && s.commitment.sequence === segment.header.sequence)!;
+    if (this.held(opening)) {
+      const at = this.venue.witnessedAtSequence(this.operator, opening.commitment.sequence);
+      requireThat(at !== undefined, "UNAVAILABLE", "opening witnessed index is unavailable");
+      if (new PoolAuthorityView(this.config, this.venue, this.terms(segment)).authorizes(segment.header, at)) targets.push(opening.commitment);
+    }
+    if (targets.length !== 0) {
+      const checked = await readPoolCheckpoints({ configuration: this.config, venue: this.venue,
+        checkpoints: targets, evidence: available, verifier: this.verifier });
+      requireThat(checked.kind === "final", "UNAVAILABLE", "retained opening evidence is unavailable or invalid");
+      this.checkImportSupport(historyImports(checked.evidence));
+    }
+    recheck();
+    engine.recheckImports = recheck;
+    this.transaction(() => {});
   }
 
   /** Canonically prepare and durably sign an empty opening. Publishing is explicit. */
@@ -376,18 +415,13 @@ export class PoolStore {
         backings: s.backings.map(b => ({ backing: makeBacking(b.backing), signature: copyBytes(b.signature) })) })) }),
       ...(e.history === undefined ? {} : { history: { trail: decodeStoredOpening(encodeStoredOpening(e.history.trail, []), this.config).trail,
         length: e.history.length } }) }));
-    const external = provided.filter(e => e.history !== undefined).map(e => ({ checkpoint: { commitment: e.commitment, directory: e.directory },
-      trail: e.history!.trail, length: e.history!.length }));
-    // preparePoolOpening owns its selected evidence before proof callbacks; do
-    // not let unrelated external objects become durable after those callbacks.
-    const imports = external.map(e => decodeStoredOpening(encodeStoredOpening(e.trail, [e]), this.config).evidence[0]!);
     return this.run(async engine => {
       const prior = this.transaction(() => this.prior(commandId, request));
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
       for (const b of own) requireThat(b.backing.evidence.silence === undefined, "UNSUPPORTED", "pool silence recovery is not implemented");
       const now = this.clock(), observed = encoded(this.latest());
-      const retained = await this.importedEvidence(engine);
-      const available = uniqueCheckpoints([...provided, ...retained, ...this.localEvidence(engine)]);
+      const available = mergePoolEvidence([...provided, ...engine.validation, ...this.localEvidence(engine)]);
+      const recheck = this.revocationView(available);
       const last = engine.signed.at(-1);
       if (this.resumedAt !== undefined) requireThat(now >= this.resumedAt + this.lag, "SCHEDULE", "restart lag has not passed");
       if (last !== undefined) {
@@ -409,11 +443,12 @@ export class PoolStore {
       const prepared = await preparePoolOpening({ configuration: this.config, venue: this.venue, operator: this.operator,
         highestSignedSequence: highest, backings: own, evidence: available, verifier: this.verifier });
       requireThat(prepared.kind === "prepared", "UNAVAILABLE", "canonical pool opening is unavailable or invalid");
+      recheck();
       this.stable(now, observed);
       const segment = prepared.segment;
-      const allImports = requiredImports(segment.header, uniqueImports([...engine.imports, ...imports, ...engine.signed.map(s => ({ checkpoint: { commitment: s.commitment, directory: s.segment.prefix(s.length).directory },
-        trail: { ...s.segment.trail(), statements: s.segment.trail().statements.slice(0, Number(s.length)) }, length: s.length }))]));
-      const opening = encodeStoredOpening(segment.trail(), allImports);
+      const validation = prepared.evidence.map(e => copyPoolCheckpointEvidence(e, this.config));
+      const allImports = requiredImports(segment.header, historyImports(validation));
+      const opening = encodeStoredOpening(segment.trail(), allImports, validation);
       const restored = await Segment.replay(segment.trail(), this.verifier, allImports);
       requireThat(same(directoryRoot(restored.directory()), directoryRoot(segment.directory())), "STORAGE", "retained imports differ from the prepared opening");
       const result = this.transaction(() => {
@@ -423,14 +458,15 @@ export class PoolStore {
           ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }),
         });
         requireThat(schedule?.commitNow === true, "SCHEDULE", "opening signing schedule is closed");
-        this.checkImportSupport(allImports);
+        this.checkImportSupport(historyImports(validation)); recheck();
         const signed = signCommitment(this.secret, segment.header.sequence, directoryRoot(segment.directory()));
         this.append(engine, commandId, request, { kind: "open", opening, at: now.toString(), observed }, bytesToHex(encodeCommitment(signed)), () => {
-          this.checkImportSupport(allImports); this.stable(now, observed);
+          recheck(); this.stable(now, observed);
         });
         return signed;
       });
       engine.segment = segment; engine.imports = uniqueImports([...engine.imports, ...allImports]);
+      engine.validation = mergePoolEvidence([...engine.validation, ...validation]); engine.recheckImports = recheck;
       engine.signed.push({ commitment: result, segment, length: 0n, at: now, observed, published: false }); engine.revision++;
       this.checkpoint?.("committed"); return decodeCommitment(encodeCommitment(result));
     });
@@ -447,6 +483,7 @@ export class PoolStore {
     return this.run(async engine => {
       const prior = engine.receipts.get(hash);
       if (prior !== undefined) return decodeStoredReceipt(encodeStoredReceipt(prior));
+      if (engine.segment !== undefined) await this.validateOpening(engine, engine.segment);
       this.ready(engine, "admit");
       const segment = engine.segment!, now = this.clock(), observed = encoded(this.latest());
       this.unrevoked(own, segment);
@@ -471,6 +508,7 @@ export class PoolStore {
     return this.run(async engine => {
       const prior = this.transaction(() => this.prior(commandId, "commit"));
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
+      if (engine.segment !== undefined) await this.validateOpening(engine, engine.segment);
       this.ready(engine, "commit");
       const segment = engine.segment!, now = this.clock(), observed = encoded(this.latest());
       const highest = engine.signed.at(-1)!.commitment.sequence;
@@ -521,26 +559,16 @@ export class PoolStore {
     return evidence;
   }
   private checkpointEvidence(s: Pick<Signed, "segment" | "length" | "commitment">): PoolCheckpointEvidence {
-      const prefix = s.segment.prefix(s.length), trail = s.segment.trail();
-      const totals = new Map<string, { issued: bigint; burned: bigint }>();
-      for (const event of prefix.events) if (event.lit !== undefined) {
-        const name = bytesToHex(event.lit.backing), held = totals.get(name) ?? { issued: 0n, burned: 0n };
-        if (event.lit.kind === ISSUE) held.issued += event.lit.quantity; else held.burned += event.lit.quantity;
-        totals.set(name, held);
-      }
-      return { commitment: decodeCommitment(encodeCommitment(s.commitment)), directory: prefix.directory,
-        snapshots: trail.header.entries.map(e => ({ backing: e.backing, header: trail.header, historyHash: prefix.historyHash,
-          ...(totals.get(bytesToHex(e.backing)) ?? { issued: 0n, burned: 0n }), backings: trail.backings })),
-        history: { trail: { ...trail, statements: trail.statements.slice(0, Number(s.length)) }, length: s.length } };
+    return replayedPoolEvidence(decodeCommitment(encodeCommitment(s.commitment)), s.segment, s.length);
   }
   async view(): Promise<PoolStoreView> {
     return this.run(async engine => {
-      const imported = await this.importedEvidence(engine);
       this.transaction(() => {});
       return { highestSignedSequence: engine.signed.at(-1)?.commitment.sequence ?? 0n,
       ...(engine.segment === undefined ? {} : { trail: engine.segment.trail() }),
       ...(engine.signed.at(-1) === undefined ? {} : { latest: decodeCommitment(encodeCommitment(engine.signed.at(-1)!.commitment)) }),
-      checkpoints: uniqueCheckpoints([...imported, ...this.localEvidence(engine)]) };
+      checkpoints: mergePoolEvidence([...engine.validation, ...this.localEvidence(engine)])
+        .map(e => copyPoolCheckpointEvidence(e, this.config)) };
     });
   }
   close(): void {

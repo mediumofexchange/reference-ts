@@ -27,7 +27,8 @@ journal. A different identity cannot reopen it.
   returning. The caller then publishes it. Command identifiers are local retry
   keys; reusing one for different content fails.
 - `view()` returns copied local history, the highest signed sequence, the latest
-  commitment, local checkpoints and their retained imported ancestry. Receipts
+  commitment, local checkpoints and their retained validation evidence. Some
+  evidence contains only a directory or snapshot, without history. Receipts
   establish acceptance; this view does not classify spendability or recovery.
 - `close()` closes the database and clears the store's copy of the signing key.
 
@@ -45,7 +46,16 @@ The database uses SQLite WAL and FULL synchronization. An append atomically
 stores its command, signed response, journal tip and observed venue index.
 The local JSON envelopes are strictly canonical encodings of existing protocol
 frames; they introduce no signed wire format. Reload replays the exact supplied
-histories and verifies every saved statement, receipt and commitment.
+histories and verifies every saved statement, receipt and commitment. Openings
+retain the canonical reader's complete used evidence: imported histories,
+same-segment predecessors, directory absence and authenticated scope lapse.
+Unselected histories and tails beyond checkpoint lengths are not retained.
+
+Version 2 opening envelopes carry this validation evidence. Version 1 remains
+readable and reconstructs snapshots from retained imports; if it omitted evidence
+now required for canonical validation, new service returns `UNAVAILABLE`. No
+missing history is inferred. Receipt envelopes and all signed protocol bytes
+are unchanged.
 
 Opening an existing journal atomically takes ownership and fences earlier
 handles. A resumed process observes a full venue lag before new admission or
@@ -64,7 +74,7 @@ the whole database. Backups and key custody remain a separate release task.
 
 This is the first durable sequencing slice, not a complete pool service.
 The [receipt record readers](POOL_RECEIPTS.md) now expose sequence, scope and
-checkpoint-inclusion facts. Global receipt classification, silence recovery, recovery of revoked issuance,
+checkpoint-inclusion facts. Global receipt classification, silence recovery,
 presentation, delivery and wallet synchronization remain to be implemented.
 Backings with silence clauses are refused in the requested scope and all
 required shared ancestry, including backings outside the new scope. Their
@@ -75,13 +85,17 @@ continues; late witnessing cannot turn revoked issuance into valid value.
 Canonical checkpoint validation now proves that every issuance first appears
 strictly before revocation, including through an earlier checkpoint of the same
 segment. Late issuance invalidates the checkpoint before activation can use it.
-The store still conservatively requires each retained ancestor containing
-issuance to have its own checkpoint before revocation: it currently retains
-header import ancestry, not the complete predecessor and descent evidence used
-by canonical validation. Safely enabling later checkpoints carrying old
-issuance requires retaining that evidence through restart. The store returns
-`UNSUPPORTED` for this valid-but-unretained case. Shared histories are checked
-even for backings outside the new scope.
+Later checkpoints carrying proven earlier issuance can be imported and used
+after restart. New service after reload revalidates retained imports against
+the witnessed record. Exact durable replies, publication retries and the raw
+evidence view remain available even when present-day finality cannot be
+established. A held opening whose whole scope was in force
+also revalidates its own canonical descent. Unpublished or publicly lapsed
+openings preserve the journal and receipts; service still requires current
+authority and the signing schedule. Missing or invalid retained evidence
+blocks new service with `UNAVAILABLE`. Shared histories are checked even for
+backings outside the new scope, and a same-index revocation during signing
+aborts the append.
 
 The synchronous venue must provide the complete record its index represents.
 Record changes during verification or append abort the operation. This store

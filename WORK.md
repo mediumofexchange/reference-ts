@@ -10,59 +10,49 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Status
 
-- Merged into `main`: `9200782`, from `fix/pool-prospective-revocation`
-  (base `49395d8`). Independently reviewed and fully verified.
-- Canonical checkpoint replay now enforces C2b.1: newly finalized local ISSUE
-  must be witnessed strictly before its obligor's revocation. Already validated
-  same-segment prefixes and imported events retain their original finality.
-  Exact prefix comparison prevents rewriting earlier positions to launder
-  issuance. Invalid live history blocks the candidate; missing evidence stops
-  validation, with no filtering, repair or fallback.
-- Revocation cutoffs are read for every required scope, including shared
-  ancestors outside the requested scope, before proof callbacks. Final checks
-  detect same-index cutoff changes. Venue/proof callback failures propagate.
-- Opening preparation and receipt inclusion inherit this check. The pool
-  authority model uses an independent first-inclusion oracle, with a departure
-  demonstrating that ignoring revocation creates invalid supply.
-- The store keeps its conservative import restriction. `requiredImports`
-  retains header import references but omits same-segment predecessor evidence
-  and other descent evidence. The reader can now validate later checkpoints
-  carrying old issuance; safely enabling them in the journal needs that full
-  proof retained across restart, not an asserted cutoff stored as metadata.
-- Receipt record facts/inclusion from `40e9484` and durable sequencing from
-  `51f8442` remain the base. Global receipt classification is still next.
+- Completed branch: `feat/pool-durable-validation-evidence`, base `5bb9c12`.
+  Independently reviewed and fully verified; merge and push are next.
+- Successful descent, checkpoint and opening readers now return their used
+  evidence: authenticated directory/scope steps and replayed histories,
+  including same-segment predecessors. Unselected history and uncheckpointed
+  tails are excluded. Replayed snapshots derive from verified prefixes.
+- Version 2 local opening envelopes retain this complete evidence. New service
+  after restart revalidates imports against the record; held openings under
+  valid scopes also revalidate their canonical descent. Later checkpoints
+  carrying proven pre-revocation issuance remain importable and usable.
+- Validation gates new admission/signing after exact retry lookup. Structural
+  replay still verifies saved proofs, signatures and receipts. Original replies,
+  unclassified history and durable publication retries remain accessible even
+  when same-index revocation later invalidates an imported checkpoint.
+- Missing evidence blocks new service with UNAVAILABLE; silence recovery remains
+  unsupported. Version 1 envelopes remain readable, reconstructing snapshots
+  from their imports, but cannot fabricate missing canonical predecessors.
 - Companion specification: `money-from-first-principles/main` at `ba8fe21`.
-  No normative, signed-byte, circuit or proof-key changes. Pool-v2 §7.4
-  explicitly excludes silence redemption and venue-nullifier adoption;
-  those objects must be specified together in a later construction version.
+  No normative, signed-byte, receipt-envelope, circuit or proof-key changes.
+  This implements C2.10.3–5/8–9 and C2b.1. Pool-v2 §7.4 still excludes silence
+  redemption and venue-nullifier adoption.
 
 ## Evidence
 
-- New model cases cover pre-revocation value, late/tied batches, same-index
-  record updates, shared obligor keys, withheld proof and an unsafe departure.
-- Runtime regressions cover continued spend/burn, replacement imports, prefix
-  rewriting, missing predecessors, invalid out-of-scope ancestry, receipt and
-  opening reads, cutoff races, wrong indices and callback failures.
-- Independent adversarial review found no blockers. Sequential reads cannot
-  provide an atomic generation token for deliberately mutating custom venue
-  callbacks; stable adapter records remain a trust requirement.
-- Full `npm run check` passed: 72 files / 1,365 tests, docs, typecheck, build,
-  installed tarball consumer, pilot and pool-store crash harness. This includes
-  20 new runtime revocation tests and 8 new model cases.
-- A store regression now expects `UNAVAILABLE`
-  because invalid late issuance is rejected during canonical opening validation,
-  before the store's older `UNSUPPORTED` guard is reached.
+- Full npm run check passed: 72 files / 1,379 tests, docs, typecheck, build,
+  installed tarball consumer, pilot and pool-store crash harness.
+- Regressions cover pre-revocation predecessors through restart and movement,
+  history-free absence/lapse, scope expansion enriching cached evidence,
+  deleted proof material, exact historical replies after same-index revocation,
+  append races, retained-prefix ownership and strict v1/v2 codec framing.
+- Independent adversarial review found two issues, both fixed and regression
+  tested: cached partial evidence shadowed newly supplied fields; unconditional
+  finality checks blocked retrieval of historical signed replies. Focused final
+  re-review found no remaining blockers.
 - Windows esbuild requires execution outside the restricted sandbox. Real
-  circuits are unchanged and were not rerun locally; pinned evidence remains
-  `docs/pool-v2-verification.json`.
+  circuits are unchanged and were not rerun; pinned evidence remains
+  docs/pool-v2-verification.json.
 
 ## Next
 
-1. Retain the complete canonical validation evidence needed by each durable
-   opening, including same-segment predecessors and descent directory/scope
-   evidence. Revalidate on restart; then lift the conservative import refusal.
+1. Merge and push the completed branch as authorized.
 2. Extend the model and build global receipt classification: authenticate the
-   held `after` commitment's segment and check historical inclusion and
+   held after commitment's segment and check historical inclusion and
    live-scope contradictions before lapse. Keep missing evidence distinct.
 3. Specify later-version silence/presentation objects before implementing
    recovery, presentation, delivery, wallet synchronization and service transport.
@@ -71,9 +61,9 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 - SQLite ownership assumes one journal per operator key on its venue. Copied
   keys/databases and coordinated backup rollback need custody/backup procedures.
-- Scope authority still assumes a complete, stable venue snapshot; same-index
-  mutation during synchronous custom adapter callbacks has no generation token.
+- Scope authority assumes a complete, stable venue snapshot; same-index mutation
+  during synchronous custom adapter callbacks has no generation token.
 - Profile large histories before designing compaction or immutable read caches.
-- Full C2 re-derivation, authenticated setup/build provenance, target
-  measurements, note delivery and transitive history availability remain
-  release requirements.
+  Complete evidence retention and pre-service validation add storage/replay cost.
+- Full C2 re-derivation, authenticated setup/build provenance, target measurements,
+  note delivery and transitive history availability remain release requirements.

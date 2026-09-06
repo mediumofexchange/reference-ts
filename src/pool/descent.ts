@@ -30,8 +30,9 @@ export interface PoolDirectoryEvidence extends Checkpoint {
 }
 
 export type PoolPredecessor =
-  | { readonly kind: "genesis" }
-  | { readonly kind: "candidate"; readonly checkpoint: Checkpoint; readonly at: bigint; readonly header: SegmentHeader }
+  | { readonly kind: "genesis"; readonly evidence: readonly PoolDirectoryEvidence[] }
+  | { readonly kind: "candidate"; readonly checkpoint: Checkpoint; readonly at: bigint; readonly header: SegmentHeader;
+      readonly evidence: readonly PoolDirectoryEvidence[] }
   | { readonly kind: "unavailable"; readonly commitment: Commitment; readonly evidence: "directory" | "scope" }
   | { readonly kind: "invalid"; readonly reason: string };
 
@@ -106,6 +107,8 @@ interface PoolDescentArguments {
  * transitive canonical openings still require C2.10.3–5 validation. In
  * particular, invalid/withheld live history leaves this candidate in place.
  * Malformed evidence returns invalid; unavailable venue reads throw VenueError.
+ * Success returns owned evidence for every traversed directory and the scope
+ * snapshots actually authenticated; it includes no history assertions.
  */
 export function readPoolPredecessor(args: PoolDescentArguments & { readonly child: Commitment }): PoolPredecessor {
   return readDescent(args, "held");
@@ -146,6 +149,7 @@ function readDescent(args: PoolDescentArguments & { readonly child?: Commitment;
     }
     requireThat(same(authority.term(backing.backing.name, atLimit)!.operator, operator), "operator is not in force for this backing");
 
+    const retained: PoolDirectoryEvidence[] = [];
     const select = (): PoolPredecessor => {
       let termAt = atLimit;
       for (;;) {
@@ -171,13 +175,14 @@ function readDescent(args: PoolDescentArguments & { readonly child?: Commitment;
           if (named !== undefined) {
             if (e.snapshot === undefined) return { kind: "unavailable", commitment: c, evidence: "scope" };
             const snapshot = ownSnapshot(e.snapshot);
+            retained.push({ commitment: e.commitment, directory: e.directory, snapshot });
             if (!lapsed(configuration, venue, c, at, backing.backing.name, named.digest, snapshot)) {
-              return { kind: "candidate", checkpoint: { commitment: c, directory: e.directory }, at, header: snapshot.header };
+              return { kind: "candidate", checkpoint: { commitment: c, directory: e.directory }, at, header: snapshot.header, evidence: retained };
             }
-          }
+          } else retained.push({ commitment: e.commitment, directory: e.directory });
           before = c.sequence;
         }
-        if (term.from === 0n) return { kind: "genesis" };
+        if (term.from === 0n) return { kind: "genesis", evidence: retained };
         termAt = term.from - 1n;
       }
     };

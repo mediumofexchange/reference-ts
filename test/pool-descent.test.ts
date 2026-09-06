@@ -57,7 +57,7 @@ function fixture() {
 describe("C2.7/C2.10.4 directory descent selects before replay", () => {
   it("selects genesis only after exhausting the eligible held record", () => {
     const venue = new LocalVenue(VENUE), x = terms(venue, "EUR"), c = child(venue, 1n);
-    expect(read(venue, x, c, [])).toEqual({ kind: "genesis" });
+    expect(read(venue, x, c, [])).toEqual({ kind: "genesis", evidence: [] });
   });
 
   it("passes authenticated absence at the same index without inspecting irrelevant scope data", () => {

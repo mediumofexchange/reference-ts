@@ -114,7 +114,29 @@ describe("C2.10.3–5 whole-scope checkpoint validation", () => {
   it("passes authenticated absence without requiring or validating its unrelated history", async () => {
     const f = await fixture(), absent = { commitment: signCommitment(SECRETS.operator, 2n, directoryRoot([])), directory: [], history: {} as never };
     f.venue.publish(absent.commitment); const next = evidence(f.segment, 3n); f.venue.publish(next.commitment);
-    expect(await read(f.venue, next, [f.base, absent], f.oracle)).toMatchObject({ kind: "final" });
+    const result = await read(f.venue, next, [f.base, absent], f.oracle);
+    expect(result.kind).toBe("final");
+    if (result.kind !== "final") throw new Error("expected final checkpoint");
+    expect(result.evidence.find(e => e.commitment.sequence === 2n)).toEqual({ commitment: absent.commitment, directory: [] });
+    expect(await read(f.venue, next, result.evidence.filter(e => e.commitment.sequence !== 3n), f.oracle)).toMatchObject({ kind: "final" });
+  });
+
+  it("retains only verified prefixes and owns the returned canonical evidence", async () => {
+    const f = await fixture(), next = evidence(f.segment, 2n);
+    f.venue.publish(next.commitment);
+    // The supplied uncheckpointed tail and unrelated checkpoint are unusable.
+    (next.history!.trail.statements as Statement[]).push({} as Statement);
+    const unrelated = { commitment: signCommitment(SECRETS.operator, 99n, directoryRoot([])), directory: [], history: {} as never };
+    const result = await read(f.venue, next, [f.base, unrelated], f.oracle);
+    if (result.kind !== "final") throw new Error("expected final checkpoint");
+    expect(result.evidence.map(e => e.commitment.sequence).sort()).toEqual([1n, 2n]);
+    expect(result.evidence.every(e => e.history!.trail.statements.length === 2)).toBe(true);
+    const owned = structuredClone(result.evidence);
+    next.history!.trail.statements[0]!.proof.fill(99);
+    next.snapshots![0]!.historyHash.fill(0);
+    expect(result.evidence).toEqual(owned);
+    result.evidence[0]!.history!.trail.statements[0]!.proof.fill(0);
+    expect(result.prefix).toEqual(f.segment.prefix());
   });
 
   it("retains historical finality after replacement and skips whole-scope lapse with no usable history", async () => {

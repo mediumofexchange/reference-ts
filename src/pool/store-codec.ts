@@ -17,6 +17,8 @@ import {
   decodeStatement,
   parsePublicInputs,
   segmentBytes,
+  segmentIdentity,
+  snapshotDigest,
   encodeStatement,
   type PoolConfiguration,
   type Statement,
@@ -27,8 +29,11 @@ import {
   type PoolReceipt,
 } from "./receipt.js";
 import type { Checkpoint, ImportEvidence, SegmentTrail, SignedBacking } from "./segment.js";
+import type { PoolCheckpointEvidence } from "./checkpoint.js";
+import type { PoolSnapshotEvidence } from "./descent.js";
 
 const VERSION = 1;
+const VALIDATION_VERSION = 2;
 const OPENING_KIND = "opening";
 const RECEIPT_KIND = "receipt";
 
@@ -67,6 +72,21 @@ interface StoredOpening {
   kind: typeof OPENING_KIND;
   trail: StoredTrail;
   evidence: StoredEvidence[];
+  validation?: StoredValidation[];
+}
+
+interface StoredSnapshot {
+  backing: string;
+  header: string;
+  historyHash: string;
+  issued: string;
+  burned: string;
+  backings: StoredBacking[];
+}
+
+interface StoredValidation extends StoredCheckpoint {
+  snapshots?: StoredSnapshot[];
+  history?: { trail: StoredTrail; length: string };
 }
 
 interface StoredReceipt {
@@ -101,6 +121,11 @@ function object(value: unknown, keys: readonly string[], what: string): JsonObje
 function array(value: unknown, what: string): unknown[] {
   if (!Array.isArray(value)) fail(`malformed ${what}`);
   return value;
+}
+
+function optionalObject(value: unknown, required: readonly string[], optional: readonly string[], what: string): JsonObject {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(`malformed ${what}`);
+  return object(value, [...required, ...optional.filter(key => Object.prototype.hasOwnProperty.call(value, key))], what);
 }
 
 function string(value: unknown, what: string): string {
@@ -280,32 +305,113 @@ function readEvidence(value: unknown, configuration: PoolConfiguration, expected
   return { checkpoint: readCheckpoint(wire["checkpoint"]), trail, length };
 }
 
-function storedOpening(trail: SegmentTrail, evidence: readonly ImportEvidence[]): StoredOpening {
+function storedSnapshot(snapshot: PoolSnapshotEvidence, domain: Uint8Array): StoredSnapshot {
+  object(snapshot, ["backing", "header", "historyHash", "issued", "burned", "backings"], "snapshot");
+  if (!same(snapshot.header.domain, domain)) fail("snapshot header has the wrong configuration");
+  // Validate the exact protocol framing, including u64 totals. Authentication
+  // against the directory and signed scope belongs to the checkpoint reader.
+  snapshotDigest(snapshot.backing, segmentIdentity(snapshot.header), snapshot.historyHash, snapshot.issued, snapshot.burned);
+  return {
+    backing: hex(snapshot.backing, "snapshot backing", 32),
+    header: hex(segmentBytes(snapshot.header), "snapshot header"),
+    historyHash: hex(snapshot.historyHash, "snapshot history hash", 32),
+    issued: decimal(snapshot.issued, "snapshot issued"),
+    burned: decimal(snapshot.burned, "snapshot burned"),
+    backings: array(snapshot.backings, "snapshot backings").map(value => {
+      const item = object(value, ["backing", "signature"], "signed backing");
+      return { backing: hex(encodeBacking(item["backing"] as Backing), "backing"),
+        signature: hex(item["signature"] as Uint8Array, "backing signature", 64) };
+    }),
+  };
+}
+
+function readSnapshot(value: unknown, domain: Uint8Array): PoolSnapshotEvidence {
+  const wire = object(value, ["backing", "header", "historyHash", "issued", "burned", "backings"], "snapshot");
+  const snapshot = {
+    backing: parseHex(wire["backing"], "snapshot backing", 32),
+    header: decodeSegmentHeader(parseHex(wire["header"], "snapshot header")),
+    historyHash: parseHex(wire["historyHash"], "snapshot history hash", 32),
+    issued: parseDecimal(wire["issued"], "snapshot issued"),
+    burned: parseDecimal(wire["burned"], "snapshot burned"),
+    backings: array(wire["backings"], "snapshot backings").map(value => {
+      const item = object(value, ["backing", "signature"], "signed backing");
+      return { backing: decodeBacking(parseHex(item["backing"], "backing")),
+        signature: parseHex(item["signature"], "backing signature", 64) };
+    }),
+  };
+  storedSnapshot(snapshot, domain);
+  return snapshot;
+}
+
+function storedValidation(item: PoolCheckpointEvidence, domain: Uint8Array): StoredValidation {
+  const checked = optionalObject(item, ["commitment", "directory"], ["snapshots", "history"], "validation evidence");
+  const result: StoredValidation = storedCheckpoint({ commitment: item.commitment, directory: item.directory });
+  if (Object.prototype.hasOwnProperty.call(checked, "snapshots")) {
+    result.snapshots = array(item.snapshots, "validation snapshots").map(value => storedSnapshot(value as PoolSnapshotEvidence, domain));
+  }
+  if (Object.prototype.hasOwnProperty.call(checked, "history")) {
+    const history = object(item.history, ["trail", "length"], "validation history");
+    const trail = storedTrail(history["trail"] as SegmentTrail, domain);
+    const length = history["length"] as bigint;
+    if (typeof length !== "bigint" || length < 0n || length > BigInt(trail.statements.length)) fail("validation length exceeds its trail");
+    result.history = { trail, length: decimal(length, "validation length") };
+  }
+  return result;
+}
+
+function readValidation(value: unknown, configuration: PoolConfiguration, domain: Uint8Array): PoolCheckpointEvidence {
+  const wire = optionalObject(value, ["commitment", "directory"], ["snapshots", "history"], "validation evidence");
+  const checkpoint = readCheckpoint({ commitment: wire["commitment"], directory: wire["directory"] });
+  const snapshots = Object.prototype.hasOwnProperty.call(wire, "snapshots")
+    ? array(wire["snapshots"], "validation snapshots").map(value => readSnapshot(value, domain)) : undefined;
+  let history: PoolCheckpointEvidence["history"];
+  if (Object.prototype.hasOwnProperty.call(wire, "history")) {
+    const encoded = object(wire["history"], ["trail", "length"], "validation history");
+    const trail = readTrail(encoded["trail"], configuration, domain);
+    const length = parseDecimal(encoded["length"], "validation length");
+    if (length > BigInt(trail.statements.length)) fail("validation length exceeds its trail");
+    history = { trail, length };
+  }
+  return { ...checkpoint, ...(snapshots === undefined ? {} : { snapshots }), ...(history === undefined ? {} : { history }) };
+}
+
+/** Own canonical validation bytes without asserting checkpoint finality. */
+export function copyPoolCheckpointEvidence(evidence: PoolCheckpointEvidence, configuration: PoolConfiguration): PoolCheckpointEvidence {
+  const domain = configurationHash(configuration);
+  return readValidation(storedValidation(evidence, domain), configuration, domain);
+}
+
+function storedOpening(trail: SegmentTrail, evidence: readonly ImportEvidence[], validation?: readonly PoolCheckpointEvidence[]): StoredOpening {
   const domain = configurationHash(trail.configuration);
   const encodedTrail = storedTrail(trail, domain);
   if (!Array.isArray(evidence)) fail("malformed import evidence");
   return {
-    version: VERSION,
+    version: validation === undefined ? VERSION : VALIDATION_VERSION,
     kind: OPENING_KIND,
     trail: encodedTrail,
     evidence: evidence.map((item) => storedEvidence(item, domain)),
+    ...(validation === undefined ? {} : { validation: array(validation, "validation evidence").map(item => storedValidation(item as PoolCheckpointEvidence, domain)) }),
   };
 }
 
 /** Encode one local SQLite opening record as canonical compact JSON. */
-export function encodeStoredOpening(trail: SegmentTrail, evidence: readonly ImportEvidence[]): string {
-  return canonicalJson(storedOpening(trail, evidence));
+export function encodeStoredOpening(trail: SegmentTrail, evidence: readonly ImportEvidence[], validation?: readonly PoolCheckpointEvidence[]): string {
+  return canonicalJson(storedOpening(trail, evidence, validation));
 }
 
 /** Decode and strictly canonicalize one local SQLite opening record. */
-export function decodeStoredOpening(text: string, configuration: PoolConfiguration): { trail: SegmentTrail; evidence: ImportEvidence[] } {
-  const parsed = object(parseJson(text), ["version", "kind", "trail", "evidence"], "opening record");
-  if (parsed["version"] !== VERSION || parsed["kind"] !== OPENING_KIND) fail("wrong opening record kind or version");
+export function decodeStoredOpening(text: string, configuration: PoolConfiguration): { trail: SegmentTrail; evidence: ImportEvidence[]; validation?: PoolCheckpointEvidence[] } {
+  const parsed = optionalObject(parseJson(text), ["version", "kind", "trail", "evidence"], ["validation"], "opening record");
+  const version = parsed["version"];
+  if ((version !== VERSION && version !== VALIDATION_VERSION) || parsed["kind"] !== OPENING_KIND) fail("wrong opening record kind or version");
+  object(parsed, ["version", "kind", "trail", "evidence", ...(version === VALIDATION_VERSION ? ["validation"] : [])], "opening record");
   const expected = configurationHash(configuration);
   const trail = readTrail(parsed["trail"], configuration, expected);
   const evidence = array(parsed["evidence"], "import evidence").map((value) => readEvidence(value, configuration, expected));
-  const result = { trail, evidence };
-  assertCanonical(text, storedOpening(trail, evidence));
+  const validation = version === VALIDATION_VERSION
+    ? array(parsed["validation"], "validation evidence").map(value => readValidation(value, configuration, expected)) : undefined;
+  const result = { trail, evidence, ...(validation === undefined ? {} : { validation }) };
+  assertCanonical(text, storedOpening(trail, evidence, validation));
   return result;
 }
 

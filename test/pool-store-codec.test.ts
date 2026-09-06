@@ -2,7 +2,8 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { describe, expect, it } from "vitest";
 import { POOL_STATEMENT_CONTEXT } from "../src/contexts.js";
 import { signPoolReceipt, verifyPoolReceipt } from "../src/pool/receipt.js";
-import { decodeStoredOpening, decodeStoredReceipt, encodeStoredOpening, encodeStoredReceipt } from "../src/pool/store-codec.js";
+import { copyPoolCheckpointEvidence, decodeStoredOpening, decodeStoredReceipt, encodeStoredOpening, encodeStoredReceipt } from "../src/pool/store-codec.js";
+import { segmentBytes } from "../src/pool/statement.js";
 import { issueStatement, CONFIG, checkpointOf, evidenceOf } from "./pool-support.js";
 import { open, fixture } from "./pool-record-support.js";
 import { SECRETS } from "./support.js";
@@ -49,6 +50,80 @@ describe("local pool store codecs", () => {
       value.trail.statements[0] = bytesToHex(bytes);
     });
     expect(() => decodeStoredOpening(wrongStatementDomain, CONFIG)).toThrow();
+  });
+
+  it("retains directory-only, snapshot-only and full validation evidence with owned bytes", async () => {
+    const f = await fixture();
+    const directoryOnly = { commitment: f.base.commitment, directory: f.base.directory };
+    const snapshotOnly = { ...directoryOnly, snapshots: f.base.snapshots! };
+    const validation = [directoryOnly, snapshotOnly, f.base];
+    const encoded = encodeStoredOpening(f.segment.trail(), [], validation);
+    const decoded = decodeStoredOpening(encoded, CONFIG);
+    expect(JSON.parse(encoded).version).toBe(2);
+    expect(decoded.validation).toEqual(validation);
+    expect(Object.keys(decoded.validation![0]!)).toEqual(["commitment", "directory"]);
+    expect(decoded.validation![1]!.history).toBeUndefined();
+    expect(encodeStoredOpening(decoded.trail, decoded.evidence, decoded.validation)).toBe(encoded);
+
+    const copied = copyPoolCheckpointEvidence(f.base, CONFIG);
+    expect(copied).toEqual(f.base);
+    copied.commitment.operator.fill(0);
+    copied.directory[0]!.digest.fill(0);
+    copied.snapshots![0]!.backing.fill(0);
+    copied.snapshots![0]!.header.operator.fill(0);
+    copied.snapshots![0]!.historyHash.fill(0);
+    copied.snapshots![0]!.backings[0]!.signature.fill(0);
+    copied.history!.trail.statements[0]!.proof.fill(0);
+    copied.history!.trail.backings[0]!.backing.name.fill(0);
+    expect(encodeStoredOpening(f.segment.trail(), [], validation)).toBe(encoded);
+    expect(decodeStoredOpening(encoded, CONFIG).validation).toEqual(validation);
+  });
+
+  it("keeps v1 openings canonical and requires validation exactly for v2", async () => {
+    const f = await fixture();
+    const legacy = encodeStoredOpening(f.segment.trail(), []);
+    expect(JSON.parse(legacy).version).toBe(1);
+    expect(decodeStoredOpening(legacy, CONFIG)).not.toHaveProperty("validation");
+    const current = encodeStoredOpening(f.segment.trail(), [], []);
+    expect(decodeStoredOpening(current, CONFIG).validation).toEqual([]);
+    expect(() => decodeStoredOpening(alter(legacy, value => { value.version = 2; }), CONFIG)).toThrow();
+    expect(() => decodeStoredOpening(alter(current, value => { value.version = 1; }), CONFIG)).toThrow();
+    for (const version of [0, 3, "2", null]) {
+      expect(() => decodeStoredOpening(alter(current, value => { value.version = version; }), CONFIG)).toThrow();
+    }
+  });
+
+  it("rejects malformed validation fields and protocol framing without certifying signatures", async () => {
+    const f = await fixture();
+    const opening = encodeStoredOpening(f.segment.trail(), [], [f.base]);
+    const mutations: ((value: Record<string, any>) => void)[] = [
+      value => { value.validation = {}; },
+      value => { value.validation[0].extra = 1; },
+      value => { value.validation[0].snapshots = null; },
+      value => { value.validation[0].history = null; },
+      value => { value.validation[0].directory[0].digest = "00"; },
+      value => { value.validation[0].history.extra = true; },
+      value => { value.validation[0].history.length = "01"; },
+      value => { value.validation[0].history.length = 1; },
+      value => { value.validation[0].history.length = "-1"; },
+      value => { value.validation[0].history.length = "3"; },
+      value => { value.validation[0].history.trail.configuration = "00".repeat(32); },
+      value => { value.validation[0].snapshots[0].extra = true; },
+      value => { value.validation[0].snapshots[0].backing = "00"; },
+      value => { value.validation[0].snapshots[0].historyHash = "AA".repeat(32); },
+      value => { value.validation[0].snapshots[0].issued = "01"; },
+      value => { value.validation[0].snapshots[0].issued = 10; },
+      value => { value.validation[0].snapshots[0].burned = (1n << 64n).toString(); },
+      value => { value.validation[0].snapshots[0].backings[0].signature = "00"; },
+      value => { value.validation[0].snapshots[0].backings[0].extra = true; },
+      value => { value.validation[0].snapshots[0].header = bytesToHex(segmentBytes({ ...f.base.snapshots![0]!.header, domain: new Uint8Array(32) })); },
+    ];
+    for (const mutate of mutations) expect(() => decodeStoredOpening(alter(opening, mutate), CONFIG)).toThrow();
+    // Persistence frames signatures; record validation must authenticate them.
+    const unsigned = alter(opening, value => { value.validation[0].snapshots[0].backings[0].signature = "00".repeat(64); });
+    expect(decodeStoredOpening(unsigned, CONFIG).validation![0]!.snapshots![0]!.backings[0]!.signature).toEqual(new Uint8Array(64));
+    expect(() => copyPoolCheckpointEvidence({ ...f.base, snapshots: [{ ...f.base.snapshots![0]!, issued: 1n << 64n }] }, CONFIG)).toThrow();
+    expect(() => copyPoolCheckpointEvidence({ ...f.base, history: { ...f.base.history!, length: -1n } }, CONFIG)).toThrow();
   });
 
   it("roundtrips receipts, validates framing, and owns byte outputs", async () => {
