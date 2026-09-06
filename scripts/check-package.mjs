@@ -67,8 +67,12 @@ assert.equal(typeof core.poolReceiptInHistory, 'function');
 assert.equal(PILOT_PROFILE, 'transparent-pilot/v0-directory-v1');
 if (Number(process.versions.node.split('.')[0]) >= 24) {
   const { PilotStore } = await import('@mediumofexchange/reference/pilot-store');
+  const { PoolStore, PoolStoreError } = await import('@mediumofexchange/reference/pool/store');
   const { createPilotServer } = await import('@mediumofexchange/reference/pilot-http');
   assert.equal(typeof PilotStore, 'function');
+  assert.equal(typeof PoolStore, 'function');
+  assert.equal(typeof PoolStoreError, 'function');
+  assert.equal(core.PoolStore, undefined);
   assert.equal(typeof createPilotServer, 'function');
 }
 console.log('Built tarball consumer: imports, canonical round trip and signature passed');

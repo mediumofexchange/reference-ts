@@ -6,6 +6,8 @@
 // The proof backend (`pool/barretenberg.ts`) is reachable on its own subpath
 // only, since it needs `@aztec/bb.js`; the circuits it verifies are the
 // pinned sources in `pool/circuits/`.
+// `pool/store.ts` is also a separate subpath: its durable SQLite journal
+// requires Node 24, while this barrel retains the package's Node 20 floor.
 
 export * from "./field.js";
 export * from "./poseidon2.js";

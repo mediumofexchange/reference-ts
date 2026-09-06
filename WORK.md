@@ -10,69 +10,64 @@ The maintainer explicitly authorized pushing and merging reviewed, verified work
 
 ## Status
 
-- Merged into `main`: `862d92e`, from `fix/pool-record-snapshots` (base
-  `36a4004`). Record snapshot isolation is implemented, independently reviewed
-  and fully verified. Durable activation/admission/signing remains next.
-- Ergo refresh builds a private candidate. Every public record/clock read
-  refuses from the start of refresh until the complete operator frontier is
-  fetched. The new clock, records and coverage become visible together.
-- Failed refreshes preserve the previous complete snapshot at its original
-  index and its admitted-replacement memo. Failed first syncs remain unavailable.
-  Successful refreshes invalidate the old memo; malformed indexed heights fail.
-- `PoolAuthorityView` owns all requested backing terms and signatures before
-  calling the adapter. Index, lag and venue identity changes raise `VenueError`,
-  including when another input validation failure interrupts construction.
-- Previously merged opening construction (`1bf2453`) remains unchanged:
-  canonical current imports, empty local history, operator-wide durable signed
-  sequence assertion, no signing or tail-discard authority.
+- Implemented and verified on `feat/durable-pool-store`, based on `d7ca1b9`:
+  Node 24 SQLite pool activation, admission, signing and publication outbox.
+  Ready to commit and merge. Snapshot isolation was previously merged in `862d92e`.
+- `PoolStore` atomically stores canonical openings, accepted statements,
+  original signed receipts, checkpoints and publication markers. Signed
+  sequences remain consumed after failed publication. Reload replays retained
+  import ancestry and local history; opening the journal fences previous handles.
+- Scope authority and signing deadlines are rechecked before commit. One
+  commitment remains in flight during the venue lag. Restart waits a full lag;
+  elective scope changes witness the live tail and latest signed checkpoint.
+  Actual scope endings/staleness permit canonical reopening; old receipts survive.
+- Revocation blocks new issue and active/imported issue lacking pre-revocation
+  checkpoint evidence. Locally finalized value still moves. General revocation
+  recovery and silence clauses remain explicitly unsupported, including silence
+  in required ancestry outside the new scope; details are in `docs/POOL_STORE.md`.
+- Retain only required replay-validated ancestry; return it with local
+  checkpoints. Exact held publication retries avoid duplicate-sequence failures.
 - Companion specification: `money-from-first-principles/main` at `ba8fe21`.
   No normative, signed-byte, circuit or proof-key changes.
 
 ## Evidence
 
-- Full `npm run check` passed: 68 files / 1,277 tests, docs, typecheck, build,
-  installed tarball consumer, crash/restart pilot and witness retry checks.
-- Focused suite passed: 5 files / 159 tests, covering Ergo, pool authority,
-  opening, checkpoint and descent. Full verification also covers predecessor
-  reads; two existing post-failure tests now assert the retained old snapshot.
-- New regression coverage: all public record APIs and pool authority refuse
-  across height/publication/revocation/frontier fetches; first-sync and refresh
-  success/failure; exact error identity, retry, old snapshot/memo retention,
-  malformed node heights, whole-request callback mutation and changed-view
-  classification on both successful and interrupted authority reads.
-- Independent adversarial source review found no protocol/security blockers.
-  The reviewer ran no tests. Focused self-review and `git diff --check` passed.
-  Windows esbuild requires running checks outside the restricted sandbox to
-  read the existing Vitest configuration.
-- Prior unchanged circuit evidence: 153 circuit/proof checks and 24 real ZK
-  proofs in `docs/pool-v2-verification.json`. Circuits were not rerun locally.
+- Final full `npm run check` passed: 70 files / 1,312 tests, docs, typecheck,
+  build, installed tarball consumer, pilot and pool-store crash harness.
+  This includes 31 store tests and 4 persistence-codec tests.
+- Child-process harness passed opening, receipt and checkpoint crashes at
+  applied/stored/committed phases. It checks rollback, retained original bytes,
+  exact publication replies and monotonic next sequence. Integrated into `check`.
+- Independent adversarial review found two original blockers: late-witnessed
+  revoked issue and retention of unrelated unverified imports. Follow-up source
+  review confirmed both fixed. Its admission-hex canonicalization finding is
+  fixed. Review also confirmed the adapter-read ownership fence and conservative
+  imported-silence refusal, with their regressions. No review blockers remain.
+  Windows esbuild needs checks outside the restricted sandbox to read the
+  existing configuration. Real circuits were not rerun locally; unchanged
+  evidence remains `docs/pool-v2-verification.json`.
 
 ## Next
 
-1. Build durable pool activation/admission/signing around prepared openings,
-   current record authority and the schedule. Elective scope changes must
-   witness their live tail and latest signed commitment; restart is no reset.
-   Journal the operator-wide signed counter and one in-flight commitment before
-   exposing signatures or receipts; preserve the restart lag and writer ownership.
-2. Reuse the SQLite command transaction pattern from `pilot-store.ts` and
-   canonical segment/header/statement/commitment encodings. Recover through
-   `Segment.replay`, retaining original receipt bytes and exact admitted evidence.
-   Port the experiment's crash-before/after-commit, retry, racing-writer,
-   identity, corruption and response-replay cases; do not add a second framework.
-3. Integrate receipt classification/recovery, then presentation, note delivery
-   and wallet synchronization over their specified objects.
+1. Commit, push and merge this reviewed, verified slice; update the handoff with
+   its merged commit.
+2. Build pool receipt classification and recovery against witnessed checkpoints,
+   preserving prospective revocation and silence rules. Port adversarial model
+   cases before enabling currently unsupported histories.
+3. Add presentation, note delivery and wallet synchronization over the specified
+   objects; then service transport and the external witness write side.
 
 ## Open questions
 
-- The snapshot fix preserves an older successful read after refresh failure;
-  callers must handle the failed refresh and must not treat it as fresh evidence.
-  Pool authority remains a synchronous snapshot, not a durable admission capability.
-- Same-index replacement appends during custom adapter callbacks are a pre-existing
-  limitation of the clock-only authority guard. The replacement lead floor keeps
-  current authority safe; refresh the view before acting on later record state.
-- Per-backing descent still repeats evidence copies and authority reads. Shared
-  checkpoint roots verify once in a batch; profile large histories before adding
-  a reusable immutable read context.
-- Full C2 re-derivation against the directory, authenticated setup/build
-  provenance, target measurements, note delivery and transitive history
-  availability remain release requirements.
+- SQLite ownership assumes exactly one journal for an operator key on its venue.
+  Copied keys/databases and coordinated backup rollback need custody and backup
+  procedures; SQLite cannot supply an external coordination authority.
+- An imported checkpoint after revocation may contain issuance finalized by an
+  earlier checkpoint of its segment. The first store slice conservatively
+  refuses that case until the recovery reader can prove it.
+- Durable replay currently reloads local history and retained supplied ancestry;
+  profile large histories before designing compaction or immutable read caches.
+- Same-index replacement appends during custom adapter callbacks are a
+  clock-only authority limitation; the lead floor protects current authority.
+- Full C2 re-derivation, authenticated setup/build provenance, target measurements,
+  note delivery and transitive history availability remain release requirements.

@@ -124,13 +124,19 @@ deadline. What the repository holds today:
   local history. Its next sequence comes from the operator's durable signed
   counter, including unsuccessful publications. Preparation neither reserves
   that sequence nor authorizes abandoning receipts or activating service.
+- **Durable pool sequencing** ([PoolStore](docs/POOL_STORE.md), Node 24):
+  atomically journals canonical openings, admitted statements, original receipts
+  and signed checkpoints, including failed publications. It fences earlier
+  handles on restart, waits the venue lag, preserves live tails across elective
+  scope changes and retries publication from the durable outbox. Required import
+  ancestry remains available after restart. Recovery-dependent histories are
+  explicitly unsupported in this first storage slice.
 - **A local two-process pilot** on the frozen path (`docs/PILOT.md`): durable
   commands, exact retries, crash recovery, a trusted local witness. An
   integration harness, not a product.
 
-Out of scope until their step: the pool sequencer over the witnessed record
-(durable activation of prepared openings, admission/signing and restart),
-durable receipt issuance and recovery, note delivery and backups,
+Out of scope until their step: pool receipt classification and recovery,
+sequencer transport and scheduling service, note delivery and backups,
 the wallet, an external witness's write side, and every Extensions profile.
 
 The [replacement boundary](docs/POOL_SEQUENCING_BOUNDARY.md) is resolved by
@@ -142,8 +148,9 @@ deduplication. [The adversarial model](model/pool-authority.ts) exercises
 splits, reunions, replay and scope changes with ideal cryptography; the
 claim layer now holds the frames and circuits. Record-derived authority,
 scheduling, predecessor descent, whole-scope checkpoint finality and canonical
-import validation and canonical opening construction are implemented;
-durable activation, admission/signing and restart are next.
+import validation, canonical opening construction, durable activation,
+admission/signing and restart are implemented. Receipt classification and
+recovery are next.
 The historical `moe/pool/v1` runtime was replaced and lives in git history.
 
 The runtime follows specification revision
@@ -201,11 +208,11 @@ consolidation map.
 
 ```
 npm ci
-npm run check     # docs, types, tests, built package consumer, and Node 24 pilot
+npm run check     # docs, types, tests, package consumer, pilot and pool-store crashes
 ```
 
-The core requires Node 20 or newer; the optional durable pilot requires Node
-24. Before changing the implementation, read `WORK.md` and `AGENTS.md`; follow
+The core requires Node 20 or newer; the optional durable pilot and pool store
+require Node 24. Before changing the implementation, read `WORK.md` and `AGENTS.md`; follow
 the linked specification rules and decision entries only as needed for the
 current slice.
 
