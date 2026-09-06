@@ -10,9 +10,9 @@ The maintainer explicitly authorized pushing and merging reviewed, verified work
 
 ## Status
 
-- Active branch: `feat/venue-predecessor-read`, based on main `378b71d`.
-  Implementation and full verification are complete; final independent review
-  is pending before push and merge.
+- Merged into `main`: `f777da9`, from `feat/venue-predecessor-read` (base
+  `378b71d`). Implementation, full verification and independent adversarial
+  review are complete. The next implementation slice is exact directory descent.
 - `Venue.previousFor(operator, beforeSequence, asOf?)` now locates the greatest
   held sequence below an exclusive sequence bound and at or before an inclusive
   witnessed index. The bound need not itself be held. Same-index predecessors
@@ -36,7 +36,9 @@ The maintainer explicitly authorized pushing and merging reviewed, verified work
   build, tarball consumer and crash/restart pilot passed. Final typecheck also
   passed after the review fix.
 - Independent adversarial review identified the partial-refresh edge; the new
-  API now refuses it. Final source verdict is pending.
+  API now refuses it. Final source review of `f777da9`, including the guard and
+  deferred regression, passed with no blocking findings. The bounded inventory
+  found no missing adapter integration; review was source-based.
 - Coverage includes same-index descent, inclusive/exclusive boundaries, sparse
   sequences above 2^53 through 2^64−1, holes, per-operator isolation, copied
   outputs, finalized versus unfinalized records, invalid signatures, rejected
