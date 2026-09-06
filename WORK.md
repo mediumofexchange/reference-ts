@@ -11,9 +11,10 @@ when satisfied in this session.
 
 ## Status
 
-- Implementation branch: `feat/pool-v2-claim-layer`, based on `1f55da1`.
-  Companion specification: `spec/pool-v2`, layout `d0f2413`, reviewed pins
-  `ba8fe21`. README pins that exact specification revision.
+- Implementation `feat/pool-v2-claim-layer` is merged and pushed to `main`:
+  `00101d7` (calendar model), `9a93cb8` (reviewed v2 and scheduling).
+  Companion `spec/pool-v2` is merged and pushed to specification `main`
+  `ba8fe21` (layout `d0f2413`, reviewed pins `ba8fe21`). README pins it.
 - v2 replaces the historical v1 runtime: immutable construction domain,
   private scope membership, segment-bound statements, two input anchors,
   finalized imports with shared-history deduplication, whole-scope directory,
@@ -49,13 +50,11 @@ when satisfied in this session.
 
 ## Next
 
-1. Commit the reviewed changes, merge and push both branches
-   under this session's explicit authorization, then record the resulting tips.
-2. Build record-derived pool scope authority and exact directory descent
+1. Build record-derived pool scope authority and exact directory descent
    (C2.7, C2.10.3–4), integrate scheduling with whole-scope finality and receipt
    classification, then durable admission/receipt/commitment journaling. Extend
    the model first and port frozen transparent cases without retired mechanisms.
-3. Port crash/retry cases from the private-payment experiment and retire it
+2. Port crash/retry cases from the private-payment experiment and retire it
    when the pool has equivalent durable execution. Presentation, receiver
    acceptance, note delivery and wallet sync follow their specified objects.
 
