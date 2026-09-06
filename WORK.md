@@ -10,8 +10,9 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Status
 
-- Completed branch: `feat/pool-durable-validation-evidence`, base `5bb9c12`.
-  Independently reviewed and fully verified; merge and push are next.
+- Merged into `main`: `a07cf0f`, from
+  `feat/pool-durable-validation-evidence` (base `5bb9c12`). Independently
+  reviewed and fully verified.
 - Successful descent, checkpoint and opening readers now return their used
   evidence: authenticated directory/scope steps and replayed histories,
   including same-segment predecessors. Unselected history and uncheckpointed
@@ -50,11 +51,10 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Next
 
-1. Merge and push the completed branch as authorized.
-2. Extend the model and build global receipt classification: authenticate the
+1. Extend the model and build global receipt classification: authenticate the
    held after commitment's segment and check historical inclusion and
    live-scope contradictions before lapse. Keep missing evidence distinct.
-3. Specify later-version silence/presentation objects before implementing
+2. Specify later-version silence/presentation objects before implementing
    recovery, presentation, delivery, wallet synchronization and service transport.
 
 ## Open questions
