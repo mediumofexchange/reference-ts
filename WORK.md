@@ -10,9 +10,9 @@ The maintainer explicitly authorized pushing and merging reviewed, verified work
 
 ## Status
 
-- Active slice: `feat/pool-directory-descent`, based on `main` at `0e6b1dd`.
-  Implementation, independent source review and full verification are complete;
-  commit, merge and push remain before this slice is finished.
+- Merged into `main`: `7a382e9`, from `feat/pool-directory-descent` (base
+  `0e6b1dd`). Implementation, independent source review and full verification
+  are complete. Next is whole-scope checkpoint validation.
 - `readPoolPredecessor` selects one backing's candidate relative to an exact
   held child, using bounded held-record reads through historical operator terms.
   Same-index lower sequences are eligible only for the child's operator;
@@ -48,12 +48,11 @@ The maintainer explicitly authorized pushing and merging reviewed, verified work
 
 ## Next
 
-1. Commit, merge and push the reviewed, verified slice.
-2. Build whole-scope checkpoint validation and transitive canonical import
+1. Build whole-scope checkpoint validation and transitive canonical import
    checks (C2.10.3–5), applying candidate selection to each backing before
    replay. Integrate canonical opening construction for new segments; this
    slice's reader is relative to an already held child, not a signing service.
-3. Integrate receipt classification and durable admission/receipt/commitment
+2. Integrate receipt classification and durable admission/receipt/commitment
    journaling, then port the experiment's crash/retry cases. Presentation,
    note delivery and wallet sync follow their specified objects.
 
