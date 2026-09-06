@@ -10,62 +10,63 @@ The maintainer explicitly authorized pushing and merging reviewed, verified work
 
 ## Status
 
-- Merged into `main`: `7a382e9`, from `feat/pool-directory-descent` (base
-  `0e6b1dd`). Implementation, independent source review and full verification
-  are complete. Next is whole-scope checkpoint validation.
-- `readPoolPredecessor` selects one backing's candidate relative to an exact
-  held child, using bounded held-record reads through historical operator terms.
-  Same-index lower sequences are eligible only for the child's operator;
-  reappointment preserves intervening terms and sparse sequences need no probes.
-- Each skipped eligible record proves directory absence or public whole-scope
-  lapse. A snapshot preimage authenticates the full header before signed scope
-  terms and witnessed replacement links can establish lapse at the record index.
-  Selective carriage cannot finalize a segment but can authenticate its scope.
-- Missing directory/scope evidence stops as unavailable; malformed evidence
-  returns invalid. A live candidate is selected before replay, even if its
-  history is invalid or withheld. No older candidate can substitute for it.
-- `PoolAuthorityView.termForLink` exposes copied historical/announced term bounds;
-  a known link is not evidence that its term has started. The adversarial model
-  now expresses authenticated directory descent and its failure departures.
-- Companion specification remains `main` at `ba8fe21`. No normative or circuit
-  changes. Bounded venue predecessor reads landed previously in `f777da9`.
+- Merged into `main`: `e68d9db`, from `feat/pool-checkpoint-finality` (base
+  `fceb9ff`). Whole-scope checkpoint validation is implemented, independently
+  reviewed and fully verified. Next is opening construction for new service.
+- `readPoolCheckpoint` validates an exact held checkpoint and all required
+  canonical imports. Every backing's predecessor is selected before proof
+  replay; later checkpoints of the same segment preserve its finalized prefix.
+- The iterative dependency plan checks local witnessed ranks, verifies each
+  checkpoint once, and imports only prefixes computed by this validator.
+  Complete replayed directories and historical authority finalize the scope
+  together. A later term ending does not undo historical finality.
+- Missing directory, scope or history evidence stops validation. Invalid live
+  history never licenses fallback. Authenticated absence and whole-scope lapse
+  need no usable history. Required bytes are owned before proof verification;
+  changed venue views and unexpected verifier exceptions remain visible.
+- This is a read-only historical finality API, not current spendability or a
+  signing service. Canonical opening construction for new service remains next.
+- Companion specification: `money-from-first-principles/main` at `ba8fe21`.
+  No normative, circuit or proof-key changes; existing authority model rules
+  already express this slice (C2.10.3–5, pool-v2 §10).
 
 ## Evidence
 
-- Focused verification passed: 78 tests across pool descent, scope authority and
-  the authority model (31 new runtime descent cases, 38 total model cases).
-  Full `npm run check` passed: 66 files / 1,197 tests, docs, typecheck, build,
-  installed tarball consumer (including descent export) and crash/restart pilot.
-- Independent adversarial source review found no blockers in rank, historical
-  bounds, authenticated lapse, refusal to fall back, copying or termination.
-  Its scope-name lookup efficiency suggestion was applied. Review ran no tests.
-- Coverage includes exact child identity, genesis, same-index absence, sparse
-  sequences through 2^64−1, missing evidence, authenticated invalid scope,
-  future terms, altered snapshot preimages, selective-directory lapse,
-  same-key reappointment, live replay failure and inconsistent venue indices.
+- Full `npm run check` passed: 67 files / 1,224 tests, docs, typecheck, build,
+  installed tarball consumer (including checkpoint export), crash/restart pilot
+  and witness retry checks. The updated handoff also passed `check:docs`.
+- Initial focused suite passed: 4 files / 101 tests; the full check includes
+  four additional boundary cases and verifier exception variants.
+- Independent adversarial source review covered canonical selection, transitive
+  imports, iterative traversal/ranks, continuity, snapshot binding, copying and
+  venue stability. Its verifier-exception diagnostic finding was fixed and
+  independently rechecked; no blockers remain. Reviewer ran no tests.
+- 27 runtime cases cover genesis, missing first signed sequence, exact held
+  identity, selective scope, stale openings, rewritten/truncated prefixes,
+  proof variants, withheld/invalid ancestors, split/rejoin and reappointment,
+  lapse, takeover index, duplicate/tampered preimages, malformed lengths,
+  repeated statements, aliasing, and venue/backend failures.
 - Prior unchanged circuit evidence: 153 circuit/proof checks and 24 real ZK
-  proofs in `docs/pool-v2-verification.json`. Circuits were not changed or rerun.
+  proofs in `docs/pool-v2-verification.json`. Circuits were not rerun.
 
 ## Next
 
-1. Build whole-scope checkpoint validation and transitive canonical import
-   checks (C2.10.3–5), applying candidate selection to each backing before
-   replay. Integrate canonical opening construction for new segments; this
-   slice's reader is relative to an already held child, not a signing service.
+1. Construct canonical openings for new segments before any child checkpoint
+   exists, and integrate admission/signing with record-derived authority and
+   the schedule. Keep historical checkpoint finality distinct from currency.
 2. Integrate receipt classification and durable admission/receipt/commitment
    journaling, then port the experiment's crash/retry cases. Presentation,
    note delivery and wallet sync follow their specified objects.
 
 ## Open questions
 
-- No protocol choice was needed. Candidate selection does not establish replay,
-  canonical imported ancestry, checkpoint finality or a durable pool sequencer.
-- Existing Ergo latest/exact readers can expose a partially fetched refresh;
-  the new bounded predecessor reader refuses unsettled views. Keep using it
-  before exact-index lookup; adapter snapshot isolation remains future work.
-- A clock change inside PoolAuthorityView construction currently becomes an
-  invalid result through PoolError; other changed-view paths throw VenueError.
-  Both refuse descent; consistent error typing is inherited follow-up work.
-- Full C2 re-derivation against the directory remains owed. Setup assumptions,
-  authenticated parameter distribution/build provenance, target measurements,
-  note delivery and transitive history availability remain release requirements.
+- No protocol choice or independent review remains unresolved for this slice.
+- Existing Ergo latest/exact reads may expose partially fetched refreshes;
+  bounded predecessor reads refuse unsettled views. Snapshot isolation and
+  consistent changed-view errors in standalone PoolAuthorityView remain owed.
+- Checkpoint planning reuses the descent reader per backing, including its
+  evidence copies and authority reads. Profile large shared histories before
+  adding a reusable immutable read context; do not weaken per-backing checks.
+- Full C2 re-derivation against the directory, authenticated setup/build
+  provenance, target measurements, note delivery and transitive history
+  availability remain release requirements.
