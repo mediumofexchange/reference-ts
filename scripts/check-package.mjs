@@ -40,6 +40,7 @@ import { makeBacking, encodeBacking, decodeBacking, signBacking, verifyBackingSi
 import { PILOT_PROFILE } from '@mediumofexchange/reference/pilot-wire';
 import { poolReceiptBytes } from '@mediumofexchange/reference/pool/receipt';
 import { readPoolPredecessor } from '@mediumofexchange/reference/pool/descent';
+import { readPoolCheckpoint } from '@mediumofexchange/reference/pool/checkpoint';
 import { ed25519 } from '@noble/curves/ed25519.js';
 const circuits = join(dirname(fileURLToPath(import.meta.resolve('@mediumofexchange/reference/package.json'))), 'src/pool/circuits');
 const manifest = JSON.parse(readFileSync(join(circuits, 'manifest.json'), 'utf8'));
@@ -56,6 +57,7 @@ assert.ok(verifyBackingSignature(backing, signBacking(secret, backing)));
 assert.equal(typeof core.makeBacking, 'function');
 assert.equal(core.poolReceiptBytes, poolReceiptBytes);
 assert.equal(core.readPoolPredecessor, readPoolPredecessor);
+assert.equal(core.readPoolCheckpoint, readPoolCheckpoint);
 assert.equal(typeof core.signPoolReceipt, 'function');
 assert.equal(typeof core.poolReceiptInHistory, 'function');
 assert.equal(PILOT_PROFILE, 'transparent-pilot/v0-directory-v1');

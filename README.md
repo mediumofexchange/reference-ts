@@ -106,12 +106,18 @@ deadline. What the repository holds today:
   evidence or invalid live history cannot substitute an older candidate.
   Snapshot preimages authenticate scope without revealing local statements.
   Candidate selection does not establish whole-scope finality.
+- **Whole-scope checkpoint validation** (`readPoolCheckpoint`, C2.10.3–5):
+  checks an exact held checkpoint and its transitive canonical imports,
+  selecting every backing's predecessor before replay. Continued segments
+  preserve their finalized prefix. Missing evidence stops validation;
+  historical finality survives later term endings. The reader returns a
+  verified prefix, not permission to open service or spend a note.
 - **A local two-process pilot** on the frozen path (`docs/PILOT.md`): durable
   commands, exact retries, crash recovery, a trusted local witness. An
   integration harness, not a product.
 
 Out of scope until their step: the pool sequencer over the witnessed record
-(canonical opening validation, whole-scope finality and restart),
+(canonical opening construction for new service and restart),
 durable receipt issuance and recovery, note delivery and backups,
 the wallet, an external witness's write side, and every Extensions profile.
 
@@ -123,9 +129,9 @@ one anchor per input, and finalized shared histories imported with
 deduplication. [The adversarial model](model/pool-authority.ts) exercises
 splits, reunions, replay and scope changes with ideal cryptography; the
 claim layer now holds the frames and circuits. Record-derived authority,
-scheduling and predecessor candidate descent are implemented; whole-scope
-finality, canonical import validation and restart are next. The historical
-`moe/pool/v1` runtime was replaced and lives in git history.
+scheduling, predecessor descent, whole-scope checkpoint finality and canonical
+import validation are implemented; opening new service and restart are next.
+The historical `moe/pool/v1` runtime was replaced and lives in git history.
 
 The runtime follows specification revision
 [`ba8fe21a8d3e55d07f18edbd9ec180adb68f6ef4`](https://github.com/mediumofexchange/money-from-first-principles/tree/ba8fe21a8d3e55d07f18edbd9ec180adb68f6ef4),

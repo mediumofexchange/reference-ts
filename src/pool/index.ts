@@ -19,3 +19,4 @@ export * from "./receipt.js";
 export * from "./schedule.js";
 export * from "./authority.js";
 export * from "./descent.js";
+export * from "./checkpoint.js";
