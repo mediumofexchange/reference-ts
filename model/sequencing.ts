@@ -16,6 +16,11 @@
 //
 // Rules are cited by number. Where the model had to choose a reading of a rule,
 // the comment says so and `sequencing.test.ts` exercises both readings.
+//
+// Scope limit: `Statement.backing` is public to this model and histories are
+// per backing. It does not model pool-v1's hidden, mixed-backing spends or
+// shared pool history, so it does not establish their compatibility with
+// independent operator replacement. See docs/POOL_SEQUENCING_BOUNDARY.md.
 
 export type Key = string;
 export type BackingId = string;
@@ -277,9 +282,9 @@ export class Operator {
     private readonly store: Store,
     private readonly statements: ReadonlyMap<string, Statement>,
     /**
-     * C2.8.1 as written says "own latest witnessed commitment". Reading it as
-     * "own latest signed commitment", which C2.4.4 makes the book the operator
-     * actually holds, is the `signed` mode; the test shows what `witnessed` costs.
+     * C2.8.1 requires the latest signed commitment and its co-signed tail.
+     * `signed` follows that rule; `witnessed` retains the departure whose
+     * counterexample motivated the specification correction.
      */
     private readonly restartFrom: RestartFrom = "signed",
   ) {}

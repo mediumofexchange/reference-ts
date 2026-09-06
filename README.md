@@ -89,6 +89,13 @@ Out of scope until their step: the pool sequencer and its commitment schedule,
 durable receipt issuance and recovery, note delivery and backups, the wallet,
 an external witness's write side, and every Extensions profile.
 
+The next sequencing step has an unresolved
+[replacement boundary](docs/POOL_SEQUENCING_BOUNDARY.md): v1 binds its
+configuration to the original operator while promising independent backing
+replacement, and its hidden spends do not expose the routing label the
+sequencing model uses. The specification and model need to resolve this
+before the pool sequencer can implement takeover.
+
 The implementation follows specification revision
 [`81516ba`](https://github.com/mediumofexchange/money-from-first-principles/tree/81516ba),
 whose `pool-v1.md` pins the construction bit for bit and records the

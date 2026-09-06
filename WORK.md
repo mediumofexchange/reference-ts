@@ -21,9 +21,9 @@ tests agree.
 - Specification main at 81516ba is pinned in the README. The companion
   spec/pool-v1-receipt branch was already merged: pool-v1 §7 fixes the
   receipt bytes and the commitment's directory contents. No specification
-  change is needed for this slice.
-- Step 4's completed receipt milestone is feat/pool-receipts from
-  7ac47c4: pool/receipt.ts signs §7's exact frame under
+  change was needed for the receipt milestone.
+- Step 4's receipt milestone is merged and pushed as main 53c9719
+  (feat/pool-receipts): pool/receipt.ts signs §7's exact frame under
   moe/pool/v1/receipt, with after the last signed commitment's sequence
   directly (0 for none). Verification pins the caller's configuration and
   operator. Statement identity, exact admitted evidence, and inclusion in
@@ -32,14 +32,28 @@ tests agree.
   result. Its caller must retain the original receipt on retries and make
   admission/receipts durable before exposing them. The pool sequencer,
   commitment schedule, journal and finality checks remain to be built.
+- PoolSequencer investigation found a material specification conflict,
+  recorded on docs/pool-sequencing-boundary in
+  docs/POOL_SEQUENCING_BOUNDARY.md. Immutable original-operator binding
+  conflicts with replacement; hidden mixed-backing spends and shared history
+  lack authority/continuation rules for independent backing replacements.
+  The model's public backing label abstracts away this problem. No normative
+  change or sequencing implementation has been selected.
 
 ## Evidence
 
+- A Node 24.6.0 host probe reproduced the conflict: a valid witnessed
+  replacement names Q, while changing the pool operator refuses the backing,
+  retaining the configuration refuses Q's receipts, and spend inputs name no
+  backing. No proof verifier was invoked; exact limits are in the note.
+  Independent specification review confirmed the conflict and options.
+- Diagnostic documentation and model comments: npm run check:docs passed
+  (19 linked files); git diff --check passed. Runtime behavior is unchanged.
 - The receipt suite covers literal byte framing, every signed field, u64
   bounds, wrong domain/configuration/operator, malformed inputs, strict
   signatures (including a small-order forgery), Buffer ownership, all three
   statement kinds, exact evidence, re-proven retries and replayed prefixes.
-- npm run check passed: 58 files / 1,079 tests, docs/links, typecheck,
+- Receipt milestone's npm run check passed: 58 files / 1,079 tests, docs/links, typecheck,
   build, tarball consumer (including receipt imports) and local pilot.
 - npm run check:pool passed; docs/pool-v1-verification.json: 111 checks,
   17 real ZK proofs of 14,656 bytes, including host/backend Poseidon2 agreement,
@@ -53,15 +67,16 @@ tests agree.
 
 ## Next
 
-1. Build PoolSequencer over Pool and LocalVenue: register, submit with
-   retained receipts, commit over directory() under moe/commitment/v2,
-   one in flight (C2.4.3), the lead floor and handover schedule (C2.5.3,
-   C2.6.1), restart from the latest signed commitment and receipted tail
-   (C2.8). Port the model's §C2/§C2b cases and the frozen suite's rule by
-   rule; use directory absence proofs, never the retired opening claims or
-   whole-state exhibits. Pool commitment sequences start at 1; the frozen
-   path's receipt offset must not be copied.
-2. The durable pool journal (the experiment's crash/retry cases) and the
+1. Maintainer decision on docs/POOL_SEQUENCING_BOUNDARY.md. Recommendation:
+   preserve private spends and independent backing replacement; repair the
+   configuration/authority/history boundary in the specification and model
+   before implementing PoolSequencer. The other directions change the trust
+   or liveness model and must not be silently chosen.
+2. After that repair: PoolSequencer over Pool and LocalVenue, retained
+   receipts, directory commitments, one in flight, handover and restart.
+   Port C2 cases using directory absence proofs, never the retired opening
+   claims or whole-state exhibits. Commitment sequences start at 1.
+3. The durable pool journal (the experiment's crash/retry cases) and the
    receiver's acceptance check, retiring the experiment's host.
 
 ## Open questions
