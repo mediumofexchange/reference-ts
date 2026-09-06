@@ -10,8 +10,8 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Status
 
-- Active branch: `fix/pool-prospective-revocation`, base `49395d8` on `main`.
-  Independently reviewed and fully verified; ready to merge and push.
+- Merged into `main`: `9200782`, from `fix/pool-prospective-revocation`
+  (base `49395d8`). Independently reviewed and fully verified.
 - Canonical checkpoint replay now enforces C2b.1: newly finalized local ISSUE
   must be witnessed strictly before its obligor's revocation. Already validated
   same-segment prefixes and imported events retain their original finality.
@@ -58,14 +58,13 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Next
 
-1. Commit, merge and push this reviewed and verified slice.
-2. Retain the complete canonical validation evidence needed by each durable
+1. Retain the complete canonical validation evidence needed by each durable
    opening, including same-segment predecessors and descent directory/scope
    evidence. Revalidate on restart; then lift the conservative import refusal.
-3. Extend the model and build global receipt classification: authenticate the
+2. Extend the model and build global receipt classification: authenticate the
    held `after` commitment's segment and check historical inclusion and
    live-scope contradictions before lapse. Keep missing evidence distinct.
-4. Specify later-version silence/presentation objects before implementing
+3. Specify later-version silence/presentation objects before implementing
    recovery, presentation, delivery, wallet synchronization and service transport.
 
 ## Open questions
