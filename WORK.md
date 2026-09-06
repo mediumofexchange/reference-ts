@@ -11,8 +11,8 @@ push reviewed, verified work.
 
 ## Status
 
-- Active branch: `feat/pool-record-authority`, based on main `1baed6d`;
-  model extension committed as `7619918`.
+- `feat/pool-record-authority` is merged and pushed to `main`: `7619918`
+  (model) and `fdc8ad2` (reviewed runtime authority and scheduling integration).
   The preceding v2 claim layer and calendar scheduler are merged/pushed:
   `9a93cb8` and `00101d7`. Companion specification remains main `ba8fe21`;
   no normative change or new construction/circuit identities in this slice.
@@ -48,16 +48,15 @@ push reviewed, verified work.
 
 ## Next
 
-1. Commit, merge and push this reviewed and verified authority slice.
-2. Build canonical opening descent and whole-scope checkpoint validation
+1. Build canonical opening descent and whole-scope checkpoint validation
    (C2.7, C2.10.3–4). The existing Venue interface can locate an exact sequence's
    index but cannot return the previous held commitment below a sequence at
    the same index. Add that bounded predecessor-read capability before descent;
    do not scan absent sequence numbers or skip same-index predecessors.
-3. Authenticate candidate scope data before using public whole-scope lapse
+2. Authenticate candidate scope data before using public whole-scope lapse
    to pass it. Present-but-invalid or withheld history must block fallback.
    Extend the model for exact directory descent before its runtime reader.
-4. Integrate receipt classification and durable admission/receipt/commitment
+3. Integrate receipt classification and durable admission/receipt/commitment
    journaling, then port the experiment's crash/retry cases. Presentation,
    note delivery and wallet sync follow their specified objects.
 
