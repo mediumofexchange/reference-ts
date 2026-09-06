@@ -21,16 +21,20 @@
 
 import { sha256 } from "@noble/hashes/sha2.js";
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
-import { copyBytes } from "../bytes.js";
-import { bytesToField, fieldToBytes, fieldToHex, isField } from "./field.js";
+import { copyBytes, EncodingError } from "../bytes.js";
+import { bytesToField, fieldToBytes, fieldToHex } from "./field.js";
 import type { StatementVerifier } from "./pool.js";
 import {
+  allFields,
   isStatementKind,
   isWellFormedProof,
   PUBLIC_INPUT_COUNT,
+  type CircuitIdentities,
   type CircuitIdentity,
   type StatementKind,
 } from "./statement.js";
+
+export type { CircuitIdentities } from "./statement.js";
 
 /** The proof options this construction is defined under (§9). */
 export const PROOF_OPTIONS = Object.freeze({ verifierTarget: "noir-recursive" as const });
@@ -48,16 +52,10 @@ export interface CompiledCircuits {
   readonly burn: CompiledProgram;
 }
 
-export interface CircuitIdentities {
-  readonly issue: CircuitIdentity;
-  readonly spend: CircuitIdentity;
-  readonly burn: CircuitIdentity;
-}
-
 export interface BarretenbergPool {
   /** SHA-256 of each circuit's bytecode and derived verification key, for the configuration. */
   readonly identities: CircuitIdentities;
-  /** Verifies against the three derived keys and nothing else. */
+  /** Verifies against the three derived keys and nothing else, and names their identities. */
   readonly verifier: StatementVerifier;
   /** The backend's own Poseidon2 sponge: the oracle `poseidon2.ts` is pinned to. */
   hash(inputs: readonly bigint[]): Promise<bigint>;
@@ -75,23 +73,25 @@ export async function barretenbergPool(api: Barretenberg, circuits: CompiledCirc
   const identities: Record<string, CircuitIdentity> = {};
   for (const kind of [1, 2, 3] as const) {
     const program = circuits[NAMES[kind]];
+    // bytecode(k) hashes the bytes the artifact's field decodes to (§2). The
+    // key is derived by the backend from its own decoding of the same string,
+    // so the string must have one decoding: canonical base64, or the hash
+    // could name bytes other than those the key came from.
+    const bytecode = Buffer.from(program.bytecode, "base64");
+    if (bytecode.toString("base64") !== program.bytecode) throw new EncodingError(`${NAMES[kind]} bytecode is not canonical base64`);
     const backend = new UltraHonkBackend(program.bytecode, api);
     const vk = await backend.getVerificationKey(PROOF_OPTIONS);
     keys.set(kind, vk);
-    identities[NAMES[kind]] = Object.freeze({ bytecode: sha256(Buffer.from(program.bytecode, "base64")), vk: sha256(vk) });
+    identities[NAMES[kind]] = Object.freeze({ bytecode: sha256(bytecode), vk: sha256(vk) });
   }
   const verifierBackend = new UltraHonkVerifierBackend(api);
+  const frozen = Object.freeze(identities) as unknown as CircuitIdentities;
   const verifier: StatementVerifier = {
+    identities: frozen,
     async verify(kind, publicInputs, proof) {
       try {
         const key = keys.get(kind);
-        if (
-          key === undefined ||
-          !isStatementKind(kind) ||
-          publicInputs.length !== PUBLIC_INPUT_COUNT[kind] ||
-          !publicInputs.every(isField) ||
-          !isWellFormedProof(proof)
-        ) {
+        if (key === undefined || !isStatementKind(kind) || !allFields(publicInputs, PUBLIC_INPUT_COUNT[kind]) || !isWellFormedProof(proof)) {
           return false;
         }
         const verified = await verifierBackend.verifyProof(
@@ -105,7 +105,7 @@ export async function barretenbergPool(api: Barretenberg, circuits: CompiledCirc
     },
   };
   return {
-    identities: Object.freeze(identities) as unknown as CircuitIdentities,
+    identities: frozen,
     verifier,
     async hash(inputs) {
       const { hash } = await api.poseidon2Hash({ inputs: inputs.map(fieldToBytes) });

@@ -113,6 +113,9 @@ describe("pool-v1 §5: statements and their identity", () => {
       { ...spend, obligorSignature: new Uint8Array(64) }, { ...spend, kind: BURN },
     ];
     for (const bad of cases) expect(isWellFormedStatement(bad)).toBe(false);
+    const holey = [...issue.publicInputs];
+    delete holey[5];
+    expect(isWellFormedStatement({ ...issue, publicInputs: holey })).toBe(false);
     expect(isWellFormedStatement({ ...issue, proof: new Uint8Array(MAX_PROOF_BYTES) })).toBe(true);
     expect(() => copyStatement({ ...spend, proof: new Uint8Array(33) })).toThrow(EncodingError);
     const copy = copyStatement(issue);
@@ -133,6 +136,13 @@ describe("pool-v1 §5: statements and their identity", () => {
     expect(() => parsePublicInputs(ISSUE, [0n, 0n, 0n, 1n << 128n, 1n, 1n])).toThrow(EncodingError);
     expect(() => parsePublicInputs(ISSUE, [0n, 0n, 0n, 0n, 1n << 64n, 1n])).toThrow(EncodingError);
     expect(() => parsePublicInputs(BURN, [0n, 0n, 0n, 0n, 1n << 64n, 1n, 2n, 3n, 4n])).toThrow(EncodingError);
+    // A zero quantity is refused on the host as in the circuit (§5.1, §5.3).
+    expect(() => parsePublicInputs(ISSUE, [0n, 0n, 0n, 0n, 0n, 1n])).toThrow(EncodingError);
+    expect(() => parsePublicInputs(BURN, [0n, 0n, 0n, 0n, 0n, 1n, 2n, 3n, 4n])).toThrow(EncodingError);
+    // A sparse array is not a list of fields, however `every` reads it.
+    const holey = [...limbsOf(CONFIG.pool), ...limbsOf(backing), 5n, 77n];
+    delete holey[5];
+    expect(() => parsePublicInputs(ISSUE, holey)).toThrow(EncodingError);
     expect(() => parsePublicInputs(SPEND, [0n, 0n, 1n, 2n, 3n, 4n])).toThrow(EncodingError);
     expect(() => parsePublicInputs(SPEND, [0n, 0n, 1n, 2n, 3n, 4n, FIELD_MODULUS])).toThrow(EncodingError);
   });
@@ -170,6 +180,10 @@ describe("pool-v1 §5: statements and their identity", () => {
     expect(() => decodeStatement(nonCanonical)).toThrow(EncodingError);
     expect(() => encodeStatement(CONFIG_HASH, { ...spend, proof: new Uint8Array(33) } as Statement)).toThrow(EncodingError);
     expect(() => encodeStatement(CONFIG_HASH, { ...spend, proof: new Uint8Array(0) } as Statement)).toThrow(EncodingError);
+    // Not bytes at all is an EncodingError too, not a TypeError from inside the reader.
+    for (const notBytes of [null, undefined, 42, "0x00", { length: 100 }]) {
+      expect(() => decodeStatement(notBytes as unknown as Uint8Array)).toThrow(EncodingError);
+    }
   });
 });
 

@@ -501,7 +501,9 @@ export function poseidon2Permutation(input: readonly bigint[]): PermutationState
 /**
  * The variable-length sponge of pool-v1 §1 over one or more canonical field
  * elements. Every in-circuit object hashes its domain tag as the first input,
- * which the callers in notes.ts and note-tree.ts supply.
+ * which the callers in notes.ts and note-tree.ts supply; so no object of
+ * this construction hashes zero inputs, and the host refuses to (the Noir
+ * sponge would permute once over the empty state).
  */
 export function poseidon2Hash(inputs: readonly bigint[]): bigint {
   if (inputs.length === 0 || !inputs.every(isField)) {

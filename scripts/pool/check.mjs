@@ -200,7 +200,7 @@ try {
   }
   // The claim layer over these circuits, with real proofs, through dist/pool.
   const { checkAdmission } = await import("./admission.mjs");
-  await checkAdmission({ api, circuits, pins, checks, metrics });
+  const claimLayer = await checkAdmission({ api, circuits, pins, checks, metrics });
   console.log("PASS: real-proof admission, refusal and replay through the claim layer.");
   // Snapshot of cache files, not a claim about consumed prefixes or provenance.
   const parameterCache = {};
@@ -208,7 +208,7 @@ try {
     const bytes = readFileSync(join(crsPath, name)); parameterCache[name] = { bytes: bytes.length, sha256: sha(bytes) };
   }
   const report = { construction: pins.construction, node: process.version, platform: process.platform, arch: process.arch,
-    compileMs, pins, parameterCache, checks, metrics };
+    compileMs, pins, parameterCache, checks, metrics, claimLayer };
   // Pinning is explicit and happens only after every test succeeds.
   if (writePins) writeFileSync(join(source, 'manifest.json'), JSON.stringify(pins, null, 2) + '\n');
   writeFileSync(join(scratch, 'pool-v1-results.json'), JSON.stringify(report, null, 2) + '\n');

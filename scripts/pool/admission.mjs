@@ -178,4 +178,12 @@ export async function checkAdmission({ api, circuits, pins, checks, metrics }) {
   assert.notDeepEqual(prefix.historyHash(), pool.historyHash());
   checks.push('a separate verifier replays the trail to the same history; a prefix proves only itself');
   await backend.close();
+  // Values the circuits proved under: the host derived them, the proofs
+  // verified, so they bind the host hash to the circuits' (pinned in
+  // test/pool-poseidon2.test.ts with this provenance).
+  return {
+    pool: bytesToHex(configuration.pool), backing: bytesToHex(backing.name),
+    note: { value: decimal(alice.opening.value), owner: fieldToHex(alice.opening.owner), rho: fieldToHex(alice.opening.rho), secret: fieldToHex(alice.secret) },
+    cm: fieldToHex(alice.cm), nf: fieldToHex(alice.nf), anchorAfterIssue: fieldToHex(issued.noteRoot),
+  };
 }

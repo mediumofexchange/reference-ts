@@ -40,6 +40,13 @@ export interface CircuitIdentity {
   readonly vk: Uint8Array;
 }
 
+/** The three circuits' identities, as a configuration names them and a verifier derives them. */
+export interface CircuitIdentities {
+  readonly issue: CircuitIdentity;
+  readonly spend: CircuitIdentity;
+  readonly burn: CircuitIdentity;
+}
+
 /**
  * The configuration (§2): what a backing's E names by hash, and what a wallet
  * and a verifier pin. It does not name the backings it serves; backings name
@@ -121,6 +128,17 @@ export function isWellFormedProof(proof: unknown): proof is Uint8Array {
   return proof instanceof Uint8Array && proof.length > 0 && proof.length <= MAX_PROOF_BYTES && proof.length % 32 === 0;
 }
 
+/**
+ * Whether `values` is an array of exactly `count` canonical field elements.
+ * By index rather than `every`, which skips a sparse array's holes and would
+ * call a list with a hole well-formed.
+ */
+export function allFields(values: unknown, count: number): values is readonly bigint[] {
+  if (!Array.isArray(values) || values.length !== count) return false;
+  for (let i = 0; i < count; i++) if (!isField(values[i])) return false;
+  return true;
+}
+
 /** A statement as submitted, stored and served: kind, public inputs, proof, and K's signature for an issuance. */
 export interface Statement {
   readonly kind: StatementKind;
@@ -136,8 +154,7 @@ export function isWellFormedStatement(statement: unknown): statement is Statemen
   if (typeof statement !== "object" || statement === null) return false;
   const s = statement as Record<string, unknown>;
   if (!isStatementKind(s["kind"])) return false;
-  const inputs = s["publicInputs"];
-  if (!Array.isArray(inputs) || inputs.length !== PUBLIC_INPUT_COUNT[s["kind"]] || !inputs.every(isField)) return false;
+  if (!allFields(s["publicInputs"], PUBLIC_INPUT_COUNT[s["kind"]])) return false;
   if (!isWellFormedProof(s["proof"])) return false;
   const signature = s["obligorSignature"];
   if (s["kind"] === ISSUE) return signature instanceof Uint8Array && signature.length === SIGNATURE_LENGTH;
@@ -248,12 +265,12 @@ export type ParsedInputs = IssueInputs | SpendInputs | BurnInputs;
 
 /**
  * Read a statement's public inputs by kind. Limbs must be below 2^128 and a
- * quantity below 2^64 (§10: malformed on excess); the circuit range-checks
+ * quantity positive and below 2^64 (§5.1, §5.3, §10); the circuit proves
  * the same, so this refuses what no valid proof could carry, with the reason
  * named, before the proof is looked at.
  */
 export function parsePublicInputs(kind: StatementKind, inputs: readonly bigint[]): ParsedInputs {
-  if (!isStatementKind(kind) || inputs.length !== PUBLIC_INPUT_COUNT[kind] || !inputs.every(isField)) {
+  if (!isStatementKind(kind) || !allFields(inputs, PUBLIC_INPUT_COUNT[kind])) {
     throw new EncodingError("public inputs do not match the kind");
   }
   const at = (i: number): bigint => inputs[i] as bigint;
@@ -264,7 +281,7 @@ export function parsePublicInputs(kind: StatementKind, inputs: readonly bigint[]
   }
   const backing = identifierOf(at(2), at(3));
   const quantity = at(4);
-  if (!isValue(quantity)) throw new EncodingError("quantity out of range");
+  if (!isValue(quantity) || quantity === 0n) throw new EncodingError("quantity must be positive and below 2^64");
   if (kind === ISSUE) {
     const issue: IssueInputs = { kind, pool, backing, quantity, nullifiers: [], outputs: [at(5)] };
     return Object.freeze(issue);

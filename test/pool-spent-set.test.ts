@@ -89,12 +89,77 @@ describe("pool-v1 §8: the spent set", () => {
     set.insert(a);
     const siblingsOfB = decodeSpentProof(set.proof(b));
     expect(siblingsOfB[255]).not.toEqual(EMPTY_SPENT_SUBTREE[255]);
-    expect(siblingsOfB.slice(0, 255).every((s, h) => s === EMPTY_SPENT_SUBTREE[h])).toBe(true);
+    expect(siblingsOfB.slice(0, 255).every((s, h) => Buffer.compare(s, EMPTY_SPENT_SUBTREE[h] as Uint8Array) === 0)).toBe(true);
     const set2 = new SpentSet();
     set2.insert(key([31, 1]));
     const siblingsOfZero = decodeSpentProof(set2.proof(key()));
     expect(siblingsOfZero[0]).toEqual(spentLeaf(key([31, 1])));
-    expect(siblingsOfZero.slice(1).every((s, h) => s === EMPTY_SPENT_SUBTREE[h + 1])).toBe(true);
+    expect(siblingsOfZero.slice(1).every((s, h) => Buffer.compare(s, EMPTY_SPENT_SUBTREE[h + 1] as Uint8Array) === 0)).toBe(true);
+  });
+
+  it("proves non-membership of a stranger sharing a long prefix with a member, on either side of it", () => {
+    const set = new SpentSet();
+    const member = key([0, 0xab], [1, 0xcd], [31, 0x01]);
+    set.insert(member);
+    const root = set.root();
+    const strangers = [
+      key([0, 0xab], [1, 0xcd], [31, 0x00]), key([0, 0xab], [1, 0xcd], [31, 0x03]),
+      key([0, 0xab], [1, 0xcc]), key([0, 0xab], [1, 0xcd], [31, 0x81]), key([0, 0x2b], [1, 0xcd], [31, 0x01]),
+    ];
+    for (const stranger of strangers) {
+      expect(spentProofProves(root, stranger, set.proof(stranger), false)).toBe(true);
+      expect(spentProofProves(root, stranger, set.proof(stranger), true)).toBe(false);
+    }
+    // The strangers join one by one; every member and the rest still prove.
+    for (const [i, nf] of strangers.entries()) {
+      set.insert(nf);
+      for (const joined of [member, ...strangers.slice(0, i + 1)]) {
+        expect(spentProofProves(set.root(), joined, set.proof(joined), true)).toBe(true);
+        expect(spentProofProves(set.root(), joined, set.proof(joined), false)).toBe(false);
+      }
+      for (const waiting of strangers.slice(i + 1)) {
+        expect(spentProofProves(set.root(), waiting, set.proof(waiting), false)).toBe(true);
+      }
+    }
+    expect(set.size).toBe(6n);
+  });
+
+  it("holds hundreds of keys with proofs for every member and for strangers, at a cost that stays flat", () => {
+    const set = new SpentSet();
+    const keys = Array.from({ length: 300 }, (_, i) => sha256(new Uint8Array([i & 0xff, i >> 8])));
+    const start = performance.now();
+    for (const nf of keys) set.insert(nf);
+    const insertMs = performance.now() - start;
+    expect(set.size).toBe(300n);
+    const root = set.root();
+    for (const nf of keys.filter((_, i) => i % 29 === 0)) {
+      expect(set.has(nf)).toBe(true);
+      expect(spentProofProves(root, nf, set.proof(nf), true)).toBe(true);
+      expect(spentProofProves(root, nf, set.proof(nf), false)).toBe(false);
+    }
+    for (let i = 300; i < 310; i++) {
+      const stranger = sha256(new Uint8Array([i & 0xff, i >> 8]));
+      expect(set.has(stranger)).toBe(false);
+      expect(spentProofProves(root, stranger, set.proof(stranger), false)).toBe(true);
+    }
+    // A generous bound, so a regression to hundreds of hashes per key shows.
+    expect(insertMs).toBeLessThan(5_000);
+  });
+
+  it("hands out copies: a decoded proof and the exported empty subtrees are not its state", () => {
+    const set = new SpentSet();
+    const nf = key([31, 1]);
+    const decoded = decodeSpentProof(set.proof(nf));
+    (decoded[5] as Uint8Array)[0] = 0xff;
+    expect(spentProofProves(EMPTY_SPENT_ROOT, nf, set.proof(nf), false)).toBe(true);
+    const exported = EMPTY_SPENT_SUBTREE[3] as Uint8Array;
+    const kept = exported[0] as number;
+    exported[0] = kept ^ 0xff;
+    expect(spentProofProves(EMPTY_SPENT_ROOT, nf, set.proof(nf), false)).toBe(true);
+    exported[0] = kept;
+    // The question must be a boolean: any other value is answered false.
+    expect(spentProofProves(EMPTY_SPENT_ROOT, nf, set.proof(nf), "false" as unknown as boolean)).toBe(false);
+    expect(spentProofProves(EMPTY_SPENT_ROOT, nf, set.proof(nf), 1 as unknown as boolean)).toBe(false);
   });
 
   it("encodes proofs canonically and refuses a map that disagrees with its siblings", () => {

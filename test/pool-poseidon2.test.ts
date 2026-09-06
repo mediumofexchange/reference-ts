@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EncodingError } from "../src/bytes.js";
 import { FIELD_MODULUS, fieldToHex, identifierOf } from "../src/pool/field.js";
+import { NoteTree } from "../src/pool/note-tree.js";
 import { commitmentOf, nullifierOf, ownerOf } from "../src/pool/notes.js";
 import { poseidon2Hash, poseidon2Permutation } from "../src/pool/poseidon2.js";
 
@@ -71,5 +72,23 @@ describe("pool-v1 §1: the in-circuit hash on the host", () => {
     expect(() => nullifierOf(pool, 0n, 9n)).toThrow(EncodingError);
     // A value of zero is a padding input or an empty output, and is allowed.
     expect(commitmentOf(pool, { backing, value: 0n, owner: 5n, rho: 6n })).not.toBe(0n);
+  });
+
+  it("derives what the pinned circuits proved under: a commitment, a nullifier and an anchor from a real-proof run", () => {
+    // Recorded by `npm run check:pool` (docs/pool-v1-verification.json,
+    // `claimLayer`): the host derived these, the issue and spend proofs over
+    // them verified under the pinned circuits, so they bind the host's
+    // two-, five- and eight-input hashes to the circuits' own.
+    const pool = Buffer.from("9c97947df94ee48aa75f64c2a9be80289058437fa4e1534043c3fba09878f98a", "hex");
+    const backing = Buffer.from("994b09afe1de6195151f3cb452d382f52c133728d7029f7da50464acf8bd38dc", "hex");
+    const secret = 0x3e9n;
+    const owner = ownerOf(secret);
+    expect(fieldToHex(owner)).toBe("0x1eaeb3dcce509f53960e03f2a075d520f7bef8932c0ea7659a27900fbc586881");
+    const cm = commitmentOf(pool, { backing, value: 100n, owner, rho: 0x3ean });
+    expect(fieldToHex(cm)).toBe("0x023e2862da0448777dcf2da1a369f4e4766c154776904506c9d6251b1cc4de44");
+    expect(fieldToHex(nullifierOf(pool, cm, secret))).toBe("0x01cd90e091fc707e9612c9f4731597426f177edec45f45d0fabff5791644f5f5");
+    const tree = new NoteTree();
+    tree.append(cm);
+    expect(fieldToHex(tree.root())).toBe("0x0a0b4349ebb20fb003a7426207c71532b4daf133a8cd0fb9d01bbdf78498b43b");
   });
 });

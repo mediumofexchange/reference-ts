@@ -95,6 +95,10 @@ describe("pool-v1 §4: the note tree", () => {
     expect(notePathProves(root, 9n, path)).toBe(false);
     expect(notePathProves(root, 8n, { siblings: path.siblings.slice(1), right: path.right })).toBe(false);
     expect(notePathProves(root, 8n, { siblings: path.siblings, right: path.right.map(() => 1 as unknown as boolean) })).toBe(false);
+    // Sparse arrays are not 32 fields or 32 booleans, however `every` reads them.
+    expect(notePathProves(root, 8n, { siblings: path.siblings, right: new Array(32) as boolean[] })).toBe(false);
+    expect(notePathProves(root, 8n, { siblings: new Array(32) as bigint[], right: path.right })).toBe(false);
+    expect(() => copyNotePath({ siblings: path.siblings, right: new Array(32) as boolean[] })).toThrow(EncodingError);
     expect(notePathProves(root, 8n, null as unknown as never)).toBe(false);
     expect(() => noteRootOf(8n, { siblings: [], right: [] })).toThrow(EncodingError);
     expect(() => copyNotePath({ siblings: [], right: [] })).toThrow(EncodingError);
@@ -110,6 +114,27 @@ describe("pool-v1 §4: the note tree", () => {
     expect(() => tree.path(-1n)).toThrow(EncodingError);
     expect(() => tree.path(0 as unknown as bigint)).toThrow(EncodingError);
     expect(tree.size).toBe(1n);
+  });
+
+  it("appends in bulk to the same root as one at a time, all or nothing", () => {
+    const one = new NoteTree();
+    const bulk = new NoteTree();
+    const leaves = Array.from({ length: 7 }, (_, i) => BigInt(i + 1) * 1000003n);
+    for (const leaf of leaves) one.append(leaf);
+    expect(bulk.appendAll(leaves)).toEqual(leaves.map((_, i) => BigInt(i)));
+    expect(bulk.root()).toBe(one.root());
+    expect(bulk.appendAll([])).toEqual([]);
+    expect(() => bulk.appendAll([9n, 9n])).toThrow(EncodingError);
+    expect(() => bulk.appendAll([10n, leaves[0] as bigint])).toThrow(EncodingError);
+    expect(() => bulk.appendAll([10n, 0n])).toThrow(EncodingError);
+    expect(bulk.size).toBe(7n);
+    expect(bulk.has(10n)).toBe(false);
+    expect(bulk.root()).toBe(one.root());
+    const more = [11n, 12n, 13n];
+    for (const leaf of more) one.append(leaf);
+    expect(bulk.appendAll(more)).toEqual([7n, 8n, 9n]);
+    expect(bulk.root()).toBe(one.root());
+    for (let i = 0n; i < 10n; i++) expect(notePathProves(bulk.root(), bulk.leaf(i) as bigint, bulk.path(i))).toBe(true);
   });
 
   it("hands out copies of its leaves", () => {

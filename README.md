@@ -85,10 +85,11 @@ pool's fields (sequencing over notes), note delivery and backups, the wallet,
 an external witness's write side, and every Extensions profile.
 
 The implementation follows specification revision
-[`1d38815`](https://github.com/mediumofexchange/money-from-first-principles/tree/1d38815),
+[`81516ba`](https://github.com/mediumofexchange/money-from-first-principles/tree/81516ba),
 whose `pool-v1.md` pins the construction bit for bit and records the
-implemented circuits and keys. `docs/PROTOCOL_RULES.md` maps each binding rule
-to its specification rule, code and test, and marks what is frozen.
+implemented circuits and keys; its §7 receipt bytes are the next step's to
+sign. `docs/PROTOCOL_RULES.md` maps each binding rule to its specification
+rule, code and test, and marks what is frozen.
 
 ## Try the local pilot
 

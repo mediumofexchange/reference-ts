@@ -18,6 +18,10 @@
 // stores every node on every leaf's path rather than only a frontier: paths
 // for arbitrary leaves are what a wallet needs, and the reference
 // implementation prefers one structure with an obvious proof of correctness.
+// `appendAll` builds a synced list with about two hashes per leaf; at the
+// host hash's cost (about a millisecond) a million leaves is minutes, and a
+// faster field arithmetic or the backend's hash behind the same interface
+// is the remedy when a deployment needs more.
 
 import { EncodingError } from "../bytes.js";
 import { isField, requireField } from "./field.js";
@@ -56,10 +60,16 @@ export interface NotePath {
 export function isNotePath(path: unknown): path is NotePath {
   if (typeof path !== "object" || path === null) return false;
   const p = path as Record<string, unknown>;
-  return (
-    Array.isArray(p["siblings"]) && p["siblings"].length === NOTE_TREE_DEPTH && p["siblings"].every(isField) &&
-    Array.isArray(p["right"]) && p["right"].length === NOTE_TREE_DEPTH && p["right"].every((b) => typeof b === "boolean")
-  );
+  const siblings = p["siblings"];
+  const right = p["right"];
+  if (!Array.isArray(siblings) || siblings.length !== NOTE_TREE_DEPTH) return false;
+  if (!Array.isArray(right) || right.length !== NOTE_TREE_DEPTH) return false;
+  // By index, not `every`: a sparse array's holes are skipped by `every`,
+  // and a hole is neither a field element nor a boolean.
+  for (let level = 0; level < NOTE_TREE_DEPTH; level++) {
+    if (!isField(siblings[level]) || typeof right[level] !== "boolean") return false;
+  }
+  return true;
 }
 
 export function copyNotePath(path: NotePath): NotePath {
@@ -124,25 +134,44 @@ export class NoteTree {
    * a programming error surfaced rather than a state the tree can reach.
    */
   append(commitment: bigint): bigint {
-    requireField(commitment, "commitment");
-    if (commitment === 0n) throw new EncodingError("a zero commitment is an unused leaf");
-    if (this.present.has(commitment)) throw new EncodingError("commitment already in the note tree");
-    if (this.size >= NOTE_TREE_CAPACITY) throw new EncodingError("note tree is full");
-    const position = this.leafList.length;
-    this.leafList.push(commitment);
-    this.present.add(commitment);
-    let index = position;
-    let node = commitment;
-    for (let level = 0; level < NOTE_TREE_DEPTH; level++) {
-      const left = index - (index % 2);
-      node =
-        index % 2 === 0
-          ? noteNode(level, node, this.node(level, left + 1))
-          : noteNode(level, this.node(level, left), node);
-      index = Math.floor(index / 2);
-      this.nodes.set(`${level + 1}:${index}`, node);
+    return this.appendAll([commitment])[0] as bigint;
+  }
+
+  /**
+   * Append commitments in order and return their positions, hashing each
+   * changed node once rather than 32 per leaf: what a wallet syncing the
+   * pool's leaf list calls, and what admission calls with a statement's one
+   * or two outputs. All or nothing: the checks run before any change.
+   */
+  appendAll(commitments: readonly bigint[]): bigint[] {
+    const fresh = new Set<bigint>();
+    for (const commitment of commitments) {
+      requireField(commitment, "commitment");
+      if (commitment === 0n) throw new EncodingError("a zero commitment is an unused leaf");
+      if (this.present.has(commitment) || fresh.has(commitment)) throw new EncodingError("commitment already in the note tree");
+      fresh.add(commitment);
     }
-    return BigInt(position);
+    if (this.size + BigInt(commitments.length) > NOTE_TREE_CAPACITY) throw new EncodingError("note tree is full");
+    if (commitments.length === 0) return [];
+    const first = this.leafList.length;
+    for (const commitment of commitments) {
+      this.leafList.push(commitment);
+      this.present.add(commitment);
+    }
+    // Recompute every node whose subtree changed: at each level, the parents
+    // of the changed range, which is the range's halving up to the root.
+    let low = first;
+    let high = this.leafList.length - 1;
+    for (let level = 0; level < NOTE_TREE_DEPTH; level++) {
+      const parentLow = Math.floor(low / 2);
+      const parentHigh = Math.floor(high / 2);
+      for (let index = parentLow; index <= parentHigh; index++) {
+        this.nodes.set(`${level + 1}:${index}`, noteNode(level, this.node(level, 2 * index), this.node(level, 2 * index + 1)));
+      }
+      low = parentLow;
+      high = parentHigh;
+    }
+    return commitments.map((_, i) => BigInt(first + i));
   }
 
   /** The path for a used leaf, against the current root. */

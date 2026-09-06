@@ -3,7 +3,7 @@
   "node": "v24.6.0",
   "platform": "win32",
   "arch": "x64",
-  "compileMs": 4959.0435,
+  "compileMs": 5195.3808,
   "pins": {
     "construction": "moe/pool/v1",
     "toolchain": {
@@ -164,138 +164,151 @@
     {
       "label": "authorized-relation issuance",
       "kind": "issue",
-      "executionMs": 95.52189999999973,
-      "proveMs": 892.0153000000028,
-      "verifyMs": 89.14220000000205,
+      "executionMs": 137.02100000000064,
+      "proveMs": 863.0856000000022,
+      "verifyMs": 113.67640000000029,
       "proofBytes": 14656
     },
     {
       "label": "one real input plus padding",
       "kind": "spend",
-      "executionMs": 131.1785000000018,
-      "proveMs": 3346.7543000000005,
-      "verifyMs": 116.25959999999759,
+      "executionMs": 118.21900000000096,
+      "proveMs": 3503.334999999999,
+      "verifyMs": 67.6862000000001,
       "proofBytes": 14656
     },
     {
       "label": "two real inputs, same backing",
       "kind": "spend",
-      "executionMs": 61.09569999999803,
-      "proveMs": 3070.9894999999997,
-      "verifyMs": 69.93059999999969,
+      "executionMs": 64.78659999999945,
+      "proveMs": 3143.426599999999,
+      "verifyMs": 71.11330000000089,
       "proofBytes": 14656
     },
     {
       "label": "two backings conserve separately",
       "kind": "spend",
-      "executionMs": 38.293900000000576,
-      "proveMs": 3093.582699999999,
-      "verifyMs": 66.41400000000067,
+      "executionMs": 47.01220000000103,
+      "proveMs": 3173.4516000000003,
+      "verifyMs": 68.32920000000013,
       "proofBytes": 14656
     },
     {
       "label": "partial burn with padding",
       "kind": "burn",
-      "executionMs": 26.16610000000219,
-      "proveMs": 3068.167999999998,
-      "verifyMs": 68.25890000000072,
+      "executionMs": 27.132700000001932,
+      "proveMs": 3137.0346999999965,
+      "verifyMs": 69.06259999999747,
       "proofBytes": 14656
     },
     {
       "label": "all right-child bits including bit 31",
       "kind": "spend",
-      "executionMs": 38.454499999999825,
-      "proveMs": 3816.2035000000033,
-      "verifyMs": 107.91599999999744,
+      "executionMs": 33.21700000000419,
+      "proveMs": 3629.3778999999995,
+      "verifyMs": 75.0734999999986,
       "proofBytes": 14656
     },
     {
       "label": "two maximum u64 inputs conserve in u128",
       "kind": "spend",
-      "executionMs": 35.72799999999552,
-      "proveMs": 4019.1730000000025,
-      "verifyMs": 93.056700000001,
+      "executionMs": 31.05999999999767,
+      "proveMs": 4167.845699999998,
+      "verifyMs": 82.89220000000205,
       "proofBytes": 14656
     },
     {
       "label": "new anchor preserves both nullifiers",
       "kind": "spend",
-      "executionMs": 38.06620000000112,
-      "proveMs": 3844.666299999997,
-      "verifyMs": 74.3808999999892,
+      "executionMs": 46.006299999993644,
+      "proveMs": 4560.421099999992,
+      "verifyMs": 101.5164000000077,
       "proofBytes": 14656
     },
     {
       "label": "full burn with zero change",
       "kind": "burn",
-      "executionMs": 35.11839999999211,
-      "proveMs": 3337.215200000006,
-      "verifyMs": 73.71849999998813,
+      "executionMs": 36.07609999999113,
+      "proveMs": 3491.4902,
+      "verifyMs": 69.4777999999933,
       "proofBytes": 14656
     },
     {
       "label": "burn widens quantity plus change",
       "kind": "burn",
-      "executionMs": 26.49199999999837,
-      "proveMs": 3852.093000000008,
-      "verifyMs": 70.13190000000759,
+      "executionMs": 29.93529999999737,
+      "proveMs": 3150.6324000000022,
+      "verifyMs": 67.97909999999683,
       "proofBytes": 14656
     },
     {
       "label": "claim layer issue",
       "kind": "issue",
-      "executionMs": 1.0426000000006752,
-      "proveMs": 925.6781000000046,
+      "executionMs": 1.2050000000017462,
+      "proveMs": 1009.9232000000047,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 28.805200000002515,
-      "proveMs": 3156.258600000001,
+      "executionMs": 24.327799999999115,
+      "proveMs": 3191.5305999999982,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 34.63189999999304,
-      "proveMs": 3321.5852999999915,
+      "executionMs": 31.515400000003865,
+      "proveMs": 3125.7829000000056,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 27.039199999999255,
-      "proveMs": 3887.4380999999994,
+      "executionMs": 28.4314999999915,
+      "proveMs": 3125.2258,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 36.13890000000538,
-      "proveMs": 4563.283800000005,
+      "executionMs": 27.343799999987823,
+      "proveMs": 3253.0108000000037,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer burn",
       "kind": "burn",
-      "executionMs": 34.72480000001087,
-      "proveMs": 4221.689300000013,
+      "executionMs": 22.980400000000373,
+      "proveMs": 3072.9147999999986,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer burn",
       "kind": "burn",
-      "executionMs": 25.97520000000077,
-      "proveMs": 4269.770499999999,
+      "executionMs": 22.308699999994133,
+      "proveMs": 3333.2142999999924,
       "verifyMs": 0,
       "proofBytes": 14656
     }
-  ]
+  ],
+  "claimLayer": {
+    "pool": "9c97947df94ee48aa75f64c2a9be80289058437fa4e1534043c3fba09878f98a",
+    "backing": "994b09afe1de6195151f3cb452d382f52c133728d7029f7da50464acf8bd38dc",
+    "note": {
+      "value": "100",
+      "owner": "0x1eaeb3dcce509f53960e03f2a075d520f7bef8932c0ea7659a27900fbc586881",
+      "rho": "0x00000000000000000000000000000000000000000000000000000000000003ea",
+      "secret": "0x00000000000000000000000000000000000000000000000000000000000003e9"
+    },
+    "cm": "0x023e2862da0448777dcf2da1a369f4e4766c154776904506c9d6251b1cc4de44",
+    "nf": "0x01cd90e091fc707e9612c9f4731597426f177edec45f45d0fabff5791644f5f5",
+    "anchorAfterIssue": "0x0a0b4349ebb20fb003a7426207c71532b4daf133a8cd0fb9d01bbdf78498b43b"
+  }
 }

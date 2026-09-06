@@ -977,6 +977,10 @@ export function replayLog(
 ): LedgerState | undefined {
   const state = emptyState();
   try {
+    // A backing whose E names a construction has no operation log: its
+    // claims move by pool statements, and a log served for it is not a
+    // history that could have happened under its terms.
+    if (backing.evidence.setting !== "transparent") return undefined;
     for (const entry of entries) applyEntry(state, backing, entry, undefined);
   } catch {
     return undefined;

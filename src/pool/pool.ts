@@ -15,13 +15,20 @@
 // admissions that interleave at the proof step still see, and change, one
 // view each. The verifier is an interface, pinned to the configuration's
 // keys by whoever constructs it (barretenberg.ts), so the pool cannot be
-// handed a key with a statement (§2).
+// handed a key with a statement (§2); where the verifier can name the
+// identities its keys were derived from, the pool refuses a configuration
+// naming others (§9).
 //
 // Supply follows by induction from the empty pool (§C1.2, invariant 12):
 // only a verified issuance introduces claims, every spend conserves them
 // under a verified proof, every burn subtracts under one. `replay` runs this
 // same class over a served trail, verifying every proof and every issuance
 // signature itself, and accepts nothing it did not recompute (§7).
+//
+// Nothing that leaves this class aliases its state. `readonly` is erased at
+// runtime and the bytes inside a frozen Backing's arrays are writable, so a
+// served backing is rebuilt with makeBacking, the configuration and every
+// hash are copied, and the accumulators are reachable only through reads.
 
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -30,21 +37,25 @@ import { compareBytes, copyBytes } from "../bytes.js";
 import type { SnapshotDigest } from "../commitment.js";
 import { isValidPublicKey, verifySignatureStrict } from "../keys.js";
 import { fieldToBytes, VALUE_BOUND } from "./field.js";
-import { EMPTY_NOTE_ROOT, NOTE_TREE_CAPACITY, NoteTree } from "./note-tree.js";
+import { EMPTY_NOTE_ROOT, NOTE_TREE_CAPACITY, NoteTree, type NotePath } from "./note-tree.js";
 import { SpentSet } from "./spent-set.js";
 import {
+  allFields,
   BURN,
   configurationHash,
   copyConfiguration,
   copyStatement,
   genesisHistoryHash,
   ISSUE,
+  isStatementKind,
   isWellFormedStatement,
   nextHistoryHash,
   parsePublicInputs,
   POOL_CONSTRUCTION,
+  PUBLIC_INPUT_COUNT,
   snapshotDigest,
   statementBytes,
+  type CircuitIdentities,
   type ParsedInputs,
   type PoolConfiguration,
   type Statement,
@@ -53,11 +64,19 @@ import {
 
 /**
  * Verifies a proof against the configuration's verification key for its
- * kind and these public inputs, and against nothing else (§6.2). Returns
- * false, never throws, for anything that does not verify.
+ * kind and these public inputs, and against nothing else (§6.2). Resolves to
+ * exactly `true` for a proof that verifies; anything else, and never a
+ * throw, for one that does not.
  */
 export interface StatementVerifier {
   verify(kind: StatementKind, publicInputs: readonly bigint[], proof: Uint8Array): Promise<boolean>;
+  /**
+   * The identities of the circuits whose keys this verifier holds, where it
+   * can say (barretenberg.ts derives them). A pool refuses a configuration
+   * naming other identities (§9: an implementation refuses a configuration
+   * whose identities do not match what it derived).
+   */
+  readonly identities?: CircuitIdentities;
 }
 
 export type PoolErrorCode =
@@ -77,6 +96,8 @@ export class PoolError extends Error {
   constructor(
     readonly code: PoolErrorCode,
     message: string,
+    /** In replay, the number of the statement that failed. */
+    readonly sequence?: bigint,
   ) {
     super(message);
     this.name = "PoolError";
@@ -85,9 +106,10 @@ export class PoolError extends Error {
 
 /**
  * What admission records for an accepted statement, and what the receipt
- * (§7) is signed over once the sequencing layer's envelope is fixed: the
- * sequence, the statement's identity, the history hash after it, the roots
- * after it, and the hashes of the evidence the operator verified.
+ * (§7) is signed over: the sequence, the statement's identity, the history
+ * hash after it, the roots after it, and the hashes of the evidence the
+ * operator verified. The operator's signature and `after` are the
+ * sequencing layer's.
  */
 export interface AcceptedStatement {
   /** The statement's number in the history, counted from 1. */
@@ -132,9 +154,18 @@ export interface Trail {
   readonly statements: readonly Statement[];
 }
 
+/** Whether `count` more leaves fit under 2^32 when `size` are in use (§4, §6 check 5). */
+export function outputsFit(size: bigint, count: number): boolean {
+  return size >= 0n && Number.isInteger(count) && count >= 0 && size + BigInt(count) <= NOTE_TREE_CAPACITY;
+}
+
+function malformed(cause: unknown, fallback: string): string {
+  return cause instanceof Error ? cause.message : fallback;
+}
+
 export class Pool {
-  readonly configuration: PoolConfiguration;
-  readonly configHash: Uint8Array;
+  private readonly config: PoolConfiguration;
+  private readonly hash: Uint8Array;
   private readonly verifier: StatementVerifier;
   private readonly tree = new NoteTree();
   private readonly anchors = new Set<bigint>([EMPTY_NOTE_ROOT]);
@@ -145,13 +176,38 @@ export class Pool {
   private history: Uint8Array;
 
   constructor(configuration: PoolConfiguration, verifier: StatementVerifier) {
-    this.configuration = copyConfiguration(configuration);
-    if (!isValidPublicKey(this.configuration.operator)) {
+    try {
+      this.config = copyConfiguration(configuration);
+      this.hash = configurationHash(this.config);
+    } catch (cause) {
+      throw new PoolError("CONFIGURATION", malformed(cause, "malformed configuration"));
+    }
+    if (!isValidPublicKey(this.config.operator)) {
       throw new PoolError("CONFIGURATION", "operator key is not a valid non-small-order Ed25519 point");
     }
-    this.configHash = configurationHash(this.configuration);
+    const identities = verifier.identities;
+    if (identities !== undefined) {
+      for (const kind of ["issue", "spend", "burn"] as const) {
+        if (
+          compareBytes(identities[kind].bytecode, this.config[kind].bytecode) !== 0 ||
+          compareBytes(identities[kind].vk, this.config[kind].vk) !== 0
+        ) {
+          throw new PoolError("CONFIGURATION", `the verifier's ${kind} circuit is not the configuration's`);
+        }
+      }
+    }
     this.verifier = verifier;
-    this.history = genesisHistoryHash(this.configHash);
+    this.history = genesisHistoryHash(this.hash);
+  }
+
+  /** A copy of the configuration this pool serves under. */
+  get configuration(): PoolConfiguration {
+    return copyConfiguration(this.config);
+  }
+
+  /** configHash (§2), copied. */
+  get configHash(): Uint8Array {
+    return copyBytes(this.hash);
   }
 
   /** The number of accepted statements, n. */
@@ -194,9 +250,14 @@ export class Pool {
     return this.tree.leaves();
   }
 
-  /** The tree the leaves form; a wallet builds its own from `leaves()`. */
-  get noteTree(): NoteTree {
-    return this.tree;
+  /** The leaf at a position, or undefined past the used leaves. */
+  leaf(position: bigint): bigint | undefined {
+    return this.tree.leaf(position);
+  }
+
+  /** The path for a used leaf against the current root; a wallet computes the same from `leaves()`. */
+  path(position: bigint): NotePath {
+    return this.tree.path(position);
   }
 
   /**
@@ -206,14 +267,19 @@ export class Pool {
    * authority from the registered obligor.
    */
   register(backing: Backing, signature: Uint8Array): void {
-    const stored = makeBacking(backing);
+    let stored: Backing;
+    try {
+      stored = makeBacking(backing);
+    } catch (cause) {
+      throw new PoolError("BACKING", malformed(cause, "malformed backing"));
+    }
     if (!verifyBackingSignature(stored, signature)) throw new PoolError("BACKING", "backing signature invalid");
     const evidence = stored.evidence;
     if (
       evidence.setting !== "pool" ||
       evidence.construction !== POOL_CONSTRUCTION ||
-      compareBytes(evidence.configuration, this.configHash) !== 0 ||
-      compareBytes(evidence.operator, this.configuration.operator) !== 0
+      compareBytes(evidence.configuration, this.hash) !== 0 ||
+      compareBytes(evidence.operator, this.config.operator) !== 0
     ) {
       throw new PoolError("BACKING", "this backing's E does not name this operator and configuration");
     }
@@ -224,10 +290,12 @@ export class Pool {
     });
   }
 
-  /** The signed terms of every backing this pool serves, by name. */
+  /** The signed terms of a backing this pool serves, by name, as fresh copies. */
   backing(name: Uint8Array): SignedBacking | undefined {
     const held = this.backings.get(bytesToHex(name));
-    return held === undefined ? undefined : { backing: held.signed.backing, signature: copyBytes(held.signed.signature) };
+    return held === undefined
+      ? undefined
+      : { backing: makeBacking(held.signed.backing), signature: copyBytes(held.signed.signature) };
   }
 
   issued(name: Uint8Array): bigint | undefined {
@@ -250,7 +318,13 @@ export class Pool {
     return totals === undefined ? undefined : snapshotDigest(name, this.history, totals.issued, totals.burned);
   }
 
-  /** The directory a commitment authenticates (§C2.4.2): every served backing with its snapshot digest, by name. */
+  /**
+   * The directory a commitment authenticates (§C2.4.2): every served backing
+   * with its snapshot digest, by name. The set of served backings is the
+   * commitment's to bind, not the history's: a backing no statement names
+   * changes no history hash, and a replayer compares directories, not only
+   * history hashes, to check what an operator committed to serving.
+   */
   directory(): SnapshotDigest[] {
     return [...this.backings.values()]
       .map(({ signed, totals }) => ({
@@ -269,9 +343,9 @@ export class Pool {
   /** The served trail: configuration, every backing's signed terms, and every statement in order with its evidence. */
   trail(): Trail {
     return {
-      configuration: copyConfiguration(this.configuration),
+      configuration: copyConfiguration(this.config),
       backings: [...this.backings.values()].map(({ signed }) => ({
-        backing: signed.backing,
+        backing: makeBacking(signed.backing),
         signature: copyBytes(signed.signature),
       })),
       statements: this.statements.map(copyStatement),
@@ -284,18 +358,26 @@ export class Pool {
    * statement that fails a check.
    */
   async admit(statement: Statement): Promise<AcceptedStatement> {
-    // Check 1, on the statement alone: shape, canonical fields, and this pool.
-    if (!isWellFormedStatement(statement)) throw new PoolError("MALFORMED", "malformed statement");
-    const own = copyStatement(statement);
-    const inputs = this.parse(own);
+    // Check 1, on what the statement asserts: kind, count, canonical fields,
+    // ranges, and this pool. The evidence is not read yet.
+    if (typeof statement !== "object" || statement === null) throw new PoolError("MALFORMED", "malformed statement");
+    const kind: unknown = statement.kind;
+    const inputs: unknown = statement.publicInputs;
+    if (!isStatementKind(kind) || !allFields(inputs, PUBLIC_INPUT_COUNT[kind])) {
+      throw new PoolError("MALFORMED", "public inputs do not match the kind");
+    }
+    const publicInputs: readonly bigint[] = Object.freeze([...inputs]);
+    const parsed = this.parse(kind, publicInputs);
     // Invariant 26 first: an exact resubmission is the same statement
-    // whatever its proof bytes, and is answered before any proof is looked at.
-    const hash = statementHashOf(this.configHash, own);
+    // whatever its proof bytes, and is answered before the evidence is looked at.
+    const hash = sha256(statementBytes(this.hash, kind, publicInputs));
     const prior = this.accepted.get(bytesToHex(hash));
     if (prior !== undefined) return copyAccepted(prior);
+    if (!isWellFormedStatement(statement)) throw new PoolError("MALFORMED", "malformed proof or signature");
+    const own = copyStatement(statement);
     // Check 2, on the statement alone: the proof, against the configuration's
     // key for this kind. Asynchronous, and the only await in admission.
-    if (!(await this.verifier.verify(own.kind, own.publicInputs, own.proof))) {
+    if ((await this.verifier.verify(own.kind, own.publicInputs, own.proof)) !== true) {
       throw new PoolError("PROOF", "proof does not verify");
     }
     // From here down nothing yields, so the checks and the transition read
@@ -303,17 +385,17 @@ export class Pool {
     // admission of the same statement may have completed during the await.
     const raced = this.accepted.get(bytesToHex(hash));
     if (raced !== undefined) return copyAccepted(raced);
-    return this.apply(own, inputs, hash);
+    return this.apply(own, parsed, hash);
   }
 
-  private parse(statement: Statement): ParsedInputs {
+  private parse(kind: StatementKind, publicInputs: readonly bigint[]): ParsedInputs {
     let inputs: ParsedInputs;
     try {
-      inputs = parsePublicInputs(statement.kind, statement.publicInputs);
+      inputs = parsePublicInputs(kind, publicInputs);
     } catch (cause) {
-      throw new PoolError("MALFORMED", cause instanceof Error ? cause.message : "malformed public inputs");
+      throw new PoolError("MALFORMED", malformed(cause, "malformed public inputs"));
     }
-    if (compareBytes(inputs.pool, this.configuration.pool) !== 0) throw new PoolError("MALFORMED", "statement names another pool");
+    if (compareBytes(inputs.pool, this.config.pool) !== 0) throw new PoolError("MALFORMED", "statement names another pool");
     return inputs;
   }
 
@@ -326,7 +408,7 @@ export class Pool {
       if (held === undefined) throw new PoolError("BACKING", "the backing is not served in this pool");
       totals = held.totals;
       if (inputs.kind === ISSUE) {
-        const message = statementBytes(this.configHash, statement.kind, statement.publicInputs);
+        const message = statementBytes(this.hash, statement.kind, statement.publicInputs);
         if (!verifySignatureStrict(statement.obligorSignature as Uint8Array, message, held.signed.backing.obligor)) {
           throw new PoolError("SIGNATURE", "the obligor did not sign this issuance");
         }
@@ -350,12 +432,10 @@ export class Pool {
     for (const output of outputs) {
       if (output === 0n || this.tree.has(output)) throw new PoolError("OUTPUT", "output commitment is not new");
     }
-    if (this.tree.size + BigInt(outputs.length) > NOTE_TREE_CAPACITY) {
-      throw new PoolError("CAPACITY", "the note tree cannot hold these outputs");
-    }
+    if (!outputsFit(this.tree.size, outputs.length)) throw new PoolError("CAPACITY", "the note tree cannot hold these outputs");
     // The transition, as one: outputs appended in order, nullifiers inserted,
     // totals moved, the statement appended, the history hash advanced.
-    for (const output of outputs) this.tree.append(output);
+    this.tree.appendAll(outputs);
     this.anchors.add(this.tree.root());
     for (const nullifier of inputs.nullifiers) this.spent.insert(fieldToBytes(nullifier));
     if (inputs.kind === ISSUE && totals !== undefined) totals.issued += inputs.quantity;
@@ -384,7 +464,7 @@ export class Pool {
    * Replay a served trail from genesis (§7): every check of §6 run again,
    * every proof and issuance signature verified by `verifier`. Stops at the
    * first statement that fails, throwing that statement's PoolError with its
-   * sequence, and accepts nothing it did not recompute. A replayed prefix
+   * number, and accepts nothing it did not recompute. A replayed prefix
    * proves only itself; which history is current is the witnessed
    * commitment's to say (§C2).
    */
@@ -398,18 +478,16 @@ export class Pool {
       try {
         accepted = await pool.admit(statement);
       } catch (cause) {
-        if (cause instanceof PoolError) throw new PoolError(cause.code, `statement ${sequence}: ${cause.message}`);
+        if (cause instanceof PoolError) throw new PoolError(cause.code, `statement ${sequence}: ${cause.message}`, sequence);
         throw cause;
       }
       // A trail that repeats a statement is not the history: an exact
       // resubmission is answered with its prior record, which numbers it
       // earlier than its place in the trail.
-      if (accepted.sequence !== sequence) throw new PoolError("MALFORMED", `statement ${sequence} repeats statement ${accepted.sequence}`);
+      if (accepted.sequence !== sequence) {
+        throw new PoolError("MALFORMED", `statement ${sequence} repeats statement ${accepted.sequence}`, sequence);
+      }
     }
     return pool;
   }
-}
-
-function statementHashOf(configHash: Uint8Array, statement: Statement): Uint8Array {
-  return sha256(statementBytes(configHash, statement.kind, statement.publicInputs));
 }

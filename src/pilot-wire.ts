@@ -94,7 +94,7 @@ export function parsePilotCommand(value: unknown): PilotCommand {
 
 export function requirePilotBacking(backing: Backing, operator: Uint8Array, venue: Uint8Array): void {
   const e = backing.evidence;
-  if (backing.reliance.length !== 0 || !("thing" in backing.payout) ||
+  if (e.setting !== "transparent" || backing.reliance.length !== 0 || !("thing" in backing.payout) ||
       e.witnessing === undefined || compareBytes(e.witnessing.venue, venue) !== 0 ||
       e.witnessing.interval !== 1n || compareBytes(e.operator, operator) !== 0 ||
       e.silence !== undefined || e.replacementRule !== undefined || e.nonService !== undefined) {

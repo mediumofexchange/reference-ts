@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { decodeBacking, encodeBacking, makeBacking, POOL_CONSTRUCTION, signBacking } from "../src/backing.js";
 import { EncodingError } from "../src/bytes.js";
 import { utf8Encoder } from "../src/contexts.js";
-import { LedgerError, TransparentLedger } from "../src/ledger.js";
+import { LedgerError, replayLog, TransparentLedger } from "../src/ledger.js";
+import { requirePilotBacking } from "../src/pilot-wire.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
 import { LocalVenue } from "../src/venue.js";
 import { CONFIG_HASH, makePoolBacking } from "./pool-support.js";
@@ -92,5 +93,23 @@ describe("E names the construction and its configuration (C1.3)", () => {
     const transparent = makeTransparentBacking(SECRETS.backer);
     expect(() => new TransparentLedger().register(transparent, signBacking(SECRETS.backer, transparent))).not.toThrow();
     expect(pub(SECRETS.backer)).toEqual(backing.obligor);
+  });
+
+  it("is outside the pilot profile, and a transparent log served for it folds to no state", () => {
+    const venue = new LocalVenue();
+    const backing = makeBacking({
+      obligor: KEYS.backer,
+      payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },
+      reliance: [],
+      evidence: {
+        setting: "pool", operator: KEYS.operator, construction: "moe/pool/v1", configuration: CONFIG_HASH,
+        witnessing: { venue: venue.id, interval: 1n },
+      },
+    });
+    expect(() => requirePilotBacking(backing, KEYS.operator, venue.id)).toThrow(EncodingError);
+    expect(replayLog(backing, [])).toBeUndefined();
+    const transparent = makeTransparentBacking(SECRETS.backer, "EUR", [], undefined, { venue: venue.id, interval: 1n });
+    expect(() => requirePilotBacking(transparent, KEYS.operator, venue.id)).not.toThrow();
+    expect(replayLog(transparent, [])).toBeDefined();
   });
 });

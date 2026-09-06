@@ -4,10 +4,11 @@ import { describe, expect, it } from "vitest";
 import { signBacking } from "../src/backing.js";
 import { directoryRoot } from "../src/commitment.js";
 import { EMPTY_NOTE_ROOT, NOTE_TREE_CAPACITY, notePathProves } from "../src/pool/note-tree.js";
-import { Pool, PoolError, type Trail } from "../src/pool/pool.js";
+import { outputsFit, Pool, PoolError, type Trail } from "../src/pool/pool.js";
 import { EMPTY_SPENT_ROOT, spentProofProves } from "../src/pool/spent-set.js";
 import { fieldToBytes } from "../src/pool/field.js";
 import {
+  BURN,
   configurationHash,
   genesisHistoryHash,
   ISSUE,
@@ -98,7 +99,8 @@ describe("pool-v1 §6: admission changes state as one transition, or not at all"
     expect(spentProofProves(pool.spentRoot(), fieldToBytes(h.alice.nf), pool.spentProof(h.alice.nf), true)).toBe(true);
     expect(spentProofProves(pool.spentRoot(), fieldToBytes(h.change.nf), pool.spentProof(h.change.nf), false)).toBe(true);
     // A wallet's own path for its leaf proves against the latest anchor.
-    expect(notePathProves(pool.noteRoot(), h.change.cm, pool.noteTree.path(2n))).toBe(true);
+    expect(notePathProves(pool.noteRoot(), h.change.cm, pool.path(2n))).toBe(true);
+    expect(pool.leaf(2n)).toBe(h.change.cm);
   });
 
   it("answers an exact resubmission with the prior record, whatever its proof bytes, and changes nothing", async () => {
@@ -164,16 +166,15 @@ describe("pool-v1 §6: admission changes state as one transition, or not at all"
       obligorSignature: ed25519.sign(statementBytes(new Uint8Array(32), ISSUE, issueStatement(a.name, 100n, alice.cm, SECRETS.backer).publicInputs), SECRETS.backer),
     });
     await refused(pool.admit(otherConfiguration), "SIGNATURE");
-    const zero = oracle.accept(issueStatement(a.name, 0n, alice.cm, SECRETS.backer));
-    // A zero quantity is refused by the circuit; the oracle stands in for it, so the state machine admits what it is told is proven.
-    expect((await pool.admit(zero)).sequence).toBe(1n);
+    // A zero quantity is malformed on the host as in the circuit (§5.1), before the proof is read.
+    await refused(pool.admit(oracle.accept(issueStatement(a.name, 0n, alice.cm, SECRETS.backer))), "MALFORMED");
     const max = walletNote(a.name, (1n << 64n) - 1n, 7n);
     await pool.admit(oracle.accept(issueStatement(a.name, (1n << 64n) - 1n, max.cm, SECRETS.backer)));
     expect(pool.issued(a.name)).toBe((1n << 64n) - 1n);
     const one = walletNote(a.name, 1n, 8n);
     await refused(pool.admit(oracle.accept(issueStatement(a.name, 1n, one.cm, SECRETS.backer))), "SUPPLY");
     expect(pool.issued(a.name)).toBe((1n << 64n) - 1n);
-    expect(pool.length).toBe(2n);
+    expect(pool.length).toBe(1n);
   });
 
   it("burns only a served backing's outstanding claims (check 3)", async () => {
@@ -226,10 +227,15 @@ describe("pool-v1 §6: admission changes state as one transition, or not at all"
     await refused(pool.admit(oracle.accept(spendStatement(h.burned.noteRoot, [h.change.nf, fresh.nf], [out.cm, 0n]))), "OUTPUT");
     // Reissuing one commitment must not create two notes with one nullifier.
     await refused(pool.admit(oracle.accept({ ...h.issue, publicInputs: h.issue.publicInputs.map((v, i) => (i === 4 ? 7n : v)), obligorSignature: ed25519.sign(statementBytes(CONFIG_HASH, ISSUE, h.issue.publicInputs.map((v, i) => (i === 4 ? 7n : v))), SECRETS.backer) })), "OUTPUT");
-    // The capacity bound, at the boundary: the tree reports itself two short of full.
-    Object.defineProperty(pool.noteTree, "size", { get: () => NOTE_TREE_CAPACITY - 1n });
-    const zero = walletNote(a.name, 0n, 16n);
-    await refused(pool.admit(oracle.accept(spendStatement(h.burned.noteRoot, [h.change.nf, fresh.nf], [out.cm, zero.cm]))), "CAPACITY");
+    // The capacity bound, at the boundary (§4, §6 check 5): two outputs fit
+    // with two leaves free and not with one. The accumulator is not reachable
+    // from outside, so the predicate admission calls is what is tested.
+    expect(outputsFit(NOTE_TREE_CAPACITY - 2n, 2)).toBe(true);
+    expect(outputsFit(NOTE_TREE_CAPACITY - 1n, 2)).toBe(false);
+    expect(outputsFit(NOTE_TREE_CAPACITY - 1n, 1)).toBe(true);
+    expect(outputsFit(NOTE_TREE_CAPACITY, 1)).toBe(false);
+    expect(outputsFit(NOTE_TREE_CAPACITY, 0)).toBe(true);
+    expect(outputsFit(-1n, 0)).toBe(false);
     expect(pool.length).toBe(3n);
     expect(pool.historyHash()).toEqual(h.burned.historyHash);
   });
@@ -384,5 +390,82 @@ describe("pool-v1 §7: the history, the directory and replay", () => {
     record.historyHash[0] = (record.historyHash[0] as number) ^ 1;
     expect(ctx.pool.acceptedStatement(h.issued.statementHash)?.historyHash).toEqual(h.issued.historyHash);
     expect(SPEND).toBe(2);
+  });
+});
+
+describe("pool-v1 §6: what leaves the pool aliases nothing, and what it trusts is checked", () => {
+  it("serves copies of a backing's terms: rewriting a served copy's obligor grants no authority", async () => {
+    const { oracle, pool, a } = setup();
+    const alice = walletNote(a.name, 100n, 1n);
+    const served = pool.backing(a.name) as { backing: { obligor: Uint8Array } };
+    served.backing.obligor.set(KEYS.mallory);
+    const trail = pool.trail();
+    (trail.backings[0]?.backing.obligor as Uint8Array).set(KEYS.mallory);
+    (trail.backings[0]?.backing.evidence as { configuration: Uint8Array }).configuration.fill(0);
+    await refused(pool.admit(oracle.accept(issueStatement(a.name, 100n, alice.cm, SECRETS.mallory))), "SIGNATURE");
+    expect((await pool.admit(oracle.accept(issueStatement(a.name, 100n, alice.cm, SECRETS.backer)))).sequence).toBe(1n);
+    expect(pool.backing(a.name)?.backing.obligor).toEqual(KEYS.backer);
+    // The configuration and its hash are copies too.
+    pool.configuration.pool.fill(0);
+    pool.configHash.fill(0);
+    expect(pool.configHash).toEqual(CONFIG_HASH);
+    expect(pool.configuration).toEqual(CONFIG);
+  });
+
+  it("refuses a verifier whose circuits are not the configuration's, where the verifier can say", () => {
+    const matching = Object.assign(new Oracle(), { identities: { issue: CONFIG.issue, spend: CONFIG.spend, burn: CONFIG.burn } });
+    expect(() => new Pool(CONFIG, matching)).not.toThrow();
+    const other = Object.assign(new Oracle(), {
+      identities: { issue: CONFIG.issue, spend: CONFIG.spend, burn: { bytecode: CONFIG.burn.bytecode, vk: new Uint8Array(32) } },
+    });
+    expect(() => new Pool(CONFIG, other)).toThrow(PoolError);
+    expect(() => new Pool(CONFIG, other)).toThrow(/burn/);
+    expect(() => new Pool(CONFIG, new Oracle())).not.toThrow();
+  });
+
+  it("answers a malformed backing or configuration with a PoolError, and numbers a replay's failing statement", async () => {
+    const pool = new Pool(CONFIG, new Oracle());
+    let caught: unknown;
+    try {
+      pool.register({} as never, new Uint8Array(64));
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ name: "PoolError", code: "BACKING" });
+    try {
+      new Pool({ ...CONFIG, pool: new Uint8Array(31) }, new Oracle());
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ name: "PoolError", code: "CONFIGURATION" });
+    const ctx = setup();
+    await history(ctx);
+    const trail = ctx.pool.trail();
+    const doubting = new Oracle();
+    doubting.accept(trail.statements[0] as Statement);
+    await expect(Pool.replay(trail, doubting)).rejects.toMatchObject({ code: "PROOF", sequence: 2n });
+    const repeated: Trail = { ...trail, statements: [trail.statements[0] as Statement, trail.statements[0] as Statement] };
+    await expect(Pool.replay(repeated, doubting)).rejects.toMatchObject({ code: "MALFORMED", sequence: 2n });
+  });
+
+  it("answers a resubmission with its record before reading its evidence, and refuses a signature over other bytes", async () => {
+    const ctx = setup();
+    const h = await history(ctx);
+    expect(await ctx.pool.admit({ ...h.spend, proof: new Uint8Array(0) })).toEqual(h.spent);
+    expect(await ctx.pool.admit({ ...h.issue, obligorSignature: undefined } as unknown as Statement)).toEqual(h.issued);
+    expect(ctx.pool.length).toBe(3n);
+    const alice = walletNote(ctx.a.name, 7n, 30n);
+    const issue = issueStatement(ctx.a.name, 7n, alice.cm, SECRETS.backer);
+    const otherInputs = issue.publicInputs.map((v, i) => (i === 4 ? 8n : v));
+    const overOtherInputs = ctx.oracle.accept({ ...issue, obligorSignature: ed25519.sign(statementBytes(CONFIG_HASH, ISSUE, otherInputs), SECRETS.backer) });
+    await refused(ctx.pool.admit(overOtherInputs), "SIGNATURE");
+    const burnInputs = [...issue.publicInputs, 1n, 2n, 3n];
+    const overOtherKind = ctx.oracle.accept({ ...issue, obligorSignature: ed25519.sign(statementBytes(CONFIG_HASH, BURN, burnInputs), SECRETS.backer) });
+    await refused(ctx.pool.admit(overOtherKind), "SIGNATURE");
+    // A verifier answering anything but `true` is a refusal.
+    const yes = { verify: async () => "yes" as unknown as boolean };
+    const trusting = new Pool(CONFIG, yes);
+    trusting.register(ctx.a, signBacking(SECRETS.backer, ctx.a));
+    await refused(trusting.admit(issue), "PROOF");
   });
 });

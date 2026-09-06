@@ -165,7 +165,15 @@ export class ByteWriter {
 export class ByteReader {
   private offset = 0;
 
-  constructor(private readonly bytes: Uint8Array) {}
+  /**
+   * Bytes only: `readonly Uint8Array` is erased at runtime, so a decoder
+   * handed a string, an object or nothing would otherwise fail with a
+   * TypeError naming no boundary, where every decoder's contract is
+   * EncodingError.
+   */
+  constructor(private readonly bytes: Uint8Array) {
+    if (!(bytes instanceof Uint8Array)) throw new EncodingError("not a byte array");
+  }
 
   u8(): number {
     if (this.offset + 1 > this.bytes.length) throw new EncodingError("truncated");
