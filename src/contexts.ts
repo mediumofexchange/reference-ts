@@ -41,6 +41,7 @@
 //   moe/pool/v1/statement      what a statement asserts; K signs it for an issuance (§5)
 //   moe/pool/v1/genesis        historyHash_0 (§7)
 //   moe/pool/v1/history        historyHash_i (§7)
+//   moe/pool/v1/receipt        the operator's acceptance evidence (§7)
 //   moe/pool/v1/snapshot       a backing's snapshot digest in the directory (§7)
 //   moe/pool/v1/spent/leaf     a spent-set leaf (§8)
 //   moe/pool/v1/spent/node     a spent-set node (§8)
@@ -68,6 +69,7 @@ export const POOL_IDENTITY_CONTEXT = tag("moe/pool/v1/pool");
 export const POOL_STATEMENT_CONTEXT = tag("moe/pool/v1/statement");
 export const POOL_GENESIS_CONTEXT = tag("moe/pool/v1/genesis");
 export const POOL_HISTORY_CONTEXT = tag("moe/pool/v1/history");
+export const POOL_RECEIPT_CONTEXT = tag("moe/pool/v1/receipt");
 export const POOL_SNAPSHOT_CONTEXT = tag("moe/pool/v1/snapshot");
 export const POOL_SPENT_LEAF_CONTEXT = tag("moe/pool/v1/spent/leaf");
 export const POOL_SPENT_NODE_CONTEXT = tag("moe/pool/v1/spent/node");
@@ -104,6 +106,7 @@ const ALL_CONTEXTS = [
   POOL_STATEMENT_CONTEXT,
   POOL_GENESIS_CONTEXT,
   POOL_HISTORY_CONTEXT,
+  POOL_RECEIPT_CONTEXT,
   POOL_SNAPSHOT_CONTEXT,
   POOL_SPENT_LEAF_CONTEXT,
   POOL_SPENT_NODE_CONTEXT,

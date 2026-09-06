@@ -14,6 +14,8 @@ import { fieldToHex, hexToField, limbsOf } from '../../dist/pool/field.js';
 import { NoteTree, notePathProves } from '../../dist/pool/note-tree.js';
 import { commitmentOf, nullifierOf, ownerOf } from '../../dist/pool/notes.js';
 import { Pool } from '../../dist/pool/pool.js';
+import { poolReceiptAttestsEvidence, poolReceiptBytes, poolReceiptCovers, poolReceiptInHistory,
+  signPoolReceipt, verifyPoolReceipt } from '../../dist/pool/receipt.js';
 import { poseidon2Hash } from '../../dist/pool/poseidon2.js';
 import { BURN, configurationHash, ISSUE, poolIdentity, SPEND, statementBytes } from '../../dist/pool/statement.js';
 
@@ -89,6 +91,7 @@ export async function checkAdmission({ api, circuits, pins, checks, metrics }) {
   const wrongSigner = { ...issue, obligorSignature: ed25519.sign(statementBytes(configHash, ISSUE, issue.publicInputs), otherSecret) };
   await refused(pool.admit(wrongSigner), 'SIGNATURE');
   const issued = await pool.admit(issue);
+  const issueReceipt = signPoolReceipt(operatorSecret, configuration, issued, 0n);
   assert.equal(issued.sequence, 1n);
   assert.equal(pool.outstanding(backing.name), 100n);
   checks.push('a real issuance is admitted under K\'s signature and refused under another key');
@@ -105,6 +108,7 @@ export async function checkAdmission({ api, circuits, pins, checks, metrics }) {
     output_notes: [witnessNote(bob), witnessNote(change)] });
   const spend = await statement('spend', spendWitness({ root: tree.root(), path: alicePath }));
   const spent = await pool.admit(spend);
+  const spendReceipt = signPoolReceipt(operatorSecret, configuration, spent, 0n);
   assert.equal(spent.sequence, 2n);
   assert.deepEqual(pool.leaves(), [alice.cm, bob.cm, change.cm]);
   checks.push('a wallet-built spend with a padding input is admitted');
@@ -113,8 +117,12 @@ export async function checkAdmission({ api, circuits, pins, checks, metrics }) {
   const again = await statement('spend', spendWitness({ root: tree.root(), path: alicePath }));
   assert.notDeepEqual(again.proof, spend.proof);
   assert.deepEqual(await pool.admit(again), spent);
+  assert.deepEqual(signPoolReceipt(operatorSecret, configuration, await pool.admit(again), spendReceipt.after), spendReceipt);
+  assert.ok(poolReceiptCovers(configuration, again, spendReceipt));
+  assert.equal(poolReceiptAttestsEvidence(configuration, again, spendReceipt), false);
   assert.equal(pool.length, 2n);
   checks.push('a re-proven resubmission returns the prior record without changing state');
+  checks.push('a re-proven retry keeps the original receipt and its original evidence hash');
 
   // Respending under the newest anchor verifies as a proof and is refused as spent.
   tree = synced();
@@ -138,6 +146,7 @@ export async function checkAdmission({ api, circuits, pins, checks, metrics }) {
     inputs: [witnessNote(bob), witnessNote(padding2)], secrets: [fieldToHex(bob.secret), fieldToHex(padding2.secret)],
     siblings: [hexPath(bobPath).siblings, emptyPath.siblings], right: [hexPath(bobPath).right, emptyPath.right], change: witnessNote(rest) });
   const burned = await pool.admit(burn);
+  const burnReceipt = signPoolReceipt(operatorSecret, configuration, burned, 0n);
   assert.equal(burned.sequence, 3n);
   assert.equal(pool.outstanding(backing.name), 70n);
   assert.ok(pool.isSpent(bob.nf) && !pool.isSpent(change.nf) && !pool.isSpent(rest.nf));
@@ -161,6 +170,10 @@ export async function checkAdmission({ api, circuits, pins, checks, metrics }) {
   // An accepted statement answers with its record whatever proof bytes accompany it (§6).
   const corruptedBurn = new Uint8Array(burn.proof); corruptedBurn[100] ^= 1;
   assert.deepEqual(await pool.admit({ ...burn, proof: corruptedBurn }), burned);
+  assert.ok(poolReceiptCovers(configuration, { ...burn, proof: corruptedBurn }, burnReceipt));
+  assert.equal(poolReceiptAttestsEvidence(configuration, { ...burn, proof: corruptedBurn }, burnReceipt), false);
+  assert.equal(poolReceiptAttestsEvidence(configuration, wrongSigner, issueReceipt), false);
+  checks.push('receipts distinguish corrupted proof and issuance-signature bytes from admitted evidence');
   assert.equal((await pool.admit(burn2)).sequence, 4n);
   assert.equal(pool.outstanding(backing.name), 65n);
   checks.push('corrupted, cross-kind and truncated proofs are refused for a new statement; an accepted one answers with its record');
@@ -172,10 +185,25 @@ export async function checkAdmission({ api, circuits, pins, checks, metrics }) {
   assert.deepEqual(replayed.spentRoot(), pool.spentRoot());
   assert.equal(replayed.outstanding(backing.name), 65n);
   assert.deepEqual(replayed.directory(), pool.directory());
+  for (const [statement, receipt] of [[issue, issueReceipt], [spend, spendReceipt], [burn, burnReceipt]]) {
+    assert.ok(verifyPoolReceipt(configuration, receipt));
+    assert.ok(poolReceiptAttestsEvidence(configuration, statement, receipt));
+    assert.ok(poolReceiptInHistory(replayed, receipt));
+    assert.equal(poolReceiptBytes(receipt).length, 195);
+    assert.equal(verifyPoolReceipt({ ...configuration, helper: new Uint8Array(32) }, receipt), false);
+  }
+  checks.push('signed issuance, spend and burn receipts verify against separately replayed real-proof history');
+  const reprovenTrail = pool.trail(); reprovenTrail.statements[1] = again;
+  const reprovenHistory = await Pool.replay(reprovenTrail, backend.verifier);
+  assert.ok(poolReceiptInHistory(reprovenHistory, spendReceipt));
+  checks.push('replay with a different valid proof preserves receipt history inclusion');
   const truncated = pool.trail();
   const prefix = await Pool.replay({ ...truncated, statements: truncated.statements.slice(0, 2) }, backend.verifier);
   assert.equal(prefix.outstanding(backing.name), 100n);
   assert.notDeepEqual(prefix.historyHash(), pool.historyHash());
+  assert.ok(poolReceiptInHistory(prefix, spendReceipt));
+  assert.equal(poolReceiptInHistory(prefix, burnReceipt), false);
+  checks.push('a receipt beyond a replayed prefix is not proven by it');
   checks.push('a separate verifier replays the trail to the same history; a prefix proves only itself');
   await backend.close();
   // Values the circuits proved under: the host derived them, the proofs

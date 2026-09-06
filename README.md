@@ -76,19 +76,24 @@ deadline. What the repository holds today:
   sources; `npm run check:pool` checks their identities, exercises real ZK
   proofs and adversarial witnesses, and drives the claim layer with real
   proofs through the Barretenberg verifier.
+- **Pool receipt envelopes** (`src/pool/receipt.ts`, pool-v1 §7): strict
+  operator signatures bound to the expected configuration, with separate
+  checks for statement identity, exact admitted evidence, and inclusion in a
+  replayed history. A receipt proves acceptance; witnessed finality remains
+  the sequencing layer's check.
 - **A local two-process pilot** on the frozen path (`docs/PILOT.md`): durable
   commands, exact retries, crash recovery, a trusted local witness. An
   integration harness, not a product.
 
-Out of scope until their step: the receipt and commitment envelopes over the
-pool's fields (sequencing over notes), note delivery and backups, the wallet,
+Out of scope until their step: the pool sequencer and its commitment schedule,
+durable receipt issuance and recovery, note delivery and backups, the wallet,
 an external witness's write side, and every Extensions profile.
 
 The implementation follows specification revision
 [`81516ba`](https://github.com/mediumofexchange/money-from-first-principles/tree/81516ba),
 whose `pool-v1.md` pins the construction bit for bit and records the
-implemented circuits and keys; its §7 receipt bytes are the next step's to
-sign. `docs/PROTOCOL_RULES.md` maps each binding rule to its specification
+implemented circuits and keys, including the §7 receipt bytes signed here.
+`docs/PROTOCOL_RULES.md` maps each binding rule to its specification
 rule, code and test, and marks what is frozen.
 
 ## Try the local pilot

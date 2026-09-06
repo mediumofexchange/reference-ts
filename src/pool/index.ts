@@ -13,3 +13,4 @@ export * from "./note-tree.js";
 export * from "./spent-set.js";
 export * from "./statement.js";
 export * from "./pool.js";
+export * from "./receipt.js";

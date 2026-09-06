@@ -38,6 +38,7 @@ import { createHash } from 'node:crypto';
 import * as core from '@mediumofexchange/reference';
 import { makeBacking, encodeBacking, decodeBacking, signBacking, verifyBackingSignature } from '@mediumofexchange/reference/backing';
 import { PILOT_PROFILE } from '@mediumofexchange/reference/pilot-wire';
+import { poolReceiptBytes } from '@mediumofexchange/reference/pool/receipt';
 import { ed25519 } from '@noble/curves/ed25519.js';
 const circuits = join(dirname(fileURLToPath(import.meta.resolve('@mediumofexchange/reference/package.json'))), 'src/pool/circuits');
 const manifest = JSON.parse(readFileSync(join(circuits, 'manifest.json'), 'utf8'));
@@ -52,6 +53,9 @@ const backing = makeBacking({ obligor: key, payout: { thing: 'test', quantumExpo
 assert.equal(decodeBacking(encodeBacking(backing)).nameHex, backing.nameHex);
 assert.ok(verifyBackingSignature(backing, signBacking(secret, backing)));
 assert.equal(typeof core.makeBacking, 'function');
+assert.equal(core.poolReceiptBytes, poolReceiptBytes);
+assert.equal(typeof core.signPoolReceipt, 'function');
+assert.equal(typeof core.poolReceiptInHistory, 'function');
 assert.equal(PILOT_PROFILE, 'transparent-pilot/v0-directory-v1');
 if (Number(process.versions.node.split('.')[0]) >= 24) {
   const { PilotStore } = await import('@mediumofexchange/reference/pilot-store');
