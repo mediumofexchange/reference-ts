@@ -10,9 +10,9 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Status
 
-- Active branch: `feat/pool-receipt-record`, base `03dca8f` on `main`.
-  Implements receipt record facts and exact source-checkpoint inclusion.
-  Independently reviewed and fully verified; ready to merge and push.
+- Merged into `main`: `40e9484`, from `feat/pool-receipt-record` (base
+  `03dca8f`). Receipt record facts and exact source-checkpoint inclusion are
+  independently reviewed and fully verified.
 - `readPoolReceiptRecord` authenticates the complete header and signed scope
   terms, resolves exact held/not-reached/moved-past sequences, and reports
   current scope term bounds. Reappointment never revives an old link.
@@ -46,14 +46,13 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Next
 
-1. Commit, merge and push this reviewed and verified slice.
-2. Extend the pool authority model and build the global receipt/recovery
+1. Extend the pool authority model and build the global receipt/recovery
    classifier: check historical inclusion and live-scope contradictions before
    lapse, preserve prospective revocation, validate silence recovery. Bind a
    held `after` commitment to its segment before treating it as an operative era.
-3. Recognize imported issuance finalized before revocation even when carried
+2. Recognize imported issuance finalized before revocation even when carried
    by a later checkpoint; then enable only histories the recovery reader proves.
-4. Add presentation, note delivery and wallet synchronization; then service
+3. Add presentation, note delivery and wallet synchronization; then service
    transport and the external witness write side.
 
 ## Open questions
