@@ -70,6 +70,11 @@ describe("C2.5/C2.10: scope authority is read from signed terms and the witnesse
       const successorHeader: SegmentHeader = { domain: DOMAIN, venue: venue.id, operator: KEYS.carol, sequence: 1n,
         entries: [{ backing: x.backing.name, link: replacementHash(x.backing.name, valid) }] };
       expect(pending.authorizes(successorHeader)).toBe(false);
+      const announced = pending.termForLink(x.backing.name, successorHeader.entries[0]!.link)!;
+      expect(announced).toMatchObject({ from: valid.effective, operator: KEYS.carol });
+      announced.operator.fill(0);
+      expect(pending.termForLink(x.backing.name, successorHeader.entries[0]!.link)?.operator).toEqual(KEYS.carol);
+      expect(pending.termForLink(x.backing.name, new Uint8Array(32))).toBeUndefined();
       venue.advance(valid.effective - venue.witnessedIndex());
       const arrived = view(venue, [x]);
       expect(arrived.term(x.backing.name)?.operator).toEqual(KEYS.carol);

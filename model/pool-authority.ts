@@ -35,6 +35,10 @@ export interface Departures {
   readonly forgetSpent?: boolean;
   readonly countSharedTwice?: boolean;
   readonly retainAbandoned?: boolean;
+  readonly skipUnprovenSteps?: boolean;
+  readonly skipLiveInvalid?: boolean;
+  readonly skipSameIndex?: boolean;
+  readonly trustShownScope?: boolean;
 }
 export class Refusal extends Error {}
 function requireThat(ok: boolean, message: string): asserts ok { if (!ok) throw new Refusal(message); }
@@ -155,6 +159,10 @@ export class World {
   readonly oracle = new ProofOracle();
   readonly records: Recorded[] = [];
   readonly withheld = new Set<Id>();
+  readonly withheldDirectories = new Set<Id>();
+  readonly withheldScopes = new Set<Id>();
+  /** An adversary's scope preimage beside the ideal signed checkpoint. */
+  readonly shownScopes = new Map<Id, Scope>();
   private readonly chains = new Map<Id, Term[]>();
   private readonly domains = new Map<Id, Id>();
   private readonly highestSigned = new Map<Id, bigint>();
@@ -191,6 +199,45 @@ export class World {
     });
   }
   latestFor(backing: Id): Id | null { return this.latest.get(backing) ?? null; }
+  /**
+   * C2.7.1–3 / C2.10.4: refine the state's latest-carrying oracle with exact
+   * evidence descent. Select a candidate BEFORE replay, never by replay's
+   * verdict. Model enumeration stands for the venue's bounded predecessor
+   * index; the runtime walks held records within each replacement term.
+   */
+  predecessorFor(backing: Id, child: { readonly operator: Id; readonly sequence: bigint; readonly at: bigint }): Id | null {
+    requireThat(child.at <= this.now && child.at >= 0n, "child index");
+    const eligible = this.records.filter(r => r.at < child.at ||
+      (!this.departures.skipSameIndex && r.at === child.at && r.checkpoint.operator === child.operator && r.checkpoint.sequence < child.sequence));
+    for (const record of [...eligible].reverse()) {
+      const c = record.checkpoint;
+      if (this.term(backing, record.at).operator !== c.operator) continue;
+      if (this.withheldDirectories.has(c.id)) {
+        if (this.departures.skipUnprovenSteps) continue;
+        throw new Refusal("unavailable directory");
+      }
+      if (!c.carries.includes(backing)) continue; // ideal authenticated absence
+      if (this.withheldScopes.has(c.id)) {
+        if (this.departures.skipUnprovenSteps) continue;
+        throw new Refusal("unavailable scope");
+      }
+      const scope = this.shownScopes.get(c.id) ?? c.scope;
+      requireThat(this.departures.trustShownScope === true || scope === c.scope, "unauthenticated scope");
+      requireThat(scope.entries.length > 0 && scope.operator === c.operator &&
+        scope.entries.some(e => e.backing === backing), "scope shape");
+      const terms = scope.entries.map(e => {
+        const chain = this.chains.get(e.backing);
+        const i = chain?.findIndex(t => t.link === e.link && t.from === e.from && t.operator === scope.operator) ?? -1;
+        requireThat(i >= 0 && this.domains.get(e.backing) === scope.domain, "scope term");
+        return { from: chain![i]!.from, until: chain![i + 1]?.from };
+      });
+      if (terms.some(t => t.until !== undefined && t.until <= record.at)) continue;
+      requireThat(terms.every(t => t.from <= record.at), "scope not in force");
+      if (this.departures.skipLiveInvalid && record.status === "invalid") continue;
+      return c.id; // missing/invalid statements still select this candidate
+    }
+    return null;
+  }
   record(id: Id): Recorded { const record = this.records.find(r => r.checkpoint.id === id); requireThat(record !== undefined, "checkpoint not held"); return record; }
   import(id: Id, checked = new Set<Id>()): State {
     requireThat(!this.withheld.has(id), "unavailable history");

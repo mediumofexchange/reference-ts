@@ -86,6 +86,19 @@ export class PoolAuthorityView {
     const chain = this.chains.get(bytesToHex(backing));
     if (chain === undefined) return undefined;
     const i = chain.findLastIndex(t => t.from <= at);
+    return this.copyTerm(backing, chain, i);
+  }
+
+  /** An exact authenticated link, including ended and announced terms.
+   * Existence is not current authority; compare its bounds with the record. */
+  termForLink(backing: Uint8Array, link: Uint8Array): PoolTerm | undefined {
+    const chain = this.chains.get(bytesToHex(backing));
+    if (chain === undefined) return undefined;
+    const i = chain.findIndex(t => compareBytes(t.link, link) === 0);
+    return i < 0 ? undefined : this.copyTerm(backing, chain, i);
+  }
+
+  private copyTerm(backing: Uint8Array, chain: readonly Succession[], i: number): PoolTerm {
     const term = chain[i]!;
     const until = chain[i + 1]?.from;
     return Object.freeze({ backing: copyBytes(backing), operator: copyBytes(term.operator), link: copyBytes(term.link), from: term.from,

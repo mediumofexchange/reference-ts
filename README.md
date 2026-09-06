@@ -99,15 +99,20 @@ deadline. What the repository holds today:
 - **Bounded commitment predecessor reads** (`Venue.previousFor`, C2.7.2):
   the local and Ergo venues locate prior held sequences, including at the same
   witnessed index, with logarithmic lookup across sparse histories. Custom
-  `Venue` adapters must implement this required read. Directory descent and
-  whole-scope checkpoint validation remain the next sequencing step.
+  `Venue` adapters must implement this required read.
+- **Exact directory descent** (`readPoolPredecessor`, C2.7/C2.10.4): selects
+  a candidate before replay, relative to a held child checkpoint. Authenticated
+  directory absence and public whole-scope lapse permit descent; missing
+  evidence or invalid live history cannot substitute an older candidate.
+  Snapshot preimages authenticate scope without revealing local statements.
+  Candidate selection does not establish whole-scope finality.
 - **A local two-process pilot** on the frozen path (`docs/PILOT.md`): durable
   commands, exact retries, crash recovery, a trusted local witness. An
   integration harness, not a product.
 
 Out of scope until their step: the pool sequencer over the witnessed record
-(canonical openings, whole-scope finality, lapse, descent,
-restart), durable receipt issuance and recovery, note delivery and backups,
+(canonical opening validation, whole-scope finality and restart),
+durable receipt issuance and recovery, note delivery and backups,
 the wallet, an external witness's write side, and every Extensions profile.
 
 The [replacement boundary](docs/POOL_SEQUENCING_BOUNDARY.md) is resolved by
@@ -117,9 +122,9 @@ current operator authority, private membership in a public service scope,
 one anchor per input, and finalized shared histories imported with
 deduplication. [The adversarial model](model/pool-authority.ts) exercises
 splits, reunions, replay and scope changes with ideal cryptography; the
-claim layer now holds the frames and circuits, and the sequencer over the
-witnessed record — scope derivation, the commit schedule, whole-scope
-finality, lapse, descent and restart — is the next step. The historical
+claim layer now holds the frames and circuits. Record-derived authority,
+scheduling and predecessor candidate descent are implemented; whole-scope
+finality, canonical import validation and restart are next. The historical
 `moe/pool/v1` runtime was replaced and lives in git history.
 
 The runtime follows specification revision

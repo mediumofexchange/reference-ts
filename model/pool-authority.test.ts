@@ -43,6 +43,86 @@ function reunite(f: ReturnType<typeof fixture>, py: Service, override?: Readonly
   return pxy;
 }
 
+describe("C2.7/C2.10.4 exact directory descent before replay", () => {
+  function child(w: World, operator = "P", sequence = 1n << 64n) { return { operator, sequence, at: w.now }; }
+
+  it("retains same-index predecessors and excludes the child and later sequences", () => {
+    const w = new World(0n); w.register("X", "P");
+    const p = w.open("P", ["X"]), first = p.commit(); settle(w, first);
+    const second = p.commit(); settle(w, second);
+    expect(w.predecessorFor("X", child(w, "P", second.sequence))).toBe(first.id);
+    const later = p.commit(); settle(w, later);
+    expect(w.predecessorFor("X", child(w, "P", second.sequence))).toBe(first.id);
+    expect(w.predecessorFor("X", child(w, "Q"))).toBeNull();
+  });
+
+  it("has a wrong-genesis counterexample if same-index predecessors are skipped", () => {
+    const w = new World(0n, { skipSameIndex: true }); w.register("X", "P");
+    const p = w.open("P", ["X"]), first = p.commit(); settle(w, first);
+    expect(w.latestFor("X")).toBe(first.id);
+    expect(w.predecessorFor("X", child(w))).toBeNull();
+  });
+
+  it("passes authenticated omission without history but refuses a missing directory", () => {
+    const { w, p, base } = fixture();
+    const omit = w.sign(p, ["Y"]); w.tick(); expect(w.include(omit)).toBe("invalid");
+    w.withheld.add(omit.id); w.withheldScopes.add(omit.id);
+    expect(w.predecessorFor("X", child(w))).toBe(base.id);
+    w.withheldDirectories.add(omit.id);
+    expect(() => w.predecessorFor("X", child(w))).toThrow("unavailable directory");
+  });
+
+  it("never substitutes an older valid checkpoint for present invalid or withheld history", () => {
+    const { w, p, base } = fixture();
+    const invalid = w.sign(p, ["X"]); w.tick(); expect(w.include(invalid)).toBe("invalid");
+    w.withheld.add(invalid.id);
+    expect(w.predecessorFor("X", child(w))).toBe(invalid.id);
+    expect(() => w.import(invalid.id)).toThrow("unavailable history");
+    w.withheldScopes.add(invalid.id);
+    expect(() => w.predecessorFor("X", child(w))).toThrow("unavailable scope");
+    const broken = fixture({ skipLiveInvalid: true });
+    const bad = broken.w.sign(broken.p, ["X"]); broken.w.tick(); broken.w.include(bad);
+    expect(broken.w.predecessorFor("X", child(broken.w))).toBe(broken.base.id);
+    expect(invalid.id).not.toBe(base.id);
+  });
+
+  it("passes a whole-scope lapse with authenticated scope even when its statements are withheld", () => {
+    const { w, p, base } = fixture();
+    const late = p.commit(["Y"]); w.replace("X", "Q"); w.tick(3n);
+    expect(w.include(late)).toBe("lapsed"); w.withheld.add(late.id);
+    expect(w.predecessorFor("Y", child(w))).toBe(base.id);
+    w.withheldScopes.add(late.id);
+    expect(() => w.predecessorFor("Y", child(w))).toThrow("unavailable scope");
+  });
+
+  it("does not let a substituted old scope manufacture lapse for a live checkpoint", () => {
+    for (const trustShownScope of [false, true]) {
+      const f = fixture({ trustShownScope }), { w, p, base } = f;
+      w.replace("X", "Q"); w.tick(3n);
+      const py = p.change(["Y"]), current = py.commit(); settle(w, current);
+      w.shownScopes.set(current.id, base.scope);
+      if (trustShownScope) expect(w.predecessorFor("Y", child(w))).toBe(base.id);
+      else expect(() => w.predecessorFor("Y", child(w))).toThrow("unauthenticated scope");
+    }
+  });
+
+  it("reaches through never-committing terms and same-key reappointment", () => {
+    const f = fixture(), { w, base } = f;
+    w.replace("X", "Q"); w.tick(3n);
+    w.replace("X", "P"); w.tick(3n);
+    expect(w.predecessorFor("X", child(w))).toBe(base.id);
+    expect(w.predecessorFor("X", child(w))).toBe(w.latestFor("X"));
+  });
+
+  it("exposes an older-state substitution if unavailable steps are silently skipped", () => {
+    const f = fixture({ skipUnprovenSteps: true });
+    const latest = f.p.commit(); settle(f.w, latest);
+    f.w.withheldDirectories.add(latest.id);
+    expect(f.w.predecessorFor("X", child(f.w))).toBe(f.base.id);
+    expect(f.w.latestFor("X")).toBe(latest.id);
+  });
+});
+
 describe("C1.2/C2.10 private scope authority and finalized import", () => {
   it("derives deadlines from every current scope term and rejects the old scope after same-key reappointment", () => {
     const { w, p } = fixture();
