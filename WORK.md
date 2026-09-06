@@ -10,9 +10,10 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Status
 
-- Active branch: `test/pool-receipt-repair-gap`, base `d42a9ea`.
+- Merged into `main`: `46dfe50` from `test/pool-receipt-repair-gap`
+  (base `d42a9ea`).
   Investigating global receipt classification found a material normative gap.
-  The regression and diagnostic are verified and ready to merge/push.
+  The regression and diagnostic are verified; classification awaits a decision.
 - Global classification must not label every new segment under live terms an
   elective violation. A receipt can name held sequence 1, then be included in
   signed-but-unwitnessed sequence 2, then be dropped by permitted stale repair
@@ -52,12 +53,11 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Next
 
-1. Finish verification and commit/merge/push the regression and diagnostic.
-2. Resolve the maintainer's receipt-repair choice in the companion specification
+1. Resolve the maintainer's receipt-repair choice in the companion specification
    first, then extend the adversarial model and build global receipt
    classification. Authenticate held after-segment identity; preserve inclusion
    and historical contradictions as independent facts; missing evidence stops.
-3. Specify later-version silence/presentation objects before implementing
+2. Specify later-version silence/presentation objects before implementing
    recovery, presentation, delivery, wallet synchronization and service transport.
 
 ## Open questions
