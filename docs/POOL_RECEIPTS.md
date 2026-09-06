@@ -71,3 +71,10 @@ contradictions before lapse (C2.10.9), building on the revocation check and the
 later construction's silence objects. Missing evidence cannot be interpreted as an absent payment. Venue
 refusals and changing views throw `VenueError`; unexpected proof-backend
 failures also propagate instead of becoming invalid external evidence.
+
+Global classification also needs a decision on
+[receipts predating a failed checkpoint repair](POOL_RECEIPT_REPAIR_GAP.md).
+The durable store can repair past a failed checkpoint while an earlier
+receipt's own `after` remains held. Current rules do not explicitly classify
+that earlier receipt; a later new segment alone cannot prove an illicit
+elective reset.

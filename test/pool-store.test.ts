@@ -5,6 +5,7 @@ import { makeBacking, signBacking } from "../src/backing.js";
 import { directoryRoot, signCommitment, type Commitment } from "../src/commitment.js";
 import { poolReceiptAttestsEvidence, poolReceiptInHistory } from "../src/pool/receipt.js";
 import type { PoolCheckpointEvidence } from "../src/pool/checkpoint.js";
+import { readPoolReceiptCheckpoint, readPoolReceiptRecord } from "../src/pool/receipt-record.js";
 import { Segment } from "../src/pool/segment.js";
 import { segmentAuthority } from "../src/pool/statement.js";
 import { decodeStoredOpening, encodeStoredOpening, encodeStoredReceipt } from "../src/pool/store-codec.js";
@@ -141,6 +142,36 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     const resumed = store(f.file, venue, f.oracle);
     expect((await resumed.view()).highestSignedSequence).toBe(2n);
     expect(await resumed.submit(f.issue())).toEqual(receipt);
+  });
+
+  it("failed checkpoint repair can leave a live-scope receipt's after sequence held", async () => {
+    const venue = new Delayed(), f = await fixture(venue);
+    await f.s.publish(); venue.advance(2n); venue.include();
+    const statement = f.issue(), receipt = await f.s.submit(statement);
+    expect(receipt.after).toBe(1n);
+    const failed = await f.s.commit("unpublished-tail");
+    expect(failed.sequence).toBe(2n);
+    // No publication of sequence 2. C2.4.3 permits stale-state repair after
+    // the lag, even though the earlier receipt names HELD sequence 1.
+    venue.advance(2n);
+    const repaired = await f.s.activate("repair-after-failed-checkpoint", [f.x, f.y]);
+    expect(repaired.sequence).toBe(3n);
+    await f.s.publish(); venue.advance(2n); venue.include();
+    const view = await f.s.view();
+    expect(view.trail!.statements).toHaveLength(0);
+    expect(view.trail!.header.entries.every(e => e.opening?.sequence === 1n)).toBe(true);
+    expect(venue.witnessedAtSequence(KEYS.operator, 2n)).toBeUndefined();
+    expect(venue.latestFor(KEYS.operator)).toEqual(repaired);
+    expect(readPoolReceiptRecord({ configuration: CONFIG, venue, header: f.trail.header,
+      receipt, backings: [f.x, f.y] })).toMatchObject({ kind: "record", scope: "live",
+      sequence: { kind: "held", commitment: f.opening } });
+    expect(await readPoolReceiptCheckpoint({ configuration: CONFIG, venue, header: f.trail.header,
+      receipt, checkpoint: f.opening, evidence: view.checkpoints, verifier: f.oracle }))
+      .toMatchObject({ kind: "not-included" });
+    // These are record facts, deliberately not a lapse or fault verdict.
+    f.s.close();
+    const resumed = store(f.file, venue, f.oracle);
+    expect(await resumed.submit(statement)).toEqual(receipt);
   });
 
   it("restart preserves a signed checkpoint and its co-signed tail, fences the old writer, and waits the lag", async () => {

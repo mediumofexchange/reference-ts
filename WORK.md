@@ -10,51 +10,54 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Status
 
-- Merged into `main`: `a07cf0f`, from
-  `feat/pool-durable-validation-evidence` (base `5bb9c12`). Independently
-  reviewed and fully verified.
-- Successful descent, checkpoint and opening readers now return their used
-  evidence: authenticated directory/scope steps and replayed histories,
-  including same-segment predecessors. Unselected history and uncheckpointed
-  tails are excluded. Replayed snapshots derive from verified prefixes.
-- Version 2 local opening envelopes retain this complete evidence. New service
-  after restart revalidates imports against the record; held openings under
-  valid scopes also revalidate their canonical descent. Later checkpoints
-  carrying proven pre-revocation issuance remain importable and usable.
-- Validation gates new admission/signing after exact retry lookup. Structural
-  replay still verifies saved proofs, signatures and receipts. Original replies,
-  unclassified history and durable publication retries remain accessible even
-  when same-index revocation later invalidates an imported checkpoint.
-- Missing evidence blocks new service with UNAVAILABLE; silence recovery remains
-  unsupported. Version 1 envelopes remain readable, reconstructing snapshots
-  from their imports, but cannot fabricate missing canonical predecessors.
+- Active branch: `test/pool-receipt-repair-gap`, base `d42a9ea`.
+  Investigating global receipt classification found a material normative gap.
+  The regression and diagnostic are verified and ready to merge/push.
+- Global classification must not label every new segment under live terms an
+  elective violation. A receipt can name held sequence 1, then be included in
+  signed-but-unwitnessed sequence 2, then be dropped by permitted stale repair
+  at sequence 3. The receipt's after is still held and its scope is still live.
+- The actual PoolStore reproduces this case at lag 2, preserves the original
+  receipt through restart, and reports the expected separate record/inclusion
+  facts. No runtime behavior or normative rule has been changed.
+- Decision requested from maintainer: explicitly permit those unfinalized
+  receipts to lapse after canonical failed-publication repair (recommended,
+  preserves existing repair), or require continuity and change the repair
+  mechanism. Either choice must preserve prior inclusion and historical
+  contradiction evidence. Details: docs/POOL_RECEIPT_REPAIR_GAP.md.
+- The private authority model must gain the stale signed-state repair case
+  together with that clarified rule. Its current open guard permits only a
+  finalized live tail or an actual scope ending. The older sequencing model
+  checks only an exact next held sequence; it avoids one false accusation but
+  is not a complete lapse classifier.
+- Latest completed runtime work remains `a07cf0f`, merged/pushed with handoff
+  `d42a9ea`: complete used checkpoint evidence retained through restart,
+  pre-service canonical revalidation, and historical replies kept accessible.
 - Companion specification: `money-from-first-principles/main` at `ba8fe21`.
   No normative, signed-byte, receipt-envelope, circuit or proof-key changes.
-  This implements C2.10.3–5/8–9 and C2b.1. Pool-v2 §7.4 still excludes silence
-  redemption and venue-nullifier adoption.
+  Pool-v2 §7.4 still excludes silence redemption and venue-nullifier adoption.
 
 ## Evidence
 
-- Full npm run check passed: 72 files / 1,379 tests, docs, typecheck, build,
+- Focused regression passed: `failed checkpoint repair can leave a live-scope
+  receipt's after sequence held` in test/pool-store.test.ts (1 passed).
+  Full npm run check passed: 72 files / 1,380 tests, docs, typecheck, build,
   installed tarball consumer, pilot and pool-store crash harness.
-- Regressions cover pre-revocation predecessors through restart and movement,
-  history-free absence/lapse, scope expansion enriching cached evidence,
-  deleted proof material, exact historical replies after same-index revocation,
-  append races, retained-prefix ownership and strict v1/v2 codec framing.
-- Independent adversarial review found two issues, both fixed and regression
-  tested: cached partial evidence shadowed newly supplied fields; unconditional
-  finality checks blocked retrieval of historical signed replies. Focused final
-  re-review found no remaining blockers.
+- Independent protocol review confirmed the gap and corrected the proposed
+  blanket elective-transition accusation. A missing sequence is a known
+  record gap, not missing history evidence and not proof of its hidden contents
+  or timing. No fault/lapse verdict for that gap is implemented.
 - Windows esbuild requires execution outside the restricted sandbox. Real
-  circuits are unchanged and were not rerun; pinned evidence remains
-  docs/pool-v2-verification.json.
+  circuits are unchanged; pinned evidence is docs/pool-v2-verification.json.
 
 ## Next
 
-1. Extend the model and build global receipt classification: authenticate the
-   held after commitment's segment and check historical inclusion and
-   live-scope contradictions before lapse. Keep missing evidence distinct.
-2. Specify later-version silence/presentation objects before implementing
+1. Finish verification and commit/merge/push the regression and diagnostic.
+2. Resolve the maintainer's receipt-repair choice in the companion specification
+   first, then extend the adversarial model and build global receipt
+   classification. Authenticate held after-segment identity; preserve inclusion
+   and historical contradictions as independent facts; missing evidence stops.
+3. Specify later-version silence/presentation objects before implementing
    recovery, presentation, delivery, wallet synchronization and service transport.
 
 ## Open questions
@@ -63,7 +66,7 @@ The maintainer explicitly authorized merging and pushing completed work.
   keys/databases and coordinated backup rollback need custody/backup procedures.
 - Scope authority assumes a complete, stable venue snapshot; same-index mutation
   during synchronous custom adapter callbacks has no generation token.
-- Profile large histories before designing compaction or immutable read caches.
-  Complete evidence retention and pre-service validation add storage/replay cost.
+- Profile large histories before compaction or immutable read caches. Complete
+  evidence retention and pre-service validation add storage/replay cost.
 - Full C2 re-derivation, authenticated setup/build provenance, target measurements,
   note delivery and transitive history availability remain release requirements.
