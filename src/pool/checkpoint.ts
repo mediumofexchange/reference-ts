@@ -19,10 +19,24 @@ export interface PoolCheckpointEvidence extends Checkpoint {
   readonly history?: { readonly trail: SegmentTrail; readonly length: bigint };
 }
 
-export type PoolCheckpointResult =
-  | { readonly kind: "final"; readonly prefix: FinalizedPrefix; readonly at: bigint; readonly witnessedIndex: bigint }
+export type PoolCheckpointFailure =
   | { readonly kind: "unavailable"; readonly commitment: OpeningCheckpoint; readonly evidence: "directory" | "scope" | "history" }
   | { readonly kind: "invalid"; readonly reason: string };
+
+export type PoolCheckpointResult = PoolCheckpointFailure
+  | { readonly kind: "final"; readonly prefix: FinalizedPrefix; readonly at: bigint; readonly witnessedIndex: bigint };
+
+export type PoolCheckpointsResult = PoolCheckpointFailure
+  | { readonly kind: "final"; readonly checkpoints: readonly {
+      readonly commitment: Commitment; readonly prefix: FinalizedPrefix; readonly at: bigint;
+    }[]; readonly witnessedIndex: bigint };
+
+interface CheckpointReadArguments {
+  readonly configuration: PoolConfiguration;
+  readonly venue: Venue;
+  readonly evidence: readonly PoolCheckpointEvidence[];
+  readonly verifier: StatementVerifier;
+}
 
 function same(a: Uint8Array, b: Uint8Array): boolean { return compareBytes(a, b) === 0; }
 function key(c: OpeningCheckpoint): string { return `${bytesToHex(c.operator)}:${c.sequence}:${bytesToHex(c.root)}`; }
@@ -74,17 +88,24 @@ interface Planned {
  * invalid. Venue failures (including a changed view) throw VenueError, as do
  * unexpected verifier failures. This reader neither signs nor opens service.
  */
-export async function readPoolCheckpoint(args: {
-  readonly configuration: PoolConfiguration;
-  readonly venue: Venue;
-  readonly checkpoint: Commitment;
-  readonly evidence: readonly PoolCheckpointEvidence[];
-  readonly verifier: StatementVerifier;
-}): Promise<PoolCheckpointResult> {
+export async function readPoolCheckpoint(args: CheckpointReadArguments & { readonly checkpoint: Commitment }): Promise<PoolCheckpointResult> {
+  if (typeof args !== "object" || args === null) return { kind: "invalid", reason: "malformed checkpoint arguments" };
+  const result = await readPoolCheckpoints({ ...args, checkpoints: [args.checkpoint] });
+  if (result.kind !== "final") return result;
+  const verified = result.checkpoints[0]!;
+  return { kind: "final", prefix: verified.prefix, at: verified.at, witnessedIndex: result.witnessedIndex };
+}
+
+/** Validate several distinct held checkpoints in one plan. Own all required
+ * histories before any verifier callback, and verify common ancestry once.
+ * Results follow request order; any unavailable/invalid root stops the batch. */
+export async function readPoolCheckpoints(args: CheckpointReadArguments & { readonly checkpoints: readonly Commitment[] }): Promise<PoolCheckpointsResult> {
   let stable = (): void => {};
   try {
     const configuration = copyConfiguration(args.configuration), domain = configurationHash(configuration);
-    const target = decodeCommitment(encodeCommitment(args.checkpoint));
+    const targets = args.checkpoints.map(c => decodeCommitment(encodeCommitment(c)));
+    const requested = new Map(targets.map(c => [key(c), c]));
+    requireThat(targets.length !== 0 && requested.size === targets.length, "checkpoint requests must be nonempty and distinct");
     const backend = args.verifier;
     const verifier: StatementVerifier = {
       ...(backend.identities === undefined ? {} : { identities: backend.identities }),
@@ -104,9 +125,9 @@ export async function readPoolCheckpoint(args: {
         throw new VenueError("venue view changed during checkpoint validation");
       }
     };
-    requireThat(verifyCommitment(target), "invalid checkpoint signature");
+    requireThat(targets.every(verifyCommitment), "invalid checkpoint signature");
     const planned = new Map<string, Planned>(), order: string[] = [];
-    const pending: { reference: OpeningCheckpoint; child?: Planned; finish?: boolean }[] = [{ reference: target }];
+    const pending: { reference: OpeningCheckpoint; child?: Planned; finish?: boolean }[] = targets.map(reference => ({ reference }));
     while (pending.length !== 0) {
       const step = pending.pop()!, id = key(step.reference);
       if (step.finish) { order.push(id); continue; }
@@ -121,7 +142,8 @@ export async function readPoolCheckpoint(args: {
         requireThat(held !== undefined && same(encodeCommitment(held), encodeCommitment(c)), "checkpoint is not held");
         const at = venue.witnessedAtSequence(c.operator, c.sequence);
         if (typeof at !== "bigint" || at < 0n || at > now) throw new VenueError("inconsistent checkpoint index");
-        if (id === key(target)) requireThat(same(encodeCommitment(c), encodeCommitment(target)), "wrong target commitment");
+        const target = requested.get(id);
+        if (target !== undefined) requireThat(same(encodeCommitment(c), encodeCommitment(target)), "wrong target commitment");
         if (e.history === undefined) { stable(); return { kind: "unavailable", commitment: c, evidence: "history" }; }
         const history = ownHistory(e.history), { trail } = history, h = trail.header;
         requireThat(same(configurationHash(trail.configuration), domain) && same(h.domain, domain) && same(h.venue, venueId),
@@ -197,7 +219,7 @@ export async function readPoolCheckpoint(args: {
       verified.set(id, prefix);
     }
     stable();
-    return { kind: "final", prefix: verified.get(key(target))!, at: planned.get(key(target))!.at, witnessedIndex: now };
+    return { kind: "final", checkpoints: targets.map(c => ({ commitment: c, prefix: verified.get(key(c))!, at: planned.get(key(c))!.at })), witnessedIndex: now };
   } catch (cause) {
     stable();
     if (cause instanceof VerifierFailure) throw cause.cause;

@@ -84,6 +84,13 @@ function lapsed(configuration: PoolConfiguration, venue: Venue, c: Commitment, a
   return false;
 }
 
+interface PoolDescentArguments {
+  readonly configuration: PoolConfiguration;
+  readonly venue: Venue;
+  readonly backing: SignedBacking;
+  readonly evidence: readonly PoolDirectoryEvidence[];
+}
+
 /**
  * Select the record-derived predecessor of one backing relative to an exact
  * HELD child commitment (C2.10.4). The child's own header/finality is outside
@@ -100,16 +107,24 @@ function lapsed(configuration: PoolConfiguration, venue: Venue, c: Commitment, a
  * particular, invalid/withheld live history leaves this candidate in place.
  * Malformed evidence returns invalid; unavailable venue reads throw VenueError.
  */
-export function readPoolPredecessor(args: {
-  readonly configuration: PoolConfiguration;
-  readonly venue: Venue;
-  readonly backing: SignedBacking;
-  readonly child: Commitment;
-  readonly evidence: readonly PoolDirectoryEvidence[];
-}): PoolPredecessor {
+export function readPoolPredecessor(args: PoolDescentArguments & { readonly child: Commitment }): PoolPredecessor {
+  return readDescent(args, "held");
+}
+
+/** Select the latest carrying state for the operator currently in force,
+ * before a new segment has a child commitment (C2.7.3, C2.10.4). All held
+ * sequences at the current index are eligible; no caller-supplied sequence
+ * can hide a newer record. Historical terms retain their exclusive ends.
+ * This is candidate selection, not finality, signing or discard authority. */
+export function readPoolCurrent(args: PoolDescentArguments & { readonly operator: Uint8Array }): PoolPredecessor {
+  return readDescent(args, "current");
+}
+
+function readDescent(args: PoolDescentArguments & { readonly child?: Commitment; readonly operator?: Uint8Array }, mode: "held" | "current"): PoolPredecessor {
   try {
     const configuration = copyConfiguration(args.configuration), backing = ownBacking(args.backing);
-    const child = decodeCommitment(encodeCommitment(args.child));
+    const child = mode === "held" ? decodeCommitment(encodeCommitment(args.child!)) : undefined;
+    const operator = child?.operator ?? copyBytes(args.operator!);
     const supplied = args.evidence.map(ownEvidence), evidence = new Map<string, PoolDirectoryEvidence>();
     for (const e of supplied) {
       requireThat(!evidence.has(key(e.commitment)), "duplicate checkpoint evidence");
@@ -117,24 +132,29 @@ export function readPoolPredecessor(args: {
     }
     const venue = args.venue, authority = new PoolAuthorityView(configuration, venue, [backing]);
     const now = authority.witnessedIndex, venueId = copyBytes(venue.id);
-    requireThat(verifyCommitment(child), "invalid child signature");
-    // This bounded read also makes an unfinished Ergo refresh refuse before
-    // the legacy exact-index method is consulted.
-    const held = venue.previousFor(child.operator, child.sequence + 1n, now);
-    requireThat(held !== undefined && same(encodeCommitment(held), encodeCommitment(child)), "child checkpoint is not held");
-    const childAt = venue.witnessedAtSequence(child.operator, child.sequence);
-    if (typeof childAt !== "bigint" || childAt > now || childAt < 0n) throw new VenueError("inconsistent child index");
-    requireThat(same(authority.term(backing.backing.name, childAt)!.operator, child.operator), "child operator is not in force for this backing");
+    let atLimit = now;
+    const sequenceLimit = child?.sequence ?? ABOVE_SEQUENCE_RANGE;
+    if (child !== undefined) {
+      requireThat(verifyCommitment(child), "invalid child signature");
+      // This bounded read also makes an unfinished Ergo refresh refuse before
+      // the legacy exact-index method is consulted.
+      const held = venue.previousFor(child.operator, child.sequence + 1n, now);
+      requireThat(held !== undefined && same(encodeCommitment(held), encodeCommitment(child)), "child checkpoint is not held");
+      const childAt = venue.witnessedAtSequence(child.operator, child.sequence);
+      if (typeof childAt !== "bigint" || childAt > now || childAt < 0n) throw new VenueError("inconsistent child index");
+      atLimit = childAt;
+    }
+    requireThat(same(authority.term(backing.backing.name, atLimit)!.operator, operator), "operator is not in force for this backing");
 
     const select = (): PoolPredecessor => {
-      let termAt = childAt;
+      let termAt = atLimit;
       for (;;) {
         const term = authority.term(backing.backing.name, termAt)!;
         // Other operators have no eligible edge at the child's index. Each
         // old term ends exclusively, including when the same key is appointed again.
-        let limit = same(term.operator, child.operator) ? childAt : childAt - 1n;
+        let limit = same(term.operator, operator) ? atLimit : atLimit - 1n;
         if (term.until !== undefined && term.until - 1n < limit) limit = term.until - 1n;
-        let before = same(term.operator, child.operator) ? child.sequence : ABOVE_SEQUENCE_RANGE;
+        let before = same(term.operator, operator) ? sequenceLimit : ABOVE_SEQUENCE_RANGE;
         while (limit >= term.from) {
           const c = venue.previousFor(term.operator, before, limit);
           if (c === undefined) break;

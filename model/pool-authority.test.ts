@@ -124,6 +124,17 @@ describe("C2.7/C2.10.4 exact directory descent before replay", () => {
 });
 
 describe("C1.2/C2.10 private scope authority and finalized import", () => {
+  it("constructs current openings from the latest same-index record before signing a child", () => {
+    const w = new World(0n); w.register("X", "P");
+    const p = w.open("P", ["X"]), first = p.commit(); settle(w, first);
+    const second = p.commit(); settle(w, second);
+    expect(w.currentFor("X", "P")).toBe(second.id);
+    const next = p.change(["X"]);
+    expect(next.openings.get("X")).toBe(second.id);
+    w.withheldDirectories.add(second.id);
+    expect(() => w.currentFor("X", "P")).toThrow("unavailable directory");
+  });
+
   it("derives deadlines from every current scope term and rejects the old scope after same-key reappointment", () => {
     const { w, p } = fixture();
     expect(w.boundaries(p.scope)).toEqual([]);

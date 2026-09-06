@@ -199,6 +199,12 @@ export class World {
     });
   }
   latestFor(backing: Id): Id | null { return this.latest.get(backing) ?? null; }
+  /** Current record selection for constructing an opening, without a child
+   * signature. The model's signed counter bounds every held sequence. */
+  currentFor(backing: Id, operator: Id): Id | null {
+    requireThat(this.term(backing).operator === operator, "wrong operator");
+    return this.predecessorFor(backing, { operator, at: this.now, sequence: (this.highestSigned.get(operator) ?? 0n) + 1n });
+  }
   /**
    * C2.7.1–3 / C2.10.4: refine the state's latest-carrying oracle with exact
    * evidence descent. Select a candidate BEFORE replay, never by replay's
@@ -268,7 +274,7 @@ export class World {
     const entries = [...names].sort().map(b => this.term(b));
     const scope: Scope = Object.freeze({ operator, domain, entries: Object.freeze(entries), root: `scope${++this.serial}` });
     requireThat(this.current(scope), "wrong operator");
-    const openings = new Map(entries.map(e => [e.backing, override?.get(e.backing) ?? this.latestFor(e.backing)]));
+    const openings = new Map(entries.map(e => [e.backing, override?.get(e.backing) ?? this.currentFor(e.backing, operator)]));
     if (override) for (const [name, id] of override) openings.set(name, id);
     requireThat(same([...openings.keys()].sort(), entries.map(e => e.backing)), "opening scope mismatch");
     if (!this.departures.ignorePredecessor) for (const e of entries) requireThat(openings.get(e.backing) === this.latestFor(e.backing), "stale predecessor");

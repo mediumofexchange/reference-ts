@@ -112,12 +112,18 @@ deadline. What the repository holds today:
   preserve their finalized prefix. Missing evidence stops validation;
   historical finality survives later term endings. The reader returns a
   verified prefix, not permission to open service or spend a note.
+- **Canonical opening construction** (`preparePoolOpening`, C2.7/C2.10.4–7):
+  derives the current scope and latest carrying state before a child exists,
+  validates all required histories together, and prepares a segment with empty
+  local history. Its next sequence comes from the operator's durable signed
+  counter, including unsuccessful publications. Preparation neither reserves
+  that sequence nor authorizes abandoning receipts or activating service.
 - **A local two-process pilot** on the frozen path (`docs/PILOT.md`): durable
   commands, exact retries, crash recovery, a trusted local witness. An
   integration harness, not a product.
 
 Out of scope until their step: the pool sequencer over the witnessed record
-(canonical opening construction for new service and restart),
+(durable activation of prepared openings, admission/signing and restart),
 durable receipt issuance and recovery, note delivery and backups,
 the wallet, an external witness's write side, and every Extensions profile.
 
@@ -130,7 +136,8 @@ deduplication. [The adversarial model](model/pool-authority.ts) exercises
 splits, reunions, replay and scope changes with ideal cryptography; the
 claim layer now holds the frames and circuits. Record-derived authority,
 scheduling, predecessor descent, whole-scope checkpoint finality and canonical
-import validation are implemented; opening new service and restart are next.
+import validation and canonical opening construction are implemented;
+durable activation, admission/signing and restart are next.
 The historical `moe/pool/v1` runtime was replaced and lives in git history.
 
 The runtime follows specification revision
