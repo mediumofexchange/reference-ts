@@ -10,9 +10,9 @@ The maintainer explicitly authorized pushing and merging reviewed, verified work
 
 ## Status
 
-- Implemented and verified on `feat/durable-pool-store`, based on `d7ca1b9`:
-  Node 24 SQLite pool activation, admission, signing and publication outbox.
-  Ready to commit and merge. Snapshot isolation was previously merged in `862d92e`.
+- Merged into `main`: `51f8442`, from `feat/durable-pool-store` (base
+  `d7ca1b9`). Node 24 SQLite pool activation, admission, signing and publication
+  outbox are implemented, independently reviewed and fully verified.
 - `PoolStore` atomically stores canonical openings, accepted statements,
   original signed receipts, checkpoints and publication markers. Signed
   sequences remain consumed after failed publication. Reload replays retained
@@ -49,12 +49,10 @@ The maintainer explicitly authorized pushing and merging reviewed, verified work
 
 ## Next
 
-1. Commit, push and merge this reviewed, verified slice; update the handoff with
-   its merged commit.
-2. Build pool receipt classification and recovery against witnessed checkpoints,
+1. Build pool receipt classification and recovery against witnessed checkpoints,
    preserving prospective revocation and silence rules. Port adversarial model
    cases before enabling currently unsupported histories.
-3. Add presentation, note delivery and wallet synchronization over the specified
+2. Add presentation, note delivery and wallet synchronization over the specified
    objects; then service transport and the external witness write side.
 
 ## Open questions
