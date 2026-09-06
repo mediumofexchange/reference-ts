@@ -41,9 +41,9 @@ export * from "./revocation.js";
 export * from "./recovery.js";
 export * from "./fault.js";
 
-// The core claim layer: the shielded pool's notes, trees, frames and
-// admission (pool-v1). Its proof backend is `pool/barretenberg`, on its own
-// subpath, since that one needs `@aztec/bb.js`.
+// The core claim layer: the shielded pool's notes, trees, scope, segment
+// frames, admission and finalized import (pool-v2). Its proof backend is
+// `pool/barretenberg`, on its own subpath, since that one needs `@aztec/bb.js`.
 export * from "./pool/index.js";
 
 // The Ergo read-only venue adapter is not part of the root surface. It is the

@@ -1,4 +1,4 @@
-// The spent set (pool-v1 §8; invariant 23): a sparse Merkle tree of height
+// The spent set (pool-v2 §11; invariant 23): a sparse Merkle tree of height
 // 256 over SHA-256, keyed by the nullifier's 32 big-endian bytes, so that
 // both membership and non-membership are provable in the clear against
 // `spentRoot`. Construction §C2b.3's snapshot redemption reads a holder's

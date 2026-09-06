@@ -1,4 +1,4 @@
-// The proof backend behind the pool (pool-v1 §9): Barretenberg 5.2.0's
+// The proof backend behind the pool (pool-v2 §12): Barretenberg 5.2.0's
 // UltraHonk over BN254 with the verifier target `noir-recursive`, which is
 // the zero-knowledge mode. The backend's legacy `keccak` mode disables zero
 // knowledge and is not this construction.
@@ -23,7 +23,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
 import { copyBytes, EncodingError } from "../bytes.js";
 import { bytesToField, fieldToBytes, fieldToHex } from "./field.js";
-import type { StatementVerifier } from "./pool.js";
+import type { StatementVerifier } from "./segment.js";
 import {
   allFields,
   isStatementKind,

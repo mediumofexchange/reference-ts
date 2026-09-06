@@ -1,20 +1,27 @@
-// The operator's acceptance evidence (pool-v1 §7). Receipt verification
-// attributes signed fields to the expected configuration's operator. It
-// does not establish a holding, a lawful history, or witnessed finality.
+// The operator's acceptance evidence (pool-v2 §9; C2.10.8). Receipt
+// verification attributes the signed fields to the expected segment's
+// operator: the domain, the segment identity and its scope root are in the
+// signed frame, and the signer is the header's operator. It does not
+// establish a holding, a lawful history, witnessed finality, or that the
+// scope's links were in force; those are the record's (C2.10.8).
 
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { ByteWriter, compareBytes, copyBytes, EncodingError } from "../bytes.js";
 import { POOL_RECEIPT_CONTEXT } from "../contexts.js";
 import { verifySignatureStrict } from "../keys.js";
-import type { AcceptedStatement, Pool } from "./pool.js";
-import { configurationHash, copyConfiguration, ISSUE, statementHash, type PoolConfiguration, type Statement } from "./statement.js";
+import { fieldToBytes } from "./field.js";
+import type { AcceptedStatement, Segment } from "./segment.js";
+import { copySegmentAuthority, ISSUE, statementHash, type SegmentAuthority, type Statement } from "./statement.js";
 
 /** Exactly the fields covered by receiptBytes, in specification order. */
 export interface PoolReceiptFields {
-  readonly configHash: Uint8Array;
-  /** The accepted statement's sequence, counted from 1. */
-  readonly sequence: bigint;
+  /** configHash, the construction domain. */
+  readonly domain: Uint8Array;
+  readonly segment: Uint8Array;
+  readonly scopeRoot: bigint;
+  /** The accepted statement's position, counted from 1. */
+  readonly position: bigint;
   readonly statementHash: Uint8Array;
   readonly historyHash: Uint8Array;
   readonly proofHash: Uint8Array;
@@ -29,10 +36,10 @@ export interface PoolReceipt extends PoolReceiptFields {
   readonly signature: Uint8Array;
 }
 
-/** Canonical receiptBytes (§7), with fixed widths and bigint u64 counters. */
+/** Canonical receiptBytes (§9), with fixed widths and bigint u64 counters. */
 export function poolReceiptBytes(receipt: PoolReceiptFields): Uint8Array {
-  if (typeof receipt.sequence !== "bigint" || receipt.sequence < 1n) {
-    throw new EncodingError("receipt sequences count from one");
+  if (typeof receipt.position !== "bigint" || receipt.position < 1n) {
+    throw new EncodingError("receipt positions count from one");
   }
   if (typeof receipt.after !== "bigint") throw new EncodingError("receipt after must be a bigint");
   const w = new ByteWriter();
@@ -41,8 +48,10 @@ export function poolReceiptBytes(receipt: PoolReceiptFields): Uint8Array {
     w.key32(bytes, what);
   };
   w.context(POOL_RECEIPT_CONTEXT);
-  hash(receipt.configHash, "configuration hash");
-  w.u64(receipt.sequence);
+  hash(receipt.domain, "configuration hash");
+  hash(receipt.segment, "segment identity");
+  w.key32(fieldToBytes(receipt.scopeRoot), "scope root");
+  w.u64(receipt.position);
   hash(receipt.statementHash, "statement hash");
   hash(receipt.historyHash, "history hash");
   hash(receipt.proofHash, "proof hash");
@@ -54,8 +63,10 @@ export function poolReceiptBytes(receipt: PoolReceiptFields): Uint8Array {
 /** Owns every byte, including when a caller supplied Node Buffers. */
 export function copyPoolReceipt(receipt: PoolReceipt): PoolReceipt {
   return Object.freeze({
-    configHash: copyBytes(receipt.configHash),
-    sequence: receipt.sequence,
+    domain: copyBytes(receipt.domain),
+    segment: copyBytes(receipt.segment),
+    scopeRoot: receipt.scopeRoot,
+    position: receipt.position,
     statementHash: copyBytes(receipt.statementHash),
     historyHash: copyBytes(receipt.historyHash),
     proofHash: copyBytes(receipt.proofHash),
@@ -67,26 +78,28 @@ export function copyPoolReceipt(receipt: PoolReceipt): PoolReceipt {
 }
 
 /**
- * Sign a trusted Pool.admit result under that pool's configuration. This is
- * the envelope only: the sequencing layer must supply the last SIGNED
+ * Sign a trusted Segment.admit result under that segment's authority. This
+ * is the envelope only: the sequencing layer must supply the last SIGNED
  * commitment's sequence, retain the original receipt on retries, and make
  * admission and receipt durable before exposing it (C2.8.1, invariant 26).
  * Neither roots nor proof bytes are added to the specified signed frame.
  */
 export function signPoolReceipt(
   operatorSecret: Uint8Array,
-  configuration: PoolConfiguration,
+  authority: SegmentAuthority,
   accepted: AcceptedStatement,
   after: bigint,
 ): PoolReceipt {
-  const config = copyConfiguration(configuration);
+  const own = copySegmentAuthority(authority);
   const operator = ed25519.getPublicKey(operatorSecret);
-  if (compareBytes(operator, config.operator) !== 0) {
-    throw new EncodingError("receipt signer is not the configuration's operator");
+  if (compareBytes(operator, own.operator) !== 0) {
+    throw new EncodingError("receipt signer is not the segment's operator");
   }
   const fields: PoolReceiptFields = {
-    configHash: configurationHash(config),
-    sequence: accepted.sequence,
+    domain: own.domain,
+    segment: own.segment,
+    scopeRoot: own.scopeRoot,
+    position: accepted.position,
     statementHash: copyBytes(accepted.statementHash),
     historyHash: copyBytes(accepted.historyHash),
     proofHash: copyBytes(accepted.proofHash),
@@ -98,17 +111,20 @@ export function signPoolReceipt(
 }
 
 /**
- * Strict signature and framing, pinned to the CALLER's configuration. A
- * self-asserted operator or configuration is not authority. Malformed
- * external data answers false, including in the predicates below.
+ * Strict signature and framing, pinned to the CALLER's segment authority:
+ * its domain, segment identity, scope root and operator. A self-asserted
+ * operator, segment or scope is not authority. Malformed external data
+ * answers false, including in the predicates below.
  */
-export function verifyPoolReceipt(configuration: PoolConfiguration, receipt: PoolReceipt): boolean {
+export function verifyPoolReceipt(authority: SegmentAuthority, receipt: PoolReceipt): boolean {
   try {
-    const config = copyConfiguration(configuration);
+    const own = copySegmentAuthority(authority);
     const message = poolReceiptBytes(receipt);
     return receipt.operator instanceof Uint8Array &&
-      compareBytes(receipt.operator, config.operator) === 0 &&
-      compareBytes(receipt.configHash, configurationHash(config)) === 0 &&
+      compareBytes(receipt.operator, own.operator) === 0 &&
+      compareBytes(receipt.domain, own.domain) === 0 &&
+      compareBytes(receipt.segment, own.segment) === 0 &&
+      receipt.scopeRoot === own.scopeRoot &&
       verifySignatureStrict(receipt.signature, message, receipt.operator);
   } catch {
     return false;
@@ -117,13 +133,13 @@ export function verifyPoolReceipt(configuration: PoolConfiguration, receipt: Poo
 
 /**
  * The operator signed this statement's identity. Evidence bytes do not enter
- * that identity (§5): re-proving it does not create another statement. This
+ * that identity (§7): re-proving it does not create another statement. This
  * attributes acceptance; it does not run admission or verify the proof.
  */
-export function poolReceiptCovers(configuration: PoolConfiguration, statement: Statement, receipt: PoolReceipt): boolean {
+export function poolReceiptCovers(authority: SegmentAuthority, statement: Statement, receipt: PoolReceipt): boolean {
   try {
-    return verifyPoolReceipt(configuration, receipt) &&
-      compareBytes(statementHash(receipt.configHash, statement.kind, statement.publicInputs), receipt.statementHash) === 0;
+    return verifyPoolReceipt(authority, receipt) &&
+      compareBytes(statementHash(receipt.domain, statement.kind, statement.publicInputs), receipt.statementHash) === 0;
   } catch {
     return false;
   }
@@ -134,11 +150,11 @@ export function poolReceiptCovers(configuration: PoolConfiguration, statement: S
  * replica's changed proof does not match; another valid proof of the same
  * statement need not match either. Deliberately does not check proof or
  * signature validity/length: even bad bytes can be attributed if the
- * operator signed their hashes (§7). This predicate alone alleges no fault.
+ * operator signed their hashes (§9). This predicate alone alleges no fault.
  */
-export function poolReceiptAttestsEvidence(configuration: PoolConfiguration, statement: Statement, receipt: PoolReceipt): boolean {
+export function poolReceiptAttestsEvidence(authority: SegmentAuthority, statement: Statement, receipt: PoolReceipt): boolean {
   try {
-    if (!poolReceiptCovers(configuration, statement, receipt) || !(statement.proof instanceof Uint8Array)) return false;
+    if (!poolReceiptCovers(authority, statement, receipt) || !(statement.proof instanceof Uint8Array)) return false;
     if (compareBytes(sha256(statement.proof), receipt.proofHash) !== 0) return false;
     if (statement.kind === ISSUE) {
       return statement.obligorSignature instanceof Uint8Array &&
@@ -152,17 +168,18 @@ export function poolReceiptAttestsEvidence(configuration: PoolConfiguration, sta
 }
 
 /**
- * The receipt's statement and history hash occur at its claimed sequence in
- * this Pool. For a served trail, obtain the Pool with Pool.replay using the
- * expected configuration's verifier first. A replayed prefix proves only
- * itself: this is not a check of currency, after, or witnessed finality.
- * Different valid proof bytes on replay preserve the same history (§7).
+ * The receipt's statement and history hash occur at its claimed position in
+ * this Segment. For a served trail, obtain the Segment with Segment.replay
+ * using the expected configuration's verifier first. A replayed segment
+ * proves only itself and its supplied ancestry: this is not a check of
+ * currency, `after`, or witnessed finality. Different valid proof bytes on
+ * replay preserve the same history (§9).
  */
-export function poolReceiptInHistory(pool: Pool, receipt: PoolReceipt): boolean {
+export function poolReceiptInHistory(segment: Segment, receipt: PoolReceipt): boolean {
   try {
-    if (!verifyPoolReceipt(pool.configuration, receipt)) return false;
-    const accepted = pool.acceptedStatement(receipt.statementHash);
-    return accepted !== undefined && accepted.sequence === receipt.sequence &&
+    if (!verifyPoolReceipt(segment.authority(), receipt)) return false;
+    const accepted = segment.acceptedStatement(receipt.statementHash);
+    return accepted !== undefined && accepted.position === receipt.position &&
       compareBytes(accepted.historyHash, receipt.historyHash) === 0;
   } catch {
     return false;

@@ -1,4 +1,4 @@
-// The pool's note tree (pool-v1 §4): a binary Merkle tree of depth 32 over H,
+// The pool's note tree (pool-v2 §4): a binary Merkle tree of depth 32 over H,
 // append-only. Leaf i is the commitment of the i-th output accepted in the
 // pool, counting from zero across every statement in acceptance order; an
 // unused leaf is the field element 0. A node is hashed with the level of its

@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-06` [pool-v2 instantiates the authority contract: a domain-only configuration, a public scope tree, the segment in every statement, one anchor per input, and finalized import](decisions/2026-09.md#2026-09-06--pool-v2-instantiates-the-authority-contract-a-domain-only-configuration-a-public-scope-tree-the-segment-in-every-statement-one-anchor-per-input-and-finalized-import)
 - `2026-09-06` [Private service scopes import only finalized shared history](decisions/2026-09.md#2026-09-06--private-service-scopes-import-only-finalized-shared-history)
 - `2026-09-05` [The claim layer: E declares the construction as clause 0x05, the host hash is a pinned Poseidon2, and admission verifies the proof before one synchronous view](decisions/2026-09.md#2026-09-05--the-claim-layer-e-declares-the-construction-as-clause-0x05-the-host-hash-is-a-pinned-poseidon2-and-admission-verifies-the-proof-before-one-synchronous-view)
 - `2026-09-05` [pool-v1 pins the shielded pool, and the sequencing model earns two rules](decisions/2026-09.md#2026-09-05--pool-v1-pins-the-shielded-pool-and-the-sequencing-model-earns-two-rules)

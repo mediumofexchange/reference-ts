@@ -1,11 +1,11 @@
 {
-  "construction": "moe/pool/v1",
+  "construction": "moe/pool/v2",
   "node": "v24.6.0",
   "platform": "win32",
   "arch": "x64",
-  "compileMs": 11228.5204,
+  "compileMs": 6302.8252999999995,
   "pins": {
-    "construction": "moe/pool/v1",
+    "construction": "moe/pool/v2",
     "toolchain": {
       "@aztec/bb.js": "5.2.0",
       "@noir-lang/noir_js": "1.0.0-beta.26",
@@ -13,24 +13,24 @@
     },
     "verifierTarget": "noir-recursive",
     "sources": {
-      "notes.nr": "371c7f8e165ea2651f223017b8efc7d09367fe85c0a19fdfcffb78715d37cff7",
-      "issue.nr": "02aabb2bf8717821729eafe826158477814f39a8fe5fb7a8e427f07774524dab",
-      "spend.nr": "34fcd327c6d3d6d397a0ad8bd57bbeba617d87c6b394a8178ac0771ade2f82a0",
-      "burn.nr": "a6c698bc22a993dde8eef7f7d624c284cbe647024b224bdc5884d352f98e1238",
+      "notes.nr": "0c0a6cf6c12c6adc702cb8ef95e237ce3486dae9e65df2fc3dd724e7ca93b484",
+      "issue.nr": "fdddefd8a94eb026259794de03faeb8854e53d274e62cb392407d5c88f9dd4cb",
+      "spend.nr": "9ea3fe7f32d32502ea13c16df38ded5f4d688cac49c24a70abca31ff65f2dec1",
+      "burn.nr": "1194077efafc1990d3fc90e866609ffc5cc1d3b6011252ae15d127d8e111ed51",
       "vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"
     },
     "circuits": {
       "issue": {
-        "bytecode": "d87c8ae466473d65662fc7dc659e610caacc831aedb169a78e9f9ff2b917133d",
-        "vk": "fe0fdfa50ed959ffb763781edb80b6193071adf5dd0166182d058734e5bf6150"
+        "bytecode": "25e9d1af26fb6003d567587f7c71879bcabd9749e0279c870bb923264ec69d22",
+        "vk": "f9fb1624b85cf70350e4a9d15bfee1b2814e8cae5f75285ba6c0207a8f195ca2"
       },
       "spend": {
-        "bytecode": "f10c097539ef00969dc97c357a511e24299dc7c851a5f7314ffcd4a4ebed237a",
-        "vk": "82760b387581485a3251f585b144488bca8fa5f1268aaace5341a0ba321949de"
+        "bytecode": "f00b1721a8a93d70c56758bb01662250f9ce8ee0ffcd9c6823aa41703b35ff93",
+        "vk": "8b46a4be1b3a307c22ff541319223c6fb7d9bb721a7a20b0a6822a291b38fcbc"
       },
       "burn": {
-        "bytecode": "57b0bad342c763f472a95c630af12a95dd70513588d9f45b55339da99002c69a",
-        "vk": "a941aa939de2188d81a4bd469cc25e0ab721aece6d2283f77c16725e98ffaad2"
+        "bytecode": "45effac560af94f59e89c3453f7c5261bc6ed64f878842be583b1a9424d50e8c",
+        "vk": "cca81c12041d305acea0c28a990253c03ef79083d2236feae24ec06be8df0af5"
       }
     }
   },
@@ -53,10 +53,11 @@
     }
   },
   "checks": [
-    "authorized-relation issuance",
+    "authorized-relation issuance in scope",
     "one real input plus padding",
     "two real inputs, same backing",
     "two backings conserve separately",
+    "two inputs against two different anchors",
     "partial burn with padding",
     "issue zero quantity",
     "issue quantity overflow",
@@ -65,8 +66,16 @@
     "issue zero owner",
     "issue zero rho",
     "issue changed backing",
-    "issue pool limb overflow",
+    "issue domain limb overflow",
+    "issue segment limb overflow",
     "issue backing limb overflow",
+    "issue link limb overflow",
+    "issue backing outside the scope",
+    "issue wrong scope root",
+    "issue wrong link",
+    "issue wrong scope sibling",
+    "issue wrong scope direction",
+    "issue scope path of the other entry",
     "unauthorized input slot 0",
     "zero secret slot 0",
     "zero input rho slot 0",
@@ -80,6 +89,10 @@
     "zero output rho slot 0",
     "output value overflow slot 0",
     "foreign output backing slot 0",
+    "input wrong link slot 0",
+    "input wrong scope sibling slot 0",
+    "input wrong scope direction slot 0",
+    "input link limb overflow slot 0",
     "unauthorized input slot 1",
     "zero secret slot 1",
     "zero input rho slot 1",
@@ -93,18 +106,26 @@
     "zero output rho slot 1",
     "output value overflow slot 1",
     "foreign output backing slot 1",
+    "input wrong link slot 1",
+    "input wrong scope sibling slot 1",
+    "input wrong scope direction slot 1",
+    "input link limb overflow slot 1",
     "wrong low sibling",
     "wrong high sibling",
     "wrong path direction",
     "wrong anchor",
+    "real input against the other slot's anchor only",
+    "wrong scope root",
     "padding from foreign backing",
+    "both inputs outside the scope with recomputed hashes",
     "inflation with correct output hashes",
     "both padding",
     "duplicate nullifiers with conserved value",
     "duplicate outputs",
-    "changed pool with recomputed nullifiers and outputs",
+    "changed domain with recomputed nullifiers and outputs",
     "cross-backing inflation with unchanged global total",
-    "padding needs no membership",
+    "second input under the first anchor when the trees differ",
+    "padding needs no membership and any anchor",
     "both input and output orders",
     "first output may be zero",
     "second output may be zero",
@@ -113,16 +134,21 @@
     "two maximum u64 inputs conserve in u128",
     "u64-wrapped conservation refused",
     "new anchor preserves both nullifiers",
+    "another segment keeps the nullifiers and outputs",
     "zero burn with conserved value",
     "excessive burn",
     "burn quantity overflow",
     "burn wrong public backing",
+    "burn backing outside the scope",
+    "burn wrong link",
+    "burn wrong scope root",
     "burn foreign change",
     "burn foreign padding",
     "burn zero change rho",
     "burn zero change owner",
     "burn duplicate nullifiers with conserved value",
     "burn bad membership",
+    "burn wrong first anchor",
     "full burn with zero change",
     "burn widens quantity plus change",
     "issue binds public input 0",
@@ -131,6 +157,9 @@
     "issue binds public input 3",
     "issue binds public input 4",
     "issue binds public input 5",
+    "issue binds public input 6",
+    "issue binds public input 7",
+    "issue binds public input 8",
     "issue rejects corrupted proof",
     "spend binds public input 0",
     "spend binds public input 1",
@@ -139,6 +168,10 @@
     "spend binds public input 4",
     "spend binds public input 5",
     "spend binds public input 6",
+    "spend binds public input 7",
+    "spend binds public input 8",
+    "spend binds public input 9",
+    "spend binds public input 10",
     "spend rejects corrupted proof",
     "burn binds public input 0",
     "burn binds public input 1",
@@ -149,6 +182,10 @@
     "burn binds public input 6",
     "burn binds public input 7",
     "burn binds public input 8",
+    "burn binds public input 9",
+    "burn binds public input 10",
+    "burn binds public input 11",
+    "burn binds public input 12",
     "burn rejects corrupted proof",
     "the claim layer derives the pinned circuit identities",
     "host Poseidon2 agrees with the backend for one to eight inputs",
@@ -163,157 +200,222 @@
     "signed issuance, spend and burn receipts verify against separately replayed real-proof history",
     "replay with a different valid proof preserves receipt history inclusion",
     "a receipt beyond a replayed prefix is not proven by it",
-    "a separate verifier replays the trail to the same history; a prefix proves only itself"
+    "a separate verifier replays the trail to the same history; a prefix proves only itself",
+    "a successor segment imports the checkpointed prefix: totals, spentness and certified roots, not the tail",
+    "in the successor segment, the other segment's statements, the discarded tail's root and imported spentness are refused",
+    "a payment from the discarded tail is re-proven in the successor segment with its nullifier unchanged",
+    "a spend takes inputs from two histories against two anchors; its receipt is the successor's alone",
+    "a stranger replays the successor segment from the checkpoint evidence; missing, longer or tampered evidence is refused"
   ],
   "metrics": [
     {
-      "label": "authorized-relation issuance",
+      "label": "authorized-relation issuance in scope",
       "kind": "issue",
-      "executionMs": 265.1415000000052,
-      "proveMs": 2411.448900000003,
-      "verifyMs": 208.0054999999993,
+      "executionMs": 144.94910000000527,
+      "proveMs": 1493.7224999999962,
+      "verifyMs": 84.26249999999709,
       "proofBytes": 14656
     },
     {
       "label": "one real input plus padding",
       "kind": "spend",
-      "executionMs": 217.15380000000005,
-      "proveMs": 8233.185700000002,
-      "verifyMs": 199.28889999999956,
+      "executionMs": 81.91440000000148,
+      "proveMs": 3944.8145000000004,
+      "verifyMs": 61.40749999999389,
       "proofBytes": 14656
     },
     {
       "label": "two real inputs, same backing",
       "kind": "spend",
-      "executionMs": 103.44580000000133,
-      "proveMs": 8218.106600000006,
-      "verifyMs": 148.8813999999984,
+      "executionMs": 72.46489999999903,
+      "proveMs": 3931.854100000004,
+      "verifyMs": 66.56229999999778,
       "proofBytes": 14656
     },
     {
       "label": "two backings conserve separately",
       "kind": "spend",
-      "executionMs": 96.0002999999997,
-      "proveMs": 8735.148099999991,
-      "verifyMs": 146.1938000000082,
+      "executionMs": 41.59339999999793,
+      "proveMs": 4818.769500000002,
+      "verifyMs": 63.56760000000213,
+      "proofBytes": 14656
+    },
+    {
+      "label": "two inputs against two different anchors",
+      "kind": "spend",
+      "executionMs": 37.70799999999872,
+      "proveMs": 3844.2214999999997,
+      "verifyMs": 65.26130000000558,
       "proofBytes": 14656
     },
     {
       "label": "partial burn with padding",
       "kind": "burn",
-      "executionMs": 54.57459999999264,
-      "proveMs": 6643.270300000004,
-      "verifyMs": 171.1015000000043,
+      "executionMs": 30.054700000000594,
+      "proveMs": 3993.0190999999977,
+      "verifyMs": 63.44389999999839,
       "proofBytes": 14656
     },
     {
       "label": "all right-child bits including bit 31",
       "kind": "spend",
-      "executionMs": 52.779899999994086,
-      "proveMs": 5623.5576,
-      "verifyMs": 96.20130000000063,
+      "executionMs": 56.876900000002934,
+      "proveMs": 7221.5785999999935,
+      "verifyMs": 87.66960000000836,
       "proofBytes": 14656
     },
     {
       "label": "two maximum u64 inputs conserve in u128",
       "kind": "spend",
-      "executionMs": 53.03299999999581,
-      "proveMs": 4189.602800000008,
-      "verifyMs": 82.97250000000349,
+      "executionMs": 47.65029999999388,
+      "proveMs": 3993.876900000003,
+      "verifyMs": 71.19559999999183,
       "proofBytes": 14656
     },
     {
       "label": "new anchor preserves both nullifiers",
       "kind": "spend",
-      "executionMs": 47.79200000000128,
-      "proveMs": 4090.054600000003,
-      "verifyMs": 86.96180000000459,
+      "executionMs": 68.63030000000435,
+      "proveMs": 5117.887199999997,
+      "verifyMs": 134.08750000000873,
+      "proofBytes": 14656
+    },
+    {
+      "label": "another segment keeps the nullifiers and outputs",
+      "kind": "spend",
+      "executionMs": 72.59700000000885,
+      "proveMs": 10508.598299999998,
+      "verifyMs": 173.68570000000182,
       "proofBytes": 14656
     },
     {
       "label": "full burn with zero change",
       "kind": "burn",
-      "executionMs": 39.98180000000866,
-      "proveMs": 3295.260899999994,
-      "verifyMs": 68.14479999998002,
+      "executionMs": 65.83999999999651,
+      "proveMs": 6805.53899999999,
+      "verifyMs": 114.79399999999441,
       "proofBytes": 14656
     },
     {
       "label": "burn widens quantity plus change",
       "kind": "burn",
-      "executionMs": 22.34979999999632,
-      "proveMs": 2891.1206999999995,
-      "verifyMs": 83.17680000001565,
+      "executionMs": 63.72209999998449,
+      "proveMs": 7513.106200000009,
+      "verifyMs": 118.8122999999905,
       "proofBytes": 14656
     },
     {
       "label": "claim layer issue",
       "kind": "issue",
-      "executionMs": 1.2581000000063796,
-      "proveMs": 1155.0190999999759,
+      "executionMs": 5.952399999980116,
+      "proveMs": 1355.3796999999904,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 59.64979999998468,
-      "proveMs": 5505.080100000021,
+      "executionMs": 31.63200000001234,
+      "proveMs": 3865.465899999981,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 34.90020000000368,
-      "proveMs": 3752.8426000000036,
+      "executionMs": 33.470699999976205,
+      "proveMs": 3849.9758000000147,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 29.252999999996973,
-      "proveMs": 3801.6043000000063,
+      "executionMs": 32.460900000005495,
+      "proveMs": 3848.8220000000147,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 33.73069999998552,
-      "proveMs": 4346.666900000011,
+      "executionMs": 32.95360000000801,
+      "proveMs": 4545.567800000019,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer burn",
       "kind": "burn",
-      "executionMs": 32.432199999981094,
-      "proveMs": 4442.826699999976,
+      "executionMs": 26.44450000001234,
+      "proveMs": 3328.330900000001,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer burn",
       "kind": "burn",
-      "executionMs": 47.37369999999646,
-      "proveMs": 4949.450299999997,
+      "executionMs": 27.011999999987893,
+      "proveMs": 3325.404200000019,
+      "verifyMs": 0,
+      "proofBytes": 14656
+    },
+    {
+      "label": "claim layer spend",
+      "kind": "spend",
+      "executionMs": 46.983600000006845,
+      "proveMs": 4589.629099999991,
+      "verifyMs": 0,
+      "proofBytes": 14656
+    },
+    {
+      "label": "claim layer spend",
+      "kind": "spend",
+      "executionMs": 33.411900000006426,
+      "proveMs": 5220.349500000011,
+      "verifyMs": 0,
+      "proofBytes": 14656
+    },
+    {
+      "label": "claim layer spend",
+      "kind": "spend",
+      "executionMs": 56.595999999990454,
+      "proveMs": 6612.536200000002,
+      "verifyMs": 0,
+      "proofBytes": 14656
+    },
+    {
+      "label": "claim layer spend",
+      "kind": "spend",
+      "executionMs": 104.30470000000787,
+      "proveMs": 10584.059099999984,
+      "verifyMs": 0,
+      "proofBytes": 14656
+    },
+    {
+      "label": "claim layer spend",
+      "kind": "spend",
+      "executionMs": 65.75380000000587,
+      "proveMs": 4374.691699999996,
       "verifyMs": 0,
       "proofBytes": 14656
     }
   ],
   "claimLayer": {
-    "pool": "9c97947df94ee48aa75f64c2a9be80289058437fa4e1534043c3fba09878f98a",
-    "backing": "994b09afe1de6195151f3cb452d382f52c133728d7029f7da50464acf8bd38dc",
+    "domain": "651a78bf0db068bb26afcb602a74f48677243669235e2b541b5bebb1da876d6c",
+    "backing": "3ae6a9e8cb9b1b6753148e4f6aaf74b6540ca42377f374a6481e75b28f6ddcb3",
+    "segments": [
+      "e341da7d87c851ae295a7cc4286d838884270f4a2042a81e496423e76888b1a6",
+      "2220569882128952b157c7e9596aad1e75a14ab00d1628e296b6eed8d0d750d1"
+    ],
     "note": {
       "value": "100",
       "owner": "0x1eaeb3dcce509f53960e03f2a075d520f7bef8932c0ea7659a27900fbc586881",
       "rho": "0x00000000000000000000000000000000000000000000000000000000000003ea",
       "secret": "0x00000000000000000000000000000000000000000000000000000000000003e9"
     },
-    "cm": "0x023e2862da0448777dcf2da1a369f4e4766c154776904506c9d6251b1cc4de44",
-    "nf": "0x01cd90e091fc707e9612c9f4731597426f177edec45f45d0fabff5791644f5f5",
-    "anchorAfterIssue": "0x0a0b4349ebb20fb003a7426207c71532b4daf133a8cd0fb9d01bbdf78498b43b"
+    "cm": "0x13f287218997ec5563e6968c7ec4e0a34cdc69efaeac4fdb1a1cdd03b5334421",
+    "nf": "0x0023a980b915183d20dbee6fc1c628372e74ddd074da7bf1584f5705623b670d",
+    "anchorAfterIssue": "0x2f55ab40a7e77d61d1085b914d59da51b05223084ab8da441c8593a597ae2796"
   }
 }

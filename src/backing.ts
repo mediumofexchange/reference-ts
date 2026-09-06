@@ -38,13 +38,14 @@
 //                   u8 0x04 non-service aggregate
 //                     || u64 duration || u32 count m || u64 window W
 //                   u8 0x05 construction (Construction §C1.3)
-//                     || u32 length || construction ("moe/pool/v1", UTF-8)
-//                     || 32-byte configuration hash (pool-v1 §2)
+//                     || u32 length || construction ("moe/pool/v2", UTF-8)
+//                     || 32-byte configuration hash (pool-v2 §2)
 //
 // With no construction clause the backing is served under the transparent
-// profile (Extensions); with one it is served in the named construction's
-// pool under that configuration and no other. The construction is inside the
-// name, so a change of construction or version is a successor (§C1.3).
+// profile (Extensions); with one it is served in the named construction under
+// that configuration and no other, by whichever operator the witnessed
+// replacement chain seats (C1.2.1). The construction is inside the name, so a
+// change of construction or version is a successor (§C1.3).
 //
 // **A list, not a tag per combination.** E's clauses are independent — a backer
 // may promise a schedule without conceding a grade, and §C2 has several more to
@@ -97,8 +98,8 @@ const CLAUSE_NON_SERVICE = 0x04;
 const CLAUSE_CONSTRUCTION = 0x05;
 /** E has a handful of blocks in the paper, not a stream of them. */
 const MAX_EVIDENCE_CLAUSES = 16;
-/** The one construction this reference knows how to serve and to check (pool-v1). */
-export const POOL_CONSTRUCTION = "moe/pool/v1";
+/** The one construction this reference knows how to serve and to check (pool-v2). */
+export const POOL_CONSTRUCTION = "moe/pool/v2";
 const MAX_CONSTRUCTION_BYTES = 64;
 
 const NAME_LENGTH = 32;
@@ -243,18 +244,20 @@ export interface TransparentEvidence {
 }
 
 /**
- * E naming the core construction (Construction §C1.3; pool-v1 §2): the
- * backing is served in this operator's shielded pool under the configuration
- * whose hash is `configuration`, and no other. The clauses beside it mean
+ * E naming the core construction (Construction §C1.3; pool-v2 §2): the
+ * backing is served in the shielded pool under the configuration whose hash
+ * is `configuration` — the construction domain — and no other. The operator
+ * is the original one, the genesis link of the replacement chain; current
+ * authority follows that witnessed chain (C1.2.1). The clauses beside it mean
  * what they mean for the transparent setting. A change to the construction,
  * its version or its configuration is a new E, hence a successor backing.
  */
 export interface PoolEvidence {
   readonly setting: "pool";
-  /** The operator whose pool serves this backing; equals the configuration's operator. */
+  /** The original operator: the genesis link of the backing's replacement chain. */
   readonly operator: Uint8Array;
   readonly construction: typeof POOL_CONSTRUCTION;
-  /** configHash (pool-v1 §2), 32 bytes. */
+  /** configHash, the construction domain (pool-v2 §2), 32 bytes. */
   readonly configuration: Uint8Array;
   readonly witnessing?: WitnessingTerms;
   readonly replacementRule?: Uint8Array;

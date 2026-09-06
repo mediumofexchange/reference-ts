@@ -13,7 +13,7 @@ import {
 import { T_NODE } from "../src/pool/notes.js";
 import { poseidon2Hash } from "../src/pool/poseidon2.js";
 
-// pool-v1 §4: a depth-32 append-only tree over H, nodes tagged with their
+// pool-v2 §4: a depth-32 append-only tree over H, nodes tagged with their
 // children's level, unused leaves zero, anchors the roots after statements.
 
 /** The root of `leaves` computed the slow way: fold every level with empty padding. */
@@ -29,7 +29,7 @@ function slowRoot(leaves: readonly bigint[]): bigint {
   return level[0] ?? EMPTY_NOTE_ROOT;
 }
 
-describe("pool-v1 §4: the note tree", () => {
+describe("pool-v2 §4: the note tree", () => {
   it("hashes nodes with their children's level and builds the empty subtrees from zero", () => {
     expect(EMPTY_NOTE_SUBTREE[0]).toBe(0n);
     expect(EMPTY_NOTE_SUBTREE).toHaveLength(NOTE_TREE_DEPTH + 1);

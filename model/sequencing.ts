@@ -18,7 +18,7 @@
 // the comment says so and `sequencing.test.ts` exercises both readings.
 //
 // Scope limit: `Statement.backing` is public to this model and histories are
-// per backing. It does not model pool-v1's hidden, mixed-backing spends or
+// per backing. It does not model the pool's hidden, mixed-backing spends or
 // shared pool history, so it does not establish their compatibility with
 // independent operator replacement. model/pool-authority.ts separately models
 // opaque scopes and shared finalized history; neither model is a sequencer.

@@ -1,6 +1,6 @@
 # One implementation, the shielded pool
 
-Decision, feasibility evidence and consolidation map, revised 2026-09-05.
+Decision, feasibility evidence and consolidation map, revised 2026-09-06.
 
 ## Direction
 
@@ -16,9 +16,10 @@ This repository builds that core, in this order:
 
 1. **Specification.** Pin the pool's concrete statement layouts, hash
    functions, spent-set accumulator, multi-input shape and proof-system
-   identity in Construction, from the experiment's evidence. Done: `pool-v1.md`
-   pins them, reviewed once; its §12 lists what is recorded when the circuits
-   are promoted.
+   identity in Construction, from the experiment's evidence. Done twice:
+   `pool-v1.md` pinned a fixed-operator layout, and `pool-v2.md` supersedes it
+   with the replacement-capable construction the authority contract
+   (`pool-authority.md`) requires.
 2. **Adversarial model.** An executable model of §C2, §C2b and §C3 over the
    pool representation — two operators, two backings, a holder, delayed and
    dropped publications, replacement, restart, incomplete views — checking
@@ -26,15 +27,19 @@ This repository builds that core, in this order:
    regression vectors. This replaces panel rounds with checks that re-run. Built for §C2/§C2b:
    `model/sequencing.ts` and its twelve checks; §C3 joins it with v2.
 3. **The pool's claim layer** in `src/pool/`: circuits promoted from the
-   experiment to the normative layouts, the note tree, the spent-set
-   accumulator, admission against one committed view. Built: the circuits are
-   pinned (`pool-v1.md` §12), and `Pool` admits, serves and replays with the
+   experiment to the normative layouts, the note tree, the scope tree, the
+   spent-set accumulator, finalized import, admission against one committed
+   view, the receipt. Built for v2: the circuits are pinned (`pool-v2.md`
+   §15), and `Segment` imports, admits, serves and replays with the
    Barretenberg verifier behind an interface; **E** declares the construction
-   as evidence clause `0x05`. Left to step 4: the receipt and commitment
-   envelopes over the pool's fields, and the durable journal.
+   as evidence clause `0x05`. Left to step 4: the sequencer over the record,
+   the commitment schedule and the durable journal.
 4. **Sequencing, recovery and presentation over notes**, rule by rule,
    porting each adversarial case from the frozen transparent suite as its rule
    lands, and deleting the transparent code when the pool path passes them.
+   The first time checks are built in `pool/schedule.ts`: the earliest scope
+   boundary, the operator-wide signing wait and restart lag, validated against
+   `model/pool-schedule.ts`. Record derivation and durable execution remain.
 5. **The wallet**: a balance, a send button, a policy list (Construction §C5);
    note delivery, backups, restore, note selection and consolidation.
 6. **The witness venue's write side** (Ergo), once the commitment format is
@@ -103,13 +108,13 @@ deployment.
 
 | Existing part | Treatment |
 |---|---|
-| `backing.ts`, `bytes.ts`, `keys.ts`, `contexts.ts`, canonical identity tests | Retained. **E** now declares the construction and its configuration hash (evidence clause `0x05`), and the configuration names the pool, operator, circuit and key identities and bounds (pool-v1 §2). Never reuse old identifiers with new rules. |
+| `backing.ts`, `bytes.ts`, `keys.ts`, `contexts.ts`, canonical identity tests | Retained. **E** declares the construction and its configuration hash (evidence clause `0x05`) beside the original operator, and the configuration names circuit and key identities, the helper and the bounds, and nothing about who serves (pool-v2 §2). Never reuse old identifiers with new rules. |
 | `commitment.ts`, `commitment-directory` tests | Retain the directory. The pool's commitment adds the note-tree root, the spent-set root and the statement-log binding (invariant 23). |
 | `venue.ts`, `LocalVenue` | Retain the interface: finality rule, lag, record rises in sequence, exact-sequence read (§C2.3). |
 | `pilot-store.ts` journal pattern | Carry forward: durable commands, exact retries, transactional admission. The pilot's `pilot-wire.ts`, `pilot-http.ts` and CLI are retired with a pool equivalent. |
 | `ledger.ts`, `oplog.ts`, `messages.ts`, `sequencer.ts`, `presentation.ts`, `replacement.ts`, `recovery.ts`, `fault.ts` and their tests | **Frozen.** The transparent profile's implementation. A differential oracle and case library; each case is ported as its rule lands over notes; the code is deleted when the pool path passes them. Do not port the exhibit walk or the opening claim (retired, Construction Appendix). |
 | `ergo.ts` and its tests | Keep as the venue direction; not exported from the root barrel; rewritten for the final commitment format at step 6. |
-| Research circuits, `host.mjs`, `journal.mjs` | The relation and the host's admission and replay are promoted into `src/pool/` against the normative layouts, with their adversarial cases (`test/pool-admission.test.ts`, `scripts/pool/admission.mjs`). The journal's crash and retry cases move with the durable pool journal; the standalone host and receiver APIs retire then. Do not keep a second storage framework. |
+| Research circuits, `host.mjs`, `journal.mjs` | The relation and the host's admission and replay are promoted into `src/pool/` against the normative layouts, with their adversarial cases (`test/pool-admission.test.ts`, `test/pool-segment.test.ts`, `scripts/pool/admission.mjs`). The journal's crash and retry cases move with the durable pool journal; the standalone host and receiver APIs retire then. Do not keep a second storage framework. |
 | Website and organization profile | Describe the direction and the experimental status accurately; change the onboarding story only when a wallet exists. |
 
 No live-value migration is assumed. If any implementation is later used with

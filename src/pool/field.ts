@@ -1,4 +1,4 @@
-// Field elements of the pool's proof system, and the encodings pool-v1 §1
+// Field elements of the pool's proof system, and the encodings pool-v2 §1
 // fixes for them.
 //
 // A field element is canonical only in [0, p). It is written as 32 big-endian
@@ -8,19 +8,19 @@
 // strict for the reason bytes.ts gives: a byte sequence either is THE
 // canonical encoding of a value or it is rejected.
 //
-// A 32-byte identifier (a pool identity, a backing name) enters a circuit as
+// A 32-byte identifier (a construction domain, segment identity or backing name) enters a circuit as
 // two limbs, each the big-endian integer of 16 bytes and so below 2^128.
 // Reducing the identifier modulo p is not a representation of it (§1), and
 // the circuits range-check both limbs, so the host does the same.
 
 import { EncodingError } from "../bytes.js";
 
-/** The BN254 scalar field modulus (pool-v1 §1). */
+/** The BN254 scalar field modulus (pool-v2 §1). */
 export const FIELD_MODULUS =
   21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 /** A limb of a 32-byte identifier is below this. */
 export const LIMB_BOUND = 1n << 128n;
-/** A note value or a public quantity is below this (pool-v1 §1, §10). */
+/** A note value or a public quantity is below this (pool-v2 §1, §10). */
 export const VALUE_BOUND = 1n << 64n;
 
 export function isField(value: unknown): value is bigint {

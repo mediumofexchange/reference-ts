@@ -6,10 +6,10 @@ import { LedgerError, replayLog, TransparentLedger } from "../src/ledger.js";
 import { requirePilotBacking } from "../src/pilot-wire.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
 import { LocalVenue } from "../src/venue.js";
-import { CONFIG_HASH, makePoolBacking } from "./pool-support.js";
+import { DOMAIN as CONFIG_HASH, makePoolBacking } from "./pool-support.js";
 import { KEYS, makeTransparentBacking, pub, SECRETS } from "./support.js";
 
-// Construction §C1.3 and pool-v1 §2: E names the construction and a
+// Construction §C1.3 and pool-v2 §2: E names the construction and a
 // configuration hash, inside the backing's name. In canonical encoding v1
 // that is evidence clause 0x05; without it the backing is served under the
 // transparent profile.
@@ -39,7 +39,7 @@ describe("E names the construction and its configuration (C1.3)", () => {
       evidence: {
         setting: "pool",
         operator: KEYS.operator,
-        construction: "moe/pool/v1",
+        construction: "moe/pool/v2",
         configuration: CONFIG_HASH,
         silence: { noCommitmentDuration: 10n, challengeWindow: 5n },
         witnessing: { venue: new Uint8Array(32).fill(7), interval: 2n },
@@ -66,15 +66,15 @@ describe("E names the construction and its configuration (C1.3)", () => {
       payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },
       reliance: [],
     };
-    expect(() => makeBacking({ ...fields, evidence: { setting: "pool", operator: KEYS.operator, construction: "moe/pool/v2" as "moe/pool/v1", configuration: CONFIG_HASH } })).toThrow(EncodingError);
-    expect(() => makeBacking({ ...fields, evidence: { setting: "pool", operator: KEYS.operator, construction: "moe/pool/v1", configuration: new Uint8Array(31) } })).toThrow(EncodingError);
-    expect(() => makeBacking({ ...fields, evidence: { setting: "shielded" as "pool", operator: KEYS.operator, construction: "moe/pool/v1", configuration: CONFIG_HASH } })).toThrow(EncodingError);
+    expect(() => makeBacking({ ...fields, evidence: { setting: "pool", operator: KEYS.operator, construction: "moe/pool/v1" as "moe/pool/v2", configuration: CONFIG_HASH } })).toThrow(EncodingError);
+    expect(() => makeBacking({ ...fields, evidence: { setting: "pool", operator: KEYS.operator, construction: "moe/pool/v2", configuration: new Uint8Array(31) } })).toThrow(EncodingError);
+    expect(() => makeBacking({ ...fields, evidence: { setting: "shielded" as "pool", operator: KEYS.operator, construction: "moe/pool/v2", configuration: CONFIG_HASH } })).toThrow(EncodingError);
     const bytes = encodeBacking(makePoolBacking(SECRETS.backer));
     const text = Buffer.from(bytes).toString("latin1");
     const at = text.lastIndexOf(POOL_CONSTRUCTION);
-    const v2 = new Uint8Array(bytes);
-    v2.set(utf8Encoder.encode("moe/pool/v2"), at);
-    expect(() => decodeBacking(v2)).toThrow(EncodingError);
+    const v1 = new Uint8Array(bytes);
+    v1.set(utf8Encoder.encode("moe/pool/v1"), at);
+    expect(() => decodeBacking(v1)).toThrow(EncodingError);
     const invalidUtf8 = new Uint8Array(bytes);
     invalidUtf8[at] = 0xff;
     expect(() => decodeBacking(invalidUtf8)).toThrow(EncodingError);
@@ -102,7 +102,7 @@ describe("E names the construction and its configuration (C1.3)", () => {
       payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },
       reliance: [],
       evidence: {
-        setting: "pool", operator: KEYS.operator, construction: "moe/pool/v1", configuration: CONFIG_HASH,
+        setting: "pool", operator: KEYS.operator, construction: "moe/pool/v2", configuration: CONFIG_HASH,
         witnessing: { venue: venue.id, interval: 1n },
       },
     });

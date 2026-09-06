@@ -1,5 +1,5 @@
 // Poseidon2 over the BN254 scalar field, state width 4, rate 3: the in-circuit
-// hash H of pool-v1 §1, computed on the host.
+// hash H of pool-v2 §1, computed on the host.
 //
 // This is the permutation the Noir standard library exposes as
 // `poseidon2_permutation` and Barretenberg implements in
@@ -14,7 +14,7 @@
 // under. A host hash that disagreed with the circuit's would make every
 // wallet-computed commitment unprovable, so the test vectors are the binding.
 //
-// The sponge is the one pool-v1 §1 states, which is noir-lang/poseidon
+// The sponge is the one pool-v2 §1 states, which is noir-lang/poseidon
 // v0.3.0's (`circuits/vendor/poseidon2.nr`): the state starts as
 // [0, 0, 0, n · 2^64] for n inputs; inputs are added into the first three
 // state elements three at a time, each full block followed by one
@@ -499,7 +499,7 @@ export function poseidon2Permutation(input: readonly bigint[]): PermutationState
 }
 
 /**
- * The variable-length sponge of pool-v1 §1 over one or more canonical field
+ * The variable-length sponge of pool-v2 §1 over one or more canonical field
  * elements. Every in-circuit object hashes its domain tag as the first input,
  * which the callers in notes.ts and note-tree.ts supply; so no object of
  * this construction hashes zero inputs, and the host refuses to (the Noir

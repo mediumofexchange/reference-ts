@@ -26,7 +26,7 @@ const backing = makeBacking({
   reliance: [],                                           // R — what travels with it
   evidence: {                                             // E — who says it is unspent, and how
     setting: "pool", operator: operatorKey,
-    construction: "moe/pool/v1", configuration: configHash,
+    construction: "moe/pool/v2", configuration: configHash,
   },
 });
 
@@ -65,47 +65,58 @@ deadline. What the repository holds today:
   contract in `RESEARCH.md`): Noir circuits, ZK-enabled UltraHonk proofs,
   public-only supply replay. Excluded from the package and retained until
   its admission, replay and crash cases have moved to the pool path.
-- **The pool's claim layer** (`src/pool/`, pool-v1 §§1–8): the field and
-  the in-circuit hash on the host, notes with their commitments and
-  nullifiers, the depth-32 note tree, the spent-set accumulator with
-  membership and non-membership proofs, the configuration, statement, history
-  and snapshot frames, **E**'s declaration of the construction, and admission
-  against one committed view with replay from genesis. The
-  [pool-v1 circuits](src/pool/circuits/README.md) — issue, two-input/two-output
-  spend with per-backing conservation and padding, and burn — are the pinned
-  sources; `npm run check:pool` checks their identities, exercises real ZK
-  proofs and adversarial witnesses, and drives the claim layer with real
-  proofs through the Barretenberg verifier.
-- **Pool receipt envelopes** (`src/pool/receipt.ts`, pool-v1 §7): strict
-  operator signatures bound to the expected configuration, with separate
-  checks for statement identity, exact admitted evidence, and inclusion in a
-  replayed history. A receipt proves acceptance; witnessed finality remains
-  the sequencing layer's check.
+- **The pool's claim layer** (`src/pool/`, construction `moe/pool/v2`,
+  pool-v2 §§1–13): the field and the in-circuit hash on the host, notes over
+  the construction domain with their commitments and nullifiers, the depth-32
+  note tree, the spent-set accumulator with membership and non-membership
+  proofs, the depth-16 scope tree with private membership paths, the
+  configuration, segment, statement, history and snapshot frames, **E**'s
+  declaration of the construction, and `Segment`: finalized import of the
+  openings' prefixes with deduplication and conflict refusal, admission
+  against one committed view with one anchor per input, the directory over
+  the whole scope, and replay through supplied checkpoint evidence. The
+  [pool-v2 circuits](src/pool/circuits/README.md) — issue, two-input/two-output
+  spend with per-backing conservation, padding and scope membership, and
+  burn — are the pinned sources; `npm run check:pool` checks their
+  identities, exercises real ZK proofs and adversarial witnesses, and drives
+  two segments across an operator replacement with real proofs through the
+  Barretenberg verifier.
+- **Pool receipt envelopes** (`src/pool/receipt.ts`, pool-v2 §9): strict
+  operator signatures bound to the segment's authority — domain, identity,
+  scope root, operator — with separate checks for statement identity, exact
+  admitted evidence, and inclusion in a replayed history. A receipt proves
+  acceptance; witnessed finality and the scope's standing remain the
+  sequencing layer's check.
+- **Shared-scope scheduling** (`src/pool/schedule.ts`, C2.6.1/C2.10.9):
+  bigint time checks for the earliest term boundary, the operator-wide
+  commitment in flight and restart lag, checked against an enumerated
+  calendar model. Record authority and durable execution remain to be built.
 - **A local two-process pilot** on the frozen path (`docs/PILOT.md`): durable
   commands, exact retries, crash recovery, a trusted local witness. An
   integration harness, not a product.
 
-Out of scope until their step: the pool sequencer and its commitment schedule,
-durable receipt issuance and recovery, note delivery and backups, the wallet,
-an external witness's write side, and every Extensions profile.
+Out of scope until their step: the pool sequencer over the witnessed record
+(scope derivation, schedule integration, whole-scope finality, lapse, descent,
+restart), durable receipt issuance and recovery, note delivery and backups,
+the wallet, an external witness's write side, and every Extensions profile.
 
-The [replacement boundary](docs/POOL_SEQUENCING_BOUNDARY.md) is resolved at
-the specification and model level by the
-[authority and history contract](https://github.com/mediumofexchange/money-from-first-principles/blob/a219aad/pool-authority.md).
-It separates immutable note identity from current operator authority, proves
-private membership in a public service scope, and imports only finalized
-shared histories. [The adversarial model](model/pool-authority.ts) exercises
-splits, reunions, replay and scope changes. It uses ideal cryptography and a
-local journal abstraction; new frames, circuits and production sequencing
-remain to be built. The current v1 runtime is fixed to its original operator
-and cannot deploy this replacement contract.
+The [replacement boundary](docs/POOL_SEQUENCING_BOUNDARY.md) is resolved by
+the [authority and history contract](https://github.com/mediumofexchange/money-from-first-principles/blob/main/pool-authority.md),
+which `moe/pool/v2` instantiates: immutable note identity separated from
+current operator authority, private membership in a public service scope,
+one anchor per input, and finalized shared histories imported with
+deduplication. [The adversarial model](model/pool-authority.ts) exercises
+splits, reunions, replay and scope changes with ideal cryptography; the
+claim layer now holds the frames and circuits, and the sequencer over the
+witnessed record — scope derivation, the commit schedule, whole-scope
+finality, lapse, descent and restart — is the next step. The historical
+`moe/pool/v1` runtime was replaced and lives in git history.
 
-The existing v1 runtime follows specification revision
-[`81516ba`](https://github.com/mediumofexchange/money-from-first-principles/tree/81516ba),
-whose `pool-v1.md` pins the construction bit for bit and records the
-implemented circuits and keys, including the §7 receipt bytes signed here.
-`docs/PROTOCOL_RULES.md` maps each binding rule to its specification
-rule, code and test, and marks what is frozen.
+The runtime follows specification revision
+[`ba8fe21a8d3e55d07f18edbd9ec180adb68f6ef4`](https://github.com/mediumofexchange/money-from-first-principles/tree/ba8fe21a8d3e55d07f18edbd9ec180adb68f6ef4),
+whose `pool-v2.md` pins the construction bit for bit and records the
+implemented circuits and keys. `docs/PROTOCOL_RULES.md` maps each binding
+rule to its specification rule, code and test, and marks what is frozen.
 
 ## Try the local pilot
 
@@ -168,9 +179,10 @@ current slice.
 
 Shared commitments authenticate a directory of backing names and snapshot
 digests (signature context `moe/commitment/v2`, directory version 1). The
-pool's frames follow `pool-v1.md` and **E**'s declaration is evidence clause
-`0x05`, but the receipt and commitment envelopes over the pool's fields are
-not yet fixed, and fixing them will change signed bytes again. Anything you
+pool's frames follow `pool-v2.md` and **E**'s declaration is evidence clause
+`0x05`, but the commitment envelope over the pool's directory and the
+sequencer's objects are not yet fixed, and fixing them may change signed
+bytes again. Anything you
 sign with this package today should be treated as disposable. There is no
 compatibility path across format changes and none is planned — accepting two
 namespaces would defeat the separation the domain tags exist to provide.

@@ -14,7 +14,7 @@ import {
   SpentSet,
 } from "../src/pool/spent-set.js";
 
-// pool-v1 §8: a 256-high sparse Merkle tree over SHA-256, keyed by the
+// pool-v2 §11: a 256-high sparse Merkle tree over SHA-256, keyed by the
 // nullifier's bytes, with membership and non-membership proofs in the clear,
 // sent as a 32-byte map of omitted empty siblings plus the rest.
 
@@ -24,13 +24,13 @@ const key = (...bytes: [number, number][]): Uint8Array => {
   return out;
 };
 
-describe("pool-v1 §8: the spent set", () => {
+describe("pool-v2 §11: the spent set", () => {
   it("frames its leaves and nodes as specified and builds the empty subtrees", () => {
     const nf = key([31, 1]);
-    expect(spentLeaf(nf)).toEqual(sha256(Buffer.concat([utf8Encoder.encode("moe/pool/v1/spent/leaf"), nf])));
+    expect(spentLeaf(nf)).toEqual(sha256(Buffer.concat([utf8Encoder.encode("moe/pool/v2/spent/leaf"), nf])));
     const left = new Uint8Array(32).fill(1);
     const right = new Uint8Array(32).fill(2);
-    expect(spentNode(left, right)).toEqual(sha256(Buffer.concat([utf8Encoder.encode("moe/pool/v1/spent/node"), left, right])));
+    expect(spentNode(left, right)).toEqual(sha256(Buffer.concat([utf8Encoder.encode("moe/pool/v2/spent/node"), left, right])));
     expect(spentNode(left, right)).not.toEqual(spentNode(right, left));
     expect(EMPTY_SPENT_SUBTREE[0]).toEqual(new Uint8Array(32));
     expect(EMPTY_SPENT_SUBTREE).toHaveLength(SPENT_SET_HEIGHT + 1);

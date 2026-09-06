@@ -5,7 +5,7 @@ import { NoteTree } from "../src/pool/note-tree.js";
 import { commitmentOf, nullifierOf, ownerOf } from "../src/pool/notes.js";
 import { poseidon2Hash, poseidon2Permutation } from "../src/pool/poseidon2.js";
 
-// pool-v1 §1: H is Poseidon2 over BN254, width 4, rate 3, the Noir standard
+// pool-v2 §1: H is Poseidon2 over BN254, width 4, rate 3, the Noir standard
 // library's permutation in noir-lang/poseidon v0.3.0's sponge. The host
 // implementation is bound to the circuits' by vectors: the permutation's own
 // test vector from Barretenberg's poseidon2_params.hpp, and hash outputs
@@ -14,7 +14,7 @@ import { poseidon2Hash, poseidon2Permutation } from "../src/pool/poseidon2.js";
 
 const p = FIELD_MODULUS;
 
-describe("pool-v1 §1: the in-circuit hash on the host", () => {
+describe("pool-v2 §1: the in-circuit hash on the host", () => {
   it("permutes Barretenberg's test vector", () => {
     expect(poseidon2Permutation([0n, 1n, 2n, 3n]).map(fieldToHex)).toEqual([
       "0x01bd538c2ee014ed5141b29e9ae240bf8db3fe5b9a38629a9647cf8d76c01737",
@@ -52,7 +52,7 @@ describe("pool-v1 §1: the in-circuit hash on the host", () => {
   });
 
   it("derives owner, commitment and nullifier with the tags in the pinned order", () => {
-    // The vectors above, read as pool-v1 §3's objects: pool limbs (17, 29),
+    // The vectors above, read as pool-v2 §3's objects: pool limbs (17, 29),
     // backing limbs (31, 43), value 100, owner 5, rho 6.
     expect(fieldToHex(ownerOf(7n))).toBe("0x156abdc75cd1df1e6a4c590f444051aa4494bdf74b1f0f530686e3a30dd27ddd");
     const pool = identifierOf(17n, 29n);
