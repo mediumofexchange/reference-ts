@@ -85,6 +85,9 @@ class RefusesEverything extends LocalVenue {
   override latestFor(): never {
     throw new VenueError("this view was not synced for that operator");
   }
+  override previousFor(): never {
+    throw new VenueError("this view was not synced for that operator");
+  }
   override witnessedAtFor(): never {
     throw new VenueError("this view was not synced for that operator");
   }

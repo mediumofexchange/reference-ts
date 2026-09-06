@@ -96,6 +96,11 @@ deadline. What the repository holds today:
   chain checks every scoped term, distinguishes same-key reappointments,
   and derives the scheduler's deadlines. It requires an explicitly declared
   common venue. It does not authenticate a header or finalize its openings.
+- **Bounded commitment predecessor reads** (`Venue.previousFor`, C2.7.2):
+  the local and Ergo venues locate prior held sequences, including at the same
+  witnessed index, with logarithmic lookup across sparse histories. Custom
+  `Venue` adapters must implement this required read. Directory descent and
+  whole-scope checkpoint validation remain the next sequencing step.
 - **A local two-process pilot** on the frozen path (`docs/PILOT.md`): durable
   commands, exact retries, crash recovery, a trusted local witness. An
   integration harness, not a product.

@@ -166,6 +166,7 @@ export function localViewFromWire(value: unknown, expectedOperator: Uint8Array, 
     publishedOpsFor: venue.publishedOpsFor.bind(venue), replacementsFor: venue.replacementsFor.bind(venue),
     revocationsFor: venue.revocationsFor.bind(venue), commitsFor: venue.commitsFor.bind(venue),
     latestFor: venue.latestFor.bind(venue), witnessedAtFor: venue.witnessedAtFor.bind(venue),
+    previousFor: venue.previousFor.bind(venue),
     witnessedAtSequence: venue.witnessedAtSequence.bind(venue),
     firstCommitmentFor: venue.firstCommitmentFor.bind(venue), nextSequenceFor: venue.nextSequenceFor.bind(venue),
   });

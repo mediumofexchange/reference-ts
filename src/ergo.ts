@@ -591,8 +591,19 @@ export class ErgoVenue implements Venue {
   }
 
   latestFor(operator: Uint8Array, asOf?: bigint): Commitment | undefined {
+    return this.readCommitment(operator, asOf);
+  }
+
+  previousFor(operator: Uint8Array, beforeSequence: bigint, asOf?: bigint): Commitment | undefined {
+    // Descent needs one settled view of the whole replacement frontier. A key
+    // already fetched during a refresh cannot stand for that unfinished view.
+    if (this.syncing || !this.synced) throw new VenueError("this view has no settled snapshot");
+    return this.readCommitment(operator, asOf, beforeSequence);
+  }
+
+  private readCommitment(operator: Uint8Array, asOf?: bigint, beforeSequence?: bigint): Commitment | undefined {
     this.requireFetched(operator);
-    const value = this.latestWitnessedFor(operator, asOf)?.value;
+    const value = this.latestWitnessedFor(operator, asOf, beforeSequence)?.value;
     return value === undefined ? undefined : {
       sequence: value.sequence,
       root: copyBytes(value.root),
@@ -608,10 +619,8 @@ export class ErgoVenue implements Venue {
 
   witnessedAtSequence(operator: Uint8Array, sequence: bigint): bigint | undefined {
     this.requireFetched(operator);
-    for (const witnessed of this.commitments.get(bytesToHex(operator)) ?? []) {
-      if (witnessed.value.sequence === sequence) return witnessed.at;
-    }
-    return undefined;
+    const witnessed = this.latestWitnessedFor(operator, undefined, sequence + 1n);
+    return witnessed?.value.sequence === sequence ? witnessed.at : undefined;
   }
 
   firstCommitmentFor(operator: Uint8Array, notBefore = 0n): bigint | undefined {
@@ -631,14 +640,20 @@ export class ErgoVenue implements Venue {
   private latestWitnessedFor(
     operator: Uint8Array,
     asOf?: bigint,
+    beforeSequence?: bigint,
   ): Witnessed<Commitment> | undefined {
     const log = this.commitments.get(bytesToHex(operator)) ?? [];
     const limit = asOf ?? this.height;
-    for (let i = log.length - 1; i >= 0; i--) {
-      const witnessed = log[i] as Witnessed<Commitment>;
-      if (witnessed.at <= limit) return witnessed;
+    // finalised + extending establish C2.3.3's monotone index/sequence order.
+    let low = 0, high = log.length;
+    while (low < high) {
+      const mid = low + Math.floor((high - low) / 2);
+      const witnessed = log[mid]!;
+      if (witnessed.at <= limit &&
+          (beforeSequence === undefined || witnessed.value.sequence < beforeSequence)) low = mid + 1;
+      else high = mid;
     }
-    return undefined;
+    return log[low - 1];
   }
 }
 

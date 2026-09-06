@@ -203,6 +203,10 @@ export interface WitnessedOp {
  *     addressable by its sequence, including when several increasing
  *     sequences share one witnessed index. A missing sequence is therefore a
  *     real hole, not an artefact of asking only for that index's latest.
+ *   - **Bounded predecessor reads.** `previousFor` returns the greatest held
+ *     sequence below its exclusive bound, at or before its inclusive index
+ *     bound. It includes predecessors at the same index (C2.7.2), and does
+ *     not probe absent sequence numbers or scan the whole held history.
  *   - **A declared lag, bound to the id.** `lag()` is a constant of the
  *     venue's finality rule — the least number of indices by which an act
  *     signed at its clock is witnessed after it — never a view's state, so it
@@ -259,6 +263,14 @@ export interface Venue {
   revocationsFor(obligor: Uint8Array): WitnessedRevocation[];
   commitsFor(attemptId: Uint8Array): WitnessedCommit[];
   latestFor(operator: Uint8Array, asOf?: bigint): Commitment | undefined;
+  /**
+   * Greatest held sequence strictly below `beforeSequence`, witnessed at or
+   * before `asOf` (the present by default), as a copy. The bound need not be
+   * held. Zero has no predecessor; a bound above the sequence range is valid.
+   * Undefined means no matching held record, never unavailable evidence.
+   * This locates a record, not an authenticated directory or final pool state.
+   */
+  previousFor(operator: Uint8Array, beforeSequence: bigint, asOf?: bigint): Commitment | undefined;
   witnessedAtFor(operator: Uint8Array, asOf?: bigint): bigint | undefined;
   /** The index of this exact commitment sequence, or undefined if the record never held it. */
   witnessedAtSequence(operator: Uint8Array, sequence: bigint): bigint | undefined;
@@ -528,6 +540,11 @@ export class LocalVenue implements Venue {
     return witnessed === undefined ? undefined : decodeCommitment(witnessed.bytes);
   }
 
+  previousFor(operator: Uint8Array, beforeSequence: bigint, asOf?: bigint): Commitment | undefined {
+    const witnessed = this.latestWitnessedFor(operator, asOf, beforeSequence);
+    return witnessed === undefined ? undefined : decodeCommitment(witnessed.bytes);
+  }
+
   /**
    * The witnessed index of this operator's latest commitment **at or before**
    * `asOf` (the present by default), or undefined if it had none by then.
@@ -549,25 +566,26 @@ export class LocalVenue implements Venue {
    * than becoming an apparent hole behind that index's latest answer.
    */
   witnessedAtSequence(operator: Uint8Array, sequence: bigint): bigint | undefined {
-    const log = this.byOperator.get(bytesToHex(operator)) ?? [];
-    for (const witnessed of log) {
-      if (decodeCommitment(witnessed.bytes).sequence === sequence) return witnessed.at;
-    }
-    return undefined;
+    const witnessed = this.latestWitnessedFor(operator, undefined, sequence + 1n);
+    return witnessed !== undefined && decodeCommitment(witnessed.bytes).sequence === sequence
+      ? witnessed.at : undefined;
   }
 
-  private latestWitnessedFor(operator: Uint8Array, asOf?: bigint): Witnessed | undefined {
+  private latestWitnessedFor(operator: Uint8Array, asOf?: bigint, beforeSequence?: bigint): Witnessed | undefined {
     const log = this.byOperator.get(bytesToHex(operator));
     if (log === undefined) return undefined;
-    if (asOf === undefined) return log[log.length - 1];
-    // Published in witnessed order, so the last one at or before asOf is the
-    // latest. A linear walk from the end: the commitments a gap question reaches
-    // back over are the recent ones.
-    for (let i = log.length - 1; i >= 0; i--) {
-      const witnessed = log[i] as Witnessed;
-      if (witnessed.at <= asOf) return witnessed;
+    if (asOf === undefined && beforeSequence === undefined) return log[log.length - 1];
+    // C2.3.3: indices are nondecreasing and held sequences strictly increase.
+    // Both bounds therefore select a prefix. Search held records, not holes.
+    let low = 0, high = log.length;
+    while (low < high) {
+      const mid = low + Math.floor((high - low) / 2);
+      const witnessed = log[mid]!;
+      if ((asOf === undefined || witnessed.at <= asOf) &&
+          (beforeSequence === undefined || decodeCommitment(witnessed.bytes).sequence < beforeSequence)) low = mid + 1;
+      else high = mid;
     }
-    return undefined;
+    return log[low - 1];
   }
 
   /**
