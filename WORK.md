@@ -11,10 +11,10 @@ operator replacement, and authorized merge/push when satisfied.
 
 ## Status
 
-- Completed implementation slice: feat/pool-authority-model, based on main
-  aa72c09. Companion spec/pool-authority is merged and pushed to specification
+- Implementation feat/pool-authority-model is merged and pushed to main as
+  7f96262. Companion spec/pool-authority is merged and pushed to specification
   main b9f8beb; normative contract f842335 through a219aad. The reference
-  slice is reviewed, checked and ready for the authorized merge/push.
+  slice is reviewed and checked; the next work is the new construction layout.
 - The new pool-authority.md contract defines immutable construction domains,
   private membership in public service scopes, whole-scope finality, exact
   canonical predecessor imports, deduplicated shared history and a forest of
