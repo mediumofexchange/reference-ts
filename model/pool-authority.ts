@@ -147,13 +147,17 @@ export interface Checkpoint {
   readonly sequence: bigint;
   readonly signedAt: bigint;
   readonly segment: Id;
+  readonly openingSequence: bigint;
   readonly scope: Scope;
   readonly openings: readonly (readonly [Id, Id | null])[];
   readonly events: readonly Event[];
   readonly carries: readonly Id[];
 }
 interface Recorded { readonly checkpoint: Checkpoint; readonly at: bigint; readonly status: "final" | "lapsed" | "invalid"; readonly state?: State }
-export interface Receipt { readonly segment: Id; readonly statement: Id; readonly position: bigint; readonly after: bigint; readonly operator: Id }
+export interface Receipt { readonly segment: Id; readonly statement: Id; readonly position: bigint; readonly after: bigint; readonly operator: Id; readonly scope: Id; readonly history: Id }
+export interface RepairClassification { readonly included: boolean; readonly contradicted: boolean; readonly lapsed: boolean }
+// Ideal injective history identity, not a protocol byte encoding.
+function history(events: readonly Event[]): Id { return JSON.stringify(events.map(e => e.statement.id)); }
 
 export class World {
   now = 0n;
@@ -291,7 +295,7 @@ export class World {
   }
   open(operator: Id, names: readonly Id[], domain = "D", override?: ReadonlyMap<Id, Id | null>): Service {
     const previousService = this.services.get(operator);
-    if (previousService && this.current(previousService.scope)) requireThat(previousService.finalized(), "live tail before scope change");
+    if (previousService && this.current(previousService.scope)) requireThat(previousService.finalized() || previousService.stale(), "live tail before scope change");
     requireThat(names.length > 0 && new Set(names).size === names.length, "scope shape");
     requireThat(names.every(b => this.domains.get(b) === domain), "wrong construction domain");
     const entries = [...names].sort().map(b => this.term(b));
@@ -320,12 +324,15 @@ export class World {
     const pending = this.inFlight.get(operator);
     return !pending || this.records.some(r => r.checkpoint === pending) || this.now >= pending.signedAt + this.lag;
   }
+  openingSequence(segment: Id, operator: Id): bigint {
+    return [...this.signatures].find(c => c.segment === segment)?.openingSequence ?? (this.highestSigned.get(operator) ?? 0n) + 1n;
+  }
   sign(service: Service, carries: readonly Id[] = service.scope.entries.map(e => e.backing)): Checkpoint {
     requireThat(this.free(service.scope.operator), "one in flight");
     const sequence = (this.highestSigned.get(service.scope.operator) ?? 0n) + 1n;
     this.highestSigned.set(service.scope.operator, sequence);
     const checkpoint = Object.freeze({ id: `checkpoint${++this.serial}`, operator: service.scope.operator, sequence,
-      signedAt: this.now, segment: service.id,
+      signedAt: this.now, segment: service.id, openingSequence: service.openingSequence,
       scope: Object.freeze({ ...service.scope, entries: Object.freeze(service.scope.entries.map(e => Object.freeze({ ...e }))) }),
       openings: Object.freeze([...service.openings].map(([b, id]) => Object.freeze([b, id] as const))),
       events: Object.freeze(service.events.map(e => Object.freeze({ ...e }))), carries: Object.freeze([...carries].sort()) });
@@ -348,7 +355,7 @@ export class World {
       requireThat(names.every(b => this.domains.get(b) === checkpoint.scope.domain), "wrong construction domain");
       requireThat(same(checkpoint.openings.map(([b]) => b), names), "opening scope mismatch");
       const known = this.records.find(r => r.checkpoint.segment === checkpoint.segment)?.checkpoint;
-      if (known) requireThat(known.scope.root === checkpoint.scope.root && known.scope.domain === checkpoint.scope.domain &&
+      if (known) requireThat(known.openingSequence === checkpoint.openingSequence && known.scope.root === checkpoint.scope.root && known.scope.domain === checkpoint.scope.domain &&
         known.operator === checkpoint.operator && known.scope.entries.length === checkpoint.scope.entries.length &&
         known.scope.entries.every((e, i) => { const other = checkpoint.scope.entries[i]!;
           return e.backing === other.backing && e.link === other.link && e.operator === other.operator && e.from === other.from; }) &&
@@ -402,6 +409,48 @@ export class World {
       return "invalid";
     }
   }
+  /** C2.10.9a, at one supplied repair boundary. Receipt signature and supplied
+   * scope are ideal authenticated inputs; the model's finite record is complete.
+   * This is not a global receipt verdict or a runtime whole-record scan API. */
+  classifyRepair(receipt: Receipt, scope: Scope, boundary: Id): RepairClassification {
+    requireThat(receipt.position > 0n && receipt.after > 0n && receipt.operator === scope.operator && receipt.scope === scope.root, "receipt context");
+    const r = this.record(boundary), c = r.checkpoint;
+    const records = this.records.filter(x => x.checkpoint.operator === receipt.operator && x.checkpoint.sequence >= receipt.after && x.checkpoint.sequence <= c.sequence);
+    const after = records.find(x => x.checkpoint.sequence === receipt.after);
+    requireThat(after !== undefined && after.checkpoint.segment === receipt.segment && after.checkpoint.scope.root === receipt.scope, "receipt after segment");
+    requireThat(scope.entries.length === after.checkpoint.scope.entries.length && scope.entries.every((e, i) => {
+      const original = after.checkpoint.scope.entries[i]!;
+      return e.backing === original.backing && e.link === original.link && e.from === original.from && e.operator === original.operator;
+    }) &&
+      scope.domain === after.checkpoint.scope.domain && scope.entries.every(e => this.chains.get(e.backing)?.some(t => t.link === e.link && t.from === e.from && t.operator === e.operator) === true), "receipt scope");
+    requireThat(c.operator === receipt.operator && c.sequence > receipt.after &&
+      records.find(x => x.checkpoint.segment !== receipt.segment) === r, "first different segment");
+    requireThat(c.sequence === c.openingSequence && c.events.length === 0, "repair opening");
+    requireThat(c.sequence - 1n > receipt.after && !this.records.some(x => x.checkpoint.operator === receipt.operator && x.checkpoint.sequence === c.sequence - 1n), "missing preceding sequence");
+    requireThat(this.current(scope, r.at), "receipt scope ended");
+    const checked = new Set<Id>();
+    const evidence = (id: Id): void => {
+      if (checked.has(id)) return;
+      checked.add(id);
+      const source = this.record(id);
+      requireThat(!this.withheldDirectories.has(id) && !this.withheldScopes.has(id), "unavailable checkpoint evidence");
+      requireThat(!this.shownScopes.has(id) || this.shownScopes.get(id) === source.checkpoint.scope, "unauthenticated scope");
+      this.import(id);
+      for (const [, parent] of source.checkpoint.openings) if (parent !== null) evidence(parent);
+      for (const prior of this.records) if (prior.checkpoint.segment === source.checkpoint.segment && prior.checkpoint.sequence < source.checkpoint.sequence) evidence(prior.checkpoint.id);
+    };
+    for (const source of records) evidence(source.checkpoint.id);
+    let included = false, contradicted = false;
+    for (const source of records) {
+      if (source.checkpoint.segment !== receipt.segment) continue;
+      const prefix = source.checkpoint.events.filter((_, i) => BigInt(i) < receipt.position);
+      const occupied = BigInt(prefix.length) === receipt.position;
+      const match = occupied && prefix.at(-1)!.statement.id === receipt.statement && history(prefix) === receipt.history;
+      included ||= match;
+      contradicted ||= !match && (occupied || source.checkpoint.sequence > receipt.after);
+    }
+    return { included, contradicted, lapsed: !included && !contradicted };
+  }
   /** Independent semantic checks over unique final events, using the hidden oracle only here. */
   violations(): string[] {
     const bad: string[] = [], seen = new Map<Id, Id>(), events = new Set<Id>();
@@ -430,7 +479,9 @@ export class Service {
   private readonly receipts = new Map<Id, Receipt>();
   private lastSigned: Checkpoint | undefined;
   private resumedAt: bigint | undefined;
+  readonly openingSequence: bigint;
   constructor(readonly world: World, readonly id: Id, readonly scope: Scope, readonly openings: ReadonlyMap<Id, Id | null>, state: State) {
+    this.openingSequence = world.openingSequence(id, scope.operator);
     this.state = copy(state); this.state.roots.set(`${id}:0`, []);
   }
   root(): Id { return `${this.id}:${this.events.length}`; }
@@ -439,6 +490,11 @@ export class Service {
     if (!this.lastSigned) return this.events.length === 0;
     const record = this.world.records.find(r => r.checkpoint === this.lastSigned);
     return record?.status === "final" && same(record.checkpoint.events.map(e => e.statement.id), this.events.map(e => e.statement.id));
+  }
+  /** Expired, unheld signed state permits C2.4.3 repair; its counter is retained. */
+  stale(): boolean {
+    return this.lastSigned !== undefined && this.world.now >= this.lastSigned.signedAt + this.world.lag &&
+      !this.world.records.some(r => r.checkpoint === this.lastSigned);
   }
   submit(statement: Statement): Receipt {
     this.ready();
@@ -452,7 +508,7 @@ export class Service {
     this.events.push(event); this.leaves.push(...statement.outputs);
     next.roots.set(this.root(), Object.freeze([...this.leaves])); this.state = next;
     const receipt = Object.freeze({ segment: this.id, statement: statement.id, position: BigInt(this.events.length),
-      after: this.lastSigned.sequence, operator: this.scope.operator });
+      after: this.lastSigned.sequence, operator: this.scope.operator, scope: this.scope.root, history: history(this.events) });
     this.receipts.set(statement.id, receipt);
     return receipt;
   }

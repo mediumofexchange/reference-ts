@@ -129,7 +129,9 @@ deadline. What the repository holds today:
 - **Pool receipt record readers** ([API and limits](docs/POOL_RECEIPTS.md)):
   resolve exact signed sequences and complete scope terms, and check receipt
   inclusion in a supplied source checkpoint through canonical replay. Missing
-  history stays unavailable after replacement. Global receipt classification
+  history stays unavailable after replacement. A bounded repair reader proves
+  C2.10.9a lapse at a supplied canonical opening while preserving inclusion and
+  contradiction independently. Global receipt classification
   and silence recovery remain next; prospective revocation is checked during replay.
 - **Durable pool sequencing** ([PoolStore](docs/POOL_STORE.md), Node 24):
   atomically journals canonical openings, admitted statements, original receipts
@@ -143,7 +145,7 @@ deadline. What the repository holds today:
   commands, exact retries, crash recovery, a trusted local witness. An
   integration harness, not a product.
 
-Out of scope until their step: pool receipt classification and recovery,
+Out of scope until their step: global pool receipt classification and recovery,
 sequencer transport and scheduling service, note delivery and backups,
 the wallet, an external witness's write side, and every Extensions profile.
 
@@ -162,7 +164,7 @@ recovery are next.
 The historical `moe/pool/v1` runtime was replaced and lives in git history.
 
 The runtime follows specification revision
-[`ba8fe21a8d3e55d07f18edbd9ec180adb68f6ef4`](https://github.com/mediumofexchange/money-from-first-principles/tree/ba8fe21a8d3e55d07f18edbd9ec180adb68f6ef4),
+[`bdd359971185463bf5e734eadaa0ced639774ca1`](https://github.com/mediumofexchange/money-from-first-principles/tree/bdd359971185463bf5e734eadaa0ced639774ca1),
 whose `pool-v2.md` pins the construction bit for bit and records the
 implemented circuits and keys. `docs/PROTOCOL_RULES.md` maps each binding
 rule to its specification rule, code and test, and marks what is frozen.

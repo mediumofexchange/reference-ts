@@ -6,6 +6,7 @@ import { directoryRoot, signCommitment, type Commitment } from "../src/commitmen
 import { poolReceiptAttestsEvidence, poolReceiptInHistory } from "../src/pool/receipt.js";
 import type { PoolCheckpointEvidence } from "../src/pool/checkpoint.js";
 import { readPoolReceiptCheckpoint, readPoolReceiptRecord } from "../src/pool/receipt-record.js";
+import { readPoolReceiptRepair } from "../src/pool/receipt-repair.js";
 import { Segment } from "../src/pool/segment.js";
 import { segmentAuthority } from "../src/pool/statement.js";
 import { decodeStoredOpening, encodeStoredOpening, encodeStoredReceipt } from "../src/pool/store-codec.js";
@@ -168,7 +169,9 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     expect(await readPoolReceiptCheckpoint({ configuration: CONFIG, venue, header: f.trail.header,
       receipt, checkpoint: f.opening, evidence: view.checkpoints, verifier: f.oracle }))
       .toMatchObject({ kind: "not-included" });
-    // These are record facts, deliberately not a lapse or fault verdict.
+    expect(await readPoolReceiptRepair({ configuration: CONFIG, venue, header: f.trail.header,
+      receipt, backings: [f.x, f.y], repair: repaired, evidence: view.checkpoints, verifier: f.oracle }))
+      .toMatchObject({ kind: "repair", lapsed: true, includedAt: [], contradictedAt: [] });
     f.s.close();
     const resumed = store(f.file, venue, f.oracle);
     expect(await resumed.submit(statement)).toEqual(receipt);

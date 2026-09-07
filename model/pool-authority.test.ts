@@ -30,6 +30,100 @@ function fixture(departures: Departures = {}) {
   return { w, p, x, y, base };
 }
 
+describe("C2.10.9a receipt classification at a failed-publication repair", () => {
+  function pending() {
+    const f = fixture(), pay = payment(f.w, f.p, f.x);
+    return { ...f, receipt: f.p.submit(pay.statement) };
+  }
+  function repair(f: ReturnType<typeof pending>) {
+    const failed = f.p.commit(); f.w.tick();
+    const next = f.p.change(["X", "Y"]), boundary = next.commit(); settle(f.w, boundary);
+    return { failed, next, boundary };
+  }
+  function omission(f: ReturnType<typeof pending>) {
+    const hostile = new Service(f.w, f.p.id, f.p.scope, f.p.openings, f.p.view());
+    hostile.events.push(...f.base.events);
+    const c = f.w.sign(hostile); settle(f.w, c);
+    return c;
+  }
+  it("repairs expired signed state without importing the tail or reusing its counter", () => {
+    const f = pending(), { failed, next, boundary } = repair(f);
+    expect(boundary.sequence).toBe(failed.sequence + 1n);
+    expect(boundary.openingSequence).toBe(boundary.sequence);
+    expect(next.view().spent.has(f.x.nf)).toBe(false);
+    expect(f.w.record(f.base.id).status).toBe("final");
+    expect(f.w.classifyRepair(f.receipt, f.p.scope, boundary.id)).toEqual({ included: false, contradicted: false, lapsed: true });
+    expect(() => f.p.commit()).toThrow("retired journal");
+    expect(() => f.w.include(failed)).toThrow("sequence moved past");
+  });
+  it("preserves final inclusion independently of an earlier old-segment omission", () => {
+    const f = pending(); omission(f); settle(f.w, f.p.commit());
+    const { boundary } = repair(f);
+    expect(f.w.classifyRepair(f.receipt, f.p.scope, boundary.id)).toEqual({ included: true, contradicted: true, lapsed: false });
+  });
+  it("preserves inclusion with no contradiction", () => {
+    const f = pending(); settle(f.w, f.p.commit()); const { boundary } = repair(f);
+    expect(f.w.classifyRepair(f.receipt, f.p.scope, boundary.id)).toEqual({ included: true, contradicted: false, lapsed: false });
+  });
+  it("preserves a valid old-segment omission instead of excusing it", () => {
+    const f = pending(); omission(f); const { boundary } = repair(f);
+    expect(f.w.classifyRepair(f.receipt, f.p.scope, boundary.id)).toEqual({ included: false, contradicted: true, lapsed: false });
+  });
+  it.each(["statement", "history"] as const)("recognizes an occupied position mismatch at after: %s", field => {
+    const f = pending(), held = f.p.commit(); settle(f.w, held); const { boundary } = repair(f);
+    // Ideal signature by a dishonest operator on a conflicting receipt.
+    const receipt = { ...f.receipt, after: held.sequence, [field]: "different" };
+    expect(f.w.classifyRepair(receipt, f.p.scope, boundary.id)).toEqual({ included: false, contradicted: true, lapsed: false });
+  });
+  it.each(["withheld", "withheldScopes", "withheldDirectories"] as const)("refuses unavailable %s anywhere in the canonical evidence", field => {
+    const f = pending(), { boundary } = repair(f);
+    const ancestor = f.w.records[0]!.checkpoint.id; f.w[field].add(ancestor);
+    expect(() => f.w.classifyRepair(f.receipt, f.p.scope, boundary.id)).toThrow("unavailable");
+  });
+  it("refuses wrong scope and wrong after segment", () => {
+    const f = pending(), { next, boundary } = repair(f);
+    expect(() => f.w.classifyRepair(f.receipt, next.scope, boundary.id)).toThrow("receipt context");
+    expect(() => f.w.classifyRepair({ ...f.receipt, segment: next.id }, f.p.scope, boundary.id)).toThrow("receipt after segment");
+  });
+  it("refuses invalid intermediate evidence even when directory absence permits a valid repair", () => {
+    const f = pending(), invalid = f.w.sign(f.p, []); f.w.tick();
+    expect(f.w.include(invalid)).toBe("invalid");
+    const { boundary } = repair(f);
+    expect(() => f.w.classifyRepair(f.receipt, f.p.scope, boundary.id)).toThrow("not finalized");
+  });
+  it("requires an empty local history even at the declared opening sequence", () => {
+    const f = pending(); f.p.commit(); f.w.tick(); const next = f.p.change(["X", "Y"]);
+    const note = f.w.oracle.note("X", 1n);
+    const statement = f.w.oracle.prove(next, "issue", [], [note], [], { backing: "X", quantity: 1n });
+    next.events.push({ id: `${next.id}:0`, statement });
+    const boundary = next.commit(); settle(f.w, boundary);
+    expect(() => f.w.classifyRepair(f.receipt, f.p.scope, boundary.id)).toThrow("repair opening");
+  });
+  it("does not infer repair from an elective opening with no preceding hole", () => {
+    const f = pending(); settle(f.w, f.p.commit());
+    const next = f.p.change(["X", "Y"]), boundary = next.commit(); settle(f.w, boundary);
+    expect(() => f.w.classifyRepair(f.receipt, f.p.scope, boundary.id)).toThrow("missing preceding sequence");
+  });
+  it("does not infer repair from a hole followed by the same segment", () => {
+    const f = pending(); f.p.commit(); f.w.tick(); const continued = f.p.commit(); settle(f.w, continued);
+    expect(() => f.w.classifyRepair(f.receipt, f.p.scope, continued.id)).toThrow("first different segment");
+  });
+  it("requires the first different held segment and its authenticated opening sequence", () => {
+    const f = pending(), { next, boundary } = repair(f);
+    const later = next.commit(); settle(f.w, later);
+    expect(() => f.w.classifyRepair(f.receipt, f.p.scope, later.id)).toThrow("first different segment");
+    const g = pending(); g.p.commit(); g.w.tick(); const s = g.p.change(["X", "Y"]);
+    s.commit(); g.w.tick(); const continued = s.commit(); settle(g.w, continued);
+    expect(() => g.w.classifyRepair(g.receipt, g.p.scope, continued.id)).toThrow("repair opening");
+    expect(f.w.classifyRepair(f.receipt, f.p.scope, boundary.id).lapsed).toBe(true);
+  });
+  it("uses actual term lapse if any original term ended at the boundary", () => {
+    const f = pending(); f.w.replace("X", "Q"); f.p.commit(); f.w.tick(2n);
+    const next = f.p.change(["Y"]), boundary = next.commit(); settle(f.w, boundary);
+    expect(() => f.w.classifyRepair(f.receipt, f.p.scope, boundary.id)).toThrow("receipt scope ended");
+  });
+});
+
 describe("C2b.1 prospective revocation over shared pool history", () => {
   it("retains old issuance through continued spend, burn and replacement", () => {
     const f = fixture(); f.w.tick(); f.w.revoke("X");
@@ -371,8 +465,9 @@ describe("C1.2/C2.10 private scope authority and finalized import", () => {
     f.p.submit(pay.statement);
     expect(() => f.p.change(["Y"])).toThrow("live tail");
     expect(() => f.w.open("P", ["X", "Y"])).toThrow("live tail");
-    const dropped = f.p.commit(); f.w.tick();
+    const dropped = f.p.commit();
     expect(() => f.p.change(["Y"])).toThrow("live tail");
+    f.w.tick();
     const retry = f.p.commit(); expect(retry.sequence).toBe(dropped.sequence + 1n);
     expect(retry.events).toEqual(dropped.events); settle(f.w, retry);
     expect(f.p.change(["Y"]).view().spent.has(f.x.nf)).toBe(true);
@@ -386,7 +481,7 @@ describe("C1.2/C2.10 private scope authority and finalized import", () => {
     expect(() => resumed.commit()).toThrow("restart lag");
     f.w.tick();
     expect(resumed.submit(pay.statement)).toBe(receipt);
-    expect(() => resumed.change(["Y"])).toThrow("live tail");
+    expect(resumed.stale()).toBe(true);
     const retry = resumed.commit(); expect(retry.sequence).toBe(pending.sequence + 1n);
     settle(f.w, retry); expect(resumed.finalized()).toBe(true);
     const inputs = [f.y, f.w.oracle.note("Y", 0n)], outputs = [f.w.oracle.note("Y", 100n), f.w.oracle.note("Y", 0n)];

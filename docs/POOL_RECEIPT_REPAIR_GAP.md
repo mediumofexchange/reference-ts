@@ -1,7 +1,8 @@
 # Receipt classification after failed checkpoint repair
 
-Status: a normative choice is required before global receipt classification.
-The existing receipt readers continue to return record and inclusion facts.
+Status: resolved by the maintainer on 2026-09-07. C2.10.9a permits lapse at
+a proven repair boundary, preserving independent inclusion and contradiction.
+The bounded reader is documented in [Pool receipts](POOL_RECEIPTS.md#failed-publication-repair).
 
 ## Reproduced boundary
 
@@ -38,29 +39,33 @@ receipt.
   describes receipt lapse where the venue moved past the commitment the
   receipt names. R names sequence 1, not the failed sequence 2.
 
-These rules do not explicitly classify an earlier receipt when a later failed
-commitment causes repair. Calling every subsequent new segment an elective
+Before C2.10.9a, these rules did not explicitly classify an earlier receipt
+when a later failed commitment caused repair. Calling every subsequent new segment an elective
 violation would accuse the existing permitted repair. Inferring lapse from
 any signed-sequence gap would introduce a rule C2b.4 does not state.
 
 The older [sequencing model](../model/sequencing.ts) checks contradiction only
 when the exact next sequence after a receipt is held. That avoids this false
 accusation but is not a complete lapse classifier. The private authority
-model's current `open` guard also lacks the durable store's stale signed-state
-repair case; extend that model together with the clarified rule.
+model's former `open` guard also lacked the durable store's stale signed-state
+repair case; the model now covers repair and classification at its boundary.
 
-## Proposed clarification for maintainer decision
+## Accepted clarification
 
 Preserve failed-publication repair and explicitly allow its unfinalized
-receipts to lapse even when their `after` remains held. Define the exact
-record evidence in C2b.4/C2.10.9: a missing intervening signed sequence and a
-subsequent canonical repair opening, with no prior final inclusion or proven
-live-scope contradiction that the gap could erase. Distinguish that opening
-from directory omission alone and from continued service in the old segment.
+receipts to lapse even when their `after` remains held. C2.10.9a requires the
+first held different-segment checkpoint after `after` to be a canonical empty
+opening. Its immediately preceding sequence must be absent and greater than
+`after`. All original terms must still be live at that boundary. Replay the
+complete held interval: prior inclusion and proven live-scope contradictions
+remain independent facts, and either prevents lapse. An occupied conflicting
+position at `after` is a contradiction too; an absent position there is not.
+Missing or invalid evidence never establishes lapse. The verdict is at the
+repair, and cannot suppress later final inclusion.
 
 This permits deliberate abandonment of unfinalized receipts by failing a
 checkpoint; it does not reverse witnessed value. The current repair already
-permits that behavior. The clarification would make the reader's verdict
+permits that behavior. The clarification makes the reader's verdict
 agree with the service's permitted action.
 
 The alternative is to forbid that discard and require continuity for receipts
@@ -68,7 +73,6 @@ issued after a held checkpoint. That changes the repair mechanism: preserving
 an unwitnessed tail across a fresh segment needs a specified, verifiable rule,
 and must not silently import unfinalized prefixes under pool-v2 §10.
 
-Until this is resolved, implement neither automatic lapse nor a fault
-accusation for this case. Keep the existing record facts available and avoid
-claiming complete global classification. No change to normative rules, store
-behavior, signed frames or circuits is made by this regression and diagnostic.
+The implementation adds the bounded `readPoolReceiptRepair` reader and model
+cases, without changing store behavior, signed frames or circuits. Complete
+global classification and later-version silence recovery remain separate work.

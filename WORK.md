@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-09-06
+Updated: 2026-09-07
 
 ## Goal
 
@@ -10,54 +10,47 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Status
 
-- Merged into `main`: `46dfe50` from `test/pool-receipt-repair-gap`
-  (base `d42a9ea`).
-  Investigating global receipt classification found a material normative gap.
-  The regression and diagnostic are verified; classification awaits a decision.
-- Global classification must not label every new segment under live terms an
-  elective violation. A receipt can name held sequence 1, then be included in
-  signed-but-unwitnessed sequence 2, then be dropped by permitted stale repair
-  at sequence 3. The receipt's after is still held and its scope is still live.
-- The actual PoolStore reproduces this case at lag 2, preserves the original
-  receipt through restart, and reports the expected separate record/inclusion
-  facts. No runtime behavior or normative rule has been changed.
-- Decision requested from maintainer: explicitly permit those unfinalized
-  receipts to lapse after canonical failed-publication repair (recommended,
-  preserves existing repair), or require continuity and change the repair
-  mechanism. Either choice must preserve prior inclusion and historical
-  contradiction evidence. Details: docs/POOL_RECEIPT_REPAIR_GAP.md.
-- The private authority model must gain the stale signed-state repair case
-  together with that clarified rule. Its current open guard permits only a
-  finalized live tail or an actual scope ending. The older sequencing model
-  checks only an exact next held sequence; it avoids one false accusation but
-  is not a complete lapse classifier.
-- Latest completed runtime work remains `a07cf0f`, merged/pushed with handoff
-  `d42a9ea`: complete used checkpoint evidence retained through restart,
-  pre-service canonical revalidation, and historical replies kept accessible.
-- Companion specification: `money-from-first-principles/main` at `ba8fe21`.
-  No normative, signed-byte, receipt-envelope, circuit or proof-key changes.
+- Implementation branch: `feat/pool-receipt-repair-lapse`, base `41adc1b`.
+- Companion specification: `spec/pool-receipt-repair-lapse` at `bdd3599`.
+  The maintainer approved lapse after proven failed-publication repair.
+  C2.10.9a is committed first and the README pins that specification revision.
+- `readPoolReceiptRepair` proves one supplied repair boundary: held after in
+  the receipt segment, first held different-segment checkpoint is a canonical
+  empty opening, immediate preceding sequence absent and greater than after,
+  original scope terms live at the boundary. Canonical replay validates the
+  complete held interval and required ancestry without enumerating holes.
+- Inclusion and contradiction remain independent. An occupied conflicting
+  position at after contradicts too; absence there does not. Only neither
+  permits lapse. Invalid/unavailable evidence never establishes lapse.
+- This is a verdict at the supplied boundary, not a global current verdict.
+  Later final inclusion remains independently meaningful. Same-index lower
+  sequences are retained. The reader owns inputs and callback references.
+- The private authority model now covers stale signed-state repair and the
+  boundary classifier. PoolStore behavior, signed frames and circuits are
+  unchanged; the actual durable-store regression now checks the lapse verdict.
+- Durable rationale: decisions/2026-09.md and docs/POOL_RECEIPT_REPAIR_GAP.md.
   Pool-v2 §7.4 still excludes silence redemption and venue-nullifier adoption.
 
 ## Evidence
 
-- Focused regression passed: `failed checkpoint repair can leave a live-scope
-  receipt's after sequence held` in test/pool-store.test.ts (1 passed).
-  Full npm run check passed: 72 files / 1,380 tests, docs, typecheck, build,
-  installed tarball consumer, pilot and pool-store crash harness.
-- Independent protocol review confirmed the gap and corrected the proposed
-  blanket elective-transition accusation. A missing sequence is a known
-  record gap, not missing history evidence and not proof of its hidden contents
-  or timing. No fault/lapse verdict for that gap is implemented.
+- Independent adversarial review approved the normative predicate after adding
+  occupied-position conflict at after, and approved runtime logic after fixing
+  venue/verifier reference replacement through callbacks.
+- Full npm run check passed: 73 files / 1,419 tests (including 63 private-model
+  and 23 repair-reader cases), docs, typecheck, build, installed tarball
+  consumer, pilot and pool-store crash harness. The package check verifies
+  the new reader through both the package root and its subpath.
 - Windows esbuild requires execution outside the restricted sandbox. Real
   circuits are unchanged; pinned evidence is docs/pool-v2-verification.json.
 
 ## Next
 
-1. Resolve the maintainer's receipt-repair choice in the companion specification
-   first, then extend the adversarial model and build global receipt
-   classification. Authenticate held after-segment identity; preserve inclusion
-   and historical contradictions as independent facts; missing evidence stops.
-2. Specify later-version silence/presentation objects before implementing
+1. Complete verification, commit, merge and push both companion branches.
+2. Build global receipt classification from these bounded facts: exact reference
+   carriage, unheld references, actual scope boundaries, historical inclusion
+   and contradictions, and chronological segment transitions. Do not turn an
+   old boundary lapse into a permanent verdict that suppresses later inclusion.
+3. Specify later-version silence/presentation objects before implementing
    recovery, presentation, delivery, wallet synchronization and service transport.
 
 ## Open questions

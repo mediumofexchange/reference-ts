@@ -1,8 +1,9 @@
 # Pool receipt record readers
 
-`@mediumofexchange/reference/pool/receipt-record` exports two read-only helpers,
-also available from the package root. They build on the canonical receipt
-envelope, signed backing terms and whole-scope checkpoint validator. Neither
+`@mediumofexchange/reference/pool/receipt-record` exports two read-only helpers;
+`pool/receipt-repair` adds classification at a supplied repair boundary. All
+are also available from the package root. They build on the canonical receipt
+envelope, signed backing terms and whole-scope checkpoint validator. None
 changes admission, signing, publication or the store's recovery restrictions.
 
 ## Record facts
@@ -50,6 +51,37 @@ Missing histories remain unavailable even after the scope ends. A receipt
 outside the selected prefix is only `not-included` there: a later checkpoint
 may include it, and an earlier checkpoint may predate its acceptance.
 
+## Failed-publication repair
+
+`readPoolReceiptRepair({ configuration, venue, header, receipt, backings,
+repair, evidence, verifier })` implements C2.10.9a. Supply a held canonical
+empty opening of a different segment, whose immediately preceding sequence
+is absent and greater than the receipt's held `after`. The opening must be
+the first held transition to a different segment after that reference, with
+all original scope terms still live at the repair's witnessed index.
+
+The reader walks only this operator's held interval from `after` through the
+supplied repair with bounded predecessor queries; it never enumerates holes.
+It validates every checkpoint and its required canonical ancestry in one
+batch. The `after` checkpoint must authenticate the receipt's segment.
+
+The result is `invalid`, `unavailable`, `not-applicable`, or `repair`.
+`not-applicable` means this particular boundary does not satisfy this reader's
+predicate; it is neither a fault accusation nor a global pending verdict.
+`repair` returns the boundary, the read view's `witnessedIndex`, independent
+`includedAt` and `contradictedAt` checkpoint facts, and `lapsed`. Inclusion
+compares position, statement identity and history hash. An occupied conflicting
+position at `after` is a contradiction; mere absence there is not. Any later
+checkpoint in the original segment before repair must include the receipt.
+Only neither inclusion nor contradiction permits lapse.
+
+This verdict is **at the supplied repair boundary**, even if the venue's read
+view is later. It does not suppress inclusion proved in a subsequent checkpoint.
+Unheld receipt references, actual scope endings and multiple segment
+transitions need separate classification. A current global receipt classifier
+remains future work. The [repair decision](POOL_RECEIPT_REPAIR_GAP.md) records
+the reproduced case and the cost accepted by the maintainer.
+
 ## Recovery boundary
 
 `included` establishes C2.10 checkpoint inclusion with C2b.1 prospective
@@ -64,7 +96,8 @@ during verification cause a venue-view failure.
 Silence redemption and venue-nullifier adoption remain outside pool-v2
 (pool-v2 §7.4). The [store's restrictions](POOL_STORE.md#current-limits)
 remain in force. No result authorizes tail discard, note resubmission, service
-activation, or an accusation of operator fault.
+activation, or a complete fault or recovery verdict. The repair reader can
+identify the specific historical receipt contradictions described above.
 
 The next classifier must check historical inclusion and historical live-scope
 contradictions before lapse (C2.10.9), building on the revocation check and the
@@ -72,9 +105,5 @@ later construction's silence objects. Missing evidence cannot be interpreted as 
 refusals and changing views throw `VenueError`; unexpected proof-backend
 failures also propagate instead of becoming invalid external evidence.
 
-Global classification also needs a decision on
-[receipts predating a failed checkpoint repair](POOL_RECEIPT_REPAIR_GAP.md).
-The durable store can repair past a failed checkpoint while an earlier
-receipt's own `after` remains held. Current rules do not explicitly classify
-that earlier receipt; a later new segment alone cannot prove an illicit
-elective reset.
+The maintainer resolved the failed-checkpoint ambiguity in C2.10.9a. A later
+new segment alone still cannot prove an illicit elective reset or receipt lapse.

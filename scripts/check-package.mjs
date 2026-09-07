@@ -40,6 +40,7 @@ import { makeBacking, encodeBacking, decodeBacking, signBacking, verifyBackingSi
 import { PILOT_PROFILE } from '@mediumofexchange/reference/pilot-wire';
 import { poolReceiptBytes } from '@mediumofexchange/reference/pool/receipt';
 import { readPoolReceiptRecord, readPoolReceiptCheckpoint } from '@mediumofexchange/reference/pool/receipt-record';
+import { readPoolReceiptRepair } from '@mediumofexchange/reference/pool/receipt-repair';
 import { readPoolPredecessor, readPoolCurrent } from '@mediumofexchange/reference/pool/descent';
 import { readPoolCheckpoint, readPoolCheckpoints } from '@mediumofexchange/reference/pool/checkpoint';
 import { preparePoolOpening } from '@mediumofexchange/reference/pool/opening';
@@ -60,6 +61,7 @@ assert.equal(typeof core.makeBacking, 'function');
 assert.equal(core.poolReceiptBytes, poolReceiptBytes);
 assert.equal(core.readPoolReceiptRecord, readPoolReceiptRecord);
 assert.equal(core.readPoolReceiptCheckpoint, readPoolReceiptCheckpoint);
+assert.equal(core.readPoolReceiptRepair, readPoolReceiptRepair);
 assert.equal(core.readPoolPredecessor, readPoolPredecessor);
 assert.equal(core.readPoolCheckpoint, readPoolCheckpoint);
 assert.equal(core.readPoolCheckpoints, readPoolCheckpoints);
