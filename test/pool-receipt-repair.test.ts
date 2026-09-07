@@ -38,17 +38,30 @@ describe("C2.10.9a receipt classification at a proven repair boundary", () => {
       includedAt: [], contradictedAt: [], boundary: { at: 0n, commitment: r.checkpoint.commitment }, witnessedIndex: 0n });
   });
 
-  it("a lapse at the supplied boundary does not suppress later final inclusion", async () => {
+  it("passes over a boundary carrying none of the scope, whose segment can still include the receipt", async () => {
     const f = await fixture(), z = terms("GBP");
     const child = open(f.venue, [z], f.oracle, 3n), boundary = evidence(child);
     f.venue.publish(boundary.commitment);
-    // This repair carries none of the old backings. Their next source prefix
-    // can still validate; a boundary verdict must not become a permanent cache.
+    // This opening carries none of the old backings, so it changes none of
+    // their carrying states: it is not a repair boundary for this receipt.
     const later = evidence(f.segment, 4n); f.venue.publish(later.commitment);
     expect(await readPoolReceiptRepair(args(f, boundary, [f.base, later])))
-      .toMatchObject({ kind: "repair", lapsed: true });
+      .toMatchObject({ kind: "not-applicable", reason: "no-carriage" });
     expect(await readPoolReceiptCheckpoint({ ...args(f, boundary, [f.base, later]), checkpoint: later.commitment }))
       .toMatchObject({ kind: "included" });
+  });
+
+  it("counts a passed-over checkpoint as filling no hole, with directory-only evidence", async () => {
+    const f = await fixture(), passed = evidence(open(f.venue, [terms("GBP")], f.oracle, 3n));
+    f.venue.publish(passed.commitment);
+    const r = await repair(f, 4n); f.venue.publish(r.checkpoint.commitment);
+    expect(await readPoolReceiptRepair(args(f, r.checkpoint, [f.base, { commitment: passed.commitment, directory: passed.directory }])))
+      .toMatchObject({ kind: "repair", lapsed: true, boundary: { commitment: r.checkpoint.commitment } });
+    const g = await fixture(), filled = evidence(open(g.venue, [terms("GBP")], g.oracle, 2n));
+    g.venue.publish(filled.commitment);
+    const s = await repair(g, 3n); g.venue.publish(s.checkpoint.commitment);
+    expect(await readPoolReceiptRepair(args(g, s.checkpoint, [g.base, filled]))).toMatchObject({ kind: "not-applicable", reason: "no-gap" });
+    expect(await readPoolReceiptRepair(args(g, s.checkpoint, [g.base]))).toMatchObject({ kind: "unavailable", evidence: "directory" });
   });
 
   it("preserves inclusion already in the after checkpoint", async () => {

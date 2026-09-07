@@ -5,6 +5,7 @@ import { decodeCommitment, encodeCommitment, type Commitment } from "../commitme
 import { VenueError, type Venue } from "../venue.js";
 import { readPoolCheckpoints, type PoolCheckpointEvidence, type PoolCheckpointFailure } from "./checkpoint.js";
 import { readPoolReceiptRecord } from "./receipt-record.js";
+import { indexEvidence, relateHeld } from "./receipt-walk.js";
 import { copyPoolReceipt, type PoolReceipt } from "./receipt.js";
 import { PoolError, type SignedBacking, type StatementVerifier } from "./segment.js";
 import { copyConfiguration, copySegmentHeader, segmentIdentity, type PoolConfiguration, type SegmentHeader } from "./statement.js";
@@ -12,7 +13,7 @@ import { copyConfiguration, copySegmentHeader, segmentIdentity, type PoolConfigu
 export interface PoolReceiptCheckpointFact { readonly commitment: Commitment; readonly at: bigint }
 export type PoolReceiptRepairResult = PoolCheckpointFailure
   | { readonly kind: "not-applicable"; readonly reason: "after-not-held" | "wrong-operator" | "no-gap" |
-      "scope-boundary" | "not-opening" | "earlier-transition" }
+      "scope-boundary" | "no-carriage" | "not-opening" | "earlier-transition" }
   | { readonly kind: "repair"; readonly boundary: PoolReceiptCheckpointFact; readonly witnessedIndex: bigint;
       readonly includedAt: readonly PoolReceiptCheckpointFact[]; readonly contradictedAt: readonly PoolReceiptCheckpointFact[];
       readonly lapsed: boolean };
@@ -31,16 +32,19 @@ function same(a: Uint8Array, b: Uint8Array): boolean { return compareBytes(a, b)
 function identical(a: Commitment, b: Commitment): boolean { return same(encodeCommitment(a), encodeCommitment(b)); }
 
 /** Prove C2.10.9a at the supplied repair, not a global verdict at the current
- * index. Later inclusion must still be checked independently. This reader
+ * index; `readPoolReceiptStatus` reads the present verdict. This reader
  * covers a held `after` and original terms live at the repair; other scope
  * boundaries and unheld receipt references are outside this predicate.
  *
  * Enumerates only this operator's held interval [after, repair], using bounded
- * predecessor reads (never enumerates sequence holes). Canonical replay checks
- * every member and its required ancestors in one batch. Missing or invalid
- * evidence never excuses a tail. Inclusion and contradiction are independent;
- * only neither permits lapse. No result authorizes service or tail discard.
- * Venue and backend failures propagate. External data is owned before callbacks.
+ * predecessor reads (never enumerates sequence holes). The repair must carry
+ * a backing of the receipt's scope; held checkpoints carrying none of the
+ * scope are passed over, each occupying its sequence without being a hole or
+ * a transition. Canonical replay checks every segment checkpoint and its
+ * required ancestors in one batch. Missing or invalid evidence never excuses
+ * a tail. Inclusion and contradiction are independent; only neither permits
+ * lapse. No result authorizes service or tail discard. Venue and backend
+ * failures propagate. External data is owned before callbacks.
  */
 export async function readPoolReceiptRepair(args: Arguments): Promise<PoolReceiptRepairResult> {
   let stable = (): void => {};
@@ -75,7 +79,7 @@ export async function readPoolReceiptRepair(args: Arguments): Promise<PoolReceip
       }
       clockStable();
     };
-    const { receipt, repair } = owned;
+    const { receipt, repair, header } = owned, scope = header.entries.map(e => e.backing);
     if (record.sequence.kind !== "held") return { kind: "not-applicable", reason: "after-not-held" };
     if (!same(repair.operator, receipt.operator)) return { kind: "not-applicable", reason: "wrong-operator" };
     if (repair.sequence - 1n <= receipt.after) return { kind: "not-applicable", reason: "no-gap" };
@@ -87,8 +91,13 @@ export async function readPoolReceiptRepair(args: Arguments): Promise<PoolReceip
     if (record.terms.some(t => t.from > at || (t.until !== undefined && t.until <= at))) {
       stable(); return { kind: "not-applicable", reason: "scope-boundary" };
     }
+    const supplied = indexEvidence(owned.evidence);
+    const boundary = relateHeld(supplied, repair, scope, receipt.segment);
+    if (boundary.kind === "unavailable") { stable(); return { kind: "unavailable", commitment: repair, evidence: boundary.evidence }; }
+    if (boundary.kind === "other") { stable(); return { kind: "not-applicable", reason: "no-carriage" }; }
+    if (boundary.kind === "segment") { stable(); return { kind: "not-applicable", reason: "not-opening" }; }
     targets = [repair];
-    let upper = repair.sequence;
+    let upper = repair.sequence, lastSegment: bigint | undefined, passedOver = 0n;
     while (upper > receipt.after) {
       const previous = venue.previousFor(receipt.operator, upper, at);
       if (previous === undefined || previous.sequence >= upper || previous.sequence < receipt.after || !same(previous.operator, receipt.operator)) {
@@ -96,16 +105,24 @@ export async function readPoolReceiptRepair(args: Arguments): Promise<PoolReceip
       }
       if (upper === repair.sequence) {
         const gapAt = venue.witnessedAtSequence(receipt.operator, repair.sequence - 1n);
-        if (previous.sequence === repair.sequence - 1n) {
-          if (typeof gapAt !== "bigint") throw new VenueError("inconsistent repair gap lookup");
-          stable(); return { kind: "not-applicable", reason: "no-gap" };
-        }
-        if (gapAt !== undefined) throw new VenueError("inconsistent repair gap lookup");
+        if ((previous.sequence === repair.sequence - 1n) !== (typeof gapAt === "bigint")) throw new VenueError("inconsistent repair gap lookup");
       }
-      targets.push(decodeCommitment(encodeCommitment(previous)));
+      const relation = relateHeld(supplied, previous, scope, receipt.segment);
+      if (relation.kind === "unavailable") { stable(); return { kind: "unavailable", commitment: previous, evidence: relation.evidence }; }
+      if (previous.sequence === receipt.after && relation.kind !== "segment") {
+        stable(); return { kind: "invalid", reason: "receipt after checkpoint belongs to another segment" };
+      }
+      if (relation.kind === "transition") { stable(); return { kind: "not-applicable", reason: "earlier-transition" }; }
+      if (relation.kind === "segment") {
+        targets.push(decodeCommitment(encodeCommitment(previous)));
+        lastSegment ??= previous.sequence;
+      } else if (lastSegment === undefined) passedOver++;
       upper = previous.sequence;
     }
-    if (!identical(targets.at(-1)!, record.sequence.commitment)) throw new VenueError("receipt reference changed during repair read");
+    if (lastSegment === undefined || !identical(targets.at(-1)!, record.sequence.commitment)) throw new VenueError("receipt reference changed during repair read");
+    // C2.10.9a's hole: a sequence between the segment's last held checkpoint
+    // and the repair that the record never held; passed-over checkpoints occupy theirs.
+    if (repair.sequence - lastSegment - 1n <= passedOver) { stable(); return { kind: "not-applicable", reason: "no-gap" }; }
     targets.reverse();
     stable();
   } catch (cause) {
@@ -118,17 +135,14 @@ export async function readPoolReceiptRepair(args: Arguments): Promise<PoolReceip
   const result = await readPoolCheckpoints({ ...owned, venue, verifier, checkpoints: targets });
   stable();
   if (result.kind !== "final") return result;
-  const first = result.checkpoints[0]!, last = result.checkpoints.at(-1)!;
-  if (!same(segmentIdentity(first.prefix.header), owned.receipt.segment)) {
-    return { kind: "invalid", reason: "receipt after checkpoint belongs to another segment" };
+  const last = result.checkpoints.at(-1)!;
+  if (same(segmentIdentity(last.prefix.header), owned.receipt.segment) ||
+      result.checkpoints.slice(0, -1).some(c => !same(segmentIdentity(c.prefix.header), owned.receipt.segment))) {
+    throw new Error("validated checkpoint disagrees with its authenticated relation");
   }
-  if (same(segmentIdentity(last.prefix.header), owned.receipt.segment) || last.prefix.length !== 0n ||
-      last.prefix.header.sequence !== owned.repair.sequence) return { kind: "not-applicable", reason: "not-opening" };
+  if (last.prefix.length !== 0n || last.prefix.header.sequence !== owned.repair.sequence) return { kind: "not-applicable", reason: "not-opening" };
   const includedAt: PoolReceiptCheckpointFact[] = [], contradictedAt: PoolReceiptCheckpointFact[] = [];
   for (const checkpoint of result.checkpoints.slice(0, -1)) {
-    if (!same(segmentIdentity(checkpoint.prefix.header), owned.receipt.segment)) {
-      return { kind: "not-applicable", reason: "earlier-transition" };
-    }
     const accepted = checkpoint.accepted.find(a => a.position === owned.receipt.position);
     const included = accepted !== undefined && same(accepted.statementHash, owned.receipt.statementHash) && same(accepted.historyHash, owned.receipt.historyHash);
     const fact = { commitment: checkpoint.commitment, at: checkpoint.at };

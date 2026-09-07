@@ -131,8 +131,11 @@ deadline. What the repository holds today:
   inclusion in a supplied source checkpoint through canonical replay. Missing
   history stays unavailable after replacement. A bounded repair reader proves
   C2.10.9a lapse at a supplied canonical opening while preserving inclusion and
-  contradiction independently. Global receipt classification
-  and silence recovery remain next; prospective revocation is checked during replay.
+  contradiction independently, and `readPoolReceiptStatus` reads C2.10.9b's
+  present verdict — final, contradicted, abandoned, lapsed or pending — from
+  the operator's held commitments, stopping at the earliest term end or the
+  first checkpoint of another segment that carries a scope backing. Silence
+  recovery remains next; prospective revocation is checked during replay.
 - **Durable pool sequencing** ([PoolStore](docs/POOL_STORE.md), Node 24):
   atomically journals canonical openings, admitted statements, original receipts
   and signed checkpoints, including failed publications. It fences earlier
@@ -145,7 +148,7 @@ deadline. What the repository holds today:
   commands, exact retries, crash recovery, a trusted local witness. An
   integration harness, not a product.
 
-Out of scope until their step: global pool receipt classification and recovery,
+Out of scope until their step: pool recovery over receipt verdicts,
 sequencer transport and scheduling service, note delivery and backups,
 the wallet, an external witness's write side, and every Extensions profile.
 
@@ -159,12 +162,12 @@ splits, reunions, replay and scope changes with ideal cryptography; the
 claim layer now holds the frames and circuits. Record-derived authority,
 scheduling, predecessor descent, whole-scope checkpoint finality and canonical
 import validation, canonical opening construction, durable activation,
-admission/signing and restart are implemented. Receipt classification and
-recovery are next.
+admission/signing, restart and receipt verdicts are implemented. Recovery is
+next.
 The historical `moe/pool/v1` runtime was replaced and lives in git history.
 
 The runtime follows specification revision
-[`bdd359971185463bf5e734eadaa0ced639774ca1`](https://github.com/mediumofexchange/money-from-first-principles/tree/bdd359971185463bf5e734eadaa0ced639774ca1),
+[`da80f856186f438a0df24f7e071923720264c72e`](https://github.com/mediumofexchange/money-from-first-principles/tree/da80f856186f438a0df24f7e071923720264c72e),
 whose `pool-v2.md` pins the construction bit for bit and records the
 implemented circuits and keys. `docs/PROTOCOL_RULES.md` maps each binding
 rule to its specification rule, code and test, and marks what is frozen.

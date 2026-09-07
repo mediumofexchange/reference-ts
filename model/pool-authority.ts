@@ -40,6 +40,7 @@ export interface Departures {
   readonly skipSameIndex?: boolean;
   readonly trustShownScope?: boolean;
   readonly ignoreRevocation?: boolean;
+  readonly lapseWithoutCarriage?: boolean;
 }
 export class Refusal extends Error {}
 function requireThat(ok: boolean, message: string): asserts ok { if (!ok) throw new Refusal(message); }
@@ -156,6 +157,13 @@ export interface Checkpoint {
 interface Recorded { readonly checkpoint: Checkpoint; readonly at: bigint; readonly status: "final" | "lapsed" | "invalid"; readonly state?: State }
 export interface Receipt { readonly segment: Id; readonly statement: Id; readonly position: bigint; readonly after: bigint; readonly operator: Id; readonly scope: Id; readonly history: Id }
 export interface RepairClassification { readonly included: boolean; readonly contradicted: boolean; readonly lapsed: boolean }
+export interface ReceiptClassification {
+  readonly status: "final" | "contradicted" | "abandoned" | "lapsed" | "pending";
+  readonly included: boolean;
+  readonly contradicted: boolean;
+  readonly abandoned: boolean;
+  readonly lapse?: "moved-past" | "repair" | "scope-boundary";
+}
 // Ideal injective history identity, not a protocol byte encoding.
 function history(events: readonly Event[]): Id { return JSON.stringify(events.map(e => e.statement.id)); }
 
@@ -411,23 +419,116 @@ export class World {
   }
   /** C2.10.9a, at one supplied repair boundary. Receipt signature and supplied
    * scope are ideal authenticated inputs; the model's finite record is complete.
-   * This is not a global receipt verdict or a runtime whole-record scan API. */
+   * This is not a global receipt verdict; `classify` reads the present one. */
   classifyRepair(receipt: Receipt, scope: Scope, boundary: Id): RepairClassification {
-    requireThat(receipt.position > 0n && receipt.after > 0n && receipt.operator === scope.operator && receipt.scope === scope.root, "receipt context");
-    const r = this.record(boundary), c = r.checkpoint;
+    this.receiptContext(receipt, scope);
+    const r = this.record(boundary), c = r.checkpoint, carries = this.carrier(scope);
     const records = this.records.filter(x => x.checkpoint.operator === receipt.operator && x.checkpoint.sequence >= receipt.after && x.checkpoint.sequence <= c.sequence);
     const after = records.find(x => x.checkpoint.sequence === receipt.after);
     requireThat(after !== undefined && after.checkpoint.segment === receipt.segment && after.checkpoint.scope.root === receipt.scope, "receipt after segment");
     requireThat(scope.entries.length === after.checkpoint.scope.entries.length && scope.entries.every((e, i) => {
       const original = after.checkpoint.scope.entries[i]!;
       return e.backing === original.backing && e.link === original.link && e.from === original.from && e.operator === original.operator;
-    }) &&
-      scope.domain === after.checkpoint.scope.domain && scope.entries.every(e => this.chains.get(e.backing)?.some(t => t.link === e.link && t.from === e.from && t.operator === e.operator) === true), "receipt scope");
+    }) && scope.domain === after.checkpoint.scope.domain, "receipt scope");
+    requireThat(carries(c), "no carriage");
     requireThat(c.operator === receipt.operator && c.sequence > receipt.after &&
-      records.find(x => x.checkpoint.segment !== receipt.segment) === r, "first different segment");
+      records.find(x => x.checkpoint.segment !== receipt.segment && carries(x.checkpoint)) === r, "first different segment");
     requireThat(c.sequence === c.openingSequence && c.events.length === 0, "repair opening");
-    requireThat(c.sequence - 1n > receipt.after && !this.records.some(x => x.checkpoint.operator === receipt.operator && x.checkpoint.sequence === c.sequence - 1n), "missing preceding sequence");
+    const segment = records.filter(x => x.checkpoint.segment === receipt.segment);
+    const last = segment.at(-1)!.checkpoint.sequence;
+    const passedOver = records.filter(x => x.checkpoint.sequence > last && x.checkpoint.sequence < c.sequence);
+    for (const x of passedOver) requireThat(!this.withheldDirectories.has(x.checkpoint.id), "unavailable checkpoint evidence");
+    requireThat(c.sequence - last - 1n > BigInt(passedOver.length), "missing preceding sequence");
     requireThat(this.current(scope, r.at), "receipt scope ended");
+    this.canonical([...segment, r]);
+    const { included, contradicted } = this.compare(receipt, segment, true);
+    return { included, contradicted, lapsed: !included && !contradicted };
+  }
+  /** C2.10.9b: the verdict at the present index from the complete finite
+   * record. The segment's checkpoint at after, or its latest live one below,
+   * is read first; then each held record above in ascending order: one
+   * carrying none of the scope is passed over (it occupies its sequence and
+   * is neither a hole nor a transition), one of the segment is validated and
+   * compared, and the first carrying record of another segment ends the walk
+   * as repair or abandonment. The earliest term end ends it as whole-scope
+   * lapse. The first inclusion is final; a transition is validated only where
+   * neither inclusion nor a proven contradiction has decided already. */
+  classify(receipt: Receipt, scope: Scope): ReceiptClassification {
+    this.receiptContext(receipt, scope);
+    const carries = this.carrier(scope);
+    const ends = scope.entries.flatMap(e => {
+      const chain = this.chains.get(e.backing)!, next = chain[chain.findIndex(t => t.link === e.link) + 1];
+      return next === undefined ? [] : [next.from];
+    });
+    const boundary = ends.length === 0 ? undefined : ends.reduce((a, b) => a < b ? a : b);
+    const live = (r: Recorded): boolean => boundary === undefined || r.at < boundary;
+    // Relating a record needs its directory, and its scope preimage where it carries the scope.
+    const related = (r: Recorded): boolean => {
+      requireThat(!this.withheldDirectories.has(r.checkpoint.id), "unavailable checkpoint evidence");
+      if (carries(r.checkpoint)) requireThat(!this.withheldScopes.has(r.checkpoint.id), "unavailable checkpoint evidence");
+      return carries(r.checkpoint);
+    };
+    const mine = this.records.filter(x => x.checkpoint.operator === receipt.operator);
+    const after = mine.find(x => x.checkpoint.sequence === receipt.after);
+    const movedPast = after === undefined && mine.some(x => x.checkpoint.sequence > receipt.after);
+    const ended = boundary !== undefined && this.now >= boundary;
+    const heldReference = after !== undefined;
+    let base: Recorded | undefined;
+    if (after !== undefined) {
+      requireThat(after.checkpoint.segment === receipt.segment && after.checkpoint.scope.root === receipt.scope, "receipt after segment");
+      if (live(after)) base = after;
+    }
+    if (base === undefined) {
+      // The segment's latest live checkpoint below after; each record passed on the way is related.
+      for (const r of [...mine].reverse()) {
+        if (r.checkpoint.sequence >= receipt.after || !live(r)) continue;
+        related(r);
+        if (r.checkpoint.segment === receipt.segment) { base = r; break; }
+      }
+    }
+    let included = false, contradicted = false, abandoned = false, lapse: ReceiptClassification["lapse"];
+    const compare = (r: Recorded): boolean => {
+      this.canonical([r]);
+      const c = r.checkpoint, prefix = c.events.filter((_, i) => BigInt(i) < receipt.position);
+      const occupied = BigInt(prefix.length) === receipt.position;
+      if (occupied && prefix.at(-1)!.statement.id === receipt.statement && history(prefix) === receipt.history) return included = true;
+      contradicted ||= c.sequence > receipt.after ? heldReference : occupied;
+      return false;
+    };
+    if (base !== undefined && compare(base)) return { status: "final", included, contradicted, abandoned };
+    let lastSegment = receipt.after, passedOver = 0n;
+    for (const r of mine.filter(x => x.checkpoint.sequence > receipt.after)) {
+      if (!live(r)) break;
+      const c = r.checkpoint;
+      if (!related(r)) { passedOver++; continue; }
+      if (c.segment === receipt.segment) {
+        if (compare(r)) return { status: "final", included, contradicted, abandoned };
+        lastSegment = c.sequence; passedOver = 0n;
+        continue;
+      }
+      if (!heldReference || contradicted) break;
+      this.canonical([r]);
+      const hole = c.sequence - lastSegment - 1n > passedOver;
+      if (c.sequence === c.openingSequence && c.events.length === 0 && hole) lapse = "repair"; else abandoned = true;
+      break;
+    }
+    if (movedPast) lapse = "moved-past"; else if (lapse === undefined && ended) lapse = "scope-boundary";
+    const status = contradicted ? "contradicted" : abandoned ? "abandoned" : lapse !== undefined ? "lapsed" : "pending";
+    return { status, included, contradicted, abandoned, ...(status === "lapsed" && lapse !== undefined ? { lapse } : {}) };
+  }
+  private receiptContext(receipt: Receipt, scope: Scope): void {
+    requireThat(receipt.position > 0n && receipt.after > 0n && receipt.operator === scope.operator && receipt.scope === scope.root, "receipt context");
+    requireThat(scope.entries.every(e => this.chains.get(e.backing)?.some(t => t.link === e.link && t.from === e.from && t.operator === e.operator) === true), "receipt scope");
+  }
+  /** Ideal authenticated directory carriage of any scope backing; the departure
+   * reads every other segment as a transition, as C2.10.9a first did. */
+  private carrier(scope: Scope): (c: Checkpoint) => boolean {
+    const names = scope.entries.map(e => e.backing);
+    return c => this.departures.lapseWithoutCarriage === true || c.carries.some(b => names.includes(b));
+  }
+  /** Every listed checkpoint, its imports and its segment predecessors must be
+   * available, authenticated and finalized before any verdict is drawn. */
+  private canonical(records: readonly Recorded[]): void {
     const checked = new Set<Id>();
     const evidence = (id: Id): void => {
       if (checked.has(id)) return;
@@ -439,17 +540,23 @@ export class World {
       for (const [, parent] of source.checkpoint.openings) if (parent !== null) evidence(parent);
       for (const prior of this.records) if (prior.checkpoint.segment === source.checkpoint.segment && prior.checkpoint.sequence < source.checkpoint.sequence) evidence(prior.checkpoint.id);
     };
-    for (const source of records) evidence(source.checkpoint.id);
+    for (const r of records) evidence(r.checkpoint.id);
+  }
+  /** Inclusion binds position, statement and history. An omission above a held
+   * after contradicts; above a moved-past after it is that lapse (C2b.4). A
+   * position occupied otherwise at or below after contradicts either way. */
+  private compare(receipt: Receipt, records: readonly Recorded[], heldReference: boolean): { included: boolean; contradicted: boolean } {
     let included = false, contradicted = false;
     for (const source of records) {
-      if (source.checkpoint.segment !== receipt.segment) continue;
-      const prefix = source.checkpoint.events.filter((_, i) => BigInt(i) < receipt.position);
+      const c = source.checkpoint;
+      requireThat(c.segment === receipt.segment, "segment records only");
+      const prefix = c.events.filter((_, i) => BigInt(i) < receipt.position);
       const occupied = BigInt(prefix.length) === receipt.position;
       const match = occupied && prefix.at(-1)!.statement.id === receipt.statement && history(prefix) === receipt.history;
       included ||= match;
-      contradicted ||= !match && (occupied || source.checkpoint.sequence > receipt.after);
+      contradicted ||= !match && (c.sequence > receipt.after ? heldReference : occupied);
     }
-    return { included, contradicted, lapsed: !included && !contradicted };
+    return { included, contradicted };
   }
   /** Independent semantic checks over unique final events, using the hidden oracle only here. */
   violations(): string[] {

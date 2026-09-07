@@ -74,7 +74,7 @@ the whole database. Backups and key custody remain a separate release task.
 
 This is the first durable sequencing slice, not a complete pool service.
 The [receipt record readers](POOL_RECEIPTS.md) now expose sequence, scope and
-checkpoint-inclusion facts. Global receipt classification, silence recovery,
+checkpoint-inclusion facts and the present verdict. Silence recovery,
 presentation, delivery and wallet synchronization remain to be implemented.
 Backings with silence clauses are refused in the requested scope and all
 required shared ancestry, including backings outside the new scope. Their

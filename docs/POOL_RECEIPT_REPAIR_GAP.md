@@ -74,5 +74,6 @@ an unwitnessed tail across a fresh segment needs a specified, verifiable rule,
 and must not silently import unfinalized prefixes under pool-v2 §10.
 
 The implementation adds the bounded `readPoolReceiptRepair` reader and model
-cases, without changing store behavior, signed frames or circuits. Complete
-global classification and later-version silence recovery remain separate work.
+cases, without changing store behavior, signed frames or circuits. The present
+verdict, C2.10.9b, is [`readPoolReceiptStatus`](POOL_RECEIPTS.md#present-verdict);
+later-version silence recovery remains separate work.

@@ -7,6 +7,7 @@ import { poolReceiptAttestsEvidence, poolReceiptInHistory } from "../src/pool/re
 import type { PoolCheckpointEvidence } from "../src/pool/checkpoint.js";
 import { readPoolReceiptCheckpoint, readPoolReceiptRecord } from "../src/pool/receipt-record.js";
 import { readPoolReceiptRepair } from "../src/pool/receipt-repair.js";
+import { readPoolReceiptStatus } from "../src/pool/receipt-status.js";
 import { Segment } from "../src/pool/segment.js";
 import { segmentAuthority } from "../src/pool/statement.js";
 import { decodeStoredOpening, encodeStoredOpening, encodeStoredReceipt } from "../src/pool/store-codec.js";
@@ -172,6 +173,9 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     expect(await readPoolReceiptRepair({ configuration: CONFIG, venue, header: f.trail.header,
       receipt, backings: [f.x, f.y], repair: repaired, evidence: view.checkpoints, verifier: f.oracle }))
       .toMatchObject({ kind: "repair", lapsed: true, includedAt: [], contradictedAt: [] });
+    expect(await readPoolReceiptStatus({ configuration: CONFIG, venue, header: f.trail.header,
+      receipt, backings: [f.x, f.y], evidence: view.checkpoints, verifier: f.oracle }))
+      .toMatchObject({ status: "lapsed", lapse: { kind: "repair", boundary: { commitment: repaired } } });
     f.s.close();
     const resumed = store(f.file, venue, f.oracle);
     expect(await resumed.submit(statement)).toEqual(receipt);
@@ -197,7 +201,7 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
 
   it("elective scope changes wait for all live receipts and the latest signed checkpoint", async () => {
     const f = await fixture(); await f.s.publish();
-    await f.s.submit(f.issue());
+    const receipt = await f.s.submit(f.issue());
     await expect(f.s.activate("drop", [f.x])).rejects.toMatchObject({ code: "STALE" });
     await f.s.commit("tail");
     // At lag zero an unpublished checkpoint expires immediately. Publish it
@@ -210,6 +214,9 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     expect(view.trail!.header.entries[0]!.opening?.sequence).toBe(2n);
     expect(view.trail!.statements).toHaveLength(0);
     await f.s.publish();
+    // The witnessed tail made the receipt final; the carrying scope change is an ordinary one.
+    expect(await readPoolReceiptStatus({ configuration: CONFIG, venue: f.venue, header: f.trail.header, receipt,
+      backings: [f.x, f.y], evidence: (await f.s.view()).checkpoints, verifier: f.oracle })).toMatchObject({ status: "final" });
     const rejoined = await f.s.activate("rejoin", [f.x, f.y]);
     expect(rejoined.sequence).toBe(4n);
   });
@@ -225,6 +232,10 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     expect(next.sequence).toBe(2n);
     expect((await f.s.view()).trail!.statements).toHaveLength(0);
     expect(await f.s.submit(f.issue())).toEqual(receipt);
+    await f.s.publish();
+    expect(await readPoolReceiptStatus({ configuration: CONFIG, venue: f.venue, header: f.trail.header, receipt,
+      backings: [f.x, f.y], evidence: (await f.s.view()).checkpoints, verifier: f.oracle }))
+      .toMatchObject({ status: "lapsed", scope: "ended", lapse: { kind: "scope-boundary", at: 2n } });
   });
 
   it.each(["applied", "stored", "committed"] as const)("recovers receipt issuance after a failure at %s", async phase => {

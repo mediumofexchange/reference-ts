@@ -599,3 +599,146 @@ describe("C1.2/C2.10 private scope authority and finalized import", () => {
     }
   });
 });
+
+describe("C2.10.9b receipt verdicts at the present index", () => {
+  function pending(departures: Departures = {}) {
+    const f = fixture(departures), pay = payment(f.w, f.p, f.x);
+    return { ...f, receipt: f.p.submit(pay.statement) };
+  }
+  type Pending = ReturnType<typeof pending>;
+  /** A hostile checkpoint signed directly: a new segment of this operator over `names`, opened from the record's latest. */
+  function transition(f: Pending, names: readonly string[]) {
+    const openings = new Map(names.map(b => [b, f.w.latestFor(b)] as const));
+    const entries = names.map(b => f.w.term(b)).sort((a, b) => a.backing < b.backing ? -1 : 1);
+    const s = new Service(f.w, `hostile${++hostile}`, { domain: "D", operator: "P", entries, root: `hostile-scope${hostile}` }, openings, f.w.merge(openings));
+    const c = f.w.sign(s); settle(f.w, c);
+    return { s, c };
+  }
+  let hostile = 0;
+  function omission(f: Pending) {
+    const empty = new Service(f.w, f.p.id, f.p.scope, f.p.openings, f.p.view());
+    empty.events.push(...f.base.events);
+    const c = f.w.sign(empty); settle(f.w, c);
+    return c;
+  }
+  function hole(f: Pending) { const failed = f.p.commit(); f.w.tick(); return failed; }
+
+  it("is pending, then final once a segment checkpoint includes the receipt", () => {
+    const f = pending();
+    expect(f.w.classify(f.receipt, f.p.scope)).toEqual({ status: "pending", included: false, contradicted: false, abandoned: false });
+    settle(f.w, f.p.commit());
+    expect(f.w.classify(f.receipt, f.p.scope)).toEqual({ status: "final", included: true, contradicted: false, abandoned: false });
+  });
+  it("keeps an omission as a contradiction beside later inclusion", () => {
+    const f = pending(); omission(f);
+    expect(f.w.classify(f.receipt, f.p.scope)).toMatchObject({ status: "contradicted", contradicted: true });
+    settle(f.w, f.p.commit());
+    expect(f.w.classify(f.receipt, f.p.scope)).toMatchObject({ status: "final", included: true, contradicted: true });
+  });
+  it("contradicts a position occupied otherwise at after, or below a moved-past after", () => {
+    const f = pending(), held = f.p.commit(); settle(f.w, held);
+    expect(f.w.classify({ ...f.receipt, after: held.sequence, statement: "different" }, f.p.scope)).toMatchObject({ status: "contradicted" });
+    const failed = hole(f), dropped = new Service(f.w, f.p.id, f.p.scope, f.p.openings, f.p.view());
+    dropped.events.push(...held.events); settle(f.w, f.w.sign(dropped));
+    expect(f.w.classify({ ...f.receipt, after: failed.sequence, history: "different" }, f.p.scope)).toMatchObject({ status: "contradicted" });
+    expect(f.w.classify({ ...f.receipt, after: failed.sequence }, f.p.scope)).toMatchObject({ status: "final" });
+  });
+  it("lapses at a proven repair and abandons at an elective carrying transition", () => {
+    const f = pending(); hole(f); const next = f.p.change(["X", "Y"]); settle(f.w, next.commit());
+    expect(f.w.classify(f.receipt, f.p.scope)).toEqual({ status: "lapsed", included: false, contradicted: false, abandoned: false, lapse: "repair" });
+    for (const names of [["X", "Y"], ["X"]]) {
+      const g = pending(); transition(g, names);
+      expect(g.w.classify(g.receipt, g.p.scope)).toEqual({ status: "abandoned", included: false, contradicted: false, abandoned: true });
+    }
+    // A hole before a transition that is not an empty opening is not repair either.
+    const h = pending(); hole(h); const busy = h.p.change(["X", "Y"]);
+    const note = h.w.oracle.note("Y", 1n);
+    busy.events.push({ id: `${busy.id}:0`, statement: h.w.oracle.prove(busy, "issue", [], [note], [], { backing: "Y", quantity: 1n }) });
+    settle(h.w, busy.commit());
+    expect(h.w.classify(h.receipt, h.p.scope)).toMatchObject({ status: "abandoned" });
+  });
+  it("treats a scope change after inclusion as an ordinary one", () => {
+    const f = pending(); settle(f.w, f.p.commit()); const next = f.p.change(["X"]); settle(f.w, next.commit());
+    expect(f.w.classify(f.receipt, f.p.scope)).toMatchObject({ status: "final", abandoned: false });
+  });
+  it("passes over checkpoints carrying none of the scope, which occupy their sequences and are not holes", () => {
+    const f = pending(); f.w.register("Z", "P"); hole(f); transition(f, ["Z"]);
+    expect(f.w.classify(f.receipt, f.p.scope)).toMatchObject({ status: "pending" });
+    settle(f.w, f.p.commit());
+    expect(f.w.classify(f.receipt, f.p.scope)).toMatchObject({ status: "final" });
+    const g = pending(); g.w.register("Z", "P"); hole(g); transition(g, ["Z"]);
+    const repaired = g.p.change(["X", "Y"]); settle(g.w, repaired.commit());
+    expect(g.w.classify(g.receipt, g.p.scope)).toMatchObject({ status: "lapsed", lapse: "repair" });
+    const h = pending(); h.w.register("Z", "P"); transition(h, ["Z"]); transition(h, ["X", "Y"]);
+    expect(h.w.classify(h.receipt, h.p.scope)).toMatchObject({ status: "abandoned" });
+  });
+  it("counterexample: lapsing at a checkpoint carrying none of the scope misreads a receipt the record finalizes", () => {
+    const f = pending({ lapseWithoutCarriage: true }); f.w.register("Z", "P"); hole(f); transition(f, ["Z"]);
+    expect(f.w.classify(f.receipt, f.p.scope)).toMatchObject({ status: "lapsed", lapse: "repair" });
+    const c = f.p.commit(); settle(f.w, c);
+    expect(c.events.some(e => e.statement.id === f.receipt.statement)).toBe(true);
+    expect(f.w.classify(f.receipt, f.p.scope)).toMatchObject({ status: "lapsed" });
+    const g = pending(); g.w.register("Z", "P"); hole(g); transition(g, ["Z"]); settle(g.w, g.p.commit());
+    expect(g.w.classify(g.receipt, g.p.scope)).toMatchObject({ status: "final" });
+  });
+  it("lapses a moved-past reference unless a later segment checkpoint includes it, without contradictions", () => {
+    const f = pending(), failed = hole(f), receipt = { ...f.receipt, after: failed.sequence };
+    const dropped = new Service(f.w, f.p.id, f.p.scope, f.p.openings, f.p.view()); dropped.events.push(...f.base.events);
+    settle(f.w, f.w.sign(dropped));
+    expect(f.w.classify(receipt, f.p.scope)).toEqual({ status: "lapsed", included: false, contradicted: false, abandoned: false, lapse: "moved-past" });
+    settle(f.w, f.p.commit());
+    expect(f.w.classify(receipt, f.p.scope)).toMatchObject({ status: "final", contradicted: false });
+  });
+  it("is pending while the reference is not reached, lapsed once a term has ended", () => {
+    const f = pending(), receipt = { ...f.receipt, after: f.receipt.after + 5n };
+    expect(f.w.classify(receipt, f.p.scope)).toMatchObject({ status: "pending" });
+    f.w.replace("X", "Q"); f.w.tick(2n * f.w.lag + 1n);
+    expect(f.w.classify(receipt, f.p.scope)).toMatchObject({ status: "lapsed", lapse: "scope-boundary" });
+  });
+  it("lapses at the actual scope boundary and reads nothing from checkpoints witnessed from it on", () => {
+    const f = pending(); f.w.replace("X", "Q"); f.w.tick(2n * f.w.lag + 1n);
+    expect(f.w.classify(f.receipt, f.p.scope)).toMatchObject({ status: "lapsed", lapse: "scope-boundary" });
+    const late = new Service(f.w, f.p.id, f.p.scope, f.p.openings, f.p.view()); late.events.push(...f.p.events);
+    const c = f.w.sign(late); f.w.tick(); expect(f.w.include(c)).toBe("lapsed");
+    expect(f.w.classify(f.receipt, f.p.scope)).toMatchObject({ status: "lapsed", included: false });
+    expect(f.w.classify({ ...f.receipt, after: c.sequence }, f.p.scope)).toMatchObject({ status: "lapsed", included: false });
+    const g = pending(); settle(g.w, g.p.commit()); g.w.replace("X", "Q"); g.w.tick(2n * g.w.lag + 1n);
+    expect(g.w.classify(g.receipt, g.p.scope)).toMatchObject({ status: "final" });
+  });
+  it.each(["withheld", "withheldScopes", "withheldDirectories"] as const)("refuses %s evidence anywhere it must read", field => {
+    const f = pending(); f.w.register("Z", "P"); hole(f); const { c } = transition(f, ["Z"]);
+    if (field === "withheldDirectories") f.w[field].add(c.id); else f.w[field].add(f.base.id);
+    expect(() => f.w.classify(f.receipt, f.p.scope)).toThrow("unavailable");
+  });
+  it("refuses a wrong scope, a reference of another segment and an invalid transition", () => {
+    const f = pending(), { s } = transition(f, ["X", "Y"]);
+    expect(() => f.w.classify(f.receipt, s.scope)).toThrow("receipt context");
+    expect(() => f.w.classify({ ...f.receipt, segment: s.id }, f.p.scope)).toThrow("receipt after segment");
+    const g = pending(), rewritten = new Service(g.w, g.p.id, g.p.scope, g.p.openings, g.p.view());
+    const c = g.w.sign(rewritten); g.w.tick(); expect(g.w.include(c)).toBe("invalid");
+    expect(() => g.w.classify(g.receipt, g.p.scope)).toThrow("not finalized");
+  });
+  it("reads the segment's latest live checkpoint below an unreached or moved-past reference", () => {
+    const f = pending(); settle(f.w, f.p.commit());
+    expect(f.w.classify({ ...f.receipt, after: f.receipt.after + 10n }, f.p.scope)).toMatchObject({ status: "final" });
+    expect(f.w.classify({ ...f.receipt, after: f.receipt.after + 10n, statement: "different" }, f.p.scope)).toMatchObject({ status: "contradicted" });
+    const g = pending(); settle(g.w, g.p.commit()); const next = g.p.change(["X"]); settle(g.w, next.commit());
+    expect(g.w.classify({ ...g.receipt, after: g.receipt.after + 10n }, g.p.scope)).toMatchObject({ status: "final" });
+  });
+  it("keeps a proven inclusion when later evidence is unavailable, and validates only a deciding transition", () => {
+    const f = pending(), included = f.p.commit(); settle(f.w, included);
+    const later = f.p.commit(); settle(f.w, later); f.w.withheld.add(later.id);
+    expect(f.w.classify(f.receipt, f.p.scope)).toMatchObject({ status: "final" });
+    const g = pending(), failed = hole(g), repaired = g.p.change(["X", "Y"]), boundary = repaired.commit(); settle(g.w, boundary);
+    g.w.withheld.add(boundary.id);
+    expect(g.w.classify({ ...g.receipt, after: failed.sequence }, g.p.scope)).toMatchObject({ status: "lapsed", lapse: "moved-past" });
+    expect(() => g.w.classify(g.receipt, g.p.scope)).toThrow("unavailable");
+    // A proven contradiction decides before the transition; inclusion at after is final before anything above is related.
+    const h = pending(); omission(h); h.w.register("Z", "P"); const { c } = transition(h, ["X", "Y"]); h.w.withheld.add(c.id);
+    expect(h.w.classify(h.receipt, h.p.scope)).toMatchObject({ status: "contradicted", abandoned: false });
+    const k = pending(); settle(k.w, k.p.commit()); k.w.register("Z", "P"); const z = transition(k, ["Z"]); k.w.withheldDirectories.add(z.c.id);
+    expect(k.w.classify(k.receipt, k.p.scope)).toMatchObject({ status: "final" });
+    const m = pending(); m.w.register("Z", "P"); const zm = transition(m, ["Z"]); m.w.withheldDirectories.add(zm.c.id);
+    expect(() => m.w.classify(m.receipt, m.p.scope)).toThrow("unavailable");
+  });
+});
