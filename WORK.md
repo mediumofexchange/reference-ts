@@ -10,8 +10,10 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Status
 
-- Implementation branch: `feat/pool-receipt-repair-lapse`, base `41adc1b`.
-- Companion specification: `spec/pool-receipt-repair-lapse` at `bdd3599`.
+- Implementation merged into `main`: `41fc808` from
+  `feat/pool-receipt-repair-lapse`, base `41adc1b`.
+- Companion specification merged/pushed to `main`: `bdd3599` from
+  `spec/pool-receipt-repair-lapse`.
   The maintainer approved lapse after proven failed-publication repair.
   C2.10.9a is committed first and the README pins that specification revision.
 - `readPoolReceiptRepair` proves one supplied repair boundary: held after in
@@ -45,12 +47,11 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Next
 
-1. Complete verification, commit, merge and push both companion branches.
-2. Build global receipt classification from these bounded facts: exact reference
+1. Build global receipt classification from these bounded facts: exact reference
    carriage, unheld references, actual scope boundaries, historical inclusion
    and contradictions, and chronological segment transitions. Do not turn an
    old boundary lapse into a permanent verdict that suppresses later inclusion.
-3. Specify later-version silence/presentation objects before implementing
+2. Specify later-version silence/presentation objects before implementing
    recovery, presentation, delivery, wallet synchronization and service transport.
 
 ## Open questions
