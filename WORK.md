@@ -6,10 +6,22 @@ Updated: 2026-09-07
 
 Build the shielded-pool protocol: specification → adversarial model → claim
 layer → sequencing/recovery/presentation → wallet → witness write side.
-The maintainer explicitly authorized merging and pushing completed work.
+Current slice: repair the reported CI failures and discuss a unified wallet
+with non-circulating promises. New protocol rules remain proposals; pushing
+this slice awaits explicit maintainer authorization.
 
 ## Status
 
+- Local branch `fix/ci-document-links`, base `be12f7c`; companion specification
+  remains `main` at `da80f85`, with no specification edits in this slice.
+- CI runs #43, #44 and #45 fail on the same three relative links to the absent
+  companion checkout in `docs/POOL_RECEIPT_REPAIR_GAP.md`. Replaced with pinned
+  GitHub links. The link checker now rejects paths outside each repository
+  root, even if the sibling checkout exists; three regression tests cover it.
+  Corrected the proof job's stale pool-v1 display label to pool-v2.
+- [Wallet direction](docs/WALLET_DIRECTION.md) records the maintainer's unified
+  wallet requirements and a discussion draft for fixed-creditor promises.
+  Acceptance, settlement, recovery and core/profile placement remain choices.
 - Implementation merged into `main` from `feat/pool-receipt-status` (one
   commit, base `6dddb74`).
 - Companion specification merged into `main` from
@@ -40,7 +52,13 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Evidence
 
-- Full `npm run check` passed on Node 24.6: 74 files / 1,458 tests (22
+- CI #45 (`34139357616`): all three `check` jobs stop in the docs check;
+  both Linux and Windows real-proof jobs pass. #43 and #44 have the same
+  missing-link errors. Local regressions reproduced the blind spot (two
+  failures before the checker fix). Full `npm run check` passed on Node 24.6:
+  75 files / 1,461 tests, docs, typecheck, build, package, pilot and store crash
+  checks. Docs rechecked after adding the wallet draft. No push or merge yet.
+- Prior feature verification on Node 24.6: 74 files / 1,458 tests (22
   `pool-receipt-status` cases, 15 model verdict cases, 3 store assertions),
   docs, typecheck, build, installed tarball consumer through the root and the
   `pool/receipt-status` subpath, pilot and pool-store crash harness.
@@ -56,10 +74,13 @@ The maintainer explicitly authorized merging and pushing completed work.
 
 ## Next
 
-1. Specify later-version silence/presentation objects (pool-v2 §7.4) before
+1. Obtain explicit authorization to merge and push `fix/ci-document-links`,
+   then verify the fresh GitHub CI run. Discuss the wallet draft before a normative
+   proposal for non-circulating promises.
+2. Specify later-version silence/presentation objects (pool-v2 §7.4) before
    implementing recovery over these verdicts, presentation, delivery, wallet
    synchronization and service transport.
-2. Wallet-side use of `readPoolReceiptStatus`: a payee's freshness rule and
+3. Wallet-side use of `readPoolReceiptStatus`: a payee's freshness rule and
    resubmission after `lapsed`, re-proved under the carrying segment.
 
 ## Open questions
