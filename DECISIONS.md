@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-07` [Shielded recovery preserves finalized holdings without payee redirection](decisions/2026-09.md#2026-09-07--shielded-recovery-preserves-finalized-holdings-without-payee-redirection)
 - `2026-09-07` [A carrying scope change decides a receipt: proven repair lapses it, an elective change abandons it](decisions/2026-09.md#2026-09-07--a-carrying-scope-change-decides-a-receipt-proven-repair-lapses-it-an-elective-change-abandons-it)
 - `2026-09-07` [Proven failed-publication repair can lapse unfinalized receipts](decisions/2026-09.md#2026-09-07--proven-failed-publication-repair-can-lapse-unfinalized-receipts)
 - `2026-09-06` [pool-v2 instantiates the authority contract: a domain-only configuration, a public scope tree, the segment in every statement, one anchor per input, and finalized import](decisions/2026-09.md#2026-09-06--pool-v2-instantiates-the-authority-contract-a-domain-only-configuration-a-public-scope-tree-the-segment-in-every-statement-one-anchor-per-input-and-finalized-import)

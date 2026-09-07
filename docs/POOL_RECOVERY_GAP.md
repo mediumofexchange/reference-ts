@@ -1,13 +1,15 @@
 # Shielded snapshot recovery and the unwitnessed tail
 
-Status: proposal for maintainer decision, 2026-09-07. Construction and the
-pinned `moe/pool/v2` construction are unchanged. This is a design gap in the
-next construction, not a finding that v2 violates its declared scope.
+Status: resolved by the maintainer on 2026-09-07. The recommended policy was
+approved and adopted in Construction C2b.3a–c; see the
+[decision](../decisions/2026-09.md#2026-09-07--shielded-recovery-preserves-finalized-holdings-without-payee-redirection).
+The analysis below records the alternatives considered. The pinned v2 bytes
+and runtime remain unchanged and do not implement recovery.
 
 ## The exact rule that cannot be ported
 
-[Construction C2b.3](https://github.com/mediumofexchange/money-from-first-principles/blob/da80f85/construction.md#c2b-failure-silence-and-recovery)
-says that during a challenge window anyone may publish:
+Before this change, [Construction C2b.3](https://github.com/mediumofexchange/money-from-first-principles/blob/da80f85/construction.md#c2b-failure-silence-and-recovery)
+said that during a challenge window anyone may publish:
 
 > the holder-signed spend that consumed the named note; on publication the
 > redemption pays the payee that spend names instead
@@ -72,10 +74,10 @@ rejects recovery through chains of holder provenance.
 That decision does not itself delete C2b.3's remaining challenge promise. The
 shielded construction therefore needs an explicit decision about its scope.
 
-**Recommendation:** retire spend-based payee redirection and its associated
+**Accepted recommendation:** retire spend-based payee redirection and its associated
 challenge window for the later shielded recovery construction. Retain the
 transparent profile's existing behavior as historical/profile behavior, without
-porting or extending it. Proposed wording for the shielded C2b.3 contract:
+porting or extending it. The approved policy for the shielded C2b.3 contract:
 
 > Snapshot recovery recognizes holdings proven in the canonical finalized
 > snapshot and valid recovery settlements witnessed afterward. An unwitnessed
@@ -98,10 +100,10 @@ design. Public proof chains do not automatically reveal every holder identity,
 but opening outputs for payout can disclose amounts and link payments. No
 claim is made here that a private rescue construction is impossible.
 
-## What approval would and would not establish
+## What approval establishes
 
-Approval would settle the loss allocation and remove the inherited redirection
-requirement from the future shielded contract. It would not make v2 support
+Approval settles the loss allocation and removes the inherited redirection
+requirement from the future shielded contract. It does not make v2 support
 recovery or select new wire bytes. Before implementation, the later construction
 must still define the following together under section 7.4:
 
@@ -130,7 +132,7 @@ reinterpret the pinned v2 frames or enable the store's refused silence path.
 Any new rule and construction must land in the specification first, then in an
 adversarial model, then in the implementation with independent review.
 
-## Review evidence and remaining decision
+## Review evidence and next implementation boundary
 
 Independent design review confirmed the missing named-payee/holder-signature
 objects, the split/merge/dependency counterexamples, and the prior decision's
@@ -139,6 +141,10 @@ and backer-owned replacement-note requirements above. This was a read-only
 review of the specification and existing sources, not a security proof or a
 review of an implemented recovery mechanism.
 
-Maintainer decision needed: approve the recommended finalized-snapshot policy
-and retire spend-based redirection and its window for shielded recovery, or
-explicitly reopen the design to rescue unwitnessed transactions.
+The maintainer approved the finalized-snapshot policy and retirement of the
+redirection window. Independent review of the actual specification diff found
+no blocking issue. Eight [model cases](../model/pool-recovery.test.ts) now
+exercise the finalized-history boundary, including split, merge, chained and
+conflicting unwitnessed spends, false inclusion, missing history and replacement.
+They do not implement recovery eligibility, proofs, settlement or adoption.
+The next work is the coordinated later-version contract listed above.
