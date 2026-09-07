@@ -29,13 +29,13 @@ receipt.
 
 ## The rules that meet here
 
-- [Construction C2.4.3](../../money-from-first-principles/construction.md#c24-commitments-and-the-directory)
+- [Construction C2.4.3](https://github.com/mediumofexchange/money-from-first-principles/blob/da80f85/construction.md#c24-commitments-and-the-directory)
   permits repair after an unwitnessed signed commitment expires: the operator
   can no longer assume that state, and its seat becomes stale.
-- [C2.10.9](../../money-from-first-principles/pool-authority.md#4-receipts-handover-and-restart)
+- [C2.10.9](https://github.com/mediumofexchange/money-from-first-principles/blob/da80f85/pool-authority.md#4-receipts-handover-and-restart)
   prohibits elective scope changes from abandoning live receipts but permits
   discard with C2.7's evidence that the held state is stale.
-- [C2b.4](../../money-from-first-principles/construction.md#c2b-failure-silence-and-recovery)
+- [C2b.4](https://github.com/mediumofexchange/money-from-first-principles/blob/da80f85/construction.md#c2b-failure-silence-and-recovery)
   describes receipt lapse where the venue moved past the commitment the
   receipt names. R names sequence 1, not the failed sequence 2.
 

@@ -32,7 +32,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Pinned pool-v1 circuits and real ZK proofs
+      - name: Pinned pool-v2 circuits and real ZK proofs
         run: npm run check:pool
 
   check:
