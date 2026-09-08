@@ -59,6 +59,7 @@ journal or changing a verifier under the same identity is not migration.
 
 - [Protocol rules](PROTOCOL_RULES.md): binding rules, code and tests.
 - [Fault recovery](POOL_FAULT_RECOVERY.md): current unresolved protocol work.
+- [v3 recovery map](POOL_V3_RECOVERY_MAP.md): candidate v3 objects, one complete trace, record ranges, resource assumptions and probes.
 - [Deployment probes](POOL_DEPLOYMENT_PROBES.md): device, venue and restoration evidence.
 - [Wallet direction](WALLET_DIRECTION.md): product direction and unselected fixed-creditor proposal.
 - [Experiment contract](../experiments/private-payment/RESEARCH.md): historical feasibility relation; not v2's normative layouts.

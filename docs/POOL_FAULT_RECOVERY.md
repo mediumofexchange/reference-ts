@@ -133,8 +133,9 @@ evidence with otherwise valid alternate proofs.
 | `pool-evidence-reader.test.ts` | Substituted and committed bad bytes, valid-prefix immutability, both receipt readers, reader isolation, lapse attribution and future oracle outputs. |
 | `pool-adopted-evidence.test.ts` | Exact witnessed demand/release evidence through adoption and receipts, valid reproof rejection, repair and mutation resistance. |
 
-Next: specify v3 statement, recovery and evidence layouts and their circuit
-relations, with authenticated record-range and evidence-retention requirements.
+Next: the [v3 recovery map](POOL_V3_RECOVERY_MAP.md) lays out the candidate
+statement, recovery and evidence layouts, one trace, the record ranges and
+the probes that precede `pool-v3.md`.
 Measure retention/retrieval, authenticated note delivery/restoration, custody
 and pinned-node publication before fixing deployment budgets. Current verification belongs in
 [`WORK.md`](../WORK.md).
