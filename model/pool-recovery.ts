@@ -256,12 +256,12 @@ export class RecoveryWorld extends World {
     const incumbent = this.term(backing, at).operator;
     const terms = this.clauses.get(backing)?.nonService;
     if (terms === undefined) return { count: 0n, fires: false, incumbent, readable: true };
+    // The canonical state is the snapshot's (C2b.3.1); what blocks the one blocks the other.
     let canonical: Recorded | undefined;
-    for (const r of this.records) {
-      if (r.at >= at || r.status === "lapsed" || !r.checkpoint.carries.includes(backing)) continue;
-      if (this.term(backing, r.at).operator === r.checkpoint.operator) canonical = r;
+    try { canonical = this.snapshot(backing, at); } catch (error) {
+      if (error instanceof Refusal && error.message.endsWith("snapshot")) return { count: 0n, fires: false, incumbent, readable: false };
+      throw error;
     }
-    if (canonical !== undefined && canonical.status !== "final") return { count: 0n, fires: false, incumbent, readable: false };
     const tags = new Set<Id>();
     if (canonical !== undefined) {
       const state = this.import(canonical.checkpoint.id);

@@ -90,7 +90,8 @@ their operator does not make the invalid predecessor importable.
 
 Invalid publications at indices 4, 8, 12 and 16 keep resetting a five-index
 clock. At 22 the gap is open, but the snapshot still cannot be read. Even an
-ideal snapshot-only skipping reader cannot fix the count, clock or descent.
+ideal snapshot-only skipping reader cannot fix the clock or descent; the
+count reads the snapshot's state (C2b.5.2), so it follows the skip.
 Corrupt and withheld replica evidence never restore the consumed payer note
 from an older checkpoint. These are concrete failures of conditional progress,
 not demonstrations that the finalized payment has been reversed.
@@ -102,18 +103,37 @@ must also explain delayed fault evidence, a prior valid prefix, recovery
 publications at their own index, and descendant adoption.
 
 The [fault-recovery proposal](POOL_FAULT_RECOVERY_PROPOSAL.md) compares intrinsic
-exclusion, prospective fault publication and venue-side validation. Its next
-model case is a non-carrying invalid commitment that changes another backing's
-clock; no candidate has been selected as a normative rule.
+exclusion, prospective fault publication and venue-side validation, and
+records what `model/pool-fault.ts` shows for the intrinsic candidate; no
+candidate has been selected as a normative rule.
+
+## Venue publication sizes, offline
+
+An offline probe under `scratch/ergo-publication/` (Fleet SDK `@fleet-sdk/core`
+0.12.0 and `@fleet-sdk/serializer` 0.11.0, no node contacted, nothing signed)
+verified the venue constants against upstream source and measured serialized
+sizes. At ergo `v6.1.5` with sigmastate-interpreter `v6.0.6`: `MaxBoxSize` is
+4,096 bytes and `MinValuePerByte` defaults to 360 nanoERG, both checked against
+the full box bytes including the 32-byte transaction id and index; the mempool
+`maxTransactionSize` is 98,304 bytes. With one payload chunk per box in `R4` and
+a 36-byte object header in `R5`, the largest chunk that fits a box is 3,978
+bytes. A 20,000-byte release publication (the 14,656-byte proof plus about
+5,000 bytes of statement, signatures, acceptance and two non-membership proofs)
+needs 6 outputs in a 20,724-byte transaction carrying at least 0.00745 ERG at
+the minimum value per byte, plus the conventional 0.0011 ERG fee; a release and
+a demand together (35,000 bytes) need 9 outputs and 35,980 bytes. Every case is
+well under the mempool limit. Not established: node acceptance, a real
+signature, fee policy, the votable parameter's current value, reassembly and
+authentication of chunks against forged or reordered boxes, and retrieval
+after the boxes are spent. The probe's script, notes and JSON stay in
+`scratch/` and are reproducible with `npm install` there.
 
 ## Venue and restoration work still required
 
-The next venue experiment must serialize a complete recovery publication using
-a pinned Ergo SDK/node, including proof, acceptance/release signatures,
-nullifier non-membership evidence and chunk framing. Measure actual output and
-transaction sizes, minimum values, fees, canonical reassembly, duplicates,
-incomplete publication and retrieval after boxes are spent. No such SDK is
-installed and this slice claims no transaction acceptance result.
+The next venue experiment must publish a complete recovery publication through
+a pinned node, including chunk framing, canonical reassembly, duplicates,
+incomplete publication and retrieval after boxes are spent. No transaction
+acceptance result is claimed yet.
 
 The restoration experiment must specify receiver-only spending authority,
 authenticated encrypted openings, deterministic retry, seed-based discovery

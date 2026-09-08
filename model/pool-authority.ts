@@ -260,7 +260,10 @@ export interface Checkpoint {
   readonly events: readonly Event[];
   readonly carries: readonly Id[];
 }
-export interface Recorded { readonly checkpoint: Checkpoint; readonly at: bigint; readonly status: "final" | "lapsed" | "invalid"; readonly state?: State }
+/** `reason` is the refusal that made a record invalid; a fault-classifying
+ * reader (model/pool-fault.ts) distinguishes an availability refusal, which
+ * proves nothing, from a deterministic failure of the held bytes. */
+export interface Recorded { readonly checkpoint: Checkpoint; readonly at: bigint; readonly status: "final" | "lapsed" | "invalid"; readonly state?: State; readonly reason?: string }
 export interface Receipt { readonly segment: Id; readonly statement: Id; readonly position: bigint; readonly after: bigint; readonly operator: Id; readonly scope: Id; readonly history: Id }
 export interface RepairClassification { readonly included: boolean; readonly contradicted: boolean; readonly lapsed: boolean }
 export interface ReceiptClassification {
@@ -380,7 +383,7 @@ export class World {
       if (terms.some(t => t.until !== undefined && t.until <= record.at)) continue;
       requireThat(terms.every(t => t.from <= record.at), "scope not in force");
       if (this.passedByRule(c, record.at)) continue; // a whole-scope lapse by public rule, passed like a term end
-      if (this.departures.skipLiveInvalid && record.status === "invalid") continue;
+      if (this.excluded(record)) continue;
       return c.id; // missing/invalid statements still select this candidate
     }
     return null;
@@ -439,6 +442,15 @@ export class World {
   /** A public condition, judged at an index, that lapses a checkpoint for its
    * whole scope and lets descent pass it (C2b.4.1 in the recovery model). */
   protected passedByRule(_checkpoint: Checkpoint, _at: bigint): boolean { return false; }
+  /** C2.10.3–4 as written: live invalid evidence is never passed. The
+   * `skipLiveInvalid` departure passes it blindly; the fault-classifying
+   * candidate (model/pool-fault.ts) passes it on authenticated evidence only. */
+  protected excluded(record: Recorded): boolean { return this.departures.skipLiveInvalid === true && record.status === "invalid"; }
+  /** Whether an invalid record becomes the backing's blocking latest state. */
+  protected blocking(_checkpoint: Checkpoint, _reason: string): boolean { return true; }
+  /** A refusal raised here, after the public lapse conditions and before
+   * validation, records the checkpoint as invalid. */
+  protected admissible(_checkpoint: Checkpoint): void {}
   protected replayed(_checkpoint: Checkpoint, _state: State): void {}
   serving(_service: Service, _statement: Statement): void {}
   protected discardable(_service: Service): boolean { return false; }
@@ -499,6 +511,7 @@ export class World {
         this.records.push({ checkpoint, at: this.now, status: "lapsed" });
         return "lapsed";
       }
+      this.admissible(checkpoint);
       requireThat(finalityScope.every(e => this.term(e.backing).link === e.link && e.operator === checkpoint.operator), "scope not in force");
       for (const [, parent] of checkpoint.openings) if (parent !== null) {
         const source = this.record(parent);
@@ -534,10 +547,12 @@ export class World {
       return "final";
     } catch (error) {
       if (!(error instanceof Refusal)) throw error;
-      this.records.push({ checkpoint, at: this.now, status: "invalid" });
+      this.records.push({ checkpoint, at: this.now, status: "invalid", reason: error.message });
       // Live, carrying but invalid evidence blocks the candidate. It cannot
       // silently disappear from the record's latest-state selection.
-      for (const e of selected) if (this.chains.has(e.backing) && this.term(e.backing).operator === checkpoint.operator) this.latest.set(e.backing, checkpoint.id);
+      if (this.blocking(checkpoint, error.message)) {
+        for (const e of selected) if (this.chains.has(e.backing) && this.term(e.backing).operator === checkpoint.operator) this.latest.set(e.backing, checkpoint.id);
+      }
       return "invalid";
     }
   }
@@ -626,7 +641,8 @@ export class World {
       const c = r.checkpoint;
       if (!related(r)) { passedOver++; continue; }
       if (c.segment === receipt.segment) {
-        if (compare(r)) return { status: "final", included, contradicted, abandoned };
+        // An excluded checkpoint of the segment consumes its sequence and includes nothing.
+        if (!this.excluded(r) && compare(r)) return { status: "final", included, contradicted, abandoned };
         lastSegment = c.sequence; passedOver = 0n;
         continue;
       }

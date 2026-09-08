@@ -155,7 +155,7 @@ describe("design-review F2: current invalid-checkpoint recovery boundaries", () 
     assertFinalHoldings(f);
   });
 
-  it("even ideal snapshot-only skipping preserves the finalized spend but does not repair the clock, count, or descent", () => {
+  it("even ideal snapshot-only skipping preserves the finalized spend but does not repair the clock or descent", () => {
     const f = fixture(new SnapshotOnlySkippingWorld(1n));
     const hostile = suffix(f, true);
     let bad = includeInvalid(f, hostile);
@@ -165,7 +165,8 @@ describe("design-review F2: current invalid-checkpoint recovery boundaries", () 
         expect(f.w.snapshot(backing, f.w.now)?.checkpoint.id).toBe(f.base.id);
         expect(f.w.recoveryState(backing, f.w.now).state.spent.has(f.payer.nf)).toBe(true);
         expect(f.w.gapOpen(backing, f.w.now)).toBe(false);
-        expect(f.w.count(backing, f.w.now).readable).toBe(false);
+        // C2b.5.2 reads the count against the snapshot's state, so it follows the skip.
+        expect(f.w.count(backing, f.w.now).readable).toBe(true);
         expect(f.w.currentFor(backing, "P")).toBe(bad.id);
       }
       bad = includeInvalid(f, hostile);
