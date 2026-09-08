@@ -4,69 +4,50 @@ Updated: 2026-09-08
 
 ## Goal
 
-Build the shielded-pool protocol. Historical-silence retirement is repaired;
-the next contract is invalid-checkpoint recovery with authenticated evidence.
-The maintainer authorized continued work and merge/push.
+Build the shielded-pool protocol. Next is the invalid-checkpoint recovery
+contract, with exact authenticated evidence and explicit receipt consequences.
 
 ## Status
 
-- Implementation: `main`, incorporating the reviewed
-  `test/pool-fault-evidence` slice based on `6e54ba9`. This adds research tests
-  and a recommendation only.
-- Companion: `money-from-first-principles` main `c5f5464`, unchanged in this
-  slice. Historical-silence rule `60af631` was committed before model `0464e38`;
-  both are already merged and pushed.
-- [Evidence review](docs/POOL_FAULT_EVIDENCE_REVIEW.md): A″ has transitive
-  dependencies across three disjoint scopes; historical lapse can reintroduce
-  old fault-proof dependencies after a fresh reset.
-- Recommend term-only non-carrying resets with explicit stale-signing
-  suppression costs. Fresh valid unrelated openings can suppress silence
-  under either clock; neither guarantees redemption against every faulty
-  operator without usable replacement authority and available evidence.
-- Recommend preserving receipt boundaries (fault alone pending, later repair
-  abandonment or genuine boundary lapse) and faulting future segment service
-  while retaining earlier finality, including after a stale twin.
-- Real v2 tests demonstrate that invalid replacement proof/signature bytes,
-  even separately receipt-attested, do not prove an earlier checkpoint bound
-  them. Semantic history inclusion differs from exact evidence attribution.
-  V3 must define checkpoint evidence binding and proof-variant continuity.
-- Runtime remains v2: no `src/`, circuit, layout or dependency changes.
-  PoolStore still refuses silence clauses. Fault clocks and R6/R7 remain
-  research choices pending one coherent normative/evidence contract.
+- Implementation: `main`, with repository cleanup based on `f3ca8b4`.
+  [Architecture](docs/PRIVATE_PAYMENT_ARCHITECTURE.md) owns the component map;
+  [fault recovery](docs/POOL_FAULT_RECOVERY.md) owns the consolidated proposal,
+  reader contract, evidence and alternatives. Superseded drafts live in Git.
+- Companion `main`: `8eb6a8c` (README cleanup only); normative recovery remains
+  `c5f5464`. Site `c93f1cf` and organization profile `ab91195` now link to the
+  implementation's setup instructions and describe the current pool.
+- Runtime remains v2 and PoolStore refuses silence clauses. Historical
+  retirement is modeled. Fault clocks and R6/R7 remain unselected research.
+- Retain the frozen private-payment fixture until receiver/invoice and
+  independent-audit crash/retry cases move to the pool/wallet path.
+- Retain the active offline Ergo probe and build/browser/setup caches in
+  `scratch/`. Obsolete probes and merged local feature branches are removed.
+  The modified detached `moeclean` worktree outside this workspace is untouched.
 
 ## Evidence
 
-- Fifteen new regression cases: six clock dependency/suppression controls,
-  four fault receipt/stale-twin cases, five actual-v2 evidence cases.
-  Focused checks passed. Real cryptographic hashes/signatures are used in
-  the v2 cases; proofs use the existing test oracle.
-- Independent adversarial review confirmed the v2 binding counterexamples.
-  Corrected the hostile ideal receipt fixture to reference the actual fault
-  sequence and explicitly distinguish it from authenticated receipt bytes.
-- Final design review checked the recommendation and suppression controls.
-  Corrected stale claims about non-carrying resets, snapshot/clock evidence
-  equivalence and the strict silence-duration boundary in the older proposal.
-- Full `npm run check` passed: 85 files / 1,606 tests, documentation,
-  typecheck, build, installed package, pilot and pool-store crash checks.
-  Vitest and process checks required Windows sandbox escalation.
+- Independent cleanup review confirmed preservation of active fault assumptions,
+  alternatives, costs, gates and component retirement conditions.
+- All 76 durable decisions and all regression tests remain. Documentation and
+  link checks pass across all four repositories; presentation diffs reviewed.
+- Full `npm run check` passed after cleanup: 85 files / 1,606 tests, typecheck,
+  build, installed package, pilot and pool-store crash checks. Windows esbuild
+  and process checks required sandbox escalation. No runtime behavior changed.
 
 ## Next
 
-1. Draft a coherent specification proposal for term-only non-carrying resets,
-   R6/R7, exact checkpoint-evidence continuity, verification-failure
-   classification and authenticated complete-range retrieval. Check C0a;
-   do not consolidate FaultWorld or freeze v3 bytes before these contracts.
-2. Continue deployment evidence: target phone benchmark, authenticated note
-   delivery/restoration, complete evidence availability and pinned-node
-   publication. Offline sizes are not node acceptance; see
-   [deployment probes](docs/POOL_DEPLOYMENT_PROBES.md).
+1. Draft one specification proposal for term-only non-carrying resets, R6/R7,
+   exact checkpoint-evidence continuity, verification-failure classification
+   and authenticated complete-range retrieval. Check C0a before adopting
+   FaultWorld or freezing v3 bytes; use the consolidated fault document.
+2. Continue [deployment probes](docs/POOL_DEPLOYMENT_PROBES.md): target phone,
+   authenticated note delivery/restoration, independently available evidence
+   and pinned-node publication. Offline sizes do not establish node acceptance.
 
 ## Open questions
 
-- The finite ideal model is not a production retrieval or scaling result.
-  Suffix/ancestry retention and cold reads need measurement; local cached
-  verdicts do not replace retained authenticated evidence or fresh snapshots.
-- SQLite assumes one journal per key/venue; copied journals, rollback and
-  custody/backup remain open. Custom synchronous venues lack a same-index
-  generation token. Provenance, C2 re-derivation and venue write acceptance
-  remain release gates.
+- Finite ideal reads supply no production retrieval/scaling result. Measure
+  suffix/ancestry retention and cold reads; cached verdicts do not replace
+  retained evidence or current snapshots.
+- Copied journals, rollback, custody/backup, same-index custom-venue changes,
+  setup/build provenance and external write acceptance remain release gates.

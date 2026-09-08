@@ -1,6 +1,6 @@
 # Check of the whole-project design review, 2026-09-08
 
-This checks the [review](2026-09-08-whole-project-design-review.md).
+This checks the [historical review](https://github.com/mediumofexchange/reference-ts/blob/f3ca8b4/decisions/archive/2026-09-08-whole-project-design-review.md).
 Recommendations below are proposals, not protocol decisions. The
 specification and implementation remain unchanged.
 

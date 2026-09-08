@@ -1,11 +1,14 @@
-# Fault recovery: evidence dependencies and recommended next contract
+# Pool fault recovery
 
-Research result, 2026-09-08. This follows the approved historical-silence
-repair in companion `money-from-first-principles` main `c5f5464` and
-implementation main `6e54ba9`. It changes no normative rule, runtime bytes,
-proof system or default model policy. The [proposal](POOL_FAULT_RECOVERY_PROPOSAL.md)
-defines the competing rules; the [reader contract](POOL_FAULT_READERS.md)
-states the ideal model's evidence assumptions.
+Current research contract and evidence, 2026-09-08. No fault policy or v3
+layout is selected. Runtime remains v2. The normative contracts still block
+on invalid live carrying evidence; the approved historical-silence repair
+in specification `c5f5464` is already implemented in the recovery model.
+
+This document consolidates the proposal, reader contract and evidence review.
+The [checked design review](../decisions/archive/2026-09-08-whole-project-design-review-check.md)
+and [fault review](../decisions/archive/2026-09-08-pool-fault-review.md) retain
+the independent findings. Historical drafts remain in Git history.
 
 ## Recommendation and its limit
 
@@ -47,6 +50,67 @@ all earlier finalized prefixes. Repair opens a new segment on canonical
 state. A stale signer can therefore force a restart; the rule does not solve
 copied-key or rollback custody. These R6/R7 recommendations remain research
 choices pending their exact normative contract.
+
+## Candidate classification and reader contract
+
+The failure is reproduced in `model/pool-fault-boundary.test.ts`: one
+authenticated invalid carrying checkpoint blocks snapshot, count and descent,
+even after replacement. A recurring invalid stream resets the normative
+clock; stopping opens the gap but leaves the snapshot blocked. Earlier
+finalized payments remain final. Missing bytes cannot justify an older state.
+
+`FaultWorld` explores intrinsic authenticated exclusion. Every affected
+reader uses the same classification at the checkpoint's own record prefix:
+
+| Classification | Required evidence and consequence |
+|---|---|
+| Valid | Canonical descent, imports, replay and required recovery adoption pass. |
+| Excluded | The signed checkpoint's exact authenticated bytes deterministically fail declared rules. No canonical state or import target; the held sequence remains occupied. |
+| Unresolved | Required bytes, ancestry, scope, clock or other dependencies are missing or mismatching. No positive verdict and no rollback. Unsupported verifiers and programming failures are not fault certificates. |
+| Lapsed | An independently established whole-scope term or historical silence boundary permits passing the record without treating it as canonical state. Term lapse needs scope/terms, not event proofs. |
+
+`World.include` records witnessing and an initial diagnostic result; that
+status is not venue-certified validity. `FaultWorld.record` evaluates afresh
+against earlier witnessed indices plus lower same-operator sequences at its
+own index, with the checkpoint itself absent. Later facts cannot fault an
+earlier finalized prefix retrospectively. Restoring evidence can resolve a
+previously unavailable result and permit service based on that fresh read.
+
+`world.reader()` snapshots the record, terms, revocations, publications and
+available evidence. Readers share ideal immutable checkpoint/proof identities,
+not verdicts. Each owns `withheld`, `withheldDirectories`, `withheldScopes`
+and `shownScopes`; clearing a withheld entry means obtaining exact evidence,
+not trusting a cached assertion. Memoization lasts one read; active dependency
+cycles refuse. Refresh for changed record facts, including same-index
+revocation. Future-index model queries are hypothetical against the finite
+snapshot, not evidence of a complete future record.
+
+Import, descent, snapshot, count, clock, opening and both receipt readers pass
+evidenced exclusions and refuse unresolved dependencies. Passed held sequences
+remain occupied. An exclusion is neither receipt inclusion nor a canonical
+carrying transition nor a missing-sequence repair. Publications retain force
+according to their own record prefix, and a new return adopts all force through
+its opening index. The semantic observer separately reads all ideal evidence
+and uses hidden note openings only to check supply, authority and consumption;
+ordinary readers never use those secrets to decide proof validity.
+
+## Alternatives and costs
+
+| Candidate | Clock rule | Cost or remaining limitation |
+|---|---|---|
+| A″ (model default) | Excluded carrying checkpoints do not reset; non-carrying checkpoints reset unless whole-scope lapsed. | Historical silence lapse recursively imports unrelated evidence dependencies. |
+| Term-only non-carrying resets (recommended research branch) | As A″ for carrying checkpoints; non-carrying steps check term lapse only. | Stale unrelated signing can suppress silence. Complete recovery still has carrying/import dependencies. |
+| A (first draft) | Non-carrying checkpoints must also classify valid. | Adds unrelated event history, possibly another construction, to every such clock step. |
+| A′ | Excluded carrying checkpoints still reset, as C2b.6.1 currently says. | A garbage stream can suppress silence indefinitely; count/replacement is the remaining route. |
+| B: prospective fault publication | A challenger publishes authenticated evidence; exclusion affects subsequent reads. | New frame, watcher and per-fault venue cost (roughly 15 KB for the proof alone, plus authentication/suffix/ancestry). Earlier force judgments cannot be reversed. |
+| C: venue admission with availability | Commitments satisfy a declared availability requirement before admission/reset. | Changes the passive venue's role or adds attestors/full-data publication. Validity alone does not supply reconstruction data. |
+
+No intrinsic rule can distinguish withheld preimages from honest replica
+failure and thereby authorize rollback. Availability needs its own contract.
+Selecting intrinsic exclusion affects C2b.3.1, C2b.5.2, C2b.6.1,
+C2.10.3–4, C2.10.9b and v3 evidence continuity; term-only changes the
+non-carrying lapse condition too. B adds a publication history; C changes the
+venue contract. None is an incidental reader fix.
 
 ## Dependencies exposed by the repaired clock
 
@@ -146,3 +210,19 @@ progress claim to available authenticated evidence and the declared remedy;
 measure suffix/ancestry retention and retrieval rather than assuming bounded
 cost from one proof verification. Complete evidence availability, note
 delivery/restoration and custody still need deployment evidence.
+
+## Regression map
+
+| Tests | Evidence retained |
+|---|---|
+| `pool-fault-boundary.test.ts`, `pool-fault.test.ts` | Original blocked-recovery case, intrinsic remedy, unresolved-evidence rollback and reversed-verdict departures. |
+| `pool-fault-reader.test.ts` | Independent snapshots, arrival order, retention, malformed/scope evidence, repair paths and same-index revocation; 27 reader regressions. |
+| `pool-fault-clock.test.ts`, `pool-fault-dependency.test.ts` | Strict clock boundary, term lapse, suppression, unrelated recursive and historical dependencies, force and adoption controls. |
+| `pool-fault-liability.test.ts`, `pool-fault-evidence.test.ts` | R6/R7 candidate consequences and real v2 hash/signature evidence limits described above. |
+| `pool-recovery-return.test.ts`, `pool-silence.test.ts` | Approved historical retirement, delayed-adoption refusal, receipt precedence and original unsafe return under `forgetSilence`. |
+
+All files are in `model/`. The checked baseline at `f3ca8b4` passed
+85 files / 1,606 tests plus typecheck, build, package, pilot and pool-store
+crash checks. That is bounded executable evidence, not production readiness.
+The accepted historical-silence rule and its costs are in the
+[decision log](../decisions/2026-09.md#2026-09-08--intervening-silence-retires-a-pool-segment-and-lapses-its-unfinished-receipts).

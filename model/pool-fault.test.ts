@@ -1,4 +1,4 @@
-// Candidate A of docs/POOL_FAULT_RECOVERY_PROPOSAL.md over model/pool-fault.ts:
+// Candidate A of docs/POOL_FAULT_RECOVERY.md over model/pool-fault.ts:
 // what intrinsic authenticated exclusion repairs, what it costs, and the
 // counterexamples its rules 1, 3 and 5 exclude. Research evidence for a
 // protocol choice that remains the maintainer's; nothing here is normative.

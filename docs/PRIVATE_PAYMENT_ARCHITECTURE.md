@@ -1,125 +1,64 @@
-# One implementation, the shielded pool
+# Shielded-pool implementation map
 
-Decision, feasibility evidence and consolidation map, revised 2026-09-06.
+Current component boundaries, 2026-09-08. The normative source is the
+companion specification pinned in [README](../README.md). Build in this
+order: specification, adversarial model, claim layer, sequencing/recovery,
+wallet, external witness write adapter. [WORK](../WORK.md) owns the next task;
+[production requirements](PRODUCTION_REQUIREMENTS.md) owns release gates.
 
-## Direction
+## Active runtime
 
-Construction's core claim layer is the shielded pool (§C1.2): one pool per
-operator, notes with receiver-generated secrets, anchor-independent
-nullifiers, spend and burn statements with conservation proofs, a lit boundary
-for issuance and burn, supply by replay from genesis, and a spent-set
-accumulator with non-membership proofs. **E** declares the construction and
-its version, and an upgrade is a successor backing (§C1.3). The transparent
-ledger, the accumulator and Chaumian signatures are Extensions profiles.
+| Component | Implemented boundary | Still outside it |
+|---|---|---|
+| `backing.ts`, `bytes.ts`, `keys.ts`, `contexts.ts`, `commitment.ts` | Canonical terms/naming, strict signatures, construction declaration and authenticated directory. | New construction versions must not reinterpret existing names or signatures. |
+| `src/pool/` claim layer | v2 fields, Poseidon2, private notes, note/spent/scope trees, canonical frames, finalized imports, admission and replay through supplied evidence. | Recovery statement/publication layouts and circuits belong to a later version. |
+| `pool/circuits/`, `pool/barretenberg.ts` | Pinned issue, two-input/two-output spend and burn circuits; Barretenberg is an optional peer reached through the verifier interface. | Deployment assurance, setup provenance and target-device budgets. See [circuit guide](../src/pool/circuits/README.md) and [recorded v2 evidence](pool-v2-verification.json). |
+| `pool/authority.ts`, `pool/schedule.ts` | Snapshot of signed terms/replacement chain; complete shared-scope authority, earliest term deadline, operator-wide in-flight commitment and restart lag. | Authority alone does not authenticate a header, establish finality or authorize service. |
+| `pool/descent.ts`, `pool/checkpoint.ts` | Authenticated absence/whole-scope lapse, exact predecessor selection, transitive canonical import validation and replay. Earlier proven pre-revocation issuance remains importable. | Missing or invalid live evidence never permits fallback. Historical finality is not current spendability. |
+| `pool/opening.ts` | Derives current scope and canonical openings before a child exists; validates dependencies and prepares an empty segment. Sequence derives from the durable signed counter, including failed publication. | Preparation reserves nothing and cannot authorize discard or signing. |
+| `pool/receipt*.ts` | Acceptance signatures, exact evidence attestation, semantic history inclusion, repair and present record verdicts. See [receipt APIs](POOL_RECEIPTS.md). | A receipt is not a balance. Silence verdicts remain model-only; exact evidence attestation is not checkpoint proof binding. |
+| `pool/store.ts`, `pool/store-codec.ts` | Node 24 journal for openings, admissions, original receipts, signed counter and outbox; restart fencing, revalidation and complete used canonical evidence retention. See [PoolStore](POOL_STORE.md). | Refuses silence clauses. Copied journals/rollback, service transport and coordinated backup custody remain open. |
+| `venue.ts`, `ergo.ts` | Local witness and read-only Ergo direction; predecessor reads over sparse sequences. Ergo refresh publishes a complete candidate snapshot atomically, refuses record reads during refresh, and retains the previous snapshot on failure. | External write adapter, pinned-node publication and stable commitment envelope. Ergo is not exported from the root barrel. |
 
-This repository builds that core, in this order:
+Record readers are tied to the captured view. Refresh after record changes,
+including same-index revocation; a previously valid snapshot is not current
+permission to serve. Validation owns external bytes before callbacks.
 
-1. **Specification.** Pin the pool's concrete statement layouts, hash
-   functions, spent-set accumulator, multi-input shape and proof-system
-   identity in Construction, from the experiment's evidence. Done twice:
-   `pool-v1.md` pinned a fixed-operator layout, and `pool-v2.md` supersedes it
-   with the replacement-capable construction the authority contract
-   (`pool-authority.md`) requires.
-2. **Adversarial model.** An executable model of §C2, §C2b and §C3 over the
-   pool representation — two operators, two backings, a holder, delayed and
-   dropped publications, replacement, restart, incomplete views — checking
-   safety and conditional progress separately and keeping counterexamples as
-   regression vectors. This replaces panel rounds with checks that re-run. Built for §C2/§C2b:
-   `model/sequencing.ts` and its twelve checks; §C3 joins it with v2.
-3. **The pool's claim layer** in `src/pool/`: circuits promoted from the
-   experiment to the normative layouts, the note tree, the scope tree, the
-   spent-set accumulator, finalized import, admission against one committed
-   view, the receipt. Built for v2: the circuits are pinned (`pool-v2.md`
-   §15), and `Segment` imports, admits, serves and replays with the
-   Barretenberg verifier behind an interface; **E** declares the construction
-   as evidence clause `0x05`. Left to step 4: the sequencer over the record,
-   the commitment schedule and the durable journal.
-4. **Sequencing, recovery and presentation over notes**, rule by rule,
-   porting each adversarial case from the frozen transparent suite as its rule
-   lands, and deleting the transparent code when the pool path passes them.
-   The first time checks are built in `pool/schedule.ts`: the earliest scope
-   boundary, the operator-wide signing wait and restart lag, validated against
-   `model/pool-schedule.ts`. `pool/authority.ts` now derives the scope's current
-   links and deadlines from signed backings and the witnessed replacement
-   chain. Canonical opening descent, whole-scope finality and durable execution
-   remain; an authority check alone does not authenticate a header or history.
-5. **The wallet**: a balance, a send button, a policy list (Construction §C5);
-   note delivery, backups, restore, note selection and consolidation.
-6. **The witness venue's write side** (Ergo), once the commitment format is
-   final.
+## Executable models
 
-There is no release deadline. Each step is finished when its specification
-rule, its model check and its adversarial tests agree.
-
-## Feasibility candidate
-
-The executable candidate (`experiments/private-payment/`, contract in
-`RESEARCH.md`) uses Noir `1.0.0-beta.26`, Barretenberg `5.2.0` and a pinned
-Poseidon2 helper: three small entry circuits sharing one note relation — issue,
-spend and burn. A note commits to pool, full 256-bit backing identity, a
-bounded quantity, receiver-generated ownership material and randomness. A
-spend proves membership, ownership, same-asset conservation and valid outputs
-while exposing a nullifier independent of the chosen anchor. Full identities
-use two range-constrained 128-bit limbs; quantities use 64-bit bounds and
-widened sums. Issuance requires K's signature over a framed public statement
-bound to the pool, backing and pinned circuit identities.
-
-The prover, verification-key derivation and verifier use
-`verifierTarget: 'noir-recursive'`; the backend's legacy `keccak: true`
-option disables zero knowledge and is not acceptable. The experiment forces one
-WASM worker. The backend downloads structured reference parameters; the
-experiment records their hashes as observations, not as setup verification.
-Production needs a reviewed account of the backend's setup and soundness
-assumptions, authenticated distribution, and build provenance.
-
-Alternatives considered: signed transparent logs (fail the privacy
-requirement), plain blind-signature cash (no public conservation), other
-circuit backends (Halo2, snarkjs — still alternatives if device measurements or
-review disqualify this one). The Zcash note/nullifier model and the Penumbra
-shielded pool are precedents, not imported code.
-
-### What the experiment establishes
-
-Recorded run (Intel i7-5500U, Windows, Node 24.6.0; re-run 2026-09-05):
-14,656-byte proofs in 1.1–1.7 s, 96 ms warm verification, ~560 MiB peak RSS,
-29.8 s fresh setup including download. Two assets, issuance, private payment,
-receiver control, return to the issuer and burn; a separate process verifies
-only public evidence; competing submissions, exact saved-proof retries after
-restart, and process termination on both sides of the commit boundary.
-Adversarial checks: unauthorized issuance, wrong owners and paths, cross-asset
-substitution, inflation, range overflow, wrong contexts, malformed proofs,
-duplicate commitments, double spends under a new anchor, a valid proof over an
-unaccepted root, a valid truncated history against a pinned checkpoint, and
-two valid histories with equal note roots but different spent sets. These are
-small-tree desktop observations: enough to continue the design, not to certify
-deployment.
-
-### What the experiment lacks, and the specification now requires
-
-- A **spent-set accumulator with non-membership** (invariant 23, §C2b.3). The
-  experiment keeps a plain set.
-- **Witnessed commitments** binding the ordered statements (§C2.4); the
-  experiment's history hash is the caller's checkpoint, not a witnessed one.
-- **Multi-input statements**, note selection and consolidation (§C1.2
-  packing).
-- Demand by `H(nullifier)`, spent-pending locks, and the non-service object's
-  membership proof (§C1.2, §C3, §C2b.5).
-- Note delivery, backups, metadata protection, and any anonymity-set
-  measurement.
-
-## Consolidation map
-
-| Existing part | Treatment |
+| Model | Role and limit |
 |---|---|
-| `backing.ts`, `bytes.ts`, `keys.ts`, `contexts.ts`, canonical identity tests | Retained. **E** declares the construction and its configuration hash (evidence clause `0x05`) beside the original operator, and the configuration names circuit and key identities, the helper and the bounds, and nothing about who serves (pool-v2 §2). Never reuse old identifiers with new rules. |
-| `commitment.ts`, `commitment-directory` tests | Retain the directory. The pool's commitment adds the note-tree root, the spent-set root and the statement-log binding (invariant 23). |
-| `venue.ts`, `LocalVenue` | Retain the interface: finality rule, lag, record rises in sequence, exact-sequence read (§C2.3). |
-| `pilot-store.ts` journal pattern | Carry forward: durable commands, exact retries, transactional admission. The pilot's `pilot-wire.ts`, `pilot-http.ts` and CLI are retired with a pool equivalent. |
-| `ledger.ts`, `oplog.ts`, `messages.ts`, `sequencer.ts`, `presentation.ts`, `replacement.ts`, `recovery.ts`, `fault.ts` and their tests | **Frozen.** The transparent profile's implementation. A differential oracle and case library; each case is ported as its rule lands over notes; the code is deleted when the pool path passes them. Do not port the exhibit walk or the opening claim (retired, Construction Appendix). |
-| `ergo.ts` and its tests | Keep as the venue direction; not exported from the root barrel; rewritten for the final commitment format at step 6. |
-| Research circuits, `host.mjs`, `journal.mjs` | The relation and the host's admission and replay are promoted into `src/pool/` against the normative layouts, with their adversarial cases (`test/pool-admission.test.ts`, `test/pool-segment.test.ts`, `scripts/pool/admission.mjs`). The journal's crash and retry cases move with the durable pool journal; the standalone host and receiver APIs retire then. Do not keep a second storage framework. |
-| Website and organization profile | Describe the direction and the experimental status accurately; change the onboarding story only when a wallet exists. |
+| `model/sequencing.ts` | Scheduling, inclusion/drop, replacement, restart and incomplete views over public backing labels. Timing oracle; does not establish privacy or shared-pool authority. |
+| `model/pool-authority.ts` | Private scopes, whole-scope finality, canonical shared imports and receipt precedence with ideal cryptography. Runtime supplies v2 bytes and proofs. |
+| `model/pool-schedule.ts` | Enumerated calendar oracle for the shared-scope scheduler. |
+| `model/pool-recovery.ts` | Normative later-version presentation, count, clock, snapshot settlement, force, adoption and historical-silence retirement, with counterexample departures and a separate semantic observer. Not runtime support. |
+| `model/pool-fault.ts` | Unselected intrinsic exclusion and competing clocks; independent evidence snapshots and original-prefix revalidation. [Fault recovery](POOL_FAULT_RECOVERY.md) defines the current recommendation, dependencies and actual-v2 limits. Do not consolidate it into the normative model yet. |
 
-No live-value migration is assumed. If any implementation is later used with
-real claims, its retirement is a successor backing with a swap. Deleting a
-database or changing a verifier under the same identity is not a migration.
+The historical-silence decision is implemented in the model: a gap strictly
+after the witnessed opening retires continuation and unfinished receipts,
+even after an unrelated reset. Earlier finality and liability survive; new
+adoption into a retired segment refuses, while historical replay and exact
+receipt retry remain available. A fresh return adopts through its own index.
+Production still needs authenticated complete interval retrieval.
+
+## Retained evidence and retirement conditions
+
+| Material | Why it remains | Remove when |
+|---|---|---|
+| Transparent `ledger.ts`, `oplog.ts`, `messages.ts`, `sequencer.ts`, presentation/recovery/replacement/fault modules and tests | Frozen profile, differential oracle and adversarial case library. | Corresponding pool rules pass the ported cases. Never port the retired exhibit walk or signed opening claim. |
+| `pilot-store.ts`, `pilot-http.ts`, `pilot-wire.ts`, pilot CLI | Durable-command pattern and process integration harness on the frozen path. [Pilot guide](PILOT.md). | A pool equivalent covers its integration behavior; retain useful persistence patterns. |
+| `experiments/private-payment/` | Frozen research fixture. Core circuit/admission and most journal cases are now covered by the pool. It still exercises receiver acceptance, accept-once invoice persistence, private-opening checks and a separate public-only audit process with real proofs. | Receiver/wallet and independent-audit boundaries, including their crash/retry cases, move to the pool path. Then remove the duplicate host/journal/circuit framework, preserving useful results and vectors. |
+| `docs/pool-*-verification.json` and [deployment probes](POOL_DEPLOYMENT_PROBES.md) | Pinned observations and reproducible benchmark instructions. | Replaced by explicitly identified evidence; old measurements never establish a new version's properties. |
+| `decisions/` and selected checked reviews in `decisions/archive/` | Durable choices, accepted costs and independent findings still relevant to open gates. | Superseded investigation/session drafts live in Git history, not alongside active guidance. |
+
+No live-value migration is assumed. Later retirement of an implementation
+used for real claims requires a successor backing and swap; deleting a
+journal or changing a verifier under the same identity is not migration.
+
+## Where to read next
+
+- [Protocol rules](PROTOCOL_RULES.md): binding rules, code and tests.
+- [Fault recovery](POOL_FAULT_RECOVERY.md): current unresolved protocol work.
+- [Deployment probes](POOL_DEPLOYMENT_PROBES.md): device, venue and restoration evidence.
+- [Wallet direction](WALLET_DIRECTION.md): product direction and unselected fixed-creditor proposal.
+- [Experiment contract](../experiments/private-payment/RESEARCH.md): historical feasibility relation; not v2's normative layouts.

@@ -5,6 +5,12 @@ real Noir circuits and ZK-enabled Barretenberg UltraHonk proofs. It is research
 code, excluded from the package and its public exports; it is not a second
 wallet, service or supported protocol profile.
 
+Frozen evidence fixture: extend the pool path, not this implementation.
+Its circuit/admission and most journal cases are covered there now. Retain
+this fixture until receiver acceptance, accept-once invoices, private-opening
+checks and the independent public-only audit process (with crash/retry cases)
+have moved to the pool/wallet path. Then retire the duplicate framework.
+
 Read [the architecture decision](../../docs/PRIVATE_PAYMENT_ARCHITECTURE.md)
 and [production requirements](../../docs/PRODUCTION_REQUIREMENTS.md) first.
 The experiment's own contract — relations, layouts, admission rules and

@@ -111,8 +111,8 @@ is not evidence.
 
 | Gate | Acceptance evidence | Standing at 2026-09-08 |
 |---|---|---|
-| Defined profile | Construction pins the pool's statement layouts, hash functions, proof system and what **E** declares; an explicit visibility/collusion model, witness assumptions and supported failure remedies; no unresolved critical protocol choice | v2 layouts, circuits and keys are pinned. Historical silence retirement and receipt consequences are [selected](POOL_RECOVERY_RETURN_DECISION.md). Invalid-checkpoint recovery, v3 layouts, authenticated interval evidence, note delivery and deployment choices remain open. |
-| Adversarial model | An executable model of §C2, §C2b and §C3 over the pool representation, with two operators, two backings, delayed and dropped publications, replacement, restart and incomplete views; safety and conditional progress checked separately; counterexamples kept as regression vectors | Sequencing, authority and recovery models exist. Independently reviewed C2b.4.1/3 retirement prevents the reproduced old-segment double spend; an explicit departure preserves the counterexample. The [fault candidate](POOL_FAULT_READERS.md) recomputes validation from reader evidence, but fault policy and its invalid-checkpoint progress remedy remain unselected. |
+| Defined profile | Construction pins the pool's statement layouts, hash functions, proof system and what **E** declares; an explicit visibility/collusion model, witness assumptions and supported failure remedies; no unresolved critical protocol choice | v2 layouts, circuits and keys are pinned. Historical silence retirement and receipt consequences are [selected](../decisions/2026-09.md#2026-09-08--intervening-silence-retires-a-pool-segment-and-lapses-its-unfinished-receipts). Invalid-checkpoint recovery, v3 layouts, authenticated interval evidence, note delivery and deployment choices remain open. |
+| Adversarial model | An executable model of §C2, §C2b and §C3 over the pool representation, with two operators, two backings, delayed and dropped publications, replacement, restart and incomplete views; safety and conditional progress checked separately; counterexamples kept as regression vectors | Sequencing, authority and recovery models exist. Independently reviewed C2b.4.1/3 retirement prevents the reproduced old-segment double spend; an explicit departure preserves the counterexample. The [fault candidate](POOL_FAULT_RECOVERY.md) recomputes validation from reader evidence, but fault policy and its invalid-checkpoint progress remedy remain unselected. |
 | Private, sound payments | Implemented prover/verifier and an independently reviewed security argument; adversarial cases for forged issuance, inflation, duplicate spends, malformed proofs, wrong contexts and disclosure channels | v2 claim layer in src/pool, pinned circuits and real-proof admission/import/replay checks exist. Focused adversarial review completed; wallet and complete deployment assurance remain. |
 | Public supply | A separate verifier checks authorized issuance, conservation, spentness and published supply from public evidence without secret keys; rejects altered, incomplete and wrong-state histories against a witnessed commitment | Public replay and record-derived canonical checkpoint validation exist, including transitive imports and pre-revocation issuance. No complete external-venue supply-verification product yet. |
 | Usable payment | A wallet completes issue → pay → receive → fulfill → redeem, including interruption and exact retry; replaying payment evidence cannot fulfill another invoice | The transparent pilot does this for the frozen path across two processes. No pool wallet. |
@@ -127,8 +127,10 @@ Maintain one production path. The transparent path is **frozen**: no new
 features, no review rounds, cases ported to the pool path as each rule lands,
 and the code deleted when the pool path passes them. The pilot is a harness for
 the durable-command layer; its transport and CLI go with a pool equivalent. The
-experiment is promoted into `src/` when Construction pins the layouts, and
-retired then. Two mechanisms in the frozen code are retired by the
+experiment's circuits and most journal cases have been promoted; it remains
+until its receiver and independent-audit cases move to the pool path, as
+listed in the [retirement map](PRIVATE_PAYMENT_ARCHITECTURE.md#retained-evidence-and-retirement-conditions).
+Two mechanisms in the frozen code are retired by the
 specification — whole-served-state exhibits and the signed opening claim
 (Construction Appendix) — and are not ported.
 

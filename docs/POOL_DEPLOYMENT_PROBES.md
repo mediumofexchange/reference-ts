@@ -102,7 +102,7 @@ authenticated cheaply. The proposed remedy must establish those facts and
 must also explain delayed fault evidence, a prior valid prefix, recovery
 publications at their own index, and descendant adoption.
 
-The [fault-recovery proposal](POOL_FAULT_RECOVERY_PROPOSAL.md) compares intrinsic
+The [fault-recovery proposal](POOL_FAULT_RECOVERY.md) compares intrinsic
 exclusion, prospective fault publication and venue-side validation, and
 records what `model/pool-fault.ts` shows for the intrinsic candidate; no
 candidate has been selected as a normative rule.

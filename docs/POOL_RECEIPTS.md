@@ -84,7 +84,7 @@ Only neither inclusion nor contradiction permits lapse.
 This verdict is **at the supplied repair boundary**, even if the venue's read
 view is later. Unheld receipt references, actual scope endings and elective
 transitions are the present verdict's below. The
-[repair decision](POOL_RECEIPT_REPAIR_GAP.md) records the reproduced case and
+[repair decision](../decisions/2026-09.md#2026-09-07--proven-failed-publication-repair-can-lapse-unfinalized-receipts) records the reproduced case and
 the cost accepted by the maintainer.
 
 ## Present verdict
