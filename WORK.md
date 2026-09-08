@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-09-07
+Updated: 2026-09-08
 
 ## Goal
 
@@ -13,9 +13,10 @@ the return from silence — before any implementation. The recovery policy
 
 ## Status
 
-- Implementation branch: `feat/pool-recovery-model`, base `6e99772` (main).
+- Implementation: `feat/pool-recovery-model`, merged fast-forward to `main` as
+  `cada3bf` and pushed on 2026-09-08 under the maintainer's authorization.
 - Companion specification: `spec/pool-recovery-contract` at `3676757`
-  (`820cd51` before review), base `dcce2dc` (main). `pool-recovery.md`
+  (`820cd51` before review), merged fast-forward to spec `main` and pushed. `pool-recovery.md`
   defines C3.1–8, C2b.5.1–2, C2b.6.1, C2b.3.1–3 and C2b.4.1–2 for
   `moe/pool/v3`; Construction §C2b/§C3, pool-v2 §7.4, the spec AGENTS and
   README point to it. v2 bytes are unchanged.
