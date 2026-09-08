@@ -29,8 +29,8 @@ The current implementation map and retirement conditions are in
 row when entering a component, rather than loading every module summary.
 
 - `src/pool/` is the active v2 runtime. Recovery is model-only; PoolStore
-  refuses silence clauses. Fault classification uses ideal evidence; exact
-  evidence binding remains to be modeled before v3 bytes.
+  refuses silence clauses. The fault model binds exact evidence bytes with
+  real hashes and ideal proof/authentication oracles; v3 bytes remain open.
 - The transparent path is frozen as a differential oracle and adversarial
   case library. Port cases as their pool rules land; remove it when covered.
   Never port the retired exhibit walk or signed opening claim.

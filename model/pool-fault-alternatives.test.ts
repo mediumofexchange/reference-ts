@@ -211,8 +211,8 @@ describe("R7′: the segment continues from its last valid checkpoint", () => {
     expect(w.classification(bad.id)).toBe("excluded");
     expect(w.classify(receipt, p.scope).status).toBe("pending"); // passed, neither included nor contradicted
     if (continues) expect(() => p.change(["Y"])).toThrow("live tail before scope change");
-    // The receipt names the original valid proof token. The bad clone is only
-    // in the excluded checkpoint; evidence-bound receipt bytes are a later model.
+    // The receipt binds the original valid proof bytes. The bad clone has
+    // different evidence and appears only in the excluded checkpoint.
     const continuation = p.commit(); witness(w, continuation, continues ? "final" : "invalid"); // 3
     expect(w.classify(receipt, p.scope).status).toBe(continues ? "final" : "pending");
     expect(w.closing("X", 3n)).toBe(1n);

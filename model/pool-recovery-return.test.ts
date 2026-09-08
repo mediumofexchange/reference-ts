@@ -70,7 +70,7 @@ describe("C2b.4.1/3: a clock reset cannot restore old-segment continuation", () 
     const continuation = w.sign(hostile);
     expect(continuation.segment).toBe(issued.segment);
     expect(continuation.events.slice(0, issued.events.length)).toEqual(issued.events);
-    expect(continuation.events.at(-1)?.statement).toBe(spend);
+    expect(continuation.events.at(-1)?.statement).toEqual(spend);
     witness(w, continuation); // UNSAFE current result: finalized at 10
     expect(w.now).toBe(10n);
     expect(w.classify(receipt, p.scope).status).toBe("final");

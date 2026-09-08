@@ -21,13 +21,14 @@ historical test helper; their counterexamples remain executable.
 | C2.10.12: continue from the last valid prefix | A stale twin need not force a new segment. Excluded positions can be repaired before silence retires the segment. |
 | C2.10.9c: fault decides no receipt | Existing precedence remains. A later construction compares admitted evidence hashes as well as position, statement and history. |
 
-The model uses ideal proof and authentication tokens. It does **not** yet
-implement the separate evidence chain, exact-byte receipt comparison, fault
-certificate encoding or an authenticated production range service. Model these
-before fixing v3 bytes. A receipt attesting bad evidence must be contradicted
-if a later valid checkpoint uses different evidence for that same statement.
-Current repair cases instead receipt the original valid proof, exclude a
-hostile clone, then finalize the original admitted evidence.
+The model binds exact proof and signature bytes with real SHA-256 in a separate
+chain. Both receipt readers compare their digests, including v2's zero digest
+for an absent obligor signature. Proof and authentication verification remain
+ideal oracles: opaque proof outputs are minted before statements are exposed.
+The framed model encoding is not a v3 layout or compact fault certificate, and
+the model does not implement an authenticated production range service.
+A later valid repair can finalize the original receipt while contradicting a
+receipt attesting different evidence for the same statement and position.
 
 ## Classification and reader contract
 
@@ -54,10 +55,20 @@ Each owns its withheld/mismatching facets. Memoization lasts one read; cycles
 refuse. Refresh changed record facts, including same-index revocation.
 Future-index queries are hypothetical, not complete future-record evidence.
 
+`supplyTrail` offers a copied trail to one reader. Its bytes must match the
+signed evidence chain before replay can attribute a fault. Event positions
+derive from the signed segment and array order; replica metadata cannot change
+them. Whole-scope lapse reads the signed checkpoint's shape before inspecting
+the offered trail. Retained statements, evidence and publication wrappers are
+immutable, so caller mutation cannot change an earlier verdict.
+
 Every dependent read passes evidenced exclusions and refuses unresolved
 checkpoints. Publications retain force at their original prefix; return adopts
 all force through its opening index. The semantic observer alone reads hidden
 note openings to check supply, authority and consumption.
+Adoption retains each forceful publication's original proof/signature bytes,
+chains them at the new segment's position and receipts those same hashes.
+A valid alternate proof cannot replace them or reopen the force decision.
 
 ## Dependencies and rejected alternatives
 
@@ -103,6 +114,13 @@ statement exceptions, and the overbroad claim of no cross-scope dependencies.
 It also removed stale operator-wide clock wording. Exact evidence mismatch
 changes comparison fields, not statement identity or verdict precedence.
 
+Independent evidence-model review corrected replica-controlled event IDs and
+trail length affecting fault/lapse attribution, mutable nested statement and
+publication inputs, and the absent-signature sentinel. Fresh opaque proof
+tokens prevent future proof generation from validating earlier guessed bytes.
+The retained regressions exercise these boundaries and adopted demand/release
+evidence with otherwise valid alternate proofs.
+
 | Tests in `model/` | Evidence |
 |---|---|
 | `pool-fault-boundary.test.ts`, `pool-fault.test.ts` | Original failure, selected remedy, unresolved rollback and reversed-verdict departures. |
@@ -111,10 +129,12 @@ changes comparison fields, not statement identity or verdict precedence.
 | `pool-fault-liability.test.ts`, `pool-fault-evidence.test.ts` | Receipt precedence, stale twins and real v2 authentication limits. |
 | `pool-fault-alternatives.test.ts` | Selected defaults versus historical departures: drop, redemption, return, disjoint scopes, silence, continuation and statement replacement. |
 | `pool-recovery-return.test.ts`, `pool-silence.test.ts` | Historical retirement, adoption, receipt precedence and unsafe return under `forgetSilence`. |
+| `pool-evidence.test.ts` | Complete public-field framing, exact hashes, order/context binding, missing evidence, canonical inputs and immutable copies. |
+| `pool-evidence-reader.test.ts` | Substituted and committed bad bytes, valid-prefix immutability, both receipt readers, reader isolation, lapse attribution and future oracle outputs. |
+| `pool-adopted-evidence.test.ts` | Exact witnessed demand/release evidence through adoption and receipts, valid reproof rejection, repair and mutation resistance. |
 
-Next: model exact evidence binding and receipt comparison, with alternate valid
-proofs, bad committed evidence, immutable valid prefixes, missing/substituted
-bytes and repaired unfinalized positions. Independently review before v3
-layouts. Measure retention/retrieval, authenticated note delivery/restoration,
-custody and pinned-node publication. Current verification belongs in
+Next: specify v3 statement, recovery and evidence layouts and their circuit
+relations, with authenticated record-range and evidence-retention requirements.
+Measure retention/retrieval, authenticated note delivery/restoration, custody
+and pinned-node publication before fixing deployment budgets. Current verification belongs in
 [`WORK.md`](../WORK.md).

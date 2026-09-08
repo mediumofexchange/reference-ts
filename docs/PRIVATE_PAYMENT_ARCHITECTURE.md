@@ -32,7 +32,7 @@ permission to serve. Validation owns external bytes before callbacks.
 | `model/pool-authority.ts` | Private scopes, whole-scope finality, canonical shared imports and receipt precedence with ideal cryptography. Runtime supplies v2 bytes and proofs. |
 | `model/pool-schedule.ts` | Enumerated calendar oracle for the shared-scope scheduler. |
 | `model/pool-recovery.ts` | Normative later-version presentation, count, clock, snapshot settlement, force, adoption and historical-silence retirement, with counterexample departures and a separate semantic observer. Not runtime support. |
-| `model/pool-fault.ts` | Selected authenticated exclusion, snapshot clock and continuation from the last valid prefix; independent evidence snapshots and original-prefix revalidation. Rejected policies live in the test-only historical helper. [Fault recovery](POOL_FAULT_RECOVERY.md) defines coverage and limits: C2.10.10's separate evidence chain and exact receipt evidence comparison remain to be modeled before v3. |
+| `model/pool-fault.ts`, `model/pool-evidence.ts` | Selected authenticated exclusion, snapshot clock and continuation from the last valid prefix; independent evidence snapshots and original-prefix revalidation. Exact proof/signature bytes are hashed into a separate chain and compared in receipts and adoption. Rejected policies live in the test-only historical helper. [Fault recovery](POOL_FAULT_RECOVERY.md) defines the ideal-oracle limits and remaining production layout/availability work. |
 
 The historical-silence decision is implemented in the model: a gap strictly
 after the witnessed opening retires continuation and unfinished receipts,

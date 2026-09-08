@@ -5,6 +5,8 @@
 // The older sequencing model checks replacement election and lag scheduling;
 // this model checks their interaction with opaque shared history, on one venue.
 // It is NOT a circuit implementation, durable store or production sequencer.
+import { evidenceHashes, statementDigest, type Evidence } from "./pool-evidence.js";
+import { randomBytes } from "node:crypto";
 
 export type Id = string;
 export interface Note {
@@ -79,6 +81,42 @@ export class ProofOracle {
   private readonly witnesses = new Map<Statement, Witness>();
   private readonly notes = new Map<Id, Note>();
   private readonly identities = new Map<string, Id>();
+  private readonly admittedEvidence = new Map<Statement, Evidence>();
+  private readonly proofBytes = new Map<string, Statement>();
+  private readonly signatureBytes = new Map<string, Statement>();
+
+  /** Opaque byte strings stand for proof/signature outputs; the registry is
+   * the ideal cryptographic verifier, not an operator's validity assertion.
+   * Two proofs of one public statement can have distinct exact bytes. */
+  evidence(statement: Statement): Evidence {
+    const prior = this.admittedEvidence.get(statement);
+    if (prior !== undefined) return prior;
+    const token = () => {
+      // Model unforgeability: predictable future byte strings could acquire
+      // validity after a later prove(), changing an earlier fault verdict.
+      let bytes: string;
+      do { bytes = randomBytes(32).toString("hex"); }
+      while (this.proofBytes.has(bytes) || this.signatureBytes.has(bytes));
+      return bytes;
+    };
+    const proof = token(); this.proofBytes.set(proof, statement);
+    const evidence = Object.freeze({ proof, signature: statement.kind === "issue" ? token() : "" });
+    this.admittedEvidence.set(statement, evidence);
+    if (evidence.signature !== "") this.signatureBytes.set(evidence.signature, statement);
+    return evidence;
+  }
+
+  verifyEvidence(statement: Statement, evidence: Evidence, scope: Scope,
+    roots: ReadonlyMap<Id, readonly Id[]>, departures: Departures): boolean {
+    evidenceHashes(evidence); // canonical byte spelling; callers handle malformed evidence
+    const proof = this.proofBytes.get(evidence.proof);
+    if (proof === undefined || statementDigest(proof) !== statementDigest(statement) ||
+      !this.verify(proof, scope, roots, departures, true)) return false;
+    if (statement.kind !== "issue") return evidence.signature === "";
+    const signature = this.signatureBytes.get(evidence.signature);
+    return signature !== undefined && statementDigest(signature) === statementDigest(statement) &&
+      this.witnesses.get(signature)?.signedByK === true;
+  }
 
   note(backing: Id, value: bigint, domain = "D", owner?: Id): Note {
     const id = ++this.serial;
@@ -108,12 +146,16 @@ export class ProofOracle {
       scope: binding.scope.root, domain: binding.scope.domain, kind,
       anchors: Object.freeze([...anchors]),
       nullifiers: Object.freeze(kind === "demand" || kind === "request" ? [] : inputs.map(n => n.nf)),
-      outputs: Object.freeze(outputs.map(n => n.cm)), ...(named ? { lit: Object.freeze({ ...named }) } : {}) });
+      outputs: Object.freeze(outputs.map(n => n.cm)), ...(named ? { lit: Object.freeze({ ...named,
+        ...(named.tags === undefined ? {} : { tags: Object.freeze([...named.tags]) }),
+        ...(named.acceptance === undefined ? {} : { acceptance: Object.freeze({ ...named.acceptance }) }),
+      }) } : {}) });
     this.witnesses.set(statement, { inputs: [...inputs], outputs: [...outputs], signedByK });
+    this.evidence(statement); // exact proof outputs exist before any reader sees the statement
     return statement;
   }
 
-  verify(s: Statement, scope: Scope, roots: ReadonlyMap<Id, readonly Id[]>, departures: Departures): boolean {
+  verify(s: Statement, scope: Scope, roots: ReadonlyMap<Id, readonly Id[]>, departures: Departures, proofOnly = false): boolean {
     const witness = this.witnesses.get(s);
     if (!witness || s.domain !== scope.domain || (s.kind !== "request" && s.scope !== scope.root)) return false;
     const { inputs, outputs } = witness;
@@ -128,7 +170,7 @@ export class ProofOracle {
       if (!leaves || (inputs[i]!.value > 0n && !leaves.includes(inputs[i]!.cm))) return false;
     }
     if (s.kind === "issue") {
-      return inputs.length === 0 && outputs.length === 1 && witness.signedByK && s.lit !== undefined &&
+      return inputs.length === 0 && outputs.length === 1 && (proofOnly || witness.signedByK) && s.lit !== undefined &&
         s.lit.quantity > 0n && outputs[0]!.backing === s.lit.backing && outputs[0]!.value === s.lit.quantity;
     }
     const lit = s.lit;
@@ -166,7 +208,7 @@ export class ProofOracle {
   opening(cm: Id): Note { return this.notes.get(cm)!; }
 }
 
-export interface Event { readonly id: Id; readonly statement: Statement }
+export interface Event { readonly id: Id; readonly statement: Statement; readonly evidence?: Evidence }
 export interface State {
   readonly events: Map<Id, Event>;
   readonly roots: Map<Id, readonly Id[]>;
@@ -259,12 +301,14 @@ export interface Checkpoint {
   readonly openings: readonly (readonly [Id, Id | null])[];
   readonly events: readonly Event[];
   readonly carries: readonly Id[];
+  /** C2.10.10 in FaultWorld; absent in the historical authority/recovery models. */
+  readonly evidenceHash?: Id;
 }
 /** `checkpoint` and `at` are witnessed facts. Status/state/reason are a
  * reader's evaluation, not facts certified by the venue. The base models
  * keep their initial evaluation; FaultWorld re-evaluates from held evidence. */
 export interface Recorded { readonly checkpoint: Checkpoint; readonly at: bigint; readonly status: "final" | "lapsed" | "invalid"; readonly state?: State; readonly reason?: string }
-export interface Receipt { readonly segment: Id; readonly statement: Id; readonly position: bigint; readonly after: bigint; readonly operator: Id; readonly scope: Id; readonly history: Id }
+export interface Receipt { readonly segment: Id; readonly statement: Id; readonly position: bigint; readonly after: bigint; readonly operator: Id; readonly scope: Id; readonly history: Id; readonly proofHash?: Id; readonly signatureHash?: Id }
 export interface RepairClassification { readonly included: boolean; readonly contradicted: boolean; readonly lapsed: boolean }
 export interface ReceiptClassification {
   readonly status: "final" | "contradicted" | "abandoned" | "lapsed" | "pending";
@@ -463,6 +507,20 @@ export class World {
   /** A refusal raised here, after the public lapse conditions and before
    * validation, records the checkpoint as invalid. */
   protected admissible(_checkpoint: Checkpoint): void {}
+  /** Lapse reads the signed structure first; only replay substitutes a served preimage. */
+  protected checkpointTrail(checkpoint: Checkpoint): Checkpoint { return checkpoint; }
+  prepareEvent(event: Event): Event { return Object.freeze({ ...event }); }
+  protected signingEvents(service: Service): readonly Event[] {
+    return Object.freeze(service.events.map(e => this.prepareEvent(e)));
+  }
+  protected checkpointBinding(_segment: Id, _events: readonly Event[]): Pick<Checkpoint, "evidenceHash"> { return {}; }
+  receiptBinding(_event: Event): Pick<Receipt, "proofHash" | "signatureHash"> { return {}; }
+  protected verifyEvent(event: Event, scope: Scope, state: State): boolean {
+    return this.oracle.verify(event.statement, scope, state.roots, this.departures);
+  }
+  protected continuation(checkpoint: Checkpoint, previous: Checkpoint): void {
+    requireThat(same(previous.events.map(e => e.statement.id), checkpoint.events.slice(0, previous.events.length).map(e => e.statement.id)), "rewritten prefix");
+  }
   protected replayed(_checkpoint: Checkpoint, _state: State): void {}
   serving(_service: Service, _statement: Statement): void {}
   protected discardable(_service: Service): boolean { return false; }
@@ -483,11 +541,12 @@ export class World {
     requireThat(this.free(service.scope.operator), "one in flight");
     const sequence = (this.highestSigned.get(service.scope.operator) ?? 0n) + 1n;
     this.highestSigned.set(service.scope.operator, sequence);
+    const events = this.signingEvents(service);
     const checkpoint = Object.freeze({ id: `checkpoint${++this.serial}`, operator: service.scope.operator, sequence,
       signedAt: this.now, segment: service.id, openingSequence: service.openingSequence,
       scope: Object.freeze({ ...service.scope, entries: Object.freeze(service.scope.entries.map(e => Object.freeze({ ...e }))) }),
       openings: Object.freeze([...service.openings].map(([b, id]) => Object.freeze([b, id] as const))),
-      events: Object.freeze(service.events.map(e => Object.freeze({ ...e }))), carries: Object.freeze([...carries].sort()) });
+      events, ...this.checkpointBinding(service.id, events), carries: Object.freeze([...carries].sort()) });
     this.signatures.add(checkpoint); this.inFlight.set(checkpoint.operator, checkpoint);
     return checkpoint;
   }
@@ -513,6 +572,7 @@ export class World {
       const ended = this.scopeEnded(checkpoint);
       const finalityScope = this.departures.partialFinality ? selected : checkpoint.scope.entries;
       if (ended || this.passedByRule(checkpoint, this.now)) return { checkpoint, at: this.now, status: "lapsed" };
+      checkpoint = this.checkpointTrail(checkpoint);
       this.admissible(checkpoint);
       requireThat(finalityScope.every(e => this.term(e.backing).link === e.link && e.operator === checkpoint.operator), "scope not in force");
       for (const [, parent] of checkpoint.openings) if (parent !== null) {
@@ -527,7 +587,7 @@ export class World {
         const expected = previous?.checkpoint.id ?? new Map(checkpoint.openings).get(e.backing)!;
         if (!this.departures.ignorePredecessor) requireThat(this.latestFor(e.backing) === expected, "stale continuation");
       }
-      if (previous) requireThat(same(previous.checkpoint.events.map(e => e.statement.id), checkpoint.events.slice(0, previous.checkpoint.events.length).map(e => e.statement.id)), "rewritten prefix");
+      if (previous) this.continuation(checkpoint, previous.checkpoint);
       const state = this.merge(new Map(checkpoint.openings));
       const leaves: Id[] = [];
       state.roots.set(`${checkpoint.segment}:0`, []);
@@ -536,7 +596,7 @@ export class World {
         requireThat(event.id === `${checkpoint.segment}:${i}`, "event position");
         const judged = event.statement.segment === checkpoint.segment ? { scope: checkpoint.scope, at: this.now } :
           this.adoptable(event.statement, checkpoint.segment, new Map(checkpoint.openings), i);
-        requireThat(this.oracle.verify(event.statement, judged.scope, state.roots, this.departures), "proof");
+        requireThat(this.verifyEvent(event, judged.scope, state), "proof");
         apply(state, event, this.departures, judged.at);
         leaves.push(...event.statement.outputs);
         state.roots.set(`${checkpoint.segment}:${i + 1}`, Object.freeze([...leaves]));
@@ -668,7 +728,7 @@ export class World {
       this.canonical([r]);
       const c = r.checkpoint, prefix = c.events.filter((_, i) => BigInt(i) < receipt.position);
       const occupied = BigInt(prefix.length) === receipt.position;
-      if (occupied && prefix.at(-1)!.statement.id === receipt.statement && history(prefix) === receipt.history) return included = true;
+      if (occupied && this.receiptMatches(receipt, prefix)) return included = true;
       contradicted ||= c.sequence > receipt.after ? heldReference : occupied;
       return false;
     };
@@ -709,6 +769,10 @@ export class World {
     requireThat(receipt.position > 0n && receipt.after > 0n && receipt.operator === scope.operator && receipt.scope === scope.root, "receipt context");
     requireThat(scope.entries.every(e => this.chains.get(e.backing)?.some(t => t.link === e.link && t.from === e.from && t.operator === e.operator) === true), "receipt scope");
   }
+  /** Both ordinary and repair receipt reads use the same inclusion relation. */
+  protected receiptMatches(receipt: Receipt, prefix: readonly Event[]): boolean {
+    return prefix.at(-1)?.statement.id === receipt.statement && history(prefix) === receipt.history;
+  }
   /** Ideal authenticated directory carriage of any scope backing; the departure
    * reads every other segment as a transition, as C2.10.9a first did. */
   private carrier(scope: Scope): (c: Checkpoint) => boolean {
@@ -742,7 +806,7 @@ export class World {
       requireThat(c.segment === receipt.segment, "segment records only");
       const prefix = c.events.filter((_, i) => BigInt(i) < receipt.position);
       const occupied = BigInt(prefix.length) === receipt.position;
-      const match = occupied && prefix.at(-1)!.statement.id === receipt.statement && history(prefix) === receipt.history;
+      const match = occupied && this.receiptMatches(receipt, prefix);
       included ||= match;
       contradicted ||= !match && (c.sequence > receipt.after ? heldReference : occupied);
     }
@@ -821,12 +885,13 @@ export class Service {
     return this.append(statement, judged.at);
   }
   private append(statement: Statement, at: bigint): Receipt {
-    const event = Object.freeze({ id: `${this.id}:${this.events.length}`, statement });
+    const event = this.world.prepareEvent({ id: `${this.id}:${this.events.length}`, statement });
     const next = copy(this.state); apply(next, event, this.world.departures, at);
     this.events.push(event); this.leaves.push(...statement.outputs);
     next.roots.set(this.root(), Object.freeze([...this.leaves])); this.state = next;
     const receipt = Object.freeze({ segment: this.id, statement: statement.id, position: BigInt(this.events.length),
-      after: this.lastSigned!.sequence, operator: this.scope.operator, scope: this.scope.root, history: history(this.events) });
+      after: this.lastSigned!.sequence, operator: this.scope.operator, scope: this.scope.root, history: history(this.events),
+      ...this.world.receiptBinding(event) });
     this.receipts.set(statement.id, receipt);
     return receipt;
   }

@@ -61,7 +61,7 @@ Use [the architecture map](docs/PRIVATE_PAYMENT_ARCHITECTURE.md) for component
 boundaries and retirement conditions, [production requirements](docs/PRODUCTION_REQUIREMENTS.md)
 for release gates, and [fault recovery](docs/POOL_FAULT_RECOVERY.md) for the
 selected rules and model limits of the companion's
-[fault contract](https://github.com/mediumofexchange/money-from-first-principles/blob/56f8a92/pool-fault.md).
+[fault contract](https://github.com/mediumofexchange/money-from-first-principles/blob/23af0f5/pool-fault.md).
 `npm run check:pool` exercises the
 pinned real circuits and multi-segment replay separately from the ordinary
 test suite.
@@ -84,11 +84,13 @@ receipts even after an unrelated clock reset, preserving earlier finality and
 liability. Return requires a new segment and complete recovery adoption.
 The original double-spend counterexample remains under an explicit departure.
 `model/pool-fault.ts` extends that model with the selected fault contract at
-[`56f8a92`](https://github.com/mediumofexchange/money-from-first-principles/commit/56f8a92):
+[`23af0f5`](https://github.com/mediumofexchange/money-from-first-principles/commit/23af0f5):
 authenticated exclusion, a clock read from the snapshot, and continuation of
 the last valid prefix. Rejected policies remain test-only historical controls.
-Exact evidence-chain binding and evidence-bound receipt comparison remain to
-be modeled before v3; production interval evidence is also still open.
+The model hashes exact admitted proof/signature bytes into a separate chain,
+compares receipt evidence and retains witnessed bytes through adoption. Proof
+and signature verification remain ideal oracles. Production v3 layouts,
+compact fault certificates and authenticated interval evidence remain open.
 
 ## Try the local pilot
 
