@@ -78,6 +78,18 @@ the return from silence — before any implementation. The recovery policy
 3. Port the frozen transparent cases (`c2b-redemption-legs`, `c2b-return-
    from-silence`, `c2b-non-service`, `c3-*`) as each rule lands over notes.
 
+## Review awaiting check
+
+- A whole-project design review (2026-09-08, a review round, not a decision)
+  is at `decisions/archive/2026-09-08-whole-project-design-review.md`. It
+  ranks fourteen findings; F1–F5 (verifier configuration inside the name,
+  proof hash absent from the history, no seed recovery of notes, the 2×2
+  shape against fees and reliance, the recovery leg against the venue's byte
+  limit) change what `pool-v3.md` must carry, so it asks that they be
+  checked and decided before v3's byte layouts. §5 of the file is the
+  verifier's yes/no checklist. Nothing in the specification or code was
+  changed by it.
+
 ## Open questions
 
 - What remedy a backing has against an operator whose last carrying
