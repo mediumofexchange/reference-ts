@@ -4,70 +4,62 @@ Updated: 2026-09-08
 
 ## Goal
 
-Build the shielded-pool protocol. Next is the maintainer's selection among the
-fault contract proposal's four choices, then the amendments and their review.
+Build the shielded-pool protocol. Adopted fault classification, snapshot clock
+and segment continuity; next model exact admitted evidence and its receipts
+before fixing any v3 bytes.
 
 ## Status
 
-- Implementation: `main`. Branch `feat/pool-fault-proposal` adds two research
-  switches to `model/pool-fault.ts`, `clockIsSnapshot` (D) and
-  `faultContinuesSegment` (R7′), with `model/pool-fault-alternatives.test.ts`
-  (13 cases against the defaults), and points the [fault document](docs/POOL_FAULT_RECOVERY.md),
-  [architecture](docs/PRIVATE_PAYMENT_ARCHITECTURE.md), README and production
-  requirements at the proposal. No `src/`, v2 layout or runtime change.
-- Companion: branch `spec/pool-fault-proposal` adds `pool-fault.md`, a
-  proposal that is not adopted: rules C2.10.10–13 and C2.10.9c, a revised
-  C2b.6.1 (the clock is the snapshot's), the sentence-level amendment table
-  and the four choices the maintainer selects; indexed in its AGENTS.md and
-  README. Normative texts are unchanged: recovery remains `c5f5464`.
-- Recommendation recorded in the proposal: authenticated exclusion; D over
-  term-only (D changes two sentences of Construction §C2b.6 and removes every
-  cross-scope clock dependency); R7′ over R7; receipt precedence retained.
-  The earlier term-only recommendation stands if the operator-wide clock is
-  kept. Nothing is decided; the maintainer selects.
-- Runtime remains v2 and PoolStore refuses silence clauses. Historical
-  retirement is modeled. Fault clocks and R6/R7 remain unselected research.
-- Retain the frozen private-payment fixture until receiver/invoice and
-  independent-audit crash/retry cases move to the pool/wallet path. Retain
-  the offline Ergo probe and build/browser/setup caches in `scratch/`.
+- Implementation: `main`, with `feat/pool-fault-contract` merged as `1fc4209`.
+  `FaultWorld` uses the snapshot clock and last-valid continuation without
+  policy switches. Rejected policies remain in a test-only historical helper.
+- Companion: `spec/pool-fault-contract` merged to `main` and pushed as
+  `56f8a92`, adopting `pool-fault.md` and amending Construction, authority
+  and recovery. The maintainer authorized choices, merge and push on 2026-09-08.
+- Selected: authenticated exclusion; snapshot clock (D); continuation from the
+  last valid prefix (R7′); existing receipt precedence. The duration prices a
+  dropped backing as darkness. Independent review clarified evidence-bound
+  receipt comparisons, immutable evidence only for valid prefixes, adopted
+  statement exceptions and the limits of cross-scope independence.
+- Runtime remains pinned v2; PoolStore refuses silence clauses. No runtime,
+  circuit or wire changes. Recovery/fault rules remain executable ideal models.
+- Keep the frozen private-payment fixture until receiver/invoice and audit
+  crash/retry cases move to the pool/wallet. Retain offline Ergo probe and
+  build/browser/setup caches in ignored `scratch/`.
 
 ## Evidence
 
-- Model suite 14 files / 251 tests and `npm run typecheck` pass. The
-  alternatives file shows, under D: a dropped backing's gap opens after the
-  duration while the count also fires, a venue release has force and the
-  return adopts it with no semantic violation; garbage carrying streams and
-  fresh valid unrelated openings reset nothing; X's clock needs no Y or Z
-  fault evidence or scope preimage but refuses without a directory; the
-  silence boundary still retires the old segment. Under R7′: the honest stale
-  twin recovers without a new segment, a bad proof then a valid continuation
-  finalizes the receipt, and a replaced statement contradicts it.
-- Full `npm run check` passed on the branch: 86 files / 1,619 tests,
-  typecheck, build, installed package, pilot and pool-store crash checks.
-  Documentation and link checks pass across the four repositories (36 files).
-- Independent read-only review of the proposal and the alternatives (Opus
-  lane, ten findings, two high) is folded into the proposal; the dispositions
-  are summarized in the [fault document](docs/POOL_FAULT_RECOVERY.md). The
-  evidence chain of C2.10.10 is not yet modelled (the model's proofs are
-  ideal tokens bound to their checkpoint); model it before v3 bytes.
+- Model suite: 14 files / 251 tests; typecheck passes. Final reader cleanup
+  also passed 27 reader tests. Rejected policies preserve the old counterexamples.
+- Independent contract review: all findings resolved and read back. Independent
+  model review: no blockers; six focused files / 88 tests pass. Verified
+  last-valid continuity, honest tail retention, occupied excluded sequences,
+  unresolved-evidence refusal, receipt precedence and same-index silence.
+- Full `npm run check` passes: 86 files / 1,619 tests, typecheck, build,
+  installed package, pilot and pool-store crash checks. It required permitted
+  access after sandboxed Vitest could not load its configuration; no check was
+  changed or weakened. Links pass across all four repositories (36 files).
+- Selected rules and costs: [decision](decisions/2026-09.md#2026-09-08--authenticated-faults-preserve-the-last-valid-state-and-the-clock-reads-its-snapshot).
+  [Fault recovery](docs/POOL_FAULT_RECOVERY.md) owns model limits and next evidence cases.
 
 ## Next
 
-1. Maintainer: select among `pool-fault.md` §10's four choices. Then apply
-   §8's amendments on a spec branch, collapse the model switches to the
-   selected rules, port the alternatives cases as the normative cases, and
-   commission independent adversarial review of the amended contracts before
-   any `pool-v3.md` byte layout.
+1. Model C2.10.10's separate evidence chain and exact receipt proof/signature
+   digest comparisons: alternate valid proofs, substituted/withheld bytes,
+   committed bad evidence, valid-prefix immutability, repaired unfinalized
+   positions and evidence-mismatched receipt contradiction. Independently
+   review that model before a v3 byte layout. Ideal proof identities do not
+   yet establish this contract.
 2. Continue [deployment probes](docs/POOL_DEPLOYMENT_PROBES.md): target phone,
    authenticated note delivery/restoration, independently available evidence
    and pinned-node publication. Offline sizes do not establish node acceptance.
 
 ## Open questions
 
-- Under D, **E**'s no-commitment duration prices a drop as it prices
-  darkness; the maintainer confirms that reading with the clock choice.
-- Finite ideal reads supply no production retrieval/scaling result. Measure
-  suffix/ancestry retention and cold reads; cached verdicts do not replace
-  retained evidence or current snapshots.
+- No protocol selection or independent review is outstanding for this slice.
+  The exact evidence-chain model and later layout still need their own review.
+- Missing committed evidence remains unresolved; intrinsic exclusion supplies
+  no availability guarantee. Measure suffix/ancestry retention and cold reads.
+  Cached verdicts do not replace evidence or current record snapshots.
 - Copied journals, rollback, custody/backup, same-index custom-venue changes,
   setup/build provenance and external write acceptance remain release gates.
