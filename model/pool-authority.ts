@@ -260,9 +260,9 @@ export interface Checkpoint {
   readonly events: readonly Event[];
   readonly carries: readonly Id[];
 }
-/** `reason` is the refusal that made a record invalid; a fault-classifying
- * reader (model/pool-fault.ts) distinguishes an availability refusal, which
- * proves nothing, from a deterministic failure of the held bytes. */
+/** `checkpoint` and `at` are witnessed facts. Status/state/reason are a
+ * reader's evaluation, not facts certified by the venue. The base models
+ * keep their initial evaluation; FaultWorld re-evaluates from held evidence. */
 export interface Recorded { readonly checkpoint: Checkpoint; readonly at: bigint; readonly status: "final" | "lapsed" | "invalid"; readonly state?: State; readonly reason?: string }
 export interface Receipt { readonly segment: Id; readonly statement: Id; readonly position: bigint; readonly after: bigint; readonly operator: Id; readonly scope: Id; readonly history: Id }
 export interface RepairClassification { readonly included: boolean; readonly contradicted: boolean; readonly lapsed: boolean }
@@ -297,6 +297,14 @@ export class World {
   private serial = 0n;
 
   constructor(readonly lag = 1n, readonly departures: Departures = {}) {}
+  /** Read-only evaluation context, sharing immutable proof/signature tokens.
+   * Validation must never call journal or venue mutations on this view. */
+  protected evaluationView(records: readonly Recorded[], at: bigint): this {
+    return Object.assign(Object.create(Object.getPrototypeOf(this)) as this, this,
+      { records: [...records], now: at, chains: new Map([...this.chains].map(([b, chain]) => [b, [...chain]])),
+        domains: new Map(this.domains), obligors: new Map(this.obligors), revocations: new Map(this.revocations),
+        highestSigned: new Map(this.highestSigned) });
+  }
   register(backing: Id, operator: Id, domain = "D", obligor = backing): void {
     requireThat(!this.chains.has(backing), "duplicate backing");
     this.chains.set(backing, [Object.freeze({ backing, operator, link: `genesis:${backing}`, from: 0n })]);
@@ -314,8 +322,9 @@ export class World {
       if (event.statement.kind !== "issue") continue;
       const revoked = this.revocations.get(this.obligors.get(event.statement.lit!.backing)!);
       if (revoked === undefined || at < revoked) continue;
-      const prior = this.records.find(r => r.status === "final" && r.at < revoked &&
-        r.checkpoint.events.some(e => e.id === event.id && e.statement.id === event.statement.id));
+      const prior = this.records.find(r => r.at < revoked &&
+        r.checkpoint.events.some(e => e.id === event.id && e.statement.id === event.statement.id) &&
+        this.record(r.checkpoint.id).status === "final");
       requireThat(prior !== undefined, "revoked issuance");
       requireThat(!this.withheld.has(prior.checkpoint.id) && !this.withheldDirectories.has(prior.checkpoint.id) &&
         !this.withheldScopes.has(prior.checkpoint.id), "unavailable pre-revocation evidence");
@@ -372,6 +381,7 @@ export class World {
       }
       const scope = this.shownScopes.get(c.id) ?? c.scope;
       requireThat(this.departures.trustShownScope === true || scope === c.scope, "unauthenticated scope");
+      if (this.excluded(record)) continue;
       requireThat(scope.entries.length > 0 && scope.operator === c.operator &&
         scope.entries.some(e => e.backing === backing), "scope shape");
       const terms = scope.entries.map(e => {
@@ -383,7 +393,6 @@ export class World {
       if (terms.some(t => t.until !== undefined && t.until <= record.at)) continue;
       requireThat(terms.every(t => t.from <= record.at), "scope not in force");
       if (this.passedByRule(c, record.at)) continue; // a whole-scope lapse by public rule, passed like a term end
-      if (this.excluded(record)) continue;
       return c.id; // missing/invalid statements still select this candidate
     }
     return null;
@@ -446,6 +455,9 @@ export class World {
    * `skipLiveInvalid` departure passes it blindly; the fault-classifying
    * candidate (model/pool-fault.ts) passes it on authenticated evidence only. */
   protected excluded(record: Recorded): boolean { return this.departures.skipLiveInvalid === true && record.status === "invalid"; }
+  /** Candidate reader hook: passing evidence consumes a sequence but proves
+   * neither inclusion nor a canonical carrying transition. */
+  protected receiptPassed(record: Recorded): boolean { return this.excluded(record); }
   /** Whether an invalid record becomes the backing's blocking latest state. */
   protected blocking(_checkpoint: Checkpoint, _reason: string): boolean { return true; }
   /** A refusal raised here, after the public lapse conditions and before
@@ -484,42 +496,33 @@ export class World {
     requireThat(this.now >= checkpoint.signedAt + this.lag, "too early");
     const prior = this.records.filter(r => r.checkpoint.operator === checkpoint.operator).at(-1);
     requireThat(!prior || prior.checkpoint.sequence < checkpoint.sequence, "sequence moved past");
+    const record = this.validateCheckpoint(checkpoint);
+    this.records.push(record);
+    if (record.status === "final" || (record.status === "invalid" && this.blocking(checkpoint, record.reason!))) {
+      for (const e of checkpoint.scope.entries.filter(e => checkpoint.carries.includes(e.backing))) {
+        if (this.chains.has(e.backing) && this.term(e.backing).operator === checkpoint.operator) this.latest.set(e.backing, checkpoint.id);
+      }
+    }
+    return record.status;
+  }
+  /** Validate with the checkpoint absent from this view's predecessor record.
+   * `now` is its witnessed index, never the reader's later observation time. */
+  protected validateCheckpoint(checkpoint: Checkpoint): Recorded {
     const selected = checkpoint.scope.entries.filter(e => checkpoint.carries.includes(e.backing));
     try {
-      const names = checkpoint.scope.entries.map(e => e.backing);
-      requireThat(names.length > 0 && new Set(names).size === names.length && same(names, [...names].sort()), "scope shape");
-      requireThat(checkpoint.operator === checkpoint.scope.operator, "scope operator");
-      requireThat(checkpoint.scope.entries.every(e => e.operator === checkpoint.operator), "scope operator");
-      requireThat(checkpoint.scope.entries.every(e => this.chains.get(e.backing)?.some(t =>
-        t.link === e.link && t.operator === e.operator && t.from === e.from) === true), "scope term");
-      requireThat(names.every(b => this.domains.get(b) === checkpoint.scope.domain), "wrong construction domain");
-      requireThat(same(checkpoint.openings.map(([b]) => b), names), "opening scope mismatch");
-      const known = this.records.find(r => r.checkpoint.segment === checkpoint.segment)?.checkpoint;
-      if (known) requireThat(known.openingSequence === checkpoint.openingSequence && known.scope.root === checkpoint.scope.root && known.scope.domain === checkpoint.scope.domain &&
-        known.operator === checkpoint.operator && known.scope.entries.length === checkpoint.scope.entries.length &&
-        known.scope.entries.every((e, i) => { const other = checkpoint.scope.entries[i]!;
-          return e.backing === other.backing && e.link === other.link && e.operator === other.operator && e.from === other.from; }) &&
-        known.openings.length === checkpoint.openings.length &&
-        known.openings.every(([b, id], i) => checkpoint.openings[i]![0] === b && checkpoint.openings[i]![1] === id), "changed segment header");
+      const ended = this.scopeEnded(checkpoint);
       const finalityScope = this.departures.partialFinality ? selected : checkpoint.scope.entries;
-      const ended = finalityScope.some(e => {
-        const chain = this.chains.get(e.backing)!;
-        const next = chain[chain.findIndex(t => t.link === e.link) + 1];
-        return next !== undefined && next.from <= this.now;
-      });
-      if (ended || this.passedByRule(checkpoint, this.now)) {
-        this.records.push({ checkpoint, at: this.now, status: "lapsed" });
-        return "lapsed";
-      }
+      if (ended || this.passedByRule(checkpoint, this.now)) return { checkpoint, at: this.now, status: "lapsed" };
       this.admissible(checkpoint);
       requireThat(finalityScope.every(e => this.term(e.backing).link === e.link && e.operator === checkpoint.operator), "scope not in force");
       for (const [, parent] of checkpoint.openings) if (parent !== null) {
         const source = this.record(parent);
+        this.scopeEvidence(source.checkpoint);
         requireThat(source.checkpoint.scope.domain === checkpoint.scope.domain, "wrong construction domain");
         requireThat(source.at < this.now || (source.at === this.now && source.checkpoint.operator === checkpoint.operator && source.checkpoint.sequence < checkpoint.sequence), "causal rank");
       }
       if (!this.departures.partialFinality) requireThat(same(checkpoint.carries, checkpoint.scope.entries.map(e => e.backing)), "incomplete scope");
-      const previous = this.records.filter(r => r.status === "final" && r.checkpoint.segment === checkpoint.segment).at(-1);
+      const previous = this.previousFinal(checkpoint);
       for (const e of selected) {
         const expected = previous?.checkpoint.id ?? new Map(checkpoint.openings).get(e.backing)!;
         if (!this.departures.ignorePredecessor) requireThat(this.latestFor(e.backing) === expected, "stale continuation");
@@ -531,7 +534,6 @@ export class World {
       for (let i = 0; i < checkpoint.events.length; i++) {
         const event = checkpoint.events[i]!;
         requireThat(event.id === `${checkpoint.segment}:${i}`, "event position");
-        // An adopted statement (C2b.4.2) is judged under the opening it was proved against, at its own index.
         const judged = event.statement.segment === checkpoint.segment ? { scope: checkpoint.scope, at: this.now } :
           this.adoptable(event.statement, checkpoint.segment, new Map(checkpoint.openings), i);
         requireThat(this.oracle.verify(event.statement, judged.scope, state.roots, this.departures), "proof");
@@ -541,20 +543,41 @@ export class World {
       }
       this.replayed(checkpoint, state);
       this.checkRevocations(state, this.now);
-      const record: Recorded = { checkpoint, at: this.now, status: "final", state };
-      this.records.push(record);
-      for (const e of selected) this.latest.set(e.backing, checkpoint.id);
-      return "final";
+      return { checkpoint, at: this.now, status: "final", state };
     } catch (error) {
       if (!(error instanceof Refusal)) throw error;
-      this.records.push({ checkpoint, at: this.now, status: "invalid", reason: error.message });
-      // Live, carrying but invalid evidence blocks the candidate. It cannot
-      // silently disappear from the record's latest-state selection.
-      if (this.blocking(checkpoint, error.message)) {
-        for (const e of selected) if (this.chains.has(e.backing) && this.term(e.backing).operator === checkpoint.operator) this.latest.set(e.backing, checkpoint.id);
-      }
-      return "invalid";
+      return { checkpoint, at: this.now, status: "invalid", reason: error.message };
     }
+  }
+  protected previousFinal(checkpoint: Checkpoint): Recorded | undefined {
+    return this.records.filter(r => r.status === "final" && r.checkpoint.segment === checkpoint.segment).at(-1);
+  }
+  /** Authenticated header/terms suffice for term lapse, without event proofs. */
+  protected scopeEvidence(_checkpoint: Checkpoint): void {}
+  protected scopeEnded(checkpoint: Checkpoint): boolean {
+      this.scopeEvidence(checkpoint);
+      const names = checkpoint.scope.entries.map(e => e.backing);
+      requireThat(names.length > 0 && new Set(names).size === names.length && same(names, [...names].sort()), "scope shape");
+      requireThat(checkpoint.operator === checkpoint.scope.operator, "scope operator");
+      requireThat(checkpoint.scope.entries.every(e => e.operator === checkpoint.operator), "scope operator");
+      requireThat(checkpoint.scope.entries.every(e => this.chains.get(e.backing)?.some(t =>
+        t.link === e.link && t.operator === e.operator && t.from === e.from) === true), "scope term");
+      requireThat(names.every(b => this.domains.get(b) === checkpoint.scope.domain), "wrong construction domain");
+      requireThat(same(checkpoint.openings.map(([b]) => b), names), "opening scope mismatch");
+      const known = this.records.find(r => r.checkpoint.segment === checkpoint.segment)?.checkpoint;
+      if (known) this.scopeEvidence(known);
+      if (known) requireThat(known.openingSequence === checkpoint.openingSequence && known.scope.root === checkpoint.scope.root && known.scope.domain === checkpoint.scope.domain &&
+        known.operator === checkpoint.operator && known.scope.entries.length === checkpoint.scope.entries.length &&
+        known.scope.entries.every((e, i) => { const other = checkpoint.scope.entries[i]!;
+          return e.backing === other.backing && e.link === other.link && e.operator === other.operator && e.from === other.from; }) &&
+        known.openings.length === checkpoint.openings.length &&
+        known.openings.every(([b, id], i) => checkpoint.openings[i]![0] === b && checkpoint.openings[i]![1] === id), "changed segment header");
+      const finalityScope = this.departures.partialFinality ? checkpoint.scope.entries.filter(e => checkpoint.carries.includes(e.backing)) : checkpoint.scope.entries;
+      return finalityScope.some(e => {
+        const chain = this.chains.get(e.backing)!;
+        const next = chain[chain.findIndex(t => t.link === e.link) + 1];
+        return next !== undefined && next.from <= this.now;
+      });
   }
   /** C2.10.9a, at one supplied repair boundary. Receipt signature and supplied
    * scope are ideal authenticated inputs; the model's finite record is complete.
@@ -570,8 +593,14 @@ export class World {
       return e.backing === original.backing && e.link === original.link && e.from === original.from && e.operator === original.operator;
     }) && scope.domain === after.checkpoint.scope.domain, "receipt scope");
     requireThat(carries(c), "no carriage");
+    for (const x of records) {
+      requireThat(!this.withheldDirectories.has(x.checkpoint.id), "unavailable checkpoint evidence");
+      if (carries(x.checkpoint)) requireThat(!this.withheldScopes.has(x.checkpoint.id) &&
+        (!this.shownScopes.has(x.checkpoint.id) || this.shownScopes.get(x.checkpoint.id) === x.checkpoint.scope), "unavailable checkpoint evidence");
+    }
     requireThat(c.operator === receipt.operator && c.sequence > receipt.after &&
-      records.find(x => x.checkpoint.segment !== receipt.segment && carries(x.checkpoint)) === r, "first different segment");
+      records.find(x => x.checkpoint.segment !== receipt.segment && carries(x.checkpoint) &&
+        !this.receiptPassed(x))?.checkpoint.id === c.id, "first different segment");
     requireThat(c.sequence === c.openingSequence && c.events.length === 0, "repair opening");
     const segment = records.filter(x => x.checkpoint.segment === receipt.segment);
     const last = segment.at(-1)!.checkpoint.sequence;
@@ -579,8 +608,14 @@ export class World {
     for (const x of passedOver) requireThat(!this.withheldDirectories.has(x.checkpoint.id), "unavailable checkpoint evidence");
     requireThat(c.sequence - last - 1n > BigInt(passedOver.length), "missing preceding sequence");
     requireThat(this.current(scope, r.at), "receipt scope ended");
-    this.canonical([...segment, r]);
-    const { included, contradicted } = this.compare(receipt, segment, true);
+    const compared = segment.filter(x => !this.receiptPassed(x));
+    if (this.receiptPassed(after)) {
+      const prior = [...this.records].reverse().find(x => x.checkpoint.operator === receipt.operator &&
+        x.checkpoint.segment === receipt.segment && x.checkpoint.sequence < receipt.after && !this.receiptPassed(x));
+      if (prior !== undefined) compared.unshift(prior);
+    }
+    this.canonical([...compared, r]);
+    const { included, contradicted } = this.compare(receipt, compared, true);
     return { included, contradicted, lapsed: !included && !contradicted };
   }
   /** C2.10.9b: the verdict at the present index from the complete finite
@@ -615,14 +650,14 @@ export class World {
     let base: Recorded | undefined;
     if (after !== undefined) {
       requireThat(after.checkpoint.segment === receipt.segment && after.checkpoint.scope.root === receipt.scope, "receipt after segment");
-      if (live(after)) base = after;
+      if (live(after) && !this.receiptPassed(after)) base = after;
     }
     if (base === undefined) {
       // The segment's latest live checkpoint below after; each record passed on the way is related.
       for (const r of [...mine].reverse()) {
         if (r.checkpoint.sequence >= receipt.after || !live(r)) continue;
         related(r);
-        if (r.checkpoint.segment === receipt.segment) { base = r; break; }
+        if (r.checkpoint.segment === receipt.segment && !this.receiptPassed(r)) { base = r; break; }
       }
     }
     let included = false, contradicted = false, abandoned = false, lapse: ReceiptClassification["lapse"];
@@ -642,11 +677,12 @@ export class World {
       if (!related(r)) { passedOver++; continue; }
       if (c.segment === receipt.segment) {
         // An excluded checkpoint of the segment consumes its sequence and includes nothing.
-        if (!this.excluded(r) && compare(r)) return { status: "final", included, contradicted, abandoned };
+        if (!this.receiptPassed(r) && compare(r)) return { status: "final", included, contradicted, abandoned };
         lastSegment = c.sequence; passedOver = 0n;
         continue;
       }
       if (!heldReference || contradicted) break;
+      if (this.receiptPassed(r)) { passedOver++; continue; }
       this.canonical([r]);
       const hole = c.sequence - lastSegment - 1n > passedOver;
       if (c.sequence === c.openingSequence && c.events.length === 0 && hole) lapse = "repair"; else abandoned = true;
@@ -678,7 +714,8 @@ export class World {
       requireThat(!this.shownScopes.has(id) || this.shownScopes.get(id) === source.checkpoint.scope, "unauthenticated scope");
       this.import(id);
       for (const [, parent] of source.checkpoint.openings) if (parent !== null) evidence(parent);
-      for (const prior of this.records) if (prior.checkpoint.segment === source.checkpoint.segment && prior.checkpoint.sequence < source.checkpoint.sequence) evidence(prior.checkpoint.id);
+      for (const prior of this.records) if (prior.checkpoint.segment === source.checkpoint.segment &&
+        prior.checkpoint.sequence < source.checkpoint.sequence && !this.receiptPassed(prior)) evidence(prior.checkpoint.id);
     };
     for (const r of records) evidence(r.checkpoint.id);
   }
@@ -698,10 +735,12 @@ export class World {
     }
     return { included, contradicted };
   }
+  /** Ideal observer input, distinct from an ordinary reader's evidence. */
+  protected observedRecords(): readonly Recorded[] { return this.records; }
   /** Independent semantic checks over unique final events, using the hidden oracle only here. */
   violations(): string[] {
     const bad: string[] = [], seen = new Map<Id, Id>(), events = new Set<Id>();
-    for (const record of this.records) {
+    for (const record of this.observedRecords()) {
       if (record.status !== "final") continue;
       for (const event of record.checkpoint.events) {
         if (events.has(event.id)) continue;
@@ -736,7 +775,8 @@ export class Service {
   finalized(): boolean {
     if (!this.lastSigned) return this.events.length === 0;
     const record = this.world.records.find(r => r.checkpoint === this.lastSigned);
-    return record?.status === "final" && same(record.checkpoint.events.map(e => e.statement.id), this.events.map(e => e.statement.id));
+    return record !== undefined && this.world.record(record.checkpoint.id).status === "final" &&
+      same(record.checkpoint.events.map(e => e.statement.id), this.events.map(e => e.statement.id));
   }
   /** Expired, unheld signed state permits C2.4.3 repair; its counter is retained. */
   stale(): boolean {
@@ -761,7 +801,8 @@ export class Service {
     const prior = this.receipts.get(statement.id);
     if (prior) return prior;
     const opening = this.lastSigned;
-    requireThat(opening !== undefined && this.world.records.some(r => r.checkpoint === opening && r.status === "final"), "opening not witnessed");
+    requireThat(opening !== undefined && this.world.records.some(r => r.checkpoint === opening &&
+      this.world.record(r.checkpoint.id).status === "final"), "opening not witnessed");
     const judged = this.world.adoptable(statement, this.id, this.openings, this.events.length);
     requireThat(this.world.oracle.verify(statement, judged.scope, this.state.roots, this.world.departures), "proof");
     return this.append(statement, judged.at);

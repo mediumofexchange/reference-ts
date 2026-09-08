@@ -53,6 +53,11 @@ export class RecoveryWorld extends World {
   private readonly names: Id[] = [];
   private readonly live = new Set<Service>();
   constructor(lag = 1n, readonly recovery: RecoveryDepartures = {}, departures: Departures = {}) { super(lag, departures); }
+  protected override evaluationView(records: readonly Recorded[], at: bigint): this {
+    return Object.assign(super.evaluationView(records, at), {
+      published: [...this.published], clauses: new Map(this.clauses), names: [...this.names],
+    });
+  }
 
   override register(backing: Id, operator: Id, domain = "D", obligor = backing): void {
     super.register(backing, operator, domain, obligor);
@@ -175,7 +180,7 @@ export class RecoveryWorld extends World {
    * state's adoption index and at or before the opening's index. */
   block(segment: Id, openings: ReadonlyMap<Id, Id | null>): Adopted[] {
     const opening = this.records.find(r => r.checkpoint.segment === segment);
-    requireThat(opening !== undefined && opening.status === "final", "opening not witnessed");
+    requireThat(opening !== undefined && this.record(opening.checkpoint.id).status === "final", "opening not witnessed");
     const through = this.recovery.skipSameIndex ? opening.at : opening.at + 1n;
     const adopted: Adopted[] = [];
     for (const backing of openings.keys()) {
@@ -301,7 +306,8 @@ export class RecoveryWorld extends World {
       const lit = s.lit, out = this.oracle.opening(s.outputs[0] ?? "");
       if (lit?.acceptance === undefined || !lit.acceptance.signedByK || out?.owner !== lit.acceptance.owner) bad.add("settlement not to the backer");
     };
-    for (const r of this.records) {
+    const observed = this.observedRecords();
+    for (const r of observed) {
       if (r.status !== "final" || r.state === undefined) continue;
       holdings(r.state, "finalized");
       for (const e of r.checkpoint.events) if (e.statement.kind === "settle") paysBacker(e.statement);
@@ -323,7 +329,7 @@ export class RecoveryWorld extends World {
         if (p.kind === "release") paysBacker(p.statement);
       }
     }
-    for (const r of this.records) {
+    for (const r of observed) {
       if (r.status !== "final") continue;
       for (const e of r.checkpoint.events) for (const nf of e.statement.nullifiers) {
         const by = consumed.get(nf);

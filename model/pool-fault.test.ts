@@ -269,7 +269,9 @@ describe("candidate A: what the rules exclude, and what the variants cost", () =
       w.withheld.add(bad.id); // a reader without the excluded checkpoint's bytes
       if (faults.unresolvedIsValid) {
         expect(w.gapOpen("X", 9n)).toBe(false); // read as a reset: no gap, so no force, so the child looks right
-        expect(w.classification(opening.id)).toBe("valid");
+        // Replaying instead of trusting the old verdict now calls the repair
+        // stale against the checkpoint this departure wrongly treats as valid.
+        expect(w.classification(opening.id)).toBe("excluded");
       } else {
         expect(() => w.gapOpen("X", 9n)).toThrow("unresolved clock");
         expect(() => w.recoveryState("X", 10n)).toThrow("unresolved snapshot");
@@ -307,6 +309,9 @@ describe("candidate A: what the rules exclude, and what the variants cost", () =
         w.withheld.delete(c4.id);
         expect(w.recoveryState("Y", 10n).force).toEqual([]); // the gap was never open: 4 closed it
       }
+      // A fresh read needs the evidence again; the earlier witnessed spend
+      // has not been removed from the record by the departure's verdict.
+      w.withheld.delete(c4.id);
       expect(w.record(c4.id).status).toBe("final");
     }
   });

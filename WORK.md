@@ -4,91 +4,87 @@ Updated: 2026-09-08
 
 ## Goal
 
-Build the shielded-pool protocol. Bring device/venue feasibility and recovery
-evidence forward before freezing v3. The maintainer asked to continue with
-pending reviews and decisions. Production remains specification → adversarial
-model → implementation, with immutable verifier authority and independent
-replacement.
+Build the shielded-pool protocol. Bring recovery and device/venue evidence
+forward before freezing v3. The maintainer approved continuing after the
+fault-candidate review. This slice repairs the research readers without
+selecting new clock/lapse or receipt-accountability policy.
 
 ## Status
 
-- Implementation: `docs/pool-fault-review`, based on `main` at `6de607b`.
-  This slice is review/documentation only; no model or runtime changes.
+- Implementation: `fix/pool-fault-readers`, based on review commit `fce0132`
+  (`docs/pool-fault-review`); `main` remains at `6de607b`.
 - Companion specification: `main` at `3676757`, unchanged. No v3 bytes fixed.
-- Runtime remains v2. PoolStore refuses silence clauses; recovery,
-  presentation and the wallet are not implemented in `src/`.
-- The previously owed independent review is complete:
-  [fault review](decisions/archive/2026-09-08-pool-fault-review.md).
-  Two independent lanes, with a second check of the key design finding.
-- The [proposal](docs/POOL_FAULT_RECOVERY_PROPOSAL.md) now suspends its
-  recommendation to adopt A″. No protocol alternative has been selected.
+- Runtime remains v2. No `src/` behavior changed; PoolStore refuses silence
+  clauses and recovery/presentation/wallet remain unimplemented there.
+- [Reader contract](docs/POOL_FAULT_READERS.md) explains the separation of
+  witnessing, evidence, fresh validation, retention and the ideal observer.
+- The [proposal](docs/POOL_FAULT_RECOVERY_PROPOSAL.md) still suspends adoption
+  of A″. No protocol alternative or new receipt precedence was selected.
 
-## Findings and decisions still open
+## Completed
 
-- **R1:** A″ can require another scope's fault evidence to prove that a
-  non-carrying checkpoint lapsed during silence. The model hides that
-  dependency by trusting cached lapse status. The claim of no new dependency
-  on other scopes is false; C2b.4.1 must be included in the rule/cost analysis.
-- **R2–R4:** evidence absent at first validation stays unresolved after it
-  arrives; imports and some finality paths bypass the candidate's dependency
-  classification; the non-carrying clock branch lacks authenticated absence.
-  Separate witnessed records, reader evidence and retained validation before
-  relying on the model as an oracle.
-- **R5:** an excluded receipt `after`, or excluded carrying checkpoint of a
-  different segment, still blocks classification after valid repair.
-- **R6:** the proposal's unconditional fault abandonment is not implemented.
-  A later signed-sequence hole gives repair lapse; a later term end gives
-  scope-boundary lapse. Choose the decisive boundary and precedence explicitly.
-- **R7:** a stale twin's later invalid signature ends the whole segment's
-  future service under the candidate, preserving earlier finality. This is a
-  defensible conservative choice, not something C2.10.6 alone requires.
-- **R8:** the fault-certificate suffix is not one 32-byte link per statement.
-  The proposal now prices all recurrence inputs conditionally and leaves v3
-  layout, evidence-variant continuity and receipt binding to be specified.
+- World validation is separate from witnessing. FaultWorld evaluates each
+  held checkpoint against its original prefix, with only earlier indices
+  and lower same-operator sequences at its index; per-read memoization never
+  makes an unresolved verdict permanent.
+- `reader()` snapshots record facts and reader-local evidence. Independent
+  readers preserve ideal proof/signature identities, not cached verdicts.
+  New record facts, including same-index revocation, need a fresh snapshot.
+- R1 is now visible: silence-lapse evidence can depend on another scope's
+  fault, so the affected clock refuses until that evidence arrives. Term
+  lapse can still be proved without event history. This does not eliminate
+  the dependency or select a different lapse rule.
+- R2–R5 are repaired: late evidence resolves; import/opening/receipt checks
+  share validation; non-carrying steps authenticate absence and lapse;
+  both receipt readers pass exclusions without inventing sequence holes.
+- Review also fixed restored service readiness, ideal observation of newly
+  resolved checkpoints, malformed authenticated header descent, and the
+  supplied repair reader's dependence on raw/evaluated object identity.
+- R6/R7 remain explicit tests of current unadopted policy: fault alone leaves
+  the tail pending; later real holes/term ends can lapse it; a stale twin
+  faults future service but preserves earlier finalized inclusion.
 
 ## Evidence
 
-- Existing model checks rerun on Node 24.6.0 / Vitest 3.2.7:
-  `npm test -- model/pool-fault.test.ts model/pool-fault-boundary.test.ts
-  model/pool-recovery.test.ts model/pool-authority.test.ts` — 4 files /
-  134 tests passed.
-- Primary agent inspected and reran the review probes: 5/5 receipt cases;
-  dependency traces reproduced R1–R4 and the receipt base-comparison variant.
-  They demonstrate current defects/choices, not candidate correctness.
-  Traces are retained in the review; temporary probes were removed.
-- Prior implementation milestone: `3e7ff72` / `4587de9`, merged and pushed
-  with maintainer approval; full `npm run check` then passed 78 files /
-  1,516 tests plus docs, typecheck, build, package, pilot and crash checks.
-- This documentation slice: `npm run check:docs` and `git diff --check`
-  passed; final diff self-reviewed. No push or merge is authorized here.
+- `model/pool-fault-reader.test.ts`: 27/27 focused regression tests passed,
+  including arrival orders, selective retention, same-index rank, scope and
+  directory evidence, term/silence lapse, both receipt readers and revocation.
+- Independent adversarial review of the implementation found four further
+  gaps; all fixed and independently verified with seven targeted probes.
+  No remaining blocker was found in those reviewed paths. Disposable probes
+  were removed after their results were captured in permanent tests/docs.
+- Full `npm run check` passed on Node 24.6.0: 79 files / 1,543 tests,
+  docs/links, typecheck, build, installed package, pilot and pool-store crash
+  checks. Final typecheck and diff checks also passed.
+- No push, merge or PR is authorized in this session.
 
 ## Next
 
-1. Repair the research model's reader abstraction. Exercise two readers on
-   one immutable signed record with evidence missing on first examination,
-   arriving later and retained selectively; distinguish term and silence
-   lapses. Add permanent regression cases from R1–R5.
-2. Compare the complete dependencies of intrinsic exclusion with a changed
-   clock/lapse rule, without silently changing whole-scope lapse. Present the
-   costed choice and R6/R7 for the maintainer's decision. Do not amend the
-   normative contracts or fold FaultWorld into RecoveryWorld yet.
-3. After that choice, specify/model the coordinated rules including C2b.4.1,
-   then independently review the critical changes before any merge.
+1. Compare the complete dependencies of intrinsic exclusion with a changed
+   clock/lapse rule. The current A″ requires Y's fault evidence to pass a
+   Y-only silence-lapsed checkpoint in X's clock. A possible alternative
+   would let a non-carrying silence-lapsed commitment close X's interval,
+   while retaining term lapse; that changes C2b.4.1/C2b.6.1 and must be
+   modelled and adversarially checked before recommending it.
+2. Present that costed choice and R6/R7 for the maintainer's decision. R6
+   needs an exact abandonment boundary and precedence over later repair or
+   term-end lapse. R7 must explicitly include stale twins if retained.
+3. After selection, amend the normative contracts first, including C2b.4.1,
+   then consolidate the candidate model and independently review the changes.
+   Do not fold FaultWorld into RecoveryWorld or fix v3 bytes before selection.
 4. Continue deployment evidence: named target phone benchmark, authenticated
    note delivery/restoration, complete evidence availability and pinned-node
-   publication. The offline Ergo sizing remains in
-   `docs/POOL_DEPLOYMENT_PROBES.md`; it is not node acceptance.
-5. Settle statement bounds and layouts on that evidence, freeze v3, then
-   implement recovery. Keep companion specification/implementation branches
-   named here when normative work begins.
+   publication. Offline sizing is in `docs/POOL_DEPLOYMENT_PROBES.md` and
+   remains distinct from node acceptance. Then settle bounds/layouts and v3.
 
 ## Open questions
 
-- Withheld preimages still block recovery. Availability must retain proofs,
+- A″'s dependency/cost choice, segment-wide fault and receipt precedence;
+  authenticated fault-certificate layouts and proof-variant continuity (R8).
+- Withheld preimages remain unresolved. Availability must retain proofs,
   issuance signatures, terms, ancestry and recoverable note openings.
-- SQLite ownership assumes one journal per operator key/venue; copied
-  journals, rollback and custody/backup procedures remain open.
-- Scope authority assumes complete stable venue snapshots; custom synchronous
-  adapters have no generation token against same-index mutation.
+- SQLite assumes one journal per operator key/venue; copied journals,
+  rollback and custody/backup procedures remain open.
+- Custom synchronous venue adapters lack a same-index generation token.
 - Setup/build provenance, full C2 re-derivation, history scaling, retention,
   note delivery, wallet restore and venue write acceptance remain gates.

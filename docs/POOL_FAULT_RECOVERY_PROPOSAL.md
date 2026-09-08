@@ -11,10 +11,12 @@ The [adversarial review](../decisions/archive/2026-09-08-pool-fault-review.md)
 found a dependency on other scopes through silence lapse, incomplete evidence
 checks, unresolved reads that cannot recover when evidence arrives, and
 receipt paths that do not implement the proposed rule.
-The nine original cases remain useful evidence, but the model is not yet an
-oracle for normative text. The earlier recommendation to adopt A″ is suspended
-pending that dependency analysis; its segment-fault and receipt-precedence
-choices remain open.
+The [reader repair](POOL_FAULT_READERS.md) now separates witnessing from
+evidence-dependent validation and covers the review's reader defects with
+27 new regression cases. The corrected model exposes the cross-scope lapse
+dependency instead of hiding it. The earlier recommendation to adopt A″
+remains suspended pending that dependency analysis; its segment-fault and
+receipt-precedence choices remain open.
 
 ## The failure reproduced
 
@@ -147,8 +149,9 @@ layouts must fix them before A″ is a rule.
   can recover can also read the clock, and one that cannot draws no verdict
   either way.
 - The receipt reader gains one step: an excluded checkpoint of the receipt's
-  segment consumes its sequence and includes nothing. `classifyRepair`, the
-  older per-boundary reader, was not extended.
+  segment consumes its sequence and includes nothing. Both the present and
+  supplied-boundary repair readers now pass exclusions in every relevant
+  selection branch, retaining held sequences when checking for a real hole.
 - A faulted segment cannot be continued, even by the honest process that
   detects its own bug; it opens a new segment, as after a failed publication.
 
@@ -156,7 +159,7 @@ layouts must fix them before A″ is a rule.
 
 Do not adopt A″ as currently justified. Retain intrinsic authenticated
 exclusion as the direction to investigate, price its complete lapse
-dependencies, repair the model, and settle receipt precedence before choosing
+dependencies, and settle receipt precedence before choosing
 a rule for v3. Availability remains a separate decision. The earlier reasons
 for preferring A″, qualified by the review, are:
 
@@ -184,9 +187,10 @@ for preferring A″, qualified by the review, are:
 
 Nothing here reopens the September 7 finality boundary, independent
 per-backing replacement or the confirmed presentation and recovery choices.
-The recommendation was recorded on 2026-09-08. Independent review now has
-concrete findings; their resolution and focused independent verification are
-owed before the rule is text. The selection remains the maintainer's.
+The recommendation was recorded on 2026-09-08. Reader corrections have passed
+focused independent adversarial verification. The remaining design findings
+and specification choices must be resolved before the rule is text; the
+selection remains the maintainer's.
 
 ## Approval boundary
 

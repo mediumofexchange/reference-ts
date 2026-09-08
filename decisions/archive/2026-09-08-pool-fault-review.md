@@ -14,6 +14,13 @@ scopes, its model mixes recorded facts with reader knowledge, and several
 receipt paths do not implement its stated policy. No protocol choice was
 made and neither the specification nor runtime was changed.
 
+**Follow-up:** the [reader repair](../../docs/POOL_FAULT_READERS.md) separates
+witnessing from per-reader validation, fixes R2–R5, and makes R1's dependency
+explicit. Independent review of those changes found and verified further
+service, observer, malformed-header and supplied-repair fixes. R1's design
+cost and R6–R8's policy/layout choices remain open. The findings and traces
+below describe the reviewed `6de607b` baseline.
+
 ## R1 — High: silence lapse introduces the other scope's evidence
 
 The A″ comparison claims no new dependency on other scopes. C2b.6.1,
