@@ -1,8 +1,8 @@
-// Research only: price the transitive and historical dependencies of both
-// unselected fault clocks after the C2b.4.1 historical-silence repair.
+// Historical rejected rules only: price the transitive and historical dependencies of both
+// rejected fault clocks after the C2b.4.1 historical-silence repair.
 import { expect, it } from "vitest";
 import { Service, type Checkpoint } from "./pool-authority.js";
-import { FaultWorld } from "./pool-fault.js";
+import { HistoricalFaultWorld as FaultWorld } from "./pool-fault-historical.js";
 
 function witness(w: FaultWorld, c: Checkpoint, status = "final"): void {
   w.tick(c.signedAt + w.lag - w.now);

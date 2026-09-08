@@ -1,9 +1,9 @@
-// Competing research clock rules, not normative recovery behavior.
+// Historical rejected clock rules, not active recovery behavior.
 // The alternative removes other-scope silence dependencies by letting their
 // stale commitments reset this backing's clock. These cases expose the cost.
 import { describe, expect, it } from "vitest";
 import { ProofOracle, Service, type Acceptance, type Binding, type Checkpoint, type Id, type Note } from "./pool-authority.js";
-import { FaultWorld } from "./pool-fault.js";
+import { HistoricalFaultWorld as FaultWorld } from "./pool-fault-historical.js";
 
 const BACKINGS = ["X", "Y"] as const;
 const CLAUSE = { noCommitment: 5n, nonService: { duration: 3n, count: 1n, window: 100n } };

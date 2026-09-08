@@ -2,13 +2,13 @@
 // The forgetSilence departure retains the original double-spend counterexample.
 import { describe, expect, it } from "vitest";
 import { Service, type Acceptance, type Checkpoint } from "./pool-authority.js";
-import { FaultWorld } from "./pool-fault.js";
+import { HistoricalFaultWorld } from "./pool-fault-historical.js";
 import { RecoveryWorld } from "./pool-recovery.js";
 
 const MODELS = [
   { name: "baseline recovery", create: (forgetSilence = false) => new RecoveryWorld(1n, { forgetSilence }) },
-  { name: "default fault candidate", create: (forgetSilence = false) => new FaultWorld(1n, {}, {}, { forgetSilence }) },
-  { name: "alternative non-carrying clock", create: (forgetSilence = false) => new FaultWorld(1n, { nonCarryingSilenceClosesInterval: true }, {}, { forgetSilence }) },
+  { name: "historical operator-wide clock", create: (forgetSilence = false) => new HistoricalFaultWorld(1n, {}, {}, { forgetSilence }) },
+  { name: "alternative non-carrying clock", create: (forgetSilence = false) => new HistoricalFaultWorld(1n, { nonCarryingSilenceClosesInterval: true }, {}, { forgetSilence }) },
 ];
 
 function witness(w: RecoveryWorld, checkpoint: Checkpoint): void {
@@ -139,7 +139,7 @@ describe("C2b.4.1/3: a clock reset cannot restore old-segment continuation", () 
 
   it.each([false, true].flatMap(alternative => [false, true].map(forgetSilence => ({ alternative, forgetSilence }))))(
     "a silence-lapsed Y reset revives X only without retirement (alternative=$alternative, forgetSilence=$forgetSilence)", ({ alternative, forgetSilence }) => {
-    const w = new FaultWorld(1n, { nonCarryingSilenceClosesInterval: alternative }, {}, { forgetSilence });
+    const w = new HistoricalFaultWorld(1n, { nonCarryingSilenceClosesInterval: alternative }, {}, { forgetSilence });
     for (const backing of ["X", "Y"]) { w.register(backing, "P"); w.declare(backing, { noCommitment: 5n }); }
     const p = w.open("P", ["X"]); witness(w, p.commit()); // 1
     const note = w.oracle.note("X", 10n, "D", "payer");

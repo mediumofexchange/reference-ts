@@ -5,8 +5,8 @@ import { FaultWorld } from "./pool-fault.js";
 import { RecoveryWorld } from "./pool-recovery.js";
 
 const MODELS = [
-  { name: "recovery", create: () => new RecoveryWorld(1n) },
-  { name: "fault reader", create: () => new FaultWorld(1n) },
+  { name: "historical recovery clock", create: () => new RecoveryWorld(1n), snapshotClock: false },
+  { name: "selected fault rules", create: () => new FaultWorld(1n), snapshotClock: true },
 ];
 function witness(w: RecoveryWorld, c: Checkpoint, status = "final") {
   w.tick(); expect(w.include(c)).toBe(status);
@@ -24,7 +24,7 @@ function twin(w: RecoveryWorld, p: Service, events = p.events) {
 }
 
 describe("C2b.4.1/3: witnessed silence boundaries", () => {
-  it.each(MODELS)("$name lapses a tail at the strict threshold without any recovery publication", ({ create }) => {
+  it.each(MODELS)("$name lapses a tail at the strict threshold without any recovery publication", ({ create, snapshotClock }) => {
     const { w, p, receipt, finalReceipt } = setup(create());
     w.tick(5n); // 7: exactly five since checkpoint@2; horizon@8 is only predicted.
     expect(w.classify(receipt, p.scope).status).toBe("pending");
@@ -34,8 +34,8 @@ describe("C2b.4.1/3: witnessed silence boundaries", () => {
     expect(w.classify(receipt, p.scope)).toMatchObject({ status: "lapsed", lapse: "silence" });
     expect(w.classify(finalReceipt, p.scope).status).toBe("final");
     expect(w.published).toHaveLength(0);
-    const y = p.change(["Y"]); witness(w, y.commit()); // closes X's clock, not retirement
-    expect(w.gapOpen("X", 10n)).toBe(false);
+    const y = p.change(["Y"]); witness(w, y.commit()); // C2b.6.1: Y closes nothing for X under the selected clock
+    expect(w.gapOpen("X", 10n)).toBe(snapshotClock);
     expect(w.classify(receipt, p.scope)).toMatchObject({ status: "lapsed", lapse: "silence" });
     witness(w, w.sign(twin(w, p)), "lapsed");
   });
@@ -109,15 +109,19 @@ describe("C2b.4.1/3: witnessed silence boundaries", () => {
   });
 
   it.each(["withheldDirectories", "withheldScopes", "shownScopes"] as const)(
-    "requires historical clock evidence (%s) while preserving earlier final inclusion", facet => {
+    "requires only relevant historical clock evidence (%s) while preserving earlier final inclusion", facet => {
       const { w, p, receipt, finalReceipt, base } = setup(new FaultWorld(1n));
       p.events.splice(0, p.events.length, ...base.events); // hostile signer drops the unfinalized tail
       const y = p.change(["Y"]), reset = y.commit(); witness(w, reset);
-      w.tick(3n); // 6: X is continuous only after evaluating the Y clock reset
+      w.tick(3n); // 6: X's clock remains at its carrying checkpoint@2
       if (facet === "shownScopes") w.shownScopes.set(reset.id, p.scope); else w[facet].add(reset.id);
       expect(w.classify(finalReceipt, p.scope).status).toBe("final");
-      expect(() => w.classify(receipt, p.scope)).toThrow();
+      if (facet === "withheldDirectories") expect(() => w.classify(receipt, p.scope)).toThrow();
+      else expect(w.classify(receipt, p.scope).status).toBe("pending");
+      w.tick(2n); // 8: the selected clock reaches silence without Y's scope evidence
+      if (facet === "withheldDirectories") expect(() => w.classify(receipt, p.scope)).toThrow();
+      else expect(w.classify(receipt, p.scope)).toMatchObject({ status: "lapsed", lapse: "silence" });
       if (facet === "shownScopes") w.shownScopes.clear(); else w[facet].clear();
-      expect(w.classify(receipt, p.scope).status).toBe("pending");
+      expect(w.classify(receipt, p.scope)).toMatchObject({ status: "lapsed", lapse: "silence" });
     });
 });

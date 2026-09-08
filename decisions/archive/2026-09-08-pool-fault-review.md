@@ -14,7 +14,7 @@ scopes, its model mixes recorded facts with reader knowledge, and several
 receipt paths do not implement its stated policy. No protocol choice was
 made and neither the specification nor runtime was changed.
 
-**Follow-up:** the [reader repair](../../docs/POOL_FAULT_RECOVERY.md#candidate-classification-and-reader-contract) separates
+**Follow-up:** the [reader repair](https://github.com/mediumofexchange/reference-ts/blob/b6a0970/docs/POOL_FAULT_RECOVERY.md#candidate-classification-and-reader-contract) separates
 witnessing from per-reader validation, fixes R2–R5, and makes R1's dependency
 explicit. Independent review of those changes found and verified further
 service, observer, malformed-header and supplied-repair fixes. R1's design

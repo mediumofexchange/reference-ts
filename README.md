@@ -60,9 +60,9 @@ feasibility checks while its remaining cases are migrated.
 Use [the architecture map](docs/PRIVATE_PAYMENT_ARCHITECTURE.md) for component
 boundaries and retirement conditions, [production requirements](docs/PRODUCTION_REQUIREMENTS.md)
 for release gates, and [fault recovery](docs/POOL_FAULT_RECOVERY.md) for the
-current research evidence behind the companion's
-[fault contract proposal](https://github.com/mediumofexchange/money-from-first-principles/blob/main/pool-fault.md),
-which awaits the maintainer's selection. `npm run check:pool` exercises the
+selected rules and model limits of the companion's
+[fault contract](https://github.com/mediumofexchange/money-from-first-principles/blob/56f8a92/pool-fault.md).
+`npm run check:pool` exercises the
 pinned real circuits and multi-segment replay separately from the ordinary
 test suite.
 
@@ -83,7 +83,12 @@ An intervening silence gap retires old continuation and lapses unfinished
 receipts even after an unrelated clock reset, preserving earlier finality and
 liability. Return requires a new segment and complete recovery adoption.
 The original double-spend counterexample remains under an explicit departure.
-Fault-exclusion policy, production interval evidence and v3 remain open.
+`model/pool-fault.ts` extends that model with the selected fault contract at
+[`56f8a92`](https://github.com/mediumofexchange/money-from-first-principles/commit/56f8a92):
+authenticated exclusion, a clock read from the snapshot, and continuation of
+the last valid prefix. Rejected policies remain test-only historical controls.
+Exact evidence-chain binding and evidence-bound receipt comparison remain to
+be modeled before v3; production interval evidence is also still open.
 
 ## Try the local pilot
 

@@ -1,12 +1,11 @@
-// Candidate A of docs/POOL_FAULT_RECOVERY.md over model/pool-fault.ts:
-// what intrinsic authenticated exclusion repairs, what it costs, and the
-// counterexamples its rules 1, 3 and 5 exclude. Research evidence for a
-// protocol choice that remains the maintainer's; nothing here is normative.
+// C2.10.9c/11–13: authenticated exclusion, snapshot clock and valid-prefix continuation.
+// Rejected rules appear only in explicitly historical comparison cases.
 // Signatures and proofs are ideal tokens; "the bytes" a reader holds or lacks
 // are the model's withheld sets, not a fault-certificate format.
 import { describe, expect, it } from "vitest";
 import { ProofOracle, Service, type Acceptance, type Binding, type Checkpoint, type Id, type Note, type Receipt, type World } from "./pool-authority.js";
-import { FaultWorld, type FaultChoices, type FaultDepartures } from "./pool-fault.js";
+import { FaultWorld, type FaultDepartures } from "./pool-fault.js";
+import { HistoricalFaultWorld, type FaultChoices } from "./pool-fault-historical.js";
 
 const BACKINGS = ["X", "Y"] as const;
 const CLAUSE = { noCommitment: 5n, nonService: { duration: 3n, count: 1n, window: 100n } };
@@ -93,7 +92,7 @@ function issue(w: World, service: Service, backing: Id, quantity: bigint) {
   return w.oracle.prove(service, "issue", [], [w.oracle.note(backing, quantity)], [], { backing, quantity });
 }
 
-describe("candidate A, rules 1–2 and 4: exclusion on authenticated evidence", () => {
+describe("C2.10.9c/11: exclusion on authenticated evidence", () => {
   it("passes an evidenced invalid checkpoint in the snapshot, the count and descent; the finalized payment and a successor's opening survive", () => {
     const f = fixture(), { w, base } = f;
     const { checkpoint: bad, status } = signAndInclude(f, forge(f).hostile); // at 4
@@ -143,8 +142,8 @@ describe("candidate A, rules 1–2 and 4: exclusion on authenticated evidence", 
     expect(w.recoveryViolations()).toEqual([]);
   });
 
-  it("an excluded checkpoint faults its segment: the door refuses, a continuation is excluded, repair is a new segment on the canonical state, and the tail's receipts read abandoned", () => {
-    const f = fixture(), { w, p, base, issued } = f;
+  it("rejected R7: an excluded checkpoint faults its segment: the door refuses, a continuation is excluded, repair is a new segment on the canonical state, and the tail's receipts read abandoned", () => {
+    const f = fixture(new HistoricalFaultWorld(1n)), { w, p, base, issued } = f;
     const { hostile, receipt: tail } = forge(f);
     const { checkpoint: bad } = signAndInclude(f, hostile); // 4
     expect(() => p.submit(issue(w, p, "Y", 2n))).toThrow("faulted segment");
@@ -166,7 +165,7 @@ describe("candidate A, rules 1–2 and 4: exclusion on authenticated evidence", 
   });
 });
 
-describe("candidate A: the clock, the gap and the return", () => {
+describe("C2b.6.1: the clock, the gap and the return", () => {
   it("an excluded carrying commitment does not close the interval, so the gap opens from the last valid one and a release in it has force; under A′ it closes it and only the count remains", () => {
     const f = fixture(), { w, recipient } = f;
     signAndInclude(f, forge(f).hostile); // 4
@@ -179,7 +178,7 @@ describe("candidate A: the clock, the gap and the return", () => {
     expect(state.spent.has(recipient.nf)).toBe(true);
     expect(state.outputs.has(out.cm)).toBe(true);
     expect(w.recoveryViolations()).toEqual([]);
-    const g = fixture(new FaultWorld(1n, { excludedClosesInterval: true }));
+    const g = fixture(new HistoricalFaultWorld(1n, { excludedClosesInterval: true }));
     signAndInclude(g, forge(g).hostile); // 4
     expect(g.w.gapOpen("X", 9n)).toBe(false);
     expect(g.w.gapOpen("X", 10n)).toBe(true);
@@ -194,9 +193,9 @@ describe("candidate A: the clock, the gap and the return", () => {
     const { hostile } = forge(f);
     expect(signAndInclude(f, hostile).status).toBe("invalid"); // 4: proof
     w.tick(3n);
-    const second = signAndInclude(f, hostile); // 8: faulted segment; the gap is still shut (8 − 3 = 5)
+    const second = signAndInclude(f, hostile); // 8: the same invalid proof; the gap is still shut (8 − 3 = 5)
     expect(second.status).toBe("invalid");
-    expect(w.record(second.checkpoint.id).reason).toBe("faulted segment");
+    expect(w.record(second.checkpoint.id).reason).toBe("proof");
     expect(w.classification(second.checkpoint.id)).toBe("excluded");
     expect(w.gapOpen("X", 9n)).toBe(true);
     w.tick(2n); // 10
@@ -251,10 +250,10 @@ describe("candidate A: the clock, the gap and the return", () => {
   });
 });
 
-describe("candidate A: what the rules exclude, and what the variants cost", () => {
+describe("C2.10.11: unavailable evidence and historical counterexamples", () => {
   it("rules 3 and 5: an unresolved dependency yields no verdict, and evidence resolves it without reversing anything; the departure reads no gap first and a gap afterwards", () => {
     for (const faults of [{}, { unresolvedIsValid: true }] as FaultDepartures[]) {
-      const f = fixture(new FaultWorld(1n, {}, faults)), { w, recipient } = f;
+      const f = fixture(new FaultWorld(1n, faults)), { w, recipient } = f;
       const { checkpoint: bad } = signAndInclude(f, forge(f).hostile); // 4
       w.tick(5n); // 9: the gap is open
       const { release } = redeem(f, recipient);
@@ -288,7 +287,7 @@ describe("candidate A: what the rules exclude, and what the variants cost", () =
 
   it("rule 1: a valid checkpoint the reader cannot obtain is unresolved, not excluded; the departure rolls a finalized spend back and settles the spent note", () => {
     for (const faults of [{}, { unresolvedIsExcluded: true }] as FaultDepartures[]) {
-      const f = fixture(new FaultWorld(1n, {}, faults)), { w, p, other, base } = f;
+      const f = fixture(new FaultWorld(1n, faults)), { w, p, other, base } = f;
       const paid = w.oracle.note("Y", 50n, "D", "someone"), rest = w.oracle.note("Y", 30n, "D", "other-holder");
       p.submit(w.oracle.prove(p, "spend", [other, w.oracle.note("Y", 0n)], [paid, rest], [p.root(), p.root()]));
       const c4 = p.commit(); witness(w, c4); // 4: `other` is spent, finally
@@ -318,7 +317,7 @@ describe("candidate A: what the rules exclude, and what the variants cost", () =
 
   it("a non-carrying commitment with resolved lapse resets X without its event history; the stricter clock requires that history", () => {
     for (const choices of [{}, { classifyNonCarrying: true }] as FaultChoices[]) {
-      const f = fixture(new FaultWorld(1n, choices)), { w, p, base, recipient } = f;
+      const f = fixture(new HistoricalFaultWorld(1n, choices)), { w, p, base, recipient } = f;
       const y = p.change(["Y"]); witness(w, y.commit()); // 4: P drops X and keeps committing for Y
       expect(w.count("X", 6n)).toMatchObject({ count: 1n, fires: true, incumbent: "P", readable: true }); // X's remedy is the non-service grade
       w.tick(3n); // 7
@@ -344,7 +343,7 @@ describe("candidate A: what the rules exclude, and what the variants cost", () =
       expect(w.recoveryState("X", 12n).force.includes(release)).toBe(choices.classifyNonCarrying === true);
       expect(w.recoveryViolations()).toEqual([]);
       // A valid Y-only commitment resets X's clock under either reading.
-      const g = fixture(new FaultWorld(1n, choices)), gy = g.p.change(["Y"]);
+      const g = fixture(new HistoricalFaultWorld(1n, choices)), gy = g.p.change(["Y"]);
       witness(g.w, gy.commit()); // 4
       g.w.tick(3n);
       gy.submit(issue(g.w, gy, "Y", 1n));

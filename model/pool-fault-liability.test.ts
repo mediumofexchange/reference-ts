@@ -1,6 +1,5 @@
-// Research regressions for the unselected R6/R7 fault-liability policies.
-// These cases characterize the current candidate after historical-silence
-// retirement; they do not select normative receipt or segment semantics.
+// C2.10.12–13: valid-prefix continuation and unchanged receipt precedence
+// after historical-silence retirement. Proofs and receipts are ideal tokens.
 import { describe, expect, it } from "vitest";
 import { Service, type Checkpoint, type Id, type Receipt } from "./pool-authority.js";
 import { FaultWorld } from "./pool-fault.js";
@@ -46,7 +45,7 @@ function postFaultReceipt(before: Receipt, statement: Id, after: bigint): Receip
     after, history: JSON.stringify([before.statement, statement]) };
 }
 
-describe("candidate R6 receipt liability after historical-silence retirement", () => {
+describe("C2.10.13 receipt liability after historical-silence retirement", () => {
   it("keeps an ideal operator-attributed post-fault tail pending until a later boundary decides it", () => {
     const { w, p } = fixture();
     const first = issue(w, p);
@@ -78,8 +77,8 @@ describe("candidate R6 receipt liability after historical-silence retirement", (
   });
 });
 
-describe("candidate R7 stale-twin segment liability after historical-silence retirement", () => {
-  it("faults future service after a stale twin while preserving every earlier XY prefix and receipt", () => {
+describe("C2.10.12 stale-twin segment continuity after historical-silence retirement", () => {
+  it("continues service after a stale twin while preserving every earlier XY prefix and receipt", () => {
     const { w, p, opening } = fixture();
     const x = issue(w, p, "X"), y = issue(w, p, "Y");
     const first = p.commit(); witness(w, first); // prefix with both scoped backings
@@ -88,8 +87,8 @@ describe("candidate R7 stale-twin segment liability after historical-silence ret
     const stale = new Service(w, p.id, p.scope, p.openings, p.view());
     const twin = w.sign(stale); witness(w, twin, "invalid");
     expect(w.record(twin.id).reason).toBe("rewritten prefix");
-    const continuation = w.sign(p); witness(w, continuation, "invalid");
-    expect(w.record(continuation.id).reason).toBe("faulted segment");
+    const continuation = w.sign(p); witness(w, continuation);
+    expect(w.classification(continuation.id)).toBe("valid");
     for (const checkpoint of [opening, first, second]) expect(w.import(checkpoint.id)).toBeDefined();
     for (const receipt of [x.receipt, y.receipt, z.receipt]) expect(w.classify(receipt, p.scope).status).toBe("final");
   });

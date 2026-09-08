@@ -1,6 +1,6 @@
 // Regressions from decisions/archive/2026-09-08-pool-fault-review.md.
 // Evidence belongs to the reader; witnessing does not certify validation.
-// R6/R7 assertions preserve the candidate's current, unadopted policies.
+// C2.10.12–13 preserve valid-prefix continuity and receipt precedence.
 import { describe, expect, it } from "vitest";
 import { Service, type Checkpoint, type Id } from "./pool-authority.js";
 import { FaultWorld } from "./pool-fault.js";
@@ -40,6 +40,17 @@ function badProof(w: FaultWorld, p: Service): Checkpoint {
   witness(w, c, "invalid");
   expect(w.classification(c.id)).toBe("excluded");
   return c;
+}
+
+let hostileSerial = 0;
+/** The operator's key may abandon its admitted tail even though the honest
+ * service door refuses. Supply a canonical opening and exercise the receipt
+ * reader against the resulting signed record, without weakening that door. */
+function hostileOpening(w: FaultWorld, prior: Service): Service {
+  const id = `hostile-opening-${++hostileSerial}`;
+  const scope = Object.freeze({ ...prior.scope, root: `${id}:scope` });
+  const openings = new Map(scope.entries.map(e => [e.backing, w.currentFor(e.backing, scope.operator)]));
+  return new Service(w, id, scope, openings, w.merge(openings));
 }
 
 describe("fault reader: evidence arrival and dependency closure (R2–R4)", () => {
@@ -205,14 +216,14 @@ describe("fault reader: evidence arrival and dependency closure (R2–R4)", () =
     const y = p.change(["Y"]), yOpening = y.commit(); witness(w, yOpening); // 2
     const reader = w.reader();
     reader.withheld.add(yOpening.id);
-    expect(reader.closing("X", 3n)).toBe(2n);
+    expect(reader.closing("X", 3n)).toBe(1n);
     expect(reader.currentFor("X", "P")).toBe(opening.id);
     reader.withheldDirectories.add(yOpening.id);
     expect(() => reader.closing("X", 3n)).toThrow();
     expect(() => reader.currentFor("X", "P")).toThrow();
     expect(() => reader.snapshot("X", 3n)).toThrow();
     reader.withheldDirectories.delete(yOpening.id);
-    expect(reader.closing("X", 3n)).toBe(2n);
+    expect(reader.closing("X", 3n)).toBe(1n);
     expect(reader.snapshot("X", 3n)?.checkpoint.id).toBe(opening.id);
   });
 });
@@ -239,20 +250,20 @@ describe("fault reader: silence lapse is evidence-dependent (R1)", () => {
       expect(reader.classification(ended.id)).toBe("lapsed"); // term lapse needs the header, not its event history
     });
 
-  it("requires Y's fault evidence to pass its lapsed continuation in X's clock", () => {
+  it("X's clock passes non-carrying Y without its fault or lapse history", () => {
     const { w, p } = fixture(); // XY at 1
     const y = p.change(["Y"]), yOpening = y.commit(); witness(w, yOpening); // Y at 2
     const bad = badProof(w, y); // invalid Y proof at 3
-    w.tick(4n); // 7: bypass the honest faulted-segment door
+    w.tick(4n); // 7: Y has crossed its silence boundary
     const continuation = w.sign(y); witness(w, continuation, "lapsed"); // 8
     const reader = w.reader();
     expect(reader.classification(continuation.id)).toBe("lapsed");
-    expect(reader.closing("X", 9n)).toBe(3n);
+    expect(reader.closing("X", 9n)).toBe(1n);
     expect(reader.gapOpen("X", 9n)).toBe(true);
     reader.withheld.add(bad.id);
     expect(reader.classification(continuation.id)).toBe("unresolved");
-    expect(() => reader.closing("X", 9n)).toThrow();
-    expect(() => reader.gapOpen("X", 9n)).toThrow();
+    expect(reader.closing("X", 9n)).toBe(1n);
+    expect(reader.gapOpen("X", 9n)).toBe(true);
     reader.withheld.delete(bad.id);
     expect(reader.classification(continuation.id)).toBe("lapsed");
     expect(reader.gapOpen("X", 9n)).toBe(true);
@@ -267,7 +278,7 @@ describe("fault reader: silence lapse is evidence-dependent (R1)", () => {
     const continuation = w.sign(y); witness(w, continuation, "lapsed"); // 6
     const reader = w.reader(); reader.withheld.add(bad.id); reader.withheld.add(continuation.id);
     expect(reader.classification(continuation.id)).toBe("lapsed");
-    expect(reader.closing("X", 9n)).toBe(3n);
+    expect(reader.closing("X", 9n)).toBe(1n);
     expect(reader.gapOpen("X", 9n)).toBe(true);
   });
 });
@@ -318,10 +329,10 @@ describe("fault reader: every receipt selection branch respects exclusion (R5)",
   it.each([false, true])("excluded transitions occupy their sequences; a supplied repair requires an actual hole (%s)", hole => {
     const { w, p } = fixture();
     const { receipt } = issue(w, p), bad = badProof(w, p); // 2
-    const failed = w.open("P", BACKINGS), excludedOpening = failed.commit(["X"]);
+    const failed = hostileOpening(w, p), excludedOpening = w.sign(failed, ["X"]);
     witness(w, excludedOpening, "invalid"); // 3
     if (hole) { w.sign(failed); w.tick(); } // sequence 4 is absent only in this branch
-    const repair = w.open("P", BACKINGS), boundary = repair.commit(); witness(w, boundary);
+    const repair = hostileOpening(w, p), boundary = w.sign(repair); witness(w, boundary);
     const reader = w.reader();
     if (hole) {
       expect(reader.classifyRepair(receipt, p.scope, boundary.id)).toEqual({ included: false, contradicted: false, lapsed: true });
@@ -359,7 +370,7 @@ describe("fault reader: every receipt selection branch respects exclusion (R5)",
     const { receipt } = issue(w, p);
     expect(receipt.after).toBe(bad.sequence);
     witness(w, bad, "invalid");
-    const repair = w.open("P", BACKINGS); witness(w, repair.commit());
+    const repair = hostileOpening(w, p); witness(w, w.sign(repair));
     const reader = w.reader(); reader.withheld.add(bad.id);
     expect(() => reader.classify(receipt, p.scope)).toThrow();
     reader.withheld.delete(bad.id);
@@ -370,9 +381,9 @@ describe("fault reader: every receipt selection branch respects exclusion (R5)",
     const { w, p } = fixture();
     const { receipt } = issue(w, p);
     badProof(w, p); // 2
-    const failed = w.open("P", BACKINGS), excludedOpening = failed.commit(["X"]);
+    const failed = hostileOpening(w, p), excludedOpening = w.sign(failed, ["X"]);
     witness(w, excludedOpening, "invalid"); // 3
-    const repair = w.open("P", BACKINGS); witness(w, repair.commit()); // 4
+    const repair = hostileOpening(w, p); witness(w, w.sign(repair)); // 4
     const reader = w.reader(); reader.withheld.add(excludedOpening.id);
     expect(() => reader.classify(receipt, p.scope)).toThrow();
     reader.withheld.delete(excludedOpening.id);
@@ -380,9 +391,9 @@ describe("fault reader: every receipt selection branch respects exclusion (R5)",
   });
 });
 
-describe("fault reader: current policy remains undecided (R6–R7)", () => {
+describe("fault reader: receipt precedence and valid-prefix continuation", () => {
   it("the semantic observer detects unauthorized issuance after initially missing evidence arrives", () => {
-    const w = new FaultWorld(1n, {}, {}, {}, { ignoreScope: true });
+    const w = new FaultWorld(1n, {}, {}, { ignoreScope: true });
     w.register("X", "P"); w.register("Y", "Q");
     const p = w.open("P", ["X"]), opening = p.commit(); witness(w, opening);
     const { note } = issue(w, p, "Y"), child = p.commit();
@@ -399,7 +410,7 @@ describe("fault reader: current policy remains undecided (R6–R7)", () => {
     const { receipt } = issue(w, p); badProof(w, p); // 2
     expect(w.classify(receipt, p.scope).status).toBe("pending");
     w.sign(p); w.tick(); // sequence 3 is signed and never held
-    const repair = w.open("P", BACKINGS); witness(w, repair.commit()); // 4
+    const repair = hostileOpening(w, p); witness(w, w.sign(repair)); // 4
     expect(w.classify(receipt, p.scope)).toMatchObject({ status: "lapsed", lapse: "repair", abandoned: false });
   });
 
@@ -411,14 +422,14 @@ describe("fault reader: current policy remains undecided (R6–R7)", () => {
     expect(w.classify(receipt, p.scope)).toMatchObject({ status: "lapsed", lapse: "scope-boundary", abandoned: false });
   });
 
-  it("R7: a stale twin faults future service while the earlier finalized receipt remains final", () => {
+  it("C2.10.12: a stale twin permits valid future service while the earlier finalized receipt remains final", () => {
     const { w, p } = fixture();
     const { receipt, note } = issue(w, p), final = p.commit(); witness(w, final); // 2
     const stale = new Service(w, p.id, p.scope, p.openings, p.view());
     const bad = w.sign(stale); witness(w, bad, "invalid"); // 3: empty rewritten prefix
     expect(w.record(bad.id).reason).toBe("rewritten prefix");
-    const continuation = w.sign(p); witness(w, continuation, "invalid"); // 4
-    expect(w.record(continuation.id).reason).toBe("faulted segment");
+    const continuation = w.sign(p); witness(w, continuation); // 4
+    expect(w.classification(continuation.id)).toBe("valid");
     expect(w.classify(receipt, p.scope).status).toBe("final");
     expect(w.import(final.id).outputs.has(note.cm)).toBe(true);
   });

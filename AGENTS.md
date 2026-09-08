@@ -29,15 +29,16 @@ The current implementation map and retirement conditions are in
 row when entering a component, rather than loading every module summary.
 
 - `src/pool/` is the active v2 runtime. Recovery is model-only; PoolStore
-  refuses silence clauses. The fault candidate is research, not normative.
+  refuses silence clauses. Fault classification uses ideal evidence; exact
+  evidence binding remains to be modeled before v3 bytes.
 - The transparent path is frozen as a differential oracle and adversarial
   case library. Port cases as their pool rules land; remove it when covered.
   Never port the retired exhibit walk or signed opening claim.
 - Keep one production path. Retire experiments only after their needed
   evidence and cases have moved to it. Do not reinterpret pinned versions.
 - [Production requirements](docs/PRODUCTION_REQUIREMENTS.md) owns release
-  gates; [fault recovery](docs/POOL_FAULT_RECOVERY.md) owns the current
-  unselected fault proposal and evidence.
+  gates; [fault recovery](docs/POOL_FAULT_RECOVERY.md) owns the selected
+  fault contract's model coverage and remaining evidence work.
 
 ## Vocabulary
 

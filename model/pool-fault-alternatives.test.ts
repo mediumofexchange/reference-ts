@@ -1,22 +1,19 @@
-// Research alternatives to the recorded fault recommendations, priced against
-// the default candidate: D, "the clock is the snapshot's" (only a valid
-// checkpoint carrying the backing resets its no-commitment clock), and R7′,
-// "the segment continues from its last valid checkpoint" (an excluded
-// checkpoint is held at its sequence and supplies no state, without ending its
-// segment). Neither is normative. The companion repository's pool-fault.md
-// proposes them for the maintainer's selection and cites these cases.
+// Selected C2b.6.1 and C2.10.12 rules run on the active FaultWorld defaults.
+// Rejected operator-wide clock and whole-segment termination are retained only
+// as historical counterexamples through the test-only helper.
 import { describe, expect, it } from "vitest";
 import { ProofOracle, Service, type Acceptance, type Binding, type Checkpoint, type Id, type Note } from "./pool-authority.js";
-import { FaultWorld, type FaultChoices } from "./pool-fault.js";
+import { FaultWorld } from "./pool-fault.js";
+import { HistoricalFaultWorld, type FaultChoices } from "./pool-fault-historical.js";
 
 const CLAUSE = { noCommitment: 5n, nonService: { duration: 3n, count: 1n, window: 100n } };
 const CLOCKS = [
-  { name: "operator-wide clock (default A″)", choices: {} as FaultChoices, snapshotClock: false },
-  { name: "the clock is the snapshot's (D)", choices: { clockIsSnapshot: true } as FaultChoices, snapshotClock: true },
+  { name: "rejected operator-wide clock (A″)", choices: {} as FaultChoices, snapshotClock: false },
+  { name: "selected snapshot clock (C2b.6.1)", choices: undefined, snapshotClock: true },
 ];
 const SEGMENTS = [
-  { name: "a fault ends the segment (default R7)", choices: {} as FaultChoices, continues: false },
-  { name: "the segment continues from its last valid checkpoint (R7′)", choices: { faultContinuesSegment: true } as FaultChoices, continues: true },
+  { name: "rejected whole-segment termination (R7)", choices: {} as FaultChoices, continues: false },
+  { name: "selected continuation of last valid prefix (C2.10.12)", choices: undefined, continues: true },
 ];
 
 function witness(w: FaultWorld, c: Checkpoint, status = "final"): void {
@@ -60,8 +57,8 @@ function redeem(w: FaultWorld, note: Note, binding: Binding, roots: ReadonlyMap<
 
 /** XY opening@1, an X note issued@2 with a non-service request for it, then
  * the operator drops X and serves Y alone from @3. */
-function dropped(choices: FaultChoices) {
-  const w = new FaultWorld(1n, choices);
+function dropped(choices: FaultChoices | undefined) {
+  const w = choices === undefined ? new FaultWorld(1n) : new HistoricalFaultWorld(1n, choices);
   for (const b of ["X", "Y"]) { w.register(b, "P"); w.declare(b, CLAUSE); }
   const p = w.open("P", ["X", "Y"]); witness(w, p.commit()); // XY@1
   const { note } = issue(w, p, "X", 100n, "holder");
@@ -105,7 +102,7 @@ describe("D: the clock is the snapshot's", () => {
   });
 
   it.each(CLOCKS)("$name: fresh valid unrelated openings and a garbage carrying stream", ({ choices, snapshotClock }) => {
-    const w = new FaultWorld(1n, choices);
+    const w = choices === undefined ? new FaultWorld(1n) : new HistoricalFaultWorld(1n, choices);
     for (const b of ["X", "Y"]) { w.register(b, "P"); w.declare(b, { noCommitment: 5n }); }
     const x = w.open("P", ["X"]); witness(w, x.commit()); // X@1
     witness(w, w.open("P", ["Y"]).commit()); // Y@2
@@ -127,7 +124,7 @@ describe("D: the clock is the snapshot's", () => {
   });
 
   it.each(CLOCKS)("$name: X's clock and the evidence of disjoint scopes Y and Z", ({ choices, snapshotClock }) => {
-    const w = new FaultWorld(1n, choices);
+    const w = choices === undefined ? new FaultWorld(1n) : new HistoricalFaultWorld(1n, choices);
     for (const b of ["X", "Y", "Z"]) { w.register(b, "P"); w.declare(b, { noCommitment: 5n }); }
     witness(w, w.open("P", ["X"]).commit()); // X@1
     const y = w.open("P", ["Y"]); witness(w, y.commit()); // Y@2
@@ -155,7 +152,7 @@ describe("D: the clock is the snapshot's", () => {
   });
 
   it.each(CLOCKS)("$name: the silence boundary retires the segment and lapses its tail; an unrelated opening closes nothing under D", ({ choices, snapshotClock }) => {
-    const w = new FaultWorld(1n, choices);
+    const w = choices === undefined ? new FaultWorld(1n) : new HistoricalFaultWorld(1n, choices);
     for (const b of ["X", "Y"]) { w.register(b, "P"); w.declare(b, { noCommitment: 5n }); }
     const p = w.open("P", ["X"]); witness(w, p.commit()); // X@1
     const { receipt: finalReceipt } = issue(w, p, "X"); const base = p.commit(); witness(w, base); // X@2
@@ -175,7 +172,7 @@ describe("D: the clock is the snapshot's", () => {
 
 describe("R7′: the segment continues from its last valid checkpoint", () => {
   it.each(SEGMENTS)("$name: an honest process after its stale twin", ({ choices, continues }) => {
-    const w = new FaultWorld(1n, choices);
+    const w = choices === undefined ? new FaultWorld(1n) : new HistoricalFaultWorld(1n, choices);
     for (const b of ["X", "Y"]) { w.register(b, "P"); w.declare(b, CLAUSE); }
     const p = w.open("P", ["X", "Y"]); witness(w, p.commit()); // 1
     const first = issue(w, p, "X"); const base = p.commit(); witness(w, base); // 2
@@ -203,7 +200,7 @@ describe("R7′: the segment continues from its last valid checkpoint", () => {
   });
 
   it.each(SEGMENTS)("$name: an authenticated bad proof, then the honest journal's valid continuation", ({ choices, continues }) => {
-    const w = new FaultWorld(1n, choices);
+    const w = choices === undefined ? new FaultWorld(1n) : new HistoricalFaultWorld(1n, choices);
     for (const b of ["X", "Y"]) { w.register(b, "P"); w.declare(b, CLAUSE); }
     const p = w.open("P", ["X", "Y"]); const opening = p.commit(); witness(w, opening); // 1
     const { receipt, note } = issue(w, p, "X");
@@ -213,6 +210,9 @@ describe("R7′: the segment continues from its last valid checkpoint", () => {
     expect(w.record(bad.id).reason).toBe("proof");
     expect(w.classification(bad.id)).toBe("excluded");
     expect(w.classify(receipt, p.scope).status).toBe("pending"); // passed, neither included nor contradicted
+    if (continues) expect(() => p.change(["Y"])).toThrow("live tail before scope change");
+    // The receipt names the original valid proof token. The bad clone is only
+    // in the excluded checkpoint; evidence-bound receipt bytes are a later model.
     const continuation = p.commit(); witness(w, continuation, continues ? "final" : "invalid"); // 3
     expect(w.classify(receipt, p.scope).status).toBe(continues ? "final" : "pending");
     expect(w.closing("X", 3n)).toBe(1n);
@@ -224,7 +224,7 @@ describe("R7′: the segment continues from its last valid checkpoint", () => {
   });
 
   it("R7′: replacing the faulted statement in the continuation contradicts its receipt", () => {
-    const w = new FaultWorld(1n, { faultContinuesSegment: true });
+    const w = new FaultWorld(1n);
     for (const b of ["X", "Y"]) { w.register(b, "P"); w.declare(b, CLAUSE); }
     const p = w.open("P", ["X", "Y"]); witness(w, p.commit()); // 1
     const { receipt } = issue(w, p, "X");

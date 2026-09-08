@@ -21,6 +21,9 @@ are rules the executable model checks and the runtime does not yet hold;
 the historical `moe/pool/v1` runtime was replaced in this repository by v2
 and is retrievable from git history only.
 
+Runtime rows follow the pinned v2 specification in the README. Later fault
+rules are model-only refinements; they do not reinterpret v2 commitments.
+
 ## Binding rules
 
 None of these is sacred. Any rule can change — with a good reason, agreed
@@ -30,6 +33,8 @@ rule while the rule still stands.
 
 | Rule | Spec | Code | Test | Scope |
 |---|---|---|---|---|
+| Classify checkpoints at their original record prefix. Pass authenticated exclusions without supplying state, imports, receipt boundaries or sequence holes; refuse unresolved evidence. Continue only from the last valid prefix, and never discard an honest live tail merely because a checkpoint was excluded. | C2.10.9c, C2.10.11–13 | `model/pool-fault.ts` | `model/pool-fault.test.ts`, `model/pool-fault-reader.test.ts`, `model/pool-fault-alternatives.test.ts` | model only; exact evidence-chain and receipt-digest comparison under C2.10.10 remain unmodeled |
+| A backing's no-commitment clock is its last valid carrying snapshot's index. Non-carrying, excluded and lapsed checkpoints reset nothing; unresolved carrying evidence blocks. Silence still retires continuation and lapses the unfinished tail. | C2b.6.1, C2b.4.1/3 | `model/pool-fault.ts` `closing`; `model/pool-recovery.ts` | `model/pool-fault-alternatives.test.ts`, `model/pool-silence.test.ts` | model only; rejected clocks remain a historical test helper |
 | The note and nullifier domain is the configuration hash, which names neither operator nor segment; every hidden input backing, padding included, proves membership in the public scope under its link, and every output names an input's backing. | C1.2.1–2, pool-v2 §§2, 3, 5, 7 | `pool/circuits/notes.nr`, `pool/notes.ts`, `pool/scope.ts`; `model/pool-authority.ts` `ProofOracle` | `scripts/pool/check.mjs`, `pool-scope`, `model/pool-authority.test.ts` | core |
 | Signed terms and the witnessed replacement chain determine every scoped term. Authority checks own the complete input before adapter callbacks and require a common declared venue and configuration, exact full-scope links, and historical indices within the read view. Clock/view changes raise venue errors, including on failed reads. Same-key reappointment never reuses an old link. Scheduling uses the earliest witnessed term end, not a caller-supplied boundary. | C2.5, C2.10.1–2, C2.10.9 | `pool/authority.ts` `PoolAuthorityView`; `replacement.ts` `successionAhead`; `pool/schedule.ts` | `pool-authority`, `model/pool-authority.test.ts` | core; claimed authority alone does not authenticate headers |
 | An Ergo refresh publishes its witnessed index and complete record set only after fetching every required operator. All record reads refuse during refresh. Failure preserves the previous complete snapshot at its old index, or remains unavailable when none exists; failed candidates cannot alter the admitted-replacement memo. | C2.3, C2.5, C2.10.1–2 | `ergo.ts` `sync`, `requireSettled` | `c2-ergo-venue` | core read adapter; refresh failure is never new record evidence |
