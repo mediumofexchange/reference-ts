@@ -177,6 +177,13 @@ pool; `model/pool-recovery.ts` is its executable model with counterexamples.
 Those objects belong to a later construction version and remain outside the
 v2 runtime.
 
+Recovery research has a [reproduced safety blocker](docs/POOL_RECOVERY_RETURN_DECISION.md):
+an unrelated commitment can close a silence interval and let an old segment
+finalize a spend already settled at the venue. The passing counterexample
+tests preserve that failure; they do not establish recovery safety. The
+return rule, fault-exclusion policy and receipt consequences need a protocol
+decision before recovery implementation or v3 can proceed.
+
 ## Try the local pilot
 
 With Node.js 24, after the source setup above:

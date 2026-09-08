@@ -316,7 +316,7 @@ describe("candidate A: what the rules exclude, and what the variants cost", () =
     }
   });
 
-  it("the non-carrying case: a commitment carrying nothing for X closes X's interval whatever its validity, so X's reader needs no other scope's evidence; the proposal's stricter clock needs it and protects only against garbage a valid commitment would replace", () => {
+  it("a non-carrying commitment with resolved lapse resets X without its event history; the stricter clock requires that history", () => {
     for (const choices of [{}, { classifyNonCarrying: true }] as FaultChoices[]) {
       const f = fixture(new FaultWorld(1n, choices)), { w, p, base, recipient } = f;
       const y = p.change(["Y"]); witness(w, y.commit()); // 4: P drops X and keeps committing for Y

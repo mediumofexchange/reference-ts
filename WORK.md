@@ -10,8 +10,8 @@ prepares material decisions; it does not select normative recovery policy.
 
 ## Status
 
-- Implementation: `test/pool-fault-clock-choice`, based on `a8e68d8`
-  (`fix/pool-fault-readers`); `main` remains at `6de607b`.
+- Implementation: `test/pool-fault-clock-choice` at `4f4f525`, based on
+  `a8e68d8` (`fix/pool-fault-readers`); merging to `main` after current checks.
 - Companion specification: `main` at `3676757`, unchanged. No v3 bytes fixed.
 - Runtime remains v2. No `src/` behavior changed; PoolStore refuses silence
   clauses and recovery/presentation/wallet remain unimplemented there.
@@ -57,7 +57,14 @@ prepares material decisions; it does not select normative recovery policy.
   build, installed package, pilot and pool-store crash checks. Final docs
   and diff checks passed. Disposable review probes were removed after
   capture in permanent tests and the decision proposal.
-- No push, merge or PR is authorized in this session.
+- Maintainer authorized merge and push on 2026-09-08. Fresh independent
+  adversarial review found no additional behavioral blocker to merging this
+  non-normative research; 4 files / 57 focused tests passed. Narrowed one
+  overbroad test title and updated README/release gates with the return bug.
+  This review does not approve recovery safety or select a proposed rule.
+- Fresh full `npm run check` passed: 81 files / 1,564 tests, docs, typecheck,
+  build, installed package, pilot and pool-store crash checks. It required
+  sandbox escalation for esbuild's configuration directory access.
 
 ## Next
 
