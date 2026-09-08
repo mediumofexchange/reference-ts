@@ -8,7 +8,20 @@ in specification `c5f5464` is already implemented in the recovery model.
 This document consolidates the proposal, reader contract and evidence review.
 The [checked design review](../decisions/archive/2026-09-08-whole-project-design-review-check.md)
 and [fault review](../decisions/archive/2026-09-08-pool-fault-review.md) retain
-the independent findings. Historical drafts remain in Git history.
+the independent findings. Historical drafts remain in Git history. The
+specification proposal drafted from this evidence is the companion's
+[`pool-fault.md`](https://github.com/mediumofexchange/money-from-first-principles/blob/main/pool-fault.md):
+rules C2.10.10–13 and C2.10.9c, a revised C2b.6.1, the sentence-level
+amendments and the four choices the maintainer selects. It recommends two
+alternatives beyond this document's earlier recommendation, both modelled in
+`model/pool-fault-alternatives.test.ts`: **D, the clock is the snapshot's**
+(only a valid checkpoint carrying the backing resets its clock, so a dropped
+backing's redemption opens after the duration and no other scope's evidence
+is ever read), and **R7′, the segment continues from its last valid
+checkpoint** (an excluded checkpoint is held and passed without ending its
+segment, so an honest stale twin needs no new segment). D changes one
+sentence of Construction §C2b.6; the term-only recommendation below stands
+where the operator-wide clock is retained.
 
 ## Recommendation and its limit
 
@@ -98,6 +111,7 @@ ordinary readers never use those secrets to decide proof validity.
 
 | Candidate | Clock rule | Cost or remaining limitation |
 |---|---|---|
+| D: the clock is the snapshot's (`clockIsSnapshot`, proposed) | Only a valid checkpoint carrying the backing resets its clock; `c(t)` is the snapshot's index. Non-carrying, excluded and lapsed checkpoints reset nothing. | A drop is reached by the aggravated grade after the duration, not only by the count (Construction §C2b.6 changes one sentence); the backer's duration prices a drop as darkness. Directories of every commitment in the range are still needed to authenticate carriage; no other scope's history, terms or clock is read. |
 | A″ (model default) | Excluded carrying checkpoints do not reset; non-carrying checkpoints reset unless whole-scope lapsed. | Historical silence lapse recursively imports unrelated evidence dependencies. |
 | Term-only non-carrying resets (recommended research branch) | As A″ for carrying checkpoints; non-carrying steps check term lapse only. | Stale unrelated signing can suppress silence. Complete recovery still has carrying/import dependencies. |
 | A (first draft) | Non-carrying checkpoints must also classify valid. | Adds unrelated event history, possibly another construction, to every such clock step. |
@@ -109,8 +123,24 @@ No intrinsic rule can distinguish withheld preimages from honest replica
 failure and thereby authorize rollback. Availability needs its own contract.
 Selecting intrinsic exclusion affects C2b.3.1, C2b.5.2, C2b.6.1,
 C2.10.3–4, C2.10.9b and v3 evidence continuity; term-only changes the
-non-carrying lapse condition too. B adds a publication history; C changes the
-venue contract. None is an incidental reader fix.
+non-carrying lapse condition too; D changes Construction §C2b.6's drop
+sentence and retires C2b.6.1's non-carrying reset. B adds a publication
+history; C changes the venue contract. None is an incidental reader fix.
+
+Segment continuity after an excluded checkpoint is a separate switch
+(`faultContinuesSegment`): under the default R7 the segment ends and repair is
+a new segment; under R7′ the segment's next checkpoint is valid where it
+extends the last valid prefix. `model/pool-fault-alternatives.test.ts` shows
+the honest stale twin recovering without a new segment under R7′ while the
+default reads its live tail as pending and refuses the door; a bad-proof
+checkpoint followed by the honest journal's valid continuation finalizes the
+receipt under R7′; and replacing the faulted statement in the continuation
+contradicts its receipt, so liability survives. Under D the same file shows a
+dropped backing's gap opening after the duration with the count also firing,
+a garbage carrying stream and fresh valid unrelated openings resetting
+nothing, X's clock resolving without Y's or Z's fault evidence or scope
+preimages but still refusing without their directories, and the silence
+boundary retiring the old segment while an unrelated opening closes nothing.
 
 ## Dependencies exposed by the repaired clock
 
@@ -202,14 +232,14 @@ new liability rules or establish production issuance behavior.
 
 ## Next implementation boundary
 
-Draft one coherent specification proposal for the recommended clock and
-R6/R7 rules together with exact checkpoint-evidence continuity, verification
-failure classification and authenticated complete-range retrieval. Check it
-against C0a before adopting FaultWorld or freezing v3 layouts. Scope the
-progress claim to available authenticated evidence and the declared remedy;
-measure suffix/ancestry retention and retrieval rather than assuming bounded
-cost from one proof verification. Complete evidence availability, note
-delivery/restoration and custody still need deployment evidence.
+The specification proposal exists (`pool-fault.md` in the companion). The
+maintainer selects among its four choices; the amendments it lists are then
+applied to the normative documents, independently reviewed, and the model's
+switches collapse to the selected rules before any v3 layout is frozen.
+Scope the progress claim to available authenticated evidence and the declared
+remedy; measure suffix/ancestry retention and retrieval rather than assuming
+bounded cost from one proof verification. Complete evidence availability,
+note delivery/restoration and custody still need deployment evidence.
 
 ## Regression map
 
@@ -219,6 +249,7 @@ delivery/restoration and custody still need deployment evidence.
 | `pool-fault-reader.test.ts` | Independent snapshots, arrival order, retention, malformed/scope evidence, repair paths and same-index revocation; 27 reader regressions. |
 | `pool-fault-clock.test.ts`, `pool-fault-dependency.test.ts` | Strict clock boundary, term lapse, suppression, unrelated recursive and historical dependencies, force and adoption controls. |
 | `pool-fault-liability.test.ts`, `pool-fault-evidence.test.ts` | R6/R7 candidate consequences and real v2 hash/signature evidence limits described above. |
+| `pool-fault-alternatives.test.ts` | D (the clock is the snapshot's) and R7′ (segment continuity) against the defaults: the dropped backing's clock, count, redemption and return; garbage and unrelated resets; disjoint-scope evidence; the silence boundary; the honest twin; bad proof then valid continuation; the replaced statement. |
 | `pool-recovery-return.test.ts`, `pool-silence.test.ts` | Approved historical retirement, delayed-adoption refusal, receipt precedence and original unsafe return under `forgetSilence`. |
 
 All files are in `model/`. The checked baseline at `f3ca8b4` passed

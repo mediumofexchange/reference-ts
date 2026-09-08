@@ -60,8 +60,11 @@ feasibility checks while its remaining cases are migrated.
 Use [the architecture map](docs/PRIVATE_PAYMENT_ARCHITECTURE.md) for component
 boundaries and retirement conditions, [production requirements](docs/PRODUCTION_REQUIREMENTS.md)
 for release gates, and [fault recovery](docs/POOL_FAULT_RECOVERY.md) for the
-current research proposal. `npm run check:pool` exercises the pinned real
-circuits and multi-segment replay separately from the ordinary test suite.
+current research evidence behind the companion's
+[fault contract proposal](https://github.com/mediumofexchange/money-from-first-principles/blob/main/pool-fault.md),
+which awaits the maintainer's selection. `npm run check:pool` exercises the
+pinned real circuits and multi-segment replay separately from the ordinary
+test suite.
 
 The runtime follows specification revision
 [`3676757a1c8ddc0df607352c6bddbb48f6d85a09`](https://github.com/mediumofexchange/money-from-first-principles/tree/3676757a1c8ddc0df607352c6bddbb48f6d85a09),

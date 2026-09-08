@@ -19,6 +19,16 @@ export interface FaultChoices {
    * prevents closure. This changes C2b.4.1/C2b.6.1 and may affect later
    * finality through the clock. */
   readonly nonCarryingSilenceClosesInterval?: boolean;
+  /** D: the clock is the snapshot's. Only a valid checkpoint carrying the
+   * backing resets its no-commitment clock, so c(t) is the snapshot's index
+   * and a commitment carrying nothing for the backing closes nothing. This
+   * changes Construction C2b.6's drop sentence and C2b.6.1/C2b.4.2. */
+  readonly clockIsSnapshot?: boolean;
+  /** R7′: an excluded checkpoint is held at its sequence and supplies no
+   * state, but does not end its segment; a later checkpoint of the segment
+   * that extends the last valid prefix is valid. The default (R7) ends the
+   * segment: repair is a new segment on the canonical state. */
+  readonly faultContinuesSegment?: boolean;
 }
 export interface FaultDepartures {
   readonly unresolvedIsExcluded?: boolean;
@@ -39,6 +49,8 @@ export class FaultWorld extends RecoveryWorld {
     recovery: RecoveryDepartures = {}, departures: Departures = {}) {
     super(lag, recovery, departures);
     requireThat(!(choices.classifyNonCarrying && choices.nonCarryingSilenceClosesInterval), "conflicting clock choices");
+    requireThat(!(choices.clockIsSnapshot && (choices.classifyNonCarrying || choices.nonCarryingSilenceClosesInterval ||
+      choices.excludedClosesInterval)), "conflicting clock choices");
   }
   reader(): FaultReader {
     const view = this.evaluationView(this.records, this.now);
@@ -144,9 +156,12 @@ export class FaultWorld extends RecoveryWorld {
     }
     return undefined;
   }
-  /** The candidate retains whole-segment termination, including stale twins.
-   * This is an explicit research choice, not derived from C2.10.6 alone. */
+  /** The default candidate retains whole-segment termination, including stale
+   * twins. This is an explicit research choice (R7), not derived from C2.10.6
+   * alone; under R7′ an excluded checkpoint ends nothing, and continuity is
+   * read from the segment's last valid checkpoint (`previousFinal`). */
   faulted(segment: Id): boolean {
+    if (this.choices.faultContinuesSegment) return false;
     return this.query(() => {
       for (const r of this.records) {
         if (r.checkpoint.segment !== segment) continue;
@@ -186,6 +201,16 @@ export class FaultWorld extends RecoveryWorld {
     });
   }
   override closing(backing: Id, at: bigint): bigint {
+    if (this.choices.clockIsSnapshot) {
+      // D: one walk for the snapshot and the clock. Directories are still
+      // needed to authenticate carriage; other scopes' histories are not.
+      return this.query(() => {
+        try { return this.snapshot(backing, at)?.at ?? 0n; } catch (error) {
+          if (error instanceof Refusal && AVAILABILITY.test(error.message)) throw new Refusal("unresolved clock");
+          throw error;
+        }
+      });
+    }
     return this.query(() => {
       for (const r of [...this.records].reverse()) {
         if (r.at >= at || this.term(backing, r.at).operator !== r.checkpoint.operator) continue;
