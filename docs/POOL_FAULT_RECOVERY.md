@@ -19,9 +19,31 @@ alternatives beyond this document's earlier recommendation, both modelled in
 backing's redemption opens after the duration and no other scope's evidence
 is ever read), and **R7′, the segment continues from its last valid
 checkpoint** (an excluded checkpoint is held and passed without ending its
-segment, so an honest stale twin needs no new segment). D changes one
-sentence of Construction §C2b.6; the term-only recommendation below stands
+segment, so an honest stale twin needs no new segment). D changes two
+sentences of Construction §C2b.6; the term-only recommendation below stands
 where the operator-wide clock is retained.
+
+An independent read-only review of the proposal (Opus lane, 2026-09-08, one
+probe with five cases, removed) returned ten findings, all folded into the
+text: silence lapse under D depends on the classification of carrying
+commitments, so the proposal's lapsed class now says so and prices the gap
+verdict waiting on the snapshot's evidence (high); Construction §C2b.6's
+clock-origin sentence also changes under D, added to the amendment table
+(high); binding evidence digests into the history recurrence would have made
+a lost original proof unrecoverable by re-proof and contradicted pool-v2 §7,
+so C2.10.10 now commits a separate evidence chain bound by the snapshot digest
+while the history hash stays proof-independent, and the retention cost is
+priced (medium-high); a lapsed checkpoint with failing evidence is still
+provable fault though no read passes it on that ground (medium); R7′ saves
+the honest twin's tail only where the next valid checkpoint lands before the
+gap opens, since exclusion resets nothing (medium); the segment-boundary
+shortcut and the import/scope bullets of the excluded class were imprecise
+(medium/low); the stranger's certificate bundle omitted the segment identity,
+totals and public inputs (low). The review found no double settlement,
+finality change or clock manipulation under D, confirmed hole counting and
+transition selection under R7′, confirmed the receipt-comparison and
+replica-corruption claims, and verified every quotation in the amendment
+table.
 
 ## Recommendation and its limit
 

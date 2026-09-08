@@ -22,7 +22,8 @@ export interface FaultChoices {
   /** D: the clock is the snapshot's. Only a valid checkpoint carrying the
    * backing resets its no-commitment clock, so c(t) is the snapshot's index
    * and a commitment carrying nothing for the backing closes nothing. This
-   * changes Construction C2b.6's drop sentence and C2b.6.1/C2b.4.2. */
+   * changes two sentences of Construction C2b.6 (the clock's origin and the
+   * drop) and C2b.6.1; the gap verdict then waits on the snapshot's evidence. */
   readonly clockIsSnapshot?: boolean;
   /** R7′: an excluded checkpoint is held at its sequence and supplies no
    * state, but does not end its segment; a later checkpoint of the segment

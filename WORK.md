@@ -21,7 +21,7 @@ fault contract proposal's four choices, then the amendments and their review.
   and the four choices the maintainer selects; indexed in its AGENTS.md and
   README. Normative texts are unchanged: recovery remains `c5f5464`.
 - Recommendation recorded in the proposal: authenticated exclusion; D over
-  term-only (D changes one sentence of Construction §C2b.6 and removes every
+  term-only (D changes two sentences of Construction §C2b.6 and removes every
   cross-scope clock dependency); R7′ over R7; receipt precedence retained.
   The earlier term-only recommendation stands if the operator-wide clock is
   kept. Nothing is decided; the maintainer selects.
@@ -42,11 +42,14 @@ fault contract proposal's four choices, then the amendments and their review.
   silence boundary still retires the old segment. Under R7′: the honest stale
   twin recovers without a new segment, a bad proof then a valid continuation
   finalizes the receipt, and a replaced statement contradicts it.
-- Documentation and link checks across the four repositories, and the full
-  `npm run check`, are recorded in the merge commit message of this slice.
-- Independent read-only review of the proposal and the alternatives was run
-  in an Opus lane before merge; its findings and their disposition are in the
-  proposal's text and this slice's commits.
+- Full `npm run check` passed on the branch: 86 files / 1,619 tests,
+  typecheck, build, installed package, pilot and pool-store crash checks.
+  Documentation and link checks pass across the four repositories (36 files).
+- Independent read-only review of the proposal and the alternatives (Opus
+  lane, ten findings, two high) is folded into the proposal; the dispositions
+  are summarized in the [fault document](docs/POOL_FAULT_RECOVERY.md). The
+  evidence chain of C2.10.10 is not yet modelled (the model's proofs are
+  ideal tokens bound to their checkpoint); model it before v3 bytes.
 
 ## Next
 
