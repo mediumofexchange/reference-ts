@@ -1,6 +1,6 @@
 # Production requirements
 
-Status: release contract, revised 2026-09-05. This document defines what a
+Status: release contract, revised 2026-09-05; evidence refreshed 2026-09-08. This document defines what a
 finished implementation of the protocol must deliver and the evidence each
 gate needs. It does not amend the normative protocol; protocol choices land in
 Construction first, and the implementation tracks the revision pinned in the
@@ -8,6 +8,10 @@ README. There is no release date. A finished, working protocol is the
 deliverable, and the order of steps is specification, then an executable
 adversarial model of its rules, then implementation rule by rule, then the
 wallet, then the external witness's write side.
+
+The approved [deployment probes](POOL_DEPLOYMENT_PROBES.md) bring provisional
+device/venue and recovery evidence forward before v3's layouts are frozen.
+They do not change the specification-first rule for production implementation.
 
 ## Release contract
 
@@ -105,16 +109,16 @@ Every gate needs a named owner, a pinned artifact and reproducible evidence in
 the release record. An unmeasured or undecided item fails the gate. Test count
 is not evidence.
 
-| Gate | Acceptance evidence | Standing at 2026-09-05 |
+| Gate | Acceptance evidence | Standing at 2026-09-08 |
 |---|---|---|
-| Defined profile | Construction pins the pool's statement layouts, hash functions, proof system and what **E** declares; an explicit visibility/collusion model, witness assumptions and supported failure remedies; no unresolved critical protocol choice | §C1.2–C1.4 written. Concrete layouts, the spent-set accumulator, the multi-input shape and the proof-system pin remain to be specified from the experiment's evidence. |
-| Adversarial model | An executable model of §C2, §C2b and §C3 over the pool representation, with two operators, two backings, delayed and dropped publications, replacement, restart and incomplete views; safety and conditional progress checked separately; counterexamples kept as regression vectors | Not started. Next after the specification. |
-| Private, sound payments | Implemented prover/verifier and an independently reviewed security argument; adversarial cases for forged issuance, inflation, duplicate spends, malformed proofs, wrong contexts and disclosure channels | The bounded real-proof experiment passes its cases (issue/spend/burn, forged roots, cross-anchor double spends, ordered-history checkpoint). No production claim layer yet. |
-| Public supply | A separate verifier checks authorized issuance, conservation, spentness and published supply from public evidence without secret keys; rejects altered, incomplete and wrong-state histories against a witnessed commitment | Public replay and rejection of valid prefixes and alternate spent histories pass against caller-pinned checkpoints. Witnessed freshness and finality are not implemented. |
+| Defined profile | Construction pins the pool's statement layouts, hash functions, proof system and what **E** declares; an explicit visibility/collusion model, witness assumptions and supported failure remedies; no unresolved critical protocol choice | v2 layouts, circuits and keys are pinned. The authority and recovery contracts exist; v3 layouts, invalid-checkpoint recovery, note delivery and deployment choices remain open. |
+| Adversarial model | An executable model of §C2, §C2b and §C3 over the pool representation, with two operators, two backings, delayed and dropped publications, replacement, restart and incomplete views; safety and conditional progress checked separately; counterexamples kept as regression vectors | Sequencing, authority and recovery models exist, with independent review of the recovery contract. New F2 cases reproduce the invalid-checkpoint progress failure; its remedy is not modelled yet. |
+| Private, sound payments | Implemented prover/verifier and an independently reviewed security argument; adversarial cases for forged issuance, inflation, duplicate spends, malformed proofs, wrong contexts and disclosure channels | v2 claim layer in src/pool, pinned circuits and real-proof admission/import/replay checks exist. Focused adversarial review completed; wallet and complete deployment assurance remain. |
+| Public supply | A separate verifier checks authorized issuance, conservation, spentness and published supply from public evidence without secret keys; rejects altered, incomplete and wrong-state histories against a witnessed commitment | Public replay and record-derived canonical checkpoint validation exist, including transitive imports and pre-revocation issuance. No complete external-venue supply-verification product yet. |
 | Usable payment | A wallet completes issue → pay → receive → fulfill → redeem, including interruption and exact retry; replaying payment evidence cannot fulfill another invoice | The transparent pilot does this for the frozen path across two processes. No pool wallet. |
-| Durable operation | Abrupt termination, lost responses, concurrent writers, disk faults, restored backups and obsolete instances cannot cause conflicting exposed signatures or silently lose accepted operations | Transactional crash tests exist for the pilot journal and the experiment's journal. Rollback protection, remote publication and restore behavior are not built. |
+| Durable operation | Abrupt termination, lost responses, concurrent writers, disk faults, restored backups and obsolete instances cannot cause conflicting exposed signatures or silently lose accepted operations | PoolStore journals openings, admissions, receipts and publication outbox, with restart fencing and crash tests. Coordinated backup rollback, custody procedures and external publication remain open. |
 | Available, recoverable state | With the original operator offline, an independent reader retrieves and verifies the promised evidence and executes each supported remedy; selective withholding fails explicitly | Not built for the pool. The frozen path's recovery code is a case library only. |
-| Practical deployment | Repeatable measurements of proof creation, verification, resync, startup, storage growth, bandwidth and finality on declared target devices and network conditions, against budgets agreed before testing | One desktop measurement (Node 24, Windows): 14.7 KB proofs, 1.1–1.7 s proving, 96 ms warm verification, ~560 MiB peak RSS. No phone or browser measurement. |
+| Practical deployment | Repeatable measurements of proof creation, verification, resync, startup, storage growth, bandwidth and finality on declared target devices and network conditions, against budgets agreed before testing | Current v2 Node evidence exists. The first [desktop browser baseline](pool-browser-verification.json) verifies nine spends: 4.28–9.30 s proving, 91–195 ms verification, 14,656-byte proofs. Mobile, whole-browser peak memory, wallet resync and venue costs are unmeasured. |
 | Release assurance | Reproducible builds, installed-package interoperability, pinned dependencies and specification, migration by successor, independent security review and documented disposition of every material finding | Package checks and focused defensive review exist. |
 
 ## What carries forward, what is frozen, what is retired

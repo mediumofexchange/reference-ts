@@ -54,6 +54,8 @@
     "pilot:demo": "npm run build && npm run check:pilot",
     "check:privacy": "npm run build && npm --prefix experiments/private-payment run check",
     "check:pool": "npm run build && node scripts/pool/check.mjs",
+    "bench:pool:prepare": "node scripts/pool/browser/prepare.mjs",
+    "bench:pool:browser": "node scripts/pool/browser/serve.mjs",
     "check:pool-store": "node scripts/pool/store-crash.mjs",
     "check": "npm run check:docs && npm run typecheck && npm test && npm run build && npm run check:package && npm run check:pilot && npm run check:pool-store",
     "prepublishOnly": "npm run check"
@@ -76,6 +78,7 @@
     "@noir-lang/noir_wasm": "1.0.0-beta.26",
     "@types/node": "^24.13.3",
     "typescript": "^5.7.0",
+    "vite": "7.3.6",
     "vitest": "^3.0.0"
   },
   "dependencies": {

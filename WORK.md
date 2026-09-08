@@ -4,102 +4,87 @@ Updated: 2026-09-08
 
 ## Goal
 
-Build the shielded-pool protocol: specification → adversarial model → claim
-layer → sequencing/recovery/presentation → wallet → witness write side.
-This slice specified and modelled pool-v2 §7.4's excluded objects —
-presentation, the non-service count, snapshot redemption at the venue and
-the return from silence — before any implementation. The recovery policy
-(C2b.3a–c) was approved on 2026-09-07 and is not reopened.
+Build the shielded-pool protocol. The maintainer approved continuing the
+checked design review's recommendations: bring device/venue feasibility and
+recovery evidence forward before freezing v3. Production remains specification
+→ adversarial model → implementation. Preserve immutable verifier authority,
+independent replacement and one shielded production path.
 
 ## Status
 
-- Implementation: `feat/pool-recovery-model`, merged fast-forward to `main` as
-  `cada3bf` and pushed on 2026-09-08 under the maintainer's authorization.
-- Companion specification: `spec/pool-recovery-contract` at `3676757`
-  (`820cd51` before review), merged fast-forward to spec `main` and pushed. `pool-recovery.md`
-  defines C3.1–8, C2b.5.1–2, C2b.6.1, C2b.3.1–3 and C2b.4.1–2 for
-  `moe/pool/v3`; Construction §C2b/§C3, pool-v2 §7.4, the spec AGENTS and
-  README point to it. v2 bytes are unchanged.
-- `model/pool-recovery.ts` (`RecoveryWorld` over the authority model): the
-  no-commitment clock, the snapshot, the adoption index, the recovery state,
-  force at the venue, the adopted block, the return, the count, and
-  `recoveryViolations` (holdings equal supply, a note settles once and is
-  never spent again, every settlement pays the backer under K's acceptance).
-- `model/pool-authority.ts` gained the demand, withdraw, settle and request
-  kinds, `tagOf`, the pending-lock set and standing demands in `State`,
-  `Service.adopt`, and the hooks `adoptable`, `passedByRule` (used by
-  `include` and descent alike), `replayed`, `serving` and `discardable`.
-- 29 new cases in `model/pool-recovery.test.ts`, with counterexamples under
-  eleven departures: `ignoreAcceptance`, `countUnproven`, `resetOnHandover`,
-  `lapsedClosesGap`, `anyAnchor`, `bareNullifiers`, `forceOutsideGap`,
-  `settleTwice`, `skipSameIndex`, `serveBeforeAdoption`, `continueThroughGap`;
-  six of them exercise the review's findings (label binding, the lock's
-  bound, the instant window, one clause per scope, a drop, adoption at the
-  publication's own index).
-- The decision entry (2026-09-07, contract) lists the choices: whole-note
-  demands by tag, the lit settlement with a public owner, no attempt timeout
-  with the lock bounded by the demand's deadline, the segment-free request,
-  the instant window, one no-commitment duration per scope, force once at
-  the publication's own index, the return as a new segment, the adoption
-  index, and invalid live evidence blocking recovery and the count as it
-  blocks descent. The maintainer confirmed them on 2026-09-08 ("if these are
-  the best choices, consider them confirmed"); the assessment that they are
-  is in the entry. They are not to be reopened without a new reason.
-- No `src/` change. PoolStore still refuses silence clauses; the runtime is
-  v2 and carries none of these objects.
+- Implementation: `feat/pool-deployment-probes`, based on `53bcea0`.
+- Companion specification: `main` at `3676757`; unchanged in this slice.
+- Prior recovery work: `cada3bf`, merged/pushed with authorization on September
+  8. The specification contract is `pool-recovery.md` at `3676757`.
+- Runtime remains v2. PoolStore refuses silence clauses; no demand, settlement,
+  recovery publication or wallet implementation has been added to `src/`.
+- The design review and its independent check are in `decisions/archive/`:
+  [review](decisions/archive/2026-09-08-whole-project-design-review.md),
+  [check](decisions/archive/2026-09-08-whole-project-design-review-check.md).
+  Continuing investigation is approved; unresolved protocol alternatives are
+  not thereby selected and no v3 bytes have been fixed.
+
+## This slice
+
+- `model/pool-fault-boundary.test.ts`: nine executable F2 cases over the existing
+  models. One otherwise valid signed checkpoint with a forged ideal proof
+  blocks both scoped backings' snapshot/count/descent. Recurring invalid
+  publications reset the clock; stopping opens the gap but leaves the snapshot
+  blocked. Snapshot-only skipping does not repair the clock/count/descent.
+  Corrupt or withheld replica evidence cannot undo a finalized payment.
+- `scripts/pool/browser/`: reproducible synthetic v2 spend benchmark. Preparation
+  compiles and checks all pinned artifacts, uses the recorded local parameter
+  cache, and prepares three spend vectors. Browser checks spend bytecode/key,
+  public-input identity, proof bounds and all nine proofs in ZK mode.
+- `docs/pool-browser-verification.json`: first desktop Chromium baseline,
+  nine verified proofs in about 61.6 seconds overall. Same-backing proving
+  4.28–6.29 seconds; mixed-backing 6.79–9.30 seconds; proofs 14,656 bytes.
+  No mobile, whole-browser peak-memory, wallet or venue result is implied.
+- Commands: `npm run bench:pool:prepare`, then `npm run bench:pool:browser`.
+  Server binds loopback only. A connected Android phone can use USB forwarding;
+  no `adb` or Ergo transaction SDK is currently installed. Target phone/browser
+  was requested from the maintainer and remains unspecified.
 
 ## Evidence
 
-- `npx vitest run model/`: 4 files / 130 tests passed (89 before this slice,
-  8 boundary cases, 29 contract cases, plus schedule).
-- `npm run typecheck` clean; spec links pass across both repositories.
-- Full `npm run check` on Node 24.6 after the review fixes: 76 files / 1,498
-  tests, docs, typecheck, build, installed package, payment pilot and
-  pool-store crash checks passed; `git diff --check` clean.
-- Independent adversarial review (one bounded, read-only reviewer lane over
-  the contract, the model and the tests) returned twelve findings, two high
-  soundness holes among them; all twelve are adopted in spec `3676757` and
-  in the model and tests. Dispositions are in the decision entry. The
-  review certifies no circuit, byte layout or implementation.
-- The pending slice merged before this one: `6e99772` on main after a full
-  `npm run check` (76 files / 1,469 tests) on 2026-09-07.
+- Model suite: 5 files / 139 tests passed on Node 24.6.0; typecheck passed.
+- Browser preparation reproduced the pinned issue/spend/burn bytecode and keys.
+  All nine browser spend proofs verified; raw timings and limitations recorded.
+- Full `npm run check` passed on Node 24.6.0: 77 files / 1,507 tests, docs,
+  typecheck, build, installed package, payment pilot and pool-store crash checks.
+  Vitest required the usual sandbox escalation for esbuild's parent lookup.
+- Focused tooling review found preparation could leave a stale manifest and
+  requested explicit target/checked-circuit reporting; these are addressed.
+- Browser rejected a mismatched verifier target before proving. HTTP checks
+  confirmed declared assets 200, private WORK.md 403 and unknown assets 404.
+- No push, merge or publication is authorized by this continuation.
 
 ## Next
 
-1. Byte layouts for `moe/pool/v3` in a new `pool-v3.md`: `T_TAG`, the holding
-   proof (both forms), the settle statement and its public-input order,
-   statement kinds 4–6 in the history and receipt, the five publication
-   frames and their identities, the adoption block in replay, and what **E**'s
-   clause fields bind. Circuits follow from the pinned v2 sources.
-2. Implement over `src/pool/` rule by rule with the model as oracle: locks in
-   `Segment` admission and replay, the request and count reader, the gap
-   reader over the venue record, `PoolStore` adoption on return (lifting the
-   silence-clause refusal), then wallet-side presentation and re-proof.
-3. Port the frozen transparent cases (`c2b-redemption-legs`, `c2b-return-
-   from-silence`, `c2b-non-service`, `c3-*`) as each rule lands over notes.
-
-## Review awaiting check
-
-- A whole-project design review (2026-09-08, a review round, not a decision)
-  is at `decisions/archive/2026-09-08-whole-project-design-review.md`. It
-  ranks fourteen findings; F1–F5 (verifier configuration inside the name,
-  proof hash absent from the history, no seed recovery of notes, the 2×2
-  shape against fees and reliance, the recovery leg against the venue's byte
-  limit) change what `pool-v3.md` must carry, so it asks that they be
-  checked and decided before v3's byte layouts. §5 of the file is the
-  verifier's yes/no checklist. Nothing in the specification or code was
-  changed by it.
+1. Model candidate A in the [fault proposal](docs/POOL_FAULT_RECOVERY_PROPOSAL.md),
+   including non-carrying clock resets and delayed fault evidence; compare its
+   verification dependencies with prospective fault publication before selection.
+2. Resolve the rule across descent/count/clock/force/adoption before normative
+   changes. A bad download is not fault proof; missing preimages still block.
+3. Run the benchmark on the named target phone, measure complete Ergo publication
+   using a pinned SDK/node, and prototype authenticated note delivery/restoration.
+4. Settle measured statement bounds and complete evidence retention, then freeze
+   v3 layouts and implement recovery with the existing model as oracle.
 
 ## Open questions
 
-- What remedy a backing has against an operator whose last carrying
-  checkpoint is provably invalid: it blocks recovery, the count and any
-  successor's descent alike (C2.10.3), and neither contract defines a way
-  past it beyond the fault proof and E's replacement rule.
-- SQLite ownership assumes one journal per operator key on its venue. Copied
-  keys/databases and coordinated backup rollback need custody/backup procedures.
-- Scope authority assumes a complete, stable venue snapshot; same-index mutation
-  during synchronous custom adapter callbacks has no generation token.
-- Profile large histories before compaction or immutable read caches.
-- Full C2 re-derivation, authenticated setup/build provenance, target measurements,
-  note delivery and transitive history availability remain release requirements.
+- `model/pool-recovery.ts` implements the approved C3/C2b contract over ideal
+  cryptography, including demand/lock/settlement, non-service, gap, adoption and
+  return. The previous independent adversarial review fixed twelve findings;
+  its disposition is in the September 7 contract decision. The new F2 evidence
+  is the reason to revisit invalid-checkpoint handling specifically.
+- Prior full check: 76 files / 1,498 tests, build/package/pilot/store crash checks
+  passed. It does not establish deployment feasibility or complete assurance.
+- Data availability must include proofs, issuance signatures, terms, ancestry
+  and recoverable openings. Public inputs alone do not establish valid state.
+- SQLite ownership assumes one journal per operator key/venue; copied journals,
+  coordinated rollback and custody/backup procedures remain open.
+- Scope authority assumes complete stable venue snapshots; same-index mutation
+  during custom synchronous adapter callbacks has no generation token.
+- Setup/build provenance, full C2 re-derivation, history scaling, retention,
+  note delivery, wallet restore and venue write-side acceptance remain gates.

@@ -1,0 +1,170 @@
+{
+  "construction": "moe/pool/v2",
+  "synthetic": true,
+  "outcome": "passed",
+  "device": "Windows desktop / Codex in-app Chromium (baseline only)",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+  "hardwareConcurrency": 4,
+  "deviceMemoryGiB": 16,
+  "crossOriginIsolated": true,
+  "threads": 1,
+  "verifierTarget": "noir-recursive",
+  "startedAt": "2026-09-08T08:28:58.542Z",
+  "hiddenDuringRun": false,
+  "samplePlan": "Three vectors, three proofs per vector; raw samples, no discarded warmup.",
+  "stagesMs": {
+    "toolsAndInputs": 720.0599999427795,
+    "worker": 1218.375,
+    "parameterFetchAndHash": 439.9800000190735,
+    "parameterInit": 699.414999961853,
+    "verificationKey": 910.9449999332428
+  },
+  "metrics": [
+    {
+      "label": "one real input plus padding",
+      "iteration": 1,
+      "executionMs": 288.75,
+      "proveMs": 6294.40499997139,
+      "verifyMs": 107.29500007629395,
+      "proofBytes": 14656
+    },
+    {
+      "label": "one real input plus padding",
+      "iteration": 2,
+      "executionMs": 78.95499992370605,
+      "proveMs": 4970.9800000190735,
+      "verifyMs": 118.68499994277954,
+      "proofBytes": 14656
+    },
+    {
+      "label": "one real input plus padding",
+      "iteration": 3,
+      "executionMs": 70.30999994277954,
+      "proveMs": 4893.174999952316,
+      "verifyMs": 91.1949999332428,
+      "proofBytes": 14656
+    },
+    {
+      "label": "two real inputs, same backing",
+      "iteration": 1,
+      "executionMs": 50.125,
+      "proveMs": 5826.735000133514,
+      "verifyMs": 95.51500010490417,
+      "proofBytes": 14656
+    },
+    {
+      "label": "two real inputs, same backing",
+      "iteration": 2,
+      "executionMs": 50.24499988555908,
+      "proveMs": 4281.835000038147,
+      "verifyMs": 93.11500000953674,
+      "proofBytes": 14656
+    },
+    {
+      "label": "two real inputs, same backing",
+      "iteration": 3,
+      "executionMs": 50.22499990463257,
+      "proveMs": 5573.630000114441,
+      "verifyMs": 132.84500002861023,
+      "proofBytes": 14656
+    },
+    {
+      "label": "two backings conserve separately",
+      "iteration": 1,
+      "executionMs": 66.92499995231628,
+      "proveMs": 9296.170000076294,
+      "verifyMs": 125.13000011444092,
+      "proofBytes": 14656
+    },
+    {
+      "label": "two backings conserve separately",
+      "iteration": 2,
+      "executionMs": 55.03999996185303,
+      "proveMs": 7770.75,
+      "verifyMs": 159.82500004768372,
+      "proofBytes": 14656
+    },
+    {
+      "label": "two backings conserve separately",
+      "iteration": 3,
+      "executionMs": 86.5,
+      "proveMs": 6794.454999923706,
+      "verifyMs": 195.0350000858307,
+      "proofBytes": 14656
+    }
+  ],
+  "memory": {
+    "sampledWindowJsHeapPeakBytes": 152868126,
+    "wholeBrowserPeakBytes": null,
+    "limitation": "Window JS heap excludes worker/WASM allocations; no whole-browser peak measurement."
+  },
+  "limitations": [
+    "Synthetic circuit witnesses; no wallet, restoration, resync, publication or finality measurement.",
+    "Asset fetches bypass HTTP cache; module/WASM/OS caches may be warm. This is not a cold-device measurement.",
+    "Parameter hashes match recorded local files; setup authenticity is not established."
+  ],
+  "totalMs": 61643.174999952316,
+  "windowResourceDecodedBytes": 57003025,
+  "resourceCaveat": "Window resource entries only; excludes resources fetched inside workers. Not total network or process memory.",
+  "pins": {
+    "construction": "moe/pool/v2",
+    "toolchain": {
+      "@aztec/bb.js": "5.2.0",
+      "@noir-lang/noir_js": "1.0.0-beta.26",
+      "@noir-lang/noir_wasm": "1.0.0-beta.26"
+    },
+    "verifierTarget": "noir-recursive",
+    "sources": {
+      "notes.nr": "0c0a6cf6c12c6adc702cb8ef95e237ce3486dae9e65df2fc3dd724e7ca93b484",
+      "issue.nr": "fdddefd8a94eb026259794de03faeb8854e53d274e62cb392407d5c88f9dd4cb",
+      "spend.nr": "9ea3fe7f32d32502ea13c16df38ded5f4d688cac49c24a70abca31ff65f2dec1",
+      "burn.nr": "1194077efafc1990d3fc90e866609ffc5cc1d3b6011252ae15d127d8e111ed51",
+      "vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"
+    },
+    "circuits": {
+      "issue": {
+        "bytecode": "25e9d1af26fb6003d567587f7c71879bcabd9749e0279c870bb923264ec69d22",
+        "vk": "f9fb1624b85cf70350e4a9d15bfee1b2814e8cae5f75285ba6c0207a8f195ca2"
+      },
+      "spend": {
+        "bytecode": "f00b1721a8a93d70c56758bb01662250f9ce8ee0ffcd9c6823aa41703b35ff93",
+        "vk": "8b46a4be1b3a307c22ff541319223c6fb7d9bb721a7a20b0a6822a291b38fcbc"
+      },
+      "burn": {
+        "bytecode": "45effac560af94f59e89c3453f7c5261bc6ed64f878842be583b1a9424d50e8c",
+        "vk": "cca81c12041d305acea0c28a990253c03ef79083d2236feae24ec06be8df0af5"
+      }
+    }
+  },
+  "parameters": {
+    "bn254_g1.dat": {
+      "bytes": 33554432,
+      "sha256": "ea7b37bb4e1840b5632675fb2d79873ac0a1598374d3087344ba0e980736b8ac"
+    },
+    "bn254_g2.dat": {
+      "bytes": 128,
+      "sha256": "01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f"
+    },
+    "grumpkin_g1_v2.flat.dat": {
+      "bytes": 4194304,
+      "sha256": "64236c9455e75aeea77a94587ea607eed2e978d2609a421d66bf10bb9698b8fd"
+    }
+  },
+  "assets": {
+    "spend.json": {
+      "bytes": 78297,
+      "sha256": "e11ba4a4716fc2d83e450697e17a2e39e320dcce5cb48b429cf45dd40298328a"
+    },
+    "vectors.json": {
+      "bytes": 26615,
+      "sha256": "cee28dc13f270cc5a70fe3abbdee94a34c13ee98a30dc1bc9e6d821064955cb3"
+    }
+  },
+  "capture": "Raw metrics transcribed from the completed browser DOM; pins/assets matched to the prepared manifest. Sample-plan wording clarified after the run.",
+  "probeFilesSha256AtRun": {
+    "main.js": "14d231d9dd27ee166f1138569d1ba38bcc8e73a3849aa9d17b40418a4e4c7a6a",
+    "index.html": "29b463ab3fa7d6627e545270c7a1f4db62d159ab84ad74c4bc796f9aae0d347c",
+    "prepare.mjs": "588b92cd073e54e0f980003d1534b537ce83a18d7c3395b7225081165c5ff57b",
+    "serve.mjs": "2dd11481c360d4c63f926691e10b9a37dee614b7811b0280f37c6918c5a5a801"
+  }
+}
