@@ -23,6 +23,13 @@ closes that trace in the model and lapses unfinished receipts at the silence
 boundary. Segment-fault, fault receipt precedence and clock choices remain
 open; this repair does not adopt the fault candidate.
 
+The subsequent [evidence review](POOL_FAULT_EVIDENCE_REVIEW.md) recommends
+term-only non-carrying resets, with an explicit stale-signing suppression
+cost. It reproduces transitive historical dependencies across three disjoint
+scopes and tests the missing exact-proof binding in real v2 bytes. The
+recommendation is ready for a coherent specification proposal; adoption
+still requires the evidence and liability contracts below.
+
 ## The failure reproduced
 
 The specification's recovery contract C2b.6.1 says a clock-resetting
@@ -56,7 +63,8 @@ record prefix and never to when a reader obtained its evidence:
 The rules over that classification:
 
 - An excluded checkpoint supplies no canonical state, no import target and no
-  clock reset. It stays at its witnessed sequence and consumes it. Descent,
+  carrying clock reset; the non-carrying exception is defined below. It stays
+  at its witnessed sequence and consumes it. Descent,
   the snapshot, the count, the clock, receipt classification, the gap and the
   return all pass it on its evidence. Absence of evidence never justifies a
   step.
@@ -73,8 +81,8 @@ The rules over that classification:
   itself establish receipt abandonment under C2.10.9b. The model retains
   that rule's existing boundaries: fault alone leaves a tail pending; a
   later canonical carrying transition can abandon it, while a real missing
-  sequence or term end can lapse it. Permanent abandonment needs a separate
-  rule defining its boundary and precedence.
+  sequence, term end or historical silence boundary can lapse it. Permanent
+  abandonment needs a separate rule defining its boundary and precedence.
 - Publications keep force according to their own record prefixes. A return
   adopts exactly the block with force, including at the opening's own index;
   a checkpoint omitting it is excluded, not merely doubtful.
@@ -99,18 +107,19 @@ boundary tests (a payment finalized at index 3, one request per backing):
 | Evidenced exclusion | Snapshot, count and descent pass the forged checkpoint; the count fires against the operator; a successor opens on the last valid state; the payment stays final; no semantic violation. |
 | Withheld bytes | Snapshot, recovery state, clock, count and descent all refuse with "unresolved"; nothing rolls back; a successor cannot open. Restoring the bytes gives the evidenced verdicts. |
 | Faulted segment | The door refuses further service; a re-signed continuation is excluded; a repair naming the excluded checkpoint or an older one is refused as stale; the new segment opens on the canonical state; the tail's receipt reads abandoned. |
-| The clock | An excluded carrying commitment does not close the interval: the gap opens five indices after the last valid commitment and a release in it has force. Under A′ the gap opens five indices after the excluded commitment and the release has none; only the count remains. |
+| The clock | An excluded carrying commitment does not close the interval: the gap opens once the declared duration after the last eligible reset is exceeded and a release in it has force. Under A′ the excluded commitment resets the clock and the same release has none; only the count remains. |
 | A stream of invalid commitments | Neither closes the gap nor blocks the count; later ones lapse under C2b.4.1; the return is a new segment that must adopt the block before serving. |
 | Successive gaps | When the checkpoint adopting the first gap's block is itself excluded, the snapshot is the valid opening and its adoption index reaches back, so the settled note stays settled and the next return adopts the first release only. |
 | Rule 3 and 5 counterexample | Reading an unresolved checkpoint as valid says "no gap" and then, when the bytes arrive, "gap": a reversed verdict. The candidate gives no verdict until then. |
 | Rule 1 counterexample | Reading unavailable bytes as fault passes a valid checkpoint that spent a note and lets a release settle that note: `settled note spent again`. The candidate refuses the read. |
-| The non-carrying case | Under A″, a non-lapsed Y-only commitment closes X's clock without Y's event proof. Establishing silence lapse can still require Y's earlier fault evidence (R1). Under A, X also waits on Y's checkpoint history. A valid Y-only commitment closes X under both. Neither option prevents the inherited old-segment return failure documented in the new comparison. |
+| The non-carrying case | Under A″, a non-lapsed Y-only commitment closes X's clock without Y's event proof. Establishing historical silence lapse can recursively require unrelated fault evidence (R1). Under A, X also waits on Y's checkpoint history. A valid Y-only commitment closes X under both. The approved C2b.4.1/3 repair prevents the inherited old-segment return failure. |
 
 ## Comparison
 
 | Candidate | Rule | Verification and availability dependencies | What it leaves |
 |---|---|---|---|
 | A″ (previous recommendation; review open) | Intrinsic exclusion; excluded carrying commitments do not close the interval; non-carrying commitments close it unless lapsed. | Ordinary non-carrying steps need authenticated absence, not the other scope's history. But proving that a non-carrying checkpoint lapsed during silence can require that scope's fault evidence. Fault evidence must be retained: excluded checkpoints' bytes, or a certificate (below). | A withheld preimage is unresolved forever; the claimed isolation from other scopes is not established. |
+| Term-only non-carrying resets (current research recommendation) | As A″ for carrying checkpoints; non-carrying checkpoints close the interval unless term-lapsed, without checking silence lapse. | Authenticated absence, scope and terms for non-carrying steps; carrying classification still needs its full dependencies. | Stale unrelated signing can suppress silence redemption; count/replacement remains conditional on the declared authority and available evidence. |
 | A (first draft) | As A″, but a non-carrying commitment closes the interval only where it classifies valid. | Adds the other scope's history, possibly another construction's, to every clock read of a dropped backing. | Same residue; the extra dependency buys nothing against a rational operator. |
 | A′ | As A″, but an excluded carrying commitment still closes the interval (C2b.6.1 as written). | As A″. | A garbage stream keeps the gap shut forever; the only remedy is the count and E's replacement rule, which needs a live rule-holder or election. |
 | B: prospective fault publication | Anyone publishes authenticated fault evidence at the venue; exclusion affects reads after that index; earlier force judgments use the record before it. | A new publication frame carrying the failing bytes (about 15 KB per proof, plus authentication/suffix or ancestry evidence); readers verify what the venue carries. Exclusion is a record fact, so readers agree without holding the trail. | Same residue. Each garbage commitment needs a fresh publication; the operator pays one commitment, the challenger the complete certificate. Releases judged before the publication stay without force. |
@@ -125,6 +134,11 @@ The withheld case needs an availability arrangement, which is C's family or
 full venue publication; F10's measured comparison feeds that choice.
 
 ## The fault certificate
+
+Real v2 regression tests in the [evidence review](POOL_FAULT_EVIDENCE_REVIEW.md)
+show why receipt attestation alone is insufficient: invalid bytes can be
+attested in a later receipt for an event in an earlier valid checkpoint.
+Semantic history inclusion does not bind that checkpoint to those bytes.
 
 The model treats fault evidence as ideal. For the bytes, F2's binding is the
 enabling change: with `proofHash` and `signatureHash` bound into
@@ -154,10 +168,10 @@ layouts must fix them before A″ is a rule.
 - Every reader keeps or can fetch the bytes of excluded checkpoints for as
   long as descent may pass them; a successor's opening depends on them as it
   depends on its imports.
-- A backing's clock read depends on the classification of its carrying
-  checkpoints. It already depended on them for the snapshot, so a reader that
-  can recover can also read the clock, and one that cannot draws no verdict
-  either way.
+- A backing's clock and snapshot overlap in their carrying-checkpoint
+  dependencies. The A″ clock can additionally need unrelated lapse evidence:
+  an available X snapshot does not imply a readable X clock. The three-scope
+  tests in the evidence review expose that distinction.
 - The receipt reader gains one step: an excluded checkpoint of the receipt's
   segment consumes its sequence and includes nothing. Both the present and
   supplied-boundary repair readers now pass exclusions in every relevant
@@ -167,41 +181,20 @@ layouts must fix them before A″ is a rule.
 
 ## Recommendation
 
-Do not adopt A″ as currently justified. Retain intrinsic authenticated
-exclusion as the direction to investigate, price its complete lapse
-dependencies, and settle receipt precedence before choosing
-a rule for v3. Availability remains a separate decision. The earlier reasons
-for preferring A″, qualified by the review, are:
+Prefer intrinsic exclusion with term-only non-carrying resets, retaining
+operator-wide silence semantics. The [evidence review](POOL_FAULT_EVIDENCE_REVIEW.md)
+gives the dependency closure, executable suppression controls, R6/R7
+recommendations and actual-byte limitations. A″ makes historical lapse reads
+depend recursively on unrelated proof availability; term-only removes that
+edge at the cost of admitting stale non-carrying resets. Fresh valid unrelated
+openings already let an active operator suppress silence under either rule.
+Neither promises unconditional redemption against that adversary without a
+usable replacement authority. Availability remains a separate requirement.
 
-- A″ repairs the failure the review found, an operator whose served bytes
-  fail, with reads the protocol already has. It adds no frame, party or venue
-  cost. Its ordinary non-carrying step avoids replay of the other scope, but
-  silence lapse can still require that scope's evidence. It lets holders
-  reach venue redemption against a carrying garbage stream with only the
-  backer alive, provided the required evidence is available. An operator can
-  still close a dropped backing's interval with a non-carrying commitment;
-  that case continues to need the non-service count and replacement rule.
-- A′ keeps C2b.6.1's wording but leaves a garbage stream able to keep the gap
-  shut forever. The count and E's replacement rule are then the only remedy,
-  and that rule is inert where E names the backer and absent where it names
-  none.
-- B makes exclusion a record fact at the price of a new frame, about 15 KB
-  for a proof plus its authentication and any required suffix or ancestry,
-  paid by a challenger against one small commitment per round, and a watcher
-  assumption. It answers the same failure as A″.
-- C is the only family that addresses the residue, a commitment whose
-  preimage nobody serves. It changes the venue's role or adds attestors, and
-  full venue data prices every statement in venue bytes. It is complementary
-  to A″ and can be decided after v3's layouts on F10's measured costs without
-  undoing A″.
-
-The return counterexample requires clarifying the existing recovery rules
-before any clock choice can be recommended. It preserves the intended
-finality and independent per-backing replacement properties.
-The recommendation was recorded on 2026-09-08. Reader corrections have passed
-focused independent adversarial verification. The remaining design findings
-and specification choices must be resolved before the rule is text; the
-selection remains the maintainer's.
+The historical-return safety defect is repaired. Do not adopt the fault
+candidate until the exact checkpoint evidence, receipt precedence, segment
+consequences and complete-range retrieval contracts are specified and
+reviewed together. No new normative policy or v3 layout is selected here.
 
 ## Approval boundary
 
@@ -214,9 +207,11 @@ admission. The corrected, reviewed model must earn its role as the oracle
 for that text. Selecting A′ keeps C2b.6.1 and changes the rest.
 Selecting B adds a publication frame and an exclusion history. Selecting C
 changes the venue contract. Approval of this investigation chose none of
-them. The companion specification remains `main` at `3676757`.
+them. The companion specification remains `main` at `c5f5464`, including the
+approved historical-silence repair. Term-only additionally changes the
+non-carrying lapse condition in C2b.6.1; it does not restore retired service.
 
-Two choices inside A″ need an explicit answer as well:
+Two choices inside intrinsic exclusion need an explicit answer as well:
 
 - Does an authenticated invalid checkpoint end its segment's future service
   even when a stale twin signed it after a valid checkpoint? The conservative

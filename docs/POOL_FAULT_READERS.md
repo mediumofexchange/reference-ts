@@ -73,6 +73,12 @@ model and both clock choices. The approved C2b.4.1/3 repair now prevents
 continuation after historical silence under all three. Neither fault-clock
 choice is adopted as normative policy.
 
+The [subsequent evidence review](POOL_FAULT_EVIDENCE_REVIEW.md) extends this
+to three disjoint scopes and historical dependencies reintroduced after a
+fresh reset. It recommends the term-only branch with its suppression cost
+explicit, and records why ideal checkpoint binding cannot be inferred from
+the actual v2 history or receipt signatures.
+
 ## Receipts and service
 
 Import, canonical validation and fresh opening validation use the same
