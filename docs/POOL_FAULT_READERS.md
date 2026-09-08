@@ -68,8 +68,10 @@ claim. The clock/lapse policy choice remains open.
 non-carrying step checks term lapse but not silence lapse. It removes that
 particular history dependency while permitting stale commitments to suppress
 another backing's silence recovery. The [comparison and return decision](POOL_RECOVERY_RETURN_DECISION.md)
-records its tests and the safety failure shared by the base recovery model
-and both clock choices. Neither is ready for normative adoption.
+records its tests and the original safety failure shared by the base recovery
+model and both clock choices. The approved C2b.4.1/3 repair now prevents
+continuation after historical silence under all three. Neither fault-clock
+choice is adopted as normative policy.
 
 ## Receipts and service
 
@@ -89,7 +91,8 @@ while preserving earlier finality.
 
 The model deliberately retains the existing undecided receipt precedence:
 fault alone leaves an unfinalized tail pending; a canonical transition can
-abandon it; a later real publication hole or term end can lapse it. Permanent
+abandon it; a later real publication hole, term end or the approved historical
+silence boundary can lapse it. Permanent
 abandonment on fault is a different proposal and has not been selected.
 
 ## Adversarial evidence

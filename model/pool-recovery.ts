@@ -1,7 +1,8 @@
 // Executable abstraction of pool-recovery.md over the authority model: C3.7–8
 // at the door, C2b.5.1–2's request and count, C2b.6.1's clock, C2b.3.1–3's
 // snapshot, recovery state and publications with force, and C2b.4.1–2's
-// return as a new segment with its adopted block. Publications are ideal
+// return as a new segment with its adopted block and C2b.4.3's receipt lapse.
+// Publications are ideal
 // signed tokens the venue holds without interpreting; every reader decides
 // force from the same record, at the publication's own index. It is NOT a
 // circuit, a venue adapter or a durable store.
@@ -34,6 +35,8 @@ export interface RecoveryDepartures {
   readonly resetOnHandover?: boolean;
   /** C2b.4.1: a continuation checkpoint closes the gap and keeps its tail. */
   readonly continueThroughGap?: boolean;
+  /** C2b.4.1: forget intervening silence once another commitment resets the clock. */
+  readonly forgetSilence?: boolean;
 }
 export type Publication =
   | { readonly kind: "demand" | "withdrawal" | "release" | "request"; readonly backing: Id; readonly statement: Statement }
@@ -87,13 +90,49 @@ export class RecoveryWorld extends World {
     let last = 0n;
     for (const r of this.records) {
       if (r.at >= at || r.at <= last || (r.status === "lapsed" && !this.recovery.lapsedClosesGap)) continue;
-      if (this.term(backing, r.at).operator === r.checkpoint.operator) last = r.at;
+      if (this.term(backing, r.at).operator !== r.checkpoint.operator) continue;
+      requireThat(!this.withheldDirectories.has(r.checkpoint.id) && !this.withheldScopes.has(r.checkpoint.id) &&
+        (!this.shownScopes.has(r.checkpoint.id) || this.shownScopes.get(r.checkpoint.id) === r.checkpoint.scope), "unresolved clock");
+      last = r.at;
     }
     return last;
   }
   gapOpen(backing: Id, at: bigint): boolean {
     const clause = this.clauses.get(backing);
     return clause !== undefined && at - this.closing(backing, at) > clause.noCommitment;
+  }
+  /** C2b.4.1/3: first actual gap strictly after the authenticated opening.
+   * The finite model enumerates record intervals, never every bigint index.
+   * Production still needs authenticated complete range evidence. */
+  protected override receiptSilence(receipt: Pick<Receipt, "segment">, scope: Scope, through: bigint): bigint | undefined {
+    if (this.recovery.forgetSilence || this.recovery.continueThroughGap || !scope.entries.some(e => this.clauses.has(e.backing))) return undefined;
+    const opening = this.records.find(r => r.checkpoint.segment === receipt.segment &&
+      r.checkpoint.sequence === r.checkpoint.openingSequence && r.checkpoint.events.length === 0);
+    requireThat(opening !== undefined, "unavailable segment opening");
+    const c = opening.checkpoint;
+    requireThat(!this.withheldDirectories.has(c.id) && !this.withheldScopes.has(c.id) &&
+      (!this.shownScopes.has(c.id) || this.shownScopes.get(c.id) === c.scope), "unresolved segment opening");
+    requireThat(c.scope.root === scope.root && c.scope.operator === scope.operator && c.scope.domain === scope.domain &&
+      c.scope.entries.length === scope.entries.length && c.scope.entries.every((e, i) => {
+        const other = scope.entries[i]!;
+        return e.backing === other.backing && e.operator === other.operator && e.link === other.link && e.from === other.from;
+      }), "unauthenticated segment scope");
+    if (through <= opening.at) return undefined;
+    const start = opening.at + 1n;
+    const points = [...new Set([start, through, ...this.records.filter(r => r.at >= start && r.at <= through).map(r => r.at)])]
+      .sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+    for (const at of points) {
+      let first: bigint | undefined;
+      for (const e of scope.entries) {
+        const clause = this.clauses.get(e.backing);
+        if (clause === undefined) continue;
+        const crossing = this.closing(e.backing, at) + clause.noCommitment + 1n;
+        const g = crossing < start ? start : crossing;
+        if (g <= at && (first === undefined || g < first)) first = g;
+      }
+      if (first !== undefined) return first;
+    }
+    return undefined;
   }
   /** C2b.3.1: the last carrying checkpoint strictly before t by a party then in
    * force, passing whole-scope lapses. Invalid live evidence blocks the read,
@@ -204,18 +243,24 @@ export class RecoveryWorld extends World {
     return this.block(service.id, service.openings).map(a => service.adopt(a.statement));
   }
   override adoptable(statement: Statement, segment: Id, openings: ReadonlyMap<Id, Id | null>, position: number): { scope: Scope; at: bigint } {
+    const opening = this.records.find(r => r.checkpoint.segment === segment);
+    if (opening !== undefined) requireThat(this.receiptSilence({ segment }, opening.checkpoint.scope, this.now) === undefined, "segment retired by silence");
     const block = this.block(segment, openings);
     const next = this.recovery.serveBeforeAdoption ? block.find(a => a.statement.id === statement.id) : block[position];
     requireThat(next !== undefined && next.statement.id === statement.id, "not the next adopted statement");
     return { scope: next.scope, at: next.witnessed.at }; // judged once, at its own index (C2b.4.2)
   }
-  /** C2b.4.1: a checkpoint witnessed while a scoped backing's gap is open,
-   * other than a new segment's opening checkpoint, lapses for its whole
-   * scope; C2.7's descent passes it on the same public condition. */
+  /** C2b.4.1: a non-opening checkpoint lapses in a current gap or after an
+   * intervening gap strictly after its opening. The current-index guard also
+   * covers same-index continuations; descent uses the same public rule. */
   protected override passedByRule(c: Checkpoint, at: bigint): boolean {
     if (this.recovery.continueThroughGap) return false;
     const opening = c.sequence === c.openingSequence && c.events.length === 0;
-    return !opening && c.scope.entries.some(e => this.gapOpen(e.backing, at));
+    return !opening && (c.scope.entries.some(e => this.gapOpen(e.backing, at)) ||
+      this.receiptSilence(c, c.scope, at - 1n) !== undefined);
+  }
+  protected override receiptPassed(r: Recorded): boolean {
+    return r.status === "lapsed" || super.receiptPassed(r);
   }
   /** C2b.4.2: after the opening, the history begins with the complete block
    * in venue order and adopts nothing outside it. */
@@ -246,6 +291,7 @@ export class RecoveryWorld extends World {
     const opening = this.records.find(r => r.checkpoint.segment === service.id);
     const open = service.scope.entries.some(e => this.gapOpen(e.backing, horizon));
     if (open) requireThat(this.recovery.serveBeforeAdoption === true, opening === undefined ? "adopt the gap first" : "gap open");
+    if (opening !== undefined && !this.recovery.serveBeforeAdoption) requireThat(this.receiptSilence({ segment: service.id }, service.scope, horizon) === undefined, "segment retired by silence");
     if (opening !== undefined && !this.recovery.serveBeforeAdoption) {
       const block = this.block(service.id, service.openings);
       requireThat(service.events.length >= block.length && block.every((a, i) => service.events[i]!.statement.id === a.statement.id), "adopt the gap first");
@@ -253,7 +299,9 @@ export class RecoveryWorld extends World {
   }
   /** C2b.4.1: a return discards the tail the gap already excused. */
   protected override discardable(service: Service): boolean {
-    return service.scope.entries.some(e => this.gapOpen(e.backing, this.now + this.lag));
+    if (this.recovery.forgetSilence || this.recovery.continueThroughGap) return service.scope.entries.some(e => this.gapOpen(e.backing, this.now));
+    const opening = this.records.find(r => r.checkpoint.segment === service.id);
+    return opening !== undefined && this.receiptSilence({ segment: service.id }, service.scope, this.now) !== undefined;
   }
 
   /** C2b.5.2: the count at an index against the canonical state there. */

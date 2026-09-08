@@ -513,7 +513,7 @@ describe("C2b.3.2–3: publications and their force at the venue", () => {
 });
 
 describe("C2b.4.1–2: the return is a new segment that adopts the gap before it serves", () => {
-  it("adopts the block in venue order after its opening lands, idempotently, then serves; the tail's receipts read abandoned and the adoption's final", () => {
+  it("adopts the block in venue order after its opening lands, idempotently, then serves; the tail's receipts lapse at silence and the adoption's final", () => {
     const f = silence(), { w, p, note } = f;
     const tail = p.submit(spend(w, p, [note], [40n, 60n]).statement);
     w.tick(6n);
@@ -533,7 +533,7 @@ describe("C2b.4.1–2: the return is a new segment that adopts the gap before it
     expect(next.view().spent.has(note.nf)).toBe(true);
     next.submit(spend(w, next, [settled.out], [40n, 60n]).statement);
     witness(w, next.commit());
-    expect(w.classify(tail, p.scope).status).toBe("abandoned");
+    expect(w.classify(tail, p.scope)).toMatchObject({ status: "lapsed", lapse: "silence" });
     expect(w.classify(receipts[1]!, next.scope).status).toBe("final");
     expect(w.recoveryViolations()).toEqual([]);
   });

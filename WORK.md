@@ -4,94 +4,64 @@ Updated: 2026-09-08
 
 ## Goal
 
-Build the shielded-pool protocol. Bring recovery and device/venue evidence
-forward before freezing v3. The reader/clock research slice is merged;
-the next slice requires a choice of recovery return and receipt rules.
+Build the shielded-pool protocol. This slice repairs return after historical
+silence and defines its receipt consequences before recovery runtime or v3.
+The maintainer approved the recommendation and authorized merge/push.
 
 ## Status
 
-- Implementation: `main`, fast-forwarded through `67086ce` from
-  `test/pool-fault-clock-choice`; includes reader repair `a8e68d8` and return
-  counterexamples `4f4f525`. No proposed recovery policy was selected.
-- Companion specification: `main` at `3676757`, unchanged. No v3 bytes fixed.
-- Runtime remains v2. No `src/` behavior changed; PoolStore refuses silence
-  clauses and recovery/presentation/wallet remain unimplemented there.
-- **New safety blocker:** an unrelated non-carrying commitment can close X's
-  gap and let its old segment finalize a spend already settled at the venue.
-  Reproduced in the base recovery model and both fault-clock choices.
-- [Decision proposal](docs/POOL_RECOVERY_RETURN_DECISION.md) gives the exact
-  trace, conflicting specification passages, repair direction and costs,
-  clock comparison and R6/R7 receipt/segment recommendations. None selected.
-- The [fault proposal](docs/POOL_FAULT_RECOVERY_PROPOSAL.md) suspends adoption
-  of A″ and corrects its prior unconditional receipt-abandonment claim.
-
-## Completed
-
-- Reader repair at `a8e68d8`: fresh evidence-relative validation, immutable
-  original prefixes, per-read memoization, shared import/receipt/service
-  checks and independent ideal observation. See [reader contract](docs/POOL_FAULT_READERS.md).
-- Added opt-in `nonCarryingSilenceClosesInterval`: non-carrying checkpoints
-  ignore silence lapse for the clock while retaining term lapse. Defaults
-  unchanged. It removes R1's Y fault-history dependency but lets a stale Y
-  stream suppress X's silence recovery; count and authorized replacement
-  remain available. The option can affect later checkpoint finality.
-- Preserved the inherited unsafe return and the alternative's additional
-  lapsed-reset trigger as permanent counterexamples, with proper new-segment
-  adoption controls. These passing counterexamples prove the bug exists.
-- Independent design review recommends historical silence retirement plus
-  the existing at-checkpoint gap guard; missing interval evidence must
-  refuse. A new opening adopts through its own index. No repair implemented.
-- R6 recommendation: retain existing receipt boundaries and separate fault
-  evidence, accepting possibly indefinite pending. R7 recommendation:
-  explicitly terminate the entire faulted segment, including stale twins,
-  preserving earlier finality. Both require a maintainer decision.
+- Implementation: `fix/pool-silence-retirement`, based on `fc343e4`.
+- Companion: `main` at `c5f5464` (rule `60af631`), merged and pushed from
+  `spec/pool-silence-retirement`. The normative contract was committed first.
+- [Decision](decisions/2026-09.md#2026-09-08--intervening-silence-retires-a-pool-segment-and-lapses-its-unfinished-receipts):
+  C2b.4.1/3 retires continuation at the first scoped gap strictly after the
+  witnessed opening. Later clock resets cannot restore it. A same-index
+  non-opening checkpoint still lapses in a current gap.
+- Receipt walks end at the earlier actual silence/term boundary. Earlier
+  inclusion, contradiction and abandonment survive; other receipts lapse,
+  including held, unheld and post-gap references. No signing time is inferred.
+- Return requires a fresh opening and complete adoption through its own index.
+  New ordinary and adopted admissions refuse retired segments. Exact receipt
+  retry and historical finalized imports remain available.
+- Runtime remains v2: no `src/`, circuit, layout or dependency changes.
+  PoolStore still refuses silence clauses. Fault-clock alternatives and R6/R7
+  remain unselected research policies; this slice does not adopt FaultWorld.
 
 ## Evidence
 
-- `model/pool-fault-clock.test.ts`: 13/13 focused comparisons passed.
-- `model/pool-recovery-return.test.ts`: 8/8 focused cases passed: three unsafe
-  valid-reset traces, three proper-return controls and two lapsed-reset cases.
-- Independent adversarial review discovered and reproduced the safety bug
-  with five probes, then reviewed the source option, comparisons and decision
-  proposal. No additional blocker in that bounded review; no safety approval.
-- Full `npm run check` passed: 81 files / 1,564 tests, docs/links, typecheck,
-  build, installed package, pilot and pool-store crash checks. Final docs
-  and diff checks passed. Disposable review probes were removed after
-  capture in permanent tests and the decision proposal.
-- Maintainer authorized merge and push on 2026-09-08. Fresh independent
-  adversarial review found no additional behavioral blocker to merging this
-  non-normative research; 4 files / 57 focused tests passed. Narrowed one
-  overbroad test title and updated README/release gates with the return bug.
-  This review does not approve recovery safety or select a proposed rule.
-- Fresh full `npm run check` passed: 81 files / 1,564 tests, docs, typecheck,
-  build, installed package, pilot and pool-store crash checks. It required
-  sandbox escalation for esbuild's configuration directory access.
+- Affected suite passed: 7 files / 200 tests, including 19 silence-boundary
+  cases and 16 return cases across the base and both fault-clock choices.
+- Original unsafe returns remain under `forgetSilence`; corrected controls
+  reject the settled note's old spend and preserve proper return adoption.
+- Independent design/adversarial review found a delayed-adoption bypass after
+  a second gap. Fixed and captured permanently, including historical import
+  and exact receipt retry. No remaining blocker in the bounded model/spec review.
+- Independent interval oracle compared 96 reset schedules against exhaustive
+  gap-index evaluation; 3/3 probes passed and disposable probes were removed.
+- Full `npm run check` passed: 82 files / 1,591 tests, typecheck, build,
+  installed package, pilot and pool-store crash checks. Documentation and
+  diff checks passed in both repositories. Vitest required Windows sandbox
+  escalation for esbuild configuration access.
 
 ## Next
 
-1. Obtain the maintainer's choice on the proposed intervening-silence rule.
-   It should retire old continuation even after a non-carrying reset, retain
-   the same-index gap guard, preserve earlier finality and require a new
-   opening/adopted block. Specify receipt consequences at the same time.
-2. Amend the normative contracts first on a named companion branch, then
-   model the selected rule and independently review hostile continuation,
-   same-index order, selective evidence, replacement and repeated gaps.
-3. Revisit the clock and R6/R7 choices only after the return is safe. Do not
-   consolidate FaultWorld into RecoveryWorld or fix v3 bytes before selection.
-4. Continue deployment evidence: target phone benchmark, authenticated note
+1. Commit, merge and push the checked implementation/model branch; update
+   this handoff with the exact resulting revision.
+2. Revisit invalid-checkpoint recovery, clock dependencies/suppression and
+   R6/R7 fault receipt/segment policy. Do not consolidate FaultWorld into the
+   normative model or freeze v3 bytes before those choices are resolved.
+3. Continue deployment evidence: target phone benchmark, authenticated note
    delivery/restoration, complete evidence availability and pinned-node
-   publication. Offline sizing in `docs/POOL_DEPLOYMENT_PROBES.md` is distinct
-   from node acceptance. Then settle bounds/layouts and v3.
+   publication. Offline sizes are not node acceptance; see
+   [deployment probes](docs/POOL_DEPLOYMENT_PROBES.md).
 
 ## Open questions
 
-- Historical silence retirement and receipt consequences; clock dependency
-  versus suppression cost; segment fault and receipt precedence; R8's fault
-  certificate layouts and proof-variant continuity.
-- Withheld preimages remain unresolved; retain proofs, issuance signatures,
-  terms, ancestry and recoverable note openings. Interval completeness and
-  scalable reader evidence are not solved by an ideal finite-record model.
+- Authenticated complete interval evidence and scalable historical reads are
+  still required in production; the ideal finite model supplies neither.
+- Fault certificate layouts, proof-variant continuity, withheld preimages,
+  replica retention, note delivery and wallet restoration remain open.
 - SQLite assumes one journal per key/venue; copied journals, rollback and
   custody/backup remain open. Custom synchronous venues lack a same-index
-  generation token. Provenance, C2 re-derivation, history scaling, retention,
-  note delivery, wallet restore and venue write acceptance remain gates.
+  generation token. Provenance, C2 re-derivation and venue write acceptance
+  remain release gates.

@@ -1,6 +1,19 @@
 # Recovery return: safety finding and decisions to make
 
-Status: unselected research proposal, 2026-09-08. The companion specification
+Status: historical-silence retirement and its receipt consequences approved
+on 2026-09-08 and implemented in the model. The [durable decision](../decisions/2026-09.md#2026-09-08--intervening-silence-retires-a-pool-segment-and-lapses-its-unfinished-receipts)
+records C2b.4.1/3 in companion specification `60af631`. Old continuation and
+new adopted admissions lapse/refuse after intervening silence; earlier
+finality and receipt liability survive. The old unsafe trace below now runs
+under the explicit `forgetSilence` departure, beside repaired controls.
+Fault-clock alternatives and R6/R7 remain unselected; runtime remains v2.
+
+## Original investigation before the repair
+
+The remainder preserves the original findings, proposal and verification
+at the pre-repair revision. References below to an unselected return rule
+or an unimplemented repair describe that earlier investigation.
+The companion specification
 is `money-from-first-principles` at `3676757` on `main`; runtime remains v2.
 This investigation adds comparisons and counterexamples, not a recovery fix
 or authority to deploy one. It follows the [fault review](../decisions/archive/2026-09-08-pool-fault-review.md)

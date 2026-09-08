@@ -177,12 +177,13 @@ pool; `model/pool-recovery.ts` is its executable model with counterexamples.
 Those objects belong to a later construction version and remain outside the
 v2 runtime.
 
-Recovery research has a [reproduced safety blocker](docs/POOL_RECOVERY_RETURN_DECISION.md):
-an unrelated commitment can close a silence interval and let an old segment
-finalize a spend already settled at the venue. The passing counterexample
-tests preserve that failure; they do not establish recovery safety. The
-return rule, fault-exclusion policy and receipt consequences need a protocol
-decision before recovery implementation or v3 can proceed.
+The recovery model follows the later [silence-retirement decision](decisions/2026-09.md#2026-09-08--intervening-silence-retires-a-pool-segment-and-lapses-its-unfinished-receipts)
+and specification revision [`c5f5464`](https://github.com/mediumofexchange/money-from-first-principles/commit/c5f5464).
+An intervening silence gap retires old continuation and lapses unfinished
+receipts even after an unrelated clock reset, preserving earlier finality and
+liability. Return requires a new segment and complete recovery adoption.
+The original double-spend counterexample remains under an explicit departure.
+Fault-exclusion policy, production interval evidence and v3 remain open.
 
 ## Try the local pilot
 

@@ -16,10 +16,12 @@ evidence-dependent validation and covers the review's reader defects with
 27 new regression cases. The corrected model exposes the cross-scope lapse
 dependency instead of hiding it. The earlier recommendation to adopt A″
 remains suspended. The [clock comparison and return decision](POOL_RECOVERY_RETURN_DECISION.md)
-now reproduce an inherited safety failure in both clock choices and the base
-recovery model: a non-carrying reset lets an old segment spend a note already
-settled during silence. Its repair takes priority; segment-fault and
-receipt-precedence choices also remain open.
+reproduced an inherited safety failure in both clock choices and the base
+recovery model: a non-carrying reset let an old segment spend a note already
+settled during silence. C2b.4.1/3's approved historical-silence retirement now
+closes that trace in the model and lapses unfinished receipts at the silence
+boundary. Segment-fault, fault receipt precedence and clock choices remain
+open; this repair does not adopt the fault candidate.
 
 ## The failure reproduced
 

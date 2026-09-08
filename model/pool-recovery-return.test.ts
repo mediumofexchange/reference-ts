@@ -1,17 +1,14 @@
-// Unresolved counterexamples to C2b.4.1's return-as-a-new-segment rule.
-// A healthy non-carrying commitment closes the current gap, but the readers
-// then accept an old segment without adopting earlier publications with force.
-// These assertions record the unsafe behavior for a pending protocol repair;
-// finalizing the old spend is not the intended safety property.
+// C2b.4.1/3: historical silence retires continuation and its unfinished receipts.
+// The forgetSilence departure retains the original double-spend counterexample.
 import { describe, expect, it } from "vitest";
 import { Service, type Acceptance, type Checkpoint } from "./pool-authority.js";
 import { FaultWorld } from "./pool-fault.js";
 import { RecoveryWorld } from "./pool-recovery.js";
 
 const MODELS = [
-  { name: "baseline recovery", create: () => new RecoveryWorld(1n) },
-  { name: "default fault candidate", create: () => new FaultWorld(1n) },
-  { name: "alternative non-carrying clock", create: () => new FaultWorld(1n, { nonCarryingSilenceClosesInterval: true }) },
+  { name: "baseline recovery", create: (forgetSilence = false) => new RecoveryWorld(1n, { forgetSilence }) },
+  { name: "default fault candidate", create: (forgetSilence = false) => new FaultWorld(1n, {}, {}, { forgetSilence }) },
+  { name: "alternative non-carrying clock", create: (forgetSilence = false) => new FaultWorld(1n, { nonCarryingSilenceClosesInterval: true }, {}, { forgetSilence }) },
 ];
 
 function witness(w: RecoveryWorld, checkpoint: Checkpoint): void {
@@ -63,9 +60,9 @@ function fixture(w: RecoveryWorld) {
   return { w, p, note, payee, returned, issued, spend, receipt, publishedDemand, release };
 }
 
-describe("unresolved recovery return counterexample: non-carrying reset revives an old segment", () => {
-  it.each(MODELS)("$name currently finalizes the already-settled note's old spend", ({ create }) => {
-    const { w, p, note, payee, returned, issued, spend, receipt, release } = fixture(create());
+describe("C2b.4.1/3: a clock reset cannot restore old-segment continuation", () => {
+  it.each(MODELS)("$name without historical retirement finalizes the already-settled note's old spend", ({ create }) => {
+    const { w, p, note, payee, returned, issued, spend, receipt, release } = fixture(create(true));
     // The hostile operator retains its signing key and old journal. Copy the
     // original, valid history exactly: no rewritten prefix or forged proof.
     const hostile = new Service(w, p.id, p.scope, p.openings, p.view());
@@ -83,6 +80,22 @@ describe("unresolved recovery return counterexample: non-carrying reset revives 
     expect(state.outputs.has(returned.cm)).toBe(false); // earlier forced settlement was not adopted
     expect(w.recoveryState("X", release.at + 1n).force).toContain(release);
     expect(w.recoveryViolations()).toEqual(["settled note spent again"]);
+  });
+
+  it.each(MODELS)("$name lapses the old continuation and receipt after the clock reset", ({ create }) => {
+    const { w, p, note, returned, issued, receipt } = fixture(create());
+    const hostile = new Service(w, p.id, p.scope, p.openings, p.view());
+    hostile.events.push(...p.events);
+    const continuation = w.sign(hostile); w.tick();
+    expect(w.include(continuation)).toBe("lapsed");
+    expect(w.classify(receipt, p.scope)).toMatchObject({ status: "lapsed", lapse: "silence" });
+    expect(w.snapshot("X", 11n)?.checkpoint.id).toBe(issued.id);
+    const recovered = w.recoveryState("X", 11n);
+    expect(recovered.state.spent.has(note.nf)).toBe(true);
+    expect(recovered.state.outputs.has(returned.cm)).toBe(true);
+    expect(w.import(issued.id).spent.has(note.nf)).toBe(false);
+    expect(w.recoveryViolations()).toEqual([]);
+    expect(() => w.serving(p, p.events.at(-1)!.statement)).toThrow("segment retired by silence");
   });
 
   it.each(MODELS)("$name's new-segment return adopts the exact force and refuses another spend", ({ create }) => {
@@ -105,8 +118,28 @@ describe("unresolved recovery return counterexample: non-carrying reset revives 
     expect(w.recoveryViolations()).toEqual([]);
   });
 
-  it.each([false, true])("a silence-lapsed Y reset revives X only under the alternative (alternative=%s)", alternative => {
-    const w = new FaultWorld(1n, { nonCarryingSilenceClosesInterval: alternative });
+  it.each(MODELS)("$name refuses delayed adopted admissions after the new segment's second silence", ({ create }) => {
+    const { w, publishedDemand } = fixture(create());
+    const next = w.open("P", ["X"]); witness(w, next.commit()); // 10
+    expect(w.block(next.id, next.openings)).toHaveLength(2);
+    w.tick(6n); // 16: the new segment is itself retired
+    const p = publishedDemand.publication;
+    if (p.kind !== "demand") throw new Error("fixture demand");
+    expect(() => next.adopt(p.statement)).toThrow("segment retired by silence");
+    expect(next.events).toHaveLength(0);
+    const fresh = w.open("P", ["X"]); witness(w, fresh.commit());
+    const receipts = w.adoptGap(fresh);
+    expect(receipts).toHaveLength(2);
+    const adopted = fresh.commit(); witness(w, adopted);
+    w.tick(6n);
+    expect(w.import(adopted.id).events.size).toBeGreaterThan(0);
+    expect(fresh.adopt(p.statement)).toEqual(receipts[0]); // exact retry, no new admission
+    expect(w.recoveryViolations()).toEqual([]);
+  });
+
+  it.each([false, true].flatMap(alternative => [false, true].map(forgetSilence => ({ alternative, forgetSilence }))))(
+    "a silence-lapsed Y reset revives X only without retirement (alternative=$alternative, forgetSilence=$forgetSilence)", ({ alternative, forgetSilence }) => {
+    const w = new FaultWorld(1n, { nonCarryingSilenceClosesInterval: alternative }, {}, { forgetSilence });
     for (const backing of ["X", "Y"]) { w.register(backing, "P"); w.declare(backing, { noCommitment: 5n }); }
     const p = w.open("P", ["X"]); witness(w, p.commit()); // 1
     const note = w.oracle.note("X", 10n, "D", "payer");
@@ -146,9 +179,9 @@ describe("unresolved recovery return counterexample: non-carrying reset revives 
     hostile.events.push(...p.events, { id: `${p.id}:${p.events.length}`, statement: spend });
     const continuation = w.sign(hostile); w.tick(); // 11
     expect(continuation.events.slice(0, issued.events.length)).toEqual(issued.events);
-    expect(w.include(continuation)).toBe(alternative ? "final" : "lapsed");
-    expect(w.recoveryViolations()).toEqual(alternative ? ["settled note spent again"] : []);
-    if (alternative) {
+    expect(w.include(continuation)).toBe(alternative && forgetSilence ? "final" : "lapsed");
+    expect(w.recoveryViolations()).toEqual(alternative && forgetSilence ? ["settled note spent again"] : []);
+    if (alternative && forgetSilence) {
       expect(w.import(continuation.id).outputs.has(payee.cm)).toBe(true);
       expect(w.import(continuation.id).outputs.has(returned.cm)).toBe(false);
     } else {

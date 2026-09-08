@@ -271,7 +271,7 @@ export interface ReceiptClassification {
   readonly included: boolean;
   readonly contradicted: boolean;
   readonly abandoned: boolean;
-  readonly lapse?: "moved-past" | "repair" | "scope-boundary";
+  readonly lapse?: "moved-past" | "repair" | "scope-boundary" | "silence";
 }
 // Ideal injective history identity, not a protocol byte encoding.
 function history(events: readonly Event[]): Id { return JSON.stringify(events.map(e => e.statement.id)); }
@@ -608,6 +608,7 @@ export class World {
     for (const x of passedOver) requireThat(!this.withheldDirectories.has(x.checkpoint.id), "unavailable checkpoint evidence");
     requireThat(c.sequence - last - 1n > BigInt(passedOver.length), "missing preceding sequence");
     requireThat(this.current(scope, r.at), "receipt scope ended");
+    requireThat(this.receiptSilence(receipt, scope, r.at) === undefined, "receipt silence boundary");
     const compared = segment.filter(x => !this.receiptPassed(x));
     if (this.receiptPassed(after)) {
       const prior = [...this.records].reverse().find(x => x.checkpoint.operator === receipt.operator &&
@@ -618,6 +619,8 @@ export class World {
     const { included, contradicted } = this.compare(receipt, compared, true);
     return { included, contradicted, lapsed: !included && !contradicted };
   }
+  /** Recovery constructions add C2b.4.3's evidence-derived silence boundary. */
+  protected receiptSilence(_receipt: Pick<Receipt, "segment">, _scope: Scope, _through: bigint): bigint | undefined { return undefined; }
   /** C2.10.9b: the verdict at the present index from the complete finite
    * record. The segment's checkpoint at after, or its latest live one below,
    * is read first; then each held record above in ascending order: one
@@ -671,24 +674,34 @@ export class World {
     };
     if (base !== undefined && compare(base)) return { status: "final", included, contradicted, abandoned };
     let lastSegment = receipt.after, passedOver = 0n;
-    for (const r of mine.filter(x => x.checkpoint.sequence > receipt.after)) {
-      if (!live(r)) break;
-      const c = r.checkpoint;
-      if (!related(r)) { passedOver++; continue; }
-      if (c.segment === receipt.segment) {
-        // An excluded checkpoint of the segment consumes its sequence and includes nothing.
-        if (!this.receiptPassed(r) && compare(r)) return { status: "final", included, contradicted, abandoned };
-        lastSegment = c.sequence; passedOver = 0n;
-        continue;
+    try {
+      for (const r of mine.filter(x => x.checkpoint.sequence > receipt.after)) {
+        if (!live(r)) break;
+        // Read only through this step, so later missing clock evidence cannot
+        // erase a final inclusion or carrying transition already established.
+        if (this.receiptSilence(receipt, scope, r.at) !== undefined) { lapse = "silence"; break; }
+        const c = r.checkpoint;
+        if (!related(r)) { passedOver++; continue; }
+        if (c.segment === receipt.segment) {
+          // A passed checkpoint consumes its sequence and includes nothing.
+          if (!this.receiptPassed(r) && compare(r)) return { status: "final", included, contradicted, abandoned };
+          lastSegment = c.sequence; passedOver = 0n;
+          continue;
+        }
+        if (!heldReference || contradicted) break;
+        if (this.receiptPassed(r)) { passedOver++; continue; }
+        this.canonical([r]);
+        const hole = c.sequence - lastSegment - 1n > passedOver;
+        if (c.sequence === c.openingSequence && c.events.length === 0 && hole) lapse = "repair"; else abandoned = true;
+        break;
       }
-      if (!heldReference || contradicted) break;
-      if (this.receiptPassed(r)) { passedOver++; continue; }
-      this.canonical([r]);
-      const hole = c.sequence - lastSegment - 1n > passedOver;
-      if (c.sequence === c.openingSequence && c.events.length === 0 && hole) lapse = "repair"; else abandoned = true;
-      break;
+      if (!abandoned && lapse === undefined && this.receiptSilence(receipt, scope,
+        boundary !== undefined && boundary < this.now ? boundary : this.now) !== undefined) lapse = "silence";
+    } catch (error) {
+      if (!(error instanceof Refusal) || !contradicted) throw error;
+      // Later missing evidence cannot erase an already authenticated contradiction.
     }
-    if (movedPast) lapse = "moved-past"; else if (lapse === undefined && ended) lapse = "scope-boundary";
+    if (movedPast && lapse !== "silence") lapse = "moved-past"; else if (lapse === undefined && ended) lapse = "scope-boundary";
     const status = contradicted ? "contradicted" : abandoned ? "abandoned" : lapse !== undefined ? "lapsed" : "pending";
     return { status, included, contradicted, abandoned, ...(status === "lapsed" && lapse !== undefined ? { lapse } : {}) };
   }
