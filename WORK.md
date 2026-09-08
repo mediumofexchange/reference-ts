@@ -58,8 +58,8 @@ independent replacement and one shielded production path.
 - Model suite: 6 files / 148 tests passed on Node 24.6.0; typecheck passed.
 - Full `npm run check` passed on Node 24.6.0: 78 files / 1,516 tests, docs,
   links, typecheck, build, installed package, pilot and pool-store crash checks.
-- Merge to `main` was authorized on 2026-09-08 ("what is ready can be
-  merged"); no push is authorized yet.
+- Merged to `main` and pushed on 2026-09-08 with the maintainer's approval
+  ("what is ready can be merged", "you may push too").
 - Review owed: the candidate touches finality, recovery and receipt
   semantics and needs independent adversarial review before any of it
   becomes specification text (a bounded read-only opus lane worked on
