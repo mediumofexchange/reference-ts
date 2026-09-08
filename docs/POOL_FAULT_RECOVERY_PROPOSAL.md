@@ -131,6 +131,33 @@ layouts must fix them before A″ is a rule.
 - A faulted segment cannot be continued, even by the honest process that
   detects its own bug; it opens a new segment, as after a failed publication.
 
+## Recommendation
+
+Adopt A″ for v3 and treat availability as a separate decision.
+
+- A″ repairs the failure the review found, an operator whose served bytes
+  fail, with reads the protocol already has. It adds no frame, party or venue
+  cost, keeps a backing's clock local to its own evidence, and lets holders
+  reach venue redemption against a garbage stream with only the backer alive.
+- A′ keeps C2b.6.1's wording but leaves a garbage stream able to keep the gap
+  shut forever. The count and E's replacement rule are then the only remedy,
+  and that rule is inert where E names the backer and absent where it names
+  none.
+- B makes exclusion a record fact at the price of a new frame, about 15 KB of
+  venue bytes per fault paid by a challenger against one small commitment per
+  round, and a watcher assumption. It answers the same failure as A″.
+- C is the only family that addresses the residue, a commitment whose
+  preimage nobody serves. It changes the venue's role or adds attestors, and
+  full venue data prices every statement in venue bytes. It is complementary
+  to A″ and can be decided after v3's layouts on F10's measured costs without
+  undoing A″.
+
+Nothing here reopens the September 7 finality boundary, independent
+per-backing replacement or the confirmed presentation and recovery choices.
+The recommendation was recorded on 2026-09-08; the selection remains the
+maintainer's, and adversarial review of the model is owed before the rule
+is text.
+
 ## Approval boundary
 
 Selecting A″ amends pool-recovery.md C2b.3.1, C2b.5.2 and C2b.6.1,

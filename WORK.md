@@ -12,9 +12,10 @@ independent replacement and one shielded production path.
 
 ## Status
 
-- Implementation: `feat/pool-deployment-probes`, based on `53bcea0`. The
-  first slice (`3e7ff72`) reproduced the F2 blockage and measured browser
-  proving; this slice models the remedy candidate and sizes venue publication.
+- Implementation: `main`, fast-forwarded from `feat/pool-deployment-probes` on
+  2026-09-08 with the maintainer's approval: `3e7ff72` reproduced the F2
+  blockage and measured browser proving; `4587de9` models the remedy
+  candidate and sizes venue publication; the recommendation is recorded.
 - Companion specification: `main` at `3676757`; unchanged. No v3 bytes fixed.
 - Runtime remains v2. PoolStore refuses silence clauses; nothing of recovery,
   presentation or the wallet is in `src/`.
@@ -57,7 +58,8 @@ independent replacement and one shielded production path.
 - Model suite: 6 files / 148 tests passed on Node 24.6.0; typecheck passed.
 - Full `npm run check` passed on Node 24.6.0: 78 files / 1,516 tests, docs,
   links, typecheck, build, installed package, pilot and pool-store crash checks.
-- No push, merge or publication is authorized by this continuation.
+- Merge to `main` was authorized on 2026-09-08 ("what is ready can be
+  merged"); no push is authorized yet.
 - Review owed: the candidate touches finality, recovery and receipt
   semantics and needs independent adversarial review before any of it
   becomes specification text (a bounded read-only opus lane worked on
