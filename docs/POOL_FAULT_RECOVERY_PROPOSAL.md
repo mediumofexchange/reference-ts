@@ -7,6 +7,15 @@ now with an executable candidate in `model/pool-fault.ts` and its cases in
 behavior is changed. Selecting a rule below is a material protocol choice
 under AGENTS.md and remains the maintainer's.
 
+The [adversarial review](../decisions/archive/2026-09-08-pool-fault-review.md)
+found a dependency on other scopes through silence lapse, incomplete evidence
+checks, unresolved reads that cannot recover when evidence arrives, and
+receipt paths that do not implement the proposed rule.
+The nine original cases remain useful evidence, but the model is not yet an
+oracle for normative text. The earlier recommendation to adopt A″ is suspended
+pending that dependency analysis; its segment-fault and receipt-precedence
+choices remain open.
+
 ## The failure reproduced
 
 The specification's recovery contract C2b.6.1 says a clock-resetting
@@ -64,7 +73,7 @@ The rules over that classification:
 
 The last rule is where the model departs from the first draft of this
 proposal, which excluded non-carrying commitments too. The model calls the
-draft **A** and the recommended form **A″**; the variant in which an excluded
+draft **A** and the previously recommended form **A″**; the variant in which an excluded
 carrying commitment still closes the interval is **A′**.
 
 ## What the model shows
@@ -89,10 +98,10 @@ boundary tests (a payment finalized at index 3, one request per backing):
 
 | Candidate | Rule | Verification and availability dependencies | What it leaves |
 |---|---|---|---|
-| A″ (recommended) | Intrinsic exclusion; excluded carrying commitments do not close the interval; non-carrying commitments close it as today. | A reader classifies the carrying checkpoints it already replays for the snapshot; no new dependency on other scopes. Fault evidence must be retained: excluded checkpoints' bytes, or a certificate (below). | A withheld preimage is unresolved forever. |
+| A″ (previous recommendation; review open) | Intrinsic exclusion; excluded carrying commitments do not close the interval; non-carrying commitments close it unless lapsed. | Ordinary non-carrying steps need authenticated absence, not the other scope's history. But proving that a non-carrying checkpoint lapsed during silence can require that scope's fault evidence. Fault evidence must be retained: excluded checkpoints' bytes, or a certificate (below). | A withheld preimage is unresolved forever; the claimed isolation from other scopes is not established. |
 | A (first draft) | As A″, but a non-carrying commitment closes the interval only where it classifies valid. | Adds the other scope's history, possibly another construction's, to every clock read of a dropped backing. | Same residue; the extra dependency buys nothing against a rational operator. |
 | A′ | As A″, but an excluded carrying commitment still closes the interval (C2b.6.1 as written). | As A″. | A garbage stream keeps the gap shut forever; the only remedy is the count and E's replacement rule, which needs a live rule-holder or election. |
-| B: prospective fault publication | Anyone publishes authenticated fault evidence at the venue; exclusion affects reads after that index; earlier force judgments use the record before it. | A new publication frame carrying the failing bytes (about 15 KB per proof, F5's chunking); readers verify what the venue carries. Exclusion is a record fact, so readers agree without holding the trail. | Same residue. Each garbage commitment needs a fresh publication; the operator pays one commitment, the challenger one framed proof. Releases judged before the publication stay without force. |
+| B: prospective fault publication | Anyone publishes authenticated fault evidence at the venue; exclusion affects reads after that index; earlier force judgments use the record before it. | A new publication frame carrying the failing bytes (about 15 KB per proof, plus authentication/suffix or ancestry evidence); readers verify what the venue carries. Exclusion is a record fact, so readers agree without holding the trail. | Same residue. Each garbage commitment needs a fresh publication; the operator pays one commitment, the challenger the complete certificate. Releases judged before the publication stay without force. |
 | C: venue validates before admission | Only a commitment satisfying a declared availability requirement can reset the clock or supply a snapshot. | Changes the passive venue's role or adds attestors; a validity proof alone does not make reconstruction data available. | The only family that addresses the residue, at the cost of a new party or a full-data venue. |
 
 The residue is the same under today's rules: a commitment whose preimage
@@ -109,15 +118,27 @@ The model treats fault evidence as ideal. For the bytes, F2's binding is the
 enabling change: with `proofHash` and `signatureHash` bound into
 `historyHash_i`, a proof failure is certified by the signed commitment, the
 directory path to the backing's snapshot digest, the history chain from
-position `i` to the committed length (thirty-two-byte links, one per later
-statement), the statement bytes and the proof bytes that hash to the bound
-value. Verification is one proof check plus hashing. A replay conflict or an
+position `i` to the committed length, the statement bytes and the proof bytes
+that hash to the bound value. Later history hashes alone do not authenticate
+an interior event: each step needs the other inputs to the hash recurrence.
+The v2 recurrence needs `statementHash`, `noteRoot`, `spentRoot` and position
+per later statement (104 bytes, or 96 if position is derived). Appending two
+32-byte evidence hashes directly would make that 168 bytes, or 160 with a
+derived position, before framing and the target event's evidence. These are
+conditional sizes, not a specified v3 certificate format. A proof-failure
+certificate then needs one proof check plus its authentication checks and
+suffix hashing. A replay conflict or an
 import fault is certified by the ancestry that exhibits it, which is the same
 evidence today's validation needs. Neither format is specified here; v3's
 layouts must fix them before A″ is a rule.
 
 ## Costs of A″ against today's contract
 
+- Silence lapse is no longer necessarily a public record-only condition. A
+  non-carrying checkpoint may have lapsed because its own scope's clock
+  excluded an earlier fault. Passing it then requires that evidence from the
+  other scope; see the review's R1. Avoiding that cost needs another rule
+  choice, not merely a reader fix.
 - Every reader keeps or can fetch the bytes of excluded checkpoints for as
   long as descent may pass them; a successor's opening depends on them as it
   depends on its imports.
@@ -133,19 +154,28 @@ layouts must fix them before A″ is a rule.
 
 ## Recommendation
 
-Adopt A″ for v3 and treat availability as a separate decision.
+Do not adopt A″ as currently justified. Retain intrinsic authenticated
+exclusion as the direction to investigate, price its complete lapse
+dependencies, repair the model, and settle receipt precedence before choosing
+a rule for v3. Availability remains a separate decision. The earlier reasons
+for preferring A″, qualified by the review, are:
 
 - A″ repairs the failure the review found, an operator whose served bytes
   fail, with reads the protocol already has. It adds no frame, party or venue
-  cost, keeps a backing's clock local to its own evidence, and lets holders
-  reach venue redemption against a garbage stream with only the backer alive.
+  cost. Its ordinary non-carrying step avoids replay of the other scope, but
+  silence lapse can still require that scope's evidence. It lets holders
+  reach venue redemption against a carrying garbage stream with only the
+  backer alive, provided the required evidence is available. An operator can
+  still close a dropped backing's interval with a non-carrying commitment;
+  that case continues to need the non-service count and replacement rule.
 - A′ keeps C2b.6.1's wording but leaves a garbage stream able to keep the gap
   shut forever. The count and E's replacement rule are then the only remedy,
   and that rule is inert where E names the backer and absent where it names
   none.
-- B makes exclusion a record fact at the price of a new frame, about 15 KB of
-  venue bytes per fault paid by a challenger against one small commitment per
-  round, and a watcher assumption. It answers the same failure as A″.
+- B makes exclusion a record fact at the price of a new frame, about 15 KB
+  for a proof plus its authentication and any required suffix or ancestry,
+  paid by a challenger against one small commitment per round, and a watcher
+  assumption. It answers the same failure as A″.
 - C is the only family that addresses the residue, a commitment whose
   preimage nobody serves. It changes the venue's role or adds attestors, and
   full venue data prices every statement in venue bytes. It is complementary
@@ -154,15 +184,31 @@ Adopt A″ for v3 and treat availability as a separate decision.
 
 Nothing here reopens the September 7 finality boundary, independent
 per-backing replacement or the confirmed presentation and recovery choices.
-The recommendation was recorded on 2026-09-08; the selection remains the
-maintainer's, and adversarial review of the model is owed before the rule
-is text.
+The recommendation was recorded on 2026-09-08. Independent review now has
+concrete findings; their resolution and focused independent verification are
+owed before the rule is text. The selection remains the maintainer's.
 
 ## Approval boundary
 
 Selecting A″ amends pool-recovery.md C2b.3.1, C2b.5.2 and C2b.6.1,
-pool-authority.md C2.10.3–4 and C2.10.9b, and v3's history binding; the model
-is the oracle for that text. Selecting A′ keeps C2b.6.1 and changes the rest.
+pool-authority.md C2.10.3–4 and C2.10.9b, and v3's history binding. C2b.4.1's
+claim that silence lapse is public must also account for the evidence the
+new clock reads. V3 must specify how evidence-bound history continuity
+coexists with C2.10.6's proof-independent event identity and exact-replay
+admission. The corrected, reviewed model must earn its role as the oracle
+for that text. Selecting A′ keeps C2b.6.1 and changes the rest.
 Selecting B adds a publication frame and an exclusion history. Selecting C
 changes the venue contract. Approval of this investigation chose none of
 them. The companion specification remains `main` at `3676757`.
+
+Two choices inside A″ need an explicit answer as well:
+
+- Does an authenticated invalid checkpoint end its segment's future service
+  even when a stale twin signed it after a valid checkpoint? The conservative
+  recommendation is yes, preserving every earlier finalized prefix and
+  requiring a new segment on the canonical state.
+- At what record boundary does fault abandon a tail, and can a later missing
+  sequence or term end excuse it? The current candidate gives `pending`
+  immediately after fault and can later give `lapsed`, despite the proposal's
+  unconditional abandonment language. Specify the boundary and precedence;
+  do not infer them from the existing test's hole-free repair case.
