@@ -4,60 +4,56 @@ Updated: 2026-09-08
 
 ## Goal
 
-Build the shielded-pool protocol. Adopted fault classification, snapshot clock
-and segment continuity; next model exact admitted evidence and its receipts
-before fixing any v3 bytes.
+Build the shielded-pool protocol. C2.10.10's evidence chain, receipt comparison
+and recovery adoption are modeled and reviewed; next define v3 layouts.
 
 ## Status
 
-- Implementation: `main`, with `feat/pool-fault-contract` merged as `1fc4209`.
-  `FaultWorld` uses the snapshot clock and last-valid continuation without
-  policy switches. Rejected policies remain in a test-only historical helper.
-- Companion: `spec/pool-fault-contract` merged to `main` and pushed as
-  `56f8a92`, adopting `pool-fault.md` and amending Construction, authority
-  and recovery. The maintainer authorized choices, merge and push on 2026-09-08.
-- Selected: authenticated exclusion; snapshot clock (D); continuation from the
-  last valid prefix (R7′); existing receipt precedence. The duration prices a
-  dropped backing as darkness. Independent review clarified evidence-bound
-  receipt comparisons, immutable evidence only for valid prefixes, adopted
-  statement exceptions and the limits of cross-scope independence.
+- Implementation: `main`, with `feat/pool-evidence-model` merged as `16da1de`.
+- Companion: `spec/pool-adopted-evidence` merged to `main` as `a15381a`.
+  Normative commit `23af0f5` preceded code and requires exact forceful
+  publication evidence through adoption; the later commit updates coverage.
+- The maintainer authorized recommendations, decisions, merge and push on
+  2026-09-08. Independent protocol and adversarial implementation review cleared.
+- FaultWorld hashes explicit proof/signature bytes into a separate chain,
+  compares receipt digests in both readers, preserves valid-prefix evidence,
+  and retains witnessed evidence through adoption. Replica substitutions
+  remain unresolved; authenticated bad evidence can be excluded and repaired.
 - Runtime remains pinned v2; PoolStore refuses silence clauses. No runtime,
-  circuit or wire changes. Recovery/fault rules remain executable ideal models.
+  circuit or wire changes. Real model hashes do not replace ideal proof and
+  authentication oracles or specify v3 encoding.
 - Keep the frozen private-payment fixture until receiver/invoice and audit
   crash/retry cases move to the pool/wallet. Retain offline Ergo probe and
-  build/browser/setup caches in ignored `scratch/`.
+  build/browser/setup caches in ignored `scratch/`. Review probes were removed.
 
 ## Evidence
 
-- Model suite: 14 files / 251 tests; typecheck passes. Final reader cleanup
-  also passed 27 reader tests. Rejected policies preserve the old counterexamples.
-- Independent contract review: all findings resolved and read back. Independent
-  model review: no blockers; six focused files / 88 tests pass. Verified
-  last-valid continuity, honest tail retention, occupied excluded sequences,
-  unresolved-evidence refusal, receipt precedence and same-index silence.
-- Full `npm run check` passes: 86 files / 1,619 tests, typecheck, build,
-  installed package, pilot and pool-store crash checks. It required permitted
-  access after sandboxed Vitest could not load its configuration; no check was
-  changed or weakened. Links pass across all four repositories (36 files).
-- Selected rules and costs: [decision](decisions/2026-09.md#2026-09-08--authenticated-faults-preserve-the-last-valid-state-and-the-clock-reads-its-snapshot).
-  [Fault recovery](docs/POOL_FAULT_RECOVERY.md) owns model limits and next evidence cases.
+- Independent final review: no remaining blockers; 3 new files / 55 focused
+  tests pass. Covers exact bytes, receipt comparisons, adoption, mutation,
+  replica event IDs and lapse shape, zero absent-signature digest, and fresh
+  oracle outputs that cannot retroactively validate earlier guessed bytes.
+- Full `npm run check` passes: 89 files / 1,674 tests, including all 306 model
+  tests; typecheck, build, installed package, pilot and pool-store crash checks.
+  The new copy boundary preserves the historical return counterexamples.
+  Vitest/integration checks required permitted access; no check was weakened.
+- Docs checks and cross-repository links pass (36 files); diff whitespace clean.
+- [Adoption decision](decisions/2026-09.md#2026-09-08--adoption-retains-witnessed-proof-evidence)
+  records the choice and retention cost. [Fault recovery](docs/POOL_FAULT_RECOVERY.md)
+  owns model coverage, review dispositions and remaining evidence work.
 
 ## Next
 
-1. Model C2.10.10's separate evidence chain and exact receipt proof/signature
-   digest comparisons: alternate valid proofs, substituted/withheld bytes,
-   committed bad evidence, valid-prefix immutability, repaired unfinalized
-   positions and evidence-mismatched receipt contradiction. Independently
-   review that model before a v3 byte layout. Ideal proof identities do not
-   yet establish this contract.
+1. Define v3 statement, recovery and evidence layouts and circuit relations;
+   specify authenticated record-range and evidence-retention requirements.
+   Reuse the adopted contract and retain adversarial cases while implementing.
 2. Continue [deployment probes](docs/POOL_DEPLOYMENT_PROBES.md): target phone,
    authenticated note delivery/restoration, independently available evidence
    and pinned-node publication. Offline sizes do not establish node acceptance.
 
 ## Open questions
 
-- No protocol selection or independent review is outstanding for this slice.
-  The exact evidence-chain model and later layout still need their own review.
+- No protocol selection, check or independent review remains outstanding for
+  this slice. Production layouts and their implementation need their own review.
 - Missing committed evidence remains unresolved; intrinsic exclusion supplies
   no availability guarantee. Measure suffix/ancestry retention and cold reads.
   Cached verdicts do not replace evidence or current record snapshots.
