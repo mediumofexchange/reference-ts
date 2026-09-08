@@ -5,13 +5,39 @@ finished implementation of the protocol must deliver and the evidence each
 gate needs. It does not amend the normative protocol; protocol choices land in
 Construction first, and the implementation tracks the revision pinned in the
 README. There is no release date. A finished, working protocol is the
-deliverable, and the order of steps is specification, then an executable
-adversarial model of its rules, then implementation rule by rule, then the
-wallet, then the external witness's write side.
+deliverable. For each mechanism, settle the specification, model its new
+semantic risks, and implement it with observable acceptance evidence. Order
+slices by dependencies and costly unknowns; bring wallet, service and witness
+integration alongside the core to expose constraints before formats are fixed.
 
 The approved [deployment probes](POOL_DEPLOYMENT_PROBES.md) bring provisional
 device/venue and recovery evidence forward before v3's layouts are frozen.
 They do not change the specification-first rule for production implementation.
+
+## Progress estimate
+
+The target is the smallest supported profile below as a usable end-to-end
+product: a holder can install a wallet, receive, verify, pay and redeem; an
+operator can run it durably; independent readers can verify supply and execute
+the declared failure paths with the original operator offline. One supported
+witness must actually accept publications. A mock, ideal model or offline
+transaction size does not establish these outcomes. Release gates still apply.
+
+Baseline at 2026-09-08: **about 40% done / 60% remaining**, plausibly
+**30–50% done / 50–70% remaining** as roadblocks become clearer. This is a
+judgment of engineering effort toward that target, not a measured fraction of
+features, code or tests and not a delivery-date prediction. Foundations include
+v2 proofs/notes, replay, authority, receipts and durable sequencing; reviewed
+recovery/fault models reduce design uncertainty but are not runtime recovery.
+
+Most remaining effort is v3 recovery/evidence formats and circuits, runtime
+integration, a pool wallet and service transport, authenticated delivery and
+restoration, witness publication, and deployment/security assurance. Device
+limits, custody/rollback and evidence availability can force redesign. Update
+the estimate when demonstrated outcomes or new evidence change the remaining
+work; allow it to move backward and explain why. Workflow/documentation cleanup
+alone does not increase it. Keep the current estimate in `WORK.md` and include
+done/remaining, uncertainty and the largest blockers in development wrap-ups.
 
 ## Release contract
 
