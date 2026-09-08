@@ -13,7 +13,33 @@ export interface Note {
   readonly backing: Id;
   readonly domain: Id;
   readonly value: bigint;
+  /** The ideal owner value (C1.2): the receiver's, or the backer's for a settlement output. */
+  readonly owner?: Id;
 }
+/** Ideal `H(T_TAG, nf)` (C3.1): the public name of a claim in a notice. The
+ * service and record only ever compute it forward from a public nullifier. */
+export function tagOf(nf: Id): Id { return `tag:${nf}`; }
+/** K's ideal acceptance of a demand (C3.4). */
+export interface Acceptance { readonly demand: Id; readonly owner: Id; readonly deadline: bigint; readonly signedByK: boolean }
+/** Public fields beside the proof. Issue and burn: backing and quantity.
+ * Demand: backing, quantity, tags, presenter, instant, deadline. Settle:
+ * backing, quantity, owner, demand, acceptance and the presenter's release.
+ * Withdraw: demand and presenter. Request: backing and tag. Signatures are
+ * ideal booleans or identities. */
+export interface Lit {
+  readonly backing: Id;
+  readonly quantity: bigint;
+  readonly tags?: readonly Id[];
+  readonly presenter?: Id;
+  readonly instant?: bigint;
+  readonly deadline?: bigint;
+  readonly demand?: Id;
+  readonly owner?: Id;
+  readonly acceptance?: Acceptance;
+  readonly tag?: Id;
+}
+/** What a proof is bound to: a segment identity and its scope (C1.2.2). */
+export interface Binding { readonly id: Id; readonly scope: Scope }
 export interface Term { readonly backing: Id; readonly operator: Id; readonly link: Id; readonly from: bigint }
 export interface Scope { readonly domain: Id; readonly operator: Id; readonly entries: readonly Term[]; readonly root: Id }
 export interface Statement {
@@ -24,8 +50,8 @@ export interface Statement {
   readonly anchors: readonly Id[];
   readonly nullifiers: readonly Id[];
   readonly outputs: readonly Id[];
-  readonly kind: "issue" | "spend" | "burn";
-  readonly lit?: { readonly backing: Id; readonly quantity: bigint };
+  readonly kind: "issue" | "spend" | "burn" | "demand" | "withdraw" | "settle" | "request";
+  readonly lit?: Lit;
 }
 interface Witness { readonly inputs: readonly Note[]; readonly outputs: readonly Note[]; readonly signedByK: boolean }
 export interface Departures {
@@ -41,6 +67,8 @@ export interface Departures {
   readonly trustShownScope?: boolean;
   readonly ignoreRevocation?: boolean;
   readonly lapseWithoutCarriage?: boolean;
+  /** Invariant 27 counterexample: a settlement without K's acceptance. */
+  readonly ignoreAcceptance?: boolean;
 }
 export class Refusal extends Error {}
 function requireThat(ok: boolean, message: string): asserts ok { if (!ok) throw new Refusal(message); }
@@ -52,36 +80,47 @@ export class ProofOracle {
   private readonly notes = new Map<Id, Note>();
   private readonly identities = new Map<string, Id>();
 
-  note(backing: Id, value: bigint, domain = "D"): Note {
+  note(backing: Id, value: bigint, domain = "D", owner?: Id): Note {
     const id = ++this.serial;
-    const note = Object.freeze({ cm: `cm${id}`, nf: `nf${id}`, backing, value, domain });
+    const note = Object.freeze({ cm: `cm${id}`, nf: `nf${id}`, backing, value, domain, ...(owner === undefined ? {} : { owner }) });
     this.notes.set(note.cm, note);
     return note;
   }
 
-  prove(service: Service, kind: Statement["kind"], inputs: readonly Note[], outputs: readonly Note[],
-    anchors: readonly Id[] = [], lit?: Statement["lit"], signedByK = true): Statement {
+  /** A request (C2b.5.1) is segment-free: it binds the domain alone. */
+  static unbound(domain = "D"): Binding {
+    return { id: "", scope: { domain, operator: "", entries: [], root: "" } };
+  }
+
+  prove(binding: Binding, kind: Statement["kind"], inputs: readonly Note[], outputs: readonly Note[],
+    anchors: readonly Id[] = [], lit?: Lit, signedByK = true): Statement {
+    // A demand names tags, a request one tag; neither reveals a nullifier (C3.1).
+    const named: Lit | undefined = lit === undefined ? undefined :
+      kind === "demand" ? { ...lit, tags: inputs.map(n => n.value > 0n ? tagOf(n.nf) : "0") } :
+      kind === "request" ? { ...lit, tag: tagOf(inputs[0]?.nf ?? "") } : lit;
     // Model-only interning of public values, not a signed wire encoding.
-    const key = JSON.stringify([service.id, service.scope.root, kind, service.scope.domain, anchors,
-      inputs.map(n => n.nf), outputs.map(n => n.cm), lit?.backing, lit?.quantity.toString()]);
+    const key = JSON.stringify([binding.id, binding.scope.root, kind, binding.scope.domain, anchors,
+      kind === "demand" || kind === "request" ? [] : inputs.map(n => n.nf), outputs.map(n => n.cm), named],
+      (_k, v: unknown) => typeof v === "bigint" ? v.toString() : v);
     const id = this.identities.get(key) ?? `statement${++this.serial}`;
     this.identities.set(key, id);
-    const statement: Statement = Object.freeze({ id, segment: service.id,
-      scope: service.scope.root, domain: service.scope.domain, kind,
-      anchors: Object.freeze([...anchors]), nullifiers: Object.freeze(inputs.map(n => n.nf)),
-      outputs: Object.freeze(outputs.map(n => n.cm)), ...(lit ? { lit: Object.freeze({ ...lit }) } : {}) });
+    const statement: Statement = Object.freeze({ id, segment: binding.id,
+      scope: binding.scope.root, domain: binding.scope.domain, kind,
+      anchors: Object.freeze([...anchors]),
+      nullifiers: Object.freeze(kind === "demand" || kind === "request" ? [] : inputs.map(n => n.nf)),
+      outputs: Object.freeze(outputs.map(n => n.cm)), ...(named ? { lit: Object.freeze({ ...named }) } : {}) });
     this.witnesses.set(statement, { inputs: [...inputs], outputs: [...outputs], signedByK });
     return statement;
   }
 
   verify(s: Statement, scope: Scope, roots: ReadonlyMap<Id, readonly Id[]>, departures: Departures): boolean {
     const witness = this.witnesses.get(s);
-    if (!witness || s.scope !== scope.root || s.domain !== scope.domain) return false;
+    if (!witness || s.domain !== scope.domain || (s.kind !== "request" && s.scope !== scope.root)) return false;
     const { inputs, outputs } = witness;
     const names = new Set(scope.entries.map(e => e.backing));
     for (const note of [...inputs, ...outputs]) {
       if (this.notes.get(note.cm) !== note || note.domain !== scope.domain || note.value < 0n || note.value >= 1n << 64n) return false;
-      if (!departures.ignoreScope && !names.has(note.backing)) return false; // padding too
+      if (s.kind !== "request" && !departures.ignoreScope && !names.has(note.backing)) return false; // padding too
     }
     if (inputs.length !== s.anchors.length) return false;
     for (let i = 0; i < inputs.length; i++) {
@@ -91,6 +130,26 @@ export class ProofOracle {
     if (s.kind === "issue") {
       return inputs.length === 0 && outputs.length === 1 && witness.signedByK && s.lit !== undefined &&
         s.lit.quantity > 0n && outputs[0]!.backing === s.lit.backing && outputs[0]!.value === s.lit.quantity;
+    }
+    const lit = s.lit;
+    if (s.kind === "withdraw") return inputs.length === 0 && outputs.length === 0 && lit?.demand !== undefined && lit.presenter !== undefined;
+    if (s.kind === "request") { // C3.2 segment-free form: one real note, its size hidden
+      return lit !== undefined && inputs.length === 1 && outputs.length === 0 && inputs[0]!.value > 0n &&
+        inputs[0]!.backing === lit.backing && lit.tag === tagOf(inputs[0]!.nf) && s.nullifiers.length === 0;
+    }
+    if (s.kind === "demand") { // C3.2 segment-bound form with the quantity lit
+      return lit !== undefined && inputs.length === 2 && outputs.length === 0 && s.nullifiers.length === 0 &&
+        inputs.every(n => n.backing === lit.backing) && inputs.some(n => n.value > 0n) &&
+        inputs.reduce((sum, n) => sum + n.value, 0n) === lit.quantity && lit.quantity > 0n &&
+        lit.presenter !== undefined && lit.deadline !== undefined && lit.tags !== undefined &&
+        same(lit.tags, inputs.map(n => n.value > 0n ? tagOf(n.nf) : "0"));
+    }
+    if (s.kind === "settle") { // C3.5: the demanded notes, whole, to the backer's owner value
+      const out = outputs[0];
+      return lit !== undefined && inputs.length === 2 && outputs.length === 1 && out !== undefined &&
+        lit.demand !== undefined && lit.owner !== undefined && lit.quantity > 0n && s.nullifiers[0] !== s.nullifiers[1] &&
+        [...inputs, out].every(n => n.backing === lit.backing) && out.value === lit.quantity && out.owner === lit.owner &&
+        inputs.reduce((sum, n) => sum + n.value, 0n) === lit.quantity;
     }
     if (inputs.length !== 2 || outputs.length !== (s.kind === "spend" ? 2 : 1)) return false;
     const delta = new Map<Id, bigint>();
@@ -114,33 +173,80 @@ export interface State {
   readonly spent: Set<Id>;
   readonly outputs: Set<Id>;
   readonly totals: Map<Id, bigint>;
+  /** C3.7: the tags of every spent nullifier, the pending locks by tag, and the standing demands. */
+  readonly spentTags: Set<Id>;
+  readonly locks: Map<Id, Id>;
+  readonly standing: Map<Id, Statement>;
 }
-function empty(): State { return { events: new Map(), roots: new Map([["empty", []]]), spent: new Set(), outputs: new Set(), totals: new Map() }; }
+function empty(): State {
+  return { events: new Map(), roots: new Map([["empty", []]]), spent: new Set(), outputs: new Set(), totals: new Map(),
+    spentTags: new Set(), locks: new Map(), standing: new Map() };
+}
 function copy(state: State): State {
   return { events: new Map(state.events), roots: new Map(state.roots), spent: new Set(state.spent),
-    outputs: new Set(state.outputs), totals: new Map(state.totals) };
+    outputs: new Set(state.outputs), totals: new Map(state.totals), spentTags: new Set(state.spentTags),
+    locks: new Map(state.locks), standing: new Map(state.standing) };
 }
-function apply(state: State, event: Event, countSharedTwice = false): void {
+/** C3.7: the demand whose lock on a tag stands at an index — none where the
+ * tag is unlocked, its demand discharged, or its deadline before the index.
+ * With no index every lock stands, which is the conservative reading. */
+export function lockStanding(state: State, tag: Id, at?: bigint): Id | undefined {
+  const lock = state.locks.get(tag);
+  const demand = lock === undefined ? undefined : state.standing.get(lock);
+  if (demand === undefined || (at !== undefined && (demand.lit?.deadline ?? 0n) < at)) return undefined;
+  return lock;
+}
+/** One transition for the service, the replayer and the gap reader alike
+ * (C3.7, C2b.3.2). `at` is the index locks are read at: the door's horizon,
+ * a checkpoint's witnessed index, or a publication's own index. */
+export function applyEvent(state: State, event: Event, departures: Departures = {}, at?: bigint): void {
   const prior = state.events.get(event.id);
   if (prior) {
     requireThat(prior.statement.id === event.statement.id, "conflicting segment prefix");
-    if (!countSharedTwice) return;
+    if (!departures.countSharedTwice) return;
   }
   const s = event.statement;
+  const demand = (s.kind === "settle" || s.kind === "withdraw") ? state.standing.get(s.lit?.demand ?? "") : undefined;
   if (!prior) {
     requireThat(new Set(s.nullifiers).size === s.nullifiers.length && !s.nullifiers.some(n => state.spent.has(n)), "spent conflict");
     requireThat(new Set(s.outputs).size === s.outputs.length && !s.outputs.some(n => state.outputs.has(n)), "output conflict");
+    // A standing lock reserves without consuming; only the settlement of its own demand consumes.
+    for (const nf of s.nullifiers) {
+      const lock = lockStanding(state, tagOf(nf), at);
+      requireThat(lock === undefined || (s.kind === "settle" && lock === s.lit?.demand), "locked");
+    }
+    if (s.kind === "demand") {
+      for (const tag of s.lit?.tags ?? []) requireThat(tag === "0" || (lockStanding(state, tag, at) === undefined && !state.spentTags.has(tag)), "tag locked or spent");
+    }
+    if (s.kind === "settle" || s.kind === "withdraw") requireThat(demand !== undefined, "demand not standing");
+    if (s.kind === "withdraw") requireThat(demand!.lit?.presenter === s.lit?.presenter, "withdrawal signer");
+    if (s.kind === "settle") {
+      const lit = s.lit!, d = demand!.lit!, a = lit.acceptance;
+      requireThat(d.backing === lit.backing && d.quantity === lit.quantity && lit.presenter === d.presenter, "settlement terms");
+      requireThat(departures.ignoreAcceptance === true || (a !== undefined && a.signedByK && a.demand === demand!.id &&
+        a.owner === lit.owner && d.deadline !== undefined && a.deadline <= d.deadline), "acceptance");
+      requireThat((d.tags ?? []).every((tag, i) => tag === "0" || tag === tagOf(s.nullifiers[i] ?? "")), "settlement tags");
+    }
   }
-  for (const nf of s.nullifiers) state.spent.add(nf);
+  for (const nf of s.nullifiers) { state.spent.add(nf); state.spentTags.add(tagOf(nf)); }
   for (const cm of s.outputs) state.outputs.add(cm);
-  if (s.lit) {
+  if (s.lit && (s.kind === "issue" || s.kind === "burn")) {
     const before = state.totals.get(s.lit.backing) ?? 0n;
     const after = before + (s.kind === "issue" ? s.lit.quantity : -s.lit.quantity);
     requireThat(after >= 0n && after < 1n << 64n, "supply bound");
     state.totals.set(s.lit.backing, after);
   }
+  if (s.kind === "demand") {
+    state.standing.set(s.id, s);
+    for (const tag of s.lit?.tags ?? []) if (tag !== "0") state.locks.set(tag, s.id);
+  }
+  if (demand !== undefined) {
+    state.standing.delete(demand.id);
+    for (const tag of demand.lit?.tags ?? []) if (state.locks.get(tag) === demand.id) state.locks.delete(tag);
+  }
   state.events.set(event.id, event);
 }
+const apply = applyEvent;
 
 export interface Checkpoint {
   readonly id: Id;
@@ -154,7 +260,7 @@ export interface Checkpoint {
   readonly events: readonly Event[];
   readonly carries: readonly Id[];
 }
-interface Recorded { readonly checkpoint: Checkpoint; readonly at: bigint; readonly status: "final" | "lapsed" | "invalid"; readonly state?: State }
+export interface Recorded { readonly checkpoint: Checkpoint; readonly at: bigint; readonly status: "final" | "lapsed" | "invalid"; readonly state?: State }
 export interface Receipt { readonly segment: Id; readonly statement: Id; readonly position: bigint; readonly after: bigint; readonly operator: Id; readonly scope: Id; readonly history: Id }
 export interface RepairClassification { readonly included: boolean; readonly contradicted: boolean; readonly lapsed: boolean }
 export interface ReceiptClassification {
@@ -273,6 +379,7 @@ export class World {
       });
       if (terms.some(t => t.until !== undefined && t.until <= record.at)) continue;
       requireThat(terms.every(t => t.from <= record.at), "scope not in force");
+      if (this.passedByRule(c, record.at)) continue; // a whole-scope lapse by public rule, passed like a term end
       if (this.departures.skipLiveInvalid && record.status === "invalid") continue;
       return c.id; // missing/invalid statements still select this candidate
     }
@@ -295,7 +402,7 @@ export class World {
     for (const id of new Set(openings.values())) {
       if (id === null) continue;
       const state = this.import(id);
-      for (const event of state.events.values()) apply(result, event, this.departures.countSharedTwice);
+      for (const event of state.events.values()) apply(result, event, this.departures, this.now);
       for (const [root, leaves] of state.roots) result.roots.set(root, leaves);
     }
     if (this.departures.forgetSpent) result.spent.clear();
@@ -303,7 +410,9 @@ export class World {
   }
   open(operator: Id, names: readonly Id[], domain = "D", override?: ReadonlyMap<Id, Id | null>): Service {
     const previousService = this.services.get(operator);
-    if (previousService && this.current(previousService.scope)) requireThat(previousService.finalized() || previousService.stale(), "live tail before scope change");
+    if (previousService && this.current(previousService.scope)) {
+      requireThat(previousService.finalized() || previousService.stale() || this.discardable(previousService), "live tail before scope change");
+    }
     requireThat(names.length > 0 && new Set(names).size === names.length, "scope shape");
     requireThat(names.every(b => this.domains.get(b) === domain), "wrong construction domain");
     const entries = [...names].sort().map(b => this.term(b));
@@ -322,6 +431,17 @@ export class World {
     this.services.set(operator, service);
     return service;
   }
+  /** The recovery model (pool-recovery.ts) overrides these; the authority
+   * contract alone adopts nothing, lapses only by term end, and serves freely. */
+  adoptable(_statement: Statement, _segment: Id, _openings: ReadonlyMap<Id, Id | null>, _position: number): { scope: Scope; at: bigint } {
+    throw new Refusal("adoption unsupported");
+  }
+  /** A public condition, judged at an index, that lapses a checkpoint for its
+   * whole scope and lets descent pass it (C2b.4.1 in the recovery model). */
+  protected passedByRule(_checkpoint: Checkpoint, _at: bigint): boolean { return false; }
+  protected replayed(_checkpoint: Checkpoint, _state: State): void {}
+  serving(_service: Service, _statement: Statement): void {}
+  protected discardable(_service: Service): boolean { return false; }
   // Model of the operator's durable actor journal, not a protocol authority.
   active(service: Service): boolean { return this.services.get(service.scope.operator) === service; }
   resume(source: Service, resumed: Service): void {
@@ -375,7 +495,7 @@ export class World {
         const next = chain[chain.findIndex(t => t.link === e.link) + 1];
         return next !== undefined && next.from <= this.now;
       });
-      if (ended) {
+      if (ended || this.passedByRule(checkpoint, this.now)) {
         this.records.push({ checkpoint, at: this.now, status: "lapsed" });
         return "lapsed";
       }
@@ -397,12 +517,16 @@ export class World {
       state.roots.set(`${checkpoint.segment}:0`, []);
       for (let i = 0; i < checkpoint.events.length; i++) {
         const event = checkpoint.events[i]!;
-        requireThat(event.id === `${checkpoint.segment}:${i}` && event.statement.segment === checkpoint.segment, "event position");
-        requireThat(this.oracle.verify(event.statement, checkpoint.scope, state.roots, this.departures), "proof");
-        apply(state, event);
+        requireThat(event.id === `${checkpoint.segment}:${i}`, "event position");
+        // An adopted statement (C2b.4.2) is judged under the opening it was proved against, at its own index.
+        const judged = event.statement.segment === checkpoint.segment ? { scope: checkpoint.scope, at: this.now } :
+          this.adoptable(event.statement, checkpoint.segment, new Map(checkpoint.openings), i);
+        requireThat(this.oracle.verify(event.statement, judged.scope, state.roots, this.departures), "proof");
+        apply(state, event, this.departures, judged.at);
         leaves.push(...event.statement.outputs);
         state.roots.set(`${checkpoint.segment}:${i + 1}`, Object.freeze([...leaves]));
       }
+      this.replayed(checkpoint, state);
       this.checkRevocations(state, this.now);
       const record: Recorded = { checkpoint, at: this.now, status: "final", state };
       this.records.push(record);
@@ -609,13 +733,30 @@ export class Service {
     if (prior) return prior;
     requireThat(this.lastSigned !== undefined, "commit opening first");
     requireThat(statement.segment === this.id, "wrong segment");
+    this.world.serving(this, statement);
     requireThat(this.world.oracle.verify(statement, this.scope, this.state.roots, this.world.departures), "proof");
+    return this.append(statement, this.world.now + this.world.lag); // locks read at the door's horizon (C3.8)
+  }
+  /** C2b.4.2: admit the next statement of the gap's adopted block, under the
+   * scope of the opening it was proved against, after this segment's opening
+   * checkpoint has been witnessed. */
+  adopt(statement: Statement): Receipt {
+    this.ready();
+    const prior = this.receipts.get(statement.id);
+    if (prior) return prior;
+    const opening = this.lastSigned;
+    requireThat(opening !== undefined && this.world.records.some(r => r.checkpoint === opening && r.status === "final"), "opening not witnessed");
+    const judged = this.world.adoptable(statement, this.id, this.openings, this.events.length);
+    requireThat(this.world.oracle.verify(statement, judged.scope, this.state.roots, this.world.departures), "proof");
+    return this.append(statement, judged.at);
+  }
+  private append(statement: Statement, at: bigint): Receipt {
     const event = Object.freeze({ id: `${this.id}:${this.events.length}`, statement });
-    const next = copy(this.state); apply(next, event);
+    const next = copy(this.state); apply(next, event, this.world.departures, at);
     this.events.push(event); this.leaves.push(...statement.outputs);
     next.roots.set(this.root(), Object.freeze([...this.leaves])); this.state = next;
     const receipt = Object.freeze({ segment: this.id, statement: statement.id, position: BigInt(this.events.length),
-      after: this.lastSigned.sequence, operator: this.scope.operator, scope: this.scope.root, history: history(this.events) });
+      after: this.lastSigned!.sequence, operator: this.scope.operator, scope: this.scope.root, history: history(this.events) });
     this.receipts.set(statement.id, receipt);
     return receipt;
   }

@@ -3,6 +3,9 @@
 Status: resolved by the maintainer on 2026-09-07. The recommended policy was
 approved and adopted in Construction C2b.3a–c; see the
 [decision](../decisions/2026-09.md#2026-09-07--shielded-recovery-preserves-finalized-holdings-without-payee-redirection).
+The later-version objects that approval left open are now specified in the
+companion `pool-recovery.md` (C3.1–8, C2b.3.1–3, C2b.4.1–2, C2b.5.1–2, C2b.6.1)
+and modelled in `model/pool-recovery.ts`; see [the contract decision](../decisions/2026-09.md#2026-09-07--the-pools-presentation-and-recovery-contract-whole-note-demands-by-tag-a-lit-settlement-to-the-backer-force-once-at-the-venue-and-the-return-as-a-new-segment).
 The analysis below records the alternatives considered. The pinned v2 bytes
 and runtime remain unchanged and do not implement recovery.
 

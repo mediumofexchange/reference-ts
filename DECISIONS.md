@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-07` [The pool's presentation and recovery contract: whole-note demands by tag, a lit settlement to the backer, force once at the venue, and the return as a new segment](decisions/2026-09.md#2026-09-07--the-pools-presentation-and-recovery-contract-whole-note-demands-by-tag-a-lit-settlement-to-the-backer-force-once-at-the-venue-and-the-return-as-a-new-segment)
 - `2026-09-07` [Shielded recovery preserves finalized holdings without payee redirection](decisions/2026-09.md#2026-09-07--shielded-recovery-preserves-finalized-holdings-without-payee-redirection)
 - `2026-09-07` [A carrying scope change decides a receipt: proven repair lapses it, an elective change abandons it](decisions/2026-09.md#2026-09-07--a-carrying-scope-change-decides-a-receipt-proven-repair-lapses-it-an-elective-change-abandons-it)
 - `2026-09-07` [Proven failed-publication repair can lapse unfinalized receipts](decisions/2026-09.md#2026-09-07--proven-failed-publication-repair-can-lapse-unfinalized-receipts)

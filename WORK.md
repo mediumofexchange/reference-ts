@@ -6,72 +6,84 @@ Updated: 2026-09-07
 
 Build the shielded-pool protocol: specification → adversarial model → claim
 layer → sequencing/recovery/presentation → wallet → witness write side.
-The maintainer approved finalized-snapshot recovery without spend-based
-redirection on 2026-09-07. That decision is adopted; do not ask for it again.
+This slice specified and modelled pool-v2 §7.4's excluded objects —
+presentation, the non-service count, snapshot redemption at the venue and
+the return from silence — before any implementation. The recovery policy
+(C2b.3a–c) was approved on 2026-09-07 and is not reopened.
 
 ## Status
 
-- Implementation branch: `feat/shielded-recovery-boundary`, based on
-  `docs/shielded-recovery-contract` at `f8244a1` (parent `3711368`).
-- Companion specification: `spec/shielded-recovery-finality`, committed as
-  `dcce2dc`, base `da80f85`. Specification committed before model work.
-- Construction C2b.3a–c now requires finalized positive holdings, ownership
-  and immutable-nullifier evidence; unwitnessed spends cannot create recovery
-  holdings or redirect redemption. The shielded challenge window is retired.
-- C2b.3b/4 preserves existing consent and supply rules: valid recovery
-  settlements consume notes and commit to backer-owned replacement notes;
-  redemption leaves outstanding unchanged. Return adopts both effects.
-  Bare nullifier publication cannot settle or destroy claims.
-- Extensions retains the transparent profile's existing limited challenge.
-  Construction's appendix records the retired rule and its cost. Pool-v2
-  section 7.4 explicitly remains unsupported: no frames, circuits, keys,
-  admission behavior or durable store support changed.
-- Eight cases in `model/pool-recovery.test.ts` exercise the approved finality
-  boundary using the existing authority model: splits, merged inputs, chains,
-  conflicting proofs, false/zero inclusion, missing history and replacement.
-  These are ideal-cryptography inclusion observations, not recovery proofs or
-  an executable settlement/adoption mechanism.
-- Decision is indexed in `decisions/2026-09.md`; README pins `dcce2dc` and
-  states the runtime exclusion. `docs/POOL_RECOVERY_GAP.md` is marked resolved;
-  `docs/PROTOCOL_RULES.md` distinguishes the model and transparent oracle.
-- Published implementation `main`/`origin/main` remains `3711368`. CI repair
-  `1ccb6e7` and wallet direction `3711368` were merged/pushed with authorization;
-  CI #46 (`34140840332`) passed all five jobs.
-- [Wallet direction](docs/WALLET_DIRECTION.md) records native assets and
-  non-circulating promises in one wallet. That instrument's acceptance,
-  settlement, key recovery and core/profile placement remain proposals.
+- Implementation branch: `feat/pool-recovery-model`, base `6e99772` (main).
+- Companion specification: `spec/pool-recovery-contract` at `3676757`
+  (`820cd51` before review), base `dcce2dc` (main). `pool-recovery.md`
+  defines C3.1–8, C2b.5.1–2, C2b.6.1, C2b.3.1–3 and C2b.4.1–2 for
+  `moe/pool/v3`; Construction §C2b/§C3, pool-v2 §7.4, the spec AGENTS and
+  README point to it. v2 bytes are unchanged.
+- `model/pool-recovery.ts` (`RecoveryWorld` over the authority model): the
+  no-commitment clock, the snapshot, the adoption index, the recovery state,
+  force at the venue, the adopted block, the return, the count, and
+  `recoveryViolations` (holdings equal supply, a note settles once and is
+  never spent again, every settlement pays the backer under K's acceptance).
+- `model/pool-authority.ts` gained the demand, withdraw, settle and request
+  kinds, `tagOf`, the pending-lock set and standing demands in `State`,
+  `Service.adopt`, and the hooks `adoptable`, `passedByRule` (used by
+  `include` and descent alike), `replayed`, `serving` and `discardable`.
+- 29 new cases in `model/pool-recovery.test.ts`, with counterexamples under
+  eleven departures: `ignoreAcceptance`, `countUnproven`, `resetOnHandover`,
+  `lapsedClosesGap`, `anyAnchor`, `bareNullifiers`, `forceOutsideGap`,
+  `settleTwice`, `skipSameIndex`, `serveBeforeAdoption`, `continueThroughGap`;
+  six of them exercise the review's findings (label binding, the lock's
+  bound, the instant window, one clause per scope, a drop, adoption at the
+  publication's own index).
+- The decision entry (2026-09-07, contract) lists the choices made under the
+  maintainer's "continue … merge and push" authority and not individually
+  confirmed: whole-note demands by tag, the lit settlement with a public
+  owner, no attempt timeout with the lock bounded by the demand's deadline,
+  the segment-free request, the instant window, one no-commitment duration
+  per scope, force once at the publication's own index, the return as a new
+  segment, the adoption index, and invalid live evidence blocking recovery
+  and the count as it blocks descent.
+- No `src/` change. PoolStore still refuses silence clauses; the runtime is
+  v2 and carries none of these objects.
 
 ## Evidence
 
-- Independent review approved the actual specification diff and the eight
-  model cases without blocking findings. It explicitly did not certify a
-  recovery construction. The forged-opening case checks ideal-token identity,
-  not an implemented ownership proof. Review obligations for later proofs,
-  settlement, adoption and return ordering remain.
-- Focused `npx vitest run model/pool-recovery.test.ts`: 8/8 passed.
-- Full `npm run check` passed on Node 24.6: 76 files / 1,469 tests, docs,
-  typecheck, build, installed package, payment pilot and pool-store crash
-  checks. Specification links and `git diff --check` also passed.
-- Baseline verification: 75 files / 1,461 tests on local Node 24.6; CI #46
-  also passed Linux Node 20/24, Windows Node 24 and both real-proof jobs.
-- Real circuits are unchanged; pinned evidence is docs/pool-v2-verification.json.
-- Windows esbuild requires execution outside the restricted sandbox.
+- `npx vitest run model/`: 4 files / 130 tests passed (89 before this slice,
+  8 boundary cases, 29 contract cases, plus schedule).
+- `npm run typecheck` clean; spec links pass across both repositories.
+- Full `npm run check` on Node 24.6 after the review fixes: 76 files / 1,498
+  tests, docs, typecheck, build, installed package, payment pilot and
+  pool-store crash checks passed; `git diff --check` clean.
+- Independent adversarial review (one bounded, read-only reviewer lane over
+  the contract, the model and the tests) returned twelve findings, two high
+  soundness holes among them; all twelve are adopted in spec `3676757` and
+  in the model and tests. Dispositions are in the decision entry. The
+  review certifies no circuit, byte layout or implementation.
+- The pending slice merged before this one: `6e99772` on main after a full
+  `npm run check` (76 files / 1,469 tests) on 2026-09-07.
 
 ## Next
 
-1. Specify the later-version presentation/recovery objects together (pool-v2
-   section 7.4): owned-note proofs, demand/accept/release, settlement, pending
-   locks, non-service evidence, supply-preserving adoption, duplicate refusal
-   and same-index gap closure. The finalized-holdings policy is already approved.
-2. Extend the adversarial model to those objects before implementing them,
-   then independently review the implementation. Wallet use follows: payee
-   freshness, reproof after lapse, delivery, synchronization and transport.
+1. Byte layouts for `moe/pool/v3` in a new `pool-v3.md`: `T_TAG`, the holding
+   proof (both forms), the settle statement and its public-input order,
+   statement kinds 4–6 in the history and receipt, the five publication
+   frames and their identities, the adoption block in replay, and what **E**'s
+   clause fields bind. Circuits follow from the pinned v2 sources.
+2. Implement over `src/pool/` rule by rule with the model as oracle: locks in
+   `Segment` admission and replay, the request and count reader, the gap
+   reader over the venue record, `PoolStore` adoption on return (lifting the
+   silence-clause refusal), then wallet-side presentation and re-proof.
+3. Port the frozen transparent cases (`c2b-redemption-legs`, `c2b-return-
+   from-silence`, `c2b-non-service`, `c3-*`) as each rule lands over notes.
 
 ## Open questions
 
-- The policy is fixed, but the later construction's exact proof/record formats,
-  multi-backing atomicity and return adoption remain to be designed together.
-  No new v2 recovery path may be enabled to shortcut that work.
+- Whether the maintainer confirms the choices above, in particular whole-note
+  demands and the always-new-segment return.
+- What remedy a backing has against an operator whose last carrying
+  checkpoint is provably invalid: it blocks recovery, the count and any
+  successor's descent alike (C2.10.3), and neither contract defines a way
+  past it beyond the fault proof and E's replacement rule.
 - SQLite ownership assumes one journal per operator key on its venue. Copied
   keys/databases and coordinated backup rollback need custody/backup procedures.
 - Scope authority assumes a complete, stable venue snapshot; same-index mutation

@@ -167,12 +167,15 @@ next.
 The historical `moe/pool/v1` runtime was replaced and lives in git history.
 
 The runtime follows specification revision
-[`dcce2dccad400ec5181a1ec3c776bd374b294aed`](https://github.com/mediumofexchange/money-from-first-principles/tree/dcce2dccad400ec5181a1ec3c776bd374b294aed),
+[`3676757a1c8ddc0df607352c6bddbb48f6d85a09`](https://github.com/mediumofexchange/money-from-first-principles/tree/3676757a1c8ddc0df607352c6bddbb48f6d85a09),
 whose `pool-v2.md` pins the construction bit for bit and records the
 implemented circuits and keys. `docs/PROTOCOL_RULES.md` maps each binding
 rule to its specification rule, code and test, and marks what is frozen.
-The approved shielded recovery boundary (C2b.3a–c) has model cases;
-recovery settlements and their adoption remain outside the v2 runtime.
+That revision's `pool-recovery.md` specifies presentation, the non-service
+count, snapshot redemption at the venue and the return from silence over the
+pool; `model/pool-recovery.ts` is its executable model with counterexamples.
+Those objects belong to a later construction version and remain outside the
+v2 runtime.
 
 ## Try the local pilot
 
