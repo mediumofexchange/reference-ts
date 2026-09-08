@@ -5,13 +5,14 @@ Updated: 2026-09-08
 ## Goal
 
 Build the shielded-pool protocol. Bring recovery and device/venue evidence
-forward before freezing v3. This slice compares clock alternatives and
-prepares material decisions; it does not select normative recovery policy.
+forward before freezing v3. The reader/clock research slice is merged;
+the next slice requires a choice of recovery return and receipt rules.
 
 ## Status
 
-- Implementation: `test/pool-fault-clock-choice` at `4f4f525`, based on
-  `a8e68d8` (`fix/pool-fault-readers`); merging to `main` after current checks.
+- Implementation: `main`, fast-forwarded through `67086ce` from
+  `test/pool-fault-clock-choice`; includes reader repair `a8e68d8` and return
+  counterexamples `4f4f525`. No proposed recovery policy was selected.
 - Companion specification: `main` at `3676757`, unchanged. No v3 bytes fixed.
 - Runtime remains v2. No `src/` behavior changed; PoolStore refuses silence
   clauses and recovery/presentation/wallet remain unimplemented there.
