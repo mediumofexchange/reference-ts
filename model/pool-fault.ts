@@ -14,6 +14,11 @@ export interface FaultChoices {
   readonly classifyNonCarrying?: boolean;
   /** A′: excluded carrying commitments still close the interval. */
   readonly excludedClosesInterval?: boolean;
+  /** Research alternative: a non-carrying commitment closes this backing's
+   * interval even if silence lapses it for its own scope. Term lapse still
+   * prevents closure. This changes C2b.4.1/C2b.6.1 and may affect later
+   * finality through the clock. */
+  readonly nonCarryingSilenceClosesInterval?: boolean;
 }
 export interface FaultDepartures {
   readonly unresolvedIsExcluded?: boolean;
@@ -33,6 +38,7 @@ export class FaultWorld extends RecoveryWorld {
   constructor(lag = 1n, readonly choices: FaultChoices = {}, readonly faults: FaultDepartures = {},
     recovery: RecoveryDepartures = {}, departures: Departures = {}) {
     super(lag, recovery, departures);
+    requireThat(!(choices.classifyNonCarrying && choices.nonCarryingSilenceClosesInterval), "conflicting clock choices");
   }
   reader(): FaultReader {
     const view = this.evaluationView(this.records, this.now);
@@ -114,9 +120,9 @@ export class FaultWorld extends RecoveryWorld {
   }
   /** Lapse has its own evidence: term lapse needs the header/terms; silence
    * lapse also needs its historical clock. Neither needs this event proof. */
-  private lapsed(r: Recorded): boolean {
+  private lapsed(r: Recorded, termOnly = false): boolean {
     const view = this.prefix(r), c = r.checkpoint;
-    try { return view.scopeEnded(c) || view.passedByRule(c, r.at); }
+    try { return view.scopeEnded(c) || (!termOnly && view.passedByRule(c, r.at)); }
     catch (error) {
       if (!(error instanceof Refusal) || AVAILABILITY.test(error.message)) throw error;
       return false; // An authenticated malformed header proves no lapse.
@@ -185,7 +191,8 @@ export class FaultWorld extends RecoveryWorld {
         if (r.at >= at || this.term(backing, r.at).operator !== r.checkpoint.operator) continue;
         requireThat(!this.withheldDirectories.has(r.checkpoint.id), "unresolved clock");
         let lapsed: boolean;
-        try { lapsed = this.lapsed(r); } catch (error) {
+        const nonCarrying = !r.checkpoint.carries.includes(backing);
+        try { lapsed = this.lapsed(r, nonCarrying && this.choices.nonCarryingSilenceClosesInterval === true); } catch (error) {
           if (error instanceof Refusal && AVAILABILITY.test(error.message)) throw new Refusal("unresolved clock");
           throw error;
         }

@@ -15,8 +15,11 @@ The [reader repair](POOL_FAULT_READERS.md) now separates witnessing from
 evidence-dependent validation and covers the review's reader defects with
 27 new regression cases. The corrected model exposes the cross-scope lapse
 dependency instead of hiding it. The earlier recommendation to adopt A″
-remains suspended pending that dependency analysis; its segment-fault and
-receipt-precedence choices remain open.
+remains suspended. The [clock comparison and return decision](POOL_RECOVERY_RETURN_DECISION.md)
+now reproduce an inherited safety failure in both clock choices and the base
+recovery model: a non-carrying reset lets an old segment spend a note already
+settled during silence. Its repair takes priority; segment-fault and
+receipt-precedence choices also remain open.
 
 ## The failure reproduced
 
@@ -59,19 +62,24 @@ The rules over that classification:
   needs every dependency valid or excluded. An unresolved dependency yields no
   verdict. Late evidence resolves; it never reverses, because classification
   is a function of the bytes.
-- An excluded checkpoint faults its segment: one segment identity binds one
-  history (C2.10.6), so no later checkpoint of that segment is canonical.
+- An excluded checkpoint faults its segment under this candidate: no later
+  checkpoint of that segment is canonical. C2.10.6 alone does not select
+  this whole-segment consequence.
   Repair is a new segment on the exact canonical state reached through the
-  evidenced exclusions, by the same operator or a successor. The faulted tail
-  is discarded as a unit and its receipts read as abandoned under C2.10.9b:
-  the sequence is consumed, so there is no hole and no repair excuse, and the
-  key that signed it answers for it.
+  evidenced exclusions, by the same operator or a successor. Whole-segment
+  termination, including stale twins, is a proposed choice. It does not by
+  itself establish receipt abandonment under C2.10.9b. The model retains
+  that rule's existing boundaries: fault alone leaves a tail pending; a
+  later canonical carrying transition can abandon it, while a real missing
+  sequence or term end can lapse it. Permanent abandonment needs a separate
+  rule defining its boundary and precedence.
 - Publications keep force according to their own record prefixes. A return
   adopts exactly the block with force, including at the opening's own index;
   a checkpoint omitting it is excluded, not merely doubtful.
 - An excluded commitment **carrying** the backing does not close its
   interval (C2b.6.1). A commitment carrying nothing for it closes it as today,
-  whatever that commitment's validity.
+  whatever that commitment's validity, unless it is whole-scope lapsed.
+  Deciding silence lapse can require another scope's fault evidence.
 
 The last rule is where the model departs from the first draft of this
 proposal, which excluded non-carrying commitments too. The model calls the
@@ -94,7 +102,7 @@ boundary tests (a payment finalized at index 3, one request per backing):
 | Successive gaps | When the checkpoint adopting the first gap's block is itself excluded, the snapshot is the valid opening and its adoption index reaches back, so the settled note stays settled and the next return adopts the first release only. |
 | Rule 3 and 5 counterexample | Reading an unresolved checkpoint as valid says "no gap" and then, when the bytes arrive, "gap": a reversed verdict. The candidate gives no verdict until then. |
 | Rule 1 counterexample | Reading unavailable bytes as fault passes a valid checkpoint that spent a note and lets a release settle that note: `settled note spent again`. The candidate refuses the read. |
-| The non-carrying case | Under A″, X's clock is closed by a Y-only commitment whether or not that commitment is valid, and X's reader needs no Y evidence. Under A, X's clock waits on Y's history, and a Y-only garbage commitment leaves X's gap open. A **valid** Y-only commitment closes X's interval under both, so A's stricter clock protects only against garbage an operator could replace with a valid commitment at the same cost. |
+| The non-carrying case | Under A″, a non-lapsed Y-only commitment closes X's clock without Y's event proof. Establishing silence lapse can still require Y's earlier fault evidence (R1). Under A, X also waits on Y's checkpoint history. A valid Y-only commitment closes X under both. Neither option prevents the inherited old-segment return failure documented in the new comparison. |
 
 ## Comparison
 
@@ -185,8 +193,9 @@ for preferring A″, qualified by the review, are:
   to A″ and can be decided after v3's layouts on F10's measured costs without
   undoing A″.
 
-Nothing here reopens the September 7 finality boundary, independent
-per-backing replacement or the confirmed presentation and recovery choices.
+The return counterexample requires clarifying the existing recovery rules
+before any clock choice can be recommended. It preserves the intended
+finality and independent per-backing replacement properties.
 The recommendation was recorded on 2026-09-08. Reader corrections have passed
 focused independent adversarial verification. The remaining design findings
 and specification choices must be resolved before the rule is text; the
@@ -213,6 +222,6 @@ Two choices inside A″ need an explicit answer as well:
   requiring a new segment on the canonical state.
 - At what record boundary does fault abandon a tail, and can a later missing
   sequence or term end excuse it? The current candidate gives `pending`
-  immediately after fault and can later give `lapsed`, despite the proposal's
-  unconditional abandonment language. Specify the boundary and precedence;
+  immediately after fault and can later give `lapsed`, contrary to the earlier
+  proposal's unconditional abandonment claim. Specify the boundary and precedence;
   do not infer them from the existing test's hole-free repair case.

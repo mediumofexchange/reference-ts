@@ -64,6 +64,13 @@ Y-only silence-lapsed continuation requires that evidence. Restoring it
 resolves the read. This repairs the reader, not the candidate's isolation
 claim. The clock/lapse policy choice remains open.
 
+`nonCarryingSilenceClosesInterval` is an opt-in research alternative: a
+non-carrying step checks term lapse but not silence lapse. It removes that
+particular history dependency while permitting stale commitments to suppress
+another backing's silence recovery. The [comparison and return decision](POOL_RECOVERY_RETURN_DECISION.md)
+records its tests and the safety failure shared by the base recovery model
+and both clock choices. Neither is ready for normative adoption.
+
 ## Receipts and service
 
 Import, canonical validation and fresh opening validation use the same
