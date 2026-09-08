@@ -4,13 +4,14 @@ Updated: 2026-09-08
 
 ## Goal
 
-Build the shielded-pool protocol. This slice repairs return after historical
-silence and defines its receipt consequences before recovery runtime or v3.
+Build the shielded-pool protocol. Historical-silence return and its receipt
+consequences are repaired in the specification and model; runtime and v3 remain next.
 The maintainer approved the recommendation and authorized merge/push.
 
 ## Status
 
-- Implementation: `fix/pool-silence-retirement`, based on `fc343e4`.
+- Implementation: `main`, fast-forwarded through `0464e38` from
+  `fix/pool-silence-retirement`, based on `fc343e4`.
 - Companion: `main` at `c5f5464` (rule `60af631`), merged and pushed from
   `spec/pool-silence-retirement`. The normative contract was committed first.
 - [Decision](decisions/2026-09.md#2026-09-08--intervening-silence-retires-a-pool-segment-and-lapses-its-unfinished-receipts):
@@ -45,12 +46,10 @@ The maintainer approved the recommendation and authorized merge/push.
 
 ## Next
 
-1. Commit, merge and push the checked implementation/model branch; update
-   this handoff with the exact resulting revision.
-2. Revisit invalid-checkpoint recovery, clock dependencies/suppression and
+1. Revisit invalid-checkpoint recovery, clock dependencies/suppression and
    R6/R7 fault receipt/segment policy. Do not consolidate FaultWorld into the
    normative model or freeze v3 bytes before those choices are resolved.
-3. Continue deployment evidence: target phone benchmark, authenticated note
+2. Continue deployment evidence: target phone benchmark, authenticated note
    delivery/restoration, complete evidence availability and pinned-node
    publication. Offline sizes are not node acceptance; see
    [deployment probes](docs/POOL_DEPLOYMENT_PROBES.md).
