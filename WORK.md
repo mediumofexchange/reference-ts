@@ -36,14 +36,15 @@ the return from silence — before any implementation. The recovery policy
   six of them exercise the review's findings (label binding, the lock's
   bound, the instant window, one clause per scope, a drop, adoption at the
   publication's own index).
-- The decision entry (2026-09-07, contract) lists the choices made under the
-  maintainer's "continue … merge and push" authority and not individually
-  confirmed: whole-note demands by tag, the lit settlement with a public
-  owner, no attempt timeout with the lock bounded by the demand's deadline,
-  the segment-free request, the instant window, one no-commitment duration
-  per scope, force once at the publication's own index, the return as a new
-  segment, the adoption index, and invalid live evidence blocking recovery
-  and the count as it blocks descent.
+- The decision entry (2026-09-07, contract) lists the choices: whole-note
+  demands by tag, the lit settlement with a public owner, no attempt timeout
+  with the lock bounded by the demand's deadline, the segment-free request,
+  the instant window, one no-commitment duration per scope, force once at
+  the publication's own index, the return as a new segment, the adoption
+  index, and invalid live evidence blocking recovery and the count as it
+  blocks descent. The maintainer confirmed them on 2026-09-08 ("if these are
+  the best choices, consider them confirmed"); the assessment that they are
+  is in the entry. They are not to be reopened without a new reason.
 - No `src/` change. PoolStore still refuses silence clauses; the runtime is
   v2 and carries none of these objects.
 
@@ -79,8 +80,6 @@ the return from silence — before any implementation. The recovery policy
 
 ## Open questions
 
-- Whether the maintainer confirms the choices above, in particular whole-note
-  demands and the always-new-segment return.
 - What remedy a backing has against an operator whose last carrying
   checkpoint is provably invalid: it blocks recovery, the count and any
   successor's descent alike (C2.10.3), and neither contract defines a way
