@@ -36,7 +36,7 @@ function fixture(w = new RecoveryWorld(1n)) {
   const base = p.commit();
   witness(w, base); // at 3: preserve this spend in every later assertion
   for (const note of [recipient, other]) {
-    const request = w.oracle.prove(ProofOracle.unbound(), "request", [note], [], [p.root()], { backing: note.backing, quantity: 0n });
+    const request = w.oracle.prove(ProofOracle.unbound(), "request", [note], [], [p.root()], { backing: note.backing, quantity: 0n, refresh: 0n });
     expect(w.oracle.verify(request, p.scope, p.view().roots, {})).toBe(true);
     w.publish({ kind: "request", backing: note.backing, statement: request });
   }

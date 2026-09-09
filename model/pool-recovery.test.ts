@@ -4,7 +4,7 @@
 // their venue ordering are deliberately NOT implemented by this test model.
 // ProofOracle's immutable notes stand in for authenticated note openings.
 import { describe, expect, it } from "vitest";
-import { ProofOracle, Service, World, tagOf, type Acceptance, type Binding, type Checkpoint, type Departures, type Id, type Note, type Statement } from "./pool-authority.js";
+import { ProofOracle, Service, World, applyEvent, tagOf, type Acceptance, type Binding, type Checkpoint, type Departures, type Id, type Note, type Statement } from "./pool-authority.js";
 import { RecoveryWorld, type RecoveryDepartures } from "./pool-recovery.js";
 
 function witness(w: World, checkpoint: Checkpoint): void {
@@ -214,7 +214,7 @@ function withdrawFor(w: World, binding: Binding, demand: Statement, presenter = 
   return w.oracle.prove(binding, "withdraw", [], [], [], { backing: demand.lit!.backing, quantity: 0n, demand: demand.id, presenter });
 }
 function requestFor(w: World, roots: Roots, note: Note): Statement {
-  return w.oracle.prove(ProofOracle.unbound(), "request", [note], [], [anchorIn(roots, note)], { backing: note.backing, quantity: 0n });
+  return w.oracle.prove(ProofOracle.unbound(), "request", [note], [], [anchorIn(roots, note)], { backing: note.backing, quantity: 0n, refresh: 0n });
 }
 /** Demand, acceptance and release published at the present index, bound to the given segment. */
 function redeem(f: Silence, binding: Binding = f.p, roots: Roots = f.p.view().roots, note = f.note, presenter = "H", acceptanceDeadline = 25n) {
@@ -238,6 +238,37 @@ function comeBack(f: Silence, operator = "P", names: readonly Id[] = ["X"]) {
 }
 
 describe("C3.7–C3.8: presentation under service", () => {
+  it("replays an expired demand's settlement only when no other demand's lock stands", () => {
+    const { w, p, note } = silence(), roots = p.view().roots;
+    const first = demandFor(w, p, roots, [note], { deadline: 100n });
+    const next = demandFor(w, p, roots, [note], { presenter: "H2", deadline: 200n });
+    const settlement = settleFor(w, p, roots, [note], first, acceptanceOf(first, "backer-owner", 100n)).statement;
+    // Every proof verifies independently; only the newer lock distinguishes
+    // these replay cases. Deadline freshness is an admission/venue check.
+    for (const statement of [first, next, settlement]) {
+      expect(w.oracle.verify(statement, p.scope, roots, {})).toBe(true);
+    }
+    for (const at of [150n, 200n, 201n]) {
+      const state = p.view();
+      applyEvent(state, { id: "first", statement: first }, {}, 50n);
+      applyEvent(state, { id: "next", statement: next }, {}, 150n);
+      const settle = () => applyEvent(state, { id: "settle", statement: settlement }, {}, at);
+      if (at <= 200n) {
+        expect(settle).toThrow("locked");
+        expect(state.spent.has(note.nf)).toBe(false);
+        expect(state.locks.get(tagOf(note.nf))).toBe(next.id);
+      } else {
+        settle();
+        expect(state.spent.has(note.nf)).toBe(true);
+        expect(state.standing.has(first.id)).toBe(false);
+      }
+    }
+    const alone = p.view();
+    applyEvent(alone, { id: "first", statement: first }, {}, 50n);
+    applyEvent(alone, { id: "settle", statement: settlement }, {}, 150n);
+    expect(alone.spent.has(note.nf)).toBe(true);
+  });
+
   it("a demand locks its notes, a locked note cannot be spent or demanded again, and a withdrawal frees it", () => {
     const { w, p, note } = silence();
     const demand = demandFor(w, p, p.view().roots, [note]);

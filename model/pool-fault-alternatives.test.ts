@@ -64,7 +64,7 @@ function dropped(choices: FaultChoices | undefined) {
   const { note } = issue(w, p, "X", 100n, "holder");
   const issued = p.commit(); witness(w, issued); // XY@2
   const roots = w.import(issued.id).roots;
-  w.publish({ kind: "request", backing: "X", statement: w.oracle.prove(ProofOracle.unbound(), "request", [note], [], [p.root()], { backing: "X", quantity: 0n }) });
+  w.publish({ kind: "request", backing: "X", statement: w.oracle.prove(ProofOracle.unbound(), "request", [note], [], [p.root()], { backing: "X", quantity: 0n, refresh: 0n }) });
   const y = p.change(["Y"]); witness(w, y.commit()); // Y@3: X dropped, Y served on
   return { w, p, y, note, issued, roots };
 }

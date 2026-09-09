@@ -34,7 +34,7 @@ function fixture(w = new FaultWorld(1n)) {
   const base = p.commit();
   witness(w, base); // at 3
   for (const note of [recipient, other]) {
-    w.publish({ kind: "request", backing: note.backing, statement: w.oracle.prove(ProofOracle.unbound(), "request", [note], [], [p.root()], { backing: note.backing, quantity: 0n }) });
+    w.publish({ kind: "request", backing: note.backing, statement: w.oracle.prove(ProofOracle.unbound(), "request", [note], [], [p.root()], { backing: note.backing, quantity: 0n, refresh: 0n }) });
   }
   return { w, p, payer, recipient, change, other, issued, base, paid };
 }

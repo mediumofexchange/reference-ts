@@ -68,6 +68,7 @@ function litBytes(w: ByteWriter, lit: Lit): void {
     w.u8(value.signedByK ? 1 : 0);
   });
   optional(w, lit.tag, value => text(w, value));
+  optional(w, lit.refresh, value => integer(w, value));
 }
 
 /** Complete public statement identity, independent of proof and signature.

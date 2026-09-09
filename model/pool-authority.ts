@@ -26,7 +26,7 @@ export interface Acceptance { readonly demand: Id; readonly owner: Id; readonly 
 /** Public fields beside the proof. Issue and burn: backing and quantity.
  * Demand: backing, quantity, tags, presenter, instant, deadline. Settle:
  * backing, quantity, owner, demand, acceptance and the presenter's release.
- * Withdraw: demand and presenter. Request: backing and tag. Signatures are
+ * Withdraw: demand and presenter. Request: backing, tag and refresh. Signatures are
  * ideal booleans or identities. */
 export interface Lit {
   readonly backing: Id;
@@ -39,6 +39,7 @@ export interface Lit {
   readonly owner?: Id;
   readonly acceptance?: Acceptance;
   readonly tag?: Id;
+  readonly refresh?: bigint;
 }
 /** What a proof is bound to: a segment identity and its scope (C1.2.2). */
 export interface Binding { readonly id: Id; readonly scope: Scope }
@@ -177,7 +178,8 @@ export class ProofOracle {
     if (s.kind === "withdraw") return inputs.length === 0 && outputs.length === 0 && lit?.demand !== undefined && lit.presenter !== undefined;
     if (s.kind === "request") { // C3.2 segment-free form: one real note, its size hidden
       return lit !== undefined && inputs.length === 1 && outputs.length === 0 && inputs[0]!.value > 0n &&
-        inputs[0]!.backing === lit.backing && lit.tag === tagOf(inputs[0]!.nf) && s.nullifiers.length === 0;
+        inputs[0]!.backing === lit.backing && lit.tag === tagOf(inputs[0]!.nf) &&
+        typeof lit.refresh === "bigint" && lit.refresh >= 0n && lit.refresh < 1n << 64n && s.nullifiers.length === 0;
     }
     if (s.kind === "demand") { // C3.2 segment-bound form with the quantity lit
       return lit !== undefined && inputs.length === 2 && outputs.length === 0 && s.nullifiers.length === 0 &&

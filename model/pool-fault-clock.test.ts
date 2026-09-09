@@ -116,7 +116,7 @@ describe("non-carrying silence clock alternative: dependency and liveness cost",
     const { w, p } = fixture(alternative), note = w.oracle.note("X", 100n);
     p.submit(w.oracle.prove(p, "issue", [], [note], [], { backing: "X", quantity: note.value }));
     const issued = p.commit(); witness(w, issued); // 2
-    w.publish({ kind: "request", backing: "X", statement: w.oracle.prove(ProofOracle.unbound(), "request", [note], [], [p.root()], { backing: "X", quantity: 0n }) });
+    w.publish({ kind: "request", backing: "X", statement: w.oracle.prove(ProofOracle.unbound(), "request", [note], [], [p.root()], { backing: "X", quantity: 0n, refresh: 0n }) });
     const y = p.change(["Y"]); witness(w, y.commit()); // 3
     badProof(w, y); // 4
     for (const at of [9n, 13n, 17n, 21n]) {
@@ -143,7 +143,7 @@ describe("non-carrying silence clock alternative: dependency and liveness cost",
     }
     const issued = p.commit(); witness(w, issued); // XY issuance@2
     const roots = w.import(issued.id).roots;
-    w.publish({ kind: "request", backing: "X", statement: w.oracle.prove(ProofOracle.unbound(), "request", [secondNote], [], [p.root()], { backing: "X", quantity: 0n }) });
+    w.publish({ kind: "request", backing: "X", statement: w.oracle.prove(ProofOracle.unbound(), "request", [secondNote], [], [p.root()], { backing: "X", quantity: 0n, refresh: 0n }) });
     const y = p.change(["Y"]); witness(w, y.commit()); // 3
     badProof(w, y); // 4
     w.tick(6n); // 10: X clock=4, a first redemption has force in both models

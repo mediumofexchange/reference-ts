@@ -10,6 +10,8 @@ import {
   World, Service, Refusal, applyEvent, lockStanding,
   type Acceptance, type Checkpoint, type Departures, type Id, type Receipt, type Recorded, type Scope, type State, type Statement,
 } from "./pool-authority.js";
+import { statementDigest } from "./pool-evidence.js";
+import { EncodingError } from "../src/bytes.js";
 
 export interface NonServiceTerms { readonly duration: bigint; readonly count: bigint; readonly window: bigint }
 /** E's silence clause (Construction §C2b.5–6): the no-commitment duration and the non-service terms. */
@@ -319,12 +321,23 @@ export class RecoveryWorld extends World {
     if (canonical !== undefined) {
       const state = this.import(canonical.checkpoint.id);
       const from = this.recovery.resetOnHandover ? this.term(backing, at).from : 0n;
+      const byIdentity = new Map<string, { firstAt: bigint; tag: Id; statements: Statement[] }>();
       for (const w of this.published) {
         const p = w.publication;
-        if (p.kind !== "request" || p.backing !== backing || w.at < at - terms.window || w.at > at - terms.duration || w.at < from) continue;
+        if (w.at >= at || p.kind !== "request" || p.backing !== backing) continue;
         const s = p.statement, tag = s.lit?.tag;
         if (s.kind !== "request" || tag === undefined || s.lit?.backing !== backing) continue;
-        if (!this.recovery.countUnproven && !this.oracle.verify(s, canonical.checkpoint.scope, state.roots, this.departures)) continue;
+        let identity: string;
+        try { identity = statementDigest(s); }
+        catch (error) { if (error instanceof EncodingError) continue; throw error; }
+        const observed = byIdentity.get(identity);
+        if (observed === undefined) byIdentity.set(identity, { firstAt: w.at, tag, statements: [s] });
+        else observed.statements.push(s);
+      }
+      for (const { firstAt, tag, statements } of byIdentity.values()) {
+        if (firstAt < at - terms.window || firstAt > at - terms.duration || firstAt < from) continue;
+        if (!this.recovery.countUnproven &&
+          !statements.some(candidate => this.oracle.verify(candidate, canonical.checkpoint.scope, state.roots, this.departures))) continue;
         if (state.spentTags.has(tag) || lockStanding(state, tag, at) !== undefined) continue;
         tags.add(tag);
       }
