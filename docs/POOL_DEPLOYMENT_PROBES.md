@@ -450,6 +450,104 @@ authenticated headers and stable transaction/output order. A8/A9, chain
 selection/finality, build provenance and publication admission remain open.
 No runtime API, venue profile or protocol rule changes in this experiment.
 
+## Windows process containment feasibility
+
+The private `experiments/ergo-range/contained-check.ps1` probe tests a fixed
+worker under Windows Job Objects, separately from the default CI corpus.
+The [retained report](ergo-containment-verification.json) records Node 24.6.0,
+Windows build 19045, PowerShell and source hashes. Its exit **2** means
+**unresolved containment evidence**; it is not a passing resource gate.
+
+The supervisor creates each worker suspended with a
+[creation-time job list](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812),
+checks membership and reads back the limits before resuming it. Only the NUL
+input and shared stdout/stderr pipe are inherited. The installed limits are
+256 MiB process/job committed memory, one active process and a default
+two-second user-CPU threshold. The supervisor caps captured output at 64 KiB
+and wall time at eight seconds; the existing corpus gets 10 seconds user CPU
+and 30 seconds wall time. These are experimental budgets. The
+[memory fields](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_extended_limit_information)
+describe committed virtual memory, not an RSS ceiling; the
+[user-CPU threshold](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_limit_information)
+is checked periodically, not enforced at an exact instruction or elapsed time.
+
+The fixed memory control grows a WASM memory toward a declared 512 MiB maximum
+in 1 MiB increments. Growth refuses before that maximum, but the final run's
+job peak is **273,514,496 bytes**, above the **268,435,456-byte** configured
+limit; process peak is **266,940,416 bytes**. Both peaks before resume were
+also captured. A prior explicit-assignment launcher showed the same kind of
+discrepancy, and creation-time assignment did not remove it. The Win32 struct
+layout was independently checked. The cause remains unproven; neither an
+unexplained accounting allowance nor allocation refusal is accepted as a hard
+memory guarantee. **No hostile depth/count/declared-size parser cases ran.**
+
+The CPU control requests a one-second user threshold. Earlier controls exited
+with native `STATUS_QUOTA_EXCEEDED` (`0xc0000044`, mapping to Win32 1816), after
+1.375 and 3.265625 seconds of user CPU. This
+[status identity](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/596a1078-e883-4972-9bbc-49e60bebca55)
+does not itself prove the termination cause. In the retained final run, while
+the full repository checks were also running, the control reached the
+eight-second supervisor deadline after **3.796875 seconds of user CPU**.
+The report preserves that unresolved result rather than retrying to select a
+passing sample. Wall and output controls terminated with their corresponding
+supervisor outcomes and exposed no captured result. A descendant could not
+finish successfully, but its failure cause is not independently attributed.
+
+The enclosing job still recovered the unchanged finite decoder corpus:
+**14,874 assertions, 24 transactions and 65 outputs**, with a reported job
+peak of **61,571,072 bytes**. Its embedded report describes the original
+runner; the outer report names the limits used here. This demonstrates fixture
+coverage under this configuration, not safety for arbitrary transaction bytes.
+The supervisor has no file/network access isolation, and unsupported decoding
+or a budget failure remains unresolved evidence, never proof of omission.
+
+Independent adversarial review inspected the actual launcher, worker and
+failure paths. It required a direct process-termination fallback when job
+membership readback fails; that fix was read back. Creation-time assignment
+also removes the suspended-orphan interval if the supervisor dies before a
+separate assignment. No runtime boundary is selected. Next, explain the job
+accounting/CPU observations or test another OS boundary with explicit resource
+semantics, then run hostile parser cases and a selected-node differential
+corpus. Header authentication, contiguous-range completeness and publication
+status remain separate gates.
+
+### Comparison with a local validating node
+
+The comparison retains the fixture manifest's Ergo node source pin
+[`c364664`](https://github.com/ergoplatform/ergo/tree/c36466405abc9a2ddda37e890635f00d593041f5)
+and sigma-interpreter pin `ab0b15c`; no node artifact was installed or executed.
+At this node revision, the
+[block API](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/http/api/BlocksApiRoute.scala)
+looks up a stored header and full block. The
+[transaction section](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/ergo-core/src/main/scala/org/ergoplatform/modifiers/history/BlockTransactions.scala)
+emits its transaction sequence in order and parses transactions with the
+applicable version context. The endpoint alone does not prove best-chain
+membership or completed transaction validation. Those require configuration,
+sync and chain-selection evidence; fetching a block by ID is insufficient.
+
+| Boundary | What it can establish | Cost and remaining evidence |
+|---|---|---|
+| Disposable binary-decoder process | Fields derived from input bytes; per-attempt failures can remain local | Alternate parser compatibility and resource bounds must be demonstrated; this Windows probe leaves memory and CPU evidence unresolved |
+| Local validating node | Selected-chain transaction semantics using that node's consensus implementation, conditional on verified configuration and sync | A long-lived JVM, chain state/storage and node maintenance become dependencies; parser/service exhaustion affects that node's availability |
+
+Node consensus validation and resource containment answer different questions.
+The pinned
+[generic node parser](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/avldb/src/main/scala/org/ergoplatform/serialization/ErgoSerializer.scala)
+also returns after parsing without checking cursor exhaustion; using the node
+does not establish unique accepted wire encodings. A client should compare
+node-derived objects, identities and authenticated block roots without
+claiming byte canonicality from successful parsing. Failed decoding, missing
+history or client response limits cannot establish omission.
+
+The smallest independent node probe is a dedicated keyless instance with an
+artifact hash and explicit validation/history/bootstrap configuration, then
+bounded GET reads of the three pinned fixtures. Compare all 24 transactions,
+65 outputs and their order/roots, and record best fully validated chain state.
+No fixture match closes contiguous-range authentication. Per-response byte
+and time budgets, node-wide OS memory/CPU bounds, disk/sync costs and behavior
+on malformed block sections still need measurement. This source comparison
+selects no production node version or runtime trust boundary.
+
 ## Venue and restoration work still required
 
 A separate venue publication experiment must publish a complete recovery publication through

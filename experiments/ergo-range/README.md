@@ -21,3 +21,26 @@ deadline and 1 MiB output cap. The corpus checks fixture pins, all output
 fields/IDs, every proper transaction prefix, trailing bytes, nonminimal counts
 and JSON field-boundary aliases. Input budgets are experimental refusal limits;
 there is no hard process/WASM memory cap and no production decoder selection.
+
+The separate Windows x64 / PowerShell 7 containment probe is run explicitly:
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/contained-check.ps1
+```
+
+It requires Windows 10 or newer for creation-time job assignment. Run only
+this supervisor, never `contained-worker.mjs` directly: the worker includes
+memory-growth, infinite CPU/output and descendant-process controls. Each
+worker joins a Job Object at creation, remains suspended until membership
+and limits are read back, and has bounded captured output and a wall deadline.
+This controls resources for fixed trusted code; it does not isolate file or
+network access. No arbitrary files or hostile parser inputs are accepted.
+
+The [retained result](../../docs/ergo-containment-verification.json) is
+**unresolved**, with exit **2**, because measured job peak memory exceeds the
+configured cap and the final CPU control reaches its wall deadline. The command
+is deliberately outside the default checks/CI until its acceptance gate can
+be met. Exit 0 would establish only these fixed controls and the old corpus;
+it would still not establish hostile-parser containment or node equivalence.
+`-StartupOnly` runs just the low-cost launch/readback control, not acceptance.
+See the [comparison and limits](../../docs/POOL_DEPLOYMENT_PROBES.md#windows-process-containment-feasibility).
