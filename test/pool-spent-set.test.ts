@@ -29,6 +29,53 @@ const key = (...bytes: [number, number][]): Uint8Array => {
 const independent = (bytes: Uint8Array): Uint8Array => new Uint8Array(createHash("sha256").update(bytes).digest());
 
 describe("pool-v2 §11: the spent set", () => {
+  it("rejects forged typed-array lengths without retaining bytes from a previous hash", () => {
+    for (const length of [0, 31, 33]) {
+      const malformed = Object.defineProperty(new Uint8Array(length), "length", { value: 32 });
+      const valid = new Uint8Array(32).fill(7);
+      const leaf = spentLeaf(valid), node = spentNode(valid, valid);
+      expect(() => spentLeaf(malformed)).toThrow(EncodingError);
+      expect(() => spentNode(malformed, valid)).toThrow(EncodingError);
+      expect(() => spentNode(valid, malformed)).toThrow(EncodingError);
+      expect(spentLeaf(valid)).toEqual(leaf);
+      expect(spentNode(valid, valid)).toEqual(node);
+    }
+  });
+
+  it("reads actual byte-array slots without invoking caller length getters", () => {
+    const valid = new Uint8Array(32).fill(3);
+    const expected = spentNode(valid, valid);
+    const input = Object.defineProperty(new Uint8Array(valid), "length", {
+      get() { throw new Error("caller code must not run during frame validation"); },
+    });
+    expect(spentNode(input, input)).toEqual(expected);
+    expect(spentLeaf(input)).toEqual(spentLeaf(valid));
+    // instanceof alone is forgeable, including by arrays of a different element width.
+    const impostors = [Object.create(Uint8Array.prototype),
+      Object.setPrototypeOf(new Uint16Array(32), Uint8Array.prototype),
+      new Proxy(valid, {})];
+    for (const input of impostors) {
+      expect(() => spentLeaf(input)).toThrow(EncodingError);
+      expect(() => spentNode(valid, input)).toThrow(EncodingError);
+    }
+  });
+
+  it("uses the hashed key bytes even when a caller replaces their iterator", () => {
+    const ordinary = key([31, 1]);
+    const input = Object.defineProperty(new Uint8Array(ordinary), Symbol.iterator, {
+      value: function* () { yield* new Uint8Array(32); },
+    });
+    const actual = new SpentSet(), expected = new SpentSet();
+    actual.insert(input); expected.insert(ordinary);
+    expect(actual.root()).toEqual(expected.root());
+    expect(actual.has(ordinary)).toBe(true);
+    expect(actual.has(key())).toBe(false);
+    expect(() => actual.insert(ordinary)).toThrow(EncodingError);
+    expect(actual.proof(input)).toEqual(expected.proof(ordinary));
+    expect(spentProofProves(actual.root(), ordinary, actual.proof(input), true)).toBe(true);
+    expect(spentProofProves(actual.root(), input, actual.proof(ordinary), true)).toBe(true);
+  });
+
   it("frames its leaves and nodes as specified and builds the empty subtrees", () => {
     const nf = key([31, 1]);
     expect(spentLeaf(nf)).toEqual(independent(Buffer.concat([utf8Encoder.encode("moe/pool/v2/spent/leaf"), nf])));

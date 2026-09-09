@@ -41,8 +41,19 @@ import { POOL_SPENT_LEAF_CONTEXT, POOL_SPENT_NODE_CONTEXT } from "../contexts.js
 export const SPENT_SET_HEIGHT = 256;
 const HASH_LENGTH = 32;
 
+// Read the actual typed-array slots. An own `length` can lie about the
+// storage width; copying such an input into a shared frame would retain old
+// bytes. The intrinsic brand also rejects forged prototypes and proxies.
+const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
+const arrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, "length")!.get!;
+const arrayBrand = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)!.get!;
+
+function isHash(bytes: Uint8Array): boolean {
+  return arrayBrand.call(bytes) === "Uint8Array" && arrayLength.call(bytes) === HASH_LENGTH;
+}
+
 function requireKey(nullifier: Uint8Array): Uint8Array {
-  if (!(nullifier instanceof Uint8Array) || nullifier.length !== HASH_LENGTH) {
+  if (!isHash(nullifier)) {
     throw new EncodingError("a spent-set key is 32 bytes");
   }
   return nullifier;
@@ -73,7 +84,7 @@ function frameOf(context: Uint8Array, fields: number): Uint8Array {
 }
 
 function requireHash(bytes: Uint8Array, what: string): Uint8Array {
-  if (!(bytes instanceof Uint8Array) || bytes.length !== HASH_LENGTH) {
+  if (!isHash(bytes)) {
     throw new EncodingError(`${what} must be ${HASH_LENGTH} bytes`);
   }
   return bytes;
@@ -113,8 +124,10 @@ export const EMPTY_SPENT_SUBTREE: readonly Uint8Array[] = Object.freeze(EMPTY.ma
 export const EMPTY_SPENT_ROOT = copyBytes(EMPTY[SPENT_SET_HEIGHT] as Uint8Array);
 
 function keyOf(nullifier: Uint8Array): bigint {
+  requireKey(nullifier);
   let key = 0n;
-  for (const b of requireKey(nullifier)) key = (key << 8n) | BigInt(b);
+  // Read the same indexed bytes that spentLeaf copies, never a caller's iterator.
+  for (let i = 0; i < HASH_LENGTH; i++) key = (key << 8n) | BigInt(nullifier[i]!);
   return key;
 }
 
