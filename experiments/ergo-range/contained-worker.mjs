@@ -4,6 +4,17 @@ const name = process.argv[2];
 const emit = (value) => console.log(JSON.stringify(value));
 switch (name) {
   case "startup": emit({ node: process.version }); break;
+  case "memory-single-growth": {
+    const memory = new WebAssembly.Memory({ initial: 1, maximum: 8192 });
+    // Resulting WASM memory would exceed the whole job cap, below its own maximum.
+    assert.throws(() => memory.grow(4096), RangeError);
+    assert.equal(memory.buffer.byteLength, 65536);
+    // Keep the memory alive briefly so independent process sampling can observe it.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    emit({ status: "allocation-refused", requestedGrowthBytes: 268435456,
+      retainedWasmBytes: memory.buffer.byteLength });
+    break;
+  }
   case "memory": {
     const memory = new WebAssembly.Memory({ initial: 1, maximum: 8192 });
     let pages = 1;
@@ -13,6 +24,7 @@ switch (name) {
     } catch (error) {
       assert(error instanceof RangeError);
       assert(pages < 8177, "refusal must precede declared WASM maximum");
+      await new Promise((resolve) => setTimeout(resolve, 100));
       emit({ status: "allocation-refused", committedWasmBytes: pages * 65536 });
     }
     break;

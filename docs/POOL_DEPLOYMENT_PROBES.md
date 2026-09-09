@@ -471,45 +471,85 @@ describe committed virtual memory, not an RSS ceiling; the
 [user-CPU threshold](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_limit_information)
 is checked periodically, not enforced at an exact instruction or elapsed time.
 
+The current diagnostic slice adds independent
+[process private-commit counters](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-process_memory_counters_ex),
+[job accounting](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information)
+and bounded process-ID/image samples. It observes both `node.exe` and
+`C:\Windows\System32\conhost.exe` associated with each job, despite the installed
+one-process limit. Before resume there is one process; afterward the lifetime
+count is two. Failed associations can also increase that lifetime count, so
+ID inventory samples and image queries with membership readback establish
+the extra associated process. They do not establish whether both processes
+were executing, or why the limit admitted the association. The former
+one-process accounting premise is false.
+
+The console host is a separate process in Microsoft's
+[console architecture](https://devblogs.microsoft.com/commandline/windows-command-line-inside-the-windows-console/).
+Its observed membership is consistent with aggregate memory/CPU exceeding
+Node's counters, but neither an exact accounting allowance nor its admission
+under the configured limit has been established for this Windows build.
+**Do not subtract a fixed overhead or treat the extra process as exempt.**
+
 The fixed memory control grows a WASM memory toward a declared 512 MiB maximum
-in 1 MiB increments. Growth refuses before that maximum, but the final run's
-job peak is **273,514,496 bytes**, above the **268,435,456-byte** configured
-limit; process peak is **266,940,416 bytes**. Both peaks before resume were
-also captured. A prior explicit-assignment launcher showed the same kind of
-discrepancy, and creation-time assignment did not remove it. The Win32 struct
-layout was independently checked. The cause remains unproven; neither an
-unexplained accounting allowance nor allocation refusal is accepted as a hard
-memory guarantee. **No hostile depth/count/declared-size parser cases ran.**
+in 1 MiB increments. Growth refuses before that maximum. The job peak is
+**274,014,208 bytes**, above the **268,435,456-byte** configured limit; the
+process peak and independently sampled private-commit peak both equal
+**267,464,704 bytes**. A second control requests a single 256 MiB growth from
+one WASM page: it refuses, retains **65,536 bytes**, and the job peak remains
+**28,860,416 bytes**. That observation does not support the hypothesis that
+this refused request itself inflates the reported peak by its requested size.
+It does not establish why aggregate enforcement permits the original overage.
 
-The CPU control requests a one-second user threshold. Earlier controls exited
-with native `STATUS_QUOTA_EXCEEDED` (`0xc0000044`, mapping to Win32 1816), after
-1.375 and 3.265625 seconds of user CPU. This
+The CPU control requests a one-second user threshold. In this run it exits
+with native `STATUS_QUOTA_EXCEEDED` (`0xc0000044`, mapping to Win32 1816) after
+**6.59375 seconds target and final job user CPU**. The
 [status identity](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/596a1078-e883-4972-9bbc-49e60bebca55)
-does not itself prove the termination cause. In the retained final run, while
-the full repository checks were also running, the control reached the
-eight-second supervisor deadline after **3.796875 seconds of user CPU**.
-The report preserves that unresolved result rather than retrying to select a
-passing sample. Wall and output controls terminated with their corresponding
-supervisor outcomes and exposed no captured result. A descendant could not
-finish successfully, but its failure cause is not independently attributed.
+does not itself prove the cause. Windows documents periodic checks without a
+maximum check interval or overshoot; kernel CPU is separate. The report now
+rejects observed target or job user CPU above the configured threshold even
+when the exit is a quota status. Eight worker-free `-EvidenceOnly` regressions
+cover quota-exit overshoot, the exact boundary, job CPU, both independent and
+job memory counters, associated process IDs and both accounting snapshots.
+The startup-only path also returns exit 2 for unresolved observations.
+This closes a false-green
+reporting path, not the resource gate.
 
-The enclosing job still recovered the unchanged finite decoder corpus:
+The previous [retained observations](https://github.com/mediumofexchange/reference-ts/blob/8f29a4a/docs/ergo-containment-verification.json)
+remain evidence: memory job peak **273,514,496 bytes**, and a CPU control that
+reached the eight-second wall deadline after **3.796875 seconds user CPU**
+while repository checks were also running. The current controls ran without
+concurrent repository checks; no passing sample was selected to erase either
+failure. Wall/output controls still terminate with their named supervisor
+outcomes. A descendant does not finish successfully; that alone does not
+attribute its failure to the process-count limit.
+
+Some samples retain active job processes after the target has exited. Cleanup
+now terminates the job and independently reads back zero active processes
+within five seconds, in addition to waiting for the target process. All eight
+current controls record successful whole-job cleanup; final job CPU totals
+include that cleanup interval. Inventory storage is
+capped at 16 IDs; process names and private-memory peaks are samples, may race
+exit and do not prove a complete lifetime inventory or enforce a budget.
+
+The enclosing job still recovers the unchanged finite decoder corpus:
 **14,874 assertions, 24 transactions and 65 outputs**, with a reported job
-peak of **61,571,072 bytes**. Its embedded report describes the original
-runner; the outer report names the limits used here. This demonstrates fixture
-coverage under this configuration, not safety for arbitrary transaction bytes.
-The supervisor has no file/network access isolation, and unsupported decoding
-or a budget failure remains unresolved evidence, never proof of omission.
+peak of **62,857,216 bytes**. Its embedded report describes the original
+runner; the outer report names the effective limits. **No hostile depth/count/
+declared-size parser cases ran.** There is no file/network isolation, and
+unsupported decoding or a resource refusal remains unresolved evidence, never
+proof of omission. No runtime boundary is selected.
 
-Independent adversarial review inspected the actual launcher, worker and
-failure paths. It required a direct process-termination fallback when job
-membership readback fails; that fix was read back. Creation-time assignment
-also removes the suspended-orphan interval if the supervisor dies before a
-separate assignment. No runtime boundary is selected. Next, explain the job
-accounting/CPU observations or test another OS boundary with explicit resource
-semantics, then run hostile parser cases and a selected-node differential
-corpus. Header authentication, contiguous-range completeness and publication
-status remain separate gates.
+The earlier independent review required direct target termination on failed
+membership readback; that fallback remains. Fresh independent review checked
+native layouts, telemetry, resource reporting and whole-job cleanup. It found
+a false-green startup-only exit and missing accounting-snapshot checks; both
+fixes and nearby variants were read back. Final report hashes and numeric
+claims were independently checked, with no remaining material findings for
+negative-evidence delivery. Hard containment remains failed.
+Next, compare a detached fixed worker against this no-window launch,
+or evaluate another boundary with explicit aggregate memory and CPU semantics.
+Do not rerun the same controls in pursuit of a passing sample. Header/range
+authentication, parser compatibility and publication status remain separate gates.
 
 ### Comparison with a local validating node
 

@@ -1,11 +1,12 @@
 // Windows-only fixed-corpus experiment, not a sandbox for untrusted programs.
-// Job limits contain committed memory and user CPU, not filesystem/network access.
+// Configured job limits are measured here; hard containment remains unproven.
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.IO;
+using System.Collections.Generic;
 
 public static class ContainedProcess {
     [StructLayout(LayoutKind.Sequential)] struct Basic {
@@ -26,6 +27,19 @@ public static class ContainedProcess {
         public IntPtr Descriptor;
         public int Inherit;
     }
+    [StructLayout(LayoutKind.Sequential)] struct ProcessMemory {
+        public uint Size, PageFaults;
+        public UIntPtr PeakWorkingSet, WorkingSet, PeakPagedPool, PagedPool;
+        public UIntPtr PeakNonPagedPool, NonPagedPool, Pagefile, PeakPagefile, Private;
+    }
+    [StructLayout(LayoutKind.Sequential)] struct Accounting {
+        public long User, Kernel, PeriodUser, PeriodKernel;
+        public uint PageFaults, TotalProcesses, ActiveProcesses, TerminatedProcesses;
+    }
+    [StructLayout(LayoutKind.Sequential)] struct ProcessIds {
+        public uint Assigned, Count;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public ulong[] Ids;
+    }
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct Startup {
         public int Size;
         public string Reserved, Desktop, Title;
@@ -44,6 +58,11 @@ public static class ContainedProcess {
     [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr CreateJobObjectW(IntPtr sa, IntPtr name);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetInformationJobObject(IntPtr job, int cls, ref Limits info, uint size);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool QueryInformationJobObject(IntPtr job, int cls, out Limits info, uint size, IntPtr returned);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool QueryInformationJobObject(IntPtr job, int cls, out Accounting info, uint size, IntPtr returned);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool QueryInformationJobObject(IntPtr job, int cls, out ProcessIds info, uint size, IntPtr returned);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint id);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool QueryFullProcessImageNameW(IntPtr process, uint flags, StringBuilder name, ref uint size);
+    [DllImport("psapi.dll", SetLastError = true)] static extern bool GetProcessMemoryInfo(IntPtr process, ref ProcessMemory info, uint size);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool IsProcessInJob(IntPtr process, IntPtr job, out bool result);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool TerminateJobObject(IntPtr job, uint code);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool TerminateProcess(IntPtr process, uint code);
@@ -69,7 +88,44 @@ public static class ContainedProcess {
         public ulong PeakCommitBytes, PeakProcessCommitBytes, CommitLimitBytes;
         public ulong BeforeResumePeakCommitBytes, BeforeResumePeakProcessCommitBytes;
         public long UserCpuTicks, KernelCpuTicks;
-        public bool LimitsReadBackBeforeResume;
+        public long UserCpuLimitTicks, JobUserCpuTicks, JobKernelCpuTicks;
+        public uint TotalProcesses, ActiveProcessesAfterExit, LimitTerminatedProcesses;
+        public uint BeforeResumeTotalProcesses, BeforeResumeActiveProcesses;
+        public ulong SampledPeakPrivateCommitBytes, SampledMaxPrivateCommitBytes;
+        public ulong BeforeResumePrivateCommitBytes;
+        public uint MemorySamples;
+        public uint MaxSampledAssociatedProcesses;
+        public ProcessObservation[] ObservedProcesses;
+        public bool LimitsReadBackBeforeResume, JobEmptyAfterCleanup;
+    }
+    public sealed class ProcessObservation {
+        public uint ProcessId;
+        public string Image;
+        public int QueryError;
+    }
+    static uint ObserveProcesses(IntPtr job, Dictionary<uint, ProcessObservation> observed) {
+        Require(QueryInformationJobObject(job, 3, out ProcessIds ids, (uint)Marshal.SizeOf<ProcessIds>(), IntPtr.Zero));
+        if (ids.Count > 16) throw new Exception("Process inventory exceeds fixed diagnostic budget");
+        for (int i = 0; i < ids.Count; i++) {
+            uint id = checked((uint)ids.Ids[i]);
+            if (observed.ContainsKey(id)) continue;
+            if (observed.Count == 16) throw new Exception("Process history exceeds fixed diagnostic budget");
+            var item = new ProcessObservation { ProcessId = id };
+            IntPtr handle = OpenProcess(0x1000, false, id); // QUERY_LIMITED_INFORMATION
+            if (handle == IntPtr.Zero) item.QueryError = Marshal.GetLastWin32Error();
+            else {
+                try {
+                    Require(IsProcessInJob(handle, job, out bool member));
+                    if (!member) { item.QueryError = 1168; observed.Add(id, item); continue; }
+                    var path = new StringBuilder(1024);
+                    uint length = 1024;
+                    if (QueryFullProcessImageNameW(handle, 0, path, ref length)) item.Image = path.ToString();
+                    else item.QueryError = Marshal.GetLastWin32Error();
+                } finally { CloseHandle(handle); }
+            }
+            observed.Add(id, item);
+        }
+        return ids.Count;
     }
     static void Require(bool ok) { if (!ok) throw new Win32Exception(Marshal.GetLastWin32Error()); }
     static string Quote(string arg) {
@@ -89,6 +145,7 @@ public static class ContainedProcess {
         IntPtr list = IntPtr.Zero, handles = IntPtr.Zero, jobs = IntPtr.Zero;
         bool listReady = false, assigned = false;
         ProcessInfo child = new ProcessInfo();
+        Result result = null;
         try {
             job = CreateJobObjectW(IntPtr.Zero, IntPtr.Zero); Require(job != IntPtr.Zero);
             var limits = new Limits { Basic = new Basic { Flags = flags, JobTime = cpuMs * 10000L, ActiveProcesses = 1 },
@@ -123,10 +180,20 @@ public static class ContainedProcess {
             assigned = true;
             Require(IsProcessInJob(child.Process, job, out bool member));
             if (!member) throw new Exception("Child not in configured job");
-            Require(QueryInformationJobObject(job, 9, out var installed, size, IntPtr.Zero));
+            Require(QueryInformationJobObject(job, 9, out Limits installed, size, IntPtr.Zero));
             if (installed.Basic.Flags != flags || installed.Basic.JobTime != cpuMs * 10000L ||
                 installed.Basic.ActiveProcesses != 1 || installed.ProcessMemory.ToUInt64() != memory ||
                 installed.JobMemory.ToUInt64() != memory) throw new Exception("Job limits not installed");
+            uint memorySize = (uint)Marshal.SizeOf<ProcessMemory>();
+            var initialMemory = new ProcessMemory { Size = memorySize };
+            Require(GetProcessMemoryInfo(child.Process, ref initialMemory, memorySize));
+            Require(QueryInformationJobObject(job, 1, out Accounting initialAccounting,
+                (uint)Marshal.SizeOf<Accounting>(), IntPtr.Zero));
+            ulong peakPrivate = initialMemory.PeakPagefile.ToUInt64();
+            ulong maxPrivate = initialMemory.Private.ToUInt64();
+            uint memorySamples = 1;
+            var observed = new Dictionary<uint, ProcessObservation>();
+            uint maxActive = ObserveProcesses(job, observed);
             CloseHandle(write); write = IntPtr.Zero;
             var clock = Stopwatch.StartNew();
             Require(ResumeThread(child.Thread) != uint.MaxValue);
@@ -135,6 +202,17 @@ public static class ContainedProcess {
             string outcome = "exited";
             while (true) {
                 if (clock.ElapsedMilliseconds >= wallMs) { outcome = "wall-limit"; break; }
+                maxActive = Math.Max(maxActive, ObserveProcesses(job, observed));
+                var sample = new ProcessMemory { Size = memorySize };
+                if (GetProcessMemoryInfo(child.Process, ref sample, memorySize)) {
+                    peakPrivate = Math.Max(peakPrivate, sample.PeakPagefile.ToUInt64());
+                    maxPrivate = Math.Max(maxPrivate, sample.Private.ToUInt64());
+                    memorySamples++;
+                } else {
+                    // Exit can race the sample. Other telemetry failures are fatal.
+                    int error = Marshal.GetLastWin32Error();
+                    if (WaitForSingleObject(child.Process, 0) != 0) throw new Win32Exception(error);
+                }
                 bool peek = PeekNamedPipe(read, IntPtr.Zero, 0, IntPtr.Zero, out uint available, IntPtr.Zero);
                 if (!peek && Marshal.GetLastWin32Error() != 109) Require(false);
                 if (peek && available > 0) {
@@ -156,15 +234,29 @@ public static class ContainedProcess {
             if (WaitForSingleObject(child.Process, 5000) != 0) throw new Exception("Child termination unresolved");
             Require(GetExitCodeProcess(child.Process, out uint exit));
             Require(GetProcessTimes(child.Process, out var created, out var ended, out var kernel, out var user));
-            Require(QueryInformationJobObject(job, 9, out var measured, size, IntPtr.Zero));
-            return new Result { Case = name, Outcome = outcome, ExitCode = exit, ElapsedMs = clock.ElapsedMilliseconds,
+            Require(QueryInformationJobObject(job, 9, out Limits measured, size, IntPtr.Zero));
+            Require(QueryInformationJobObject(job, 1, out Accounting accounting,
+                (uint)Marshal.SizeOf<Accounting>(), IntPtr.Zero));
+            result = new Result { Case = name, Outcome = outcome, ExitCode = exit, ElapsedMs = clock.ElapsedMilliseconds,
                 PeakCommitBytes = measured.PeakJobMemory.ToUInt64(),
                 PeakProcessCommitBytes = measured.PeakProcessMemory.ToUInt64(), CommitLimitBytes = memory,
                 BeforeResumePeakCommitBytes = installed.PeakJobMemory.ToUInt64(),
                 BeforeResumePeakProcessCommitBytes = installed.PeakProcessMemory.ToUInt64(),
                 UserCpuTicks = user, KernelCpuTicks = kernel,
+                UserCpuLimitTicks = cpuMs * 10000L,
+                JobUserCpuTicks = accounting.User, JobKernelCpuTicks = accounting.Kernel,
+                TotalProcesses = accounting.TotalProcesses, ActiveProcessesAfterExit = accounting.ActiveProcesses,
+                BeforeResumeTotalProcesses = initialAccounting.TotalProcesses,
+                BeforeResumeActiveProcesses = initialAccounting.ActiveProcesses,
+                LimitTerminatedProcesses = accounting.TerminatedProcesses,
+                BeforeResumePrivateCommitBytes = initialMemory.Private.ToUInt64(),
+                SampledPeakPrivateCommitBytes = peakPrivate, SampledMaxPrivateCommitBytes = maxPrivate,
+                MemorySamples = memorySamples,
+                MaxSampledAssociatedProcesses = maxActive,
+                ObservedProcesses = new List<ProcessObservation>(observed.Values).ToArray(),
                 LimitsReadBackBeforeResume = true,
                 Output = outcome == "exited" && exit == 0 ? Encoding.UTF8.GetString(output.ToArray()) : "" };
+            return result;
         } finally {
             // Failure before assignment must also kill the still-suspended process.
             bool cleanupUnresolved = false;
@@ -173,6 +265,29 @@ public static class ContainedProcess {
                 // Also cover an unexpected failed/false membership readback.
                 TerminateProcess(child.Process, 0xE0000002);
                 cleanupUnresolved = WaitForSingleObject(child.Process, 5000) != 0;
+                // Console helpers can outlive the target. Verify the whole job,
+                // not just the handle of the process we explicitly created.
+                if (assigned) {
+                    var cleanupClock = Stopwatch.StartNew();
+                    while (true) {
+                        if (!QueryInformationJobObject(job, 1, out Accounting remaining,
+                            (uint)Marshal.SizeOf<Accounting>(), IntPtr.Zero)) {
+                            cleanupUnresolved = true; break;
+                        }
+                        if (remaining.ActiveProcesses == 0) {
+                            if (result != null) {
+                                result.JobEmptyAfterCleanup = true;
+                                result.JobUserCpuTicks = remaining.User;
+                                result.JobKernelCpuTicks = remaining.Kernel;
+                                result.TotalProcesses = remaining.TotalProcesses;
+                                result.LimitTerminatedProcesses = remaining.TerminatedProcesses;
+                            }
+                            break;
+                        }
+                        if (cleanupClock.ElapsedMilliseconds >= 5000) { cleanupUnresolved = true; break; }
+                        System.Threading.Thread.Sleep(5);
+                    }
+                }
             }
             foreach (var handle in new[] { child.Thread, child.Process, read, write, input, job })
                 if (handle != IntPtr.Zero && handle != new IntPtr(-1)) CloseHandle(handle);

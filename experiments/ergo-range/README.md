@@ -37,10 +37,15 @@ This controls resources for fixed trusted code; it does not isolate file or
 network access. No arbitrary files or hostile parser inputs are accepted.
 
 The [retained result](../../docs/ergo-containment-verification.json) is
-**unresolved**, with exit **2**, because measured job peak memory exceeds the
-configured cap and the final CPU control reaches its wall deadline. The command
+**unresolved**, with exit **2**: measured job peak memory and user CPU exceed
+their configured thresholds, and the job contains both Node and `conhost.exe`
+despite the one-process limit. Independent process counters, bounded process
+inventories and whole-job cleanup readback distinguish these observations.
+The extra console host does not establish a permissible memory allowance. The command
 is deliberately outside the default checks/CI until its acceptance gate can
 be met. Exit 0 would establish only these fixed controls and the old corpus;
 it would still not establish hostile-parser containment or node equivalence.
 `-StartupOnly` runs just the low-cost launch/readback control, not acceptance.
+`-EvidenceOnly` checks eight resource-report regressions without executing a worker,
+including a quota exit with excessive CPU that the earlier check accepted.
 See the [comparison and limits](../../docs/POOL_DEPLOYMENT_PROBES.md#windows-process-containment-feasibility).
