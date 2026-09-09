@@ -88,6 +88,10 @@ using real signatures. Authentication alone supplies no checkpoint verdict.
 with canonical scope/opening references and bounded strict decoding. Its
 signed-directory and hostile-byte tests establish header conformance; complete
 opening evidence, trail/certificate formats and runtime adoption remain open.
+`model/pool-v3-fault-evidence.ts` adds the [portable fault-evidence record](https://github.com/mediumofexchange/money-from-first-principles/blob/322bcae/pool-v3.md#9-fault-evidence-records):
+exact raw target bytes and an evidence suffix, checked against an externally
+authenticated snapshot with an explicit reader budget. Successful evidence
+authentication is not an exclusion verdict or a complete served trail.
 
 The runtime follows specification revision
 [`3676757a1c8ddc0df607352c6bddbb48f6d85a09`](https://github.com/mediumofexchange/money-from-first-principles/tree/3676757a1c8ddc0df607352c6bddbb48f6d85a09),

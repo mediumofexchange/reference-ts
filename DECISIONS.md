@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-09` [Carry exact target bytes in fault evidence](decisions/2026-09.md#2026-09-09--carry-exact-target-bytes-in-fault-evidence)
 - `2026-09-09` [Reuse the segment header fields for v3](decisions/2026-09.md#2026-09-09--reuse-the-segment-header-fields-for-v3)
 - `2026-09-09` [Bind successor snapshots and receipts to exact event evidence](decisions/2026-09.md#2026-09-09--bind-successor-snapshots-and-receipts-to-exact-event-evidence)
 - `2026-09-09` [Fix canonical successor statement and publication records](decisions/2026-09.md#2026-09-09--fix-canonical-successor-statement-and-publication-records)

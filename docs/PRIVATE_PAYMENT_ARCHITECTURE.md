@@ -45,6 +45,7 @@ Production still needs authenticated complete interval retrieval.
 
 | Material | Why it remains | Remove when |
 |---|---|---|
+| `model/pool-v3-fault-evidence.ts` | Portable exact-byte fault-evidence frames and bounded authentication with explicit local budgets; no checkpoint verdict. | V3 runtime takes over the codec and hostile cases, together with authenticated certificate dependencies and replay. |
 | `model/pool-v3-headers.ts` | Canonical successor segment-header byte/hash conformance, bounded decoding and signed-directory substitution cases. | Final v3 runtime takes over the codec and hostile cases; no complete opening or key authority is inferred from decoding. |
 | `scripts/pool/v3/` | Reproducible six-relation proof conformance against the successor layouts, with synthetic domain and no adopted configuration. | Reviewed final v3 configuration and runtime take over the sources and all proof/range/hostile cases; do not duplicate production verifiers. |
 | `model/pool-v3-records.ts` and `test/pool-v3-records.test.ts` | Canonical statement/authorization/publication byte conformance under pool-v3 §§5–6; synthetic domains and shape-only proof fixtures, with real signature-message tests. | Final v3 runtime takes over the codec and all vectors/hostile cases; it must still enforce proof validity, authority, state, time and semantic replay. |

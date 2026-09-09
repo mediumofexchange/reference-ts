@@ -110,6 +110,15 @@ Proofs and roots are synthetic. This is evidence authentication, not a complete
 fault certificate or checkpoint classification; header/trail/record evidence,
 final configuration and runtime replay remain required.
 
+The [portable §9 fault-evidence record](https://github.com/mediumofexchange/money-from-first-principles/blob/322bcae/pool-v3.md#9-fault-evidence-records)
+is retained in `model/pool-v3-fault-evidence.ts`. Its raw target fields retain
+malformed committed bytes, and its verifier requires expected snapshot,
+backing and segment context from an authenticated directory. Explicit local
+suffix budgets bound allocation and hashing without changing classification
+rules; exceeded budgets remain unresolved. The record is one certificate
+component. Scope, record ranges, imports, lapse priority and replay still
+decide whether authenticated failing evidence establishes exclusion.
+
 ## Review and next boundary
 
 The earlier [checked design review](../decisions/archive/2026-09-08-whole-project-design-review-check.md)
