@@ -4,7 +4,7 @@ Updated: 2026-09-09
 
 ## Goal
 
-Deliver canonical v3 segment headers, the first dependency of bounded
+Completed canonical v3 segment headers, the first dependency of bounded
 complete-opening evidence. Branches: reference `feat/pool-v3-segment-headers`,
 companion `spec/pool-v3-segment-headers`. Acceptance: independent byte/hash
 vectors bind domain, venue, operator, first sequence, ordered scope and exact
@@ -26,8 +26,10 @@ No complete-opening, replay, finality or adoption result is claimed.
 - Fresh normative and implementation reviews found no material issues.
   Implementation reviewer independently passed all 17 focused tests; its
   documentation correction distinguishes framing checks from entry validation.
-- Full project checks pass. Implementation delivery remains pending.
-  Current upstream main `b824f41` has all seven CI jobs passing.
+- Implementation `a23d8c9` passed full local checks and is merged/pushed to
+  `main` with remote parity. This follow-up changes only the handoff.
+  New CI is pending; prior main `b824f41` passed all seven jobs, which does
+  not establish CI evidence for the new implementation.
 - Runtime remains v2, refuses silence clauses and exports no pool wallet.
   Header key bytes are structural data: strict signatures and record context
   still establish authentication. Missing opening evidence stays unresolved.
@@ -52,8 +54,7 @@ No complete-opening, replay, finality or adoption result is claimed.
 
 ## Next
 
-1. Finish implementation commit and authorized delivery;
-   verify remote parity and distinguish the new CI run from prior evidence.
+1. Check CI for the delivered revision and resolve any failure.
 2. Define served-trail and fault-certificate framing, including exact invalid
    evidence and dependency references, then complete-opening verification.
    Name companion branches before coordinated changes. Acceptance: a signed
