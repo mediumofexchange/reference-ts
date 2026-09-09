@@ -4,18 +4,21 @@ Updated: 2026-09-09
 
 ## Goal
 
-Finish delivery of reviewed v3 evidence/history chains, snapshot and receipt
-frames. Branches: reference `feat/pool-v3-commitments`, companion
-`spec/pool-v3-commitments`. Acceptance demonstrated: committed failing evidence
-authenticates but replica substitutions do not; proof variants preserve history
-but change evidence/snapshot; adopted withdrawals retain original evidence at
-new positions. Full local checks and independent reviews pass; CI and delivery
-verification are next. Final configuration and runtime adoption remain later.
+Next: define bounded complete-opening and fault-evidence formats using the
+reviewed v3 commitments. The completed slice used reference
+`feat/pool-v3-commitments` and companion `spec/pool-v3-commitments`.
+Acceptance demonstrated: committed failing evidence authenticates but replica
+substitutions do not; proof variants preserve history but change evidence and
+snapshots; adopted withdrawals retain original evidence at new positions.
+Final configuration and runtime adoption remain later.
 
 ## Status
 
-- Specification `4a58fdc` fixes pool-v3 §7 frames and suffix authentication,
-  committed before dependent code. No adopted configuration is defined.
+- Implementation `f474ce5` passed all seven CI jobs; the final follow-up
+  updates only this handoff and the recovery map. Delivery target is `main`.
+  Specification `4a58fdc` is merged/pushed to `main`. It fixes pool-v3 §7
+  frames and suffix authentication, committed before dependent code.
+  No adopted configuration is defined.
 - `model/pool-v3-commitments.ts` implements history/evidence chains,
   snapshots, evidence suffix openings and signed receipts outside `src/`.
   `hashEvidenceFields` hashes actual malformed proof/authorization bytes
@@ -44,8 +47,11 @@ verification are next. Final configuration and runtime adoption remain later.
   committed bad authorization vs replica substitution, all truncations,
   range/overflow/seed/suffix tampering and mutable-buffer ownership checks.
   Proof bytes, roots and domains are synthetic; no valid state is claimed.
-- Previous main [CI run 34358187309](https://github.com/mediumofexchange/reference-ts/actions/runs/34358187309)
-  passes all seven jobs. Current branch CI remains to run before merge.
+- [CI run 34360944245](https://github.com/mediumofexchange/reference-ts/actions/runs/34360944245)
+  passes all seven jobs at `f474ce5`: Node 20/24 Linux and Node 24 Windows
+  checks, both platforms' v3 proofs and unchanged v2/delivery/fee proofs.
+  Final documentation checks pass. Main's automatic rerun after the
+  documentation follow-up is separate from this verified code evidence.
 - Unchanged real-proof evidence: `check:pool:v3` previously passed 304 checks /
   18 real proofs of 14,656 bytes, all 81 public scalars, key substitution,
   ABI-bypass ranges and hostile reproof controls. [Report](docs/pool-v3-conformance-verification.json).
@@ -54,14 +60,12 @@ verification are next. Final configuration and runtime adoption remain later.
 
 ## Next
 
-1. Finish documentation/type checks, commit/push this branch, run seven-job CI,
-   merge/push both repositories and verify clean remote parity.
-2. Define segment headers, served-trail and fault-certificate framing, then
+1. Define segment headers, served-trail and fault-certificate framing, then
    replay/import/adoption order and final configuration/artifact pins in
    `pool-v3.md`. Name companion branches before coordinated changes. First
    acceptance: a signed directory authenticates a complete bounded opening,
    while missing dependencies remain unresolved and substitutions fail.
-3. Implement the single v3 runtime/recovery path and wallet after final pins;
+2. Implement the single v3 runtime/recovery path and wallet after final pins;
    repeat the six real-proof relations on the final configuration domain.
 
 ## Open questions

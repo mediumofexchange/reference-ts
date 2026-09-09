@@ -766,13 +766,13 @@ its seven material findings became A16–A21 and the corrections now in
 trace and the sizes. This map is complete when such a review has checked
 every rule citation and candidate against the contracts, the trace names
 the evidence each party holds at each step, and every open item above has an owner
-probe or decision. `pool-v3.md` then fixes: the contexts and `T_TAG`; the
-statement record with its authorization slot; the six circuits' sources,
-identities and public-input orders; the evidence chain and snapshot digest;
-the configuration preimage over the six bytecode and key identities, the
-helper and the bounds, whose hash is the v3 domain; the publication frame
-and bodies; the acceptance, release and withdrawal bytes; the replayed
-state; and the bounds table. A1–A3, A5–A7 and A16–A21 were decided on
+probe or decision. `pool-v3.md` now fixes the six proof relations and input
+orders; statement records and authorization slots; publication bodies and
+acceptance/release/withdrawal bytes; and history/evidence/snapshot/receipt
+frames. Remaining prerequisites are segment headers, served-trail and fault
+certificate frames, replay/import/adoption state and order, final artifact
+identities, and the configuration preimage over those identities, the helper
+and bounds, whose hash becomes the v3 domain. A1–A3, A5–A7 and A16–A21 were decided on
 2026-09-09 in the contracts, and A4 is measured. A12's requirement to settle
 F3/F4 together is satisfied: delivery changes three relations, and
 spend has two inputs/four outputs. A22 selects compressed spent roots, and
