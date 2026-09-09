@@ -1,0 +1,56 @@
+{
+  "sources": {
+    "ergoNode": "https://github.com/ergoplatform/ergo/tree/c36466405abc9a2ddda37e890635f00d593041f5",
+    "sigmaInterpreter": "https://github.com/ergoplatform/sigmastate-interpreter/tree/ab0b15ceb9d34f2ccd6e68e3e2a8aa27cd16a042",
+    "scrypto": "https://github.com/ergoplatform/scrypto/tree/70b36102b2ed8f7a443cfc92f9f135665d777a37",
+    "fleetSerializer": "https://github.com/fleet-sdk/fleet/tree/7d06847afea124c5fdc71c0e8d813db0a1791978"
+  },
+  "fixtures": [
+    {
+      "file": "fixtures/mainnet-100000.json",
+      "sha256": "ede02a4dd9e452727f9b3b94eef034150d223f641cf3a19070777aa6ab6d51cd",
+      "height": "100000",
+      "version": "1",
+      "transactions": "1",
+      "headerId": "9b61e8564436969ff3beeb7afbfcfea9794116cffc28f0cfd04dbaccae2df0d7",
+      "source": "https://node.ergo.watch/blocks/9b61e8564436969ff3beeb7afbfcfea9794116cffc28f0cfd04dbaccae2df0d7",
+      "sdkUnsupportedPositions": [
+        "0"
+      ]
+    },
+    {
+      "file": "fixtures/mainnet-1000000.json",
+      "sha256": "40f362a5b2d677efd58feb6234aaedcff1a2dd2a04c48644e4403f19d7e58f4d",
+      "height": "1000000",
+      "version": "3",
+      "transactions": "17",
+      "headerId": "f04085962f306d8e4ee9f1a415abb82c32ac6a183d4d286e995569c978a7c5cb",
+      "source": "https://node.ergo.watch/blocks/f04085962f306d8e4ee9f1a415abb82c32ac6a183d4d286e995569c978a7c5cb",
+      "sdkUnsupportedPositions": [
+        "0",
+        "7",
+        "11",
+        "12",
+        "13",
+        "16"
+      ]
+    },
+    {
+      "file": "fixtures/mainnet-1500000.json",
+      "sha256": "48e75a130a6747affa83e5107b9036fd4b012686d61909e9f7a4db40892e5f09",
+      "height": "1500000",
+      "version": "3",
+      "transactions": "6",
+      "headerId": "f5f148ba4e16fb0ede5d026536f2a29c62b695055762659d6d5ab18126aae6bc",
+      "source": "https://node.ergo.watch/blocks/f5f148ba4e16fb0ede5d026536f2a29c62b695055762659d6d5ab18126aae6bc",
+      "sdkUnsupportedPositions": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ]
+    }
+  ]
+}

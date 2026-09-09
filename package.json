@@ -49,6 +49,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "check:docs": "node scripts/check-docs.mjs && node scripts/check-links.mjs .",
+    "check:ergo:range": "npm --prefix experiments/ergo-range run check",
     "check:package": "node scripts/check-package.mjs",
     "check:pilot": "node scripts/pilot-demo.mjs",
     "pilot:demo": "npm run build && npm run check:pilot",

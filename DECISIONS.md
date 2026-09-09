@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-09` [Check the range source before certificate packaging](decisions/2026-09.md#2026-09-09--check-the-range-source-before-certificate-packaging)
 - `2026-09-09` [Frame served trails without granting opening validity](decisions/2026-09.md#2026-09-09--frame-served-trails-without-granting-opening-validity)
 - `2026-09-09` [Carry exact target bytes in fault evidence](decisions/2026-09.md#2026-09-09--carry-exact-target-bytes-in-fault-evidence)
 - `2026-09-09` [Reuse the segment header fields for v3](decisions/2026-09.md#2026-09-09--reuse-the-segment-header-fields-for-v3)

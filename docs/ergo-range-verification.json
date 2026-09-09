@@ -1,0 +1,118 @@
+{
+  "status": "offline-feasibility-only",
+  "node": "v24.6.0",
+  "checks": 342,
+  "sources": {
+    "ergoNode": "https://github.com/ergoplatform/ergo/tree/c36466405abc9a2ddda37e890635f00d593041f5",
+    "sigmaInterpreter": "https://github.com/ergoplatform/sigmastate-interpreter/tree/ab0b15ceb9d34f2ccd6e68e3e2a8aa27cd16a042",
+    "scrypto": "https://github.com/ergoplatform/scrypto/tree/70b36102b2ed8f7a443cfc92f9f135665d777a37",
+    "fleetSerializer": "https://github.com/fleet-sdk/fleet/tree/7d06847afea124c5fdc71c0e8d813db0a1791978"
+  },
+  "inputManifestSha256": "00976f84cf1e311d5f10ec6edeb58290aadb43a83856529b453da1c56907620e",
+  "files": {
+    "check.mjs": "92fb2522e427c1b65d4810e191466ee3f4bffff5f2e3f89a306a33c6c7bc31e0",
+    "package.json": "cdacc54d9867ec35c5707aea27e1f0c921c4882fcd2226b31eb08886ab72dc5b",
+    "package-lock.json": "002e388baecb556a092a126fc15d254876df0b34821cc6f94638e3eaaa11807f"
+  },
+  "blocks": [
+    {
+      "height": "100000",
+      "version": "1",
+      "headerId": "9b61e8564436969ff3beeb7afbfcfea9794116cffc28f0cfd04dbaccae2df0d7",
+      "transactions": "1",
+      "outputs": "2",
+      "jsonBytes": "4443",
+      "serializedTransactionBytes": "345",
+      "transactionsRoot": "6457b577ed41a038a70fd588d11c48dfd84bd56a90e8d823f163bbe70c7e3282",
+      "sdkDecodedTransactions": "0",
+      "sdkUnsupportedTransactions": [
+        {
+          "position": "0",
+          "reason": "ErgoTree parsing without the size flag is not supported."
+        }
+      ]
+    },
+    {
+      "height": "1000000",
+      "version": "3",
+      "headerId": "f04085962f306d8e4ee9f1a415abb82c32ac6a183d4d286e995569c978a7c5cb",
+      "transactions": "17",
+      "outputs": "46",
+      "jsonBytes": "55386",
+      "serializedTransactionBytes": "9067",
+      "transactionsRoot": "842c5b47f466e52eb48c2476774ab27f166eccafe069f1e536d7c9a02cf7951d",
+      "sdkDecodedTransactions": "11",
+      "sdkUnsupportedTransactions": [
+        {
+          "position": "0",
+          "reason": "ErgoTree parsing without the size flag is not supported."
+        },
+        {
+          "position": "7",
+          "reason": "ErgoTree parsing without the size flag is not supported."
+        },
+        {
+          "position": "11",
+          "reason": "ErgoTree parsing without the size flag is not supported."
+        },
+        {
+          "position": "12",
+          "reason": "ErgoTree parsing without the size flag is not supported."
+        },
+        {
+          "position": "13",
+          "reason": "ErgoTree parsing without the size flag is not supported."
+        },
+        {
+          "position": "16",
+          "reason": "ErgoTree parsing without the size flag is not supported."
+        }
+      ]
+    },
+    {
+      "height": "1500000",
+      "version": "3",
+      "headerId": "f5f148ba4e16fb0ede5d026536f2a29c62b695055762659d6d5ab18126aae6bc",
+      "transactions": "6",
+      "outputs": "17",
+      "jsonBytes": "78399",
+      "serializedTransactionBytes": "5038",
+      "transactionsRoot": "31a762dc5e5dd6dfbe199e28d9b01538290be01915de746bec3118f26f0a97a9",
+      "sdkDecodedTransactions": "0",
+      "sdkUnsupportedTransactions": [
+        {
+          "position": "0",
+          "reason": "ErgoTree parsing without the size flag is not supported."
+        },
+        {
+          "position": "1",
+          "reason": "ErgoTree parsing without the size flag is not supported."
+        },
+        {
+          "position": "2",
+          "reason": "ErgoTree parsing without the size flag is not supported."
+        },
+        {
+          "position": "3",
+          "reason": "ErgoTree parsing without the size flag is not supported."
+        },
+        {
+          "position": "4",
+          "reason": "ErgoTree parsing without the size flag is not supported."
+        },
+        {
+          "position": "5",
+          "reason": "ErgoTree parsing without the size flag is not supported."
+        }
+      ]
+    }
+  ],
+  "jsonFieldBoundaryAlias": "same unsigned bytes and ID, different claimed script and height",
+  "limitations": [
+    "Headers were acquired as fixtures, not independently authenticated.",
+    "No consensus, finality, range continuity, venue filtering, record admission or opening verification.",
+    "Fleet is used only on pinned fixtures; JSON serialization does not authenticate claimed fields.",
+    "The decoder is incomplete and lacks a safe resource boundary for hostile bytes.",
+    "Version 1 transaction roots do not authenticate witnesses."
+  ]
+}

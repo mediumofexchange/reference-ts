@@ -39,6 +39,11 @@ with real proofs. These probes do not implement a pool wallet or v3 finality.
 against independent batch roots and hostile keys; `npm run bench:pool:spent`
 compares per-insert replay cost with pinned v2. It is outside the runtime.
 
+The [Ergo full-block probe](POOL_DEPLOYMENT_PROBES.md#full-block-commitment-feasibility)
+reproduces real transaction roots and retains serializer counterexamples.
+It establishes source feasibility limits; authenticated complete-range reads
+and safe decoding of all transaction outputs remain unimplemented.
+
 ## Successor record conformance
 
 `model/pool-v3-records.ts` implements the successor's reviewed

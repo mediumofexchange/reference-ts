@@ -505,6 +505,14 @@ Candidates to authenticate what C2.10.13 requires, none selected:
 - read several independent nodes and refuse on disagreement, which lowers
   the trust but does not authenticate.
 
+The [full-block probe](POOL_DEPLOYMENT_PROBES.md#full-block-commitment-feasibility)
+reproduces three real block roots but finds no sampled block fully decodable
+by Fleet 0.11.0. It also demonstrates that matching a root after blind JSON
+serialization cannot authenticate claimed output fields. A complete bounded
+decoder and authenticated contiguous headers remain prerequisites; A8/A9
+are open. Develop this source before fixing certificate packaging, whose
+dependencies must reflect the evidence actually consumed by replay.
+
 Retention obligations, by party: the operator and its replicas keep every
 statement record exactly as admitted, since a re-proof no longer classifies
 (C2.10.10); a holder keeps the leaves of every segment it holds notes in
@@ -804,8 +812,9 @@ probe or decision. `pool-v3.md` now fixes the six proof relations and input
 orders; statement records and authorization slots; publication bodies and
 acceptance/release/withdrawal bytes; and history/evidence/snapshot/receipt
 frames, segment headers, portable fault-evidence records and served-trail transport. Remaining
-prerequisites are complete certificate dependency frames and opening verification,
-replay/import/adoption state and order, final artifact
+prerequisites are authenticated range-source evidence, replay/import/adoption
+state and order, complete opening verification and its certificate dependency
+frames, final artifact
 identities, and the configuration preimage over those identities, the helper
 and bounds, whose hash becomes the v3 domain. A1–A3, A5–A7 and A16–A21 were decided on
 2026-09-09 in the contracts, and A4 is measured. A12's requirement to settle

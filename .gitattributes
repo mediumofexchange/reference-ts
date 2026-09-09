@@ -1,1 +1,4 @@
 * text=auto eol=lf
+
+# Preserve hash-pinned public responses, including their original blank-line spaces.
+experiments/ergo-range/fixtures/mainnet-*.json -text -whitespace

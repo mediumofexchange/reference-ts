@@ -96,3 +96,11 @@ jobs:
 
       - name: Reference, installed package and durable payment acceptance
         run: npm run check
+
+      - name: Install pinned offline Ergo probe dependencies
+        if: matrix.node == 24
+        run: npm --prefix experiments/ergo-range ci --ignore-scripts --no-audit --no-fund
+
+      - name: Real-block commitment feasibility and serializer counterexamples
+        if: matrix.node == 24
+        run: npm run check:ergo:range

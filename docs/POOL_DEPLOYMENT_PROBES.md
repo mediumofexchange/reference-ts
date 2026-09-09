@@ -315,9 +315,82 @@ authentication of chunks against forged or reordered boxes, and retrieval
 after the boxes are spent. The probe's script, notes and JSON stay in
 `scratch/` and are reproducible with `npm install` there.
 
+## Full-block commitment feasibility
+
+The private [offline experiment](../experiments/ergo-range/README.md) checks
+complete block transaction commitments before choosing an A8/A9 range source.
+Run it on Node 24 with `npm run check:ergo:range` after the experiment's
+separate pinned install. CI runs it on Linux and Windows. It adds no library
+runtime dependency or exported verification API.
+
+The source baseline matches the publication probe: Ergo node v6.1.5 at
+[`c364664`](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/ergo-core/src/main/scala/org/ergoplatform/modifiers/history/BlockTransactions.scala),
+sigma-state v6.0.6 at
+[`ab0b15c`](https://github.com/ergoplatform/sigmastate-interpreter/blob/ab0b15ceb9d34f2ccd6e68e3e2a8aa27cd16a042/data/shared/src/main/scala/org/ergoplatform/ErgoLikeTransaction.scala),
+and its scrypto v3.1.1 dependency at
+[`70b3610`](https://github.com/ergoplatform/scrypto/blob/70b36102b2ed8f7a443cfc92f9f135665d777a37/shared/src/main/scala/scorex/crypto/authds/merkle/MerkleTree.scala).
+Fleet serializer 0.11.0 is pinned to
+[`7d06847`](https://github.com/fleet-sdk/fleet/blob/7d06847afea124c5fdc71c0e8d813db0a1791978/packages/serializer/src/serializers/transactionSerializer.ts)
+and npm integrity hashes in the experiment lockfile. These are selected
+research baselines, not a claim to cover every node or future block version.
+
+Transaction IDs hash the canonical transaction with empty spending proofs.
+For block version 1, Merkle leaves are the transaction IDs alone. Later
+versions in the node use all transaction IDs followed by all witness IDs.
+Each witness ID is Blake2b-256 of the concatenated input proof bytes with its
+first byte removed: 31 bytes, as fixed by
+[the node transaction implementation](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/ergo-core/src/main/scala/org/ergoplatform/modifiers/mempool/ErgoTransaction.scala).
+The leaves are neither pairs nor interleaved. Merkle leaf/internal prefixes
+are 0/1; a missing right sibling contributes zero bytes, and a single leaf
+still has an internal parent. The
+[node types](https://github.com/ergoplatform/scrypto/blob/70b36102b2ed8f7a443cfc92f9f135665d777a37/shared/src/main/scala/scorex/crypto/authds/merkle/Node.scala)
+fix those details. Secondary discovery material described a conflicting
+paired-leaf construction; the probe follows the pinned source instead.
+
+The retained [result](ergo-range-verification.json) has 342 passing assertions:
+three public mainnet block fixtures at heights 100000, 1000000 and 1500000,
+versions 1/3/3, 24 transactions and 65 outputs. Their raw JSON totals 138,228
+bytes; reconstructed signed transactions total 14,450 bytes, excluding block
+section framing. The fixture manifest records source URLs and SHA-256 pins.
+These blocks are separated in height and were acquired from a public node;
+their headers have not been independently authenticated. No network request
+is needed to repeat the checks.
+
+All 24 computed transaction IDs and all three roots match the fixtures.
+Controls remove and duplicate every transaction, swap adjacent transactions,
+mutate every output value and input-proof evidence, and check competing root
+algorithms. Version 1 explicitly retains the same root after proof mutation.
+Node 24's JSON source-text reviver retains amounts above JavaScript's exact
+integer range without rounding.
+
+**Parser result:** only 11 of 24 transactions round-trip through Fleet's
+decoder. The other 13 fail on valid fixture scripts without a size flag;
+every sampled block contains at least one such transaction. Expected failure
+positions and messages are pinned so new failures cannot count as success.
+A small counterexample moves one creation-height byte into a claimed raw
+ErgoTree field: two different JSON field assignments serialize to identical
+unsigned bytes and transaction IDs. Thus serializing arbitrary node JSON and
+checking its root cannot authenticate the claimed output fields. Separate
+finite controls show a short byte read advances past the buffer and an empty
+integer read returns zero. The
+[SDK reader](https://github.com/fleet-sdk/fleet/blob/7d06847afea124c5fdc71c0e8d813db0a1791978/packages/serializer/src/coders/sigmaByteReader.ts)
+also allocates arrays from decoded counts. The probe only decodes hash-pinned
+fixtures; it is not a safe parser for hostile bytes.
+
+The next source gate is a complete, bounded canonical transaction decoder
+that reproduces all fixture output IDs, then a contiguous-range reader
+against externally authenticated headers. Evaluate a pinned maintained Ergo
+parser or local node boundary before writing a partial script parser: an
+unsupported transaction anywhere in the range prevents an absence verdict.
+Consensus, chain selection/finality, exact output extraction, resource refusal,
+same-height publication order and admission of held commitments remain open.
+No runtime source has been selected and no C2.10.13 completeness claim follows
+from this probe. Raw venue outputs would still need existing signature,
+sequence and authority checks before acquiring protocol force.
+
 ## Venue and restoration work still required
 
-The next venue experiment must publish a complete recovery publication through
+A separate venue publication experiment must publish a complete recovery publication through
 a pinned node, including chunk framing, canonical reassembly, duplicates,
 incomplete publication and retrieval after boxes are spent. No transaction
 acceptance result is claimed yet.
