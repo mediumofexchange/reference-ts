@@ -98,7 +98,17 @@ C2.10.10 selects a separate evidence chain beside semantic history. A linear
 chain needs later recurrence inputs for an interior-event certificate: three
 32-byte digests per later evidence event, before target bytes, framing,
 directory proof and ancestry. A tree could reduce suffix cost. No v3 encoding,
-production retention bound or node acceptance is established here.
+production retention bound or node acceptance is established by those v2 tests.
+
+The successor's [pool-v3 §7 frames](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md#7-history-evidence-snapshots-and-receipts)
+are now implemented outside the runtime in `model/pool-v3-commitments.ts`.
+`test/pool-v3-commitments.test.ts` authenticates exact evidence against signed
+directories, distinguishing a committed failing backer signature from replica
+substitution. It checks raw malformed-length fields, snapshot/receipt bytes,
+suffix positions, overflow and adopted source evidence at a new position.
+Proofs and roots are synthetic. This is evidence authentication, not a complete
+fault certificate or checkpoint classification; header/trail/record evidence,
+final configuration and runtime replay remain required.
 
 ## Review and next boundary
 

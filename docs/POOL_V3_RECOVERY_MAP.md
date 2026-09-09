@@ -14,9 +14,10 @@ trace through wallet, operator, backer, venue and stranger; the record range
 and retention each read needs; the resource assumptions; and the choices
 that are still open, each with the probe or decision that closes it.
 
-The [v3 layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/ca727f6/pool-v3.md)
+The [v3 layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md)
 fix the six relations, public-input orders and canonical statement,
-authorization and publication records. Other layouts here remain
+authorization, publication, snapshot and receipt records, plus history and
+evidence recurrences. Other layouts here remain
 **candidates**: the specification fixes the remaining bytes after the choices
 in [§8](#8-unresolved-assumptions-and-choices) are decided and reviewed, and the
 runtime follows the specification. No v3 configuration or adoption is defined.
@@ -312,6 +313,17 @@ Estimates assume a 14,656-byte proof and the frames above;
 
 ## 4. Checkpoint, evidence chain, receipt and trail
 
+The hash and receipt frames below are normative in
+[pool-v3 §7 at 4a58fdc](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md#7-history-evidence-snapshots-and-receipts).
+`model/pool-v3-commitments.ts` retains exact byte conformance and the evidence
+suffix opening relation. Its snapshot hashing accepts invalid u64 supply
+assertions so they can authenticate before replay rejects them; raw proof and
+authorization fields can likewise be hashed despite invalid lengths. Missing
+or unparseable data is never replaced with empty fields. Real-signature tests
+distinguish committed bad authorization from replica substitutions. These
+primitives supply neither a standalone certificate nor a checkpoint verdict.
+Segment/trail encoding and replay integration remain open.
+
 ```text
 evidenceHash_0 = SHA256("moe/pool/v3/evidence-seed" ‖ segmentId[32])
 evidenceHash_i = SHA256("moe/pool/v3/evidence-link" ‖ evidenceHash_{i−1}[32] ‖ statementHash_i[32]
@@ -326,8 +338,9 @@ receiptBytes   = frame("moe/pool/v3/receipt" ‖ configHash ‖ segmentId ‖ sc
 over the bytes exactly as admitted, zero where absent. v2's zero digest
 stood only for an absent obligor signature; v3 extends it to the proof
 digest of the proofless withdraw. The chain is `SHA256` over frames, not
-`H`: no circuit reads it and its inputs are `SHA256` digests. The history chain, roots and
-statement identity are unchanged, so re-proof, deduplication and
+`H`: no circuit reads it and its inputs are `SHA256` digests. The history
+recurrence and statement identity retain their meanings under v3 contexts,
+while the spent root uses pool-spent's compressed tree. Re-proof, deduplication and
 idempotence stay as in pool-v2 §§7–8. The receipt fields are v2's; for an
 adopted statement `after` is the opening checkpoint's sequence and the
 digests are the publication's (C2b.4.2, C2.10.10).

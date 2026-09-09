@@ -1,4 +1,4 @@
-// Canonical byte conformance for pool-v3 §§5–6 at ca727f6. No adopted
+// Canonical byte conformance for pool-v3 §§5–7 at 4a58fdc. No adopted
 // configuration, proof verifier, admission or replay. Move this codec and its
 // tests into the single runtime path only after final v3 configuration review.
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -163,12 +163,27 @@ export function decodeRecord(bytes: Uint8Array): Record {
   return result;
 }
 
-/** Exact evidence components, not a committed evidence chain or a validity check. */
-export function evidenceHashes(s: Record): { statementHash: Uint8Array; proofHash: Uint8Array; signatureHash: Uint8Array } {
+export interface EvidenceDigests {
+  readonly statementHash: Uint8Array;
+  readonly proofHash: Uint8Array;
+  readonly signatureHash: Uint8Array;
+}
+
+/** pool-v3 §7.1: hash ACTUAL supplied fields, even with invalid lengths or
+ * signatures. Never replace unavailable/unparseable data with empty bytes.
+ * This does not validate record shape, proof, authorization or state. */
+export function hashEvidenceFields(statement: Uint8Array, proof: Uint8Array, authorization: Uint8Array): EvidenceDigests {
+  requireBytes(statement, 32);
+  if (!(proof instanceof Uint8Array) || !(authorization instanceof Uint8Array)) throw new EncodingError("missing evidence bytes");
+  return Object.freeze({ statementHash: Uint8Array.from(statement),
+    proofHash: proof.length ? sha256(proof) : new Uint8Array(32),
+    signatureHash: authorization.length ? sha256(authorization) : new Uint8Array(32) });
+}
+
+/** Convenience for a canonical record; raw failing fields use hashEvidenceFields. */
+export function evidenceHashes(s: Record): EvidenceDigests {
   requireRecord(s);
-  return { statementHash: statementHash(s),
-    proofHash: s.proof.length ? sha256(s.proof) : new Uint8Array(32),
-    signatureHash: s.authorization.length ? sha256(s.authorization) : new Uint8Array(32) };
+  return hashEvidenceFields(statementHash(s), s.proof, s.authorization);
 }
 
 export function acceptanceBytes(a: Acceptance): Uint8Array {

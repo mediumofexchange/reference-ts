@@ -80,6 +80,10 @@ compares per-insert replay cost with pinned v2. It is outside the runtime.
 `npm test` checks exact bytes, hostile parsing, delivery association and
 signature-message binding. This codec is not exported or used for admission;
 v3 configuration, finality and adoption remain undefined.
+`model/pool-v3-commitments.ts` adds the reviewed history/evidence chains,
+snapshot and receipt frames from [pool-v3 §7](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md#7-history-evidence-snapshots-and-receipts).
+Its tests distinguish authenticated failing evidence from substituted bytes
+using real signatures. Authentication alone supplies no checkpoint verdict.
 
 The runtime follows specification revision
 [`3676757a1c8ddc0df607352c6bddbb48f6d85a09`](https://github.com/mediumofexchange/money-from-first-principles/tree/3676757a1c8ddc0df607352c6bddbb48f6d85a09),
