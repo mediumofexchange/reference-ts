@@ -4,7 +4,7 @@ Updated: 2026-09-09
 
 ## Goal
 
-Deliver portable v3 fault-evidence records on reference
+Completed portable v3 fault-evidence records on reference
 `feat/pool-v3-fault-evidence` and companion `spec/pool-v3-fault-evidence`.
 Acceptance: exact target statement/proof/authorization fields and their
 consecutive evidence suffix authenticate against an expected signed-directory
@@ -27,7 +27,9 @@ neither complete-opening state nor an exclusion verdict.
   later event. No new protocol suffix cap is introduced; budgets are local.
 - All 10 focused hostile tests and typecheck pass. Fresh independent code
   review found no material issues and independently passed all ten tests.
-  Full project checks pass; implementation delivery remains pending.
+  Full project checks pass. Implementation `0d2464e` is merged to `main`;
+  this follow-up records its delivery. New CI is pending and must be checked
+  on the final main revision; prior CI below covers the unchanged proof work.
 - Prior header delivery `a23d8c9` / handoff `edbb5b1` passes all seven
   [CI jobs](https://github.com/mediumofexchange/reference-ts/actions/runs/34380754806),
   including Node 20/24 Linux, Node 24 Windows and both platforms' real proofs.
@@ -58,8 +60,7 @@ neither complete-opening state nor an exclusion verdict.
 
 ## Next
 
-1. Commit/merge/push the reviewed implementation and verify remote parity
-   and new CI; local acceptance is complete.
+1. Check CI for the delivered main revision and resolve any failure.
 2. Define served-trail framing and complete certificate dependency evidence,
    then complete-opening verification. Name companion branches first.
    Acceptance: a signed directory authenticates a complete bounded opening,
