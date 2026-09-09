@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-09` [Frame served trails without granting opening validity](decisions/2026-09.md#2026-09-09--frame-served-trails-without-granting-opening-validity)
 - `2026-09-09` [Carry exact target bytes in fault evidence](decisions/2026-09.md#2026-09-09--carry-exact-target-bytes-in-fault-evidence)
 - `2026-09-09` [Reuse the segment header fields for v3](decisions/2026-09.md#2026-09-09--reuse-the-segment-header-fields-for-v3)
 - `2026-09-09` [Bind successor snapshots and receipts to exact event evidence](decisions/2026-09.md#2026-09-09--bind-successor-snapshots-and-receipts-to-exact-event-evidence)

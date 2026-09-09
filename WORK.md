@@ -4,79 +4,63 @@ Updated: 2026-09-09
 
 ## Goal
 
-Completed repository presentation cleanup at `eea69bd` on `main`, with
-companion specification commit `01387a4` on `main`: concise entry points, neutral
-decision records and preserved technical evidence. Website README commit `326a3f6`
-is merged/pushed to `main`; its authorized GitHub Pages deployment succeeded.
-The protocol continuation below remains the next implementation task.
-
-Completed portable v3 fault-evidence records on reference
-`feat/pool-v3-fault-evidence` and companion `spec/pool-v3-fault-evidence`.
-Acceptance: exact target statement/proof/authorization fields and their
-consecutive evidence suffix authenticate against an expected signed-directory
-snapshot, including committed invalid bytes; substitutions and false contexts
-fail. Bound parsing before payload allocation/hashing, retain byte ownership,
-and keep local resource refusal distinct from operator fault. This proves
-neither complete-opening state nor an exclusion verdict.
+Canonical served-trail transport and local evidence authentication on
+`feat/pool-v3-served-trail`, with companion `spec/pool-v3-served-trail`.
+Acceptance: bounded framing carries the header, every scoped term/signature
+and exact ordered records; local event evidence authenticates against an
+externally authenticated snapshot. Substitutions/truncation fail; resource
+refusal stays distinct. This is a prerequisite to complete opening verification,
+not a claim that terms, imports, record ranges or state have been verified.
+Commit the independently reviewed specification before dependent code.
 
 ## Status
 
-- Specification `322bcae` passed fresh independent normative review, was
-  committed before dependent code, and is merged/pushed to `main` with clean
-  status and remote parity. Pool-v3 §9 now fixes this evidence-opening frame.
-- `model/pool-v3-fault-evidence.ts` implements encoding, preflight decoding
-  and evidence verification outside the runtime. Explicit suffix budgets
-  fail with `FaultEvidenceLimitError`; malformed data fails encoding/decoding
-  or returns false from verification. Neither outcome classifies a checkpoint.
-- Each raw target field is at most 131072 bytes; valid statement/proof/auth
-  bounds are unchanged. Cost is 250 fixed bytes plus target bytes and 96 per
-  later event. No new protocol suffix cap is introduced; budgets are local.
-- All 10 focused hostile tests and typecheck pass. Fresh independent code
-  review found no material issues and independently passed all ten tests.
-  Full project checks pass. Implementation `0d2464e` is merged to `main`;
-  the delivery handoff `d2edf1b` passes all seven
+- Both repositories entered clean; upstream fetches show no new changes.
+  Reference main `c5cf164` passes [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/34386666427).
+  Companion main is `01387a4`. Repository presentation work is delivered.
+- Specification `7ea0ee8` composes existing headers, scoped terms/signatures and
+  raw record bytes. Independent normative review found no material blocker;
+  the specification was committed before code and is merged/pushed to main.
+- `model/pool-v3-trail.ts` implements bounded outer framing and local event
+  authentication. Ten independently authored hostile tests and typecheck pass.
+  Fresh independent review found no unresolved material findings and passed
+  five related suites / 96 tests. Full project checks pass; implementation
+  commit and remote delivery are the remaining steps.
+- Decision: [served trails](decisions/2026-09.md#2026-09-09--frame-served-trails-without-granting-opening-validity).
+  Integration order: [recovery map](docs/POOL_V3_RECOVERY_MAP.md).
+- Prior fault-evidence specification `322bcae` and implementation `0d2464e`
+  are merged/pushed; handoff `d2edf1b` passes all seven
   [CI jobs](https://github.com/mediumofexchange/reference-ts/actions/runs/34383194240).
-- Prior header delivery `a23d8c9` / handoff `edbb5b1` passes all seven
-  [CI jobs](https://github.com/mediumofexchange/reference-ts/actions/runs/34380754806),
-  including Node 20/24 Linux, Node 24 Windows and both platforms' real proofs.
+  Header specification `061f87e` and implementation `a23d8c9` are delivered.
 - Runtime remains v2, refuses silence clauses and exports no pool wallet.
-  Configuration, complete trails, certificate dependencies and adoption are
-  not supplied by this evidence record. Missing dependencies stay unresolved.
-- Decision: [exact target bytes](decisions/2026-09.md#2026-09-09--carry-exact-target-bytes-in-fault-evidence).
-  Integration order and assumptions: [recovery map](docs/POOL_V3_RECOVERY_MAP.md).
+  Complete certificate dependencies, configuration and adoption remain open.
 
 ## Evidence
 
-- Presentation: docs/index checks pass (88 decisions), links across 46 Markdown
-  files pass, and 22 cross-repository links resolve against files/pinned Git objects.
-  Focused history review preserved uncertainty, review limits and pending statuses.
-  Presentation `eea69bd` passes [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/34385966935).
-- Specification review checked raw-vs-strict framing, empty-field hashes,
-  exact 250+fields+96*(n-i) size, context/position checks, external expectations,
-  local budgets and the distinction between authentication and exclusion.
-- The focused suite covers independent bytes/hashes, signed directories,
-  malformed committed targets, seed/context/suffix substitutions, all
-  truncations, raw-field/u64 boundaries, explicit resource refusals, sparse
-  inputs and Buffer ownership. A 65,537-entry suffix authenticates under its
-  exact reader budget; no unreviewed fixed suffix cap is introduced.
-- Full `npm run check` passes: 95 files / 1,785 tests, typecheck, build,
+- Specification links pass across all 15 Markdown files; both new distinct
+  pinned links resolve against the committed Git object. Reference docs pass.
+- Current full `npm run check`: 96 files / 1,795 tests, typecheck, build,
   installed-package consumer, pilot, pool-store crash probes and ten spent-set
-  groups. No runtime, circuit, relation, key or configuration change.
+  groups. Independent adversarial review is complete with no material findings.
+  The initial sandbox run failed before tests at esbuild configuration loading;
+  the unchanged approved run outside the restricted sandbox passed.
 - Existing v3 real-proof evidence remains 304 checks / 18 proofs of 14,656
   bytes, all 81 public scalars and hostile controls. [Report](docs/pool-v3-conformance-verification.json).
   These are synthetic-domain observations, not approved configuration pins.
-- Specification links and diff checks pass. Both repositories report no
-  effective main rules; no protections or access controls were changed.
+- Prior fault-evidence tests authenticate exact malformed bytes, all positions,
+  independent hash/byte oracles, real signed directories and buffer ownership.
+  A 65,537-entry suffix authenticates under an exact local reader budget.
+  This neither proves a complete opening nor classifies a checkpoint.
 
 ## Next
 
-1. Check CI for this handoff update; presentation and runtime CI are verified above.
-2. Define served-trail framing and complete certificate dependency evidence,
-   then complete-opening verification. Name companion branches first.
-   Acceptance: a signed directory authenticates a complete bounded opening,
-   missing dependencies remain unresolved, and substitutions fail. Neither
-   header nor portable fault-evidence conformance fulfills that acceptance.
-3. Fix replay/import/adoption order and final configuration/artifact pins in
+1. Commit and deliver under standing merge/push authorization, then verify
+   clean status, remote parity and available CI. Both repositories currently
+   have no effective main rules or branch protection; no safeguards changed.
+3. Define complete certificate dependency framing, then complete-opening
+   verification: a signed directory authenticates a complete bounded opening,
+   missing dependencies remain unresolved and substitutions fail.
+4. Fix replay/import/adoption order and final configuration/artifact pins in
    `pool-v3.md`, then implement one v3 runtime/recovery path and wallet;
    repeat the six real-proof relations on the final configuration domain.
 
@@ -92,8 +76,7 @@ neither complete-opening state nor an exclusion verdict.
   proof or presenter participation. Parsing establishes no authority, demand
   standing or force. Copied journals, rollback, same-index venue order,
   setup/build provenance, phone budgets and publication remain gates.
-- Larger malformed target fields and faults requiring capsule or other
-  omitted dependency evidence are outside this record's coverage. Resource
-  failure is never exclusion. Protocol deployment, releases, access changes and
-  funds remain unauthorized. Existing probes/caches remain; no new dependency trees or
-  disposable repository copies were created.
+- Malformed fields beyond transport bounds need other evidence. Resource
+  failure is never exclusion. Protocol deployment, releases, access changes
+  and funds remain unauthorized. Existing probes/caches remain; no new
+  dependency trees or disposable repository copies were created.

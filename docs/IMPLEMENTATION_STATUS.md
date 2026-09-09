@@ -53,11 +53,18 @@ using real signatures. Authentication alone supplies no checkpoint verdict.
 `model/pool-v3-headers.ts` implements [v3 segment headers](https://github.com/mediumofexchange/money-from-first-principles/blob/061f87e/pool-v3.md#8-segment-headers)
 with canonical scope/opening references and bounded strict decoding. Its
 signed-directory and hostile-byte tests establish header conformance; complete
-opening evidence, trail/certificate formats and runtime adoption remain open.
+opening evidence, complete certificate formats and runtime adoption remain open.
 `model/pool-v3-fault-evidence.ts` adds the [portable fault-evidence record](https://github.com/mediumofexchange/money-from-first-principles/blob/322bcae/pool-v3.md#9-fault-evidence-records):
 exact raw target bytes and an evidence suffix, checked against an externally
 authenticated snapshot with an explicit reader budget. Successful evidence
 authentication is not an exclusion verdict or a complete served trail.
+`model/pool-v3-trail.ts` implements [served-trail transport](https://github.com/mediumofexchange/money-from-first-principles/blob/7ea0ee8/pool-v3.md#10-served-trail-transport)
+with explicit byte/event budgets and raw inner-byte retention. Its local
+evidence helper authenticates the header and ordered event evidence against
+an expected signed-directory snapshot, including capsule association for
+decodable records. It does not authenticate scoped terms, replay history or
+imports, resolve record ranges/adoption or establish a complete opening.
+Opaque terms still require their own decoding, name/signature and force checks.
 
 ## Runtime pin and recovery models
 

@@ -14,10 +14,11 @@ trace through wallet, operator, backer, venue and stranger; the record range
 and retention each read needs; the resource assumptions; and the choices
 that are still open, each with the probe or decision that closes it.
 
-The [v3 layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/322bcae/pool-v3.md)
+The [v3 layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/7ea0ee8/pool-v3.md)
 fix the six relations, public-input orders and canonical statement,
 authorization, publication, snapshot and receipt records, plus history and
-evidence recurrences, plus segment headers and portable fault-evidence records.
+evidence recurrences, plus segment headers, portable fault-evidence records
+and served-trail transport.
 Other layouts here remain
 **candidates**: the specification fixes the remaining bytes after the choices
 in [§8](#8-unresolved-assumptions-and-choices) are decided and reviewed, and the
@@ -330,7 +331,8 @@ authorization fields can likewise be hashed despite invalid lengths. Missing
 or unparseable data is never replaced with empty fields. Real-signature tests
 distinguish committed bad authorization from replica substitutions. These
 primitives supply neither a standalone certificate nor a checkpoint verdict.
-Segment headers are fixed in §8. Trail encoding and replay integration remain open.
+Segment headers are fixed in §8; §10 fixes the outer served-trail transport.
+Complete certificate encoding and replay integration remain open.
 
 [Pool-v3 §9](https://github.com/mediumofexchange/money-from-first-principles/blob/322bcae/pool-v3.md#9-fault-evidence-records)
 now frames the target byte preimages and suffix as a portable fault-evidence
@@ -343,6 +345,18 @@ can authenticate; missing data, a replaced preimage or a processing limit
 does not prove fault. This is one certificate component, not the full
 record/scope/import/continuity evidence required for exclusion, nor a proof
 that a capsule was served, missing or corrupted.
+
+[Pool-v3 §10](https://github.com/mediumofexchange/money-from-first-principles/blob/7ea0ee8/pool-v3.md#10-served-trail-transport)
+frames the canonical header, every scoped terms/signature pair and exact
+ordered record bytes. `model/pool-v3-trail.ts` checks explicit byte/event budgets
+and all outer boundaries before payload allocation or hashing. Inner terms
+and records remain raw; local authentication decodes §5 records and binds
+their evidence chain and capsule association to an expected directory snapshot.
+It authenticates neither terms nor replayed state; even a zero-event trail
+can import nonempty state. A source-segment mismatch or kind 7 can authenticate
+as committed bytes without becoming authorized history. Malformed records
+outside the 131978-byte transport cap need other evidence. Complete record
+ranges, imports, clock/descent dependencies and final configuration stay open.
 
 ```text
 evidenceHash_0 = SHA256("moe/pool/v3/evidence-seed" ‖ segmentId[32])
@@ -789,8 +803,8 @@ the evidence each party holds at each step, and every open item above has an own
 probe or decision. `pool-v3.md` now fixes the six proof relations and input
 orders; statement records and authorization slots; publication bodies and
 acceptance/release/withdrawal bytes; and history/evidence/snapshot/receipt
-frames, segment headers and portable fault-evidence records. Remaining
-prerequisites are served-trail and complete certificate dependency frames,
+frames, segment headers, portable fault-evidence records and served-trail transport. Remaining
+prerequisites are complete certificate dependency frames and opening verification,
 replay/import/adoption state and order, final artifact
 identities, and the configuration preimage over those identities, the helper
 and bounds, whose hash becomes the v3 domain. A1–A3, A5–A7 and A16–A21 were decided on
