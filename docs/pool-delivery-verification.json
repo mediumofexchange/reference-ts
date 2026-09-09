@@ -1,0 +1,283 @@
+{
+  "recorded": "2026-09-09",
+  "command": "npm run check:pool:delivery",
+  "scope": "F3 cryptographic restoration seam over prevalidated synthetic data plus candidate spend digest binding; no production v3 finality, venue completeness or device acceptance",
+  "companionSpecCommit": "02d911c82d895feae86607ee9e9d3cae9612361e",
+  "capsule": {
+    "status": "pass",
+    "profile": 1,
+    "capsuleBytes": 89,
+    "tests": {
+      "passed": 22,
+      "names": [
+        "exact retry is byte-for-byte deterministic",
+        "identifier, domain, seed, backing and amount variants are separated",
+        "master keys and settlement key are domain separated",
+        "u64 zero and maximum are accepted and bounds are rejected",
+        "fixed-width byte boundaries ignore subclass length and iterator overrides",
+        "seed and exact public context recover the complete opening and nullifier",
+        "wrong seed, commitment or domain is an ordinary no-match",
+        "tamper is no-match while truncation and profile mismatch are malformed",
+        "candidate API cannot encrypt under an arbitrary commitment",
+        "valid AEAD under a declared cm still fails recomputed-commitment association",
+        "delivery hash binds prefix, domain, count, order, cm and exact capsule",
+        "bound capsule corruption fails the statement hash before scanning",
+        "Node WebCrypto independently reproduces one AES-GCM envelope",
+        "an AEAD capsule subkey is separated from the spend master",
+        "synthetic restore finds issuer, receiver and lit-settlement notes",
+        "spent change and zero output are not returned as holdings",
+        "synthetic restore makes no authentication, finality or completeness claim",
+        "wrong-seed restore reports no matches without claiming zero completeness",
+        "settlement restoration requires a declared prevalidated canonical creation",
+        "child restore receives only seed and declared public synthetic-view fields",
+        "restored worker creates new requests from fresh IDs without an index scan",
+        "child restore fails a missing bound delivery hash"
+      ]
+    },
+    "deterministicVector": {
+      "seed": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "domain": "2122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40",
+      "requestId": "6162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80",
+      "backing": "4142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60",
+      "value": "73",
+      "spendAttempt": 2,
+      "rhoAttempt": 1,
+      "owner": "0x22a467d1fa14a91a2802f16486f39f509c699fa00f3e5350a114792bec136a06",
+      "rho": "0x0d2f2ac91326a35ce92a08860002daf808aedf293799fc09233c9d846d932375",
+      "cm": "0x08a712671bde055c383a017a485c4efe4a94b3580ec6c1e6b8eecdd9ececc50c",
+      "nf": "0x1a5cc255590f51fb0a91277a17cfc452871c60ae002ba2da759e2ca83d54e65d",
+      "capsule": "01662bfbcbf8b7272e476e9527a82defc4b56cf3b06e06f3303fe85e2c4a7ac63d1d7a496437c3bdeea60aefc4213ae6642ef017d5903e943cb62fce5474747e18d8a7de361965decb55ca32a9b8307a0f5ba829d8a18d4367",
+      "capsuleSha256": "42d0f77c8953c6e4d41f23ad05b17763b587a5de3671de087c7837145185cdd5"
+    },
+    "childProcessRestore": {
+      "inputTopLevelFields": [
+        "viewKind",
+        "seed",
+        "domain",
+        "statements",
+        "spentNullifiers",
+        "settlements"
+      ],
+      "inputContainsRequestIdsOutsideCiphertext": false,
+      "inputContainsSenderSecretsOrOriginalWalletDatabase": false,
+      "restoredHoldings": [
+        {
+          "source": "capsule",
+          "cm": "0x2e4506efaaaf52bac6672c7e2dce083b7e1b3d8e1766c3008c813f16294f0504",
+          "nf": "0x1e915d89b49a52f8c63060eae2db4841ba51158be923a11daec2d6bf5fbf1c22",
+          "backing": "4142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60",
+          "value": "101"
+        },
+        {
+          "source": "capsule",
+          "cm": "0x1b2cfe739d76005342514b0d7608d8905cb85625d666ba8336ecc48087a7124f",
+          "nf": "0x0d683d677b3119be7485275fefdec565a93faa2daabc67c750f01c3b8828649f",
+          "backing": "4142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60",
+          "value": "37"
+        },
+        {
+          "source": "settlement",
+          "cm": "0x19f070ce0aa7fc3299972654aae04b49b5dc9a71fa1607e9c20b4cd472326443",
+          "nf": "0x04777755759360759beee7b984111a079a86885621c9ca57cbb6249f9d80dd7e",
+          "backing": "4142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60",
+          "value": "11"
+        }
+      ],
+      "pendingAdoption": [
+        {
+          "source": "settlement",
+          "cm": "0x2ee2911b9851824dae899e413827f9442845cc05f1f43afbeab7fd4b124bc482",
+          "nf": "0x2980b82d309f3cba78c7edce33d6b7bc9bdba8464d6fde2efee58627cce1d9bb",
+          "backing": "4142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60",
+          "value": "13",
+          "spendable": false,
+          "status": "awaiting-canonical-adoption-and-certified-path"
+        }
+      ],
+      "stats": {
+        "trials": 5,
+        "matches": 4,
+        "settlementTrials": 2,
+        "settlementMatches": 2
+      },
+      "requestGeneration": {
+        "strategy": "fresh-cryptographic-random-32-bytes",
+        "requestId": "25120b516ff016d3c5c9d6b1e697b86836dd096a1dcffdf392176958cfceafff",
+        "cm": "0x2699022671be3bc2bcd1712c0be6a1fa579b8d70fa056410eae4976bf8dd13ee",
+        "indexScans": 0,
+        "randomDraws": 1
+      },
+      "evidenceScope": "prevalidated-synthetic-view",
+      "authenticatedFullV3Finality": false,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true
+    },
+    "benchmark": {
+      "scope": "local profile-1 capsule trials only; excludes history transport/authentication, proof verification, finality and completeness",
+      "cachedPerDomainMasterKeys": true,
+      "perTrialWork": "one per-commitment HKDF-SHA256 plus one failed AES-256-GCM open and framing checks",
+      "repeatedEnvelopeCaveat": "each sample repeats one foreign cm/capsule without caching its per-commitment subkey; this does not measure traversal of distinct history entries",
+      "foreignCapsuleScans": [
+        {
+          "trials": 1000,
+          "matches": 0,
+          "elapsedMs": 79.02199999999999,
+          "trialsPerSecond": 12654.703753385134,
+          "microsecondsPerTrial": 79.02199999999999
+        },
+        {
+          "trials": 10000,
+          "matches": 0,
+          "elapsedMs": 737.6607999999999,
+          "trialsPerSecond": 13556.366286510007,
+          "microsecondsPerTrial": 73.76607999999999
+        },
+        {
+          "trials": 100000,
+          "matches": 0,
+          "elapsedMs": 12361.3816,
+          "trialsPerSecond": 8089.71061940196,
+          "microsecondsPerTrial": 123.61381600000001
+        }
+      ],
+      "ownNoteHashCost": {
+        "pairs": 250,
+        "hashesPerPair": 2,
+        "elapsedMs": 527.6543000000001,
+        "microsecondsPerCommitmentAndNullifier": 2110.6172000000006,
+        "checksum": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    "limitations": [
+      "Input is a declared prevalidated synthetic view, not authenticated complete v3 history or finality evidence.",
+      "No-match and missing external coverage never establish a zero balance or restoration completeness.",
+      "The probe does not implement venue/backing discovery, availability, proof verification, authenticated range reads or local path construction.",
+      "Only a prevalidated canonical finalized settlement enters holdings; a prevalidated force-created output remains non-spendable pending adoption, and the probe does not validate either creation history.",
+      "The capsule-subkey separation check is a deterministic regression vector, not a computational proof of HKDF security."
+    ],
+    "environment": {
+      "node": "v24.6.0",
+      "platform": "win32",
+      "arch": "x64",
+      "cpu": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz"
+    },
+    "sourceSha256": {
+      "crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
+      "restore-worker.mjs": "928310e7ceeed3263f63717cbd88264cbb22049326553d21dfa8fa9daef903b0",
+      "check.mjs": "4ab4dfce3d5ec57565688c72fa0c82afe9061b43b37e976fdd7e3eb35497d6c4"
+    }
+  },
+  "binding": {
+    "candidate": "pool-v2-spend-plus-public-delivery-u128x2",
+    "sourceOnly": true,
+    "companionSpecCommit": "02d911c82d895feae86607ee9e9d3cae9612361e",
+    "node": "v24.6.0",
+    "platform": "win32",
+    "arch": "x64",
+    "noirVersion": "1.0.0-beta.26+40d6574f851d926f93e0c3a271bac3e6e82ac905",
+    "verifierTarget": "noir-recursive",
+    "toolchain": {
+      "@aztec/bb.js": "5.2.0",
+      "@noir-lang/noir_js": "1.0.0-beta.26",
+      "@noir-lang/noir_wasm": "1.0.0-beta.26"
+    },
+    "publicInputOrder": [
+      "domainHi",
+      "domainLo",
+      "segmentHi",
+      "segmentLo",
+      "scope",
+      "anchor1",
+      "anchor2",
+      "nullifier1",
+      "nullifier2",
+      "output1",
+      "output2",
+      "deliveryHi",
+      "deliveryLo"
+    ],
+    "publicInputCount": 13,
+    "deliveryAbi": {
+      "name": "delivery",
+      "type": {
+        "kind": "array",
+        "length": 2,
+        "type": {
+          "kind": "integer",
+          "sign": "unsigned",
+          "width": 128
+        }
+      },
+      "visibility": "public"
+    },
+    "checks": [
+      "fresh baseline equals pinned spend bytecode",
+      "genuine maximum-limb spend executes, proves and verifies",
+      "proof public inputs match declared order",
+      "mutating either delivery public input rejects the original proof",
+      "Field-ABI valid control executes over unchanged ACIR",
+      "2^128 in either Field-spelled delivery limb fails unchanged ACIR"
+    ],
+    "overflowFailures": {
+      "normalAbi": [
+        {
+          "label": "normal ABI delivery limb 0",
+          "name": "Error",
+          "message": "The value passed for parameter `delivery[0]` does not match the specified type:\nValue Field(340282366920938463463374607431768211456) does not fall within range of allowable values for a Integer { sign: Unsigned, width: 128 }"
+        },
+        {
+          "label": "normal ABI delivery limb 1",
+          "name": "Error",
+          "message": "The value passed for parameter `delivery[1]` does not match the specified type:\nValue Field(340282366920938463463374607431768211456) does not fall within range of allowable values for a Integer { sign: Unsigned, width: 128 }"
+        }
+      ],
+      "fieldAbiUnchangedAcir": [
+        {
+          "label": "Field ABI delivery limb 0",
+          "name": "Error",
+          "message": "Cannot satisfy constraint"
+        },
+        {
+          "label": "Field ABI delivery limb 1",
+          "name": "Error",
+          "message": "Cannot satisfy constraint"
+        }
+      ]
+    },
+    "metrics": {
+      "compileMs": 3466.6931999999997,
+      "executeMs": 200.6349999999984,
+      "proveMs": 4380.614599999997,
+      "verificationKeyMs": 827.5377999999982,
+      "verifyMs": 92.48839999999836,
+      "proofBytes": 14656,
+      "publicInputBytesAdded": 64,
+      "baselineCircuitSizes": [
+        19034,
+        32768
+      ],
+      "candidateCircuitSizes": [
+        19050,
+        32768
+      ],
+      "baselineCompressedBytecodeBytes": 11572,
+      "candidateCompressedBytecodeBytes": 11594
+    },
+    "identities": {
+      "baselineBytecodeSha256": "f00b1721a8a93d70c56758bb01662250f9ce8ee0ffcd9c6823aa41703b35ff93",
+      "candidateBytecodeSha256": "f0886f05a1e253a47496ac0a53312f7a478305096857a7d8f8af620091c57b28",
+      "verificationKeySha256": "2721cc1fe56dc51133364fa81d6d68ef3e3fa42bf3f17c80e7d0d60216cf99ac",
+      "generatedSourceSha256": "e4205835690c53a47198002b541ba8c30b2c023efc7f23b3a67e2da3bfaa7cd1",
+      "checkScriptSha256": "cc339ceaf873d83b9ab5e1f7fc8688c05dc3de065ef8693ce0793d646478be3c",
+      "compileScriptSha256": "9bf741a3f65dd692efa1f5102b5a1f782edba574b125a6bf2d0876786d1ab5df",
+      "notesSha256": "0c0a6cf6c12c6adc702cb8ef95e237ce3486dae9e65df2fc3dd724e7ca93b484",
+      "poseidon2Sha256": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"
+    },
+    "limits": [
+      "digest preimage/framing and capsule cryptography are outside this probe",
+      "issue, burn, settle, output association, retry, restoration and availability are outside this probe",
+      "desktop timings are one run and do not establish device budgets"
+    ]
+  }
+}

@@ -34,6 +34,8 @@ jobs:
       - run: npm ci
       - name: Pinned pool-v2 circuits and real ZK proofs
         run: npm run check:pool
+      - name: Delivery and seed restoration candidate
+        run: npm run check:pool:delivery
 
   check:
     runs-on: ${{ matrix.os }}

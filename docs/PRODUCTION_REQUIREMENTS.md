@@ -1,6 +1,6 @@
 # Production requirements
 
-Status: release contract, revised 2026-09-05; evidence refreshed 2026-09-08. This document defines what a
+Status: release contract, revised 2026-09-05; evidence refreshed 2026-09-09. This document defines what a
 finished implementation of the protocol must deliver and the evidence each
 gate needs. It does not amend the normative protocol; protocol choices land in
 Construction first, and the implementation tracks the revision pinned in the
@@ -136,9 +136,9 @@ Every gate needs a named owner, a pinned artifact and reproducible evidence in
 the release record. An unmeasured or undecided item fails the gate. Test count
 is not evidence.
 
-| Gate | Acceptance evidence | Standing at 2026-09-08 |
+| Gate | Acceptance evidence | Standing at 2026-09-09 |
 |---|---|---|
-| Defined profile | Construction pins the pool's statement layouts, hash functions, proof system and what **E** declares; an explicit visibility/collusion model, witness assumptions and supported failure remedies; no unresolved critical protocol choice | v2 layouts, circuits and keys are pinned. Historical silence retirement and receipt consequences are [selected](../decisions/2026-09.md#2026-09-08--intervening-silence-retires-a-pool-segment-and-lapses-its-unfinished-receipts), as is the [fault contract](POOL_FAULT_RECOVERY.md). v3 layouts, authenticated interval evidence, note delivery and deployment choices remain open. |
+| Defined profile | Construction pins the pool's statement layouts, hash functions, proof system and what **E** declares; an explicit visibility/collusion model, witness assumptions and supported failure remedies; no unresolved critical protocol choice | v2 layouts, circuits and keys are pinned. Historical silence retirement and receipt consequences are [selected](../decisions/2026-09.md#2026-09-08--intervening-silence-retires-a-pool-segment-and-lapses-its-unfinished-receipts), as is the [fault contract](POOL_FAULT_RECOVERY.md). The [delivery contract](https://github.com/mediumofexchange/money-from-first-principles/blob/02d911c/pool-delivery.md) is selected and its cryptographic seam probed; v3 layouts, authenticated interval evidence, wallet integration and deployment choices remain open. |
 | Adversarial model | An executable model of §C2, §C2b and §C3 over the pool representation, with two operators, two backings, delayed and dropped publications, replacement, restart and incomplete views; safety and conditional progress checked separately; counterexamples kept as regression vectors | Sequencing, authority and recovery models exist. C2b.4.1/3 retirement prevents the reproduced old-segment double spend; a departure preserves the counterexample. The selected [fault model](POOL_FAULT_RECOVERY.md) uses authenticated exclusion, the snapshot clock and last-valid continuation, with exact evidence-chain, receipt and adoption comparisons. Real hashes bind explicit bytes; proof/authentication oracles remain ideal. Production encoding and availability evidence remain open. |
 | Private, sound payments | Implemented prover/verifier and an independently reviewed security argument; adversarial cases for forged issuance, inflation, duplicate spends, malformed proofs, wrong contexts and disclosure channels | v2 claim layer in src/pool, pinned circuits and real-proof admission/import/replay checks exist. Focused adversarial review completed; wallet and complete deployment assurance remain. |
 | Public supply | A separate verifier checks authorized issuance, conservation, spentness and published supply from public evidence without secret keys; rejects altered, incomplete and wrong-state histories against a witnessed commitment | Public replay and record-derived canonical checkpoint validation exist, including transitive imports and pre-revocation issuance. No complete external-venue supply-verification product yet. |

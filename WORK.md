@@ -4,89 +4,66 @@ Updated: 2026-09-09
 
 ## Goal
 
-Build the shielded-pool protocol. Next: **F3 delivery/restoration**, then F4
-fee shape, before freezing `pool-v3.md`. The review follow-up fixes the last
-slice's confirmed findings and aligns request replay/refresh in the model.
+F3 is complete as a design/feasibility slice. Next, choose the smallest fee-capable shape
+before freezing v3. Measure a direct payment/change/fee output against the
+smallest viable alternative, preserving per-backing conservation and private
+receiver control. Keep the first supported profile at constant-payout roots
+with no reliance graph.
 
 ## Status
 
-- Implementation: `main` (slice branch `fix/recovery-review-followup`):
-  `a31e7cf` fixes spent-set inputs; `f28ac2b` aligns the model.
-  Runtime remains pinned v2; `PoolStore` refuses silence clauses. No circuit,
-  key, configuration or CI change.
-- Specification: `main`, `a166161`, pushed and clean (companion branch
-  `spec/recovery-lock-clarification`). C3.7 now explicitly bars settlement
-  from consuming another demand's standing lock. The existing model already
-  enforced it. Expired demands remain standing; replay/adoption indices are
-  unchanged. See the follow-up in the [decision](DECISIONS.md).
-- Reviewing the prior spent-set optimization reproduced a regression: an
-  actual 31-byte array with an own `length = 32` retained an earlier call's
-  last byte in a shared hash frame. Validation now reads intrinsic brand and
-  length. Key conversion also reads indexed bytes, preventing an overridden
-  iterator from selecting a different key than the bytes being hashed.
-- C2b.5.1–2 model follow-up: request identity binds an explicit unsigned
-  64-bit refresh; counting retains the first witnessed index per identity
-  and backing, so copies cannot renew an aged-out request. Holder reproof
-  with a new refresh works under an unchanged anchor; tags still count once.
-  Seed derivation/counter persistence and the v3 circuit remain unimplemented.
-- Corrected v3 map omissions for zero padding anchors, refresh bounds and
-  derivation, and the settle lock guard; corrected the decision's stale A22
-  claim. All v2 frames, accumulator shape and identities remain unchanged.
+- F3 delivery/restoration contract is merged/pushed in companion main at
+  `02d911c`; companion branch: `spec/pool-delivery-restoration`.
+- Reference delivery: `main`; slice branch `feat/pool-delivery-restoration`,
+  from `61dc4bf`. Specification landed before the retained probes.
+- [Decision](decisions/2026-09.md#2026-09-09--receiver-prepared-outputs-restore-from-bound-public-capsules):
+  receiver-prepared exact outputs with seed-encrypted 89-byte capsules;
+  issue/spend/burn bind the ordered vector through two public digest limbs.
+  Note, owner and nullifier formulas stay unchanged. Lit settlements use
+  their public opening and a separately derived backer secret.
+- Runtime remains v2 and refuses silence clauses. These reproducible probes
+  are outside exported runtime code; v3 finality, restoration and wallet
+  durability are not implemented. Lost pending invoices still need backup.
 
 ## Evidence
 
-- New frame regression tests failed on the prior code; all original 1,674
-  tests passed in that run. Focused corrected frame/lock tests pass (50).
-- Independent frame review: 1,000 leaf/node comparisons against node:crypto,
-  all 257 empty hashes, forged lengths/prototypes, proxies, detached/resizable
-  views, Buffers and cross-realm arrays; indexed-key fix read back with a
-  24-key tree under hostile getters/iterators. No material findings remain.
-- Independent review of spec `6995082..7a510f1` found the lock ambiguity;
-  exact corrective diff read back and approved. Regression covers another
-  lock live at/before its deadline, expiry after it, and no other lock.
-- Request model independent review/readback passed after correcting an invalid
-  first copy shadowing later valid proof evidence, strict judging-index reads,
-  and malformed public-field handling. Eight request regressions pass.
-  Full `npm run check` passes: 90 files / 1,686 tests, build, installed-package
-  consumer, pilot and pool-store crash checks. Cross-repository links pass.
-  GitHub CI for this delivery must be checked separately from local results.
-  `check:pool`
-  is not required locally: no production circuit, key, proof relation or
-  pool configuration changed.
+- Independent contract/probe review resolved settlement creation/adoption,
+  malformed byte subclasses and in-circuit digest range evidence. Final host
+  source readback is complete; no unresolved material findings.
+  See [deployment probes](docs/POOL_DEPLOYMENT_PROBES.md#delivery-and-seed-restoration).
+- `npm run check:pool` passed: 153 checks, 24 real proofs, unchanged v2 pins.
+- `npm run check:pool:delivery` passed 22 host checks, WebCrypto and a fresh
+  process with seed plus prevalidated synthetic public data. It preserves
+  unresolved coverage and separates venue-created notes awaiting adoption.
+- Binding probe: +16 gates, same 32,768 subgroup and 14,656-byte proof;
+  mutation of either digest limb fails. ABI-bypassed `2^128` fails ACIR.
+- `npm run check` passed: 90 files / 1,686 tests, installed package, pilot and
+  pool-store crash checks. Links passed across both repositories (37 files).
+- Final report/source hashes: `docs/pool-delivery-verification.json`.
+  CI includes delivery probes on Linux and Windows; inspect the exact main SHA.
+  Disposable F3 copies/builds were removed after recording their evidence.
 
 ## Next
 
-1. **F3 delivery/restoration:** decide whether seed restoration changes the
-   note/relation or stays outside the circuit. Acceptance: seed plus public
-   evidence restores notes with payer and original operator gone; reviewed
-   encryption/address design, discovery, key separation, retry and output
-   association; decision and specification committed before dependent code.
-2. **F4 fee shape:** measure a direct three-output candidate before selecting
-   bounds, preserving per-backing conservation. Then v3 layouts and runtime
-   over `src/pool/`, with the models as oracle (P6).
-3. Remaining model alignment: demand nullifier/tag distinctness and zero
-   padding anchor; real ideal authorization for withdrawal instead of public
-   field equality; acceptance read with its demand; separate evidence-chain
-   contexts and position. These are not runtime recovery evidence.
-4. Before freezing v3, reconcile Construction invariant 24/§C3's signed,
-   attributable-presentment wording with C3.2–3's unsigned holding proof and
-   fresh presenter key. This pre-existing contradiction is explicit debt,
-   not a new signature requirement. See the decision's follow-up review.
-5. P2 testnet chunk publication, P4 authenticated range completeness and
-   inclusion latency, P5 phone proving. Retain the offline Ergo probe,
-   `scratch/pool-v3` and build/browser caches.
+1. F4: measure 2-input/3-output spend including the selected delivery digest;
+   compare separate fees/atomic batching and define who requests/receives the
+   fee, retry behavior and fee backing constraints. Preserve conservation,
+   zero padding and no privileged debit. Resolve review; commit spec first.
+2. Before `pool-v3.md`, close remaining map choices and signed-attributable
+   presentment wording versus the unsigned pool demand/fresh presenter key.
+   Integrate final circuits, layouts, model cases and runtime only afterward.
 
 ## Open questions
 
-- About **42% done / 58% remaining**, plausible done range **32–52%**.
-  This slice fixes correctness and the model, not a new usable holder path.
-  Largest blocks: F3/F4, v3 circuits/runtime, wallet/transport, witness
-  publication and complete authenticated range reads, deployment assurance.
-  See [estimate scope](docs/PRODUCTION_REQUIREMENTS.md#progress-estimate).
-- A22: measure a cheaper spent-set shape before v3. It must retain a root
-  determined by the set alone and recomputable per statement; a conventional
-  insertion-ordered indexed tree does not automatically meet that condition.
-- A8: Ergo range completeness has no selected authenticated source. Missing
-  committed evidence is unresolved; cached verdicts are no substitute.
-- Copied journals, rollback, custody/backup, same-index custom venues,
-  setup/build provenance and external write acceptance remain release gates.
+- About 43% done / 57% remaining, plausible done range 33–53%. F3 removes a
+  format/design uncertainty; it does not close the wallet/recovery product gate.
+  Largest work: F4, v3 circuits/runtime, wallet/transport, witness publication
+  and authenticated complete-range reads, custody and deployment assurance.
+- A8: no selected authenticated complete-range source for Ergo. Missing full
+  public evidence is unresolved, never zero balance or an older current state.
+- A22: spent roots must stay set-determined and recomputable per statement;
+  insertion-ordered indexed trees do not automatically satisfy those rules.
+- Copied journals, rollback, same-index venue order, setup/build provenance,
+  phone budgets and real publication acceptance remain release gates.
+- Retain existing Ergo/pool-v3 probes and shared parameter caches. No public
+  release, live deployment, access-control change or real funds are authorized.

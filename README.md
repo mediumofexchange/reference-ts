@@ -64,7 +64,10 @@ selected rules and model limits of the companion's
 [fault contract](https://github.com/mediumofexchange/money-from-first-principles/blob/23af0f5/pool-fault.md).
 `npm run check:pool` exercises the
 pinned real circuits and multi-segment replay separately from the ordinary
-test suite.
+test suite. With Node 24, `npm run check:pool:delivery` exercises the
+[successor delivery/restoration probes](docs/POOL_DEPLOYMENT_PROBES.md#delivery-and-seed-restoration):
+seed-encrypted capsules, fresh-process recovery over synthetic public data,
+and real proof binding. It does not implement a pool wallet or v3 finality.
 
 The runtime follows specification revision
 [`3676757a1c8ddc0df607352c6bddbb48f6d85a09`](https://github.com/mediumofexchange/money-from-first-principles/tree/3676757a1c8ddc0df607352c6bddbb48f6d85a09),

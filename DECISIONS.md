@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-09` [Receiver-prepared outputs restore from bound public capsules](decisions/2026-09.md#2026-09-09--receiver-prepared-outputs-restore-from-bound-public-capsules)
 - `2026-09-09` [The v3 recovery choices: the notice is the proof's public inputs, only settlement or withdrawal discharges a demand, and the release publishes no non-membership proof](decisions/2026-09.md#2026-09-09--the-v3-recovery-choices-the-notice-is-the-proofs-public-inputs-only-settlement-or-withdrawal-discharges-a-demand-and-the-release-publishes-no-non-membership-proof)
 - `2026-09-08` [Adoption retains witnessed proof evidence](decisions/2026-09.md#2026-09-08--adoption-retains-witnessed-proof-evidence)
 - `2026-09-08` [Authenticated faults preserve the last valid state and the clock reads its snapshot](decisions/2026-09.md#2026-09-08--authenticated-faults-preserve-the-last-valid-state-and-the-clock-reads-its-snapshot)

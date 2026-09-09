@@ -11,8 +11,9 @@ Demonstrate one signed constant-payout root, issuance, private payment with
 change and a realistic fee arrangement, receiver discovery, independent
 verification, interruption/exact retry, restoration on a fresh wallet, and
 redemption after the original operator disappears. Start with one venue and
-no reliance graph. A fee-capable shape and authenticated note encryption are
-candidate changes requiring specification; v2 cannot silently stand in for them.
+no reliance graph. Fee shape remains open. [The delivery contract](https://github.com/mediumofexchange/money-from-first-principles/blob/02d911c/pool-delivery.md)
+now selects receiver-prepared exact outputs and seed-encrypted capsules for a
+successor; v2 cannot silently stand in for these changes.
 
 Success requires the restored wallet to reconstruct its unspent notes from its
 seed plus independently available data; a fresh verifier to check supply and
@@ -79,6 +80,68 @@ Limitations:
   trusted setup or establish reproducible dependency builds.
 - The synthetic proof inputs do not measure a wallet, restoration, note-tree
   resync, encrypted delivery, publication fees, or witnessed payment latency.
+
+## Delivery and seed restoration
+
+F3 selects receiver-prepared exact output requests under
+[pool-delivery C4.1–8](https://github.com/mediumofexchange/money-from-first-principles/blob/02d911c/pool-delivery.md).
+A receiver derives the requested note from its seed and a fresh durable request
+identifier and encrypts the identifier/backing/value to itself. The payer
+copies the exact opening and opaque capsule. There is no stable public scan
+key, new ownership algebra or payer-to-recipient key agreement. Arbitrary
+unsolicited amounts require a new receiver request; pending invoices and
+accounting labels still need a backup.
+
+Reproduce the cryptographic seam and proof-binding checks with Node 24:
+
+```powershell
+npm run check:pool:delivery
+```
+
+The retained sources are under [scripts/pool/delivery](../scripts/pool/delivery/).
+Generated compilation and run reports stay under ignored `scratch/`.
+The [recorded result](pool-delivery-verification.json) identifies the exact
+sources/toolchain and records hostile checks and local measurements. CI runs
+the candidate checks on Linux and Windows beside the pinned v2 proof checks.
+No production circuit, key, configuration or exported runtime API changes.
+
+The fresh restoration process receives only a seed and synthetic public
+outputs/capsules, spent nullifiers and lit settlement data. It receives no
+request journal, original payer secrets or original operator callbacks.
+It reconstructs positive unspent notes, retains unresolved coverage, and
+separates force-created outputs awaiting canonical adoption. The probe also
+checks deterministic retries, key separation, malformed/context-swapped
+capsules, missing/reordered delivery vectors, authenticated wrong-commitment
+plaintext, spent/zero outputs and fresh request generation after journal loss.
+Node's cipher results are checked against WebCrypto independently.
+
+Every capsule is 89 bytes. One aggregate digest adds two public field
+encodings, 64 bytes per issue/spend/burn before record framing: 242 extra
+bytes for two outputs, 331 for three. A real candidate spend with those two
+public `u128` limbs uses 19,050 gates versus 19,034 (+16); its subgroup
+remains 32,768 and proof remains 14,656 bytes. Mutating either limb rejects
+the original proof. Changing only the compiler ABI metadata to `Field`
+still rejects `2^128` in either limb over unchanged ACIR, establishing an
+actual circuit range constraint. This is a spend-binding measurement, not
+an already measured final v3 issue/spend/burn suite.
+
+On this Windows desktop (Node 24.6.0, i7-5500U), 1,000 / 10,000 / 100,000
+failed capsule opens took 79 ms / 738 ms / 12.36 s. These samples repeat one
+foreign envelope while deriving its subkey each time; they measure trial
+cryptography, not traversal of distinct history records. Existing commitment
+plus nullifier hashing averaged 2.11 ms per pair over 250 samples, excluding
+owner derivation and the rest of successful recovery. The candidate spend
+proved in 4.38 s and verified in 92 ms. These are single local samples, not
+phone budgets or throughput guarantees.
+
+The restoration fixture is explicitly a **prevalidated synthetic view**.
+It does not verify full v3 history, force, adoption, venue ordering or range
+completeness. A caller's marker is no finality evidence. The production wallet
+must consume independently authenticated complete public packages, retain
+full evidence before payer/operator disappearance, and construct certified
+paths. Seed recovery does not discover unknown venues/backings, prove a
+complete balance or guarantee permanent availability. Device and full-history
+replay costs remain additional gates.
 
 ## Invalid-checkpoint evidence
 
