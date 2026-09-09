@@ -34,6 +34,19 @@ jobs:
       - run: npm ci
       - name: Six successor proof relations, uninstantiated construction
         run: npm run check:pool:v3
+      - name: Diagnose proving parameter integrity on failure
+        if: failure()
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import { createHash } from 'node:crypto';
+          import { existsSync, readdirSync, readFileSync } from 'node:fs';
+          const path = 'scratch/private-payment-crs';
+          if (existsSync(path)) for (const name of readdirSync(path).filter(n => n.endsWith('.dat'))) {
+            const bytes = readFileSync(`${path}/${name}`);
+            console.log(JSON.stringify({ name, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }));
+          }
+          JS
 
   pool:
     runs-on: ${{ matrix.os }}

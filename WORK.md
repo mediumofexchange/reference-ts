@@ -4,6 +4,12 @@ Updated: 2026-09-09
 
 ## Goal
 
+Current: diagnose and fix repeated Linux CI proving-parameter initialization
+failure at `21f6843`. Acceptance: retain parameter integrity validation and
+all conformance checks; pass Linux/Windows CI on the delivered revision.
+Branch: `fix/pool-v3-crs-diagnostics`. Windows passed; Linux attempts 1 and 2
+of run `34350273177` fail at compressed G1 chunk 0 SHA-256 verification.
+
 Next: fix the final v3 configuration and record formats before runtime
 adoption. Acceptance: explicit delivery-profile encoding, six ordered
 bytecode/key identities, helper and bounds, canonical statement/authorization
