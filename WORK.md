@@ -4,8 +4,9 @@ Updated: 2026-09-09
 
 ## Goal
 
-Current slice: contained Ergo decoder feasibility and local-node comparison,
-on `feat/ergo-contained-decoder`, based on `main` at `72c18b0`.
+Delivered slice: contained Ergo decoder feasibility and local-node comparison,
+at `d65daa2`, merged and pushed to `main` and `feat/ergo-contained-decoder`.
+Clean status and remote parity verified; based on `72c18b0`.
 Observable result: install/read back process limits before a fixed worker
 runs, measure independent controls and recover the existing corpus. Acceptance
 of hard containment FAILED; retain the negative result and do not execute
@@ -36,8 +37,9 @@ companion `money-from-first-principles` remains `main` at `7ea0ee8`.
   inside the job, peak **61,571,072** bytes. No hostile parser stress ran.
 - Independent review checked actual C#/PowerShell/JS and x64 struct layouts;
   required direct process cleanup on failed membership readback, now fixed and
-  read back. Final report hashes/claims checked; node-comparison readback and
-  authorized delivery remain pending.
+  read back. Review of `72c18b0..d65daa2` found no unresolved material findings
+  for evidence delivery; all report hashes and node source claims checked.
+  This review does not clear the failed containment/runtime gate.
 - Baseline CI [34397257226](https://github.com/mediumofexchange/reference-ts/actions/runs/34397257226)
   passed at `72c18b0`. Upstream fetched, no intervening main changes.
   Full `npm run check` passed: 96 files / 1,795 tests, build, package consumer,
@@ -46,8 +48,8 @@ companion `money-from-first-principles` remains `main` at `7ea0ee8`.
 
 ## Next
 
-1. Finish final checks/review, commit and deliver this negative feasibility
-   result under standing authority; retain exit 2 rather than calling it a pass.
+1. Read CI for the latest main/handoff revision. Local checks, independent
+   review and implementation delivery are verified; new remote CI is pending.
 2. Explain job memory accounting and CPU behavior, or evaluate another OS
    boundary with explicit resource semantics. Do not raise tolerances to hide
    unexplained overages. Hard containment remains open; hostile depth/count/
