@@ -78,7 +78,13 @@ and `quantity > 0`; `nf_1 ≠ nf_2`; one scope path carries
 and `deadline` below `2^64`. The presenter key, instant and deadline are
 bound as public inputs and otherwise unread by the circuit, so the notice
 of C3.3 is the statement's own public inputs and the **demand identity is
-`statementHash`**. Nothing else signs the demand.
+`statementHash`**. Nothing else signs the demand. C3.3a distinguishes that
+authorization from the presenter key's participation and from any publisher
+identity: a holder can name an unrelated key, and anyone can relay the same
+authorized notice. The wallet retains a fresh signing key it controls for
+release/withdrawal. The selected proof system must bind every unsigned public
+field; range constraints alone are not a general proof of nonmalleability.
+The final v3 evidence must test the full statement's binding.
 
 In the clear, at the door (C3.7–8): anchors at nonzero-tag positions are in
 the forest; the backing is in the scope with held terms; the nonzero tags are distinct and
@@ -584,6 +590,19 @@ Each names the rule, the candidate, the alternative, and what closes it.
   V2's 256-high sparse root remains pinned; `pool-v3.md` must adopt this
   successor contract with final configuration and statement layouts.
 
+- **A23 Presentment authorization is not identity attribution.**
+  **Decided 2026-09-09:** [C3.3a and related corrections](https://github.com/mediumofexchange/money-from-first-principles/commit/923ee46)
+  retain the unsigned holding-proof demand and fresh presenter key for its
+  exits. A proof binds a notice to control of notes, not a person, ongoing
+  reputation, presenter-key participation or publisher identity. Adding a
+  fresh-key signature would prove only that key's participation; no identity
+  gate or additional authorization is added. Construction's other profiles
+  retain their signing and publication-time fallback; the pool keeps C3.3's
+  named-instant window. First relay admission can create the original lock;
+  repetition cannot add a lock or extend the deadline. The
+  [decision](../decisions/2026-09.md#2026-09-09--pool-demands-authorize-notes-without-identifying-the-demander)
+  records the counterexamples, independent review and ideal-model limits.
+
 ## 9. Probe plan
 
 Every probe writes its result under ignored `scratch/` and is summarized
@@ -604,7 +623,13 @@ None changes `src/`, the pinned v2 identities or the specification.
   `node scratch/pool-v3/probe.mjs` (sources under `scratch/pool-v3/circuits`,
   result `scratch/pool-v3/results.json`); the numbers are in §7 and A4. Not
   established: constraint counts, and that these sources are the normative
-  ones, which `pool-v3.md` pins.
+  ones, which `pool-v3.md` pins. The current scratch demand does not constrain
+  a padding anchor to zero and the scratch request lacks C2b.5.1's refresh
+  field. They cannot serve as final conformance evidence. Before pinning,
+  audit all six final relations/public-input orders against the contracts,
+  close these gaps and check full statement binding under the selected proof
+  system (C3.2), including otherwise-unread notice fields. A23's model cases
+  assume that cryptographic property; they do not establish it.
 - **P2 Publication, offline then node.** Encode the §3 bodies over P1's
   proofs and the v2 spent-set proofs at a synthetic set; run the existing
   chunking probe in `scratch/ergo-publication` on the real sizes; then, with
@@ -647,6 +672,7 @@ and bodies; the acceptance, release and withdrawal bytes; the replayed
 state; and the bounds table. A1–A3, A5–A7 and A16–A21 were decided on
 2026-09-09 in the contracts, and A4 is measured. A12's requirement to settle
 F3/F4 together is satisfied: delivery changes three relations, and
-spend has two inputs/four outputs. A22 selects compressed spent roots.
+spend has two inputs/four outputs. A22 selects compressed spent roots, and
+A23 resolves presentment attribution without adding a demand signature.
 Remaining choices still precede the final `configHash`. The runtime follows
 the specification, with the model as its oracle.

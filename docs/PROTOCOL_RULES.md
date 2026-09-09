@@ -26,6 +26,14 @@ rules are model-only refinements; they do not reinterpret v2 commitments.
 
 ## Binding rules
 
+Pool demand attribution follows [C3.3a at 923ee46](https://github.com/mediumofexchange/money-from-first-principles/blob/923ee46/pool-recovery.md):
+the holding proof authorizes the bound notice; it does not prove presenter-key
+participation or publisher/civil identity. `model/pool-recovery.test.ts` has
+focused copy, metadata-rebinding, exit-authority and replay cases. Proof and
+signature authentication there remain ideal; the selected v3 proof system's
+full public-input binding and real signatures remain runtime obligations.
+The v2 runtime and signed transparent profile keep their pinned rules.
+
 None of these is sacred. Any rule can change — with a good reason, agreed
 with the maintainer, by editing the specification first and then this file.
 What is never acceptable is silent drift: code that quietly stops following a

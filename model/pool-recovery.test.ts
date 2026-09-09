@@ -237,6 +237,83 @@ function comeBack(f: Silence, operator = "P", names: readonly Id[] = ["X"]) {
   return { next, opening };
 }
 
+describe("C3.3a: demand authorization does not identify its publisher or presenter", () => {
+  // The oracle supplies note authorization and unforgeable proof/signature
+  // tokens. These cases test the contract's evidence/state boundaries, not
+  // real proof nonmalleability, secret extraction or Ed25519 verification.
+  it("accepts an unsigned demand naming an unrelated presenter and copies its public evidence", () => {
+    const { w, p, note } = silence(), roots = p.view().roots;
+    const demand = demandFor(w, p, roots, [note], { presenter: "unrelated-key" });
+    const evidence = w.oracle.evidence(demand);
+    expect(note.owner).toBe("holder");
+    expect(demand.lit!.presenter).not.toBe(note.owner);
+    expect(evidence.signature).toBe("");
+    // No signer or broadcaster identity is supplied to this reader. The
+    // public copy is authenticated by the original proof's complete digest.
+    expect(w.oracle.verifyEvidence(structuredClone(demand), { ...evidence }, p.scope, roots, {})).toBe(true);
+    expect(w.oracle.verifyEvidence(demand, { ...evidence, proof: "" }, p.scope, roots, {})).toBe(false);
+    expect(w.oracle.verifyEvidence(demand, { ...evidence, signature: "01" }, p.scope, roots, {})).toBe(false);
+    // Service represents a relay by passing the same immutable statement;
+    // it does not simulate serialized transport or a presenter signing act.
+    p.submit(demand);
+    expect(p.view().locks.get(tagOf(note.nf))).toBe(demand.id);
+    expect(p.view().spent.has(note.nf)).toBe(false);
+    expect(() => p.submit(withdrawFor(w, p, demand, "holder"))).toThrow("withdrawal signer");
+    expect(() => p.submit(settleFor(w, p, roots, [note], demand,
+      acceptanceOf(demand), "holder").statement)).toThrow("settlement terms");
+  });
+
+  it("rejects rebinding presenter, instant or deadline even when the alternative notice is valid", () => {
+    const { w, p, note } = silence(), roots = p.view().roots;
+    const demand = demandFor(w, p, roots, [note]);
+    const evidence = w.oracle.evidence(demand);
+    const alternatives = [
+      { presenter: "another-key" }, { instant: w.now }, { deadline: 40n },
+    ];
+    for (const terms of alternatives) {
+      // Each changed notice has its own valid proof over the same real note;
+      // an unrelated note/scope/time failure cannot hide absent binding.
+      const alternative = demandFor(w, p, roots, [note], terms);
+      expect(alternative.id).not.toBe(demand.id);
+      expect(w.oracle.verify(alternative, p.scope, roots, {})).toBe(true);
+      expect(() => w.serving(p, alternative)).not.toThrow();
+      expect(w.oracle.verifyEvidence(alternative, w.oracle.evidence(alternative), p.scope, roots, {})).toBe(true);
+      // Keep the original opaque id as well: the digest must bind public
+      // fields, not just trust a retained or caller-supplied model identity.
+      const rebound = { ...demand, lit: { ...demand.lit!, ...terms } };
+      expect(w.oracle.verifyEvidence(rebound, evidence, p.scope, roots, {})).toBe(false);
+      expect(w.oracle.verifyEvidence(alternative, evidence, p.scope, roots, {})).toBe(false);
+    }
+  });
+
+  it("first relay admission locks once and retries cannot recreate a withdrawn demand", () => {
+    const { w, p, note } = silence(), roots = p.view().roots;
+    const demand = demandFor(w, p, roots, [note], { deadline: 6n });
+    const before = p.events.length;
+    const receipt = p.submit(demand);
+    expect(p.events.length).toBe(before + 1);
+    expect(p.view().locks.get(tagOf(note.nf))).toBe(demand.id);
+    // A fresh proof with the same public values has the same identity.
+    const reproved = demandFor(w, p, roots, [note], { deadline: 6n });
+    expect(reproved.id).toBe(demand.id);
+    expect(w.oracle.evidence(reproved).proof).not.toBe(w.oracle.evidence(demand).proof);
+    expect(p.submit(reproved)).toBe(receipt);
+    expect(p.events.length).toBe(before + 1);
+    expect(p.view().standing.get(demand.id)!.lit!.deadline).toBe(6n);
+    p.submit(withdrawFor(w, p, demand));
+    const afterWithdrawal = p.events.length;
+    expect(p.view().locks.size).toBe(0);
+    expect(p.view().standing.has(demand.id)).toBe(false);
+    witness(w, p.commit());
+    w.tick(4n); // after the original deadline and notice window
+    expect(w.now).toBeGreaterThan(6n);
+    expect(p.submit(reproved)).toBe(receipt);
+    expect(p.events.length).toBe(afterWithdrawal);
+    expect(p.view().locks.size).toBe(0);
+    expect(p.view().standing.has(demand.id)).toBe(false);
+  });
+});
+
 describe("C3.7–C3.8: presentation under service", () => {
   it("replays an expired demand's settlement only when no other demand's lock stands", () => {
     const { w, p, note } = silence(), roots = p.view().roots;

@@ -101,6 +101,13 @@ compares receipt evidence and retains witnessed bytes through adoption. Proof
 and signature verification remain ideal oracles. Production v3 layouts,
 compact fault certificates and authenticated interval evidence remain open.
 
+The later [presentment clarification](https://github.com/mediumofexchange/money-from-first-principles/commit/923ee46)
+keeps pool demands authorized by their holding proofs. A fresh presenter key
+authorizes release/withdrawal; the demand does not establish that key's
+participation, its publisher's identity or a person's reputation. Focused
+model cases cover copied evidence, field rebinding and lock/retry behavior;
+they assume cryptographic authentication and do not implement v3 recovery.
+
 ## Try the local pilot
 
 With Node.js 24, after the source setup above:
