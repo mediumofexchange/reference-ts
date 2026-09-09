@@ -4,20 +4,18 @@ Updated: 2026-09-10
 
 ## Goal
 
-Verified slice: compare fixed `DETACHED_PROCESS` and `CREATE_NO_WINDOW` launches
-on `test/windows-detached-containment`, based on `53ff092`. Preserve identical
-256 MiB, process, CPU, output and wall budgets, suspended creation-time job
-assignment and whole-job cleanup. Acceptance: retain both launch reports,
-identify helper/accounting differences, preserve all resource failures, pass
-focused regressions and `npm run check`, obtain independent adversarial review,
-then merge/push. No hostile parser cases or runtime adoption in this slice.
+Delivered slice: fixed `DETACHED_PROCESS` versus `CREATE_NO_WINDOW` comparison
+at `05e273f`, merged/pushed to `main` and `test/windows-detached-containment`.
+Both remote refs verified at that commit; based on `53ff092`. The comparison
+preserves identical budgets, suspended creation-time job assignment, cleanup
+and all resource failures. No hostile parser cases or runtime adoption.
 No specification change; companion `money-from-first-principles` remains
 `main` at `7ea0ee8`.
 
 ## Status
 
 - Baseline CI [34402013200](https://github.com/mediumofexchange/reference-ts/actions/runs/34402013200)
-  passed at `53ff092`; upstream main is unchanged. Main has no branch
+  passed at `53ff092`; upstream had no intervening main change. Main has no branch
   protection or rulesets. No safeguards changed.
 - Both final launch reports return exit 2. Detached samples only Node, with
   job/process/private peaks agreeing and the growing-memory peak below 256 MiB.
@@ -45,8 +43,9 @@ No specification change; companion `money-from-first-principles` remains
 
 ## Next
 
-1. Finish authorized delivery and record remote parity/latest CI. Local checks,
-   independent review and source-hash verification passed.
+1. Read CI for the latest main/handoff revision. Local checks, independent
+   review, source-hash verification and implementation delivery passed;
+   new remote CI is pending.
 2. Choose a justified resource contract and mechanism for bounded decoder
    computation and memory. Compare metered execution with OS containment;
    measure the smallest viable candidate before selecting a dependency.
