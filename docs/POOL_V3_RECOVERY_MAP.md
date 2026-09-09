@@ -66,8 +66,8 @@ authorization = empty
 Relation (C3.2, segment-bound form): for each position, `secret_i ≠ 0`,
 `owner_i = H(T_OWNER, secret_i)`, `nf_i = H(T_NULLIFIER, …)`, `nf_i ≠ 0`;
 where `value_i > 0` the path carries `cm_i` to `anchor_i` and
-`tag_i = H(T_TAG, nf_i)`; where `value_i = 0`, `tag_i = 0`; every note names
-the public `backing`; `quantity = value_1 + value_2` in 128-bit arithmetic
+`tag_i = H(T_TAG, nf_i)`; where `value_i = 0`, `tag_i = 0` and `anchor_i = 0`;
+every note names the public `backing`; `quantity = value_1 + value_2` in 128-bit arithmetic
 and `quantity > 0`; `nf_1 ≠ nf_2`; one scope path carries
 `leaf(backing, link)` to `scopeRoot`; every limb is below `2^128`, `instant`
 and `deadline` below `2^64`. The presenter key, instant and deadline are
@@ -75,8 +75,8 @@ bound as public inputs and otherwise unread by the circuit, so the notice
 of C3.3 is the statement's own public inputs and the **demand identity is
 `statementHash`**. Nothing else signs the demand.
 
-In the clear, at the door (C3.7–8): the anchors are in the forest; the
-backing is in the scope with held terms; the nonzero tags are distinct and
+In the clear, at the door (C3.7–8): anchors at nonzero-tag positions are in
+the forest; the backing is in the scope with held terms; the nonzero tags are distinct and
 none is locked or spent; `deadline` is strictly ahead of the horizon and
 `instant` within `[horizon − 2·lag, horizon − lag]`. Effect: the demand
 enters the standing-demand record with its position; each nonzero tag is
@@ -127,7 +127,8 @@ backing's **K** over `acceptanceBytes(demand, owner, acceptanceDeadline)`
 with `acceptanceDeadline ≤ demand.deadline` (C3.4) and not behind the
 horizon (C3.8); the release verifies under the demand's presenter key over
 `releaseBytes(demand, acceptanceId, statementHash)`; anchors in the forest;
-nullifiers and output new. Effect: a spend's, plus the demand discharged
+nullifiers and output new; no nullifier's tag under another demand's standing
+lock. Effect: a spend's, plus the demand discharged
 and its locks released; totals unchanged. Evidence:
 `(statementHash, proofHash, SHA256(authorization))`. The acceptance's
 demand and owner are the settle's own public inputs, so the 136 bytes are
@@ -142,14 +143,18 @@ authorization = empty
 ```
 
 Relation (C3.2, segment-free form): ownership, the nullifier, membership at
-`anchor` with `value > 0`, `tag = H(T_TAG, nf)`, the note names `backing`.
+`anchor` with `value > 0`, `tag = H(T_TAG, nf)`, the note names `backing`,
+and `0 ≤ refresh < 2^64`.
 No segment, scope or quantity. It reuses the statement frame for its
 identity and record and is a venue publication only (C2b.5.1); the counting
 reader places its anchor in the canonical state's forest (C2b.5.2). It is
 unsigned, so a copy is the same request and is read at that request's first
 index; `refresh` is the holder's own field, constrained but unread, so only
 a party that can prove the note can mint another identity for one tag, which
-is how a holder refreshes a request an operator is stalling on (A21). P1
+is how a holder refreshes a request an operator is stalling on (A21). The
+wallet derives it from its root secret, the note's nullifier and a refresh
+counter advanced only to file again; recovery after a crash retries the same
+request (C2b.5.1). P1
 compiled and proved this circuit over the six inputs it had before
 `refresh` was added; the seventh is unmeasured.
 
