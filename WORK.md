@@ -4,8 +4,9 @@ Updated: 2026-09-09
 
 ## Goal
 
-Demonstrate full-block Ergo transaction-root verification in a reproducible
-offline probe on `feat/ergo-block-commitment-probe`. Acceptance: retained real
+Delivered full-block Ergo transaction-root feasibility at `42f80a2`, merged
+and pushed to `main` and `feat/ergo-block-commitment-probe` with remote parity.
+Acceptance: retained real
 block fixtures reproduce transaction IDs and version-specific witness roots;
 omissions, reordering and committed-field mutations fail. Pin upstream algorithms and capture
 parser limitations before choosing an authenticated complete-range reader.
@@ -17,7 +18,8 @@ Companion specification main `7ea0ee8` is unchanged in this experimental slice.
 
 - Independent adversarial review found no unresolved material findings and
   reproduced the exact retained report. Full project checks and a clean
-  experiment install pass. Commit/merge/push and CI readback remain.
+  experiment install pass. Implementation is merged/pushed; latest main CI
+  readback remains. No effective main rules/protection were present or changed.
 - Independent dependency review places authenticated range-source feasibility
   (A8/A9) before replay/configuration and certificate packaging. Raw outputs
   cannot acquire held-commitment status or publication force from root checks.
@@ -51,8 +53,8 @@ Companion specification main `7ea0ee8` is unchanged in this experimental slice.
 
 ## Next
 
-1. Complete the required checks; deliver the independently reviewed probe under
-   standing merge/push authority and read back remote parity and CI.
+1. Read CI for the latest main handoff. Implementation local checks pass and
+   remote parity is verified; the handoff's docs-only check also passes.
 2. Evaluate a pinned maintained full transaction decoder or local validating
    node boundary. Acceptance: all fixture outputs reproduce their IDs; hostile
    bytes cannot yield substituted fields or exceed explicit reader budgets.
