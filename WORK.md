@@ -4,87 +4,82 @@ Updated: 2026-09-09
 
 ## Goal
 
-Next: fix the final v3 configuration and record formats before runtime
-adoption. Acceptance: explicit delivery-profile encoding, six ordered
-bytecode/key identities, helper and bounds, canonical statement/authorization
-and publication bytes, evidence/snapshot/replay commitments, independent
-review and a specification commit before dependent runtime changes. Repeat
-proof evidence on the final build/domain; observed hashes are not pins.
+Finish the v3 configuration before runtime adoption. Canonical statement,
+authorization and publication records are now fixed and tested. Next acceptance:
+explicit delivery-profile identity/encoding, six ordered bytecode/key identities,
+helper and remaining bounds, evidence/snapshot/receipt/segment commitments,
+replay/import rules, independent review and a specification commit before
+runtime changes. Repeat real-proof evidence on the final build and domain.
 
 ## Status
 
-- CI fix: `fix/pool-v3-crs-diagnostics`, code `4f37593`, reviewed and verified.
-  Diagnostic run `34352187697` found an empty Linux compressed G1 cache;
-  G2/Grumpkin matched. The pinned loader accepted the empty download until
-  SRS initialization correctly rejected it. `prepare-crs.mjs` now validates
-  HTTP range, exact length and recorded v2 SHA-256 identities before atomic
-  caching, with the existing fallback host. Barretenberg checks remain on.
-  This is test tooling; no circuit, runtime or protocol identities changed.
-- Previous slice: `feat/pool-v3-proof-conformance`, delivered `21f6843`. Six retained
-  relations share one notes helper and the pinned Poseidon2 source under
-  `scripts/pool/v3/`; `npm run check:pool:v3` runs their combined conformance
-  suite from a clean checkout, without the inherited scratch probes.
-- Companion `spec/pool-v3-proof-layouts` is merged/pushed to `main` at
-  `d57ddb0`, before dependent tooling was retained. It fixes public-input
-  orders/counts 11/15/15/16/17/7 and explicitly forbids adopting the incomplete
-  v3 construction. No final configuration or approved artifact pins exist.
-- Issue/burn bind delivery, spend has four ordinary outputs, demand alone
-  requires zero padding anchors, and request binds its final u64 refresh.
-  The runtime remains v2, refuses silence clauses and exports no pool wallet.
-- Independent normative review cleared the relation semantics, layouts and
-  no-adoption boundary. Implementation review/readback cleared the retained
-  sources and added distinct-anchor/hostile-reproof controls. Final measured
-  retained run passes. Neither reviewer independently reran proofs.
-- Separate Linux/Windows CI jobs run the v3 suite. Existing v2 jobs remain.
-  Decision and remaining configuration choices are in
-  [the decision](decisions/2026-09.md#2026-09-09--fix-the-six-successor-proof-layouts-before-configuration-adoption)
-  and [the recovery map](docs/POOL_V3_RECOVERY_MAP.md#26-contract-to-constraint-audit).
+- Active reference branch: `feat/pool-v3-records`; companion
+  `spec/pool-v3-records` merged/pushed to specification `main` at `ca727f6`.
+  Specification was committed before the dependent codec was written.
+- `model/pool-v3-records.ts` implements pool-v3 §§5–6 outside `src/`:
+  seven statement kinds, exact proof/authorization/capsule fields, domain and
+  integer checks, C4.4 delivery association, three signing messages, five
+  bounded publication bodies and exact evidence hashes. No adopted domain,
+  proof verification, admission, force or semantic replay is claimed.
+- Independent normative review found a first-witness/first-force ambiguity.
+  The corrected spec preserves first-effective-index semantics for recovery
+  publications and first-witness statement identity for request counting.
+  Readback cleared the correction and adjacent variants. Implementation
+  review cleared the codec and independently passed its 43 initial tests;
+  an additional boundary test exercises exact maximum publication bodies.
+- This is a prerequisite for final configuration, not runtime adoption.
+  Runtime remains v2, refuses silence clauses and exports no pool wallet.
+  Preserve the codec and its cases when moving it into the single v3 runtime.
+- Previous six-relation conformance slice: `21f6843`, specification `d57ddb0`.
+  Issue/burn bind delivery; spend has four ordinary outputs; demand alone
+  requires zero padding anchors; request binds its final u64 refresh.
+  Retained sources are in `scripts/pool/v3/`. Observed artifact hashes are
+  not approved configuration pins. The verified parameter-download fix is
+  `4f37593`, with passing seven-job CI run `34352925479`.
+- Decision: [canonical records](decisions/2026-09.md#2026-09-09--fix-canonical-successor-statement-and-publication-records).
+  Remaining configuration and runtime work: [recovery map](docs/POOL_V3_RECOVERY_MAP.md).
 
 ## Evidence
 
-- `npm run check` passes after the download fix: 91 files / 1,699 tests,
-  package consumer, pilot, store crashes and ten spent-set groups. Ten new
-  cases reject empty/truncated/corrupt/oversized responses, wrong range,
-  bad length, network failure and invalid caches; fallback and reuse pass.
-  Independent review cleared the source and independently reran these tests.
-- Fresh downloads from both upstream hosts match all three parameter hashes.
-  Branch CI [34352925479](https://github.com/mediumofexchange/reference-ts/actions/runs/34352925479)
-  passes all seven jobs at `4f37593`: Linux/Windows v2, v3 and required checks.
-  Linux now verifies the full 16 MiB G1 prefix and passes 304 checks / 18 proofs.
-- Final `npm run check:pool:v3` passes: 304 checks / 18 real proofs, each
-  14,656 bytes. It checks all 81 public scalars,
-  equal-count spend/burn key substitution both ways, independently provable
-  metadata, unchanged-ACIR range guards and recomputed hostile witnesses.
-  Distinct anchors prevent equal fixture values from masking ordering errors.
-  [Report](docs/pool-v3-conformance-verification.json) captures source/helper,
-  bytecode/key and harness hashes; these are observations, not config pins.
-- Documentation and companion links pass. Audit base `5ba6099` GitHub CI
-  passed, including unchanged v2/F3/F4 real-proof evidence. The specification
-  has no listed CI run; local link/diff checks passed before its push.
+- `npm run check` passes: 92 files / 1,743 tests, including all 44 codec
+  tests, typecheck, build, installed-package consumer, pilot, store crash
+  probes and ten spent-set groups. Final documentation/link checks pass.
+- Byte tests use independent Buffer/node:crypto framing, every truncated
+  record/publication prefix, excessive lengths/counts, domain/limb/u64/field
+  bounds, capsule profile/order/digest association and Buffer ownership.
+  Real strict Ed25519 tests mutate every bound input and both settlement
+  signatures. Proof bytes are shape-only; capsules are opaque synthetic data.
+- Specification link/diff checks pass; its `main` and `origin/main` match
+  `ca727f6` and are clean. No current specification workflow is defined.
+- Unchanged real-proof evidence: `npm run check:pool:v3` at the previous slice
+  passed 304 checks / 18 real proofs of 14,656 bytes, all 81 public scalars,
+  key substitution both ways, ABI-bypass ranges and hostile reproof controls.
+  [Report](docs/pool-v3-conformance-verification.json) records observations.
+  No circuit, key or configuration changed in this byte-codec slice.
 
 ## Next
 
-1. Define the remaining config preimage and delivery-profile identity/encoding
-   in `pool-v3.md`, together with records/bounds and observed artifact pins.
-   Create/name companion branches here before coordinated changes.
-2. Implement v3 runtime/recovery and wallet after final normative pins. Carry
-   these conformance sources/cases into the runtime path; retire this separate
-   tooling only once its evidence and cases are preserved there.
+1. Finish full checks, commit/push reference branch, run available CI and
+   merge/push under standing authorization; verify clean status and parity.
+2. Fix final configuration and remaining evidence/snapshot/replay formats in
+   `pool-v3.md`; name companion branches before coordinated changes.
+3. Implement v3 runtime/recovery and wallet after final normative pins.
+   Move retained proof and byte-conformance sources/cases into that path.
 
 ## Open questions
 
-- About 45% done / 55% remaining, plausible done range 35-55%. The six-relation
-  implementation reduces remaining circuit work but closes no runtime/product
-  gate. Largest work: final configuration/records, v3 runtime, wallet/transport,
+- About 45% done / 55% remaining, plausible done range 35–55%. Record codecs
+  reduce integration work but close no runtime/product gate. Largest work:
+  final configuration/evidence formats, v3 runtime, wallet/transport,
   authenticated complete-range reads, witness publication and custody assurance.
-- Proof mutation tests are selected-backend evidence, not a general
-  nonmalleability proof or presenter-key participation. Synthetic capsules
-  test opaque-vector hashing, not receiver decryption or restoration.
-- A8: no selected authenticated complete-range source for Ergo. Missing full
+- A8: no selected authenticated complete-range Ergo source. Missing required
   evidence remains unresolved, never zero balance or an older current state.
+- Proof-mutation rejection is selected-backend evidence, not a general
+  nonmalleability proof or presenter-key participation. Byte parsing does not
+  establish proof validity, authority, demand standing, time or finality.
 - Real holders can make dishonest in-kind allegations; public outcomes do not
   prove external non-payment. Copied journals, rollback, same-index venue
-  order, setup/build provenance, phone budgets and actual publication remain
-  release gates. No release, deployment, access change or real funds authorized.
-- Retain existing Ergo/pool-v3 probes and parameter caches. New duplicate
-  six-build scratch sources were removed after capture in the retained suite.
+  order, setup/build provenance, phone budgets and publication remain gates.
+  No release, deployment, access change or real funds authorized.
+- Retain existing Ergo/pool-v3 probes and parameter caches. No new disposable
+  full repository copies or dependency trees were created for this slice.

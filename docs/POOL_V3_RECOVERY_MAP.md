@@ -14,8 +14,9 @@ trace through wallet, operator, backer, venue and stranger; the record range
 and retention each read needs; the resource assumptions; and the choices
 that are still open, each with the probe or decision that closes it.
 
-The [v3 proof layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/d57ddb0/pool-v3.md)
-now fix the six relations and public-input orders. Other layouts here remain
+The [v3 layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/ca727f6/pool-v3.md)
+fix the six relations, public-input orders and canonical statement,
+authorization and publication records. Other layouts here remain
 **candidates**: the specification fixes the remaining bytes after the choices
 in [§8](#8-unresolved-assumptions-and-choices) are decided and reviewed, and the
 runtime follows the specification. No v3 configuration or adoption is defined.
@@ -31,7 +32,7 @@ Words are pool-v2's and the contracts'.
 | Spend shape | two input/two output positions | two inputs/four ordinary outputs, including fee and both changes when needed | pool-fees C1.2.3–7 |
 | Note delivery | payer privately supplies the opening | receiver-prepared exact output; one seed-encrypted 89-byte capsule per output, ordered vector bound by two public digest limbs | pool-delivery C4.1–8 |
 | Statement kinds | 1 issue, 2 spend, 3 burn | add 4 demand, 5 withdraw, 6 settle in the history; 7 request, never admitted, in the same frame | C3.7, C2b.5.1 |
-| Statement record | `statementBytes ‖ proof ‖ obligorSignature` | `statementBytes ‖ proof ‖ authorization`, the authorization fixed per kind ([§2](#2-statements)) | C3.4, C3.6, pool-v2 §7 |
+| Statement record | `statementBytes ‖ proof ‖ obligorSignature` | statement bytes, length-prefixed proof/authorization, u32 capsule count and fixed 89-byte capsules; pool-v3 §5 | C3.4, C3.6, C4.4 |
 | Replayed state | forest, spent set, outputs, totals | add the standing-demand record, the pending-lock set and the spent-tag set | C3.7 |
 | Snapshot digest | `historyHash_n`, totals | add `evidenceHash_n` beside `historyHash_n` | C2.10.10 |
 | Evidence chain | none (receipt digests only) | `evidenceHash_i` over `(statementHash_i, proofHash_i, signatureHash_i)` | C2.10.10 |
@@ -250,7 +251,7 @@ proof or evidence of presenter-key participation. Single desktop timings
 do not establish device budgets.
 
 **Final pinning acceptance.** Fix the remaining configuration preimage,
-delivery-profile encoding, records and bounds, then independently review and
+delivery-profile encoding and remaining bounds, then independently review and
 commit the complete source/helper/toolchain/bytecode/key identities together
 before runtime adoption. Rerun affected proofs on that exact build and domain.
 A passing v2 proof or this uninstantiated-domain suite cannot substitute for
@@ -261,12 +262,19 @@ runtime must never interpret these layouts under the v2 domain.
 
 ## 3. Signed objects and publications
 
+These bytes and the complete record framing are now normative in pool-v3
+§§5–6 at `ca727f6`. `model/pool-v3-records.ts` and its focused tests retain
+byte conformance outside the runtime: exact vectors, bounded malformed-input
+rejection, delivery association and real Ed25519 message-binding checks.
+Publication bodies have a u32 length; statement records end with a u32 capsule
+count and fixed 89-byte capsules. No configuration or runtime gate is closed.
+
 ```text
 acceptanceBytes = frame("moe/pool/v3/acceptance" ‖ configHash[32] ‖ demandId[32] ‖ owner[F] ‖ u64 deadline)
 acceptanceId    = SHA256 over acceptanceBytes;  K signs acceptanceBytes strictly
 releaseBytes    = frame("moe/pool/v3/release" ‖ configHash[32] ‖ demandId[32] ‖ acceptanceId[32] ‖ settlementHash[32])
 withdrawalBytes = frame("moe/pool/v3/withdrawal" ‖ configHash[32] ‖ withdrawStatementHash[32])     A18
-publicationBytes = frame("moe/pool/v3/publication" ‖ configHash[32] ‖ backing[32] ‖ u8 kind ‖ body)
+publicationBytes = frame("moe/pool/v3/publication" ‖ configHash[32] ‖ backing[32] ‖ u8 kind ‖ u32 bodyLength ‖ body)
 ```
 
 The presenter key is an Ed25519 key, fresh per demand (C3.3), carried as
@@ -283,9 +291,9 @@ two limbs in the demand. A publication's identity is `SHA256` over
 | 5 request | the request statement record | ≈ 15.0 KB | no, counted by C2b.5.2 |
 
 A publication is read for the backing its statement names; one whose
-routing name differs from it has no force and is no evidence (C2b.3.2). An
-acceptance names no backing of its own and resolves to its demand's, so
-its routing name is checkable only with the demand in hand (A19). A
+routing name differs from it has no force and is no evidence (C2b.3.2).
+Acceptance and withdrawal name no backing of their own and resolve to their
+demand's, so their routing name is checkable only with that demand in hand. A
 statement in a publication is bound to the snapshot's segment and scope root at the index it is judged; the
 reader refuses any other binding. No publication carries a non-membership
 proof (A20): every reader that decides force replays the snapshot for its

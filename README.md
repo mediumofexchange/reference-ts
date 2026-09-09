@@ -75,6 +75,12 @@ with real proofs. These probes do not implement a pool wallet or v3 finality.
 against independent batch roots and hostile keys; `npm run bench:pool:spent`
 compares per-insert replay cost with pinned v2. It is outside the runtime.
 
+`model/pool-v3-records.ts` implements the successor's reviewed
+[canonical record layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/ca727f6/pool-v3.md#5-canonical-statement-records).
+`npm test` checks exact bytes, hostile parsing, delivery association and
+signature-message binding. This codec is not exported or used for admission;
+v3 configuration, finality and adoption remain undefined.
+
 The runtime follows specification revision
 [`3676757a1c8ddc0df607352c6bddbb48f6d85a09`](https://github.com/mediumofexchange/money-from-first-principles/tree/3676757a1c8ddc0df607352c6bddbb48f6d85a09),
 whose `pool-v2.md` pins the construction bit for bit and records the

@@ -32,7 +32,13 @@ issue 11, spend 15, burn 15, demand 16, settle 17 and request 7.
 
 Domain and capsule fixtures are synthetic. The capsules exercise opaque
 public-vector hashing only; no fixture claims receiver decryption. There is
-no v3 statement parser/key router, issuance authorization, admission/replay,
+no v3 key router, issuance authorization, admission/replay,
 lock enforcement, finality, wallet restoration or complete venue evidence
 in this check. The existing delivery suite covers its separate cryptographic
 seam. Those tests and real-proof conformance do not close runtime gates.
+
+The separate `model/pool-v3-records.ts` codec follows
+[pool-v3 §§5–6 at ca727f6](https://github.com/mediumofexchange/money-from-first-principles/blob/ca727f6/pool-v3.md#5-canonical-statement-records).
+`npm test` checks canonical statement/publication bytes and signature-message
+binding. It has no proof verifier or adopted configuration; these circuit
+fixtures and the byte fixtures do not yet form an admitted runtime path.

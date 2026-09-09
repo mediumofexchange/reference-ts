@@ -24,6 +24,7 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-09` [Fix canonical successor statement and publication records](decisions/2026-09.md#2026-09-09--fix-canonical-successor-statement-and-publication-records)
 - `2026-09-09` [Fix the six successor proof layouts before configuration adoption](decisions/2026-09.md#2026-09-09--fix-the-six-successor-proof-layouts-before-configuration-adoption)
 
 - `2026-09-09` [Pool demands authorize notes without identifying the demander](decisions/2026-09.md#2026-09-09--pool-demands-authorize-notes-without-identifying-the-demander)
