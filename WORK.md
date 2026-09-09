@@ -4,16 +4,6 @@ Updated: 2026-09-09
 
 ## Goal
 
-Current: verify and deliver the Linux CI parameter-download fix on
-`fix/pool-v3-crs-diagnostics`. Acceptance: retain parameter integrity and all
-conformance checks; pass Linux/Windows CI on the delivered revision.
-Run `34352187697` proves the failed Linux cache had an empty compressed G1
-file; G2/Grumpkin hashes matched. `prepare-crs.mjs` now checks exact lengths,
-range responses and recorded v2 SHA-256 identities before atomic caching,
-with the library's existing fallback host. Barretenberg still validates SRS.
-Fresh downloads and ten malformed-download/cache tests pass. Independent
-source review and focused test rerun cleared the fix. Full checks/CI pending.
-
 Next: fix the final v3 configuration and record formats before runtime
 adoption. Acceptance: explicit delivery-profile encoding, six ordered
 bytecode/key identities, helper and bounds, canonical statement/authorization
@@ -23,6 +13,13 @@ proof evidence on the final build/domain; observed hashes are not pins.
 
 ## Status
 
+- CI fix: `fix/pool-v3-crs-diagnostics`, code `4f37593`, reviewed and verified.
+  Diagnostic run `34352187697` found an empty Linux compressed G1 cache;
+  G2/Grumpkin matched. The pinned loader accepted the empty download until
+  SRS initialization correctly rejected it. `prepare-crs.mjs` now validates
+  HTTP range, exact length and recorded v2 SHA-256 identities before atomic
+  caching, with the existing fallback host. Barretenberg checks remain on.
+  This is test tooling; no circuit, runtime or protocol identities changed.
 - Previous slice: `feat/pool-v3-proof-conformance`, delivered `21f6843`. Six retained
   relations share one notes helper and the pinned Poseidon2 source under
   `scripts/pool/v3/`; `npm run check:pool:v3` runs their combined conformance
@@ -45,10 +42,15 @@ proof evidence on the final build/domain; observed hashes are not pins.
 
 ## Evidence
 
-- `npm run check` passes: 90 files / 1,689 tests, package consumer, pilot,
-  store crash checks and ten spent-set groups. The first sandboxed attempt
-  failed in esbuild directory resolution; the authorized unrestricted run
-  passed. No test or gate was weakened.
+- `npm run check` passes after the download fix: 91 files / 1,699 tests,
+  package consumer, pilot, store crashes and ten spent-set groups. Ten new
+  cases reject empty/truncated/corrupt/oversized responses, wrong range,
+  bad length, network failure and invalid caches; fallback and reuse pass.
+  Independent review cleared the source and independently reran these tests.
+- Fresh downloads from both upstream hosts match all three parameter hashes.
+  Branch CI [34352925479](https://github.com/mediumofexchange/reference-ts/actions/runs/34352925479)
+  passes all seven jobs at `4f37593`: Linux/Windows v2, v3 and required checks.
+  Linux now verifies the full 16 MiB G1 prefix and passes 304 checks / 18 proofs.
 - Final `npm run check:pool:v3` passes: 304 checks / 18 real proofs, each
   14,656 bytes. It checks all 81 public scalars,
   equal-count spend/burn key substitution both ways, independently provable
@@ -62,12 +64,10 @@ proof evidence on the final build/domain; observed hashes are not pins.
 
 ## Next
 
-1. Finish required checks and Linux/Windows CI for the download fix; merge
-   and push under standing authority once the checks pass.
-2. Define the remaining config preimage and delivery-profile identity/encoding
+1. Define the remaining config preimage and delivery-profile identity/encoding
    in `pool-v3.md`, together with records/bounds and observed artifact pins.
    Create/name companion branches here before coordinated changes.
-3. Implement v3 runtime/recovery and wallet after final normative pins. Carry
+2. Implement v3 runtime/recovery and wallet after final normative pins. Carry
    these conformance sources/cases into the runtime path; retire this separate
    tooling only once its evidence and cases are preserved there.
 
