@@ -34,10 +34,9 @@ signature authentication there remain ideal; the selected v3 proof system's
 full public-input binding and real signatures remain runtime obligations.
 The v2 runtime and signed transparent profile keep their pinned rules.
 
-None of these is sacred. Any rule can change — with a good reason, agreed
-with the maintainer, by editing the specification first and then this file.
-What is never acceptable is silent drift: code that quietly stops following a
-rule while the rule still stands.
+Rules can change through the decision and review process in AGENTS.md.
+Amend the specification first, then this map and dependent code. Implementation
+changes must not silently diverge from an unchanged rule.
 
 | Rule | Spec | Code | Test | Scope |
 |---|---|---|---|---|

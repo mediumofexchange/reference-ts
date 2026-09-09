@@ -1,7 +1,7 @@
 # Pool fault recovery
 
-Selected contract and evidence, 2026-09-08. The maintainer authorized the
-recommendations: authenticated exclusion, the snapshot clock, continuation
+Selected contract and evidence, 2026-09-08. The selected rules are authenticated
+exclusion, the snapshot clock, continuation
 from the last valid prefix, and existing receipt precedence. The normative
 [contract](https://github.com/mediumofexchange/money-from-first-principles/blob/main/pool-fault.md)
 amends Construction, authority and recovery for a later construction version.

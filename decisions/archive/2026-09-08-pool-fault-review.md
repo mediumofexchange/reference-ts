@@ -200,6 +200,6 @@ Exercise term and silence lapses separately, same-index sequence order,
 transitive imports, all receipt selection branches and retained provenance.
 Compare accepting the complete dependency closure with alternatives to the
 clock/lapse rule. Then present that priced choice together with R6/R7; obtain
-the maintainer's selection before normative edits, and independently review
+the selected design before normative edits, and independently review
 the critical changes. The specification remains `main` at `3676757`; the
 review branch is `docs/pool-fault-review`.

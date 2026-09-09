@@ -1,12 +1,12 @@
 # Wallet direction and non-circulating promises
 
-Discussion draft, 2026-09-07. This records the maintainer's product direction
-and a proposed minimum to discuss. It does not change Construction, approve a
+Discussion draft, 2026-09-07. This records the product direction
+and a proposed minimum for evaluation. It does not change Construction, approve a
 new claim layer, or describe an implemented wallet.
 
 ## Product direction
 
-One mobile wallet holds native cryptocurrencies (BTC, ERG and the requested
+One mobile wallet holds native cryptocurrencies (BTC, ERG and the
 Ergo stablecoin USE), circulating protocol claims, and promises made to a
 fixed creditor. Asset support is a requirement here, not a verified integration.
 

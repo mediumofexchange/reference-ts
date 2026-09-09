@@ -85,7 +85,7 @@ This verdict is **at the supplied repair boundary**, even if the venue's read
 view is later. Unheld receipt references, actual scope endings and elective
 transitions are the present verdict's below. The
 [repair decision](../decisions/2026-09.md#2026-09-07--proven-failed-publication-repair-can-lapse-unfinalized-receipts) records the reproduced case and
-the cost accepted by the maintainer.
+the accepted cost.
 
 ## Present verdict
 
@@ -168,7 +168,7 @@ remain next. Missing evidence cannot be interpreted as an absent payment. Venue
 refusals and changing views throw `VenueError`; unexpected proof-backend
 failures also propagate instead of becoming invalid external evidence.
 
-The maintainer resolved the failed-checkpoint ambiguity in C2.10.9a; C2.10.9b
+C2.10.9a resolves the failed-checkpoint ambiguity; C2.10.9b
 names the present verdicts. A new segment carrying none of the receipt's scope
 proves nothing about it; one that carries a scope backing proves repair or
 abandonment.

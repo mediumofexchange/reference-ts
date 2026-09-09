@@ -6,6 +6,8 @@ This repository is the executable reference implementation of the Medium of Exch
 
 - The normative specification lives in the companion `money-from-first-principles` repository. The README pins its implemented revision. If code and specification disagree, identify the exact conflict and fix or escalate the specification first.
 - `WORK.md` is the current operational handoff. Replace stale status instead of appending a diary.
+- Keep README as the concise introduction and setup guide. Detailed component evidence and specification pins belong in `docs/IMPLEMENTATION_STATUS.md`; update that guide in place rather than appending milestones to README.
+- Record decisions neutrally: choice, rationale, alternatives, evidence and status. Do not quote conversations or attribute decision authority to a person or model; retain substantive review findings and evidence limits. Git preserves authorship.
 - `DECISIONS.md` is the index of durable design decisions. Read only relevant entries. Keep selected checked reviews in `decisions/archive/`; completed session logs and superseded drafts belong in Git history, not new archive copies.
 - Keep one current document per topic. Update it in place; capture a resolved choice in the decision log and remove its superseded diagnosis once the evidence is preserved. Link historical text at an immutable Git revision when needed.
 - `docs/PROTOCOL_RULES.md` maps each binding rule to its specification rule, code and test. Load only the relevant rows when changing that mechanism.
@@ -83,7 +85,7 @@ When a change touches one of these rules, inspect its relevant specification rul
 
 ## Work autonomously
 
-The maintainer's standing authorization (2026-09-08) delegates engineering and protocol decisions to AI, with independent review for consequential choices, and authorizes merge and push when good. Continue from `WORK.md` without asking for routine decisions or renewed merge permission. Use available capabilities, not assumptions about a model name.
+Standing authorization effective 2026-09-08 covers engineering and protocol decisions, with independent review for consequential choices, and merge and push after verification. Continue from `WORK.md` without asking for routine decisions or renewed merge permission. Use available capabilities, not assumptions about a model name.
 
 Preserve the project's intent: open entry without a gatekeeper, independent verification, private payments with public supply verification, no privileged debit or hidden custody, and compartmentalized failure. Choose practicality, simplicity, security and efficient code within those boundaries. There is no deadline that licenses weakening them.
 

@@ -1,26 +1,38 @@
 # Decisions
 
-Resolved questions about the spec and this implementation. Decisions here
-can be reopened — with a good reason — but reopening one should be done
-knowingly, with the earlier reasoning in view, not by forgetting it was ever
-decided.
+Dated design decisions for the protocol and reference implementation, indexed
+newest first. Entries record what was chosen and why, including alternatives,
+costs, evidence and links to specification changes.
 
-**This file is the index.** One line per decision, newest first. The entries
-themselves live in [`decisions/`](decisions/), one file per month. Read the
-index, then open only the entry you need — the full log is far too large to
-read in one go, and reading it in one go is not the point.
+The monthly records preserve the reasoning at the time. Some describe superseded
+designs or completed investigations. Use the [architecture](docs/PRIVATE_PAYMENT_ARCHITECTURE.md)
+for current component status, [protocol rules](docs/PROTOCOL_RULES.md) for binding
+implementation requirements, and [WORK.md](WORK.md) for the active task.
 
-Adding one: put the entry at the top of the current month's file (create it if
-the month is new), and add its line at the top of the index below.
+## Recording a decision
 
-```
+Add an entry to the current month in [decisions/](decisions/) and one link to
+the index. Write in neutral project language: record the choice and its basis,
+without attributing authority to a person or model, quoting conversations, or
+turning review rounds into a diary. Preserve substantive review findings and
+evidence limits. Source/specification quotations are appropriate when needed
+to identify an ambiguity. Git records authorship and change history.
+
+Use the fields that apply; a routine progress update belongs in WORK.md.
+
+```text
 ## YYYY-MM-DD — short title
-**Question:** what was ambiguous, contradictory, or wrong (quote the spec).
-**Decision:** what was decided, and by whom.
-**Spec change:** link to the issue/commit on the paper repo, or "none needed".
+**Status:** accepted, superseded (link), or deferred (condition).
+**Question:** exact ambiguity or problem, with relevant rule references.
+**Decision:** selected behavior and scope.
+**Rationale:** alternatives, tradeoffs, invariants and accepted costs.
+**Evidence:** tests, measurements, review findings/disposition and limits.
+**Spec change:** immutable specification link, or "none needed".
 ```
 
----
+Reopen a decision when new evidence or a missed requirement warrants it; link
+the replacement so readers can follow the change without treating old proposals
+as current instructions.
 
 ## Index
 
@@ -75,7 +87,7 @@ the month is new), and add its line at the top of the index below.
 - `2026-08-25` [Slice 29: a dead successor does not end the chain](decisions/2026-08.md#2026-08-25---slice-29-a-dead-successor-does-not-end-the-chain)
 - `2026-08-24` [Slice 28b: the receipt names its era, and the era is the backing's own](decisions/2026-08.md#2026-08-24---slice-28b-the-receipt-names-its-era-and-the-era-is-the-backings-own)
 - `2026-08-23` [Slice 28a: returning from silence is committing](decisions/2026-08.md#2026-08-23---slice-28a-returning-from-silence-is-committing)
-- `2026-08-22` [The audit: six angles over the merged code, what was wrong, and what is the maintainer's to decide](decisions/2026-08.md#2026-08-22---the-audit-six-angles-over-the-merged-code-what-was-wrong-and-what-is-the-maintainers-to-decide)
+- `2026-08-22` [Implementation audit findings and protocol questions](decisions/2026-08.md#2026-08-22---implementation-audit-findings-and-protocol-questions)
 - `2026-08-22` [Slice 27: a demand outlives its locks, and a window is open when it is set](decisions/2026-08.md#2026-08-22---slice-27-a-demand-outlives-its-locks-and-a-window-is-open-when-it-is-set)
 - `2026-08-22` [Slice 26: a payout paying in claims settles inside the settlement](decisions/2026-08.md#2026-08-22---slice-26-a-payout-paying-in-claims-settles-inside-the-settlement)
 - `2026-08-21` [Slice 25: the n-party exchange, one object signed by all](decisions/2026-08.md#2026-08-21---slice-25-the-n-party-exchange-one-object-signed-by-all)
