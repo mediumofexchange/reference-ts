@@ -510,7 +510,10 @@ reproduces three real block roots but finds no sampled block fully decodable
 by Fleet 0.11.0. It also demonstrates that matching a root after blind JSON
 serialization cannot authenticate claimed output fields. A complete bounded
 decoder and authenticated contiguous headers remain prerequisites; A8/A9
-are open. Develop this source before fixing certificate packaging, whose
+are open. The [binary decoder probe](POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility)
+recovers all 65 fixture outputs with sigma-rust and rejects the observed
+noncanonical encodings after an exact round trip, but has no hard memory
+boundary or general node-equivalence evidence. Develop this source before fixing certificate packaging, whose
 dependencies must reflect the evidence actually consumed by replay.
 
 Retention obligations, by party: the operator and its replicas keep every

@@ -11,8 +11,8 @@
   "inputManifestSha256": "00976f84cf1e311d5f10ec6edeb58290aadb43a83856529b453da1c56907620e",
   "files": {
     "check.mjs": "92fb2522e427c1b65d4810e191466ee3f4bffff5f2e3f89a306a33c6c7bc31e0",
-    "package.json": "cdacc54d9867ec35c5707aea27e1f0c921c4882fcd2226b31eb08886ab72dc5b",
-    "package-lock.json": "002e388baecb556a092a126fc15d254876df0b34821cc6f94638e3eaaa11807f"
+    "package.json": "e3d76787e32df293fe93bb2db309cef948d96a5ea8974d02ec08e97af9743e30",
+    "package-lock.json": "3c2055dc1a71712fb19a99eb895794c392d9e2c169e5a1d6a0d697ce03b9f79e"
   },
   "blocks": [
     {

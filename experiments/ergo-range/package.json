@@ -2,10 +2,15 @@
   "name": "moe-ergo-range-experiment",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24" },
-  "scripts": { "check": "node check.mjs" },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "check": "node check.mjs && node decoder-check.mjs"
+  },
   "dependencies": {
     "@fleet-sdk/serializer": "0.11.0",
-    "@noble/hashes": "1.8.0"
+    "@noble/hashes": "1.8.0",
+    "ergo-lib-wasm-nodejs": "0.28.0"
   }
 }

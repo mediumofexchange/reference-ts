@@ -377,16 +377,73 @@ integer read returns zero. The
 also allocates arrays from decoded counts. The probe only decodes hash-pinned
 fixtures; it is not a safe parser for hostile bytes.
 
-The next source gate is a complete, bounded canonical transaction decoder
-that reproduces all fixture output IDs, then a contiguous-range reader
-against externally authenticated headers. Evaluate a pinned maintained Ergo
-parser or local node boundary before writing a partial script parser: an
-unsupported transaction anywhere in the range prevents an absence verdict.
+The next source gate is a complete, bounded canonical transaction decoder,
+then a contiguous-range reader against externally authenticated headers.
+The [binary decoder experiment](#full-binary-decoder-feasibility) below closes
+the observed fixture coverage gap but leaves resource isolation and supported
+node equivalence open. An unsupported transaction anywhere in the range
+prevents an absence verdict.
 Consensus, chain selection/finality, exact output extraction, resource refusal,
 same-height publication order and admission of held commitments remain open.
 No runtime source has been selected and no C2.10.13 completeness claim follows
 from this probe. Raw venue outputs would still need existing signature,
 sequence and authority checks before acquiring protocol force.
+
+## Full binary decoder feasibility
+
+The same private experiment now evaluates `ergo-lib-wasm-nodejs` **0.28.0**,
+the npm stable version observed on 2026-09-09. npm associates it with
+sigma-rust [`635bbaca55a27d6dd6b2c0ee2479b6ed60117780`](https://github.com/ergoplatform/sigma-rust/tree/635bbaca55a27d6dd6b2c0ee2479b6ed60117780).
+The lockfile pins package integrity; the [retained report](ergo-decoder-verification.json)
+also hashes the installed WASM and corpus sources. This is package metadata
+provenance, not an independently reproduced build or a maintenance guarantee.
+
+Fleet serializes only the existing hash-pinned fixtures. Sigma-rust parses
+those signed binary transactions, reserializes them, and exposes fields only
+after exact byte equality. It recovers all **24 transaction IDs and 65 output
+IDs**, values, scripts, token order/amounts, registers, creation heights,
+transaction references and indices; input proofs/extensions and data inputs
+also match. This includes the 13 transactions Fleet cannot decode. Numeric
+fixture ingestion remains lossless above `2^53`; comparisons use `bigint`.
+
+The report retains **14,874 assertions**, including rejection of all **14,450
+proper prefixes**. For each transaction, the raw parser accepts a trailing
+zero byte and an overlong input-count VLQ; the exact byte round trip rejects
+both. For each output position, moving a creation-height byte into the claimed
+JSON script produces identical signed bytes, but binary extraction recovers
+the original committed fields. Forged claimed transaction/output IDs are
+ignored and recomputed. These controls establish observed behavior, not a
+proof of parser equivalence with the node over every valid transaction.
+
+The fixed corpus runs in a separate process with a **30-second deadline** and
+**1 MiB output cap**. It refuses fixture files above **256 KiB** before reading
+and transaction buffers above **64 KiB** before entering WASM; the largest
+fixture transaction is **2,163 bytes**. These are experiment budgets, not
+network consensus limits. A failed, timed-out or oversized run yields
+unresolved evidence, never a successful absence verdict. **There is no hard
+process/WASM memory limit** and no adversarial depth/allocation exhaustion
+test. Input size, reserialization and a process deadline do not establish
+bounded memory use; this slice does not pass that part of the source gate.
+
+The pinned [generic parser](https://github.com/ergoplatform/sigma-rust/blob/635bbaca55a27d6dd6b2c0ee2479b6ed60117780/ergotree-ir/src/serialization/serializable.rs)
+returns after `sigma_parse` without checking cursor exhaustion, explaining
+the accepted suffix. More consequentially, the
+[sized ErgoTree parser](https://github.com/ergoplatform/sigma-rust/blob/635bbaca55a27d6dd6b2c0ee2479b6ed60117780/ergotree-ir/src/ergo_tree.rs)
+allocates `vec![0u8; tree_size_bytes as usize]` from a decoded `u32` before
+reading that many bytes, without a local pre-allocation cap. A small input
+budget therefore does not bound this allocation. Per-field count bounds in
+the [transaction parser](https://github.com/ergoplatform/sigma-rust/blob/635bbaca55a27d6dd6b2c0ee2479b6ed60117780/ergo-lib/src/chain/transaction.rs)
+do not supply a parser-wide resource budget. The exhaustion case is source
+evidence only; the finite corpus deliberately does not execute that allocation.
+
+Next, compare an OS-contained decoder with a local validating-node boundary,
+including hard memory/CPU limits, hostile depth/counts, refusal semantics and
+compatibility with the selected node. Canonical round trips can conservatively
+refuse node-valid noncanonical encodings; they must not turn that refusal into
+an omission. Only then connect a complete contiguous range to independently
+authenticated headers and stable transaction/output order. A8/A9, chain
+selection/finality, build provenance and publication admission remain open.
+No runtime API, venue profile or protocol rule changes in this experiment.
 
 ## Venue and restoration work still required
 

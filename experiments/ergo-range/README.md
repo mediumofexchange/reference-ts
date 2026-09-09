@@ -12,4 +12,12 @@ The [deployment evidence](../../docs/POOL_DEPLOYMENT_PROBES.md#full-block-commit
 records source pins, observed coverage, counterexamples and the next source gate.
 The fixture manifest pins the original public response bytes before parsing;
 Git attributes preserve those raw responses, including trailing whitespace.
-do not expose this probe as an arbitrary-file or network verification API.
+Do not expose this probe as an arbitrary-file or network verification API.
+
+The command runs both the block-root/Fleet experiment and the
+[full binary decoder experiment](../../docs/POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility).
+`decoder-check.mjs` launches the fixed corpus in a child process with a 30-second
+deadline and 1 MiB output cap. The corpus checks fixture pins, all output
+fields/IDs, every proper transaction prefix, trailing bytes, nonminimal counts
+and JSON field-boundary aliases. Input budgets are experimental refusal limits;
+there is no hard process/WASM memory cap and no production decoder selection.

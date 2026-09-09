@@ -41,8 +41,10 @@ compares per-insert replay cost with pinned v2. It is outside the runtime.
 
 The [Ergo full-block probe](POOL_DEPLOYMENT_PROBES.md#full-block-commitment-feasibility)
 reproduces real transaction roots and retains serializer counterexamples.
-It establishes source feasibility limits; authenticated complete-range reads
-and safe decoding of all transaction outputs remain unimplemented.
+The [binary decoder corpus](POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility)
+recovers all 65 fixture outputs and exposes permissive parsing, with strict
+round-trip rejection controls. Hard memory containment, supported node
+equivalence and authenticated complete-range reads remain unimplemented.
 
 ## Successor record conformance
 

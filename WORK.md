@@ -4,6 +4,14 @@ Updated: 2026-09-09
 
 ## Goal
 
+Active slice: evaluate a pinned full binary transaction decoder on
+`feat/ergo-decoder-probe`. Acceptance: recover all 65 fixture output IDs and
+committed fields from 24 signed transactions, retain malformed/canonicality
+counterexamples, and identify explicit resource limits and remaining gaps.
+No runtime API or venue-profile change. Independent parser review is required
+before delivery; companion specification `main` at `7ea0ee8` stays unchanged.
+Latest inherited main `b110d6b` CI passed (run `34394566142`); fetch is current.
+
 Delivered full-block Ergo transaction-root feasibility at `42f80a2`, merged
 and pushed to `main` and `feat/ergo-block-commitment-probe` with remote parity.
 Acceptance: retained real
