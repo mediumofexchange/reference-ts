@@ -4,14 +4,16 @@ Updated: 2026-09-09
 
 ## Goal
 
-Canonical served-trail transport and local evidence authentication on
-`feat/pool-v3-served-trail`, with companion `spec/pool-v3-served-trail`.
+Delivered canonical served-trail transport and local evidence authentication
+at reference `8833e07` and companion specification `7ea0ee8`, both merged/pushed
+to `main` with verified remote parity. Branches: `feat/pool-v3-served-trail`
+and `spec/pool-v3-served-trail`.
 Acceptance: bounded framing carries the header, every scoped term/signature
 and exact ordered records; local event evidence authenticates against an
 externally authenticated snapshot. Substitutions/truncation fail; resource
 refusal stays distinct. This is a prerequisite to complete opening verification,
 not a claim that terms, imports, record ranges or state have been verified.
-Commit the independently reviewed specification before dependent code.
+The independently reviewed specification was committed before dependent code.
 
 ## Status
 
@@ -25,7 +27,7 @@ Commit the independently reviewed specification before dependent code.
   authentication. Ten independently authored hostile tests and typecheck pass.
   Fresh independent review found no unresolved material findings and passed
   five related suites / 96 tests. Full project checks pass; implementation
-  commit and remote delivery are the remaining steps.
+  `8833e07` is merged/pushed. The final delivery handoff needs its CI readback.
 - Decision: [served trails](decisions/2026-09.md#2026-09-09--frame-served-trails-without-granting-opening-validity).
   Integration order: [recovery map](docs/POOL_V3_RECOVERY_MAP.md).
 - Prior fault-evidence specification `322bcae` and implementation `0d2464e`
@@ -54,13 +56,13 @@ Commit the independently reviewed specification before dependent code.
 
 ## Next
 
-1. Commit and deliver under standing merge/push authorization, then verify
-   clean status, remote parity and available CI. Both repositories currently
-   have no effective main rules or branch protection; no safeguards changed.
-3. Define complete certificate dependency framing, then complete-opening
+1. Read CI for the latest main handoff; implementation local checks pass.
+   Both repositories have no effective main rules or branch protection;
+   no safeguards changed.
+2. Define complete certificate dependency framing, then complete-opening
    verification: a signed directory authenticates a complete bounded opening,
    missing dependencies remain unresolved and substitutions fail.
-4. Fix replay/import/adoption order and final configuration/artifact pins in
+3. Fix replay/import/adoption order and final configuration/artifact pins in
    `pool-v3.md`, then implement one v3 runtime/recovery path and wallet;
    repeat the six real-proof relations on the final configuration domain.
 
