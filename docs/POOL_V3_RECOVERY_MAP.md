@@ -7,7 +7,8 @@ must carry to instantiate the
 [fault contract](https://github.com/mediumofexchange/money-from-first-principles/blob/main/pool-fault.md)
 (C2.10.9c, C2.10.10–13), plus the
 [delivery contract](https://github.com/mediumofexchange/money-from-first-principles/blob/02d911c/pool-delivery.md)
-(C4.1–8): the public inputs, witnesses, relations, in-clear
+(C4.1–8) and [transfer/fee contract](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-fees.md)
+(C1.2.3–7): the public inputs, witnesses, relations, in-clear
 checks, state effects and exact evidence of every new object; one complete
 trace through wallet, operator, backer, venue and stranger; the record range
 and retention each read needs; the resource assumptions; and the choices
@@ -25,6 +26,7 @@ runtime follows the specification. Words are pool-v2's and the contracts'.
 |---|---|---|---|
 | In-circuit tags | `T_OWNER`…`T_SCOPE_NODE` (1001–1006) | add `T_TAG = 1007`, `tag = H(T_TAG, nf)` | C3.1 |
 | Circuits | issue, spend, burn | add demand, settle, request; bind delivery digest in issue/spend/burn; six identities in the configuration | C3.2, C3.5, C2b.5.1, C4.4 |
+| Spend shape | two input/two output positions | two inputs/four ordinary outputs, including fee and both changes when needed | pool-fees C1.2.3–7 |
 | Note delivery | payer privately supplies the opening | receiver-prepared exact output; one seed-encrypted 89-byte capsule per output, ordered vector bound by two public digest limbs | pool-delivery C4.1–8 |
 | Statement kinds | 1 issue, 2 spend, 3 burn | add 4 demand, 5 withdraw, 6 settle in the history; 7 request, never admitted, in the same frame | C3.7, C2b.5.1 |
 | Statement record | `statementBytes ‖ proof ‖ obligorSignature` | `statementBytes ‖ proof ‖ authorization`, the authorization fixed per kind ([§2](#2-statements)) | C3.4, C3.6, pool-v2 §7 |
@@ -170,8 +172,12 @@ public `u128` limbs. Every output, including change and zero positions, has
 one 89-byte capsule. Admission/replay check framing, count, association and
 hash; the proof binds the digest without running encryption in-circuit.
 The record carries the authorization slot: the obligor signature for an
-issue, empty otherwise. F4 still decides the fee-capable output arity before
-`pool-v3.md` fixes these statement layouts and configuration identities.
+issue, empty otherwise. F4 selects two input/four output positions for spend;
+issue retains one output and burn one change output. Fee notes are ordinary
+receiver-controlled outputs, with no public fee label or special validity
+rule. `pool-v3.md` fixes these layouts and configuration identities together.
+The measured spend order has 15 public inputs: the existing five-field
+prefix, two anchors, two nullifiers, four commitments and two delivery limbs.
 A spend or burn whose nullifier's tag is under a standing lock is refused
 (C3.7); the tag is the host's `H(T_TAG, nf)` over the public nullifier.
 
@@ -377,7 +383,8 @@ secrets; every reader keeps evidence rather than verdicts (C2.10.13).
 | Proving, candidate circuits, desktop Node, one thread | demand 5.0–5.8 s, settle 6.3 s, request 3.5 s; verification 85–156 ms; key derivation 0.5–1.1 s; verification keys 3,680 bytes | measured (P1, this machine) |
 | Proving, desktop browser | 4.3–9.3 s spend | measured; phone unmeasured |
 | Verification | 61–174 ms in Node, 91–195 ms in the browser | measured |
-| Delivery | 89 bytes/output plus 64 public-input bytes per issue/spend/burn before record framing; 242 bytes for two outputs, 331 for three | C4.4/8; final arity waits on F4 |
+| Delivery | 89 bytes/output plus 64 public-input bytes per issue/spend/burn before record framing; 242 bytes for two outputs, 331 for three, 420 for four | C4.4/8; F4 selects four spend outputs |
+| Fee shape, spend probe | 2x3: 19,256 gates; selected 2x4: 19,465 (+209), both subgroup 32,768 | four fits payment/change and independently denominated fee/change; full evidence in deployment probes |
 | Delivery binding, spend probe | +16 gates (19,034 to 19,050), unchanged 32,768 subgroup and 14,656-byte proof | measured with two constrained public digest limbs; not the full v3 spend relation |
 | Evidence chain | 32 bytes in the digest; 96 bytes of inputs per later event in a certificate | fixed by the form |
 | Non-membership proof, not published (A20) | median `32·(log₂N + 1)` bytes: 352, 480 and 576 bytes at 10³, 10⁴ and 10⁵ random nullifiers, at most three siblings more; the two the release no longer carries are 1,192 bytes at 10⁵ | measured (P3) |
@@ -473,8 +480,16 @@ Each names the rule, the candidate, the alternative, and what closes it.
   Notes and ownership/nullifier formulas stay unchanged; issue/spend/burn
   relations and configuration change. [The probes](POOL_DEPLOYMENT_PROBES.md#delivery-and-seed-restoration)
   establish the cryptographic seam and digest-binding feasibility, not a
-  complete wallet or public-evidence source. F4 fee shape is next. This map's
-  other contract choices remain independent of the final layouts.
+  complete wallet or public-evidence source. **F4 decided 2026-09-09:**
+  two inputs/four ordinary outputs, no privileged fee kind or asset, in
+  [pool-fees C1.2.3–7](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-fees.md).
+  Four fits positive payment/change and fee/change in two scoped backings
+  without a preparation transfer; +209 gates and 121 bytes over three is
+  the measured price. Sponsored service remains available; a fee recipient
+  learns its own opening/statement association and may infer other backings
+  from the flow/scope. Prices cannot alter non-service counts or public
+  remedies. F3/F4 no longer block the bound choice; A22 and remaining
+  evidence/layout obligations still precede the final configuration.
 - **A13 Retention and replay cost.** The redemption reader replays the
   closure; the operator retains exact bytes; the holder keeps leaves and
   the spent set. P3's first run: the reference spent set costs about 2.7 ms
@@ -640,7 +655,8 @@ the configuration preimage over the six bytecode and key identities, the
 helper and the bounds, whose hash is the v3 domain; the publication frame
 and bodies; the acceptance, release and withdrawal bytes; the replayed
 state; and the bounds table. A1–A3, A5–A7 and A16–A21 were decided on
-2026-09-09 in the contracts, and A4 is measured; A12 keeps the layouts
-waiting on fee shape (F4); delivery/restoration (F3) is selected and changes
-three relations. Both must be included in the final `configHash`. The runtime
-follows the specification, with the model as its oracle.
+2026-09-09 in the contracts, and A4 is measured. A12's requirement to settle
+F3/F4 together is satisfied: delivery changes three relations, and
+spend has two inputs/four outputs. Remaining choices, including A22, still
+precede the final `configHash`. The runtime follows the specification, with
+the model as its oracle.

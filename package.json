@@ -59,7 +59,8 @@
     "check:pool-store": "node scripts/pool/store-crash.mjs",
     "check": "npm run check:docs && npm run typecheck && npm test && npm run build && npm run check:package && npm run check:pilot && npm run check:pool-store",
     "prepublishOnly": "npm run check",
-    "check:pool:delivery": "npm run build && node scripts/pool/delivery/check.mjs && node scripts/pool/delivery/binding/check.mjs"
+    "check:pool:delivery": "npm run build && node scripts/pool/delivery/check.mjs && node scripts/pool/delivery/binding/check.mjs",
+    "check:pool:fees": "npm run build && node scripts/pool/fees/check.mjs"
   },
   "publishConfig": {
     "access": "public",

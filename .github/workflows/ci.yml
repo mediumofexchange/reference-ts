@@ -36,6 +36,8 @@ jobs:
         run: npm run check:pool
       - name: Delivery and seed restoration candidate
         run: npm run check:pool:delivery
+      - name: Four-output transfers and ordinary fees candidate
+        run: npm run check:pool:fees
 
   check:
     runs-on: ${{ matrix.os }}

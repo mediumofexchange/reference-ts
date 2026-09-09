@@ -11,7 +11,8 @@ Demonstrate one signed constant-payout root, issuance, private payment with
 change and a realistic fee arrangement, receiver discovery, independent
 verification, interruption/exact retry, restoration on a fresh wallet, and
 redemption after the original operator disappears. Start with one venue and
-no reliance graph. Fee shape remains open. [The delivery contract](https://github.com/mediumofexchange/money-from-first-principles/blob/02d911c/pool-delivery.md)
+no reliance graph. The [fee contract](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-fees.md)
+selects two inputs/four ordinary outputs. [The delivery contract](https://github.com/mediumofexchange/money-from-first-principles/blob/02d911c/pool-delivery.md)
 now selects receiver-prepared exact outputs and seed-encrypted capsules for a
 successor; v2 cannot silently stand in for these changes.
 
@@ -142,6 +143,87 @@ full evidence before payer/operator disappearance, and construct certified
 paths. Seed recovery does not discover unknown venues/backings, prove a
 complete balance or guarantee permanent availability. Device and full-history
 replay costs remain additional gates.
+
+## Transfer shape and ordinary fees
+
+Run the retained comparison and hostile checks with Node 24:
+
+```powershell
+npm run check:pool:fees
+```
+
+[Probe sources](../scripts/pool/fees/) generate candidates from the pinned v2
+spend; [recorded evidence](pool-fees-verification.json) pins their identities,
+inputs and measurement scope. Generated sources/builds/reports stay in
+`scratch/pool-fees/`. CI runs this command on Linux and Windows.
+
+F4 selects two input/four output positions for successor spend, under
+[pool-fees C1.2.3–7](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-fees.md).
+A payment of 73 A from 100 A and a fee of 2 B from 10 B fit in one statement:
+73 A to the receiver, 27 A change, 2 B to the fee recipient and 8 B change.
+Each recipient controls its output through an exact F3 request. Every output
+uses the same commitment, scope and per-backing conservation rules; no fee
+position, asset, debit authority, public amount or new statement kind exists.
+Same-backing fees and sponsored service pad the unused positions with the
+payer's distinct zero-value notes and capsules.
+
+Three positions fit same-backing payment/change/fee and can use another fee
+backing if its input already has the exact amount. Four also returns both
+changes without a preparation transfer. Separate fee/payment statements have
+separate admission/finality; putting their submissions beside each other does
+not provide atomicity. Adding a batch would need a new receipt/replay/finality
+contract for behavior one ordinary spend already supplies.
+
+| Spend candidate | Gates | Subgroup | Public inputs |
+|---|---:|---:|---:|
+| Pinned v2, 2x2 | 19,034 | 32,768 | 11 |
+| F3 delivery, 2x2 | 19,050 | 32,768 | 13 |
+| F4 comparison, 2x3 | 19,256 | 32,768 | 14 |
+| Selected F4, 2x4 | 19,465 | 32,768 | 15 |
+
+Four costs 209 gates over three (about 1.1%), a 32-byte commitment, 89-byte
+capsule, one leaf and one recovery trial on every spend, including padding.
+That is 121 extra statement bytes versus another roughly 15 KB proof-bearing
+preparation record when needed. It also increases output storage/scanning
+positions by one third; no frequency or device budget is assumed. All four
+capsules plus the two public digest encodings cost 420 bytes before framing.
+Inputs, note formulas, issue's one output and burn's one change remain fixed.
+
+All five real proofs are 14,656 bytes. The selected 2x4 flow and a total of
+`2^64` with individually bounded inputs both prove. Seventeen positive host
+checks and 35 rejection cases cover every added output, all duplicate pairs,
+per-backing conservation even when aggregate value matches, and exact capsule
+association. Host-ABI bypasses leave ACIR unchanged and still reject `2^64`
+in each added output and `2^128` in either delivery limb. Mutating any
+commitment or digest limb rejects its original proof. These tests do not
+infer hidden-value range constraints from ABI serialization alone.
+
+On the recorded single-threaded Node 24 desktop run, the selected fee/change
+proof took 4.22 s to prove and 92 ms to verify; its widened-sum boundary took
+5.78 s and 132 ms. These are individual feasibility measurements, not a
+timing distribution or a phone/deployment budget.
+
+The fee recipient knows its fee opening and statement association. When the
+flow guarantees the same backing, this reveals the payment backing; a quoted
+fee independent of payment size avoids disclosing size through a fee formula.
+Another fee backing reduces that inference only where scope and other leaks
+leave actual alternatives. Sponsored service avoids direct-fee disclosure.
+Fees have ordinary pending-local-root, finality, lapse and recovery treatment;
+exact retry returns its existing receipt before applying a changed price.
+Changing an exposed fee requires a newly authorized transfer after verified
+lapse and canonical unspentness, not an implicit rewrite or cancellation.
+
+Private fee policy is outside public validity. A fee-free admitted statement
+remains valid on replay. Unpaid/declined quotes do not clear non-service counts
+or gate the public remedies: the holding request proves no fee agreement.
+Backer/sponsor funding remains a practical service choice, including for the
+unchanged issue/burn/recovery shapes. Pool fees do not fund venue currency
+publication costs automatically.
+
+The probe compares generated circuits and receiver-prepared output evidence.
+It does not implement v3 admission, a quote transport, durable wallet pricing,
+public-history authentication or actual publication. Those are integration
+and deployment gates, not consequences of choosing an arity.
 
 ## Invalid-checkpoint evidence
 

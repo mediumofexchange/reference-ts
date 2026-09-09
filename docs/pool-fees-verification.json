@@ -1,0 +1,424 @@
+{
+  "recorded": "2026-09-09T09:42:42.958Z",
+  "candidate": "generic two-input spend with 2, 3, or 4 ordinary outputs and F3 delivery digest",
+  "sourceOnly": true,
+  "referenceCommit": "17a9f1e",
+  "companionSpecCommit": "37cbd404dab1525f10c3e6815cc643c16269e6de",
+  "environment": {
+    "node": "v24.6.0",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
+    "noirVersion": "1.0.0-beta.26+40d6574f851d926f93e0c3a271bac3e6e82ac905",
+    "verifierTarget": "noir-recursive",
+    "toolchain": {
+      "@aztec/bb.js": "5.2.0",
+      "@noir-lang/noir_js": "1.0.0-beta.26",
+      "@noir-lang/noir_wasm": "1.0.0-beta.26"
+    },
+    "threads": 1,
+    "crsPath": "scratch/private-payment-crs"
+  },
+  "publicInputOrders": {
+    "v2-2x2": [
+      "domainHi",
+      "domainLo",
+      "segmentHi",
+      "segmentLo",
+      "scope",
+      "anchor1",
+      "anchor2",
+      "nullifier1",
+      "nullifier2",
+      "output1",
+      "output2"
+    ],
+    "f3-2x2": [
+      "domainHi",
+      "domainLo",
+      "segmentHi",
+      "segmentLo",
+      "scope",
+      "anchor1",
+      "anchor2",
+      "nullifier1",
+      "nullifier2",
+      "output1",
+      "output2",
+      "deliveryHi",
+      "deliveryLo"
+    ],
+    "f4-2x3": [
+      "domainHi",
+      "domainLo",
+      "segmentHi",
+      "segmentLo",
+      "scope",
+      "anchor1",
+      "anchor2",
+      "nullifier1",
+      "nullifier2",
+      "output1",
+      "output2",
+      "output3",
+      "deliveryHi",
+      "deliveryLo"
+    ],
+    "f4-2x4": [
+      "domainHi",
+      "domainLo",
+      "segmentHi",
+      "segmentLo",
+      "scope",
+      "anchor1",
+      "anchor2",
+      "nullifier1",
+      "nullifier2",
+      "output1",
+      "output2",
+      "output3",
+      "output4",
+      "deliveryHi",
+      "deliveryLo"
+    ]
+  },
+  "circuitSizes": {
+    "v2-2x2": [
+      19034,
+      32768
+    ],
+    "f3-2x2": [
+      19050,
+      32768
+    ],
+    "f4-2x3": [
+      19256,
+      32768
+    ],
+    "f4-2x4": [
+      19465,
+      32768
+    ]
+  },
+  "compileMs": 4746.1721,
+  "proofMetrics": [
+    {
+      "name": "f4-2x4",
+      "label": "F4 2x4 different-backing fee/change",
+      "executeMs": 33.46510000000126,
+      "proveMs": 4220.629799999995,
+      "verificationKeyMs": 844.7606000000087,
+      "verifyMs": 91.52689999999711,
+      "proofBytes": 14656,
+      "publicInputCount": 15,
+      "verificationKeySha256": "3031ee50907a456eae0f31fa3a1f43ce7720a3e3d4bad37883a7e86c5e478e08",
+      "mutatedPublicInputsRejected": [
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ]
+    },
+    {
+      "name": "v2-2x2",
+      "label": "pinned v2 2x2 payment/change",
+      "executeMs": 37.03750000000582,
+      "proveMs": 4654.822000000015,
+      "verificationKeyMs": 869.9698999999964,
+      "verifyMs": 67.9373000000196,
+      "proofBytes": 14656,
+      "publicInputCount": 11,
+      "verificationKeySha256": "8b46a4be1b3a307c22ff541319223c6fb7d9bb721a7a20b0a6822a291b38fcbc",
+      "mutatedPublicInputsRejected": []
+    },
+    {
+      "name": "f3-2x2",
+      "label": "F3 2x2 payment/change with delivery digest",
+      "executeMs": 36.029799999989336,
+      "proveMs": 3776.471600000019,
+      "verificationKeyMs": 705.8612000000139,
+      "verifyMs": 64.8866000000271,
+      "proofBytes": 14656,
+      "publicInputCount": 13,
+      "verificationKeySha256": "2721cc1fe56dc51133364fa81d6d68ef3e3fa42bf3f17c80e7d0d60216cf99ac",
+      "mutatedPublicInputsRejected": [
+        9,
+        10,
+        11,
+        12
+      ]
+    },
+    {
+      "name": "f4-2x3",
+      "label": "F4 2x3 payment/change/fee",
+      "executeMs": 32.53639999998268,
+      "proveMs": 3821.2114,
+      "verificationKeyMs": 711.2452000000048,
+      "verifyMs": 61.47049999999581,
+      "proofBytes": 14656,
+      "publicInputCount": 14,
+      "verificationKeySha256": "1f791895667e65d86c09af10b76d0208bdb3e3b7627b2a81b028d04fc507113d",
+      "mutatedPublicInputsRejected": [
+        9,
+        10,
+        11,
+        12,
+        13
+      ]
+    },
+    {
+      "name": "f4-2x4",
+      "label": "F4 2x4 widened-sum boundary",
+      "executeMs": 33.30770000000484,
+      "proveMs": 5780.073100000009,
+      "verificationKeyMs": 1509.0700999999826,
+      "verifyMs": 131.76530000002822,
+      "proofBytes": 14656,
+      "publicInputCount": 15,
+      "verificationKeySha256": "3031ee50907a456eae0f31fa3a1f43ce7720a3e3d4bad37883a7e86c5e478e08",
+      "mutatedPublicInputsRejected": []
+    }
+  ],
+  "comparison": {
+    "f3TwoIndependentSpendProofBytes": 29312,
+    "f3TwoIndependentSpendPublicInputs": 26,
+    "f4ThreeOutputProofBytes": 14656,
+    "f4FourOutputProofBytes": 14656,
+    "note": "Two F3 statements can produce four outputs but are independently admitted/finalized; this probe does not make them atomic."
+  },
+  "checks": [
+    "73 payment + 25 change + 2 ordinary fee uses receiver-prepared outputs; host commitments equal backend fixture commitments; only the fee seed recovers the fee secret",
+    "host F3 association requires the exact ordered three-output commitment/capsule vector; a missing or altered fee capsule rejects",
+    "selected 2x4 fee output is recoverable only by the fee receiver seed; its backing-B change is payer-seed controlled",
+    "host F3 association requires the exact ordered four-output commitment/capsule vector; a missing or altered fourth capsule rejects",
+    "f4-2x3: valid zero fee uses payer-seed owned, distinct zero-value padding output",
+    "f4-2x3: valid zero-change output",
+    "f4-2x3: valid two-positive-input same-backing spend",
+    "f4-2x3: valid two-backing conservation",
+    "f4-2x3: valid outgoing sum 2^64 uses u128 accumulator",
+    "f4-2x3: Field-ABI valid control executes over unchanged ACIR",
+    "f4-2x4: valid zero fee uses payer-seed owned, distinct zero-value padding output",
+    "f4-2x4: valid zero-change output",
+    "f4-2x4: valid two-positive-input same-backing spend",
+    "f4-2x4: valid two-backing conservation",
+    "f4-2x4: valid outgoing sum 2^64 uses u128 accumulator",
+    "f4-2x4: Field-ABI valid control executes over unchanged ACIR",
+    "f4-2x4: Field-ABI delivery valid control executes over unchanged ACIR"
+  ],
+  "rejectionEvidence": [
+    {
+      "label": "f4-2x3: zero-valued foreign added output 2",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x3: inflated same-backing output total",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x3: shaved same-backing output total",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x3: wrong added output 2 commitment",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x3: duplicate output pair 0,1",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x3: duplicate output pair 0,2",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x3: duplicate output pair 1,2",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x3: zero rho in added output 2 with recomputed commitment",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x3: zero owner in added output 2 with recomputed commitment",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x3: conserved grand total shifts one unit A to B",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x3: normal ABI rejects 2^64 in added output 2 with valid inputs",
+      "name": "Error",
+      "message": "The value passed for parameter `output_notes[2].value` does not match the specified type:\nValue Field(18446744073709551616) does not fall within range of allowable values for a Integer { sign: Unsigned, width: 64 }"
+    },
+    {
+      "label": "f4-2x3: Field ABI bypass rejects 2^64 in added output 2 in unchanged ACIR",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: zero-valued foreign added output 2",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: zero-valued foreign added output 3",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: inflated same-backing output total",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: shaved same-backing output total",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: wrong added output 2 commitment",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: wrong added output 3 commitment",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: duplicate output pair 0,1",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: duplicate output pair 0,2",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: duplicate output pair 0,3",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: duplicate output pair 1,2",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: duplicate output pair 1,3",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: duplicate output pair 2,3",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: zero rho in added output 2 with recomputed commitment",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: zero owner in added output 2 with recomputed commitment",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: zero rho in added output 3 with recomputed commitment",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: zero owner in added output 3 with recomputed commitment",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: conserved grand total shifts one unit A to B",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: normal ABI rejects 2^64 in added output 2 with valid inputs",
+      "name": "Error",
+      "message": "The value passed for parameter `output_notes[2].value` does not match the specified type:\nValue Field(18446744073709551616) does not fall within range of allowable values for a Integer { sign: Unsigned, width: 64 }"
+    },
+    {
+      "label": "f4-2x4: Field ABI bypass rejects 2^64 in added output 2 in unchanged ACIR",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: normal ABI rejects 2^64 in added output 3 with valid inputs",
+      "name": "Error",
+      "message": "The value passed for parameter `output_notes[3].value` does not match the specified type:\nValue Field(18446744073709551616) does not fall within range of allowable values for a Integer { sign: Unsigned, width: 64 }"
+    },
+    {
+      "label": "f4-2x4: Field ABI bypass rejects 2^64 in added output 3 in unchanged ACIR",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: Field ABI bypass rejects 2^128 delivery limb 0 in unchanged ACIR",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    },
+    {
+      "label": "f4-2x4: Field ABI bypass rejects 2^128 delivery limb 1 in unchanged ACIR",
+      "name": "Error",
+      "message": "Cannot satisfy constraint"
+    }
+  ],
+  "structuralFinding": "Each candidate exposes every ordered output commitment and one delivery digest in one proof public-input vector. Mutating every output or digest input rejects that proof. A caller can therefore admit all outputs with that one statement or reject it; this is circuit structure only, not a production v3 admission/finality demonstration.",
+  "feeFinding": "There is no fee role, privileged owner, or special debit in either candidate. Output 3/4 traverse the same backing, commitment, distinctness, and per-backing conservation loops. A zero fee is an ordinary zero-value owned output. Three outputs fit same-backing payment/change/fee; four fit payment/change on A plus fee/change on B.",
+  "privacyFinding": "A same-backing fee flow lets a fee recipient who recovers its capsule learn the payment backing. When both the payment input and fee input require change, 2x3 cannot carry payment, payment change, fee, and fee change; 2x4 can keep those flows on separate backings.",
+  "identities": {
+    "v2-2x2": {
+      "bytecodeSha256": "f00b1721a8a93d70c56758bb01662250f9ce8ee0ffcd9c6823aa41703b35ff93",
+      "generatedSourceSha256": "9ea3fe7f32d32502ea13c16df38ded5f4d688cac49c24a70abca31ff65f2dec1",
+      "compressedBytecodeBytes": 11572
+    },
+    "f3-2x2": {
+      "bytecodeSha256": "f0886f05a1e253a47496ac0a53312f7a478305096857a7d8f8af620091c57b28",
+      "generatedSourceSha256": "c2e97703984ef38a977e060c99597be1baf0c11d7c13e6cf424ad045d18a83cd",
+      "compressedBytecodeBytes": 11594
+    },
+    "f4-2x3": {
+      "bytecodeSha256": "eb1ca7d1c9cb02877c357275e272549a6177d18bf8c567b114dcc348a8cd0f78",
+      "generatedSourceSha256": "4aa123f31bb4587c1a33b80da55316c36aa87c4660c1657b69a7f13a1e6a1589",
+      "compressedBytecodeBytes": 11941
+    },
+    "f4-2x4": {
+      "bytecodeSha256": "04d8155c9a43874203bb5975844b2aba21df6bdbf4728f2c88fb83a3d2f229e2",
+      "generatedSourceSha256": "cbc317cf5c7732d3c1d9c6a25269a1b9dbaefbf29b17bdaafd54829d23957b45",
+      "compressedBytecodeBytes": 12363
+    },
+    "compileScriptSha256": "59e355bed3758b7336f5a0070466b7853982b4cd697bf56cbaee9c99e00d3cb0",
+    "checkScriptSha256": "0a32505c69a62a9548f6d34a7519dace3796bb75f14318dd91606be568186cb8",
+    "fixturesSha256": "9062b9825218adb87171f06261d3c15635efcca6925352562734ca72c2ee5878",
+    "deliveryCryptoSha256": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
+    "notesSha256": "0c0a6cf6c12c6adc702cb8ef95e237ce3486dae9e65df2fc3dd724e7ca93b484",
+    "poseidon2Sha256": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"
+  },
+  "limitations": [
+    "Generated scratch candidates do not change production v2 configuration, keys, admission, retry, publication, or finality.",
+    "The host cross-check covers F3 delivery framing and fixture-backend commitments; no authenticated complete history is demonstrated.",
+    "Single desktop runs are comparative measurements, not phone or deployment acceptance.",
+    "The two-statement F3 comparison has no atomic batching claim."
+  ]
+}
