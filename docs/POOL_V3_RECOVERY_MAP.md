@@ -14,10 +14,12 @@ trace through wallet, operator, backer, venue and stranger; the record range
 and retention each read needs; the resource assumptions; and the choices
 that are still open, each with the probe or decision that closes it.
 
-It is not `pool-v3.md`. Where it proposes a layout, the layout is a
-**candidate**: the specification fixes the bytes after the choices in
-[§8](#8-unresolved-assumptions-and-choices) are decided and reviewed, and the
-runtime follows the specification. Words are pool-v2's and the contracts'.
+The [v3 proof layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/d57ddb0/pool-v3.md)
+now fix the six relations and public-input orders. Other layouts here remain
+**candidates**: the specification fixes the remaining bytes after the choices
+in [§8](#8-unresolved-assumptions-and-choices) are decided and reviewed, and the
+runtime follows the specification. No v3 configuration or adoption is defined.
+Words are pool-v2's and the contracts'.
 `frame`, `SHA256`, `H`, limbs, `F`, `u8`/`u32`/`u64` are pool-v2 §1's.
 
 ## 1. What v3 carries beyond v2
@@ -191,20 +193,23 @@ A spend or burn whose nullifier's tag is under a standing lock is refused
 
 Audited 2026-09-09 against specification revision
 [`923ee46`](https://github.com/mediumofexchange/money-from-first-principles/tree/923ee46)
-and reference revision `8deadf5`. This is the combined layout proposal and
-evidence inventory before `pool-v3.md`, not a construction/configuration pin.
+and reference revision `8deadf5`. The resulting orders are now fixed by
+[`d57ddb0`](https://github.com/mediumofexchange/money-from-first-principles/blob/d57ddb0/pool-v3.md),
+an incomplete construction with no configuration pin or adoption. The
+[retained suite](../scripts/pool/v3/README.md) compiles the six relations
+together after that specification commit.
 Let `P = [domainHi, domainLo, segmentHi, segmentLo, scopeRoot]` and
 `D = [deliveryHi, deliveryLo]`; concatenation below is ordered field expansion.
 Identifier and digest limbs are `u128`, quantity/instant/deadline/refresh are
 `u64`, and other public scalars are `Field`. Appending D preserves each v2
-order and follows the measured F3/F4 spend convention; issue/burn's final
-orders still require normative review and specification commitment.
+order and follows the measured F3/F4 spend convention. Independent normative
+review cleared issue/burn's appended digest order before dependent retention.
 
-| Relation | Proposed complete public-input order | Count | Source and conformance result |
+| Relation | Normative complete public-input order | Count | Source and conformance result |
 |---|---|---:|---|
-| issue | `P, backingHi, backingLo, quantity, cm, D` | 11 | v2 `issue.nr`: positive quantity, nonzero owner/rho/cm, exact commitment and scope path. C4.4 requires D; no amended issue source/key or real-proof evidence yet. |
+| issue | `P, backingHi, backingLo, quantity, cm, D` | 11 | Retained issue adds D to v2's positive quantity, nonzero owner/rho/cm, exact commitment and scope path. Six-relation suite proves the amended source; no approved v3 key identity. |
 | spend | `P, anchor_1, anchor_2, nf_1, nf_2, cm_1, cm_2, cm_3, cm_4, D` | 15 | F4 generator retains both input ownership/membership/scope checks, padding backing rule, distinct nonzero nullifiers and positive input total. All four outputs name an input backing, bind nonzero owner/rho/cm, are pairwise distinct and conserve each backing in widened `u128` sums. Candidate real proofs exist; no final v3 identity. |
-| burn | `P, backingHi, backingLo, quantity, anchor_1, anchor_2, nf_1, nf_2, cm_change, D` | 15 | v2 `burn.nr`: both authenticated inputs and change name the public backing; distinct nullifiers, positive burn quantity, scope path, exact change commitment and widened input = burn + change conservation. C4.4 requires D; no amended burn source/key or real-proof evidence yet. |
+| burn | `P, backingHi, backingLo, quantity, anchor_1, anchor_2, nf_1, nf_2, cm_change, D` | 15 | Retained burn adds D; both authenticated inputs and change name the public backing, with distinct nullifiers, positive burn quantity, scope path, exact change commitment and widened input = burn + change conservation. Six-relation suite proves the amended source; no approved v3 key identity. |
 | demand | `P, backingHi, backingLo, quantity, anchor_1, anchor_2, tag_1, tag_2, presenterHi, presenterLo, instant, deadline` | 16 | P1 helper proves ownership, nonzero commitment/nullifier, positive-note membership and scope. Demand binds backing, distinct private nullifiers, positive exact quantity and tags. Original P1 omits C3.2's zero padding anchor; corrected candidate evidence below. |
 | settle | `P, backingHi, backingLo, quantity, owner, rho_out, anchor_1, anchor_2, nf_1, nf_2, cm_out, demandHi, demandLo` | 17 | P1 reuses input authentication, constrains common backing, distinct nullifiers, positive whole-input quantity, scope and public output opening/commitment. A free padding anchor is intentional under C3.2: the release signs this statement identity. No D or capsule (C4.7). |
 | request | `domainHi, domainLo, backingHi, backingLo, anchor, tag, refresh` | 7 | P1 helper proves ownership, positive-note membership, backing and tag. Original P1 has only six inputs; corrected candidate adds public `u64 refresh` last. No segment/scope/quantity and no output. |
@@ -217,55 +222,39 @@ the respective admission/replay/venue reader. In particular, delivery limbs
 are proof-bound; SHA256 framing and capsule association are host checks,
 and successful binding does not prove that a receiver can decrypt.
 
-**Reproduced gaps and minimal corrections.** Original
-`node scratch/pool-v3/probe.mjs` passed 47 checks and five real proofs on this
-date. Its padded demand uses both anchors from `fixtures().padded`, including
-the nonzero tree root at the zero-value position, and proves successfully.
-Its request emits six public inputs. This is direct evidence of obsolete
-relations, even though the old suite passes. In a separate scratch copy:
+**Reproduced gaps and corrections.** The
+[original audit observation](https://github.com/mediumofexchange/reference-ts/blob/5ba6099/docs/pool-v3-conformance-verification.json)
+records P1 passing despite a nonzero demand padding anchor and a request
+with no refresh. Retained demand now enforces
+`assert((inputs[i].value > 0) | (anchors[i] == 0));` in its own position
+loop, with canonical padding fixtures. Retained request appends public
+`refresh: u64`. Neither changes the shared holding helper's free padding
+anchor, the settlement relation or the cryptographic primitives. No public
+identity gate, new signature, in-circuit digest or cipher is introduced.
 
-- Demand adds `assert((inputs[i].value > 0) | (anchors[i] == 0));` inside
-  its position loop, keeping this rule out of the shared holding helper.
-  The padded demand fixture sets only its padding anchor to zero. The foreign
-  backing and zero-quantity cases also use canonical padding anchors so that
-  the new rule cannot mask their intended failure.
-- Request adds `refresh: pub u64` after `tag`, includes it last in the
-  expected public-input order, and uses zero for the initial fixture.
-  Refresh changes no ownership, tag or membership calculation.
-- The helper, settlement and cryptographic primitives are unchanged.
-  No public identity gate, extra signature, in-circuit digest or cipher is
-  introduced. No production source, configuration or v2 pin changes.
+**Retained conformance.** `npm run check:pool:v3` now provides the combined
+six-source/shared-helper build, exact ABI orders, genuine D-bearing issue/burn
+proofs, all-input binding, and equal-count spend/burn key substitution in both
+directions. The older [F3](pool-delivery-verification.json) and
+[F4](pool-fees-verification.json) reports cover only added spend fields; the
+new suite also tests the full prefix under each amended key. It tests ranges
+below the ABI encoder, recomputes dependent note hashes/paths/sums for hostile
+witnesses, and keeps distinct-anchor positive controls so equal fixture values
+cannot mask an order mistake. Domain and capsule fixtures are explicitly
+synthetic. Generated source/bytecode/key hashes are observations, not pins.
+The [current observation](pool-v3-conformance-verification.json) records
+304 passing checks and 18 real proofs, source/helper/bytecode/key identities
+and exact metrics. All observed proofs are 14,656 bytes. Binding
+mutation tests are selected-backend evidence, not a general nonmalleability
+proof or evidence of presenter-key participation. Single desktop timings
+do not establish device budgets.
 
-The [candidate observation](pool-v3-conformance-verification.json) records
-source/bytecode/key hashes, toolchain, orders, checks and limits. The corrected
-run passed 62 checks and six real proofs with demand/settle/request counts
-16/17/7. Each proof is 14,656 bytes. Nonzero padding anchors reject in either
-demand position, with otherwise-valid inputs; reversed canonical padding
-executes. Settlement still proves with its ordinary nonzero padding anchor.
-Requests with refresh 0 and 1 independently prove, and the maximum `u64`
-refresh executes. For demand segment/presenter limbs, instant/deadline and
-request refresh, changing only ABI integer metadata to `Field` preserves a
-valid control and rejects overflow on unchanged ACIR. Mutating each public
-input rejects the original proof; independently provable alternate notice
-and refresh fields also reject when paired with the original proof. These
-are concrete selected-backend binding tests, not a general nonmalleability
-proof or evidence of presenter-key participation. Desktop timings are single
-runs, not device budgets.
-
-**Final pinning acceptance.** The six relations still need one reviewed
-source/helper/toolchain build, exact ABI orders, configuration preimage and
-derived bytecode/key identities, committed in the specification before
-dependent retained code. Carry the corrected cases into that retained suite.
-The [F3 report](pool-delivery-verification.json) tests only spend's added
-digest limbs; [F4](pool-fees-verification.json) tests spend positions 9–14.
-Final binding checks must cover every input of all six final keys, including
-spend's prefix 0–8; a passing v2 proof cannot supply this evidence for a new
-key. Spend and burn both have 15 inputs in the proposal: reject proof/key
-substitution despite equal counts, and select the key by statement kind.
-Issue/burn need genuine D-bearing proofs and unchanged-ACIR range tests for
-both limbs. Repeat otherwise-valid hostile ownership, membership, scope,
-duplicate, backing, quantity/overflow and output tests on the final sources.
-Then integrate exact one/four/one capsule vectors, parsing, authorization,
+**Final pinning acceptance.** Fix the remaining configuration preimage,
+delivery-profile encoding, records and bounds, then independently review and
+commit the complete source/helper/toolchain/bytecode/key identities together
+before runtime adoption. Rerun affected proofs on that exact build and domain.
+A passing v2 proof or this uninstantiated-domain suite cannot substitute for
+the final configuration. Integrate exact one/four/one capsule vectors, parsing, authorization,
 atomic output/totals/lock effects, replay and reproof into v3 runtime; these
 are separate acceptance results from a circuit proof. Configuration and
 runtime must never interpret these layouts under the v2 domain.
@@ -466,8 +455,8 @@ secrets; every reader keeps evidence rather than verdicts (C2.10.13).
 
 | Item | Value | Standing |
 |---|---|---|
-| Proof bytes, observed circuits | 14,656 (458 fields) | measured for v2 and P1, including §2.6's corrections; no delivery-bearing issue/burn result |
-| Public inputs | issue 11, spend 15, burn 15, demand 16, withdraw 7, settle 17, request 7 | proposal and per-relation evidence in §2.6; issue/burn with delivery remain unproved |
+| Proof bytes, observed circuits | 14,656 (458 fields) | v2, P1 and all six retained successor relations; §2.6 records the exact evidence |
+| Public inputs | issue 11, spend 15, burn 15, demand 16, withdraw 7, settle 17, request 7 | six proof orders fixed in pool-v3 §3; withdrawal remains the §2.2 candidate, without a circuit |
 | Proving, desktop Node | 1.4 s for an issue to 10.5 s for a spend under a second segment (v2) | measured; demand and settle expected at burn's scale, request below |
 | Proving, original P1 circuits, desktop Node, one thread | demand 5.0–5.8 s, settle 6.3 s, request 3.5 s; verification 85–156 ms; key derivation 0.5–1.1 s; verification keys 3,680 bytes | historical measurement; corrected-candidate observations are in §2.6's report |
 | Proving, desktop browser | 4.3–9.3 s spend | measured; phone unmeasured |

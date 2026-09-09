@@ -54,6 +54,7 @@
     "pilot:demo": "npm run build && npm run check:pilot",
     "check:privacy": "npm run build && npm --prefix experiments/private-payment run check",
     "check:pool": "npm run build && node scripts/pool/check.mjs",
+    "check:pool:v3": "npm run build && node scripts/pool/v3/check.mjs",
     "bench:pool:prepare": "node scripts/pool/browser/prepare.mjs",
     "bench:pool:browser": "node scripts/pool/browser/serve.mjs",
     "check:pool-store": "node scripts/pool/store-crash.mjs",

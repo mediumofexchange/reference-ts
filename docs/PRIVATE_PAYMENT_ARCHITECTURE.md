@@ -45,6 +45,7 @@ Production still needs authenticated complete interval retrieval.
 
 | Material | Why it remains | Remove when |
 |---|---|---|
+| `scripts/pool/v3/` | Reproducible six-relation proof conformance against the successor layouts, with synthetic domain and no adopted configuration. | Reviewed final v3 configuration and runtime take over the sources and all proof/range/hostile cases; do not duplicate production verifiers. |
 | `scripts/pool/spent-set/` | A22's selected compressed-root candidate, independent oracle and measured per-insert replay cost; v2 remains fixed. | v3 runtime implements the selected roots with atomic statement/import validation and takes over these cases and measurements. |
 | Transparent `ledger.ts`, `oplog.ts`, `messages.ts`, `sequencer.ts`, presentation/recovery/replacement/fault modules and tests | Frozen profile, differential oracle and adversarial case library. | Corresponding pool rules pass the ported cases. Never port the retired exhibit walk or signed opening claim. |
 | `pilot-store.ts`, `pilot-http.ts`, `pilot-wire.ts`, pilot CLI | Durable-command pattern and process integration harness on the frozen path. [Pilot guide](PILOT.md). | A pool equivalent covers its integration behavior; retain useful persistence patterns. |

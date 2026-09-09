@@ -24,6 +24,8 @@ the month is new), and add its line at the top of the index below.
 
 ## Index
 
+- `2026-09-09` [Fix the six successor proof layouts before configuration adoption](decisions/2026-09.md#2026-09-09--fix-the-six-successor-proof-layouts-before-configuration-adoption)
+
 - `2026-09-09` [Pool demands authorize notes without identifying the demander](decisions/2026-09.md#2026-09-09--pool-demands-authorize-notes-without-identifying-the-demander)
 - `2026-09-09` [Spent roots use a canonical compressed binary tree](decisions/2026-09.md#2026-09-09--spent-roots-use-a-canonical-compressed-binary-tree)
 - `2026-09-09` [Fees are ordinary outputs in the successor spend](decisions/2026-09.md#2026-09-09--fees-are-ordinary-outputs-in-the-successor-spend)

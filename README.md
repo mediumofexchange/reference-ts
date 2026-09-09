@@ -98,7 +98,7 @@ authenticated exclusion, a clock read from the snapshot, and continuation of
 the last valid prefix. Rejected policies remain test-only historical controls.
 The model hashes exact admitted proof/signature bytes into a separate chain,
 compares receipt evidence and retains witnessed bytes through adoption. Proof
-and signature verification remain ideal oracles. Production v3 layouts,
+and signature verification remain ideal oracles. Production v3 records/configuration,
 compact fault certificates and authenticated interval evidence remain open.
 
 The later [presentment clarification](https://github.com/mediumofexchange/money-from-first-principles/commit/923ee46)
@@ -107,6 +107,14 @@ authorizes release/withdrawal; the demand does not establish that key's
 participation, its publisher's identity or a person's reputation. Focused
 model cases cover copied evidence, field rebinding and lock/retry behavior;
 they assume cryptographic authentication and do not implement v3 recovery.
+
+The successor [proof layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/d57ddb0/pool-v3.md)
+fix six relations and public-input orders. `npm run check:pool:v3` compiles
+and proves them together, including delivery on issue/burn, four spend
+outputs, canonical demand padding, refresh binding and equal-count cross-key
+rejection. See the [conformance suite](scripts/pool/v3/README.md). V3 remains
+an incomplete construction: no configuration hash, approved artifact pins,
+backing adoption or runtime support is defined.
 
 ## Try the local pilot
 
