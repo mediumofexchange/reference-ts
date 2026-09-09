@@ -121,7 +121,10 @@ bytes. A 20,000-byte release publication (the 14,656-byte proof plus about
 5,000 bytes of statement, signatures, acceptance and two non-membership proofs)
 needs 6 outputs in a 20,724-byte transaction carrying at least 0.00745 ERG at
 the minimum value per byte, plus the conventional 0.0011 ERG fee; a release and
-a demand together (35,000 bytes) need 9 outputs and 35,980 bytes. Every case is
+a demand together (35,000 bytes) need 9 outputs and 35,980 bytes. The
+non-membership proofs left the release on 2026-09-09 (C3.6), so a release is
+now about 15.5 KB in four chunks; the chunking arithmetic above is unchanged
+and still bounds the larger case. Every case is
 well under the mempool limit. Not established: node acceptance, a real
 signature, fee policy, the votable parameter's current value, reassembly and
 authentication of chunks against forged or reordered boxes, and retrieval

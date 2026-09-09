@@ -136,7 +136,7 @@ the whole authorization.
 ### 2.4 Request, kind 7, never admitted
 
 ```text
-publicInputs  = [domainHi, domainLo, backingHi, backingLo, anchor, tag]     n = 6
+publicInputs  = [domainHi, domainLo, backingHi, backingLo, anchor, tag, refresh]   n = 7
 witness       = note, secret, siblings[32], right[32]
 authorization = empty
 ```
@@ -146,7 +146,12 @@ Relation (C3.2, segment-free form): ownership, the nullifier, membership at
 No segment, scope or quantity. It reuses the statement frame for its
 identity and record and is a venue publication only (C2b.5.1); the counting
 reader places its anchor in the canonical state's forest (C2b.5.2). It is
-unsigned, so a copy is the same publication (A21).
+unsigned, so a copy is the same request and is read at that request's first
+index; `refresh` is the holder's own field, constrained but unread, so only
+a party that can prove the note can mint another identity for one tag, which
+is how a holder refreshes a request an operator is stalling on (A21). P1
+compiled and proved this circuit over the six inputs it had before
+`refresh` was added; the seventh is unmeasured.
 
 ### 2.5 Issue, spend, burn
 
@@ -174,7 +179,7 @@ two limbs in the demand. A publication's identity is `SHA256` over
 |---|---|---|---|
 | 1 demand | the demand statement record | ≈ 15.3 KB | yes |
 | 2 acceptance | `acceptanceBytes ‖ signature[64]` | ≈ 0.3 KB | no, evidence for C3.8 |
-| 3 release | the settle statement record; under C2b.3.2 as written, then `u8 count ‖ nonMembershipProof_1 ‖ nonMembershipProof_2` at the snapshot's `spentRoot` (A20) | ≈ 15.5 KB, ≈ 17 KB with the proofs | yes |
+| 3 release | the settle statement record | ≈ 15.5 KB | yes |
 | 4 withdrawal | the withdraw statement record | ≈ 0.4 KB | yes |
 | 5 request | the request statement record | ≈ 15.0 KB | no, counted by C2b.5.2 |
 
@@ -183,13 +188,14 @@ routing name differs from it has no force and is no evidence (C2b.3.2). An
 acceptance names no backing of its own and resolves to its demand's, so
 its routing name is checkable only with the demand in hand (A19). A
 statement in a publication is bound to the snapshot's segment and scope root at the index it is judged; the
-reader refuses any other binding. The non-membership proofs, where
-retained (A20), are venue evidence for force, not part of the statement's
-evidence: an adopted settle carries only its record ([§4](#4-checkpoint-evidence-chain-receipt-and-trail)).
+reader refuses any other binding. No publication carries a non-membership
+proof (A20): every reader that decides force replays the snapshot for its
+forest and standing demands, so it holds the spent set and reads absence
+from it, and an adopted settle carries only its record
+([§4](#4-checkpoint-evidence-chain-receipt-and-trail)).
 
-Estimates assume a 14,656-byte proof, the v2 spent-set proof encoding
-(a median of `32·(log₂N + 1)` bytes per proof at `N` nullifiers, measured)
-and the frames above; [§9](#9-probe-plan) measures the rest.
+Estimates assume a 14,656-byte proof and the frames above;
+[§9](#9-probe-plan) measures the rest.
 
 ## 4. Checkpoint, evidence chain, receipt and trail
 
@@ -284,8 +290,7 @@ segment `S1` over one backing `b`, venue **V** (Ergo, depth `d`, lag
    pass (C2b.3.2). A demand already standing in `c3` needs no publication.
 9. **K** returns an acceptance to **H**, or publishes it.
 10. **H** proves the settle bound to `S1`, signs the release, and publishes
-    the release body of §3, with non-membership proofs at `c3`'s
-    `spentRoot`, built from its replayed set, where A20 keeps them. Witnessed at `w_r`, it has force where the gap
+    the release body of §3. Witnessed at `w_r`, it has force where the gap
     is open, the demand stands and is not past its deadline, the acceptance
     deadline is at or after `w_r`, the proofs and signatures verify, the
     anchors are `c3`'s, the nullifiers are absent from the spent set and
@@ -352,15 +357,15 @@ secrets; every reader keeps evidence rather than verdicts (C2.10.13).
 | Item | Value | Standing |
 |---|---|---|
 | Proof bytes, any kind | 14,656 (458 fields) | measured for v2's three circuits and the three candidates (P1) |
-| Public inputs | demand 16, withdraw 7, settle 17, request 6 | candidate; P1 proves the circuits in exactly §2's order |
+| Public inputs | demand 16, withdraw 7, settle 17, request 7 | candidate; P1 proves the circuits in exactly §2's order, the request as it stood before its refresh value |
 | Proving, desktop Node | 1.4 s for an issue to 10.5 s for a spend under a second segment (v2) | measured; demand and settle expected at burn's scale, request below |
 | Proving, candidate circuits, desktop Node, one thread | demand 5.0–5.8 s, settle 6.3 s, request 3.5 s; verification 85–156 ms; key derivation 0.5–1.1 s; verification keys 3,680 bytes | measured (P1, this machine) |
 | Proving, desktop browser | 4.3–9.3 s spend | measured; phone unmeasured |
 | Verification | 61–174 ms in Node, 91–195 ms in the browser | measured |
 | Evidence chain | 32 bytes in the digest; 96 bytes of inputs per later event in a certificate | fixed by the form |
-| Non-membership proof, if retained (A20) | median `32·(log₂N + 1)` bytes: 352, 480 and 576 bytes at 10³, 10⁴ and 10⁵ random nullifiers, at most three siblings more | measured (P3) |
-| Spent-set build, reference trie | 4.4 s, 37 s and 265 s for 10³, 10⁴ and 10⁵ inserts, about 2.7 ms per insert; a proof 3–5 ms | measured (P3); the trie rehashes a 256-long chain per displaced leaf, an implementation cost to remove before replay budgets are set |
-| Release publication | ≈ 15.5 KB and four 3,978-byte chunks without non-membership proofs, ≈ 17 KB and five with them (A20); about 0.006 ERG at the minimum value per byte plus fee | estimated from the offline probe |
+| Non-membership proof, not published (A20) | median `32·(log₂N + 1)` bytes: 352, 480 and 576 bytes at 10³, 10⁴ and 10⁵ random nullifiers, at most three siblings more; the two the release no longer carries are 1,192 bytes at 10⁵ | measured (P3) |
+| Spent-set build, reference trie | about 1.4 ms per insert, from 2.1–2.7 ms, once each frame was built once rather than per hash call; a proof 3–5 ms | measured (P3, re-measured after the frame fix); what remains is the accumulator's price, not the code's — about 430 node hashes per insert, and a bare SHA-256 over the 86-byte node frame costs 2.85 µs on this machine against node:crypto's 2.42 µs, so the hash implementation is not the lever (A22) |
+| Release publication | ≈ 15.5 KB and four 3,978-byte chunks; about 0.006 ERG at the minimum value per byte plus fee. Two non-membership proofs would have added ≈ 1.2 KB and a fifth chunk (A20) | estimated from the offline probe |
 | Demand or request publication | ≈ 15.3 KB and ≈ 15.0 KB, four chunks each | estimated |
 | Acceptance, withdrawal | one box each | estimated |
 | Replayed state per standing demand | about 184 bytes; 32 bytes per spent tag | fixed by the form |
@@ -374,15 +379,22 @@ Each names the rule, the candidate, the alternative, and what closes it.
 - **A1 Evidence chain form.** C2.10.10 writes the chain with `H` and
   `T_EVIDENCE`. Candidate: `SHA256` frames as in §4, two prefix-free contexts.
   Alternative: Poseidon over limbs, useful only if a circuit ever reads the
-  chain, which no rule needs. Closed by the pool-v3 text.
+  chain, which no rule needs. **Decided 2026-09-09** (spec [`64cc529`](https://github.com/mediumofexchange/money-from-first-principles/commit/64cc529)): the
+  candidate. C2.10.10 now writes the chain hash-neutrally and records
+  `SHA256` over frames, two prefix-free contexts binding the position, as
+  pool-v3's form.
 - **A2 The notice is the public inputs.** C3.3's identity is "the hash of
   the notice with the proof's public inputs". Candidate: presenter, instant
   and deadline as public inputs; identity `statementHash`. Alternative: a
   notice hash as one public input, which adds a hash in the circuit and a
-  second identity. Closed by the pool-v3 text.
+  second identity. **Decided 2026-09-09**: the candidate. C3.2 lists the
+  presenter key, the instant and the deadline among the demand's public
+  inputs and C3.3 makes the demand's identity its `statementHash`.
 - **A3 The authorization slot.** Candidate: one variable record field per
   kind, `signatureHash` over it. Alternative: separate fields per signature
-  kind, which adds frames. Closed by the pool-v3 text.
+  kind, which adds frames. The contract now reads `signatureHash` over
+  whatever authorization a kind carries, and the zero digest where it
+  carries none (C2.10.10, 2026-09-09); the record field is pool-v3's.
 - **A4 Six circuits.** Two holding forms and a settle relation cannot share
   one verification key with different public inputs. Closed by P1 on
   2026-09-08: three candidate circuits compile without warnings under the
@@ -392,11 +404,14 @@ Each names the rule, the candidate, the alternative, and what closes it.
   not require `nf_1 ≠ nf_2`; two positions over one note would double the
   quantity and make the demand unsettleable, a manufactured dishonour.
   Candidate: the constraint in-circuit and distinct nonzero tags in the
-  clear. A contract sentence is owed.
+  clear. **Decided 2026-09-09**: both. C3.2 requires distinct nullifiers
+  across the positions and C3.7's door requires distinct nonzero tags.
 - **A6 `rho_out` public.** C3.5 leaves it private. Public, the backer's
   holding is rebuildable from the record and no delivery step exists;
   nothing hidden by C3.5 is revealed, since the settlement is lit and
-  `cm_out` is public. A contract sentence is owed.
+  `cm_out` is public. **Decided 2026-09-09**: `rho_out` is a public input
+  of C3.5, so the backer rebuilds the note's opening from the record alone,
+  with no delivery from the party the settlement is a remedy against.
 - **A7 Lock index at replay.** C3.7 reads a lock at the checkpoint's index
   in replay and at the horizon at the door, so a spend of a locked tag
   admitted between the deadline and the checkpoint's index replays valid.
@@ -404,7 +419,9 @@ Each names the rule, the candidate, the alternative, and what closes it.
   spending a demanded note voids the demand, so the dishonour reading of
   C3.8 should read a spent tag as the holder's void in whichever segment's
   history the spend is witnessed; a spend has no force at the venue. A
-  contract sentence is owed; no supply or finality effect.
+  **Decided 2026-09-09**: C3.8 reads a spent tag as the holder's own void
+  whatever index the spend was admitted at, since only the holder can sign
+  it. No supply or finality effect.
 - **A8 Authenticated range completeness.** C2.10.13's first item has no
   authenticated source on Ergo today ([§6](#6-what-each-read-needs-from-the-record)).
   A withheld box reads as silence or as a repair hole. Closed by P4 and a
@@ -428,7 +445,15 @@ Each names the rule, the candidate, the alternative, and what closes it.
   restoration (F3) must be decided before `pool-v3.md`; this map depends on
   them only through `inputs = 2`, but either moves `configHash`, the domain
   of every note and nullifier, so nothing here is pinned before they are.
-  Closed by their own proposals.
+  **Decided 2026-09-09: `pool-v3.md` waits for both.** The alternative,
+  freezing v3 now and carrying F3 and F4 into a v4, charges every backing a
+  second successor migration across a changed domain, and the domain is
+  every note's and nullifier's; an extensible configuration that could
+  absorb them later is the mutable verifier authority design review F1
+  refused. F3 is the next slice, since restoration may reach the note
+  itself and so should precede an arity measurement; F4 follows. This map's
+  other items were decided first because they are version-independent: they
+  amend the contracts, not the layouts.
 - **A13 Retention and replay cost.** The redemption reader replays the
   closure; the operator retains exact bytes; the holder keeps leaves and
   the spent set. P3's first run: the reference spent set costs about 2.7 ms
@@ -452,7 +477,9 @@ Each names the rule, the candidate, the alternative, and what closes it.
   and may be witnessed at 150. Candidate: only settle and withdraw
   discharge; the deadline expires the lock at the judging index and gates
   the door and the venue; a never-withdrawn demand stays in the record at
-  about 184 bytes. A contract sentence is owed.
+  about 184 bytes. **Decided 2026-09-09**: the candidate. C3.7 discharges a
+  demand only by its settlement or its withdrawal, as Construction §C3
+  already said, and the retention price is recorded in the contract's costs.
 - **A17 The adopted position's index.** A replayer reads an adopted
   statement's locks at the publication's own index (C2b.4.2); the index is
   derived from the venue record, never asserted by the trail. Fixed by the
@@ -463,13 +490,16 @@ Each names the rule, the candidate, the alternative, and what closes it.
   statement's hash, which binds the demand and the segment; a return needs
   a fresh signature, which costs no proof. Alternative: drop the segment
   from kind 5's inputs so identity and authorization coincide, at the price
-  of one admitted kind without a segment binding. A contract sentence is
-  owed.
+  of one admitted kind without a segment binding. **Decided 2026-09-09**:
+  the candidate. C3.6 makes the withdrawal a `withdraw` statement its
+  presenter signs by `statementHash`, and C2b.3.2 requires of it at the
+  venue the same snapshot binding a demand's proof carries.
 - **A19 The acceptance's routing name.** C2b.3.2 lists five kinds each
   naming a backing, but an acceptance carries only its demand, owner and
   deadline (C3.4); it resolves to its demand's backing, and its routing name
-  cannot be checked without the demand. A contract sentence is owed, or
-  the backing enters `acceptanceBytes` at 32 bytes.
+  cannot be checked without the demand. **Decided 2026-09-09**: C2b.3.2
+  reads an acceptance beside the demand it names, rather than paying 32
+  signed bytes for a routing name no reader can use without that demand.
 - **A20 Non-membership proofs in the release.** The snapshot digest binds
   `historyHash_n`, not `spentRoot_n`, and every reader of force replays the
   snapshot's trail for its forest and standing demands (C2b.3.3), so it
@@ -480,13 +510,53 @@ Each names the rule, the candidate, the alternative, and what closes it.
   is then the replayed set. Alternative: keep them and bind `spentRoot_n`
   in the digest at 32 bytes, so a reader holding the digest preimage can
   check that one condition alone. C2b.3.2, C2b.3.3 and C3.6 are amended
-  either way; §3 and §7 give both sizes.
+  either way. **Decided 2026-09-09**: the candidate. No reader decides
+  force without replaying the snapshot for its forest and standing demands,
+  so a published proof restates what its reader already holds; C3.6,
+  C2b.3.2 and C2b.3.3 are amended, pool-v2 §11's forward-looking sentence is
+  corrected without changing a byte of v2, and Construction §C1.2's
+  requirement that the accumulator support non-membership stands. §3 and §7
+  now give one size and the saving.
 - **A21 The request is a bearer object.** It is unsigned (C2b.5.1), so
   anyone can republish it. An exact republication is the same publication,
   read at its first index (C2b.3.2), so a copy should extend no count
   window and only the holder can refresh a tag with a new proof; C2b.5.2
-  does not say so, and a sentence is owed. A count reader deduplicates by
-  publication identity before it counts tags.
+  does not say so. **Decided 2026-09-09**: C2b.5.2 reads a request at the
+  first index a request of its identity was witnessed at naming the backing.
+  Independent review then found that this closed the holder's own renewal
+  too: refreshing by re-proving under a later canonical root is impossible
+  while the operator stalls and admits nothing, which is exactly when the
+  grade must count. C2b.5.1 now frames the request as a statement of its own
+  kind over its own public inputs, with a holder-chosen **refresh value**
+  the proof binds, so only a party that can prove the note mints another
+  identity for one tag; a copy still extends no window, and the count still
+  deduplicates by tag.
+
+- **A22 What shape the spent set should be, now that no proof is published.**
+  With A20 decided, nothing in the pool publishes a spent-set proof: the
+  accumulator's only reader is a replayer that rebuilds it. The reference
+  trie's framing cost is gone (about 1.4 ms per insert, from 2.1–2.7 ms) and
+  what remains is the shape's, not the code's: about 430 node hashes per
+  insert, because a lone key's path at height `h` runs through `h ≈ 239`
+  empty levels, and an insert pays that chain for the key it adds and again
+  for the key it displaces where it displaces one; about a quarter of inserts
+  land in an empty subtree and pay one chain only, which is why the average
+  is near 430 rather than 480, and why it is flat in `N`. The hash
+  implementation is not the lever — a bare `SHA256` of the 86-byte node frame
+  costs 2.85 µs on this machine against `node:crypto`'s 2.42 µs — so
+  10⁵ nullifiers cost about 4·10⁷ hashes to accumulate however it is coded.
+  The amended Construction (§C1.2, invariant 23) requires that absence be
+  *establishable*, and leaves the route to the construction, so the
+  structure is now a v3 layout choice rather than a Construction change,
+  provided it keeps what pool-v2 §§9–11 rely on: a root that is a function
+  of the set alone (so an imported closure inserts in any order, §10) and
+  that is recomputable per statement, since `historyHash_i` binds
+  `spentRoot_i` at every `i`. That last requirement is why a hash over the
+  sorted set is not the answer: it is `O(N)` per statement. Candidate worth
+  pricing against the present tree: an indexed Merkle tree over a sorted
+  linked list in a dense tree of small height, where absence is a
+  neighbouring entry rather than 256 empty levels, at about 32 hashes per
+  insert. Closed by that measurement before `pool-v3.md` pins the layout.
 
 ## 9. Probe plan
 
@@ -548,6 +618,8 @@ identities and public-input orders; the evidence chain and snapshot digest;
 the configuration preimage over the six bytecode and key identities, the
 helper and the bounds, whose hash is the v3 domain; the publication frame
 and bodies; the acceptance, release and withdrawal bytes; the replayed
-state; and the bounds table, after A1–A7, A12 and A16–A20 are decided and
-A4 is measured. The runtime follows the specification, with the model as
+state; and the bounds table. A1–A3, A5–A7 and A16–A21 were decided on
+2026-09-09 in the contracts, and A4 is measured; A12 keeps the layouts
+waiting on the delivery/restoration (F3) and fee-shape (F4) decisions,
+which move `configHash`. The runtime follows the specification, with the model as
 its oracle.

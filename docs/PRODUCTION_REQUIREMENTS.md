@@ -118,8 +118,9 @@ them, including when the issuer, operator and witness collude.
   valid supply total or proof of omission (§C2.4.2). Define retention,
   checkpoints, bootstrap and resynchronization before pruning.
 - **Redemption and recovery:** support demand by `H(nullifier)`, acceptance,
-  holder-authorized release and withdrawal (§C3); snapshot redemption with a
-  spent-set non-membership proof (§C2b.3); replacement and takeover (§C2.5–
+  holder-authorized release and withdrawal (§C3); snapshot redemption, whose
+  readers establish unspentness from the spent set they replay rather than
+  from a published proof (§C2b.3, C2b.3.3); replacement and takeover (§C2.5–
   C2.7). Exercise operator disappearance, censorship, equivocation, data
   withholding, key compromise and authorized succession. State what can be
   prevented, detected and recovered, and the evidence each remedy needs.
