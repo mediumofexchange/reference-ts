@@ -4,8 +4,9 @@ Updated: 2026-09-09
 
 ## Goal
 
-Complete binary-decoder feasibility slice at `f1eeae2` on
-`feat/ergo-decoder-probe`. Acceptance demonstrated: recover all 65 fixture
+Delivered binary-decoder feasibility at `f1eeae2`, with review/limits at
+`ef284ae`, merged and pushed to `main` and `feat/ergo-decoder-probe`.
+Acceptance demonstrated: recover all 65 fixture
 output IDs/fields from 24 signed transactions, retain malformed/canonicality
 counterexamples, and identify resource gaps. The broader bounded-reader gate
 is NOT closed: hard memory containment and node-equivalence evidence remain.
@@ -17,7 +18,8 @@ at `7ea0ee8` is unchanged. Next slice changes to process/node-boundary design.
 - Independent adversarial review of `b110d6b..f1eeae2` found no unresolved
   material findings and reproduced the exact report. Source/package claims
   were independently checked; the opaque-script clarification was accepted.
-  Full checks pass; merge/push is next.
+  Full checks pass; merge/push and remote parity through `ef284ae` verified.
+  Latest handoff CI readback remains; local docs/link checks pass.
 - Clean experiment install and `npm run check:ergo:range` pass. Inherited main
   `b110d6b` passed all CI ([run](https://github.com/mediumofexchange/reference-ts/actions/runs/34394566142)).
   Upstream was fetched; no effective main rules/protection were present or changed.
@@ -51,8 +53,8 @@ at `7ea0ee8` is unchanged. Next slice changes to process/node-boundary design.
 
 ## Next
 
-1. Merge/push the reviewed and verified slice, then read latest CI. Preserve
-   required safeguards.
+1. Read CI for the latest main handoff; local checks and review pass, and
+   implementation delivery is verified. Preserve required safeguards.
 2. Compare OS-contained binary decoding with a local validating-node boundary.
    Acceptance: hard memory/CPU/read budgets demonstrably contain hostile
    depth/count/declared-size inputs; failures remain unresolved evidence;
