@@ -4,10 +4,10 @@ Updated: 2026-09-09
 
 ## Goal
 
-Completed repository presentation cleanup on `docs/repository-presentation`, with
+Completed repository presentation cleanup at `eea69bd` on `main`, with
 companion specification commit `01387a4` on `main`: concise entry points, neutral
 decision records and preserved technical evidence. Website README commit `326a3f6`
-is on `docs/repository-presentation`; merging requires Pages deployment authority.
+is merged/pushed to `main`; its authorized GitHub Pages deployment succeeded.
 The protocol continuation below remains the next implementation task.
 
 Completed portable v3 fault-evidence records on reference
@@ -50,6 +50,7 @@ neither complete-opening state nor an exclusion verdict.
 - Presentation: docs/index checks pass (88 decisions), links across 46 Markdown
   files pass, and 22 cross-repository links resolve against files/pinned Git objects.
   Focused history review preserved uncertainty, review limits and pending statuses.
+  Presentation `eea69bd` passes [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/34385966935).
 - Specification review checked raw-vs-strict framing, empty-field hashes,
   exact 250+fields+96*(n-i) size, context/position checks, external expectations,
   local budgets and the distinction between authentication and exclusion.
@@ -69,7 +70,7 @@ neither complete-opening state nor an exclusion verdict.
 
 ## Next
 
-1. Check CI for the documentation delivery; prior runtime CI is verified above.
+1. Check CI for this handoff update; presentation and runtime CI are verified above.
 2. Define served-trail framing and complete certificate dependency evidence,
    then complete-opening verification. Name companion branches first.
    Acceptance: a signed directory authenticates a complete bounded opening,
@@ -93,6 +94,6 @@ neither complete-opening state nor an exclusion verdict.
   setup/build provenance, phone budgets and publication remain gates.
 - Larger malformed target fields and faults requiring capsule or other
   omitted dependency evidence are outside this record's coverage. Resource
-  failure is never exclusion. No release, deployment, access change or funds
-  authorized. Existing probes/caches remain; no new dependency trees or
+  failure is never exclusion. Protocol deployment, releases, access changes and
+  funds remain unauthorized. Existing probes/caches remain; no new dependency trees or
   disposable repository copies were created.
