@@ -4,69 +4,66 @@ Updated: 2026-09-09
 
 ## Goal
 
-Next A22: select a set-determined spent-set shape before v3 freezes its roots.
-Acceptance: compare the current trie with a canonical compressed sparse/radix
-candidate; identical roots across insertion/import orders, efficient updates
-per statement, hostile key/boundary cases, measured replay cost, independent
-review, specification committed before dependent code, checks and delivery.
-Do not use an insertion-ordered indexed tree or a full sorted-set hash that
-costs O(N) at every statement. Preserve the pinned v2 representation.
+Next: resolve C3 presentment attribution before the final v3 layouts,
+circuit identities and configuration domain. Acceptance: reconcile signed
+attributable Construction presentment with the pool's unsigned demand and
+fresh presenter key; independently review the smallest choice, commit its
+specification before dependent code, update affected evidence and deliver.
 
 ## Status
 
-- F4 is reviewed and verified on `feat/pool-fee-shape` (base `17a9f1e`),
-  for integration into main. The latest F4 commit carries the retained probe,
-  source-pinned report and Linux/Windows CI integration.
-- Companion `spec/pool-fee-shape` is merged/pushed to main at `37cbd40`;
-  normative selection and review preceded retained probe code.
-- F4 selects two inputs/four ordinary outputs. Payment/change in A and
-  fee/change in B fit one statement; same-backing or sponsored flows pad
-  unused positions with distinct payer-owned zero notes and F3 capsules.
-- No fee kind, privileged debit or protocol price schedule. Exact retry,
-  local pending roots, finality, lapse and recovery treat fees ordinarily.
-  A fee quote cannot change public validity, counted requests or remedies.
-- F3 is merged at `17a9f1e`: receiver-prepared exact outputs, 89-byte capsules
-  and two public digest limbs. Notes and nullifiers stay unchanged.
+- A22 is reviewed and verified in the commit carrying this handoff, from
+  `feat/pool-spent-radix` (base `fcf532c`), for integration into main.
+  Companion `spec/pool-spent-radix` is merged/pushed to main
+  at `78f8a8c`, after independent normative review and before retained code.
+- Selected canonical compressed binary roots: full-key leaves, absolute
+  first-differing-bit branches, no unary nodes or insertion-assigned positions.
+  Same validated set means same root; each insert hashes at most one leaf
+  plus 256 branches. Non-membership capability remains; no published proof
+  encoding/parser is selected. See the
+  [decision](decisions/2026-09.md#2026-09-09--spent-roots-use-a-canonical-compressed-binary-tree).
+- `scripts/pool/spent-set/` retains the candidate and independent batch
+  oracle outside the runtime. `check:pool:spent` is in the ordinary check/CI;
+  `bench:pool:spent` regenerates the pinned-source comparison in scratch.
 - Runtime remains v2, refuses silence clauses and exports no pool wallet.
-  No pinned v2 circuit, configuration or key changes in this candidate slice.
+  No pinned v2 root, circuit, configuration, key or runtime source changes.
+- F4 is merged/pushed at `fcf532c`, with exact-revision GitHub CI success;
+  companion specification `37cbd40`. F3 is merged at `17a9f1e`.
 
 ## Evidence
 
-- F4 `npm run check:pool:fees` passes: 17 positive checks, 35 rejections,
-  five verified proofs, all 14,656 bytes. The
-  [report](docs/pool-fees-verification.json) pins the retained source hashes.
-  Selected fee/change: 4.22 s proving, 92 ms verification on this desktop.
-- Gates: v2 19,034; F3 2x2 19,050; 2x3 19,256; selected 2x4 19,465.
-  All use subgroup 32,768. Four adds 209 gates and 121 record bytes over
-  three, plus one leaf/scan trial on every spend, including padding.
-- Independent adversarial review resolved pending-fee semantics, fee-payee
-  privacy, unpaid requests and isolated extra-output/range witnesses.
-- Final `npm run check` passes: 90 files / 1,686 tests, package, pilot and
-  store crashes. Final retained sources/report passed independent readback.
-  F3: 22 host checks and real digest binding; 153 v2 checks / 24 real proofs.
-  GitHub Actions supplies the exact delivery revision's CI result.
+- Ten A22 check groups pass: independent prefix roots, permutations/import
+  grouping, all bit positions and worst-depth keys, absent-key paths, field
+  boundaries, duplicates, malformed arrays and aliasing. Full statement/import
+  validation and atomic updates remain v3 integration obligations.
+- Final 100k-key replay: v2 157.29 s, candidate 15.80 s, 9.96x;
+  1,649,737 candidate hashes (16.50/insert). Both read root after every insert.
+  [Report](docs/pool-spent-verification.json) pins the retained sources.
+  Independent final readback verified report equality, source pins and
+  arithmetic; no unresolved material finding remains.
+- Final `npm run check` passes: 90 files / 1,686 tests, package, pilot,
+  pool-store crashes and ten A22 groups. Initial sandbox Vitest loading was
+  blocked; the complete check passed with the required filesystem access.
+  Cross-repository links and final documentation checks pass.
+  Unchanged v2/F3/F4 real-proof evidence is retained; no circuit/config changes.
 
 ## Next
 
-1. Take A22 from the
-   [recovery map](docs/POOL_V3_RECOVERY_MAP.md#8-unresolved-assumptions-and-choices).
-   Compare shapes against set-determined roots and per-statement updates;
-   record reproducible measurements rather than optimizing hash code again.
-2. Resolve signed-attributable C3 presentment wording versus unsigned pool
-   demand/fresh presenter key, then close v3 layouts/circuit identities.
+1. Verify main delivery/remote parity and GitHub CI for the A22 revision.
+2. Resolve signed-attributable Construction C3 presentment versus unsigned
+   pool demand/fresh presenter key, then close v3 layouts/circuit identities.
 3. Build the v3 runtime/recovery path and pool wallet against those contracts.
 
 ## Open questions
 
 - About 44% done / 56% remaining, plausible done range 34–54%. Largest work:
   v3 circuits/runtime, wallet/transport, authenticated complete-range reads,
-  witness publication, custody and deployment assurance.
+  witness publication, custody and deployment assurance. A22 is accumulator
+  feasibility, not an end-to-end replay or device-budget result.
 - A8: no selected authenticated complete-range source for Ergo. Missing full
   evidence is unresolved, never zero balance or an older current state.
-- A22: spent roots must remain set-determined and recomputable per statement.
 - Fee payees learn their opening/statement association; same-backing fees
-  reveal payment backing. Sponsored service avoids direct-fee disclosure.
-  Private pricing cannot cure unpaid counted-request grief.
+  reveal payment backing. Private prices cannot cure unpaid counted requests.
 - Copied journals, rollback, same-index venue order, setup/build provenance,
   phone budgets and real publication acceptance remain release gates.
 - Retain existing Ergo/pool-v3 probes and parameter caches. No release,

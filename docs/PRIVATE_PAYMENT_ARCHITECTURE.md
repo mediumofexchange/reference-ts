@@ -45,6 +45,7 @@ Production still needs authenticated complete interval retrieval.
 
 | Material | Why it remains | Remove when |
 |---|---|---|
+| `scripts/pool/spent-set/` | A22's selected compressed-root candidate, independent oracle and measured per-insert replay cost; v2 remains fixed. | v3 runtime implements the selected roots with atomic statement/import validation and takes over these cases and measurements. |
 | Transparent `ledger.ts`, `oplog.ts`, `messages.ts`, `sequencer.ts`, presentation/recovery/replacement/fault modules and tests | Frozen profile, differential oracle and adversarial case library. | Corresponding pool rules pass the ported cases. Never port the retired exhibit walk or signed opening claim. |
 | `pilot-store.ts`, `pilot-http.ts`, `pilot-wire.ts`, pilot CLI | Durable-command pattern and process integration harness on the frozen path. [Pilot guide](PILOT.md). | A pool equivalent covers its integration behavior; retain useful persistence patterns. |
 | `experiments/private-payment/` | Frozen research fixture. Core circuit/admission and most journal cases are now covered by the pool. It still exercises receiver acceptance, accept-once invoice persistence, private-opening checks and a separate public-only audit process with real proofs. | Receiver/wallet and independent-audit boundaries, including their crash/retry cases, move to the pool path. Then remove the duplicate host/journal/circuit framework, preserving useful results and vectors. |

@@ -225,6 +225,45 @@ It does not implement v3 admission, a quote transport, durable wallet pricing,
 public-history authentication or actual publication. Those are integration
 and deployment gates, not consequences of choosing an arity.
 
+## Spent-set replay
+
+A22 selects [the successor spent-root contract](https://github.com/mediumofexchange/money-from-first-principles/blob/78f8a8c/pool-spent.md):
+a canonical compressed binary tree with full-key leaves and absolute split
+positions. `scripts/pool/spent-set/` retains the candidate and an independent
+batch oracle; no runtime v2 code, root, proof or configuration changes.
+`npm run check:pool:spent` is included in `npm run check`, so Linux Node 20/24
+and Windows Node 24 CI exercise the deterministic checks.
+
+Ten check groups cover empty/singleton frames, all 120 insertion orders of a
+five-key boundary set, every prefix under four orders, every split position
+and a hostile 256-branch path, skipped prefixes, field boundaries,
+non-membership capability, imported-set grouping, duplicates, malformed
+typed arrays and input/output aliasing. Imported event/conflict validation
+and atomic multi-nullifier statement updates remain runtime obligations;
+the probe only accumulates an already validated set. The path algebra proves
+the retained non-membership capability, without selecting a published proof
+format or parser.
+
+Run `npm run bench:pool:spent` to regenerate
+`scratch/pool-spent-set/report.json`. The
+[recorded report](pool-spent-verification.json) pins the specification and
+LF-normalized source hashes, environment and deterministic roots. Both shapes
+use the same SHA-256 library, and the harness reads the root after **every
+insert**, including v2's lazy singleton hashing. Sizes are 128, 1,024, 8,192
+and 100,000 keys, with one measured run after a 128-key warmup; a reversed
+candidate replay checks the final root at every size. No timing threshold
+determines a pass. This measures accumulator replay, excluding proof checks,
+history bytes, import validation and transport; it is not end-to-end replay,
+memory-in-bytes, mobile or deployment evidence.
+
+The retained 100,000-key comparison took 157.29 s for v2 and 15.80 s
+for the candidate (9.96×), with 1,649,737 candidate hashes, or 16.50 per
+insert. Reverse candidate replay took 10.14 s; timings vary with the
+machine and load. An insertion needs at most one leaf hash and 256 branch
+hashes even for hostile keys, while uniform-key path lengths are approximately
+logarithmic. The selected representation stores N leaves and N−1 branches
+for N > 0. This closes the A22 shape decision, not v3 runtime integration.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` contains nine cases using the existing

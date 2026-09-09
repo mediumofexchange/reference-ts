@@ -488,7 +488,7 @@ Each names the rule, the candidate, the alternative, and what closes it.
   the measured price. Sponsored service remains available; a fee recipient
   learns its own opening/statement association and may infer other backings
   from the flow/scope. Prices cannot alter non-service counts or public
-  remedies. F3/F4 no longer block the bound choice; A22 and remaining
+  remedies. F3/F4 and A22 no longer block the bound choice; remaining
   evidence/layout obligations still precede the final configuration.
 - **A13 Retention and replay cost.** The redemption reader replays the
   closure; the operator retains exact bytes; the holder keeps leaves and
@@ -568,31 +568,21 @@ Each names the rule, the candidate, the alternative, and what closes it.
   identity for one tag; a copy still extends no window, and the count still
   deduplicates by tag.
 
-- **A22 What shape the spent set should be, now that no proof is published.**
-  With A20 decided, nothing in the pool publishes a spent-set proof: the
-  accumulator's only reader is a replayer that rebuilds it. The reference
-  trie's framing cost is gone (about 1.4 ms per insert, from 2.1–2.7 ms) and
-  what remains is the shape's, not the code's: about 430 node hashes per
-  insert, because a lone key's path at height `h` runs through `h ≈ 239`
-  empty levels, and an insert pays that chain for the key it adds and again
-  for the key it displaces where it displaces one; about a quarter of inserts
-  land in an empty subtree and pay one chain only, which is why the average
-  is near 430 rather than 480, and why it is flat in `N`. The hash
-  implementation is not the lever — a bare `SHA256` of the 86-byte node frame
-  costs 2.85 µs on this machine against `node:crypto`'s 2.42 µs — so
-  10⁵ nullifiers cost about 4·10⁷ hashes to accumulate however it is coded.
-  The amended Construction (§C1.2, invariant 23) requires that absence be
-  *establishable*, and leaves the route to the construction, so the
-  structure is now a v3 layout choice rather than a Construction change,
-  provided it keeps what pool-v2 §§9–11 rely on: a root that is a function
-  of the set alone (so an imported closure inserts in any order, §10) and
-  that is recomputable per statement, since `historyHash_i` binds
-  `spentRoot_i` at every `i`. That last requirement is why a hash over the
-  sorted set is not the answer: it is `O(N)` per statement. Candidate worth
-  pricing against the present tree: an indexed Merkle tree over a sorted
-  linked list in a dense tree of small height, where absence is a
-  neighbouring entry rather than 256 empty levels, at about 32 hashes per
-  insert. Closed by that measurement before `pool-v3.md` pins the layout.
+- **A22 The successor uses a canonical compressed binary spent tree.**
+  **Decided 2026-09-09:** [pool-spent C1.2.8–9](https://github.com/mediumofexchange/money-from-first-principles/blob/78f8a8c/pool-spent.md)
+  selects full-key singleton leaves, a separate empty hash and branches at
+  the subtree's absolute first differing bit, hashing its u16be position and
+  ordered child roots. No unary nodes or insertion-assigned positions occur.
+  The shape is determined by the set and updates along at most 256 branches;
+  it preserves per-statement roots and imported-closure order independence.
+  Invariant 23's non-membership capability survives via an authenticated path
+  to an unequal terminal key, although A20 publishes no proof. No new proof
+  bytes/parser are selected. Indexed trees whose positions follow insertion
+  order fail the imported-set requirement; full sorted-set hashing costs
+  O(N) per statement. The [retained comparison](POOL_DEPLOYMENT_PROBES.md#spent-set-replay)
+  checks a separate batch definition, hostile keys and 100,000-key replay.
+  V2's 256-high sparse root remains pinned; `pool-v3.md` must adopt this
+  successor contract with final configuration and statement layouts.
 
 ## 9. Probe plan
 
@@ -657,6 +647,6 @@ and bodies; the acceptance, release and withdrawal bytes; the replayed
 state; and the bounds table. A1–A3, A5–A7 and A16–A21 were decided on
 2026-09-09 in the contracts, and A4 is measured. A12's requirement to settle
 F3/F4 together is satisfied: delivery changes three relations, and
-spend has two inputs/four outputs. Remaining choices, including A22, still
-precede the final `configHash`. The runtime follows the specification, with
-the model as its oracle.
+spend has two inputs/four outputs. A22 selects compressed spent roots.
+Remaining choices still precede the final `configHash`. The runtime follows
+the specification, with the model as its oracle.

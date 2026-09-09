@@ -70,6 +70,10 @@ seed-encrypted capsules, fresh-process recovery over synthetic public data,
 and real proof binding. `npm run check:pool:fees` compares the successor
 [transfer shapes and ordinary fees](docs/POOL_DEPLOYMENT_PROBES.md#transfer-shape-and-ordinary-fees)
 with real proofs. These probes do not implement a pool wallet or v3 finality.
+`npm run check:pool:spent` verifies the successor's
+[canonical compressed spent-set candidate](docs/POOL_DEPLOYMENT_PROBES.md#spent-set-replay)
+against independent batch roots and hostile keys; `npm run bench:pool:spent`
+compares per-insert replay cost with pinned v2. It is outside the runtime.
 
 The runtime follows specification revision
 [`3676757a1c8ddc0df607352c6bddbb48f6d85a09`](https://github.com/mediumofexchange/money-from-first-principles/tree/3676757a1c8ddc0df607352c6bddbb48f6d85a09),
