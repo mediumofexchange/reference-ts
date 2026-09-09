@@ -14,10 +14,10 @@ trace through wallet, operator, backer, venue and stranger; the record range
 and retention each read needs; the resource assumptions; and the choices
 that are still open, each with the probe or decision that closes it.
 
-The [v3 layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md)
+The [v3 layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/061f87e/pool-v3.md)
 fix the six relations, public-input orders and canonical statement,
 authorization, publication, snapshot and receipt records, plus history and
-evidence recurrences. Other layouts here remain
+evidence recurrences, plus segment headers. Other layouts here remain
 **candidates**: the specification fixes the remaining bytes after the choices
 in [§8](#8-unresolved-assumptions-and-choices) are decided and reviewed, and the
 runtime follows the specification. No v3 configuration or adoption is defined.
@@ -48,6 +48,13 @@ fields and the proof system are carried over. A22 replaces the spent-set
 root construction. The header gains no field: one duration per scope is read from
 the scoped backings' terms, and the adoption index is a function of the
 record (C2b.3.1).
+
+The [header bytes are fixed by v3 §8](https://github.com/mediumofexchange/money-from-first-principles/blob/061f87e/pool-v3.md#8-segment-headers):
+127 prefix bytes plus 136 per entry, at most 8,913,023 bytes. Retained codec
+`model/pool-v3-headers.ts` bounds count and exact size before reading entries,
+preserves the sole empty sentinel and independent operator counters, and
+rejects unordered scopes. Its tests bind identity through a real signed
+directory without claiming complete opening state or a device budget.
 
 ## 2. Statements
 
@@ -769,7 +776,7 @@ the evidence each party holds at each step, and every open item above has an own
 probe or decision. `pool-v3.md` now fixes the six proof relations and input
 orders; statement records and authorization slots; publication bodies and
 acceptance/release/withdrawal bytes; and history/evidence/snapshot/receipt
-frames. Remaining prerequisites are segment headers, served-trail and fault
+frames and segment headers. Remaining prerequisites are served-trail and fault
 certificate frames, replay/import/adoption state and order, final artifact
 identities, and the configuration preimage over those identities, the helper
 and bounds, whose hash becomes the v3 domain. A1–A3, A5–A7 and A16–A21 were decided on

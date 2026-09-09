@@ -4,75 +4,71 @@ Updated: 2026-09-09
 
 ## Goal
 
-Next: define bounded complete-opening and fault-evidence formats using the
-reviewed v3 commitments. The completed slice used reference
-`feat/pool-v3-commitments` and companion `spec/pool-v3-commitments`.
-Acceptance demonstrated: committed failing evidence authenticates but replica
-substitutions do not; proof variants preserve history but change evidence and
-snapshots; adopted withdrawals retain original evidence at new positions.
-Final configuration and runtime adoption remain later.
+Deliver canonical v3 segment headers, the first dependency of bounded
+complete-opening evidence. Branches: reference `feat/pool-v3-segment-headers`,
+companion `spec/pool-v3-segment-headers`. Acceptance: independent byte/hash
+vectors bind domain, venue, operator, first sequence, ordered scope and exact
+opening references; strict bounded decoding rejects malformed inputs and owns
+buffers; substituted headers cannot authenticate through a signed directory.
+No complete-opening, replay, finality or adoption result is claimed.
 
 ## Status
 
-- Implementation `f474ce5` passed all seven CI jobs; the final follow-up
-  updates only this handoff and the recovery map. Delivery target is `main`.
-  Specification `4a58fdc` is merged/pushed to `main`. It fixes pool-v3 §7
-  frames and suffix authentication, committed before dependent code.
-  No adopted configuration is defined.
-- `model/pool-v3-commitments.ts` implements history/evidence chains,
-  snapshots, evidence suffix openings and signed receipts outside `src/`.
-  `hashEvidenceFields` hashes actual malformed proof/authorization bytes
-  separately from strict record validation. Missing fields never become empty.
-- Normative review clarified malformed-length evidence vs strict decoding;
-  independent readback cleared the correction. Fresh implementation review
-  found no material issues and independently passed 59 focused tests.
-  A narrow readback cleared the final signed-withdrawal adoption fixture.
-- Authentication is separate from replay validity, inclusion and finality.
-  Callers must authenticate the expected directory/context and match target
-  hashes to actual bytes. Header/trail/certificate formats remain undefined.
+- Specification `061f87e` is reviewed, committed before code, merged/pushed
+  to `main` with clean status and remote parity. It fixes pool-v3 §8's header
+  fields under the new context without changing v2 or adding derived fields.
+- `model/pool-v3-headers.ts` implements the codec outside the runtime. Count
+  and exact byte length are checked before entries; structural validation
+  checks ordered unique scopes, the sole empty sentinel and same-operator
+  predecessor sequences. Other operators' counters remain independent.
+- Maximum header is 8,913,023 bytes for 65,536 entries; encoding uses a
+  preallocated byte buffer. This format bound is not a proven device budget.
+- Fresh normative and implementation reviews found no material issues.
+  Implementation reviewer independently passed all 17 focused tests; its
+  documentation correction distinguishes framing checks from entry validation.
+- Full project checks pass. Implementation delivery remains pending.
+  Current upstream main `b824f41` has all seven CI jobs passing.
 - Runtime remains v2, refuses silence clauses and exports no pool wallet.
-  Move retained v3 codecs and cases into one runtime when its final pins land.
-- Prior slices: canonical records `5c1a246` / spec `ca727f6`; six proof
-  relations `21f6843` / spec `d57ddb0`. Sources in `scripts/pool/v3/` remain
-  conformance evidence, with observed artifact hashes not approved pins.
-- Decision: [exact event evidence](decisions/2026-09.md#2026-09-09--bind-successor-snapshots-and-receipts-to-exact-event-evidence).
-  Remaining adoption work: [recovery map](docs/POOL_V3_RECOVERY_MAP.md).
+  Header key bytes are structural data: strict signatures and record context
+  still establish authentication. Missing opening evidence stays unresolved.
+- Decision: [reuse header fields](decisions/2026-09.md#2026-09-09--reuse-the-segment-header-fields-for-v3).
+  Integration order and remaining assumptions: [recovery map](docs/POOL_V3_RECOVERY_MAP.md).
 
 ## Evidence
 
-- Full `npm run check` passes: 93 files / 1,758 tests, typecheck, build,
-  installed-package consumer, pilot, store crash probes and ten spent-set
-  groups. Final fixture-only refinement passes all 59 focused tests again.
-- Byte tests use independent Buffer/node:crypto frames, real strict Ed25519,
-  committed bad authorization vs replica substitution, all truncations,
-  range/overflow/seed/suffix tampering and mutable-buffer ownership checks.
-  Proof bytes, roots and domains are synthetic; no valid state is claimed.
-- [CI run 34360944245](https://github.com/mediumofexchange/reference-ts/actions/runs/34360944245)
-  passes all seven jobs at `f474ce5`: Node 20/24 Linux and Node 24 Windows
-  checks, both platforms' v3 proofs and unchanged v2/delivery/fee proofs.
-  Final documentation checks pass. Main's automatic rerun after the
-  documentation follow-up is separate from this verified code evidence.
-- Unchanged real-proof evidence: `check:pool:v3` previously passed 304 checks /
-  18 real proofs of 14,656 bytes, all 81 public scalars, key substitution,
-  ABI-bypass ranges and hostile reproof controls. [Report](docs/pool-v3-conformance-verification.json).
-  This slice changes no circuit, proof relation, key or configuration.
-- Specification link/diff checks pass. No current specification workflow exists.
+- Focused suite: 17 tests pass; typecheck passes. Independent Buffer/SHA256
+  vectors, v2 separation, every truncation, count/length prechecks, maximum
+  scope, sentinel/order/counter/range cases, sparse/malformed objects,
+  Buffer ownership and real signed-directory substitution are covered.
+- Full `npm run check` passes: 94 files / 1,775 tests, typecheck, build,
+  installed-package consumer, pilot, pool-store crash probes and ten spent-set
+  groups. Final documentation and cross-repository link checks pass.
+- Specification links and whitespace checks pass. Both repositories report
+  no main branch protection or effective rules; no safeguards were changed.
+- Proof relations, circuits, keys and configuration are unchanged. Existing
+  v3 real-proof evidence remains 304 checks / 18 proofs of 14,656 bytes,
+  all 81 public scalars and hostile reproof controls. [Report](docs/pool-v3-conformance-verification.json).
+  These are synthetic-domain observations, not approved configuration pins.
 
 ## Next
 
-1. Define segment headers, served-trail and fault-certificate framing, then
-   replay/import/adoption order and final configuration/artifact pins in
-   `pool-v3.md`. Name companion branches before coordinated changes. First
-   acceptance: a signed directory authenticates a complete bounded opening,
-   while missing dependencies remain unresolved and substitutions fail.
-2. Implement the single v3 runtime/recovery path and wallet after final pins;
+1. Finish implementation commit and authorized delivery;
+   verify remote parity and distinguish the new CI run from prior evidence.
+2. Define served-trail and fault-certificate framing, including exact invalid
+   evidence and dependency references, then complete-opening verification.
+   Name companion branches before coordinated changes. Acceptance: a signed
+   directory authenticates a complete bounded opening, missing dependencies
+   remain unresolved, and substitutions fail. Header conformance alone does
+   not fulfill this acceptance.
+3. Fix replay/import/adoption order and final configuration/artifact pins in
+   `pool-v3.md`, then implement one v3 runtime/recovery path and wallet;
    repeat the six real-proof relations on the final configuration domain.
 
 ## Open questions
 
-- About 45% done / 55% remaining, plausible done range 35–55%. These frames
+- About 45% done / 55% remaining, plausible done range 35–55%. Header formats
   reduce integration work but close no runtime/product gate. Largest work:
-  final configuration/evidence/replay formats, v3 runtime, wallet/transport,
+  complete evidence/replay/configuration, v3 runtime, wallet/transport,
   authenticated complete-range reads, witness publication and custody assurance.
 - A8: no selected authenticated complete-range Ergo source. Missing required
   evidence remains unresolved, never zero balance or an older current state.
@@ -80,7 +76,7 @@ Final configuration and runtime adoption remain later.
   proof or presenter participation. Parsing does not establish authority,
   demand standing or force. Copied journals, rollback, same-index venue order,
   setup/build provenance, phone budgets and publication remain gates.
-- Real holders can make dishonest in-kind allegations; public outcomes do not
-  prove external non-payment. No release, deployment, access change or funds
-  authorized. Retain existing Ergo/v3 probes and parameter caches; no new
-  disposable repository copies or dependency trees were created in this slice.
+- Real holders can make dishonest in-kind allegations; public outcomes do
+  not prove external non-payment. No release, deployment, access change or
+  funds authorized. Existing probes and parameter caches remain; this slice
+  creates no disposable repository copies or dependency trees.

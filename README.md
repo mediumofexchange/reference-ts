@@ -84,6 +84,10 @@ v3 configuration, finality and adoption remain undefined.
 snapshot and receipt frames from [pool-v3 §7](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md#7-history-evidence-snapshots-and-receipts).
 Its tests distinguish authenticated failing evidence from substituted bytes
 using real signatures. Authentication alone supplies no checkpoint verdict.
+`model/pool-v3-headers.ts` implements [v3 segment headers](https://github.com/mediumofexchange/money-from-first-principles/blob/061f87e/pool-v3.md#8-segment-headers)
+with canonical scope/opening references and bounded strict decoding. Its
+signed-directory and hostile-byte tests establish header conformance; complete
+opening evidence, trail/certificate formats and runtime adoption remain open.
 
 The runtime follows specification revision
 [`3676757a1c8ddc0df607352c6bddbb48f6d85a09`](https://github.com/mediumofexchange/money-from-first-principles/tree/3676757a1c8ddc0df607352c6bddbb48f6d85a09),
