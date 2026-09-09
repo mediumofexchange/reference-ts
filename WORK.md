@@ -4,68 +4,62 @@ Updated: 2026-09-09
 
 ## Goal
 
-Active slice: evaluate a pinned full binary transaction decoder on
-`feat/ergo-decoder-probe`. Acceptance: recover all 65 fixture output IDs and
-committed fields from 24 signed transactions, retain malformed/canonicality
-counterexamples, and identify explicit resource limits and remaining gaps.
-No runtime API or venue-profile change. Independent parser review is required
-before delivery; companion specification `main` at `7ea0ee8` stays unchanged.
-Latest inherited main `b110d6b` CI passed (run `34394566142`); fetch is current.
-
-Delivered full-block Ergo transaction-root feasibility at `42f80a2`, merged
-and pushed to `main` and `feat/ergo-block-commitment-probe` with remote parity.
-Acceptance: retained real
-block fixtures reproduce transaction IDs and version-specific witness roots;
-omissions, reordering and committed-field mutations fail. Pin upstream algorithms and capture
-parser limitations before choosing an authenticated complete-range reader.
-This is source feasibility evidence, not a new venue profile or runtime API;
-header consensus, finality and untrusted transaction parsing remain gates.
-Companion specification main `7ea0ee8` is unchanged in this experimental slice.
+Complete binary-decoder feasibility slice at `f1eeae2` on
+`feat/ergo-decoder-probe`. Acceptance demonstrated: recover all 65 fixture
+output IDs/fields from 24 signed transactions, retain malformed/canonicality
+counterexamples, and identify resource gaps. The broader bounded-reader gate
+is NOT closed: hard memory containment and node-equivalence evidence remain.
+No runtime API or venue-profile change; companion specification `main`
+at `7ea0ee8` is unchanged. Next slice changes to process/node-boundary design.
 
 ## Status
 
-- Independent adversarial review found no unresolved material findings and
-  reproduced the exact retained report. Full project checks and a clean
-  experiment install pass. Implementation is merged/pushed; latest main CI
-  readback remains. No effective main rules/protection were present or changed.
-- Independent dependency review places authenticated range-source feasibility
-  (A8/A9) before replay/configuration and certificate packaging. Raw outputs
-  cannot acquire held-commitment status or publication force from root checks.
-- Decision: [range source before packaging](decisions/2026-09.md#2026-09-09--check-the-range-source-before-certificate-packaging).
-  Integration order: [recovery map](docs/POOL_V3_RECOVERY_MAP.md).
-- Prior served-trail implementation `8833e07` and specification `7ea0ee8`
-  are merged/pushed. Main handoff `a9fb874` passes all seven
-  [CI jobs](https://github.com/mediumofexchange/reference-ts/actions/runs/34390115096).
+- Independent adversarial review of `b110d6b..f1eeae2` found no unresolved
+  material findings and reproduced the exact report. Source/package claims
+  were independently checked; the opaque-script clarification was accepted.
+  Full checks pass; merge/push is next.
+- Clean experiment install and `npm run check:ergo:range` pass. Inherited main
+  `b110d6b` passed all CI ([run](https://github.com/mediumofexchange/reference-ts/actions/runs/34394566142)).
+  Upstream was fetched; no effective main rules/protection were present or changed.
+- The [range-source-before-packaging decision](decisions/2026-09.md#2026-09-09--check-the-range-source-before-certificate-packaging)
+  still applies. [Recovery map](docs/POOL_V3_RECOVERY_MAP.md) owns integration order.
 - Runtime remains v2, refuses silence clauses and exports no pool wallet.
   Complete certificate dependencies, configuration and adoption remain open.
 
 ## Evidence
 
-- `npm run check:ergo:range`: 342 assertions; all 24 transaction IDs and
-  three roots match pinned fixtures, covering 65 outputs and versions 1/3/3.
-  Raw fixture JSON: 138,228 bytes; signed transactions: 14,450 bytes.
-  [Report](docs/ergo-range-verification.json) records source and input hashes.
-- Fleet 0.11.0 decodes 11/24 transactions; all three blocks contain valid
-  scripts it cannot parse. JSON field-boundary aliases preserve transaction
-  bytes while changing claimed output fields. Short reads can pass EOF.
-  The probe decodes only hash-pinned fixtures and is not an untrusted API.
-- Baseline: Ergo v6.1.5, sigma-state v6.0.6, scrypto v3.1.1 and exact Fleet
-  source revisions; matches the existing publication probe's node baseline.
-- Current full `npm run check`: 96 files / 1,795 tests plus typecheck, build,
-  installed-package consumer, pilot, crash probes and ten spent-set groups.
-  The sandbox run failed at esbuild's parent-directory read; the unchanged
-  approved run outside the sandbox passed. Final docs and links also pass.
-- Existing v3 real-proof evidence remains 304 checks / 18 proofs of 14,656
-  bytes, all 81 public scalars and hostile controls. [Report](docs/pool-v3-conformance-verification.json).
-  These are synthetic-domain observations, not approved configuration pins.
+- [Decoder report](docs/ergo-decoder-verification.json): 14,874 assertions,
+  24 transactions / 65 outputs fully recovered by `ergo-lib-wasm-nodejs@0.28.0`.
+  All 14,450 proper prefixes reject. Raw parser accepts trailing bytes and
+  nonminimal input counts in all 24 transactions; exact round trips reject both.
+  All 65 script/height aliases recover original committed fields from bytes.
+- [Source analysis](docs/POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility):
+  pinned sigma-rust allocates a declared u32 script size before reading it,
+  without a local cap. Source evidence only; exhaustion was not executed.
+  Experimental limits: 256 KiB fixture, 64 KiB transaction, 30-second corpus
+  process deadline, 1 MiB output. No hard process/WASM memory bound.
+- Existing [block-root report](docs/ergo-range-verification.json): 342 checks,
+  all three roots/24 transaction IDs match. 138,228 raw JSON bytes and 14,450
+  signed transaction bytes. Fleet decodes only 11/24; sigma-rust closes that
+  observed coverage gap. Fixtures and upstream/package sources are pinned.
+- Required full `npm run check` initially failed at esbuild's sandboxed
+  parent-directory read; the unchanged authorized outside-sandbox run passed:
+  96 files / 1,795 tests, build, package consumer, pilot, crash probes and ten
+  spent-set groups. Docs/links and clean-install offline checks pass. No circuits/config changed;
+  prior [v3 proof report](docs/pool-v3-conformance-verification.json) remains
+  304 checks / 18 proofs, synthetic domain only.
 
 ## Next
 
-1. Read CI for the latest main handoff. Implementation local checks pass and
-   remote parity is verified; the handoff's docs-only check also passes.
-2. Evaluate a pinned maintained full transaction decoder or local validating
-   node boundary. Acceptance: all fixture outputs reproduce their IDs; hostile
-   bytes cannot yield substituted fields or exceed explicit reader budgets.
+1. Merge/push the reviewed and verified slice, then read latest CI. Preserve
+   required safeguards.
+2. Compare OS-contained binary decoding with a local validating-node boundary.
+   Acceptance: hard memory/CPU/read budgets demonstrably contain hostile
+   depth/count/declared-size inputs; failures remain unresolved evidence;
+   selected-node valid transaction coverage and canonicality policy are explicit.
+   Use isolated disposable probes, never an unrestricted allocation stress run.
+   This is a new security/design slice suitable for a fresh primary instance;
+   independent adversarial review is required before adopting a runtime boundary.
 3. Build authenticated contiguous-range reads and stable publication order,
    then replay/import/adoption, complete openings and certificate dependencies.
    Missing or unsupported evidence remains unresolved.
@@ -75,17 +69,17 @@ Companion specification main `7ea0ee8` is unchanged in this experimental slice.
 
 ## Open questions
 
-- About 45% done / 55% remaining, plausible done range 35–55%. The source
-  experiment reduces uncertainty but closes no runtime/product gate. Largest
-  blocks: complete evidence/replay/configuration, v3 runtime, wallet/transport,
-  authenticated complete-range reads, witness publication and custody assurance.
-- A8/A9 remain open: fixtures are noncontiguous and their headers were not
-  independently authenticated. Version 1 roots do not authenticate witnesses.
-  Raw output discovery supplies no held commitment or publication force.
-- Proof rejection is backend evidence, not general nonmalleability or presenter
-  participation. Rollback, finality, setup/build provenance, phone budgets and
-  publication remain gates. Resource failure is never exclusion.
-- Protocol deployment, releases, access changes and funds remain unauthorized.
-  The private experiment has a separate pinned install; no root dependency
-  tree or disposable repository copies are added. This slice's scratch source
-  downloads and duplicate fixtures were removed after evidence and review.
+- About 45% done / 55% remaining, plausible done range 35–55%. Decoder evidence
+  reduces uncertainty but closes no runtime/product gate. Largest blocks:
+  evidence/replay/configuration, v3 runtime, wallet/transport, authenticated
+  complete-range reads, witness publication and custody assurance.
+- A8/A9 remain open: fixtures are noncontiguous; headers were not independently
+  authenticated. Version 1 roots do not authenticate witnesses. Raw outputs
+  supply no held-commitment status or publication force.
+- Npm source metadata is not build reproduction. Canonical round trips may
+  refuse node-valid encodings; unsupported input cannot imply omission.
+  Proof rejection is not general nonmalleability or presenter participation.
+  Rollback/finality, setup provenance, phone budgets and publication stay open.
+- Deployment, releases, access changes and real funds remain unauthorized.
+  Dependencies remain private to the experiment; slice scratch probes were
+  removed after their evidence was captured in the retained corpus and docs.

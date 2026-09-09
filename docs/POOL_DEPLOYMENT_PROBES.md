@@ -414,6 +414,11 @@ JSON script produces identical signed bytes, but binary extraction recovers
 the original committed fields. Forged claimed transaction/output IDs are
 ignored and recomputed. These controls establish observed behavior, not a
 proof of parser equivalence with the node over every valid transaction.
+In particular, the pinned
+[ErgoTree parser](https://github.com/ergoplatform/sigma-rust/blob/635bbaca55a27d6dd6b2c0ee2479b6ed60117780/ergotree-ir/src/ergo_tree.rs)
+can preserve a failed sized-tree parse as opaque `Unparsed` bytes that round-trip.
+Exact reserialization is therefore not evidence that every embedded script
+was structurally validated or that the transaction satisfies consensus.
 
 The fixed corpus runs in a separate process with a **30-second deadline** and
 **1 MiB output cap**. It refuses fixture files above **256 KiB** before reading
