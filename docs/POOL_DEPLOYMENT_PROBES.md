@@ -452,104 +452,102 @@ No runtime API, venue profile or protocol rule changes in this experiment.
 
 ## Windows process containment feasibility
 
-The private `experiments/ergo-range/contained-check.ps1` probe tests a fixed
-worker under Windows Job Objects, separately from the default CI corpus.
-The [retained report](ergo-containment-verification.json) records Node 24.6.0,
-Windows build 19045, PowerShell and source hashes. Its exit **2** means
-**unresolved containment evidence**; it is not a passing resource gate.
+The private `experiments/ergo-range/contained-check.ps1` probe compares fixed
+workers under Windows Job Objects, separately from the default CI corpus.
+The [no-window report](ergo-containment-verification.json) and
+[detached report](ergo-detached-containment-verification.json) record Node
+24.6.0, Windows build 19045, PowerShell, launch flags and the same six source
+hashes. Both exit **2**, meaning **unresolved containment evidence**.
+These are one sequential pair of runs after repository checks, not statistical
+bounds or samples selected for passing. The default remains `no-window`.
 
 The supervisor creates each worker suspended with a
 [creation-time job list](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812),
-checks membership and reads back the limits before resuming it. Only the NUL
-input and shared stdout/stderr pipe are inherited. The installed limits are
-256 MiB process/job committed memory, one active process and a default
-two-second user-CPU threshold. The supervisor caps captured output at 64 KiB
-and wall time at eight seconds; the existing corpus gets 10 seconds user CPU
-and 30 seconds wall time. These are experimental budgets. The
+checks membership and reads back limits before resuming. Only NUL input and
+the shared stdout/stderr pipe are inherited. Both modes retain 256 MiB
+process/job committed memory, one active process, a default two-second user-CPU
+threshold, 64 KiB output and an eight-second wall deadline. The CPU control
+gets one second user CPU; the wall control gets one second wall time. The
+finite corpus gets 10 seconds user CPU and 30 seconds wall time. These are
+experimental budgets. The
 [memory fields](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_extended_limit_information)
-describe committed virtual memory, not an RSS ceiling; the
-[user-CPU threshold](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_limit_information)
-is checked periodically, not enforced at an exact instruction or elapsed time.
+describe committed virtual memory, not an RSS ceiling.
 
-The current diagnostic slice adds independent
-[process private-commit counters](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-process_memory_counters_ex),
-[job accounting](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information)
-and bounded process-ID/image samples. It observes both `node.exe` and
-`C:\Windows\System32\conhost.exe` associated with each job, despite the installed
-one-process limit. Before resume there is one process; afterward the lifetime
-count is two. Failed associations can also increase that lifetime count, so
-ID inventory samples and image queries with membership readback establish
-the extra associated process. They do not establish whether both processes
-were executing, or why the limit admitted the association. The former
-one-process accounting premise is false.
+The only launch difference is `CREATE_NO_WINDOW` versus `DETACHED_PROCESS`,
+combined respectively into flags `0x08080004` and `0x0008000c` with
+`CREATE_SUSPENDED` and `EXTENDED_STARTUPINFO_PRESENT`.
+[Microsoft documents](https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags)
+that detached console processes do not inherit the parent's console and may
+allocate one later. This comparison does not prevent later console allocation
+or isolate untrusted programs. Both modes keep identical job assignment,
+handle inheritance, budget checks and cleanup.
 
-The console host is a separate process in Microsoft's
-[console architecture](https://devblogs.microsoft.com/commandline/windows-command-line-inside-the-windows-console/).
-Its observed membership is consistent with aggregate memory/CPU exceeding
-Node's counters, but neither an exact accounting allowance nor its admission
-under the configured limit has been established for this Windows build.
-**Do not subtract a fixed overhead or treat the extra process as exempt.**
+| Observation | No window | Detached |
+|---|---|---|
+| Images observed in all eight cases | Node and `C:\Windows\System32\conhost.exe` | Node only |
+| Maximum sampled associated IDs per case | 2 | 1 |
+| Growing-memory job peak, bytes | 273,985,536 (above 268,435,456 cap) | 267,730,944 (below cap) |
+| Growing-memory process and independent private-commit peaks, bytes | 267,403,264 | 267,730,944 |
+| Single 256 MiB growth | Refused; retains 65,536 WASM bytes | Refused; retains 65,536 WASM bytes |
+| One-second CPU control, target / final job user seconds | 1.1875 / 1.203125 | 5.859375 / 5.859375 |
+| Whole-job cleanup readback | All eight empty | All eight empty |
+| Finite corpus job peak, bytes | 61,480,960 | 54,521,856 |
+| Report resource issues | Extra associated IDs, memory and CPU overages | CPU overage |
 
-The fixed memory control grows a WASM memory toward a declared 512 MiB maximum
-in 1 MiB increments. Growth refuses before that maximum. The job peak is
-**274,014,208 bytes**, above the **268,435,456-byte** configured limit; the
-process peak and independently sampled private-commit peak both equal
-**267,464,704 bytes**. A second control requests a single 256 MiB growth from
-one WASM page: it refuses, retains **65,536 bytes**, and the job peak remains
-**28,860,416 bytes**. That observation does not support the hypothesis that
-this refused request itself inflates the reported peak by its requested size.
-It does not establish why aggregate enforcement permits the original overage.
+Detached job/process memory peaks agree in every case and no helper is observed.
+This supports the console-helper explanation for the no-window accounting
+mismatch on this host; it does not prove why the OS admitted the helper under
+the configured one-process limit. **Do not subtract an empirical allowance.**
+[Job accounting](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information)
+records one lifetime process in each detached case and two in each no-window
+case. Failed associations can also increment this count, so it cannot by itself
+prove successful execution. The descendant control fails in both modes;
+that alone does not attribute the failure to the process-count limit.
 
-The CPU control requests a one-second user threshold. In this run it exits
-with native `STATUS_QUOTA_EXCEEDED` (`0xc0000044`, mapping to Win32 1816) after
-**6.59375 seconds target and final job user CPU**. The
+Independent
+[private-commit measurements](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-process_memory_counters_ex)
+and process-ID/image queries are bounded samples, may race exit and do not
+prove a complete lifetime inventory. Inventory storage is capped at 16 IDs.
+Cleanup terminates the job, waits for the target with a direct termination
+fallback, and reads back zero active job entries within five seconds. Some
+no-window accounting snapshots retain entries after target exit; detached
+snapshots report zero. Final job CPU includes the cleanup interval.
+
+Both CPU controls exit with native `STATUS_QUOTA_EXCEEDED` (`0xc0000044`,
+mapping to Win32 1816). The
 [status identity](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/596a1078-e883-4972-9bbc-49e60bebca55)
-does not itself prove the cause. Windows documents periodic checks without a
-maximum check interval or overshoot; kernel CPU is separate. The report now
-rejects observed target or job user CPU above the configured threshold even
-when the exit is a quota status. Eight worker-free `-EvidenceOnly` regressions
-cover quota-exit overshoot, the exact boundary, job CPU, both independent and
-job memory counters, associated process IDs and both accounting snapshots.
-The startup-only path also returns exit 2 for unresolved observations.
-This closes a false-green
-reporting path, not the resource gate.
+does not prove its cause or an exact bound. Windows checks
+[user-CPU thresholds periodically](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_limit_information)
+without a documented maximum overshoot; kernel CPU is separate. Detached
+launch does not change this contract. Observed target or final job CPU above
+the threshold remains a failure even on a quota exit. Wall/output controls
+still terminate with their named supervisor outcomes and no accepted output.
 
-The previous [retained observations](https://github.com/mediumofexchange/reference-ts/blob/8f29a4a/docs/ergo-containment-verification.json)
-remain evidence: memory job peak **273,514,496 bytes**, and a CPU control that
-reached the eight-second wall deadline after **3.796875 seconds user CPU**
-while repository checks were also running. The current controls ran without
-concurrent repository checks; no passing sample was selected to erase either
-failure. Wall/output controls still terminate with their named supervisor
-outcomes. A descendant does not finish successfully; that alone does not
-attribute its failure to the process-count limit.
+Eight worker-free `-EvidenceOnly` regressions retain checks for CPU overshoot,
+exact boundaries, job CPU, independent/job memory, associated IDs and both
+accounting snapshots. `-StartupOnly` remains diagnostic and returns exit 2 for
+unresolved observations. Independent adversarial review and final report/hash,
+resource-predicate and numeric-claim readback found no material defect.
+Both full runs recover the unchanged corpus: **14,874 assertions, 24
+transactions and 65 outputs**. Its embedded report describes the old runner;
+the outer reports name the effective limits.
 
-Some samples retain active job processes after the target has exited. Cleanup
-now terminates the job and independently reads back zero active processes
-within five seconds, in addition to waiting for the target process. All eight
-current controls record successful whole-job cleanup; final job CPU totals
-include that cleanup interval. Inventory storage is
-capped at 16 IDs; process names and private-memory peaks are samples, may race
-exit and do not prove a complete lifetime inventory or enforce a budget.
+Earlier failed evidence remains at immutable revisions:
+[`8938c77`](https://github.com/mediumofexchange/reference-ts/blob/8938c77/docs/ergo-containment-verification.json)
+records a 274,014,208-byte job memory peak and 6.59375 seconds CPU, and
+[`8f29a4a`](https://github.com/mediumofexchange/reference-ts/blob/8f29a4a/docs/ergo-containment-verification.json)
+records a 273,514,496-byte peak and a CPU case reaching the wall deadline after
+3.796875 user seconds during concurrent repository checks. New samples do not
+erase those failures. No hostile depth/count/declared-size parser cases ran;
+there is no filesystem/network isolation or selected runtime boundary.
+Unsupported decoding and resource refusal remain unresolved, never omission.
 
-The enclosing job still recovers the unchanged finite decoder corpus:
-**14,874 assertions, 24 transactions and 65 outputs**, with a reported job
-peak of **62,857,216 bytes**. Its embedded report describes the original
-runner; the outer report names the effective limits. **No hostile depth/count/
-declared-size parser cases ran.** There is no file/network isolation, and
-unsupported decoding or a resource refusal remains unresolved evidence, never
-proof of omission. No runtime boundary is selected.
-
-The earlier independent review required direct target termination on failed
-membership readback; that fallback remains. Fresh independent review checked
-native layouts, telemetry, resource reporting and whole-job cleanup. It found
-a false-green startup-only exit and missing accounting-snapshot checks; both
-fixes and nearby variants were read back. Final report hashes and numeric
-claims were independently checked, with no remaining material findings for
-negative-evidence delivery. Hard containment remains failed.
-Next, compare a detached fixed worker against this no-window launch,
-or evaluate another boundary with explicit aggregate memory and CPU semantics.
-Do not rerun the same controls in pursuit of a passing sample. Header/range
-authentication, parser compatibility and publication status remain separate gates.
+Hard containment remains **failed**. The next slice must choose a resource
+contract and mechanism with justified memory and computation bounds, rather
+than repeat launch diagnostics or enlarge a timeout. Metered decoder execution
+is one candidate to evaluate; no engine or dependency is selected here.
+Header/range authentication, parser compatibility and publication status remain
+separate gates.
 
 ### Comparison with a local validating node
 

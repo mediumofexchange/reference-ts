@@ -1,71 +1,59 @@
 # Current work
 
-Updated: 2026-09-09
+Updated: 2026-09-10
 
 ## Goal
 
-Delivered slice: Windows job accounting and resource-evidence checks at
-`8938c77`, merged and pushed to `main` and `test/windows-containment-accounting`.
-Both remote refs verified at that commit; based on `8f29a4a`.
-Observable result: identify extra job processes, independently measure private
-commit, reject observed CPU/process overages and verify whole-job cleanup.
+Verified slice: compare fixed `DETACHED_PROCESS` and `CREATE_NO_WINDOW` launches
+on `test/windows-detached-containment`, based on `53ff092`. Preserve identical
+256 MiB, process, CPU, output and wall budgets, suspended creation-time job
+assignment and whole-job cleanup. Acceptance: retain both launch reports,
+identify helper/accounting differences, preserve all resource failures, pass
+focused regressions and `npm run check`, obtain independent adversarial review,
+then merge/push. No hostile parser cases or runtime adoption in this slice.
 No specification change; companion `money-from-first-principles` remains
-`main` at `7ea0ee8`. Hard containment remains FAILED; no hostile parser cases
-or runtime boundary adoption are authorized by this evidence.
+`main` at `7ea0ee8`.
 
 ## Status
 
-- Fixed controls identify both Node and `C:\Windows\System32\conhost.exe` in
-  sampled job inventories. There is one accounting entry before resume and
-  two lifetime entries after it. The former one-process premise is false.
-  Associated IDs do not by themselves prove simultaneous execution or an
-  exemption from configured process/memory limits.
-- Independent sampled private-commit peaks match the job's process peaks.
-  The growing-memory control still reports job commit above 256 MiB. A single
-  refused 256 MiB WASM growth retains one page and does not inflate the job
-  peak by the requested allocation. Aggregate enforcement remains unexplained.
-- Microsoft documents periodic user-CPU checks without a maximum overshoot;
-  exact CPU containment cannot be inferred. Target and final job overages now
-  remain unresolved even on quota exit. Kernel CPU is a separate measurement.
-- Cleanup terminates the job and reads back zero active accounting entries,
-  in addition to the existing direct target fallback and wait. Samples can
-  retain a console helper after target exit; cleanup covers that interval.
+- Baseline CI [34402013200](https://github.com/mediumofexchange/reference-ts/actions/runs/34402013200)
+  passed at `53ff092`; upstream main is unchanged. Main has no branch
+  protection or rulesets. No safeguards changed.
+- Both final launch reports return exit 2. Detached samples only Node, with
+  job/process/private peaks agreeing and the growing-memory peak below 256 MiB.
+  No-window still samples Node plus `conhost.exe` and exceeds job memory.
+  Both CPU controls exceed their one-second threshold on quota exits.
+  Hard containment remains FAILED. See the
+  [analysis](docs/POOL_DEPLOYMENT_PROBES.md#windows-process-containment-feasibility).
 
 ## Evidence
 
-- `contained-check.ps1 -EvidenceOnly`: eight worker-free regressions pass.
-  `-StartupOnly` emits unresolved status and exit 2 for observed overages.
-- Independent review inspected native layouts, cleanup, worker and report
-  predicates. It found a false-green startup-only exit and missing checks on
-  accounting snapshots; both fixes and nearby variants were read back.
-  No unresolved material code findings for negative-evidence delivery.
-  Final report hashes, resource issues and numeric documentation also passed
-  independent readback; all six staged source hashes match the report.
-- Full `npm run check` passed: 96 files / 1,795 tests, build, package consumer,
-  pilot, crash and spent-set checks. It ran outside the sandbox after the
-  known esbuild parent-directory denial. Final docs and companion links pass.
-- Final controls ran after checks: exit 2, eight clean job shutdowns, corpus
-  14,874 assertions / 24 transactions / 65 outputs. Job memory 274,014,208
-  bytes exceeds 268,435,456; CPU quota exit follows 6.59375 seconds user CPU
-  at a one-second threshold. All six report source hashes match.
-- Baseline CI [34399693641](https://github.com/mediumofexchange/reference-ts/actions/runs/34399693641)
-  passed at `8f29a4a`; upstream fetched with no intervening main change.
-  Main has no branch protection or rulesets. No safeguards were changed.
-- [Current report](docs/ergo-containment-verification.json) and
-  [analysis](docs/POOL_DEPLOYMENT_PROBES.md#windows-process-containment-feasibility)
-  retain evidence limits. Old report remains at immutable `8f29a4a`.
+- Fixed launch selection records exact mode/flags; uppercase input is normalized.
+  Worker-free resource regressions pass (8 cases). Detached startup exits 0
+  as a diagnostic only. Independent code review and final report/hash,
+  resource-predicate and numeric-claim readback found no material defect.
+- Full `npm run check` passed: 96 files / 1,795 tests, build, installed package,
+  pilot, crash and spent-set checks. The known esbuild parent-directory denial
+  required running outside the sandbox. Final docs and companion links pass.
+- Final controls ran sequentially after checks: no-window then `DETACHED`.
+  Both reports recover 14,874 assertions / 24 transactions / 65 outputs;
+  all 16 jobs clean up. Both reports' six source hashes match working/index
+  bytes and budgets are identical. No-window growing-memory job peak is
+  273,985,536 bytes; detached is 267,730,944 (limit 268,435,456).
+  CPU target/final job seconds are 1.1875/1.203125 and 5.859375/5.859375.
+  Earlier failed reports remain linked at immutable revisions.
 
 ## Next
 
-1. Read CI for the latest main/handoff revision. Local checks, independent
-   review and implementation delivery passed; new remote CI is pending.
-2. Compare a fixed `DETACHED_PROCESS` launch with this `CREATE_NO_WINDOW`
-   launch, or evaluate another boundary with explicit aggregate resource
-   semantics. Keep 256 MiB limits and record helper behavior; do not subtract
-   an empirical allowance. Exact user-CPU limits require a different mechanism
-   or an explicitly justified resource contract, not a larger timeout.
-   This change of launch/resource design is a useful fresh-primary boundary
-   and requires independent adversarial review. Tell the user at that boundary.
+1. Finish authorized delivery and record remote parity/latest CI. Local checks,
+   independent review and source-hash verification passed.
+2. Choose a justified resource contract and mechanism for bounded decoder
+   computation and memory. Compare metered execution with OS containment;
+   measure the smallest viable candidate before selecting a dependency.
+   Exact user-CPU limits are not supplied by periodic Windows job checks.
+   Do not enlarge timeouts or repeat launch controls seeking a passing sample.
+   A fresh primary is recommended at this completed investigation/design
+   boundary; the handoff carries the evidence needed for that next slice.
 3. Hard containment gates hostile depth/count/declared-size parser cases.
    Then probe a dedicated keyless validating node with exact artifact,
    validation/history/bootstrap config and sync-state evidence; reproduce

@@ -1,6 +1,8 @@
 # Offline feasibility only. No caller-supplied executable, corpus or network input.
-param([switch]$StartupOnly, [switch]$EvidenceOnly)
+param([switch]$StartupOnly, [switch]$EvidenceOnly,
+    [ValidateSet('no-window', 'detached')][string]$LaunchMode = 'no-window')
 $ErrorActionPreference = 'Stop'
+$LaunchMode = $LaunchMode.ToLowerInvariant()
 function Get-ResourceIssues($Result) {
     if ($Result.PeakCommitBytes -gt $Result.CommitLimitBytes -or
         $Result.PeakProcessCommitBytes -gt $Result.CommitLimitBytes -or
@@ -54,7 +56,11 @@ $workerPath = Join-Path $PSScriptRoot 'contained-worker.mjs'
 $results = [System.Collections.Generic.List[object]]::new()
 $unresolved = [System.Collections.Generic.List[string]]::new()
 function Run-Case([string]$Name, [uint32]$CpuMs = 2000, [uint32]$WallMs = 8000) {
-    $result = [ContainedProcess]::Run($nodePath, $workerPath, $Name, $CpuMs, $WallMs, 65536)
+    $result = [ContainedProcess]::Run($nodePath, $workerPath, $Name, $CpuMs, $WallMs, 65536, $LaunchMode)
+    $expectedFlags = if ($LaunchMode -eq 'detached') { 0x8000c } else { 0x8080004 }
+    if ($result.LaunchMode -cne $LaunchMode -or $result.CreationFlags -ne $expectedFlags) {
+        throw "Launch mode evidence mismatch: $Name"
+    }
     if (-not $result.LimitsReadBackBeforeResume -or -not $result.JobEmptyAfterCleanup) {
         throw "Containment evidence unresolved: $Name"
     }
@@ -71,6 +77,7 @@ function Require-Success($Result) {
 $startup = Require-Success (Run-Case 'startup')
 if ($StartupOnly) {
     [ordered]@{ status = $(if ($unresolved.Count) { 'unresolved-containment-evidence' } else { 'startup-diagnostics-only' });
+        launchMode = $LaunchMode;
         results = $results; unresolved = @($unresolved.ToArray()) } | ConvertTo-Json -Depth 12
     if ($unresolved.Count) { exit 2 }
     exit 0
@@ -103,6 +110,7 @@ foreach ($file in @('ContainedProcess.cs', 'contained-worker.mjs', 'contained-ch
 }
 [ordered]@{
     status = $(if ($unresolved.Count) { 'unresolved-containment-evidence' } else { 'offline-windows-controls-only' })
+    launchMode = $LaunchMode
     node = $startup.node
     powershell = $PSVersionTable.PSVersion.ToString()
     os = [Environment]::OSVersion.VersionString
@@ -116,6 +124,7 @@ foreach ($file in @('ContainedProcess.cs', 'contained-worker.mjs', 'contained-ch
         'Wall/output limits are supervisor-enforced; memory sampling is diagnostic, not an enforcement mechanism.',
         'Independent private-commit peaks are sampled and may miss the final interval before exit.',
         'Process-ID/image observations are bounded samples; failed associations also count toward lifetime TotalProcesses.',
+        'Detached launch avoids inheriting a console; it does not prevent later console allocation or isolate untrusted programs.',
         'Allocation RangeError and descendant failure alone do not identify their cause.',
         'The nested corpus report describes its original runner; effective outer limits are listed here.',
         'No filesystem/network isolation, production boundary, node equivalence or authenticated range evidence.')

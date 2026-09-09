@@ -82,8 +82,8 @@ public static class ContainedProcess {
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool ReadFile(IntPtr file, byte[] buffer, uint count, out uint read, IntPtr overlapped);
 
     public sealed class Result {
-        public string Case, Outcome, Output;
-        public uint ExitCode;
+        public string Case, Outcome, Output, LaunchMode;
+        public uint ExitCode, CreationFlags;
         public long ElapsedMs;
         public ulong PeakCommitBytes, PeakProcessCommitBytes, CommitLimitBytes;
         public ulong BeforeResumePeakCommitBytes, BeforeResumePeakProcessCommitBytes;
@@ -134,9 +134,17 @@ public static class ContainedProcess {
             throw new ArgumentException("Unsupported fixed argument");
         return "\"" + arg + "\"";
     }
-    public static Result Run(string node, string worker, string name, uint cpuMs, uint wallMs, uint outputBytes) {
+    public static Result Run(string node, string worker, string name, uint cpuMs, uint wallMs, uint outputBytes, string launchMode) {
         if (IntPtr.Size != 8 || cpuMs == 0 || wallMs == 0 || outputBytes == 0 || outputBytes > 1048576)
             throw new ArgumentException("Requires x64 and finite budgets");
+        // Fixed alternatives only. DETACHED_PROCESS and CREATE_NO_WINDOW are
+        // mutually exclusive here; neither changes job assignment or budgets.
+        uint consoleFlag;
+        if (launchMode == "no-window") consoleFlag = 0x08000000;
+        else if (launchMode == "detached") consoleFlag = 0x8;
+        else throw new ArgumentException("Unknown fixed launch mode");
+        // CREATE_SUSPENDED | EXTENDED_STARTUPINFO_PRESENT | consoleFlag.
+        uint creationFlags = 0x4 | 0x80000 | consoleFlag;
         const ulong memory = 256UL * 1024 * 1024;
         // JOB_TIME | ACTIVE_PROCESS | PROCESS_MEMORY | JOB_MEMORY |
         // DIE_ON_UNHANDLED_EXCEPTION | KILL_ON_JOB_CLOSE. No breakaway flags.
@@ -174,8 +182,7 @@ public static class ContainedProcess {
             var startup = new StartupEx { Startup = new Startup { Size = Marshal.SizeOf<StartupEx>(),
                 Flags = 0x100, Input = input, Output = write, Error = write }, Attributes = list };
             var command = new StringBuilder(Quote(node) + " " + Quote(worker) + " " + Quote(name));
-            // CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT.
-            Require(CreateProcessW(node, command, IntPtr.Zero, IntPtr.Zero, true, 0x4 | 0x08000000 | 0x80000,
+            Require(CreateProcessW(node, command, IntPtr.Zero, IntPtr.Zero, true, creationFlags,
                 IntPtr.Zero, Path.GetDirectoryName(worker), ref startup, out child));
             assigned = true;
             Require(IsProcessInJob(child.Process, job, out bool member));
@@ -238,6 +245,7 @@ public static class ContainedProcess {
             Require(QueryInformationJobObject(job, 1, out Accounting accounting,
                 (uint)Marshal.SizeOf<Accounting>(), IntPtr.Zero));
             result = new Result { Case = name, Outcome = outcome, ExitCode = exit, ElapsedMs = clock.ElapsedMilliseconds,
+                LaunchMode = launchMode, CreationFlags = creationFlags,
                 PeakCommitBytes = measured.PeakJobMemory.ToUInt64(),
                 PeakProcessCommitBytes = measured.PeakProcessMemory.ToUInt64(), CommitLimitBytes = memory,
                 BeforeResumePeakCommitBytes = installed.PeakJobMemory.ToUInt64(),

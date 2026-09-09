@@ -26,6 +26,7 @@ The separate Windows x64 / PowerShell 7 containment probe is run explicitly:
 
 ```powershell
 pwsh -NoProfile -File experiments/ergo-range/contained-check.ps1
+pwsh -NoProfile -File experiments/ergo-range/contained-check.ps1 -LaunchMode detached
 ```
 
 It requires Windows 10 or newer for creation-time job assignment. Run only
@@ -33,18 +34,26 @@ this supervisor, never `contained-worker.mjs` directly: the worker includes
 memory-growth, infinite CPU/output and descendant-process controls. Each
 worker joins a Job Object at creation, remains suspended until membership
 and limits are read back, and has bounded captured output and a wall deadline.
+The default `no-window` mode uses `CREATE_NO_WINDOW`; `detached` substitutes
+`DETACHED_PROCESS`, with identical budgets and inherited handles. Each result
+records the mode and creation flags. Run the two commands sequentially without
+concurrent repository checks when comparing resource measurements. Detached
+launch does not prevent the process from allocating a console later.
 This controls resources for fixed trusted code; it does not isolate file or
 network access. No arbitrary files or hostile parser inputs are accepted.
 
-The [retained result](../../docs/ergo-containment-verification.json) is
-**unresolved**, with exit **2**: measured job peak memory and user CPU exceed
-their configured thresholds, and the job contains both Node and `conhost.exe`
-despite the one-process limit. Independent process counters, bounded process
-inventories and whole-job cleanup readback distinguish these observations.
-The extra console host does not establish a permissible memory allowance. The command
-is deliberately outside the default checks/CI until its acceptance gate can
-be met. Exit 0 would establish only these fixed controls and the old corpus;
-it would still not establish hostile-parser containment or node equivalence.
+The [no-window result](../../docs/ergo-containment-verification.json) and
+[detached result](../../docs/ergo-detached-containment-verification.json) retain
+both launch observations. Both exit **2**, unresolved: no-window reports
+excess memory/CPU and extra associated processes; detached samples only Node
+and stays below the memory limit but still exceeds the CPU threshold.
+Independent process counters, bounded process inventories and whole-job
+cleanup readback distinguish those observations.
+The extra console host does not establish a permissible memory allowance.
+The commands are deliberately outside the default checks/CI until the
+acceptance gate can be met. Exit 0 would establish only these fixed controls
+and the old corpus; it would still not establish hostile-parser containment
+or node equivalence.
 `-StartupOnly` runs just the low-cost launch/readback control, not acceptance.
 `-EvidenceOnly` checks eight resource-report regressions without executing a worker,
 including a quota exit with excessive CPU that the earlier check accepted.
