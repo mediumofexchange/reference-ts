@@ -38,10 +38,10 @@ runtime follows the specification. Words are pool-v2's and the contracts'.
 | **E** | silence clause, non-service terms already encoded, inert | the same fields bind: one no-commitment duration per scope | §7 of the contract |
 | Contexts | `moe/pool/v2/…` | `moe/pool/v3/…`, prefix-free | pool-v2 §1 |
 
-Nothing else changes: the field, `H`, the note, its commitment and
-nullifier, the note tree, the scope, the segment header, the history chain,
-the directory, the receipt fields, the spent set and the proof system are
-carried over. The header gains no field: one duration per scope is read from
+The field, `H`, the note, its commitment and nullifier, the note tree, the
+scope, the segment header, the history chain, the directory, the receipt
+fields and the proof system are carried over. A22 replaces the spent-set
+root construction. The header gains no field: one duration per scope is read from
 the scoped backings' terms, and the adoption index is a function of the
 record (C2b.3.1).
 
@@ -165,9 +165,9 @@ a party that can prove the note can mint another identity for one tag, which
 is how a holder refreshes a request an operator is stalling on (A21). The
 wallet derives it from its root secret, the note's nullifier and a refresh
 counter advanced only to file again; recovery after a crash retries the same
-request (C2b.5.1). P1
-compiled and proved this circuit over the six inputs it had before
-`refresh` was added; the seventh is unmeasured.
+request (C2b.5.1). Original P1 compiled and proved six inputs before
+`refresh` was added. The corrected seven-input candidate is measured in
+[§2.6](#26-contract-to-constraint-audit); its identity is not a v3 pin.
 
 ### 2.5 Issue, spend, burn
 
@@ -186,6 +186,89 @@ The measured spend order has 15 public inputs: the existing five-field
 prefix, two anchors, two nullifiers, four commitments and two delivery limbs.
 A spend or burn whose nullifier's tag is under a standing lock is refused
 (C3.7); the tag is the host's `H(T_TAG, nf)` over the public nullifier.
+
+### 2.6 Contract-to-constraint audit
+
+Audited 2026-09-09 against specification revision
+[`923ee46`](https://github.com/mediumofexchange/money-from-first-principles/tree/923ee46)
+and reference revision `8deadf5`. This is the combined layout proposal and
+evidence inventory before `pool-v3.md`, not a construction/configuration pin.
+Let `P = [domainHi, domainLo, segmentHi, segmentLo, scopeRoot]` and
+`D = [deliveryHi, deliveryLo]`; concatenation below is ordered field expansion.
+Identifier and digest limbs are `u128`, quantity/instant/deadline/refresh are
+`u64`, and other public scalars are `Field`. Appending D preserves each v2
+order and follows the measured F3/F4 spend convention; issue/burn's final
+orders still require normative review and specification commitment.
+
+| Relation | Proposed complete public-input order | Count | Source and conformance result |
+|---|---|---:|---|
+| issue | `P, backingHi, backingLo, quantity, cm, D` | 11 | v2 `issue.nr`: positive quantity, nonzero owner/rho/cm, exact commitment and scope path. C4.4 requires D; no amended issue source/key or real-proof evidence yet. |
+| spend | `P, anchor_1, anchor_2, nf_1, nf_2, cm_1, cm_2, cm_3, cm_4, D` | 15 | F4 generator retains both input ownership/membership/scope checks, padding backing rule, distinct nonzero nullifiers and positive input total. All four outputs name an input backing, bind nonzero owner/rho/cm, are pairwise distinct and conserve each backing in widened `u128` sums. Candidate real proofs exist; no final v3 identity. |
+| burn | `P, backingHi, backingLo, quantity, anchor_1, anchor_2, nf_1, nf_2, cm_change, D` | 15 | v2 `burn.nr`: both authenticated inputs and change name the public backing; distinct nullifiers, positive burn quantity, scope path, exact change commitment and widened input = burn + change conservation. C4.4 requires D; no amended burn source/key or real-proof evidence yet. |
+| demand | `P, backingHi, backingLo, quantity, anchor_1, anchor_2, tag_1, tag_2, presenterHi, presenterLo, instant, deadline` | 16 | P1 helper proves ownership, nonzero commitment/nullifier, positive-note membership and scope. Demand binds backing, distinct private nullifiers, positive exact quantity and tags. Original P1 omits C3.2's zero padding anchor; corrected candidate evidence below. |
+| settle | `P, backingHi, backingLo, quantity, owner, rho_out, anchor_1, anchor_2, nf_1, nf_2, cm_out, demandHi, demandLo` | 17 | P1 reuses input authentication, constrains common backing, distinct nullifiers, positive whole-input quantity, scope and public output opening/commitment. A free padding anchor is intentional under C3.2: the release signs this statement identity. No D or capsule (C4.7). |
+| request | `domainHi, domainLo, backingHi, backingLo, anchor, tag, refresh` | 7 | P1 helper proves ownership, positive-note membership, backing and tag. Original P1 has only six inputs; corrected candidate adds public `u64 refresh` last. No segment/scope/quantity and no output. |
+
+Withdraw is kind 5 with seven inputs as in §2.2, but has no proof relation
+or key. Request is never admitted. A proof does not establish in-clear
+forest membership, scope authority, unspentness, lock status, witnessed time,
+acceptance/release signatures, finality or capsule preimages. Those stay with
+the respective admission/replay/venue reader. In particular, delivery limbs
+are proof-bound; SHA256 framing and capsule association are host checks,
+and successful binding does not prove that a receiver can decrypt.
+
+**Reproduced gaps and minimal corrections.** Original
+`node scratch/pool-v3/probe.mjs` passed 47 checks and five real proofs on this
+date. Its padded demand uses both anchors from `fixtures().padded`, including
+the nonzero tree root at the zero-value position, and proves successfully.
+Its request emits six public inputs. This is direct evidence of obsolete
+relations, even though the old suite passes. In a separate scratch copy:
+
+- Demand adds `assert((inputs[i].value > 0) | (anchors[i] == 0));` inside
+  its position loop, keeping this rule out of the shared holding helper.
+  The padded demand fixture sets only its padding anchor to zero. The foreign
+  backing and zero-quantity cases also use canonical padding anchors so that
+  the new rule cannot mask their intended failure.
+- Request adds `refresh: pub u64` after `tag`, includes it last in the
+  expected public-input order, and uses zero for the initial fixture.
+  Refresh changes no ownership, tag or membership calculation.
+- The helper, settlement and cryptographic primitives are unchanged.
+  No public identity gate, extra signature, in-circuit digest or cipher is
+  introduced. No production source, configuration or v2 pin changes.
+
+The [candidate observation](pool-v3-conformance-verification.json) records
+source/bytecode/key hashes, toolchain, orders, checks and limits. The corrected
+run passed 62 checks and six real proofs with demand/settle/request counts
+16/17/7. Each proof is 14,656 bytes. Nonzero padding anchors reject in either
+demand position, with otherwise-valid inputs; reversed canonical padding
+executes. Settlement still proves with its ordinary nonzero padding anchor.
+Requests with refresh 0 and 1 independently prove, and the maximum `u64`
+refresh executes. For demand segment/presenter limbs, instant/deadline and
+request refresh, changing only ABI integer metadata to `Field` preserves a
+valid control and rejects overflow on unchanged ACIR. Mutating each public
+input rejects the original proof; independently provable alternate notice
+and refresh fields also reject when paired with the original proof. These
+are concrete selected-backend binding tests, not a general nonmalleability
+proof or evidence of presenter-key participation. Desktop timings are single
+runs, not device budgets.
+
+**Final pinning acceptance.** The six relations still need one reviewed
+source/helper/toolchain build, exact ABI orders, configuration preimage and
+derived bytecode/key identities, committed in the specification before
+dependent retained code. Carry the corrected cases into that retained suite.
+The [F3 report](pool-delivery-verification.json) tests only spend's added
+digest limbs; [F4](pool-fees-verification.json) tests spend positions 9–14.
+Final binding checks must cover every input of all six final keys, including
+spend's prefix 0–8; a passing v2 proof cannot supply this evidence for a new
+key. Spend and burn both have 15 inputs in the proposal: reject proof/key
+substitution despite equal counts, and select the key by statement kind.
+Issue/burn need genuine D-bearing proofs and unchanged-ACIR range tests for
+both limbs. Repeat otherwise-valid hostile ownership, membership, scope,
+duplicate, backing, quantity/overflow and output tests on the final sources.
+Then integrate exact one/four/one capsule vectors, parsing, authorization,
+atomic output/totals/lock effects, replay and reproof into v3 runtime; these
+are separate acceptance results from a circuit proof. Configuration and
+runtime must never interpret these layouts under the v2 domain.
 
 ## 3. Signed objects and publications
 
@@ -383,10 +466,10 @@ secrets; every reader keeps evidence rather than verdicts (C2.10.13).
 
 | Item | Value | Standing |
 |---|---|---|
-| Proof bytes, any kind | 14,656 (458 fields) | measured for v2's three circuits and the three candidates (P1) |
-| Public inputs | demand 16, withdraw 7, settle 17, request 7 | candidate; P1 proves the circuits in exactly §2's order, the request as it stood before its refresh value |
+| Proof bytes, observed circuits | 14,656 (458 fields) | measured for v2 and P1, including §2.6's corrections; no delivery-bearing issue/burn result |
+| Public inputs | issue 11, spend 15, burn 15, demand 16, withdraw 7, settle 17, request 7 | proposal and per-relation evidence in §2.6; issue/burn with delivery remain unproved |
 | Proving, desktop Node | 1.4 s for an issue to 10.5 s for a spend under a second segment (v2) | measured; demand and settle expected at burn's scale, request below |
-| Proving, candidate circuits, desktop Node, one thread | demand 5.0–5.8 s, settle 6.3 s, request 3.5 s; verification 85–156 ms; key derivation 0.5–1.1 s; verification keys 3,680 bytes | measured (P1, this machine) |
+| Proving, original P1 circuits, desktop Node, one thread | demand 5.0–5.8 s, settle 6.3 s, request 3.5 s; verification 85–156 ms; key derivation 0.5–1.1 s; verification keys 3,680 bytes | historical measurement; corrected-candidate observations are in §2.6's report |
 | Proving, desktop browser | 4.3–9.3 s spend | measured; phone unmeasured |
 | Verification | 61–174 ms in Node, 91–195 ms in the browser | measured |
 | Delivery | 89 bytes/output plus 64 public-input bytes per issue/spend/burn before record framing; 242 bytes for two outputs, 331 for three, 420 for four | C4.4/8; F4 selects four spend outputs |
@@ -425,11 +508,13 @@ Each names the rule, the candidate, the alternative, and what closes it.
   kind, which adds frames. The contract now reads `signatureHash` over
   whatever authorization a kind carries, and the zero digest where it
   carries none (C2.10.10, 2026-09-09); the record field is pool-v3's.
-- **A4 Six circuits.** Two holding forms and a settle relation cannot share
-  one verification key with different public inputs. Closed by P1 on
+- **A4 Six circuits.** Separate holding forms and settlement use separate
+  relation/key identities. Feasibility measured by P1 on
   2026-09-08: three candidate circuits compile without warnings under the
   pinned toolchain, prove in §2's public-input order, give 14,656-byte
-  proofs, and refuse every hostile witness of §9; 47 checks, 5 proofs.
+  proofs, and pass 47 checks with 5 proofs. That run predates the
+  padding-anchor and refresh constraints; §2.6 records the corrected
+  candidate and the remaining final six-relation pinning gate.
 - **A5 Distinct nullifiers in the demand.** C3.2's segment-bound form does
   not require `nf_1 ≠ nf_2`; two positions over one note would double the
   quantity and make the demand unsettleable, a manufactured dishonour.
@@ -628,7 +713,9 @@ None changes `src/`, the pinned v2 identities or the specification.
   field. They cannot serve as final conformance evidence. Before pinning,
   audit all six final relations/public-input orders against the contracts,
   close these gaps and check full statement binding under the selected proof
-  system (C3.2), including otherwise-unread notice fields. A23's model cases
+  system (C3.2), including otherwise-unread notice fields. The §2.6 audit
+  reproduces the old gaps and measures separate corrected candidates; final
+  retained sources and configuration are still owed. A23's model cases
   assume that cryptographic property; they do not establish it.
 - **P2 Publication, offline then node.** Encode the §3 bodies over P1's
   proofs and the v2 spent-set proofs at a synthetic set; run the existing

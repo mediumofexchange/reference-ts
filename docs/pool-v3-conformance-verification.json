@@ -1,0 +1,285 @@
+{
+  "recorded": "2026-09-09",
+  "scope": "Contract audit and scratch-only demand/request corrections; no final v3 source, configuration, runtime or specification pin",
+  "referenceCommit": "8deadf54558901f3c860fd923b4ff7f86e3f371b",
+  "companionSpecCommit": "923ee46",
+  "method": "POOL_V3_RECOVERY_MAP.md section 2.6 records the exact source corrections and focused witness changes; original P1 scratch sources are local feasibility probes, not clean-checkout retained test inputs.",
+  "harnessSha256": {
+    "originalProbe": "c82dd27423604cdc8deb6a7a4111b6812d8266b6238604347a168f479f876dd1",
+    "correctedProbe": "dc4f3cf6c93520ffce9d19a6b89ea21af06787b014df4326fa0b51686fa4cd86",
+    "compile": "54eee153190576291ec95c3e7090c219e42b7325980b03b7c9207fcadf3ab1e0",
+    "fixtures": "9062b9825218adb87171f06261d3c15635efcca6925352562734ca72c2ee5878"
+  },
+  "originalP1": {
+    "command": "node scratch/pool-v3/probe.mjs",
+    "checks": 47,
+    "realProofs": 5,
+    "sourceSha256": {
+      "demand.nr": "02729be876c82ad0e7527d5a649f754a0626dbe645b005299af3cc9a23a9954f",
+      "request.nr": "b7952fffb56a40fa8de896c3070db2db6000e7baa44a722df78ff01e11f2340b",
+      "settle.nr": "2c12b4ec378df06d23f7be1148c2979d66c4936a89842aea61c81229de63ad2b",
+      "notes.nr": "c606dd994e523631a969de861b909128b834be8f6fba4be11a4e2a217262270d",
+      "poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"
+    },
+    "observed": [
+      "Padded demand with both anchors equal to the nonzero fixture tree root proves and verifies, violating current C3.2 padding-anchor rule",
+      "Request proof has six inputs and no refresh"
+    ],
+    "publicInputCounts": {
+      "demand": 16,
+      "settle": 17,
+      "request": 6
+    }
+  },
+  "correctedCandidate": {
+    "command": "node scratch/pool-v3-conformance/probe.mjs",
+    "environment": {
+      "node": "v24.6.0",
+      "platform": "win32",
+      "arch": "x64",
+      "toolchain": {
+        "@aztec/bb.js": "5.2.0",
+        "@noir-lang/noir_js": "1.0.0-beta.26",
+        "@noir-lang/noir_wasm": "1.0.0-beta.26"
+      },
+      "noirVersion": "1.0.0-beta.26+40d6574f851d926f93e0c3a271bac3e6e82ac905",
+      "verifierTarget": "noir-recursive",
+      "threads": 1
+    },
+    "circuits": {
+      "demand": {
+        "vkMs": 713.4250000000002,
+        "vkBytes": 3680,
+        "bytecodeBase64Chars": 12020,
+        "sourceSha256": "ed9d81a3846fa33afb4b80c3f127a7a8c6ee99be28c90822a033af1efeaa7799",
+        "bytecodeSha256": "2c89f98d36395c88c9ba3413a7e21fa4cb0935ecde131846f83f6a0c6cadd6ee",
+        "vkSha256": "4b2a35483b750bb59c2677289dbab490acaa234165c201a54b9caab883c09555",
+        "publicParameters": [
+          "domain",
+          "segment",
+          "scope",
+          "backing",
+          "quantity",
+          "anchors",
+          "tags",
+          "presenter",
+          "instant",
+          "deadline"
+        ]
+      },
+      "settle": {
+        "vkMs": 645.6594000000005,
+        "vkBytes": 3680,
+        "bytecodeBase64Chars": 12048,
+        "sourceSha256": "2c12b4ec378df06d23f7be1148c2979d66c4936a89842aea61c81229de63ad2b",
+        "bytecodeSha256": "ccad2b665539a22c1be4692e05a87bae01ccd6756ce464fc327d8a41b7938b23",
+        "vkSha256": "ea5b3e66ced10ded8cd72bae33c6cf4dd7d2704735713ce3b7f2f76126967654",
+        "publicParameters": [
+          "domain",
+          "segment",
+          "scope",
+          "backing",
+          "quantity",
+          "owner",
+          "rho_out",
+          "anchors",
+          "nullifiers",
+          "cm_out",
+          "demand"
+        ]
+      },
+      "request": {
+        "vkMs": 332.0176999999994,
+        "vkBytes": 3680,
+        "bytecodeBase64Chars": 5056,
+        "sourceSha256": "393e68dc68bf2f610eb9b531fb0ace812f0021f91ce72bd43ca62c68251a2119",
+        "bytecodeSha256": "4b1a0e76a48b651a33f19a25dcad2e45e708aabd70d757528153a2098a929084",
+        "vkSha256": "1f048f189568b0b6ffdac39c71957aee34ed3485490d8594aba86d800e2aeaf4",
+        "publicParameters": [
+          "domain",
+          "backing",
+          "anchor",
+          "tag",
+          "refresh"
+        ]
+      }
+    },
+    "publicInputOrders": {
+      "demand": [
+        "domainHi",
+        "domainLo",
+        "segmentHi",
+        "segmentLo",
+        "scopeRoot",
+        "backingHi",
+        "backingLo",
+        "quantity",
+        "anchor1",
+        "anchor2",
+        "tag1",
+        "tag2",
+        "presenterHi",
+        "presenterLo",
+        "instant",
+        "deadline"
+      ],
+      "settle": [
+        "domainHi",
+        "domainLo",
+        "segmentHi",
+        "segmentLo",
+        "scopeRoot",
+        "backingHi",
+        "backingLo",
+        "quantity",
+        "owner",
+        "rho_out",
+        "anchor1",
+        "anchor2",
+        "nullifier1",
+        "nullifier2",
+        "cm_out",
+        "demandHi",
+        "demandLo"
+      ],
+      "request": [
+        "domainHi",
+        "domainLo",
+        "backingHi",
+        "backingLo",
+        "anchor",
+        "tag",
+        "refresh"
+      ]
+    },
+    "checks": [
+      "demand: one real note plus padding",
+      "demand: two real notes, quantity is their sum",
+      "demand: notice fields are bound only, not read",
+      "settle: the demanded notes, whole, to the backer owner with rho_out public",
+      "request: one real note, size hidden",
+      "demand: rejects nonzero padding anchor 0x0000000000000000000000000000000000000000000000000000000000000001",
+      "demand: rejects nonzero padding anchor 0x2084c7b6121e0e1f07527c06dd31389228978dc32f593aeb8ecd7af1113bf397",
+      "demand: padding in first position",
+      "demand: first padding anchor nonzero",
+      "request: independently valid refresh 1",
+      "request: maximum refresh",
+      "demand: unchanged ACIR rejects overflow segment0",
+      "demand: unchanged ACIR rejects overflow segment1",
+      "demand: unchanged ACIR rejects overflow presenter0",
+      "demand: unchanged ACIR rejects overflow presenter1",
+      "demand: unchanged ACIR rejects overflow instantnull",
+      "demand: unchanged ACIR rejects overflow deadlinenull",
+      "request: unchanged ACIR rejects overflow refreshnull",
+      "demand: separately provable metadata cannot rebind original proof",
+      "request: separately provable metadata cannot rebind original proof",
+      "demand: same note in both positions",
+      "demand: positive value with a zero tag",
+      "demand: wrong tag",
+      "demand: padding with a nonzero tag",
+      "demand: quantity below the sum",
+      "demand: quantity above the sum",
+      "demand: two paddings, zero quantity",
+      "demand: wrong public backing",
+      "demand: backing outside the scope",
+      "demand: wrong scope root",
+      "demand: wrong link",
+      "demand: unauthorized input",
+      "demand: bad membership",
+      "demand: wrong first anchor",
+      "demand: presenter limb overflow",
+      "demand: instant overflow",
+      "demand: deadline overflow",
+      "settle: wrong owner",
+      "settle: wrong quantity",
+      "settle: wrong rho_out",
+      "settle: zero owner",
+      "settle: zero rho_out",
+      "settle: duplicate nullifiers",
+      "settle: wrong public backing",
+      "settle: foreign padding",
+      "settle: wrong scope root",
+      "settle: unauthorized input",
+      "settle: bad membership",
+      "settle: zero quantity with two paddings",
+      "settle: demand limb overflow",
+      "request: zero value",
+      "request: wrong tag",
+      "request: wrong anchor",
+      "request: wrong backing",
+      "request: unauthorized",
+      "request: bad membership",
+      "demand: binds all 16 public inputs",
+      "demand: corrupted proof fails",
+      "settle: binds all 17 public inputs",
+      "settle: corrupted proof fails",
+      "request: binds all 7 public inputs",
+      "request: corrupted proof fails"
+    ],
+    "metrics": [
+      {
+        "label": "demand: one real note plus padding",
+        "kind": "demand",
+        "executionMs": 185.77410000000236,
+        "proveMs": 3444.8511999999973,
+        "verifyMs": 84.773199999996,
+        "proofBytes": 14656,
+        "publicInputs": 16
+      },
+      {
+        "label": "demand: two real notes, quantity is their sum",
+        "kind": "demand",
+        "executionMs": 73.76030000000173,
+        "proveMs": 3414.0912000000026,
+        "verifyMs": 80.2190000000046,
+        "proofBytes": 14656,
+        "publicInputs": 16
+      },
+      {
+        "label": "demand: notice fields are bound only, not read",
+        "kind": "demand",
+        "executionMs": 51.99409999999625,
+        "proveMs": 4047.914899999996,
+        "verifyMs": 65.02469999999448,
+        "proofBytes": 14656,
+        "publicInputs": 16
+      },
+      {
+        "label": "settle: the demanded notes, whole, to the backer owner with rho_out public",
+        "kind": "settle",
+        "executionMs": 36.22119999999995,
+        "proveMs": 3673.5337999999974,
+        "verifyMs": 74.86030000000028,
+        "proofBytes": 14656,
+        "publicInputs": 17
+      },
+      {
+        "label": "request: one real note, size hidden",
+        "kind": "request",
+        "executionMs": 11.743000000002212,
+        "proveMs": 2182.2203999999983,
+        "verifyMs": 135.511599999998,
+        "proofBytes": 14656,
+        "publicInputs": 7
+      },
+      {
+        "label": "request: independently valid refresh 1",
+        "kind": "request",
+        "executionMs": 17.118299999994633,
+        "proveMs": 1827.223100000003,
+        "verifyMs": 70.29879999999685,
+        "proofBytes": 14656,
+        "publicInputs": 7
+      }
+    ]
+  },
+  "limits": [
+    "No issue/burn delivery candidate or combined six-key build in this run",
+    "No equal-length spend/burn cross-key comparison; the inherited P1 count-filtered cross-key loop executes zero comparisons",
+    "Observed mutation rejection under pinned UltraHonk backend is not a general nonmalleability proof",
+    "Historical P1 hostile cases are inherited; only the newly stated focused padding/refresh/range controls establish their isolated obligations",
+    "SHA256 delivery vectors, authentication, state transitions, venue completeness, finality, wallet and availability are outside this run",
+    "Source/bytecode/key hashes identify scratch candidates, not approved configuration identities; review and commit normative layouts before dependent retained code",
+    "Single desktop run; no device latency or memory budget established"
+  ]
+}
