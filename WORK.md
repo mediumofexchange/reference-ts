@@ -13,7 +13,7 @@ runtime changes. Repeat real-proof evidence on the final build and domain.
 
 ## Status
 
-- Active reference branch: `feat/pool-v3-records`; companion
+- Delivered code: `5c1a246` from reference `feat/pool-v3-records`; companion
   `spec/pool-v3-records` merged/pushed to specification `main` at `ca727f6`.
   Specification was committed before the dependent codec was written.
 - `model/pool-v3-records.ts` implements pool-v3 §§5–6 outside `src/`:
@@ -44,6 +44,11 @@ runtime changes. Repeat real-proof evidence on the final build and domain.
 - `npm run check` passes: 92 files / 1,743 tests, including all 44 codec
   tests, typecheck, build, installed-package consumer, pilot, store crash
   probes and ten spent-set groups. Final documentation/link checks pass.
+- [CI run 34357577567](https://github.com/mediumofexchange/reference-ts/actions/runs/34357577567)
+  passes all seven jobs at `5c1a246`: Node 20/24 Linux and Node 24 Windows
+  checks, both platforms' v3 proofs and unchanged v2/delivery/fee proofs.
+  The final follow-up changes only this handoff and exact publication sizes;
+  its documentation checks pass, reusing the verified code evidence.
 - Byte tests use independent Buffer/node:crypto framing, every truncated
   record/publication prefix, excessive lengths/counts, domain/limb/u64/field
   bounds, capsule profile/order/digest association and Buffer ownership.
@@ -59,11 +64,9 @@ runtime changes. Repeat real-proof evidence on the final build and domain.
 
 ## Next
 
-1. Finish full checks, commit/push reference branch, run available CI and
-   merge/push under standing authorization; verify clean status and parity.
-2. Fix final configuration and remaining evidence/snapshot/replay formats in
+1. Fix final configuration and remaining evidence/snapshot/replay formats in
    `pool-v3.md`; name companion branches before coordinated changes.
-3. Implement v3 runtime/recovery and wallet after final normative pins.
+2. Implement v3 runtime/recovery and wallet after final normative pins.
    Move retained proof and byte-conformance sources/cases into that path.
 
 ## Open questions

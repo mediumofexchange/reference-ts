@@ -282,13 +282,19 @@ two limbs in the demand. A publication's identity is `SHA256` over
 `publicationBytes`; an exact republication is the same publication
 (C2b.3.2). Bodies:
 
-| Kind | Body | Estimated bytes | Force |
+| Kind | Body | Publication bytes with a 14,656-byte proof | Force |
 |---|---|---|---|
-| 1 demand | the demand statement record | ≈ 15.3 KB | yes |
-| 2 acceptance | `acceptanceBytes ‖ signature[64]` | ≈ 0.3 KB | no, evidence for C3.8 |
-| 3 release | the settle statement record | ≈ 15.5 KB | yes |
-| 4 withdrawal | the withdraw statement record | ≈ 0.4 KB | yes |
-| 5 request | the request statement record | ≈ 15.0 KB | no, counted by C2b.5.2 |
+| 1 demand | the demand statement record | 15,330 | yes |
+| 2 acceptance | `acceptanceBytes ‖ signature[64]` | 282 (no proof) | no, evidence for C3.8 |
+| 3 release | the settle statement record | 15,498 | yes |
+| 4 withdrawal | the withdraw statement record | 450 (no proof) | yes |
+| 5 request | the request statement record | 15,042 | no, counted by C2b.5.2 |
+
+These are exact framing arithmetic under pool-v3 §§5–6, excluding venue
+chunking. The publication prefix is 92 bytes; each statement body is
+`58 + 32n + 12 + proofLength + authorizationLength + 89·capsuleCount`.
+The proof length is the retained suite's observation, not a future fixed
+proof-size claim; the parser accepts the specified bounded proof lengths.
 
 A publication is read for the backing its statement names; one whose
 routing name differs from it has no force and is no evidence (C2b.3.2).
@@ -464,7 +470,7 @@ secrets; every reader keeps evidence rather than verdicts (C2.10.13).
 | Item | Value | Standing |
 |---|---|---|
 | Proof bytes, observed circuits | 14,656 (458 fields) | v2, P1 and all six retained successor relations; §2.6 records the exact evidence |
-| Public inputs | issue 11, spend 15, burn 15, demand 16, withdraw 7, settle 17, request 7 | six proof orders fixed in pool-v3 §3; withdrawal remains the §2.2 candidate, without a circuit |
+| Public inputs | issue 11, spend 15, burn 15, demand 16, withdraw 7, settle 17, request 7 | six proof orders fixed in pool-v3 §3; proofless withdrawal and record bytes fixed in §5 |
 | Proving, desktop Node | 1.4 s for an issue to 10.5 s for a spend under a second segment (v2) | measured; demand and settle expected at burn's scale, request below |
 | Proving, original P1 circuits, desktop Node, one thread | demand 5.0–5.8 s, settle 6.3 s, request 3.5 s; verification 85–156 ms; key derivation 0.5–1.1 s; verification keys 3,680 bytes | historical measurement; corrected-candidate observations are in §2.6's report |
 | Proving, desktop browser | 4.3–9.3 s spend | measured; phone unmeasured |
