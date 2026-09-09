@@ -4,11 +4,15 @@ Updated: 2026-09-09
 
 ## Goal
 
-Current: diagnose and fix repeated Linux CI proving-parameter initialization
-failure at `21f6843`. Acceptance: retain parameter integrity validation and
-all conformance checks; pass Linux/Windows CI on the delivered revision.
-Branch: `fix/pool-v3-crs-diagnostics`. Windows passed; Linux attempts 1 and 2
-of run `34350273177` fail at compressed G1 chunk 0 SHA-256 verification.
+Current: verify and deliver the Linux CI parameter-download fix on
+`fix/pool-v3-crs-diagnostics`. Acceptance: retain parameter integrity and all
+conformance checks; pass Linux/Windows CI on the delivered revision.
+Run `34352187697` proves the failed Linux cache had an empty compressed G1
+file; G2/Grumpkin hashes matched. `prepare-crs.mjs` now checks exact lengths,
+range responses and recorded v2 SHA-256 identities before atomic caching,
+with the library's existing fallback host. Barretenberg still validates SRS.
+Fresh downloads and ten malformed-download/cache tests pass. Independent
+source review and focused test rerun cleared the fix. Full checks/CI pending.
 
 Next: fix the final v3 configuration and record formats before runtime
 adoption. Acceptance: explicit delivery-profile encoding, six ordered
@@ -19,7 +23,7 @@ proof evidence on the final build/domain; observed hashes are not pins.
 
 ## Status
 
-- Active slice: `feat/pool-v3-proof-conformance`, base `5ba6099`. Six retained
+- Previous slice: `feat/pool-v3-proof-conformance`, delivered `21f6843`. Six retained
   relations share one notes helper and the pinned Poseidon2 source under
   `scripts/pool/v3/`; `npm run check:pool:v3` runs their combined conformance
   suite from a clean checkout, without the inherited scratch probes.
@@ -58,8 +62,8 @@ proof evidence on the final build/domain; observed hashes are not pins.
 
 ## Next
 
-1. Inspect GitHub CI for this slice's delivered main revision, including the
-   new Linux/Windows v3 jobs. All required local checks pass.
+1. Finish required checks and Linux/Windows CI for the download fix; merge
+   and push under standing authority once the checks pass.
 2. Define the remaining config preimage and delivery-profile identity/encoding
    in `pool-v3.md`, together with records/bounds and observed artifact pins.
    Create/name companion branches here before coordinated changes.

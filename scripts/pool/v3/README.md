@@ -14,6 +14,14 @@ the check records observed source/bytecode/key hashes, checks and metrics in
 runs Barretenberg with one worker thread. The hashes are observations, not
 configuration pins. Final pinning requires separate review.
 
+The npm command verifies parameter cache/download lengths and SHA-256 hashes
+with `../prepare-crs.mjs` before starting the suite. It checks both upstream
+hosts on download failure; an empty or corrupt successful HTTP response is
+never cached. These are the existing bb.js 5.2.0 test parameters recorded in
+`docs/pool-v2-verification.json`; Barretenberg's own validation remains active.
+A mismatched uncompressed cache fails explicitly. This does not establish
+ceremony trust or approve a v3 configuration.
+
 The suite verifies every public-input position under each amended key,
 equal-count spend/burn substitution in both directions, separately provable
 metadata, and integer overflow with ABI range encoding bypassed while ACIR
