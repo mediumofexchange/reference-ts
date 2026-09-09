@@ -12,8 +12,8 @@ specification before dependent code, update affected evidence and deliver.
 
 ## Status
 
-- A22 is reviewed and verified in the commit carrying this handoff, from
-  `feat/pool-spent-radix` (base `fcf532c`), for integration into main.
+- A22 is merged/pushed to main at `c955798`, from `feat/pool-spent-radix`
+  (base `fcf532c`); remote parity and clean worktrees were verified.
   Companion `spec/pool-spent-radix` is merged/pushed to main
   at `78f8a8c`, after independent normative review and before retained code.
 - Selected canonical compressed binary roots: full-key leaves, absolute
@@ -49,7 +49,7 @@ specification before dependent code, update affected evidence and deliver.
 
 ## Next
 
-1. Verify main delivery/remote parity and GitHub CI for the A22 revision.
+1. Check GitHub CI for the delivered main revision; local checks passed.
 2. Resolve signed-attributable Construction C3 presentment versus unsigned
    pool demand/fresh presenter key, then close v3 layouts/circuit identities.
 3. Build the v3 runtime/recovery path and pool wallet against those contracts.
