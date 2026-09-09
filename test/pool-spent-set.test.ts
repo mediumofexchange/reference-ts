@@ -1,4 +1,4 @@
-import { sha256 } from "@noble/hashes/sha2.js";
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { EncodingError } from "../src/bytes.js";
 import { utf8Encoder } from "../src/contexts.js";
@@ -24,13 +24,23 @@ const key = (...bytes: [number, number][]): Uint8Array => {
   return out;
 };
 
+/** SHA-256 from another implementation, so the pinned frames are not checked
+ * against the same library that produces them. */
+const independent = (bytes: Uint8Array): Uint8Array => new Uint8Array(createHash("sha256").update(bytes).digest());
+
 describe("pool-v2 §11: the spent set", () => {
   it("frames its leaves and nodes as specified and builds the empty subtrees", () => {
     const nf = key([31, 1]);
-    expect(spentLeaf(nf)).toEqual(sha256(Buffer.concat([utf8Encoder.encode("moe/pool/v2/spent/leaf"), nf])));
+    expect(spentLeaf(nf)).toEqual(independent(Buffer.concat([utf8Encoder.encode("moe/pool/v2/spent/leaf"), nf])));
     const left = new Uint8Array(32).fill(1);
     const right = new Uint8Array(32).fill(2);
-    expect(spentNode(left, right)).toEqual(sha256(Buffer.concat([utf8Encoder.encode("moe/pool/v2/spent/node"), left, right])));
+    expect(spentNode(left, right)).toEqual(independent(Buffer.concat([utf8Encoder.encode("moe/pool/v2/spent/node"), left, right])));
+    // The frames are filled into shared buffers, so a rejected field must
+    // leave no residue for the next call (and must be rejected at all).
+    const before = spentNode(left, right);
+    expect(() => spentNode(left, new Uint8Array(31))).toThrow(EncodingError);
+    expect(() => spentNode(new Uint8Array(33), right)).toThrow(EncodingError);
+    expect(spentNode(left, right)).toEqual(before);
     expect(spentNode(left, right)).not.toEqual(spentNode(right, left));
     expect(EMPTY_SPENT_SUBTREE[0]).toEqual(new Uint8Array(32));
     expect(EMPTY_SPENT_SUBTREE).toHaveLength(SPENT_SET_HEIGHT + 1);
@@ -126,7 +136,7 @@ describe("pool-v2 §11: the spent set", () => {
 
   it("holds hundreds of keys with proofs for every member and for strangers, at a cost that stays flat", () => {
     const set = new SpentSet();
-    const keys = Array.from({ length: 300 }, (_, i) => sha256(new Uint8Array([i & 0xff, i >> 8])));
+    const keys = Array.from({ length: 300 }, (_, i) => independent(new Uint8Array([i & 0xff, i >> 8])));
     const start = performance.now();
     for (const nf of keys) set.insert(nf);
     const insertMs = performance.now() - start;
@@ -138,7 +148,7 @@ describe("pool-v2 §11: the spent set", () => {
       expect(spentProofProves(root, nf, set.proof(nf), false)).toBe(false);
     }
     for (let i = 300; i < 310; i++) {
-      const stranger = sha256(new Uint8Array([i & 0xff, i >> 8]));
+      const stranger = independent(new Uint8Array([i & 0xff, i >> 8]));
       expect(set.has(stranger)).toBe(false);
       expect(spentProofProves(root, stranger, set.proof(stranger), false)).toBe(true);
     }

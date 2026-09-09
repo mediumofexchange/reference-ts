@@ -126,7 +126,12 @@ export class ByteWriter {
    * A fixed-width field, asserted. This is the framing rule's enforcement
    * point: every raw byte field in every signed or hashed message goes through
    * here or through lengthPrefixed, so no two field values can ever share an
-   * encoding.
+   * encoding. The one exception is `pool/spent-set.ts`, whose two frames are
+   * hashed hundreds of times per nullifier and so are filled into a
+   * preallocated buffer; it asserts each field's width itself, and more
+   * strictly than this does — `fixed` reads `.length` without checking the
+   * type, so a 32-character string or a `Uint8ClampedArray(32)` encodes here
+   * as thirty-two zero bytes.
    */
   fixed(bytes: Uint8Array, length: number, what: string): void {
     if (bytes.length !== length) {

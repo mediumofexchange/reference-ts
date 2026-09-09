@@ -1,12 +1,15 @@
 // The spent set (pool-v2 §11; invariant 23): a sparse Merkle tree of height
 // 256 over SHA-256, keyed by the nullifier's 32 big-endian bytes, so that
 // both membership and non-membership are provable in the clear against
-// `spentRoot`. Construction §C2b.3's snapshot redemption reads a holder's
-// non-membership proof at the last witnessed commitment's spent root.
+// `spentRoot`. Construction §C2b.3's snapshot redemption establishes that a
+// claim is unspent as of the snapshot; the recovery contract has each reader
+// of force read that from the set it replays rather than from a published
+// proof (C2b.3.3, decided 2026-09-09), so the encoding below is defined and
+// unused there. The set and its root are unchanged either way.
 //
-//   leaf(nf)          = SHA256("moe/pool/v1/spent/leaf" ‖ nf)      nf in the set
+//   leaf(nf)          = SHA256("moe/pool/v2/spent/leaf" ‖ nf)      nf in the set
 //   e_0               = 0[32]                                        the empty leaf
-//   node(left, right) = SHA256("moe/pool/v1/spent/node" ‖ left ‖ right)
+//   node(left, right) = SHA256("moe/pool/v2/spent/node" ‖ left ‖ right)
 //   e_{h+1}           = node(e_h, e_h)
 //
 // Key bits are numbered from the most significant as bit 0. At height h,
@@ -45,19 +48,53 @@ function requireKey(nullifier: Uint8Array): Uint8Array {
   return nullifier;
 }
 
-export function spentLeaf(nullifier: Uint8Array): Uint8Array {
+// Both frames are a fixed context and one or two 32-byte fields, so each is
+// written once into a buffer of exactly its length (54 and 86 bytes) and
+// refilled per call rather than rebuilt through a ByteWriter's byte-at-a-time
+// array. Building a node's frame that way cost more than the SHA-256 over it,
+// and an insert costs about 430 node hashes: §11's tree is 256 high while the
+// trie holding N keys is about log2(N) deep, so a lone key's path runs through
+// roughly 240 empty levels, and an insert pays that for the key it adds and
+// again for the key it displaces where it displaces one. The bytes are
+// unchanged, which `test/pool-spent-set.test.ts` pins against a SHA-256 from
+// another library over the same concatenation.
+//
+// The shared buffers are safe because nothing can run between filling one and
+// hashing it: both fields are validated first, %TypedArray%.set with a typed
+// array source runs no user code, and the hash reads its input without
+// retaining or mutating it. Keep that order.
+function frameOf(context: Uint8Array, fields: number): Uint8Array {
   const w = new ByteWriter();
-  w.context(POOL_SPENT_LEAF_CONTEXT);
-  w.key32(requireKey(nullifier), "nullifier");
-  return sha256(w.finish());
+  w.context(context);
+  const prefix = w.finish();
+  const frame = new Uint8Array(prefix.length + fields * HASH_LENGTH);
+  frame.set(prefix, 0);
+  return frame;
+}
+
+function requireHash(bytes: Uint8Array, what: string): Uint8Array {
+  if (!(bytes instanceof Uint8Array) || bytes.length !== HASH_LENGTH) {
+    throw new EncodingError(`${what} must be ${HASH_LENGTH} bytes`);
+  }
+  return bytes;
+}
+
+const LEAF_FRAME = frameOf(POOL_SPENT_LEAF_CONTEXT, 1);
+const LEAF_OFFSET = LEAF_FRAME.length - HASH_LENGTH;
+const NODE_FRAME = frameOf(POOL_SPENT_NODE_CONTEXT, 2);
+const NODE_OFFSET = NODE_FRAME.length - 2 * HASH_LENGTH;
+
+export function spentLeaf(nullifier: Uint8Array): Uint8Array {
+  LEAF_FRAME.set(requireKey(nullifier), LEAF_OFFSET);
+  return sha256(LEAF_FRAME);
 }
 
 export function spentNode(left: Uint8Array, right: Uint8Array): Uint8Array {
-  const w = new ByteWriter();
-  w.context(POOL_SPENT_NODE_CONTEXT);
-  w.key32(left, "left child");
-  w.key32(right, "right child");
-  return sha256(w.finish());
+  requireHash(left, "left child");
+  requireHash(right, "right child");
+  NODE_FRAME.set(left, NODE_OFFSET);
+  NODE_FRAME.set(right, NODE_OFFSET + HASH_LENGTH);
+  return sha256(NODE_FRAME);
 }
 
 /** e_0 … e_256, private: the module hands out copies and reads only these. */
