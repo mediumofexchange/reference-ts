@@ -6,6 +6,15 @@ permits a finite, source-configured offline startup on a trusted host. The runti
 this does not select a production source, change a parser budget or establish
 an authenticated range. Companion specification: `main` at `7ea0ee8`.
 
+Current direction: [prefer the standard Ergo distribution](../decisions/2026-09.md#2026-09-10--prefer-the-standard-ergo-distribution).
+The custom native trial is suspended. Stock Windows startup already passed;
+later standalone version/module refusals do not establish a node storage bug.
+The source-built NO_COMPRESSION candidate does not exercise Ergo's normal LZ4
+configuration. Compare stable v6.0.5 with the prerelease fixture requirements
+and test actual stock storage before considering native substitution.
+Historical preparation and refusal evidence below remain valid within their
+original scope; they are not the current execution queue.
+
 ## Candidate and measured artifact
 
 Keep the fixture baseline, Ergo **v6.1.5**, rather than changing consensus
