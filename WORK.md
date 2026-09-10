@@ -4,11 +4,12 @@ Updated: 2026-09-10
 
 ## Goal
 
-Completed native disk-control preparation `4849120`, fast-forwarded from
-`test/ergo-disk-control` to `main`. Result: a reviewed fixed 64 MiB create-new VHD helper,
-identity guards before storage mutations, bounded disk-full worker and detach
-readback, ready for an elevated host attempt. Record ordinary-host refusal
-without claiming an attached-volume pass. No full-sized allocation or peers.
+Active native disk-control measurement on `test/ergo-disk-measurement`, based
+on `b8c098e`. The reviewed helper is `4849120`. Acceptance: inspect a real
+fixed 64 MiB disk-full attempt, its resource/capacity and detach evidence,
+independently review the classification and preserve any refusal honestly.
+Explicit approval for this fixed elevated disk test is now in effect.
+No full-sized allocation or peers.
 Companion specification: `money-from-first-principles/main` at `7ea0ee8`;
 no normative change or runtime adoption.
 
@@ -32,10 +33,13 @@ no normative change or runtime adoption.
   mutation: ordinary host administrator=false, 532,020,400,128 bytes free,
   no disk or worker created. Real disk-full/attachment/detach is unmeasured.
   Ordinary sandbox escalation cannot provide Windows administrator elevation.
-- A UAC launch was requested on 2026-09-10 but automatic approval review
-  rejected it before execution: elevated disk creation/partitioning/formatting
-  requires separate explicit approval under the destructive-operation exclusion.
-  That approval is pending. No attempt report or control directory exists.
+- Explicit approval covers the fixed elevated disk test. Its
+  [first attempt](docs/ergo-disk-control-first-attempt.json) created/attached
+  the fixed 64 MiB VHD but refused before initialization/formatting: Storage's
+  adapted BusType is a display string, not an integer. Detach readback passed.
+  Read-only follow-up confirms the exact 67,109,376-byte image is detached.
+  Correct the raw CIM property read, review it and preserve this refusal before
+  cleanup/retry; no worker or disk-full observation exists yet.
 
 ## Evidence
 
@@ -56,9 +60,8 @@ no normative change or runtime adoption.
 
 ## Next
 
-1. Obtain explicit approval for the reviewed fixed 64 MiB elevated disk test;
-   then use ordinary Windows UAC, which may require physical confirmation.
-   Do not infer that a generic continuation overrides the approval rejection.
+1. Correct/review the BusType projection mismatch, then verify exact detached
+   image identity and clean only this captured attempt before a fresh retry.
 2. The reviewed command for an elevated PowerShell 7 window is documented in
    [reproduction](experiments/ergo-range/README.md). Run one small control only,
    then inspect disk-full, resource, image capacity and detach evidence.
