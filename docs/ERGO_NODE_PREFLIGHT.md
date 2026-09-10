@@ -60,7 +60,7 @@ ends that attempt with incomplete evidence; there is no automatic increase.
 |---|---|---|
 | Extract and inspect runtime | 512 MiB dedicated scratch total; 5 minutes | Check member count, paths, expanded sizes and hashes before extraction; keep all files under the probe directory |
 | Offline startup | 120 seconds; 4 GiB aggregate job commit; 2 GiB JVM heap; one JVM and no descendants; 25% host CPU rate | Assign the process to a kill-on-close job before execution; read back memory, process and CPU-rate controls; exercise controls before the node |
-| First sync measurement | 30 minutes; same memory/CPU controls; 20 GiB dedicated data volume; 10 GiB combined network traffic | Demonstrated disk ceiling and traffic accounting/stop mechanism; preserve at least 100 GiB free on C:; report stop latency and any overshoot |
+| First sync measurement | 30 minutes; same memory/CPU controls; 20 GiB dedicated data volume; 10 GiB combined final observed successful-interface traffic | Demonstrated disk ceiling and traffic accounting/stop mechanism with an earlier trigger; preserve at least 100 GiB free on C:; report stop latency and any overshoot, refusing missing/late accounting or final excess |
 | Logs and run files | 16 MiB combined observed envelope | Capped stdout plus sampled/final run-file bytes; stop/refuse on excess. This is not a filesystem quota |
 | Fixture/API reads | GET only, one at a time; 1 MiB decoded bytes and 5 seconds per response; 64 MiB/120 seconds total | Stream counting before JSON parse; no redirects or automatic retries; lossless integer parsing; stop on malformed, unavailable or excessive data |
 
@@ -303,18 +303,28 @@ connection. Enabling them after socket discovery leaves an unmeasured prefix;
 short-lived connections can disappear between samples. Neither mechanism
 establishes the proposed 10 GiB combined budget.
 
-One native accounting candidate is conservative host-interface
+The [reviewed experiment contract](../decisions/2026-09.md#2026-09-10--measure-traffic-and-stop-the-finite-source-probe)
+selects a native accounting/stop candidate: conservative host-interface
 receive/send deltas, including unrelated traffic, with immediate job stop
 on threshold, counter reset, interface change or observation failure. The
 [interface counters](https://learn.microsoft.com/en-us/windows/win32/api/netioapi/ns-netioapi-mib_if_row2)
-report received and transmitted octets; they are observations, not a quota.
-This candidate is **not selected**: sampling alone cannot promise the declared
-combined ceiling under arbitrary incoming traffic or a stalled supervisor.
-An enforceable gateway or isolated environment must define its byte-accounting
-boundary, include both directions, and demonstrate stop latency and any final
-overshoot within the predeclared envelope. Review its cost and required host
-changes before selection. A proxy payload counter excludes transport overhead
-and bypass traffic and cannot silently redefine the budget.
+report successful received and transmitted octets; they are observations,
+not a physical-wire, ISP-billing or complete link-overhead bound. Include
+unrelated traffic and repeated virtual-interface accounting. The original
+table called for traffic accounting/stop and reported overshoot; the later
+absolute-cap interpretation is superseded by this explicit refusal contract,
+without reclassifying any prior result. Keep 10 GiB as the maximum accepted
+final observation; earlier trigger/headroom and timing limits still need
+first-sync selection and measurement. Missing/late accounting or excess
+refuses the attempt. Increases in error/discard counts also refuse.
+
+Sampling cannot detect every transient interface or counter reset/regrowth,
+and a permanently stalled supervisor cannot execute a stop. Stable trusted
+host configuration and counter continuity are explicit assumptions. Public
+peers remain untrusted; their parser exposure needs separate review before
+sync. A gateway could cap admitted bytes, but does not prevent arbitrary
+incoming physical-link consumption before local rejection. No hard network
+quota or isolation is inferred from this selection.
 
 The existing WSL 2 / Ubuntu 20.04 installation offers a second route without
 Windows elevation. A fixed
@@ -347,8 +357,8 @@ to Linux guest processes. Launching the Windows bundle through WSL interop
 also does not place that Windows process inside the Linux namespaces. No
 WSL-wide settings or host access rules were changed.
 
-**Selection status:** retain the native stock-node probe as the measured
-baseline; no complete first-sync control combination is selected. Native disk
+**Selection status:** retain the native stock-node probe and the reviewed
+accounting/stop route; no complete first-sync combination is demonstrated. Native disk
 attachment lacks a privilege in the current host token; rootless Linux is
 feasible at the namespace boundary but has unproven disk, connected-network
 and process-resource controls. Do not launch peers or install a new stack based
