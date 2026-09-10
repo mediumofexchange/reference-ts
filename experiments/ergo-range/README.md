@@ -128,7 +128,27 @@ hard disk/network quotas or production readiness. The
 [current report](../../docs/ergo-node-startup-verification.json) retains exact
 artifact/source pins and the limitations of the observations.
 
-The command runs both the block-root/Fleet experiment and the
+The separate settings-only readback uses the same extracted pinned bundle:
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-settings.ps1
+```
+
+It requires an absent `scratch/node-settings/` and the standalone Eclipse
+compiler 3.37.0 at `scratch/sync-preparation/ecj-3.37.0.jar`. Retrieve that exact
+artifact from [Maven Central](https://repo.maven.apache.org/maven2/org/eclipse/jdt/ecj/3.37.0/)
+with a 4 MiB / 60-second download ceiling; the launcher checks its SHA-256.
+Reacquire the pinned node archive under the existing download/extraction
+budgets above and run `node-prepare.ps1` if the scratch bundle was removed.
+Nothing is installed. The helper invokes the actual loader and typed settings
+constructors without starting node services. It checks the baseline and two
+negative controls: a JVM pruning override and omitted checkpoint override.
+Each compiler/readback process has 30 seconds, 1 GiB commit, 25% CPU rate,
+one process and 64 KiB output. The [report](../../docs/ergo-node-settings-verification.json)
+records effective values, process evidence and limits. Successful settings
+loading is not evidence of executed chain validation or a complete sync boundary.
+
+The original `npm run check:ergo:range` command runs both the block-root/Fleet experiment and the
 [full binary decoder experiment](../../docs/POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility).
 `decoder-check.mjs` launches the fixed corpus in a child process with a 30-second
 deadline and 1 MiB output cap. The corpus checks fixture pins, all output

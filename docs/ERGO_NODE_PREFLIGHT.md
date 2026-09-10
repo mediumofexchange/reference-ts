@@ -269,7 +269,55 @@ observations do not constitute a complete effective-settings dump; no sync,
 validated block ancestry, production resource sufficiency or hard network/disk
 isolation has been established.
 
-## Next executable slice
+## Effective settings readback
+
+The [offline readback](ergo-node-settings-verification.json) uses the pinned
+JAR's actual `ErgoSettingsReader.readConfig(Args)` and `fromConfig` methods,
+including its typed settings constructors. The
+[helper](../experiments/ergo-range/NodeSettingsReadback.java) reflects the exact
+private loader method rather than recreating HOCON precedence. It never calls
+`ErgoApp.main`, starts actors, opens the node databases or invokes wallet routes.
+The [fixed launcher](../experiments/ergo-range/node-settings.ps1) reproduces the
+recorded offline startup configuration with fresh paths and a new random API
+hash target, without retaining an authentication preimage.
+
+The baseline resolved mainnet (address prefix 0, magic bytes `[1,0,2,4]`,
+genesis ID `b0244dfc267baca974a4caee06120321562784303a8a688976ae56170e4d175b`).
+Typed settings confirm `utxo`, transaction verification, `blocksToKeep=-1`,
+absent checkpoint, disabled UTXO/NiPoPoW bootstrap and zero stored snapshots.
+Both `isFullBlocksPruned` and `areSnapshotsStored` are false. Mining, offline
+generation and extra indexes are false; test mnemonic and test key count are
+absent. REST/P2P are loopback, known/banned peers empty, maximum connections
+zero, discovery and UPnP false, declared address and public URL absent. CORS's
+parsed null still does not remove the hardcoded HTTP behavior described above.
+
+Two otherwise matching controls establish that this is effective readback:
+`-Dergo.node.blocksToKeep=10` overrides the file and sets typed pruning true;
+omitting `checkpoint = null` restores mainnet's checkpoint. Both are rejected
+as validation profiles. Their settings processes successfully exit; this
+rejection does not claim the stock node itself rejects those configurations.
+Settings establish intended behavior, not that a node executed validation
+from genesis or retained a complete history.
+
+The compiler and three readbacks each use the existing Job Object launcher:
+30 seconds, 1 GiB aggregate/process commit, 25% CPU rate, one process and
+64 KiB captured output. The compiler took 5,409 ms / 132,771,840 peak commit
+bytes; readbacks took 5,841–6,972 ms / at most 156,377,088 bytes. Each exited
+naturally with one total process, limits read back and an empty job. Final
+run files totaled 9,231 bytes; data and secret directories remained empty.
+JRE readback reports 21.0.1 and the explicit home/temp/logback paths. This is
+neither a full filesystem trace nor packet-isolation evidence.
+
+The bundle lacks `jdk.compiler`. Compilation uses the standalone
+[Eclipse compiler 3.37.0 distribution](https://repo.maven.apache.org/maven2/org/eclipse/jdt/ecj/3.37.0/),
+3,257,207 bytes, SHA-256
+`cde026ff966b48b5e5f148b6f041ceff3cf4f85cf75155f4ec0f40e4ee14b545`,
+only in ignored scratch. Its published SHA-1 was cross-checked at retrieval;
+the launcher pins the measured SHA-256. This is distribution identity, not
+reproducible-build assurance. No runtime/compiler installation or project
+dependency was added. The compiler is absent from the readback classpath.
+
+## First-sync preparation
 
 ### First-sync control selection
 
@@ -283,9 +331,10 @@ does not grant Windows administrator elevation. No privilege, disk attachment,
 firewall or access-control setting was changed.
 
 A fixed-capacity, freshly formatted dedicated virtual disk is the native
-candidate for the 20 GiB data ceiling. It still needs an attach-capable host
-context and a small disk-full/write-refusal demonstration before allocating
-the declared volume. Verify the mounted volume identity and capacity, all
+candidate for the 20 GiB data ceiling. The small native worker's disk-full
+demonstration below now passes in an attach-capable host context; a composed
+JRE/database control is still needed before allocating the declared volume.
+Verify the mounted volume identity and capacity, all
 node write locations (including temporary/crash files), container overhead,
 the host reserve and cleanup. A bounded data volume alone does not isolate
 the process from other host paths or reserve disk against unrelated writers.
@@ -543,13 +592,133 @@ to Linux guest processes. Launching the Windows bundle through WSL interop
 also does not place that Windows process inside the Linux namespaces. No
 WSL-wide settings or host access rules were changed.
 
+### Write targets and remaining observation boundary
+
+This inventory distinguishes source-derived destinations from measured file
+activity. Let `R` be one fresh run root on the owned data volume, `D=R/data`,
+`T=R/tmp`, and `S=R/secrets`. For the later volume experiment, process working
+directory, `TEMP`, `TMP` and `USERPROFILE` must be `R`; `user.home=R/home`,
+`java.io.tmpdir=T`, `ergo.directory=D` and wallet `secretDir=S`. Read these back
+under the same invocation/environment that the experiment will use. The
+existing supervisor supplies only `SystemRoot`, `TEMP`, `TMP`, `USERPROFILE`:
+Java option injection, `DATADIR` and `ROCKSDB_SHAREDLIB_DIR` are not inherited.
+Path settings constrain ordinary writes, not a compromised process.
+
+| Target | Source and required treatment |
+|---|---|
+| `D/history/index`, `objects`, `extra` | `HistoryStorage` opens all three RocksDB databases. `extraIndex=false` does not remove `extra`. |
+| `D/state/ldb_main`, `ldb_undo` | `ErgoState`/`UtxoState` and `RocksDBVersionedStore` derive the current and undo stores under `D`. |
+| `D/snapshots` | `UtxoStateReader` includes `UtxoSetSnapshotPersistence`, which eagerly opens `SnapshotsDb`; zero stored snapshots disables snapshot dumping, not this database. |
+| `D/wallet/registry/ldb_main`, `ldb_undo`; `D/wallet/storage` | `ErgoWalletActor`/`ErgoWalletState` construct the registry and storage even without a spending key. A fresh registry records pre-genesis state. |
+| `D/peers` | `PeerDatabase` still opens with offline networking settings. |
+| Per-database RocksDB files | SST data, WAL `.log` files, `MANIFEST-*`, `CURRENT`, `LOCK`, `LOG`/`LOG.old.*`, `OPTIONS-*`, `IDENTITY`, temporary `.dbtmp` and possible archive files belong to each DB directory. Include compaction/obsolete/temp bytes in the same volume ceiling. |
+| `S/<UUID>.json` | Encrypted seed storage written by wallet init/restore. Keep `S` initially empty, test mnemonic/count absent and API authentication unavailable; any secret file is a refusal. Registry/storage files are distinct from this directory. |
+| `T/mainnet.conf` | The settings reader copies the embedded defaults before parsing and deletes them via a shutdown hook. A killed process can leave this file. |
+| Native lookup and JNI extraction fallback | `RocksDB.loadLibrary()` first tries optional compression and RocksDB libraries through `java.library.path`. Only its extraction fallback uses `ROCKSDB_SHAREDLIB_DIR` if present, otherwise the Java temp directory `T`. Verify the actual loaded JNI and optional compression DLL paths/hashes; count extraction and residue after kill, without depending on delete-on-exit. |
+| Application stdout and fallback logs | Stock `logback.xml` writes `ergo.log`/rolled archives relative to cwd; `scorex.logDir` does not redirect that appender. Use the explicit console-only logback file and capped output pipe. Keeping cwd in `R` also contains ordinary fallback logs. |
+| JVM/native diagnostics | Put `-XX:ErrorFile=R/hs_err.log` on the volume, disable core dumps and performance data (`-XX:-CreateCoredumpOnCrash`, `-XX:-UsePerfData`), and supply no heap-dump/JFR/logging injection options. Auxiliary native/JRE/Windows destinations still require observation. |
+| Host supervisor and OS | Bundle/compiler reads, supervisor compilation/module caches, evidence output, VHD backing file, paging and Windows crash reporting are outside the worker volume. The previous PowerShell startup profile demonstrates this boundary. Inventory/budget these separately; the Job Object does not contain host services or filesystem access. |
+
+Ergo sources at the pinned revision: the
+[history stores](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/nodeView/history/storage/HistoryStorage.scala#L230),
+[snapshot trait](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/nodeView/state/UtxoSetSnapshotPersistence.scala#L18),
+[snapshot database](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/nodeView/state/SnapshotsDb.scala#L140),
+[peer database](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/network/peer/PeerDatabase.scala#L15),
+[state root](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/nodeView/state/ErgoState.scala#L299),
+[UTXO store](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/nodeView/state/UtxoState.scala#L286),
+[database factory](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/avldb/src/main/scala/scorex/db/RocksDBFactory.scala),
+[versioned stores](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/avldb/src/main/scala/scorex/db/RocksDBVersionedStore.scala),
+[wallet registry](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/nodeView/wallet/persistence/WalletRegistry.scala),
+[wallet storage](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/nodeView/wallet/persistence/WalletStorage.scala),
+[wallet startup/init/restore](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/nodeView/wallet/ErgoWalletService.scala#L271),
+[settings reader](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/settings/ErgoSettingsReader.scala#L105)
+and [logback](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/resources/logback.xml).
+[build.sbt](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/build.sbt)
+pins rocksdbjni 10.2.1. Its
+[Java loader](https://github.com/facebook/rocksdb/blob/v10.2.1/java/src/main/java/org/rocksdb/RocksDB.java#L46),
+[native extraction](https://github.com/facebook/rocksdb/blob/v10.2.1/java/src/main/java/org/rocksdb/NativeLibraryLoader.java#L112),
+[default directories](https://github.com/facebook/rocksdb/blob/v10.2.1/db/db_impl/db_impl_open.cc#L123)
+and [file naming](https://github.com/facebook/rocksdb/blob/v10.2.1/file/filename.cc)
+support the native-storage rows. The observed `java.library.path` includes
+Windows/system directories and `.`; environment scrubbing alone does not prove
+that the embedded JNI DLL will be loaded. The settings-only run does not load
+RocksDB. The Ergo factory sets no separate WAL/log/data paths.
+`scorex.dataDir` and `scorex.logDir` are read back for visibility but are
+not substitutes for these consuming-code paths.
+
+This accounts for the identified node write targets and explicitly leaves
+transitive native/JRE/OS writes unclosed. Source search and a settings-only
+run cannot establish an exhaustive runtime write trace. A first-sync launch
+must refuse until the following composition checks account for that remainder.
+
+### Combined experiment proposal
+
+The smallest route reuses the native fixed disk, existing detached JVM Job
+Object and aggregate interface accounting/stop contract. It introduces no
+firewall, sandbox claim, separate service or production dependency; the stock
+wallet actor/routes remain under the existing no-spending-key boundary. Before any
+20 GiB allocation or peers, demonstrate a small **offline JRE/RocksDB control**
+on the same owned volume and exact path form intended for sync. The native
+disk worker's successful volume GUID path does not establish Java/RocksDB
+compatibility. Test create/write/flush/close, finite disk-full refusal and
+whole-job termination with verified pinned JNI identity and explicit optional
+compression-library provenance; correlate actual loaded modules and file
+destinations with the inventory, including cleanup residue. The old
+disk control's approval covered its fixed worker, not this different worker.
+Prepare and review that runnable control before requesting its execution.
+If volume GUID paths fail, assess a temporary volume mount separately rather
+than silently redirecting writes to C:.
+
+The later combined first-sync proposal has these fixed refusal limits:
+
+| Boundary | Proposed limit and acceptance |
+|---|---|
+| Worker | 1,800,000 ms; 4 GiB aggregate/process commit; 2 GiB JVM heap; 25% host CPU rate; one detached JVM, no descendants. Read back limits before resume and confirm empty job for every exit. |
+| Disk | New fixed VHD with 21,474,836,480 virtual bytes (20 GiB); accept at most 20 GiB + 1 MiB backing bytes. GPT/NTFS overhead and every `R` write share the virtual capacity, so 20 GiB is not usable database space. Verify exact image/disk/partition/volume association before each mutation. |
+| Host | At least 100 GiB + maximum backing bytes + 512 MiB preparation + 16 MiB reports free before creation; at least 100 GiB while observing and after detach. No reservation against unrelated host writers is inferred. Record actual backing/NTFS/free bytes and setup/detach times. |
+| Traffic | Trigger at 8 GiB combined successful-interface receive/send octets; maximum accepted final observation 10 GiB. Include unrelated and duplicate virtual-interface traffic. The 2 GiB headroom is a provisional refusal margin, not a throughput/overshoot guarantee. |
+| Accounting timing | Nominal 250 ms observation; refuse a sample gap above 1,000 ms, discontinuity, interface change or read/error/discard failure. Stop decision to confirmed empty job at most 2,000 ms; final sample must finish within 1,000 ms after empty confirmation. Final accounting is required for natural exit, wall/memory/output stop and errors too. |
+| Logs and reports | Capped 16 MiB combined application output and non-database diagnostic/report files; observe against the same budget and refuse excess. Database, WAL, JNI and temporary data bytes belong to the disk budget and must not be mistaken for logs. No directory sample is a quota. |
+| API | Existing bounded, one-at-a-time public GET allowlist; at most 1 MiB/5 s per response, 64 MiB/120 s total for any later fixture extraction. No redirects, retries, credentials, wallet mutation or transaction submission. |
+
+Do not put a recursive database scan, blocking API read, disk setup/detach or
+other potentially long operation inside the traffic observer. Volume/free
+queries and diagnostic accounting need measured latency; any file inventory
+must be finite and outside the sample-critical path. The current synchronous
+observer cannot stop a worker while permanently blocked. Preserve that
+trusted-supervisor limitation, and test delayed/failed observers and final
+sampling in a combined harness before any peer run. Independent controls
+cannot be multiplied into a hard total disk/network/CPU guarantee.
+
+The combined control must exercise disk-full and traffic stop while the same
+JVM is doing finite database work, with no public peer payloads, and preserve
+each refusal and final accounting result. This remains preparation for a
+separately reviewed public-peer parser boundary: connection/message limits,
+native decompression and the bundled JRE's maintenance suitability are open.
+Keep the offline config at zero peers until the exact candidate peer-enabled
+config and artifact are reviewed; rerun effective readback for that config.
+Full-sized allocation needs separate authorization of the concrete harness.
+No selection here establishes fixture ancestry, complete ranges, C2.10.13/A8,
+same-index order/A9, or permission to deploy a public service.
+
+Independent review inspected the actual helper, captured report, all 167
+bundle hashes and the pinned loader/constructor path. A separate read of the
+inventory and combined proposal caught the native-library search order;
+the loaded-library identity requirement above resolves that claim gap.
+No material review finding remains for this preparation slice. The combined
+control and public-peer parser review remain future execution gates.
+`npm run check` passes on unchanged final runtime code: 96 files / 1,795 tests,
+package consumer, pilot, store-crash and spent-set checks. The ordinary host
+was required after sandboxed esbuild could not read its configuration.
+
 **Selection status:** retain the native stock-node probe and the reviewed
 accounting/stop route; no complete first-sync combination is demonstrated.
 The explicitly elevated native route now passes the fixed 64 MiB disk control;
 ordinary process escalation alone still does not grant the required Windows
 privilege. Rootless Linux is feasible at the namespace boundary but has unproven
-disk, connected-network and process-resource controls. Combine and review the
-chosen route, all write targets and full-sized overhead before a separately
+disk, connected-network and process-resource controls. The inventory and
+combined proposal above identify the remaining measured prerequisites. Verify
+the composed route and full-sized overhead before a separately
 authorized full-sized measurement. Neither small disk control authorizes peers
 or establishes the complete sync boundary. No normative protocol change follows.
 
@@ -559,8 +728,8 @@ without the deliberately unavailable authentication capability.
 
 Select and demonstrate the first sync's disk/network controls before enabling
 peers. Preserve the declared finite envelope, explicit wallet boundary and
-validation/history settings. A complete effective-settings readback remains
-useful before sync. Only a separately controlled sync can produce fixture and
+validation/history settings. The offline effective-settings readback now passes;
+the peer-enabled invocation still needs its own readback. Only a separately controlled sync can produce fixture and
 validation evidence. No production dependency is selected here.
 
 Independent source/claim review caught the omitted prerelease label, now
