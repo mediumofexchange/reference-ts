@@ -65,6 +65,8 @@ try {
             if ($images.Count -ne 1) { throw 'Expected exactly the created image' }
             $disks = @($images[0] | Storage\Get-Disk)
             if ($disks.Count -ne 1) { throw 'Expected exactly the created disk' }
+            # Retain actual observed properties even when the next guard refuses.
+            $report.disk = $disks[0] | Select-Object Number,Path,UniqueId,Guid,Size,BusType,PartitionStyle,IsBoot,IsSystem,IsOffline,IsReadOnly,NumberOfPartitions
             Assert-ProbeDiskIdentity $images[0] $disks[0] $imagePath $ownedDisk.PhysicalPath $Style
             return $disks[0]
         }
@@ -74,9 +76,10 @@ try {
         Storage\Initialize-Disk -InputObject $disk -PartitionStyle GPT -Confirm:$false
         $disk = Read-OwnedDisk 'GPT'
         $diskId = $disk.UniqueId; $diskPath = $disk.Path; $diskGuid = $disk.Guid
-        $partitions = @(Storage\New-Partition -InputObject $disk -UseMaximumSize -AssignDriveLetter:$false)
+        $partitions = @(Storage\New-Partition -InputObject $disk -Offset 1048576UL -UseMaximumSize -AssignDriveLetter:$false)
         if ($partitions.Count -ne 1) { throw 'Expected one created data partition' }
         $expectedPartition = $partitions[0]
+        $report.partition = $expectedPartition | Select-Object DiskNumber,PartitionNumber,Guid,Offset,Size,GptType,DriveLetter,IsBoot,IsSystem,IsReadOnly,IsOffline
         Assert-ProbePartition $expectedPartition $disk $null
         function Read-OwnedPartition {
             $currentDisk = Read-OwnedDisk 'GPT'
@@ -101,8 +104,6 @@ try {
             $volume.FileSystem -cne 'NTFS' -or $volume.FileSystemLabel -cne 'MOE_DISK_CONTROL' -or
             $volume.Size -le 0 -or $volume.Size -gt 67108864UL -or
             ($volume.DriveLetter -and [int][char]$volume.DriveLetter -ne 0)) { throw 'Unexpected formatted volume identity/capacity' }
-        $report.disk = $disk | Select-Object Number,Path,UniqueId,Guid,Size,BusType,PartitionStyle
-        $report.partition = $partition | Select-Object DiskNumber,PartitionNumber,Guid,Offset,Size,GptType
         $report.volumeBefore = $volume | Select-Object Path,UniqueId,FileSystem,FileSystemLabel,Size,SizeRemaining
         $worker = Join-Path $PSScriptRoot 'node-disk-worker.ps1'
         $powershell = Join-Path $PSHOME 'pwsh.exe'

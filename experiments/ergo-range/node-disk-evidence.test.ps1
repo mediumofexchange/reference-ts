@@ -40,6 +40,12 @@ Expect-Pass 'valid disk identity' { Invoke-Identity {} }
 Expect-Pass 'valid partition' { Invoke-Partition {} }
 Expect-Pass 'valid completion' { Invoke-Completion {} }
 Expect-Pass 'display label is not the bus identity' { Invoke-Identity { param($f) $f.Disk.BusType='display label' } }
+Expect-Reject 'observed Windows default 64 KiB offset, otherwise stable partition' {
+    Invoke-Partition { param($f)
+        $f.Partition.Offset=65536UL; $f.Expected.Offset=65536UL
+        $f.Partition.Size=66977792UL; $f.Expected.Size=66977792UL
+    }
+}
 
 @(
     @{ n='unattached image'; m={param($f) $f.Image.Attached=$false} },
