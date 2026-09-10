@@ -1,0 +1,231 @@
+{
+  "status": "compiled-unadopted-native-candidate",
+  "phase": "complete",
+  "candidateLoaded": false,
+  "databaseAcceptance": false,
+  "errors": [],
+  "imageVersion": "20260830.290.1",
+  "workflowCommit": "e9178497a22162d13958085d096fd4df54715c4b",
+  "runId": "34495975811",
+  "imageSourceCommit": "81f6fba751cfd9688d726f4981cd9798305a1985",
+  "imageManifestSha256": "93aff42175f175422340f660e5c8d22adb6cfbcf40e5ec4636bdccd334ae56e5",
+  "freeBefore": 157792608256,
+  "sourceCommit": "4b2122578e475cb88aef4dcf152cccd5dbf51060",
+  "sourceTree": "3d47d6368014281754cc7324a9b1edf05e22e892",
+  "javaHome": "C:\\hostedtoolcache\\windows\\Java_Temurin-Hotspot_jdk\\21.0.12-101.0\\x64",
+  "javaRelease": "IMPLEMENTOR=\"Eclipse Adoptium\"\r\nIMPLEMENTOR_VERSION=\"Temurin-21.0.12.1+1\"\r\nJAVA_RUNTIME_VERSION=\"21.0.12.1+1-LTS\"\r\nJAVA_VERSION=\"21.0.12.1\"\r\nJAVA_VERSION_DATE=\"2026-08-18\"\r\nLIBC=\"default\"\r\nMODULES=\"java.base java.compiler java.datatransfer java.xml java.prefs java.desktop java.instrument java.logging java.management java.security.sasl java.naming java.rmi java.management.rmi java.net.http java.scripting java.security.jgss java.transaction.xa java.sql java.sql.rowset java.xml.crypto java.se java.smartcardio jdk.accessibility jdk.internal.jvmstat jdk.attach jdk.charsets jdk.internal.opt jdk.zipfs jdk.compiler jdk.crypto.ec jdk.crypto.cryptoki jdk.crypto.mscapi jdk.dynalink jdk.internal.ed jdk.editpad jdk.hotspot.agent jdk.httpserver jdk.incubator.vector jdk.internal.le jdk.internal.vm.ci jdk.internal.vm.compiler jdk.internal.vm.compiler.management jdk.jartool jdk.javadoc jdk.jcmd jdk.management jdk.management.agent jdk.jconsole jdk.jdeps jdk.jdwp.agent jdk.jdi jdk.jfr jdk.jlink jdk.jpackage jdk.jshell jdk.jsobject jdk.jstatd jdk.localedata jdk.management.jfr jdk.naming.dns jdk.naming.rmi jdk.net jdk.nio.mapmode jdk.random jdk.sctp jdk.security.auth jdk.security.jgss jdk.unsupported jdk.unsupported.desktop jdk.xml.dom\"\r\nOS_ARCH=\"x86_64\"\r\nOS_NAME=\"Windows\"\r\nSOURCE=\".:git:1c417fbfc2f7\"\r\nBUILD_SOURCE=\"git:e6ba7dec3d07654074559310376a3ae89da5f4ac\"\nBUILD_SOURCE_REPO=\"https://github.com/adoptium/temurin-build.git\"\nSOURCE_REPO=\"https://github.com/adoptium/jdk21u.git\"\nFULL_VERSION=\"21.0.12.1+1-LTS\"\nSEMANTIC_VERSION=\"21.0.12.1+1\"\nBUILD_INFO=\"OS: Windows Server 2022 Version: 10.0\"\nJVM_VARIANT=\"Hotspot\"\nJVM_VERSION=\"21.0.12.1+1-LTS\"\nIMAGE_TYPE=\"JDK\"",
+  "cmakeVersion": "cmake version 3.31.6",
+  "toolset": "14.44.35207",
+  "tools": [
+    {
+      "name": "cmake.exe",
+      "bytes": 12029392,
+      "sha256": "3fe22eb02e1c6184ec207366ed21a6f2f9c3828c1e9f3324546befadfb362be3"
+    },
+    {
+      "name": "javac.exe",
+      "bytes": 24704,
+      "sha256": "00f7c6f9ec89ebba4bb96cf8760403cccf1268df2eae8685900ba38e58a7aff9"
+    },
+    {
+      "name": "jar.exe",
+      "bytes": 24184,
+      "sha256": "63252d4bf24035ddba3d98fd23e0a2a414d5e860a49f180ce4ac35f52febe043"
+    },
+    {
+      "name": "jni.h",
+      "bytes": 76018,
+      "sha256": "99e64ebbe749e6df284f852f11b3c73f6ea97baf15120428f40f887fe0616e61"
+    },
+    {
+      "name": "jni_md.h",
+      "bytes": 1510,
+      "sha256": "3cacac1e4802ec246ea7c0c6772d4ac40c9f7255d4df095cfffe601137689771"
+    },
+    {
+      "name": "cl.exe",
+      "bytes": 677736,
+      "sha256": "88c8344236a27a6e727e0a8edc49aaa2690bdc7a9464b9d18cc7abe70a9f1c0d"
+    },
+    {
+      "name": "c1xx.dll",
+      "bytes": 12332384,
+      "sha256": "688fe28f3065283edf668868e76aeab28f03f80e2171c14c7d4e37f64513f623"
+    },
+    {
+      "name": "c2.dll",
+      "bytes": 10462008,
+      "sha256": "98050f97d60f7e95fcaf3525a7103e4818fba498a43563922476819ce88ed162"
+    },
+    {
+      "name": "link.exe",
+      "bytes": 3252576,
+      "sha256": "ca11e6c45debd34bf652dfe984c5360a531a005ed78bf72852330c9c2590cf0d"
+    },
+    {
+      "name": "dumpbin.exe",
+      "bytes": 23416,
+      "sha256": "12a1cd87238bd66dfdb788b4fcdcb91ce4b3f81236aab12a7a29e5ae1d85af50"
+    },
+    {
+      "name": "rc.exe",
+      "bytes": 71208,
+      "sha256": "2cbcc6024fe41ae92fada6b3f74e6e2a1b2fe71c51b288167d6abab319da2628"
+    },
+    {
+      "name": "libucrt.lib",
+      "bytes": 35488094,
+      "sha256": "335d768550631d4f667b12c5f3a7a7155e341117cd61ce11aadc533b031be80c"
+    },
+    {
+      "name": "libcmt.lib",
+      "bytes": 6534094,
+      "sha256": "8fe40dd342b90b35d62b8f5d55b4e92df7785c122976618365cfe3b014cc857a"
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "junit-4.13.1.jar",
+      "bytes": 382708,
+      "sha256": "c30719db974d6452793fe191b3638a5777005485bae145924044530ffa5f6122"
+    },
+    {
+      "name": "hamcrest-2.2.jar",
+      "bytes": 123360,
+      "sha256": "5e62846a89f05cd78cd9c1a553f340d002458380c320455dd1f8fc5497a8a1c1"
+    },
+    {
+      "name": "mockito-all-1.10.19.jar",
+      "bytes": 1234599,
+      "sha256": "d1a7a7ef14b3db5c0fc3e0a63a81b374b510afe85add9f7984b97911f4c70605"
+    },
+    {
+      "name": "cglib-3.3.0.jar",
+      "bytes": 306864,
+      "sha256": "9fe0c26d7464140ccdfe019ac687be1fb906122b508ab54beb810db0f09a9212"
+    },
+    {
+      "name": "assertj-core-2.9.0.jar",
+      "bytes": 1096630,
+      "sha256": "5e88ea3ecbe3c48aa1346fec76c84979fa9c8d22499f11479011691230e8babf"
+    }
+  ],
+  "configureArguments": [
+    "-S",
+    "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source",
+    "-B",
+    "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\build",
+    "-G",
+    "Visual Studio 17 2022",
+    "-A",
+    "x64",
+    "-T",
+    "v143,version=14.44.35207",
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DCMAKE_SYSTEM_VERSION=10.0.19041.0",
+    "-DCMAKE_CXX_STANDARD=17",
+    "-DWITH_JNI=ON",
+    "-DROCKSDB_BUILD_SHARED=OFF",
+    "-DROCKSDB_SKIP_THIRDPARTY=ON",
+    "-DWITH_MD_LIBRARY=OFF",
+    "-DPORTABLE=ON",
+    "-DFAIL_ON_WARNINGS=ON",
+    "-DWITH_TESTS=OFF",
+    "-DWITH_BENCHMARK_TOOLS=OFF",
+    "-DWITH_CORE_TOOLS=OFF",
+    "-DWITH_TOOLS=OFF",
+    "-DWITH_TRACE_TOOLS=OFF",
+    "-DWITH_BENCHMARK=OFF",
+    "-DWITH_EXAMPLES=OFF",
+    "-DWITH_GFLAGS=OFF",
+    "-DWITH_JEMALLOC=OFF",
+    "-DWITH_SNAPPY=OFF",
+    "-DWITH_LZ4=OFF",
+    "-DWITH_ZLIB=OFF",
+    "-DWITH_ZSTD=OFF",
+    "-DWITH_XPRESS=OFF",
+    "-DWITH_LIBURING=OFF",
+    "-DWITH_DYNAMIC_EXTENSION=OFF",
+    "-DCUSTOM_DEPS_URL=file:///nonexistent-moe-build-dependencies"
+  ],
+  "cache": {
+    "name": "CMakeCache.txt",
+    "bytes": 23679,
+    "sha256": "029d2b9f58a79f6d31862a3c8907be78a469f1828fac22513de16e2fc812aab4"
+  },
+  "effectiveCache": [
+    "CMAKE_BUILD_TYPE:UNINITIALIZED=Release",
+    "CMAKE_CXX_FLAGS:STRING=/DWIN32 /D_WINDOWS /W3 /GR /EHsc",
+    "CMAKE_CXX_FLAGS_DEBUG:STRING=/MDd /Zi /Ob0 /Od /RTC1",
+    "CMAKE_CXX_FLAGS_MINSIZEREL:STRING=/MD /O1 /Ob1 /DNDEBUG",
+    "CMAKE_CXX_FLAGS_RELEASE:STRING=/MD /O2 /Ob2 /DNDEBUG",
+    "CMAKE_CXX_FLAGS_RELWITHDEBINFO:STRING=/MD /Zi /O2 /Ob1 /DNDEBUG",
+    "CMAKE_SYSTEM_VERSION:UNINITIALIZED=10.0.19041.0",
+    "JAVA_AWT_INCLUDE_PATH:PATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/include",
+    "JAVA_AWT_LIBRARY:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/lib/jawt.lib",
+    "JAVA_INCLUDE_PATH:PATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/include",
+    "JAVA_JVM_LIBRARY:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/lib/jvm.lib",
+    "Java_IDLJ_EXECUTABLE:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/8.0.504-1/x64/bin/idlj.exe",
+    "Java_JARSIGNER_EXECUTABLE:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/bin/jarsigner.exe",
+    "Java_JAR_EXECUTABLE:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/bin/jar.exe",
+    "Java_JAVAC_EXECUTABLE:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/bin/javac.exe",
+    "Java_JAVADOC_EXECUTABLE:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/bin/javadoc.exe",
+    "Java_JAVAH_EXECUTABLE:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/8.0.504-1/x64/bin/javah.exe",
+    "Java_JAVA_EXECUTABLE:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/bin/java.exe",
+    "PORTABLE:STRING=ON",
+    "ROCKSDB_BUILD_SHARED:BOOL=OFF",
+    "ROCKSDB_INSTALL_ON_WINDOWS:BOOL=OFF",
+    "ROCKSDB_SKIP_THIRDPARTY:BOOL=ON",
+    "WITH_ALL_TESTS:BOOL=ON",
+    "WITH_ASAN:BOOL=OFF",
+    "WITH_BENCHMARK:BOOL=OFF",
+    "WITH_BENCHMARK_TOOLS:BOOL=OFF",
+    "WITH_CORE_TOOLS:BOOL=OFF",
+    "WITH_DYNAMIC_EXTENSION:BOOL=OFF",
+    "WITH_EXAMPLES:BOOL=OFF",
+    "WITH_FALLOCATE:BOOL=ON",
+    "WITH_GFLAGS:BOOL=OFF",
+    "WITH_IOSTATS_CONTEXT:BOOL=ON",
+    "WITH_JEMALLOC:BOOL=OFF",
+    "WITH_JNI:BOOL=ON",
+    "WITH_LIBURING:BOOL=OFF",
+    "WITH_MD_LIBRARY:BOOL=OFF",
+    "WITH_NUMA:BOOL=OFF",
+    "WITH_PERF_CONTEXT:BOOL=ON",
+    "WITH_RUNTIME_DEBUG:BOOL=ON",
+    "WITH_SNAPPY:BOOL=OFF",
+    "WITH_TBB:BOOL=OFF",
+    "WITH_TOOLS:BOOL=OFF",
+    "WITH_TRACE_TOOLS:BOOL=OFF",
+    "WITH_TSAN:BOOL=OFF",
+    "WITH_UBSAN:BOOL=OFF",
+    "WITH_XPRESS:BOOL=OFF",
+    "WITH_ZLIB:BOOL=OFF",
+    "WITH_ZSTD:BOOL=OFF",
+    "CMAKE_CXX_FLAGS-ADVANCED:INTERNAL=1",
+    "CMAKE_CXX_FLAGS_DEBUG-ADVANCED:INTERNAL=1",
+    "CMAKE_CXX_FLAGS_MINSIZEREL-ADVANCED:INTERNAL=1",
+    "CMAKE_CXX_FLAGS_RELEASE-ADVANCED:INTERNAL=1",
+    "CMAKE_CXX_FLAGS_RELWITHDEBINFO-ADVANCED:INTERNAL=1",
+    "CMAKE_GENERATOR:INTERNAL=Visual Studio 17 2022",
+    "CMAKE_GENERATOR_INSTANCE:INTERNAL=C:/Program Files/Microsoft Visual Studio/2022/Enterprise",
+    "CMAKE_GENERATOR_PLATFORM:INTERNAL=x64",
+    "CMAKE_GENERATOR_TOOLSET:INTERNAL=v143,version=14.44.35207",
+    "WITH_TESTS:INTERNAL=OFF"
+  ],
+  "buildVersionSource": "// Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.\r\n\r\n#include <memory>\r\n\r\n#include \"rocksdb/version.h\"\r\n#include \"rocksdb/utilities/object_registry.h\"\r\n#include \"util/string_util.h\"\r\n\r\n// The build script may replace these values with real values based\r\n// on whether or not GIT is available and the platform settings\r\nstatic const std::string rocksdb_build_git_sha  = \"rocksdb_build_git_sha:4b2122578e475cb88aef4dcf152cccd5dbf51060\";\r\nstatic const std::string rocksdb_build_git_tag = \"rocksdb_build_git_tag:\";\r\n#define HAS_GIT_CHANGES 0\r\n#if HAS_GIT_CHANGES == 0\r\n// If HAS_GIT_CHANGES is 0, the GIT date is used.\r\n// Use the time the branch/tag was last modified\r\nstatic const std::string rocksdb_build_date = \"rocksdb_build_date:2025-04-24 22:11:56\";\r\n#else\r\n// If HAS_GIT_CHANGES is > 0, the branch/tag has modifications.\r\n// Use the time the build was created.\r\nstatic const std::string rocksdb_build_date = \"rocksdb_build_date:2026-09-10 15:30:14\";\r\n#endif\r\n\r\nextern \"C\" {\r\n\r\n} // extern \"C\"\r\n\r\nstd::unordered_map<std::string, ROCKSDB_NAMESPACE::RegistrarFunc> ROCKSDB_NAMESPACE::ObjectRegistry::builtins_ = {\r\n  \r\n};\r\n\r\nnamespace ROCKSDB_NAMESPACE {\r\nstatic void AddProperty(std::unordered_map<std::string, std::string> *props, const std::string& name) {\r\n  size_t colon = name.find(\":\");\r\n  if (colon != std::string::npos && colon > 0 && colon < name.length() - 1) {\r\n    // If we found a \"@:\", then this property was a build-time substitution that failed.  Skip it\r\n    size_t at = name.find(\"@\", colon);\r\n    if (at != colon + 1) {\r\n      // Everything before the colon is the name, after is the value\r\n      (*props)[name.substr(0, colon)] = name.substr(colon + 1);\r\n    }\r\n  }\r\n}\r\n\r\nstatic std::unordered_map<std::string, std::string>* LoadPropertiesSet() {\r\n  auto * properties = new std::unordered_map<std::string, std::string>();\r\n  AddProperty(properties, rocksdb_build_git_sha);\r\n  AddProperty(properties, rocksdb_build_git_tag);\r\n  AddProperty(properties, rocksdb_build_date);\r\n  return properties;\r\n}\r\n\r\nconst std::unordered_map<std::string, std::string>& GetRocksBuildProperties() {\r\n  static std::unique_ptr<std::unordered_map<std::string, std::string>> props(LoadPropertiesSet());\r\n  return *props;\r\n}\r\n\r\nstd::string GetRocksVersionAsString(bool with_patch) {\r\n  std::string version = std::to_string(ROCKSDB_MAJOR) + \".\" + std::to_string(ROCKSDB_MINOR);\r\n  if (with_patch) {\r\n    return version + \".\" + std::to_string(ROCKSDB_PATCH);\r\n  } else {\r\n    return version;\r\n }\r\n}\r\n\r\nstd::string GetRocksBuildInfoAsString(const std::string& program, bool verbose) {\r\n  std::string info = program + \" (RocksDB) \" + GetRocksVersionAsString(true);\r\n  if (verbose) {\r\n    for (const auto& it : GetRocksBuildProperties()) {\r\n      info.append(\"\\n    \");\r\n      info.append(it.first);\r\n      info.append(\": \");\r\n      info.append(it.second);\r\n    }\r\n  }\r\n  return info;\r\n}\r\n} // namespace ROCKSDB_NAMESPACE\r\n",
+  "dll": {
+    "name": "librocksdbjni-win64.dll",
+    "bytes": 8998912,
+    "sha256": "dc4b067b3a6fb9d30f6b2b8d384918c4eacd51d6ae1ea2c2b051f5f46354affe"
+  },
+  "jar": {
+    "name": "rocksdbjni-10.2.1-win64.jar",
+    "bytes": 3991103,
+    "sha256": "5c9bc052737d6f88b14a999e69889f50e8bb4a5c06a7950d04e66fcb44131e3f"
+  },
+  "freeAfter": 157050720256,
+  "scratchFiles": 3472,
+  "scratchBytes": 780178640.0,
+  "elapsedMs": 985526
+}

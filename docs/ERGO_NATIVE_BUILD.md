@@ -1,6 +1,6 @@
 # Windows native build qualification
 
-Status: 2026-09-10, three pre-compile refusals; exact JDK correction prepared.
+Status: 2026-09-10, bounded compile-only qualification passed after three input refusals.
 This implements the [preparation preference](../decisions/2026-09.md#2026-09-10--qualify-a-consistent-windows-database-build).
 The [published artifact mismatch](ERGO_NODE_PREFLIGHT.md#published-windows-native-reconciliation)
 and the existing database-control refusals remain unresolved for execution.
@@ -76,7 +76,7 @@ the workflow uses Git, not that archive.
 
 The [pinned root CMake configuration](https://github.com/facebook/rocksdb/blob/4b2122578e475cb88aef4dcf152cccd5dbf51060/CMakeLists.txt)
 uses C++17, MSVC static CRT (`WITH_MD_LIBRARY=OFF`), portable CPU settings,
-static RocksDB linked into the JNI DLL, and warnings as errors. Third-party
+static RocksDB linked into the JNI DLL, and C++ warnings as errors. Third-party
 discovery, compression codecs, gflags, jemalloc, liburing, dynamic extensions,
 native tests, benchmarks and tools are disabled explicitly. Compression-free
 output serves only the small offline control profile; it cannot silently
@@ -136,8 +136,8 @@ parallelism two. Refuse less than 8 GiB free before the build; accept at most
 for the DLL/JAR. These are initial/final observations, not disk quotas or a
 process-memory limit. The standard runner supplies the machine boundary;
 no local host resource envelope or worst-case compile cost is inferred.
-The initial working estimate is 5–25 minutes and 2–6 GiB scratch, unmeasured
-until execution. Keep failures and investigate rather than automatically
+The initial estimate was 5–25 minutes and 2–6 GiB scratch; the measured result
+below replaces that estimate for this one configuration. Keep failures rather than automatically
 raising limits, updating the image or disabling warnings.
 
 The script parses with PowerShell and refuses execution on the local host
@@ -151,9 +151,50 @@ supports contention as the cause, not a proved diagnosis. The full check
 sequence then passed with one worker and unchanged deadlines: 96 files /
 1,795 tests in 420.46 s, plus docs, typecheck, build, package, pilot, store-crash
 and spent-set checks. Preparation `b304e34` CI also passed in run `34492285718`.
-After execution, capture the exact run,
-workflow revision, report, compile failure or static output and limitations.
+Final `e917849` full `npm run check` passed with default workers: 96 files /
+1,795 tests in 277.97 s and every subsequent check. The earlier timeout remains
+recorded above; no test deadline or implementation was changed.
+Cross-platform project CI also passed all jobs for `e917849` in
+[run 34497461262](https://github.com/mediumofexchange/reference-ts/actions/runs/34497461262).
 No version/hash/module gate in the local database harness changes here.
+
+## Successful compile-only result
+
+[Run 34495975811](https://github.com/mediumofexchange/reference-ts/actions/runs/34495975811)
+at `e9178497a22162d13958085d096fd4df54715c4b` passed. The
+[build report](ergo-native-build-verification.json) records the exact source
+and tree, image `20260830.290.1`, Temurin 21.0.12.1, CMake 3.31.6 and
+MSVC toolset 14.44.35207. Compilation and static inspection took 985,526 ms
+(16.43 minutes), with 780,178,640 bytes of final scratch files (744.0 MiB).
+Free disk was 157,792,608,256 bytes initially and 157,050,720,256 finally.
+This is one observation, not a worst-case bound or reproducibility result.
+
+- DLL: 8,998,912 bytes, SHA-256
+  `dc4b067b3a6fb9d30f6b2b8d384918c4eacd51d6ae1ea2c2b051f5f46354affe`.
+- JAR: 3,991,103 bytes, SHA-256
+  `5c9bc052737d6f88b14a999e69889f50e8bb4a5c06a7950d04e66fcb44131e3f`.
+
+[Static inspection](ergo-native-build-static.json) retains all 1,524 export
+names/RVAs and direct imports: SHLWAPI.dll, RPCRT4.dll and KERNEL32.dll.
+The published baseline had 1,603 exports; name/Java binding and semantic
+compatibility still need investigation before adoption. Import names do not
+authenticate the eventual loaded Windows components or their transitive graph.
+The generated binaries were not retained; a later build is a new candidate
+whose actual bytes must be captured and reviewed, not assumed to match these hashes.
+
+Independent output review found no compile-feasibility contradiction and
+retained these evidence limits:
+
+- CMakeCache retains baseline `/MD` flags. The pinned source appends `/MT`
+  through normal variables when `WITH_MD_LIBRARY=OFF`, shadowing the cache;
+  static imports are consistent with that selection. Cache text is not a
+  complete record of compiler invocations.
+- JDK 8 `javah`/`idlj` cache discoveries are unused by the selected modern JNI
+  header-generation branch. Both Java builds emitted three source-8/bootstrap
+  option warnings; C++ warnings-as-errors does not apply to those Java warnings.
+- Shallow exact-commit checkout has no tags, so `git describe` reported no
+  names. Generated build metadata records the correct commit, empty tag and
+  `HAS_GIT_CHANGES=0`; source diff checks passed before and after compilation.
 
 Before a local trial: retain and independently inspect an actual candidate,
 establish its full input/Java linkage evidence, handle compression-profile

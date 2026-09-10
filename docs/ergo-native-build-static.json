@@ -1,0 +1,6110 @@
+{
+  "runId": "34495975811",
+  "workflowCommit": "e9178497a22162d13958085d096fd4df54715c4b",
+  "method": "dumpbin /DEPENDENTS and /EXPORTS; DLL parsed as data, not loaded",
+  "logSha256": "aaf8d8694234e5ce49c0c36f739555248cb9307ee528697da2fc8f046e06bb94",
+  "directImports": [
+    "SHLWAPI.dll",
+    "RPCRT4.dll",
+    "KERNEL32.dll"
+  ],
+  "exportCount": 1524,
+  "exports": [
+    {
+      "rva": "00087DC0",
+      "name": "Java_org_rocksdb_AbstractCompactionFilterFactory_createNewCompactionFilterFactory0"
+    },
+    {
+      "rva": "00087E80",
+      "name": "Java_org_rocksdb_AbstractCompactionFilterFactory_disposeInternal"
+    },
+    {
+      "rva": "00087D30",
+      "name": "Java_org_rocksdb_AbstractCompactionFilter_disposeInternal"
+    },
+    {
+      "rva": "0008AC10",
+      "name": "Java_org_rocksdb_AbstractComparator_createNewComparator"
+    },
+    {
+      "rva": "0008AC70",
+      "name": "Java_org_rocksdb_AbstractComparator_usingDirectBuffers"
+    },
+    {
+      "rva": "00091360",
+      "name": "Java_org_rocksdb_AbstractEventListener_createNewEventListener"
+    },
+    {
+      "rva": "00091590",
+      "name": "Java_org_rocksdb_AbstractEventListener_disposeInternal"
+    },
+    {
+      "rva": "000BE480",
+      "name": "Java_org_rocksdb_AbstractSlice_compare0"
+    },
+    {
+      "rva": "000BE4E0",
+      "name": "Java_org_rocksdb_AbstractSlice_createNewSliceFromString"
+    },
+    {
+      "rva": "000BE5C0",
+      "name": "Java_org_rocksdb_AbstractSlice_disposeInternalJni"
+    },
+    {
+      "rva": "000BE5D0",
+      "name": "Java_org_rocksdb_AbstractSlice_empty0"
+    },
+    {
+      "rva": "000BE5E0",
+      "name": "Java_org_rocksdb_AbstractSlice_size0"
+    },
+    {
+      "rva": "000BE5F0",
+      "name": "Java_org_rocksdb_AbstractSlice_startsWith0"
+    },
+    {
+      "rva": "000BE620",
+      "name": "Java_org_rocksdb_AbstractSlice_toString0"
+    },
+    {
+      "rva": "000C3540",
+      "name": "Java_org_rocksdb_AbstractTableFilter_createNewTableFilter"
+    },
+    {
+      "rva": "000C8860",
+      "name": "Java_org_rocksdb_AbstractTraceWriter_createNewTraceWriter"
+    },
+    {
+      "rva": "000D2110",
+      "name": "Java_org_rocksdb_AbstractTransactionNotifier_createNewTransactionNotifier"
+    },
+    {
+      "rva": "000D21D0",
+      "name": "Java_org_rocksdb_AbstractTransactionNotifier_disposeInternalJni"
+    },
+    {
+      "rva": "000D31B0",
+      "name": "Java_org_rocksdb_AbstractWalFilter_createNewWalFilter"
+    },
+    {
+      "rva": "00081BF0",
+      "name": "Java_org_rocksdb_BackupEngineOptions_backupDir"
+    },
+    {
+      "rva": "00081C10",
+      "name": "Java_org_rocksdb_BackupEngineOptions_backupLogFiles"
+    },
+    {
+      "rva": "00081C20",
+      "name": "Java_org_rocksdb_BackupEngineOptions_backupRateLimit"
+    },
+    {
+      "rva": "00081C30",
+      "name": "Java_org_rocksdb_BackupEngineOptions_callbackTriggerIntervalSize"
+    },
+    {
+      "rva": "00081C40",
+      "name": "Java_org_rocksdb_BackupEngineOptions_destroyOldData"
+    },
+    {
+      "rva": "00081C50",
+      "name": "Java_org_rocksdb_BackupEngineOptions_disposeInternalJni"
+    },
+    {
+      "rva": "00081D00",
+      "name": "Java_org_rocksdb_BackupEngineOptions_maxBackgroundOperations"
+    },
+    {
+      "rva": "00081D10",
+      "name": "Java_org_rocksdb_BackupEngineOptions_newBackupEngineOptions"
+    },
+    {
+      "rva": "00081F70",
+      "name": "Java_org_rocksdb_BackupEngineOptions_restoreRateLimit"
+    },
+    {
+      "rva": "00081F80",
+      "name": "Java_org_rocksdb_BackupEngineOptions_setBackupEnv"
+    },
+    {
+      "rva": "00081F90",
+      "name": "Java_org_rocksdb_BackupEngineOptions_setBackupLogFiles"
+    },
+    {
+      "rva": "00081FA0",
+      "name": "Java_org_rocksdb_BackupEngineOptions_setBackupRateLimit"
+    },
+    {
+      "rva": "00081FB0",
+      "name": "Java_org_rocksdb_BackupEngineOptions_setBackupRateLimiter"
+    },
+    {
+      "rva": "00081FC0",
+      "name": "Java_org_rocksdb_BackupEngineOptions_setCallbackTriggerIntervalSize"
+    },
+    {
+      "rva": "00081FD0",
+      "name": "Java_org_rocksdb_BackupEngineOptions_setDestroyOldData"
+    },
+    {
+      "rva": "00081FE0",
+      "name": "Java_org_rocksdb_BackupEngineOptions_setInfoLog"
+    },
+    {
+      "rva": "00082000",
+      "name": "Java_org_rocksdb_BackupEngineOptions_setMaxBackgroundOperations"
+    },
+    {
+      "rva": "00082010",
+      "name": "Java_org_rocksdb_BackupEngineOptions_setRestoreRateLimit"
+    },
+    {
+      "rva": "00082020",
+      "name": "Java_org_rocksdb_BackupEngineOptions_setRestoreRateLimiter"
+    },
+    {
+      "rva": "00082030",
+      "name": "Java_org_rocksdb_BackupEngineOptions_setShareFilesWithChecksum"
+    },
+    {
+      "rva": "00082040",
+      "name": "Java_org_rocksdb_BackupEngineOptions_setShareTableFiles"
+    },
+    {
+      "rva": "00082050",
+      "name": "Java_org_rocksdb_BackupEngineOptions_setSync"
+    },
+    {
+      "rva": "00082060",
+      "name": "Java_org_rocksdb_BackupEngineOptions_shareFilesWithChecksum"
+    },
+    {
+      "rva": "00082070",
+      "name": "Java_org_rocksdb_BackupEngineOptions_shareTableFiles"
+    },
+    {
+      "rva": "00082080",
+      "name": "Java_org_rocksdb_BackupEngineOptions_sync"
+    },
+    {
+      "rva": "00084C90",
+      "name": "Java_org_rocksdb_BackupEngine_createNewBackup"
+    },
+    {
+      "rva": "00084D10",
+      "name": "Java_org_rocksdb_BackupEngine_createNewBackupWithMetadata"
+    },
+    {
+      "rva": "00084FF0",
+      "name": "Java_org_rocksdb_BackupEngine_deleteBackup"
+    },
+    {
+      "rva": "00085040",
+      "name": "Java_org_rocksdb_BackupEngine_disposeInternalJni"
+    },
+    {
+      "rva": "00085060",
+      "name": "Java_org_rocksdb_BackupEngine_garbageCollect"
+    },
+    {
+      "rva": "000850B0",
+      "name": "Java_org_rocksdb_BackupEngine_getBackupInfo"
+    },
+    {
+      "rva": "000852B0",
+      "name": "Java_org_rocksdb_BackupEngine_getCorruptedBackups"
+    },
+    {
+      "rva": "00085440",
+      "name": "Java_org_rocksdb_BackupEngine_open"
+    },
+    {
+      "rva": "00085490",
+      "name": "Java_org_rocksdb_BackupEngine_purgeOldBackups"
+    },
+    {
+      "rva": "000854E0",
+      "name": "Java_org_rocksdb_BackupEngine_restoreDbFromBackup"
+    },
+    {
+      "rva": "00085740",
+      "name": "Java_org_rocksdb_BackupEngine_restoreDbFromLatestBackup"
+    },
+    {
+      "rva": "000C2EC0",
+      "name": "Java_org_rocksdb_BlockBasedTableConfig_newTableFactoryHandle"
+    },
+    {
+      "rva": "000963D0",
+      "name": "Java_org_rocksdb_BloomFilter_createNewBloomFilter"
+    },
+    {
+      "rva": "00085980",
+      "name": "Java_org_rocksdb_Cache_getPinnedUsage"
+    },
+    {
+      "rva": "00085990",
+      "name": "Java_org_rocksdb_Cache_getUsage"
+    },
+    {
+      "rva": "000859A0",
+      "name": "Java_org_rocksdb_CassandraCompactionFilter_createNewCassandraCompactionFilter0"
+    },
+    {
+      "rva": "00085A80",
+      "name": "Java_org_rocksdb_CassandraValueMergeOperator_disposeInternalJni"
+    },
+    {
+      "rva": "00085AF0",
+      "name": "Java_org_rocksdb_CassandraValueMergeOperator_newSharedCassandraValueMergeOperator"
+    },
+    {
+      "rva": "00085BC0",
+      "name": "Java_org_rocksdb_Checkpoint_createCheckpoint"
+    },
+    {
+      "rva": "00085D00",
+      "name": "Java_org_rocksdb_Checkpoint_disposeInternalJni"
+    },
+    {
+      "rva": "00085D20",
+      "name": "Java_org_rocksdb_Checkpoint_exportColumnFamily"
+    },
+    {
+      "rva": "00085E80",
+      "name": "Java_org_rocksdb_Checkpoint_newCheckpoint"
+    },
+    {
+      "rva": "00085EB0",
+      "name": "Java_org_rocksdb_ClockCache_disposeInternalJni"
+    },
+    {
+      "rva": "00085F20",
+      "name": "Java_org_rocksdb_ClockCache_newClockCache"
+    },
+    {
+      "rva": "00087600",
+      "name": "Java_org_rocksdb_ColumnFamilyHandle_disposeInternalJni"
+    },
+    {
+      "rva": "00087620",
+      "name": "Java_org_rocksdb_ColumnFamilyHandle_getDescriptor"
+    },
+    {
+      "rva": "000876E0",
+      "name": "Java_org_rocksdb_ColumnFamilyHandle_getID"
+    },
+    {
+      "rva": "000876F0",
+      "name": "Java_org_rocksdb_ColumnFamilyHandle_getName"
+    },
+    {
+      "rva": "000A20C0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_arenaBlockSize"
+    },
+    {
+      "rva": "000A20D0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_blobCompactionReadaheadSize"
+    },
+    {
+      "rva": "000A20E0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_blobCompressionType"
+    },
+    {
+      "rva": "000A20F0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_blobFileSize"
+    },
+    {
+      "rva": "000A2100",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_blobFileStartingLevel"
+    },
+    {
+      "rva": "000A2110",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_blobGarbageCollectionAgeCutoff"
+    },
+    {
+      "rva": "000A2120",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_blobGarbageCollectionForceThreshold"
+    },
+    {
+      "rva": "000A2130",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_bloomLocality"
+    },
+    {
+      "rva": "000A2140",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_bottommostCompressionType"
+    },
+    {
+      "rva": "000A2150",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_cfPaths"
+    },
+    {
+      "rva": "000A2170",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_cfPathsLen"
+    },
+    {
+      "rva": "000A21A0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_compactionPriority"
+    },
+    {
+      "rva": "000A21D0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_compactionStyle"
+    },
+    {
+      "rva": "000A2200",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_compressionPerLevel"
+    },
+    {
+      "rva": "000A2230",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_compressionType"
+    },
+    {
+      "rva": "000A2240",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_copyColumnFamilyOptions"
+    },
+    {
+      "rva": "000A2270",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_disableAutoCompactions"
+    },
+    {
+      "rva": "000A2280",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_disposeInternalJni"
+    },
+    {
+      "rva": "000A22B0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_enableBlobFiles"
+    },
+    {
+      "rva": "000A22C0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_enableBlobGarbageCollection"
+    },
+    {
+      "rva": "000A22D0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_experimentalMempurgeThreshold"
+    },
+    {
+      "rva": "000A22E0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_forceConsistencyChecks"
+    },
+    {
+      "rva": "000A22F0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_getColumnFamilyOptionsFromProps__JLjava_lang_String_2"
+    },
+    {
+      "rva": "000A24A0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_getColumnFamilyOptionsFromProps__Ljava_lang_String_2"
+    },
+    {
+      "rva": "000A26C0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_hardPendingCompactionBytesLimit"
+    },
+    {
+      "rva": "000A26D0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_inplaceUpdateNumLocks"
+    },
+    {
+      "rva": "000A26E0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_inplaceUpdateSupport"
+    },
+    {
+      "rva": "000A26F0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_level0FileNumCompactionTrigger"
+    },
+    {
+      "rva": "000A2700",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_level0SlowdownWritesTrigger"
+    },
+    {
+      "rva": "000A2710",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_level0StopWritesTrigger"
+    },
+    {
+      "rva": "000A2720",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_levelCompactionDynamicLevelBytes"
+    },
+    {
+      "rva": "000A2730",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_levelZeroFileNumCompactionTrigger"
+    },
+    {
+      "rva": "000A2740",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_levelZeroSlowdownWritesTrigger"
+    },
+    {
+      "rva": "000A2750",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_levelZeroStopWritesTrigger"
+    },
+    {
+      "rva": "000A2760",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_maxBytesForLevelBase"
+    },
+    {
+      "rva": "000A2770",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_maxBytesForLevelMultiplier"
+    },
+    {
+      "rva": "000A2780",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_maxBytesForLevelMultiplierAdditional"
+    },
+    {
+      "rva": "000A2920",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_maxCompactionBytes"
+    },
+    {
+      "rva": "000A2930",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_maxSequentialSkipInIterations"
+    },
+    {
+      "rva": "000A2940",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_maxSuccessiveMerges"
+    },
+    {
+      "rva": "000A2950",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_maxTableFilesSizeFIFO"
+    },
+    {
+      "rva": "000A2960",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_maxWriteBufferNumber"
+    },
+    {
+      "rva": "000A2970",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_memTableFactoryName"
+    },
+    {
+      "rva": "000A29F0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_memtableHugePageSize"
+    },
+    {
+      "rva": "000A2A00",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_memtableMaxRangeDeletions"
+    },
+    {
+      "rva": "000A2A10",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_memtablePrefixBloomSizeRatio"
+    },
+    {
+      "rva": "000A2A20",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_memtableWholeKeyFiltering"
+    },
+    {
+      "rva": "000A2A30",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_minBlobSize"
+    },
+    {
+      "rva": "000A2A40",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_minWriteBufferNumberToMerge"
+    },
+    {
+      "rva": "000A2A50",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_newColumnFamilyOptions"
+    },
+    {
+      "rva": "000A2A80",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_newColumnFamilyOptionsFromOptions"
+    },
+    {
+      "rva": "000A2AB0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_numLevels"
+    },
+    {
+      "rva": "000A2AC0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_oldDefaults"
+    },
+    {
+      "rva": "000A2AD0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_optimizeFiltersForHits"
+    },
+    {
+      "rva": "000A2AE0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_optimizeForPointLookup"
+    },
+    {
+      "rva": "000A2AF0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_optimizeForSmallDb__J"
+    },
+    {
+      "rva": "000A2B00",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_optimizeForSmallDb__JJ"
+    },
+    {
+      "rva": "000A2B10",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_optimizeLevelStyleCompaction"
+    },
+    {
+      "rva": "000A2B20",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_optimizeUniversalStyleCompaction"
+    },
+    {
+      "rva": "000A2B30",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_paranoidFileChecks"
+    },
+    {
+      "rva": "000A2B40",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_periodicCompactionSeconds"
+    },
+    {
+      "rva": "000A2B50",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_prepopulateBlobCache"
+    },
+    {
+      "rva": "000A2B70",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_reportBgIoStats"
+    },
+    {
+      "rva": "000A2B80",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setArenaBlockSize"
+    },
+    {
+      "rva": "000A2B90",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setBlobCompactionReadaheadSize"
+    },
+    {
+      "rva": "000A2BA0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setBlobCompressionType"
+    },
+    {
+      "rva": "000A2BC0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setBlobFileSize"
+    },
+    {
+      "rva": "000A2BD0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setBlobFileStartingLevel"
+    },
+    {
+      "rva": "000A2BE0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setBlobGarbageCollectionAgeCutoff"
+    },
+    {
+      "rva": "000A2BF0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setBlobGarbageCollectionForceThreshold"
+    },
+    {
+      "rva": "000A2C00",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setBloomLocality"
+    },
+    {
+      "rva": "000A2C10",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setBottommostCompressionOptions"
+    },
+    {
+      "rva": "000A2C50",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setBottommostCompressionType"
+    },
+    {
+      "rva": "000A2C70",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setCfPaths"
+    },
+    {
+      "rva": "000A2DB0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setCompactionFilterFactoryHandle"
+    },
+    {
+      "rva": "000A2E30",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setCompactionFilterHandle"
+    },
+    {
+      "rva": "000A2E40",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setCompactionOptionsFIFO"
+    },
+    {
+      "rva": "000A2E90",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setCompactionOptionsUniversal"
+    },
+    {
+      "rva": "000A2EB0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setCompactionPriority"
+    },
+    {
+      "rva": "000A2F00",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setCompactionStyle"
+    },
+    {
+      "rva": "000A2F40",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setCompactionThreadLimiter"
+    },
+    {
+      "rva": "000A2F50",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setComparatorHandle__JI"
+    },
+    {
+      "rva": "000A2F90",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setComparatorHandle__JJB"
+    },
+    {
+      "rva": "000A2FD0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setCompressionOptions"
+    },
+    {
+      "rva": "000A3010",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setCompressionPerLevel"
+    },
+    {
+      "rva": "000A3070",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setCompressionType"
+    },
+    {
+      "rva": "000A3090",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setDisableAutoCompactions"
+    },
+    {
+      "rva": "000A30A0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setEnableBlobFiles"
+    },
+    {
+      "rva": "000A30B0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setEnableBlobGarbageCollection"
+    },
+    {
+      "rva": "000A30C0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setExperimentalMempurgeThreshold"
+    },
+    {
+      "rva": "000A30D0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setForceConsistencyChecks"
+    },
+    {
+      "rva": "000A30E0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setHardPendingCompactionBytesLimit"
+    },
+    {
+      "rva": "000A30F0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setInplaceUpdateNumLocks"
+    },
+    {
+      "rva": "000A3100",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setInplaceUpdateSupport"
+    },
+    {
+      "rva": "000A3110",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setLevel0FileNumCompactionTrigger"
+    },
+    {
+      "rva": "000A3120",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setLevel0SlowdownWritesTrigger"
+    },
+    {
+      "rva": "000A3130",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setLevel0StopWritesTrigger"
+    },
+    {
+      "rva": "000A3140",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setLevelCompactionDynamicLevelBytes"
+    },
+    {
+      "rva": "000A3150",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setLevelZeroFileNumCompactionTrigger"
+    },
+    {
+      "rva": "000A3160",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setLevelZeroSlowdownWritesTrigger"
+    },
+    {
+      "rva": "000A3170",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setLevelZeroStopWritesTrigger"
+    },
+    {
+      "rva": "000A3180",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMaxBytesForLevelBase"
+    },
+    {
+      "rva": "000A3190",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMaxBytesForLevelMultiplier"
+    },
+    {
+      "rva": "000A31A0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMaxBytesForLevelMultiplierAdditional"
+    },
+    {
+      "rva": "000A32A0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMaxCompactionBytes"
+    },
+    {
+      "rva": "000A32B0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMaxSequentialSkipInIterations"
+    },
+    {
+      "rva": "000A32C0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMaxSuccessiveMerges"
+    },
+    {
+      "rva": "000A32D0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMaxTableFilesSizeFIFO"
+    },
+    {
+      "rva": "000A32E0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMaxWriteBufferNumber"
+    },
+    {
+      "rva": "000A32F0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMemTableFactory"
+    },
+    {
+      "rva": "000A3300",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMemtableHugePageSize"
+    },
+    {
+      "rva": "000A3310",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMemtableMaxRangeDeletions"
+    },
+    {
+      "rva": "000A3320",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMemtablePrefixBloomSizeRatio"
+    },
+    {
+      "rva": "000A3330",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMemtableWholeKeyFiltering"
+    },
+    {
+      "rva": "000A3340",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMergeOperator"
+    },
+    {
+      "rva": "000A3350",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMergeOperatorName"
+    },
+    {
+      "rva": "000A34A0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMinBlobSize"
+    },
+    {
+      "rva": "000A34B0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setMinWriteBufferNumberToMerge"
+    },
+    {
+      "rva": "000A34C0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setNumLevels"
+    },
+    {
+      "rva": "000A34D0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setOptimizeFiltersForHits"
+    },
+    {
+      "rva": "000A34E0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setParanoidFileChecks"
+    },
+    {
+      "rva": "000A34F0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setPeriodicCompactionSeconds"
+    },
+    {
+      "rva": "000A3500",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setPrepopulateBlobCache"
+    },
+    {
+      "rva": "000A3520",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setReportBgIoStats"
+    },
+    {
+      "rva": "000A3530",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setSoftPendingCompactionBytesLimit"
+    },
+    {
+      "rva": "000A3540",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setSstPartitionerFactory"
+    },
+    {
+      "rva": "000A3550",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setTableFactory"
+    },
+    {
+      "rva": "000A3560",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setTargetFileSizeBase"
+    },
+    {
+      "rva": "000A3570",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setTargetFileSizeMultiplier"
+    },
+    {
+      "rva": "000A3580",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setTtl"
+    },
+    {
+      "rva": "000A3590",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_setWriteBufferSize"
+    },
+    {
+      "rva": "000A35A0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_softPendingCompactionBytesLimit"
+    },
+    {
+      "rva": "000A35B0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_tableFactoryName"
+    },
+    {
+      "rva": "000A35E0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_targetFileSizeBase"
+    },
+    {
+      "rva": "000A35F0",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_targetFileSizeMultiplier"
+    },
+    {
+      "rva": "000A3600",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_ttl"
+    },
+    {
+      "rva": "000A3610",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_useCappedPrefixExtractor"
+    },
+    {
+      "rva": "000A3640",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_useFixedLengthPrefixExtractor"
+    },
+    {
+      "rva": "000A3670",
+      "name": "Java_org_rocksdb_ColumnFamilyOptions_writeBufferSize"
+    },
+    {
+      "rva": "00087930",
+      "name": "Java_org_rocksdb_CompactRangeOptions_allowWriteStall"
+    },
+    {
+      "rva": "00087940",
+      "name": "Java_org_rocksdb_CompactRangeOptions_bottommostLevelCompaction"
+    },
+    {
+      "rva": "00087980",
+      "name": "Java_org_rocksdb_CompactRangeOptions_canceled"
+    },
+    {
+      "rva": "000879A0",
+      "name": "Java_org_rocksdb_CompactRangeOptions_changeLevel"
+    },
+    {
+      "rva": "000879B0",
+      "name": "Java_org_rocksdb_CompactRangeOptions_disposeInternalJni"
+    },
+    {
+      "rva": "000879E0",
+      "name": "Java_org_rocksdb_CompactRangeOptions_exclusiveManualCompaction"
+    },
+    {
+      "rva": "000879F0",
+      "name": "Java_org_rocksdb_CompactRangeOptions_fullHistoryTSLow"
+    },
+    {
+      "rva": "00087B10",
+      "name": "Java_org_rocksdb_CompactRangeOptions_maxSubcompactions"
+    },
+    {
+      "rva": "00087B20",
+      "name": "Java_org_rocksdb_CompactRangeOptions_newCompactRangeOptions"
+    },
+    {
+      "rva": "00087B90",
+      "name": "Java_org_rocksdb_CompactRangeOptions_setAllowWriteStall"
+    },
+    {
+      "rva": "00087BA0",
+      "name": "Java_org_rocksdb_CompactRangeOptions_setBottommostLevelCompaction"
+    },
+    {
+      "rva": "00087BE0",
+      "name": "Java_org_rocksdb_CompactRangeOptions_setCanceled"
+    },
+    {
+      "rva": "00087C00",
+      "name": "Java_org_rocksdb_CompactRangeOptions_setChangeLevel"
+    },
+    {
+      "rva": "00087C10",
+      "name": "Java_org_rocksdb_CompactRangeOptions_setExclusiveManualCompaction"
+    },
+    {
+      "rva": "00087C20",
+      "name": "Java_org_rocksdb_CompactRangeOptions_setFullHistoryTSLow"
+    },
+    {
+      "rva": "00087CE0",
+      "name": "Java_org_rocksdb_CompactRangeOptions_setMaxSubcompactions"
+    },
+    {
+      "rva": "00087CF0",
+      "name": "Java_org_rocksdb_CompactRangeOptions_setTargetLevel"
+    },
+    {
+      "rva": "00087D00",
+      "name": "Java_org_rocksdb_CompactRangeOptions_setTargetPathId"
+    },
+    {
+      "rva": "00087D10",
+      "name": "Java_org_rocksdb_CompactRangeOptions_targetLevel"
+    },
+    {
+      "rva": "00087D20",
+      "name": "Java_org_rocksdb_CompactRangeOptions_targetPathId"
+    },
+    {
+      "rva": "00089F30",
+      "name": "Java_org_rocksdb_CompactionJobInfo_baseInputLevel"
+    },
+    {
+      "rva": "00089F40",
+      "name": "Java_org_rocksdb_CompactionJobInfo_columnFamilyName"
+    },
+    {
+      "rva": "00089F90",
+      "name": "Java_org_rocksdb_CompactionJobInfo_compactionReason"
+    },
+    {
+      "rva": "0008A040",
+      "name": "Java_org_rocksdb_CompactionJobInfo_compression"
+    },
+    {
+      "rva": "0008A0B0",
+      "name": "Java_org_rocksdb_CompactionJobInfo_disposeInternalJni"
+    },
+    {
+      "rva": "0008A160",
+      "name": "Java_org_rocksdb_CompactionJobInfo_inputFiles"
+    },
+    {
+      "rva": "0008A170",
+      "name": "Java_org_rocksdb_CompactionJobInfo_jobId"
+    },
+    {
+      "rva": "0008A180",
+      "name": "Java_org_rocksdb_CompactionJobInfo_newCompactionJobInfo"
+    },
+    {
+      "rva": "0008A1C0",
+      "name": "Java_org_rocksdb_CompactionJobInfo_outputFiles"
+    },
+    {
+      "rva": "0008A1D0",
+      "name": "Java_org_rocksdb_CompactionJobInfo_outputLevel"
+    },
+    {
+      "rva": "0008A1E0",
+      "name": "Java_org_rocksdb_CompactionJobInfo_stats"
+    },
+    {
+      "rva": "0008A230",
+      "name": "Java_org_rocksdb_CompactionJobInfo_status"
+    },
+    {
+      "rva": "0008A240",
+      "name": "Java_org_rocksdb_CompactionJobInfo_tableProperties"
+    },
+    {
+      "rva": "0008A400",
+      "name": "Java_org_rocksdb_CompactionJobInfo_threadId"
+    },
+    {
+      "rva": "0008A410",
+      "name": "Java_org_rocksdb_CompactionJobStats_add"
+    },
+    {
+      "rva": "0008A420",
+      "name": "Java_org_rocksdb_CompactionJobStats_disposeInternalJni"
+    },
+    {
+      "rva": "0008A460",
+      "name": "Java_org_rocksdb_CompactionJobStats_elapsedMicros"
+    },
+    {
+      "rva": "0008A470",
+      "name": "Java_org_rocksdb_CompactionJobStats_fileFsyncNanos"
+    },
+    {
+      "rva": "0008A480",
+      "name": "Java_org_rocksdb_CompactionJobStats_filePrepareWriteNanos"
+    },
+    {
+      "rva": "0008A490",
+      "name": "Java_org_rocksdb_CompactionJobStats_fileRangeSyncNanos"
+    },
+    {
+      "rva": "0008A4A0",
+      "name": "Java_org_rocksdb_CompactionJobStats_fileWriteNanos"
+    },
+    {
+      "rva": "0008A4B0",
+      "name": "Java_org_rocksdb_CompactionJobStats_isManualCompaction"
+    },
+    {
+      "rva": "0008A4C0",
+      "name": "Java_org_rocksdb_CompactionJobStats_largestOutputKeyPrefix"
+    },
+    {
+      "rva": "0008A520",
+      "name": "Java_org_rocksdb_CompactionJobStats_newCompactionJobStats"
+    },
+    {
+      "rva": "0008A640",
+      "name": "Java_org_rocksdb_CompactionJobStats_numCorruptKeys"
+    },
+    {
+      "rva": "0008A650",
+      "name": "Java_org_rocksdb_CompactionJobStats_numExpiredDeletionRecords"
+    },
+    {
+      "rva": "0008A660",
+      "name": "Java_org_rocksdb_CompactionJobStats_numInputDeletionRecords"
+    },
+    {
+      "rva": "0008A670",
+      "name": "Java_org_rocksdb_CompactionJobStats_numInputFiles"
+    },
+    {
+      "rva": "0008A680",
+      "name": "Java_org_rocksdb_CompactionJobStats_numInputFilesAtOutputLevel"
+    },
+    {
+      "rva": "0008A690",
+      "name": "Java_org_rocksdb_CompactionJobStats_numInputRecords"
+    },
+    {
+      "rva": "0008A6A0",
+      "name": "Java_org_rocksdb_CompactionJobStats_numOutputFiles"
+    },
+    {
+      "rva": "0008A6B0",
+      "name": "Java_org_rocksdb_CompactionJobStats_numOutputRecords"
+    },
+    {
+      "rva": "0008A6C0",
+      "name": "Java_org_rocksdb_CompactionJobStats_numRecordsReplaced"
+    },
+    {
+      "rva": "0008A6D0",
+      "name": "Java_org_rocksdb_CompactionJobStats_numSingleDelFallthru"
+    },
+    {
+      "rva": "0008A6E0",
+      "name": "Java_org_rocksdb_CompactionJobStats_numSingleDelMismatch"
+    },
+    {
+      "rva": "0008A6F0",
+      "name": "Java_org_rocksdb_CompactionJobStats_reset"
+    },
+    {
+      "rva": "0008A700",
+      "name": "Java_org_rocksdb_CompactionJobStats_smallestOutputKeyPrefix"
+    },
+    {
+      "rva": "0008A760",
+      "name": "Java_org_rocksdb_CompactionJobStats_totalInputBytes"
+    },
+    {
+      "rva": "0008A770",
+      "name": "Java_org_rocksdb_CompactionJobStats_totalInputRawKeyBytes"
+    },
+    {
+      "rva": "0008A780",
+      "name": "Java_org_rocksdb_CompactionJobStats_totalInputRawValueBytes"
+    },
+    {
+      "rva": "0008A790",
+      "name": "Java_org_rocksdb_CompactionJobStats_totalOutputBytes"
+    },
+    {
+      "rva": "0008AA00",
+      "name": "Java_org_rocksdb_CompactionOptionsFIFO_allowCompaction"
+    },
+    {
+      "rva": "0008AA10",
+      "name": "Java_org_rocksdb_CompactionOptionsFIFO_disposeInternalJni"
+    },
+    {
+      "rva": "0008AA40",
+      "name": "Java_org_rocksdb_CompactionOptionsFIFO_maxTableFilesSize"
+    },
+    {
+      "rva": "0008AA50",
+      "name": "Java_org_rocksdb_CompactionOptionsFIFO_newCompactionOptionsFIFO"
+    },
+    {
+      "rva": "0008AA90",
+      "name": "Java_org_rocksdb_CompactionOptionsFIFO_setAllowCompaction"
+    },
+    {
+      "rva": "0008AAA0",
+      "name": "Java_org_rocksdb_CompactionOptionsFIFO_setMaxTableFilesSize"
+    },
+    {
+      "rva": "0008AAB0",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_allowTrivialMove"
+    },
+    {
+      "rva": "0008AAC0",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_compressionSizePercent"
+    },
+    {
+      "rva": "0008AAD0",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_disposeInternalJni"
+    },
+    {
+      "rva": "0008AAE0",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_maxMergeWidth"
+    },
+    {
+      "rva": "0008AAF0",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_maxSizeAmplificationPercent"
+    },
+    {
+      "rva": "0008AB00",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_minMergeWidth"
+    },
+    {
+      "rva": "0008AB10",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_newCompactionOptionsUniversal"
+    },
+    {
+      "rva": "0008AB60",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_setAllowTrivialMove"
+    },
+    {
+      "rva": "0008AB70",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_setCompressionSizePercent"
+    },
+    {
+      "rva": "0008AB80",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_setMaxMergeWidth"
+    },
+    {
+      "rva": "0008AB90",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_setMaxSizeAmplificationPercent"
+    },
+    {
+      "rva": "0008ABA0",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_setMinMergeWidth"
+    },
+    {
+      "rva": "0008ABB0",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_setSizeRatio"
+    },
+    {
+      "rva": "0008ABC0",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_setStopStyle"
+    },
+    {
+      "rva": "0008ABE0",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_sizeRatio"
+    },
+    {
+      "rva": "0008ABF0",
+      "name": "Java_org_rocksdb_CompactionOptionsUniversal_stopStyle"
+    },
+    {
+      "rva": "0008A7A0",
+      "name": "Java_org_rocksdb_CompactionOptions_compression"
+    },
+    {
+      "rva": "0008A800",
+      "name": "Java_org_rocksdb_CompactionOptions_disposeInternalJni"
+    },
+    {
+      "rva": "0008A810",
+      "name": "Java_org_rocksdb_CompactionOptions_maxSubcompactions"
+    },
+    {
+      "rva": "0008A820",
+      "name": "Java_org_rocksdb_CompactionOptions_newCompactionOptions"
+    },
+    {
+      "rva": "0008A850",
+      "name": "Java_org_rocksdb_CompactionOptions_outputFileSizeLimit"
+    },
+    {
+      "rva": "0008A860",
+      "name": "Java_org_rocksdb_CompactionOptions_setCompression"
+    },
+    {
+      "rva": "0008A970",
+      "name": "Java_org_rocksdb_CompactionOptions_setMaxSubcompactions"
+    },
+    {
+      "rva": "0008A980",
+      "name": "Java_org_rocksdb_CompactionOptions_setOutputFileSizeLimit"
+    },
+    {
+      "rva": "000A3680",
+      "name": "Java_org_rocksdb_ComparatorOptions_disposeInternalJni"
+    },
+    {
+      "rva": "000A3690",
+      "name": "Java_org_rocksdb_ComparatorOptions_maxReusedBufferSize"
+    },
+    {
+      "rva": "000A36A0",
+      "name": "Java_org_rocksdb_ComparatorOptions_newComparatorOptions"
+    },
+    {
+      "rva": "000A36E0",
+      "name": "Java_org_rocksdb_ComparatorOptions_reusedSynchronisationType"
+    },
+    {
+      "rva": "000A3700",
+      "name": "Java_org_rocksdb_ComparatorOptions_setMaxReusedBufferSize"
+    },
+    {
+      "rva": "000A3710",
+      "name": "Java_org_rocksdb_ComparatorOptions_setReusedSynchronisationType"
+    },
+    {
+      "rva": "000A3740",
+      "name": "Java_org_rocksdb_ComparatorOptions_setUseDirectBuffer"
+    },
+    {
+      "rva": "000A3750",
+      "name": "Java_org_rocksdb_ComparatorOptions_useDirectBuffer"
+    },
+    {
+      "rva": "0008FFF0",
+      "name": "Java_org_rocksdb_CompressionOptions_disposeInternalJni"
+    },
+    {
+      "rva": "00090000",
+      "name": "Java_org_rocksdb_CompressionOptions_enabled"
+    },
+    {
+      "rva": "00090010",
+      "name": "Java_org_rocksdb_CompressionOptions_level"
+    },
+    {
+      "rva": "00090020",
+      "name": "Java_org_rocksdb_CompressionOptions_maxDictBytes"
+    },
+    {
+      "rva": "00090030",
+      "name": "Java_org_rocksdb_CompressionOptions_newCompressionOptions"
+    },
+    {
+      "rva": "00090080",
+      "name": "Java_org_rocksdb_CompressionOptions_setEnabled"
+    },
+    {
+      "rva": "00090090",
+      "name": "Java_org_rocksdb_CompressionOptions_setLevel"
+    },
+    {
+      "rva": "000900A0",
+      "name": "Java_org_rocksdb_CompressionOptions_setMaxDictBytes"
+    },
+    {
+      "rva": "000900B0",
+      "name": "Java_org_rocksdb_CompressionOptions_setStrategy"
+    },
+    {
+      "rva": "000900C0",
+      "name": "Java_org_rocksdb_CompressionOptions_setWindowBits"
+    },
+    {
+      "rva": "000900D0",
+      "name": "Java_org_rocksdb_CompressionOptions_setZstdMaxTrainBytes"
+    },
+    {
+      "rva": "000900E0",
+      "name": "Java_org_rocksdb_CompressionOptions_strategy"
+    },
+    {
+      "rva": "000900F0",
+      "name": "Java_org_rocksdb_CompressionOptions_windowBits"
+    },
+    {
+      "rva": "00090100",
+      "name": "Java_org_rocksdb_CompressionOptions_zstdMaxTrainBytes"
+    },
+    {
+      "rva": "00090180",
+      "name": "Java_org_rocksdb_ConcurrentTaskLimiterImpl_disposeInternalJni"
+    },
+    {
+      "rva": "000901F0",
+      "name": "Java_org_rocksdb_ConcurrentTaskLimiterImpl_name"
+    },
+    {
+      "rva": "00090230",
+      "name": "Java_org_rocksdb_ConcurrentTaskLimiterImpl_newConcurrentTaskLimiterImpl0"
+    },
+    {
+      "rva": "00090410",
+      "name": "Java_org_rocksdb_ConcurrentTaskLimiterImpl_outstandingTask"
+    },
+    {
+      "rva": "00090420",
+      "name": "Java_org_rocksdb_ConcurrentTaskLimiterImpl_resetMaxOutstandingTask"
+    },
+    {
+      "rva": "00090430",
+      "name": "Java_org_rocksdb_ConcurrentTaskLimiterImpl_setMaxOutstandingTask"
+    },
+    {
+      "rva": "00090440",
+      "name": "Java_org_rocksdb_ConfigOptions_disposeInternalJni"
+    },
+    {
+      "rva": "000904C0",
+      "name": "Java_org_rocksdb_ConfigOptions_newConfigOptions"
+    },
+    {
+      "rva": "000904F0",
+      "name": "Java_org_rocksdb_ConfigOptions_setDelimiter"
+    },
+    {
+      "rva": "00090570",
+      "name": "Java_org_rocksdb_ConfigOptions_setEnv"
+    },
+    {
+      "rva": "00090580",
+      "name": "Java_org_rocksdb_ConfigOptions_setIgnoreUnknownOptions"
+    },
+    {
+      "rva": "00090590",
+      "name": "Java_org_rocksdb_ConfigOptions_setInputStringsEscaped"
+    },
+    {
+      "rva": "000905A0",
+      "name": "Java_org_rocksdb_ConfigOptions_setSanityLevel"
+    },
+    {
+      "rva": "000A3760",
+      "name": "Java_org_rocksdb_DBOptions_adviseRandomOnOpen"
+    },
+    {
+      "rva": "000A3770",
+      "name": "Java_org_rocksdb_DBOptions_allow2pc"
+    },
+    {
+      "rva": "000A3780",
+      "name": "Java_org_rocksdb_DBOptions_allowConcurrentMemtableWrite"
+    },
+    {
+      "rva": "000A3790",
+      "name": "Java_org_rocksdb_DBOptions_allowFAllocate"
+    },
+    {
+      "rva": "000A37A0",
+      "name": "Java_org_rocksdb_DBOptions_allowIngestBehind"
+    },
+    {
+      "rva": "000A37B0",
+      "name": "Java_org_rocksdb_DBOptions_allowMmapReads"
+    },
+    {
+      "rva": "000A37C0",
+      "name": "Java_org_rocksdb_DBOptions_allowMmapWrites"
+    },
+    {
+      "rva": "000A37D0",
+      "name": "Java_org_rocksdb_DBOptions_atomicFlush"
+    },
+    {
+      "rva": "000A37E0",
+      "name": "Java_org_rocksdb_DBOptions_avoidFlushDuringRecovery"
+    },
+    {
+      "rva": "000A37F0",
+      "name": "Java_org_rocksdb_DBOptions_avoidFlushDuringShutdown"
+    },
+    {
+      "rva": "000A3800",
+      "name": "Java_org_rocksdb_DBOptions_avoidUnnecessaryBlockingIO"
+    },
+    {
+      "rva": "000A3810",
+      "name": "Java_org_rocksdb_DBOptions_bestEffortsRecovery"
+    },
+    {
+      "rva": "000A3820",
+      "name": "Java_org_rocksdb_DBOptions_bgerrorResumeRetryInterval"
+    },
+    {
+      "rva": "000A3830",
+      "name": "Java_org_rocksdb_DBOptions_bytesPerSync"
+    },
+    {
+      "rva": "000A3840",
+      "name": "Java_org_rocksdb_DBOptions_compactionReadaheadSize"
+    },
+    {
+      "rva": "000A3850",
+      "name": "Java_org_rocksdb_DBOptions_copyDBOptions"
+    },
+    {
+      "rva": "000A3880",
+      "name": "Java_org_rocksdb_DBOptions_createIfMissing"
+    },
+    {
+      "rva": "000A3890",
+      "name": "Java_org_rocksdb_DBOptions_createMissingColumnFamilies"
+    },
+    {
+      "rva": "000A38A0",
+      "name": "Java_org_rocksdb_DBOptions_dailyOffpeakTimeUTC"
+    },
+    {
+      "rva": "000A38C0",
+      "name": "Java_org_rocksdb_DBOptions_dbLogDir"
+    },
+    {
+      "rva": "000A38E0",
+      "name": "Java_org_rocksdb_DBOptions_dbPaths"
+    },
+    {
+      "rva": "000A3AF0",
+      "name": "Java_org_rocksdb_DBOptions_dbPathsLen"
+    },
+    {
+      "rva": "000A3B20",
+      "name": "Java_org_rocksdb_DBOptions_dbWriteBufferSize"
+    },
+    {
+      "rva": "000A3B30",
+      "name": "Java_org_rocksdb_DBOptions_delayedWriteRate"
+    },
+    {
+      "rva": "000A3B40",
+      "name": "Java_org_rocksdb_DBOptions_deleteObsoleteFilesPeriodMicros"
+    },
+    {
+      "rva": "000A3B50",
+      "name": "Java_org_rocksdb_DBOptions_disposeInternalJni"
+    },
+    {
+      "rva": "000A3B80",
+      "name": "Java_org_rocksdb_DBOptions_dumpMallocStats"
+    },
+    {
+      "rva": "000A3B90",
+      "name": "Java_org_rocksdb_DBOptions_enablePipelinedWrite"
+    },
+    {
+      "rva": "000A3BA0",
+      "name": "Java_org_rocksdb_DBOptions_enableThreadTracking"
+    },
+    {
+      "rva": "000A3BB0",
+      "name": "Java_org_rocksdb_DBOptions_enableWriteThreadAdaptiveYield"
+    },
+    {
+      "rva": "000A3BC0",
+      "name": "Java_org_rocksdb_DBOptions_errorIfExists"
+    },
+    {
+      "rva": "000A3BD0",
+      "name": "Java_org_rocksdb_DBOptions_eventListeners"
+    },
+    {
+      "rva": "000A3BE0",
+      "name": "Java_org_rocksdb_DBOptions_getDBOptionsFromProps__JLjava_lang_String_2"
+    },
+    {
+      "rva": "000A3D80",
+      "name": "Java_org_rocksdb_DBOptions_getDBOptionsFromProps__Ljava_lang_String_2"
+    },
+    {
+      "rva": "000A3F90",
+      "name": "Java_org_rocksdb_DBOptions_infoLogLevel"
+    },
+    {
+      "rva": "000A3FA0",
+      "name": "Java_org_rocksdb_DBOptions_isFdCloseOnExec"
+    },
+    {
+      "rva": "000A3FB0",
+      "name": "Java_org_rocksdb_DBOptions_keepLogFileNum"
+    },
+    {
+      "rva": "000A3FC0",
+      "name": "Java_org_rocksdb_DBOptions_logFileTimeToRoll"
+    },
+    {
+      "rva": "000A3FD0",
+      "name": "Java_org_rocksdb_DBOptions_logReadaheadSize"
+    },
+    {
+      "rva": "000A3FE0",
+      "name": "Java_org_rocksdb_DBOptions_manifestPreallocationSize"
+    },
+    {
+      "rva": "000A3FF0",
+      "name": "Java_org_rocksdb_DBOptions_manualWalFlush"
+    },
+    {
+      "rva": "000A4000",
+      "name": "Java_org_rocksdb_DBOptions_maxBackgroundCompactions"
+    },
+    {
+      "rva": "000A4010",
+      "name": "Java_org_rocksdb_DBOptions_maxBackgroundFlushes"
+    },
+    {
+      "rva": "000A4020",
+      "name": "Java_org_rocksdb_DBOptions_maxBackgroundJobs"
+    },
+    {
+      "rva": "000A4030",
+      "name": "Java_org_rocksdb_DBOptions_maxBgerrorResumeCount"
+    },
+    {
+      "rva": "000A4040",
+      "name": "Java_org_rocksdb_DBOptions_maxFileOpeningThreads"
+    },
+    {
+      "rva": "000A4050",
+      "name": "Java_org_rocksdb_DBOptions_maxLogFileSize"
+    },
+    {
+      "rva": "000A4060",
+      "name": "Java_org_rocksdb_DBOptions_maxManifestFileSize"
+    },
+    {
+      "rva": "000A4070",
+      "name": "Java_org_rocksdb_DBOptions_maxOpenFiles"
+    },
+    {
+      "rva": "000A4080",
+      "name": "Java_org_rocksdb_DBOptions_maxSubcompactions"
+    },
+    {
+      "rva": "000A4090",
+      "name": "Java_org_rocksdb_DBOptions_maxTotalWalSize"
+    },
+    {
+      "rva": "000A40A0",
+      "name": "Java_org_rocksdb_DBOptions_maxWriteBatchGroupSizeBytes"
+    },
+    {
+      "rva": "000A40B0",
+      "name": "Java_org_rocksdb_DBOptions_newDBOptions"
+    },
+    {
+      "rva": "000A40E0",
+      "name": "Java_org_rocksdb_DBOptions_newDBOptionsFromOptions"
+    },
+    {
+      "rva": "000A4110",
+      "name": "Java_org_rocksdb_DBOptions_optimizeForSmallDb"
+    },
+    {
+      "rva": "000A4120",
+      "name": "Java_org_rocksdb_DBOptions_paranoidChecks"
+    },
+    {
+      "rva": "000A4130",
+      "name": "Java_org_rocksdb_DBOptions_persistStatsToDisk"
+    },
+    {
+      "rva": "000A4140",
+      "name": "Java_org_rocksdb_DBOptions_recycleLogFileNum"
+    },
+    {
+      "rva": "000A4150",
+      "name": "Java_org_rocksdb_DBOptions_setAdviseRandomOnOpen"
+    },
+    {
+      "rva": "000A4160",
+      "name": "Java_org_rocksdb_DBOptions_setAllow2pc"
+    },
+    {
+      "rva": "000A4170",
+      "name": "Java_org_rocksdb_DBOptions_setAllowConcurrentMemtableWrite"
+    },
+    {
+      "rva": "000A4180",
+      "name": "Java_org_rocksdb_DBOptions_setAllowFAllocate"
+    },
+    {
+      "rva": "000A4190",
+      "name": "Java_org_rocksdb_DBOptions_setAllowIngestBehind"
+    },
+    {
+      "rva": "000A41A0",
+      "name": "Java_org_rocksdb_DBOptions_setAllowMmapReads"
+    },
+    {
+      "rva": "000A41B0",
+      "name": "Java_org_rocksdb_DBOptions_setAllowMmapWrites"
+    },
+    {
+      "rva": "000A41C0",
+      "name": "Java_org_rocksdb_DBOptions_setAtomicFlush"
+    },
+    {
+      "rva": "000A41D0",
+      "name": "Java_org_rocksdb_DBOptions_setAvoidFlushDuringRecovery"
+    },
+    {
+      "rva": "000A41E0",
+      "name": "Java_org_rocksdb_DBOptions_setAvoidFlushDuringShutdown"
+    },
+    {
+      "rva": "000A41F0",
+      "name": "Java_org_rocksdb_DBOptions_setAvoidUnnecessaryBlockingIO"
+    },
+    {
+      "rva": "000A4200",
+      "name": "Java_org_rocksdb_DBOptions_setBestEffortsRecovery"
+    },
+    {
+      "rva": "000A4210",
+      "name": "Java_org_rocksdb_DBOptions_setBgerrorResumeRetryInterval"
+    },
+    {
+      "rva": "000A4220",
+      "name": "Java_org_rocksdb_DBOptions_setBytesPerSync"
+    },
+    {
+      "rva": "000A4230",
+      "name": "Java_org_rocksdb_DBOptions_setCompactionReadaheadSize"
+    },
+    {
+      "rva": "000A4240",
+      "name": "Java_org_rocksdb_DBOptions_setCreateIfMissing"
+    },
+    {
+      "rva": "000A4250",
+      "name": "Java_org_rocksdb_DBOptions_setCreateMissingColumnFamilies"
+    },
+    {
+      "rva": "000A4260",
+      "name": "Java_org_rocksdb_DBOptions_setDailyOffpeakTimeUTC"
+    },
+    {
+      "rva": "000A4380",
+      "name": "Java_org_rocksdb_DBOptions_setDbLogDir"
+    },
+    {
+      "rva": "000A4400",
+      "name": "Java_org_rocksdb_DBOptions_setDbPaths"
+    },
+    {
+      "rva": "000A4890",
+      "name": "Java_org_rocksdb_DBOptions_setDbWriteBufferSize"
+    },
+    {
+      "rva": "000A48A0",
+      "name": "Java_org_rocksdb_DBOptions_setDelayedWriteRate"
+    },
+    {
+      "rva": "000A48B0",
+      "name": "Java_org_rocksdb_DBOptions_setDeleteObsoleteFilesPeriodMicros"
+    },
+    {
+      "rva": "000A48C0",
+      "name": "Java_org_rocksdb_DBOptions_setDumpMallocStats"
+    },
+    {
+      "rva": "000A48D0",
+      "name": "Java_org_rocksdb_DBOptions_setEnablePipelinedWrite"
+    },
+    {
+      "rva": "000A48E0",
+      "name": "Java_org_rocksdb_DBOptions_setEnableThreadTracking"
+    },
+    {
+      "rva": "000A48F0",
+      "name": "Java_org_rocksdb_DBOptions_setEnableWriteThreadAdaptiveYield"
+    },
+    {
+      "rva": "000A4900",
+      "name": "Java_org_rocksdb_DBOptions_setEnv"
+    },
+    {
+      "rva": "000A4910",
+      "name": "Java_org_rocksdb_DBOptions_setErrorIfExists"
+    },
+    {
+      "rva": "000A4920",
+      "name": "Java_org_rocksdb_DBOptions_setEventListeners"
+    },
+    {
+      "rva": "000A4930",
+      "name": "Java_org_rocksdb_DBOptions_setIncreaseParallelism"
+    },
+    {
+      "rva": "000A4940",
+      "name": "Java_org_rocksdb_DBOptions_setInfoLogLevel"
+    },
+    {
+      "rva": "000A4950",
+      "name": "Java_org_rocksdb_DBOptions_setIsFdCloseOnExec"
+    },
+    {
+      "rva": "000A4960",
+      "name": "Java_org_rocksdb_DBOptions_setKeepLogFileNum"
+    },
+    {
+      "rva": "000A4970",
+      "name": "Java_org_rocksdb_DBOptions_setLogFileTimeToRoll"
+    },
+    {
+      "rva": "000A4980",
+      "name": "Java_org_rocksdb_DBOptions_setLogReadaheadSize"
+    },
+    {
+      "rva": "000A4990",
+      "name": "Java_org_rocksdb_DBOptions_setLogger"
+    },
+    {
+      "rva": "000A4A40",
+      "name": "Java_org_rocksdb_DBOptions_setManifestPreallocationSize"
+    },
+    {
+      "rva": "000A4A50",
+      "name": "Java_org_rocksdb_DBOptions_setManualWalFlush"
+    },
+    {
+      "rva": "000A4A60",
+      "name": "Java_org_rocksdb_DBOptions_setMaxBackgroundCompactions"
+    },
+    {
+      "rva": "000A4A70",
+      "name": "Java_org_rocksdb_DBOptions_setMaxBackgroundFlushes"
+    },
+    {
+      "rva": "000A4A80",
+      "name": "Java_org_rocksdb_DBOptions_setMaxBackgroundJobs"
+    },
+    {
+      "rva": "000A4A90",
+      "name": "Java_org_rocksdb_DBOptions_setMaxBgErrorResumeCount"
+    },
+    {
+      "rva": "000A4AA0",
+      "name": "Java_org_rocksdb_DBOptions_setMaxFileOpeningThreads"
+    },
+    {
+      "rva": "000A4AB0",
+      "name": "Java_org_rocksdb_DBOptions_setMaxLogFileSize"
+    },
+    {
+      "rva": "000A4AC0",
+      "name": "Java_org_rocksdb_DBOptions_setMaxManifestFileSize"
+    },
+    {
+      "rva": "000A4AD0",
+      "name": "Java_org_rocksdb_DBOptions_setMaxOpenFiles"
+    },
+    {
+      "rva": "000A4AE0",
+      "name": "Java_org_rocksdb_DBOptions_setMaxSubcompactions"
+    },
+    {
+      "rva": "000A4AF0",
+      "name": "Java_org_rocksdb_DBOptions_setMaxTotalWalSize"
+    },
+    {
+      "rva": "000A4B00",
+      "name": "Java_org_rocksdb_DBOptions_setMaxWriteBatchGroupSizeBytes"
+    },
+    {
+      "rva": "000A4B10",
+      "name": "Java_org_rocksdb_DBOptions_setParanoidChecks"
+    },
+    {
+      "rva": "000A4B20",
+      "name": "Java_org_rocksdb_DBOptions_setPersistStatsToDisk"
+    },
+    {
+      "rva": "000A4B30",
+      "name": "Java_org_rocksdb_DBOptions_setRateLimiter"
+    },
+    {
+      "rva": "000A4B40",
+      "name": "Java_org_rocksdb_DBOptions_setRecycleLogFileNum"
+    },
+    {
+      "rva": "000A4B50",
+      "name": "Java_org_rocksdb_DBOptions_setRowCache"
+    },
+    {
+      "rva": "000A4B60",
+      "name": "Java_org_rocksdb_DBOptions_setSkipCheckingSstFileSizesOnDbOpen"
+    },
+    {
+      "rva": "000A4B70",
+      "name": "Java_org_rocksdb_DBOptions_setSkipStatsUpdateOnDbOpen"
+    },
+    {
+      "rva": "000A4B80",
+      "name": "Java_org_rocksdb_DBOptions_setSstFileManager"
+    },
+    {
+      "rva": "000A4B90",
+      "name": "Java_org_rocksdb_DBOptions_setStatistics"
+    },
+    {
+      "rva": "000A4BA0",
+      "name": "Java_org_rocksdb_DBOptions_setStatsDumpPeriodSec"
+    },
+    {
+      "rva": "000A4BB0",
+      "name": "Java_org_rocksdb_DBOptions_setStatsHistoryBufferSize"
+    },
+    {
+      "rva": "000A4BC0",
+      "name": "Java_org_rocksdb_DBOptions_setStatsPersistPeriodSec"
+    },
+    {
+      "rva": "000A4BD0",
+      "name": "Java_org_rocksdb_DBOptions_setStrictBytesPerSync"
+    },
+    {
+      "rva": "000A4BE0",
+      "name": "Java_org_rocksdb_DBOptions_setTableCacheNumshardbits"
+    },
+    {
+      "rva": "000A4BF0",
+      "name": "Java_org_rocksdb_DBOptions_setTwoWriteQueues"
+    },
+    {
+      "rva": "000A4C00",
+      "name": "Java_org_rocksdb_DBOptions_setUnorderedWrite"
+    },
+    {
+      "rva": "000A4C10",
+      "name": "Java_org_rocksdb_DBOptions_setUseAdaptiveMutex"
+    },
+    {
+      "rva": "000A4C20",
+      "name": "Java_org_rocksdb_DBOptions_setUseDirectIoForFlushAndCompaction"
+    },
+    {
+      "rva": "000A4C30",
+      "name": "Java_org_rocksdb_DBOptions_setUseDirectReads"
+    },
+    {
+      "rva": "000A4C40",
+      "name": "Java_org_rocksdb_DBOptions_setUseFsync"
+    },
+    {
+      "rva": "000A4C50",
+      "name": "Java_org_rocksdb_DBOptions_setWalBytesPerSync"
+    },
+    {
+      "rva": "000A4C60",
+      "name": "Java_org_rocksdb_DBOptions_setWalDir"
+    },
+    {
+      "rva": "000A4CE0",
+      "name": "Java_org_rocksdb_DBOptions_setWalFilter"
+    },
+    {
+      "rva": "000A4D00",
+      "name": "Java_org_rocksdb_DBOptions_setWalRecoveryMode"
+    },
+    {
+      "rva": "000A4D40",
+      "name": "Java_org_rocksdb_DBOptions_setWalSizeLimitMB"
+    },
+    {
+      "rva": "000A4D50",
+      "name": "Java_org_rocksdb_DBOptions_setWalTtlSeconds"
+    },
+    {
+      "rva": "000A4D60",
+      "name": "Java_org_rocksdb_DBOptions_setWritableFileMaxBufferSize"
+    },
+    {
+      "rva": "000A4D70",
+      "name": "Java_org_rocksdb_DBOptions_setWriteBufferManager"
+    },
+    {
+      "rva": "000A4D80",
+      "name": "Java_org_rocksdb_DBOptions_setWriteDbidToManifest"
+    },
+    {
+      "rva": "000A4D90",
+      "name": "Java_org_rocksdb_DBOptions_setWriteThreadMaxYieldUsec"
+    },
+    {
+      "rva": "000A4DA0",
+      "name": "Java_org_rocksdb_DBOptions_setWriteThreadSlowYieldUsec"
+    },
+    {
+      "rva": "000A4DB0",
+      "name": "Java_org_rocksdb_DBOptions_skipCheckingSstFileSizesOnDbOpen"
+    },
+    {
+      "rva": "000A4DC0",
+      "name": "Java_org_rocksdb_DBOptions_skipStatsUpdateOnDbOpen"
+    },
+    {
+      "rva": "000A4DD0",
+      "name": "Java_org_rocksdb_DBOptions_statistics"
+    },
+    {
+      "rva": "000A4E70",
+      "name": "Java_org_rocksdb_DBOptions_statsDumpPeriodSec"
+    },
+    {
+      "rva": "000A4E80",
+      "name": "Java_org_rocksdb_DBOptions_statsHistoryBufferSize"
+    },
+    {
+      "rva": "000A4E90",
+      "name": "Java_org_rocksdb_DBOptions_statsPersistPeriodSec"
+    },
+    {
+      "rva": "000A4EA0",
+      "name": "Java_org_rocksdb_DBOptions_strictBytesPerSync"
+    },
+    {
+      "rva": "000A4EB0",
+      "name": "Java_org_rocksdb_DBOptions_tableCacheNumshardbits"
+    },
+    {
+      "rva": "000A4EC0",
+      "name": "Java_org_rocksdb_DBOptions_twoWriteQueues"
+    },
+    {
+      "rva": "000A4ED0",
+      "name": "Java_org_rocksdb_DBOptions_unorderedWrite"
+    },
+    {
+      "rva": "000A4EE0",
+      "name": "Java_org_rocksdb_DBOptions_useAdaptiveMutex"
+    },
+    {
+      "rva": "000A4EF0",
+      "name": "Java_org_rocksdb_DBOptions_useDirectIoForFlushAndCompaction"
+    },
+    {
+      "rva": "000A4F00",
+      "name": "Java_org_rocksdb_DBOptions_useDirectReads"
+    },
+    {
+      "rva": "000A4F10",
+      "name": "Java_org_rocksdb_DBOptions_useFsync"
+    },
+    {
+      "rva": "000A4F20",
+      "name": "Java_org_rocksdb_DBOptions_walBytesPerSync"
+    },
+    {
+      "rva": "000A4F30",
+      "name": "Java_org_rocksdb_DBOptions_walDir"
+    },
+    {
+      "rva": "000A4F50",
+      "name": "Java_org_rocksdb_DBOptions_walRecoveryMode"
+    },
+    {
+      "rva": "000A4F80",
+      "name": "Java_org_rocksdb_DBOptions_walSizeLimitMB"
+    },
+    {
+      "rva": "000A4F90",
+      "name": "Java_org_rocksdb_DBOptions_walTtlSeconds"
+    },
+    {
+      "rva": "000A4FA0",
+      "name": "Java_org_rocksdb_DBOptions_writableFileMaxBufferSize"
+    },
+    {
+      "rva": "000A4FB0",
+      "name": "Java_org_rocksdb_DBOptions_writeDbidToManifest"
+    },
+    {
+      "rva": "000A4FC0",
+      "name": "Java_org_rocksdb_DBOptions_writeThreadMaxYieldUsec"
+    },
+    {
+      "rva": "000A4FD0",
+      "name": "Java_org_rocksdb_DBOptions_writeThreadSlowYieldUsec"
+    },
+    {
+      "rva": "000BE6E0",
+      "name": "Java_org_rocksdb_DirectSlice_clear0"
+    },
+    {
+      "rva": "000BE720",
+      "name": "Java_org_rocksdb_DirectSlice_createNewDirectSlice0"
+    },
+    {
+      "rva": "000BE810",
+      "name": "Java_org_rocksdb_DirectSlice_createNewDirectSlice1"
+    },
+    {
+      "rva": "000BE900",
+      "name": "Java_org_rocksdb_DirectSlice_data0"
+    },
+    {
+      "rva": "000BE920",
+      "name": "Java_org_rocksdb_DirectSlice_disposeInternalBuf"
+    },
+    {
+      "rva": "000BE930",
+      "name": "Java_org_rocksdb_DirectSlice_get0"
+    },
+    {
+      "rva": "000BE940",
+      "name": "Java_org_rocksdb_DirectSlice_removePrefix0"
+    },
+    {
+      "rva": "000BE950",
+      "name": "Java_org_rocksdb_DirectSlice_setLength0"
+    },
+    {
+      "rva": "00090E50",
+      "name": "Java_org_rocksdb_EnvOptions_allowFallocate"
+    },
+    {
+      "rva": "00090E60",
+      "name": "Java_org_rocksdb_EnvOptions_bytesPerSync"
+    },
+    {
+      "rva": "00090E70",
+      "name": "Java_org_rocksdb_EnvOptions_compactionReadaheadSize"
+    },
+    {
+      "rva": "00090E80",
+      "name": "Java_org_rocksdb_EnvOptions_disposeInternalJni"
+    },
+    {
+      "rva": "00090E90",
+      "name": "Java_org_rocksdb_EnvOptions_fallocateWithKeepSize"
+    },
+    {
+      "rva": "00090EA0",
+      "name": "Java_org_rocksdb_EnvOptions_newEnvOptions__"
+    },
+    {
+      "rva": "00090ED0",
+      "name": "Java_org_rocksdb_EnvOptions_newEnvOptions__J"
+    },
+    {
+      "rva": "00090F00",
+      "name": "Java_org_rocksdb_EnvOptions_setAllowFallocate"
+    },
+    {
+      "rva": "00090F10",
+      "name": "Java_org_rocksdb_EnvOptions_setBytesPerSync"
+    },
+    {
+      "rva": "00090F20",
+      "name": "Java_org_rocksdb_EnvOptions_setCompactionReadaheadSize"
+    },
+    {
+      "rva": "00090F30",
+      "name": "Java_org_rocksdb_EnvOptions_setFallocateWithKeepSize"
+    },
+    {
+      "rva": "00090F40",
+      "name": "Java_org_rocksdb_EnvOptions_setFdCloexec"
+    },
+    {
+      "rva": "00090F50",
+      "name": "Java_org_rocksdb_EnvOptions_setRateLimiter"
+    },
+    {
+      "rva": "00090F60",
+      "name": "Java_org_rocksdb_EnvOptions_setSetFdCloexec"
+    },
+    {
+      "rva": "00090F70",
+      "name": "Java_org_rocksdb_EnvOptions_setUseDirectReads"
+    },
+    {
+      "rva": "00090F80",
+      "name": "Java_org_rocksdb_EnvOptions_setUseDirectWrites"
+    },
+    {
+      "rva": "00090F90",
+      "name": "Java_org_rocksdb_EnvOptions_setUseMmapReads"
+    },
+    {
+      "rva": "00090FA0",
+      "name": "Java_org_rocksdb_EnvOptions_setUseMmapWrites"
+    },
+    {
+      "rva": "00090FB0",
+      "name": "Java_org_rocksdb_EnvOptions_setWritableFileMaxBufferSize"
+    },
+    {
+      "rva": "00090FC0",
+      "name": "Java_org_rocksdb_EnvOptions_useDirectReads"
+    },
+    {
+      "rva": "00090FD0",
+      "name": "Java_org_rocksdb_EnvOptions_useDirectWrites"
+    },
+    {
+      "rva": "00090FE0",
+      "name": "Java_org_rocksdb_EnvOptions_useMmapReads"
+    },
+    {
+      "rva": "00090FF0",
+      "name": "Java_org_rocksdb_EnvOptions_useMmapWrites"
+    },
+    {
+      "rva": "00091000",
+      "name": "Java_org_rocksdb_EnvOptions_writableFileMaxBufferSize"
+    },
+    {
+      "rva": "000909D0",
+      "name": "Java_org_rocksdb_Env_getBackgroundThreads"
+    },
+    {
+      "rva": "00090A20",
+      "name": "Java_org_rocksdb_Env_getDefaultEnvInternal"
+    },
+    {
+      "rva": "00090A30",
+      "name": "Java_org_rocksdb_Env_getThreadList"
+    },
+    {
+      "rva": "00090C40",
+      "name": "Java_org_rocksdb_Env_getThreadPoolQueueLen"
+    },
+    {
+      "rva": "00090C90",
+      "name": "Java_org_rocksdb_Env_incBackgroundThreadsIfNeeded"
+    },
+    {
+      "rva": "00090CF0",
+      "name": "Java_org_rocksdb_Env_lowerThreadPoolCPUPriority"
+    },
+    {
+      "rva": "00090D40",
+      "name": "Java_org_rocksdb_Env_lowerThreadPoolIOPriority"
+    },
+    {
+      "rva": "00090D90",
+      "name": "Java_org_rocksdb_Env_setBackgroundThreads"
+    },
+    {
+      "rva": "00096260",
+      "name": "Java_org_rocksdb_ExportImportFilesMetaData_disposeInternal"
+    },
+    {
+      "rva": "00096480",
+      "name": "Java_org_rocksdb_Filter_disposeInternalJni"
+    },
+    {
+      "rva": "000A4FE0",
+      "name": "Java_org_rocksdb_FlushOptions_allowWriteStall"
+    },
+    {
+      "rva": "000A4FF0",
+      "name": "Java_org_rocksdb_FlushOptions_disposeInternalJni"
+    },
+    {
+      "rva": "000A5000",
+      "name": "Java_org_rocksdb_FlushOptions_newFlushOptions"
+    },
+    {
+      "rva": "000A5030",
+      "name": "Java_org_rocksdb_FlushOptions_setAllowWriteStall"
+    },
+    {
+      "rva": "000A5040",
+      "name": "Java_org_rocksdb_FlushOptions_setWaitForFlush"
+    },
+    {
+      "rva": "000A5050",
+      "name": "Java_org_rocksdb_FlushOptions_waitForFlush"
+    },
+    {
+      "rva": "0009C900",
+      "name": "Java_org_rocksdb_HashLinkedListMemTableConfig_newMemTableFactoryHandle"
+    },
+    {
+      "rva": "0009C930",
+      "name": "Java_org_rocksdb_HashSkipListMemTableConfig_newMemTableFactoryHandle"
+    },
+    {
+      "rva": "00096600",
+      "name": "Java_org_rocksdb_HyperClockCache_disposeInternalJni"
+    },
+    {
+      "rva": "00096670",
+      "name": "Java_org_rocksdb_HyperClockCache_newHyperClockCache"
+    },
+    {
+      "rva": "00096790",
+      "name": "Java_org_rocksdb_ImportColumnFamilyOptions_disposeInternal"
+    },
+    {
+      "rva": "000967A0",
+      "name": "Java_org_rocksdb_ImportColumnFamilyOptions_moveFiles"
+    },
+    {
+      "rva": "000967B0",
+      "name": "Java_org_rocksdb_ImportColumnFamilyOptions_newImportColumnFamilyOptions"
+    },
+    {
+      "rva": "000967D0",
+      "name": "Java_org_rocksdb_ImportColumnFamilyOptions_setMoveFiles"
+    },
+    {
+      "rva": "000967E0",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_allowBlockingFlush"
+    },
+    {
+      "rva": "000967F0",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_allowGlobalSeqNo"
+    },
+    {
+      "rva": "00096800",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_disposeInternalJni"
+    },
+    {
+      "rva": "00096810",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_ingestBehind"
+    },
+    {
+      "rva": "00096820",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_moveFiles"
+    },
+    {
+      "rva": "00096830",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_newIngestExternalFileOptions__"
+    },
+    {
+      "rva": "00096870",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_newIngestExternalFileOptions__ZZZZ"
+    },
+    {
+      "rva": "000968E0",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_setAllowBlockingFlush"
+    },
+    {
+      "rva": "000968F0",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_setAllowGlobalSeqNo"
+    },
+    {
+      "rva": "00096900",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_setIngestBehind"
+    },
+    {
+      "rva": "00096910",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_setMoveFiles"
+    },
+    {
+      "rva": "00096920",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_setSnapshotConsistency"
+    },
+    {
+      "rva": "00096930",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_setWriteGlobalSeqno"
+    },
+    {
+      "rva": "00096940",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_snapshotConsistency"
+    },
+    {
+      "rva": "00096950",
+      "name": "Java_org_rocksdb_IngestExternalFileOptions_writeGlobalSeqno"
+    },
+    {
+      "rva": "0009AFA0",
+      "name": "Java_org_rocksdb_LRUCache_disposeInternalJni"
+    },
+    {
+      "rva": "0009B010",
+      "name": "Java_org_rocksdb_LRUCache_newLRUCache"
+    },
+    {
+      "rva": "0009ADF0",
+      "name": "Java_org_rocksdb_Logger_disposeInternal"
+    },
+    {
+      "rva": "0009AE60",
+      "name": "Java_org_rocksdb_Logger_infoLogLevel"
+    },
+    {
+      "rva": "0009AE70",
+      "name": "Java_org_rocksdb_Logger_newLogger"
+    },
+    {
+      "rva": "0009AF40",
+      "name": "Java_org_rocksdb_Logger_setInfoLogLevel"
+    },
+    {
+      "rva": "0009C4C0",
+      "name": "Java_org_rocksdb_MemoryUtil_getApproximateMemoryUsageByType"
+    },
+    {
+      "rva": "0009CE70",
+      "name": "Java_org_rocksdb_NativeComparatorWrapperTest_00024NativeStringComparatorWrapper_newStringComparator"
+    },
+    {
+      "rva": "0008AC80",
+      "name": "Java_org_rocksdb_NativeComparatorWrapper_disposeInternal"
+    },
+    {
+      "rva": "0009D900",
+      "name": "Java_org_rocksdb_OptimisticTransactionDB_beginTransaction_1withOld__JJJ"
+    },
+    {
+      "rva": "0009D950",
+      "name": "Java_org_rocksdb_OptimisticTransactionDB_beginTransaction_1withOld__JJJJ"
+    },
+    {
+      "rva": "0009D970",
+      "name": "Java_org_rocksdb_OptimisticTransactionDB_beginTransaction__JJ"
+    },
+    {
+      "rva": "0009D9D0",
+      "name": "Java_org_rocksdb_OptimisticTransactionDB_beginTransaction__JJJ"
+    },
+    {
+      "rva": "0009D9F0",
+      "name": "Java_org_rocksdb_OptimisticTransactionDB_closeDatabase"
+    },
+    {
+      "rva": "0009DA30",
+      "name": "Java_org_rocksdb_OptimisticTransactionDB_disposeInternalJni"
+    },
+    {
+      "rva": "0009DA50",
+      "name": "Java_org_rocksdb_OptimisticTransactionDB_getBaseDB"
+    },
+    {
+      "rva": "0009DA60",
+      "name": "Java_org_rocksdb_OptimisticTransactionDB_open__JLjava_lang_String_2"
+    },
+    {
+      "rva": "0009DBA0",
+      "name": "Java_org_rocksdb_OptimisticTransactionDB_open__JLjava_lang_String_2_3_3B_3J"
+    },
+    {
+      "rva": "0009E260",
+      "name": "Java_org_rocksdb_OptimisticTransactionOptions_disposeInternalJni"
+    },
+    {
+      "rva": "0009E270",
+      "name": "Java_org_rocksdb_OptimisticTransactionOptions_isSetSnapshot"
+    },
+    {
+      "rva": "0009E280",
+      "name": "Java_org_rocksdb_OptimisticTransactionOptions_newOptimisticTransactionOptions"
+    },
+    {
+      "rva": "0009E2C0",
+      "name": "Java_org_rocksdb_OptimisticTransactionOptions_setComparator"
+    },
+    {
+      "rva": "0009E2D0",
+      "name": "Java_org_rocksdb_OptimisticTransactionOptions_setSetSnapshot"
+    },
+    {
+      "rva": "000A88B0",
+      "name": "Java_org_rocksdb_OptionsUtil_getLatestOptionsFileName"
+    },
+    {
+      "rva": "000A8A40",
+      "name": "Java_org_rocksdb_OptionsUtil_loadLatestOptions"
+    },
+    {
+      "rva": "000A8EF0",
+      "name": "Java_org_rocksdb_OptionsUtil_loadOptionsFromFile"
+    },
+    {
+      "rva": "000A93A0",
+      "name": "Java_org_rocksdb_OptionsUtil_readTableFormatConfig"
+    },
+    {
+      "rva": "000A5060",
+      "name": "Java_org_rocksdb_Options_adviseRandomOnOpen"
+    },
+    {
+      "rva": "000A5070",
+      "name": "Java_org_rocksdb_Options_allow2pc"
+    },
+    {
+      "rva": "000A5080",
+      "name": "Java_org_rocksdb_Options_allowConcurrentMemtableWrite"
+    },
+    {
+      "rva": "000A5090",
+      "name": "Java_org_rocksdb_Options_allowFAllocate"
+    },
+    {
+      "rva": "000A50A0",
+      "name": "Java_org_rocksdb_Options_allowIngestBehind"
+    },
+    {
+      "rva": "000A50B0",
+      "name": "Java_org_rocksdb_Options_allowMmapReads"
+    },
+    {
+      "rva": "000A50C0",
+      "name": "Java_org_rocksdb_Options_allowMmapWrites"
+    },
+    {
+      "rva": "000A50D0",
+      "name": "Java_org_rocksdb_Options_arenaBlockSize"
+    },
+    {
+      "rva": "000A50E0",
+      "name": "Java_org_rocksdb_Options_atomicFlush"
+    },
+    {
+      "rva": "000A50F0",
+      "name": "Java_org_rocksdb_Options_avoidFlushDuringRecovery"
+    },
+    {
+      "rva": "000A5100",
+      "name": "Java_org_rocksdb_Options_avoidFlushDuringShutdown"
+    },
+    {
+      "rva": "000A5110",
+      "name": "Java_org_rocksdb_Options_avoidUnnecessaryBlockingIO"
+    },
+    {
+      "rva": "000A5120",
+      "name": "Java_org_rocksdb_Options_bestEffortsRecovery"
+    },
+    {
+      "rva": "000A5130",
+      "name": "Java_org_rocksdb_Options_bgerrorResumeRetryInterval"
+    },
+    {
+      "rva": "000A5140",
+      "name": "Java_org_rocksdb_Options_blobCompactionReadaheadSize"
+    },
+    {
+      "rva": "000A5150",
+      "name": "Java_org_rocksdb_Options_blobCompressionType"
+    },
+    {
+      "rva": "000A5160",
+      "name": "Java_org_rocksdb_Options_blobFileSize"
+    },
+    {
+      "rva": "000A5170",
+      "name": "Java_org_rocksdb_Options_blobFileStartingLevel"
+    },
+    {
+      "rva": "000A5180",
+      "name": "Java_org_rocksdb_Options_blobGarbageCollectionAgeCutoff"
+    },
+    {
+      "rva": "000A5190",
+      "name": "Java_org_rocksdb_Options_blobGarbageCollectionForceThreshold"
+    },
+    {
+      "rva": "000A51A0",
+      "name": "Java_org_rocksdb_Options_bloomLocality"
+    },
+    {
+      "rva": "000A51B0",
+      "name": "Java_org_rocksdb_Options_bottommostCompressionType"
+    },
+    {
+      "rva": "000A51C0",
+      "name": "Java_org_rocksdb_Options_bytesPerSync"
+    },
+    {
+      "rva": "000A51D0",
+      "name": "Java_org_rocksdb_Options_cfPaths"
+    },
+    {
+      "rva": "000A51F0",
+      "name": "Java_org_rocksdb_Options_cfPathsLen"
+    },
+    {
+      "rva": "000A5220",
+      "name": "Java_org_rocksdb_Options_compactionPriority"
+    },
+    {
+      "rva": "000A5250",
+      "name": "Java_org_rocksdb_Options_compactionReadaheadSize"
+    },
+    {
+      "rva": "000A5260",
+      "name": "Java_org_rocksdb_Options_compactionStyle"
+    },
+    {
+      "rva": "000A5290",
+      "name": "Java_org_rocksdb_Options_compressionPerLevel"
+    },
+    {
+      "rva": "000A52C0",
+      "name": "Java_org_rocksdb_Options_compressionType"
+    },
+    {
+      "rva": "000A52D0",
+      "name": "Java_org_rocksdb_Options_copyOptions"
+    },
+    {
+      "rva": "000A5330",
+      "name": "Java_org_rocksdb_Options_createIfMissing"
+    },
+    {
+      "rva": "000A5340",
+      "name": "Java_org_rocksdb_Options_createMissingColumnFamilies"
+    },
+    {
+      "rva": "000A5350",
+      "name": "Java_org_rocksdb_Options_dailyOffpeakTimeUTC"
+    },
+    {
+      "rva": "000A5370",
+      "name": "Java_org_rocksdb_Options_dbLogDir"
+    },
+    {
+      "rva": "000A5390",
+      "name": "Java_org_rocksdb_Options_dbPaths"
+    },
+    {
+      "rva": "000A55A0",
+      "name": "Java_org_rocksdb_Options_dbPathsLen"
+    },
+    {
+      "rva": "000A55D0",
+      "name": "Java_org_rocksdb_Options_dbWriteBufferSize"
+    },
+    {
+      "rva": "000A55E0",
+      "name": "Java_org_rocksdb_Options_delayedWriteRate"
+    },
+    {
+      "rva": "000A55F0",
+      "name": "Java_org_rocksdb_Options_deleteObsoleteFilesPeriodMicros"
+    },
+    {
+      "rva": "000A5600",
+      "name": "Java_org_rocksdb_Options_disableAutoCompactions"
+    },
+    {
+      "rva": "000A5610",
+      "name": "Java_org_rocksdb_Options_disposeInternalJni"
+    },
+    {
+      "rva": "000A5650",
+      "name": "Java_org_rocksdb_Options_dumpMallocStats"
+    },
+    {
+      "rva": "000A5660",
+      "name": "Java_org_rocksdb_Options_enableBlobFiles"
+    },
+    {
+      "rva": "000A5670",
+      "name": "Java_org_rocksdb_Options_enableBlobGarbageCollection"
+    },
+    {
+      "rva": "000A5680",
+      "name": "Java_org_rocksdb_Options_enablePipelinedWrite"
+    },
+    {
+      "rva": "000A5690",
+      "name": "Java_org_rocksdb_Options_enableThreadTracking"
+    },
+    {
+      "rva": "000A56A0",
+      "name": "Java_org_rocksdb_Options_enableWriteThreadAdaptiveYield"
+    },
+    {
+      "rva": "000A56B0",
+      "name": "Java_org_rocksdb_Options_errorIfExists"
+    },
+    {
+      "rva": "000A56C0",
+      "name": "Java_org_rocksdb_Options_eventListeners"
+    },
+    {
+      "rva": "000A56D0",
+      "name": "Java_org_rocksdb_Options_experimentalMempurgeThreshold"
+    },
+    {
+      "rva": "000A56E0",
+      "name": "Java_org_rocksdb_Options_forceConsistencyChecks"
+    },
+    {
+      "rva": "000A56F0",
+      "name": "Java_org_rocksdb_Options_hardPendingCompactionBytesLimit"
+    },
+    {
+      "rva": "000A5700",
+      "name": "Java_org_rocksdb_Options_infoLogLevel"
+    },
+    {
+      "rva": "000A5710",
+      "name": "Java_org_rocksdb_Options_inplaceUpdateNumLocks"
+    },
+    {
+      "rva": "000A5720",
+      "name": "Java_org_rocksdb_Options_inplaceUpdateSupport"
+    },
+    {
+      "rva": "000A5730",
+      "name": "Java_org_rocksdb_Options_isFdCloseOnExec"
+    },
+    {
+      "rva": "000A5740",
+      "name": "Java_org_rocksdb_Options_keepLogFileNum"
+    },
+    {
+      "rva": "000A5750",
+      "name": "Java_org_rocksdb_Options_level0FileNumCompactionTrigger"
+    },
+    {
+      "rva": "000A5760",
+      "name": "Java_org_rocksdb_Options_level0SlowdownWritesTrigger"
+    },
+    {
+      "rva": "000A5770",
+      "name": "Java_org_rocksdb_Options_level0StopWritesTrigger"
+    },
+    {
+      "rva": "000A5780",
+      "name": "Java_org_rocksdb_Options_levelCompactionDynamicLevelBytes"
+    },
+    {
+      "rva": "000A5790",
+      "name": "Java_org_rocksdb_Options_levelZeroFileNumCompactionTrigger"
+    },
+    {
+      "rva": "000A57A0",
+      "name": "Java_org_rocksdb_Options_levelZeroSlowdownWritesTrigger"
+    },
+    {
+      "rva": "000A57B0",
+      "name": "Java_org_rocksdb_Options_levelZeroStopWritesTrigger"
+    },
+    {
+      "rva": "000A57C0",
+      "name": "Java_org_rocksdb_Options_logFileTimeToRoll"
+    },
+    {
+      "rva": "000A57D0",
+      "name": "Java_org_rocksdb_Options_logReadaheadSize"
+    },
+    {
+      "rva": "000A57E0",
+      "name": "Java_org_rocksdb_Options_manifestPreallocationSize"
+    },
+    {
+      "rva": "000A57F0",
+      "name": "Java_org_rocksdb_Options_manualWalFlush"
+    },
+    {
+      "rva": "000A5800",
+      "name": "Java_org_rocksdb_Options_maxBackgroundCompactions"
+    },
+    {
+      "rva": "000A5810",
+      "name": "Java_org_rocksdb_Options_maxBackgroundFlushes"
+    },
+    {
+      "rva": "000A5820",
+      "name": "Java_org_rocksdb_Options_maxBackgroundJobs"
+    },
+    {
+      "rva": "000A5830",
+      "name": "Java_org_rocksdb_Options_maxBgerrorResumeCount"
+    },
+    {
+      "rva": "000A5840",
+      "name": "Java_org_rocksdb_Options_maxBytesForLevelBase"
+    },
+    {
+      "rva": "000A5850",
+      "name": "Java_org_rocksdb_Options_maxBytesForLevelMultiplier"
+    },
+    {
+      "rva": "000A5860",
+      "name": "Java_org_rocksdb_Options_maxBytesForLevelMultiplierAdditional"
+    },
+    {
+      "rva": "000A5A00",
+      "name": "Java_org_rocksdb_Options_maxCompactionBytes"
+    },
+    {
+      "rva": "000A5A10",
+      "name": "Java_org_rocksdb_Options_maxFileOpeningThreads"
+    },
+    {
+      "rva": "000A5A20",
+      "name": "Java_org_rocksdb_Options_maxLogFileSize"
+    },
+    {
+      "rva": "000A5A30",
+      "name": "Java_org_rocksdb_Options_maxManifestFileSize"
+    },
+    {
+      "rva": "000A5A40",
+      "name": "Java_org_rocksdb_Options_maxOpenFiles"
+    },
+    {
+      "rva": "000A5A50",
+      "name": "Java_org_rocksdb_Options_maxSequentialSkipInIterations"
+    },
+    {
+      "rva": "000A5A60",
+      "name": "Java_org_rocksdb_Options_maxSubcompactions"
+    },
+    {
+      "rva": "000A5A70",
+      "name": "Java_org_rocksdb_Options_maxSuccessiveMerges"
+    },
+    {
+      "rva": "000A5A80",
+      "name": "Java_org_rocksdb_Options_maxTableFilesSizeFIFO"
+    },
+    {
+      "rva": "000A5A90",
+      "name": "Java_org_rocksdb_Options_maxTotalWalSize"
+    },
+    {
+      "rva": "000A5AA0",
+      "name": "Java_org_rocksdb_Options_maxWriteBatchGroupSizeBytes"
+    },
+    {
+      "rva": "000A5AB0",
+      "name": "Java_org_rocksdb_Options_maxWriteBufferNumber"
+    },
+    {
+      "rva": "000A5AC0",
+      "name": "Java_org_rocksdb_Options_memTableFactoryName"
+    },
+    {
+      "rva": "000A5B40",
+      "name": "Java_org_rocksdb_Options_memtableHugePageSize"
+    },
+    {
+      "rva": "000A5B50",
+      "name": "Java_org_rocksdb_Options_memtableMaxRangeDeletions"
+    },
+    {
+      "rva": "000A5B60",
+      "name": "Java_org_rocksdb_Options_memtablePrefixBloomSizeRatio"
+    },
+    {
+      "rva": "000A5B70",
+      "name": "Java_org_rocksdb_Options_memtableWholeKeyFiltering"
+    },
+    {
+      "rva": "000A5B80",
+      "name": "Java_org_rocksdb_Options_minBlobSize"
+    },
+    {
+      "rva": "000A5B90",
+      "name": "Java_org_rocksdb_Options_minWriteBufferNumberToMerge"
+    },
+    {
+      "rva": "000A5BA0",
+      "name": "Java_org_rocksdb_Options_newOptions__"
+    },
+    {
+      "rva": "000A5BE0",
+      "name": "Java_org_rocksdb_Options_newOptions__JJ"
+    },
+    {
+      "rva": "000A5C50",
+      "name": "Java_org_rocksdb_Options_numLevels"
+    },
+    {
+      "rva": "000A5C60",
+      "name": "Java_org_rocksdb_Options_oldDefaults"
+    },
+    {
+      "rva": "000A5C70",
+      "name": "Java_org_rocksdb_Options_optimizeFiltersForHits"
+    },
+    {
+      "rva": "000A5C80",
+      "name": "Java_org_rocksdb_Options_optimizeForPointLookup"
+    },
+    {
+      "rva": "000A5C90",
+      "name": "Java_org_rocksdb_Options_optimizeForSmallDb__J"
+    },
+    {
+      "rva": "000A5CA0",
+      "name": "Java_org_rocksdb_Options_optimizeForSmallDb__JJ"
+    },
+    {
+      "rva": "000A5CC0",
+      "name": "Java_org_rocksdb_Options_optimizeLevelStyleCompaction"
+    },
+    {
+      "rva": "000A5CD0",
+      "name": "Java_org_rocksdb_Options_optimizeUniversalStyleCompaction"
+    },
+    {
+      "rva": "000A5CE0",
+      "name": "Java_org_rocksdb_Options_paranoidChecks"
+    },
+    {
+      "rva": "000A5CF0",
+      "name": "Java_org_rocksdb_Options_paranoidFileChecks"
+    },
+    {
+      "rva": "000A5D00",
+      "name": "Java_org_rocksdb_Options_periodicCompactionSeconds"
+    },
+    {
+      "rva": "000A5D10",
+      "name": "Java_org_rocksdb_Options_persistStatsToDisk"
+    },
+    {
+      "rva": "000A5D20",
+      "name": "Java_org_rocksdb_Options_prepareForBulkLoad"
+    },
+    {
+      "rva": "000A5D30",
+      "name": "Java_org_rocksdb_Options_prepopulateBlobCache"
+    },
+    {
+      "rva": "000A5D50",
+      "name": "Java_org_rocksdb_Options_recycleLogFileNum"
+    },
+    {
+      "rva": "000A5D60",
+      "name": "Java_org_rocksdb_Options_reportBgIoStats"
+    },
+    {
+      "rva": "000A5D70",
+      "name": "Java_org_rocksdb_Options_setAdviseRandomOnOpen"
+    },
+    {
+      "rva": "000A5D80",
+      "name": "Java_org_rocksdb_Options_setAllow2pc"
+    },
+    {
+      "rva": "000A5D90",
+      "name": "Java_org_rocksdb_Options_setAllowConcurrentMemtableWrite"
+    },
+    {
+      "rva": "000A5DA0",
+      "name": "Java_org_rocksdb_Options_setAllowFAllocate"
+    },
+    {
+      "rva": "000A5DB0",
+      "name": "Java_org_rocksdb_Options_setAllowIngestBehind"
+    },
+    {
+      "rva": "000A5DC0",
+      "name": "Java_org_rocksdb_Options_setAllowMmapReads"
+    },
+    {
+      "rva": "000A5DD0",
+      "name": "Java_org_rocksdb_Options_setAllowMmapWrites"
+    },
+    {
+      "rva": "000A5DE0",
+      "name": "Java_org_rocksdb_Options_setArenaBlockSize"
+    },
+    {
+      "rva": "000A5DF0",
+      "name": "Java_org_rocksdb_Options_setAtomicFlush"
+    },
+    {
+      "rva": "000A5E00",
+      "name": "Java_org_rocksdb_Options_setAvoidFlushDuringRecovery"
+    },
+    {
+      "rva": "000A5E10",
+      "name": "Java_org_rocksdb_Options_setAvoidFlushDuringShutdown"
+    },
+    {
+      "rva": "000A5E20",
+      "name": "Java_org_rocksdb_Options_setAvoidUnnecessaryBlockingIO"
+    },
+    {
+      "rva": "000A5E30",
+      "name": "Java_org_rocksdb_Options_setBestEffortsRecovery"
+    },
+    {
+      "rva": "000A5E40",
+      "name": "Java_org_rocksdb_Options_setBgerrorResumeRetryInterval"
+    },
+    {
+      "rva": "000A5E50",
+      "name": "Java_org_rocksdb_Options_setBlobCompactionReadaheadSize"
+    },
+    {
+      "rva": "000A5E60",
+      "name": "Java_org_rocksdb_Options_setBlobCompressionType"
+    },
+    {
+      "rva": "000A5E80",
+      "name": "Java_org_rocksdb_Options_setBlobFileSize"
+    },
+    {
+      "rva": "000A5E90",
+      "name": "Java_org_rocksdb_Options_setBlobFileStartingLevel"
+    },
+    {
+      "rva": "000A5EA0",
+      "name": "Java_org_rocksdb_Options_setBlobGarbageCollectionAgeCutoff"
+    },
+    {
+      "rva": "000A5EB0",
+      "name": "Java_org_rocksdb_Options_setBlobGarbageCollectionForceThreshold"
+    },
+    {
+      "rva": "000A5EC0",
+      "name": "Java_org_rocksdb_Options_setBloomLocality"
+    },
+    {
+      "rva": "000A5ED0",
+      "name": "Java_org_rocksdb_Options_setBottommostCompressionOptions"
+    },
+    {
+      "rva": "000A5F10",
+      "name": "Java_org_rocksdb_Options_setBottommostCompressionType"
+    },
+    {
+      "rva": "000A5F30",
+      "name": "Java_org_rocksdb_Options_setBytesPerSync"
+    },
+    {
+      "rva": "000A5F40",
+      "name": "Java_org_rocksdb_Options_setCfPaths"
+    },
+    {
+      "rva": "000A6080",
+      "name": "Java_org_rocksdb_Options_setCompactionFilterFactoryHandle"
+    },
+    {
+      "rva": "000A60F0",
+      "name": "Java_org_rocksdb_Options_setCompactionFilterHandle"
+    },
+    {
+      "rva": "000A6100",
+      "name": "Java_org_rocksdb_Options_setCompactionOptionsFIFO"
+    },
+    {
+      "rva": "000A6150",
+      "name": "Java_org_rocksdb_Options_setCompactionOptionsUniversal"
+    },
+    {
+      "rva": "000A6170",
+      "name": "Java_org_rocksdb_Options_setCompactionPriority"
+    },
+    {
+      "rva": "000A61C0",
+      "name": "Java_org_rocksdb_Options_setCompactionReadaheadSize"
+    },
+    {
+      "rva": "000A61D0",
+      "name": "Java_org_rocksdb_Options_setCompactionStyle"
+    },
+    {
+      "rva": "000A6210",
+      "name": "Java_org_rocksdb_Options_setCompactionThreadLimiter"
+    },
+    {
+      "rva": "000A6220",
+      "name": "Java_org_rocksdb_Options_setComparatorHandle__JI"
+    },
+    {
+      "rva": "000A6260",
+      "name": "Java_org_rocksdb_Options_setComparatorHandle__JJB"
+    },
+    {
+      "rva": "000A62A0",
+      "name": "Java_org_rocksdb_Options_setCompressionOptions"
+    },
+    {
+      "rva": "000A62E0",
+      "name": "Java_org_rocksdb_Options_setCompressionPerLevel"
+    },
+    {
+      "rva": "000A6350",
+      "name": "Java_org_rocksdb_Options_setCompressionType"
+    },
+    {
+      "rva": "000A6370",
+      "name": "Java_org_rocksdb_Options_setCreateIfMissing"
+    },
+    {
+      "rva": "000A6380",
+      "name": "Java_org_rocksdb_Options_setCreateMissingColumnFamilies"
+    },
+    {
+      "rva": "000A6390",
+      "name": "Java_org_rocksdb_Options_setDailyOffpeakTimeUTC"
+    },
+    {
+      "rva": "000A6460",
+      "name": "Java_org_rocksdb_Options_setDbLogDir"
+    },
+    {
+      "rva": "000A64E0",
+      "name": "Java_org_rocksdb_Options_setDbPaths"
+    },
+    {
+      "rva": "000A6970",
+      "name": "Java_org_rocksdb_Options_setDbWriteBufferSize"
+    },
+    {
+      "rva": "000A6980",
+      "name": "Java_org_rocksdb_Options_setDelayedWriteRate"
+    },
+    {
+      "rva": "000A6990",
+      "name": "Java_org_rocksdb_Options_setDeleteObsoleteFilesPeriodMicros"
+    },
+    {
+      "rva": "000A69A0",
+      "name": "Java_org_rocksdb_Options_setDisableAutoCompactions"
+    },
+    {
+      "rva": "000A69B0",
+      "name": "Java_org_rocksdb_Options_setDumpMallocStats"
+    },
+    {
+      "rva": "000A69C0",
+      "name": "Java_org_rocksdb_Options_setEnableBlobFiles"
+    },
+    {
+      "rva": "000A69D0",
+      "name": "Java_org_rocksdb_Options_setEnableBlobGarbageCollection"
+    },
+    {
+      "rva": "000A69E0",
+      "name": "Java_org_rocksdb_Options_setEnablePipelinedWrite"
+    },
+    {
+      "rva": "000A69F0",
+      "name": "Java_org_rocksdb_Options_setEnableThreadTracking"
+    },
+    {
+      "rva": "000A6A00",
+      "name": "Java_org_rocksdb_Options_setEnableWriteThreadAdaptiveYield"
+    },
+    {
+      "rva": "000A6A10",
+      "name": "Java_org_rocksdb_Options_setEnv"
+    },
+    {
+      "rva": "000A6A20",
+      "name": "Java_org_rocksdb_Options_setErrorIfExists"
+    },
+    {
+      "rva": "000A6A30",
+      "name": "Java_org_rocksdb_Options_setEventListeners"
+    },
+    {
+      "rva": "000A6A40",
+      "name": "Java_org_rocksdb_Options_setExperimentalMempurgeThreshold"
+    },
+    {
+      "rva": "000A6A50",
+      "name": "Java_org_rocksdb_Options_setForceConsistencyChecks"
+    },
+    {
+      "rva": "000A6A60",
+      "name": "Java_org_rocksdb_Options_setHardPendingCompactionBytesLimit"
+    },
+    {
+      "rva": "000A6A70",
+      "name": "Java_org_rocksdb_Options_setIncreaseParallelism"
+    },
+    {
+      "rva": "000A6A80",
+      "name": "Java_org_rocksdb_Options_setInfoLogLevel"
+    },
+    {
+      "rva": "000A6A90",
+      "name": "Java_org_rocksdb_Options_setInplaceUpdateNumLocks"
+    },
+    {
+      "rva": "000A6AA0",
+      "name": "Java_org_rocksdb_Options_setInplaceUpdateSupport"
+    },
+    {
+      "rva": "000A6AB0",
+      "name": "Java_org_rocksdb_Options_setIsFdCloseOnExec"
+    },
+    {
+      "rva": "000A6AC0",
+      "name": "Java_org_rocksdb_Options_setKeepLogFileNum"
+    },
+    {
+      "rva": "000A6AD0",
+      "name": "Java_org_rocksdb_Options_setLevel0FileNumCompactionTrigger"
+    },
+    {
+      "rva": "000A6AE0",
+      "name": "Java_org_rocksdb_Options_setLevel0SlowdownWritesTrigger"
+    },
+    {
+      "rva": "000A6AF0",
+      "name": "Java_org_rocksdb_Options_setLevel0StopWritesTrigger"
+    },
+    {
+      "rva": "000A6B00",
+      "name": "Java_org_rocksdb_Options_setLevelCompactionDynamicLevelBytes"
+    },
+    {
+      "rva": "000A6B10",
+      "name": "Java_org_rocksdb_Options_setLevelZeroFileNumCompactionTrigger"
+    },
+    {
+      "rva": "000A6B20",
+      "name": "Java_org_rocksdb_Options_setLevelZeroSlowdownWritesTrigger"
+    },
+    {
+      "rva": "000A6B30",
+      "name": "Java_org_rocksdb_Options_setLevelZeroStopWritesTrigger"
+    },
+    {
+      "rva": "000A6B40",
+      "name": "Java_org_rocksdb_Options_setLogFileTimeToRoll"
+    },
+    {
+      "rva": "000A6B50",
+      "name": "Java_org_rocksdb_Options_setLogReadaheadSize"
+    },
+    {
+      "rva": "000A6B60",
+      "name": "Java_org_rocksdb_Options_setLogger"
+    },
+    {
+      "rva": "000A6C10",
+      "name": "Java_org_rocksdb_Options_setManifestPreallocationSize"
+    },
+    {
+      "rva": "000A6C20",
+      "name": "Java_org_rocksdb_Options_setManualWalFlush"
+    },
+    {
+      "rva": "000A6C30",
+      "name": "Java_org_rocksdb_Options_setMaxBackgroundCompactions"
+    },
+    {
+      "rva": "000A6C40",
+      "name": "Java_org_rocksdb_Options_setMaxBackgroundFlushes"
+    },
+    {
+      "rva": "000A6C50",
+      "name": "Java_org_rocksdb_Options_setMaxBackgroundJobs"
+    },
+    {
+      "rva": "000A6C60",
+      "name": "Java_org_rocksdb_Options_setMaxBgErrorResumeCount"
+    },
+    {
+      "rva": "000A6C70",
+      "name": "Java_org_rocksdb_Options_setMaxBytesForLevelBase"
+    },
+    {
+      "rva": "000A6C80",
+      "name": "Java_org_rocksdb_Options_setMaxBytesForLevelMultiplier"
+    },
+    {
+      "rva": "000A6C90",
+      "name": "Java_org_rocksdb_Options_setMaxBytesForLevelMultiplierAdditional"
+    },
+    {
+      "rva": "000A6D90",
+      "name": "Java_org_rocksdb_Options_setMaxCompactionBytes"
+    },
+    {
+      "rva": "000A6DA0",
+      "name": "Java_org_rocksdb_Options_setMaxFileOpeningThreads"
+    },
+    {
+      "rva": "000A6DB0",
+      "name": "Java_org_rocksdb_Options_setMaxLogFileSize"
+    },
+    {
+      "rva": "000A6DC0",
+      "name": "Java_org_rocksdb_Options_setMaxManifestFileSize"
+    },
+    {
+      "rva": "000A6DD0",
+      "name": "Java_org_rocksdb_Options_setMaxOpenFiles"
+    },
+    {
+      "rva": "000A6DE0",
+      "name": "Java_org_rocksdb_Options_setMaxSequentialSkipInIterations"
+    },
+    {
+      "rva": "000A6DF0",
+      "name": "Java_org_rocksdb_Options_setMaxSubcompactions"
+    },
+    {
+      "rva": "000A6E00",
+      "name": "Java_org_rocksdb_Options_setMaxSuccessiveMerges"
+    },
+    {
+      "rva": "000A6E10",
+      "name": "Java_org_rocksdb_Options_setMaxTableFilesSizeFIFO"
+    },
+    {
+      "rva": "000A6E20",
+      "name": "Java_org_rocksdb_Options_setMaxTotalWalSize"
+    },
+    {
+      "rva": "000A6E30",
+      "name": "Java_org_rocksdb_Options_setMaxWriteBatchGroupSizeBytes"
+    },
+    {
+      "rva": "000A6E40",
+      "name": "Java_org_rocksdb_Options_setMaxWriteBufferNumber"
+    },
+    {
+      "rva": "000A6E50",
+      "name": "Java_org_rocksdb_Options_setMemTableFactory"
+    },
+    {
+      "rva": "000A6E60",
+      "name": "Java_org_rocksdb_Options_setMemtableHugePageSize"
+    },
+    {
+      "rva": "000A6E70",
+      "name": "Java_org_rocksdb_Options_setMemtableMaxRangeDeletions"
+    },
+    {
+      "rva": "000A6E80",
+      "name": "Java_org_rocksdb_Options_setMemtablePrefixBloomSizeRatio"
+    },
+    {
+      "rva": "000A6E90",
+      "name": "Java_org_rocksdb_Options_setMemtableWholeKeyFiltering"
+    },
+    {
+      "rva": "000A6EA0",
+      "name": "Java_org_rocksdb_Options_setMergeOperator"
+    },
+    {
+      "rva": "000A6EB0",
+      "name": "Java_org_rocksdb_Options_setMergeOperatorName"
+    },
+    {
+      "rva": "000A7000",
+      "name": "Java_org_rocksdb_Options_setMinBlobSize"
+    },
+    {
+      "rva": "000A7010",
+      "name": "Java_org_rocksdb_Options_setMinWriteBufferNumberToMerge"
+    },
+    {
+      "rva": "000A7020",
+      "name": "Java_org_rocksdb_Options_setNumLevels"
+    },
+    {
+      "rva": "000A7030",
+      "name": "Java_org_rocksdb_Options_setOptimizeFiltersForHits"
+    },
+    {
+      "rva": "000A7040",
+      "name": "Java_org_rocksdb_Options_setParanoidChecks"
+    },
+    {
+      "rva": "000A7050",
+      "name": "Java_org_rocksdb_Options_setParanoidFileChecks"
+    },
+    {
+      "rva": "000A7060",
+      "name": "Java_org_rocksdb_Options_setPeriodicCompactionSeconds"
+    },
+    {
+      "rva": "000A7070",
+      "name": "Java_org_rocksdb_Options_setPersistStatsToDisk"
+    },
+    {
+      "rva": "000A7080",
+      "name": "Java_org_rocksdb_Options_setPrepopulateBlobCache"
+    },
+    {
+      "rva": "000A70A0",
+      "name": "Java_org_rocksdb_Options_setRateLimiter"
+    },
+    {
+      "rva": "000A70B0",
+      "name": "Java_org_rocksdb_Options_setRecycleLogFileNum"
+    },
+    {
+      "rva": "000A70C0",
+      "name": "Java_org_rocksdb_Options_setReportBgIoStats"
+    },
+    {
+      "rva": "000A70D0",
+      "name": "Java_org_rocksdb_Options_setRowCache"
+    },
+    {
+      "rva": "000A70E0",
+      "name": "Java_org_rocksdb_Options_setSkipCheckingSstFileSizesOnDbOpen"
+    },
+    {
+      "rva": "000A70F0",
+      "name": "Java_org_rocksdb_Options_setSkipStatsUpdateOnDbOpen"
+    },
+    {
+      "rva": "000A7100",
+      "name": "Java_org_rocksdb_Options_setSoftPendingCompactionBytesLimit"
+    },
+    {
+      "rva": "000A7110",
+      "name": "Java_org_rocksdb_Options_setSstFileManager"
+    },
+    {
+      "rva": "000A7120",
+      "name": "Java_org_rocksdb_Options_setSstPartitionerFactory"
+    },
+    {
+      "rva": "000A7130",
+      "name": "Java_org_rocksdb_Options_setStatistics"
+    },
+    {
+      "rva": "000A7140",
+      "name": "Java_org_rocksdb_Options_setStatsDumpPeriodSec"
+    },
+    {
+      "rva": "000A7150",
+      "name": "Java_org_rocksdb_Options_setStatsHistoryBufferSize"
+    },
+    {
+      "rva": "000A7160",
+      "name": "Java_org_rocksdb_Options_setStatsPersistPeriodSec"
+    },
+    {
+      "rva": "000A7170",
+      "name": "Java_org_rocksdb_Options_setStrictBytesPerSync"
+    },
+    {
+      "rva": "000A7180",
+      "name": "Java_org_rocksdb_Options_setTableCacheNumshardbits"
+    },
+    {
+      "rva": "000A7190",
+      "name": "Java_org_rocksdb_Options_setTableFactory"
+    },
+    {
+      "rva": "000A71A0",
+      "name": "Java_org_rocksdb_Options_setTablePropertiesCollectorFactory"
+    },
+    {
+      "rva": "000A72C0",
+      "name": "Java_org_rocksdb_Options_setTargetFileSizeBase"
+    },
+    {
+      "rva": "000A72D0",
+      "name": "Java_org_rocksdb_Options_setTargetFileSizeMultiplier"
+    },
+    {
+      "rva": "000A72E0",
+      "name": "Java_org_rocksdb_Options_setTtl"
+    },
+    {
+      "rva": "000A72F0",
+      "name": "Java_org_rocksdb_Options_setTwoWriteQueues"
+    },
+    {
+      "rva": "000A7300",
+      "name": "Java_org_rocksdb_Options_setUnorderedWrite"
+    },
+    {
+      "rva": "000A7310",
+      "name": "Java_org_rocksdb_Options_setUseAdaptiveMutex"
+    },
+    {
+      "rva": "000A7320",
+      "name": "Java_org_rocksdb_Options_setUseDirectIoForFlushAndCompaction"
+    },
+    {
+      "rva": "000A7330",
+      "name": "Java_org_rocksdb_Options_setUseDirectReads"
+    },
+    {
+      "rva": "000A7340",
+      "name": "Java_org_rocksdb_Options_setUseFsync"
+    },
+    {
+      "rva": "000A7350",
+      "name": "Java_org_rocksdb_Options_setWalBytesPerSync"
+    },
+    {
+      "rva": "000A7360",
+      "name": "Java_org_rocksdb_Options_setWalDir"
+    },
+    {
+      "rva": "000A73E0",
+      "name": "Java_org_rocksdb_Options_setWalFilter"
+    },
+    {
+      "rva": "000A7400",
+      "name": "Java_org_rocksdb_Options_setWalRecoveryMode"
+    },
+    {
+      "rva": "000A7440",
+      "name": "Java_org_rocksdb_Options_setWalSizeLimitMB"
+    },
+    {
+      "rva": "000A7450",
+      "name": "Java_org_rocksdb_Options_setWalTtlSeconds"
+    },
+    {
+      "rva": "000A7460",
+      "name": "Java_org_rocksdb_Options_setWritableFileMaxBufferSize"
+    },
+    {
+      "rva": "000A7470",
+      "name": "Java_org_rocksdb_Options_setWriteBufferManager"
+    },
+    {
+      "rva": "000A7480",
+      "name": "Java_org_rocksdb_Options_setWriteBufferSize"
+    },
+    {
+      "rva": "000A7490",
+      "name": "Java_org_rocksdb_Options_setWriteDbidToManifest"
+    },
+    {
+      "rva": "000A74A0",
+      "name": "Java_org_rocksdb_Options_setWriteThreadMaxYieldUsec"
+    },
+    {
+      "rva": "000A74B0",
+      "name": "Java_org_rocksdb_Options_setWriteThreadSlowYieldUsec"
+    },
+    {
+      "rva": "000A74C0",
+      "name": "Java_org_rocksdb_Options_skipCheckingSstFileSizesOnDbOpen"
+    },
+    {
+      "rva": "000A74D0",
+      "name": "Java_org_rocksdb_Options_skipStatsUpdateOnDbOpen"
+    },
+    {
+      "rva": "000A74E0",
+      "name": "Java_org_rocksdb_Options_softPendingCompactionBytesLimit"
+    },
+    {
+      "rva": "000A74F0",
+      "name": "Java_org_rocksdb_Options_statistics"
+    },
+    {
+      "rva": "000A7590",
+      "name": "Java_org_rocksdb_Options_statsDumpPeriodSec"
+    },
+    {
+      "rva": "000A75A0",
+      "name": "Java_org_rocksdb_Options_statsHistoryBufferSize"
+    },
+    {
+      "rva": "000A75B0",
+      "name": "Java_org_rocksdb_Options_statsPersistPeriodSec"
+    },
+    {
+      "rva": "000A75C0",
+      "name": "Java_org_rocksdb_Options_strictBytesPerSync"
+    },
+    {
+      "rva": "000A75D0",
+      "name": "Java_org_rocksdb_Options_tableCacheNumshardbits"
+    },
+    {
+      "rva": "000A75E0",
+      "name": "Java_org_rocksdb_Options_tableFactoryName"
+    },
+    {
+      "rva": "000A7610",
+      "name": "Java_org_rocksdb_Options_tablePropertiesCollectorFactory"
+    },
+    {
+      "rva": "000A7790",
+      "name": "Java_org_rocksdb_Options_targetFileSizeBase"
+    },
+    {
+      "rva": "000A77A0",
+      "name": "Java_org_rocksdb_Options_targetFileSizeMultiplier"
+    },
+    {
+      "rva": "000A77B0",
+      "name": "Java_org_rocksdb_Options_ttl"
+    },
+    {
+      "rva": "000A77C0",
+      "name": "Java_org_rocksdb_Options_twoWriteQueues"
+    },
+    {
+      "rva": "000A77D0",
+      "name": "Java_org_rocksdb_Options_unorderedWrite"
+    },
+    {
+      "rva": "000A77E0",
+      "name": "Java_org_rocksdb_Options_useAdaptiveMutex"
+    },
+    {
+      "rva": "000A77F0",
+      "name": "Java_org_rocksdb_Options_useCappedPrefixExtractor"
+    },
+    {
+      "rva": "000A7820",
+      "name": "Java_org_rocksdb_Options_useDirectIoForFlushAndCompaction"
+    },
+    {
+      "rva": "000A7830",
+      "name": "Java_org_rocksdb_Options_useDirectReads"
+    },
+    {
+      "rva": "000A7840",
+      "name": "Java_org_rocksdb_Options_useFixedLengthPrefixExtractor"
+    },
+    {
+      "rva": "000A7870",
+      "name": "Java_org_rocksdb_Options_useFsync"
+    },
+    {
+      "rva": "000A7880",
+      "name": "Java_org_rocksdb_Options_walBytesPerSync"
+    },
+    {
+      "rva": "000A7890",
+      "name": "Java_org_rocksdb_Options_walDir"
+    },
+    {
+      "rva": "000A78B0",
+      "name": "Java_org_rocksdb_Options_walRecoveryMode"
+    },
+    {
+      "rva": "000A78E0",
+      "name": "Java_org_rocksdb_Options_walSizeLimitMB"
+    },
+    {
+      "rva": "000A78F0",
+      "name": "Java_org_rocksdb_Options_walTtlSeconds"
+    },
+    {
+      "rva": "000A7900",
+      "name": "Java_org_rocksdb_Options_writableFileMaxBufferSize"
+    },
+    {
+      "rva": "000A7910",
+      "name": "Java_org_rocksdb_Options_writeBufferSize"
+    },
+    {
+      "rva": "000A7920",
+      "name": "Java_org_rocksdb_Options_writeDbidToManifest"
+    },
+    {
+      "rva": "000A7930",
+      "name": "Java_org_rocksdb_Options_writeThreadMaxYieldUsec"
+    },
+    {
+      "rva": "000A7940",
+      "name": "Java_org_rocksdb_Options_writeThreadSlowYieldUsec"
+    },
+    {
+      "rva": "00099A20",
+      "name": "Java_org_rocksdb_PerfContext_getBlobCacheHitCount"
+    },
+    {
+      "rva": "00099A30",
+      "name": "Java_org_rocksdb_PerfContext_getBlobChecksumTime"
+    },
+    {
+      "rva": "00099A40",
+      "name": "Java_org_rocksdb_PerfContext_getBlobDecompressTime"
+    },
+    {
+      "rva": "00099A50",
+      "name": "Java_org_rocksdb_PerfContext_getBlobReadByte"
+    },
+    {
+      "rva": "00099A60",
+      "name": "Java_org_rocksdb_PerfContext_getBlobReadCount"
+    },
+    {
+      "rva": "00099A70",
+      "name": "Java_org_rocksdb_PerfContext_getBlobReadTime"
+    },
+    {
+      "rva": "00099A80",
+      "name": "Java_org_rocksdb_PerfContext_getBlockCacheFilterHitCount"
+    },
+    {
+      "rva": "00099A90",
+      "name": "Java_org_rocksdb_PerfContext_getBlockCacheHitCount"
+    },
+    {
+      "rva": "00099AA0",
+      "name": "Java_org_rocksdb_PerfContext_getBlockCacheIndexHitCount"
+    },
+    {
+      "rva": "00099AB0",
+      "name": "Java_org_rocksdb_PerfContext_getBlockCacheRealHandleCount"
+    },
+    {
+      "rva": "00099AC0",
+      "name": "Java_org_rocksdb_PerfContext_getBlockCacheStandaloneHandleCount"
+    },
+    {
+      "rva": "00099AD0",
+      "name": "Java_org_rocksdb_PerfContext_getBlockChecksumTime"
+    },
+    {
+      "rva": "00099AE0",
+      "name": "Java_org_rocksdb_PerfContext_getBlockDecompressTime"
+    },
+    {
+      "rva": "00099AF0",
+      "name": "Java_org_rocksdb_PerfContext_getBlockReadByte"
+    },
+    {
+      "rva": "00099B00",
+      "name": "Java_org_rocksdb_PerfContext_getBlockReadCount"
+    },
+    {
+      "rva": "00099B10",
+      "name": "Java_org_rocksdb_PerfContext_getBlockReadCpuTime"
+    },
+    {
+      "rva": "00099B20",
+      "name": "Java_org_rocksdb_PerfContext_getBlockReadTime"
+    },
+    {
+      "rva": "00099B30",
+      "name": "Java_org_rocksdb_PerfContext_getBlockSeekNanos"
+    },
+    {
+      "rva": "00099B40",
+      "name": "Java_org_rocksdb_PerfContext_getBloomMemtableHitCount"
+    },
+    {
+      "rva": "00099B50",
+      "name": "Java_org_rocksdb_PerfContext_getBloomMemtableMissCount"
+    },
+    {
+      "rva": "00099B60",
+      "name": "Java_org_rocksdb_PerfContext_getBloomSstHitCount"
+    },
+    {
+      "rva": "00099B70",
+      "name": "Java_org_rocksdb_PerfContext_getBloomSstMissCount"
+    },
+    {
+      "rva": "00099B80",
+      "name": "Java_org_rocksdb_PerfContext_getCompressedSecCacheCompressedBytes"
+    },
+    {
+      "rva": "00099B90",
+      "name": "Java_org_rocksdb_PerfContext_getCompressedSecCacheInsertDummyCount"
+    },
+    {
+      "rva": "00099BA0",
+      "name": "Java_org_rocksdb_PerfContext_getCompressedSecCacheInsertRealCount"
+    },
+    {
+      "rva": "00099BB0",
+      "name": "Java_org_rocksdb_PerfContext_getCompressedSecCacheUncompressedBytes"
+    },
+    {
+      "rva": "00099BC0",
+      "name": "Java_org_rocksdb_PerfContext_getCompressionDictBlockReadCount"
+    },
+    {
+      "rva": "00099BD0",
+      "name": "Java_org_rocksdb_PerfContext_getDbConditionWaitNanos"
+    },
+    {
+      "rva": "00099BE0",
+      "name": "Java_org_rocksdb_PerfContext_getDbMutexLockNanos"
+    },
+    {
+      "rva": "00099BF0",
+      "name": "Java_org_rocksdb_PerfContext_getDecryptDataNanos"
+    },
+    {
+      "rva": "00099C00",
+      "name": "Java_org_rocksdb_PerfContext_getEncryptDataNanos"
+    },
+    {
+      "rva": "00099C10",
+      "name": "Java_org_rocksdb_PerfContext_getEnvCreateDirIfMissingNanos"
+    },
+    {
+      "rva": "00099C20",
+      "name": "Java_org_rocksdb_PerfContext_getEnvCreateDirNanos"
+    },
+    {
+      "rva": "00099C30",
+      "name": "Java_org_rocksdb_PerfContext_getEnvDeleteDirNanos"
+    },
+    {
+      "rva": "00099C40",
+      "name": "Java_org_rocksdb_PerfContext_getEnvDeleteFileNanos"
+    },
+    {
+      "rva": "00099C50",
+      "name": "Java_org_rocksdb_PerfContext_getEnvFileExistsNanos"
+    },
+    {
+      "rva": "00099C60",
+      "name": "Java_org_rocksdb_PerfContext_getEnvGetChildrenFileAttributesNanos"
+    },
+    {
+      "rva": "00099C70",
+      "name": "Java_org_rocksdb_PerfContext_getEnvGetChildrenNanos"
+    },
+    {
+      "rva": "00099C80",
+      "name": "Java_org_rocksdb_PerfContext_getEnvGetFileModificationTimeNanos"
+    },
+    {
+      "rva": "00099C90",
+      "name": "Java_org_rocksdb_PerfContext_getEnvGetFileSizeNanos"
+    },
+    {
+      "rva": "00099CA0",
+      "name": "Java_org_rocksdb_PerfContext_getEnvLinkFileNanos"
+    },
+    {
+      "rva": "00099CB0",
+      "name": "Java_org_rocksdb_PerfContext_getEnvLockFileNanos"
+    },
+    {
+      "rva": "00099CC0",
+      "name": "Java_org_rocksdb_PerfContext_getEnvNewDirectoryNanos"
+    },
+    {
+      "rva": "00099CD0",
+      "name": "Java_org_rocksdb_PerfContext_getEnvNewLoggerNanos"
+    },
+    {
+      "rva": "00099CE0",
+      "name": "Java_org_rocksdb_PerfContext_getEnvNewRandomAccessFileNanos"
+    },
+    {
+      "rva": "00099CF0",
+      "name": "Java_org_rocksdb_PerfContext_getEnvNewRandomRwFileNanos"
+    },
+    {
+      "rva": "00099D00",
+      "name": "Java_org_rocksdb_PerfContext_getEnvNewSequentialFileNanos"
+    },
+    {
+      "rva": "00099D10",
+      "name": "Java_org_rocksdb_PerfContext_getEnvNewWritableFileNanos"
+    },
+    {
+      "rva": "00099D20",
+      "name": "Java_org_rocksdb_PerfContext_getEnvRenameFileNanos"
+    },
+    {
+      "rva": "00099D30",
+      "name": "Java_org_rocksdb_PerfContext_getEnvReuseWritableFileNanos"
+    },
+    {
+      "rva": "00099D40",
+      "name": "Java_org_rocksdb_PerfContext_getEnvUnlockFileNanos"
+    },
+    {
+      "rva": "00099D50",
+      "name": "Java_org_rocksdb_PerfContext_getFilterBlockReadCount"
+    },
+    {
+      "rva": "00099D60",
+      "name": "Java_org_rocksdb_PerfContext_getFindNextUserEntryTime"
+    },
+    {
+      "rva": "00099D70",
+      "name": "Java_org_rocksdb_PerfContext_getFindTableNanos"
+    },
+    {
+      "rva": "00099D80",
+      "name": "Java_org_rocksdb_PerfContext_getFromMemtableCount"
+    },
+    {
+      "rva": "00099D90",
+      "name": "Java_org_rocksdb_PerfContext_getFromMemtableTime"
+    },
+    {
+      "rva": "00099DA0",
+      "name": "Java_org_rocksdb_PerfContext_getFromOutputFilesTime"
+    },
+    {
+      "rva": "00099DB0",
+      "name": "Java_org_rocksdb_PerfContext_getGetCpuNanos"
+    },
+    {
+      "rva": "00099DC0",
+      "name": "Java_org_rocksdb_PerfContext_getIndexBlockReadCount"
+    },
+    {
+      "rva": "00099DD0",
+      "name": "Java_org_rocksdb_PerfContext_getInternalDeleteSkippedCount"
+    },
+    {
+      "rva": "00099DE0",
+      "name": "Java_org_rocksdb_PerfContext_getInternalKeySkippedCount"
+    },
+    {
+      "rva": "00099DF0",
+      "name": "Java_org_rocksdb_PerfContext_getInternalMergeCount"
+    },
+    {
+      "rva": "00099E00",
+      "name": "Java_org_rocksdb_PerfContext_getInternalMergePointLookupCount"
+    },
+    {
+      "rva": "00099E10",
+      "name": "Java_org_rocksdb_PerfContext_getInternalRangeDelReseekCount"
+    },
+    {
+      "rva": "00099E20",
+      "name": "Java_org_rocksdb_PerfContext_getInternalRecentSkippedCount"
+    },
+    {
+      "rva": "00099E30",
+      "name": "Java_org_rocksdb_PerfContext_getIterNextCpuNanos"
+    },
+    {
+      "rva": "00099E40",
+      "name": "Java_org_rocksdb_PerfContext_getIterPrevCpuNanos"
+    },
+    {
+      "rva": "00099E50",
+      "name": "Java_org_rocksdb_PerfContext_getIterReadBytes"
+    },
+    {
+      "rva": "00099E60",
+      "name": "Java_org_rocksdb_PerfContext_getIterSeekCpuNanos"
+    },
+    {
+      "rva": "00099E70",
+      "name": "Java_org_rocksdb_PerfContext_getKeyLockWaitCount"
+    },
+    {
+      "rva": "00099E80",
+      "name": "Java_org_rocksdb_PerfContext_getKeyLockWaitTime"
+    },
+    {
+      "rva": "00099E90",
+      "name": "Java_org_rocksdb_PerfContext_getMergeOperatorTimeNanos"
+    },
+    {
+      "rva": "00099EA0",
+      "name": "Java_org_rocksdb_PerfContext_getMultigetReadBytes"
+    },
+    {
+      "rva": "00099EB0",
+      "name": "Java_org_rocksdb_PerfContext_getNewTableBlockIterNanos"
+    },
+    {
+      "rva": "00099EC0",
+      "name": "Java_org_rocksdb_PerfContext_getNewTableIteratorNanos"
+    },
+    {
+      "rva": "00099ED0",
+      "name": "Java_org_rocksdb_PerfContext_getNextOnMemtableCount"
+    },
+    {
+      "rva": "00099EE0",
+      "name": "Java_org_rocksdb_PerfContext_getNumberAsyncSeek"
+    },
+    {
+      "rva": "00099EF0",
+      "name": "Java_org_rocksdb_PerfContext_getPostProcessTime"
+    },
+    {
+      "rva": "00099F00",
+      "name": "Java_org_rocksdb_PerfContext_getPrevOnMemtableCount"
+    },
+    {
+      "rva": "00099F10",
+      "name": "Java_org_rocksdb_PerfContext_getReadBytes"
+    },
+    {
+      "rva": "00099F20",
+      "name": "Java_org_rocksdb_PerfContext_getReadFilterBlockNanos"
+    },
+    {
+      "rva": "00099F30",
+      "name": "Java_org_rocksdb_PerfContext_getReadIndexBlockNanos"
+    },
+    {
+      "rva": "00099F40",
+      "name": "Java_org_rocksdb_PerfContext_getSecondaryCacheHitCount"
+    },
+    {
+      "rva": "00099F50",
+      "name": "Java_org_rocksdb_PerfContext_getSeekChildSeekCount"
+    },
+    {
+      "rva": "00099F60",
+      "name": "Java_org_rocksdb_PerfContext_getSeekChildSeekTime"
+    },
+    {
+      "rva": "00099F70",
+      "name": "Java_org_rocksdb_PerfContext_getSeekInternalSeekTime"
+    },
+    {
+      "rva": "00099F80",
+      "name": "Java_org_rocksdb_PerfContext_getSeekMaxHeapTime"
+    },
+    {
+      "rva": "00099F90",
+      "name": "Java_org_rocksdb_PerfContext_getSeekMinHeapTime"
+    },
+    {
+      "rva": "00099FA0",
+      "name": "Java_org_rocksdb_PerfContext_getSeekOnMemtableCount"
+    },
+    {
+      "rva": "00099FB0",
+      "name": "Java_org_rocksdb_PerfContext_getSeekOnMemtableTime"
+    },
+    {
+      "rva": "00099FC0",
+      "name": "Java_org_rocksdb_PerfContext_getSnapshotTime"
+    },
+    {
+      "rva": "00099FD0",
+      "name": "Java_org_rocksdb_PerfContext_getUserKeyComparisonCount"
+    },
+    {
+      "rva": "00099FE0",
+      "name": "Java_org_rocksdb_PerfContext_getWriteDelayTime"
+    },
+    {
+      "rva": "00099FF0",
+      "name": "Java_org_rocksdb_PerfContext_getWriteMemtableTime"
+    },
+    {
+      "rva": "0009A000",
+      "name": "Java_org_rocksdb_PerfContext_getWritePreAndPostProcessTime"
+    },
+    {
+      "rva": "0009A010",
+      "name": "Java_org_rocksdb_PerfContext_getWriteSchedulingFlushesCompactionsTime"
+    },
+    {
+      "rva": "0009A020",
+      "name": "Java_org_rocksdb_PerfContext_getWriteThreadWaitNanos"
+    },
+    {
+      "rva": "0009A030",
+      "name": "Java_org_rocksdb_PerfContext_getWriteWalTime"
+    },
+    {
+      "rva": "0009A040",
+      "name": "Java_org_rocksdb_PerfContext_reset"
+    },
+    {
+      "rva": "0009A050",
+      "name": "Java_org_rocksdb_PerfContext_toString"
+    },
+    {
+      "rva": "000A97F0",
+      "name": "Java_org_rocksdb_PersistentCache_disposeInternalJni"
+    },
+    {
+      "rva": "000A9860",
+      "name": "Java_org_rocksdb_PersistentCache_newPersistentCache"
+    },
+    {
+      "rva": "000C34C0",
+      "name": "Java_org_rocksdb_PlainTableConfig_newTableFactoryHandle"
+    },
+    {
+      "rva": "000A9B20",
+      "name": "Java_org_rocksdb_RateLimiter_disposeInternalJni"
+    },
+    {
+      "rva": "000A9B90",
+      "name": "Java_org_rocksdb_RateLimiter_getBytesPerSecond"
+    },
+    {
+      "rva": "000A9BA0",
+      "name": "Java_org_rocksdb_RateLimiter_getSingleBurstBytes"
+    },
+    {
+      "rva": "000A9BB0",
+      "name": "Java_org_rocksdb_RateLimiter_getTotalBytesThrough"
+    },
+    {
+      "rva": "000A9BC0",
+      "name": "Java_org_rocksdb_RateLimiter_getTotalRequests"
+    },
+    {
+      "rva": "000A9BD0",
+      "name": "Java_org_rocksdb_RateLimiter_newRateLimiterHandle"
+    },
+    {
+      "rva": "000A9CB0",
+      "name": "Java_org_rocksdb_RateLimiter_request"
+    },
+    {
+      "rva": "000A9CD0",
+      "name": "Java_org_rocksdb_RateLimiter_setBytesPerSecond"
+    },
+    {
+      "rva": "000A7950",
+      "name": "Java_org_rocksdb_ReadOptions_asyncIo"
+    },
+    {
+      "rva": "000A7960",
+      "name": "Java_org_rocksdb_ReadOptions_autoPrefixMode"
+    },
+    {
+      "rva": "000A7970",
+      "name": "Java_org_rocksdb_ReadOptions_backgroundPurgeOnIteratorCleanup"
+    },
+    {
+      "rva": "000A7980",
+      "name": "Java_org_rocksdb_ReadOptions_copyReadOptions"
+    },
+    {
+      "rva": "000A7AE0",
+      "name": "Java_org_rocksdb_ReadOptions_deadline"
+    },
+    {
+      "rva": "000A7AF0",
+      "name": "Java_org_rocksdb_ReadOptions_disposeInternalJni"
+    },
+    {
+      "rva": "000A7B40",
+      "name": "Java_org_rocksdb_ReadOptions_fillCache"
+    },
+    {
+      "rva": "000A7B50",
+      "name": "Java_org_rocksdb_ReadOptions_ignoreRangeDeletions"
+    },
+    {
+      "rva": "000A7B60",
+      "name": "Java_org_rocksdb_ReadOptions_ioTimeout"
+    },
+    {
+      "rva": "000A7B70",
+      "name": "Java_org_rocksdb_ReadOptions_iterStartTs"
+    },
+    {
+      "rva": "000A7B80",
+      "name": "Java_org_rocksdb_ReadOptions_iterateLowerBound"
+    },
+    {
+      "rva": "000A7B90",
+      "name": "Java_org_rocksdb_ReadOptions_iterateUpperBound"
+    },
+    {
+      "rva": "000A7BA0",
+      "name": "Java_org_rocksdb_ReadOptions_managed"
+    },
+    {
+      "rva": "000A7BB0",
+      "name": "Java_org_rocksdb_ReadOptions_maxSkippableInternalKeys"
+    },
+    {
+      "rva": "000A7BC0",
+      "name": "Java_org_rocksdb_ReadOptions_newReadOptions__"
+    },
+    {
+      "rva": "000A7C40",
+      "name": "Java_org_rocksdb_ReadOptions_newReadOptions__ZZ"
+    },
+    {
+      "rva": "000A7C90",
+      "name": "Java_org_rocksdb_ReadOptions_pinData"
+    },
+    {
+      "rva": "000A7CA0",
+      "name": "Java_org_rocksdb_ReadOptions_prefixSameAsStart"
+    },
+    {
+      "rva": "000A7CB0",
+      "name": "Java_org_rocksdb_ReadOptions_readTier"
+    },
+    {
+      "rva": "000A7CC0",
+      "name": "Java_org_rocksdb_ReadOptions_readaheadSize"
+    },
+    {
+      "rva": "000A7CD0",
+      "name": "Java_org_rocksdb_ReadOptions_setAsyncIo"
+    },
+    {
+      "rva": "000A7CE0",
+      "name": "Java_org_rocksdb_ReadOptions_setAutoPrefixMode"
+    },
+    {
+      "rva": "000A7CF0",
+      "name": "Java_org_rocksdb_ReadOptions_setBackgroundPurgeOnIteratorCleanup"
+    },
+    {
+      "rva": "000A7D00",
+      "name": "Java_org_rocksdb_ReadOptions_setDeadline"
+    },
+    {
+      "rva": "000A7D10",
+      "name": "Java_org_rocksdb_ReadOptions_setFillCache"
+    },
+    {
+      "rva": "000A7D20",
+      "name": "Java_org_rocksdb_ReadOptions_setIgnoreRangeDeletions"
+    },
+    {
+      "rva": "000A7D30",
+      "name": "Java_org_rocksdb_ReadOptions_setIoTimeout"
+    },
+    {
+      "rva": "000A7D40",
+      "name": "Java_org_rocksdb_ReadOptions_setIterStartTs"
+    },
+    {
+      "rva": "000A7D50",
+      "name": "Java_org_rocksdb_ReadOptions_setIterateLowerBound"
+    },
+    {
+      "rva": "000A7D60",
+      "name": "Java_org_rocksdb_ReadOptions_setIterateUpperBound"
+    },
+    {
+      "rva": "000A7D70",
+      "name": "Java_org_rocksdb_ReadOptions_setManaged"
+    },
+    {
+      "rva": "000A7D80",
+      "name": "Java_org_rocksdb_ReadOptions_setMaxSkippableInternalKeys"
+    },
+    {
+      "rva": "000A7D90",
+      "name": "Java_org_rocksdb_ReadOptions_setPinData"
+    },
+    {
+      "rva": "000A7DA0",
+      "name": "Java_org_rocksdb_ReadOptions_setPrefixSameAsStart"
+    },
+    {
+      "rva": "000A7DB0",
+      "name": "Java_org_rocksdb_ReadOptions_setReadTier"
+    },
+    {
+      "rva": "000A7DC0",
+      "name": "Java_org_rocksdb_ReadOptions_setReadaheadSize"
+    },
+    {
+      "rva": "000A7DD0",
+      "name": "Java_org_rocksdb_ReadOptions_setSnapshot"
+    },
+    {
+      "rva": "000A7DE0",
+      "name": "Java_org_rocksdb_ReadOptions_setTableFilter"
+    },
+    {
+      "rva": "000A7EB0",
+      "name": "Java_org_rocksdb_ReadOptions_setTailing"
+    },
+    {
+      "rva": "000A7EC0",
+      "name": "Java_org_rocksdb_ReadOptions_setTimestamp"
+    },
+    {
+      "rva": "000A7ED0",
+      "name": "Java_org_rocksdb_ReadOptions_setTotalOrderSeek"
+    },
+    {
+      "rva": "000A7EE0",
+      "name": "Java_org_rocksdb_ReadOptions_setValueSizeSoftLimit"
+    },
+    {
+      "rva": "000A7EF0",
+      "name": "Java_org_rocksdb_ReadOptions_setVerifyChecksums"
+    },
+    {
+      "rva": "000A7F00",
+      "name": "Java_org_rocksdb_ReadOptions_snapshot"
+    },
+    {
+      "rva": "000A7F10",
+      "name": "Java_org_rocksdb_ReadOptions_tailing"
+    },
+    {
+      "rva": "000A7F20",
+      "name": "Java_org_rocksdb_ReadOptions_timestamp"
+    },
+    {
+      "rva": "000A7F30",
+      "name": "Java_org_rocksdb_ReadOptions_totalOrderSeek"
+    },
+    {
+      "rva": "000A7F40",
+      "name": "Java_org_rocksdb_ReadOptions_valueSizeSoftLimit"
+    },
+    {
+      "rva": "000A7F50",
+      "name": "Java_org_rocksdb_ReadOptions_verifyChecksums"
+    },
+    {
+      "rva": "000A9EE0",
+      "name": "Java_org_rocksdb_RemoveEmptyValueCompactionFilter_createNewRemoveEmptyValueCompactionFilter0"
+    },
+    {
+      "rva": "000A9F20",
+      "name": "Java_org_rocksdb_RestoreOptions_disposeInternalJni"
+    },
+    {
+      "rva": "000A9F70",
+      "name": "Java_org_rocksdb_RestoreOptions_newRestoreOptions"
+    },
+    {
+      "rva": "000A9FB0",
+      "name": "Java_org_rocksdb_RocksCallbackObject_disposeInternal"
+    },
+    {
+      "rva": "000AA290",
+      "name": "Java_org_rocksdb_RocksDBExceptionTest_raiseException"
+    },
+    {
+      "rva": "000AA350",
+      "name": "Java_org_rocksdb_RocksDBExceptionTest_raiseExceptionNoMsgWithStatusCode"
+    },
+    {
+      "rva": "000AA380",
+      "name": "Java_org_rocksdb_RocksDBExceptionTest_raiseExceptionNoMsgWithStatusCodeSubCode"
+    },
+    {
+      "rva": "000AA3B0",
+      "name": "Java_org_rocksdb_RocksDBExceptionTest_raiseExceptionWithStatusCode"
+    },
+    {
+      "rva": "000AA490",
+      "name": "Java_org_rocksdb_RocksDBExceptionTest_raiseExceptionWithStatusCodeState"
+    },
+    {
+      "rva": "000AA5D0",
+      "name": "Java_org_rocksdb_RocksDBExceptionTest_raiseExceptionWithStatusCodeSubCode"
+    },
+    {
+      "rva": "000B2E80",
+      "name": "Java_org_rocksdb_RocksDB_cancelAllBackgroundWork"
+    },
+    {
+      "rva": "000B2E90",
+      "name": "Java_org_rocksdb_RocksDB_clipColumnFamily"
+    },
+    {
+      "rva": "000B3090",
+      "name": "Java_org_rocksdb_RocksDB_closeDatabase"
+    },
+    {
+      "rva": "000B30D0",
+      "name": "Java_org_rocksdb_RocksDB_compactFiles"
+    },
+    {
+      "rva": "000B32D0",
+      "name": "Java_org_rocksdb_RocksDB_compactRange"
+    },
+    {
+      "rva": "000B3A70",
+      "name": "Java_org_rocksdb_RocksDB_continueBackgroundWork"
+    },
+    {
+      "rva": "000B3AC0",
+      "name": "Java_org_rocksdb_RocksDB_createColumnFamilies__JJ_3_3B"
+    },
+    {
+      "rva": "000B3D70",
+      "name": "Java_org_rocksdb_RocksDB_createColumnFamilies__J_3J_3_3B"
+    },
+    {
+      "rva": "000B4440",
+      "name": "Java_org_rocksdb_RocksDB_createColumnFamily"
+    },
+    {
+      "rva": "000B4590",
+      "name": "Java_org_rocksdb_RocksDB_createColumnFamilyWithImport"
+    },
+    {
+      "rva": "000B4950",
+      "name": "Java_org_rocksdb_RocksDB_deleteDirect"
+    },
+    {
+      "rva": "000B49D0",
+      "name": "Java_org_rocksdb_RocksDB_deleteFilesInRanges"
+    },
+    {
+      "rva": "000B4D60",
+      "name": "Java_org_rocksdb_RocksDB_deleteRange__JJ_3BII_3BII"
+    },
+    {
+      "rva": "000B4D80",
+      "name": "Java_org_rocksdb_RocksDB_deleteRange__JJ_3BII_3BIIJ"
+    },
+    {
+      "rva": "000B4E30",
+      "name": "Java_org_rocksdb_RocksDB_deleteRange__J_3BII_3BII"
+    },
+    {
+      "rva": "000B4E90",
+      "name": "Java_org_rocksdb_RocksDB_deleteRange__J_3BII_3BIIJ"
+    },
+    {
+      "rva": "000B4F90",
+      "name": "Java_org_rocksdb_RocksDB_delete__JJ_3BII"
+    },
+    {
+      "rva": "000B4FB0",
+      "name": "Java_org_rocksdb_RocksDB_delete__JJ_3BIIJ"
+    },
+    {
+      "rva": "000B5050",
+      "name": "Java_org_rocksdb_RocksDB_delete__J_3BII"
+    },
+    {
+      "rva": "000B5080",
+      "name": "Java_org_rocksdb_RocksDB_delete__J_3BIIJ"
+    },
+    {
+      "rva": "000B5150",
+      "name": "Java_org_rocksdb_RocksDB_destroyDB"
+    },
+    {
+      "rva": "000B53A0",
+      "name": "Java_org_rocksdb_RocksDB_disableFileDeletions"
+    },
+    {
+      "rva": "000B53F0",
+      "name": "Java_org_rocksdb_RocksDB_disposeInternalJni"
+    },
+    {
+      "rva": "000B5410",
+      "name": "Java_org_rocksdb_RocksDB_dropColumnFamilies"
+    },
+    {
+      "rva": "000B56C0",
+      "name": "Java_org_rocksdb_RocksDB_dropColumnFamily"
+    },
+    {
+      "rva": "000B5710",
+      "name": "Java_org_rocksdb_RocksDB_enableAutoCompaction"
+    },
+    {
+      "rva": "000B57C0",
+      "name": "Java_org_rocksdb_RocksDB_enableFileDeletions"
+    },
+    {
+      "rva": "000B5810",
+      "name": "Java_org_rocksdb_RocksDB_endTrace"
+    },
+    {
+      "rva": "000B5860",
+      "name": "Java_org_rocksdb_RocksDB_flush"
+    },
+    {
+      "rva": "000B5A50",
+      "name": "Java_org_rocksdb_RocksDB_flushWal"
+    },
+    {
+      "rva": "000B5AA0",
+      "name": "Java_org_rocksdb_RocksDB_getAggregatedLongProperty"
+    },
+    {
+      "rva": "000B5B70",
+      "name": "Java_org_rocksdb_RocksDB_getApproximateMemTableStats"
+    },
+    {
+      "rva": "000B5C90",
+      "name": "Java_org_rocksdb_RocksDB_getApproximateSizes"
+    },
+    {
+      "rva": "000B5F90",
+      "name": "Java_org_rocksdb_RocksDB_getColumnFamilyMetaData"
+    },
+    {
+      "rva": "000B61D0",
+      "name": "Java_org_rocksdb_RocksDB_getDBOptions"
+    },
+    {
+      "rva": "000B63A0",
+      "name": "Java_org_rocksdb_RocksDB_getDefaultColumnFamily"
+    },
+    {
+      "rva": "000B63B0",
+      "name": "Java_org_rocksdb_RocksDB_getDirect"
+    },
+    {
+      "rva": "000B68E0",
+      "name": "Java_org_rocksdb_RocksDB_getEnv"
+    },
+    {
+      "rva": "000B68F0",
+      "name": "Java_org_rocksdb_RocksDB_getLatestSequenceNumber"
+    },
+    {
+      "rva": "000B6900",
+      "name": "Java_org_rocksdb_RocksDB_getLiveFiles"
+    },
+    {
+      "rva": "000B6B80",
+      "name": "Java_org_rocksdb_RocksDB_getLiveFilesMetaData"
+    },
+    {
+      "rva": "000B6DA0",
+      "name": "Java_org_rocksdb_RocksDB_getLongProperty"
+    },
+    {
+      "rva": "000B6E80",
+      "name": "Java_org_rocksdb_RocksDB_getMapProperty"
+    },
+    {
+      "rva": "000B7080",
+      "name": "Java_org_rocksdb_RocksDB_getName"
+    },
+    {
+      "rva": "000B7140",
+      "name": "Java_org_rocksdb_RocksDB_getOptions"
+    },
+    {
+      "rva": "000B7330",
+      "name": "Java_org_rocksdb_RocksDB_getPerfContextNative"
+    },
+    {
+      "rva": "000B7340",
+      "name": "Java_org_rocksdb_RocksDB_getPerfLevelNative"
+    },
+    {
+      "rva": "000B73C0",
+      "name": "Java_org_rocksdb_RocksDB_getPropertiesOfAllTables"
+    },
+    {
+      "rva": "000B7510",
+      "name": "Java_org_rocksdb_RocksDB_getPropertiesOfTablesInRange"
+    },
+    {
+      "rva": "000B7710",
+      "name": "Java_org_rocksdb_RocksDB_getProperty"
+    },
+    {
+      "rva": "000B7890",
+      "name": "Java_org_rocksdb_RocksDB_getSnapshot"
+    },
+    {
+      "rva": "000B78A0",
+      "name": "Java_org_rocksdb_RocksDB_getSortedWalFiles"
+    },
+    {
+      "rva": "000B7AA0",
+      "name": "Java_org_rocksdb_RocksDB_getUpdatesSince"
+    },
+    {
+      "rva": "000B7B50",
+      "name": "Java_org_rocksdb_RocksDB_get__JJ_3BII"
+    },
+    {
+      "rva": "000B7E70",
+      "name": "Java_org_rocksdb_RocksDB_get__JJ_3BIIJ"
+    },
+    {
+      "rva": "000B81A0",
+      "name": "Java_org_rocksdb_RocksDB_get__JJ_3BII_3BII"
+    },
+    {
+      "rva": "000B8510",
+      "name": "Java_org_rocksdb_RocksDB_get__JJ_3BII_3BIIJ"
+    },
+    {
+      "rva": "000B8890",
+      "name": "Java_org_rocksdb_RocksDB_get__J_3BII"
+    },
+    {
+      "rva": "000B8C60",
+      "name": "Java_org_rocksdb_RocksDB_get__J_3BIIJ"
+    },
+    {
+      "rva": "000B9030",
+      "name": "Java_org_rocksdb_RocksDB_get__J_3BII_3BII"
+    },
+    {
+      "rva": "000B9450",
+      "name": "Java_org_rocksdb_RocksDB_get__J_3BII_3BIIJ"
+    },
+    {
+      "rva": "000B9880",
+      "name": "Java_org_rocksdb_RocksDB_ingestExternalFile"
+    },
+    {
+      "rva": "000B99B0",
+      "name": "Java_org_rocksdb_RocksDB_iterator"
+    },
+    {
+      "rva": "000B99D0",
+      "name": "Java_org_rocksdb_RocksDB_iterators"
+    },
+    {
+      "rva": "000B9DA0",
+      "name": "Java_org_rocksdb_RocksDB_keyExists"
+    },
+    {
+      "rva": "000B9E60",
+      "name": "Java_org_rocksdb_RocksDB_keyExistsDirect"
+    },
+    {
+      "rva": "000BA130",
+      "name": "Java_org_rocksdb_RocksDB_keyMayExist"
+    },
+    {
+      "rva": "000BA240",
+      "name": "Java_org_rocksdb_RocksDB_keyMayExistDirect"
+    },
+    {
+      "rva": "000BA350",
+      "name": "Java_org_rocksdb_RocksDB_keyMayExistDirectFoundValue"
+    },
+    {
+      "rva": "000BA7B0",
+      "name": "Java_org_rocksdb_RocksDB_keyMayExistFoundValue"
+    },
+    {
+      "rva": "000BAAB0",
+      "name": "Java_org_rocksdb_RocksDB_level0StopWriteTrigger"
+    },
+    {
+      "rva": "000BAAF0",
+      "name": "Java_org_rocksdb_RocksDB_listColumnFamilies"
+    },
+    {
+      "rva": "000BAD30",
+      "name": "Java_org_rocksdb_RocksDB_maxMemCompactionLevel"
+    },
+    {
+      "rva": "000BAD70",
+      "name": "Java_org_rocksdb_RocksDB_mergeDirect"
+    },
+    {
+      "rva": "000BAE20",
+      "name": "Java_org_rocksdb_RocksDB_merge__JJ_3BII_3BII"
+    },
+    {
+      "rva": "000BB040",
+      "name": "Java_org_rocksdb_RocksDB_merge__JJ_3BII_3BIIJ"
+    },
+    {
+      "rva": "000BB2F0",
+      "name": "Java_org_rocksdb_RocksDB_merge__J_3BII_3BII"
+    },
+    {
+      "rva": "000BB510",
+      "name": "Java_org_rocksdb_RocksDB_merge__J_3BII_3BIIJ"
+    },
+    {
+      "rva": "000BB7C0",
+      "name": "Java_org_rocksdb_RocksDB_multiGet__JJ_3J_3Ljava_nio_ByteBuffer_2_3I_3I_3Ljava_nio_ByteBuffer_2_3I_3Lorg_rocksdb_Status_2"
+    },
+    {
+      "rva": "000BBC20",
+      "name": "Java_org_rocksdb_RocksDB_multiGet__JJ_3_3B_3I_3I"
+    },
+    {
+      "rva": "000BBF00",
+      "name": "Java_org_rocksdb_RocksDB_multiGet__JJ_3_3B_3I_3I_3J"
+    },
+    {
+      "rva": "000BC150",
+      "name": "Java_org_rocksdb_RocksDB_multiGet__J_3_3B_3I_3I"
+    },
+    {
+      "rva": "000BC4C0",
+      "name": "Java_org_rocksdb_RocksDB_multiGet__J_3_3B_3I_3I_3J"
+    },
+    {
+      "rva": "000BC7B0",
+      "name": "Java_org_rocksdb_RocksDB_numberLevels"
+    },
+    {
+      "rva": "000BC7F0",
+      "name": "Java_org_rocksdb_RocksDB_openAsSecondary__JLjava_lang_String_2Ljava_lang_String_2"
+    },
+    {
+      "rva": "000BC8A0",
+      "name": "Java_org_rocksdb_RocksDB_openAsSecondary__JLjava_lang_String_2Ljava_lang_String_2_3_3B_3J"
+    },
+    {
+      "rva": "000BC960",
+      "name": "Java_org_rocksdb_RocksDB_openROnly__JLjava_lang_String_2Z"
+    },
+    {
+      "rva": "000BC9B0",
+      "name": "Java_org_rocksdb_RocksDB_openROnly__JLjava_lang_String_2_3_3B_3JZ"
+    },
+    {
+      "rva": "000BCA10",
+      "name": "Java_org_rocksdb_RocksDB_open__JLjava_lang_String_2"
+    },
+    {
+      "rva": "000BCA60",
+      "name": "Java_org_rocksdb_RocksDB_open__JLjava_lang_String_2_3_3B_3J"
+    },
+    {
+      "rva": "000BCAC0",
+      "name": "Java_org_rocksdb_RocksDB_pauseBackgroundWork"
+    },
+    {
+      "rva": "000BCB10",
+      "name": "Java_org_rocksdb_RocksDB_promoteL0"
+    },
+    {
+      "rva": "000BCB60",
+      "name": "Java_org_rocksdb_RocksDB_putDirect"
+    },
+    {
+      "rva": "000BCC10",
+      "name": "Java_org_rocksdb_RocksDB_put__JJ_3BII_3BII"
+    },
+    {
+      "rva": "000BCE30",
+      "name": "Java_org_rocksdb_RocksDB_put__JJ_3BII_3BIIJ"
+    },
+    {
+      "rva": "000BD0D0",
+      "name": "Java_org_rocksdb_RocksDB_put__J_3BII_3BII"
+    },
+    {
+      "rva": "000BD2F0",
+      "name": "Java_org_rocksdb_RocksDB_put__J_3BII_3BIIJ"
+    },
+    {
+      "rva": "000BD590",
+      "name": "Java_org_rocksdb_RocksDB_releaseSnapshot"
+    },
+    {
+      "rva": "000BD5A0",
+      "name": "Java_org_rocksdb_RocksDB_resetStats"
+    },
+    {
+      "rva": "000BD5D0",
+      "name": "Java_org_rocksdb_RocksDB_setDBOptions"
+    },
+    {
+      "rva": "000BD9D0",
+      "name": "Java_org_rocksdb_RocksDB_setOptions"
+    },
+    {
+      "rva": "000BDE10",
+      "name": "Java_org_rocksdb_RocksDB_setPerfLevel"
+    },
+    {
+      "rva": "000BDE80",
+      "name": "Java_org_rocksdb_RocksDB_singleDelete__JJ_3BI"
+    },
+    {
+      "rva": "000BDEA0",
+      "name": "Java_org_rocksdb_RocksDB_singleDelete__JJ_3BIJ"
+    },
+    {
+      "rva": "000BDF40",
+      "name": "Java_org_rocksdb_RocksDB_singleDelete__J_3BI"
+    },
+    {
+      "rva": "000BDF70",
+      "name": "Java_org_rocksdb_RocksDB_singleDelete__J_3BIJ"
+    },
+    {
+      "rva": "000BE030",
+      "name": "Java_org_rocksdb_RocksDB_startTrace"
+    },
+    {
+      "rva": "000BE0D0",
+      "name": "Java_org_rocksdb_RocksDB_suggestCompactRange"
+    },
+    {
+      "rva": "000BE2A0",
+      "name": "Java_org_rocksdb_RocksDB_syncWal"
+    },
+    {
+      "rva": "000BE2F0",
+      "name": "Java_org_rocksdb_RocksDB_tryCatchUpWithPrimary"
+    },
+    {
+      "rva": "000BE340",
+      "name": "Java_org_rocksdb_RocksDB_verifyChecksum"
+    },
+    {
+      "rva": "000BE390",
+      "name": "Java_org_rocksdb_RocksDB_version"
+    },
+    {
+      "rva": "000BE3A0",
+      "name": "Java_org_rocksdb_RocksDB_write0"
+    },
+    {
+      "rva": "000BE400",
+      "name": "Java_org_rocksdb_RocksDB_write1"
+    },
+    {
+      "rva": "00097140",
+      "name": "Java_org_rocksdb_RocksIterator_disposeInternalJni"
+    },
+    {
+      "rva": "00097160",
+      "name": "Java_org_rocksdb_RocksIterator_isValid0Jni"
+    },
+    {
+      "rva": "00097170",
+      "name": "Java_org_rocksdb_RocksIterator_key0"
+    },
+    {
+      "rva": "000971F0",
+      "name": "Java_org_rocksdb_RocksIterator_keyByteArray0"
+    },
+    {
+      "rva": "00097250",
+      "name": "Java_org_rocksdb_RocksIterator_keyDirect0"
+    },
+    {
+      "rva": "000972A0",
+      "name": "Java_org_rocksdb_RocksIterator_next0Jni"
+    },
+    {
+      "rva": "000972B0",
+      "name": "Java_org_rocksdb_RocksIterator_prev0Jni"
+    },
+    {
+      "rva": "000972C0",
+      "name": "Java_org_rocksdb_RocksIterator_refresh0Jni"
+    },
+    {
+      "rva": "00097300",
+      "name": "Java_org_rocksdb_RocksIterator_refresh1"
+    },
+    {
+      "rva": "00097350",
+      "name": "Java_org_rocksdb_RocksIterator_seek0Jni"
+    },
+    {
+      "rva": "000973A0",
+      "name": "Java_org_rocksdb_RocksIterator_seekByteArray0Jni"
+    },
+    {
+      "rva": "000973F0",
+      "name": "Java_org_rocksdb_RocksIterator_seekDirect0Jni"
+    },
+    {
+      "rva": "00097440",
+      "name": "Java_org_rocksdb_RocksIterator_seekForPrev0Jni"
+    },
+    {
+      "rva": "00097490",
+      "name": "Java_org_rocksdb_RocksIterator_seekForPrevByteArray0Jni"
+    },
+    {
+      "rva": "000974E0",
+      "name": "Java_org_rocksdb_RocksIterator_seekForPrevDirect0Jni"
+    },
+    {
+      "rva": "00097530",
+      "name": "Java_org_rocksdb_RocksIterator_seekToFirst0Jni"
+    },
+    {
+      "rva": "00097540",
+      "name": "Java_org_rocksdb_RocksIterator_seekToLast0Jni"
+    },
+    {
+      "rva": "00097550",
+      "name": "Java_org_rocksdb_RocksIterator_status0Jni"
+    },
+    {
+      "rva": "00097590",
+      "name": "Java_org_rocksdb_RocksIterator_value0"
+    },
+    {
+      "rva": "00097610",
+      "name": "Java_org_rocksdb_RocksIterator_valueByteArray0"
+    },
+    {
+      "rva": "00097670",
+      "name": "Java_org_rocksdb_RocksIterator_valueDirect0"
+    },
+    {
+      "rva": "00090DF0",
+      "name": "Java_org_rocksdb_RocksMemEnv_createMemEnv"
+    },
+    {
+      "rva": "00090E00",
+      "name": "Java_org_rocksdb_RocksMemEnv_disposeInternalJni"
+    },
+    {
+      "rva": "0009C950",
+      "name": "Java_org_rocksdb_SkipListMemTableConfig_newMemTableFactoryHandle0"
+    },
+    {
+      "rva": "000BE960",
+      "name": "Java_org_rocksdb_Slice_clear0"
+    },
+    {
+      "rva": "000BE9A0",
+      "name": "Java_org_rocksdb_Slice_createNewSlice0"
+    },
+    {
+      "rva": "000BEA50",
+      "name": "Java_org_rocksdb_Slice_createNewSlice1"
+    },
+    {
+      "rva": "000BEB20",
+      "name": "Java_org_rocksdb_Slice_data0"
+    },
+    {
+      "rva": "000BEBC0",
+      "name": "Java_org_rocksdb_Slice_disposeInternalBuf"
+    },
+    {
+      "rva": "000BEBD0",
+      "name": "Java_org_rocksdb_Slice_removePrefix0"
+    },
+    {
+      "rva": "000BEBE0",
+      "name": "Java_org_rocksdb_Snapshot_getSequenceNumber"
+    },
+    {
+      "rva": "000BEDF0",
+      "name": "Java_org_rocksdb_SstFileManager_disposeInternalJni"
+    },
+    {
+      "rva": "000BEE60",
+      "name": "Java_org_rocksdb_SstFileManager_getDeleteRateBytesPerSecond"
+    },
+    {
+      "rva": "000BEE70",
+      "name": "Java_org_rocksdb_SstFileManager_getMaxTrashDBRatio"
+    },
+    {
+      "rva": "000BEE80",
+      "name": "Java_org_rocksdb_SstFileManager_getTotalSize"
+    },
+    {
+      "rva": "000BEE90",
+      "name": "Java_org_rocksdb_SstFileManager_getTrackedFiles"
+    },
+    {
+      "rva": "000BF120",
+      "name": "Java_org_rocksdb_SstFileManager_isMaxAllowedSpaceReached"
+    },
+    {
+      "rva": "000BF130",
+      "name": "Java_org_rocksdb_SstFileManager_isMaxAllowedSpaceReachedIncludingCompactions"
+    },
+    {
+      "rva": "000BF140",
+      "name": "Java_org_rocksdb_SstFileManager_newSstFileManager"
+    },
+    {
+      "rva": "000BF560",
+      "name": "Java_org_rocksdb_SstFileManager_setCompactionBufferSize"
+    },
+    {
+      "rva": "000BF570",
+      "name": "Java_org_rocksdb_SstFileManager_setDeleteRateBytesPerSecond"
+    },
+    {
+      "rva": "000BF580",
+      "name": "Java_org_rocksdb_SstFileManager_setMaxAllowedSpaceUsage"
+    },
+    {
+      "rva": "000BF590",
+      "name": "Java_org_rocksdb_SstFileManager_setMaxTrashDBRatio"
+    },
+    {
+      "rva": "000BF6A0",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_disposeInternalJni"
+    },
+    {
+      "rva": "000BF6C0",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_isValid0Jni"
+    },
+    {
+      "rva": "000BF6D0",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_key0"
+    },
+    {
+      "rva": "000BF750",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_keyByteArray0"
+    },
+    {
+      "rva": "000BF7C0",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_keyDirect0"
+    },
+    {
+      "rva": "000BF810",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_next0Jni"
+    },
+    {
+      "rva": "000BF820",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_prev0Jni"
+    },
+    {
+      "rva": "000BF830",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_refresh0Jni"
+    },
+    {
+      "rva": "000BF870",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_refresh1"
+    },
+    {
+      "rva": "000BF8C0",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_seek0Jni"
+    },
+    {
+      "rva": "000BF950",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_seekByteArray0Jni"
+    },
+    {
+      "rva": "000BFA10",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_seekDirect0Jni"
+    },
+    {
+      "rva": "000BFA60",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_seekForPrev0Jni"
+    },
+    {
+      "rva": "000BFAF0",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_seekForPrevByteArray0Jni"
+    },
+    {
+      "rva": "000BFBB0",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_seekForPrevDirect0Jni"
+    },
+    {
+      "rva": "000BFC00",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_seekToFirst0Jni"
+    },
+    {
+      "rva": "000BFC10",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_seekToLast0Jni"
+    },
+    {
+      "rva": "000BFC20",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_status0Jni"
+    },
+    {
+      "rva": "000BFC60",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_value0"
+    },
+    {
+      "rva": "000BFCE0",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_valueByteArray0"
+    },
+    {
+      "rva": "000BFD50",
+      "name": "Java_org_rocksdb_SstFileReaderIterator_valueDirect0"
+    },
+    {
+      "rva": "000BFDA0",
+      "name": "Java_org_rocksdb_SstFileReader_disposeInternalJni"
+    },
+    {
+      "rva": "000BFDD0",
+      "name": "Java_org_rocksdb_SstFileReader_getTableProperties"
+    },
+    {
+      "rva": "000BFE50",
+      "name": "Java_org_rocksdb_SstFileReader_newIterator"
+    },
+    {
+      "rva": "000BFE60",
+      "name": "Java_org_rocksdb_SstFileReader_newSstFileReader"
+    },
+    {
+      "rva": "000BFE90",
+      "name": "Java_org_rocksdb_SstFileReader_open"
+    },
+    {
+      "rva": "000BFFC0",
+      "name": "Java_org_rocksdb_SstFileReader_verifyChecksum"
+    },
+    {
+      "rva": "000C0170",
+      "name": "Java_org_rocksdb_SstFileWriter_delete__JJ"
+    },
+    {
+      "rva": "000C01C0",
+      "name": "Java_org_rocksdb_SstFileWriter_delete__J_3B"
+    },
+    {
+      "rva": "000C0280",
+      "name": "Java_org_rocksdb_SstFileWriter_disposeInternalJni"
+    },
+    {
+      "rva": "000C02B0",
+      "name": "Java_org_rocksdb_SstFileWriter_fileSize"
+    },
+    {
+      "rva": "000C02C0",
+      "name": "Java_org_rocksdb_SstFileWriter_finish"
+    },
+    {
+      "rva": "000C0310",
+      "name": "Java_org_rocksdb_SstFileWriter_merge__JJJ"
+    },
+    {
+      "rva": "000C0360",
+      "name": "Java_org_rocksdb_SstFileWriter_merge__J_3B_3B"
+    },
+    {
+      "rva": "000C04C0",
+      "name": "Java_org_rocksdb_SstFileWriter_newSstFileWriter__JJ"
+    },
+    {
+      "rva": "000C0540",
+      "name": "Java_org_rocksdb_SstFileWriter_newSstFileWriter__JJJB"
+    },
+    {
+      "rva": "000C05E0",
+      "name": "Java_org_rocksdb_SstFileWriter_open"
+    },
+    {
+      "rva": "000C0710",
+      "name": "Java_org_rocksdb_SstFileWriter_putDirect"
+    },
+    {
+      "rva": "000C07A0",
+      "name": "Java_org_rocksdb_SstFileWriter_put__JJJ"
+    },
+    {
+      "rva": "000C07F0",
+      "name": "Java_org_rocksdb_SstFileWriter_put__J_3B_3B"
+    },
+    {
+      "rva": "000C0950",
+      "name": "Java_org_rocksdb_SstPartitionerFixedPrefixFactory_disposeInternalJni"
+    },
+    {
+      "rva": "000C09C0",
+      "name": "Java_org_rocksdb_SstPartitionerFixedPrefixFactory_newSstPartitionerFixedPrefixFactory0"
+    },
+    {
+      "rva": "000C1A30",
+      "name": "Java_org_rocksdb_Statistics_disposeInternalJni"
+    },
+    {
+      "rva": "000C1AA0",
+      "name": "Java_org_rocksdb_Statistics_getAndResetTickerCount"
+    },
+    {
+      "rva": "000C1AD0",
+      "name": "Java_org_rocksdb_Statistics_getHistogramData"
+    },
+    {
+      "rva": "000C1C60",
+      "name": "Java_org_rocksdb_Statistics_getHistogramString"
+    },
+    {
+      "rva": "000C1D30",
+      "name": "Java_org_rocksdb_Statistics_getTickerCount"
+    },
+    {
+      "rva": "000C1D60",
+      "name": "Java_org_rocksdb_Statistics_newStatistics__"
+    },
+    {
+      "rva": "000C1D70",
+      "name": "Java_org_rocksdb_Statistics_newStatistics__J"
+    },
+    {
+      "rva": "000C1D80",
+      "name": "Java_org_rocksdb_Statistics_newStatistics___3B"
+    },
+    {
+      "rva": "000C1D90",
+      "name": "Java_org_rocksdb_Statistics_newStatistics___3BJ"
+    },
+    {
+      "rva": "000C2140",
+      "name": "Java_org_rocksdb_Statistics_reset"
+    },
+    {
+      "rva": "000C2190",
+      "name": "Java_org_rocksdb_Statistics_setStatsLevel"
+    },
+    {
+      "rva": "000C21C0",
+      "name": "Java_org_rocksdb_Statistics_statsLevel"
+    },
+    {
+      "rva": "000C21E0",
+      "name": "Java_org_rocksdb_Statistics_toString"
+    },
+    {
+      "rva": "0009C9B0",
+      "name": "Java_org_rocksdb_StringAppendOperator_disposeInternalJni"
+    },
+    {
+      "rva": "0009CA20",
+      "name": "Java_org_rocksdb_StringAppendOperator_newSharedStringAppendOperator__C"
+    },
+    {
+      "rva": "0009CA50",
+      "name": "Java_org_rocksdb_StringAppendOperator_newSharedStringAppendOperator__Ljava_lang_String_2"
+    },
+    {
+      "rva": "000C3A50",
+      "name": "Java_org_rocksdb_TablePropertiesCollectorFactory_deleteCompactOnDeletionCollectorFactory"
+    },
+    {
+      "rva": "000C3AC0",
+      "name": "Java_org_rocksdb_TablePropertiesCollectorFactory_newCompactOnDeletionCollectorFactory"
+    },
+    {
+      "rva": "000C7FB0",
+      "name": "Java_org_rocksdb_ThreadStatus_getOperationName"
+    },
+    {
+      "rva": "000C80B0",
+      "name": "Java_org_rocksdb_ThreadStatus_getOperationPropertyName"
+    },
+    {
+      "rva": "000C81B0",
+      "name": "Java_org_rocksdb_ThreadStatus_getOperationStageName"
+    },
+    {
+      "rva": "000C8310",
+      "name": "Java_org_rocksdb_ThreadStatus_getStateName"
+    },
+    {
+      "rva": "000C83F0",
+      "name": "Java_org_rocksdb_ThreadStatus_getThreadTypeName"
+    },
+    {
+      "rva": "000C84E0",
+      "name": "Java_org_rocksdb_ThreadStatus_interpretOperationProperties"
+    },
+    {
+      "rva": "000C87A0",
+      "name": "Java_org_rocksdb_ThreadStatus_microsToStringNative"
+    },
+    {
+      "rva": "00090E20",
+      "name": "Java_org_rocksdb_TimedEnv_createTimedEnv"
+    },
+    {
+      "rva": "00090E30",
+      "name": "Java_org_rocksdb_TimedEnv_disposeInternalJni"
+    },
+    {
+      "rva": "000D1D20",
+      "name": "Java_org_rocksdb_TransactionDBOptions_disposeInternalJni"
+    },
+    {
+      "rva": "000D1DF0",
+      "name": "Java_org_rocksdb_TransactionDBOptions_getDefaultLockTimeout"
+    },
+    {
+      "rva": "000D1E00",
+      "name": "Java_org_rocksdb_TransactionDBOptions_getMaxNumLocks"
+    },
+    {
+      "rva": "000D1E10",
+      "name": "Java_org_rocksdb_TransactionDBOptions_getNumStripes"
+    },
+    {
+      "rva": "000D1E20",
+      "name": "Java_org_rocksdb_TransactionDBOptions_getTransactionLockTimeout"
+    },
+    {
+      "rva": "000D1E30",
+      "name": "Java_org_rocksdb_TransactionDBOptions_getWritePolicy"
+    },
+    {
+      "rva": "000D1E50",
+      "name": "Java_org_rocksdb_TransactionDBOptions_newTransactionDBOptions"
+    },
+    {
+      "rva": "000D1EE0",
+      "name": "Java_org_rocksdb_TransactionDBOptions_setDefaultLockTimeout"
+    },
+    {
+      "rva": "000D1EF0",
+      "name": "Java_org_rocksdb_TransactionDBOptions_setMaxNumLocks"
+    },
+    {
+      "rva": "000D1F00",
+      "name": "Java_org_rocksdb_TransactionDBOptions_setNumStripes"
+    },
+    {
+      "rva": "000D1F10",
+      "name": "Java_org_rocksdb_TransactionDBOptions_setTransactionLockTimeout"
+    },
+    {
+      "rva": "000D1F20",
+      "name": "Java_org_rocksdb_TransactionDBOptions_setWritePolicy"
+    },
+    {
+      "rva": "000D06A0",
+      "name": "Java_org_rocksdb_TransactionDB_beginTransaction_1withOld__JJJ"
+    },
+    {
+      "rva": "000D0710",
+      "name": "Java_org_rocksdb_TransactionDB_beginTransaction_1withOld__JJJJ"
+    },
+    {
+      "rva": "000D0730",
+      "name": "Java_org_rocksdb_TransactionDB_beginTransaction__JJ"
+    },
+    {
+      "rva": "000D07B0",
+      "name": "Java_org_rocksdb_TransactionDB_beginTransaction__JJJ"
+    },
+    {
+      "rva": "000D07D0",
+      "name": "Java_org_rocksdb_TransactionDB_closeDatabase"
+    },
+    {
+      "rva": "000D0810",
+      "name": "Java_org_rocksdb_TransactionDB_disposeInternalJni"
+    },
+    {
+      "rva": "000D0830",
+      "name": "Java_org_rocksdb_TransactionDB_getAllPreparedTransactions"
+    },
+    {
+      "rva": "000D0A50",
+      "name": "Java_org_rocksdb_TransactionDB_getDeadlockInfoBuffer"
+    },
+    {
+      "rva": "000D10E0",
+      "name": "Java_org_rocksdb_TransactionDB_getLockStatusData"
+    },
+    {
+      "rva": "000D1290",
+      "name": "Java_org_rocksdb_TransactionDB_getTransactionByName"
+    },
+    {
+      "rva": "000D13A0",
+      "name": "Java_org_rocksdb_TransactionDB_open__JJLjava_lang_String_2"
+    },
+    {
+      "rva": "000D14F0",
+      "name": "Java_org_rocksdb_TransactionDB_open__JJLjava_lang_String_2_3_3B_3J"
+    },
+    {
+      "rva": "000D1C30",
+      "name": "Java_org_rocksdb_TransactionDB_setDeadlockInfoBufferSize"
+    },
+    {
+      "rva": "000D1F50",
+      "name": "Java_org_rocksdb_TransactionLogIterator_disposeInternalJni"
+    },
+    {
+      "rva": "000D1F70",
+      "name": "Java_org_rocksdb_TransactionLogIterator_getBatch"
+    },
+    {
+      "rva": "000D2040",
+      "name": "Java_org_rocksdb_TransactionLogIterator_isValid"
+    },
+    {
+      "rva": "000D2050",
+      "name": "Java_org_rocksdb_TransactionLogIterator_next"
+    },
+    {
+      "rva": "000D2060",
+      "name": "Java_org_rocksdb_TransactionLogIterator_status"
+    },
+    {
+      "rva": "000D2440",
+      "name": "Java_org_rocksdb_TransactionOptions_disposeInternalJni"
+    },
+    {
+      "rva": "000D2450",
+      "name": "Java_org_rocksdb_TransactionOptions_getDeadlockDetectDepth"
+    },
+    {
+      "rva": "000D2460",
+      "name": "Java_org_rocksdb_TransactionOptions_getExpiration"
+    },
+    {
+      "rva": "000D2470",
+      "name": "Java_org_rocksdb_TransactionOptions_getLockTimeout"
+    },
+    {
+      "rva": "000D2480",
+      "name": "Java_org_rocksdb_TransactionOptions_getMaxWriteBatchSize"
+    },
+    {
+      "rva": "000D2490",
+      "name": "Java_org_rocksdb_TransactionOptions_isDeadlockDetect"
+    },
+    {
+      "rva": "000D24A0",
+      "name": "Java_org_rocksdb_TransactionOptions_isSetSnapshot"
+    },
+    {
+      "rva": "000D24B0",
+      "name": "Java_org_rocksdb_TransactionOptions_newTransactionOptions"
+    },
+    {
+      "rva": "000D2520",
+      "name": "Java_org_rocksdb_TransactionOptions_setDeadlockDetect"
+    },
+    {
+      "rva": "000D2530",
+      "name": "Java_org_rocksdb_TransactionOptions_setDeadlockDetectDepth"
+    },
+    {
+      "rva": "000D2540",
+      "name": "Java_org_rocksdb_TransactionOptions_setExpiration"
+    },
+    {
+      "rva": "000D2550",
+      "name": "Java_org_rocksdb_TransactionOptions_setLockTimeout"
+    },
+    {
+      "rva": "000D2560",
+      "name": "Java_org_rocksdb_TransactionOptions_setMaxWriteBatchSize"
+    },
+    {
+      "rva": "000D2570",
+      "name": "Java_org_rocksdb_TransactionOptions_setSetSnapshot"
+    },
+    {
+      "rva": "000CB8E0",
+      "name": "Java_org_rocksdb_Transaction_clearSnapshot"
+    },
+    {
+      "rva": "000CB8F0",
+      "name": "Java_org_rocksdb_Transaction_commit"
+    },
+    {
+      "rva": "000CB930",
+      "name": "Java_org_rocksdb_Transaction_deleteUntracked__J_3BI"
+    },
+    {
+      "rva": "000CBA60",
+      "name": "Java_org_rocksdb_Transaction_deleteUntracked__J_3BIJ"
+    },
+    {
+      "rva": "000CBBA0",
+      "name": "Java_org_rocksdb_Transaction_deleteUntracked__J_3_3BI"
+    },
+    {
+      "rva": "000CBC30",
+      "name": "Java_org_rocksdb_Transaction_deleteUntracked__J_3_3BIJ"
+    },
+    {
+      "rva": "000CBCD0",
+      "name": "Java_org_rocksdb_Transaction_delete__J_3BI"
+    },
+    {
+      "rva": "000CBE00",
+      "name": "Java_org_rocksdb_Transaction_delete__J_3BIJZ"
+    },
+    {
+      "rva": "000CBF50",
+      "name": "Java_org_rocksdb_Transaction_delete__J_3_3BI"
+    },
+    {
+      "rva": "000CBFE0",
+      "name": "Java_org_rocksdb_Transaction_delete__J_3_3BIJZ"
+    },
+    {
+      "rva": "000CC090",
+      "name": "Java_org_rocksdb_Transaction_disableIndexing"
+    },
+    {
+      "rva": "000CC0A0",
+      "name": "Java_org_rocksdb_Transaction_disposeInternal"
+    },
+    {
+      "rva": "000CC0C0",
+      "name": "Java_org_rocksdb_Transaction_enableIndexing"
+    },
+    {
+      "rva": "000CC0D0",
+      "name": "Java_org_rocksdb_Transaction_getCommitTimeWriteBatch"
+    },
+    {
+      "rva": "000CC0E0",
+      "name": "Java_org_rocksdb_Transaction_getDirect"
+    },
+    {
+      "rva": "000CC2B0",
+      "name": "Java_org_rocksdb_Transaction_getDirectForUpdate"
+    },
+    {
+      "rva": "000CC4A0",
+      "name": "Java_org_rocksdb_Transaction_getElapsedTime"
+    },
+    {
+      "rva": "000CC4B0",
+      "name": "Java_org_rocksdb_Transaction_getForUpdate__JJ_3BIIJZZ"
+    },
+    {
+      "rva": "000CC800",
+      "name": "Java_org_rocksdb_Transaction_getForUpdate__JJ_3BII_3BIIJZZ"
+    },
+    {
+      "rva": "000CCBA0",
+      "name": "Java_org_rocksdb_Transaction_getID"
+    },
+    {
+      "rva": "000CCBB0",
+      "name": "Java_org_rocksdb_Transaction_getId"
+    },
+    {
+      "rva": "000CCBC0",
+      "name": "Java_org_rocksdb_Transaction_getIterator"
+    },
+    {
+      "rva": "000CCBE0",
+      "name": "Java_org_rocksdb_Transaction_getLogNumber"
+    },
+    {
+      "rva": "000CCBF0",
+      "name": "Java_org_rocksdb_Transaction_getName"
+    },
+    {
+      "rva": "000CCCB0",
+      "name": "Java_org_rocksdb_Transaction_getNumDeletes"
+    },
+    {
+      "rva": "000CCCC0",
+      "name": "Java_org_rocksdb_Transaction_getNumKeys"
+    },
+    {
+      "rva": "000CCCD0",
+      "name": "Java_org_rocksdb_Transaction_getNumMerges"
+    },
+    {
+      "rva": "000CCCE0",
+      "name": "Java_org_rocksdb_Transaction_getNumPuts"
+    },
+    {
+      "rva": "000CCCF0",
+      "name": "Java_org_rocksdb_Transaction_getSnapshot"
+    },
+    {
+      "rva": "000CCD00",
+      "name": "Java_org_rocksdb_Transaction_getState"
+    },
+    {
+      "rva": "000CCD60",
+      "name": "Java_org_rocksdb_Transaction_getWaitingTxns"
+    },
+    {
+      "rva": "000CCEA0",
+      "name": "Java_org_rocksdb_Transaction_getWriteBatch"
+    },
+    {
+      "rva": "000CCEB0",
+      "name": "Java_org_rocksdb_Transaction_getWriteOptions"
+    },
+    {
+      "rva": "000CCEC0",
+      "name": "Java_org_rocksdb_Transaction_get__JJ_3BIIJ"
+    },
+    {
+      "rva": "000CD1D0",
+      "name": "Java_org_rocksdb_Transaction_get__JJ_3BII_3BIIJ"
+    },
+    {
+      "rva": "000CD540",
+      "name": "Java_org_rocksdb_Transaction_isDeadlockDetect"
+    },
+    {
+      "rva": "000CD550",
+      "name": "Java_org_rocksdb_Transaction_mergeDirect__JLjava_nio_ByteBuffer_2IILjava_nio_ByteBuffer_2II"
+    },
+    {
+      "rva": "000CD660",
+      "name": "Java_org_rocksdb_Transaction_mergeDirect__JLjava_nio_ByteBuffer_2IILjava_nio_ByteBuffer_2IIJZ"
+    },
+    {
+      "rva": "000CD780",
+      "name": "Java_org_rocksdb_Transaction_mergeUntracked"
+    },
+    {
+      "rva": "000CD9A0",
+      "name": "Java_org_rocksdb_Transaction_mergeUntrackedDirect"
+    },
+    {
+      "rva": "000CDAB0",
+      "name": "Java_org_rocksdb_Transaction_merge__J_3BII_3BII"
+    },
+    {
+      "rva": "000CDCC0",
+      "name": "Java_org_rocksdb_Transaction_merge__J_3BII_3BIIJZ"
+    },
+    {
+      "rva": "000CDEF0",
+      "name": "Java_org_rocksdb_Transaction_multiGetForUpdate__JJ_3_3B"
+    },
+    {
+      "rva": "000CE160",
+      "name": "Java_org_rocksdb_Transaction_multiGetForUpdate__JJ_3_3B_3J"
+    },
+    {
+      "rva": "000CE3A0",
+      "name": "Java_org_rocksdb_Transaction_multiGet__JJ_3_3B"
+    },
+    {
+      "rva": "000CE610",
+      "name": "Java_org_rocksdb_Transaction_multiGet__JJ_3_3B_3J"
+    },
+    {
+      "rva": "000CE850",
+      "name": "Java_org_rocksdb_Transaction_prepare"
+    },
+    {
+      "rva": "000CE890",
+      "name": "Java_org_rocksdb_Transaction_putDirect__JLjava_nio_ByteBuffer_2IILjava_nio_ByteBuffer_2II"
+    },
+    {
+      "rva": "000CE9A0",
+      "name": "Java_org_rocksdb_Transaction_putDirect__JLjava_nio_ByteBuffer_2IILjava_nio_ByteBuffer_2IIJZ"
+    },
+    {
+      "rva": "000CEAC0",
+      "name": "Java_org_rocksdb_Transaction_putLogData"
+    },
+    {
+      "rva": "000CEB50",
+      "name": "Java_org_rocksdb_Transaction_putUntracked__J_3BI_3BI"
+    },
+    {
+      "rva": "000CED50",
+      "name": "Java_org_rocksdb_Transaction_putUntracked__J_3BI_3BIJ"
+    },
+    {
+      "rva": "000CEF60",
+      "name": "Java_org_rocksdb_Transaction_putUntracked__J_3_3BI_3_3BI"
+    },
+    {
+      "rva": "000CF020",
+      "name": "Java_org_rocksdb_Transaction_putUntracked__J_3_3BI_3_3BIJ"
+    },
+    {
+      "rva": "000CF0F0",
+      "name": "Java_org_rocksdb_Transaction_put__J_3BII_3BII"
+    },
+    {
+      "rva": "000CF300",
+      "name": "Java_org_rocksdb_Transaction_put__J_3BII_3BIIJZ"
+    },
+    {
+      "rva": "000CF530",
+      "name": "Java_org_rocksdb_Transaction_put__J_3_3BI_3_3BI"
+    },
+    {
+      "rva": "000CF5F0",
+      "name": "Java_org_rocksdb_Transaction_put__J_3_3BI_3_3BIJZ"
+    },
+    {
+      "rva": "000CF6C0",
+      "name": "Java_org_rocksdb_Transaction_rebuildFromWriteBatch"
+    },
+    {
+      "rva": "000CF710",
+      "name": "Java_org_rocksdb_Transaction_rollback"
+    },
+    {
+      "rva": "000CF750",
+      "name": "Java_org_rocksdb_Transaction_rollbackToSavePoint"
+    },
+    {
+      "rva": "000CF790",
+      "name": "Java_org_rocksdb_Transaction_setLockTimeout"
+    },
+    {
+      "rva": "000CF7A0",
+      "name": "Java_org_rocksdb_Transaction_setLogNumber"
+    },
+    {
+      "rva": "000CF7B0",
+      "name": "Java_org_rocksdb_Transaction_setName"
+    },
+    {
+      "rva": "000CF8E0",
+      "name": "Java_org_rocksdb_Transaction_setSavePoint"
+    },
+    {
+      "rva": "000CF8F0",
+      "name": "Java_org_rocksdb_Transaction_setSnapshot"
+    },
+    {
+      "rva": "000CF900",
+      "name": "Java_org_rocksdb_Transaction_setSnapshotOnNextOperation__J"
+    },
+    {
+      "rva": "000CF920",
+      "name": "Java_org_rocksdb_Transaction_setSnapshotOnNextOperation__JJ"
+    },
+    {
+      "rva": "000CF970",
+      "name": "Java_org_rocksdb_Transaction_setWriteOptions"
+    },
+    {
+      "rva": "000CF980",
+      "name": "Java_org_rocksdb_Transaction_singleDelete__J_3BI"
+    },
+    {
+      "rva": "000CFAB0",
+      "name": "Java_org_rocksdb_Transaction_singleDelete__J_3BIJZ"
+    },
+    {
+      "rva": "000CFC00",
+      "name": "Java_org_rocksdb_Transaction_singleDelete__J_3_3BI"
+    },
+    {
+      "rva": "000CFC90",
+      "name": "Java_org_rocksdb_Transaction_singleDelete__J_3_3BIJZ"
+    },
+    {
+      "rva": "000CFD40",
+      "name": "Java_org_rocksdb_Transaction_undoGetForUpdate__J_3BI"
+    },
+    {
+      "rva": "000CFDD0",
+      "name": "Java_org_rocksdb_Transaction_undoGetForUpdate__J_3BIJ"
+    },
+    {
+      "rva": "000D2780",
+      "name": "Java_org_rocksdb_TtlDB_closeDatabase"
+    },
+    {
+      "rva": "000D2790",
+      "name": "Java_org_rocksdb_TtlDB_createColumnFamilyWithTtl"
+    },
+    {
+      "rva": "000D2910",
+      "name": "Java_org_rocksdb_TtlDB_disposeInternalJni"
+    },
+    {
+      "rva": "000D2930",
+      "name": "Java_org_rocksdb_TtlDB_open"
+    },
+    {
+      "rva": "000D2AA0",
+      "name": "Java_org_rocksdb_TtlDB_openCF"
+    },
+    {
+      "rva": "0009CBE0",
+      "name": "Java_org_rocksdb_UInt64AddOperator_disposeInternalJni"
+    },
+    {
+      "rva": "0009CC50",
+      "name": "Java_org_rocksdb_UInt64AddOperator_newSharedUInt64AddOperator"
+    },
+    {
+      "rva": "0009C980",
+      "name": "Java_org_rocksdb_VectorMemTableConfig_newMemTableFactoryHandle"
+    },
+    {
+      "rva": "000D8E20",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_disposeInternalJni"
+    },
+    {
+      "rva": "000D8E40",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_entry1"
+    },
+    {
+      "rva": "000D9010",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_isValid0Jni"
+    },
+    {
+      "rva": "000D9020",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_next0Jni"
+    },
+    {
+      "rva": "000D9030",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_prev0Jni"
+    },
+    {
+      "rva": "000D9040",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_refresh1"
+    },
+    {
+      "rva": "000D90C0",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_seek0Jni"
+    },
+    {
+      "rva": "000D9170",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_seekByteArray0Jni"
+    },
+    {
+      "rva": "000D9230",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_seekDirect0Jni"
+    },
+    {
+      "rva": "000D9280",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_seekForPrev0Jni"
+    },
+    {
+      "rva": "000D9330",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_seekForPrevByteArray0Jni"
+    },
+    {
+      "rva": "000D93F0",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_seekForPrevDirect0Jni"
+    },
+    {
+      "rva": "000D9440",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_seekToFirst0Jni"
+    },
+    {
+      "rva": "000D9450",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_seekToLast0Jni"
+    },
+    {
+      "rva": "000D9460",
+      "name": "Java_org_rocksdb_WBWIRocksIterator_status0Jni"
+    },
+    {
+      "rva": "000D6940",
+      "name": "Java_org_rocksdb_WriteBatchTestInternalHelper_append"
+    },
+    {
+      "rva": "000D6970",
+      "name": "Java_org_rocksdb_WriteBatchTestInternalHelper_sequence"
+    },
+    {
+      "rva": "000D6980",
+      "name": "Java_org_rocksdb_WriteBatchTestInternalHelper_setSequence"
+    },
+    {
+      "rva": "000D6990",
+      "name": "Java_org_rocksdb_WriteBatchTest_getContents"
+    },
+    {
+      "rva": "000D94A0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_clear0Jni"
+    },
+    {
+      "rva": "000D94B0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_count0Jni"
+    },
+    {
+      "rva": "000D94D0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_deleteDirectJni"
+    },
+    {
+      "rva": "000D9540",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_deleteJni__J_3BI"
+    },
+    {
+      "rva": "000D95E0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_deleteJni__J_3BIJ"
+    },
+    {
+      "rva": "000D9690",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_deleteRangeJni__J_3BI_3BI"
+    },
+    {
+      "rva": "000D9740",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_deleteRangeJni__J_3BI_3BIJ"
+    },
+    {
+      "rva": "000D9800",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_disposeInternalJni"
+    },
+    {
+      "rva": "000D9820",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_getFromBatchAndDB__JJJ_3BI"
+    },
+    {
+      "rva": "000D9890",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_getFromBatchAndDB__JJJ_3BIJ"
+    },
+    {
+      "rva": "000D9910",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_getFromBatch__JJ_3BI"
+    },
+    {
+      "rva": "000D9970",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_getFromBatch__JJ_3BIJ"
+    },
+    {
+      "rva": "000D99E0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_getWriteBatchJni"
+    },
+    {
+      "rva": "000D9AA0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_iterator0"
+    },
+    {
+      "rva": "000D9AB0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_iterator1"
+    },
+    {
+      "rva": "000D9AC0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_iteratorWithBase"
+    },
+    {
+      "rva": "000D9AE0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_mergeJni__J_3BI_3BI"
+    },
+    {
+      "rva": "000D9B90",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_mergeJni__J_3BI_3BIJ"
+    },
+    {
+      "rva": "000D9C50",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_newWriteBatchWithIndex__"
+    },
+    {
+      "rva": "000D9CA0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_newWriteBatchWithIndex__JBIZ"
+    },
+    {
+      "rva": "000D9D10",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_newWriteBatchWithIndex__Z"
+    },
+    {
+      "rva": "000D9D80",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_popSavePointJni"
+    },
+    {
+      "rva": "000D9DD0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_putDirectJni"
+    },
+    {
+      "rva": "000D9E60",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_putJni__J_3BI_3BI"
+    },
+    {
+      "rva": "000D9F10",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_putJni__J_3BI_3BIJ"
+    },
+    {
+      "rva": "000D9FD0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_putLogDataJni"
+    },
+    {
+      "rva": "000DA070",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_rollbackToSavePoint0Jni"
+    },
+    {
+      "rva": "000DA0C0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_setMaxBytesJni"
+    },
+    {
+      "rva": "000DA0D0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_setSavePoint0Jni"
+    },
+    {
+      "rva": "000DA0E0",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_singleDeleteJni__J_3BI"
+    },
+    {
+      "rva": "000DA180",
+      "name": "Java_org_rocksdb_WriteBatchWithIndex_singleDeleteJni__J_3BIJ"
+    },
+    {
+      "rva": "000D4E60",
+      "name": "Java_org_rocksdb_WriteBatch_00024Handler_createNewHandler0"
+    },
+    {
+      "rva": "000D4EB0",
+      "name": "Java_org_rocksdb_WriteBatch_clear0Jni"
+    },
+    {
+      "rva": "000D4EC0",
+      "name": "Java_org_rocksdb_WriteBatch_count0Jni"
+    },
+    {
+      "rva": "000D4ED0",
+      "name": "Java_org_rocksdb_WriteBatch_data"
+    },
+    {
+      "rva": "000D4FB0",
+      "name": "Java_org_rocksdb_WriteBatch_deleteDirectJni"
+    },
+    {
+      "rva": "000D5020",
+      "name": "Java_org_rocksdb_WriteBatch_deleteJni__J_3BI"
+    },
+    {
+      "rva": "000D50C0",
+      "name": "Java_org_rocksdb_WriteBatch_deleteJni__J_3BIJ"
+    },
+    {
+      "rva": "000D5170",
+      "name": "Java_org_rocksdb_WriteBatch_deleteRangeJni__J_3BI_3BI"
+    },
+    {
+      "rva": "000D5220",
+      "name": "Java_org_rocksdb_WriteBatch_deleteRangeJni__J_3BI_3BIJ"
+    },
+    {
+      "rva": "000D52E0",
+      "name": "Java_org_rocksdb_WriteBatch_disposeInternalJni"
+    },
+    {
+      "rva": "000D5300",
+      "name": "Java_org_rocksdb_WriteBatch_getDataSize"
+    },
+    {
+      "rva": "000D5310",
+      "name": "Java_org_rocksdb_WriteBatch_getWalTerminationPoint"
+    },
+    {
+      "rva": "000D5480",
+      "name": "Java_org_rocksdb_WriteBatch_hasBeginPrepare"
+    },
+    {
+      "rva": "000D5490",
+      "name": "Java_org_rocksdb_WriteBatch_hasCommit"
+    },
+    {
+      "rva": "000D54A0",
+      "name": "Java_org_rocksdb_WriteBatch_hasDelete"
+    },
+    {
+      "rva": "000D54B0",
+      "name": "Java_org_rocksdb_WriteBatch_hasDeleteRange"
+    },
+    {
+      "rva": "000D54C0",
+      "name": "Java_org_rocksdb_WriteBatch_hasEndPrepare"
+    },
+    {
+      "rva": "000D54D0",
+      "name": "Java_org_rocksdb_WriteBatch_hasMerge"
+    },
+    {
+      "rva": "000D54E0",
+      "name": "Java_org_rocksdb_WriteBatch_hasPut"
+    },
+    {
+      "rva": "000D54F0",
+      "name": "Java_org_rocksdb_WriteBatch_hasRollback"
+    },
+    {
+      "rva": "000D5500",
+      "name": "Java_org_rocksdb_WriteBatch_hasSingleDelete"
+    },
+    {
+      "rva": "000D5510",
+      "name": "Java_org_rocksdb_WriteBatch_iterate"
+    },
+    {
+      "rva": "000D5560",
+      "name": "Java_org_rocksdb_WriteBatch_markWalTerminationPoint"
+    },
+    {
+      "rva": "000D5570",
+      "name": "Java_org_rocksdb_WriteBatch_mergeJni__J_3BI_3BI"
+    },
+    {
+      "rva": "000D5620",
+      "name": "Java_org_rocksdb_WriteBatch_mergeJni__J_3BI_3BIJ"
+    },
+    {
+      "rva": "000D56E0",
+      "name": "Java_org_rocksdb_WriteBatch_newWriteBatch__I"
+    },
+    {
+      "rva": "000D5740",
+      "name": "Java_org_rocksdb_WriteBatch_newWriteBatch___3BI"
+    },
+    {
+      "rva": "000D5830",
+      "name": "Java_org_rocksdb_WriteBatch_popSavePointJni"
+    },
+    {
+      "rva": "000D5880",
+      "name": "Java_org_rocksdb_WriteBatch_putDirectJni"
+    },
+    {
+      "rva": "000D5910",
+      "name": "Java_org_rocksdb_WriteBatch_putJni__J_3BI_3BI"
+    },
+    {
+      "rva": "000D59C0",
+      "name": "Java_org_rocksdb_WriteBatch_putJni__J_3BI_3BIJ"
+    },
+    {
+      "rva": "000D5A80",
+      "name": "Java_org_rocksdb_WriteBatch_putLogDataJni"
+    },
+    {
+      "rva": "000D5B20",
+      "name": "Java_org_rocksdb_WriteBatch_rollbackToSavePoint0Jni"
+    },
+    {
+      "rva": "000D5B70",
+      "name": "Java_org_rocksdb_WriteBatch_setMaxBytesJni"
+    },
+    {
+      "rva": "000D5B80",
+      "name": "Java_org_rocksdb_WriteBatch_setSavePoint0Jni"
+    },
+    {
+      "rva": "000D5B90",
+      "name": "Java_org_rocksdb_WriteBatch_singleDeleteJni__J_3BI"
+    },
+    {
+      "rva": "000D5C30",
+      "name": "Java_org_rocksdb_WriteBatch_singleDeleteJni__J_3BIJ"
+    },
+    {
+      "rva": "000DA2A0",
+      "name": "Java_org_rocksdb_WriteBufferManager_disposeInternalJni"
+    },
+    {
+      "rva": "000DA310",
+      "name": "Java_org_rocksdb_WriteBufferManager_newWriteBufferManager"
+    },
+    {
+      "rva": "000A7F60",
+      "name": "Java_org_rocksdb_WriteOptions_copyWriteOptions"
+    },
+    {
+      "rva": "000A7FA0",
+      "name": "Java_org_rocksdb_WriteOptions_disableWAL"
+    },
+    {
+      "rva": "000A7FB0",
+      "name": "Java_org_rocksdb_WriteOptions_disposeInternalJni"
+    },
+    {
+      "rva": "000A7FC0",
+      "name": "Java_org_rocksdb_WriteOptions_ignoreMissingColumnFamilies"
+    },
+    {
+      "rva": "000A7FD0",
+      "name": "Java_org_rocksdb_WriteOptions_lowPri"
+    },
+    {
+      "rva": "000A7FE0",
+      "name": "Java_org_rocksdb_WriteOptions_memtableInsertHintPerBatch"
+    },
+    {
+      "rva": "000A7FF0",
+      "name": "Java_org_rocksdb_WriteOptions_newWriteOptions"
+    },
+    {
+      "rva": "000A8030",
+      "name": "Java_org_rocksdb_WriteOptions_noSlowdown"
+    },
+    {
+      "rva": "000A8040",
+      "name": "Java_org_rocksdb_WriteOptions_setDisableWAL"
+    },
+    {
+      "rva": "000A8050",
+      "name": "Java_org_rocksdb_WriteOptions_setIgnoreMissingColumnFamilies"
+    },
+    {
+      "rva": "000A8060",
+      "name": "Java_org_rocksdb_WriteOptions_setLowPri"
+    },
+    {
+      "rva": "000A8070",
+      "name": "Java_org_rocksdb_WriteOptions_setMemtableInsertHintPerBatch"
+    },
+    {
+      "rva": "000A8080",
+      "name": "Java_org_rocksdb_WriteOptions_setNoSlowdown"
+    },
+    {
+      "rva": "000A8090",
+      "name": "Java_org_rocksdb_WriteOptions_setSync"
+    },
+    {
+      "rva": "000A80A0",
+      "name": "Java_org_rocksdb_WriteOptions_sync"
+    },
+    {
+      "rva": "000C65C0",
+      "name": "Java_org_rocksdb_test_TestableEventListener_invokeAllCallbacks"
+    },
+    {
+      "rva": "000C27A0",
+      "name": "Java_org_rocksdb_util_StdErrLogger_disposeInternal"
+    },
+    {
+      "rva": "000C2810",
+      "name": "Java_org_rocksdb_util_StdErrLogger_infoLogLevel"
+    },
+    {
+      "rva": "000C2820",
+      "name": "Java_org_rocksdb_util_StdErrLogger_newStdErrLogger"
+    },
+    {
+      "rva": "000C2BB0",
+      "name": "Java_org_rocksdb_util_StdErrLogger_setInfoLogLevel"
+    }
+  ]
+}
