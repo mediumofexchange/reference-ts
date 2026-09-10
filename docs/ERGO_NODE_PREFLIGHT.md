@@ -345,8 +345,8 @@ The [ordinary-host preflight](ergo-disk-control-preflight.json) exited **2**
 with `administrator=false`, `mutationsStarted=false`, no process or disk
 observation, and **532,020,400,128 bytes** available on the host volume. Source
 hashes identify the tested helper. The result is `unresolved-disk-preflight`:
-no disk was created, attached, formatted, filled or detached. One elevated
-small-control measurement and its report remain the next required evidence.
+no disk was created, attached, formatted, filled or detached in that preflight.
+The subsequent elevated observations are recorded below.
 
 The [first elevated attempt](ergo-disk-control-first-attempt.json), preserved
 at `358b070`, obtained administrator context and created/attached a fixed VHD:
@@ -408,6 +408,33 @@ The classifier requires the exact mode/flags, verified parent console and
 one total job process, including transient processes. The
 [harmless startup test](../experiments/ergo-range/node-disk-startup.test.ps1)
 requires exact stdout and an explicit nonzero exit code in separate launches.
+
+The [corrected fixed control](ergo-disk-control-verification.json), measured
+at `91055fc`, passes with native **ERROR_DISK_FULL (112)** after **53,477,376
+completed bytes (51 MiB)**; the failed next block brings attempted bytes to
+54,525,952 (52 MiB). The 65,990,656-byte NTFS volume has **151,552 bytes** free
+afterward, down from 53,633,024. The worker exits naturally in **4,746 ms**,
+uses at most **69,287,936 bytes** job/process commit, captures 273 output bytes
+and records one total process. Limits were read back before resume and the
+whole job was confirmed empty. The fill loop itself took 222 ms.
+
+The new VHD has 67,108,864 virtual bytes and **67,109,376 backing bytes**;
+explicit detachment and a separate ordinary-host `Get-DiskImage` readback
+both confirm it is detached. Host free space after the run is
+531,929,812,992 bytes, above the reserve. PowerShell also created a
+192,792-byte startup profile under the run directory, outside the data volume,
+consistent with the stated write-location limit. Project checks were running
+concurrently; this is a bounded capacity/control observation, not isolated
+performance benchmarking. Source hashes and the completion classifier were
+rechecked against the unmodified report. The three refused reports remain
+historical failures. This small pass does not establish a complete first sync.
+Independent report review repeated the completion/partition guards, checked
+all seven source hashes, output bytes and volume bindings, with no unresolved
+material finding. Raw CIM/image samples are not serialized in the report:
+those identity checks are evidenced by the reviewed executed path, not by
+independent replay of their original native types. The separate detached-image
+query corroborates cleanup. The final focused suite has 79 worker-free cases;
+the harmless inherited-console and unchanged detached-Node checks also pass.
 
 The existing Job Object does not supply the combined traffic control:
 Microsoft's
@@ -512,13 +539,14 @@ also does not place that Windows process inside the Linux namespaces. No
 WSL-wide settings or host access rules were changed.
 
 **Selection status:** retain the native stock-node probe and the reviewed
-accounting/stop route; no complete first-sync combination is demonstrated. Native disk
-attachment lacks a privilege in the current host token; rootless Linux is
-feasible at the namespace boundary but has unproven disk, connected-network
-and process-resource controls. Do not launch peers or install a new stack based
-on the small tmpfs test. Prepare and review one complete control route before
-its full-sized measurement. This is an experiment prerequisite, not a change
-to the normative protocol or an impossibility claim about this host.
+accounting/stop route; no complete first-sync combination is demonstrated.
+The explicitly elevated native route now passes the fixed 64 MiB disk control;
+ordinary process escalation alone still does not grant the required Windows
+privilege. Rootless Linux is feasible at the namespace boundary but has unproven
+disk, connected-network and process-resource controls. Combine and review the
+chosen route, all write targets and full-sized overhead before a separately
+authorized full-sized measurement. Neither small disk control authorizes peers
+or establishes the complete sync boundary. No normative protocol change follows.
 
 Use the reviewed stock-node boundary above. Falsifier: any reachable route,
 startup behavior or persisted data can generate/import/use a spending key

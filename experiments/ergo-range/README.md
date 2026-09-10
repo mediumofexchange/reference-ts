@@ -59,11 +59,13 @@ Keep the JSON output when comparing controls; never raise limits automatically.
 This does not change the offline decoder commands above. On Windows x64 with
 PowerShell 7, the node experiment has no npm/default-check integration:
 
-The separate native disk control is prepared for an already elevated Windows
-host. Run the worker-free checks and read-only preflight first:
+The separate native disk control requires an already elevated Windows host.
+Run the worker-free guards, harmless console startup checks and read-only
+preflight first:
 
 ```powershell
 pwsh -NoProfile -File experiments/ergo-range/node-disk-evidence.test.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-disk-startup.test.ps1
 pwsh -NoProfile -File experiments/ergo-range/node-disk-control.ps1
 ```
 
@@ -79,14 +81,17 @@ The repository's `scratch/` must already exist for that output redirection;
 64 MiB VHD there, formats its own newly created partition, and attempts at
 most 65 MiB through its volume GUID path. There are no path/disk/size options,
 drive letters, folder mounts or automatic elevation. The worker is contained
-by the existing Job Object; never run `node-disk-worker.ps1` directly.
+by the existing Job Object and uses the verified parent console; its shared
+control/lifetime and existing host resources remain outside that job.
+Never run `node-disk-worker.ps1` directly.
 See the [control contract](../../docs/ERGO_NODE_PREFLIGHT.md#first-sync-control-selection)
 for reserve, memory, time and evidence limits. Exit 0 from preflight only means
 ready for an explicit attempt; exit 0 with status `fixed-native-disk-full-only`
 requires the actual disk-full and detach observations. Exit 2 is unresolved.
 Keep the report and the detached image for readback. A failed attempt is not
 automatically rerun or removed; cleanup requires checking the exact image's
-detached state before deleting only that file and the empty directory.
+detached state before deleting only the captured image and inspecting/removing
+its disposable PowerShell profile files, then the resulting empty directories.
 
 The existing offline startup commands remain separate:
 
