@@ -3,7 +3,10 @@ function Get-NodeTrafficControlEvidence($Result, $State, $Budget) {
     $unresolved=[Collections.Generic.List[string]]::new()
     if (-not $Result.JobEmptyAfterCleanup -or $State.emptyConfirmedMs -lt 0) { $unresolved.Add('Whole-job emptiness was not confirmed') }
     if ($State.readError -or -not $Budget.AccountingValid) { $unresolved.Add('Host traffic accounting is incomplete or discontinuous') }
-    if ($Result.Outcome -ne 'observer-complete' -or $Budget.StopReason -ne 'traffic-threshold' -or
+    # The observer runs before the supervisor checks natural process exit.
+    # Only the fixed supervisor termination code proves this worker was stopped.
+    if ($Result.Outcome -ne 'observer-complete' -or $Result.ExitCode -ne 3758096385UL -or
+        $Budget.StopReason -ne 'traffic-threshold' -or
         $State.stopDecisionMs -lt 0 -or $Budget.TotalBytes -lt 16384UL -or
         $Budget.FirstStopMs -lt 0 -or $Budget.FirstStopMs -gt $State.stopDecisionMs) {
         $unresolved.Add('A traffic-triggered whole-job stop was not demonstrated')

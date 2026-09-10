@@ -36,6 +36,12 @@ pwsh -NoProfile -File experiments/ergo-range/node-traffic-evidence.test.ps1
 pwsh -NoProfile -File experiments/ergo-range/node-traffic-control.ps1
 ```
 
+To revalidate the checked-in observation with the current stricter classifier,
+run the evidence test with `-RecordedReport`. The
+[report](../../docs/ergo-traffic-stop-verification.json) preserves source hashes
+from its measurement at `2f1d9bc`; a later termination-code check closes a
+natural-exit race. Revalidation repeats no transfer and does not rewrite history.
+
 The first two commands are worker-free. The last makes one bounded HTTPS GET
 of the already-public, immutable fixture through system curl, under the
 existing Job Object supervisor. It counts all exposed host-interface receive

@@ -4,7 +4,8 @@ Updated: 2026-09-10
 
 ## Goal
 
-Traffic accounting/stop control on `test/ergo-traffic-stop`, based on `4af6af4`.
+Completed traffic accounting/stop slice `test/ergo-traffic-stop` for `main`,
+based on `4af6af4`.
 Contract clarification `ff82b2e`; first baseline refusal/source `bae0515`.
 Acceptance: counter/refusal cases and a real traffic-triggered whole-job stop,
 with final observed bytes and timing inside the small predeclared envelope.
@@ -26,13 +27,16 @@ No normative changes, runtime adoption, Ergo peers or sync in this slice.
   maximum sample gap, 7 ms decision-to-empty confirmation. Final reading
   ended 4 ms after that confirmation. No budget was raised.
 - Independent native ABI/implementation review and 112 counter checks pass.
-  Review identified a nearby natural-exit classification race: require the
-  supervisor's exact termination exit code before accepting stop evidence.
-  The recorded run already has that code; final classifier strengthening
-  and report revalidation are next. Full repository checks are running.
+  Final classifier requires the supervisor's exact termination exit code,
+  closing a natural-exit race. Its 26 cases and recorded-report revalidation
+  pass. Raw report/source hashes remain from measured commit `2f1d9bc`;
+  no GET was repeated. Final independent readback has no material findings.
+  `npm run check` passed: 96 files / 1,795 tests, build/package, pilot,
+  store-crash and spent-set checks. Final documentation checks also pass.
 - Prior slice CI `34446724693` passed for `4af6af4`. Upstream was refreshed
   without intervening commits. No branch protection/rulesets were present;
-  safeguards are unchanged. Delivery CI for this slice remains to be checked.
+  safeguards are unchanged. Delivery CI is pending; read the latest `main`
+  run before beginning the next slice.
 
 ## Evidence
 
@@ -60,23 +64,22 @@ No normative changes, runtime adoption, Ergo peers or sync in this slice.
 
 ## Next
 
-1. Complete the current native-control measurement, final review, required
-   checks, merge/push and delivery-CI readback.
-2. Prepare the native dedicated-volume disk-full control and review every
+1. Read delivery CI, then prepare the native dedicated-volume disk-full
+   control and review every
    write target/cleanup path before execution. Attachment needs
    SeManageVolumePrivilege, absent from the current normal host token;
    ordinary tool sandbox escalation does not provide Windows elevation.
    Finish the concrete helper before requesting any needed physical input.
-3. Preserve 30 minutes, 20 GiB dedicated data, existing CPU/memory controls,
+2. Preserve 30 minutes, 20 GiB dedicated data, existing CPU/memory controls,
    100 GiB host reserve and 10 GiB final observed traffic. Choose first-sync
    trigger/headroom/timing from control evidence; a small pass alone does not
    establish those values. Review public-peer parser exposure independently
    under the no-spending-key boundary before enabling peers.
-4. Then complete settings readback and finite sync/fixture ancestry evidence,
+3. Then complete settings readback and finite sync/fixture ancestry evidence,
    or proceed with source-independent authenticated range/replay contract
    work from the [recovery map](docs/POOL_V3_RECOVERY_MAP.md) while access is
    missing. No mock or response match closes the fully validated source gate.
-5. Use a fresh Astra instance for the next native disk boundary: the current
+4. Use a fresh Astra instance for the next native disk boundary: the current
    investigation is captured, and disk setup is a distinct privileged action.
    Use an economical builder for bounded tooling with independent strong
    review. This is a workload/context judgment, not comparative benchmarking.

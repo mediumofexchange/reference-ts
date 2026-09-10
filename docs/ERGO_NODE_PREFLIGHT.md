@@ -353,6 +353,15 @@ exit code is `0xE0000001`, the supervisor's termination code. This is host
 aggregate evidence, including unrelated/duplicate traffic; it does not
 attribute those bytes to curl or prove a completed fixture download. The
 controlled worker ran for 271 ms under the installed process limits.
+The report's six source hashes refer to the measured code at
+[`2f1d9bc`](https://github.com/mediumofexchange/reference-ts/commit/2f1d9bc).
+Final review strengthened the classifier to require that exact termination
+code: the observer runs before natural-exit detection, so `observer-complete`
+alone could accept an already-finished curl process. The unchanged report
+passes the strengthened classifier through `node-traffic-evidence.test.ps1
+-RecordedReport`; its historical source hashes were not rewritten and the
+GET was not repeated. Final evidence includes 112 pure counter checks and
+26 worker-free report cases. No material review finding remains after readback.
 
 The existing WSL 2 / Ubuntu 20.04 installation offers a second route without
 Windows elevation. A fixed
