@@ -58,3 +58,29 @@ or node equivalence.
 `-EvidenceOnly` checks eight resource-report regressions without executing a worker,
 including a quota exit with excessive CPU that the earlier check accepted.
 See the [comparison and limits](../../docs/POOL_DEPLOYMENT_PROBES.md#windows-process-containment-feasibility).
+
+The separate [metered decoder probe](../../docs/POOL_DEPLOYMENT_PROBES.md#metered-decoder-feasibility)
+requires a working Windows x64 Python 3.9+ executable as well as Node 24.
+Choose its path below; install only into the disposable repository directory:
+
+```powershell
+$probePython = 'C:\path\to\python.exe'
+& $probePython -m pip install --no-deps --only-binary=:all: --require-hashes --target scratch/metering-python -r experiments/ergo-range/metering-requirements.txt
+& $probePython -I -B experiments/ergo-range/metering-provenance.test.py
+node experiments/ergo-range/metering-check.mjs $probePython
+```
+
+The launcher uses isolated Python, a 30-second process deadline and 1 MiB
+captured-output cap. It is a finite measurement runner, not process-tree or
+total-memory containment. Only the existing pinned valid fixtures are decoded.
+Wasmtime 48.0.0 is pinned by Windows wheel hash and native DLL hash; the runner
+rejects missing scratch installs and checks the loaded package/DLL paths.
+No production or default-check dependency is added. The scratch install can
+be removed after the report is captured and reproduced using the same command.
+
+Exit **2** preserves a report with unresolved fuel refusals (currently one of
+24 transactions). Exit 0 means controls and all fixed fixture comparisons
+completed; neither status establishes hostile-parser safety or production
+acceptance. Fuel and linear-memory caps leave host overhead and total process
+resources open. No limit is raised automatically, no fuel is refilled, and no
+failed transaction contributes accepted outputs.

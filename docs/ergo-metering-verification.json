@@ -1,0 +1,340 @@
+{
+  "status": "offline-metering-feasibility-only",
+  "python": "3.12.14",
+  "os": "Windows-10-10.0.19045-SP0",
+  "engine": "wasmtime 48.0.0",
+  "wasmSha256": "5c39a0933a07031492efbe956fb4f957da745e295a94c06efddb475d9d1db4e5",
+  "budgets": {
+    "fuelPerTransaction": 10000000,
+    "linearMemoryBytes": 16777216,
+    "tableElements": 4096,
+    "instances": 1,
+    "memories": 1,
+    "tables": 1,
+    "inputBytes": 65536,
+    "jsonBytes": 262144
+  },
+  "controls": [
+    {
+      "control": "spin",
+      "fuel": 0,
+      "remaining": 0
+    },
+    {
+      "control": "spin",
+      "fuel": 1,
+      "remaining": 0
+    },
+    {
+      "control": "spin",
+      "fuel": 1000,
+      "remaining": 0
+    },
+    {
+      "control": "spin",
+      "fuel": 100000,
+      "remaining": 0
+    },
+    {
+      "control": "growth",
+      "memoryBytes": 131072,
+      "tableElements": 2,
+      "memoryOverCap": -1,
+      "singleLargeGrowth": -1,
+      "tableOverCap": -1
+    },
+    {
+      "control": "recursion",
+      "trap": "STACK_OVERFLOW"
+    }
+  ],
+  "lowFuelValidTransaction": "OUT_OF_FUEL",
+  "hostImports": 56,
+  "hostImportPolicy": "all trap; no guest-memory reads or JS bridge",
+  "compileMs": 2318.1125999981305,
+  "corpusMs": 414.07270000490826,
+  "transactions": [
+    {
+      "id": "9c20f008f0935ea363ad003f17801fcf39365d7922747e3188e093eb37e7154a",
+      "inputBytes": 345,
+      "status": "matched",
+      "outputs": 2,
+      "fuelConsumed": 4402058,
+      "memoryBytes": 1572864,
+      "jsonBytes": 1562
+    },
+    {
+      "id": "81943a9cf0fb1f3d513cd3de5bad9f5e3738e116ee0cb2135b7aed6c5fe26255",
+      "inputBytes": 425,
+      "status": "matched",
+      "outputs": 2,
+      "fuelConsumed": 4523079,
+      "memoryBytes": 1572864,
+      "jsonBytes": 1998
+    },
+    {
+      "id": "347f569a907db1dac0c56756b96965aa43b01735004c2c37154f98604a55fba2",
+      "inputBytes": 433,
+      "status": "matched",
+      "outputs": 4,
+      "fuelConsumed": 5547233,
+      "memoryBytes": 1507328,
+      "jsonBytes": 2486
+    },
+    {
+      "id": "5e4170782ddd01df1687ded474c8de27c17535a2fea57bdad433d0f585b2b62d",
+      "inputBytes": 497,
+      "status": "matched",
+      "outputs": 2,
+      "fuelConsumed": 3420392,
+      "memoryBytes": 1572864,
+      "jsonBytes": 2051
+    },
+    {
+      "id": "4987fc234bc5ad277650e8998840697d12ec42a1d3164b0ee084a2a99f1693cb",
+      "inputBytes": 509,
+      "status": "matched",
+      "outputs": 3,
+      "fuelConsumed": 4373465,
+      "memoryBytes": 1507328,
+      "jsonBytes": 2393
+    },
+    {
+      "id": "8d1a31234d61b94606456d766cf1ec2a5ce1da8cac7d8b9afb11698f1da059e0",
+      "inputBytes": 509,
+      "status": "matched",
+      "outputs": 3,
+      "fuelConsumed": 4373465,
+      "memoryBytes": 1507328,
+      "jsonBytes": 2393
+    },
+    {
+      "id": "53aa38f983245cb9bbf3603e87dd82bf72c16f2bdd639bb6cbde3c78578d3002",
+      "inputBytes": 497,
+      "status": "matched",
+      "outputs": 2,
+      "fuelConsumed": 3420392,
+      "memoryBytes": 1572864,
+      "jsonBytes": 2051
+    },
+    {
+      "id": "31f7731f220b4c2216898711db2e3e87d71645dbad90fb26fddcc2a9ac11c4b0",
+      "inputBytes": 497,
+      "status": "matched",
+      "outputs": 2,
+      "fuelConsumed": 3420392,
+      "memoryBytes": 1572864,
+      "jsonBytes": 2051
+    },
+    {
+      "id": "f2755bcc747e4a10ca8be470e795ab1428c88203796e28b9dc57e7ca2874bada",
+      "inputBytes": 631,
+      "status": "matched",
+      "outputs": 3,
+      "fuelConsumed": 6598114,
+      "memoryBytes": 1572864,
+      "jsonBytes": 2729
+    },
+    {
+      "id": "6eadee2a9aa59461c6e634abff2b85b362e02122ecfeb068835d3d8e569b872a",
+      "inputBytes": 497,
+      "status": "matched",
+      "outputs": 3,
+      "fuelConsumed": 4370877,
+      "memoryBytes": 1507328,
+      "jsonBytes": 2371
+    },
+    {
+      "id": "bced74d05110c97e0c80348c3bbe882dc939298c5666aff8f31201c37a274039",
+      "inputBytes": 497,
+      "status": "matched",
+      "outputs": 3,
+      "fuelConsumed": 4371285,
+      "memoryBytes": 1507328,
+      "jsonBytes": 2372
+    },
+    {
+      "id": "e656678fc40c49587af45e7eaadece8011e8bb9494776053d45d5e60164ae0b2",
+      "inputBytes": 496,
+      "status": "matched",
+      "outputs": 3,
+      "fuelConsumed": 4370821,
+      "memoryBytes": 1507328,
+      "jsonBytes": 2369
+    },
+    {
+      "id": "34fc5ac973e9e468804569104e1252ce3ce433120fae06eabfbf0c0b105f6de7",
+      "inputBytes": 631,
+      "status": "matched",
+      "outputs": 3,
+      "fuelConsumed": 6598114,
+      "memoryBytes": 1572864,
+      "jsonBytes": 2729
+    },
+    {
+      "id": "a079c69b17d2ceb76c024c2d5bf1b509d8099304e0dea002750161582b224ef0",
+      "inputBytes": 631,
+      "status": "matched",
+      "outputs": 3,
+      "fuelConsumed": 6598114,
+      "memoryBytes": 1572864,
+      "jsonBytes": 2729
+    },
+    {
+      "id": "ca1486635584d37ff862e995a8da7536d787896d7e9a7f45cefb4af63a38649f",
+      "inputBytes": 631,
+      "status": "matched",
+      "outputs": 3,
+      "fuelConsumed": 6598114,
+      "memoryBytes": 1572864,
+      "jsonBytes": 2729
+    },
+    {
+      "id": "1a45c3a107199d92a35c29803a329e1280074d0277524458667b7c0f313066b9",
+      "inputBytes": 539,
+      "status": "matched",
+      "outputs": 3,
+      "fuelConsumed": 4249609,
+      "memoryBytes": 1507328,
+      "jsonBytes": 2648
+    },
+    {
+      "id": "8e5628c3f713472e9f050d9b30454511727a8eb05fc456c93181dc4c349afe10",
+      "inputBytes": 570,
+      "status": "matched",
+      "outputs": 3,
+      "fuelConsumed": 4180844,
+      "memoryBytes": 1507328,
+      "jsonBytes": 2668
+    },
+    {
+      "id": "864f7491fe8d20c6dff6c37a818fa37c8f3ffc8f9695e64bcd613dbfc5768aaf",
+      "inputBytes": 577,
+      "status": "matched",
+      "outputs": 1,
+      "fuelConsumed": 2461211,
+      "memoryBytes": 1507328,
+      "jsonBytes": 3265
+    },
+    {
+      "id": "dec7c13ebeb7a357b11d56acbf45e64b0538c4dc3539e3b3c41e7b88ceacd366",
+      "inputBytes": 424,
+      "status": "matched",
+      "outputs": 2,
+      "fuelConsumed": 4523943,
+      "memoryBytes": 1572864,
+      "jsonBytes": 1997
+    },
+    {
+      "id": "3f75664a18d8c3f4714b2e7ff65f371c7a691aaffd2a358b4044ea10ee422ad3",
+      "inputBytes": 630,
+      "status": "matched",
+      "outputs": 3,
+      "fuelConsumed": 6597625,
+      "memoryBytes": 1572864,
+      "jsonBytes": 2731
+    },
+    {
+      "fixtureId": "745e19978f4bb6d1c0ebe4f083408f3e8474b4010a88ada07f3d1fbb7ee9ac1c",
+      "inputBytes": 2163,
+      "status": "unresolved-fuel-refusal",
+      "acceptedOutputs": 0,
+      "fuelConsumed": 10000000,
+      "memoryBytes": 1900544,
+      "phase": "transaction_sigma_parse_bytes"
+    },
+    {
+      "id": "4f8db5d175f2ff59d2fdcfb7d3bff05c5a681ff77acd821da1274590c1610963",
+      "inputBytes": 630,
+      "status": "matched",
+      "outputs": 3,
+      "fuelConsumed": 6597625,
+      "memoryBytes": 1572864,
+      "jsonBytes": 2731
+    },
+    {
+      "id": "feb2ca826c7a96bb94b27f69e4f9c2affe32cbadb4be1aeff1897420f1a75dc5",
+      "inputBytes": 988,
+      "status": "matched",
+      "outputs": 3,
+      "fuelConsumed": 6739774,
+      "memoryBytes": 1572864,
+      "jsonBytes": 3891
+    },
+    {
+      "id": "16bd2ca6ac56b2e18f529fb8d838751aaf034f2b0d4fab80071d2757604041f5",
+      "inputBytes": 203,
+      "status": "matched",
+      "outputs": 1,
+      "fuelConsumed": 2196591,
+      "memoryBytes": 1507328,
+      "jsonBytes": 1295
+    }
+  ],
+  "corpus": {
+    "status": "unresolved",
+    "matchedTransactions": 23,
+    "refusedTransactions": 1,
+    "matchedOutputs": 60
+  },
+  "nativeEngineSha256": "91671331a752287c92ada8cd84cae7b572521f5a854dcc8d69cd9b3556b3c832",
+  "files": {
+    "metering-check.py": "579e35cd1c5007f0d82dc4e790b431991a6b8f6c474e5ffdd2b74edf64083285",
+    "metering-check.mjs": "70cdb6da33a35889ebef22a8cf23a960f2f1450ac1000fda1e830076e87549aa",
+    "metering-fixtures.mjs": "8b3f9112ce863dfc8149b2ea795e32ace0df04f71230a977fb7a484a55fc65d5",
+    "metering-provenance.test.py": "2b423c5e71b3adab01f6e71e25419e12751dcdb0d1eef573a2e3f7621f8d9c8a",
+    "metering-requirements.txt": "b13fe5bfccb174ab232c99d8828d255714dabe99d08f9ce629982fd5a0dd9b96",
+    "package-lock.json": "3c2055dc1a71712fb19a99eb895794c392d9e2c169e5a1d6a0d697ce03b9f79e",
+    "fixtures/manifest.json": "00976f84cf1e311d5f10ec6edeb58290aadb43a83856529b453da1c56907620e"
+  },
+  "engineFiles": {
+    "wasmtime\\__init__.py": "bd4d388a475a422e70f8ddbb93ba628741d5fb359639e1035f0fe2ea032c62ba",
+    "wasmtime\\_bindings.py": "178a73b75a60c5a447e66d4468d946a5de08726f4af5c003ed7eefd971995f7e",
+    "wasmtime\\_config.py": "7b2986a642245cac33a97d9cc625b62768f4d9258897ad5515f17a75905c98ba",
+    "wasmtime\\_engine.py": "02ab2ebf00c03289fffd12e677b4236af17a4bc8ca951ebe651bebb75b48f1ee",
+    "wasmtime\\_error.py": "2375d3fbafb18a152dd8ec638901b02c0ab3e51fc0375ec8fe44c1bc6934ca76",
+    "wasmtime\\_exportable.py": "67ecdfe91601af2ba6533ebd4557ef77dfd2e651eaef6609028ca2289885d15f",
+    "wasmtime\\_extern.py": "4e3b5e97b67a8502b1d36088adb1f12d300a17798d693fc6191cb87fdb1f5338",
+    "wasmtime\\_ffi.py": "40c83ceef08c4d729a019eca3d13dfe82116b28a2c29993e28cafd64f88e8d7e",
+    "wasmtime\\_func.py": "d4478c40155f71d47310740be3ee595477ef2eaa5519c84094ba5bc303f13173",
+    "wasmtime\\_globals.py": "eec111a68ffb42adb2292bc56861a733d4cd349f3df0b9f0b5c657d2726cc0be",
+    "wasmtime\\_instance.py": "3eb3fad12a3ee3936ed7cf9109b8e2eba61041a67ca327b50ea64472fec628dc",
+    "wasmtime\\_instance_pre.py": "01b7a31d278c9b798188909654468901b1e1a5a3e65776e2c310a7c8d0105e34",
+    "wasmtime\\_linker.py": "5d739e35abd3a3ae51ebb27ef9d66e2b0c8efc7da0a296d46caa2d59eb19c73e",
+    "wasmtime\\_managed.py": "eb0355aff974f446c0da3ce35d87aabe53844c77990ec4115edc0cb47e4475b9",
+    "wasmtime\\_memory.py": "62d4daaa89aa50541af8b0b61b8321529adc0f2f428bd4980863ec06f2402561",
+    "wasmtime\\_module.py": "1fa29ee6a63fccf6b5fd783f149d2a3924e873dc86f92bde11ad791f7f081ad3",
+    "wasmtime\\_sharedmemory.py": "1ae2c696fa1e94870830641d0330fce8f0827b23ae6f9ca1462e76d5cc4cded0",
+    "wasmtime\\_slab.py": "433da4c51d44aef4f48cbc5fb12b2f6b59f3218515190947e8364b83999db4de",
+    "wasmtime\\_store.py": "2b0581944597b63a102026ab2efdc610af9114eba76dacefda8a33b1b1271e45",
+    "wasmtime\\_table.py": "b3944099df01a2f3e9cc2694b8441419197cb7f36040cc667e961d19b7113ab4",
+    "wasmtime\\_tag.py": "abdf17aff4507b430690ed6b13152d65524272c8fa7ee14e8ceccfe88815319a",
+    "wasmtime\\_trap.py": "4d59f5726610c9c2336fd37e07ef9dcf7460160a4c5e90b1a962bc72157cb4bf",
+    "wasmtime\\_types.py": "72a4a7f54295b77918184707122074d9ea15c246c9790f32f8cf537575381d54",
+    "wasmtime\\_value.py": "bda6c04cebe3c6b4ecb8c307a074a4f5380d74ad771fec9e0d3f861fc0670c73",
+    "wasmtime\\_wasi.py": "f43f6f86e82512b7cca0cee0921fe154f190ce18e06614f13b54f71dba56deb1",
+    "wasmtime\\_wat2wasm.py": "fc25e79eb06f4fd66fdbb659bfc7485c749acb1a48557ae33fe68e02dd741f9d",
+    "wasmtime\\component\\__init__.py": "9083779d881974fa1cc9cb78561cc128dba8b2d117c62d4e0dd4c3cb11ed8c10",
+    "wasmtime\\component\\_component.py": "5dec270461e1f2dcc0340cb110b573a3565427c12fccf39700292940a9347b92",
+    "wasmtime\\component\\_enter.py": "213fd2bb17eebb1a83f86816c719b052ecfbc2eee062ff7eb45feb5b5199d9d7",
+    "wasmtime\\component\\_func.py": "9cb353d9ef0d9cc79b4c3b9e31ec02098506583f2e3fefc0d317af06c0224132",
+    "wasmtime\\component\\_instance.py": "8ab4014012c9b59b393586e72f7887228aada13bb2a2b70cda637919a98a4325",
+    "wasmtime\\component\\_linker.py": "7855091bf9366e41632bb97c93218bdc61cd341a787341abccae882fddf06fb7",
+    "wasmtime\\component\\_resource_type.py": "5b31131e846cf95f8a7a01da9889b9ab21897812a45c5843ee937036ab112350",
+    "wasmtime\\component\\_resources.py": "2cd6724f60b6ae7f1dc5a7c3ad5b22c0b1bc816922947dc8e56efa70ce323068",
+    "wasmtime\\component\\_types.py": "7e54ca888cad3017ac61bbeed8645e47fea7d5534510786961e0c43f39741ea3",
+    "wasmtime\\win32-x86_64\\_wasmtime.dll": "91671331a752287c92ada8cd84cae7b572521f5a854dcc8d69cd9b3556b3c832"
+  },
+  "limitations": [
+    "Fuel bounds guest metered work, not CPU seconds or host compilation/callback costs.",
+    "Linear-memory/table limits are not a total process memory or RSS ceiling.",
+    "Fixed valid fixtures only; no hostile parser depth/count/declared-size cases.",
+    "No production engine selection, node equivalence, authenticated ranges or runtime adoption."
+  ],
+  "node": "v24.6.0",
+  "runner": {
+    "timeoutMs": 30000,
+    "capturedOutputBytes": 1048576,
+    "processTreeContainment": false
+  }
+}

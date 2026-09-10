@@ -542,14 +542,80 @@ erase those failures. No hostile depth/count/declared-size parser cases ran;
 there is no filesystem/network isolation or selected runtime boundary.
 Unsupported decoding and resource refusal remain unresolved, never omission.
 
-Hard containment remains **failed**. The next slice must choose a resource
-contract and mechanism with justified memory and computation bounds, rather
-than repeat launch diagnostics or enlarge a timeout. Metered decoder execution
-is one candidate to evaluate; no engine or dependency is selected here.
+Hard containment remains **failed**. The
+[metered probe](#metered-decoder-feasibility) below evaluates a different guest
+resource contract; it does not clear these OS failures or raise their budgets.
 Header/range authentication, parser compatibility and publication status remain
 separate gates.
 
-### Comparison with a local validating node
+## Metered decoder feasibility
+
+The [finite harness](../experiments/ergo-range/metering-check.py) evaluates
+Wasmtime **48.0.0**, using the existing `ergo-lib-wasm-nodejs` 0.28.0 WASM hash.
+The Windows x64 wheel is
+[hash-pinned](../experiments/ergo-range/metering-requirements.txt), with a native
+DLL hash and loaded-path checks before controls. The
+[report](ergo-metering-verification.json) records the Python/native engine and
+harness hashes. Package integrity is not an independently reproduced build.
+This is a disposable experiment, not a production dependency selection.
+
+The trial contract is **10,000,000 fuel units per transaction**, **16 MiB**
+linear memory, one instance/memory/table and **4,096 table elements**. Input is
+at most 64 KiB; canonical bytes copied out are at most 64 KiB and JSON text at
+most 256 KiB. Limits are fixed before the run and never increased or refilled.
+Each transaction gets a fresh Store. Its single fuel budget covers guest
+allocation, parsing, exact reserialization and `transaction_to_json`; Store
+destruction discards allocations on success or refusal. No guest cleanup call
+receives fresh fuel. Shared memories, multiple memories and memory64 are disabled.
+
+All 56 wasm-bindgen function imports use a trap callback. The Python trampoline
+converts scalar arguments; the callback reads no guest memory and implements no
+JS object bridge, WASI, filesystem, network or randomness service. Successful
+fixture paths do not call imports. This deliberately refuses unsupported paths;
+it is not a general replacement for the library's JavaScript binding.
+
+| Control or fixture measurement | Result |
+|---|---|
+| Infinite guest loop with 0 / 1 / 1,000 / 100,000 fuel | `OUT_OF_FUEL`, zero remaining |
+| Memory growth to exactly two pages, then one page or a single 4,096-page growth beyond | Exact cap accepted; both overages return -1; remains 131,072 bytes |
+| Table growth to two elements, then one beyond | Exact cap accepted; overage returns -1; remains two elements |
+| Recursive guest call | `STACK_OVERFLOW` |
+| Valid transaction with one fuel unit | `OUT_OF_FUEL`; no accepted output |
+| Fixed valid corpus at the unchanged trial budget | 23 of 24 transactions, all 60 corresponding outputs and fields match |
+| Largest successful guest fuel / linear memory / JSON text | 6,739,774 units / 1,572,864 bytes / 3,891 bytes |
+
+The 2,163-byte transaction
+`745e19978f4bb6d1c0ebe4f083408f3e8474b4010a88ada07f3d1fbb7ee9ac1c`
+exhausts fuel during parsing; its five outputs remain **unresolved**. The
+runner exits **2**, carries explicit matched/refused totals and gives that
+transaction no accepted outputs. This is evidence of enforced refusal, not a
+usable complete-corpus budget. No hostile parser mutation ran.
+
+The [v48 limiter](https://github.com/bytecodealliance/wasmtime/blob/v48.0.0/crates/wasmtime/src/runtime/limits.rs)
+checks each memory/table separately; limiting their counts makes these guest
+caps aggregate here. The
+[memory implementation](https://github.com/bytecodealliance/wasmtime/blob/v48.0.0/crates/wasmtime/src/runtime/vm/memory.rs)
+consults `memory_growing` before the underlying growth allocation. The control
+observes the logical size and refusal; pre-allocation ordering comes from this
+pinned source inspection. Neither establishes a process-commit or RSS ceiling.
+
+[Fuel](https://github.com/bytecodealliance/wasmtime/blob/v48.0.0/crates/wasmtime/src/config.rs)
+meters guest execution using engine-specific accounting. It is not CPU seconds,
+an invariant instruction cost across engine versions, or a bound on compilation,
+bulk-operation cost, host callbacks, copies or JSON parsing. The fixed artifact
+is compiled once; only pinned valid fixture data reaches this harness. Its
+30-second launcher deadline and 1 MiB output cap are operational guards, with
+no whole-process/tree resource guarantee. Total host memory remains unmeasured.
+
+Metering is a better candidate for explicit guest-work refusal than periodic
+Windows CPU thresholds. A validating node supplies different consensus evidence;
+rewriting the parser would add compatibility work without removing host costs.
+The next experiment must explain the refused valid transaction's cost and bound
+host overhead before proposing a supported budget and embedding. Do not simply
+raise the trial budget until all fixtures pass. Keep hard hostile-parser
+containment, node equivalence and authenticated ranges as separate open gates.
+
+## Comparison with a local validating node
 
 The comparison retains the fixture manifest's Ergo node source pin
 [`c364664`](https://github.com/ergoplatform/ergo/tree/c36466405abc9a2ddda37e890635f00d593041f5)

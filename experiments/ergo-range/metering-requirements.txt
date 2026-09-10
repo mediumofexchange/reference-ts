@@ -1,0 +1,2 @@
+# Disposable Windows x64 feasibility engine; not a runtime dependency.
+wasmtime==48.0.0 --hash=sha256:21fa500e70f3819a8c0539c3f0be6b3b81ec3c630bb90c47dba4d8a2c1d4c698
