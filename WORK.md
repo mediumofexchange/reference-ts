@@ -4,81 +4,89 @@ Updated: 2026-09-10
 
 ## Goal
 
-Delivered slice: fixed-artifact metered decoder feasibility on `main` and
-`test/metered-decoder-feasibility`, based on `6fae48d`.
-Acceptance: pin a disposable engine, demonstrate fuel exhaustion and memory
-growth refusal, measure canonical fixture decoding and preserve refusals.
-Implementation, independent review and final report hash readback passed.
-No normative or runtime change; companion `money-from-first-principles`
+Delivered slice: decoder cost accounting on `main` and
+`test/decoder-cost-accounting`, based on `d446f83`. Phase measurement, source
+analysis, independent review and final report hash readback passed.
+Acceptance: explain the API's additional work, preserve the original refusal,
+measure host overhead and choose the next source probe.
+No normative/runtime change. Companion `money-from-first-principles`
 remains `main` at `7ea0ee8`.
 
 ## Status
 
-- Baseline CI [34414321259](https://github.com/mediumofexchange/reference-ts/actions/runs/34414321259)
-  passed at `6fae48d`; fetched upstream had no intervening commits. No branch
+- Baseline CI [34436250463](https://github.com/mediumofexchange/reference-ts/actions/runs/34436250463)
+  passed at `d446f83`; upstream fetched without intervening commits. No branch
   protection or rulesets; no safeguards changed.
+- The next source experiment is a dedicated keyless validating node. Independent
+  review confirms this follows the
+  [range-source-first decision](decisions/2026-09.md#2026-09-09--check-the-range-source-before-certificate-packaging).
+  It is an independent alternative; hostile alternate-parser tests need not
+  precede it. No production node/decoder boundary or resource budget is selected.
 
 ## Evidence
 
-- Disposable Wasmtime 48.0.0 Windows x64 wheel is hash-pinned outside production
-  dependencies. The runner checks the native DLL hash before import and exact
-  loaded package/DLL paths, preventing global-install fallback.
-- At fixed 10,000,000 fuel / 16 MiB guest memory per fresh Store, 23/24 valid
-  transactions and all 60 corresponding output fields match after an exact
-  byte round trip. The 2,163-byte transaction `745e1997...ee9ac1c` consumes its
-  budget during parsing; its five outputs remain unresolved. Runner exit 2
-  preserves this distinction. No hostile parser mutations were run.
-- Zero/one/1,000/100,000-fuel infinite loops exhaust exactly; memory/table
-  growth accepts the exact cap and refuses overages; recursion traps. The
-  one-fuel valid transaction also traps. All 56 host imports refuse without
-  guest-memory reads or a JS object bridge. This measures guest resource
-  refusal, not exact CPU seconds or total process memory.
-- Independent adversarial review found a global-import provenance gap and
-  ambiguous zero exit on incomplete decoding; both fixed and read back.
-  Source inspection confirms limiter refusal precedes growth allocation.
-  Four worker-free provenance regressions pass. No material finding remains.
-- `npm run check` passed: 96 files / 1,795 tests, build, installed package,
-  pilot, crash and spent-set checks. The known esbuild parent-directory denial
-  required running outside the sandbox. Final harness and docs checks follow
-  the review fixes; no circuits or runtime sources changed.
-- Current evidence and reproduction instructions:
-  [analysis](docs/POOL_DEPLOYMENT_PROBES.md#metered-decoder-feasibility),
-  [report](docs/ergo-metering-verification.json),
-  [runner](experiments/ergo-range/README.md).
-- Final readback: seven source hashes match working/index bytes; all 36 engine
-  hashes and the native DLL/WASM pins match. Disposable engine and intermediate
-  reports removed after capture; the pinned installation command reproduces them.
+- New optional observations preserve every deterministic field of the pinned
+  baseline: 23/24 transactions and 60 outputs match at 10 million fuel; one
+  valid transaction still refuses during parsing. No accepted output from it.
+- Separate predeclared diagnostics run once on that same transaction and its
+  five original scripts, at 100 million fuel each with the original 16 MiB
+  guest memory. The transaction completes at 21,525,326 fuel; parse 12,830,008,
+  serialization 2,599,805, guest JSON 5,714,147, instantiation 380,929 and
+  input/stack allocation 437. All fields/IDs of its five outputs and exact bytes match.
+- Direct parsing of its original 515/948/36/36/105-byte trees consumes
+  2,322,785 fuel combined; all five round-trip. The source confirms transaction
+  parsing also constructs/hashes boxes twice and serializes/hashes the tx ID.
+  It supports repeated constructor work as the extra cost, but does not measure
+  how much of the 10,507,223-fuel difference belongs to clones, hashes or writes.
+- Windows current/lifetime-peak private commit/working set and process CPU,
+  before/after snapshots, paired phases and Store cleanup are measured.
+  Neither observed peaks nor fuel imply a total-process or exact CPU bound.
+  The launcher always exits 2; diagnostic completion never clears acceptance.
+  Final compile: 2.377 s wall / 7.719 s process CPU, lifetime peak commit
+  154,443,776 bytes; current commit after engine closure 28,057,600 bytes.
+- Nine worker-free regressions pass: four provenance and five phase/error-cleanup
+  cases. Independent review inspected actual code, baseline equality, source
+  paths and next-probe priority; no material finding remains. `npm run check`
+  passed: 96 files / 1,795 tests plus build/package/pilot/crash/spent-set checks.
+  Final docs passed; eight source hashes match working/index bytes and all
+  36 engine hashes plus DLL/WASM pins match. Disposable engine and intermediate
+  reports were removed after capture; pinned installation reproduces them.
+- [Cost analysis](docs/POOL_DEPLOYMENT_PROBES.md#decoder-cost-and-host-overhead),
+  [profile](docs/ergo-decoder-cost-verification.json),
+  [reproduction](experiments/ergo-range/README.md). Historical
+  [baseline report](docs/ergo-metering-verification.json) is hash-pinned at
+  `d446f83`; do not overwrite it with an observational rerun.
 
 ## Next
 
 1. Read CI for the latest main revision. Local checks, independent review and
-   final report readback passed; new remote CI is pending at handoff.
-2. Explain the refused valid transaction's parser cost and measure host overhead
-   before proposing a supported metering budget/embedding. Keep the original
-   trial budget/evidence; do not raise it just to get all fixtures through.
-   Acceptance: evidence-backed resource contract for guest and host work,
-   complete fixture support or an explicit justified alternative boundary.
-   Continuing in the same primary instance is reasonable for this directly
-   related slice; switch at a component boundary or if context causes rework.
-3. Hard containment still gates hostile depth/count/declared-size parser cases.
-   Then probe a dedicated keyless validating node with exact artifact,
-   validation/history/bootstrap configuration and sync-state evidence; reproduce
-   fixture fields/order/roots with bounded GET reads. No local node ran here.
-4. Authenticate complete contiguous ranges and publication order, then replay,
-   import/adoption, openings and certificate dependencies. The
-   [range-source-first decision](decisions/2026-09.md#2026-09-09--check-the-range-source-before-certificate-packaging)
-   and [recovery map](docs/POOL_V3_RECOVERY_MAP.md) still govern integration.
-5. Fix final v3 configuration/artifact pins, build one v3 runtime and wallet,
-   then rerun all six real-proof relations on that configuration.
+   final report/source/index/engine readback passed; new CI is pending at handoff.
+2. Preflight a dedicated local keyless validating-node probe: select and pin
+   artifact/source; declare disk, network, wall and OS resource budgets before
+   installation/sync; bind only local APIs and disable wallet/key services.
+   Record validation/history/bootstrap settings and best fully validated
+   chain/sync state. Reproduce all 24 fixture transactions, 65 output fields,
+   order and roots through bounded GET reads. Matching fixtures or HTTP success
+   alone cannot establish full validation or best-chain membership.
+3. Compare that measured node boundary with the metered-decoder evidence before
+   selecting production dependencies or optimizing/forking the parser.
+   Reusing one compiled module with fresh capped Stores is plausible, but host
+   allocation/copy/JSON bounds, containment and hostile parser cases remain owed.
+4. Authenticate complete contiguous ranges/publication order, then replay,
+   import/adoption, openings and certificate dependencies; see the
+   [recovery map](docs/POOL_V3_RECOVERY_MAP.md). Fix v3 configuration/artifact
+   pins, implement one v3 runtime and wallet, rerun all six real-proof relations.
+5. A fresh primary instance is recommended for the node work: this investigation
+   is captured, and the next slice changes to node configuration/sync evidence.
 
 ## Open questions
 
-- Windows job CPU containment remains failed; no old report or budget changed.
-  Guest fuel/linear memory do not bound compilation, bulk-operation cost,
-  host callbacks/copies/JSON parsing or total process memory. No product gate
-  closed here. Runtime remains v2, refuses silence clauses and has no pool wallet.
+- Windows exact CPU containment remains failed. No old budget/report changed.
+  No hostile parser inputs, live deployment, node installation or real funds
+  were involved; no product gate closed. Runtime remains v2, rejects silence
+  clauses and has no pool wallet.
 - About **45% done / 55% remaining**, plausible done range **35–55%**.
   Largest work: evidence/replay/configuration, v3 runtime, wallet/transport,
   authenticated ranges, witness publication and custody assurance.
 - Deployment, public releases, access changes and real funds remain outside
-  authorization. No node installation or live publication added.
+  standing authorization.

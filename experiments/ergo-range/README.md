@@ -84,3 +84,22 @@ completed; neither status establishes hostile-parser safety or production
 acceptance. Fuel and linear-memory caps leave host overhead and total process
 resources open. No limit is raised automatically, no fuel is refilled, and no
 failed transaction contributes accepted outputs.
+
+The separate [cost profile](../../docs/POOL_DEPLOYMENT_PROBES.md#decoder-cost-and-host-overhead)
+uses that same scratch installation, Windows x64 Python and Node 24:
+
+```powershell
+& $probePython -I -B experiments/ergo-range/cost-observer.test.py
+node experiments/ergo-range/cost-check.mjs $probePython
+```
+
+It pins the original metering report and verifies all 24 baseline results at
+the unchanged 10-million-fuel budget. It then measures the one refused valid
+transaction and its five original scripts under a separate, fixed
+100-million-fuel ceiling each. These six diagnostics run once, without retry,
+refill or adaptive budget changes; any refusal stays unresolved. No hostile
+decoder inputs are accepted. Exit **2** is always retained because profiling
+does not clear the original acceptance refusal or host-containment gate.
+Phase observations include fuel, wall/process CPU and Windows process memory
+before/after each measured operation. Process counters cover Python only;
+lifetime peaks and timing samples are not worst-case resource bounds.

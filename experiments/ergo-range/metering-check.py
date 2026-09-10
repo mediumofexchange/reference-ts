@@ -6,6 +6,7 @@ gets a fresh Store, destroyed on success or refusal, with one shared fuel budget
 for allocation, parse, exact reserialization and JSON extraction.
 """
 import hashlib
+from contextlib import contextmanager
 import importlib.metadata
 import json
 import pathlib
@@ -95,38 +96,69 @@ def controls(engine):
     return observations
 
 
-def decode(engine, module, data, fuel=FUEL):
+def decode(engine, module, data, fuel=FUEL, observe=None):
     require(0 < len(data) <= 65536, "input byte limit")
-    with store_for(engine, fuel=fuel) as store:
+    def event(phase, state, store=None, memory=None):
+        if observe is not None:
+            observe({"phase": phase, "event": state,
+                     "fuelRemaining": store.get_fuel() if store is not None else None,
+                     "linearMemoryBytes": memory.data_len(store) if memory is not None else None})
+
+    @contextmanager
+    def attempt_store():
+        store = store_for(engine, fuel=fuel)
+        try:
+            yield store
+        finally:
+            try:
+                event("store-close", "before", store)
+            finally:
+                store.close()
+            event("store-close", "after")
+
+    event("store", "before")
+    with attempt_store() as store:
+        event("store", "after", store)
         def refuse_import(*_args):
             raise wt.Trap("host import refused")
 
+        event("instantiate", "before", store)
         imports = []
         for item in module.imports:
             require(isinstance(item.type, wt.FuncType), "nonfunction import")
             imports.append(wt.Func(store, item.type, refuse_import))
         exports = wt.Instance(store, module, imports).exports(store)
         memory = exports["memory"]
+        event("instantiate", "after", store, memory)
 
         def call(name, *args):
+            event(name, "before", store, memory)
             try:
-                return exports[name](store, *args)
+                value = exports[name](store, *args)
             except wt.Trap as error:
+                event(name, "trap", store, memory)
                 if error.trap_code == wt.TrapCode.OUT_OF_FUEL:
                     require(store.get_fuel() == 0, "fuel left on decoder exhaustion")
                     error.metering = {"fuelConsumed": fuel, "memoryBytes": memory.data_len(store),
                                       "phase": name}
                 raise
+            event(name, "after", store, memory)
+            return value
 
         def read(pointer, length, limit):
             require(0 <= length <= limit and 0 <= pointer <= memory.data_len(store) - length,
                     "guest output bounds")
-            return bytes(memory.read(store, pointer, pointer + length))
+            event("copy-out", "before", store, memory)
+            value = bytes(memory.read(store, pointer, pointer + length))
+            event("copy-out", "after", store, memory)
+            return value
 
         result = call("__wbindgen_add_to_stack_pointer", -16)
         pointer = call("__wbindgen_malloc", len(data), 1)
         require(0 <= pointer <= memory.data_len(store) - len(data), "guest input bounds")
+        event("copy-in", "before", store, memory)
         memory.write(store, data, pointer)
+        event("copy-in", "after", store, memory)
         call("transaction_sigma_parse_bytes", result, pointer, len(data))
         tx, _error, failed = struct.unpack("<III", read(result, 12, 16))
         require(failed == 0 and tx != 0, "parse refusal")
@@ -143,7 +175,10 @@ def decode(engine, module, data, fuel=FUEL):
                   "jsonBytes": length}
     # No guest references survive Store destruction. JSON is finite trusted
     # fixture output in this slice; hostile JSON parsing remains a separate gate.
-    return json.loads(output), result
+    event("json-loads", "before")
+    decoded = json.loads(output)
+    event("json-loads", "after")
+    return decoded, result
 
 
 def fields(tx):
@@ -155,18 +190,26 @@ def fields(tx):
                          "index": int(o["index"])} for o in tx["outputs"]]}
 
 
-def main():
+def validate_engine():
     require(pathlib.Path(wt.__file__).resolve() == (ENGINE_ROOT / "wasmtime/__init__.py").resolve(),
             "wrong loaded Python engine")
     require(pathlib.Path(wt._ffi.filename).resolve() == ENGINE_DLL.resolve() and
             pathlib.Path(wt._ffi.dll._name).resolve() == ENGINE_DLL.resolve(), "wrong loaded native engine")
     require(importlib.metadata.version("wasmtime") == "48.0.0", "wrong engine version")
+
+
+def engine_config():
     config = wt.Config()
     config.consume_fuel = True
     config.wasm_threads = False
     config.wasm_multi_memory = False
     config.wasm_memory64 = False
-    with wt.Engine(config) as engine:
+    return config
+
+
+def main():
+    validate_engine()
+    with wt.Engine(engine_config()) as engine:
         evidence = controls(engine)
         wasm = (BASE / "node_modules/ergo-lib-wasm-nodejs/ergo_lib_wasm_bg.wasm").read_bytes()
         require(sha(wasm) == WASM_HASH, "wrong decoder artifact")

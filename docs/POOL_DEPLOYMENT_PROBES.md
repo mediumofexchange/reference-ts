@@ -550,13 +550,15 @@ separate gates.
 
 ## Metered decoder feasibility
 
-The [finite harness](../experiments/ergo-range/metering-check.py) evaluates
+The [baseline harness](https://github.com/mediumofexchange/reference-ts/blob/d446f83/experiments/ergo-range/metering-check.py) evaluates
 Wasmtime **48.0.0**, using the existing `ergo-lib-wasm-nodejs` 0.28.0 WASM hash.
 The Windows x64 wheel is
 [hash-pinned](../experiments/ergo-range/metering-requirements.txt), with a native
 DLL hash and loaded-path checks before controls. The
 [report](ergo-metering-verification.json) records the Python/native engine and
-harness hashes. Package integrity is not an independently reproduced build.
+harness hashes at `d446f83`; the cost probe below pins that report and verifies
+its deterministic results with the current observational hooks. Package
+integrity is not an independently reproduced build.
 This is a disposable experiment, not a production dependency selection.
 
 The trial contract is **10,000,000 fuel units per transaction**, **16 MiB**
@@ -605,15 +607,99 @@ an invariant instruction cost across engine versions, or a bound on compilation,
 bulk-operation cost, host callbacks, copies or JSON parsing. The fixed artifact
 is compiled once; only pinned valid fixture data reaches this harness. Its
 30-second launcher deadline and 1 MiB output cap are operational guards, with
-no whole-process/tree resource guarantee. Total host memory remains unmeasured.
+no whole-process/tree resource guarantee. Total host memory is unmeasured in
+this baseline.
 
 Metering is a better candidate for explicit guest-work refusal than periodic
 Windows CPU thresholds. A validating node supplies different consensus evidence;
 rewriting the parser would add compatibility work without removing host costs.
-The next experiment must explain the refused valid transaction's cost and bound
-host overhead before proposing a supported budget and embedding. Do not simply
-raise the trial budget until all fixtures pass. Keep hard hostile-parser
-containment, node equivalence and authenticated ranges as separate open gates.
+The [cost probe](#decoder-cost-and-host-overhead) below explains the API's extra
+work and measures host overhead, without selecting a supported budget. Keep
+hard hostile-parser containment, node equivalence and authenticated ranges as
+separate open gates.
+
+## Decoder cost and host overhead
+
+The [profile](ergo-decoder-cost-verification.json) uses the same pinned artifacts
+and replays all 24 valid fixtures at the original 10-million-fuel budget. It
+checks IDs/order, status, input size, fuel, guest memory, JSON size, output
+counts and refusal phase against the hash-pinned baseline. Optional phase
+observation does not change guest calls or refill fuel. Phase fuel totals must
+equal the attempt total; success and trap paths both bracket Store destruction.
+
+A separate, predeclared **100-million-fuel diagnostic ceiling** applies once
+to the one refused transaction and once to each of its five original scripts.
+These six attempts keep 16 MiB guest memory and the old launcher limits. No
+mutation, retry or adaptive ceiling occurs; if a diagnostic refuses, that result
+remains unresolved and the remaining fixed cases still run. The ceiling permits
+cost measurement above the original refusal; it is not a proposed acceptance
+budget. The runner always exits **2** and preserves the original corpus refusal.
+
+| Work within the diagnostic transaction | Fuel |
+|---|---:|
+| Instantiation | 380,929 |
+| Stack-area reservation and input allocation | 437 |
+| `transaction_sigma_parse_bytes` | 12,830,008 |
+| Exact transaction reserialization | 2,599,805 |
+| Guest JSON construction | 5,714,147 |
+| Whole attempt | 21,525,326 |
+
+All fields of the five outputs match in this diagnostic, with an exact transaction byte
+round trip. The five original script lengths are 515, 948, 36, 36 and 105 bytes;
+their independent parse calls consume **2,322,785 fuel combined** and all five
+round-trip exactly. Script round trips still do not establish structural or
+consensus validation. Nor is their sum a decomposition of transaction parsing:
+the two API paths do different work.
+
+In the pinned
+[transaction source](https://github.com/ergoplatform/sigma-rust/blob/635bbaca55a27d6dd6b2c0ee2479b6ed60117780/ergo-lib/src/chain/transaction.rs),
+`sigma_parse` ends by constructing a transaction. The constructor clones
+candidates, builds outputs with a zero transaction ID, computes the transaction
+ID through serialization and hashing, then builds outputs again with that ID.
+Each [box construction](https://github.com/ergoplatform/sigma-rust/blob/635bbaca55a27d6dd6b2c0ee2479b6ed60117780/ergotree-ir/src/chain/ergo_box.rs)
+clones its tree/tokens/registers and serializes/hashes the box. The
+[tree serializer](https://github.com/ergoplatform/sigma-rust/blob/635bbaca55a27d6dd6b2c0ee2479b6ed60117780/ergotree-ir/src/ergo_tree.rs)
+rebuilds parsed trees from constants and the expression tree; opaque `Unparsed`
+trees retain their bytes. Thus the nominal parsing
+call includes repeated copying, serialization and identity computation.
+
+This source confirms additional work and supports the cost explanation; it
+does not assign the **10,507,223-fuel difference** to particular constructors,
+clones or hashes. A split wrapper or instrumented pinned-source build could
+falsify the proposed dominance of constructor work. Neither a parser defect nor
+an asymptotic bound follows from this finite measurement, and no upstream code
+was changed. The required real IDs and canonicality checks remain intact.
+
+Host snapshots cover loading the pinned Python engine package/native DLL,
+compilation, instantiation, guest
+calls, copies, JSON parsing and cleanup. They use
+[Windows process counters](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-process_memory_counters_ex)
+for current private commit and working set, plus process-lifetime peaks, and
+[process CPU time](https://docs.python.org/3/library/time.html#time.process_time).
+Before/after snapshots and phase totals are retained. These are measurements,
+not resource enforcement. Lifetime peaks cannot be attributed to the latest
+phase; process CPU is quantized, so a zero phase delta does not mean no CPU work.
+Initial Python startup/standard-library imports precede these snapshots.
+The Python counters omit fixture-preparation and launcher processes; wall
+timings include instrumentation. No guest-memory subtraction is used to claim
+a bound on host memory.
+
+The final sequential run after repository checks measured **2.377 s wall /
+7.719 s process CPU** for compilation. Python's lifetime peak commit reached
+**154,443,776 bytes**; current commit after engine closure was **28,057,600
+bytes**. Across the original 24 attempts (including the refusal), instantiation
+took **389.539 ms** combined versus **19.926 ms** in guest parse calls. The full
+diagnostic transaction attempt took **22.237 ms**. These are one host's samples,
+including measurement overhead, not statistical or supported-device bounds.
+
+The measured fixed compilation and fresh-instance setup costs argue for reusing
+a compiled module if this decoder is adopted, with fresh capped Stores and a
+separately bounded host interface. They do not justify a production fuel limit
+or clear total-process containment. Further parser optimization or a custom
+source build is deferred: the next source probe should exercise a dedicated
+keyless validating node, whose consensus/configuration/sync evidence is needed
+independently of binary parsing. Hostile alternate-parser cases remain gated
+on containment; they need not precede testing that independent node boundary.
 
 ## Comparison with a local validating node
 
