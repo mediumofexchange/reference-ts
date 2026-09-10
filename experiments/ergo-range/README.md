@@ -16,6 +16,18 @@ Do not expose this probe as an arbitrary-file or network verification API.
 
 The separate [dedicated-node preflight](../../docs/ERGO_NODE_PREFLIGHT.md)
 pins a Windows distribution and records the separate finite node-startup probe.
+Its [first-sync control selection](../../docs/ERGO_NODE_PREFLIGHT.md#first-sync-control-selection)
+also records a narrow rootless WSL control. From the repository root in the
+existing Ubuntu 20.04 distro, run `sh experiments/ergo-range/sync-namespace-control.sh`.
+It requires an existing `scratch/` and absent `scratch/sync-namespace-control/`,
+creates private namespaces, mounts 8 MiB of tmpfs, attempts at most 9 MiB of
+writes, checks `ENOSPC` and removes the mountpoint. It runs under a 15-second
+timeout plus two-second kill grace. Exit 0 establishes that fixed control only;
+it does not permit sync or supply the 20 GiB disk/10 GiB traffic contract.
+It creates no external connections and changes no host settings. No WSL
+installation or distro-wide change is needed. This command is separate from
+the Windows startup and default CI checks below.
+
 This does not change the offline decoder commands above. On Windows x64 with
 PowerShell 7, the node experiment has no npm/default-check integration:
 
