@@ -169,7 +169,7 @@ public static class NodeProbeProcess {
     public sealed class Result {
         public string Case, Outcome, Output, LaunchMode;
         public uint ExitCode, CreationFlags;
-        public long ElapsedMs;
+        public long ElapsedMs, CapturedOutputBytes;
         public ulong PeakCommitBytes, PeakProcessCommitBytes, CommitLimitBytes;
         public ulong BeforeResumePeakCommitBytes, BeforeResumePeakProcessCommitBytes;
         public long UserCpuTicks, KernelCpuTicks;
@@ -219,7 +219,7 @@ public static class NodeProbeProcess {
             throw new ArgumentException("Unsupported fixed argument");
         return "\"" + arg + "\"";
     }
-    public static Result Run(string executable, string[] arguments, string directory, string name, ulong memory, uint wallMs, uint outputBytes, Func<uint, bool> observe) {
+    public static Result Run(string executable, string[] arguments, string directory, string name, ulong memory, uint wallMs, uint outputBytes, Func<uint, long, bool> observe) {
         if (IntPtr.Size != 8 || wallMs == 0 || wallMs > 120000 || outputBytes == 0 || outputBytes > 16777216 || memory < 268435456UL || memory > 4294967296UL)
             throw new ArgumentException("Requires x64 and finite budgets");
         // Detached, suspended, explicit Unicode environment and creation-time job assignment.
@@ -299,7 +299,7 @@ public static class NodeProbeProcess {
                 maxActive = Math.Max(maxActive, ObserveProcesses(job, observed));
                 if (observe != null && clock.ElapsedMilliseconds >= nextObservation) {
                     nextObservation = clock.ElapsedMilliseconds + 250;
-                    if (observe(child.ProcessId)) { outcome = "observer-complete"; break; }
+                    if (observe(child.ProcessId, output.Length)) { outcome = "observer-complete"; break; }
                 }
                 var sample = new ProcessMemory { Size = memorySize };
                 if (GetProcessMemoryInfo(child.Process, ref sample, memorySize)) {
@@ -354,7 +354,7 @@ public static class NodeProbeProcess {
                 MaxSampledAssociatedProcesses = maxActive,
                 ObservedProcesses = new List<ProcessObservation>(observed.Values).ToArray(),
                 LimitsReadBackBeforeResume = true,
-                Output = Encoding.UTF8.GetString(output.ToArray()) };
+                CapturedOutputBytes = output.Length, Output = Encoding.UTF8.GetString(output.ToArray()) };
             return result;
         } finally {
             // Failure before assignment must also kill the still-suspended process.

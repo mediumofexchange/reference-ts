@@ -4,82 +4,89 @@ Updated: 2026-09-10
 
 ## Goal
 
-Delivered slice: dedicated validating-node preflight on `docs/ergo-node-preflight`,
-based on `4b11830`. Acceptance: pin and inspect the artifact/source, check
-validation/history/API/wallet settings, declare finite resource envelopes and
-identify a reviewed next step. No node extraction, installation, execution or
-sync; no normative/runtime change. Companion `money-from-first-principles`
-remains `main` at `7ea0ee8`.
+Delivered behavior: stock Ergo node startup without spending keys, on
+`test/ergo-node-startup`, based on `206e0e3`. Decision `760fa4a`; first refusal
+`2309bdf`; second observation/classifier refusal `a462dd3`. Final observations
+pass after source-checked fixes. No sync, publication, funds or runtime adoption.
+Companion specification remains `money-from-first-principles/main` at `7ea0ee8`.
 
 ## Status
 
-- Baseline CI [34439509449](https://github.com/mediumofexchange/reference-ts/actions/runs/34439509449)
-  passed at `4b11830`; upstream fetched without intervening commits. No branch
-  protection or rulesets; no safeguards changed.
-- The [preflight](docs/ERGO_NODE_PREFLIGHT.md) finds that stock v6.1.5 always
-  starts the wallet actor and mounts authenticated wallet routes. An empty,
-  uninitialized wallet has no spending key but is not disabled wallet service.
-  No fake configuration switch or silent relaxation was introduced.
-- Resource envelopes are declared, not enforced or sufficient for sync.
-  The node/service boundary and supervisor remain unselected/unimplemented.
-  Independent source/claim review passed after correcting the prerelease label.
-  Local docs and cross-repository links pass; final commit CI is pending delivery.
+- [Decision](decisions/2026-09.md#2026-09-10--keep-the-source-probe-free-of-spending-keys):
+  reuse the pinned stock node for this finite trusted-host probe. It never
+  initializes/imports/persists/uses a spending key, wallet prover or keystore.
+  Wallet actor/routes and hardcoded wildcard CORS remain; no fake disable flag.
+- Startup strips inherited JVM overrides, checks bundle hashes, uses fresh
+  private directories, CPU-rate/memory/process limits and three literal GETs.
+  Source-configured offline plus socket samples is not hard network isolation.
+- Independent boundary/implementation review is complete with no material
+  findings remaining. Final code's Windows controls and startup passed.
+  `npm run check` passed: 96 files / 1,795 tests, build/package/pilot/crash and
+  spent-set checks. Initial sandbox esbuild access refusal was resolved by
+  rerunning the unchanged required command with normal filesystem access.
+  Final docs/links passed; delivery CI is pending for the resulting main commit.
+- No branch protection or rulesets at entry; safeguards unchanged. Baseline
+  CI [34440565868](https://github.com/mediumofexchange/reference-ts/actions/runs/34440565868)
+  passed; upstream refreshed without intervening commits.
 
 ## Evidence
 
-- Prerelease v6.1.5 resolves to fixture source `c36466405abc9a2ddda37e890635f00d593041f5`.
-  One bounded archive download: 179,682,635 bytes in 51.175424 seconds;
-  measured ZIP and embedded JAR SHA-256 match the release asset digests.
-  The archive has 192 entries, 202,691,057 uncompressed bytes and declares
-  bundled Java 21.0.1. No executable ran; no reproducible-build claim.
-- Artifact inspection declared 192 MiB transfer / 256 MiB scratch, 300 seconds,
-  8 MiB/s, at most 1 MiB per text entry; binary JAR hash streamed in memory.
-- Host has about 16 GiB RAM, four logical processors and 497 GiB free disk.
-  Host Java is Oracle 8u481; the bundled Java avoids that dependency. WSL2 is
-  configured but its controls are untested; Docker was not found on PATH.
-- Pinned config/source distinguish transaction verification, history retention,
-  bootstrap, API auth and mining settings. Mainnet, genesis validation and
-  fully validated chain membership need effective startup/sync evidence.
-- The old decoder [cost profile](docs/POOL_DEPLOYMENT_PROBES.md#decoder-cost-and-host-overhead)
-  remains unchanged: 23/24 transactions at 10 million fuel; the separate
-  100-million diagnostic resolves cost, not the original refusal or containment.
-  Its code checks passed at baseline (96 files / 1,795 tests plus integration
-  checks); docs-only preflight does not require repeating runtime tests.
+- [Probe, source references and limits](docs/ERGO_NODE_PREFLIGHT.md),
+  [startup report](docs/ergo-node-startup-verification.json),
+  [resource controls](docs/ergo-node-controls-verification.json),
+  [reproduction](experiments/ergo-range/README.md).
+- Final run: 73.897 s wall; 20.797 s job user CPU / 2.281 s kernel;
+  peak job commit 336,232,448 bytes; observed files+stdout 9,193,752 bytes.
+  Installed limits: 4 GiB commit, 2 GiB JVM heap, 25% CPU rate, one process,
+  120 s wall and 16 MiB combined observed file/output envelope.
+- Three GETs return 200 / 200 / 403: initialized mainnet UTXO root, no block
+  headers (explicit null heights), empty peers, rejected unauthenticated wallet
+  access. Secret directory remains empty. 287 TCP/UDP samples show only loopback
+  TCP; whole-job cleanup passes. Zero packets/hostile-input isolation not proven.
+- Java is Microsoft OpenJDK 21.0.1+12-LTS. Node appVersion reports
+  `6.0.4RC2-109-c3646640-SNAPSHOT`; preserve this beside v6.1.5 prerelease
+  artifact hashes. Artifact identity is not a reproducible-source-build proof.
+- Six process controls; ten worker-free resource-report regressions; sixteen
+  startup-evidence regressions; eleven loopback HTTP/socket cases pass.
+- All eight report/source hash entries match working and Git index bytes;
+  all 167 bundle files match after execution. Secret storage is empty.
+  Disposable bundle, node state and source-inspection files were removed.
+- First attempt's 500 ms request at listener appearance refused before readers
+  were ready. Second attempt's null-height/empty-array classifier rejected valid
+  empty history. Immutable reports/code remain at the two commits above; neither
+  is reclassified as passing. Final run fixes readiness schedule and predicates,
+  and checks final+sampled files together with raw captured output bytes.
 
 ## Next
 
-1. Check CI for the delivered preflight commit. Local docs/cross-repository link
-   checks and independent source/claim review passed; disposable archive/source
-   inspection files were removed after evidence capture.
-2. Resolve the service boundary with independent review: prefer the stock node
-   with no spending keys and an authentication-isolated uninitialized wallet
-   if it preserves the invariant; compare minimal source omission if literal
-   actor/route removal is necessary. This is an experimental requirement choice,
-   not a production dependency decision. See the preflight's falsifier/costs.
-3. Implement a fixed-purpose offline startup supervisor, verify resolved config,
-   listeners, resource controls, no outbound traffic and whole-job cleanup.
-   Do not reuse the failed exact-CPU decoder result as passing node containment.
-4. Only after enforcing the disk/network/resource envelope, measure a finite
-   sync. Compare all 24 fixture transactions, 65 output fields/IDs, order and
-   roots, with ancestry to a captured fully validated tip. HTTP success or
-   matching fixtures alone cannot establish validation or chain membership.
-5. Authenticate contiguous ranges/publication order, then replay/adoption,
+1. Check CI for the delivered startup commit. Local required checks, independent
+   review, report/source/index hash readback and scratch cleanup passed.
+2. Use a fresh Astra primary instance for the next slice. The source/startup
+   investigation is captured; disk/network containment is a distinct boundary
+   that still needs strong judgment. This is an efficiency recommendation,
+   not measured comparative model performance.
+3. Select and demonstrate the first sync's disk/network controls before enabling
+   peers. The declared envelope is 30 minutes, 20 GiB dedicated data, 10 GiB
+   combined traffic, existing memory/CPU controls and 100 GiB host disk reserve.
+   File sampling/process I/O counters alone do not enforce those quotas. No host
+   firewall, WSL-wide settings or access-control changes are authorized.
+4. Add full effective-settings readback if practical; current evidence combines
+   source/config hashes, JVM properties, listeners and selected API flags.
+5. Then measure a finite sync; reproduce 24 fixture transactions, all 65 output
+   fields/IDs, order and roots with ancestry to a captured fully validated tip.
+   HTTP success/matching fixtures alone cannot establish validation/membership.
+6. Authenticate contiguous ranges/publication order before replay/adoption,
    openings and certificates; see [recovery map](docs/POOL_V3_RECOVERY_MAP.md).
-   Fix v3 configuration/artifact pins, integrate v3 runtime and wallet, and
-   rerun the six real-proof relations.
-6. Continue with Astra in this instance for the next boundary decision and
-   supervisor design. Context remains focused; native resource controls and
-   wallet isolation need strong review. Reassess a cheaper instance once work
-   is routine measurement/fixture integration; no comparative benchmark exists.
+   Fix v3 artifact/config pins, integrate runtime/wallet and rerun six real proofs.
 
 ## Open questions
 
-- Windows exact CPU containment remains failed; node memory/CPU/disk/network
-  controls are not yet demonstrated. Full genesis sync cost is unmeasured.
-  Runtime remains v2, rejects silence clauses and has no pool wallet.
-- About **45% done / 55% remaining**, plausible done range **35–55%**. This
-  preflight does not close a product gate. Largest work: evidence/replay/config,
-  v3 runtime, wallet/transport, authenticated ranges, witness publication and
-  custody assurance.
-- Deployment, public releases, access changes and real funds remain outside
-  standing authorization.
+- Earlier exact CPU-time containment is still failed. New CPU-rate scheduling
+  does not reinterpret it. No full sync, hostile parsing, hard filesystem/network
+  isolation or production node/JRE suitability is established. Runtime remains
+  v2, rejects silence clauses and has no pool wallet.
+- About **45% done / 55% remaining**, plausible done range **35–55%**. This startup
+  evidence does not close a product gate. Largest work: evidence/replay/config,
+  v3 runtime, wallet/transport, authenticated ranges, publication and custody.
+- Deployment, releases, access changes and real funds remain outside standing
+  authorization.

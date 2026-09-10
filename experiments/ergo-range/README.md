@@ -15,8 +15,42 @@ Git attributes preserve those raw responses, including trailing whitespace.
 Do not expose this probe as an arbitrary-file or network verification API.
 
 The separate [dedicated-node preflight](../../docs/ERGO_NODE_PREFLIGHT.md)
-pins a Windows distribution and defines the launch gates for the next source
-comparison. It has not started a node or changed these offline probe commands.
+pins a Windows distribution and records the separate finite node-startup probe.
+This does not change the offline decoder commands above. On Windows x64 with
+PowerShell 7, the node experiment has no npm/default-check integration:
+
+```powershell
+New-Item -ItemType Directory -Force scratch/node-startup | Out-Null
+curl.exe --fail --location --proto '=https' --proto-redir '=https' --max-time 300 --max-filesize 201326592 --limit-rate 8M --output scratch/node-startup/ergo-node-v6.1.5-windows-x64.zip https://github.com/ergoplatform/ergo/releases/download/v6.1.5/ergo-node-v6.1.5-windows-x64.zip
+# Preparation verifies the exact ZIP hash before extracting anything.
+pwsh -NoProfile -File experiments/ergo-range/node-prepare.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-controls.ps1 -EvidenceOnly
+pwsh -NoProfile -File experiments/ergo-range/node-evidence.test.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-observer.test.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-controls.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-startup.ps1
+```
+
+Run controls and startup sequentially, without other repository checks during
+measurements. Preparation requires the pinned archive at
+`scratch/node-startup/ergo-node-v6.1.5-windows-x64.zip` and an absent `bundle/`.
+Startup requires an absent `run/`; preserve the report before removing a
+previous disposable run. Never invoke a control worker or bundled launcher
+directly. The startup supervisor strips inherited JVM options, joins a job
+before execution, caps CPU rate/memory/output, and samples owned TCP/UDP sockets.
+It requests only `/info`, `/peers/connected`, and unauthenticated `/wallet/status`
+once each, starting no earlier than 60 seconds, with five-second full-response
+deadlines. It stops after ten further seconds of observation, or at 120 seconds.
+The wallet remains uninitialized, with no known API authentication preimage.
+Its actor and wildcard CORS remain present. This is a trusted-host probe,
+not a network/filesystem sandbox or a service for arbitrary callers.
+
+Exit **0** means the finite startup observations pass; exit **2** preserves
+unresolved startup evidence. A launch/provenance error fails before acceptance.
+Neither exit establishes sync, chain membership, exact CPU-time containment,
+hard disk/network quotas or production readiness. The
+[current report](../../docs/ergo-node-startup-verification.json) retains exact
+artifact/source pins and the limitations of the observations.
 
 The command runs both the block-root/Fleet experiment and the
 [full binary decoder experiment](../../docs/POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility).

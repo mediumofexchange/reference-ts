@@ -1,5 +1,5 @@
 {
-  "status": "unresolved-node-startup",
+  "status": "stock-node-offline-startup-only",
   "archiveSha256": "7d8c010b781841631f8968e424e30ea99f2352ac0cd40ef32c72e90c37d0af73",
   "bundleManifest": {
     "archiveSha256": "7d8c010b781841631f8968e424e30ea99f2352ac0cd40ef32c72e90c37d0af73",
@@ -182,16 +182,17 @@
     "LaunchMode": "detached",
     "ExitCode": 0,
     "CreationFlags": 525324,
-    "ElapsedMs": 164,
-    "PeakCommitBytes": 337969152,
-    "PeakProcessCommitBytes": 337969152,
+    "ElapsedMs": 157,
+    "CapturedOutputBytes": 2620,
+    "PeakCommitBytes": 338018304,
+    "PeakProcessCommitBytes": 338018304,
     "CommitLimitBytes": 4294967296,
-    "BeforeResumePeakCommitBytes": 389120,
-    "BeforeResumePeakProcessCommitBytes": 389120,
-    "UserCpuTicks": 937500,
-    "KernelCpuTicks": 468750,
-    "JobUserCpuTicks": 937500,
-    "JobKernelCpuTicks": 468750,
+    "BeforeResumePeakCommitBytes": 397312,
+    "BeforeResumePeakProcessCommitBytes": 397312,
+    "UserCpuTicks": 781250,
+    "KernelCpuTicks": 312500,
+    "JobUserCpuTicks": 781250,
+    "JobKernelCpuTicks": 312500,
     "CpuRateFlags": 5,
     "CpuRatePer10000": 2500,
     "TotalProcesses": 1,
@@ -199,14 +200,14 @@
     "LimitTerminatedProcesses": 0,
     "BeforeResumeTotalProcesses": 1,
     "BeforeResumeActiveProcesses": 1,
-    "SampledPeakPrivateCommitBytes": 337969152,
-    "SampledMaxPrivateCommitBytes": 337817600,
-    "BeforeResumePrivateCommitBytes": 389120,
-    "MemorySamples": 12,
+    "SampledPeakPrivateCommitBytes": 338018304,
+    "SampledMaxPrivateCommitBytes": 337891328,
+    "BeforeResumePrivateCommitBytes": 397312,
+    "MemorySamples": 11,
     "MaxSampledAssociatedProcesses": 1,
     "ObservedProcesses": [
       {
-        "ProcessId": 10592,
+        "ProcessId": 18880,
         "Image": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-startup\\bundle\\jre\\bin\\java.exe",
         "QueryError": 0
       }
@@ -229,25 +230,26 @@
     "-c",
     "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-startup\\run/ergo.conf"
   ],
-  "config": "ergo.directory = \"C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/node-startup/run/data\"\nergo.networkType = \"mainnet\"\nergo.node {\n  stateType = \"utxo\"\n  verifyTransactions = true\n  blocksToKeep = -1\n  utxo.utxoBootstrap = false\n  utxo.storingUtxoSnapshots = 0\n  nipopow.nipopowBootstrap = false\n  checkpoint = null\n  mining = false\n  offlineGeneration = false\n  extraIndex = false\n}\nergo.wallet.secretStorage.secretDir = \"C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/node-startup/run/secrets\"\nergo.wallet.testMnemonic = null\nergo.wallet.testKeysQty = null\nscorex.dataDir = \"C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/node-startup/run/data\"\nscorex.logDir = \"C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/node-startup/run\"\nscorex.logging.level = \"INFO\"\nscorex.restApi {\n  bindAddress = \"127.0.0.1:19053\"\n  apiKeyHash = \"d5ea10ad7e1071fa2b9be956b0dbc059c98a6d10f0508a9789c989355f2fa658\"\n  publicUrl = null\n  corsAllowedOrigin = null\n}\nscorex.network {\n  bindAddress = \"127.0.0.1:19030\"\n  knownPeers = []\n  bannedPeers = []\n  peerDiscovery = false\n  maxConnections = 0\n  upnpEnabled = false\n  declaredAddress = null\n  nodeName = \"moe-offline-source-probe\"\n}",
-  "configSha256": "37f256f0b13dd631daeccfef5eded95ebc2c41020590710c105cb756582d5605",
+  "config": "ergo.directory = \"C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/node-startup/run/data\"\nergo.networkType = \"mainnet\"\nergo.node {\n  stateType = \"utxo\"\n  verifyTransactions = true\n  blocksToKeep = -1\n  utxo.utxoBootstrap = false\n  utxo.storingUtxoSnapshots = 0\n  nipopow.nipopowBootstrap = false\n  checkpoint = null\n  mining = false\n  offlineGeneration = false\n  extraIndex = false\n}\nergo.wallet.secretStorage.secretDir = \"C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/node-startup/run/secrets\"\nergo.wallet.testMnemonic = null\nergo.wallet.testKeysQty = null\nscorex.dataDir = \"C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/node-startup/run/data\"\nscorex.logDir = \"C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/node-startup/run\"\nscorex.logging.level = \"INFO\"\nscorex.restApi {\n  bindAddress = \"127.0.0.1:19053\"\n  apiKeyHash = \"8651bc38481e522dc128f6e0686fd4561d634b56d64506a2d56584c3578ac124\"\n  publicUrl = null\n  corsAllowedOrigin = null\n}\nscorex.network {\n  bindAddress = \"127.0.0.1:19030\"\n  knownPeers = []\n  bannedPeers = []\n  peerDiscovery = false\n  maxConnections = 0\n  upnpEnabled = false\n  declaredAddress = null\n  nodeName = \"moe-offline-source-probe\"\n}",
+  "configSha256": "57e797e469142e229da5d482c43f07d6988c862f4ba48db9019e6381640ed960",
   "result": {
     "Case": "stock-node-startup",
     "Outcome": "observer-complete",
-    "Output": "INFO org.ergoplatform.ErgoApp - Running with args: Args(Some(C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-startup\\run/ergo.conf),Some(MainNet))\r\nINFO org.ergoplatform.settings.ErgoSettingsReader$ - Running in mainnet network mode\r\nINFO org.ergoplatform.settings.ErgoSettingsReader$ - Log level set to INFO\r\nINFO org.ergoplatform.ErgoApp - Working directory: C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/node-startup/run/data\r\nINFO org.ergoplatform.ErgoApp - Secret directory: C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/node-startup/run/secrets\r\nINFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started\r\nINFO scorex.core.network.NetworkController - Declared address: None\r\nINFO org.ergoplatform.nodeView.state.ErgoState$ - Generating genesis UTXO state\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO org.ergoplatform.ErgoApp - Available processors: 4\r\nINFO org.ergoplatform.ErgoApp - Max memory available: 2147483648\r\nINFO org.ergoplatform.ErgoApp - RPC is allowed at /127.0.0.1:19053\r\nINFO org.ergoplatform.local.CleanupWorker - Cleanup worker started\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO scorex.core.network.NetworkController - Successfully bound to the port 19030\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO org.ergoplatform.network.peer.PeerManager - No peers in database, seeding peers database with nodes from config\r\nINFO org.ergoplatform.nodeView.state.ErgoState$ - Genesis UTXO state generated with hex digest a5df145d41ab15a01e0cd3ffbab046f0d029e5412293072ad0f5827428589b9302\r\nINFO org.ergoplatform.nodeView.history.ErgoHistory$ - History database read\r\nINFO org.ergoplatform.nodeView.mempool.ErgoMemPool$ - Sorting mempool by fee-per-cycle\r\nINFO org.ergoplatform.nodeView.wallet.ErgoWalletActor - Initializing wallet actor\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nINFO org.ergoplatform.nodeView.wallet.ErgoWalletServiceImpl - Trying to read wallet in secure mode ..\r\nWARN org.ergoplatform.nodeView.wallet.ErgoWalletServiceImpl - Failed to read wallet. Manual initialization is required. Details: \r\njava.lang.Exception: Cannot readSecretStorage: Secret file not found in dir 'C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-startup\\run\\secrets'\r\n\tat org.ergoplatform.wallet.secrets.JsonSecretStorage$.readFile(JsonSecretStorage.scala:146)\r\n\tat org.ergoplatform.nodeView.wallet.ErgoWalletServiceImpl.readWallet(ErgoWalletService.scala:282)\r\n\tat org.ergoplatform.nodeView.wallet.ErgoWalletActor$$anonfun$emptyWallet$1.applyOrElse(ErgoWalletActor.scala:78)\r\n\tat akka.actor.Actor.aroundReceive(Actor.scala:537)\r\n\tat akka.actor.Actor.aroundReceive$(Actor.scala:535)\r\n\tat org.ergoplatform.nodeView.wallet.ErgoWalletActor.aroundReceive(ErgoWalletActor.scala:26)\r\n\tat akka.actor.ActorCell.receiveMessage(ActorCell.scala:577)\r\n\tat akka.actor.ActorCell.invoke(ActorCell.scala:547)\r\n\tat akka.dispatch.Mailbox.processMailbox(Mailbox.scala:270)\r\n\tat akka.dispatch.Mailbox.run(Mailbox.scala:231)\r\n\tat akka.dispatch.Mailbox.exec(Mailbox.scala:243)\r\n\tat java.base/java.util.concurrent.ForkJoinTask.doExec(Unknown Source)\r\n\tat java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(Unknown Source)\r\n\tat java.base/java.util.concurrent.ForkJoinPool.scan(Unknown Source)\r\n\tat java.base/java.util.concurrent.ForkJoinPool.runWorker(Unknown Source)\r\n\tat java.base/java.util.concurrent.ForkJoinWorkerThread.run(Unknown Source)\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\n",
+    "Output": "INFO org.ergoplatform.ErgoApp - Running with args: Args(Some(C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-startup\\run/ergo.conf),Some(MainNet))\r\nINFO org.ergoplatform.settings.ErgoSettingsReader$ - Running in mainnet network mode\r\nINFO org.ergoplatform.settings.ErgoSettingsReader$ - Log level set to INFO\r\nINFO org.ergoplatform.ErgoApp - Working directory: C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/node-startup/run/data\r\nINFO org.ergoplatform.ErgoApp - Secret directory: C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/node-startup/run/secrets\r\nINFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started\r\nINFO scorex.core.network.NetworkController - Declared address: None\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO org.ergoplatform.nodeView.state.ErgoState$ - Generating genesis UTXO state\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO org.ergoplatform.ErgoApp - Available processors: 4\r\nINFO org.ergoplatform.ErgoApp - Max memory available: 2147483648\r\nINFO org.ergoplatform.ErgoApp - RPC is allowed at /127.0.0.1:19053\r\nINFO org.ergoplatform.local.CleanupWorker - Cleanup worker started\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO scorex.core.network.NetworkController - Successfully bound to the port 19030\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO org.ergoplatform.network.peer.PeerManager - No peers in database, seeding peers database with nodes from config\r\nINFO org.ergoplatform.nodeView.state.ErgoState$ - Genesis UTXO state generated with hex digest a5df145d41ab15a01e0cd3ffbab046f0d029e5412293072ad0f5827428589b9302\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO org.ergoplatform.nodeView.history.ErgoHistory$ - History database read\r\nINFO org.ergoplatform.nodeView.mempool.ErgoMemPool$ - Sorting mempool by fee-per-cycle\r\nINFO org.ergoplatform.nodeView.wallet.ErgoWalletActor - Initializing wallet actor\r\nINFO org.ergoplatform.nodeView.wallet.ErgoWalletServiceImpl - Trying to read wallet in secure mode ..\r\nWARN org.ergoplatform.nodeView.wallet.ErgoWalletServiceImpl - Failed to read wallet. Manual initialization is required. Details: \r\njava.lang.Exception: Cannot readSecretStorage: Secret file not found in dir 'C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-startup\\run\\secrets'\r\n\tat org.ergoplatform.wallet.secrets.JsonSecretStorage$.readFile(JsonSecretStorage.scala:146)\r\n\tat org.ergoplatform.nodeView.wallet.ErgoWalletServiceImpl.readWallet(ErgoWalletService.scala:282)\r\n\tat org.ergoplatform.nodeView.wallet.ErgoWalletActor$$anonfun$emptyWallet$1.applyOrElse(ErgoWalletActor.scala:78)\r\n\tat akka.actor.Actor.aroundReceive(Actor.scala:537)\r\n\tat akka.actor.Actor.aroundReceive$(Actor.scala:535)\r\n\tat org.ergoplatform.nodeView.wallet.ErgoWalletActor.aroundReceive(ErgoWalletActor.scala:26)\r\n\tat akka.actor.ActorCell.receiveMessage(ActorCell.scala:577)\r\n\tat akka.actor.ActorCell.invoke(ActorCell.scala:547)\r\n\tat akka.dispatch.Mailbox.processMailbox(Mailbox.scala:270)\r\n\tat akka.dispatch.Mailbox.run(Mailbox.scala:231)\r\n\tat akka.dispatch.Mailbox.exec(Mailbox.scala:243)\r\n\tat java.base/java.util.concurrent.ForkJoinTask.doExec(Unknown Source)\r\n\tat java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(Unknown Source)\r\n\tat java.base/java.util.concurrent.ForkJoinPool.scan(Unknown Source)\r\n\tat java.base/java.util.concurrent.ForkJoinPool.runWorker(Unknown Source)\r\n\tat java.base/java.util.concurrent.ForkJoinWorkerThread.run(Unknown Source)\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\n",
     "LaunchMode": "detached",
     "ExitCode": 3758096385,
     "CreationFlags": 525324,
-    "ElapsedMs": 73562,
-    "PeakCommitBytes": 454627328,
-    "PeakProcessCommitBytes": 454627328,
+    "ElapsedMs": 73897,
+    "CapturedOutputBytes": 5115,
+    "PeakCommitBytes": 336232448,
+    "PeakProcessCommitBytes": 336232448,
     "CommitLimitBytes": 4294967296,
-    "BeforeResumePeakCommitBytes": 401408,
-    "BeforeResumePeakProcessCommitBytes": 401408,
-    "UserCpuTicks": 222656250,
-    "KernelCpuTicks": 20468750,
-    "JobUserCpuTicks": 222656250,
-    "JobKernelCpuTicks": 20156250,
+    "BeforeResumePeakCommitBytes": 393216,
+    "BeforeResumePeakProcessCommitBytes": 393216,
+    "UserCpuTicks": 207968750,
+    "KernelCpuTicks": 23281250,
+    "JobUserCpuTicks": 207968750,
+    "JobKernelCpuTicks": 22812500,
     "CpuRateFlags": 5,
     "CpuRatePer10000": 2500,
     "TotalProcesses": 1,
@@ -255,14 +257,14 @@
     "LimitTerminatedProcesses": 0,
     "BeforeResumeTotalProcesses": 1,
     "BeforeResumeActiveProcesses": 1,
-    "SampledPeakPrivateCommitBytes": 454627328,
-    "SampledMaxPrivateCommitBytes": 453472256,
-    "BeforeResumePrivateCommitBytes": 401408,
-    "MemorySamples": 4419,
+    "SampledPeakPrivateCommitBytes": 336232448,
+    "SampledMaxPrivateCommitBytes": 336232448,
+    "BeforeResumePrivateCommitBytes": 393216,
+    "MemorySamples": 4449,
     "MaxSampledAssociatedProcesses": 1,
     "ObservedProcesses": [
       {
-        "ProcessId": 15848,
+        "ProcessId": 16016,
         "Image": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-startup\\bundle\\jre\\bin\\java.exe",
         "QueryError": 0
       }
@@ -271,7 +273,7 @@
     "JobEmptyAfterCleanup": true
   },
   "observations": {
-    "socketSamples": 285,
+    "socketSamples": 287,
     "sockets": [
       {
         "Protocol": "tcp",
@@ -294,14 +296,14 @@
         "LocalAddress": "127.0.0.1",
         "RemoteAddress": "127.0.0.1",
         "LocalPort": 19053,
-        "RemotePort": 50164,
+        "RemotePort": 50484,
         "State": 5
       }
     ],
     "replies": {
       "/info": {
         "status": 200,
-        "body": "{\n  \"lastMemPoolUpdateTime\" : 1789018680633,\n  \"currentTime\" : 1789018732517,\n  \"network\" : \"mainnet\",\n  \"name\" : \"moe-offline-source-probe\",\n  \"stateType\" : \"utxo\",\n  \"difficulty\" : null,\n  \"bestFullHeaderId\" : null,\n  \"bestHeaderId\" : null,\n  \"peersCount\" : 0,\n  \"unconfirmedCount\" : 0,\n  \"appVersion\" : \"6.0.4RC2-109-c3646640-SNAPSHOT\",\n  \"eip37Supported\" : true,\n  \"stateRoot\" : \"a5df145d41ab15a01e0cd3ffbab046f0d029e5412293072ad0f5827428589b9302\",\n  \"genesisBlockId\" : null,\n  \"previousFullHeaderId\" : null,\n  \"fullHeight\" : null,\n  \"headersHeight\" : null,\n  \"stateVersion\" : \"0000000000000000000000000000000000000000000000000000000000000000\",\n  \"fullBlocksScore\" : null,\n  \"maxPeerHeight\" : null,\n  \"launchTime\" : 1789018680633,\n  \"isExplorer\" : false,\n  \"lastSeenMessageTime\" : 0,\n  \"eip27Supported\" : true,\n  \"headersScore\" : null,\n  \"parameters\" : {\n    \"outputCost\" : 100,\n    \"tokenAccessCost\" : 100,\n    \"maxBlockCost\" : 1000000,\n    \"height\" : 0,\n    \"maxBlockSize\" : 524288,\n    \"dataInputCost\" : 100,\n    \"blockVersion\" : 1,\n    \"inputCost\" : 2000,\n    \"storageFeeFactor\" : 1250000,\n    \"subblocksPerBlock\" : null,\n    \"minValuePerByte\" : 360\n  },\n  \"isMining\" : false\n}"
+        "body": "{\n  \"lastMemPoolUpdateTime\" : 1789019049212,\n  \"currentTime\" : 1789019099914,\n  \"network\" : \"mainnet\",\n  \"name\" : \"moe-offline-source-probe\",\n  \"stateType\" : \"utxo\",\n  \"difficulty\" : null,\n  \"bestFullHeaderId\" : null,\n  \"bestHeaderId\" : null,\n  \"peersCount\" : 0,\n  \"unconfirmedCount\" : 0,\n  \"appVersion\" : \"6.0.4RC2-109-c3646640-SNAPSHOT\",\n  \"eip37Supported\" : true,\n  \"stateRoot\" : \"a5df145d41ab15a01e0cd3ffbab046f0d029e5412293072ad0f5827428589b9302\",\n  \"genesisBlockId\" : null,\n  \"previousFullHeaderId\" : null,\n  \"fullHeight\" : null,\n  \"headersHeight\" : null,\n  \"stateVersion\" : \"0000000000000000000000000000000000000000000000000000000000000000\",\n  \"fullBlocksScore\" : null,\n  \"maxPeerHeight\" : null,\n  \"launchTime\" : 1789019049212,\n  \"isExplorer\" : false,\n  \"lastSeenMessageTime\" : 0,\n  \"eip27Supported\" : true,\n  \"headersScore\" : null,\n  \"parameters\" : {\n    \"outputCost\" : 100,\n    \"tokenAccessCost\" : 100,\n    \"maxBlockCost\" : 1000000,\n    \"height\" : 0,\n    \"maxBlockSize\" : 524288,\n    \"dataInputCost\" : 100,\n    \"blockVersion\" : 1,\n    \"inputCost\" : 2000,\n    \"storageFeeFactor\" : 1250000,\n    \"subblocksPerBlock\" : null,\n    \"minValuePerByte\" : 360\n  },\n  \"isMining\" : false\n}"
       },
       "/peers/connected": {
         "status": 200,
@@ -313,17 +315,18 @@
       }
     },
     "apiBytes": 1319,
-    "readyAtMs": 63219,
-    "nextProbeMs": 74511,
+    "readyAtMs": 63534,
+    "nextProbeMs": 74851,
     "filesPeakBytes": 9021216,
-    "unresolved": [
-      "Unexpected initial state or peers"
-    ]
+    "unresolved": [],
+    "finalFileBytes": 9188637.0,
+    "observedFileAndOutputBytes": 9193752
   },
   "files": {
-    "NodeProbeProcess.cs": "8cc56d16da9698de130089f2072ffaf844bb7a67b823854b4ddb747a15655334",
-    "node-startup.ps1": "0f58279b71699892e59e77192ab20ad5a005f81e165f2c55a089027fb3158e43",
-    "node-prepare.ps1": "2c938409834eb9c2d7a6ba9643d671e0d5556cd9cc82c81e6c908845f0f1b465"
+    "NodeProbeProcess.cs": "e97499a8cd9508d2326a143e8624e4e8e0d3c422502f1b509a1ea92ad984c0ab",
+    "node-startup.ps1": "f3cd80d8f1c90c59f089af19d18c19b07b2b2c8b9f496a937e7431add4ae5316",
+    "node-prepare.ps1": "2c938409834eb9c2d7a6ba9643d671e0d5556cd9cc82c81e6c908845f0f1b465",
+    "node-evidence.ps1": "570f340b38c2dd20ac149df3f01645d4ae9c7d0275bd3c0423b9d92494308438"
   },
   "limits": [
     "Source-configured offline and sampled TCP/UDP sockets, not zero-packet proof or network sandbox.",

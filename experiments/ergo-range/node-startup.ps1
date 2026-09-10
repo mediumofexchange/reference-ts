@@ -2,6 +2,7 @@
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows -or -not [Environment]::Is64BitProcess) { throw 'Requires Windows x64 / PowerShell 7' }
 Add-Type -Path (Join-Path $PSScriptRoot 'NodeProbeProcess.cs')
+. (Join-Path $PSScriptRoot 'node-evidence.ps1')
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $scratch = Join-Path $repo 'scratch/node-startup'
 $bundle = Join-Path $scratch 'bundle'
@@ -84,8 +85,8 @@ $script:nodeObservation = [ordered]@{ socketSamples=0; sockets=[Collections.Gene
     unresolved=[Collections.Generic.List[string]]::new() }
 $script:pendingNodeRead=$null; $script:pendingNodeEndpoint=$null
 $probeClock = [Diagnostics.Stopwatch]::StartNew()
-$observer = [Func[uint32,bool]] {
-    param($processId)
+$observer = [Func[uint32,long,bool]] {
+    param($processId,$capturedOutputBytes)
     $state=$script:nodeObservation
     $sockets=[NodeProbeProcess]::Sockets($processId); $state.socketSamples++
     foreach ($socket in $sockets) {
@@ -103,7 +104,7 @@ $observer = [Func[uint32,bool]] {
     $fileBytes=($files | Measure-Object Length -Sum).Sum
     $state.filesPeakBytes=[Math]::Max($state.filesPeakBytes,$fileBytes)
     # Startup uses only a fresh genesis directory. This is observation, not a disk quota.
-    if ($fileBytes -gt 16777216) { $state.unresolved.Add('Startup file/log observation exceeds 16 MiB'); return $true }
+    if ($fileBytes+$capturedOutputBytes -gt 16777216) { $state.unresolved.Add('Combined startup file/output observation exceeds 16 MiB'); return $true }
     if (@(Get-ChildItem -LiteralPath "$run/secrets" -Force).Count -ne 0) { $state.unresolved.Add('Secret storage no longer empty'); return $true }
     # Predeclared observation schedule: first request no earlier than 60 seconds.
     # Listener presence alone is not application readiness. No request is retried.
@@ -137,16 +138,15 @@ if ($result.CpuRateFlags -ne 5 -or $result.CpuRatePer10000 -ne 2500 -or
     $result.PeakCommitBytes -gt 4294967296UL -or $result.SampledPeakPrivateCommitBytes -gt 4294967296UL -or
     $result.MaxSampledAssociatedProcesses -gt 1) { $state.unresolved.Add('Resource evidence unresolved') }
 if ($state.replies.Count -eq 3) {
-    if ($state.replies['/info'].status -ne 200 -or $state.replies['/peers/connected'].status -ne 200 -or
-        $state.replies['/wallet/status'].status -ne 403) { $state.unresolved.Add('Unexpected API statuses') }
-    $info=$state.replies['/info'].body | ConvertFrom-Json
-    $peers=$state.replies['/peers/connected'].body | ConvertFrom-Json
-    if ($info.stateType -ne 'utxo' -or $info.isMining -ne $false -or $info.headersHeight -ne 0 -or
-        $info.fullHeight -ne 0 -or @($peers).Count -ne 0) { $state.unresolved.Add('Unexpected initial state or peers') }
+    try { Assert-InitialNodeReplies $state.replies } catch { $state.unresolved.Add($_.Exception.Message) }
 } else { $state.unresolved.Add('API observations missing') }
 if (@(Get-ChildItem -LiteralPath "$run/secrets" -Force).Count -ne 0) { $state.unresolved.Add('Secret storage not empty after cleanup') }
+$finalFiles=@(Get-ChildItem -LiteralPath $run -Recurse -File)
+$state.finalFileBytes=($finalFiles | Measure-Object Length -Sum).Sum
+$state.observedFileAndOutputBytes=[Math]::Max($state.filesPeakBytes,$state.finalFileBytes)+$result.CapturedOutputBytes
+try { Assert-NodeObservedBytes $result.CapturedOutputBytes $state.filesPeakBytes $state.finalFileBytes } catch { $state.unresolved.Add($_.Exception.Message) }
 $hashes=[ordered]@{}
-foreach ($file in @('NodeProbeProcess.cs','node-startup.ps1','node-prepare.ps1')) { $hashes[$file]=(Get-FileHash (Join-Path $PSScriptRoot $file) -Algorithm SHA256).Hash.ToLowerInvariant() }
+foreach ($file in @('NodeProbeProcess.cs','node-startup.ps1','node-prepare.ps1','node-evidence.ps1')) { $hashes[$file]=(Get-FileHash (Join-Path $PSScriptRoot $file) -Algorithm SHA256).Hash.ToLowerInvariant() }
 [ordered]@{ status=$(if ($state.unresolved.Count) {'unresolved-node-startup'} else {'stock-node-offline-startup-only'});
     archiveSha256=$manifest.archiveSha256; bundleManifest=$manifest; javaVersion=$version;
     arguments=$arguments; config=$config; configSha256=(Get-FileHash "$run/ergo.conf" -Algorithm SHA256).Hash.ToLowerInvariant();

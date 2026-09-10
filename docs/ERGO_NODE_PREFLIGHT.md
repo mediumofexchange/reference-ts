@@ -1,4 +1,4 @@
-# Dedicated Ergo node preflight
+# Dedicated Ergo node probe
 
 Status: 2026-09-10, artifact inspection and launch requirements. The
 [stock no-spending-key decision](../decisions/2026-09.md#2026-09-10--keep-the-source-probe-free-of-spending-keys)
@@ -61,7 +61,7 @@ ends that attempt with incomplete evidence; there is no automatic increase.
 | Extract and inspect runtime | 512 MiB dedicated scratch total; 5 minutes | Check member count, paths, expanded sizes and hashes before extraction; keep all files under the probe directory |
 | Offline startup | 120 seconds; 4 GiB aggregate job commit; 2 GiB JVM heap; one JVM and no descendants; 25% host CPU rate | Assign the process to a kill-on-close job before execution; read back memory, process and CPU-rate controls; exercise controls before the node |
 | First sync measurement | 30 minutes; same memory/CPU controls; 20 GiB dedicated data volume; 10 GiB combined network traffic | Demonstrated disk ceiling and traffic accounting/stop mechanism; preserve at least 100 GiB free on C:; report stop latency and any overshoot |
-| Logs | 16 MiB aggregate for an attempt | Bounded capture including JVM/node file logs, not only stdout; stop on exhaustion |
+| Logs and run files | 16 MiB combined observed envelope | Capped stdout plus sampled/final run-file bytes; stop/refuse on excess. This is not a filesystem quota |
 | Fixture/API reads | GET only, one at a time; 1 MiB decoded bytes and 5 seconds per response; 64 MiB/120 seconds total | Stream counting before JSON parse; no redirects or automatic retries; lossless integer parsing; stop on malformed, unavailable or excessive data |
 
 The old decoder Job Object supervisor is not a JVM launcher and did not
@@ -207,18 +207,79 @@ Even a successful fixture comparison covers three noncontiguous blocks only.
 Complete contiguous ranges, publication ordering, hostile-node/parser cases
 and production resource sufficiency remain separate gates.
 
+## Offline startup evidence
+
+The [supervisor and reproduction](../experiments/ergo-range/README.md) now run
+the pinned stock JVM/node in a fresh directory. The first attempt's early
+listener/500 ms response timeout refused before readers were ready; its exact
+[report and code](https://github.com/mediumofexchange/reference-ts/blob/2309bdf/docs/ergo-node-startup-first-attempt.json)
+remain in history. The second, scheduled observation received all expected
+responses but its classifier incorrectly expected height zero. Its exact
+[refusal](https://github.com/mediumofexchange/reference-ts/blob/a462dd3/docs/ergo-node-startup-verification.json)
+also remains. Neither historical report is reclassified as passing.
+
+The source shows absent headers/full blocks encode as explicit null fields.
+The corrected checker requires those nulls, the pinned genesis UTXO root,
+zero state-version bytes, mainnet/UTXO/non-mining flags and an actual empty peer
+array. It rejects missing fields, wrong roots/networks, mining, invalid field
+types and nonempty/non-array peer data. Socket observations cover owned IPv4
+and IPv6 TCP/UDP table entries; the finite node run requires loopback TCP only.
+Tests exercise real loopback TCP/UDP ownership, path allowlisting, duplicate
+refusal, redirects, encoding/UTF-8 failures, oversized responses and timeouts.
+
+The JVM runs with an explicit minimal environment and private home/tmp/data/
+secret paths. A custom console-only Logback config avoids its default large
+rolling log. RocksDB and JVM temporary files remain included in sampled and
+final file-byte accounting. The native supervisor records raw captured bytes;
+acceptance adds them to the maximum sampled/final run-file size. The check is
+conservative over observations, not a hard filesystem quota.
+
+All archive members are hash-checked against the pinned generated manifest
+before execution; the runner refuses extra files, reparse entries, reused run
+directories and occupied listener ports. The installed distribution reports
+application label `6.0.4RC2-109-c3646640-SNAPSHOT`; preserve that observation
+alongside the v6.1.5 prerelease asset hashes. It is not a reproducible-build proof.
+The actual Java version is checked under the same process controls before node
+startup. Exact command/config hashes and observations live in the
+[current report](ergo-node-startup-verification.json).
+
+The final run passes the finite startup predicates and exits **0**:
+
+| Observation | Final result |
+|---|---|
+| Java runtime | Microsoft OpenJDK 21.0.1+12-LTS, matching the bundled declaration |
+| Node duration and process CPU | 73.897 s wall; 20.797 s job user CPU and 2.281 s job kernel CPU |
+| Peak job commit | 336,232,448 bytes under the 4 GiB installed job limit |
+| Observed combined files/output | 9,193,752 bytes, below 16 MiB |
+| API observations | 1,319 response bytes; `/info` 200, `/peers/connected` 200 with `[]`, `/wallet/status` 403 |
+| Socket samples and cleanup | 287 owned TCP/UDP samples; only loopback TCP observed; one associated process; whole job empty after cleanup |
+
+The [separate controls](ergo-node-controls-verification.json) preserve six
+fixed process cases, including four busy threads under CPU-rate scheduling,
+allocation refusal, descendant refusal, wall and output termination. Ten
+worker-free resource-report cases, sixteen startup-evidence cases and eleven
+loopback observer cases pass. The rate is a cycle-scheduling contract, not an
+exact total-CPU bound. Memory peaks/timing from this single run are not capacity
+planning, worst-case costs, or evidence for hostile parser inputs.
+
+Independent implementation review confirmed the boundary and found the initial
+null-height and separate stdout/file-budget errors. Corrected predicates and
+their nearby cases were read back and independently exercised. API/config
+observations do not constitute a complete effective-settings dump; no sync,
+validated block ancestry, production resource sufficiency or hard network/disk
+isolation has been established.
+
 ## Next executable slice
 
 Use the reviewed stock-node boundary above. Falsifier: any reachable route,
 startup behavior or persisted data can generate/import/use a spending key
 without the deliberately unavailable authentication capability.
 
-Build a fixed-purpose offline startup supervisor for the chosen artifact.
-Acceptance is a short process with no wallet/spending keys, local-only
-listeners, effective settings, job limits and whole-job cleanup read back,
-plus source-configured offline behavior and no observed outbound sockets.
-This revised claim does not establish zero packets. Only a separately controlled sync can produce the
-fixture and validation evidence. No production dependency is selected here.
+Select and demonstrate the first sync's disk/network controls before enabling
+peers. Preserve the declared finite envelope, explicit wallet boundary and
+validation/history settings. A complete effective-settings readback remains
+useful before sync. Only a separately controlled sync can produce fixture and
+validation evidence. No production dependency is selected here.
 
 Independent source/claim review caught the omitted prerelease label, now
 corrected, and confirmed the always-present wallet surface and API membership
