@@ -292,6 +292,62 @@ the process from other host paths or reserve disk against unrelated writers.
 Do not replace that prerequisite with directory sampling or a file-length
 limit: neither bounds aggregate database storage.
 
+The [fixed native disk control](../experiments/ergo-range/node-disk-control.ps1)
+prepares that next observation. Its default mode is read-only preflight;
+`-Execute` requires an already elevated Windows x64 / PowerShell 7 process.
+It never requests elevation or enables token privileges itself. An ordinary
+host refusal is unresolved evidence, not an attached-volume test.
+
+The control creates a new **64 MiB fixed VHD**, with at most **65 MiB** backing
+file accepted, under the absent `scratch/node-disk-control/` directory. It
+requires a fixed NTFS host volume, with **100 GiB plus 65 MiB** free before
+creation and **100 GiB** after the worker. Its handle owns the new image;
+attachment has no drive letter or permanent-lifetime flag. Before each storage
+mutation, the script correlates the image association with the handle's
+physical path and the disk's identity, size and non-system/non-boot state.
+It initializes only that new RAW disk, creates a GPT data partition and
+formats only that partition as NTFS. No existing image, disk selector, mount
+directory or drive-letter option is accepted.
+
+The worker uses the formatted volume's GUID path, which Windows defines as a
+[volume identifier](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-volume).
+It attempts at most **65 MiB** in 1 MiB writes; only native error **112** after
+positive completed writes can establish disk-full. The existing Job Object
+allows **30 seconds, 512 MiB commit, one process, 25% host CPU rate and 64 KiB
+output**. The final classifier also requires a natural successful worker exit,
+confirmed empty job, expected volume capacity/free space, backing-file bounds,
+host reserve and detached-image readback. Errors never imply empty or complete
+evidence. The bounded VHD is retained for inspection after detachment; cleanup
+must first verify the exact path and detached state and must not recurse.
+
+This is a trusted-host control, not a storage sandbox. Concurrent path/disk
+administration is outside its assumptions. Synchronous Windows storage setup
+and detach calls have no hard deadline; only the worker has the demonstrated
+Job Object deadline. The worker's private temporary/home directory and the
+supervisor's compiler/Storage-module activity are outside the data volume.
+The future node run still owes an inventory of every node write target,
+full-sized disk/overhead measurements and combined traffic/process evidence.
+No 20 GiB allocation, node, peer or sync is launched by this control.
+
+Preparation verification passes 69 durable worker-free cases, including native
+compilation/ABI and strict path endings. Independent adversarial review found
+and corrected the fixed-subtype selector (`GET_VIRTUAL_DISK_INFO_PROVIDER_SUBTYPE`
+is **7**, not the storage-type query **6**) and ownership of the undefined
+output handle on failed creation. The helper now owns that handle only after
+successful creation. See Microsoft's
+[information selectors](https://learn.microsoft.com/en-us/windows/win32/api/virtdisk/ne-virtdisk-get_virtual_disk_info_version)
+and [creation contract](https://learn.microsoft.com/en-us/windows/win32/api/virtdisk/nf-virtdisk-createvirtualdisk).
+Focused readback also verified trailing LF/CRLF/NUL/suffix refusal; no material
+static finding remains under the stated host assumptions. These checks do not
+exercise the storage operations themselves.
+
+The [ordinary-host preflight](ergo-disk-control-preflight.json) exited **2**
+with `administrator=false`, `mutationsStarted=false`, no process or disk
+observation, and **532,020,400,128 bytes** available on the host volume. Source
+hashes identify the tested helper. The result is `unresolved-disk-preflight`:
+no disk was created, attached, formatted, filled or detached. One elevated
+small-control measurement and its report remain the next required evidence.
+
 The existing Job Object does not supply the combined traffic control:
 Microsoft's
 [network rate structure](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_net_rate_control_information)
