@@ -66,7 +66,7 @@ $testArgs=$jvm+@('-cp',("$run/classes;"+$jar),'NodeDatabaseControlTest')
 $test=[NodeProbeProcess]::Run($java,$testArgs,$run,'database-status-and-write-roots-unit',1073741824UL,30000,65536,$null)
 Assert-DatabaseProcess $test
 $observed=$test.Output | ConvertFrom-Json -AsHashtable
-if ($observed.Count -ne 3 -or $observed.status -cne 'passed' -or $observed.cases -ne 18 -or $observed.test -cne 'status-write-roots-and-jni-names') { throw 'Unexpected pure Java unit evidence' }
+if ($observed.Count -ne 3 -or $observed.status -cne 'passed' -or $observed.cases -ne 24 -or $observed.test -cne 'status-write-roots-jni-names-and-version') { throw 'Unexpected pure Java unit evidence' }
 $classPins=[ordered]@{}
 foreach ($name in @('NodeDatabaseControl.class','NodeDatabaseControlTest.class')) {
     $path=Join-Path $run "classes/$name"
@@ -84,7 +84,7 @@ if (@(Get-ChildItem -LiteralPath "$run/classes" -Force).Count -ne 2 -or
     runPath=$run; bundleFilesVerified=$count; bundleManifestSha256=(Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash.ToLowerInvariant();
     bundlePins=$pins; compilerSha256=$compilerHash; sourcePins=$sourcePins; classPins=$classPins;
     compileArguments=$compileArgs; compile=$compile; testArguments=$testArgs; test=$test; observations=$observed;
-    limitations=@('Compilation and 18 pure Java status/path/filename checks only; worker main and JNI/database work are not executed.',
+    limitations=@('Compilation and 24 pure Java status/path/filename/version checks only; worker main and JNI/database work are not executed.',
         'Two sequential JVMs, each 30 seconds / 1 GiB commit / 25% CPU / one process / 64 KiB captured output.',
         'Script-owned output is limited to two classes under the fresh fixed scratch directory; host supervisor/JRE/OS activity is not a filesystem sandbox.',
         'Trusted stable host administration and source/input paths assumed. This does not demonstrate VHD mapping, module identity, disk-full behavior or traffic containment.')

@@ -41,6 +41,7 @@ public final class NodeDatabaseControl {
     private static long attemptedPayloadBytes, completedPayloadBytes;
     private static boolean baselineClosed, finalClosed, diskFull;
     private static String capacityStatus = "none", closeStatus = "not-opened";
+    private static RocksDB.Version observedVersion;
 
     private static String quote(String value) {
         if (value == null) return "null";
@@ -111,6 +112,17 @@ public final class NodeDatabaseControl {
     static boolean isNoSpace(Status status) {
         return status != null && status.getCode() == Status.Code.IOError
             && status.getSubCode() == Status.SubCode.NoSpace;
+    }
+
+    static boolean isPinnedVersion(RocksDB.Version version) {
+        return version != null && version.getMajor() == 10
+            && version.getMinor() == 2 && version.getPatch() == 1;
+    }
+
+    private static String versionFields() {
+        return "\"rocksdbMajor\":" + (observedVersion == null ? "null" : observedVersion.getMajor())
+            + ",\"rocksdbMinor\":" + (observedVersion == null ? "null" : observedVersion.getMinor())
+            + ",\"rocksdbPatch\":" + (observedVersion == null ? "null" : observedVersion.getPatch());
     }
 
     private static String status(RocksDBException error) {
@@ -285,11 +297,10 @@ public final class NodeDatabaseControl {
             throw new IllegalArgumentException("Pinned JRE 21.0.1 required");
         phase = "load-jni";
         RocksDB.loadLibrary(Collections.singletonList(nativeDir.toString()));
-        if (!"10.2.1".equals(RocksDB.rocksdbVersion().toString()))
-            throw new IllegalStateException("Pinned RocksDB version mismatch");
+        observedVersion = RocksDB.rocksdbVersion();
         emit("\"event\":\"jni-loaded\",\"mode\":" + quote(mode)
             + ",\"jniPath\":" + quote(dll.toString()) + ",\"jniSha256\":" + quote(args[1])
-            + ",\"rocksdbVersion\":\"10.2.1\",\"javaVersion\":" + quote(System.getProperty("java.version"))
+            + "," + versionFields() + ",\"javaVersion\":" + quote(System.getProperty("java.version"))
             + ",\"tmp\":" + quote(System.getProperty("java.io.tmpdir"))
             + ",\"home\":" + quote(System.getProperty("user.home"))
             + ",\"cwd\":" + quote(System.getProperty("user.dir"))
@@ -299,6 +310,11 @@ public final class NodeDatabaseControl {
             + ",\"userProfile\":" + quote(System.getenv("USERPROFILE")));
         phase = "jni-handshake";
         handshake(caseRoot);
+        // Preserve loaded-module provenance even when the reported native
+        // version differs. No database access precedes this exact tuple gate.
+        phase = "version-check";
+        if (!isPinnedVersion(observedVersion))
+            throw new IllegalStateException("Pinned RocksDB version mismatch");
         database(caseRoot);
     }
 
@@ -315,6 +331,7 @@ public final class NodeDatabaseControl {
         }
         emit("\"event\":\"result\",\"outcome\":" + quote(outcome) + ",\"mode\":" + quote(mode)
             + ",\"phase\":" + quote(phase) + ",\"diskFull\":" + diskFull
+            + "," + versionFields()
             + ",\"capacityStatus\":" + quote(capacityStatus) + ",\"closeStatus\":" + quote(closeStatus)
             + ",\"baselineClosed\":" + baselineClosed + ",\"finalClosed\":" + finalClosed
             + ",\"completedWrites\":" + completedWrites + ",\"completedFlushes\":" + completedFlushes

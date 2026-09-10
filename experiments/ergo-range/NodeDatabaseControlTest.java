@@ -1,6 +1,7 @@
-// Pure Java status, path and pinned-library filename checks. No worker main/JNI.
+// Pure Java status, path, filename and version checks. No worker main/JNI.
 import java.nio.file.Paths;
 import org.rocksdb.Status;
+import org.rocksdb.RocksDB;
 import org.rocksdb.util.Environment;
 
 public final class NodeDatabaseControlTest {
@@ -24,6 +25,11 @@ public final class NodeDatabaseControlTest {
             throw new AssertionError("Pinned JNI filename mismatch");
     }
 
+    private static void checkVersion(boolean expected, RocksDB.Version version) {
+        if (NodeDatabaseControl.isPinnedVersion(version) != expected)
+            throw new AssertionError("Unexpected pinned RocksDB version acceptance");
+    }
+
     public static void main(String[] args) {
         if (args.length != 0) throw new IllegalArgumentException("No arguments");
         check(true, new Status(Status.Code.IOError, Status.SubCode.NoSpace, null));
@@ -44,6 +50,16 @@ public final class NodeDatabaseControlTest {
         checkRoot(false, "R:\\run\\tmp;C:\\system");
         checkJniName("librocksdbjni-win64.dll", "rocksdb");
         checkJniName(NodeDatabaseControl.JNI_FILE_NAME, "rocksdbjni");
-        System.out.println("{\"status\":\"passed\",\"cases\":18,\"test\":\"status-write-roots-and-jni-names\"}");
+        RocksDB.Version pinned = new RocksDB.Version((byte) 10, (byte) 2, (byte) 1);
+        checkVersion(true, pinned);
+        checkVersion(false, null);
+        checkVersion(false, new RocksDB.Version((byte) 9, (byte) 2, (byte) 1));
+        checkVersion(false, new RocksDB.Version((byte) 10, (byte) 1, (byte) 1));
+        checkVersion(false, new RocksDB.Version((byte) 10, (byte) 2, (byte) 0));
+        // Pure pinned-JAR evidence: its formatting is already dotted numeric.
+        // A native mismatch must not be explained away as a formatting issue.
+        if (!"10.2.1".equals(pinned.toString()))
+            throw new AssertionError("Pinned RocksDB Version formatting changed");
+        System.out.println("{\"status\":\"passed\",\"cases\":24,\"test\":\"status-write-roots-jni-names-and-version\"}");
     }
 }

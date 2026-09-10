@@ -1,0 +1,22 @@
+{
+  "status": "static-pinned-native-version-decoded",
+  "dllSha256": "0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7",
+  "dllBytes": 8869888,
+  "archivePath": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-startup\\bundle\\ergo-6.1.5.jar",
+  "member": "librocksdbjni-win64.dll",
+  "export": "Java_org_rocksdb_RocksDB_version",
+  "rva": 1326640,
+  "rawOffset": 1323568,
+  "firstSixBytes": "B8-03-01-0A-00-C3",
+  "encodedVersion": 655619,
+  "major": 10,
+  "minor": 1,
+  "patch": 3,
+  "interpretation": "x64 B8 imm32 C3 is mov eax, imm32; ret. RocksDB.Version.fromEncodedVersion decodes bits 16..23/8..15/0..7 as major/minor/patch.",
+  "source": "https://raw.githubusercontent.com/facebook/rocksdb/v10.2.1/java/src/main/java/org/rocksdb/RocksDB.java#L4850",
+  "limitations": [
+    "Static inspection of the exact pinned DLL only; no JNI load or database access.",
+    "This disposable parser handles a hash-pinned PE, not arbitrary untrusted PE files.",
+    "Loaded-module identity and the actual runtime-returned tuple remain separate execution evidence."
+  ]
+}

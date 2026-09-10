@@ -781,8 +781,8 @@ node operation and the larger sync envelope remain separate work.
 
 The [preparation report](ergo-node-database-preparation.json) captures a passing
 read-only preflight, exact source/artifact pins, warning-free compilation and
-18 pure Java status/path/filename checks. Compilation took 5,806 ms with 156,262,400
-peak commit bytes; tests took 639 ms with 101,052,416 bytes. Both processes exited
+24 pure Java status/path/filename/version checks. Compilation took 6,652 ms with 150,196,224
+peak commit bytes; tests took 354 ms with 101,203,968 bytes. Both processes exited
 0 with installed limits and empty jobs. Separately, 46 identity and 37
 accounting/evidence cases pass; the full project check passes 1,795 tests plus
 package, pilot, store-crash and spent-set checks. Its test runner required the
@@ -818,6 +818,58 @@ Two additional pure Java regression cases execute the pinned JAR's filename
 calculation for both `rocksdb` and `rocksdbjni`, tying the archive name and
 worker destination to actual artifact behavior. No budget or load directory
 is widened; the failed first attempt remains a refusal.
+
+The [second attempt](ergo-node-database-second-attempt.json) with that loader
+correction loaded JNI, then refused the required version before any database
+access. Both jobs were empty and final counters remained valid (410,088 and
+40,572 bytes). Its [cleanup](ergo-node-database-second-cleanup.json) verified
+the detached image, hash and absent letter before removing it. The refusal
+was not a `Version.toString()` formatting problem: the pinned JAR's real pure
+constructor returns dotted numeric text. The diagnostic worker now records
+the observed major/minor/patch fields, retaining the exact `10/2/1` requirement
+after the bounded module handshake and before database access.
+
+The [final diagnostic run](ergo-node-database-verification.json) reports native
+**10.1.3**. Independent [static export inspection](ergo-node-native-version-export.json)
+of the exact pinned DLL agrees: `Java_org_rocksdb_RocksDB_version` at RVA
+1,326,640 / raw offset 1,323,568 contains `B8 03 01 0A 00 C3`, returning packed
+value `0x000A0103`. This establishes a version-marker mismatch with the declared
+10.2.1 dependency; it does not establish the DLL's full source/build provenance
+or make the 10.1.3 source an authenticated substitute for the actual artifact.
+
+That run also refused a loaded `COMCTL32.dll` under the Windows side-by-side
+component store (`C:\WINDOWS\WinSxS\...`), outside the prepared module policy.
+The supervisor stopped the JVM before issuing `PROCEED`; `nativeVerified`,
+`databaseActive` and `injected` remain false. The helper throws before returning
+its module inventory, so an empty captured array is not evidence of no loaded
+modules or a passing JNI provenance check. The worker's version/path output
+must not be promoted into that missing independent module acceptance.
+
+Compilation took 5,928 ms / 147,804,160 peak commit bytes; the diagnostic worker
+took 1,983 ms / 106,655,744 bytes. Both jobs were empty with installed limits.
+Actual counters were valid at 766,227 and 10,829 bytes, with maximum sample gaps
+294 and 954 ms. Final samples finished 5 and 2 ms after empty confirmation;
+observer stop to empty took 10 ms. The shared observer `readError` records the
+module-policy refusal, so overall acceptance correctly fails even though the
+raw network counter observations remain valid. It is not a successful injected
+traffic stop. No database baseline, write/flush/close/reopen or disk-full result
+has been demonstrated by these attempts.
+
+The [final cleanup](ergo-node-database-cleanup.json) rechecked the detached
+67,109,376-byte image and hash, verified absent `Z:`, removed that exact image
+and empty control directory, and measured 531,748,184,064 bytes host free.
+Independent review matched all final source/class hashes, version evidence,
+counter arithmetic/timing, empty jobs and all three cleanup records. No material
+evidence inconsistency remains; the control itself remains **unresolved**.
+
+Stop further trials with this candidate until the native source/build mismatch
+is resolved. Compare reviewing the reported older implementation with obtaining
+a demonstrably consistent Java/JNI artifact; neither follows from a version
+string alone. Separately establish narrow Windows side-by-side component
+provenance before changing the module policy. Keep the current version and
+identity guards; a passing test is not grounds to weaken them. The near-1-second
+module-observation gap is a remaining timing concern. No larger disk, peers,
+runtime adoption or production claim follows from these observations.
 
 ### Combined experiment proposal
 
