@@ -1,0 +1,282 @@
+{
+  "status": "unresolved-database-control",
+  "executeRequested": true,
+  "observedAtUtc": "2026-09-10T13:51:31.2037242Z",
+  "imagePath": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-database-control\\control.vhd",
+  "virtualBytes": 67108864,
+  "maximumBackingBytes": 68157440,
+  "hostReserveBytes": 107374182400,
+  "processCountMaximum": 6,
+  "perProcessWallMs": 30000,
+  "perProcessCommitBytes": 1073741824,
+  "perProcessOutputBytes": 65536,
+  "perProcessTrafficTriggerBytes": 1048576,
+  "perProcessFinalTrafficMaximumBytes": 2097152,
+  "mutationsStarted": true,
+  "detached": true,
+  "mappingRemoved": true,
+  "artifactRemoved": false,
+  "driveLetter": "Z",
+  "volumeRoot": "\\\\?\\Volume{b718ae4d-fad8-4be4-8d55-1eaa7c262a52}\\",
+  "nativeDisk": {
+    "VirtualSizeBytes": 67108864,
+    "BackingSizeBytes": 67109376,
+    "ProviderSubtype": 2,
+    "PhysicalPath": "\\\\.\\PhysicalDrive1"
+  },
+  "disk": {
+    "Number": 1,
+    "Path": "\\\\?\\scsi#disk&ven_msft&prod_virtual_disk#2&1f4adffe&1&000002#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}",
+    "UniqueId": "600224801E86DD3D22CDF85D8C2314CF",
+    "Guid": "{8af1bae8-b487-4afc-863b-6cf240d42ac2}",
+    "Size": 67108864,
+    "PartitionStyle": "GPT"
+  },
+  "partition": {
+    "DiskNumber": 1,
+    "PartitionNumber": 1,
+    "Guid": "{b718ae4d-fad8-4be4-8d55-1eaa7c262a52}",
+    "Offset": 1048576,
+    "Size": 65994752,
+    "GptType": "{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}"
+  },
+  "volumeBefore": {
+    "Path": "\\\\?\\Volume{b718ae4d-fad8-4be4-8d55-1eaa7c262a52}\\",
+    "UniqueId": "\\\\?\\Volume{b718ae4d-fad8-4be4-8d55-1eaa7c262a52}\\",
+    "FileSystem": "NTFS",
+    "FileSystemLabel": "MOE_JRE_CONTROL",
+    "Size": 65990656,
+    "SizeRemaining": 53633024
+  },
+  "volumeAfter": null,
+  "hostFreeBefore": 531761397760,
+  "hostFreeAfter": null,
+  "backingBytes": null,
+  "compilerSha256": "cde026ff966b48b5e5f148b6f041ceff3cf4f85cf75155f4ec0f40e4ee14b545",
+  "jniSha256": "0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7",
+  "files": {
+    "node-database-control.ps1": "22c27d8e9a5babdfab4f73aba0a6696f7ce2bd6ddc66fb04d2206d4dedb3b314",
+    "node-database-evidence.ps1": "603c98e7dc4dbad3fea966bc78b06b54806875b1b6ec475c241a69a36342f54c",
+    "node-database-evidence.test.ps1": "561dd3e6b10987d9bec18a85a868107ddfd922321317fffcb5eafa9827d18764",
+    "NodeDatabaseControl.java": "bdbceb549ae7ea785a71f0737debca2d6446dbe77152f26dd3c6d059b5150bf6",
+    "NodeDatabaseIdentity.cs": "3d684b732e17d4139e8cab922b988782fe18081d7ddf00fa94dd1080582ca04c",
+    "node-database-identity.test.ps1": "3bb118f720055b81ddc413c4bcfd3a3124c9d4f60d7d224c73c226c2a769b534",
+    "NodeProbeDisk.cs": "b2c95f52447d159fe6c4af213ad3f83f27b92be58a216c16e48e94eb075e8b23",
+    "node-disk-evidence.ps1": "2cb5e0007a19bff6f7f82bcf0cc14efe6885d67617916cef1f79405f7597d65b",
+    "NodeProbeProcess.cs": "bef224d4fd27d9a06ac2960f2d85b8b06dc5cf0048d473b7e12e20eee690979d",
+    "NodeTrafficCounter.cs": "4ad99aabf1f2df82b7854f8604f76ae33c1381d125b49ad5bd6a03168589c3c5"
+  },
+  "cases": [
+    {
+      "mode": "compile",
+      "arguments": [
+        "-Xms32m",
+        "-Xmx256m",
+        "-Djava.io.tmpdir=Z:\\run/tmp",
+        "-Duser.home=Z:\\run/home",
+        "-Djava.library.path=Z:\\run/native",
+        "-XX:-UsePerfData",
+        "-XX:-CreateCoredumpOnCrash",
+        "-XX:ErrorFile=Z:\\run/hs_err.log",
+        "-jar",
+        "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\sync-preparation\\ecj-3.37.0.jar",
+        "-proc:none",
+        "-encoding",
+        "UTF-8",
+        "-source",
+        "8",
+        "-target",
+        "8",
+        "-cp",
+        "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-startup\\bundle\\ergo-6.1.5.jar",
+        "-d",
+        "Z:\\run/classes",
+        "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\experiments\\ergo-range\\NodeDatabaseControl.java"
+      ],
+      "process": {
+        "Case": "compile",
+        "Outcome": "exited",
+        "Output": "",
+        "LaunchMode": "detached",
+        "ExitCode": 0,
+        "CreationFlags": 525324,
+        "ElapsedMs": 5780,
+        "CapturedOutputBytes": 0,
+        "PeakCommitBytes": 155045888,
+        "PeakProcessCommitBytes": 155045888,
+        "CommitLimitBytes": 1073741824,
+        "BeforeResumePeakCommitBytes": 393216,
+        "BeforeResumePeakProcessCommitBytes": 393216,
+        "UserCpuTicks": 44375000,
+        "KernelCpuTicks": 3437500,
+        "JobUserCpuTicks": 44375000,
+        "JobKernelCpuTicks": 3437500,
+        "CpuRateFlags": 5,
+        "CpuRatePer10000": 2500,
+        "TotalProcesses": 1,
+        "ActiveProcessesAfterExit": 0,
+        "LimitTerminatedProcesses": 0,
+        "BeforeResumeTotalProcesses": 1,
+        "BeforeResumeActiveProcesses": 1,
+        "SampledPeakPrivateCommitBytes": 155045888,
+        "SampledMaxPrivateCommitBytes": 155045888,
+        "BeforeResumePrivateCommitBytes": 393216,
+        "MemorySamples": 323,
+        "MaxSampledAssociatedProcesses": 1,
+        "ObservedProcesses": [
+          {
+            "ProcessId": 4008,
+            "Image": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-startup\\bundle\\jre\\bin\\java.exe",
+            "QueryError": 0
+          }
+        ],
+        "LimitsReadBackBeforeResume": true,
+        "JobEmptyAfterCleanup": true,
+        "ParentConsoleVerified": false
+      },
+      "launchFailure": null,
+      "traffic": {
+        "ReceivedBytes": 59388,
+        "SentBytes": 44576,
+        "TotalBytes": 103964,
+        "StopReason": null,
+        "FirstStopMs": -1,
+        "AccountingValid": true,
+        "LastSampleMs": 5903,
+        "MaxGapMs": 1000,
+        "MaxGapMsObserved": 294
+      },
+      "observations": {
+        "stopDecisionMs": -1,
+        "emptyConfirmedMs": 5898,
+        "finalSampleStartedMs": 5901,
+        "finalSampleFinishedMs": 5903,
+        "readError": null,
+        "samples": 25,
+        "finalAttempted": true
+      },
+      "progress": {
+        "modules": [],
+        "nativeVerified": false,
+        "databaseActive": false,
+        "injected": false,
+        "injectedReason": null,
+        "injectedReadError": null
+      },
+      "classes": [
+        {
+          "name": "NodeDatabaseControl.class",
+          "bytes": 15461,
+          "sha256": "10e5c1c549def82ab63fb59de926c2f3646e9960e1df5c5aed779d15e4d1c557"
+        }
+      ]
+    },
+    {
+      "mode": "threshold",
+      "arguments": [
+        "-Xms32m",
+        "-Xmx256m",
+        "-Djava.io.tmpdir=Z:\\run/tmp",
+        "-Duser.home=Z:\\run/home",
+        "-Djava.library.path=Z:\\run/native",
+        "-XX:-UsePerfData",
+        "-XX:-CreateCoredumpOnCrash",
+        "-XX:ErrorFile=Z:\\run/hs_err.log",
+        "-cp",
+        "Z:\\run/classes;C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-startup\\bundle\\ergo-6.1.5.jar",
+        "NodeDatabaseControl",
+        "Z:\\run",
+        "0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7",
+        "threshold"
+      ],
+      "process": {
+        "Case": "threshold",
+        "Outcome": "exited",
+        "Output": "{\"event\":\"result\",\"outcome\":\"failed\",\"mode\":\"threshold\",\"phase\":\"load-jni\",\"diskFull\":false,\"capacityStatus\":\"none\",\"closeStatus\":\"not-opened\",\"baselineClosed\":false,\"finalClosed\":false,\"completedWrites\":0,\"completedFlushes\":0,\"verifiedReads\":0,\"attemptedPayloadBytes\":0,\"completedPayloadBytes\":0,\"maxPayloadBytes\":67112960,\"elapsedMs\":412,\"errorClass\":\"java.lang.UnsatisfiedLinkError\",\"error\":\"Can't load library: Z:\\\\run\\\\native\\\\librocksdbjnijni-win64.dll\"}\n",
+        "LaunchMode": "detached",
+        "ExitCode": 2,
+        "CreationFlags": 525324,
+        "ElapsedMs": 744,
+        "CapturedOutputBytes": 461,
+        "PeakCommitBytes": 105373696,
+        "PeakProcessCommitBytes": 105373696,
+        "CommitLimitBytes": 1073741824,
+        "BeforeResumePeakCommitBytes": 397312,
+        "BeforeResumePeakProcessCommitBytes": 397312,
+        "UserCpuTicks": 6562500,
+        "KernelCpuTicks": 937500,
+        "JobUserCpuTicks": 6562500,
+        "JobKernelCpuTicks": 937500,
+        "CpuRateFlags": 5,
+        "CpuRatePer10000": 2500,
+        "TotalProcesses": 1,
+        "ActiveProcessesAfterExit": 0,
+        "LimitTerminatedProcesses": 0,
+        "BeforeResumeTotalProcesses": 1,
+        "BeforeResumeActiveProcesses": 1,
+        "SampledPeakPrivateCommitBytes": 105373696,
+        "SampledMaxPrivateCommitBytes": 104783872,
+        "BeforeResumePrivateCommitBytes": 397312,
+        "MemorySamples": 45,
+        "MaxSampledAssociatedProcesses": 1,
+        "ObservedProcesses": [
+          {
+            "ProcessId": 4748,
+            "Image": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-startup\\bundle\\jre\\bin\\java.exe",
+            "QueryError": 0
+          }
+        ],
+        "LimitsReadBackBeforeResume": true,
+        "JobEmptyAfterCleanup": true,
+        "ParentConsoleVerified": false
+      },
+      "launchFailure": null,
+      "traffic": {
+        "ReceivedBytes": 1848,
+        "SentBytes": 1540,
+        "TotalBytes": 3388,
+        "StopReason": null,
+        "FirstStopMs": -1,
+        "AccountingValid": true,
+        "LastSampleMs": 784,
+        "MaxGapMs": 1000,
+        "MaxGapMsObserved": 266
+      },
+      "observations": {
+        "stopDecisionMs": -1,
+        "emptyConfirmedMs": 778,
+        "finalSampleStartedMs": 778,
+        "finalSampleFinishedMs": 784,
+        "readError": null,
+        "samples": 5,
+        "finalAttempted": true
+      },
+      "progress": {
+        "modules": [],
+        "nativeVerified": false,
+        "databaseActive": false,
+        "injected": false,
+        "injectedReason": null,
+        "injectedReadError": null
+      }
+    }
+  ],
+  "errors": [
+    "Injected whole-job stop not demonstrated"
+  ],
+  "limitations": [
+    "Trusted offline fixed worker only; no Ergo services, peers, public release or full-sized allocation.",
+    "Stable trusted host administration and paths assumed; drive mapping and Job Object are not a filesystem sandbox.",
+    "Synchronous storage, module reads and supervisor calls have no hard deadline; late samples refuse evidence but cannot stop a permanently stalled supervisor.",
+    "Loaded module snapshots are point-in-time provenance, not an exhaustive lifetime DLL or native/JRE/OS write trace.",
+    "Traffic controls inject synthetic observations separately from real interface accounting; they do not measure real traffic-trigger throughput.",
+    "Host supervisor caches, bundle/compiler reads, image, reports, paging and OS services are outside the worker volume.",
+    "Six sequential JVMs at most; real accounting covers each JVM baseline through its final sample, not intervening disk setup/cleanup."
+  ],
+  "mappingBefore": {
+    "DriveLetter": "Z",
+    "DriveRoot": "Z:\\",
+    "VolumeGuidRoot": "\\\\?\\Volume{b718ae4d-fad8-4be4-8d55-1eaa7c262a52}\\",
+    "NativeTarget": "\\Device\\HarddiskVolume8"
+  }
+}

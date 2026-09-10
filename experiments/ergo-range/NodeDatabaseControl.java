@@ -24,6 +24,10 @@ import org.rocksdb.Status;
 import org.rocksdb.WriteOptions;
 
 public final class NodeDatabaseControl {
+    // v10.2.1 loadLibrary(List) passes "rocksdbjni" to a helper which appends
+    // "jni" again. The supervisor extracts the original archive member under
+    // this explicit-loader filename, retaining exactly the pinned DLL bytes.
+    static final String JNI_FILE_NAME = "librocksdbjnijni-win64.dll";
     private static final int MIB = 1024 * 1024;
     private static final int MAX_WRITES = 64;
     private static final long MAX_RUNTIME_NS = 25_000_000_000L;
@@ -265,7 +269,7 @@ public final class NodeDatabaseControl {
         expectedRoot("TEMP", System.getenv("TEMP"), run);
         expectedRoot("TMP", System.getenv("TMP"), run);
         expectedRoot("USERPROFILE", System.getenv("USERPROFILE"), run);
-        Path dll = nativeDir.resolve("librocksdbjni-win64.dll");
+        Path dll = nativeDir.resolve(JNI_FILE_NAME);
         // loadLibrary(List) also tries optional compression DLL names. A single
         // verified file in its only search directory prevents those candidates.
         try (DirectoryStream<Path> entries = Files.newDirectoryStream(nativeDir)) {

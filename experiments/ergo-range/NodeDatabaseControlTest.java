@@ -1,6 +1,7 @@
-// Pure Java status and path checks. Never calls worker main or loads JNI.
+// Pure Java status, path and pinned-library filename checks. No worker main/JNI.
 import java.nio.file.Paths;
 import org.rocksdb.Status;
+import org.rocksdb.util.Environment;
 
 public final class NodeDatabaseControlTest {
     private static void check(boolean expected, Status status) {
@@ -13,6 +14,14 @@ public final class NodeDatabaseControlTest {
         try { NodeDatabaseControl.expectedRoot("test-root", actual, Paths.get("R:\\run\\tmp")); }
         catch (IllegalArgumentException error) { accepted = false; }
         if (accepted != expected) throw new AssertionError("Unexpected write-root acceptance");
+    }
+
+    private static void checkJniName(String expected, String library) {
+        // Executes the pinned JAR's actual filename computation without loading
+        // JNI. RocksDB v10.2.1 loadLibrary(List) supplies "rocksdbjni", whereas
+        // the archive's normal resource naming supplies "rocksdb".
+        if (!expected.equals(Environment.getJniLibraryFileName(library)))
+            throw new AssertionError("Pinned JNI filename mismatch");
     }
 
     public static void main(String[] args) {
@@ -33,6 +42,8 @@ public final class NodeDatabaseControlTest {
         checkRoot(false, "S:\\run\\tmp");
         checkRoot(false, "R:\\run\\home");
         checkRoot(false, "R:\\run\\tmp;C:\\system");
-        System.out.println("{\"status\":\"passed\",\"cases\":16,\"test\":\"status-and-write-roots\"}");
+        checkJniName("librocksdbjni-win64.dll", "rocksdb");
+        checkJniName(NodeDatabaseControl.JNI_FILE_NAME, "rocksdbjni");
+        System.out.println("{\"status\":\"passed\",\"cases\":18,\"test\":\"status-write-roots-and-jni-names\"}");
     }
 }

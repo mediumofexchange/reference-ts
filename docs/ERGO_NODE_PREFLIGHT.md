@@ -736,7 +736,10 @@ Failures retain the bounded image and exact unresolved evidence.
 
 The pinned JAR contains an 8,869,888-byte `librocksdbjni-win64.dll`, SHA-256
 `0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7`.
-It is streamed into the volume's otherwise empty native directory. The
+It is streamed into the volume's otherwise empty native directory as
+`librocksdbjnijni-win64.dll`. The pinned explicit-directory overload calls
+`Environment.getJniLibraryFileName("rocksdbjni")`, adding that second suffix;
+the original archive member and exact bytes/hash remain unchanged. The
 [worker](../experiments/ergo-range/NodeDatabaseControl.java) uses RocksDB's
 [explicit directory loader](https://github.com/facebook/rocksdb/blob/v10.2.1/java/src/main/java/org/rocksdb/RocksDB.java),
 validates JRE/version/write roots, and waits for the supervisor to inspect
@@ -778,8 +781,8 @@ node operation and the larger sync envelope remain separate work.
 
 The [preparation report](ergo-node-database-preparation.json) captures a passing
 read-only preflight, exact source/artifact pins, warning-free compilation and
-16 pure Java status/path checks. Compilation took 6,826 ms with 153,784,320
-peak commit bytes; tests took 717 ms with 99,823,616 bytes. Both processes exited
+18 pure Java status/path/filename checks. Compilation took 5,806 ms with 156,262,400
+peak commit bytes; tests took 639 ms with 101,052,416 bytes. Both processes exited
 0 with installed limits and empty jobs. Separately, 46 identity and 37
 accounting/evidence cases pass; the full project check passes 1,795 tests plus
 package, pilot, store-crash and spent-set checks. Its test runner required the
@@ -792,8 +795,29 @@ complete names and rejects alternate JNI paths. A post-exit marker read avoids
 rejecting a fast completed disk-full worker merely because it finished between
 observer samples. Focused readback and hostile cases close both findings; no
 material preparation finding remains. The mapped-volume/JNI/database and
-cleanup experiment itself has not run. Prior native-worker elevation approval
-does not cover this new worker or drive-letter mapping.
+cleanup experiment required separate authorization; its first attempt and
+loader correction are recorded below.
+
+The [first authorized attempt](ergo-node-database-first-attempt.json) at
+`2251836` created/mapped the owned disk and compiled the worker successfully
+on `Z:\run`, then failed before the JNI handshake or any database operation.
+The explicit-directory loader requested `librocksdbjnijni-win64.dll`, while
+the prepared extraction had retained the archive member's shorter name. The
+Java result records `UnsatisfiedLinkError`; the outer stop classifier's refusal
+does not replace that underlying cause. Both jobs were empty, final actual
+traffic accounting remained valid (103,964 and 3,388 bytes), and mapping
+removal plus detachment succeeded. A
+[separate cleanup readback](ergo-node-database-first-cleanup.json) checked the
+exact detached 67,109,376-byte image's hash and absent drive letter before
+removing it; host free space afterward was 531,757,232,128 bytes.
+
+The correction keeps the explicit-directory API and its loaded-state update,
+renaming only the extracted copy to the basename that API computes. Switching
+to the default search path or manipulating private loader state is unnecessary.
+Two additional pure Java regression cases execute the pinned JAR's filename
+calculation for both `rocksdb` and `rocksdbjni`, tying the archive name and
+worker destination to actual artifact behavior. No budget or load directory
+is widened; the failed first attempt remains a refusal.
 
 ### Combined experiment proposal
 

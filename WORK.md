@@ -9,9 +9,12 @@ Prepare the smallest offline JRE/RocksDB control on a newly created fixed
 harness, finite limits, exact mapping and loaded-DLL identity, database
 write/read/flush/close/reopen and disk-full behavior, every-exit's final traffic
 accounting, empty jobs and verified mapping/image cleanup. Default is read-only.
-The preparation is implemented; elevated execution has not been performed.
+The preparation was reviewed at `2251836`; the exact small elevated experiment
+is authorized. Its first run failed at JNI loading, before database access.
+The unchanged-byte filename correction is independently reviewed; checks and
+the fresh, same-budget retry are in progress.
 
-Development branch: `test/ergo-jre-database-control`, based on `1c2d70a`.
+Development branch: `test/ergo-jre-database-execution`, based on `2251836`.
 Companion specification: `money-from-first-principles/main` at `7ea0ee8`.
 No normative change, runtime adoption, Ergo node, peers or full-sized allocation.
 
@@ -35,13 +38,20 @@ No normative change, runtime adoption, Ergo node, peers or full-sized allocation
 
 - Read-only preflight passes without creating a disk or control directory.
   Reproducible compiler check verifies all 167 bundle files, compiler/source/
-  class hashes; warning-free compilation and 16 pure Java tests pass. No JNI
-  or database experiment ran. Identity/accounting hostile tests pass separately.
+  class hashes; warning-free corrected compilation and 18 pure Java tests pass.
+  Identity/accounting hostile tests pass separately.
 - [Preparation report](docs/ergo-node-database-preparation.json) captures final
   source/artifact pins and compilation evidence. 46 identity and 37 accounting
   cases pass. Independent review resolved missing optional compression names,
   alternate JNI paths and a fast-exit marker race; focused readback closed review
   with no unresolved material finding. Actual volume/database behavior is untested.
+- [First attempt](docs/ergo-node-database-first-attempt.json): volume mapping and
+  compilation succeeded; the pinned explicit-directory API requested a second
+  `jni` suffix. Both jobs were empty with valid final traffic accounting; mapping
+  removal and detach passed. [Cleanup](docs/ergo-node-database-first-cleanup.json)
+  verified the exact detached image/hash and absent letter before removing it.
+  The correction renames only the extracted identical DLL bytes and adds pinned
+  filename-computation regression tests; independent review closed without findings.
 - `npm run check` passes: 96 files / 1,795 tests, package consumer, pilot,
   store-crash and spent-set checks. Ordinary-host execution was needed after
   sandboxed esbuild could not read its configuration. Windows CI now includes
@@ -52,12 +62,9 @@ No normative change, runtime adoption, Ergo node, peers or full-sized allocation
 
 ## Next
 
-1. Request execution of the exact reviewed `node-database-control.ps1 -Execute`
-   only after preparation is delivered. Prior elevated approval covered the
-   native disk worker, not this Java/database worker or drive-letter mapping.
-   Pinned bundle/compiler remain as direct inputs until that decision. The
-   disposable archive and generated compile copies were removed after capture.
-2. If approved, run only this small offline control and preserve every result;
+1. Finish required checks and retry the approved small control with the reviewed
+   filename correction. Pinned bundle/compiler remain as direct inputs.
+2. Run only this small offline control and preserve every result;
    failures are unresolved, not reasons to widen budgets. Verify all job,
    mapping, image and final traffic results before accepting the composition.
 3. Then prepare the separate 30 min / 20 GiB / 100 GiB reserve sync harness,

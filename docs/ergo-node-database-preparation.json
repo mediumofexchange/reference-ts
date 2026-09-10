@@ -1,10 +1,10 @@
 {
-  "status": "prepared-offline-database-control-only",
-  "observedAtUtc": "2026-09-10T13:44:27.7485021Z",
+  "status": "prepared-offline-database-control-loader-corrected",
+  "observedAtUtc": "2026-09-10T13:58:28.8110499Z",
   "preflight": {
     "status": "prepared-read-only-database-control",
     "executeRequested": false,
-    "observedAtUtc": "2026-09-10T13:44:25.1620962Z",
+    "observedAtUtc": "2026-09-10T13:57:29.972727Z",
     "imagePath": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-database-control\\control.vhd",
     "virtualBytes": 67108864,
     "maximumBackingBytes": 68157440,
@@ -26,16 +26,16 @@
     "partition": null,
     "volumeBefore": null,
     "volumeAfter": null,
-    "hostFreeBefore": 531574419456,
+    "hostFreeBefore": 531752161280,
     "hostFreeAfter": null,
     "backingBytes": null,
     "compilerSha256": "cde026ff966b48b5e5f148b6f041ceff3cf4f85cf75155f4ec0f40e4ee14b545",
     "jniSha256": "0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7",
     "files": {
-      "node-database-control.ps1": "22c27d8e9a5babdfab4f73aba0a6696f7ce2bd6ddc66fb04d2206d4dedb3b314",
+      "node-database-control.ps1": "7c10b194294ee299206b11f0902e4c05f2a82913de0646d402ca02a5558ce197",
       "node-database-evidence.ps1": "603c98e7dc4dbad3fea966bc78b06b54806875b1b6ec475c241a69a36342f54c",
       "node-database-evidence.test.ps1": "561dd3e6b10987d9bec18a85a868107ddfd922321317fffcb5eafa9827d18764",
-      "NodeDatabaseControl.java": "bdbceb549ae7ea785a71f0737debca2d6446dbe77152f26dd3c6d059b5150bf6",
+      "NodeDatabaseControl.java": "68e963ac7b3de055e143e9cc1413ea6a7abdc59331aacc5b27f1cbc72877ef16",
       "NodeDatabaseIdentity.cs": "3d684b732e17d4139e8cab922b988782fe18081d7ddf00fa94dd1080582ca04c",
       "node-database-identity.test.ps1": "3bb118f720055b81ddc413c4bcfd3a3124c9d4f60d7d224c73c226c2a769b534",
       "NodeProbeDisk.cs": "b2c95f52447d159fe6c4af213ad3f83f27b92be58a216c16e48e94eb075e8b23",
@@ -57,7 +57,7 @@
   },
   "compilation": {
     "status": "database-worker-compiled-pure-java-tests-passed",
-    "observedAtUtc": "2026-09-10T13:37:03.3852313Z",
+    "observedAtUtc": "2026-09-10T13:56:07.834677Z",
     "runPath": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-database-compile-test",
     "bundleFilesVerified": 167,
     "bundleManifestSha256": "08bad2de4f8624e94d8f429df7b902669e78956c15966b044f5b4897a7cf232d",
@@ -232,15 +232,15 @@
     },
     "compilerSha256": "cde026ff966b48b5e5f148b6f041ceff3cf4f85cf75155f4ec0f40e4ee14b545",
     "sourcePins": {
-      "node-database-compile.test.ps1": "4c1f148d0567aeb26605413f275d4718c067025cfc886b7f688002b482ce02de",
-      "NodeDatabaseControl.java": "bdbceb549ae7ea785a71f0737debca2d6446dbe77152f26dd3c6d059b5150bf6",
-      "NodeDatabaseControlTest.java": "d45c5a7d06fa0ceee155fb8910ab2b4349ce24701ef76672ac1c00067e140408",
+      "node-database-compile.test.ps1": "05b98f611a93bb3fc854dcbea9ea4d97d45bee0046cc88952362c48a7f7eaf45",
+      "NodeDatabaseControl.java": "68e963ac7b3de055e143e9cc1413ea6a7abdc59331aacc5b27f1cbc72877ef16",
+      "NodeDatabaseControlTest.java": "bd53fc698def2da91f9a571c113cefbce35d48f7900a61e3c85ba2fa1f1bf98a",
       "NodeProbeProcess.cs": "bef224d4fd27d9a06ac2960f2d85b8b06dc5cf0048d473b7e12e20eee690979d",
       "node-database-evidence.ps1": "603c98e7dc4dbad3fea966bc78b06b54806875b1b6ec475c241a69a36342f54c"
     },
     "classPins": {
-      "NodeDatabaseControl.class": "10e5c1c549def82ab63fb59de926c2f3646e9960e1df5c5aed779d15e4d1c557",
-      "NodeDatabaseControlTest.class": "02bb3363264fa29b2d14b234dc981f8cb549728cb247802280cc83df41ee6c5d"
+      "NodeDatabaseControl.class": "3e8f4bdb4ceddfc3f6baf471ad2ccb5860e0c564b450aef8c418ce094cba6426",
+      "NodeDatabaseControlTest.class": "4750b3f75a58334f3ca1ca7d5d843250225aab29a3b7bfa2b427f5b90421bdaa"
     },
     "compileArguments": [
       "-Xms32m",
@@ -273,17 +273,17 @@
       "LaunchMode": "detached",
       "ExitCode": 0,
       "CreationFlags": 525324,
-      "ElapsedMs": 6826,
+      "ElapsedMs": 5806,
       "CapturedOutputBytes": 0,
-      "PeakCommitBytes": 153784320,
-      "PeakProcessCommitBytes": 153784320,
+      "PeakCommitBytes": 156262400,
+      "PeakProcessCommitBytes": 156262400,
       "CommitLimitBytes": 1073741824,
-      "BeforeResumePeakCommitBytes": 397312,
-      "BeforeResumePeakProcessCommitBytes": 397312,
-      "UserCpuTicks": 54687500,
-      "KernelCpuTicks": 3281250,
-      "JobUserCpuTicks": 54687500,
-      "JobKernelCpuTicks": 3281250,
+      "BeforeResumePeakCommitBytes": 393216,
+      "BeforeResumePeakProcessCommitBytes": 393216,
+      "UserCpuTicks": 54218750,
+      "KernelCpuTicks": 2968750,
+      "JobUserCpuTicks": 54218750,
+      "JobKernelCpuTicks": 2968750,
       "CpuRateFlags": 5,
       "CpuRatePer10000": 2500,
       "TotalProcesses": 1,
@@ -291,14 +291,14 @@
       "LimitTerminatedProcesses": 0,
       "BeforeResumeTotalProcesses": 1,
       "BeforeResumeActiveProcesses": 1,
-      "SampledPeakPrivateCommitBytes": 153784320,
-      "SampledMaxPrivateCommitBytes": 153739264,
-      "BeforeResumePrivateCommitBytes": 397312,
-      "MemorySamples": 163,
+      "SampledPeakPrivateCommitBytes": 156262400,
+      "SampledMaxPrivateCommitBytes": 156225536,
+      "BeforeResumePrivateCommitBytes": 393216,
+      "MemorySamples": 232,
       "MaxSampledAssociatedProcesses": 1,
       "ObservedProcesses": [
         {
-          "ProcessId": 9708,
+          "ProcessId": 19308,
           "Image": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-startup\\bundle\\jre\\bin\\java.exe",
           "QueryError": 0
         }
@@ -322,21 +322,21 @@
     "test": {
       "Case": "database-status-and-write-roots-unit",
       "Outcome": "exited",
-      "Output": "{\"status\":\"passed\",\"cases\":16,\"test\":\"status-and-write-roots\"}\r\n",
+      "Output": "{\"status\":\"passed\",\"cases\":18,\"test\":\"status-write-roots-and-jni-names\"}\r\n",
       "LaunchMode": "detached",
       "ExitCode": 0,
       "CreationFlags": 525324,
-      "ElapsedMs": 717,
-      "CapturedOutputBytes": 64,
-      "PeakCommitBytes": 99823616,
-      "PeakProcessCommitBytes": 99823616,
+      "ElapsedMs": 639,
+      "CapturedOutputBytes": 74,
+      "PeakCommitBytes": 101052416,
+      "PeakProcessCommitBytes": 101052416,
       "CommitLimitBytes": 1073741824,
       "BeforeResumePeakCommitBytes": 397312,
       "BeforeResumePeakProcessCommitBytes": 397312,
-      "UserCpuTicks": 3125000,
-      "KernelCpuTicks": 468750,
-      "JobUserCpuTicks": 3125000,
-      "JobKernelCpuTicks": 468750,
+      "UserCpuTicks": 3281250,
+      "KernelCpuTicks": 625000,
+      "JobUserCpuTicks": 3281250,
+      "JobKernelCpuTicks": 625000,
       "CpuRateFlags": 5,
       "CpuRatePer10000": 2500,
       "TotalProcesses": 1,
@@ -344,14 +344,14 @@
       "LimitTerminatedProcesses": 0,
       "BeforeResumeTotalProcesses": 1,
       "BeforeResumeActiveProcesses": 1,
-      "SampledPeakPrivateCommitBytes": 99823616,
-      "SampledMaxPrivateCommitBytes": 99758080,
+      "SampledPeakPrivateCommitBytes": 101052416,
+      "SampledMaxPrivateCommitBytes": 101052416,
       "BeforeResumePrivateCommitBytes": 397312,
-      "MemorySamples": 48,
+      "MemorySamples": 27,
       "MaxSampledAssociatedProcesses": 1,
       "ObservedProcesses": [
         {
-          "ProcessId": 19924,
+          "ProcessId": 7680,
           "Image": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-startup\\bundle\\jre\\bin\\java.exe",
           "QueryError": 0
         }
@@ -362,11 +362,11 @@
     },
     "observations": {
       "status": "passed",
-      "cases": 16,
-      "test": "status-and-write-roots"
+      "cases": 18,
+      "test": "status-write-roots-and-jni-names"
     },
     "limitations": [
-      "Compilation and 16 pure Java status/path checks only; worker main and JNI/database work are not executed.",
+      "Compilation and 18 pure Java status/path/filename checks only; worker main and JNI/database work are not executed.",
       "Two sequential JVMs, each 30 seconds / 1 GiB commit / 25% CPU / one process / 64 KiB captured output.",
       "Script-owned output is limited to two classes under the fresh fixed scratch directory; host supervisor/JRE/OS activity is not a filesystem sandbox.",
       "Trusted stable host administration and source/input paths assumed. This does not demonstrate VHD mapping, module identity, disk-full behavior or traffic containment."
@@ -374,8 +374,9 @@
   },
   "identityChecks": 46,
   "accountingEvidenceChecks": 37,
-  "pureJavaChecks": 16,
+  "pureJavaChecks": 18,
   "fullProjectCheck": "passed: 96 files / 1795 tests, package, pilot, store-crash, spent-set",
-  "independentReview": "closed: complete optional compression names, duplicate JNI and post-exit marker variants verified",
-  "runtimeExperimentExecuted": false
+  "independentReview": "closed: pinned explicit-loader basename and exact DLL bytes/path policy verified",
+  "correctedRuntimeExperimentExecuted": false,
+  "priorAttempt": "ergo-node-database-first-attempt.json"
 }

@@ -138,7 +138,10 @@ try {
         $root=Join-Path $driveRoot 'run'
         if (Test-Path -LiteralPath $root) { throw 'Worker root already exists' }
         foreach ($path in @($root,"$root/tmp","$root/home","$root/native","$root/classes")) { [void][IO.Directory]::CreateDirectory($path) }
-        $jni=Join-Path $root 'native/librocksdbjni-win64.dll'
+        # The pinned explicit-directory overload applies getJniLibraryFileName
+        # to "rocksdbjni", yielding a second "jni". Preserve the exact archive
+        # bytes/hash while using the basename that this loader actually requests.
+        $jni=Join-Path $root 'native/librocksdbjnijni-win64.dll'
         $jar=Join-Path $bundle 'ergo-6.1.5.jar'
         $archive=[IO.Compression.ZipFile]::OpenRead($jar)
         try {
