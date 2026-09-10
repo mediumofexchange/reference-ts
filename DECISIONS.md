@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-10` [Qualify a consistent Windows database build](decisions/2026-09.md#2026-09-10--qualify-a-consistent-windows-database-build)
 - `2026-09-10` [Measure traffic and stop the finite source probe](decisions/2026-09.md#2026-09-10--measure-traffic-and-stop-the-finite-source-probe)
 - `2026-09-10` [Keep the source probe free of spending keys](decisions/2026-09.md#2026-09-10--keep-the-source-probe-free-of-spending-keys)
 - `2026-09-09` [Check the range source before certificate packaging](decisions/2026-09.md#2026-09-09--check-the-range-source-before-certificate-packaging)

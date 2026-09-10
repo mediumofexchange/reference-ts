@@ -862,14 +862,86 @@ Independent review matched all final source/class hashes, version evidence,
 counter arithmetic/timing, empty jobs and all three cleanup records. No material
 evidence inconsistency remains; the control itself remains **unresolved**.
 
-Stop further trials with this candidate until the native source/build mismatch
-is resolved. Compare reviewing the reported older implementation with obtaining
-a demonstrably consistent Java/JNI artifact; neither follows from a version
-string alone. Separately establish narrow Windows side-by-side component
-provenance before changing the module policy. Keep the current version and
-identity guards; a passing test is not grounds to weaken them. The near-1-second
-module-observation gap is a remaining timing concern. No larger disk, peers,
+Stop further trials with this candidate. The static reconciliation below
+locates the mismatch in the published Windows dependency; it does not clear
+native build provenance, compatibility or the module-policy refusal. Keep
+the current version, identity and timing guards. No larger disk, peers,
 runtime adoption or production claim follows from these observations.
+
+### Published Windows native reconciliation
+
+The [static comparison](ergo-node-native-provenance.json) records complete
+archive/member hashes, PE section hashes, every differing DLL byte, embedded
+build identifiers and a reproduction method. It reads archives and DLL bytes
+without loading JNI, launching Java or opening a database. Inputs are Maven
+Central's Windows classifiers for
+[10.2.1](https://repo.maven.apache.org/maven2/org/rocksdb/rocksdbjni/10.2.1/rocksdbjni-10.2.1-win64.jar)
+and [10.1.3](https://repo.maven.apache.org/maven2/org/rocksdb/rocksdbjni/10.1.3/rocksdbjni-10.1.3-win64.jar),
+plus the already pinned Ergo JAR. These HTTPS downloads establish distribution
+identity; no independent Maven signature or build attestation was verified.
+
+All **253** `org/rocksdb/*.class` member names and uncompressed hashes in Ergo
+match the 10.2.1 classifier, as does the complete Windows DLL. Thus the mixed
+version is already present in that published dependency; it is not introduced
+by the harness's extraction or by different RocksDB classes in the Ergo bundle.
+This comparison does not cover the other platform classifiers.
+
+| Windows DLL | SHA-256 | Embedded source/tag |
+|---|---|---|
+| Published 10.2.1 and Ergo | `0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7` | `5823cf08d69e4d9cba6953d51fb7d6996c72df94`, `v10.1.3` |
+| Published 10.1.3 | `eb32668a03728002905d4bfd0e54bf19299e5ea1af97a86d58d36856a61c5adf` | same |
+
+Both DLLs are 8,869,888 bytes. Only **36 bytes** differ, in the recorded
+timestamp/build-date/debug-identifier regions. Their entire 7,044,096-byte
+`.text` sections are identical, SHA-256
+`002bac9a46a9f497450ac650e1ab1141cc2130aad7410167e0a67a191234f75f`.
+The `.data`, `.pdata`, `.rsrc` and `.reloc` sections also match. Both export
+the same 1,603 names and encode native version 10/1/3 at the same offset.
+The build-date strings differ: `2025-05-08 20:15:16` and
+`2025-05-12 17:54:01`, respectively for published 10.1.3 and 10.2.1.
+
+The embedded source identifier resolves to the upstream
+[10.1.3 version commit](https://github.com/facebook/rocksdb/commit/5823cf08d69e4d9cba6953d51fb7d6996c72df94),
+which is also the dereferenced 10.1.3 tag. The 10.2.1 tag instead resolves to
+[`4b2122578e475cb88aef4dcf152cccd5dbf51060`](https://github.com/facebook/rocksdb/commit/4b2122578e475cb88aef4dcf152cccd5dbf51060).
+The executable-byte equality strongly supports an older native implementation,
+not merely a stale version constant in otherwise updated code. It still does
+not prove a clean source tree, complete compiler/linker inputs, transitive
+compression-library provenance or a reproducible build.
+
+Eleven Java class files differ between the two published classifiers, including
+`Options`, `ReadOptions`, `HistogramType`, `RocksDB` and `Transaction`; none
+were added or removed. Equal JNI export names therefore do not establish
+semantic/API compatibility with the newer Java classes. A passing small
+write/flush/reopen control would not establish all of Ergo's database paths.
+
+One concrete source-level difference is the
+[10.2.1 Java histogram value](https://github.com/facebook/rocksdb/blob/4b2122578e475cb88aef4dcf152cccd5dbf51060/java/src/main/java/org/rocksdb/HistogramType.java#L213)
+`COMPACTION_PREFETCH_BYTES`, encoded as `0x3F`. Its
+[10.2.1 JNI mapping](https://github.com/facebook/rocksdb/blob/4b2122578e475cb88aef4dcf152cccd5dbf51060/java/rocksjni/portal.h#L6039)
+selects that metric; the
+[10.1.3 mapping](https://github.com/facebook/rocksdb/blob/5823cf08d69e4d9cba6953d51fb7d6996c72df94/java/rocksjni/portal.h#L6034)
+has no such histogram case and falls back to `DB_GET`. This is a semantic
+counterexample to assuming the interfaces mean the same thing, based on exact
+endpoint sources. It is not a runtime reproduction against the DLL or evidence
+that the small control or Ergo uses that metric. The source branches diverge;
+a merge-base comparison alone is insufficient for exact endpoint differences.
+
+The pinned
+[release targets](https://github.com/facebook/rocksdb/blob/4b2122578e475cb88aef4dcf152cccd5dbf51060/Makefile#L2360)
+assemble Linux/macOS members, while the
+[publication target](https://github.com/facebook/rocksdb/blob/4b2122578e475cb88aef4dcf152cccd5dbf51060/Makefile#L2421)
+also consumes a pre-existing `win64` classifier. Those targets do not establish
+how the measured Windows DLL was built or enforce its correspondence to the
+release source. No complete historical Windows build record was established.
+
+The [route decision](../decisions/2026-09.md#2026-09-10--qualify-a-consistent-windows-database-build)
+prefers preparing a source-controlled 10.2.1 native build for the existing
+Java baseline, subject to concrete build feasibility and independent review.
+It selects preparation, not adoption: the current pinned bundle and every
+execution guard remain unchanged. Establish narrow Windows side-by-side
+component provenance separately; the observed 954 ms module-sampling gap also
+remains close to the unchanged 1-second ceiling.
 
 ### Combined experiment proposal
 

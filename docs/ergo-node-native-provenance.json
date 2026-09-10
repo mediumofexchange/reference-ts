@@ -1,0 +1,344 @@
+{
+  "status": "static-published-windows-artifact-mismatch-confirmed",
+  "observedDate": "2026-09-10",
+  "nativeCodeExecuted": false,
+  "databaseAcceptance": false,
+  "acquisition": "HTTPS download from Maven Central; local Ergo JAR rehashed against its recorded release pin. No Maven signature was independently authenticated; archive hashes are observations, not build attestations.",
+  "artifacts": [
+    {
+      "archiveSha256": "ed628b49b839830e3d8d8b3c3888111a4abcc1e89e93dfc309959b73fa20a6c9",
+      "label": "10.2.1",
+      "members": [
+        {
+          "name": "org/rocksdb/RocksDB.class",
+          "sha256": "410a229fc46111f128ff5ee905da200123ba7844254c42f65abd9fb793326dd9",
+          "bytes": 53351
+        },
+        {
+          "name": "librocksdbjni-win64.dll",
+          "sha256": "0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7",
+          "bytes": 8869888
+        }
+      ],
+      "archiveBytes": 3876368,
+      "url": "https://repo.maven.apache.org/maven2/org/rocksdb/rocksdbjni/10.2.1/rocksdbjni-10.2.1-win64.jar"
+    },
+    {
+      "archiveSha256": "8258075170d016dbd6b724903a603f2d8bb66277df043e2b566681893adbf902",
+      "label": "10.1.3",
+      "members": [
+        {
+          "name": "org/rocksdb/RocksDB.class",
+          "sha256": "91a52fa38e7a3b66c1619bd614d5e43358bc76f889265a820c423c8bc7a40ab2",
+          "bytes": 53231
+        },
+        {
+          "name": "librocksdbjni-win64.dll",
+          "sha256": "eb32668a03728002905d4bfd0e54bf19299e5ea1af97a86d58d36856a61c5adf",
+          "bytes": 8869888
+        }
+      ],
+      "archiveBytes": 3876441,
+      "url": "https://repo.maven.apache.org/maven2/org/rocksdb/rocksdbjni/10.1.3/rocksdbjni-10.1.3-win64.jar"
+    },
+    {
+      "archiveSha256": "4ada5520636a65d7be09b6ec3ff8044b8fdc5baf552633b8c4f6335f71b93928",
+      "label": "ergo",
+      "members": [
+        {
+          "name": "librocksdbjni-win64.dll",
+          "sha256": "0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7",
+          "bytes": 8869888
+        },
+        {
+          "name": "org/rocksdb/RocksDB.class",
+          "sha256": "410a229fc46111f128ff5ee905da200123ba7844254c42f65abd9fb793326dd9",
+          "bytes": 53351
+        }
+      ],
+      "archiveBytes": 153586421,
+      "url": "https://github.com/ergoplatform/ergo/releases/download/v6.1.5/ergo-6.1.5.jar"
+    }
+  ],
+  "classes": {
+    "counts": {
+      "10.2.1": 253,
+      "ergo": 253,
+      "10.1.3": 253
+    },
+    "ergoVs1021": [],
+    "changedSince1013": [
+      "org/rocksdb/AdvancedColumnFamilyOptionsInterface.class",
+      "org/rocksdb/ColumnFamilyOptions.class",
+      "org/rocksdb/HistogramType.class",
+      "org/rocksdb/Options.class",
+      "org/rocksdb/ReadOptions.class",
+      "org/rocksdb/RocksDB.class",
+      "org/rocksdb/RocksDB$LiveFiles.class",
+      "org/rocksdb/RocksDB$Version.class",
+      "org/rocksdb/Transaction.class",
+      "org/rocksdb/Transaction$TransactionState.class",
+      "org/rocksdb/Transaction$WaitingTransactions.class"
+    ],
+    "addedSince1013": [],
+    "removedSince1013": []
+  },
+  "native": {
+    "published1013": {
+      "version": "10.1.3",
+      "sha256": "eb32668a03728002905d4bfd0e54bf19299e5ea1af97a86d58d36856a61c5adf",
+      "bytes": 8869888,
+      "coffTimestamp": 1746740554,
+      "sections": [
+        {
+          "name": ".text",
+          "rva": 4096,
+          "size": 7044096,
+          "raw": 1024,
+          "sha256": "002bac9a46a9f497450ac650e1ab1141cc2130aad7410167e0a67a191234f75f"
+        },
+        {
+          "name": ".rdata",
+          "rva": 7049216,
+          "size": 1265152,
+          "raw": 7045120,
+          "sha256": "648a835b845b49debdc4d0de7d56656fdf186dba69cb259fd47650e2b4408b0a"
+        },
+        {
+          "name": ".data",
+          "rva": 8314880,
+          "size": 248320,
+          "raw": 8310272,
+          "sha256": "abad0ce0a60a970621b5003871cb845bfa2e292492afaaa0bc2837af44f63968"
+        },
+        {
+          "name": ".pdata",
+          "rva": 8581120,
+          "size": 277504,
+          "raw": 8558592,
+          "sha256": "29634daa12a252df718cd2fa47bbe0ae026667c606ee6d11877afdbcdbf0a6f5"
+        },
+        {
+          "name": ".rsrc",
+          "rva": 8859648,
+          "size": 512,
+          "raw": 8836096,
+          "sha256": "041869039c2ba4901348f3cc7dc45557e297218719535d6911bf60716caa9a34"
+        },
+        {
+          "name": ".reloc",
+          "rva": 8863744,
+          "size": 33280,
+          "raw": 8836608,
+          "sha256": "9f6e4b0e4a3b61426d4bc35219473805ef4fa1aaab540dd6d4079682182cb02b"
+        }
+      ],
+      "buildMarkers": [
+        {
+          "rawOffset": 7245960,
+          "text": "rocksdb_build_git_sha:5823cf08d69e4d9cba6953d51fb7d6996c72df94"
+        },
+        {
+          "rawOffset": 7246024,
+          "text": "rocksdb_build_git_tag:v10.1.3"
+        },
+        {
+          "rawOffset": 7246056,
+          "text": "rocksdb_build_date:2025-05-08 20:15:16"
+        }
+      ],
+      "versionExport": {
+        "name": "Java_org_rocksdb_RocksDB_version",
+        "rva": 1326640,
+        "rawOffset": 1323568,
+        "firstSixBytes": "b803010a00c3"
+      },
+      "exportCount": 1603,
+      "exportNamesSha256": "5596eefa7c2a7c30147d7cc6340f3299f4fd6f920cfd1496361b3ed9603f9c5f"
+    },
+    "published1021": {
+      "version": "10.2.1",
+      "sha256": "0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7",
+      "bytes": 8869888,
+      "coffTimestamp": 1747077701,
+      "sections": [
+        {
+          "name": ".text",
+          "rva": 4096,
+          "size": 7044096,
+          "raw": 1024,
+          "sha256": "002bac9a46a9f497450ac650e1ab1141cc2130aad7410167e0a67a191234f75f"
+        },
+        {
+          "name": ".rdata",
+          "rva": 7049216,
+          "size": 1265152,
+          "raw": 7045120,
+          "sha256": "432cee705471979b3dbdefb6d73bce000b6a23b65527fdc8815726ba3e6bf188"
+        },
+        {
+          "name": ".data",
+          "rva": 8314880,
+          "size": 248320,
+          "raw": 8310272,
+          "sha256": "abad0ce0a60a970621b5003871cb845bfa2e292492afaaa0bc2837af44f63968"
+        },
+        {
+          "name": ".pdata",
+          "rva": 8581120,
+          "size": 277504,
+          "raw": 8558592,
+          "sha256": "29634daa12a252df718cd2fa47bbe0ae026667c606ee6d11877afdbcdbf0a6f5"
+        },
+        {
+          "name": ".rsrc",
+          "rva": 8859648,
+          "size": 512,
+          "raw": 8836096,
+          "sha256": "041869039c2ba4901348f3cc7dc45557e297218719535d6911bf60716caa9a34"
+        },
+        {
+          "name": ".reloc",
+          "rva": 8863744,
+          "size": 33280,
+          "raw": 8836608,
+          "sha256": "9f6e4b0e4a3b61426d4bc35219473805ef4fa1aaab540dd6d4079682182cb02b"
+        }
+      ],
+      "buildMarkers": [
+        {
+          "rawOffset": 7245960,
+          "text": "rocksdb_build_git_sha:5823cf08d69e4d9cba6953d51fb7d6996c72df94"
+        },
+        {
+          "rawOffset": 7246024,
+          "text": "rocksdb_build_git_tag:v10.1.3"
+        },
+        {
+          "rawOffset": 7246056,
+          "text": "rocksdb_build_date:2025-05-12 17:54:01"
+        }
+      ],
+      "versionExport": {
+        "name": "Java_org_rocksdb_RocksDB_version",
+        "rva": 1326640,
+        "rawOffset": 1323568,
+        "firstSixBytes": "b803010a00c3"
+      },
+      "exportCount": 1603,
+      "exportNamesSha256": "5596eefa7c2a7c30147d7cc6340f3299f4fd6f920cfd1496361b3ed9603f9c5f"
+    },
+    "addedExports": [],
+    "removedExports": [],
+    "byteDifferences": {
+      "runs": [
+        {
+          "length": 3,
+          "offset": 304,
+          "current": "454A22",
+          "old": "4A251D"
+        },
+        {
+          "length": 2,
+          "offset": 7246083,
+          "current": "3132",
+          "old": "3038"
+        },
+        {
+          "length": 2,
+          "offset": 7246086,
+          "current": "3137",
+          "old": "3230"
+        },
+        {
+          "length": 2,
+          "offset": 7246089,
+          "current": "3534",
+          "old": "3135"
+        },
+        {
+          "length": 2,
+          "offset": 7246092,
+          "current": "3031",
+          "old": "3136"
+        },
+        {
+          "length": 3,
+          "offset": 7418228,
+          "current": "454A22",
+          "old": "4A251D"
+        },
+        {
+          "length": 3,
+          "offset": 7418256,
+          "current": "454A22",
+          "old": "4A251D"
+        },
+        {
+          "length": 3,
+          "offset": 7418284,
+          "current": "454A22",
+          "old": "4A251D"
+        },
+        {
+          "length": 16,
+          "offset": 7443424,
+          "current": "25DC4C10AD7E5149B9A9CC7A3FF7020E",
+          "old": "860BA23C7FB2114DACCEF9F91EC4F8EF"
+        }
+      ],
+      "differentBytes": 36
+    }
+  },
+  "sourceRefs": {
+    "rocksdb1021": {
+      "ref": "v10.2.1",
+      "commit": "4b2122578e475cb88aef4dcf152cccd5dbf51060"
+    },
+    "rocksdb1013": {
+      "ref": "v10.1.3",
+      "tagObject": "9e0e58d6f19e832fafc2142f8b0bce1ef944d075",
+      "commit": "5823cf08d69e4d9cba6953d51fb7d6996c72df94"
+    }
+  },
+  "method": [
+    "Hash complete archive bytes with SHA-256. Open ZIP read-only, hash uncompressed librocksdbjni-win64.dll and org/rocksdb/RocksDB.class streams.",
+    "Build name-to-SHA-256 maps of every org/rocksdb/*.class ZIP entry, rejecting duplicate names; compare exact member sets and hashes.",
+    "Read the two hash-pinned DLLs as data. Parse PE32+ section headers, hash each SizeOfRawData byte range from PointerToRawData; resolve export names through the export directory. Export digest hashes UTF-8 sorted names joined by LF with a final LF.",
+    "Read version export bytes at recorded raw offset. B8 03 01 0A 00 C3 encodes mov eax,0x000A0103; ret. Record NUL-terminated ASCII build strings with their raw offsets.",
+    "Compare every DLL byte, recording every maximal contiguous differing run; old/current are hexadecimal bytes for published 10.1.3/10.2.1 respectively.",
+    "Resolve upstream tag objects using GitHub Git reference/tag APIs. Embedded source markers and publication identity do not establish a clean, reproducible build."
+  ],
+  "limitations": [
+    "Static comparison of these pinned artifacts only, not a general hostile-PE parser, source audit, runtime API/ABI test or database result.",
+    "Equal executable code sections and 36 metadata differences strongly support the same older native implementation, but do not authenticate complete source, compiler flags or transitive compression dependencies.",
+    "The Windows classifier and Ergo bundle were compared; other Maven platform classifiers and the full multi-platform Maven JAR were not downloaded.",
+    "The exact 10/2/1 version gate, module policy, timing and resource limits remain unchanged. No WinSxS acceptance, native replacement or control retry follows."
+  ],
+  "sourceFiles": [
+    {
+      "sha256": "6937ca3e032ccf83489b4385990ab436a0fbad86d363f807cf6664db5a2ba8c6",
+      "url": "https://raw.githubusercontent.com/facebook/rocksdb/5823cf08d69e4d9cba6953d51fb7d6996c72df94/java/rocksjni/portal.h"
+    },
+    {
+      "sha256": "5b1b7094d65af316f953fdf0cc22acda10d3189e2a90cff0d12bf0ccb263e8a2",
+      "url": "https://raw.githubusercontent.com/facebook/rocksdb/4b2122578e475cb88aef4dcf152cccd5dbf51060/java/rocksjni/portal.h"
+    },
+    {
+      "sha256": "42799b19f7b341ab8e7f40a45fca0880f6a242eee537c8daecee000d10b0706b",
+      "url": "https://raw.githubusercontent.com/facebook/rocksdb/4b2122578e475cb88aef4dcf152cccd5dbf51060/java/src/main/java/org/rocksdb/HistogramType.java"
+    },
+    {
+      "sha256": "f49fcd99b28bfb3b6fd38abc01875cf02a4b1c3ecff07f5af4ca9d4882920227",
+      "url": "https://raw.githubusercontent.com/facebook/rocksdb/4b2122578e475cb88aef4dcf152cccd5dbf51060/Makefile"
+    }
+  ],
+  "sourceCompatibility": {
+    "ergoReachabilityEstablished": false,
+    "java1021": "HistogramType.COMPACTION_PREFETCH_BYTES is 0x3F",
+    "native1013": "No histogram 0x3F case; default returns DB_GET",
+    "runtimeReproduction": false,
+    "native1021": "HistogramTypeJni::toCppHistograms maps 0x3F to COMPACTION_PREFETCH_BYTES",
+    "comparison": "Exact endpoint files, not the diverged branches merge-base diff"
+  }
+}
