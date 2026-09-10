@@ -148,6 +148,20 @@ one process and 64 KiB output. The [report](../../docs/ergo-node-settings-verifi
 records effective values, process evidence and limits. Successful settings
 loading is not evidence of executed chain validation or a complete sync boundary.
 
+With that same verified bundle and compiler, run the separate fixed path probe:
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-volume-path.ps1
+```
+
+It requires an absent `scratch/node-volume-path/`. It checks only path syntax
+in the pinned JRE, without opening its fake volume/drive/UNC specimens or
+loading Ergo/RocksDB. Its [report](../../docs/ergo-node-volume-path-verification.json)
+records volume GUID refusal by both NIO entry points and accepted ordinary
+absolute-path controls. Exit 0 means the expected incompatibility was reproduced;
+it does not mean a volume or database worked. Compile and probe each have
+30 seconds, 1 GiB commit, 25% CPU, one process and 64 KiB output.
+
 The original `npm run check:ergo:range` command runs both the block-root/Fleet experiment and the
 [full binary decoder experiment](../../docs/POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility).
 `decoder-check.mjs` launches the fixed corpus in a child process with a 30-second

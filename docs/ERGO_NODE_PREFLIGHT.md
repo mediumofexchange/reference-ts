@@ -651,6 +651,70 @@ transitive native/JRE/OS writes unclosed. Source search and a settings-only
 run cannot establish an exhaustive runtime write trace. A first-sync launch
 must refuse until the following composition checks account for that remainder.
 
+### JRE volume path prerequisite
+
+The [bundled-JRE path probe](ergo-node-volume-path-verification.json) falsifies
+direct reuse of the native worker's volume GUID path for all Java write roots.
+`Paths.get` and `File.toPath` both reject
+`\\?\Volume{11111111-2222-3333-4444-555555555555}\` and its `run/tmp` child.
+The error is `Long path prefix can only be used with an absolute path`.
+`File.isAbsolute()` is nevertheless true: that check alone is insufficient.
+Ordinary drive paths, extended drive paths and extended UNC paths pass the
+syntax controls. These specimens were never opened, resolved against a real
+volume, statted or used for network access.
+
+The [fixed helper](../experiments/ergo-range/NodeVolumePathCheck.java) has no
+Ergo/RocksDB classes on its runtime classpath. The
+[launcher](../experiments/ergo-range/node-volume-path.ps1) verifies the existing
+167-file bundle manifest and compiler pin. Each of its two JVM processes has
+30 seconds, 1 GiB commit, 25% CPU rate, one process and 64 KiB output. Compile:
+4,411 ms / 130,850,816 peak commit bytes. Probe: 733 ms / 97,480,704 bytes.
+Both naturally exit 0 with installed limits and empty jobs. Only the
+3,142-byte compiled class remains in the probe directory at capture.
+Successful probe classification records an incompatible path; it does not
+mean the disk prerequisite passed. No disk or mount was created.
+
+This agrees with the
+[OpenJDK 21.0.1 parser](https://github.com/openjdk/jdk21u/blob/jdk-21.0.1%2B12/src/java.base/windows/classes/sun/nio/fs/WindowsPathParser.java#L95):
+after stripping the extended prefix it requires a drive-absolute path, which
+`Volume{...}` is not. The bundled binary is the decisive measured artifact;
+upstream source agreement is not a reproducible Microsoft JRE build claim.
+RocksDB 10.2.1's
+[JNI extraction](https://github.com/facebook/rocksdb/blob/v10.2.1/java/src/main/java/org/rocksdb/NativeLibraryLoader.java#L140)
+calls `Files.copy(..., temp.toPath(), ...)`. Thus routing its fallback temp
+file through that GUID path cannot succeed on the measured JRE. This does
+not prove that every `java.io.File` operation or direct native RocksDB path
+fails; no such wider claim is needed to reject the proposed all-roots route.
+
+The next candidate uses an ordinary drive-letter path for the **same newly
+created, fixed 64 MiB VHD**, leaving the old native control unchanged. It must
+select an unused letter, associate it only with the owned new partition, and
+verify that its drive root maps to the expected volume GUID before any worker
+write. Correlate image, disk, partition and volume identity as before; refuse
+collisions, ambiguous identity or changed mapping, and verify mapping removal
+and image detachment during cleanup. Stable trusted-host administration is
+still assumed; a letter is not a filesystem sandbox. The new control must
+remain read-only by default and have no arbitrary disk/path selector.
+
+A mounted directory is an alternative but adds mount-point/reparse handling
+to the existing ancestor guards. Pre-extracting/preloading JNI outside the
+volume could avoid this one conversion, but would introduce another load path
+and would not establish compatibility for other Java writes. A temporary
+owned drive letter is therefore the smaller next candidate. Syntax acceptance
+does not establish its Windows mapping, RocksDB behavior or cleanup. Prepare
+and independently review the exact mapping/database harness before requesting
+execution; neither this syntax probe nor the old native-worker approval
+authorizes that new elevated experiment. No 20 GiB allocation follows.
+
+Fresh independent review verified the complete bundle and report/source/class
+hashes, the captured JSON, the helper's syntax-only operations and the narrow
+source inference. No material finding remains. Both child processes exited 0;
+an outer in-process capture wrapper initially misread a stale PowerShell
+`LASTEXITCODE`, which does not change those recorded process results. The full
+`npm run check` passes (96 files / 1,795 tests plus package, pilot, store-crash
+and spent-set checks); final documentation checks pass separately. The review
+did not rerun the probe or establish mounted-volume/database behavior.
+
 ### Combined experiment proposal
 
 The smallest route reuses the native fixed disk, existing detached JVM Job
@@ -658,16 +722,15 @@ Object and aggregate interface accounting/stop contract. It introduces no
 firewall, sandbox claim, separate service or production dependency; the stock
 wallet actor/routes remain under the existing no-spending-key boundary. Before any
 20 GiB allocation or peers, demonstrate a small **offline JRE/RocksDB control**
-on the same owned volume and exact path form intended for sync. The native
-disk worker's successful volume GUID path does not establish Java/RocksDB
-compatibility. Test create/write/flush/close, finite disk-full refusal and
+on the same owned volume and exact path form intended for sync. The direct
+volume GUID route is refused above; the candidate owned drive-letter mapping
+still needs demonstration. Test create/write/flush/close, finite disk-full refusal and
 whole-job termination with verified pinned JNI identity and explicit optional
 compression-library provenance; correlate actual loaded modules and file
 destinations with the inventory, including cleanup residue. The old
 disk control's approval covered its fixed worker, not this different worker.
 Prepare and review that runnable control before requesting its execution.
-If volume GUID paths fail, assess a temporary volume mount separately rather
-than silently redirecting writes to C:.
+Do not silently redirect writes to an ordinary host directory.
 
 The later combined first-sync proposal has these fixed refusal limits:
 
