@@ -1,6 +1,6 @@
 # Windows native build qualification
 
-Status: 2026-09-10, first run refused before compilation; reviewed retry prepared.
+Status: 2026-09-10, three pre-compile refusals; exact JDK correction prepared.
 This implements the [preparation preference](../decisions/2026-09.md#2026-09-10--qualify-a-consistent-windows-database-build).
 The [published artifact mismatch](ERGO_NODE_PREFLIGHT.md#published-windows-native-reconciliation)
 and the existing database-control refusals remain unresolved for execution.
@@ -54,9 +54,9 @@ the [billing documentation](https://docs.github.com/en/billing/concepts/product-
 
 The [input manifest](../experiments/ergo-range/native-build-inputs.json) pins
 RocksDB commit `4b2122578e475cb88aef4dcf152cccd5dbf51060`, image version
-`20260830.290.1` or `20260907.297.1`, CMake 3.31.6, Java 21.0.12 and Windows SDK 10.0.19041.0.
+`20260830.290.1` or `20260907.297.1`, CMake 3.31.6, Java 21.0.12.1 and Windows SDK 10.0.19041.0.
 The [image source](https://github.com/actions/runner-images/blob/3e99119430a6c4ead03a20a2a4020a71782eede1/images/windows/Windows2022-Readme.md)
-lists Visual Studio 2022 and those tools, as does the separately inspected
+lists Visual Studio 2022 and those tools (Java as `21.0.12+101.0`), as does the separately inspected
 [preceding image](https://github.com/actions/runner-images/blob/81f6fba751cfd9688d726f4981cd9798305a1985/images/windows/Windows2022-Readme.md).
 The script refuses any other image;
 it selects and records the installed MSVC 14.44 toolset and passes its exact
@@ -118,7 +118,17 @@ the delivered image and exact source tree, then refused the JDK version in
 616 ms, before configure or downloads. The report omitted the actual JDK
 release text. Record tool version evidence before its corresponding check so
 the next diagnostic can distinguish an input mismatch from a parsing defect;
-the JDK gate itself remains unchanged pending that evidence.
+the JDK gate itself remained unchanged for that diagnostic.
+
+The [diagnostic run](ergo-native-build-jdk-diagnostic.json), `34495391755` at
+`443d84b`, recorded `JAVA_VERSION="21.0.12.1"`,
+`JAVA_RUNTIME_VERSION="21.0.12.1+1-LTS"` and Eclipse Adoptium as implementor.
+The runner manifest's `21.0.12+101.0` toolcache spelling was incorrectly
+interpreted as the release-file version. The recorded version agrees with
+the [official Temurin release](https://github.com/adoptium/temurin21-binaries/releases/tag/jdk-21.0.12.1%2B1).
+Correct the exact pin to `21.0.12.1`; keep the same exact-match check and all
+other input/runtime limits. This is observed provider metadata, not an
+independent attestation of the installed JDK binaries.
 
 One manually dispatched job has a 30-minute platform timeout and build
 parallelism two. Refuse less than 8 GiB free before the build; accept at most

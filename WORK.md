@@ -6,9 +6,10 @@ Updated: 2026-09-10
 
 Demonstrate a bounded compile-only Windows build of pinned RocksDB 10.2.1,
 then qualify an actual native candidate before any local database trial.
-Two hosted runs refused before compilation: first the image, then the JDK
-version. Record actual tool metadata before each gate, diagnose on the named
-development branch, and complete final checks before merge. No DLL is loaded.
+Three hosted runs refused before compilation: image, JDK, then diagnostic.
+The diagnostic identified Java 21.0.12.1 versus the mistaken 21.0.12 pin.
+Correct that exact pin, qualify on the development branch, then finish final
+checks before merge. No DLL is loaded.
 
 Development branch: `test/rocksdb-build-execution`, from preparation `b304e34`.
 Companion specification: `money-from-first-principles/main` at `7ea0ee8`.
@@ -19,7 +20,7 @@ No normative change, local toolchain installation, peers or disk allocation.
 - The [build plan](docs/ERGO_NATIVE_BUILD.md) selects an existing public standard
   Windows runner: local compiler/SDK/CMake/JDK were not found in scoped inventory.
   WSL2 Ubuntu exists but was not started. Local runtime controls remain intact.
-- [Workflow](.github/workflows/rocksdb-native-build.yml): manual public-main-only,
+- [Workflow](.github/workflows/rocksdb-native-build.yml): manual public main/named-branch,
   read-only token, explicit image allowlist/source, 30 minutes, parallelism two.
   Five Java build JARs are URL/size/SHA-256 pinned, 3,144,161 bytes total.
 - C++17, static CRT, portable CPU, compression-free JNI profile; no tests run.
@@ -44,7 +45,7 @@ No normative change, local toolchain installation, peers or disk allocation.
   96 files / 1,795 tests, package consumer, pilot, store-crash and spent-set checks.
   A parallel rerun timed out one test and two worker RPCs; the full sequence
   then passed with one test worker and unchanged deadlines (420.46 s test run).
-  `b304e34` CI passed in run `34492285718`; retry revision CI remains pending.
+  `b304e34` CI passed in run `34492285718`; `ef091de` CI passed in `34494811121`.
 - [First hosted refusal](docs/ergo-native-build-first-refusal.json), run
   `34492285266` at `b304e34`: delivered image `20260830.290.1` instead of the
   published `20260907.297.1`; stopped in 110 ms before configure. Independent
@@ -52,7 +53,8 @@ No normative change, local toolchain installation, peers or disk allocation.
   listed build tools; all other images refuse. Trace tools are now explicitly off.
 - [Second refusal](docs/ergo-native-build-second-refusal.json), run
   `34494811547` at `ef091de`: JDK version mismatch in 616 ms. Actual release
-  text was omitted; the reviewed diagnostic correction logs it before checking.
+  text was omitted; [diagnostic run](docs/ergo-native-build-jdk-diagnostic.json)
+  `34495391755` at `443d84b` records Java 21.0.12.1. Exact pin correction prepared.
 - Last [database diagnostic](docs/ergo-node-database-verification.json) loaded
   native version 10/1/3 and stopped before PROCEED on WinSxS COMCTL32.
   Maximum sample gap was 954 ms against a 1 s ceiling. All three images and
@@ -60,8 +62,8 @@ No normative change, local toolchain installation, peers or disk allocation.
 
 ## Next
 
-1. Dispatch the reviewed diagnostic on `test/rocksdb-build-execution`; inspect
-   actual JDK metadata before changing any input gate. Keep refusals and compile
+1. Dispatch the reviewed exact-pin correction on `test/rocksdb-build-execution`.
+   Keep refusals and compile
    errors; do not automatically update inputs, disable warnings or raise limits.
    Finish final project checks and reviewed integration after qualification.
 2. After build feasibility, prepare a retained candidate with complete input,

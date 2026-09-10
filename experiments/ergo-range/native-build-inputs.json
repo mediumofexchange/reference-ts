@@ -5,7 +5,7 @@
     {"version":"20260907.297.1","sourceCommit":"3e99119430a6c4ead03a20a2a4020a71782eede1","manifestSha256":"2d0afae5e8117b57ff64f3fe66a338120e38ef414fcc861b9993809f129b5a09"}
   ],
   "cmakeVersion": "3.31.6",
-  "javaVersion": "21.0.12",
+  "javaVersion": "21.0.12.1",
   "windowsSdkVersion": "10.0.19041.0",
   "dependencies": [
     {"file":"junit-4.13.1.jar","path":"junit/junit/4.13.1/junit-4.13.1.jar","bytes":382708,"sha256":"c30719db974d6452793fe191b3638a5777005485bae145924044530ffa5f6122"},
