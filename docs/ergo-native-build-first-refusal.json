@@ -1,0 +1,18 @@
+{
+  "report": {
+    "status": "refused",
+    "phase": "host",
+    "candidateLoaded": false,
+    "databaseAcceptance": false,
+    "errors": [
+      "Runner image differs from reviewed input"
+    ],
+    "imageVersion": "20260830.290.1",
+    "imageSourceCommit": "3e99119430a6c4ead03a20a2a4020a71782eede1",
+    "workflowCommit": "b304e34c36423a2aeac076f599434579f816231a",
+    "runId": "34492285266",
+    "elapsedMs": 110
+  },
+  "runId": 34492285266,
+  "url": "https://github.com/mediumofexchange/reference-ts/actions/runs/34492285266"
+}

@@ -1,7 +1,9 @@
 {
   "sourceCommit": "4b2122578e475cb88aef4dcf152cccd5dbf51060",
-  "imageVersion": "20260907.297.1",
-  "imageSourceCommit": "3e99119430a6c4ead03a20a2a4020a71782eede1",
+  "images": [
+    {"version":"20260830.290.1","sourceCommit":"81f6fba751cfd9688d726f4981cd9798305a1985","manifestSha256":"93aff42175f175422340f660e5c8d22adb6cfbcf40e5ec4636bdccd334ae56e5"},
+    {"version":"20260907.297.1","sourceCommit":"3e99119430a6c4ead03a20a2a4020a71782eede1","manifestSha256":"2d0afae5e8117b57ff64f3fe66a338120e38ef414fcc861b9993809f129b5a09"}
+  ],
   "cmakeVersion": "3.31.6",
   "javaVersion": "21.0.12",
   "windowsSdkVersion": "10.0.19041.0",

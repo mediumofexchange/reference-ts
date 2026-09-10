@@ -22,10 +22,12 @@ try {
     if ($event.repository.private -ne $false) { throw 'Public repository required' }
     $pins = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'native-build-inputs.json') | ConvertFrom-Json
     $report.imageVersion = $env:ImageVersion
-    $report.imageSourceCommit = $pins.imageSourceCommit
     $report.workflowCommit = $env:GITHUB_SHA
     $report.runId = $env:GITHUB_RUN_ID
-    if ($env:ImageVersion -cne $pins.imageVersion) { throw 'Runner image differs from reviewed input' }
+    $image = @($pins.images | Where-Object { $_.version -ceq $env:ImageVersion })
+    if ($image.Count -ne 1) { throw 'Runner image differs from reviewed inputs' }
+    $report.imageSourceCommit = $image[0].sourceCommit
+    $report.imageManifestSha256 = $image[0].manifestSha256
     $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
     if ($repo -cne [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE)) { throw 'Unexpected workspace' }
     $root = Join-Path $repo 'scratch/native-build'
@@ -89,6 +91,7 @@ try {
         '-DWITH_JNI=ON','-DROCKSDB_BUILD_SHARED=OFF','-DROCKSDB_SKIP_THIRDPARTY=ON',
         '-DWITH_MD_LIBRARY=OFF','-DPORTABLE=ON','-DFAIL_ON_WARNINGS=ON',
         '-DWITH_TESTS=OFF','-DWITH_BENCHMARK_TOOLS=OFF','-DWITH_CORE_TOOLS=OFF','-DWITH_TOOLS=OFF',
+        '-DWITH_TRACE_TOOLS=OFF','-DWITH_BENCHMARK=OFF','-DWITH_EXAMPLES=OFF',
         '-DWITH_GFLAGS=OFF','-DWITH_JEMALLOC=OFF','-DWITH_SNAPPY=OFF','-DWITH_LZ4=OFF',
         '-DWITH_ZLIB=OFF','-DWITH_ZSTD=OFF','-DWITH_XPRESS=OFF','-DWITH_LIBURING=OFF',
         '-DWITH_DYNAMIC_EXTENSION=OFF','-DCUSTOM_DEPS_URL=file:///nonexistent-moe-build-dependencies')
@@ -131,4 +134,3 @@ try {
     Write-Output 'MOE_NATIVE_BUILD_REPORT_END'
 }
 if ($report.status -cne 'compiled-unadopted-native-candidate') { exit 1 }
-

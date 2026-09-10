@@ -1,6 +1,6 @@
 # Windows native build qualification
 
-Status: 2026-09-10, prepared compile-only hosted experiment; execution pending.
+Status: 2026-09-10, first run refused before compilation; reviewed retry prepared.
 This implements the [preparation preference](../decisions/2026-09.md#2026-09-10--qualify-a-consistent-windows-database-build).
 The [published artifact mismatch](ERGO_NODE_PREFLIGHT.md#published-windows-native-reconciliation)
 and the existing database-control refusals remain unresolved for execution.
@@ -46,9 +46,11 @@ the [billing documentation](https://docs.github.com/en/billing/concepts/product-
 
 The [input manifest](../experiments/ergo-range/native-build-inputs.json) pins
 RocksDB commit `4b2122578e475cb88aef4dcf152cccd5dbf51060`, image version
-`20260907.297.1`, CMake 3.31.6, Java 21.0.12 and Windows SDK 10.0.19041.0.
+`20260830.290.1` or `20260907.297.1`, CMake 3.31.6, Java 21.0.12 and Windows SDK 10.0.19041.0.
 The [image source](https://github.com/actions/runner-images/blob/3e99119430a6c4ead03a20a2a4020a71782eede1/images/windows/Windows2022-Readme.md)
-lists Visual Studio 2022 and those tools. The script refuses a different image;
+lists Visual Studio 2022 and those tools, as does the separately inspected
+[preceding image](https://github.com/actions/runner-images/blob/81f6fba751cfd9688d726f4981cd9798305a1985/images/windows/Windows2022-Readme.md).
+The script refuses any other image;
 it selects and records the installed MSVC 14.44 toolset and passes its exact
 version to CMake. Image labels can change: this is a refusal gate, not a claim
 that GitHub permits immutable runner selection. Selected tool/header/library
@@ -90,6 +92,19 @@ after a concrete retained candidate and its module policy are reviewed.
 
 ## Bounds, checks and remaining gates
 
+The [first run](ergo-native-build-first-refusal.json) at `b304e34` refused in
+110 ms before configure or compilation: GitHub delivered `20260830.290.1`
+despite the newly published `20260907.297.1` image. Its recorded
+`imageSourceCommit` is the expected manifest reference, not the delivered
+image's source. Inspection of both immutable manifests found the same OS,
+CMake, Java, Visual Studio and installed SDK versions; listed changes concern
+other software. Explicitly qualify these two images, recording which one ran,
+and refuse all others. The two manifest hashes do not attest the live VM.
+Also disable upstream's default-enabled trace-tool target explicitly; the
+named JNI target did not depend on it, but the declared configuration should
+match the generated graph. Independent readback reproduced both manifest hashes,
+confirmed the unchanged listed build tools and accepted the bounded retry.
+
 One manually dispatched job has a 30-minute platform timeout and build
 parallelism two. Refuse less than 8 GiB free before the build; accept at most
 8 GiB observed scratch use, at least 2 GiB final free and at most 32 MiB each
@@ -103,7 +118,15 @@ raising limits, updating the image or disabling warnings.
 The script parses with PowerShell and refuses execution on the local host
 before any mutation. Full `npm run check` passed (96 files / 1,795 tests plus
 package, pilot, store-crash and spent-set checks); independent workflow/source
-review found no material blocker. After execution, capture the exact run,
+review found no material blocker. A later local parallel rerun failed one
+30-second fault-evidence test timeout and two Vitest `onTaskUpdate` RPC
+timeouts (1,794/1,795 tests passed). The unchanged failing file then passed
+all ten cases with one worker; its large-suffix case took 1,975 ms. This
+supports contention as the cause, not a proved diagnosis. The full check
+sequence then passed with one worker and unchanged deadlines: 96 files /
+1,795 tests in 420.46 s, plus docs, typecheck, build, package, pilot, store-crash
+and spent-set checks. Preparation `b304e34` CI also passed in run `34492285718`.
+After execution, capture the exact run,
 workflow revision, report, compile failure or static output and limitations.
 No version/hash/module gate in the local database harness changes here.
 

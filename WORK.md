@@ -6,10 +6,11 @@ Updated: 2026-09-10
 
 Demonstrate a bounded compile-only Windows build of pinned RocksDB 10.2.1,
 then qualify an actual native candidate before any local database trial.
-The fixed manual hosted workflow is prepared and independently reviewed;
-execution is next. No candidate DLL is loaded or adopted by this slice.
+The first run refused before compilation on an unselected runner image.
+Two explicitly reviewed image versions are now accepted; final checks passed
+and bounded retry is next. No candidate DLL is loaded or adopted by this slice.
 
-Development branch: `docs/rocksdb-build-feasibility`, from `f2e511a`.
+Development branch: `test/rocksdb-build-execution`, from preparation `b304e34`.
 Companion specification: `money-from-first-principles/main` at `7ea0ee8`.
 No normative change, local toolchain installation, peers or disk allocation.
 
@@ -19,7 +20,7 @@ No normative change, local toolchain installation, peers or disk allocation.
   Windows runner: local compiler/SDK/CMake/JDK were not found in scoped inventory.
   WSL2 Ubuntu exists but was not started. Local runtime controls remain intact.
 - [Workflow](.github/workflows/rocksdb-native-build.yml): manual public-main-only,
-  read-only token, fixed image/source, 30 minutes, build parallelism two.
+  read-only token, explicit image allowlist/source, 30 minutes, parallelism two.
   Five Java build JARs are URL/size/SHA-256 pinned, 3,144,161 bytes total.
 - C++17, static CRT, portable CPU, compression-free JNI profile; no tests run.
   Initial/final disk observations are refusal checks, not quotas. Selected tool
@@ -41,7 +42,14 @@ No normative change, local toolchain installation, peers or disk allocation.
   without patching upstream source or widening loader paths.
 - PowerShell parsing and local-host refusal passed. Full `npm run check` passed:
   96 files / 1,795 tests, package consumer, pilot, store-crash and spent-set checks.
-  Hosted execution and delivered-revision CI remain pending.
+  A parallel rerun timed out one test and two worker RPCs; the full sequence
+  then passed with one test worker and unchanged deadlines (420.46 s test run).
+  `b304e34` CI passed in run `34492285718`; retry revision CI remains pending.
+- [First hosted refusal](docs/ergo-native-build-first-refusal.json), run
+  `34492285266` at `b304e34`: delivered image `20260830.290.1` instead of the
+  published `20260907.297.1`; stopped in 110 ms before configure. Independent
+  manifest comparison/readback accepted both exact versions with unchanged
+  listed build tools; all other images refuse. Trace tools are now explicitly off.
 - Last [database diagnostic](docs/ergo-node-database-verification.json) loaded
   native version 10/1/3 and stopped before PROCEED on WinSxS COMCTL32.
   Maximum sample gap was 954 ms against a 1 s ceiling. All three images and
