@@ -4,87 +4,89 @@ Updated: 2026-09-10
 
 ## Goal
 
-Next slice: build and review the smallest offline pinned-JRE/RocksDB control
-that uses the fixed native data volume and existing process/traffic controls.
-Acceptance: a concrete runnable harness with finite limits, loaded-DLL identity,
-volume-path compatibility, write-target accounting, database disk-full refusal,
-job cleanup and final traffic accounting. Prepare/review before requesting
-execution: the old elevated approval covered the fixed native disk worker only.
-No peers or full-sized allocation. Companion specification:
-`money-from-first-principles/main` at `7ea0ee8`; no normative change or adoption.
+Next slice: prepare and independently review the smallest offline JRE/RocksDB
+control on a newly created fixed 64 MiB VHD with an owned temporary drive letter.
+Acceptance: concrete runnable harness, finite resource limits, exact mapping
+and loaded-DLL identity, database write/flush/disk-full behavior, final traffic
+accounting, empty job and verified mapping/image cleanup. Default is read-only.
+Prepare the actual harness before requesting execution: previous elevated
+approval covered the native disk worker only, not this worker or mapping.
+Companion specification: `money-from-first-principles/main` at `7ea0ee8`;
+no normative change, runtime adoption, peers or full-sized allocation.
 
 ## Status
 
-- Preparation slice `1374f5b` and handoff `52eb44f` fast-forwarded/pushed to
-  `main`; exact remote parity confirmed. Development branch:
-  `chore/ergo-sync-preparation`. This final handoff refresh follows on `main`.
-- [Effective settings and write inventory](docs/ERGO_NODE_PREFLIGHT.md#effective-settings-readback)
-  and [combined proposal](docs/ERGO_NODE_PREFLIGHT.md#combined-experiment-proposal)
-  replace the open-ended source inventory with explicit measured prerequisites.
-- [Readback report](docs/ergo-node-settings-verification.json) calls the pinned
-  JAR's actual private configuration loader and typed constructors, with no
-  node actors, databases, wallet initialization or node API calls.
-- Baseline: mainnet, UTXO verification, all blocks retained, absent checkpoint,
-  disabled bootstraps/snapshot payloads/mining/extra indexing; test mnemonic
-  and test key count absent. Loopback/zero-peer settings are read back too.
-- Controls: JVM `blocksToKeep=10` makes typed pruning true; omission of explicit
-  null restores the mainnet checkpoint. Both reject the intended profile.
+- Path prerequisite slice complete at `525bbd5`; instruction/estimate method
+  clarification at `9c17c0d`. Delivery branch: `main`; development branch:
+  `test/ergo-jre-disk-preparation`. Final handoff follows those commits.
+- [Measured JRE path refusal](docs/ERGO_NODE_PREFLIGHT.md#jre-volume-path-prerequisite)
+  rules out routing all Java write roots through the old native worker's
+  volume GUID path. Prepare an ordinary drive-letter route on the same small
+  owned VHD; syntax acceptance alone does not establish mapped-volume I/O.
+- Permanent instructions in both workspace and repository AGENTS.md require
+  explicit stay/switch advice after every slice without a reminder. Workspace
+  instructions are stored locally; the standalone repository rule is committed.
+- [Estimate method](docs/PRODUCTION_REQUIREMENTS.md#progress-estimate) now states
+  that progress is an engineering judgment against product acceptance, without
+  a measured hours ledger, automatic gate score or fixed numerical weights.
 
 ## Evidence
 
-- Compiler plus three sequential readbacks: each 30 s / 1 GiB commit / 25% CPU /
-  one process / 64 KiB output. All natural exits, limits read back, jobs empty.
-  Readback peak commit <=156,377,088 bytes; 9,231 final run-file bytes; data and
-  secrets empty. Compiler is scratch-only ECJ 3.37.0, SHA-256 pinned by launcher.
-- Independent review verified all 167 bundle files, config/source/report hashes,
-  loader/constructor call graph and controls. Inventory review caught RocksDB's
-  native-library search before JNI extraction; loaded-module provenance is now
-  an explicit next-control gate. No material preparation finding remains.
-- Required `npm run check` passes: 96 files / 1,795 tests, package consumer,
-  pilot, store-crash and spent-set checks. Sandboxed esbuild config access failed;
-  the normal-host rerun passed. Final documentation changes checked separately.
-- Reacquired bundle, compiler, generated class/run files and temporary source
-  copies were removed after capture/review. Reproduction is in the experiment
-  README. No disk image, node service, peer connection or full sync was launched.
-- Final upstream refresh found no intervening commits; branch protection
-  absent and rulesets empty. Prior `d7f65cf` CI passed; the new push was not yet
-  listed by Actions at readback. Check available CI for the current revision.
+- [Path report](docs/ergo-node-volume-path-verification.json): pinned JRE 21.0.1
+  rejects GUID root/child through both Paths.get and File.toPath, although
+  File.isAbsolute returns true. Drive, extended drive and extended UNC syntax
+  pass. No specimen was statted/opened/resolved; no JNI/Ergo classes were loaded.
+- RocksDB 10.2.1 JNI extraction calls Files.copy(..., temp.toPath(), ...), so
+  its fallback temp route cannot use the measured GUID syntax. This does not
+  assert that every java.io or direct native operation rejects GUID paths.
+- Compiler: 4,411 ms / 130,850,816 peak commit bytes; probe: 733 ms / 97,480,704.
+  Both exit 0 under 30 s / 1 GiB / 25% CPU / one process / 64 KiB output limits,
+  with installed limits and empty jobs. Only a 3,142-byte compiled class remains
+  at capture. An outer wrapper's stale LASTEXITCODE did not reflect child exit.
+- Fresh review verified all 167 bundle files, compiler/JRE/class/source hashes,
+  captured JSON, syntax-only call effects and the narrow source inference.
+  No material finding remains; mapped-volume/database behavior is still untested.
+- Required npm run check passes: 96 files / 1,795 tests, package consumer, pilot,
+  store-crash and spent-set checks. Final docs checks pass separately. Scratch
+  bundle/compiler/generated class and source copies removed after capture/review.
+- Latest fetch had no intervening main commits. Protection absent, rulesets
+  empty; previous main `97cdf24` CI passed. Check the final pushed revision's CI
+  separately; none of the above claims a new remote CI result before it exists.
 
 ## Next
 
-1. Use the inventory's actual stores: history index/objects/extra, state+undo,
-   snapshots, wallet registry+undo/storage, peers, secret directory, config temp,
-   native DLL and diagnostic paths. Disabling snapshots/indexes still opens DBs.
-2. Verify Java/RocksDB accepts the native control's volume GUID path and loads
-   the pinned JNI DLL; observe optional compression modules. `java.library.path`
-   includes system directories and cwd, so a pinned JAR alone is insufficient.
-3. Build bounded database I/O and observer composition: no recursive DB scan or
-   blocking API work in the traffic observer; demonstrate delayed/failed samples,
-   every exit's final sample and empty-job cleanup. Account for native/JRE/OS
-   writes without claiming a filesystem sandbox. Keep the runnable worker small.
-4. After review, request execution of that exact small elevated control. Only
-   after its evidence passes, prepare the 30 min / 20 GiB / 100 GiB host-reserve
-   sync harness with 8 GiB traffic trigger and 10 GiB final observed maximum.
-   Full-sized allocation and public-peer exposure remain separate gates.
+1. Keep node-disk-control.ps1 and its GUID-only guards unchanged. Prepare a
+   separate fixed JRE/database control that assigns an unused drive letter only
+   to its owned new partition. Verify root-to-GUID and image/disk/partition/volume
+   identity before writes; refuse collisions/changed mapping, and read back
+   mapping removal plus detachment on cleanup. Never reuse an existing image.
+2. Put all identified node/JRE temp/home/log/crash/database paths on that volume.
+   Verify actual loaded JNI/optional compression DLLs; java.library.path can
+   otherwise find system/cwd libraries before extraction from the pinned JAR.
+3. Combine bounded database work with the existing process/traffic controls;
+   keep blocking API reads/recursive DB scans out of the traffic observer.
+   Exercise missing/late/failing observations, disk full and every exit's final
+   accounting. Native/JRE/OS writes and supervisor stalls remain explicit limits.
+4. Request execution only after the exact new small harness is reviewable.
+   Then prepare the 30 min / 20 GiB / 100 GiB host-reserve sync harness with
+   8 GiB traffic trigger and 10 GiB final maximum. Full-size allocation and
+   public-peer parser/JRE review remain separate gates.
 
 ## Open questions
 
-- Earlier disk evidence at `91055fc`/`eab393f`: 64 MiB fixed VHD, native error
-  112 after 51 MiB completed writes, within worker limits, empty job/detached.
-  Earlier traffic evidence: 53,848 aggregate octets, 240 ms max gap, 7 ms stop
-  to empty. Neither establishes the combined JRE/database/peer boundary.
-- A settings readback is not executed validation, complete retained history or
-  packet absence. No complete write trace, full-sized headroom or authenticated
-  fixture ancestry is established. Public-peer parser/JRE review remains owed.
-- Runtime stays v2, refuses silence clauses, and has no pool wallet. C2.10.13/A8,
+- Earlier fixed disk, aggregate traffic and effective-settings evidence remains
+  in ERGO_NODE_PREFLIGHT.md. It does not prove combined containment, full-sized
+  headroom, executed validation, complete retained history or fixture ancestry.
+- Runtime remains v2, refuses silence clauses and has no pool wallet. C2.10.13/A8,
   same-index order/A9, authenticated ranges and v3 runtime adoption remain open.
-- Stay with the current instance for the next bounded harness implementation:
-  relevant source/control context is fresh; use a fresh independent reviewer
-  for its consequential boundary. This is an efficiency recommendation, not
-  measured comparative model performance.
-- About **45% done / 55% remaining**, plausible done range **35-55%**. This
-  preparation reduces uncertainty, without advancing an end-to-end product gate.
-  Main blocks: evidence/replay/configuration, v3 runtime, wallet/transport,
-  authenticated ranges, witness publication and custody/rollback assurance.
-- No firewall, WSL-wide settings, access controls, public release, live deployment,
-  full-sized allocation or real funds are authorized here.
+- Switch to a fresh instance for the next mapping/database harness. This thread
+  accumulated two preparation slices; the handoff preserves the necessary
+  conclusions. This is context-efficiency advice, not comparative benchmarking.
+- Estimate reassessed 2026-09-10: retain **45% done / 55% remaining**, plausible
+  done range **35-55%**. V3 relations/layout/conformance work supports the modest
+  increase over the historical Sep 8 baseline; recent Ergo controls close no
+  end-to-end gate. Runtime/recovery integration, wallet/transport, authenticated
+  evidence, witness publication and custody/rollback assurance dominate remaining
+  effort and can force redesign. The range is judgment, not a statistical interval.
+- No public release/deployment, access-control changes, real funds, public peers
+  or new elevated/full-sized disk execution are authorized by this preparation.
