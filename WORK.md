@@ -14,10 +14,9 @@ no normative change or runtime adoption.
 
 ## Status
 
-- Prior delivery CI `34451912372` passed for `6357ed7`. Upstream was refreshed
-  without intervening commits. No branch protection/rulesets were present;
-  safeguards are unchanged. This slice's delivery CI must be read before
-  the next measurement; all local required checks pass.
+- Delivery CI `34469643234` passed for `ac776f7`. Upstream was refreshed
+  without intervening commits. All local required checks pass. No branch
+  protection/rulesets were present at delivery; safeguards are unchanged.
 - The previous traffic control remains valid at its stated boundary: 53,848
   combined interface octets, maximum sample gap 240 ms, 7 ms stop-to-empty
   confirmation. The stricter classifier requires supervisor termination.
@@ -33,6 +32,10 @@ no normative change or runtime adoption.
   mutation: ordinary host administrator=false, 532,020,400,128 bytes free,
   no disk or worker created. Real disk-full/attachment/detach is unmeasured.
   Ordinary sandbox escalation cannot provide Windows administrator elevation.
+- A UAC launch was requested on 2026-09-10 but automatic approval review
+  rejected it before execution: elevated disk creation/partitioning/formatting
+  requires separate explicit approval under the destructive-operation exclusion.
+  That approval is pending. No attempt report or control directory exists.
 
 ## Evidence
 
@@ -53,7 +56,9 @@ no normative change or runtime adoption.
 
 ## Next
 
-1. Check delivery CI for the final main revision; local checks pass.
+1. Obtain explicit approval for the reviewed fixed 64 MiB elevated disk test;
+   then use ordinary Windows UAC, which may require physical confirmation.
+   Do not infer that a generic continuation overrides the approval rejection.
 2. The reviewed command for an elevated PowerShell 7 window is documented in
    [reproduction](experiments/ergo-range/README.md). Run one small control only,
    then inspect disk-full, resource, image capacity and detach evidence.
@@ -66,6 +71,9 @@ no normative change or runtime adoption.
    source-independent authenticated range/replay contract from the
    [recovery map](docs/POOL_V3_RECOVERY_MAP.md) while host access is missing.
    No mock or response match closes the fully validated source gate.
+   Inventory found that another abstract range wrapper would still assume
+   completeness; do not add one without advancing a concrete replay consumer
+   or authenticated source. C2.10.13/A8 and same-index order/A9 remain open.
 
 ## Open questions
 
