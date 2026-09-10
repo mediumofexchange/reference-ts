@@ -17,7 +17,9 @@ function Expect-Reject([string]$Name, [scriptblock]$Action) {
 }
 function New-IdentityFixture {
     [pscustomobject]@{ Image=[pscustomobject]@{ Attached=$true; ImagePath='C:\control.vhd'; DevicePath='\\.\PhysicalDrive12' }
-        Disk=[pscustomobject]@{ Number=12; Size=67108864UL; BusType=15; PartitionStyle='RAW'; IsBoot=$false; IsSystem=$false; IsOffline=$false; IsReadOnly=$false; Path='\\?\scsi#disk'; UniqueId='disk-12'; NumberOfPartitions=0 } }
+        Disk=[pscustomobject]@{ Number=12; Size=67108864UL; BusType='File Backed Virtual';
+            CimInstanceProperties=@{ BusType=[pscustomobject]@{Value=[uint16]15} };
+            PartitionStyle='RAW'; IsBoot=$false; IsSystem=$false; IsOffline=$false; IsReadOnly=$false; Path='\\?\scsi#disk'; UniqueId='disk-12'; NumberOfPartitions=0 } }
 }
 function New-PartitionFixture {
     [pscustomobject]@{ Disk=[pscustomobject]@{ Number=12 }
@@ -37,6 +39,7 @@ function Invoke-Completion([scriptblock]$Mutate) { $f=New-CompletionFixture; & $
 Expect-Pass 'valid disk identity' { Invoke-Identity {} }
 Expect-Pass 'valid partition' { Invoke-Partition {} }
 Expect-Pass 'valid completion' { Invoke-Completion {} }
+Expect-Pass 'display label is not the bus identity' { Invoke-Identity { param($f) $f.Disk.BusType='display label' } }
 
 @(
     @{ n='unattached image'; m={param($f) $f.Image.Attached=$false} },
@@ -44,7 +47,11 @@ Expect-Pass 'valid completion' { Invoke-Completion {} }
     @{ n='wrong device'; m={param($f) $f.Image.DevicePath='\\.\PhysicalDrive13'} },
     @{ n='wrong disk number'; m={param($f) $f.Disk.Number=13} },
     @{ n='wrong size'; m={param($f) $f.Disk.Size=67108863UL} },
-    @{ n='wrong bus'; m={param($f) $f.Disk.BusType=7} },
+    @{ n='wrong raw bus despite matching display'; m={param($f) $f.Disk.CimInstanceProperties.BusType.Value=[uint16]7} },
+    @{ n='string raw bus'; m={param($f) $f.Disk.CimInstanceProperties.BusType.Value='15'} },
+    @{ n='wide integer raw bus'; m={param($f) $f.Disk.CimInstanceProperties.BusType.Value=15} },
+    @{ n='missing raw bus'; m={param($f) $f.Disk.CimInstanceProperties.Remove('BusType')} },
+    @{ n='missing CIM properties'; m={param($f) $f.Disk.PSObject.Properties.Remove('CimInstanceProperties')} },
     @{ n='wrong partition style'; m={param($f) $f.Disk.PartitionStyle='GPT'} },
     @{ n='boot disk'; m={param($f) $f.Disk.IsBoot=$true} },
     @{ n='system disk'; m={param($f) $f.Disk.IsSystem=$true} },

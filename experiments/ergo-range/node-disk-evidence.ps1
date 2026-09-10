@@ -3,10 +3,13 @@ Set-StrictMode -Version Latest
 function Assert-ProbeDiskIdentity($Image, $Disk, [string]$ImagePath, [string]$PhysicalPath, [string]$Style) {
     if ($PhysicalPath -cnotmatch '^\\\\\.\\PhysicalDrive(0|[1-9][0-9]*)\z') { throw 'Malformed physical disk path' }
     $number = [uint32]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture)
+    # Storage's type data projects BusType to a display string (for example
+    # "File Backed Virtual"). Use the underlying MSFT_Disk UInt16 instead.
+    $busType = $Disk.CimInstanceProperties['BusType'].Value
     if ($Image.Attached -isnot [bool] -or -not $Image.Attached -or
         $Image.ImagePath -ine $ImagePath -or $Image.DevicePath -ine $PhysicalPath -or
         $Disk.Number -ne $number -or $Disk.Size -ne 67108864UL -or
-        [int]$Disk.BusType -ne 15 -or $Disk.PartitionStyle.ToString() -cne $Style -or
+        $busType -isnot [uint16] -or $busType -ne 15 -or $Disk.PartitionStyle.ToString() -cne $Style -or
         $Disk.IsBoot -isnot [bool] -or $Disk.IsBoot -or
         $Disk.IsSystem -isnot [bool] -or $Disk.IsSystem -or
         $Disk.IsOffline -isnot [bool] -or $Disk.IsOffline -or
