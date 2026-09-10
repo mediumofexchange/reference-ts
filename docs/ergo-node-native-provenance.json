@@ -3,6 +3,21 @@
   "observedDate": "2026-09-10",
   "nativeCodeExecuted": false,
   "databaseAcceptance": false,
+  "standardPackageRecheck": {
+    "observedDate": "2026-09-10",
+    "url": "https://repo.maven.apache.org/maven2/org/rocksdb/rocksdbjni/10.2.1/rocksdbjni-10.2.1.jar",
+    "archiveBytes": 72769957,
+    "archiveSha256": "4358a08bb96652dca35247137ec42db26e6b71f0a02633a3d7508cf2971f2f8b",
+    "windowsDllBytes": 8869888,
+    "windowsDllSha256": "0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7",
+    "rocksDBClassBytes": 53351,
+    "rocksDBClassSha256": "410a229fc46111f128ff5ee905da200123ba7844254c42f65abd9fb793326dd9",
+    "classCount": 253,
+    "classNamesOrHashesDifferingFromErgo": [],
+    "method": "Download the full standard JAR over HTTPS, verify archive length/hash, then inspect ZIP streams read-only with System.IO.Compression.ZipFile. Reject duplicate selected member names, hash every org/rocksdb/*.class and the Windows DLL, and compare exact selected sets, lengths and hashes with the pinned Ergo JAR.",
+    "result": "The standard package contains the same Windows DLL and all 253 RocksDB classes as the Windows classifier and Ergo bundle. It does not provide a corrected Windows 10.2.1 native library.",
+    "nativeCodeExecuted": false
+  },
   "acquisition": "HTTPS download from Maven Central; local Ergo JAR rehashed against its recorded release pin. No Maven signature was independently authenticated; archive hashes are observations, not build attestations.",
   "artifacts": [
     {
@@ -312,7 +327,7 @@
   "limitations": [
     "Static comparison of these pinned artifacts only, not a general hostile-PE parser, source audit, runtime API/ABI test or database result.",
     "Equal executable code sections and 36 metadata differences strongly support the same older native implementation, but do not authenticate complete source, compiler flags or transitive compression dependencies.",
-    "The Windows classifier and Ergo bundle were compared; other Maven platform classifiers and the full multi-platform Maven JAR were not downloaded.",
+    "The full standard 10.2.1 Maven JAR was subsequently compared for its Windows DLL and RocksDB classes. Other native platforms and alternative matched Java/native release versions were not qualified.",
     "The exact 10/2/1 version gate, module policy, timing and resource limits remain unchanged. No WinSxS acceptance, native replacement or control retry follows."
   ],
   "sourceFiles": [

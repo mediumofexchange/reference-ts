@@ -906,6 +906,15 @@ version is already present in that published dependency; it is not introduced
 by the harness's extraction or by different RocksDB classes in the Ergo bundle.
 This comparison does not cover the other platform classifiers.
 
+A subsequent read-only check of the
+[standard 10.2.1 package](https://repo.maven.apache.org/maven2/org/rocksdb/rocksdbjni/10.2.1/rocksdbjni-10.2.1.jar)
+(72,769,957 bytes, SHA-256
+`4358a08bb96652dca35247137ec42db26e6b71f0a02633a3d7508cf2971f2f8b`)
+found the same complete Windows DLL and all 253 RocksDB class names/hashes.
+Downloading that package therefore does not correct the Windows version
+mismatch. A different matched Java/native release remains an unqualified
+alternative; this check does not establish a custom build as the only route.
+
 | Windows DLL | SHA-256 | Embedded source/tag |
 |---|---|---|
 | Published 10.2.1 and Ergo | `0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7` | `5823cf08d69e4d9cba6953d51fb7d6996c72df94`, `v10.1.3` |

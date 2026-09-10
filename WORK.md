@@ -4,12 +4,13 @@ Updated: 2026-09-10
 
 ## Goal
 
-Exact native candidate and narrow Common Controls policy prepared for the fixed
-trusted offline database control. Candidate disposition and actual patch passed
-independent adversarial review. No DLL load, JVM trial, volume allocation, peers
-or deployment in this slice. Full project validation passed.
+Run one fixed offline database trial on the reviewed exact native candidate.
+Acceptance: actual module/version handshake, baseline persistence, NoSpace,
+final real accounting and verified cleanup, independently checked. Preserve any
+refusal without automatic retry or widening bounds. No node, peers or deployment.
+Windows elevation is required; the current task process is not elevated.
 
-Delivery: `main`; baseline `37425da`; source build input `9ea1c16`.
+Delivery: `main`; baseline `bb560a5`; source build input `9ea1c16`.
 Companion specification: `money-from-first-principles/main` at `7ea0ee8`.
 No normative change or local toolchain installation.
 
@@ -45,6 +46,10 @@ No normative change or local toolchain installation.
 
 ## Evidence
 
+- The standard Maven 10.2.1 JAR was also downloaded and inspected read-only:
+  its Windows DLL and all 253 RocksDB classes exactly match the classifier and
+  Ergo bundle. It offers no corrected Windows binary; other complete release
+  versions remain unqualified. Pins are in the native provenance evidence.
 - 58 identity/module cases, 21 synthetic file cases and 37 accounting cases pass.
   Independent review reran the first two and passed ten additional probes for
   path/stream/case aliases, duplicate records, existing writers, self-destination,
@@ -52,8 +57,7 @@ No normative change or local toolchain installation.
 - Full npm run check passed: 96 files / 1,795 tests in 279.87 s plus docs,
   typecheck, build, package, pilot, store-crash and spent-set checks.
   Final documentation/link/diff checks pass.
-  Baseline `37425da` CI run `34510048192` passed all seven jobs. Check delivery
-  CI separately after the resulting commit is pushed.
+  Delivery `bb560a5` CI run `34512630234` passed all seven jobs.
 - Fixed worker, disk/process/traffic helpers, 64 MiB disk, 1 GiB process commit,
   30 s per process, 1 s sampling ceiling and all other bounds remain unchanged.
   The last actual diagnostic's 954 ms sampling gap remains close to the ceiling.
