@@ -4,8 +4,8 @@ Updated: 2026-09-10
 
 ## Goal
 
-Completed native disk-control preparation on `test/ergo-disk-control`, based
-on `6357ed7`, ready for delivery. Result: a reviewed fixed 64 MiB create-new VHD helper,
+Completed native disk-control preparation `4849120`, fast-forwarded from
+`test/ergo-disk-control` to `main`. Result: a reviewed fixed 64 MiB create-new VHD helper,
 identity guards before storage mutations, bounded disk-full worker and detach
 readback, ready for an elevated host attempt. Record ordinary-host refusal
 without claiming an attached-volume pass. No full-sized allocation or peers.
@@ -14,8 +14,10 @@ no normative change or runtime adoption.
 
 ## Status
 
-- Prior delivery CI `34451912372` passed for `6357ed7`. Refreshed upstream
-  has no intervening commits; final delivery/remote parity is being verified.
+- Prior delivery CI `34451912372` passed for `6357ed7`. Upstream was refreshed
+  without intervening commits. No branch protection/rulesets were present;
+  safeguards are unchanged. This slice's delivery CI must be read before
+  the next measurement; all local required checks pass.
 - The previous traffic control remains valid at its stated boundary: 53,848
   combined interface octets, maximum sample gap 240 ms, 7 ms stop-to-empty
   confirmation. The stricter classifier requires supervisor termination.
@@ -70,7 +72,7 @@ no normative change or runtime adoption.
 - Runtime remains v2, refuses silence clauses and has no pool wallet. No
   complete sync containment, authenticated ranges, validated fixture ancestry
   or production node/JRE selection is established.
-- Continue Astra for the next elevated-control evidence/identity judgment;
+- Continue this Astra instance for the next elevated-control evidence/identity judgment;
   bounded tests/tooling can use economical builders with strong independent
   review. Reassess at slice completion; this is not comparative benchmarking.
 - About **45% done / 55% remaining**, plausible done range **35-55%**.
