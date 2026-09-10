@@ -1,0 +1,22 @@
+{
+  "url": "https://github.com/mediumofexchange/reference-ts/actions/runs/34494811547",
+  "report": {
+    "status": "refused",
+    "phase": "inputs",
+    "candidateLoaded": false,
+    "databaseAcceptance": false,
+    "errors": [
+      "JDK version mismatch"
+    ],
+    "imageVersion": "20260830.290.1",
+    "workflowCommit": "ef091dee798493935672d62be6cfd21953b13bf9",
+    "runId": "34494811547",
+    "imageSourceCommit": "81f6fba751cfd9688d726f4981cd9798305a1985",
+    "imageManifestSha256": "93aff42175f175422340f660e5c8d22adb6cfbcf40e5ec4636bdccd334ae56e5",
+    "freeBefore": 236024872960,
+    "sourceCommit": "4b2122578e475cb88aef4dcf152cccd5dbf51060",
+    "sourceTree": "3d47d6368014281754cc7324a9b1edf05e22e892",
+    "elapsedMs": 616
+  },
+  "runId": 34494811547
+}

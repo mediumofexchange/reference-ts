@@ -15,7 +15,8 @@ function Run([string]$tool, [string[]]$arguments) {
 try {
     if (-not $IsWindows -or $env:GITHUB_ACTIONS -cne 'true' -or
         $env:GITHUB_REPOSITORY -cne 'mediumofexchange/reference-ts' -or
-        $env:GITHUB_EVENT_NAME -cne 'workflow_dispatch' -or $env:GITHUB_REF -cne 'refs/heads/main') {
+        $env:GITHUB_EVENT_NAME -cne 'workflow_dispatch' -or
+        $env:GITHUB_REF -cnotin @('refs/heads/main','refs/heads/test/rocksdb-build-execution')) {
         throw 'Only the fixed manual public Windows CI job is supported'
     }
     $event = Get-Content -Raw -LiteralPath $env:GITHUB_EVENT_PATH | ConvertFrom-Json
@@ -47,21 +48,23 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Source tree unavailable' }
     $javaHome = $env:JAVA_HOME_21_X64
     $javaRelease = Get-Content -Raw -LiteralPath (Join-Path $javaHome 'release')
+    $report.javaHome = $javaHome
+    $report.javaRelease = $javaRelease.Trim()
     if ($javaRelease -notmatch ('(?m)^JAVA_VERSION="'+[regex]::Escape($pins.javaVersion)+'"')) { throw 'JDK version mismatch' }
     $env:JAVA_HOME = $javaHome
     $env:PATH = (Join-Path $javaHome 'bin') + ';' + $env:PATH
     $cmake = (Get-Command cmake).Source
     $cmakeVersion = (& $cmake --version)[0]
+    $report.cmakeVersion = $cmakeVersion
     if ($LASTEXITCODE -ne 0 -or $cmakeVersion -cne ('cmake version '+$pins.cmakeVersion)) { throw 'CMake version mismatch' }
     $vs = 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise'
     $vcVersion = (Get-Content -Raw -LiteralPath (Join-Path $vs 'VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt')).Trim()
+    $report.toolset = $vcVersion
     if ($vcVersion -cnotmatch '^14\.44\.[0-9]+$') { throw 'Expected MSVC v143 14.44 toolset' }
     $vcRoot = Join-Path $vs ('VC/Tools/MSVC/'+$vcVersion)
     $vcBin = Join-Path $vcRoot 'bin/Hostx64/x64'
     $sdkRoot = 'C:\Program Files (x86)\Windows Kits\10'
     $sdkVersion = $pins.windowsSdkVersion
-    $report.toolset = $vcVersion
-    $report.javaRelease = $javaRelease.Trim()
     $report.tools = @()
     foreach ($file in @($cmake,(Join-Path $javaHome 'bin/javac.exe'),(Join-Path $javaHome 'bin/jar.exe'),
         (Join-Path $javaHome 'include/jni.h'),(Join-Path $javaHome 'include/win32/jni_md.h'),

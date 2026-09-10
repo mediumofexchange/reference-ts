@@ -15,12 +15,20 @@ not establish Java/native runtime compatibility, reproducibility or database
 acceptance. No output DLL is loaded and no native or Java test is executed.
 
 The [manual workflow](../.github/workflows/rocksdb-native-build.yml) runs only
-on `mediumofexchange/reference-ts/main`, in the public repository, on a
+on `main` or the named `test/rocksdb-build-execution` development branch of
+the public `mediumofexchange/reference-ts` repository, on a
 standard `windows-2022` runner. There are no dispatch inputs, schedules,
 secrets, credential persistence, artifact/cache uploads or release steps.
 Its token has `contents: read`. Logs retain the JSON report and static
 inspection; generated binaries disappear with the runner and are not an
 adoptable local artifact. A later retention/transfer route is separate work.
+
+Development-branch dispatch tests reviewed input/diagnostic changes before
+merge; it does not waive independent review or final project checks. Both
+workflow and script reject every other ref. This replaces the initial
+main-only development cycle, which forced unverified input assumptions into
+main before the first hosted observation. Runtime execution stays separately
+gated regardless of branch.
 
 ## Host and route choice
 
@@ -104,6 +112,13 @@ Also disable upstream's default-enabled trace-tool target explicitly; the
 named JNI target did not depend on it, but the declared configuration should
 match the generated graph. Independent readback reproduced both manifest hashes,
 confirmed the unchanged listed build tools and accepted the bounded retry.
+
+The [second run](ergo-native-build-second-refusal.json) at `ef091de` accepted
+the delivered image and exact source tree, then refused the JDK version in
+616 ms, before configure or downloads. The report omitted the actual JDK
+release text. Record tool version evidence before its corresponding check so
+the next diagnostic can distinguish an input mismatch from a parsing defect;
+the JDK gate itself remains unchanged pending that evidence.
 
 One manually dispatched job has a 30-minute platform timeout and build
 parallelism two. Refuse less than 8 GiB free before the build; accept at most

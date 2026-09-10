@@ -6,9 +6,9 @@ Updated: 2026-09-10
 
 Demonstrate a bounded compile-only Windows build of pinned RocksDB 10.2.1,
 then qualify an actual native candidate before any local database trial.
-The first run refused before compilation on an unselected runner image.
-Two explicitly reviewed image versions are now accepted; final checks passed
-and bounded retry is next. No candidate DLL is loaded or adopted by this slice.
+Two hosted runs refused before compilation: first the image, then the JDK
+version. Record actual tool metadata before each gate, diagnose on the named
+development branch, and complete final checks before merge. No DLL is loaded.
 
 Development branch: `test/rocksdb-build-execution`, from preparation `b304e34`.
 Companion specification: `money-from-first-principles/main` at `7ea0ee8`.
@@ -50,6 +50,9 @@ No normative change, local toolchain installation, peers or disk allocation.
   published `20260907.297.1`; stopped in 110 ms before configure. Independent
   manifest comparison/readback accepted both exact versions with unchanged
   listed build tools; all other images refuse. Trace tools are now explicitly off.
+- [Second refusal](docs/ergo-native-build-second-refusal.json), run
+  `34494811547` at `ef091de`: JDK version mismatch in 616 ms. Actual release
+  text was omitted; the reviewed diagnostic correction logs it before checking.
 - Last [database diagnostic](docs/ergo-node-database-verification.json) loaded
   native version 10/1/3 and stopped before PROCEED on WinSxS COMCTL32.
   Maximum sample gap was 954 ms against a 1 s ceiling. All three images and
@@ -57,10 +60,10 @@ No normative change, local toolchain installation, peers or disk allocation.
 
 ## Next
 
-1. Finish full checks, deliver the reviewed workflow under standing authority,
-   dispatch it once, and capture its exact run/revision/report and static output
-   or refusal. Keep image mismatch and compile errors; do not automatically
-   update inputs, disable warnings or raise limits. Record measured cost.
+1. Dispatch the reviewed diagnostic on `test/rocksdb-build-execution`; inspect
+   actual JDK metadata before changing any input gate. Keep refusals and compile
+   errors; do not automatically update inputs, disable warnings or raise limits.
+   Finish final project checks and reviewed integration after qualification.
 2. After build feasibility, prepare a retained candidate with complete input,
    Java/JNI and compression-profile evidence. Review actual output and the
    concrete local bundle/native pin patch before any library load. The generated
