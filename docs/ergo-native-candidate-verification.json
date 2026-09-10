@@ -7,86 +7,85 @@
     "actionsBudgetDollars": 0,
     "packagesBudgetDollars": 0,
     "bothPreventFurtherUsage": true,
-    "referenceTsArtifactCountBeforeDispatch": 0,
     "packageInventoryComplete": false,
     "billingSettingsChanged": false
   },
   "transfer": {
-    "runId": "34502815638",
+    "runId": "34507404910",
     "runAttempt": "1",
-    "workflowCommit": "373db5058b71370612818f4bb261ea8d25c66fdc",
+    "workflowCommit": "9ea1c16de569b7075a34850ba0ffbaf9975efd65",
     "repository": "mediumofexchange/reference-ts",
     "workflowPath": ".github/workflows/rocksdb-native-build.yml",
     "event": "workflow_dispatch",
     "headBranch": "main",
     "status": "completed",
     "conclusion": "success",
-    "runUrl": "https://github.com/mediumofexchange/reference-ts/actions/runs/34502815638",
-    "createdAt": "2026-09-10T16:33:20Z",
-    "updatedAt": "2026-09-10T16:50:44Z",
+    "runUrl": "https://github.com/mediumofexchange/reference-ts/actions/runs/34507404910",
+    "createdAt": "2026-09-10T17:18:30Z",
+    "updatedAt": "2026-09-10T17:36:42Z",
     "artifact": {
-      "id": 10163251532,
-      "node_id": "MDg6QXJ0aWZhY3QxMDE2MzI1MTUzMg==",
-      "name": "rocksdb-candidate-34502815638-1",
-      "size_in_bytes": 13696641,
-      "url": "https://api.github.com/repos/mediumofexchange/reference-ts/actions/artifacts/10163251532",
-      "archive_download_url": "https://api.github.com/repos/mediumofexchange/reference-ts/actions/artifacts/10163251532/zip",
+      "id": 10165083375,
+      "node_id": "MDg6QXJ0aWZhY3QxMDE2NTA4MzM3NQ==",
+      "name": "rocksdb-candidate-34507404910-1",
+      "size_in_bytes": 13695907,
+      "url": "https://api.github.com/repos/mediumofexchange/reference-ts/actions/artifacts/10165083375",
+      "archive_download_url": "https://api.github.com/repos/mediumofexchange/reference-ts/actions/artifacts/10165083375/zip",
       "expired": false,
-      "digest": "sha256:d3ab87cba4a7d432b182a81f23c21b91215a35e22cf9960efecbc3adceb194f6",
-      "created_at": "2026-09-10T16:50:38Z",
-      "updated_at": "2026-09-10T16:50:38Z",
-      "expires_at": "2026-09-11T16:50:37Z",
+      "digest": "sha256:28c4f283a0bdc9041c52ccf2ef62563f1cf295694580c67108873eeff9fa57e5",
+      "created_at": "2026-09-10T17:36:35Z",
+      "updated_at": "2026-09-10T17:36:35Z",
+      "expires_at": "2026-09-11T17:36:32Z",
       "workflow_run": {
-        "id": 34502815638,
+        "id": 34507404910,
         "repository_id": 1338452450,
         "head_repository_id": 1338452450,
         "head_branch": "main",
-        "head_sha": "373db5058b71370612818f4bb261ea8d25c66fdc"
+        "head_sha": "9ea1c16de569b7075a34850ba0ffbaf9975efd65"
       }
     },
-    "downloadBytes": 13696641,
-    "archiveSha256": "d3ab87cba4a7d432b182a81f23c21b91215a35e22cf9960efecbc3adceb194f6",
-    "buildLogSha256": "3bfb34485f82aea956304f1bba0c8e9a9a084c8830456782a0c2b35e6239a830"
+    "downloadBytes": 13695907,
+    "archiveSha256": "28c4f283a0bdc9041c52ccf2ef62563f1cf295694580c67108873eeff9fa57e5",
+    "buildLogSha256": "8eec01c4bab605cba1c12b19e9f5e319ba47407928e6e942b5b5acfd292e9f5d"
   },
   "import": {
-    "toolRevision": "373db5058b71370612818f4bb261ea8d25c66fdc",
-    "toolGitBlob": "4a5a9b62b939bbe7037d0c174825b3788f0596f4",
+    "toolRevision": "9ea1c16de569b7075a34850ba0ffbaf9975efd65",
     "result": "105 content members and manifest validated before extraction",
-    "destination": "scratch/retained-native-review/candidate",
-    "currentImporterRejectsSiblingOnlyArchive": true
+    "destination": "scratch/retained-native-target/candidate",
+    "packagedTargetProjectRequired": true,
+    "toolGitBlob": "7b80d5881bedf3843e8bd4a875bd874bbb8fd96f"
   },
   "manifest": {
     "schema": "moe-rocksdb-candidate-v1",
     "repository": "mediumofexchange/reference-ts",
     "sourceCommit": "4b2122578e475cb88aef4dcf152cccd5dbf51060",
-    "workflowCommit": "373db5058b71370612818f4bb261ea8d25c66fdc",
-    "runId": "34502815638",
+    "workflowCommit": "9ea1c16de569b7075a34850ba0ffbaf9975efd65",
+    "runId": "34507404910",
     "runAttempt": "1",
     "files": [
       {
         "name": "librocksdbjni-win64.dll",
         "bytes": 8998912,
-        "sha256": "a05f9ba907daf041a5ac9eaec7f241fe012b1aef4b1b844bb1696d392229c5de"
+        "sha256": "b0370fa9a8afe8942d0d2ccba1557b29ab08472a09da7c1bde7005eca7cdd21c"
       },
       {
         "name": "rocksdbjni-10.2.1-win64.jar",
-        "bytes": 3991103,
-        "sha256": "d04301aa65fb5830d459089b19c492727798b9a84c8d745173eb77cf0e19f2ee"
+        "bytes": 3991125,
+        "sha256": "841c928c73b2e5506f95456f8d959b2a26a83668422a98b773dadd95cd56c8d9"
       },
       {
         "name": "CMakeCache.txt",
         "bytes": 23679,
-        "sha256": "7819ff4bb7335c4b5dfccfa7c93a1955d6686e6abf072ce24ad5d1d62121d415"
+        "sha256": "04c2af5e3985e1ffb2b0aa9e1bfc4d87292efd9239ba502458ede82fb684d2a4"
       },
       {
-        "name": "rocksdbjni-shared.vcxproj",
-        "bytes": 47001,
-        "sha256": "748671bd7ba471e6228a0b0c1295284ae3788f4b0abbb25381343132948cb8f6"
+        "name": "rocksdbjni.vcxproj",
+        "bytes": 46266,
+        "sha256": "df88c292cd99d58b44e62165a1903b36179a06a712356b88cfeaf417925c2026"
       },
       {
         "name": "build_version.cc",
         "bytes": 2940,
-        "sha256": "754d53f57655bc902acdf25c2d3a8a53d99e1849160a526f7093433b55b52dab"
+        "sha256": "ceaf2889009e7575a8dd3cec5755277a59c0e704c738c2510770cbadbeb925bd"
       },
       {
         "name": "exports.txt",
@@ -581,7 +580,7 @@
       {
         "name": "report.json",
         "bytes": 13514,
-        "sha256": "433fe8a7bc2febcfa8370432cdf24fff0419de64ae23829708288c2df6d7b9fb"
+        "sha256": "6b94f259d21feb33d38942590c527d6cf8b4ffbfa79895cc954003e2b3aaf3d6"
       },
       {
         "name": "native-build-inputs.json",
@@ -589,7 +588,7 @@
         "sha256": "1361cd33e0b8dd2f23bb6f5e3e76f21a245317e8fcf6a06563c02ad6ca6759c2"
       }
     ],
-    "totalBytes": 13660092
+    "totalBytes": 13659379
   },
   "build": {
     "status": "compiled-unadopted-native-candidate",
@@ -597,14 +596,14 @@
     "candidateLoaded": false,
     "databaseAcceptance": false,
     "errors": [],
-    "imageVersion": "20260830.290.1",
-    "workflowCommit": "373db5058b71370612818f4bb261ea8d25c66fdc",
-    "runId": "34502815638",
+    "imageVersion": "20260907.297.1",
+    "workflowCommit": "9ea1c16de569b7075a34850ba0ffbaf9975efd65",
+    "runId": "34507404910",
     "runAttempt": "1",
     "retentionRequested": true,
-    "imageSourceCommit": "81f6fba751cfd9688d726f4981cd9798305a1985",
-    "imageManifestSha256": "93aff42175f175422340f660e5c8d22adb6cfbcf40e5ec4636bdccd334ae56e5",
-    "freeBefore": 157779980288,
+    "imageSourceCommit": "3e99119430a6c4ead03a20a2a4020a71782eede1",
+    "imageManifestSha256": "2d0afae5e8117b57ff64f3fe66a338120e38ef414fcc861b9993809f129b5a09",
+    "freeBefore": 157779640320,
     "sourceCommit": "4b2122578e475cb88aef4dcf152cccd5dbf51060",
     "sourceTree": "3d47d6368014281754cc7324a9b1edf05e22e892",
     "javaHome": "C:\\hostedtoolcache\\windows\\Java_Temurin-Hotspot_jdk\\21.0.12-101.0\\x64",
@@ -746,7 +745,7 @@
     "cache": {
       "name": "CMakeCache.txt",
       "bytes": 23679,
-      "sha256": "7819ff4bb7335c4b5dfccfa7c93a1955d6686e6abf072ce24ad5d1d62121d415"
+      "sha256": "04c2af5e3985e1ffb2b0aa9e1bfc4d87292efd9239ba502458ede82fb684d2a4"
     },
     "effectiveCache": [
       "CMAKE_BUILD_TYPE:UNINITIALIZED=Release",
@@ -808,21 +807,21 @@
       "CMAKE_GENERATOR_TOOLSET:INTERNAL=v143,version=14.44.35207",
       "WITH_TESTS:INTERNAL=OFF"
     ],
-    "buildVersionSource": "// Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.\r\n\r\n#include <memory>\r\n\r\n#include \"rocksdb/version.h\"\r\n#include \"rocksdb/utilities/object_registry.h\"\r\n#include \"util/string_util.h\"\r\n\r\n// The build script may replace these values with real values based\r\n// on whether or not GIT is available and the platform settings\r\nstatic const std::string rocksdb_build_git_sha  = \"rocksdb_build_git_sha:4b2122578e475cb88aef4dcf152cccd5dbf51060\";\r\nstatic const std::string rocksdb_build_git_tag = \"rocksdb_build_git_tag:\";\r\n#define HAS_GIT_CHANGES 0\r\n#if HAS_GIT_CHANGES == 0\r\n// If HAS_GIT_CHANGES is 0, the GIT date is used.\r\n// Use the time the branch/tag was last modified\r\nstatic const std::string rocksdb_build_date = \"rocksdb_build_date:2025-04-24 22:11:56\";\r\n#else\r\n// If HAS_GIT_CHANGES is > 0, the branch/tag has modifications.\r\n// Use the time the build was created.\r\nstatic const std::string rocksdb_build_date = \"rocksdb_build_date:2026-09-10 16:34:07\";\r\n#endif\r\n\r\nextern \"C\" {\r\n\r\n} // extern \"C\"\r\n\r\nstd::unordered_map<std::string, ROCKSDB_NAMESPACE::RegistrarFunc> ROCKSDB_NAMESPACE::ObjectRegistry::builtins_ = {\r\n  \r\n};\r\n\r\nnamespace ROCKSDB_NAMESPACE {\r\nstatic void AddProperty(std::unordered_map<std::string, std::string> *props, const std::string& name) {\r\n  size_t colon = name.find(\":\");\r\n  if (colon != std::string::npos && colon > 0 && colon < name.length() - 1) {\r\n    // If we found a \"@:\", then this property was a build-time substitution that failed.  Skip it\r\n    size_t at = name.find(\"@\", colon);\r\n    if (at != colon + 1) {\r\n      // Everything before the colon is the name, after is the value\r\n      (*props)[name.substr(0, colon)] = name.substr(colon + 1);\r\n    }\r\n  }\r\n}\r\n\r\nstatic std::unordered_map<std::string, std::string>* LoadPropertiesSet() {\r\n  auto * properties = new std::unordered_map<std::string, std::string>();\r\n  AddProperty(properties, rocksdb_build_git_sha);\r\n  AddProperty(properties, rocksdb_build_git_tag);\r\n  AddProperty(properties, rocksdb_build_date);\r\n  return properties;\r\n}\r\n\r\nconst std::unordered_map<std::string, std::string>& GetRocksBuildProperties() {\r\n  static std::unique_ptr<std::unordered_map<std::string, std::string>> props(LoadPropertiesSet());\r\n  return *props;\r\n}\r\n\r\nstd::string GetRocksVersionAsString(bool with_patch) {\r\n  std::string version = std::to_string(ROCKSDB_MAJOR) + \".\" + std::to_string(ROCKSDB_MINOR);\r\n  if (with_patch) {\r\n    return version + \".\" + std::to_string(ROCKSDB_PATCH);\r\n  } else {\r\n    return version;\r\n }\r\n}\r\n\r\nstd::string GetRocksBuildInfoAsString(const std::string& program, bool verbose) {\r\n  std::string info = program + \" (RocksDB) \" + GetRocksVersionAsString(true);\r\n  if (verbose) {\r\n    for (const auto& it : GetRocksBuildProperties()) {\r\n      info.append(\"\\n    \");\r\n      info.append(it.first);\r\n      info.append(\": \");\r\n      info.append(it.second);\r\n    }\r\n  }\r\n  return info;\r\n}\r\n} // namespace ROCKSDB_NAMESPACE\r\n",
+    "buildVersionSource": "// Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.\r\n\r\n#include <memory>\r\n\r\n#include \"rocksdb/version.h\"\r\n#include \"rocksdb/utilities/object_registry.h\"\r\n#include \"util/string_util.h\"\r\n\r\n// The build script may replace these values with real values based\r\n// on whether or not GIT is available and the platform settings\r\nstatic const std::string rocksdb_build_git_sha  = \"rocksdb_build_git_sha:4b2122578e475cb88aef4dcf152cccd5dbf51060\";\r\nstatic const std::string rocksdb_build_git_tag = \"rocksdb_build_git_tag:\";\r\n#define HAS_GIT_CHANGES 0\r\n#if HAS_GIT_CHANGES == 0\r\n// If HAS_GIT_CHANGES is 0, the GIT date is used.\r\n// Use the time the branch/tag was last modified\r\nstatic const std::string rocksdb_build_date = \"rocksdb_build_date:2025-04-24 22:11:56\";\r\n#else\r\n// If HAS_GIT_CHANGES is > 0, the branch/tag has modifications.\r\n// Use the time the build was created.\r\nstatic const std::string rocksdb_build_date = \"rocksdb_build_date:2026-09-10 17:19:17\";\r\n#endif\r\n\r\nextern \"C\" {\r\n\r\n} // extern \"C\"\r\n\r\nstd::unordered_map<std::string, ROCKSDB_NAMESPACE::RegistrarFunc> ROCKSDB_NAMESPACE::ObjectRegistry::builtins_ = {\r\n  \r\n};\r\n\r\nnamespace ROCKSDB_NAMESPACE {\r\nstatic void AddProperty(std::unordered_map<std::string, std::string> *props, const std::string& name) {\r\n  size_t colon = name.find(\":\");\r\n  if (colon != std::string::npos && colon > 0 && colon < name.length() - 1) {\r\n    // If we found a \"@:\", then this property was a build-time substitution that failed.  Skip it\r\n    size_t at = name.find(\"@\", colon);\r\n    if (at != colon + 1) {\r\n      // Everything before the colon is the name, after is the value\r\n      (*props)[name.substr(0, colon)] = name.substr(colon + 1);\r\n    }\r\n  }\r\n}\r\n\r\nstatic std::unordered_map<std::string, std::string>* LoadPropertiesSet() {\r\n  auto * properties = new std::unordered_map<std::string, std::string>();\r\n  AddProperty(properties, rocksdb_build_git_sha);\r\n  AddProperty(properties, rocksdb_build_git_tag);\r\n  AddProperty(properties, rocksdb_build_date);\r\n  return properties;\r\n}\r\n\r\nconst std::unordered_map<std::string, std::string>& GetRocksBuildProperties() {\r\n  static std::unique_ptr<std::unordered_map<std::string, std::string>> props(LoadPropertiesSet());\r\n  return *props;\r\n}\r\n\r\nstd::string GetRocksVersionAsString(bool with_patch) {\r\n  std::string version = std::to_string(ROCKSDB_MAJOR) + \".\" + std::to_string(ROCKSDB_MINOR);\r\n  if (with_patch) {\r\n    return version + \".\" + std::to_string(ROCKSDB_PATCH);\r\n  } else {\r\n    return version;\r\n }\r\n}\r\n\r\nstd::string GetRocksBuildInfoAsString(const std::string& program, bool verbose) {\r\n  std::string info = program + \" (RocksDB) \" + GetRocksVersionAsString(true);\r\n  if (verbose) {\r\n    for (const auto& it : GetRocksBuildProperties()) {\r\n      info.append(\"\\n    \");\r\n      info.append(it.first);\r\n      info.append(\": \");\r\n      info.append(it.second);\r\n    }\r\n  }\r\n  return info;\r\n}\r\n} // namespace ROCKSDB_NAMESPACE\r\n",
     "dll": {
       "name": "librocksdbjni-win64.dll",
       "bytes": 8998912,
-      "sha256": "a05f9ba907daf041a5ac9eaec7f241fe012b1aef4b1b844bb1696d392229c5de"
+      "sha256": "b0370fa9a8afe8942d0d2ccba1557b29ab08472a09da7c1bde7005eca7cdd21c"
     },
     "jar": {
       "name": "rocksdbjni-10.2.1-win64.jar",
-      "bytes": 3991103,
-      "sha256": "d04301aa65fb5830d459089b19c492727798b9a84c8d745173eb77cf0e19f2ee"
+      "bytes": 3991125,
+      "sha256": "841c928c73b2e5506f95456f8d959b2a26a83668422a98b773dadd95cd56c8d9"
     },
-    "freeAfter": 157037887488,
+    "freeAfter": 157037547520,
     "scratchFiles": 3474,
-    "scratchBytes": 780378258.0,
-    "elapsedMs": 1019452
+    "scratchBytes": 780378256,
+    "elapsedMs": 1063162
   },
   "staticInspection": {
     "status": "static-inspection-only-unadopted",
@@ -2429,7 +2428,88 @@
           "FreeEnvironmentStringsW"
         ]
       },
-      "unnamedOrdinals": []
+      "unnamedOrdinals": [],
+      "byteObservations": {
+        "machine": "x64",
+        "sha256": "b0370fa9a8afe8942d0d2ccba1557b29ab08472a09da7c1bde7005eca7cdd21c",
+        "bytes": 8998912,
+        "timestamp": 1789061788,
+        "sections": [
+          {
+            "name": ".text",
+            "virtualSize": 7153420,
+            "rva": 4096,
+            "size": 7153664,
+            "raw": 1024,
+            "characteristics": 1610612768,
+            "sha256": "fbfd039ce560bf42a3a84e459ddfce5e726b7e2b23ecc3b0ee5cc7c66d1a3bfa"
+          },
+          {
+            "name": ".rdata",
+            "virtualSize": 1292320,
+            "rva": 7159808,
+            "size": 1292800,
+            "raw": 7154688,
+            "characteristics": 1073741888,
+            "sha256": "0bcd95b7d02a9bfe76cd7a5c24155832a120f2e728c081c2798eebc6c8793400"
+          },
+          {
+            "name": ".data",
+            "virtualSize": 231312,
+            "rva": 8454144,
+            "size": 202752,
+            "raw": 8447488,
+            "characteristics": 3221225536,
+            "sha256": "cfe9e942cdc19432952d75b7d8558029ab7c2ef45194617791700485454f4e62"
+          },
+          {
+            "name": ".pdata",
+            "virtualSize": 310980,
+            "rva": 8687616,
+            "size": 311296,
+            "raw": 8650240,
+            "characteristics": 1073741888,
+            "sha256": "c15a027744c6d8d5c27b20e40b8af764aeb1e8ed8e17a609a4dce2ee5bd927f7"
+          },
+          {
+            "name": ".rsrc",
+            "virtualSize": 480,
+            "rva": 8998912,
+            "size": 512,
+            "raw": 8961536,
+            "characteristics": 1073741888,
+            "sha256": "566f8d2a036a057c3cc20aee6fbe44d26ae49a53664590f5ae33aa1fb4e91f5a"
+          },
+          {
+            "name": ".reloc",
+            "virtualSize": 36440,
+            "rva": 9003008,
+            "size": 36864,
+            "raw": 8962048,
+            "characteristics": 1107296320,
+            "sha256": "f3e8c5b14a5405af7a81d0b4830246a47878fa1d6d908bc143dbd7161051a6c9"
+          }
+        ],
+        "imports": [
+          "SHLWAPI.dll",
+          "RPCRT4.dll",
+          "KERNEL32.dll"
+        ],
+        "certificateDirectory": {
+          "offset": 0,
+          "bytes": 0
+        },
+        "delayImportDirectory": {
+          "rva": 0,
+          "bytes": 0
+        },
+        "version": {
+          "rva": 779152,
+          "offset": 776080,
+          "instructionHex": "b801020a00c3",
+          "packed": 655873
+        }
+      }
     },
     "allStockNativeDeclarationsPresentUnchanged": true,
     "additionalBuiltNativeDeclarations": [
@@ -3924,9 +4004,9 @@
     "candidateReconciliation": "All 36 required symbols are nonzero executable nonforwarded candidate exports; generated JNI headers agree with stock descriptors, receiver and return types. The generated JAR is not substituted for the stock Ergo JAR."
   },
   "targetEvidence": {
-    "retained": "rocksdbjni-shared.vcxproj",
+    "retained": "rocksdbjni.vcxproj",
     "packagedTarget": "rocksdbjni.vcxproj",
-    "packagedTargetProjectRetained": false,
+    "packagedTargetProjectRetained": true,
     "source": "java/CMakeLists.txt",
     "sourceSha256": "cf3069345f82c8bb85701f763076a0d2f306c55db62126a6d860b2e2b65e8664",
     "selectionLines": [
@@ -3939,9 +4019,113 @@
       880,
       882
     ],
-    "correction": "Stager/importer now require rocksdbjni.vcxproj and reject the sibling-only archive. Actual corrected-target retention remains unobserved.",
-    "siblingProjectObservation": {
+    "correction": "Actual corrected-target project retained and independently inspected. Sibling-only original archive remains historical evidence.",
+    "packagedProjectObservation": {
+      "projectSha256": "df88c292cd99d58b44e62165a1903b36179a06a712356b88cfeaf417925c2026",
       "sourceCount": 85,
+      "sources": [
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\backup_engine_options.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\backupenginejni.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\cache.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\cassandra_compactionfilterjni.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\cassandra_value_operator.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\checkpoint.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\clock_cache.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\columnfamilyhandle.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\compact_range_options.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\compaction_filter.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\compaction_filter_factory.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\compaction_filter_factory_jnicallback.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\compaction_job_info.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\compaction_job_stats.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\compaction_options.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\compaction_options_fifo.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\compaction_options_universal.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\comparator.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\comparatorjnicallback.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\compression_options.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\concurrent_task_limiter.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\config_options.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\env.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\env_options.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\event_listener.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\event_listener_jnicallback.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\export_import_files_metadatajni.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\filter.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\hyper_clock_cache.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\import_column_family_options.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\ingest_external_file_options.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\iterator.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\jni_multiget_helpers.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\jni_perf_context.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\jnicallback.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\loggerjnicallback.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\lru_cache.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\memory_util.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\memtablejni.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\merge_operator.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\native_comparator_wrapper_test.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\optimistic_transaction_db.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\optimistic_transaction_options.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\options.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\options_util.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\persistent_cache.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\ratelimiterjni.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\remove_emptyvalue_compactionfilterjni.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\restorejni.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\rocks_callback_object.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\rocksdb_exception_test.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\rocksjni.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\slice.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\snapshot.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\sst_file_manager.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\sst_file_reader_iterator.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\sst_file_readerjni.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\sst_file_writerjni.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\sst_partitioner.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\statistics.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\statisticsjni.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\stderr_logger.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\table.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\table_filter.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\table_filter_jnicallback.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\table_properties_collector_factory.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\testable_event_listener.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\thread_status.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\trace_writer.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\trace_writer_jnicallback.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\transaction.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\transaction_db.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\transaction_db_options.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\transaction_log.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\transaction_notifier.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\transaction_notifier_jnicallback.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\transaction_options.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\ttl.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\wal_filter.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\wal_filter_jnicallback.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\write_batch.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\write_batch_test.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\write_batch_with_index.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\write_buffer_manager.cc",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java\\rocksjni\\writebatchhandlerjnicallback.cc"
+      ],
+      "releaseProperties": [
+        {
+          "ConfigurationType": "DynamicLibrary",
+          "CharacterSet": "MultiByte",
+          "PlatformToolset": "v143"
+        }
+      ],
+      "releaseTargetProperties": {
+        "OutDir": "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\build\\java\\Release\\",
+        "IntDir": "rocksdbjni.dir\\Release\\",
+        "TargetName": "librocksdbjni-win64",
+        "TargetExt": ".dll",
+        "LinkIncremental": "false",
+        "GenerateManifest": "true"
+      },
+      "sourceSpecificOverrides": [],
       "releaseCompile": {
         "AdditionalIncludeDirectories": "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source;D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\include;C:\\hostedtoolcache\\windows\\Java_Temurin-Hotspot_jdk\\21.0.12-101.0\\x64\\include;C:\\hostedtoolcache\\windows\\Java_Temurin-Hotspot_jdk\\21.0.12-101.0\\x64\\include\\win32;D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java;%(AdditionalIncludeDirectories)",
         "AdditionalOptions": "%(AdditionalOptions) /external:I \"D:/a/reference-ts/reference-ts/scratch/native-build/source/third-party/gtest-1.8.1/fused-src\" /d2Zi+ /Oxt",
@@ -3966,15 +4150,14 @@
         "RuntimeTypeInfo": "false",
         "StringPooling": "true",
         "StructMemberAlignment": "8Bytes",
-        "SupportJustMyCode": null,
+        "SupportJustMyCode": "",
         "SuppressStartupBanner": "true",
         "TreatWChar_tAsBuiltInType": "true",
         "TreatWarningAsError": "true",
         "UseFullPaths": "true",
         "WarningLevel": "Level4",
-        "PreprocessorDefinitions": "%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;ROCKSDB_NO_DYNAMIC_EXTENSION;OS_WIN;_MBCS;WIN64;NOMINMAX;CMAKE_INTDIR=\"Release\";rocksdbjni_shared_EXPORTS",
+        "PreprocessorDefinitions": "%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;ROCKSDB_NO_DYNAMIC_EXTENSION;OS_WIN;_MBCS;WIN64;NOMINMAX;CMAKE_INTDIR=\"Release\";rocksdbjni_EXPORTS",
         "ObjectFileName": "$(IntDir)",
-        "ProgramDataBaseFileName": "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\build\\java\\$(Configuration)\\Release\\rocksdbjni.pdb.pdb",
         "ScanSourceForModuleDependencies": "false"
       },
       "releaseLink": {
@@ -3983,10 +4166,15 @@
         "AdditionalOptions": "%(AdditionalOptions) /machine:x64",
         "GenerateDebugInformation": "true",
         "IgnoreSpecificDefaultLibraries": "%(IgnoreSpecificDefaultLibraries)",
-        "ImportLibrary": "D:/a/reference-ts/reference-ts/scratch/native-build/build/java/Release/rocksdbjni-shared.lib",
-        "ProgramDataBaseFile": "D:/a/reference-ts/reference-ts/scratch/native-build/build/java/Release/rocksdbjni-shared.pdb",
+        "ImportLibrary": "D:/a/reference-ts/reference-ts/scratch/native-build/build/java/Release/librocksdbjni-win64.lib",
+        "ProgramDataBaseFile": "D:/a/reference-ts/reference-ts/scratch/native-build/build/java/Release/librocksdbjni-win64.pdb",
         "SubSystem": "Console"
-      }
+      },
+      "projectReferences": [
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\build\\ZERO_CHECK.vcxproj",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\build\\rocksdb.vcxproj",
+        "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\build\\java\\rocksdbjni_classes.vcxproj"
+      ]
     }
   },
   "wbwi": {
@@ -4001,30 +4189,106 @@
   },
   "limitations": [
     "Static byte/header/source inspection does not establish native semantics, callbacks under arbitrary configuration, Windows transitive module provenance or runtime safety.",
-    "Exact packaged-target project and complete compiler invocations are unavailable from this run. Sibling project evidence must not be attributed to the actual output target.",
+    "The exact packaged JNI target project is retained. Complete compiler/link invocations, core RocksDB project/object provenance and transitive toolchain attestation remain unavailable.",
     "Seven missing JNI bindings remain excluded only for the specified offline worker; a general Ergo replacement is not established. Generated JAR is inspection-only and contains test helpers.",
     "Compression-free candidate fits the fresh explicit NO_COMPRESSION control configuration only; arbitrary existing databases and full-node compression compatibility remain open.",
-    "Native pin adoption, narrow WinSxS provenance, 1-second sampling ceiling and fixed 64 MiB database controls remain unmet. No volume allocation, DLL/JAR replacement, native load or database retry in this slice.",
+    "Native pin adoption, module-policy preparation, 1-second sampling ceiling and fixed 64 MiB database controls remain unmet. Read-only WinSxS provenance is recorded separately; no runtime approval follows.",
     "Artifact digest and manifest bind observed provider bytes; no independent build reproducibility or complete transitive toolchain attestation is claimed."
   ],
   "review": {
-    "scope": "Independent byte parsers, generated prototype versus compiled class and pinned source comparison, stock worker path, and focused target-selection patch readback.",
+    "scope": "Independent ZIP/class/PE/header parser, exact pinned CMake and packaged-target XML inspection; unchanged class/header/source findings reused by byte identity.",
+    "result": "No unresolved material finding within static retention/reporting. No native equivalence or runtime-adoption clearance.",
     "findings": [
-      "Retained project belongs to sibling; staging/acceptance corrected for future runs, current exact-target evidence explicitly remains owed.",
       "WBWI static receiver differs from C++ definition; excluded from worker and not patched.",
       "Generated Java classes target major 65 and include helpers; no stock JAR substitution.",
-      "Stock default ReadOptions allocation lacks close on the bounded worker path; at most two objects before exit, general lifecycle remains open."
+      "Stock default ReadOptions allocation lacks close on the bounded worker path; at most two objects before exit, general lifecycle remains open.",
+      "Actual packaged-target project verified; core project/object provenance and complete invocations remain outside retained evidence.",
+      "DLL differs in 8608 bytes including 7202 executable bytes; cause and semantic equivalence are unestablished."
     ],
-    "result": "No unresolved material finding in static-only retention/report scope. No runtime adoption clearance.",
-    "independentExpectedIdentitySource": "Reviewer received expected outer identity from primary authenticated API/upload-log read, separate from archive contents; reviewer did not repeat authenticated API lookup.",
+    "independentExpectedIdentitySource": "Reviewer received expected outer identity from primary authenticated API/upload-log read, separate from archive contents.",
     "checks": {
-      "syntheticArchives": 47,
-      "fullProjectCheck": "passed",
-      "testFiles": 96,
-      "tests": 1795,
-      "testDurationSeconds": 254.64,
-      "runtimeCodeChanged": false
+      "documentation": "passed",
+      "runtimeCodeChanged": false,
+      "priorFullProjectCheck": "9ea1c16: npm run check passed; 96 files / 1795 tests in 254.64 s; CI run 34505552007 passed"
     },
     "evidenceLimits": "Separate parsers agreed on these inputs; not general parser correctness, preprocessed AST/object disassembly, native-code security audit or runtime acceptance."
+  },
+  "comparisonToPrevious": {
+    "previous": {
+      "evidenceRevision": "9ea1c16de569b7075a34850ba0ffbaf9975efd65",
+      "runId": "34502815638",
+      "workflowCommit": "373db5058b71370612818f4bb261ea8d25c66fdc",
+      "archiveSha256": "d3ab87cba4a7d432b182a81f23c21b91215a35e22cf9960efecbc3adceb194f6",
+      "dllSha256": "a05f9ba907daf041a5ac9eaec7f241fe012b1aef4b1b844bb1696d392229c5de",
+      "jarSha256": "d04301aa65fb5830d459089b19c492727798b9a84c8d745173eb77cf0e19f2ee",
+      "project": "rocksdbjni-shared.vcxproj",
+      "evidenceUrl": "https://github.com/mediumofexchange/reference-ts/blob/9ea1c16de569b7075a34850ba0ffbaf9975efd65/docs/ergo-native-candidate-verification.json"
+    },
+    "previousDllSha256": "a05f9ba907daf041a5ac9eaec7f241fe012b1aef4b1b844bb1696d392229c5de",
+    "headersByteIdentical": 96,
+    "stockJarAndWorkerHashUnchanged": true,
+    "exportNamesAndRvasIdentical": true,
+    "directImportsIdentical": true,
+    "sections": [
+      {
+        "name": ".text",
+        "equal": false
+      },
+      {
+        "name": ".rdata",
+        "equal": false
+      },
+      {
+        "name": ".data",
+        "equal": false
+      },
+      {
+        "name": ".pdata",
+        "equal": false
+      },
+      {
+        "name": ".rsrc",
+        "equal": true
+      },
+      {
+        "name": ".reloc",
+        "equal": true
+      }
+    ],
+    "differingByteCount": 8608,
+    "all258ClassBytesIdentical": true,
+    "generatedJarInspectionOnly": true,
+    "unchangedSourceAndHeaderReviewReused": true,
+    "scope": "Actual class/header equality and export-name/RVA comparison justify reuse of prior declaration/prototype and 36-method worker findings; no complete native-code audit or reproducible-build claim.",
+    "differencesBySection": [
+      {
+        "name": ".text",
+        "differingBytes": 7202
+      },
+      {
+        "name": ".rdata",
+        "differingBytes": 225
+      },
+      {
+        "name": ".data",
+        "differingBytes": 1001
+      },
+      {
+        "name": ".pdata",
+        "differingBytes": 178
+      },
+      {
+        "name": ".rsrc",
+        "differingBytes": 0
+      },
+      {
+        "name": ".reloc",
+        "differingBytes": 0
+      }
+    ],
+    "previousImageVersion": "20260830.290.1",
+    "selectedToolsAndDependenciesIdentical": true,
+    "nativeDeltaUnexplained": true,
+    "nativeDeltaLimit": "Executable and data bytes differ across the two reviewed runner images despite equal recorded tool hashes; no cause, semantic equivalence or reproducibility is established."
   }
 }

@@ -943,6 +943,25 @@ execution guard remain unchanged. Establish narrow Windows side-by-side
 component provenance separately; the observed 954 ms module-sampling gap also
 remains close to the unchanged 1-second ceiling.
 
+Read-only [component provenance](ergo-node-system-component-provenance.json)
+now identifies the exact refused Common Controls DLL: 2,715,536 bytes,
+SHA-256 `4f3c45946d2e04915691d93b0606bdea1ebf60d89b884a42cbe226e65a03ea56`.
+The host reports a valid Microsoft Windows catalog signature for both the
+DLL and its matching component manifest; the manifest's identity-transform
+SHA-256 digest equals the DLL hash. Both paths have ordinary ancestors.
+Independent PE resource inspection of the pinned `java.exe` finds its actual
+RT_MANIFEST dependency on Common Controls 6.0.0.0 with the same public-key token.
+This supports the expected component family, not a complete activation trace.
+
+These are observations through the current host's trust store, not independent
+OS attestation or an online revocation guarantee. PowerShell's
+[signature reader](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/get-authenticodesignature?view=powershell-7.5)
+uses Windows catalog signatures when available. The module policy still refuses
+this path. The next preparation can review an exception for its exact path,
+hash and length while preserving other refusals; it must also review the exact
+new native pin and the existing sampling cost before any database retry.
+No native load, policy change or volume allocation accompanies this evidence.
+
 The [build qualification](ERGO_NATIVE_BUILD.md) now prepares a fixed manual
 hosted Windows compilation with pinned source/dependencies, explicit features
 and recorded toolchain evidence. It does not load the output or change the

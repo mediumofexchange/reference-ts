@@ -1,0 +1,100 @@
+{
+  "status": "read-only-host-component-provenance",
+  "observedAtUtc": "2026-09-10T17:24:03.1216283Z",
+  "candidateLoaded": false,
+  "modulePolicyChanged": false,
+  "databaseAcceptance": false,
+  "previousRefusal": "docs/ergo-node-database-verification.json: traffic.readError in diagnostic case",
+  "dll": {
+    "path": "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.19041.6456_none_60b8a6cb71f64256\\COMCTL32.dll",
+    "bytes": 2715536,
+    "sha256": "4f3c45946d2e04915691d93b0606bdea1ebf60d89b884a42cbe226e65a03ea56",
+    "ordinaryAncestors": [
+      "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.19041.6456_none_60b8a6cb71f64256\\COMCTL32.dll",
+      "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.19041.6456_none_60b8a6cb71f64256",
+      "C:\\WINDOWS\\WinSxS",
+      "C:\\WINDOWS",
+      "C:\\"
+    ],
+    "owner": "NT SERVICE\\TrustedInstaller",
+    "sddl": "O:S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464G:S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464D:PAI(A;;0x1200a9;;;SY)(A;;0x1200a9;;;BA)(A;;0x1200a9;;;BU)(A;;FA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;;0x1200a9;;;AC)(A;;0x1200a9;;;S-1-15-2-2)",
+    "signature": {
+      "status": "Valid",
+      "type": "Catalog",
+      "isOsBinary": true,
+      "signerSubject": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+      "signerIssuer": "CN=Microsoft Windows Production PCA 2011, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+      "signerThumbprint": "3B77DB29AC72AA6B5880ECB2ED5EC1EC6601D847",
+      "signerNotBefore": "2025-06-19T18:11:44Z",
+      "signerNotAfter": "2026-06-17T18:11:44Z"
+    }
+  },
+  "manifest": {
+    "path": "C:\\WINDOWS\\WinSxS\\Manifests\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.19041.6456_none_60b8a6cb71f64256.manifest",
+    "bytes": 3119,
+    "sha256": "f4cda6865caa3616a821ed1b47151b6420151dc1cd9b80438f3c5d2d3ba3e4e4",
+    "ordinaryAncestors": [
+      "C:\\WINDOWS\\WinSxS\\Manifests\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.19041.6456_none_60b8a6cb71f64256.manifest",
+      "C:\\WINDOWS\\WinSxS\\Manifests",
+      "C:\\WINDOWS\\WinSxS",
+      "C:\\WINDOWS",
+      "C:\\"
+    ],
+    "owner": "NT-AUTORITÄT\\SYSTEM",
+    "sddl": "O:SYG:SYD:(A;ID;FA;;;S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464)(A;ID;0x1200a9;;;BA)(A;ID;0x1200a9;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1200a9;;;AC)(A;ID;0x1200a9;;;S-1-15-2-2)",
+    "signature": {
+      "status": "Valid",
+      "type": "Catalog",
+      "isOsBinary": true,
+      "signerSubject": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+      "signerIssuer": "CN=Microsoft Windows Production PCA 2011, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+      "signerThumbprint": "3B77DB29AC72AA6B5880ECB2ED5EC1EC6601D847",
+      "signerNotBefore": "2025-06-19T18:11:44Z",
+      "signerNotAfter": "2026-06-17T18:11:44Z"
+    }
+  },
+  "assemblyIdentity": {
+    "name": "Microsoft.Windows.Common-Controls",
+    "version": "6.0.19041.6456",
+    "processorArchitecture": "amd64",
+    "publicKeyToken": "6595b64144ccf1df",
+    "type": "win32"
+  },
+  "manifestDigest": {
+    "algorithm": "http://www.w3.org/2000/09/xmldsig#sha256",
+    "transform": "urn:schemas-microsoft-com:HashTransforms.Identity",
+    "base64": "TzxFlG0uBJFWkdk7Bga96h6/YNibiEpCy+Im5loD6lY=",
+    "matchesDllSha256": true
+  },
+  "signatureReference": "https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/get-authenticodesignature?view=powershell-7.5",
+  "limitations": [
+    "Windows catalog validation is an observation through this host trust store, not an independent OS attestation or native-code audit.",
+    "Hash-before/hash-after and ordinary ancestors assume a stable trusted host; they do not fence a hostile concurrent administrator.",
+    "No complete loaded-module graph, activation-context trace, component catalog file identity, online revocation guarantee or runtime acceptance is established.",
+    "The current module policy still refuses this exact WinSxS path. Any proposed exception must bind reviewed exact path, hash and length, preserve other refusals and receive independent review.",
+    "The fixed 64 MiB control and 1-second sampling ceiling remain unchanged; signature validation should not be added to the timed hot path without measurement."
+  ],
+  "javaLauncher": {
+    "file": "scratch/node-startup/bundle/jre/bin/java.exe",
+    "sha256": "318eaf69dd5b54f1fd365482ac404271d4553d9917c251c8004f4be61123333c",
+    "resourceDirectoryRva": 24576,
+    "manifests": [
+      {
+        "path": [
+          24,
+          1,
+          1033
+        ],
+        "rva": 51244,
+        "size": 1543,
+        "codePage": 1252,
+        "text": "<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\" xmlns:asmv3=\"urn:schemas-microsoft-com:asm.v3\"><assemblyIdentity name=\"java.exe\" version=\"21.0.1.0\" processorArchitecture=\"X86\" type=\"win32\"></assemblyIdentity><description>Java(TM) SE process</description><dependency><dependentAssembly><assemblyIdentity type=\"win32\" name=\"Microsoft.Windows.Common-Controls\" version=\"6.0.0.0\" processorArchitecture=\"*\" publicKeyToken=\"6595b64144ccf1df\" language=\"*\"></assemblyIdentity></dependentAssembly></dependency><trustInfo xmlns=\"urn:schemas-microsoft-com:asm.v3\"><security><requestedPrivileges><requestedExecutionLevel level=\"asInvoker\" uiAccess=\"false\"></requestedExecutionLevel></requestedPrivileges></security></trustInfo><asmv3:application><asmv3:windowsSettings xmlns:dpi1=\"http://schemas.microsoft.com/SMI/2005/WindowsSettings\" xmlns:dpi2=\"http://schemas.microsoft.com/SMI/2016/WindowsSettings\"><dpi1:dpiAware>true/PM</dpi1:dpiAware><dpi2:dpiAwareness>PerMonitorV2, PerMonitor, system</dpi2:dpiAwareness></asmv3:windowsSettings></asmv3:application><compatibility xmlns=\"urn:schemas-microsoft-com:compatibility.v1\"><application><supportedOS Id=\"{e2011457-1546-43c5-a5fe-008deee3d3f0}\"></supportedOS><supportedOS Id=\"{35138b9a-5d96-4fbd-8e2d-a2440225f93a}\"></supportedOS><supportedOS Id=\"{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}\"></supportedOS><supportedOS Id=\"{1f676c76-80e1-4239-95bb-83d0f6d0da78}\"></supportedOS><supportedOS Id=\"{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}\"></supportedOS></application></compatibility></assembly>"
+      }
+    ]
+  },
+  "review": {
+    "scope": "Independent exact file/manifest hash and catalog readback plus stock java.exe PE RT_MANIFEST parser",
+    "result": "Observations reproduced; no module-policy or runtime acceptance",
+    "runtimeCodeChanged": false
+  }
+}

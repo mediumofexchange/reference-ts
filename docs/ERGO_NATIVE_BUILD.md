@@ -1,7 +1,7 @@
 # Windows native build qualification
 
-Status: 2026-09-10, retained candidate imported and statically inspected; runtime
-adoption and exact packaged-target project evidence remain open.
+Status: 2026-09-10, corrected candidate and exact packaged-target project imported
+and statically inspected; native-byte equivalence and runtime adoption remain open.
 This implements the [preparation preference](../decisions/2026-09.md#2026-09-10--qualify-a-consistent-windows-database-build).
 The [published artifact mismatch](ERGO_NODE_PREFLIGHT.md#published-windows-native-reconciliation)
 and the existing database-control refusals remain unresolved for execution.
@@ -309,9 +309,9 @@ to the fixed 64 MiB control.
 
 ## Bounded candidate retention
 
-[Run 34502815638](https://github.com/mediumofexchange/reference-ts/actions/runs/34502815638)
-at `373db5058b71370612818f4bb261ea8d25c66fdc`, attempt 1, successfully retained
-one candidate. The [candidate report](ergo-native-candidate-verification.json)
+[Run 34507404910](https://github.com/mediumofexchange/reference-ts/actions/runs/34507404910)
+at `9ea1c16de569b7075a34850ba0ffbaf9975efd65`, attempt 1, successfully retained
+the corrected candidate. The [candidate report](ergo-native-candidate-verification.json)
 records independently read API/upload-log identity, raw archive verification,
 all member hashes, build observations and the static worker call path. The
 original successful run remains logs-only; this candidate has new DLL/JAR hashes.
@@ -413,26 +413,45 @@ metadata and JSON parsing still allocate memory within their input bounds.
 
 ### Actual retained output
 
-The run accepted image `20260830.290.1`, Temurin 21.0.12.1, CMake 3.31.6 and
-MSVC toolset 14.44.35207. Compilation/static inspection took 1,019,452 ms
-(16.99 minutes), observing 780,378,258 bytes of scratch before staging.
-Artifact `10163251532`, named `rocksdb-candidate-34502815638-1`, advertised and
-downloaded exactly 13,696,641 bytes. Its API and upload-log digest both matched
-the raw ZIP SHA-256 `d3ab87cba4a7d432b182a81f23c21b91215a35e22cf9960efecbc3adceb194f6`.
-The advertised expiry is 2026-09-11 16:50:37 UTC; local verified bytes remain in
+The corrected run accepted the other reviewed image, `20260907.297.1`, with
+Temurin 21.0.12.1, CMake 3.31.6 and MSVC toolset 14.44.35207. All selected tool
+and dependency hashes match the earlier retained run. Compilation/static
+inspection took 1,063,162 ms (17.72 minutes), observing 780,378,256 bytes of
+scratch before staging. Initial/final free disk was 157,779,640,320 /
+157,037,547,520 bytes. These remain observations, not worst-case bounds.
+Artifact `10165083375`, named `rocksdb-candidate-34507404910-1`, advertised and
+downloaded exactly 13,695,907 bytes. Its API and upload-log digest both matched
+the raw ZIP SHA-256 `28c4f283a0bdc9041c52ccf2ef62563f1cf295694580c67108873eeff9fa57e5`.
+The advertised expiry is 2026-09-11 17:36:32 UTC; local verified bytes remain in
 ignored scratch for the next static/adoption preparation step.
 
-The original `373db50` importer validated all 105 content members, 13,660,092
-bytes plus manifest, before extraction. Its unchanged Git blob was checked
-before use. This archive retains the sibling project described above; the
-corrected current importer deliberately refuses that old member selection.
+The current `9ea1c16` importer validated all 105 content members, 13,659,379
+bytes plus manifest, before extraction. The original sibling-only candidate
+and its limitations remain in the [prior immutable report](https://github.com/mediumofexchange/reference-ts/blob/9ea1c16de569b7075a34850ba0ffbaf9975efd65/docs/ergo-native-candidate-verification.json).
 Existing zero-dollar Actions/Packages budgets were rechecked before dispatch;
 no billing or access setting changed. The package inventory limit remains.
 
 | Output | Bytes | SHA-256 |
 |---|---:|---|
-| DLL | 8,998,912 | `a05f9ba907daf041a5ac9eaec7f241fe012b1aef4b1b844bb1696d392229c5de` |
-| JAR | 3,991,103 | `d04301aa65fb5830d459089b19c492727798b9a84c8d745173eb77cf0e19f2ee` |
+| DLL | 8,998,912 | `b0370fa9a8afe8942d0d2ccba1557b29ab08472a09da7c1bde7005eca7cdd21c` |
+| JAR | 3,991,125 | `841c928c73b2e5506f95456f8d959b2a26a83668422a98b773dadd95cd56c8d9` |
+| Packaged target project | 46,266 | `df88c292cd99d58b44e62165a1903b36179a06a712356b88cfeaf417925c2026` |
+
+The actual `rocksdbjni.vcxproj` contains exactly the 85 JNI source files in
+the pinned CMake list, with no source-specific overrides. Its Release x64
+settings select C++17, static CRT (`MultiThreaded`, `/MT`) and warnings as
+errors, and name `librocksdbjni-win64.dll` as output. Its link inputs include
+the static `rocksdb.lib`; project references include the core RocksDB and
+Java-header targets. This closes the sibling-target retention gap. The core
+project/object files, full compiler/link invocations and transitive toolchain
+attestation are not retained, so these settings have a narrower evidence scope.
+
+Compared with the prior retained DLL, **8,608 bytes differ**: 7,202 in `.text`,
+225 in `.rdata`, 1,001 in `.data`, 178 in `.pdata` and two in PE headers.
+`.rsrc` and `.reloc` are identical. Both independent readers reproduced the
+counts. The cause and semantic equivalence of these executable/data changes
+are unestablished; matching selected tools and interfaces is insufficient.
+No metadata-only delta, reproducible build or native runtime clearance is claimed.
 
 Independent PE parsing confirms x64, 1,524 named/nonzero executable exports,
 no forwarded or unnamed exports, and the same complete name/RVA table as the
@@ -441,7 +460,9 @@ KERNEL32; there is no delay-import directory or embedded certificate table.
 The JAR's embedded DLL equals the standalone DLL byte for byte. These facts
 do not authenticate Windows transitive imports or establish native semantics.
 
-The generated JAR contains 258 RocksDB classes and 1,531 native declarations:
+All 258 generated class files and 96 headers are byte-identical to the earlier
+retained candidate, allowing its unchanged class/header/source findings to be
+reused with explicit scope. The generated JAR contains 1,531 native declarations:
 all 1,519 stock declarations are unchanged, plus 12 test-helper declarations
 corresponding to the formerly unused exports. It has 11 classes absent from
 the stock JAR and lacks six stock `$1` classes; all 247 shared class files have
@@ -492,8 +513,10 @@ process exit; this review does not establish general leak-free lifecycle.
 Native allocation failure, fatal assertions, memory corruption, arbitrary
 callbacks and JVM/OS native behavior remain outside the static call graph.
 
-Before execution, capture the corrected packaged-target project in a later
-bounded run, then review exact native pins and narrow WinSxS provenance.
+Before execution, review the exact native pin, unexplained native-byte differences
+and narrow module-policy preparation. Read-only [WinSxS provenance](ergo-node-system-component-provenance.json)
+now binds the previously refused file to its Microsoft catalog and component
+manifest; it does not change the policy or establish a complete module graph.
 Keep the stock JAR, compression-free fresh-database profile, fixed 64 MiB
 control and unchanged one-second sampling ceiling. No native load, database
 retry, node start, peer connection or volume allocation occurred here.
@@ -527,5 +550,12 @@ all 85 pinned JNI source files with the generated prototypes. It reproduced
 member identity, class/native sets, export addresses and the scoped findings
 above. The reviewer used the primary authenticated API/log identity as its
 outer expectation and independently checked the archive contents against it.
+For the corrected candidate, independent readers also verified the authenticated
+ZIP/member identity, exact packaged-target source membership/settings, all class
+and header bytes, direct import functions, export addresses and 36 worker bindings.
 No unresolved material finding remains within static retention/reporting;
-the missing exact-target evidence and runtime adoption gates remain explicit.
+the unexplained native-byte differences and runtime adoption gates remain explicit.
+Baseline `9ea1c16` passed every CI job in
+[run 34505552007](https://github.com/mediumofexchange/reference-ts/actions/runs/34505552007).
+This follow-up changes evidence/documentation only; documentation and link checks
+pass, and unchanged runtime checks reuse that baseline.
