@@ -14,6 +14,10 @@ The fixture manifest pins the original public response bytes before parsing;
 Git attributes preserve those raw responses, including trailing whitespace.
 Do not expose this probe as an arbitrary-file or network verification API.
 
+The separate [dedicated-node preflight](../../docs/ERGO_NODE_PREFLIGHT.md)
+pins a Windows distribution and defines the launch gates for the next source
+comparison. It has not started a node or changed these offline probe commands.
+
 The command runs both the block-root/Fleet experiment and the
 [full binary decoder experiment](../../docs/POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility).
 `decoder-check.mjs` launches the fixed corpus in a child process with a 30-second

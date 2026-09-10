@@ -706,6 +706,10 @@ on containment; they need not precede testing that independent node boundary.
 The comparison retains the fixture manifest's Ergo node source pin
 [`c364664`](https://github.com/ergoplatform/ergo/tree/c36466405abc9a2ddda37e890635f00d593041f5)
 and sigma-interpreter pin `ab0b15c`; no node artifact was installed or executed.
+The [dedicated-node preflight](ERGO_NODE_PREFLIGHT.md) now records the verified
+Windows archive/JAR hashes, bundled runtime declaration, source requirements
+and provisional resource envelope. Archive inspection is not node execution;
+the startup and sync gates remain open.
 At this node revision, the
 [block API](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/http/api/BlocksApiRoute.scala)
 looks up a stored header and full block. The
