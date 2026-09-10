@@ -8,8 +8,44 @@ using System.Text;
 using System.IO;
 using System.Collections.Generic;
 using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 
 public static class NodeProbeProcess {
+    public sealed class ApiReply { public int Status; public string Body; public int Bytes; }
+    public sealed class StartupReader : IDisposable {
+        readonly HttpClient client;
+        readonly CancellationTokenSource lifetime = new CancellationTokenSource();
+        readonly HashSet<string> attempted = new HashSet<string>();
+        public StartupReader() {
+            client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false, UseCookies = false });
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        }
+        public async Task<ApiReply> ReadOnce(string endpoint) {
+            if ((endpoint != "/info" && endpoint != "/peers/connected" && endpoint != "/wallet/status") || !attempted.Add(endpoint))
+                throw new ArgumentException("Endpoint not allowed or already attempted");
+            using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token)) {
+                timeout.CancelAfter(5000); // One deadline covers headers AND the entire body.
+                using (var request = new HttpRequestMessage(HttpMethod.Get, "http://127.0.0.1:19053" + endpoint))
+                using (var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token)) {
+                    if (response.Content.Headers.ContentEncoding.Count != 0) throw new Exception("Encoded API response refused");
+                    using (var input = await response.Content.ReadAsStreamAsync(timeout.Token))
+                    using (var output = new MemoryStream()) {
+                        var buffer = new byte[4096];
+                        int count;
+                        while ((count = await input.ReadAsync(buffer, 0, buffer.Length, timeout.Token)) != 0) {
+                            if (output.Length + count > 1048576) throw new Exception("API response byte budget exceeded");
+                            output.Write(buffer, 0, count);
+                        }
+                        return new ApiReply { Status = (int)response.StatusCode, Bytes = (int)output.Length,
+                            Body = new UTF8Encoding(false, true).GetString(output.ToArray()) };
+                    }
+                }
+            }
+        }
+        public void Dispose() { lifetime.Cancel(); client.Dispose(); lifetime.Dispose(); }
+    }
     [DllImport("iphlpapi.dll")] static extern uint GetExtendedTcpTable(IntPtr table, ref uint size, bool order, uint family, uint cls, uint reserved);
     [DllImport("iphlpapi.dll")] static extern uint GetExtendedUdpTable(IntPtr table, ref uint size, bool order, uint family, uint cls, uint reserved);
     public sealed class SocketObservation {

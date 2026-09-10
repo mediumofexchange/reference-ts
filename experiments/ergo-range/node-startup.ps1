@@ -7,7 +7,15 @@ $scratch = Join-Path $repo 'scratch/node-startup'
 $bundle = Join-Path $scratch 'bundle'
 $run = Join-Path $scratch 'run'
 if (Test-Path -LiteralPath $run) { throw 'Startup requires an absent run directory' }
-$manifest = Get-Content -Raw (Join-Path $scratch 'bundle-manifest.json') | ConvertFrom-Json -AsHashtable
+$manifestPath=Join-Path $scratch 'bundle-manifest.json'
+if ((Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -ne '5a5d8e06d006f53b15502e4e64b8f158a8112fd8ee65b75ff84790718ac2d067') { throw 'Manifest bytes changed' }
+$manifest = Get-Content -Raw $manifestPath | ConvertFrom-Json -AsHashtable
+foreach ($root in @((Join-Path $repo 'scratch'),$scratch,$bundle)) {
+    if ((Get-Item -LiteralPath $root).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Reparse root refused' }
+}
+$bundleEntries=@(Get-ChildItem -LiteralPath $bundle -Recurse -Force)
+if (@($bundleEntries | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count -ne 0 -or
+    @($bundleEntries | Where-Object { -not $_.PSIsContainer }).Count -ne 167) { throw 'Unexpected bundle entry' }
 if ($manifest.archiveSha256 -ne '7d8c010b781841631f8968e424e30ea99f2352ac0cd40ef32c72e90c37d0af73' -or $manifest.files.Count -ne 167) { throw 'Bundle manifest mismatch' }
 foreach ($entry in $manifest.files.GetEnumerator()) {
     $file = [IO.Path]::GetFullPath((Join-Path $bundle $entry.Key))
@@ -70,12 +78,11 @@ $arguments = @('-Xms128m','-Xmx2g',"-Duser.home=$run/home","-Djava.io.tmpdir=$ru
     "-Dlogback.configurationFile=$run/logback.xml",'-Djava.net.preferIPv4Stack=true',
     "-XX:ErrorFile=$run/hs_err.log",'-XX:-CreateCoredumpOnCrash',
     '-jar',"$bundle/ergo-6.1.5.jar",'--mainnet','-c',"$run/ergo.conf")
-$handler = [Net.Http.HttpClientHandler]::new()
-$handler.AllowAutoRedirect=$false; $handler.UseProxy=$false; $handler.UseCookies=$false
-$client = [Net.Http.HttpClient]::new($handler); $client.Timeout=[TimeSpan]::FromMilliseconds(500)
+$reader=[NodeProbeProcess+StartupReader]::new()
 $script:nodeObservation = [ordered]@{ socketSamples=0; sockets=[Collections.Generic.List[object]]::new();
     replies=[ordered]@{}; apiBytes=0L; readyAtMs=-1L; nextProbeMs=0L; filesPeakBytes=0L;
     unresolved=[Collections.Generic.List[string]]::new() }
+$script:pendingNodeRead=$null; $script:pendingNodeEndpoint=$null
 $probeClock = [Diagnostics.Stopwatch]::StartNew()
 $observer = [Func[uint32,bool]] {
     param($processId)
@@ -98,26 +105,22 @@ $observer = [Func[uint32,bool]] {
     # Startup uses only a fresh genesis directory. This is observation, not a disk quota.
     if ($fileBytes -gt 16777216) { $state.unresolved.Add('Startup file/log observation exceeds 16 MiB'); return $true }
     if (@(Get-ChildItem -LiteralPath "$run/secrets" -Force).Count -ne 0) { $state.unresolved.Add('Secret storage no longer empty'); return $true }
-    if (-not ($sockets | Where-Object { $_.State -eq 2 -and $_.LocalPort -eq 19053 })) { return $false }
+    # Predeclared observation schedule: first request no earlier than 60 seconds.
+    # Listener presence alone is not application readiness. No request is retried.
+    if ($probeClock.ElapsedMilliseconds -lt 60000 -or -not ($sockets | Where-Object { $_.State -eq 2 -and $_.LocalPort -eq 19053 })) { return $false }
+    if ($script:pendingNodeRead) {
+        if (-not $script:pendingNodeRead.IsCompleted) { return $false }
+        try {
+            $reply=$script:pendingNodeRead.GetAwaiter().GetResult()
+            $state.apiBytes+=$reply.Bytes
+            $state.replies[$script:pendingNodeEndpoint]=[ordered]@{status=$reply.Status; body=$reply.Body}
+        } catch { $state.unresolved.Add("API observation failed: $script:pendingNodeEndpoint : $($_.Exception.Message)"); return $true }
+        $script:pendingNodeRead=$null
+    }
     foreach ($endpoint in @('/info','/peers/connected','/wallet/status')) {
         if ($state.replies.Contains($endpoint)) { continue }
-        $response=$null
-        try {
-            # One attempt per literal endpoint, no redirects/retry/private headers.
-            $response=$client.GetAsync("http://127.0.0.1:19053$endpoint",[Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
-            $stream=$response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
-            $body=[IO.MemoryStream]::new(); $cancel=[Threading.CancellationTokenSource]::new(500)
-            try {
-                $buffer=[byte[]]::new(4096)
-                while (($count=$stream.ReadAsync($buffer,0,$buffer.Length,$cancel.Token).GetAwaiter().GetResult()) -gt 0) {
-                    $state.apiBytes+=$count
-                    if ($body.Length+$count -gt 1048576 -or $state.apiBytes -gt 67108864) { throw 'API byte budget exceeded' }
-                    $body.Write($buffer,0,$count)
-                }
-                $state.replies[$endpoint]=[ordered]@{ status=[int]$response.StatusCode; body=[Text.Encoding]::UTF8.GetString($body.ToArray()) }
-            } finally { $cancel.Dispose(); $body.Dispose(); $stream.Dispose() }
-        } catch { $state.unresolved.Add("API observation failed: $endpoint : $($_.Exception.Message)"); return $true }
-        finally { if ($response) { $response.Dispose() } }
+        $script:pendingNodeEndpoint=$endpoint
+        $script:pendingNodeRead=$reader.ReadOnce($endpoint)
         break
     }
     if ($state.replies.Count -eq 3) {
@@ -127,7 +130,7 @@ $observer = [Func[uint32,bool]] {
     return $false
 }
 try { $result=[NodeProbeProcess]::Run($java,$arguments,$run,'stock-node-startup',4294967296UL,120000,16777216,$observer) }
-finally { $client.Dispose() }
+finally { $reader.Dispose() }
 $state=$script:nodeObservation
 if ($result.Outcome -ne 'observer-complete' -or -not $result.JobEmptyAfterCleanup -or -not $result.LimitsReadBackBeforeResume) { $state.unresolved.Add('Startup/cleanup incomplete') }
 if ($result.CpuRateFlags -ne 5 -or $result.CpuRatePer10000 -ne 2500 -or
