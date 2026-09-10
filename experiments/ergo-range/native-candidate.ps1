@@ -28,7 +28,7 @@ function Get-NativeFileLimit([string]$Name) {
         'rocksdbjni-10.2.1-win64.jar' { return 32MB }
         'report.json' { return 1MB }
         'CMakeCache.txt' { return 1MB }
-        'rocksdbjni-shared.vcxproj' { return 4MB }
+        'rocksdbjni.vcxproj' { return 4MB }
         'build_version.cc' { return 64KB }
         'exports.txt' { return 1MB }
         'imports.txt' { return 1MB }
@@ -130,7 +130,7 @@ function Export-NativeCandidate([string]$Root, $Report) {
         'librocksdbjni-win64.dll' = (Join-Path $build 'java/Release/librocksdbjni-win64.dll')
         'rocksdbjni-10.2.1-win64.jar' = (Join-Path $build 'java/rocksdbjni-10.2.1-win64.jar')
         'CMakeCache.txt' = (Join-Path $build 'CMakeCache.txt')
-        'rocksdbjni-shared.vcxproj' = (Join-Path $build 'java/rocksdbjni-shared.vcxproj')
+        'rocksdbjni.vcxproj' = (Join-Path $build 'java/rocksdbjni.vcxproj')
         'build_version.cc' = (Join-Path $build 'build_version.cc')
         'exports.txt' = (Join-Path $rootPath 'exports.txt')
         'imports.txt' = (Join-Path $rootPath 'imports.txt')
@@ -231,7 +231,7 @@ function Import-NativeCandidate([string]$Archive, [string]$ArchiveSha256, [strin
             }
             if ($declared -gt $script:NativeMaxBytes -or $manifest.totalBytes -ne $declared) { throw 'Manifest total mismatch' }
             foreach ($required in @('librocksdbjni-win64.dll','rocksdbjni-10.2.1-win64.jar','report.json',
-                'CMakeCache.txt','rocksdbjni-shared.vcxproj','build_version.cc','exports.txt','imports.txt','native-build-inputs.json')) {
+                'CMakeCache.txt','rocksdbjni.vcxproj','build_version.cc','exports.txt','imports.txt','native-build-inputs.json')) {
                 if (-not $seen.Contains($required)) { throw 'Missing required candidate member' }
             }
             $headerCount = @($manifest.files | Where-Object { $_.name.StartsWith('headers/') }).Count

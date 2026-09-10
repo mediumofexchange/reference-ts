@@ -1,0 +1,4030 @@
+{
+  "status": "verified-transfer-and-static-inspection-unadopted",
+  "observedDate": "2026-09-10",
+  "candidateLoaded": false,
+  "databaseAcceptance": false,
+  "storagePrerequisite": {
+    "actionsBudgetDollars": 0,
+    "packagesBudgetDollars": 0,
+    "bothPreventFurtherUsage": true,
+    "referenceTsArtifactCountBeforeDispatch": 0,
+    "packageInventoryComplete": false,
+    "billingSettingsChanged": false
+  },
+  "transfer": {
+    "runId": "34502815638",
+    "runAttempt": "1",
+    "workflowCommit": "373db5058b71370612818f4bb261ea8d25c66fdc",
+    "repository": "mediumofexchange/reference-ts",
+    "workflowPath": ".github/workflows/rocksdb-native-build.yml",
+    "event": "workflow_dispatch",
+    "headBranch": "main",
+    "status": "completed",
+    "conclusion": "success",
+    "runUrl": "https://github.com/mediumofexchange/reference-ts/actions/runs/34502815638",
+    "createdAt": "2026-09-10T16:33:20Z",
+    "updatedAt": "2026-09-10T16:50:44Z",
+    "artifact": {
+      "id": 10163251532,
+      "node_id": "MDg6QXJ0aWZhY3QxMDE2MzI1MTUzMg==",
+      "name": "rocksdb-candidate-34502815638-1",
+      "size_in_bytes": 13696641,
+      "url": "https://api.github.com/repos/mediumofexchange/reference-ts/actions/artifacts/10163251532",
+      "archive_download_url": "https://api.github.com/repos/mediumofexchange/reference-ts/actions/artifacts/10163251532/zip",
+      "expired": false,
+      "digest": "sha256:d3ab87cba4a7d432b182a81f23c21b91215a35e22cf9960efecbc3adceb194f6",
+      "created_at": "2026-09-10T16:50:38Z",
+      "updated_at": "2026-09-10T16:50:38Z",
+      "expires_at": "2026-09-11T16:50:37Z",
+      "workflow_run": {
+        "id": 34502815638,
+        "repository_id": 1338452450,
+        "head_repository_id": 1338452450,
+        "head_branch": "main",
+        "head_sha": "373db5058b71370612818f4bb261ea8d25c66fdc"
+      }
+    },
+    "downloadBytes": 13696641,
+    "archiveSha256": "d3ab87cba4a7d432b182a81f23c21b91215a35e22cf9960efecbc3adceb194f6",
+    "buildLogSha256": "3bfb34485f82aea956304f1bba0c8e9a9a084c8830456782a0c2b35e6239a830"
+  },
+  "import": {
+    "toolRevision": "373db5058b71370612818f4bb261ea8d25c66fdc",
+    "toolGitBlob": "4a5a9b62b939bbe7037d0c174825b3788f0596f4",
+    "result": "105 content members and manifest validated before extraction",
+    "destination": "scratch/retained-native-review/candidate",
+    "currentImporterRejectsSiblingOnlyArchive": true
+  },
+  "manifest": {
+    "schema": "moe-rocksdb-candidate-v1",
+    "repository": "mediumofexchange/reference-ts",
+    "sourceCommit": "4b2122578e475cb88aef4dcf152cccd5dbf51060",
+    "workflowCommit": "373db5058b71370612818f4bb261ea8d25c66fdc",
+    "runId": "34502815638",
+    "runAttempt": "1",
+    "files": [
+      {
+        "name": "librocksdbjni-win64.dll",
+        "bytes": 8998912,
+        "sha256": "a05f9ba907daf041a5ac9eaec7f241fe012b1aef4b1b844bb1696d392229c5de"
+      },
+      {
+        "name": "rocksdbjni-10.2.1-win64.jar",
+        "bytes": 3991103,
+        "sha256": "d04301aa65fb5830d459089b19c492727798b9a84c8d745173eb77cf0e19f2ee"
+      },
+      {
+        "name": "CMakeCache.txt",
+        "bytes": 23679,
+        "sha256": "7819ff4bb7335c4b5dfccfa7c93a1955d6686e6abf072ce24ad5d1d62121d415"
+      },
+      {
+        "name": "rocksdbjni-shared.vcxproj",
+        "bytes": 47001,
+        "sha256": "748671bd7ba471e6228a0b0c1295284ae3788f4b0abbb25381343132948cb8f6"
+      },
+      {
+        "name": "build_version.cc",
+        "bytes": 2940,
+        "sha256": "754d53f57655bc902acdf25c2d3a8a53d99e1849160a526f7093433b55b52dab"
+      },
+      {
+        "name": "exports.txt",
+        "bytes": 199070,
+        "sha256": "1b723222940c2a2602321581e2058989ecc999dfe5323d53bae8e465e9b779bc"
+      },
+      {
+        "name": "imports.txt",
+        "bytes": 8740,
+        "sha256": "0126279ac5517c7a1bc9696ce5638bdc6716a072ae0e5694e53a6bd3af2a504e"
+      },
+      {
+        "name": "headers/org_rocksdb_AbstractCompactionFilter.h",
+        "bytes": 556,
+        "sha256": "2f4014992bf4de77cbf3aa9bcd86608880483007537af09c45b595fc96be704f"
+      },
+      {
+        "name": "headers/org_rocksdb_AbstractCompactionFilterFactory.h",
+        "bytes": 860,
+        "sha256": "3e455051e552d21c379eebcd77f6c4295ae1453bb53f17f79c71c47c4254bb89"
+      },
+      {
+        "name": "headers/org_rocksdb_AbstractComparator.h",
+        "bytes": 759,
+        "sha256": "60a0ed357d1cca2333820e6984fb43e040559da19e6eb7dddc14c3dc181b2035"
+      },
+      {
+        "name": "headers/org_rocksdb_AbstractEventListener.h",
+        "bytes": 777,
+        "sha256": "3b6c5606d755598de7874169367eeb49704279304ab0dccc64a6259174dbfa15"
+      },
+      {
+        "name": "headers/org_rocksdb_AbstractSlice.h",
+        "bytes": 1751,
+        "sha256": "d4bffe58b5115651e2a952fd494a5cb21faaa8645d8bc2586abfa919951d8d02"
+      },
+      {
+        "name": "headers/org_rocksdb_AbstractTableFilter.h",
+        "bytes": 534,
+        "sha256": "93688785346bf5709a039d71aa32e68d8aab39bcfcc94a31cc0cb5c920376ffe"
+      },
+      {
+        "name": "headers/org_rocksdb_AbstractTraceWriter.h",
+        "bytes": 534,
+        "sha256": "68c01976c94dcd50d65a1632842de2803af226978ec61573fc6b4b96b57e4a74"
+      },
+      {
+        "name": "headers/org_rocksdb_AbstractTransactionNotifier.h",
+        "bytes": 828,
+        "sha256": "4149d65d62b160a805acbd992d9082a31c91d457b542f311b7a73acb324f3442"
+      },
+      {
+        "name": "headers/org_rocksdb_AbstractWalFilter.h",
+        "bytes": 520,
+        "sha256": "121736bc49a40e1cb61080f1153b7f3987a683b5669a8e391a596c4dade0cce3"
+      },
+      {
+        "name": "headers/org_rocksdb_BackupEngine.h",
+        "bytes": 2790,
+        "sha256": "1cc3a3bef6a3cbaf08e5138fe620e3071ac0b05fb1b33ede713ea9593846f0fa"
+      },
+      {
+        "name": "headers/org_rocksdb_BackupEngineOptions.h",
+        "bytes": 6023,
+        "sha256": "00241f1511733d05155039826b0aee2eec04515d291ba8e19c505c7cade92ac9"
+      },
+      {
+        "name": "headers/org_rocksdb_BlockBasedTableConfig.h",
+        "bytes": 809,
+        "sha256": "7743413fa78af9098c5b908b43c9bec2e6f906dae70d9b5242edc4e53f0070ca"
+      },
+      {
+        "name": "headers/org_rocksdb_BloomFilter.h",
+        "bytes": 615,
+        "sha256": "23344ba64ea88992480b2c9c25701ddb880c38bf39d4ffdf5985bc19d81dcacc"
+      },
+      {
+        "name": "headers/org_rocksdb_Cache.h",
+        "bytes": 634,
+        "sha256": "fda8ae734def6663a5b937d3c165ced81fa24f5cc25a3db466220f676e1c0017"
+      },
+      {
+        "name": "headers/org_rocksdb_CassandraCompactionFilter.h",
+        "bytes": 611,
+        "sha256": "3656e767b1fc9d0a9778c7544411f334ead2de8626224340cf725b4c22bf2cef"
+      },
+      {
+        "name": "headers/org_rocksdb_CassandraValueMergeOperator.h",
+        "bytes": 857,
+        "sha256": "32e7887f95eb267f8a4893cf1b3b945230c189178665a4d63dc4dbf53e9216a9"
+      },
+      {
+        "name": "headers/org_rocksdb_Checkpoint.h",
+        "bytes": 1154,
+        "sha256": "09548a08b036d14089b6b63938fa0523c278bfea923c111e811449eeaf42d0b1"
+      },
+      {
+        "name": "headers/org_rocksdb_ClockCache.h",
+        "bytes": 704,
+        "sha256": "57db429383892ba30b6a3b3fcc3a69212679a13f46c7abb79322e040bc9b4b54"
+      },
+      {
+        "name": "headers/org_rocksdb_ColumnFamilyHandle.h",
+        "bytes": 1178,
+        "sha256": "9668709c75d504feb84df45e0d6511d616c1fb82b38581f023fa272a25fb8f69"
+      },
+      {
+        "name": "headers/org_rocksdb_ColumnFamilyOptions.h",
+        "bytes": 33620,
+        "sha256": "55e24ae24c11a70105c972fa8baac1f4f9dd98db41ebeb7c6533ae0314c6cb61"
+      },
+      {
+        "name": "headers/org_rocksdb_CompactionJobInfo.h",
+        "bytes": 3283,
+        "sha256": "45b912371a297dd1323c44656afdcecc3af96bf7c2c158aa8a213d13eec0307d"
+      },
+      {
+        "name": "headers/org_rocksdb_CompactionJobStats.h",
+        "bytes": 6256,
+        "sha256": "439f1ddbffc1b88d04396bd5b748c592a6cbcfb051ddbbb3944ccefbeab479c4"
+      },
+      {
+        "name": "headers/org_rocksdb_CompactionOptions.h",
+        "bytes": 2064,
+        "sha256": "e13ef85038d36cb3c8b7b4033c08b09780a6948c4579ee7b9f4db3406c7290b6"
+      },
+      {
+        "name": "headers/org_rocksdb_CompactionOptionsFIFO.h",
+        "bytes": 1701,
+        "sha256": "2512a47735883a5770d95262cf356031aee1926e2e935fb3ec089cf72f506b58"
+      },
+      {
+        "name": "headers/org_rocksdb_CompactionOptionsUniversal.h",
+        "bytes": 4159,
+        "sha256": "dd5816c49ef877e19e2dcfd6a3afa60c6457fc601bf440a8b1de5d812afa11e0"
+      },
+      {
+        "name": "headers/org_rocksdb_CompactRangeOptions.h",
+        "bytes": 5360,
+        "sha256": "8eb003f4ff47c9d71e5bee44e2d81f23fd080a0074ad92276c4ff3cfe40e042e"
+      },
+      {
+        "name": "headers/org_rocksdb_ComparatorOptions.h",
+        "bytes": 2118,
+        "sha256": "886abed1c3b59846e4f70b7bdfab858a6fc1bf0eb024c83b1fd0fa5ae8158792"
+      },
+      {
+        "name": "headers/org_rocksdb_CompressionOptions.h",
+        "bytes": 3280,
+        "sha256": "3cf5217ce7166aedbeff5066879eac42d687958afbbcba36feef2fab2d2d78a1"
+      },
+      {
+        "name": "headers/org_rocksdb_ConcurrentTaskLimiterImpl.h",
+        "bytes": 1794,
+        "sha256": "c6ce282544e4032f4557f1b29aba5d6bf5052ef11418c6c1df916d26e3f88cab"
+      },
+      {
+        "name": "headers/org_rocksdb_ConfigOptions.h",
+        "bytes": 1794,
+        "sha256": "66c17511837b656b3a1737185906e094b220acb7b75a0a7889618f7b7481f231"
+      },
+      {
+        "name": "headers/org_rocksdb_DBOptions.h",
+        "bytes": 35174,
+        "sha256": "496f7b5634796aef9c9a8364ee00ada1ec6ef9f59dae2d8146b39ebe87a2fa7e"
+      },
+      {
+        "name": "headers/org_rocksdb_DirectSlice.h",
+        "bytes": 1972,
+        "sha256": "2d32e28e9fea29240454aec99255ecd9ae6e38b23ccab59bd4673d3f61e8de67"
+      },
+      {
+        "name": "headers/org_rocksdb_Env.h",
+        "bytes": 1935,
+        "sha256": "4432e2f07ba6b469f27d40d10b5706e6c840f72b72bf801575bbad30b0f7c0c7"
+      },
+      {
+        "name": "headers/org_rocksdb_EnvOptions.h",
+        "bytes": 5278,
+        "sha256": "32d7f61f9feee043a3abe033011fc7b292fd845ecb0a31a8c7f2413783b64156"
+      },
+      {
+        "name": "headers/org_rocksdb_ExportImportFilesMetaData.h",
+        "bytes": 561,
+        "sha256": "ab40780bc1791896918062673cea7482379c51d53f7d234fa9c036bf3499a36f"
+      },
+      {
+        "name": "headers/org_rocksdb_Filter.h",
+        "bytes": 471,
+        "sha256": "2250dd88085707048ef546a0845fd98be87468f9bad0d8bcbb13d210e1b0e223"
+      },
+      {
+        "name": "headers/org_rocksdb_FlushOptions.h",
+        "bytes": 1534,
+        "sha256": "00fe8aed432d7b3448735611942d94755aebd18e16c7597c8387081e9ab04f63"
+      },
+      {
+        "name": "headers/org_rocksdb_HashLinkedListMemTableConfig.h",
+        "bytes": 1448,
+        "sha256": "4fb69152123fdcde072acf8cdc3de58688b1821e1e70093ad8b836606bbc14ff"
+      },
+      {
+        "name": "headers/org_rocksdb_HashSkipListMemTableConfig.h",
+        "bytes": 1020,
+        "sha256": "13cbf32e2d256622f4fa60454052e510d4f21ceb0fbfbb8c0070329d036202d4"
+      },
+      {
+        "name": "headers/org_rocksdb_HyperClockCache.h",
+        "bytes": 757,
+        "sha256": "107483d0d05b71f69d831f279fedf75a6ca8364069762e985e5118c9e21020cd"
+      },
+      {
+        "name": "headers/org_rocksdb_ImportColumnFamilyOptions.h",
+        "bytes": 1263,
+        "sha256": "1600cea2dec41befa6008177db2567d94e328aa563cabbbd998015f7e5addd51"
+      },
+      {
+        "name": "headers/org_rocksdb_IngestExternalFileOptions.h",
+        "bytes": 3974,
+        "sha256": "db345603d56f9dd7c54b6d1f1976a97158d6a66799d236c6f0ff8ca988edacfd"
+      },
+      {
+        "name": "headers/org_rocksdb_LiveFileMetaData.h",
+        "bytes": 712,
+        "sha256": "9dd82ce25e07c4bd38b853b6f2ce8cbe412a91439951455dfeb27fa93a7f2e86"
+      },
+      {
+        "name": "headers/org_rocksdb_Logger.h",
+        "bytes": 1031,
+        "sha256": "3350765cf6f641c8861bc8bae78f6bed260a56bed17f4a9f62de471f4f72dfed"
+      },
+      {
+        "name": "headers/org_rocksdb_LRUCache.h",
+        "bytes": 706,
+        "sha256": "35dbf76e463a8e07f0e4307a64afb040f90178f259d308221d47f3431d2b8b9f"
+      },
+      {
+        "name": "headers/org_rocksdb_MemoryUtil.h",
+        "bytes": 554,
+        "sha256": "8599f4ef2412fd9f4b9c12520f166dde8832e2a5b910f3bcdcc2da0cf2fe8ea7"
+      },
+      {
+        "name": "headers/org_rocksdb_NativeComparatorWrapper.h",
+        "bytes": 550,
+        "sha256": "0cb8d9c6c6da65aac0398bce47fc77fa42443da88a54856b3673becfcb0fa8e9"
+      },
+      {
+        "name": "headers/org_rocksdb_NativeComparatorWrapperTest_NativeStringComparatorWrapper.h",
+        "bytes": 727,
+        "sha256": "eb50645050717e96c34f9a4ba882010b9ba72341e3a90a3866c8b8f5cbe3d473"
+      },
+      {
+        "name": "headers/org_rocksdb_OptimisticTransactionDB.h",
+        "bytes": 2677,
+        "sha256": "abf14a98871f77043e6a859a7b313eaecf460e8ae4cd3854c1d5aafcca82f862"
+      },
+      {
+        "name": "headers/org_rocksdb_OptimisticTransactionOptions.h",
+        "bytes": 1555,
+        "sha256": "cf9ab4e3195c1102ee540910d23026c63cb4b58ce4c43e6b6c25afedda0239a4"
+      },
+      {
+        "name": "headers/org_rocksdb_Options.h",
+        "bytes": 62953,
+        "sha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "name": "headers/org_rocksdb_OptionsUtil.h",
+        "bytes": 1332,
+        "sha256": "618556050c2f6654c579fff7888c96f167d41da040cb3be3c1c6b0de53d7d768"
+      },
+      {
+        "name": "headers/org_rocksdb_PerfContext.h",
+        "bytes": 21991,
+        "sha256": "82e9d7bcebc38d02cb309cb966aee8a14dd81b4fc3c1b72658f712c78688a013"
+      },
+      {
+        "name": "headers/org_rocksdb_PersistentCache.h",
+        "bytes": 785,
+        "sha256": "fcf9ee2cadb7a4f2ea867e51a234c251745e3b83751476788703ab8b7b9652e4"
+      },
+      {
+        "name": "headers/org_rocksdb_PlainTableConfig.h",
+        "bytes": 1470,
+        "sha256": "646d943eb3b2467868cd077f0486c164d69176c330bea626dcca2b286f60f4f4"
+      },
+      {
+        "name": "headers/org_rocksdb_RateLimiter.h",
+        "bytes": 2311,
+        "sha256": "bcd929007b79d4179720610d4899f62280293eebaf4dc4800b776dc72ae44fb9"
+      },
+      {
+        "name": "headers/org_rocksdb_ReadOptions.h",
+        "bytes": 10355,
+        "sha256": "393ddb828d79610072dab9bf8620c041d0d3794d6948c013871726b35c052286"
+      },
+      {
+        "name": "headers/org_rocksdb_RemoveEmptyValueCompactionFilter.h",
+        "bytes": 642,
+        "sha256": "03e97fc202828358944d5d716f3918b000761a76ea76b4580834a07354d024dc"
+      },
+      {
+        "name": "headers/org_rocksdb_RestoreOptions.h",
+        "bytes": 725,
+        "sha256": "1895623f065fcd7de19c3a1028da3e6fb4f6efa69312f7c46861f6c7afab41db"
+      },
+      {
+        "name": "headers/org_rocksdb_RocksCallbackObject.h",
+        "bytes": 530,
+        "sha256": "586b0ede187ad0f772f49bcbe411836ba89ad43dd079222fa5197bb633cef1eb"
+      },
+      {
+        "name": "headers/org_rocksdb_RocksDB.h",
+        "bytes": 26792,
+        "sha256": "df7748cd7416c3bd7614352cb967779f866a580d662f122e65b3079ea8a8e955"
+      },
+      {
+        "name": "headers/org_rocksdb_RocksDBExceptionTest.h",
+        "bytes": 1769,
+        "sha256": "f5f38dd1908bbc70780f0890969015a38d3513982161dbc6f172573c739abea4"
+      },
+      {
+        "name": "headers/org_rocksdb_RocksEnv.h",
+        "bytes": 481,
+        "sha256": "f0312127e4d7479f44bc35c983ac3cad7b28357407f4bc99c238a48c35bb5021"
+      },
+      {
+        "name": "headers/org_rocksdb_RocksIterator.h",
+        "bytes": 4831,
+        "sha256": "70d27ae2446c3671af4a68c80d13f793facd6f6e03eeca1f4d14fe9a91f52997"
+      },
+      {
+        "name": "headers/org_rocksdb_RocksMemEnv.h",
+        "bytes": 691,
+        "sha256": "8020c059bfffb6d9469b86f6b1032d0849c195e4bb304f0bc03096c1fadc6f47"
+      },
+      {
+        "name": "headers/org_rocksdb_SkipListMemTableConfig.h",
+        "bytes": 694,
+        "sha256": "1a4755e186c93ff6c6b5169dc720451b3058445b740dc7bb34141f0d53735595"
+      },
+      {
+        "name": "headers/org_rocksdb_Slice.h",
+        "bytes": 1427,
+        "sha256": "6209ee3c63294e8c85e2498d020e54d14f6cc6a81cb5bbc1e1a1f4964e94457c"
+      },
+      {
+        "name": "headers/org_rocksdb_Snapshot.h",
+        "bytes": 480,
+        "sha256": "9f62879717ea0883029ba071237e91ec7c4f464d51b1bde9652e308f5ae6468b"
+      },
+      {
+        "name": "headers/org_rocksdb_SstFileManager.h",
+        "bytes": 3583,
+        "sha256": "f882561c8efd523f666f85fc2ce519c50c240856bcb7b3413b1df838a3a28e47"
+      },
+      {
+        "name": "headers/org_rocksdb_SstFileReader.h",
+        "bytes": 1570,
+        "sha256": "2c0f625adc2540d8fd472ca257f14302d0f060768314aca276e80459b37b071b"
+      },
+      {
+        "name": "headers/org_rocksdb_SstFileReaderIterator.h",
+        "bytes": 5191,
+        "sha256": "f1274b21dbc5b501bb566d05e76abd48ef039ebf645501fbf8072fa1c23cfb6e"
+      },
+      {
+        "name": "headers/org_rocksdb_SstFileWriter.h",
+        "bytes": 3076,
+        "sha256": "508d246b50eb61ebe8246a8db1a31fea7c0339b76b80492cc5e6a1c7d811046f"
+      },
+      {
+        "name": "headers/org_rocksdb_SstPartitionerFixedPrefixFactory.h",
+        "bytes": 886,
+        "sha256": "91b171c65bee10bd03f5272766e271ac14e20dfc9a6cd3e11a35d8993599c756"
+      },
+      {
+        "name": "headers/org_rocksdb_Statistics.h",
+        "bytes": 2967,
+        "sha256": "e6b0135a95237dfff7307d67bcb83ba9a8c5cd3119419a0a52648f1983bf8fe9"
+      },
+      {
+        "name": "headers/org_rocksdb_StringAppendOperator.h",
+        "bytes": 1078,
+        "sha256": "4d35899d77be7c8ba560786713897aab1bb678c6ede72d1566eea3ec2d52876d"
+      },
+      {
+        "name": "headers/org_rocksdb_TablePropertiesCollectorFactory.h",
+        "bytes": 939,
+        "sha256": "34214db6160014815ed692d64a4badf67b9144ad5bb21820bbf8dbe21764c615"
+      },
+      {
+        "name": "headers/org_rocksdb_test_TestableEventListener.h",
+        "bytes": 571,
+        "sha256": "494b3619577eb247b150802cb45823ac995cd656efc4aee5db2127fb4a8cd8f2"
+      },
+      {
+        "name": "headers/org_rocksdb_ThreadStatus.h",
+        "bytes": 1931,
+        "sha256": "6af2b82fa5c7ee22e4d9a7032de4f189be590e3f57331391fbbc1266193cbfdc"
+      },
+      {
+        "name": "headers/org_rocksdb_TimedEnv.h",
+        "bytes": 674,
+        "sha256": "217e49ed3e897dc17be59da283075e52306ce580f6bb323f48f4990e43751202"
+      },
+      {
+        "name": "headers/org_rocksdb_Transaction.h",
+        "bytes": 17758,
+        "sha256": "5c0a5e3ee6fddbb116301f6543358dc5784c8fe0b86460c58140c345c7c0da06"
+      },
+      {
+        "name": "headers/org_rocksdb_TransactionDB.h",
+        "bytes": 3467,
+        "sha256": "7aa7179cf2315ecbac148e5432a34baa2fa9707e9632fef2a8e5e0bec4cfab49"
+      },
+      {
+        "name": "headers/org_rocksdb_TransactionDBOptions.h",
+        "bytes": 3041,
+        "sha256": "1ea096a541a884152d56bf2345710f3458c241c47208cab83fd4ef505b0042bb"
+      },
+      {
+        "name": "headers/org_rocksdb_TransactionLogIterator.h",
+        "bytes": 1423,
+        "sha256": "41e47b0fb8ec70a0f1509bd0c2a74c13690ca7d78490283f4ceca918b2bce3a4"
+      },
+      {
+        "name": "headers/org_rocksdb_TransactionOptions.h",
+        "bytes": 3420,
+        "sha256": "fab5151f8c781c1ba2f7708bf4e5250263d43acb35c96111410ffd81a7359aa8"
+      },
+      {
+        "name": "headers/org_rocksdb_TtlDB.h",
+        "bytes": 1436,
+        "sha256": "8fc10ed0b06638b81b661e087a25e780fc541536e5da73be862d067b19e3ff24"
+      },
+      {
+        "name": "headers/org_rocksdb_UInt64AddOperator.h",
+        "bytes": 753,
+        "sha256": "3b61b7cc61365d75c61b334a6a290fafd8f314143cc6aeeb8d23809247ea9ba6"
+      },
+      {
+        "name": "headers/org_rocksdb_util_StdErrLogger.h",
+        "bytes": 1188,
+        "sha256": "cbc000c1809afe131485ac562917e1bb608b9fae9a69f6158d857cbadeeb24ef"
+      },
+      {
+        "name": "headers/org_rocksdb_VectorMemTableConfig.h",
+        "bytes": 684,
+        "sha256": "6ee752aea7cadf66c5c9ecfc9e5d4a3b5916f4064fa940c0d1a6d0c92ff1f802"
+      },
+      {
+        "name": "headers/org_rocksdb_WBWIRocksIterator.h",
+        "bytes": 3842,
+        "sha256": "93e7ac43995dde0a3626bdeb07153823903856d8b72c69de500ee839fc030c17"
+      },
+      {
+        "name": "headers/org_rocksdb_WriteBatch_Handler.h",
+        "bytes": 528,
+        "sha256": "0b69f94db814737a02d5e9437db25edec976d6ac93be2bed09566dd859a20814"
+      },
+      {
+        "name": "headers/org_rocksdb_WriteBatch.h",
+        "bytes": 7980,
+        "sha256": "6f737d75ea24fc7963c60023a8e4bad6375255da42d9797114d0e45adf3433df"
+      },
+      {
+        "name": "headers/org_rocksdb_WriteBatchTest.h",
+        "bytes": 504,
+        "sha256": "47b872a9402a8135e899a805c7207d659958a0198082ab10c8dc531a47701c86"
+      },
+      {
+        "name": "headers/org_rocksdb_WriteBatchTestInternalHelper.h",
+        "bytes": 1020,
+        "sha256": "02cef70978a38fc09b6cfaeedb6358f7807e1b61d3a0541e6dce28e822e229b5"
+      },
+      {
+        "name": "headers/org_rocksdb_WriteBatchWithIndex.h",
+        "bytes": 7884,
+        "sha256": "e261b8c9141f22b4b82153850e65a4003da491144cada751b0fee226c0ddd746"
+      },
+      {
+        "name": "headers/org_rocksdb_WriteBufferManager.h",
+        "bytes": 777,
+        "sha256": "49ba53ff4d65103399d2048304921e587f8f944aa7d49f18d31e217be84ffc66"
+      },
+      {
+        "name": "headers/org_rocksdb_WriteOptions.h",
+        "bytes": 3423,
+        "sha256": "9edc63343bfb2544698c687bd01a1b24844e988ce417680aaeda58a2c2c8e586"
+      },
+      {
+        "name": "report.json",
+        "bytes": 13514,
+        "sha256": "433fe8a7bc2febcfa8370432cdf24fff0419de64ae23829708288c2df6d7b9fb"
+      },
+      {
+        "name": "native-build-inputs.json",
+        "bytes": 1458,
+        "sha256": "1361cd33e0b8dd2f23bb6f5e3e76f21a245317e8fcf6a06563c02ad6ca6759c2"
+      }
+    ],
+    "totalBytes": 13660092
+  },
+  "build": {
+    "status": "compiled-unadopted-native-candidate",
+    "phase": "complete",
+    "candidateLoaded": false,
+    "databaseAcceptance": false,
+    "errors": [],
+    "imageVersion": "20260830.290.1",
+    "workflowCommit": "373db5058b71370612818f4bb261ea8d25c66fdc",
+    "runId": "34502815638",
+    "runAttempt": "1",
+    "retentionRequested": true,
+    "imageSourceCommit": "81f6fba751cfd9688d726f4981cd9798305a1985",
+    "imageManifestSha256": "93aff42175f175422340f660e5c8d22adb6cfbcf40e5ec4636bdccd334ae56e5",
+    "freeBefore": 157779980288,
+    "sourceCommit": "4b2122578e475cb88aef4dcf152cccd5dbf51060",
+    "sourceTree": "3d47d6368014281754cc7324a9b1edf05e22e892",
+    "javaHome": "C:\\hostedtoolcache\\windows\\Java_Temurin-Hotspot_jdk\\21.0.12-101.0\\x64",
+    "javaRelease": "IMPLEMENTOR=\"Eclipse Adoptium\"\r\nIMPLEMENTOR_VERSION=\"Temurin-21.0.12.1+1\"\r\nJAVA_RUNTIME_VERSION=\"21.0.12.1+1-LTS\"\r\nJAVA_VERSION=\"21.0.12.1\"\r\nJAVA_VERSION_DATE=\"2026-08-18\"\r\nLIBC=\"default\"\r\nMODULES=\"java.base java.compiler java.datatransfer java.xml java.prefs java.desktop java.instrument java.logging java.management java.security.sasl java.naming java.rmi java.management.rmi java.net.http java.scripting java.security.jgss java.transaction.xa java.sql java.sql.rowset java.xml.crypto java.se java.smartcardio jdk.accessibility jdk.internal.jvmstat jdk.attach jdk.charsets jdk.internal.opt jdk.zipfs jdk.compiler jdk.crypto.ec jdk.crypto.cryptoki jdk.crypto.mscapi jdk.dynalink jdk.internal.ed jdk.editpad jdk.hotspot.agent jdk.httpserver jdk.incubator.vector jdk.internal.le jdk.internal.vm.ci jdk.internal.vm.compiler jdk.internal.vm.compiler.management jdk.jartool jdk.javadoc jdk.jcmd jdk.management jdk.management.agent jdk.jconsole jdk.jdeps jdk.jdwp.agent jdk.jdi jdk.jfr jdk.jlink jdk.jpackage jdk.jshell jdk.jsobject jdk.jstatd jdk.localedata jdk.management.jfr jdk.naming.dns jdk.naming.rmi jdk.net jdk.nio.mapmode jdk.random jdk.sctp jdk.security.auth jdk.security.jgss jdk.unsupported jdk.unsupported.desktop jdk.xml.dom\"\r\nOS_ARCH=\"x86_64\"\r\nOS_NAME=\"Windows\"\r\nSOURCE=\".:git:1c417fbfc2f7\"\r\nBUILD_SOURCE=\"git:e6ba7dec3d07654074559310376a3ae89da5f4ac\"\nBUILD_SOURCE_REPO=\"https://github.com/adoptium/temurin-build.git\"\nSOURCE_REPO=\"https://github.com/adoptium/jdk21u.git\"\nFULL_VERSION=\"21.0.12.1+1-LTS\"\nSEMANTIC_VERSION=\"21.0.12.1+1\"\nBUILD_INFO=\"OS: Windows Server 2022 Version: 10.0\"\nJVM_VARIANT=\"Hotspot\"\nJVM_VERSION=\"21.0.12.1+1-LTS\"\nIMAGE_TYPE=\"JDK\"",
+    "cmakeVersion": "cmake version 3.31.6",
+    "toolset": "14.44.35207",
+    "tools": [
+      {
+        "name": "cmake.exe",
+        "bytes": 12029392,
+        "sha256": "3fe22eb02e1c6184ec207366ed21a6f2f9c3828c1e9f3324546befadfb362be3"
+      },
+      {
+        "name": "javac.exe",
+        "bytes": 24704,
+        "sha256": "00f7c6f9ec89ebba4bb96cf8760403cccf1268df2eae8685900ba38e58a7aff9"
+      },
+      {
+        "name": "jar.exe",
+        "bytes": 24184,
+        "sha256": "63252d4bf24035ddba3d98fd23e0a2a414d5e860a49f180ce4ac35f52febe043"
+      },
+      {
+        "name": "jni.h",
+        "bytes": 76018,
+        "sha256": "99e64ebbe749e6df284f852f11b3c73f6ea97baf15120428f40f887fe0616e61"
+      },
+      {
+        "name": "jni_md.h",
+        "bytes": 1510,
+        "sha256": "3cacac1e4802ec246ea7c0c6772d4ac40c9f7255d4df095cfffe601137689771"
+      },
+      {
+        "name": "cl.exe",
+        "bytes": 677736,
+        "sha256": "88c8344236a27a6e727e0a8edc49aaa2690bdc7a9464b9d18cc7abe70a9f1c0d"
+      },
+      {
+        "name": "c1xx.dll",
+        "bytes": 12332384,
+        "sha256": "688fe28f3065283edf668868e76aeab28f03f80e2171c14c7d4e37f64513f623"
+      },
+      {
+        "name": "c2.dll",
+        "bytes": 10462008,
+        "sha256": "98050f97d60f7e95fcaf3525a7103e4818fba498a43563922476819ce88ed162"
+      },
+      {
+        "name": "link.exe",
+        "bytes": 3252576,
+        "sha256": "ca11e6c45debd34bf652dfe984c5360a531a005ed78bf72852330c9c2590cf0d"
+      },
+      {
+        "name": "dumpbin.exe",
+        "bytes": 23416,
+        "sha256": "12a1cd87238bd66dfdb788b4fcdcb91ce4b3f81236aab12a7a29e5ae1d85af50"
+      },
+      {
+        "name": "rc.exe",
+        "bytes": 71208,
+        "sha256": "2cbcc6024fe41ae92fada6b3f74e6e2a1b2fe71c51b288167d6abab319da2628"
+      },
+      {
+        "name": "libucrt.lib",
+        "bytes": 35488094,
+        "sha256": "335d768550631d4f667b12c5f3a7a7155e341117cd61ce11aadc533b031be80c"
+      },
+      {
+        "name": "libcmt.lib",
+        "bytes": 6534094,
+        "sha256": "8fe40dd342b90b35d62b8f5d55b4e92df7785c122976618365cfe3b014cc857a"
+      }
+    ],
+    "dependencies": [
+      {
+        "name": "junit-4.13.1.jar",
+        "bytes": 382708,
+        "sha256": "c30719db974d6452793fe191b3638a5777005485bae145924044530ffa5f6122"
+      },
+      {
+        "name": "hamcrest-2.2.jar",
+        "bytes": 123360,
+        "sha256": "5e62846a89f05cd78cd9c1a553f340d002458380c320455dd1f8fc5497a8a1c1"
+      },
+      {
+        "name": "mockito-all-1.10.19.jar",
+        "bytes": 1234599,
+        "sha256": "d1a7a7ef14b3db5c0fc3e0a63a81b374b510afe85add9f7984b97911f4c70605"
+      },
+      {
+        "name": "cglib-3.3.0.jar",
+        "bytes": 306864,
+        "sha256": "9fe0c26d7464140ccdfe019ac687be1fb906122b508ab54beb810db0f09a9212"
+      },
+      {
+        "name": "assertj-core-2.9.0.jar",
+        "bytes": 1096630,
+        "sha256": "5e88ea3ecbe3c48aa1346fec76c84979fa9c8d22499f11479011691230e8babf"
+      }
+    ],
+    "configureArguments": [
+      "-S",
+      "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source",
+      "-B",
+      "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\build",
+      "-G",
+      "Visual Studio 17 2022",
+      "-A",
+      "x64",
+      "-T",
+      "v143,version=14.44.35207",
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DCMAKE_SYSTEM_VERSION=10.0.19041.0",
+      "-DCMAKE_CXX_STANDARD=17",
+      "-DWITH_JNI=ON",
+      "-DROCKSDB_BUILD_SHARED=OFF",
+      "-DROCKSDB_SKIP_THIRDPARTY=ON",
+      "-DWITH_MD_LIBRARY=OFF",
+      "-DPORTABLE=ON",
+      "-DFAIL_ON_WARNINGS=ON",
+      "-DWITH_TESTS=OFF",
+      "-DWITH_BENCHMARK_TOOLS=OFF",
+      "-DWITH_CORE_TOOLS=OFF",
+      "-DWITH_TOOLS=OFF",
+      "-DWITH_TRACE_TOOLS=OFF",
+      "-DWITH_BENCHMARK=OFF",
+      "-DWITH_EXAMPLES=OFF",
+      "-DWITH_GFLAGS=OFF",
+      "-DWITH_JEMALLOC=OFF",
+      "-DWITH_SNAPPY=OFF",
+      "-DWITH_LZ4=OFF",
+      "-DWITH_ZLIB=OFF",
+      "-DWITH_ZSTD=OFF",
+      "-DWITH_XPRESS=OFF",
+      "-DWITH_LIBURING=OFF",
+      "-DWITH_DYNAMIC_EXTENSION=OFF",
+      "-DCUSTOM_DEPS_URL=file:///nonexistent-moe-build-dependencies"
+    ],
+    "cache": {
+      "name": "CMakeCache.txt",
+      "bytes": 23679,
+      "sha256": "7819ff4bb7335c4b5dfccfa7c93a1955d6686e6abf072ce24ad5d1d62121d415"
+    },
+    "effectiveCache": [
+      "CMAKE_BUILD_TYPE:UNINITIALIZED=Release",
+      "CMAKE_CXX_FLAGS:STRING=/DWIN32 /D_WINDOWS /W3 /GR /EHsc",
+      "CMAKE_CXX_FLAGS_DEBUG:STRING=/MDd /Zi /Ob0 /Od /RTC1",
+      "CMAKE_CXX_FLAGS_MINSIZEREL:STRING=/MD /O1 /Ob1 /DNDEBUG",
+      "CMAKE_CXX_FLAGS_RELEASE:STRING=/MD /O2 /Ob2 /DNDEBUG",
+      "CMAKE_CXX_FLAGS_RELWITHDEBINFO:STRING=/MD /Zi /O2 /Ob1 /DNDEBUG",
+      "CMAKE_SYSTEM_VERSION:UNINITIALIZED=10.0.19041.0",
+      "JAVA_AWT_INCLUDE_PATH:PATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/include",
+      "JAVA_AWT_LIBRARY:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/lib/jawt.lib",
+      "JAVA_INCLUDE_PATH:PATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/include",
+      "JAVA_JVM_LIBRARY:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/lib/jvm.lib",
+      "Java_IDLJ_EXECUTABLE:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/8.0.504-1/x64/bin/idlj.exe",
+      "Java_JARSIGNER_EXECUTABLE:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/bin/jarsigner.exe",
+      "Java_JAR_EXECUTABLE:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/bin/jar.exe",
+      "Java_JAVAC_EXECUTABLE:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/bin/javac.exe",
+      "Java_JAVADOC_EXECUTABLE:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/bin/javadoc.exe",
+      "Java_JAVAH_EXECUTABLE:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/8.0.504-1/x64/bin/javah.exe",
+      "Java_JAVA_EXECUTABLE:FILEPATH=C:/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.12-101.0/x64/bin/java.exe",
+      "PORTABLE:STRING=ON",
+      "ROCKSDB_BUILD_SHARED:BOOL=OFF",
+      "ROCKSDB_INSTALL_ON_WINDOWS:BOOL=OFF",
+      "ROCKSDB_SKIP_THIRDPARTY:BOOL=ON",
+      "WITH_ALL_TESTS:BOOL=ON",
+      "WITH_ASAN:BOOL=OFF",
+      "WITH_BENCHMARK:BOOL=OFF",
+      "WITH_BENCHMARK_TOOLS:BOOL=OFF",
+      "WITH_CORE_TOOLS:BOOL=OFF",
+      "WITH_DYNAMIC_EXTENSION:BOOL=OFF",
+      "WITH_EXAMPLES:BOOL=OFF",
+      "WITH_FALLOCATE:BOOL=ON",
+      "WITH_GFLAGS:BOOL=OFF",
+      "WITH_IOSTATS_CONTEXT:BOOL=ON",
+      "WITH_JEMALLOC:BOOL=OFF",
+      "WITH_JNI:BOOL=ON",
+      "WITH_LIBURING:BOOL=OFF",
+      "WITH_MD_LIBRARY:BOOL=OFF",
+      "WITH_NUMA:BOOL=OFF",
+      "WITH_PERF_CONTEXT:BOOL=ON",
+      "WITH_RUNTIME_DEBUG:BOOL=ON",
+      "WITH_SNAPPY:BOOL=OFF",
+      "WITH_TBB:BOOL=OFF",
+      "WITH_TOOLS:BOOL=OFF",
+      "WITH_TRACE_TOOLS:BOOL=OFF",
+      "WITH_TSAN:BOOL=OFF",
+      "WITH_UBSAN:BOOL=OFF",
+      "WITH_XPRESS:BOOL=OFF",
+      "WITH_ZLIB:BOOL=OFF",
+      "WITH_ZSTD:BOOL=OFF",
+      "CMAKE_CXX_FLAGS-ADVANCED:INTERNAL=1",
+      "CMAKE_CXX_FLAGS_DEBUG-ADVANCED:INTERNAL=1",
+      "CMAKE_CXX_FLAGS_MINSIZEREL-ADVANCED:INTERNAL=1",
+      "CMAKE_CXX_FLAGS_RELEASE-ADVANCED:INTERNAL=1",
+      "CMAKE_CXX_FLAGS_RELWITHDEBINFO-ADVANCED:INTERNAL=1",
+      "CMAKE_GENERATOR:INTERNAL=Visual Studio 17 2022",
+      "CMAKE_GENERATOR_INSTANCE:INTERNAL=C:/Program Files/Microsoft Visual Studio/2022/Enterprise",
+      "CMAKE_GENERATOR_PLATFORM:INTERNAL=x64",
+      "CMAKE_GENERATOR_TOOLSET:INTERNAL=v143,version=14.44.35207",
+      "WITH_TESTS:INTERNAL=OFF"
+    ],
+    "buildVersionSource": "// Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.\r\n\r\n#include <memory>\r\n\r\n#include \"rocksdb/version.h\"\r\n#include \"rocksdb/utilities/object_registry.h\"\r\n#include \"util/string_util.h\"\r\n\r\n// The build script may replace these values with real values based\r\n// on whether or not GIT is available and the platform settings\r\nstatic const std::string rocksdb_build_git_sha  = \"rocksdb_build_git_sha:4b2122578e475cb88aef4dcf152cccd5dbf51060\";\r\nstatic const std::string rocksdb_build_git_tag = \"rocksdb_build_git_tag:\";\r\n#define HAS_GIT_CHANGES 0\r\n#if HAS_GIT_CHANGES == 0\r\n// If HAS_GIT_CHANGES is 0, the GIT date is used.\r\n// Use the time the branch/tag was last modified\r\nstatic const std::string rocksdb_build_date = \"rocksdb_build_date:2025-04-24 22:11:56\";\r\n#else\r\n// If HAS_GIT_CHANGES is > 0, the branch/tag has modifications.\r\n// Use the time the build was created.\r\nstatic const std::string rocksdb_build_date = \"rocksdb_build_date:2026-09-10 16:34:07\";\r\n#endif\r\n\r\nextern \"C\" {\r\n\r\n} // extern \"C\"\r\n\r\nstd::unordered_map<std::string, ROCKSDB_NAMESPACE::RegistrarFunc> ROCKSDB_NAMESPACE::ObjectRegistry::builtins_ = {\r\n  \r\n};\r\n\r\nnamespace ROCKSDB_NAMESPACE {\r\nstatic void AddProperty(std::unordered_map<std::string, std::string> *props, const std::string& name) {\r\n  size_t colon = name.find(\":\");\r\n  if (colon != std::string::npos && colon > 0 && colon < name.length() - 1) {\r\n    // If we found a \"@:\", then this property was a build-time substitution that failed.  Skip it\r\n    size_t at = name.find(\"@\", colon);\r\n    if (at != colon + 1) {\r\n      // Everything before the colon is the name, after is the value\r\n      (*props)[name.substr(0, colon)] = name.substr(colon + 1);\r\n    }\r\n  }\r\n}\r\n\r\nstatic std::unordered_map<std::string, std::string>* LoadPropertiesSet() {\r\n  auto * properties = new std::unordered_map<std::string, std::string>();\r\n  AddProperty(properties, rocksdb_build_git_sha);\r\n  AddProperty(properties, rocksdb_build_git_tag);\r\n  AddProperty(properties, rocksdb_build_date);\r\n  return properties;\r\n}\r\n\r\nconst std::unordered_map<std::string, std::string>& GetRocksBuildProperties() {\r\n  static std::unique_ptr<std::unordered_map<std::string, std::string>> props(LoadPropertiesSet());\r\n  return *props;\r\n}\r\n\r\nstd::string GetRocksVersionAsString(bool with_patch) {\r\n  std::string version = std::to_string(ROCKSDB_MAJOR) + \".\" + std::to_string(ROCKSDB_MINOR);\r\n  if (with_patch) {\r\n    return version + \".\" + std::to_string(ROCKSDB_PATCH);\r\n  } else {\r\n    return version;\r\n }\r\n}\r\n\r\nstd::string GetRocksBuildInfoAsString(const std::string& program, bool verbose) {\r\n  std::string info = program + \" (RocksDB) \" + GetRocksVersionAsString(true);\r\n  if (verbose) {\r\n    for (const auto& it : GetRocksBuildProperties()) {\r\n      info.append(\"\\n    \");\r\n      info.append(it.first);\r\n      info.append(\": \");\r\n      info.append(it.second);\r\n    }\r\n  }\r\n  return info;\r\n}\r\n} // namespace ROCKSDB_NAMESPACE\r\n",
+    "dll": {
+      "name": "librocksdbjni-win64.dll",
+      "bytes": 8998912,
+      "sha256": "a05f9ba907daf041a5ac9eaec7f241fe012b1aef4b1b844bb1696d392229c5de"
+    },
+    "jar": {
+      "name": "rocksdbjni-10.2.1-win64.jar",
+      "bytes": 3991103,
+      "sha256": "d04301aa65fb5830d459089b19c492727798b9a84c8d745173eb77cf0e19f2ee"
+    },
+    "freeAfter": 157037887488,
+    "scratchFiles": 3474,
+    "scratchBytes": 780378258.0,
+    "elapsedMs": 1019452
+  },
+  "staticInspection": {
+    "status": "static-inspection-only-unadopted",
+    "nativeCodeExecuted": false,
+    "stockClassCount": 253,
+    "builtClassCount": 258,
+    "stockNativeCount": 1519,
+    "builtNativeCount": 1531,
+    "nativeDeclarationsEqual": false,
+    "missingStock": [
+      {
+        "className": "org/rocksdb/DBOptions",
+        "method": "setFailIfOptionsFileError",
+        "descriptor": "(JZ)V",
+        "static": true
+      },
+      {
+        "className": "org/rocksdb/DBOptions",
+        "method": "failIfOptionsFileError",
+        "descriptor": "(J)Z",
+        "static": true
+      },
+      {
+        "className": "org/rocksdb/LiveFileMetaData",
+        "method": "newLiveFileMetaDataHandle",
+        "descriptor": "([BIILjava/lang/String;Ljava/lang/String;JJJ[BI[BIJZJJ)J",
+        "static": false
+      },
+      {
+        "className": "org/rocksdb/Options",
+        "method": "setFailIfOptionsFileError",
+        "descriptor": "(JZ)V",
+        "static": true
+      },
+      {
+        "className": "org/rocksdb/Options",
+        "method": "failIfOptionsFileError",
+        "descriptor": "(J)Z",
+        "static": true
+      },
+      {
+        "className": "org/rocksdb/RocksEnv",
+        "method": "disposeInternalJni",
+        "descriptor": "(J)V",
+        "static": true
+      },
+      {
+        "className": "org/rocksdb/WBWIRocksIterator",
+        "method": "refresh0Jni",
+        "descriptor": "(J)V",
+        "static": true
+      }
+    ],
+    "missingBuilt": [
+      {
+        "className": "org/rocksdb/DBOptions",
+        "method": "setFailIfOptionsFileError",
+        "descriptor": "(JZ)V",
+        "static": true
+      },
+      {
+        "className": "org/rocksdb/DBOptions",
+        "method": "failIfOptionsFileError",
+        "descriptor": "(J)Z",
+        "static": true
+      },
+      {
+        "className": "org/rocksdb/LiveFileMetaData",
+        "method": "newLiveFileMetaDataHandle",
+        "descriptor": "([BIILjava/lang/String;Ljava/lang/String;JJJ[BI[BIJZJJ)J",
+        "static": false
+      },
+      {
+        "className": "org/rocksdb/Options",
+        "method": "setFailIfOptionsFileError",
+        "descriptor": "(JZ)V",
+        "static": true
+      },
+      {
+        "className": "org/rocksdb/Options",
+        "method": "failIfOptionsFileError",
+        "descriptor": "(J)Z",
+        "static": true
+      },
+      {
+        "className": "org/rocksdb/RocksEnv",
+        "method": "disposeInternalJni",
+        "descriptor": "(J)V",
+        "static": true
+      },
+      {
+        "className": "org/rocksdb/WBWIRocksIterator",
+        "method": "refresh0Jni",
+        "descriptor": "(J)V",
+        "static": true
+      }
+    ],
+    "stockOnlyClasses": [
+      "org/rocksdb/MutableColumnFamilyOptions$1.class",
+      "org/rocksdb/MutableDBOptions$1.class",
+      "org/rocksdb/OptionString$1.class",
+      "org/rocksdb/Transaction$1.class",
+      "org/rocksdb/TransactionDB$1.class",
+      "org/rocksdb/WBWIRocksIterator$1.class"
+    ],
+    "builtOnlyClasses": [
+      "org/rocksdb/NativeComparatorWrapperTest$NativeStringComparatorWrapper.class",
+      "org/rocksdb/NativeComparatorWrapperTest.class",
+      "org/rocksdb/RocksDBExceptionTest.class",
+      "org/rocksdb/RocksNativeLibraryResource.class",
+      "org/rocksdb/WriteBatchTest.class",
+      "org/rocksdb/WriteBatchTestInternalHelper.class",
+      "org/rocksdb/test/TestableEventListener.class",
+      "org/rocksdb/util/CapturingWriteBatchHandler$Action.class",
+      "org/rocksdb/util/CapturingWriteBatchHandler$Event.class",
+      "org/rocksdb/util/CapturingWriteBatchHandler.class",
+      "org/rocksdb/util/WriteBatchGetter.class"
+    ],
+    "headerCount": 96,
+    "headerBytes": 373675,
+    "builtDllMatchesStandalone": true,
+    "exportReportMatchesPe": true,
+    "wbwiHeader": "/* DO NOT EDIT THIS FILE - it is machine generated */\n#include <jni.h>\n/* Header for class org_rocksdb_WBWIRocksIterator */\n\n#ifndef _Included_org_rocksdb_WBWIRocksIterator\n#define _Included_org_rocksdb_WBWIRocksIterator\n#ifdef __cplusplus\nextern \"C\" {\n#endif\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    refresh1\n * Signature: (JJ)V\n */\nJNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_refresh1\n  (JNIEnv *, jobject, jlong, jlong);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    disposeInternalJni\n * Signature: (J)V\n */\nJNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_disposeInternalJni\n  (JNIEnv *, jclass, jlong);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    isValid0Jni\n * Signature: (J)Z\n */\nJNIEXPORT jboolean JNICALL Java_org_rocksdb_WBWIRocksIterator_isValid0Jni\n  (JNIEnv *, jclass, jlong);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    seekToFirst0Jni\n * Signature: (J)V\n */\nJNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_seekToFirst0Jni\n  (JNIEnv *, jclass, jlong);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    seekToLast0Jni\n * Signature: (J)V\n */\nJNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_seekToLast0Jni\n  (JNIEnv *, jclass, jlong);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    next0Jni\n * Signature: (J)V\n */\nJNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_next0Jni\n  (JNIEnv *, jclass, jlong);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    prev0Jni\n * Signature: (J)V\n */\nJNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_prev0Jni\n  (JNIEnv *, jclass, jlong);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    refresh0Jni\n * Signature: (J)V\n */\nJNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_refresh0Jni\n  (JNIEnv *, jclass, jlong);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    seek0Jni\n * Signature: (J[BI)V\n */\nJNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_seek0Jni\n  (JNIEnv *, jclass, jlong, jbyteArray, jint);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    seekForPrev0Jni\n * Signature: (J[BI)V\n */\nJNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_seekForPrev0Jni\n  (JNIEnv *, jclass, jlong, jbyteArray, jint);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    status0Jni\n * Signature: (J)V\n */\nJNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_status0Jni\n  (JNIEnv *, jclass, jlong);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    seekDirect0Jni\n * Signature: (JLjava/nio/ByteBuffer;II)V\n */\nJNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_seekDirect0Jni\n  (JNIEnv *, jclass, jlong, jobject, jint, jint);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    seekForPrevDirect0Jni\n * Signature: (JLjava/nio/ByteBuffer;II)V\n */\nJNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_seekForPrevDirect0Jni\n  (JNIEnv *, jclass, jlong, jobject, jint, jint);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    seekByteArray0Jni\n * Signature: (J[BII)V\n */\nJNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_seekByteArray0Jni\n  (JNIEnv *, jclass, jlong, jbyteArray, jint, jint);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    seekForPrevByteArray0Jni\n * Signature: (J[BII)V\n */\nJNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_seekForPrevByteArray0Jni\n  (JNIEnv *, jclass, jlong, jbyteArray, jint, jint);\n\n/*\n * Class:     org_rocksdb_WBWIRocksIterator\n * Method:    entry1\n * Signature: (J)[J\n */\nJNIEXPORT jlongArray JNICALL Java_org_rocksdb_WBWIRocksIterator_entry1\n  (JNIEnv *, jclass, jlong);\n\n#ifdef __cplusplus\n}\n#endif\n#endif\n",
+    "builtClasses": [
+      {
+        "name": "org/rocksdb/AbstractCompactionFilter$Context.class",
+        "sha256": "e4badff8722f82c7a4c2ee559a9151b593a908cbbdba147336defa35e974de17",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractCompactionFilter.class",
+        "sha256": "9ecb29cb4d1cd1b146d6581dd0ec4a54d88497148088c374ace44fba7dabc256",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractCompactionFilterFactory.class",
+        "sha256": "d86ac2e53083297d9255307863c6f11929f2c5d3fcc2157672b5dc72a5013cab",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractComparator.class",
+        "sha256": "d95d73e81508dd741bc18cc1a15a847fdd1b5631b33ac26f7b085bcbd841cebb",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractComparatorJniBridge.class",
+        "sha256": "4f9ffdae3354c30451e0f3352781bda49a480bacdc2c95c956a0422572269548",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractEventListener$EnabledEventCallback.class",
+        "sha256": "481214409b041600c9e9d409f22761bb39cd8f4861cb8d08b61e83fbad243ec5",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractEventListener.class",
+        "sha256": "3e77e74396f44ce8fca6b6f67bb66ad4f5c86d8583aef90e3b5eb92db3dc5632",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractImmutableNativeReference.class",
+        "sha256": "64d5e967c307271064b3b28778f55306401e9360eead2ab23480ba4d537ef774",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractMutableOptions$1.class",
+        "sha256": "605815c4b406b584f7cdd82afb03945498a437c398d67e9283fb9434d5e849db",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractMutableOptions$AbstractMutableOptionsBuilder.class",
+        "sha256": "e713f8bfeab2d5f6ead4771d0cd3ba57f73b9d9acec444268c2f59e62407c057",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractMutableOptions.class",
+        "sha256": "6ff020177443ac2289e6819957eb4a3ef5a827e08ab7acf014b6210569594597",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractNativeReference.class",
+        "sha256": "82ccf2c8e8554809f8f5981dcc265b31d1a296791d98956b56b67080e7f066f0",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractRocksIterator.class",
+        "sha256": "12ffbb152b6e14290079e3fdf58e57bd8dce9617fe9356c6c46e615147d03832",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractSlice.class",
+        "sha256": "cf1cd5ef695d2b6f53c2c9d8fad207bb9e22a0cbe9fcc47b65f816a929aa8a99",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractTableFilter.class",
+        "sha256": "78d6c54b46b331857b9af79280e2cf1b6ac536457bb401b9e4a6058daf548064",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractTraceWriter.class",
+        "sha256": "6deaec4721755ac74db726c5b167d5a216627c69915fcd1eb55b976a15b4b504",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractTransactionNotifier.class",
+        "sha256": "1aa7d4b875504c733da72dc2bd0b2178f46b98d48071ee9bc8fe807653ccb99a",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractWalFilter.class",
+        "sha256": "2034a48f5fc20920808f3ba56e0a7fe32903920d6b2d6f1fcc448930502d8740",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AbstractWriteBatch.class",
+        "sha256": "98fa096d8b0c41b5c7fbb43a7ba4325ff9ac323f5f73e0c7a11506eaf25802db",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AdvancedColumnFamilyOptionsInterface.class",
+        "sha256": "5ac6f15db9210c001235c79ad646ed842fefc9b030f32a96b6720d851cdff0a6",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/AdvancedMutableColumnFamilyOptionsInterface.class",
+        "sha256": "936bdefeda94679d917da34227165f35a796a1d65a3e45dae9358e74487806b0",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/BackgroundErrorReason.class",
+        "sha256": "05a33cd2df0ec2b5a4694483d98e0748af1cfbada7e973a4d5f4015768b3bb79",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/BackupEngine.class",
+        "sha256": "2754f9f866fea543f67ee574f33f535b8073917936552bc89cd9d82418a6ceb4",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/BackupEngineOptions.class",
+        "sha256": "de33718df6281ed7cade2db858685d7549801e19741110b48add23d413921006",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/BackupInfo.class",
+        "sha256": "4b9b840da12bb9e08f37589f7ac1c11ceefe3c90148f2e96f6cf5f98210d67b3",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/BlockBasedTableConfig.class",
+        "sha256": "6284bd71a350ad3d83dcd023c01501e74a87b099bde345611bd717d1f97eae16",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/BloomFilter.class",
+        "sha256": "6150b7c47cb18604208c96686e06155014ce289c7e854f41ecac7923afba9866",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/BuiltinComparator.class",
+        "sha256": "2c21b673fa5977e1cfdf30c6169976d94c908481996df94c58f196f01412f40b",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ByteBufferGetStatus.class",
+        "sha256": "7a6f9911691633548a5c99c61dc42c8d2a48f3f7db5f12e5af52c594e06b3bf8",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Cache.class",
+        "sha256": "92d4a86b9d0e3dad9fa7b7b3325ff230ec8fd5cfa54900fa6438e563e255f817",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CassandraCompactionFilter.class",
+        "sha256": "5511f5064a16274d1a76971b025a3367e424ddbf5a827af3787f930d0127f727",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CassandraValueMergeOperator.class",
+        "sha256": "79f023c8864b29bbeb05155e86b2abcc6d8537da9cce172b92c5d42f229552bb",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Checkpoint.class",
+        "sha256": "c4274362d44eaf6b16bfdbd3eca08b1412058e950df82cd93e0d287ce3899930",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ChecksumType.class",
+        "sha256": "5d05436801dab962066b5a300e926d2804ace32b8bccd2890d65a34c93b9a03a",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ClockCache.class",
+        "sha256": "53631af6c0912da320269f36dcc8057222763d21eb5cef87fa6cfadb028d258a",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ColumnFamilyDescriptor.class",
+        "sha256": "2e303f64680ca5315dce0b65980e2f31848bd1ee88cff6388bbde467bf8767f7",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ColumnFamilyHandle.class",
+        "sha256": "03339d8f3cc0041b6f8a1293299a1e4f69f867909a2b358ac3838591374d9480",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ColumnFamilyMetaData.class",
+        "sha256": "6344de770649e40d7f73c872c31d67bb40c5df6969563838354e26f9ad2d37d8",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ColumnFamilyOptions.class",
+        "sha256": "2c0870dc5725d69db5abd7ee4a667e2adc7e5410618e544112366701f83dc5ea",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ColumnFamilyOptionsInterface.class",
+        "sha256": "d05919465fef521657fbd4e8186e3c259e39d72c073a40cb7a6b9ddd9243ca59",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CompactRangeOptions$BottommostLevelCompaction.class",
+        "sha256": "155d4cdab420d191793b638e5eff175cf4403dd6057dad1a45a7f63ea40a9d9a",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CompactRangeOptions$Timestamp.class",
+        "sha256": "dd17e0d3b8d65dc3f986a76ef69caa181d317f98c3178d64d823a2b49c91544d",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CompactRangeOptions.class",
+        "sha256": "9cb2017498b9eedf112b661aefa3823b22cb766f3fbbbe4b2569decb03682405",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CompactionJobInfo.class",
+        "sha256": "50c3e6d12a2831671ff0ed87811548ed9934ec6518799bce13ae840e01dc7470",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CompactionJobStats.class",
+        "sha256": "f9247174c31a399a91008c764c30de02be698f9c3b62b68039b257ecdd6c57db",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CompactionOptions.class",
+        "sha256": "44b632f593a5b8f3f4b0845924f19a6e9f46fd2fabd409215d8c708f13d88cd4",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CompactionOptionsFIFO.class",
+        "sha256": "51a0b26cd99d4cc7795452bccd0d99a2aa639f2aa78ce351e3d625bffe1264eb",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CompactionOptionsUniversal.class",
+        "sha256": "71e60e989fcbe70c5144df7946e54fcd4516ab47e1b38f441f124b2bed97a54a",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CompactionPriority.class",
+        "sha256": "9bc5e50509be4fcd2feb9f02e62d98c1c2794fc007c723255c95607bf44ac709",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CompactionReason.class",
+        "sha256": "61c9ae8c3f6956c245cae247c145813c0f7e3c4170c5bb6849e72d76b0343572",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CompactionStopStyle.class",
+        "sha256": "7c1308cef9fdb77eb8f8f3060dc17b8ba1e24991b44124590b2e69404bd6d7c6",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CompactionStyle.class",
+        "sha256": "dafb169302c809cf35fcebebc6afe3a2f4661aedf79a7b25e27e81df6901ce42",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ComparatorOptions.class",
+        "sha256": "f626c43da8749f26a181583c1fddf503f6d9840460451099bed4cafbb24cc4aa",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ComparatorType.class",
+        "sha256": "1aee915f79167930ba5125682b4458fbfcd9ed99c75a137f511f9fcd8b027915",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CompressionOptions.class",
+        "sha256": "1eaaa64ec475a4f00f659e07a8458f4803013ddd3fa7c64b29c1a95f0df76342",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/CompressionType.class",
+        "sha256": "cecf66f459f6a6d7433eacae98071c0dadd01f380456b64314bb343e1dc6ef5c",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ConcurrentTaskLimiter.class",
+        "sha256": "185008881a801fcb239daa47f2b1a65a6b2100d282c738900a9c34bf8fc55654",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ConcurrentTaskLimiterImpl.class",
+        "sha256": "3102f635c023be2fb509bd5797c7db802781081566958326bb5af5306fb9ed3c",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ConfigOptions.class",
+        "sha256": "a98b8341e37df50fff6d48ad3a03fbcc394bf46d1e7d50732419e633603d2f23",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/DBOptions.class",
+        "sha256": "646ac1320630fadf80c15e520d12994e6324075d220abc7d6167f684b0d82e86",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/DBOptionsInterface.class",
+        "sha256": "ed1d50b71d26d12726617b7572156293bf9037aff9e4cdf05f573bb4df75fece",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/DataBlockIndexType.class",
+        "sha256": "0ba605989b5837844802bd12e2341dc4b4e0b7f2557990d113b42d45d97a3d9d",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/DbPath.class",
+        "sha256": "bac43ffdcb2ca95f44bcd701b3c21a8e4abdcc1a636df3e28a4100480a6c7089",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/DirectSlice.class",
+        "sha256": "7318b717e1a6999c8aef0116e644e9a1bae9921333b71b0555b76ebd614a070e",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/EncodingType.class",
+        "sha256": "0f38c90de6192b641b839b6bb17a938b7dc45505181153eadaf254408f1e73ea",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Env.class",
+        "sha256": "570a2bb64ea46989c1fb0b23550a6df902b06c2cc4f63f68dad85b83f62ba9eb",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/EnvOptions.class",
+        "sha256": "a948044a914a5449eb0f5bdb3745db74d33fa850785909d3fa18c4d678109f20",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/EventListener.class",
+        "sha256": "5dc2bb8aaecb70b342206e486047754de5f66a1e91e1ad28abce8ba0b2bde850",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Experimental.class",
+        "sha256": "66cadfdd069a853a2801956977f7ea99e4946fa5dfb111f8d9d6a2874e2bc44b",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ExportImportFilesMetaData.class",
+        "sha256": "0d8d8c29ead8e79b10bf15a1baed51152f4f0fd6b29c84d95e98b76efdc1f0de",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ExternalFileIngestionInfo.class",
+        "sha256": "69e7f94214208c3c40f5fe3b6e2f1c15a779ccd0031a9d9528509f767eac491a",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/FileOperationInfo.class",
+        "sha256": "355e408447413994afffad573066a8f3781c3f23598a2acfae7cdbe9b8069b07",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Filter.class",
+        "sha256": "60e8701dc3f94dfe633c86729a818d0f4349dabfa9095060a77fac56b03b7cd3",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/FilterPolicyType.class",
+        "sha256": "56bf99618eabbc807c7035818ee4a8beb8fde20b0e0a63bcd4a7053ac32d7e47",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/FlushJobInfo.class",
+        "sha256": "33e4d6782e5fb238b04b27a944eedf8a7d4fa3b24c00961c8f97d89221dd5c42",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/FlushOptions.class",
+        "sha256": "7eb9f7b8da06eb477a5ce1cda66f95aa58b7d17dcadb953914e09a2f924c5c62",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/FlushReason.class",
+        "sha256": "48302c9a4662fda971bba9b2d36a7dd8e45d1375db8c8f3e2dbd76be4b184578",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/GetStatus.class",
+        "sha256": "198b928216a69753c53f24509c2328cf9310aded546ded95b1c6aca2b78fefc4",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/HashLinkedListMemTableConfig.class",
+        "sha256": "057aedf257ec4f7898eed4b28c3e421daeb36f259a46abce8a1cfe30f24937c3",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/HashSkipListMemTableConfig.class",
+        "sha256": "d833d66ed74d374ae56d25f97e7dfad9fc0498aa068ea64080485fbec96e92ce",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/HistogramData.class",
+        "sha256": "72797ee1b78368568344cb14a4e137458dbff1c20c608f6e65279c0e139a50b1",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/HistogramType.class",
+        "sha256": "1c8653bbf5f6934608f8f009a252fc434e36fc757daad9086f8e3a8ebd57c143",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Holder.class",
+        "sha256": "6d52ab5acf076a42f459288b595d99c84b1d441381a497c404510abe928221e5",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/HyperClockCache.class",
+        "sha256": "6899606bedc644b942c34c8b7a0a18444e82f0129a86fa7c9f9e7856326aee88",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ImportColumnFamilyOptions.class",
+        "sha256": "4fc45e19562bd6698503d59511107640b8753b2aacb597a0173d7ee5d31a134e",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/IndexShorteningMode.class",
+        "sha256": "a74c0f874c44591bfe2d1a5a3eb68896cf010d1807353ec115491c3d69670e78",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/IndexType.class",
+        "sha256": "7f6d77ef77a24eb3cc1ae66a7869e8fc786db49c03cf9a2a843560f2995dc304",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/InfoLogLevel.class",
+        "sha256": "d470828692798b8c192cf50fd8abcbe219208e055c3f1993379270709d2d0450",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/IngestExternalFileOptions.class",
+        "sha256": "7847e45f7536bc120aadcd2c2f24473c5eb19600a8609099b78cf78b15b90e78",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/KeyMayExist$KeyMayExistEnum.class",
+        "sha256": "5fec040cb8d623cf1bb841c08282239d8fa3a3df7de593ae9621cae2d945eb38",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/KeyMayExist.class",
+        "sha256": "5346590fe09754a01276011e19ab3da8cb5d77291d56a02fccda11b3f0813ab6",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/LRUCache.class",
+        "sha256": "1bffa1346bacd991f1ae30c370695724a00bb7023d3cc8dddba12331889ea5a0",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/LevelMetaData.class",
+        "sha256": "7e00d4d648ff83b5ccbc37e75a75459082ef1ad36807aba67918e973ff55e9f4",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/LiveFileMetaData.class",
+        "sha256": "856cf235b4d14d8fa6ea26b17bbc444eeb966447d7faf37585fe962ccb6d982e",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/LogFile.class",
+        "sha256": "8662d1695ceef36388652af1b7ac83ce7431f2995913da34a3e23766190c0878",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Logger.class",
+        "sha256": "007dfa94d8d92cc31c3d395fed7dfb6b66dbe255fe685ef4694aff08369291a7",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/LoggerInterface.class",
+        "sha256": "fb1317daa19b82743d6f05c3d697582f5220577571f83ff51049c2e0a8117f41",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/LoggerType.class",
+        "sha256": "ac05ae8bd71e51bb71b09d51719744a7354df411684b0761d7d7a90fee43e0b2",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MemTableConfig.class",
+        "sha256": "08841609009624342b996769c65114fab006f6eccf7df56ce37180b6b23160b3",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MemTableInfo.class",
+        "sha256": "c4ff73fc3df2213b3aebe792c99082e76f9e6bac4151e2a1ab294fb8f55057e9",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MemoryUsageType.class",
+        "sha256": "ae49bbb981df847105f4ea23e13470d1a717cc478d0a28858f7e35ae8d15ddd7",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MemoryUtil.class",
+        "sha256": "cd6ff3c2f558aabf77b6e9d17f91d16de57d381e5b2a8d651a1dbb52c3dce831",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MergeOperator.class",
+        "sha256": "ad1ff5ace08adca7260ff2dfa8e143f295399b77e2db1acac1237ee724122ed1",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableColumnFamilyOptions$BlobOption.class",
+        "sha256": "cbae3df985c088f4ed28755a90334de06d23eb64a6115ca6e9837aa49a0101a5",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableColumnFamilyOptions$CompactionOption.class",
+        "sha256": "5aec8950ad3e90972f90f4943602e5aea7b28d716e7a06a05fe31a7520c07c2f",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableColumnFamilyOptions$MemtableOption.class",
+        "sha256": "78af3515f6369ec589018f8d286674ea817c76f5dcf3c9da4e00de225c4617f4",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableColumnFamilyOptions$MiscOption.class",
+        "sha256": "ef6b7fad315105b689812a8dd53ae9534409bf87574a3d8b5c14493ff5446149",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableColumnFamilyOptions$MutableColumnFamilyOptionKey.class",
+        "sha256": "b816c7a4f50b4516545ffbf59569f2fdc4dc78eba2bb7a09e6fb40f4a5790f82",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableColumnFamilyOptions$MutableColumnFamilyOptionsBuilder.class",
+        "sha256": "7683430d4afadea2032cd2ecbf57b66a80f4d2cb8354a0688d52276309e9cd2c",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableColumnFamilyOptions.class",
+        "sha256": "701c722d27506b21ff8a7537926ad8c855362dfd7406e234b89ef8938e3ca9a4",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableColumnFamilyOptionsInterface.class",
+        "sha256": "21be3812e0b8cbb5da5b75d7aa5012429de16e71ed01653ec922e4983afeb4d4",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableDBOptions$DBOption.class",
+        "sha256": "6ab752fb234af17901ddeb89f2bc18b47ac8189617cc434d9ca90d83317ed8f5",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableDBOptions$MutableDBOptionKey.class",
+        "sha256": "6eb63b8029976981522e4e11e769ea0a553ec6c4ee1cbae3228f8986ae2a6411",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableDBOptions$MutableDBOptionsBuilder.class",
+        "sha256": "3e3c1cac0b5eda7db5df6aa42326a333893c01332e334d26c8988aea7cfa48a5",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableDBOptions.class",
+        "sha256": "dfe1f19cd30761f10a367bb1a382ec20499cfeb98e299dd31f15401a29caabdd",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableDBOptionsInterface.class",
+        "sha256": "ea8c5c74c7b1930d100a725eb6d35e5e18b57846c5cfe62d0430eae06b3cf952",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableOptionKey$ValueType.class",
+        "sha256": "efad9fce19bd2dcf08e5420e3248aed437f2fa6641a257dcee35975615c87f79",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableOptionKey.class",
+        "sha256": "cfaabfdce0b09ff616fbfc646b1440e068768dd45847052c72d545d9df4f2eed",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableOptionValue$MutableOptionBooleanValue.class",
+        "sha256": "cd01d9a3f8dbe30a2d2be00dd32a6456da3f25aa6b8d3bbd4e8bfce44cc2d56d",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableOptionValue$MutableOptionDoubleValue.class",
+        "sha256": "4ea590b6bc1d4a547e89edcfa5087cf30d8c7147a4ad36fa18f8ab5c44819e73",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableOptionValue$MutableOptionEnumValue.class",
+        "sha256": "1d08ceb1f7f7b753007cfa49eda7f4ca70478f1db9d30a55468400d70a870621",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableOptionValue$MutableOptionIntArrayValue.class",
+        "sha256": "38e82b6e417b6c7500add8699106c8f51b3db253da352bdd26c286c1c50576ae",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableOptionValue$MutableOptionIntValue.class",
+        "sha256": "ff612d0296049e4ee6dad65aaa86f1e2794e9b7479dd35e29e9e3e8274c1ef39",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableOptionValue$MutableOptionLongValue.class",
+        "sha256": "f22599e00fd83a1de91a828109655fedbcb4bcd58a1ccb1bd6b2455965294f8b",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableOptionValue$MutableOptionStringValue.class",
+        "sha256": "19be1356e4b6aa00a316b46a5eddb4400ac7fdcb2e2b27a7cfe1deb3b71bc165",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableOptionValue$MutableOptionValueObject.class",
+        "sha256": "b6596b241f464f284825c9c102ae919186a74c1f30e1f77ed26514c418eec9ca",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/MutableOptionValue.class",
+        "sha256": "67f0625944b0674f6bf6f937119d1c67a1e691039991ddbe09d9a3962cfa5a89",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/NativeComparatorWrapper.class",
+        "sha256": "47b05347e4571c4a8c47b378938b04910b4e4d940291457e10dedea5f78081f2",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/NativeComparatorWrapperTest$NativeStringComparatorWrapper.class",
+        "sha256": "3a7d135fb46f8d1af17bc73926c8b77756ea48a60d750f35616d4156b7c04166",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/NativeComparatorWrapperTest.class",
+        "sha256": "c4c309dc5c0ac25b30f8e5f47f3bc0b07a872af8a4b72a5d2f29315c06a867de",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/NativeLibraryLoader.class",
+        "sha256": "e2576edfb20c749c0b795127595e4223465c4d2f842209f7f832561c92c642a5",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/OperationStage.class",
+        "sha256": "d01418ad39b81a62b976398f3a4d30f43ea6973687fa37d6b9025008cf88dd5b",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/OperationType.class",
+        "sha256": "cccf32b5efa451c59a4cce8f6a9ff9f0e49242b86256da54d4b63742c6d3d079",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/OptimisticTransactionDB.class",
+        "sha256": "896ef461f4eea6cfe2f403e4660b6f3277b79143266a79c877c745e1b62ecfd3",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/OptimisticTransactionOptions.class",
+        "sha256": "5db3d3fbe9f84761beb8201f26732d40a0ee6ae8cb04843d32e1e8cc4cc9f5db",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/OptionString$Entry.class",
+        "sha256": "089baf4ed48727de93dfb4cc2024e59e269d06a2908aa5bf56dbc12c7e4fee6a",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/OptionString$Parser$Exception.class",
+        "sha256": "9df68cf6e99f10cda47919ecd48e6efa0a313ee1808a796f0c347ccf21ea6dbb",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/OptionString$Parser.class",
+        "sha256": "7b387a50341c39deacfe55490425cb3f5a9ce3eed25d7b336798816be3895cba",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/OptionString$Value.class",
+        "sha256": "eee4f675ea140c563503490fde58cfa7a890e03d22f2933fbc427c53dd1e0117",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/OptionString.class",
+        "sha256": "d700c9aa24128fb2d82d7f34a6b4787b2c4191809497b30313b4408c5743c480",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Options.class",
+        "sha256": "5e6837b2462a1b23220c82b4b215ca5ea985eb42dc7c64646449d4dacb1cb883",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/OptionsUtil.class",
+        "sha256": "04ecff39e399f0417aba9547fcfcb1614914c9371771107c6167a6ad47f75709",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/PerfContext.class",
+        "sha256": "90fb7d3c0c6f572af26e116f49b218775557b14668de8f0ee3abc470f37a7800",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/PerfLevel.class",
+        "sha256": "65ceeb315810f33c1910ac277597540be8e4ba63b70e767feaf4a76dd5260fec",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/PersistentCache.class",
+        "sha256": "d5a1cead9b8f570d0f08fc91e271494d45f0e973c37e6ddd3453200753e64bf0",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/PlainTableConfig.class",
+        "sha256": "9620840b586f6c901f1bbf07c16c267ea9ed9eced03ea0b76d2ea5287ec095ac",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/PrepopulateBlobCache.class",
+        "sha256": "c3a2e897c21d0a053e65ffe6b126196fa56ad8119baf549f4f95dbf21a718c14",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Priority.class",
+        "sha256": "3d4947c88b2f969f9fd2ed4ed11eaf63c39a6619a43d3ddcd51369c61959f11b",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Range.class",
+        "sha256": "bddbb1dcd39f4d3ed78d5409011bdba6a03f2af6837ea1689f6f6f5c872e09f5",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RateLimiter.class",
+        "sha256": "4382f91374d13bec00f0da7445a7ca067b80960fd716c71e78cfcf37de539c5e",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RateLimiterMode.class",
+        "sha256": "aa27d53b0dc6b1dcff4bd9e6a47f078faf4b42d99578aa8b380cbd34519eef6f",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ReadOptions.class",
+        "sha256": "0105e685c86a210d768dd688a8f470ac6183d22112857993e15033ae530ba7b9",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ReadTier.class",
+        "sha256": "c8cb512b79987442e53734645e7a86812597a21b4cbdc63870797f2551f1630c",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RemoveEmptyValueCompactionFilter.class",
+        "sha256": "b3c2c5d348dbb0ae6fd4241ce1120d0ebeb2d4330e1a190feb24b62882f5d503",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RestoreOptions.class",
+        "sha256": "0bf4769f185a1a320fd946ab30715b59abee84ede8d67d9e6fd5fcbd0f707b1b",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ReusedSynchronisationType.class",
+        "sha256": "5f5f7fc974652fb409591a650fb7d35647cf9a4cac6570075e3bea5adf5c3b14",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksCallbackObject.class",
+        "sha256": "4dd9b5588e6842752f5169f44b7d5eda8d568524a3e7f6cedae79c4cc82e66f3",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksDB$CountAndSize.class",
+        "sha256": "619e772270f2eb0114ff80ff8de1f81914b0a4ca6b54b044ab2fc20c0ff8a333",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksDB$LibraryState.class",
+        "sha256": "67405d1240902d28eddf4c32d4592e269da68a0e3bb4723ca578592c3e66a6ad",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksDB$LiveFiles.class",
+        "sha256": "a3d7523489ffd3669f250c8c5f61ddcb2ba0ce35485c34336cdecc25826303fe",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksDB$Version.class",
+        "sha256": "a0b22583db6e82a28eec89e26b3672e67c65163febd7ef393e31e1b5dfd950ea",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksDB.class",
+        "sha256": "378822ffe3364b012b1373877177b962c4f523db788f22a299bc5ef9ac4fc869",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksDBException.class",
+        "sha256": "1d2eba5e3ae9c86f3339f84d36f7812c1a39bdfe94caa9794bdf74861fc54105",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksDBExceptionTest.class",
+        "sha256": "42b9904ec8fa7d5767133f128ce6a10a46ef55fe396232a8026cd7a081dc99f6",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksEnv.class",
+        "sha256": "54ff8cf047ca541b23712cd1e021e85e09f026d153d8d0e9833837d9bc537fcb",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksIterator.class",
+        "sha256": "03147dd3c03ca7248d9062b57f4e694c234635edf401416c5694202a8f0eb18f",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksIteratorInterface.class",
+        "sha256": "33992047910c965b6fb97bf65d932267b8cc052ab9390cd1c0618f0ace77a9ce",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksMemEnv.class",
+        "sha256": "e7009a86befe73f70dabf19c90f4f1625372b69b83b2a789a703ac0627e035d4",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksMutableObject.class",
+        "sha256": "c5eec79b1308c79aa9a59b471f9d6fcb3090167c757f6106b8147082cba7546f",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksNativeLibraryResource.class",
+        "sha256": "93f166ace988da25424769c56c9e564961e132d546af6c7a8c351730c6674325",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/RocksObject.class",
+        "sha256": "2254726a3865ca81035db22d7e98f75aebbeea087233a33d5cd9d7a3681f1d3b",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/SanityLevel.class",
+        "sha256": "9f9bdcc49248741e86de8b8ec71fa021c77916c0e27076a7e63fef1fe7ebd6b0",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/SizeApproximationFlag.class",
+        "sha256": "82a29349758f66d4a06655b3762d49681210d535d99ce7607283be11cd7776ff",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/SkipListMemTableConfig.class",
+        "sha256": "8c1f6b11149e62bccd1aab7461eb17a201dc3ab2524c90beec1bb8e4804778af",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Slice.class",
+        "sha256": "56c67cae014ed00eb4b411fa99bb6dae04ba70a607c60ca04b02fbdb60b833af",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Snapshot.class",
+        "sha256": "cd5194f950e38ab0aff8c90d9787b71194dc3f8e600b0fc9206b6a96992803c2",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/SstFileManager.class",
+        "sha256": "e7c83736c8c687b05aacb5447b1e14d87826204cda216217d2ef291e95bb8098",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/SstFileMetaData.class",
+        "sha256": "7aa19bc3ddce57bbae03c0b9b09c883433a703400adb902f6dc991a5ae319f18",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/SstFileReader.class",
+        "sha256": "4c717a577c538262ca304905921d4f594dd1058e61e37eb3ca22ec679c0dccf5",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/SstFileReaderIterator.class",
+        "sha256": "c6c74523a044ff29c898bb3d8f4c999a1489e43b90cb5cabb3e11cf14e9e5073",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/SstFileWriter.class",
+        "sha256": "9009be46ef9ac25773d1cedda2f3ad5bd4ac9b908dc075cad9dffe9383df750c",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/SstPartitionerFactory.class",
+        "sha256": "5e005573faef3a5ba362d815f439d379063053b561e7c9b4afcf2eb271bb6910",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/SstPartitionerFixedPrefixFactory.class",
+        "sha256": "e95486db1fe7b417d83eb9964f5b6d8f6b40098fa41d0f3e11ff0392396e3f80",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/StateType.class",
+        "sha256": "168fe54102862fe4f3a4f57a8b4c62ca25f099f37e9d650bdb8d86e7e39f65fe",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Statistics.class",
+        "sha256": "2c53d8fe1ffc407d1f391909e320e9d5cabb213164cdc880758f834a9493c6ee",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/StatisticsCollector.class",
+        "sha256": "2db92a50adb4f34901b09051ed76858d76915d4a30627ccc1177b6408af3531d",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/StatisticsCollectorCallback.class",
+        "sha256": "ca4e5a12a1b16a72829189e8d43c850626df572c3a90b737b7d386eed750972a",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/StatsCollectorInput.class",
+        "sha256": "f3bb9f8035d2066079895558c5a9456f54d381cb5a80e93a8c8d5bc6f78beb9c",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/StatsLevel.class",
+        "sha256": "f68d591e4731645e0de7472cd178b6e3f7f65d55820d217122ea4097591f8fc6",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Status$Code.class",
+        "sha256": "6fe589028ca78a7722e85a7d5ee7bd2accb289a80b663f7aac30fc89faf67bdf",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Status$SubCode.class",
+        "sha256": "c3f526d49d2f221476331d854be672490494eb69c30b7944221484fa851e92c1",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Status.class",
+        "sha256": "819ea85c47cfcc199a5b629496d39a3bd1c82211dc0d31471488e5fbb746afa9",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/StringAppendOperator.class",
+        "sha256": "8efd4c2eb62fbbcf820a11a2b55e53b3aed347b70b13989b9483bfa2d6bf04fb",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TableFileCreationBriefInfo.class",
+        "sha256": "3d076bb4cde2bbab881130854d30578e73caaee99403e369b193bcbf35f5ddd6",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TableFileCreationInfo.class",
+        "sha256": "3519683b815ff8e709a3b4ec78e0349141e1fcc584695414dfdbd5b0a372bbdd",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TableFileCreationReason.class",
+        "sha256": "355e275514cbe992763693ec940ab18bbbe58c5769fec1f51348cae2f62d1afa",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TableFileDeletionInfo.class",
+        "sha256": "d7caf1221e612517f0555fcb66603cb83a6270dcb2f44f1aad242aac212dc003",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TableFilter.class",
+        "sha256": "352294f5f28bfeacdf09bfa99a2701c09f75dd6d4b5bc4b825756f7e4ff168a2",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TableFormatConfig.class",
+        "sha256": "090053f2834c421a9f15f5367f942fafa1d92ae14f0bff5368ce1ec515cd7ef5",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TableProperties.class",
+        "sha256": "c405bc26bd98112d5eef46fd35d15a2ad2c82ac1c6d5ff80a5b9c800ae312520",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TablePropertiesCollectorFactory$1.class",
+        "sha256": "26323cae9ae8d128205724863cd6b9081a583adcab399a6a2de1831b981765a9",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TablePropertiesCollectorFactory$2.class",
+        "sha256": "dbbc7c2e9c4a73114386b7d73d3f42589d105f3f1da4a5333d1771a3046fa70f",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TablePropertiesCollectorFactory.class",
+        "sha256": "30cf104312f3145fa3aed26c59d853fe772f9a42eba3ca33acecdaa361145ee3",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ThreadStatus.class",
+        "sha256": "264de6c7f52c036301118367a6587c2c4a2bb9bc2ceaffd98541271a201f5ce3",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/ThreadType.class",
+        "sha256": "6ecbc4d6931911a8396981768ae179efd93f5091b332a05a3b0a65434e2e1a56",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TickerType.class",
+        "sha256": "be96230adeac965c0ae7b6e3e9499e81e89f5c3acaede169f25acbecb31f824c",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TimedEnv.class",
+        "sha256": "a4ede376e9aa9f898ff150c7728ba8ecb5c1c48d62a60eba9514cffde8d03274",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TraceOptions.class",
+        "sha256": "a43c0848f59aed9a1d1241508ee6a99ec08f8f99493218c97443273cb1072f9e",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TraceWriter.class",
+        "sha256": "10729d55b69d76b371256472a5ec2a3c94f6d03d7aa7d73d9b8b1488f44ce272",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Transaction$TransactionState.class",
+        "sha256": "087819fc51b68650c2c5340b75f91672efe86cf867e7daedae59674599999ce1",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Transaction$WaitingTransactions.class",
+        "sha256": "e83cb328cf50fde7adf80921b0b5de0611336de181dedb11e5026deec1ee93f4",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/Transaction.class",
+        "sha256": "fd251830e2c1849dc5c49bd00abc6f126fb24974487a47cea2c7f94fe574f68d",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TransactionDB$DeadlockInfo.class",
+        "sha256": "5fa0f944b92c7982b26f5f30370e4b3248c03884093487c40d106c25803706dd",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TransactionDB$DeadlockPath.class",
+        "sha256": "9cfecb47256ca73e591e438661488546cce715757048704b12dafd24878e3994",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TransactionDB$KeyLockInfo.class",
+        "sha256": "6e0139628cfb3bf4ec0b53d545d96a43e0566843e9552b7428efd0d78b8b8528",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TransactionDB.class",
+        "sha256": "de163e34e77934fa8925ff01fc9aae7565fe06cdef43c8a52a49401547d261a7",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TransactionDBOptions.class",
+        "sha256": "f5bc6abc9905557ef127cadfb6a57450972c1f67204ce23f74429b89d46d276c",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TransactionLogIterator$BatchResult.class",
+        "sha256": "fcf744140b3b2d702ded147e474a0b41e7596c301201e42ddd63d57eab77bea2",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TransactionLogIterator.class",
+        "sha256": "6e96a83c8858d71718e1c7852107c5f80dfba94238c915f50d87c6ca52db9eb7",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TransactionOptions.class",
+        "sha256": "73c4d5876cec23998c33b6af49ca12b2e5f731251c455956d9415438c6d5fb09",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TransactionalDB.class",
+        "sha256": "8c9b83f9ebf4b9573129863cfc452e73cb620b02dc37c1a410e56d7f79a32f30",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TransactionalOptions.class",
+        "sha256": "310bd908a3d07caa606b0d2ce700e6cfab026030df006fad0e2129c960d775ed",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TtlDB.class",
+        "sha256": "6bc7d0a7bcc05038045478560b349c5ff4a797a17973719ce8cac3464da2960b",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/TxnDBWritePolicy.class",
+        "sha256": "bac8a08b778fe623c996c6efaac12ea13f2ad17394a8d29cb52d233bab68ce93",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/UInt64AddOperator.class",
+        "sha256": "7ab82b7549dff055b47aae571eeb7e0eeab830cfd4f23d1beb1127aba80b9921",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/VectorMemTableConfig.class",
+        "sha256": "0f03e72447e2c9eaac9c5ee955c3285cc30488a7cadd1c61441e187100bc5b2a",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WALRecoveryMode.class",
+        "sha256": "004cb1ea4d62c8288131d49deddcdf9bfcb30c6e5239024e9cda528af43d6eca",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WBWIRocksIterator$WriteEntry.class",
+        "sha256": "758d1e8331b50d48a36317e752dade7d9105dfa9a78e3d79eddf6084167871ce",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WBWIRocksIterator$WriteType.class",
+        "sha256": "4afb796da732be5df67a79f3c24080e3947b3117dbd5fb472f703a0919cae21f",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WBWIRocksIterator.class",
+        "sha256": "1bfd98f6205c82ffe1c8272f1e796f147601fcef7a7de6bbcf8727033431cf1f",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WalFileType.class",
+        "sha256": "6db694ae0890fbe3a49d370a7717f4b304c61d9fb430bd7cb872ef93e2b6622a",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WalFilter$LogRecordFoundResult.class",
+        "sha256": "32b4deeda0b1a3cb96397986c805ee703accfab358deffe1127ad71974194135",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WalFilter.class",
+        "sha256": "4344a7773409cdf6914056c8ce5bdc3ace9df320e95fa4782f044c05c1d135c7",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WalProcessingOption.class",
+        "sha256": "6b8bf6269660d5da4487494a64656a40bc9ed6969dc3e5db4d8630e7d5b4682b",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WriteBatch$Handler.class",
+        "sha256": "b4d5481142293338bbab37f752a32fc504fef66789943601c3f21c7278082c0c",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WriteBatch$SavePoint.class",
+        "sha256": "58dee58f370896ec247ec84b4a6836a5f155627c88f2ce053631979e9bddeb23",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WriteBatch.class",
+        "sha256": "b176936c3e23ea9fecb0da83b9350307eb7484b9bf598ca1652ada96bae85fbc",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WriteBatchInterface.class",
+        "sha256": "b221394b76783e7f11a482e7014482fb0fa79c7b669b191c0abdb11bd1801f81",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WriteBatchTest.class",
+        "sha256": "16b664a56bc65f1414e14e35eb2e2bd677783636ca3e39e60d2ce51fd6da3d51",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WriteBatchTestInternalHelper.class",
+        "sha256": "dc8d2dcfcca3783a8a2d7992794457c134c9dd070166456897c285427f7894ac",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WriteBatchWithIndex.class",
+        "sha256": "6ace2b947d5c4a1bf99c6154faa76d9438b6b6ee4e348f933753e564d61bee2f",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WriteBufferManager.class",
+        "sha256": "c67188966de5dfa8773648a0e8cdb980072db7f785d28cdd43a01c8a141e6309",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WriteOptions.class",
+        "sha256": "724d126cd70e5c3e63b9705381f2337e9be413177f3dc91fffb411a608f60d97",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WriteStallCondition.class",
+        "sha256": "2b91c056579c4552e35eb2ac210ade4ab2baa541efe77c26096601c19183b478",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/WriteStallInfo.class",
+        "sha256": "ff91c11b8a26d9ff81f6635fb18b65218291bd530d5070ae682cf8aeb4d432d4",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/test/TestableEventListener.class",
+        "sha256": "0340369e773b3f44238b0caa32582011a65ef506d0ec8865eb648b7b5f2b0e78",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/util/BufferUtil.class",
+        "sha256": "6b0f975221ca6c6cd1f4465bd816e45b88afe82b40638359bc202aeea7f27cde",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/util/ByteUtil.class",
+        "sha256": "42879ab0a89d21463cc2b7f8a29d3e39b0d52b870802299ecc35e3d8dcafe890",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/util/BytewiseComparator.class",
+        "sha256": "09bcbaa7eb536fc0f8c0253bdcfdda7657a721b8cf276404824adc6f84449c38",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/util/CapturingWriteBatchHandler$Action.class",
+        "sha256": "96bc0813d9cd99a03968f39f7346939074e2366aa9f8c0524993cb2799ab52af",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/util/CapturingWriteBatchHandler$Event.class",
+        "sha256": "47f2a2ecf2dda9c392cc10cf480b46ae67cd1809428b367cecb8af9d7f03d04b",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/util/CapturingWriteBatchHandler.class",
+        "sha256": "e210b0668362a9ef4fbe5d3e2809d687a664ff91d74d044c6ab6ebadfab64167",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/util/Environment.class",
+        "sha256": "ce98e00feb6af4c4dea19db4813382c6d8ec5c336b5ef506f9108d692d58bdb3",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/util/IntComparator.class",
+        "sha256": "d7f3cb25b05b3ee388d039ad6a1bf9eb47f27c04c1838ce9423c66c1cb5f7f08",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/util/ReverseBytewiseComparator.class",
+        "sha256": "d60dc2768735ba76567c067c774e43272b23a5f8afda69ed1b0493ddfc696069",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/util/SizeUnit.class",
+        "sha256": "79db281493918249b6f472964be267ecd242c6fb02ec358863c446e12d76df3b",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/util/StdErrLogger.class",
+        "sha256": "d38eef453ac1d51f0d40ab072f20aec249339606039a6c028fdf66c4e82e753f",
+        "major": 65
+      },
+      {
+        "name": "org/rocksdb/util/WriteBatchGetter.class",
+        "sha256": "e4932955291dde263d6b4450f754969e63f1e30c9a86ef0de5f63b7463948706",
+        "major": 65
+      }
+    ],
+    "pe": {
+      "machine": "0x8664",
+      "exportCount": 1524,
+      "functionCount": 1524,
+      "directImports": [
+        "SHLWAPI.dll",
+        "RPCRT4.dll",
+        "KERNEL32.dll"
+      ],
+      "delayImportRva": 0,
+      "clrRva": 0,
+      "certificateBytes": 0,
+      "exportNamesSha256": "8436f91c35966aa4212257a804be027d78521b3ee3f464dc1ef52aaf05aba6e9",
+      "namedTargetsAllExecutableNonzero": true,
+      "forwardedExports": 0,
+      "exportNameRvaTable": {
+        "path": "docs/ergo-native-build-static.json",
+        "sha256": "cde21e45e3a2ef547d11cde8bd457ce139174be11e7210bcb11b6ac36e7bbc0c",
+        "exactNameAndRvaEquality": true,
+        "count": 1524
+      },
+      "importFunctions": {
+        "SHLWAPI.dll": [
+          "PathIsRelativeA",
+          "PathIsDirectoryA"
+        ],
+        "RPCRT4.dll": [
+          "UuidToStringA",
+          "UuidCreateSequential",
+          "RpcStringFreeA"
+        ],
+        "KERNEL32.dll": [
+          "LCMapStringEx",
+          "OutputDebugStringW",
+          "SetEndOfFile",
+          "WriteConsoleW",
+          "CreateFileW",
+          "SetStdHandle",
+          "GetProcessHeap",
+          "InitializeSRWLock",
+          "ReleaseSRWLockExclusive",
+          "ReleaseSRWLockShared",
+          "AcquireSRWLockExclusive",
+          "AcquireSRWLockShared",
+          "CreateFileA",
+          "FindClose",
+          "FindFirstFileExA",
+          "FindNextFileA",
+          "SetFileInformationByHandle",
+          "CloseHandle",
+          "GetLastError",
+          "GetCurrentProcessId",
+          "GetCurrentProcessorNumber",
+          "TlsAlloc",
+          "TlsGetValue",
+          "TlsSetValue",
+          "GetCurrentDirectoryA",
+          "CreateDirectoryA",
+          "DeleteFileA",
+          "GetDiskFreeSpaceExA",
+          "GetFileAttributesExA",
+          "RemoveDirectoryA",
+          "SetFilePointerEx",
+          "SetFileTime",
+          "QueryPerformanceCounter",
+          "QueryPerformanceFrequency",
+          "DeviceIoControl",
+          "GetCurrentThreadId",
+          "GetSystemInfo",
+          "GetSystemTimeAsFileTime",
+          "MapViewOfFileEx",
+          "GetModuleHandleA",
+          "GetProcAddress",
+          "CreateFileMappingA",
+          "MoveFileExA",
+          "CreateHardLinkA",
+          "GetComputerNameA",
+          "GetFileInformationByHandleEx",
+          "WaitForSingleObject",
+          "GetCurrentThread",
+          "GetThreadId",
+          "MapViewOfFile",
+          "UnmapViewOfFile",
+          "FlushFileBuffers",
+          "ReadFile",
+          "WriteFile",
+          "FlushViewOfFile",
+          "LocalFree",
+          "FormatMessageA",
+          "SetEnvironmentVariableW",
+          "TryAcquireSRWLockExclusive",
+          "WideCharToMultiByte",
+          "RtlPcToFileHeader",
+          "RaiseException",
+          "WakeConditionVariable",
+          "WakeAllConditionVariable",
+          "SleepConditionVariableSRW",
+          "WaitForSingleObjectEx",
+          "Sleep",
+          "SwitchToThread",
+          "GetExitCodeThread",
+          "GetNativeSystemInfo",
+          "InitOnceBeginInitialize",
+          "InitOnceComplete",
+          "TryAcquireSRWLockShared",
+          "GetTickCount64",
+          "GetLocaleInfoEx",
+          "EnterCriticalSection",
+          "LeaveCriticalSection",
+          "InitializeCriticalSectionEx",
+          "DeleteCriticalSection",
+          "EncodePointer",
+          "DecodePointer",
+          "MultiByteToWideChar",
+          "RtlUnwind",
+          "GetTempPathW",
+          "InitOnceExecuteOnce",
+          "CreateEventExW",
+          "CreateSemaphoreExW",
+          "FlushProcessWriteBuffers",
+          "FreeLibraryWhenCallbackReturns",
+          "CreateThreadpoolTimer",
+          "SetThreadpoolTimer",
+          "WaitForThreadpoolTimerCallbacks",
+          "CloseThreadpoolTimer",
+          "CreateThreadpoolWait",
+          "SetThreadpoolWait",
+          "CloseThreadpoolWait",
+          "GetModuleHandleW",
+          "CreateSymbolicLinkW",
+          "GetStringTypeW",
+          "CompareStringEx",
+          "GetCPInfo",
+          "RtlCaptureContext",
+          "RtlLookupFunctionEntry",
+          "RtlVirtualUnwind",
+          "UnhandledExceptionFilter",
+          "SetUnhandledExceptionFilter",
+          "GetCurrentProcess",
+          "TerminateProcess",
+          "IsProcessorFeaturePresent",
+          "IsDebuggerPresent",
+          "GetStartupInfoW",
+          "InitializeSListHead",
+          "RtlUnwindEx",
+          "InterlockedPushEntrySList",
+          "InterlockedFlushSList",
+          "SetLastError",
+          "InitializeCriticalSectionAndSpinCount",
+          "TlsFree",
+          "FreeLibrary",
+          "LoadLibraryExW",
+          "CreateThread",
+          "ExitThread",
+          "ResumeThread",
+          "FreeLibraryAndExitThread",
+          "GetModuleHandleExW",
+          "ExitProcess",
+          "GetModuleFileNameW",
+          "HeapFree",
+          "HeapAlloc",
+          "GetStdHandle",
+          "GetFileType",
+          "HeapReAlloc",
+          "HeapSize",
+          "HeapQueryInformation",
+          "SetConsoleCtrlHandler",
+          "GetDateFormatW",
+          "GetTimeFormatW",
+          "CompareStringW",
+          "LCMapStringW",
+          "GetLocaleInfoW",
+          "IsValidLocale",
+          "GetUserDefaultLCID",
+          "EnumSystemLocalesW",
+          "GetConsoleOutputCP",
+          "GetConsoleMode",
+          "GetTimeZoneInformation",
+          "GetFileSizeEx",
+          "ReadConsoleW",
+          "FindFirstFileExW",
+          "FindNextFileW",
+          "IsValidCodePage",
+          "GetACP",
+          "GetOEMCP",
+          "GetCommandLineA",
+          "GetCommandLineW",
+          "GetEnvironmentStringsW",
+          "FreeEnvironmentStringsW"
+        ]
+      },
+      "unnamedOrdinals": []
+    },
+    "allStockNativeDeclarationsPresentUnchanged": true,
+    "additionalBuiltNativeDeclarations": [
+      {
+        "className": "org/rocksdb/NativeComparatorWrapperTest$NativeStringComparatorWrapper",
+        "method": "newStringComparator",
+        "descriptor": "()J",
+        "static": false
+      },
+      {
+        "className": "org/rocksdb/RocksDBExceptionTest",
+        "method": "raiseException",
+        "descriptor": "()V",
+        "static": false
+      },
+      {
+        "className": "org/rocksdb/RocksDBExceptionTest",
+        "method": "raiseExceptionNoMsgWithStatusCode",
+        "descriptor": "()V",
+        "static": false
+      },
+      {
+        "className": "org/rocksdb/RocksDBExceptionTest",
+        "method": "raiseExceptionNoMsgWithStatusCodeSubCode",
+        "descriptor": "()V",
+        "static": false
+      },
+      {
+        "className": "org/rocksdb/RocksDBExceptionTest",
+        "method": "raiseExceptionWithStatusCode",
+        "descriptor": "()V",
+        "static": false
+      },
+      {
+        "className": "org/rocksdb/RocksDBExceptionTest",
+        "method": "raiseExceptionWithStatusCodeState",
+        "descriptor": "()V",
+        "static": false
+      },
+      {
+        "className": "org/rocksdb/RocksDBExceptionTest",
+        "method": "raiseExceptionWithStatusCodeSubCode",
+        "descriptor": "()V",
+        "static": false
+      },
+      {
+        "className": "org/rocksdb/WriteBatchTest",
+        "method": "getContents",
+        "descriptor": "(J)[B",
+        "static": true
+      },
+      {
+        "className": "org/rocksdb/WriteBatchTestInternalHelper",
+        "method": "append",
+        "descriptor": "(JJ)V",
+        "static": true
+      },
+      {
+        "className": "org/rocksdb/WriteBatchTestInternalHelper",
+        "method": "sequence",
+        "descriptor": "(J)J",
+        "static": true
+      },
+      {
+        "className": "org/rocksdb/WriteBatchTestInternalHelper",
+        "method": "setSequence",
+        "descriptor": "(JJ)V",
+        "static": true
+      },
+      {
+        "className": "org/rocksdb/test/TestableEventListener",
+        "method": "invokeAllCallbacks",
+        "descriptor": "(J)V",
+        "static": true
+      }
+    ],
+    "sharedClassCount": 247,
+    "changedSharedClassCount": 247,
+    "stockClassFileMajor": 52,
+    "builtClassFileMajor": 65,
+    "headerSourceComparison": {
+      "headerCount": 96,
+      "prototypeCount": 1531,
+      "sourceCount": 85,
+      "definitionCount": 1536,
+      "matched": 1524,
+      "missingDefinitions": [
+        {
+          "name": "Java_org_rocksdb_DBOptions_setFailIfOptionsFileError",
+          "header": {
+            "returnType": "void",
+            "args": [
+              "JNIEnv*",
+              "jclass",
+              "jlong",
+              "jboolean"
+            ],
+            "file": "org_rocksdb_DBOptions.h"
+          }
+        },
+        {
+          "name": "Java_org_rocksdb_DBOptions_failIfOptionsFileError",
+          "header": {
+            "returnType": "jboolean",
+            "args": [
+              "JNIEnv*",
+              "jclass",
+              "jlong"
+            ],
+            "file": "org_rocksdb_DBOptions.h"
+          }
+        },
+        {
+          "name": "Java_org_rocksdb_LiveFileMetaData_newLiveFileMetaDataHandle",
+          "header": {
+            "returnType": "jlong",
+            "args": [
+              "JNIEnv*",
+              "jobject",
+              "jbyteArray",
+              "jint",
+              "jint",
+              "jstring",
+              "jstring",
+              "jlong",
+              "jlong",
+              "jlong",
+              "jbyteArray",
+              "jint",
+              "jbyteArray",
+              "jint",
+              "jlong",
+              "jboolean",
+              "jlong",
+              "jlong"
+            ],
+            "file": "org_rocksdb_LiveFileMetaData.h"
+          }
+        },
+        {
+          "name": "Java_org_rocksdb_Options_setFailIfOptionsFileError",
+          "header": {
+            "returnType": "void",
+            "args": [
+              "JNIEnv*",
+              "jclass",
+              "jlong",
+              "jboolean"
+            ],
+            "file": "org_rocksdb_Options.h"
+          }
+        },
+        {
+          "name": "Java_org_rocksdb_Options_failIfOptionsFileError",
+          "header": {
+            "returnType": "jboolean",
+            "args": [
+              "JNIEnv*",
+              "jclass",
+              "jlong"
+            ],
+            "file": "org_rocksdb_Options.h"
+          }
+        },
+        {
+          "name": "Java_org_rocksdb_RocksEnv_disposeInternalJni",
+          "header": {
+            "returnType": "void",
+            "args": [
+              "JNIEnv*",
+              "jclass",
+              "jlong"
+            ],
+            "file": "org_rocksdb_RocksEnv.h"
+          }
+        }
+      ],
+      "mismatches": [
+        {
+          "name": "Java_org_rocksdb_Transaction_getDirect",
+          "header": {
+            "returnType": "jint",
+            "args": [
+              "JNIEnv*",
+              "jclass",
+              "jlong",
+              "jlong",
+              "jobject",
+              "jint",
+              "jint",
+              "jobject",
+              "jint",
+              "jint",
+              "jlong"
+            ],
+            "file": "org_rocksdb_Transaction.h"
+          },
+          "definition": {
+            "returnType": "jint",
+            "args": [
+              "JNIEnv*",
+              "jobject",
+              "jlong",
+              "jlong",
+              "jobject",
+              "jint",
+              "jint",
+              "jobject",
+              "jint",
+              "jint",
+              "jlong"
+            ],
+            "file": "rocksjni/transaction.cc"
+          }
+        },
+        {
+          "name": "Java_org_rocksdb_WBWIRocksIterator_refresh0Jni",
+          "header": {
+            "returnType": "void",
+            "args": [
+              "JNIEnv*",
+              "jclass",
+              "jlong"
+            ],
+            "file": "org_rocksdb_WBWIRocksIterator.h"
+          },
+          "definition": {
+            "returnType": "void",
+            "args": [
+              "JNIEnv*",
+              "jobject",
+              "jlong"
+            ],
+            "file": "rocksjni/write_batch_with_index.cc"
+          }
+        }
+      ],
+      "definitionsWithoutHeader": [
+        {
+          "name": "Java_org_rocksdb_CompressionOptions_setMaxDictBufferBytes",
+          "definitions": [
+            {
+              "returnType": "void",
+              "args": [
+                "JNIEnv*",
+                "jclass",
+                "jlong",
+                "jlong"
+              ],
+              "file": "rocksjni/compression_options.cc"
+            }
+          ]
+        },
+        {
+          "name": "Java_org_rocksdb_CompressionOptions_maxDictBufferBytes",
+          "definitions": [
+            {
+              "returnType": "jlong",
+              "args": [
+                "JNIEnv*",
+                "jclass",
+                "jlong"
+              ],
+              "file": "rocksjni/compression_options.cc"
+            }
+          ]
+        },
+        {
+          "name": "Java_org_rocksdb_CompressionOptions_setUseZstdDictTrainer",
+          "definitions": [
+            {
+              "returnType": "void",
+              "args": [
+                "JNIEnv*",
+                "jclass",
+                "jlong",
+                "jboolean"
+              ],
+              "file": "rocksjni/compression_options.cc"
+            }
+          ]
+        },
+        {
+          "name": "Java_org_rocksdb_CompressionOptions_useZstdDictTrainer",
+          "definitions": [
+            {
+              "returnType": "jboolean",
+              "args": [
+                "JNIEnv*",
+                "jclass",
+                "jlong"
+              ],
+              "file": "rocksjni/compression_options.cc"
+            }
+          ]
+        },
+        {
+          "name": "Java_org_rocksdb_RocksEnv_disposeInternal",
+          "definitions": [
+            {
+              "returnType": "void",
+              "args": [
+                "JNIEnv*",
+                "jclass",
+                "jlong"
+              ],
+              "file": "rocksjni/env.cc"
+            }
+          ]
+        },
+        {
+          "name": "Java_org_rocksdb_PerfContext_getBlockCacheIndexReadByte",
+          "definitions": [
+            {
+              "returnType": "jlong",
+              "args": [
+                "JNIEnv*",
+                "jobject",
+                "jlong"
+              ],
+              "file": "rocksjni/jni_perf_context.cc"
+            }
+          ]
+        },
+        {
+          "name": "Java_org_rocksdb_PerfContext_getBlockCacheFilterReadByte",
+          "definitions": [
+            {
+              "returnType": "jlong",
+              "args": [
+                "JNIEnv*",
+                "jobject",
+                "jlong"
+              ],
+              "file": "rocksjni/jni_perf_context.cc"
+            }
+          ]
+        },
+        {
+          "name": "Java_org_rocksdb_PerfContext_getBlockCacheCompressionDictReadByte",
+          "definitions": [
+            {
+              "returnType": "jlong",
+              "args": [
+                "JNIEnv*",
+                "jobject",
+                "jlong"
+              ],
+              "file": "rocksjni/jni_perf_context.cc"
+            }
+          ]
+        },
+        {
+          "name": "Java_org_rocksdb_PerfContext_getBlockCacheReadByte",
+          "definitions": [
+            {
+              "returnType": "jlong",
+              "args": [
+                "JNIEnv*",
+                "jobject",
+                "jlong"
+              ],
+              "file": "rocksjni/jni_perf_context.cc"
+            }
+          ]
+        },
+        {
+          "name": "Java_org_rocksdb_Transaction_get__JJ_3BII",
+          "definitions": [
+            {
+              "returnType": "jbyteArray",
+              "args": [
+                "JNIEnv*",
+                "jclass",
+                "jlong",
+                "jlong",
+                "jbyteArray",
+                "jint",
+                "jint"
+              ],
+              "file": "rocksjni/transaction.cc"
+            }
+          ]
+        }
+      ],
+      "classHeaderMismatches": [],
+      "headersNotDeclaredInBuiltJar": [],
+      "exportsWithoutMatchingSourcePrototype": [],
+      "matchingSourcePrototypesWithoutExport": []
+    }
+  },
+  "workerCallPath": {
+    "status": "static-worker-java-native-call-path",
+    "nativeCodeExecuted": false,
+    "databaseAcceptance": false,
+    "inputs": {
+      "worker": {
+        "path": "experiments/ergo-range/NodeDatabaseControl.java",
+        "sha256": "9b31cdd78bb38773400771d689bf7c97d89b44e9962142dff06a043d15b86313"
+      },
+      "jar": {
+        "path": "scratch/node-startup/bundle/ergo-6.1.5.jar",
+        "sha256": "4ada5520636a65d7be09b6ec3ff8044b8fdc5baf552633b8c4f6335f71b93928"
+      },
+      "sourceCommit": "4b2122578e475cb88aef4dcf152cccd5dbf51060",
+      "sourceArchive": {
+        "bytes": 15183601,
+        "sha256": "5537b7e494daec8cd34fc41ad54fffff0ab528afad9908d38c75104614470ef6",
+        "allNineReviewedSourcesMatched": true
+      }
+    },
+    "roots": [
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "loadLibrary",
+        "descriptor": "(Ljava/util/List;)V"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "rocksdbVersion",
+        "descriptor": "()Lorg/rocksdb/RocksDB$Version;"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "open",
+        "descriptor": "(Lorg/rocksdb/Options;Ljava/lang/String;)Lorg/rocksdb/RocksDB;"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "put",
+        "descriptor": "(Lorg/rocksdb/WriteOptions;[B[B)V"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "get",
+        "descriptor": "([B[B)I"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "flush",
+        "descriptor": "(Lorg/rocksdb/FlushOptions;)V"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "closeE",
+        "descriptor": "()V"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "isClosed",
+        "descriptor": "()Z"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "<init>",
+        "descriptor": "()V"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "close",
+        "descriptor": "()V"
+      },
+      {
+        "owner": "org/rocksdb/WriteOptions",
+        "name": "<init>",
+        "descriptor": "()V"
+      },
+      {
+        "owner": "org/rocksdb/WriteOptions",
+        "name": "close",
+        "descriptor": "()V"
+      },
+      {
+        "owner": "org/rocksdb/FlushOptions",
+        "name": "<init>",
+        "descriptor": "()V"
+      },
+      {
+        "owner": "org/rocksdb/FlushOptions",
+        "name": "close",
+        "descriptor": "()V"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setCreateIfMissing",
+        "descriptor": "(Z)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setErrorIfExists",
+        "descriptor": "(Z)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setCompressionType",
+        "descriptor": "(Lorg/rocksdb/CompressionType;)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setBottommostCompressionType",
+        "descriptor": "(Lorg/rocksdb/CompressionType;)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setDbLogDir",
+        "descriptor": "(Ljava/lang/String;)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setWalDir",
+        "descriptor": "(Ljava/lang/String;)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setWriteBufferSize",
+        "descriptor": "(J)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setMaxWriteBufferNumber",
+        "descriptor": "(I)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setDisableAutoCompactions",
+        "descriptor": "(Z)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setLevel0SlowdownWritesTrigger",
+        "descriptor": "(I)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setLevel0StopWritesTrigger",
+        "descriptor": "(I)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setMaxBackgroundJobs",
+        "descriptor": "(I)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setMaxBgErrorResumeCount",
+        "descriptor": "(I)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setMaxOpenFiles",
+        "descriptor": "(I)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setMaxLogFileSize",
+        "descriptor": "(J)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setKeepLogFileNum",
+        "descriptor": "(J)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setAvoidFlushDuringShutdown",
+        "descriptor": "(Z)Lorg/rocksdb/Options;"
+      },
+      {
+        "owner": "org/rocksdb/WriteOptions",
+        "name": "setSync",
+        "descriptor": "(Z)Lorg/rocksdb/WriteOptions;"
+      },
+      {
+        "owner": "org/rocksdb/WriteOptions",
+        "name": "setDisableWAL",
+        "descriptor": "(Z)Lorg/rocksdb/WriteOptions;"
+      },
+      {
+        "owner": "org/rocksdb/FlushOptions",
+        "name": "setWaitForFlush",
+        "descriptor": "(Z)Lorg/rocksdb/FlushOptions;"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB$Version",
+        "name": "getMajor",
+        "descriptor": "()I"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB$Version",
+        "name": "getMinor",
+        "descriptor": "()I"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB$Version",
+        "name": "getPatch",
+        "descriptor": "()I"
+      },
+      {
+        "owner": "org/rocksdb/RocksDBException",
+        "name": "getStatus",
+        "descriptor": "()Lorg/rocksdb/Status;"
+      },
+      {
+        "owner": "org/rocksdb/Status",
+        "name": "getCode",
+        "descriptor": "()Lorg/rocksdb/Status$Code;"
+      },
+      {
+        "owner": "org/rocksdb/Status",
+        "name": "getSubCode",
+        "descriptor": "()Lorg/rocksdb/Status$SubCode;"
+      },
+      {
+        "owner": "org/rocksdb/Status",
+        "name": "<init>",
+        "descriptor": "(BBLjava/lang/String;)V"
+      },
+      {
+        "owner": "org/rocksdb/RocksDBException",
+        "name": "<init>",
+        "descriptor": "(Lorg/rocksdb/Status;)V"
+      }
+    ],
+    "nativeMethodCount": 36,
+    "nativeMethods": [
+      {
+        "owner": "org/rocksdb/Env",
+        "name": "getDefaultEnvInternal",
+        "descriptor": "()J",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Env_getDefaultEnvInternal",
+        "longName": "Java_org_rocksdb_Env_getDefaultEnvInternal__",
+        "source": {
+          "path": "java/rocksjni/env.cc",
+          "line": 27,
+          "signature": "jlong Java_org_rocksdb_Env_getDefaultEnvInternal(JNIEnv*, jclass)",
+          "bodySha256": "769c93599eb64145356f719c134c07802999f8f77ecdd65bf149ff4dc105c582"
+        },
+        "candidateExport": "Java_org_rocksdb_Env_getDefaultEnvInternal",
+        "candidateRva": "00090A20",
+        "generatedPrototype": "JNIEXPORT jlong JNICALL Java_org_rocksdb_Env_getDefaultEnvInternal\n  (JNIEnv *, jclass)",
+        "generatedHeaderSha256": "4432e2f07ba6b469f27d40d10b5706e6c840f72b72bf801575bbad30b0f7c0c7"
+      },
+      {
+        "owner": "org/rocksdb/FlushOptions",
+        "name": "disposeInternalJni",
+        "descriptor": "(J)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_FlushOptions_disposeInternalJni",
+        "longName": "Java_org_rocksdb_FlushOptions_disposeInternalJni__J",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 8688,
+          "signature": "void Java_org_rocksdb_FlushOptions_disposeInternalJni(JNIEnv*, jclass, jlong jhandle)",
+          "bodySha256": "dece9f1946c8e1d775a9594bc6ed4e134aa66e145c862d6836050f7ff4713f32"
+        },
+        "candidateExport": "Java_org_rocksdb_FlushOptions_disposeInternalJni",
+        "candidateRva": "000A4FF0",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_FlushOptions_disposeInternalJni\n  (JNIEnv *, jclass, jlong)",
+        "generatedHeaderSha256": "00fe8aed432d7b3448735611942d94755aebd18e16c7597c8387081e9ab04f63"
+      },
+      {
+        "owner": "org/rocksdb/FlushOptions",
+        "name": "newFlushOptions",
+        "descriptor": "()J",
+        "static": true,
+        "shortName": "Java_org_rocksdb_FlushOptions_newFlushOptions",
+        "longName": "Java_org_rocksdb_FlushOptions_newFlushOptions__",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 8632,
+          "signature": "jlong Java_org_rocksdb_FlushOptions_newFlushOptions(JNIEnv*, jclass)",
+          "bodySha256": "764a5a9b169e33c799b0eb20edf0a57d84eaf3b07d9a2927105b111fd0232a3c"
+        },
+        "candidateExport": "Java_org_rocksdb_FlushOptions_newFlushOptions",
+        "candidateRva": "000A5000",
+        "generatedPrototype": "JNIEXPORT jlong JNICALL Java_org_rocksdb_FlushOptions_newFlushOptions\n  (JNIEnv *, jclass)",
+        "generatedHeaderSha256": "00fe8aed432d7b3448735611942d94755aebd18e16c7597c8387081e9ab04f63"
+      },
+      {
+        "owner": "org/rocksdb/FlushOptions",
+        "name": "setWaitForFlush",
+        "descriptor": "(JZ)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_FlushOptions_setWaitForFlush",
+        "longName": "Java_org_rocksdb_FlushOptions_setWaitForFlush__JZ",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 8642,
+          "signature": "void Java_org_rocksdb_FlushOptions_setWaitForFlush(JNIEnv*, jclass, jlong jhandle, jboolean jwait)",
+          "bodySha256": "00da0ed876e2b10c68a2ab4fa114898efe1cca9335fff1c0aa6176ead30fff12"
+        },
+        "candidateExport": "Java_org_rocksdb_FlushOptions_setWaitForFlush",
+        "candidateRva": "000A5040",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_FlushOptions_setWaitForFlush\n  (JNIEnv *, jclass, jlong, jboolean)",
+        "generatedHeaderSha256": "00fe8aed432d7b3448735611942d94755aebd18e16c7597c8387081e9ab04f63"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "disposeInternalJni",
+        "descriptor": "(J)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_disposeInternalJni",
+        "longName": "Java_org_rocksdb_Options_disposeInternalJni__J",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 85,
+          "signature": "void Java_org_rocksdb_Options_disposeInternalJni(JNIEnv*, jclass, jlong handle)",
+          "bodySha256": "11ecdf9b6ca23671b5b7a45cee481fae76cedb3af7da7ae5e20f0a89fb22b712"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_disposeInternalJni",
+        "candidateRva": "000A5610",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_disposeInternalJni\n  (JNIEnv *, jclass, jlong)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "newOptions",
+        "descriptor": "()J",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_newOptions",
+        "longName": "Java_org_rocksdb_Options_newOptions__",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 49,
+          "signature": "jlong Java_org_rocksdb_Options_newOptions__(JNIEnv*, jclass)",
+          "bodySha256": "514da5ca8ecee9d1b13c6cc104ad51a6e45b6c8483c24ce9764c895e3a844452"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_newOptions__",
+        "candidateRva": "000A5BA0",
+        "generatedPrototype": "JNIEXPORT jlong JNICALL Java_org_rocksdb_Options_newOptions__\n  (JNIEnv *, jclass)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setAvoidFlushDuringShutdown",
+        "descriptor": "(JZ)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setAvoidFlushDuringShutdown",
+        "longName": "Java_org_rocksdb_Options_setAvoidFlushDuringShutdown__JZ",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 2293,
+          "signature": "void Java_org_rocksdb_Options_setAvoidFlushDuringShutdown(JNIEnv*, jclass, jlong jhandle, jboolean javoid_flush_during_shutdown)",
+          "bodySha256": "ffbd0ea6217a243a7e94c8bb6961dc5117151faee28c1ed4cfe415301022aaab"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setAvoidFlushDuringShutdown",
+        "candidateRva": "000A5E10",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setAvoidFlushDuringShutdown\n  (JNIEnv *, jclass, jlong, jboolean)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setBottommostCompressionType",
+        "descriptor": "(JB)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setBottommostCompressionType",
+        "longName": "Java_org_rocksdb_Options_setBottommostCompressionType__JB",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 2573,
+          "signature": "void Java_org_rocksdb_Options_setBottommostCompressionType(JNIEnv*, jclass, jlong jhandle, jbyte jcompression_type_value)",
+          "bodySha256": "51517881ed78899ec0809c26e857a9ea6415476d5228cd9e8746f205be6c70a1"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setBottommostCompressionType",
+        "candidateRva": "000A5F10",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setBottommostCompressionType\n  (JNIEnv *, jclass, jlong, jbyte)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setCompressionType",
+        "descriptor": "(JB)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setCompressionType",
+        "longName": "Java_org_rocksdb_Options_setCompressionType__JB",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 2442,
+          "signature": "void Java_org_rocksdb_Options_setCompressionType(JNIEnv*, jclass, jlong jhandle, jbyte jcompression_type_value)",
+          "bodySha256": "895c6870d9de023dfa286f7ae7f233294e3a2ba43dfeeb580b232bd140ac35d1"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setCompressionType",
+        "candidateRva": "000A6350",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setCompressionType\n  (JNIEnv *, jclass, jlong, jbyte)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setCreateIfMissing",
+        "descriptor": "(JZ)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setCreateIfMissing",
+        "longName": "Java_org_rocksdb_Options_setCreateIfMissing__JZ",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 109,
+          "signature": "void Java_org_rocksdb_Options_setCreateIfMissing(JNIEnv*, jclass, jlong jhandle, jboolean flag)",
+          "bodySha256": "78193c22ca6a59fed9f4cbe8283c890cba1ba841542d30ec2af00de3b848c416"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setCreateIfMissing",
+        "candidateRva": "000A6370",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setCreateIfMissing\n  (JNIEnv *, jclass, jlong, jboolean)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setDbLogDir",
+        "descriptor": "(JLjava/lang/String;)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setDbLogDir",
+        "longName": "Java_org_rocksdb_Options_setDbLogDir__JLjava_lang_String_2",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 603,
+          "signature": "void Java_org_rocksdb_Options_setDbLogDir(JNIEnv* env, jclass, jlong jhandle, jstring jdb_log_dir)",
+          "bodySha256": "88b23554c64a5a755c51337162327f2c56a76a13f29c18857f3cd2afbf322a17"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setDbLogDir",
+        "candidateRva": "000A6460",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setDbLogDir\n  (JNIEnv *, jclass, jlong, jstring)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setDisableAutoCompactions",
+        "descriptor": "(JZ)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setDisableAutoCompactions",
+        "longName": "Java_org_rocksdb_Options_setDisableAutoCompactions__JZ",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 2938,
+          "signature": "void Java_org_rocksdb_Options_setDisableAutoCompactions(JNIEnv*, jclass, jlong jhandle, jboolean jdisable_auto_compactions)",
+          "bodySha256": "641c56e207d1d94ea97194209e9894c077d9c524fa8c3cb407a2d55924ee9a40"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setDisableAutoCompactions",
+        "candidateRva": "000A69A0",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setDisableAutoCompactions\n  (JNIEnv *, jclass, jlong, jboolean)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setErrorIfExists",
+        "descriptor": "(JZ)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setErrorIfExists",
+        "longName": "Java_org_rocksdb_Options_setErrorIfExists__JZ",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 368,
+          "signature": "void Java_org_rocksdb_Options_setErrorIfExists(JNIEnv*, jclass, jlong jhandle, jboolean error_if_exists)",
+          "bodySha256": "0840f60139d50edf3f7ef64c31a6a42b9f614d6667116678ace23c99bda7ce2d"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setErrorIfExists",
+        "candidateRva": "000A6A20",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setErrorIfExists\n  (JNIEnv *, jclass, jlong, jboolean)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setKeepLogFileNum",
+        "descriptor": "(JJ)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setKeepLogFileNum",
+        "longName": "Java_org_rocksdb_Options_setKeepLogFileNum__JJ",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 827,
+          "signature": "void Java_org_rocksdb_Options_setKeepLogFileNum(JNIEnv* env, jclass, jlong jhandle, jlong keep_log_file_num)",
+          "bodySha256": "c6649907198519c3844bb1d79172c56abbfe040f9e1524f44cafbb3826f1de57"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setKeepLogFileNum",
+        "candidateRva": "000A6AC0",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setKeepLogFileNum\n  (JNIEnv *, jclass, jlong, jlong)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setLevel0SlowdownWritesTrigger",
+        "descriptor": "(JI)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setLevel0SlowdownWritesTrigger",
+        "longName": "Java_org_rocksdb_Options_setLevel0SlowdownWritesTrigger__JI",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 3354,
+          "signature": "void Java_org_rocksdb_Options_setLevel0SlowdownWritesTrigger(JNIEnv*, jclass, jlong jhandle, jint jlevel0_slowdown_writes_trigger)",
+          "bodySha256": "8204875be4301c9bdfe5eb52cebde08459c3e2df33aca6ae441dda1b7b6381aa"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setLevel0SlowdownWritesTrigger",
+        "candidateRva": "000A6AE0",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setLevel0SlowdownWritesTrigger\n  (JNIEnv *, jclass, jlong, jint)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setLevel0StopWritesTrigger",
+        "descriptor": "(JI)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setLevel0StopWritesTrigger",
+        "longName": "Java_org_rocksdb_Options_setLevel0StopWritesTrigger__JI",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 3377,
+          "signature": "void Java_org_rocksdb_Options_setLevel0StopWritesTrigger(JNIEnv*, jclass, jlong jhandle, jint jlevel0_stop_writes_trigger)",
+          "bodySha256": "c1146bbcf96080e9349f1fdfbd704d6da42195f7f6788b578101f85d23dc6900"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setLevel0StopWritesTrigger",
+        "candidateRva": "000A6AF0",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setLevel0StopWritesTrigger\n  (JNIEnv *, jclass, jlong, jint)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setMaxBackgroundJobs",
+        "descriptor": "(JI)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setMaxBackgroundJobs",
+        "longName": "Java_org_rocksdb_Options_setMaxBackgroundJobs__JI",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 749,
+          "signature": "void Java_org_rocksdb_Options_setMaxBackgroundJobs(JNIEnv*, jclass, jlong jhandle, jint max_background_jobs)",
+          "bodySha256": "7e78c8217e7e1d6aec6b6599b7be12f0793d394b461fc81261636f04854cbb2b"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setMaxBackgroundJobs",
+        "candidateRva": "000A6C50",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setMaxBackgroundJobs\n  (JNIEnv *, jclass, jlong, jint)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setMaxBgErrorResumeCount",
+        "descriptor": "(JI)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setMaxBgErrorResumeCount",
+        "longName": "Java_org_rocksdb_Options_setMaxBgErrorResumeCount__JI",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 2219,
+          "signature": "void Java_org_rocksdb_Options_setMaxBgErrorResumeCount(JNIEnv*, jclass, jlong jhandle, jint jmax_bgerror_resume_count)",
+          "bodySha256": "c013eb677183791d59252a24b878abd7b2772b9580aaa70d2683759bf8da90e3"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setMaxBgErrorResumeCount",
+        "candidateRva": "000A6C60",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setMaxBgErrorResumeCount\n  (JNIEnv *, jclass, jlong, jint)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setMaxLogFileSize",
+        "descriptor": "(JJ)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setMaxLogFileSize",
+        "longName": "Java_org_rocksdb_Options_setMaxLogFileSize__JJ",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 771,
+          "signature": "void Java_org_rocksdb_Options_setMaxLogFileSize(JNIEnv* env, jclass, jlong jhandle, jlong max_log_file_size)",
+          "bodySha256": "22f82772f23395894c6c848768740d6bde9d533f23abb4b8f9ac349c50004abb"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setMaxLogFileSize",
+        "candidateRva": "000A6DB0",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setMaxLogFileSize\n  (JNIEnv *, jclass, jlong, jlong)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setMaxOpenFiles",
+        "descriptor": "(JI)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setMaxOpenFiles",
+        "longName": "Java_org_rocksdb_Options_setMaxOpenFiles__JI",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 442,
+          "signature": "void Java_org_rocksdb_Options_setMaxOpenFiles(JNIEnv*, jclass, jlong jhandle, jint max_open_files)",
+          "bodySha256": "e105a39e497133cfe470ce42b3693b15480e958a77e394e12f5aca422663f774"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setMaxOpenFiles",
+        "candidateRva": "000A6DD0",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setMaxOpenFiles\n  (JNIEnv *, jclass, jlong, jint)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setMaxWriteBufferNumber",
+        "descriptor": "(JI)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setMaxWriteBufferNumber",
+        "longName": "Java_org_rocksdb_Options_setMaxWriteBufferNumber__JI",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 304,
+          "signature": "void Java_org_rocksdb_Options_setMaxWriteBufferNumber(JNIEnv*, jclass, jlong jhandle, jint jmax_write_buffer_number)",
+          "bodySha256": "5daf0f87543aa5752b0e40b4ecbde0d214d8f978b0e1c342b9d97f666a783e76"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setMaxWriteBufferNumber",
+        "candidateRva": "000A6E40",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setMaxWriteBufferNumber\n  (JNIEnv *, jclass, jlong, jint)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setWalDir",
+        "descriptor": "(JLjava/lang/String;)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setWalDir",
+        "longName": "Java_org_rocksdb_Options_setWalDir__JLjava_lang_String_2",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 630,
+          "signature": "void Java_org_rocksdb_Options_setWalDir(JNIEnv* env, jclass, jlong jhandle, jstring jwal_dir)",
+          "bodySha256": "44096ca4e37813bca5582cdc46fe60420e9e3cf878c7d37782ce2e11042e90d9"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setWalDir",
+        "candidateRva": "000A7360",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setWalDir\n  (JNIEnv *, jclass, jlong, jstring)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/Options",
+        "name": "setWriteBufferSize",
+        "descriptor": "(JJ)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_Options_setWriteBufferSize",
+        "longName": "Java_org_rocksdb_Options_setWriteBufferSize__JJ",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 261,
+          "signature": "void Java_org_rocksdb_Options_setWriteBufferSize(JNIEnv* env, jclass, jlong jhandle, jlong jwrite_buffer_size)",
+          "bodySha256": "19c223e235c9d1ad41ef7bb86d0f8e4f6444a04654392519d91bf959547e6c45"
+        },
+        "candidateExport": "Java_org_rocksdb_Options_setWriteBufferSize",
+        "candidateRva": "000A7480",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_Options_setWriteBufferSize\n  (JNIEnv *, jclass, jlong, jlong)",
+        "generatedHeaderSha256": "059dd5f757de45442f99519338754cc77930c405a590c09cff3d7e72aa4f370f"
+      },
+      {
+        "owner": "org/rocksdb/ReadOptions",
+        "name": "newReadOptions",
+        "descriptor": "()J",
+        "static": true,
+        "shortName": "Java_org_rocksdb_ReadOptions_newReadOptions",
+        "longName": "Java_org_rocksdb_ReadOptions_newReadOptions__",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 7977,
+          "signature": "jlong Java_org_rocksdb_ReadOptions_newReadOptions__(JNIEnv*, jclass)",
+          "bodySha256": "ea2d76ed73781d198eea26bc64ef05b3fdb9584e4cec01366a934deda02af756"
+        },
+        "candidateExport": "Java_org_rocksdb_ReadOptions_newReadOptions__",
+        "candidateRva": "000A7BC0",
+        "generatedPrototype": "JNIEXPORT jlong JNICALL Java_org_rocksdb_ReadOptions_newReadOptions__\n  (JNIEnv *, jclass)",
+        "generatedHeaderSha256": "393ddb828d79610072dab9bf8620c041d0d3794d6948c013871726b35c052286"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "closeDatabase",
+        "descriptor": "(J)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_RocksDB_closeDatabase",
+        "longName": "Java_org_rocksdb_RocksDB_closeDatabase__J",
+        "source": {
+          "path": "java/rocksjni/rocksjni.cc",
+          "line": 307,
+          "signature": "void Java_org_rocksdb_RocksDB_closeDatabase(JNIEnv* env, jclass, jlong jhandle)",
+          "bodySha256": "e352a78d2682b83dca44e4bda8b921efb0c2ae7e3b56db92de884e01f2bc65d9"
+        },
+        "candidateExport": "Java_org_rocksdb_RocksDB_closeDatabase",
+        "candidateRva": "000B3090",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_RocksDB_closeDatabase\n  (JNIEnv *, jclass, jlong)",
+        "generatedHeaderSha256": "df7748cd7416c3bd7614352cb967779f866a580d662f122e65b3079ea8a8e955"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "disposeInternalJni",
+        "descriptor": "(J)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_RocksDB_disposeInternalJni",
+        "longName": "Java_org_rocksdb_RocksDB_disposeInternalJni__J",
+        "source": {
+          "path": "java/rocksjni/rocksjni.cc",
+          "line": 295,
+          "signature": "void Java_org_rocksdb_RocksDB_disposeInternalJni(JNIEnv*, jclass, jlong jhandle)",
+          "bodySha256": "a78932799ea22957cd40268a4d6b04c3b02b3527356b06f7c54d8b6c2906a3c6"
+        },
+        "candidateExport": "Java_org_rocksdb_RocksDB_disposeInternalJni",
+        "candidateRva": "000B53F0",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_RocksDB_disposeInternalJni\n  (JNIEnv *, jclass, jlong)",
+        "generatedHeaderSha256": "df7748cd7416c3bd7614352cb967779f866a580d662f122e65b3079ea8a8e955"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "flush",
+        "descriptor": "(JJ[J)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_RocksDB_flush",
+        "longName": "Java_org_rocksdb_RocksDB_flush__JJ_3J",
+        "source": {
+          "path": "java/rocksjni/rocksjni.cc",
+          "line": 3058,
+          "signature": "void Java_org_rocksdb_RocksDB_flush(JNIEnv* env, jclass, jlong jdb_handle, jlong jflush_opts_handle, jlongArray jcf_handles)",
+          "bodySha256": "241c8eb45ef6143bacc6335cedee084cd9e01989196b04f2578f582053ddb89c"
+        },
+        "candidateExport": "Java_org_rocksdb_RocksDB_flush",
+        "candidateRva": "000B5860",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_RocksDB_flush\n  (JNIEnv *, jclass, jlong, jlong, jlongArray)",
+        "generatedHeaderSha256": "df7748cd7416c3bd7614352cb967779f866a580d662f122e65b3079ea8a8e955"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "get",
+        "descriptor": "(J[BII[BII)I",
+        "static": true,
+        "shortName": "Java_org_rocksdb_RocksDB_get",
+        "longName": "Java_org_rocksdb_RocksDB_get__J_3BII_3BII",
+        "source": {
+          "path": "java/rocksjni/rocksjni.cc",
+          "line": 1556,
+          "signature": "jint Java_org_rocksdb_RocksDB_get__J_3BII_3BII(JNIEnv* env, jclass, jlong jdb_handle, jbyteArray jkey, jint jkey_off, jint jkey_len, jbyteArray jval, jint jval_off, jint jval_len)",
+          "bodySha256": "0dca28820f15eeb7cfe131ed2d094e0ac6f7f8ee6d6ebeff434db52116e48f6a"
+        },
+        "candidateExport": "Java_org_rocksdb_RocksDB_get__J_3BII_3BII",
+        "candidateRva": "000B9030",
+        "generatedPrototype": "JNIEXPORT jint JNICALL Java_org_rocksdb_RocksDB_get__J_3BII_3BII\n  (JNIEnv *, jclass, jlong, jbyteArray, jint, jint, jbyteArray, jint, jint)",
+        "generatedHeaderSha256": "df7748cd7416c3bd7614352cb967779f866a580d662f122e65b3079ea8a8e955"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "getDefaultColumnFamily",
+        "descriptor": "(J)J",
+        "static": true,
+        "shortName": "Java_org_rocksdb_RocksDB_getDefaultColumnFamily",
+        "longName": "Java_org_rocksdb_RocksDB_getDefaultColumnFamily__J",
+        "source": {
+          "path": "java/rocksjni/rocksjni.cc",
+          "line": 3361,
+          "signature": "jlong Java_org_rocksdb_RocksDB_getDefaultColumnFamily(JNIEnv*, jclass, jlong jdb_handle)",
+          "bodySha256": "4014c835c0c1793f9eefb4b59685a1c07d6a8156fd88714b4a7c87c33646cab1"
+        },
+        "candidateExport": "Java_org_rocksdb_RocksDB_getDefaultColumnFamily",
+        "candidateRva": "000B63A0",
+        "generatedPrototype": "JNIEXPORT jlong JNICALL Java_org_rocksdb_RocksDB_getDefaultColumnFamily\n  (JNIEnv *, jclass, jlong)",
+        "generatedHeaderSha256": "df7748cd7416c3bd7614352cb967779f866a580d662f122e65b3079ea8a8e955"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "open",
+        "descriptor": "(JLjava/lang/String;)J",
+        "static": true,
+        "shortName": "Java_org_rocksdb_RocksDB_open",
+        "longName": "Java_org_rocksdb_RocksDB_open__JLjava_lang_String_2",
+        "source": {
+          "path": "java/rocksjni/rocksjni.cc",
+          "line": 67,
+          "signature": "jlong Java_org_rocksdb_RocksDB_open__JLjava_lang_String_2(JNIEnv* env, jclass, jlong jopt_handle, jstring jdb_path)",
+          "bodySha256": "696c4aa2ca5b08195db30d5b84d45d98bfdb10f7d40151b23a2fab9d22d0a9b4"
+        },
+        "candidateExport": "Java_org_rocksdb_RocksDB_open__JLjava_lang_String_2",
+        "candidateRva": "000BCA10",
+        "generatedPrototype": "JNIEXPORT jlong JNICALL Java_org_rocksdb_RocksDB_open__JLjava_lang_String_2\n  (JNIEnv *, jclass, jlong, jstring)",
+        "generatedHeaderSha256": "df7748cd7416c3bd7614352cb967779f866a580d662f122e65b3079ea8a8e955"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "put",
+        "descriptor": "(JJ[BII[BII)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_RocksDB_put",
+        "longName": "Java_org_rocksdb_RocksDB_put__JJ_3BII_3BII",
+        "source": {
+          "path": "java/rocksjni/rocksjni.cc",
+          "line": 668,
+          "signature": "void Java_org_rocksdb_RocksDB_put__JJ_3BII_3BII(JNIEnv* env, jclass, jlong jdb_handle, jlong jwrite_options_handle, jbyteArray jkey, jint jkey_off, jint jkey_len, jbyteArray jval, jint jval_off, jint jval_len)",
+          "bodySha256": "067311770d0617ca3945f08d44994b330c0d6b56b5f77368b61b466424e9bcf8"
+        },
+        "candidateExport": "Java_org_rocksdb_RocksDB_put__JJ_3BII_3BII",
+        "candidateRva": "000BCC10",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_RocksDB_put__JJ_3BII_3BII\n  (JNIEnv *, jclass, jlong, jlong, jbyteArray, jint, jint, jbyteArray, jint, jint)",
+        "generatedHeaderSha256": "df7748cd7416c3bd7614352cb967779f866a580d662f122e65b3079ea8a8e955"
+      },
+      {
+        "owner": "org/rocksdb/RocksDB",
+        "name": "version",
+        "descriptor": "()I",
+        "static": true,
+        "shortName": "Java_org_rocksdb_RocksDB_version",
+        "longName": "Java_org_rocksdb_RocksDB_version__",
+        "source": {
+          "path": "java/rocksjni/rocksjni.cc",
+          "line": 3716,
+          "signature": "jint Java_org_rocksdb_RocksDB_version(JNIEnv*, jclass)",
+          "bodySha256": "07ec86b681af3869306fc1fb2b389385129bc3ceb63e45959e3363634569cfc8"
+        },
+        "candidateExport": "Java_org_rocksdb_RocksDB_version",
+        "candidateRva": "000BE390",
+        "generatedPrototype": "JNIEXPORT jint JNICALL Java_org_rocksdb_RocksDB_version\n  (JNIEnv *, jclass)",
+        "generatedHeaderSha256": "df7748cd7416c3bd7614352cb967779f866a580d662f122e65b3079ea8a8e955"
+      },
+      {
+        "owner": "org/rocksdb/WriteOptions",
+        "name": "disposeInternalJni",
+        "descriptor": "(J)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_WriteOptions_disposeInternalJni",
+        "longName": "Java_org_rocksdb_WriteOptions_disposeInternalJni__J",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 7832,
+          "signature": "void Java_org_rocksdb_WriteOptions_disposeInternalJni(JNIEnv*, jclass, jlong jhandle)",
+          "bodySha256": "d4ecb57e7a871d29577b15affdd97991d45de5f826520eea02f2fdc479a0d4b0"
+        },
+        "candidateExport": "Java_org_rocksdb_WriteOptions_disposeInternalJni",
+        "candidateRva": "000A7FB0",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_WriteOptions_disposeInternalJni\n  (JNIEnv *, jclass, jlong)",
+        "generatedHeaderSha256": "9edc63343bfb2544698c687bd01a1b24844e988ce417680aaeda58a2c2c8e586"
+      },
+      {
+        "owner": "org/rocksdb/WriteOptions",
+        "name": "newWriteOptions",
+        "descriptor": "()J",
+        "static": true,
+        "shortName": "Java_org_rocksdb_WriteOptions_newWriteOptions",
+        "longName": "Java_org_rocksdb_WriteOptions_newWriteOptions__",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 7810,
+          "signature": "jlong Java_org_rocksdb_WriteOptions_newWriteOptions(JNIEnv*, jclass)",
+          "bodySha256": "8a71ddc69fe2aa86d3ae52ab2a9f264133c9ccb8c36fd83d1e86647767ffd04e"
+        },
+        "candidateExport": "Java_org_rocksdb_WriteOptions_newWriteOptions",
+        "candidateRva": "000A7FF0",
+        "generatedPrototype": "JNIEXPORT jlong JNICALL Java_org_rocksdb_WriteOptions_newWriteOptions\n  (JNIEnv *, jclass)",
+        "generatedHeaderSha256": "9edc63343bfb2544698c687bd01a1b24844e988ce417680aaeda58a2c2c8e586"
+      },
+      {
+        "owner": "org/rocksdb/WriteOptions",
+        "name": "setDisableWAL",
+        "descriptor": "(JZ)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_WriteOptions_setDisableWAL",
+        "longName": "Java_org_rocksdb_WriteOptions_setDisableWAL__JZ",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 7864,
+          "signature": "void Java_org_rocksdb_WriteOptions_setDisableWAL(JNIEnv*, jclass, jlong jhandle, jboolean jflag)",
+          "bodySha256": "8a58117c1ec28b6971c206392df110f1e69f2ea0b561713ad03ca69214d227d3"
+        },
+        "candidateExport": "Java_org_rocksdb_WriteOptions_setDisableWAL",
+        "candidateRva": "000A8040",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_WriteOptions_setDisableWAL\n  (JNIEnv *, jclass, jlong, jboolean)",
+        "generatedHeaderSha256": "9edc63343bfb2544698c687bd01a1b24844e988ce417680aaeda58a2c2c8e586"
+      },
+      {
+        "owner": "org/rocksdb/WriteOptions",
+        "name": "setSync",
+        "descriptor": "(JZ)V",
+        "static": true,
+        "shortName": "Java_org_rocksdb_WriteOptions_setSync",
+        "longName": "Java_org_rocksdb_WriteOptions_setSync__JZ",
+        "source": {
+          "path": "java/rocksjni/options.cc",
+          "line": 7845,
+          "signature": "void Java_org_rocksdb_WriteOptions_setSync(JNIEnv*, jclass, jlong jhandle, jboolean jflag)",
+          "bodySha256": "da08b896899d66430bdb8a8f5902b2bf7745e90333f45ada077ecf9f8dd1088c"
+        },
+        "candidateExport": "Java_org_rocksdb_WriteOptions_setSync",
+        "candidateRva": "000A8090",
+        "generatedPrototype": "JNIEXPORT void JNICALL Java_org_rocksdb_WriteOptions_setSync\n  (JNIEnv *, jclass, jlong, jboolean)",
+        "generatedHeaderSha256": "9edc63343bfb2544698c687bd01a1b24844e988ce417680aaeda58a2c2c8e586"
+      }
+    ],
+    "excludedEdges": [
+      {
+        "from": "org/rocksdb/RocksDB.closeE()V",
+        "call": {
+          "at": 30,
+          "op": 182,
+          "owner": "org/rocksdb/ColumnFamilyHandle",
+          "name": "close",
+          "descriptor": "()V"
+        },
+        "reason": "ownedColumnFamilyHandles is empty after the only selected open(Options,String); default handle is separately stored and disowned"
+      }
+    ],
+    "classHashes": [
+      {
+        "name": "org/rocksdb/AbstractImmutableNativeReference",
+        "sha256": "84aec95f246c8e2c97d690f8af7562ef0afa7abf5bb5156956c191b70a06f316"
+      },
+      {
+        "name": "org/rocksdb/AbstractNativeReference",
+        "sha256": "6b84f5d023bff305047d6ec8e4eb30207a6744b144b2815e2d63ae144c5505a8"
+      },
+      {
+        "name": "org/rocksdb/ColumnFamilyHandle",
+        "sha256": "a6adc3c80e4e6f9e7d5a9e89a5225dab5146fe597cec06415611f830f7e3cf8b"
+      },
+      {
+        "name": "org/rocksdb/CompressionType",
+        "sha256": "5841b805ace14585f866163f9dbdcb59ca7a3b4e0ad153724a31672dc2a5327e"
+      },
+      {
+        "name": "org/rocksdb/Env",
+        "sha256": "7f9d20c973e8e0e6ea7e69f5b18472065d2c2cf839cac841a2fb861585cda7d3"
+      },
+      {
+        "name": "org/rocksdb/FlushOptions",
+        "sha256": "36d86c3b3b4c07411ab0b5295b6172d0ee2c3145f5cbcfbcf7f68cfba136ee98"
+      },
+      {
+        "name": "org/rocksdb/NativeLibraryLoader",
+        "sha256": "30b81a59f63f109c1bf6b3ee8147281c84207612c0cb28107b514b7a76ca77e7"
+      },
+      {
+        "name": "org/rocksdb/Options",
+        "sha256": "f6acdb452fd96ebe8ccb64370590a00f09035db56fd20c9df449011ebbd4ea2b"
+      },
+      {
+        "name": "org/rocksdb/ReadOptions",
+        "sha256": "9fe99b39e9d6e6e6a1431856fb13c9f9994ec155b76bdc3a2841d1d2b294cba3"
+      },
+      {
+        "name": "org/rocksdb/RocksDB",
+        "sha256": "410a229fc46111f128ff5ee905da200123ba7844254c42f65abd9fb793326dd9"
+      },
+      {
+        "name": "org/rocksdb/RocksDB$LibraryState",
+        "sha256": "8c6fdebb5cbfbdc430c0e228ae9780ed61dfb1446477ed885396c48588251498"
+      },
+      {
+        "name": "org/rocksdb/RocksDB$Version",
+        "sha256": "16c79146fd6ccbd1610284b7301c1c7b3b2cb8e4ff3829f4b060d04bef69849d"
+      },
+      {
+        "name": "org/rocksdb/RocksDBException",
+        "sha256": "64c3e6f9fa9dbc3c0df2b349af6eac42e30b3448a06e9e012e9cf3227ee31ea9"
+      },
+      {
+        "name": "org/rocksdb/RocksEnv",
+        "sha256": "b32ed6606047f8f4222503266f6c2f0a88c56218fd21a7f12aa11abb518713bf"
+      },
+      {
+        "name": "org/rocksdb/RocksObject",
+        "sha256": "e0a39afc89e887f47d1d2e3c1db52f11c5e08b37ec10fd0f8352f3ce5c53d022"
+      },
+      {
+        "name": "org/rocksdb/Status",
+        "sha256": "c467458f2f70c5c49b7a0b52afa94d743f8771426ae943a6bb4e677598022e7e"
+      },
+      {
+        "name": "org/rocksdb/Status$Code",
+        "sha256": "4526f5372b88a4839727ff83e964e505af188d8cd482b0ea1c5859433b08b91e"
+      },
+      {
+        "name": "org/rocksdb/Status$SubCode",
+        "sha256": "961362d4fc82d83c8abc83ec49d94fb4ea83ecc224debe62393bfb87a7badb2c"
+      },
+      {
+        "name": "org/rocksdb/WriteOptions",
+        "sha256": "5340983a009ea2c5b332fc0db23877ee3f5c61ed4a4c52c5f4648247fbbac40e"
+      },
+      {
+        "name": "org/rocksdb/util/Environment",
+        "sha256": "8c2550f122939c12989f5a852361d687c299459e6cebb11ad64a383ee2f4bd18"
+      }
+    ],
+    "sources": [
+      {
+        "path": "java/rocksjni/options.cc",
+        "sha256": "fa2e3243d94f79e5648bdf8dfe6a5edfd69c3f2405a34fa0c643bc9c64769ea5"
+      },
+      {
+        "path": "java/rocksjni/rocksjni.cc",
+        "sha256": "307d38a36b09996e192852f03adcb1423674e1363a58791e3e23b977e1c2c506"
+      },
+      {
+        "path": "java/rocksjni/env.cc",
+        "sha256": "732e1d3cc8f50bd33b9c7f4e757d33712e7897d68940b93eaf9187d5e34bce08"
+      },
+      {
+        "path": "java/rocksjni/portal.h",
+        "sha256": "5b1b7094d65af316f953fdf0cc22acda10d3189e2a90cff0d12bf0ccb263e8a2"
+      },
+      {
+        "path": "java/rocksjni/kv_helper.h",
+        "sha256": "19e79fe269956b00b3e60866847f392e40235c838eadf8595f846c51acaa79b1"
+      },
+      {
+        "path": "include/rocksdb/options.h",
+        "sha256": "e12b38b4561f2b66de7e4f1f3030f45cb11fb2478809dcc7e89f82054df77280"
+      },
+      {
+        "path": "include/rocksdb/advanced_options.h",
+        "sha256": "65c070fde0a4ddf3595b0648515faf409b5d801000277f1ee78afb7e8a5b2383"
+      },
+      {
+        "path": "java/src/main/java/org/rocksdb/RocksDB.java",
+        "sha256": "8d29dca338f3a7076007731e833bd40094669868ad6d1c9c8111ec3eafa8bc8c"
+      },
+      {
+        "path": "java/src/main/java/org/rocksdb/Env.java",
+        "sha256": "aaecf8c9d7cc3f0f422d34e6e7a1bbaa80049125c1d2b0c55bf9e1440f43c2bc"
+      }
+    ],
+    "sevenGapExclusions": [
+      {
+        "class": "org/rocksdb/DBOptions",
+        "method": "setFailIfOptionsFileError",
+        "descriptor": "(JZ)V",
+        "static": true,
+        "short": "Java_org_rocksdb_DBOptions_setFailIfOptionsFileError",
+        "long": "Java_org_rocksdb_DBOptions_setFailIfOptionsFileError__JZ",
+        "reason": "Neither selected Options constructor, setters nor open path calls these wrappers. No DBOptions object is constructed; Options implements the stored DBOptionsInterface without invoking it. Native option-field access is not a Java native-method invocation."
+      },
+      {
+        "class": "org/rocksdb/DBOptions",
+        "method": "failIfOptionsFileError",
+        "descriptor": "(J)Z",
+        "static": true,
+        "short": "Java_org_rocksdb_DBOptions_failIfOptionsFileError",
+        "long": "Java_org_rocksdb_DBOptions_failIfOptionsFileError__J",
+        "reason": "Neither selected Options constructor, setters nor open path calls these wrappers. No DBOptions object is constructed; Options implements the stored DBOptionsInterface without invoking it. Native option-field access is not a Java native-method invocation."
+      },
+      {
+        "class": "org/rocksdb/LiveFileMetaData",
+        "method": "newLiveFileMetaDataHandle",
+        "descriptor": "([BIILjava/lang/String;Ljava/lang/String;JJJ[BI[BIJZJJ)J",
+        "static": false,
+        "short": "Java_org_rocksdb_LiveFileMetaData_newLiveFileMetaDataHandle",
+        "long": "Java_org_rocksdb_LiveFileMetaData_newLiveFileMetaDataHandle___3BIILjava_lang_String_2Ljava_lang_String_2JJJ_3BI_3BIJZJJ",
+        "reason": "Worker calls no live-file metadata, export/import or metadata-to-native conversion API; neither selected Java methods nor the inspected native exception constructors construct LiveFileMetaData."
+      },
+      {
+        "class": "org/rocksdb/Options",
+        "method": "setFailIfOptionsFileError",
+        "descriptor": "(JZ)V",
+        "static": true,
+        "short": "Java_org_rocksdb_Options_setFailIfOptionsFileError",
+        "long": "Java_org_rocksdb_Options_setFailIfOptionsFileError__JZ",
+        "reason": "Neither selected Options constructor, setters nor open path calls these wrappers. No DBOptions object is constructed; Options implements the stored DBOptionsInterface without invoking it. Native option-field access is not a Java native-method invocation."
+      },
+      {
+        "class": "org/rocksdb/Options",
+        "method": "failIfOptionsFileError",
+        "descriptor": "(J)Z",
+        "static": true,
+        "short": "Java_org_rocksdb_Options_failIfOptionsFileError",
+        "long": "Java_org_rocksdb_Options_failIfOptionsFileError__J",
+        "reason": "Neither selected Options constructor, setters nor open path calls these wrappers. No DBOptions object is constructed; Options implements the stored DBOptionsInterface without invoking it. Native option-field access is not a Java native-method invocation."
+      },
+      {
+        "class": "org/rocksdb/RocksEnv",
+        "method": "disposeInternalJni",
+        "descriptor": "(J)V",
+        "static": true,
+        "short": "Java_org_rocksdb_RocksEnv_disposeInternalJni",
+        "long": "Java_org_rocksdb_RocksEnv_disposeInternalJni__J",
+        "reason": "The only RocksEnv comes from Env.getDefault(); it is disowned before publication, never closed by the worker, and Options.disposeInternalJni deletes native Options only. There is no Java finalizer in the inspected native-reference hierarchy."
+      },
+      {
+        "class": "org/rocksdb/WBWIRocksIterator",
+        "method": "refresh0Jni",
+        "descriptor": "(J)V",
+        "static": true,
+        "short": "Java_org_rocksdb_WBWIRocksIterator_refresh0Jni",
+        "long": "Java_org_rocksdb_WBWIRocksIterator_refresh0Jni__J",
+        "reason": "Worker creates no WriteBatchWithIndex or iterator and calls no refresh method; direct database put/get/flush do not create a Java iterator."
+      }
+    ],
+    "nativeCallbackReview": {
+      "errorPath": [
+        "DB open, put, get, flush and close failures reach RocksDBExceptionJni::ThrowNew(Status).",
+        "portal.h constructs Status(BB, String) and RocksDBException(Status); compiled constructor, enum initialization and accessor bytecode add zero org.rocksdb native methods.",
+        "GetByteArrayRegion, SetByteArrayRegion, GetStringUTFChars and pointer-array conversion can raise JVM allocation/bounds exceptions; these use JNI/JVM facilities, not the seven absent bindings. KVException treats NotFound as negative read length without Java status exception.",
+        "C++ allocation failure or fatal native assertions are not proved safe/translated by this analysis.",
+        "Three size-valued Options setters check jlong-to-size_t conversion and can throw java.lang.IllegalArgumentException, with no org.rocksdb native callback. Worker constants 2 MiB, 64 KiB and 2 fit even 32-bit size_t."
+      ],
+      "customCallbacks": "New native Options defaults to native BytewiseComparator and Env::Default; merge/filter/filter-factory/WAL filter are null; Java listeners and collector factories are not installed. The worker installs no Java comparator, logger, listener, filter, table-properties collector, environment or iterator callback. Disabled auto-compaction is not the sole basis of this exclusion.",
+      "cleanup": "closeE invokes closeDatabase and invokes DB disposal in finally, including RocksDBException. Worker resource cleanup invokes only Options, WriteOptions and FlushOptions disposal. Single-family open leaves ownedColumnFamilyHandles empty and disowns the separately stored default family handle.",
+      "defaultReadOptions": "RocksDB constructor allocates native default ReadOptions even though the selected byte-array get uses a separate native stack ReadOptions. Stock closeE/disposeInternal does not close that Java field; ReadOptions.disposeInternalJni is not reachable here. The bounded worker creates at most two such objects before process exit. This does not establish general leak-free lifecycle."
+    },
+    "limitations": [
+      "Static source-to-stock-bytecode reachability for this worker configuration, not runtime execution or a general Ergo compatibility result.",
+      "Worker roots were resolved from reviewed source against exact stock class descriptors; the worker was not compiled or run for this analysis.",
+      "36 is the union of potential org.rocksdb native declarations across startup, normal calls and explicit cleanup, conditional on progress through prior gates; it is not a claim all run on every failure path.",
+      "JVM/JRE/OS native methods and arbitrary behavior caused by native defects, memory corruption or concurrent mutation are outside this call graph.",
+      "No database, compression interoperability, module provenance, resource-limit or runtime adoption gate is satisfied here."
+    ],
+    "candidateReconciliation": "All 36 required symbols are nonzero executable nonforwarded candidate exports; generated JNI headers agree with stock descriptors, receiver and return types. The generated JAR is not substituted for the stock Ergo JAR."
+  },
+  "targetEvidence": {
+    "retained": "rocksdbjni-shared.vcxproj",
+    "packagedTarget": "rocksdbjni.vcxproj",
+    "packagedTargetProjectRetained": false,
+    "source": "java/CMakeLists.txt",
+    "sourceSha256": "cf3069345f82c8bb85701f763076a0d2f306c55db62126a6d860b2e2b65e8664",
+    "selectionLines": [
+      792,
+      797,
+      803,
+      804,
+      848,
+      850,
+      880,
+      882
+    ],
+    "correction": "Stager/importer now require rocksdbjni.vcxproj and reject the sibling-only archive. Actual corrected-target retention remains unobserved.",
+    "siblingProjectObservation": {
+      "sourceCount": 85,
+      "releaseCompile": {
+        "AdditionalIncludeDirectories": "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source;D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\include;C:\\hostedtoolcache\\windows\\Java_Temurin-Hotspot_jdk\\21.0.12-101.0\\x64\\include;C:\\hostedtoolcache\\windows\\Java_Temurin-Hotspot_jdk\\21.0.12-101.0\\x64\\include\\win32;D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\source\\java;%(AdditionalIncludeDirectories)",
+        "AdditionalOptions": "%(AdditionalOptions) /external:I \"D:/a/reference-ts/reference-ts/scratch/native-build/source/third-party/gtest-1.8.1/fused-src\" /d2Zi+ /Oxt",
+        "AssemblerListingLocation": "$(IntDir)",
+        "BasicRuntimeChecks": "Default",
+        "BufferSecurityCheck": "true",
+        "CallingConvention": "Cdecl",
+        "DebugInformationFormat": "ProgramDatabase",
+        "DisableSpecificWarnings": "4127;4996;4100;4324",
+        "ErrorReporting": "Queue",
+        "ExceptionHandling": "Sync",
+        "ExternalWarningLevel": "TurnOffAllWarnings",
+        "FloatingPointModel": "Precise",
+        "ForceConformanceInForLoopScope": "true",
+        "FunctionLevelLinking": "true",
+        "InlineFunctionExpansion": "AnySuitable",
+        "LanguageStandard": "stdcpp17",
+        "MinimalRebuild": "false",
+        "Optimization": "MaxSpeed",
+        "PrecompiledHeader": "NotUsing",
+        "RuntimeLibrary": "MultiThreaded",
+        "RuntimeTypeInfo": "false",
+        "StringPooling": "true",
+        "StructMemberAlignment": "8Bytes",
+        "SupportJustMyCode": null,
+        "SuppressStartupBanner": "true",
+        "TreatWChar_tAsBuiltInType": "true",
+        "TreatWarningAsError": "true",
+        "UseFullPaths": "true",
+        "WarningLevel": "Level4",
+        "PreprocessorDefinitions": "%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;ROCKSDB_NO_DYNAMIC_EXTENSION;OS_WIN;_MBCS;WIN64;NOMINMAX;CMAKE_INTDIR=\"Release\";rocksdbjni_shared_EXPORTS",
+        "ObjectFileName": "$(IntDir)",
+        "ProgramDataBaseFileName": "D:\\a\\reference-ts\\reference-ts\\scratch\\native-build\\build\\java\\$(Configuration)\\Release\\rocksdbjni.pdb.pdb",
+        "ScanSourceForModuleDependencies": "false"
+      },
+      "releaseLink": {
+        "AdditionalDependencies": "..\\Release\\rocksdb.lib;..\\Release\\rocksdb.lib;shlwapi.lib;rpcrt4.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib",
+        "AdditionalLibraryDirectories": "%(AdditionalLibraryDirectories)",
+        "AdditionalOptions": "%(AdditionalOptions) /machine:x64",
+        "GenerateDebugInformation": "true",
+        "IgnoreSpecificDefaultLibraries": "%(IgnoreSpecificDefaultLibraries)",
+        "ImportLibrary": "D:/a/reference-ts/reference-ts/scratch/native-build/build/java/Release/rocksdbjni-shared.lib",
+        "ProgramDataBaseFile": "D:/a/reference-ts/reference-ts/scratch/native-build/build/java/Release/rocksdbjni-shared.pdb",
+        "SubSystem": "Console"
+      }
+    }
+  },
+  "wbwi": {
+    "header": "headers/org_rocksdb_WBWIRocksIterator.h",
+    "headerSha256": "93e7ac43995dde0a3626bdeb07153823903856d8b72c69de500ee839fc030c17",
+    "declaration": "JNIEXPORT void JNICALL Java_org_rocksdb_WBWIRocksIterator_refresh0Jni(JNIEnv *, jclass, jlong)",
+    "definition": "void Java_org_rocksdb_WBWIRocksIterator_refresh0Jni(JNIEnv*, jobject, jlong)",
+    "definitionSource": "java/rocksjni/write_batch_with_index.cc",
+    "definitionLine": 947,
+    "definitionSourceSha256": "5b24b19bae6c607ecd3579fe616cba5bad299fac038bb7b4f301cb5697f338c8",
+    "finding": "Generated static receiver and source instance receiver differ in C++ type; definition can form an overload without the prototype linkage/export decoration. Actual export is absent. No source patch or runtime reproduction."
+  },
+  "limitations": [
+    "Static byte/header/source inspection does not establish native semantics, callbacks under arbitrary configuration, Windows transitive module provenance or runtime safety.",
+    "Exact packaged-target project and complete compiler invocations are unavailable from this run. Sibling project evidence must not be attributed to the actual output target.",
+    "Seven missing JNI bindings remain excluded only for the specified offline worker; a general Ergo replacement is not established. Generated JAR is inspection-only and contains test helpers.",
+    "Compression-free candidate fits the fresh explicit NO_COMPRESSION control configuration only; arbitrary existing databases and full-node compression compatibility remain open.",
+    "Native pin adoption, narrow WinSxS provenance, 1-second sampling ceiling and fixed 64 MiB database controls remain unmet. No volume allocation, DLL/JAR replacement, native load or database retry in this slice.",
+    "Artifact digest and manifest bind observed provider bytes; no independent build reproducibility or complete transitive toolchain attestation is claimed."
+  ],
+  "review": {
+    "scope": "Independent byte parsers, generated prototype versus compiled class and pinned source comparison, stock worker path, and focused target-selection patch readback.",
+    "findings": [
+      "Retained project belongs to sibling; staging/acceptance corrected for future runs, current exact-target evidence explicitly remains owed.",
+      "WBWI static receiver differs from C++ definition; excluded from worker and not patched.",
+      "Generated Java classes target major 65 and include helpers; no stock JAR substitution.",
+      "Stock default ReadOptions allocation lacks close on the bounded worker path; at most two objects before exit, general lifecycle remains open."
+    ],
+    "result": "No unresolved material finding in static-only retention/report scope. No runtime adoption clearance.",
+    "independentExpectedIdentitySource": "Reviewer received expected outer identity from primary authenticated API/upload-log read, separate from archive contents; reviewer did not repeat authenticated API lookup.",
+    "checks": {
+      "syntheticArchives": 47,
+      "fullProjectCheck": "passed",
+      "testFiles": 96,
+      "tests": 1795,
+      "testDurationSeconds": 254.64,
+      "runtimeCodeChanged": false
+    },
+    "evidenceLimits": "Separate parsers agreed on these inputs; not general parser correctness, preprocessed AST/object disassembly, native-code security audit or runtime acceptance."
+  }
+}

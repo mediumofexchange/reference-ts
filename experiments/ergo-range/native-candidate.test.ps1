@@ -53,15 +53,22 @@ function Mutate-Manifest($Members, [scriptblock]$Change) {
 try {
     foreach ($dir in @('build/java/Release','source/java/include')) { New-Item -ItemType Directory -Path (Join-Path $root $dir) -Force | Out-Null }
     $paths = @('build/java/Release/librocksdbjni-win64.dll','build/java/rocksdbjni-10.2.1-win64.jar',
-        'build/CMakeCache.txt','build/java/rocksdbjni-shared.vcxproj','build/build_version.cc','exports.txt','imports.txt',
+        'build/CMakeCache.txt','build/java/rocksdbjni.vcxproj','build/build_version.cc','exports.txt','imports.txt',
         'source/java/include/org_rocksdb_Fixture.h')
     foreach ($path in $paths) { [IO.File]::WriteAllText((Join-Path $root $path),'synthetic candidate data') }
+    # Both projects exist after configure. Only rocksdbjni is packaged by
+    # upstream rocksdbjava; the sibling must never stand in for its evidence.
+    [IO.File]::WriteAllText((Join-Path $root 'build/java/rocksdbjni-shared.vcxproj'),'unbuilt sibling target')
     $report = @{status='compiled-unadopted-native-candidate'; candidateLoaded=$false; databaseAcceptance=$false;
         sourceCommit=$script:NativeSource; workflowCommit=$commit; runId=$run; runAttempt='1';
         dll=(Record (Join-Path $root $paths[0])); jar=(Record (Join-Path $root $paths[1]))}
     Check 'stage exact bounded members' {
         $manifest = Export-NativeCandidate $root $report
         if ($manifest.files.Count -ne 10) { throw 'Unexpected staged member count' }
+        if (@($manifest.files | Where-Object name -CEQ 'rocksdbjni.vcxproj').Count -ne 1 -or
+            @($manifest.files | Where-Object name -CEQ 'rocksdbjni-shared.vcxproj').Count -ne 0) {
+            throw 'Stager must retain the packaged DLL target project'
+        }
     }
     $good = Archive 'good'
     Check 'verified import preserves every byte' {
@@ -85,6 +92,8 @@ try {
     } 'below repository scratch'
     $bad = Archive 'traversal' { param($m) $m.Add(@{name='../escape';bytes=[byte[]]@(1);attributes=0}) }
     Reject 'parent traversal' { Receive $bad } 'Unexpected candidate member name'
+    $bad = Archive 'sibling-project' { param($m) ($m | Where-Object name -CEQ 'rocksdbjni.vcxproj').name='rocksdbjni-shared.vcxproj' }
+    Reject 'sibling project cannot replace packaged target' { Receive $bad } 'Unexpected candidate member name'
     $bad = Archive 'case-duplicate' { param($m) $m.Add(@{name='EXPORTS.TXT';bytes=[byte[]]@(1);attributes=0}) }
     Reject 'case-colliding name' { Receive $bad } 'Duplicate candidate archive name'
     $bad = Archive 'special' { param($m) $m[0].attributes = (0xA000 -shl 16) }
@@ -194,4 +203,3 @@ try {
         Remove-Item -LiteralPath $verified -Recurse -Force
     }
 }
-

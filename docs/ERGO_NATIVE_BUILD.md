@@ -1,6 +1,7 @@
 # Windows native build qualification
 
-Status: 2026-09-10, bounded compile-only qualification passed after three input refusals.
+Status: 2026-09-10, retained candidate imported and statically inspected; runtime
+adoption and exact packaged-target project evidence remain open.
 This implements the [preparation preference](../decisions/2026-09.md#2026-09-10--qualify-a-consistent-windows-database-build).
 The [published artifact mismatch](ERGO_NODE_PREFLIGHT.md#published-windows-native-reconciliation)
 and the existing database-control refusals remain unresolved for execution.
@@ -296,11 +297,11 @@ inventory of the published DLL. A successful no-compression control would
 establish neither decoding of previously compressed data nor the stock Ergo
 configuration. Do not substitute the compile-only JAR for the pinned Ergo JAR.
 
-The next slice should prepare bounded retention/transfer of the narrow
-offline candidate and inspect its actual DLL, generated JAR, export addresses,
-Java descriptors, JNI signatures and build configuration. Preserve the seven
-gaps as explicit exclusions; demonstrate the control's required call path
-before relying on it. A general Ergo replacement must resolve the binding
+Bounded retention/transfer below supports inspection of the narrow offline
+candidate's actual DLL, generated JAR, export addresses, Java descriptors,
+JNI signatures and build configuration. Preserve the seven gaps as explicit
+exclusions; demonstrate the control's required call path before relying on it.
+A general Ergo replacement must resolve the binding
 gaps and compression profile separately. Do not add placeholder JNI methods
 or relax the native version, module or resource gates to make adoption pass.
 WinSxS provenance and the previous 954 ms sampling gap remain separate blockers
@@ -308,9 +309,12 @@ to the fixed 64 MiB control.
 
 ## Bounded candidate retention
 
-The retention route is prepared and tested with synthetic archives. No retained
-hosted build has been produced by this slice. The original successful run
-remains logs-only, and its DLL/JAR hashes do not authorize a later build.
+[Run 34502815638](https://github.com/mediumofexchange/reference-ts/actions/runs/34502815638)
+at `373db5058b71370612818f4bb261ea8d25c66fdc`, attempt 1, successfully retained
+one candidate. The [candidate report](ergo-native-candidate-verification.json)
+records independently read API/upload-log identity, raw archive verification,
+all member hashes, build observations and the static worker call path. The
+original successful run remains logs-only; this candidate has new DLL/JAR hashes.
 
 The [stager/importer](../experiments/ergo-range/native-candidate.ps1) selects
 only these outputs from one successful build:
@@ -319,7 +323,7 @@ only these outputs from one successful build:
 |---|---:|
 | DLL and JAR | 32 MiB each |
 | All post-generation `source/java/include/org_rocksdb_*.h` | 256 files, 256 KiB each, 8 MiB together |
-| `rocksdbjni-shared.vcxproj` | 4 MiB |
+| `rocksdbjni.vcxproj` (packaged DLL target) | 4 MiB |
 | Build report, CMake cache, export report, import report | 1 MiB each |
 | `build_version.cc`, reviewed input manifest | 64 KiB each |
 | Transfer manifest | 256 KiB |
@@ -330,6 +334,14 @@ paths must be ordinary paths below repository scratch, and existing staging or
 import destinations are refused. No source tree, build dependency JARs, compiler
 installation, credential file, PDB or unrelated workspace output is uploaded.
 The generated project complements the cache's incomplete compiler-flag evidence.
+The first retention revision `373db50` selected `rocksdbjni-shared.vcxproj`,
+a sibling target. Pinned Java CMake lines 792-806 create both targets, but
+lines 846-850 name the `rocksdbjni` output and lines 878-883 package that target
+into the JAR. Future staging/import requires its exact `rocksdbjni.vcxproj`;
+the old sibling-only archive requires the original revision's importer and
+cannot satisfy the corrected target-evidence requirement. No artifact is
+renamed or reinterpreted to hide this gap. Neither project is a complete
+compiler-invocation or transitive toolchain attestation.
 Headers, built Java classes and exports let the next review investigate the
 unresolved `WBWIRocksIterator` signature/export boundary using actual output.
 The [pinned CMake source](https://github.com/facebook/rocksdb/blob/4b2122578e475cb88aef4dcf152cccd5dbf51060/java/CMakeLists.txt#L564)
@@ -399,14 +411,103 @@ whole-process memory ceiling. The GitHub transfer has an advertised-size
 preflight and the importer checks actual archive bytes; ZIP central-directory
 metadata and JSON parsing still allocate memory within their input bounds.
 
+### Actual retained output
+
+The run accepted image `20260830.290.1`, Temurin 21.0.12.1, CMake 3.31.6 and
+MSVC toolset 14.44.35207. Compilation/static inspection took 1,019,452 ms
+(16.99 minutes), observing 780,378,258 bytes of scratch before staging.
+Artifact `10163251532`, named `rocksdb-candidate-34502815638-1`, advertised and
+downloaded exactly 13,696,641 bytes. Its API and upload-log digest both matched
+the raw ZIP SHA-256 `d3ab87cba4a7d432b182a81f23c21b91215a35e22cf9960efecbc3adceb194f6`.
+The advertised expiry is 2026-09-11 16:50:37 UTC; local verified bytes remain in
+ignored scratch for the next static/adoption preparation step.
+
+The original `373db50` importer validated all 105 content members, 13,660,092
+bytes plus manifest, before extraction. Its unchanged Git blob was checked
+before use. This archive retains the sibling project described above; the
+corrected current importer deliberately refuses that old member selection.
+Existing zero-dollar Actions/Packages budgets were rechecked before dispatch;
+no billing or access setting changed. The package inventory limit remains.
+
+| Output | Bytes | SHA-256 |
+|---|---:|---|
+| DLL | 8,998,912 | `a05f9ba907daf041a5ac9eaec7f241fe012b1aef4b1b844bb1696d392229c5de` |
+| JAR | 3,991,103 | `d04301aa65fb5830d459089b19c492727798b9a84c8d745173eb77cf0e19f2ee` |
+
+Independent PE parsing confirms x64, 1,524 named/nonzero executable exports,
+no forwarded or unnamed exports, and the same complete name/RVA table as the
+prior retained static report. Direct imports remain SHLWAPI, RPCRT4 and
+KERNEL32; there is no delay-import directory or embedded certificate table.
+The JAR's embedded DLL equals the standalone DLL byte for byte. These facts
+do not authenticate Windows transitive imports or establish native semantics.
+
+The generated JAR contains 258 RocksDB classes and 1,531 native declarations:
+all 1,519 stock declarations are unchanged, plus 12 test-helper declarations
+corresponding to the formerly unused exports. It has 11 classes absent from
+the stock JAR and lacks six stock `$1` classes; all 247 shared class files have
+different bytes. Generated classes use class-file major 65 (Java 21), while
+stock classes use major 52 (Java 8); earlier source-8 compiler warnings do not
+establish the packaged JAR's target level. The 96 generated headers (373,675 bytes) cover all 1,531 native
+declarations with matching descriptor, return type and static/instance receiver.
+The same seven names are missing. The generated JAR remains inspection-only;
+the stock Ergo JAR is unchanged. All 1,524 actual exported names have a
+matching pinned C++ definition and generated header return/parameter type list
+after normalizing top-level `const`. This is static signature consistency,
+not a proof of the compiled ABI or runtime semantics.
+The source comparison also records an extra `Transaction_getDirect` receiver
+overload; a separate matching definition and actual export cover that method,
+so it is not an eighth missing binding.
+
+The actual `WBWIRocksIterator` header declares `refresh0Jni` with a `jclass`
+receiver. Pinned C++ line 947 defines it with `jobject` and without an explicit
+`JNIEXPORT`/`JNICALL`. Distinct C++ parameter types permit an overload that
+does not inherit the generated declaration's C linkage/export decoration;
+the actual export is absent. This explains the source/header inconsistency
+without treating source presence as an exported binding. No patch, placeholder
+implementation or runtime reproduction was introduced.
+
+### Offline worker linkage boundary
+
+The candidate report records the exact **36 potential native declarations**
+reachable through the reviewed `NodeDatabaseControl` configuration. Independent
+stock class-bytecode and pinned-source inspection includes all 17 Options
+setters, write/flush options, explicit loading/version, both database opens,
+put/get/flush, constructor calls and exceptional cleanup. Five use long JNI
+names: Options/ReadOptions constructors and the selected RocksDB open/get/put
+overloads; the other 31 use short names. Every required candidate export and
+generated prototype matches the selected stock signature.
+
+The seven missing bindings are excluded by specific paths: no missing option
+wrapper, live-file metadata conversion or indexed-write-batch iterator is
+called; the default RocksEnv is disowned. Single-family open leaves the owned
+column-family list empty and disowns its separately stored default handle.
+Native status errors construct the checked Java-only Status and RocksDBException
+objects. The worker installs no Java comparator, listener, logger, filter or
+environment callbacks. This is a scoped potential-call set, not a whole-Ergo
+call graph or a claim that every call occurs on every failed run.
+
+Stock RocksDB allocates a default native ReadOptions object on construction
+without closing it along this path. The worker creates at most two before
+process exit; this review does not establish general leak-free lifecycle.
+Native allocation failure, fatal assertions, memory corruption, arbitrary
+callbacks and JVM/OS native behavior remain outside the static call graph.
+
+Before execution, capture the corrected packaged-target project in a later
+bounded run, then review exact native pins and narrow WinSxS provenance.
+Keep the stock JAR, compression-free fresh-database profile, fixed 64 MiB
+control and unchanged one-second sampling ceiling. No native load, database
+retry, node start, peer connection or volume allocation occurred here.
+
 ### Verification
 
 The [synthetic suite](../experiments/ergo-range/native-candidate.test.ps1) covers
-46 cases without executable binaries or network access: valid round trip,
+47 cases without executable binaries or network access: valid round trip,
 wrong archive/member hashes and workflow identities, missing required members,
 traversal, case collisions, symlink metadata, malformed lengths, size overflow,
 lying ZIP lengths, duplicate JSON keys, identity/status arrays and final-newline
-filenames. Windows CI runs it alongside the offline identity/accounting checks.
+filenames. It stages the packaged target when both project files exist and
+rejects a sibling project substituted for it. Windows CI runs it alongside
+the offline identity/accounting checks.
 Independent review reproduced the array-comparison and newline-name defects;
 strict scalar validation and absolute regex anchors fixed them. Independent
 readback passed the suite, original counterexamples and a separate Windows
@@ -416,4 +517,15 @@ package, pilot, store-crash and spent-set checks. An initial sandbox run passed
 documentation/type checks but refused Vitest/esbuild directory access; the same
 command passed outside that boundary without changing implementation or deadlines.
 The retained-build script also refused local invocation at its host gate before
-mutation. Actual hosted retention, upload and transfer remain untested.
+mutation. The actual retained run and verified transfer above now complement
+the synthetic evidence. The exact-target correction passed all 47 archive
+cases and full `npm run check`: 96 files / 1,795 tests in 254.64 s plus every
+subsequent check. Preparation revision `373db50` passed every CI job in
+[run 34502530808](https://github.com/mediumofexchange/reference-ts/actions/runs/34502530808).
+Independent candidate review used separate ZIP/class/PE readers and compared
+all 85 pinned JNI source files with the generated prototypes. It reproduced
+member identity, class/native sets, export addresses and the scoped findings
+above. The reviewer used the primary authenticated API/log identity as its
+outer expectation and independently checked the archive contents against it.
+No unresolved material finding remains within static retention/reporting;
+the missing exact-target evidence and runtime adoption gates remain explicit.
