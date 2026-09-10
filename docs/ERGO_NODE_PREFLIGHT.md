@@ -1,7 +1,8 @@
 # Dedicated Ergo node preflight
 
-Status: 2026-09-10, artifact inspection and launch requirements only. No node
-was installed, extracted, executed or synchronized. The runtime remains v2;
+Status: 2026-09-10, artifact inspection and launch requirements. The
+[stock no-spending-key decision](../decisions/2026-09.md#2026-09-10--keep-the-source-probe-free-of-spending-keys)
+permits a finite, source-configured offline startup on a trusted host. The runtime remains v2;
 this does not select a production source, change a parser budget or establish
 an authenticated range. Companion specification: `main` at `7ea0ee8`.
 
@@ -110,7 +111,10 @@ Bind REST and P2P listeners only to loopback, disable UPnP and avoid a declared
 public address. Keep mainnet peers for a later controlled outbound sync; an
 empty peer list alone is not network isolation. Before sync, verify actual
 listener addresses and outgoing behavior. Never inherit the default API-key
-hash of `hello` or wildcard CORS. An API authentication secret is distinct from
+hash of `hello`. Wildcard CORS is hardcoded by
+[ErgoHttpService](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/http/ErgoHttpService.scala)
+and cannot be disabled by the parsed `corsAllowedOrigin` setting; the finite
+probe retains that local surface explicitly. An API authentication secret is distinct from
 a spending key and cannot establish that wallet services are disabled.
 
 The pinned
@@ -126,19 +130,39 @@ configuration key such as `wallet.enabled = false` cannot establish otherwise.
 No seed, wallet restoration, funds, signing or transaction submission is
 needed for the source comparison.
 
-Keep this distinction in the next decision. The smallest alternatives are:
+The reviewed decision selects the first of these alternatives for this probe:
 
 - Retain the stock binary with a fresh uninitialized wallet, an unpredictable
   API-key hash whose preimage is not retained, local listeners and a reader
   that has only bounded public GET access. This avoids a node fork and spending
   keys but retains wallet code and depends on authentication/isolation; it
-  changes the experiment's service-disabling requirement and needs review.
+  changes the experiment's service-disabling requirement, as explicitly reviewed.
 - Omit wallet actor/routes through a minimal source change or an upstream
   supported option. This can satisfy literal service removal, but introduces
   a changed artifact, build provenance and continuing maintenance/review costs.
 
-Neither alternative is adopted by this preflight. An HTTP proxy alone leaves
+Only the finite experiment adopts the first alternative. An HTTP proxy alone leaves
 the underlying wallet routes present and does not establish their removal.
+The invariant is that the node never initializes/imports/persists/uses a spending
+key, wallet prover or keystore. Random entropy is not itself wallet authority.
+The source's
+[wallet startup](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/nodeView/wallet/ErgoWalletService.scala#L271)
+does not generate a key when the secret file and test mnemonic are absent.
+All [wallet routes](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/http/api/WalletApiRoute.scala#L49)
+require authentication. Public entropy and transaction-submission routes remain:
+the startup reader allowlists `/info`, `/peers/connected` and the unauthenticated
+`/wallet/status` rejection check, not arbitrary GET paths.
+
+For source-configured offline startup, explicitly set `knownPeers=[]`,
+`bannedPeers=[]`, `peerDiscovery=false`, `maxConnections=0`, `upnpEnabled=false`,
+`declaredAddress=null` and `restApi.publicUrl=null`, with a fresh peer database.
+The pinned
+[network controller](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/scorex/core/network/NetworkController.scala#L268)
+suppresses scheduled connections at zero maximum. Its direct connect path is
+not guarded by that maximum, but its HTTP trigger requires authentication.
+No NTP/DNS-seed implementation was identified in the bounded production-source
+review. Record no observed outbound sockets when supported; socket sampling
+does not prove zero packets or hard network isolation.
 
 ## Acceptance after a controlled sync
 
@@ -185,20 +209,20 @@ and production resource sufficiency remain separate gates.
 
 ## Next executable slice
 
-Resolve the service boundary above with independent review before choosing
-the executable artifact. Prefer reusing the stock node if its uninitialized,
-authentication-isolated wallet preserves the actual no-spending-key invariant;
-do not describe it as wallet-service removal. Falsifier: any reachable route,
+Use the reviewed stock-node boundary above. Falsifier: any reachable route,
 startup behavior or persisted data can generate/import/use a spending key
 without the deliberately unavailable authentication capability.
 
-Then build a fixed-purpose offline startup supervisor for the chosen artifact.
+Build a fixed-purpose offline startup supervisor for the chosen artifact.
 Acceptance is a short process with no wallet/spending keys, local-only
 listeners, effective settings, job limits and whole-job cleanup read back,
-plus no outbound traffic. Only a separately controlled sync can produce the
+plus source-configured offline behavior and no observed outbound sockets.
+This revised claim does not establish zero packets. Only a separately controlled sync can produce the
 fixture and validation evidence. No production dependency is selected here.
 
 Independent source/claim review caught the omitted prerelease label, now
 corrected, and confirmed the always-present wallet surface and API membership
-limits. No material preflight finding remains. It did not approve a future
-wallet-boundary relaxation or establish startup/resource/sync evidence.
+limits. Subsequent independent boundary review found hardcoded CORS and public
+non-passive routes; the explicit residual surface and reader allowlist resolve
+those findings for the finite experiment. No material static boundary finding
+remains under the recorded assumptions; startup/resource/sync evidence is separate.
