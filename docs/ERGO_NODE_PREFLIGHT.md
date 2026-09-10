@@ -373,8 +373,16 @@ before formatting. Read-only inspection of that detached image's GPT found the
 data partition starting at sector 128, **65,536 bytes**, below the guard's
 declared 1 MiB minimum. The setup had relied on Windows' default offset.
 Detachment succeeded again; no worker or disk-full evidence was produced.
-The corrected setup must request the 1 MiB offset explicitly and preserve
-the observed disk/partition properties before evaluating their guards.
+The corrected setup at `53c2bec` requests the 1 MiB offset explicitly and
+preserves observed disk/partition properties before evaluating their guards.
+Independent readback and 75 durable cases pass.
+
+The [third attempt](ergo-disk-control-third-attempt.json) created and formatted
+the expected partition at offset 1,048,576 bytes. NTFS capacity was 65,990,656
+bytes with 53,633,024 bytes free both before and after the worker. The detached
+PowerShell worker exited 0 in 208 ms with no output; no fill happened. The
+classifier refused the missing result and image detachment passed. Source
+hashes identify `53c2bec`; this refusal is preserved without reclassification.
 
 The existing Job Object does not supply the combined traffic control:
 Microsoft's
