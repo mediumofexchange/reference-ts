@@ -348,6 +348,34 @@ hashes identify the tested helper. The result is `unresolved-disk-preflight`:
 no disk was created, attached, formatted, filled or detached. One elevated
 small-control measurement and its report remain the next required evidence.
 
+The [first elevated attempt](ergo-disk-control-first-attempt.json), preserved
+at `358b070`, obtained administrator context and created/attached a fixed VHD:
+67,108,864 virtual bytes, 67,109,376 backing bytes, provider subtype 2.
+It refused before disk initialization because the Storage module projects
+`BusType` to the display string `File Backed Virtual`, which cannot be cast
+to an integer. The worker never launched; no formatting or disk-full result
+was established. Explicit detach and readback succeeded. A separate read-only
+query confirmed the exact image was detached before its captured scratch
+artifact was removed for the corrected attempt.
+
+The corrected guard at `e3864b3` reads the underlying CIM property and requires
+`System.UInt16` value 15. Installed `Storage.types.ps1xml` and `Disk.cdxml`
+confirm the display mapping and raw type; the
+[MSFT_Disk contract](https://learn.microsoft.com/en-us/windows-hardware/drivers/storage/msft-disk)
+defines the bus values. An independent in-memory CIM reproduction and 74
+durable cases pass, including wrong raw values behind a matching display label,
+missing properties and wrong scalar types. No other identity predicate or
+budget changed. The initial refusal is not reclassified as passing.
+
+The [second attempt](ergo-disk-control-second-attempt.json) passed the raw-bus
+check, initialized the new GPT disk and created a data partition, then refused
+before formatting. Read-only inspection of that detached image's GPT found the
+data partition starting at sector 128, **65,536 bytes**, below the guard's
+declared 1 MiB minimum. The setup had relied on Windows' default offset.
+Detachment succeeded again; no worker or disk-full evidence was produced.
+The corrected setup must request the 1 MiB offset explicitly and preserve
+the observed disk/partition properties before evaluating their guards.
+
 The existing Job Object does not supply the combined traffic control:
 Microsoft's
 [network rate structure](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_net_rate_control_information)
