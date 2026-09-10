@@ -1,6 +1,6 @@
 # Production requirements
 
-Status: release contract, revised 2026-09-05; evidence refreshed 2026-09-09. This document defines what a
+Status: release contract, revised 2026-09-05; estimate method clarified 2026-09-10. This document defines what a
 finished implementation of the protocol must deliver and the evidence each
 gate needs. It does not amend the normative protocol; protocol choices land in
 Construction first, and the implementation tracks the revision pinned in the
@@ -29,6 +29,24 @@ judgment of engineering effort toward that target, not a measured fraction of
 features, code or tests and not a delivery-date prediction. Foundations include
 v2 proofs/notes, replay, authority, receipts and durable sequencing; reviewed
 recovery/fault models reduce design uncertainty but are not runtime recovery.
+
+The percentage is a coarse engineering judgment, not an automatic score from
+the release-gate table. Conceptually it compares reusable completed engineering
+effort with that effort plus the work still expected to satisfy the acceptance
+scope. There is no measured hours ledger or fixed set of numerical weights
+that calculates the current percentage. An exact-looking calculation would
+overstate the available evidence. The gate table is an evidence checklist:
+partially implemented gates can represent substantial completed work, while
+one unresolved dependency can prevent every usable product path.
+
+Reassess by inspecting the active implementation and gate evidence, identifying
+new demonstrated outcomes, and estimating what remains across runtime/recovery,
+wallet/transport, authenticated evidence/publication and operating assurance.
+Count reusable implementation and resolved consequential uncertainties; avoid
+double-counting models, their tests and their later integration. Allow for
+integration and redesign, state a broad range, and explain why an estimate
+changes or stays the same. Do not assign equal weight to gates or infer a
+percentage from files, commits, test totals or the fraction of gates passed.
 
 Most remaining effort is v3 recovery/evidence formats and circuits, runtime
 integration, a pool wallet and service transport, authenticated delivery and

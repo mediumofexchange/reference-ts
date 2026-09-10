@@ -143,7 +143,7 @@ Keep `AGENTS.md` under 200 lines and `WORK.md` under 100. Handoffs retain the ne
 
 Final reports state the delivered behavior, checks/review, merge/push state and remaining limits. Include a rough percentage done and remaining toward the usable end-to-end product, a range for roadblocks and the largest remaining work. Use the acceptance scope and estimate in [production requirements](docs/PRODUCTION_REQUIREMENTS.md#progress-estimate); estimate effort, not files, commits or tests. Workflow work alone does not advance product completion.
 
-After each slice, recommend continuing with the current model/instance or switching, based on the next slice's reasoning needs, context freshness and expected efficiency. State the reason; distinguish a recommendation from measured comparative performance.
+After every completed slice, explicitly recommend staying with the current model/instance or switching, without waiting for a reminder. Base it on the next slice's reasoning needs, context freshness and expected efficiency. State the reason; distinguish a recommendation from measured comparative performance.
 
 ## Toolchain
 
