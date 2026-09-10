@@ -2,6 +2,11 @@ name: RocksDB native build qualification
 
 on:
   workflow_dispatch:
+    inputs:
+      retain_candidate:
+        description: Retain the bounded unadopted DLL/JAR and static evidence for one day
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -12,7 +17,7 @@ concurrency:
 
 jobs:
   compile:
-    if: github.repository == 'mediumofexchange/reference-ts' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test/rocksdb-build-execution') && !github.event.repository.private
+    if: github.repository == 'mediumofexchange/reference-ts' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test/rocksdb-retention-preparation') && !github.event.repository.private
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
@@ -28,6 +33,29 @@ jobs:
           fetch-depth: 1
       - name: Compile fixed source and record static identity
         shell: pwsh
-        run: ./experiments/ergo-range/native-build.ps1
-      # Logs carry the bounded report. No artifact/cache upload, native test,
-      # local host installation, release or node execution is part of this job.
+        env:
+          RETAIN_CANDIDATE: ${{ inputs.retain_candidate }}
+        run: ./experiments/ergo-range/native-build.ps1 -RetainCandidate:($env:RETAIN_CANDIDATE -ceq 'true')
+      - name: Retain one bounded candidate for static review
+        if: ${{ success() && inputs.retain_candidate }}
+        id: candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rocksdb-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: scratch/native-build/candidate/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+          overwrite: false
+          include-hidden-files: false
+      - name: Record transfer identity
+        if: ${{ success() && inputs.retain_candidate }}
+        shell: pwsh
+        env:
+          CANDIDATE_ID: ${{ steps.candidate.outputs.artifact-id }}
+          CANDIDATE_DIGEST: ${{ steps.candidate.outputs.artifact-digest }}
+        run: |
+          Write-Output "Candidate artifact ID: $env:CANDIDATE_ID"
+          Write-Output "Candidate archive SHA-256: $env:CANDIDATE_DIGEST"
+      # Default remains logs-only. Retention never loads the candidate, runs
+      # native tests, installs tools locally, releases binaries or starts a node.

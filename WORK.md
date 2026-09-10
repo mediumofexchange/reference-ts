@@ -4,84 +4,90 @@ Updated: 2026-09-10
 
 ## Goal
 
-Prepare a retained Windows RocksDB 10.2.1 candidate for the bounded offline
-database control. Static Java/JNI name reconciliation is complete; runtime
-adoption remains blocked. No build, DLL load or database retry in this slice.
+Prepare bounded retention and verified local import of an unadopted Windows
+RocksDB candidate. Implementation, independent review and project checks are
+complete. The first hosted retained build is the next slice.
+No DLL load, runtime adoption, database retry or billing change in this slice.
 
-Delivery: `main`; preparation branch `docs/rocksdb-jni-compatibility`.
-Prior executable revision: `e917849`; this slice changes documentation only.
+Delivery: `main`; preparation branch `test/rocksdb-retention-preparation`.
+Prior build revision: `e917849`; JNI evidence revision: `38b7af9`.
 Companion specification: `money-from-first-principles/main` at `7ea0ee8`.
-No normative change, local toolchain installation, peers or disk allocation.
+No normative change, local toolchain installation, peers or volume allocation.
 
 ## Status
 
+- [Retention route](docs/ERGO_NATIVE_BUILD.md#bounded-candidate-retention) adds an
+  opt-in boolean to the manual build; default remains logs-only. Successful
+  staging can upload one named artifact for one day with a pinned upload action.
+- [Stager/importer](experiments/ergo-range/native-candidate.ps1) allowlists DLL,
+  JAR, generated source/java/include headers, generated project, build/cache/
+  import/export evidence and manifests. Bounds: 32 MiB per binary, 8 MiB headers,
+  80 MiB content plus 256 KiB manifest, 81 MiB downloaded archive, 300 files.
+- Import requires expected archive SHA-256 and workflow/run/attempt identity,
+  validates every member and report before extraction, and publishes an absent
+  destination only after complete extraction. Partial output is cleaned on error.
+- Read-only billing check found existing zero-dollar Actions/Packages budgets
+  with prevent_further_usage enabled. No budget/access settings were changed.
+  Package inventory lacks read:packages scope; recheck zero-spend budgets before
+  dispatch. Size gates are not bandwidth or whole-process memory quotas.
 - [JNI comparison](docs/ERGO_NATIVE_BUILD.md#javajni-name-compatibility) accounts
-  for all 79 removed exports: 71 LZ4, four obsolete option bindings, four still
-  declared `failIfOptionsFileError` getter/setter bindings on Options/DBOptions.
-  No added exports. Seven of 1,519 Ergo native declarations have no build
-  export; three were also missing from the published DLL. Twelve build exports
-  are test helpers absent from the Ergo class set.
-- [Static report](docs/ergo-native-jni-compatibility.json) retains all missing
-  descriptors, export differences, 253 class hashes, input/source hashes and
-  explicit evidence limits. Four newly missing natives have no bridge source
-  implementations; a full Java API compatibility claim is ruled out.
-- The existing worker does not directly call missing wrappers and explicitly
-  uses no compression. Transitive control reachability, retained output linkage
-  and runtime semantics remain open. No replacement of the stock Ergo baseline.
-- [Compile-only run 34495975811](docs/ERGO_NATIVE_BUILD.md) at `e917849` used
-  source `4b2122578e475cb88aef4dcf152cccd5dbf51060`, image `20260830.290.1`,
-  Temurin 21.0.12.1, CMake 3.31.6 and MSVC 14.44.35207. It took 16.43 minutes
-  and ended with 744.04 MiB scratch. All binaries disappeared with the runner.
-  Reports retain output/tool hashes and 1,524 exports. A later build is a new
-  candidate; no current hash silently authorizes it.
+  for 79 removed exports: 71 LZ4, four obsolete bindings, four still-declared
+  Options/DBOptions failIfOptionsFileError getter/setter bindings. Seven of
+  1,519 Ergo native declarations lack build exports; three gaps are shared with
+  the published DLL. The stock Ergo class baseline is unchanged.
+- Original [compile-only run 34495975811](docs/ERGO_NATIVE_BUILD.md) at `e917849`
+  took 16.43 minutes and 744.04 MiB scratch; binaries were discarded. A new run
+  produces new hashes, not an artifact authorized by those old observations.
 
 ## Evidence
 
-- Rehashed pinned Ergo JAR, published DLL and exact RocksDB source archive.
-  Read every compiled RocksDB class method table and the published PE exports;
-  compared against retained hosted exports without loading any native code.
-- Independent readback used separate ZIP/class and PE export-address parsers,
-  reproduced all counts/digests/missing lists and checked pinned source/prose.
-  No short-name overload collisions, zero published function addresses or
-  forwarded exports; no unresolved material finding within the static scope.
-- `npm run check:docs` and `git diff --check` pass for documentation changes.
-  Unchanged code reuses full `npm run check` at `e917849`: 96 files / 1,795
-  tests plus package, pilot, store-crash and spent-set checks; cross-platform
-  CI run `34497461262` passed. Build warnings/refusals remain in the build doc.
-- Static names do not prove signatures, callbacks, semantics, codec inventory
-  or runtime call paths. Generated build JAR and DLL are unavailable. The new
-  report does not qualify a runtime artifact or close a product gate.
+- 46 synthetic archive tests pass without native execution: round trip, hashes,
+  identity, traversal, duplicates, symlinks, bounds, malformed lengths, JSON
+  arrays/duplicate keys and final-newline names. Windows CI runs this suite.
+- Independent review reproduced two blockers: PowerShell array comparisons
+  bypassed identity checks; a final newline passed a filename regex. Explicit
+  scalar validation and absolute regex anchors resolve both. Independent
+  readback passed original counterexamples, all 46 tests and a separate Windows
+  extraction-failure cleanup probe; no material finding remains in this scope.
+- Local retained-build invocation refused at the host gate in 53 ms before
+  mutation. Workflow/source still require the exact public manual Windows job.
+- Initial full check reached typecheck, then sandbox directory access blocked
+  Vitest/esbuild startup. Full `npm run check` then passed outside the sandbox:
+  96 files / 1,795 tests in 264.20 s plus build, package, pilot, store-crash and
+  spent-set checks. No implementation or test deadline was relaxed.
+- Previous JNI docs revision `38b7af9` CI run `34499805855` passed all jobs.
+- No hosted retention/upload/download or candidate inspection has run yet.
+  Synthetic archives do not prove actual generated paths, upload behavior,
+  candidate signatures/semantics or the database worker's transitive call path.
 - Last [database diagnostic](docs/ergo-node-database-verification.json) loaded
   native 10/1/3 and refused WinSxS COMCTL32 before PROCEED. Sample gap 954 ms
-  approaches the unchanged 1 s ceiling. All three VHDs/mappings were removed;
-  no write/flush/reopen or disk-full acceptance has been demonstrated.
+  approaches the unchanged 1 s ceiling; all VHDs/mappings were removed.
 
 ## Next
 
-1. Prepare bounded artifact retention/transfer for the narrow offline profile.
-   Independently review actual retained DLL/JAR, Java descriptors/JNI signatures,
-   export addresses and compression configuration. Carry the seven name gaps
-   as explicit exclusions and establish the worker's required call path.
-   Do not substitute the compile-only JAR for the stock Ergo class baseline.
-2. Review exact bundle/native pin changes before any load. General Ergo use
-   requires a separate resolution of the missing bindings and codec profile;
-   do not patch placeholder methods merely to satisfy a symbol count.
-3. Establish narrow WinSxS component provenance separately; keep the sampling
-   concern and 1 s ceiling. Retry the fixed 64 MiB control only after candidate
-   and module-policy prerequisites are concretely reviewed.
-4. Larger sync still requires separate preparation/approval: 30 min, 20 GiB
-   disk, 100 GiB host reserve, 8 GiB traffic trigger/10 GiB final maximum,
-   public-peer parser/JRE review. No complete sync combination is shown.
+1. Recheck existing zero-spend budgets, then manually dispatch the reviewed
+   native build with retain_candidate=true. Preserve input refusals. Verify
+   successful workflow commit/run/attempt and artifact ID/digest/size, download
+   raw ZIP into scratch, and import using independently read expected identity.
+2. Independently inspect the actual DLL/JAR, generated JNI headers/project and
+   import/export evidence. Establish the exact required worker call path and
+   seven binding-gap exclusions; investigate WBWIRocksIterator's header/ABI.
+   Do not replace the stock Ergo JAR or patch placeholder JNI methods.
+3. Review exact native pin changes and narrow WinSxS provenance before any load.
+   Keep the 1 s sampling limit and fixed 64 MiB control prerequisites.
+4. Larger sync still needs separate preparation/approval: 30 min, 20 GiB disk,
+   100 GiB host reserve, 8 GiB traffic trigger/10 GiB final maximum, and public
+   peer parser/JRE review. No complete sync combination is established.
 
 ## Open questions
 
 - Runtime remains v2, refuses silence clauses and has no pool wallet. Recovery,
   authenticated ranges, fixture ancestry and v3 adoption remain unestablished.
-- Stay with the current instance for retention preparation: the exact inputs,
-  static gaps and runtime exclusions are fresh. Use an independent reviewer
-  for the eventual retained candidate. This is an efficiency recommendation,
+- Switch to a fresh instance for the retained-build execution/review slice.
+  The bounded route and exclusions are recorded; fresh context should improve
+  efficiency for inspecting actual build evidence. This is a recommendation,
   not measured comparative performance.
 - Estimate unchanged: **45% done / 55% remaining**, plausible done range
-  **35-55%**. Static compatibility evidence closes no end-to-end product gate.
-  Runtime/recovery, wallet/transport, authenticated evidence, witness publication
-  and custody/rollback assurance dominate remaining effort and may need redesign.
+  **35-55%**. Retention tooling closes no end-to-end product gate. Runtime/recovery,
+  wallet/transport, authenticated evidence, witness publication and custody/
+  rollback assurance dominate remaining effort and may require redesign.

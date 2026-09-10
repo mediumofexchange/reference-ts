@@ -103,6 +103,7 @@ jobs:
         run: |
           ./experiments/ergo-range/node-database-identity.test.ps1
           ./experiments/ergo-range/node-database-evidence.test.ps1
+          ./experiments/ergo-range/native-candidate.test.ps1
 
       - name: Install pinned offline Ergo probe dependencies
         if: matrix.node == 24

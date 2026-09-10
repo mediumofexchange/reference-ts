@@ -1,4 +1,5 @@
 # Manual, public standard-runner compilation only. Never loads the output DLL.
+param([switch]$RetainCandidate)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $report = [ordered]@{status='refused'; phase='host'; candidateLoaded=$false; databaseAcceptance=$false; errors=@()}
@@ -16,7 +17,7 @@ try {
     if (-not $IsWindows -or $env:GITHUB_ACTIONS -cne 'true' -or
         $env:GITHUB_REPOSITORY -cne 'mediumofexchange/reference-ts' -or
         $env:GITHUB_EVENT_NAME -cne 'workflow_dispatch' -or
-        $env:GITHUB_REF -cnotin @('refs/heads/main','refs/heads/test/rocksdb-build-execution')) {
+        $env:GITHUB_REF -cnotin @('refs/heads/main','refs/heads/test/rocksdb-retention-preparation')) {
         throw 'Only the fixed manual public Windows CI job is supported'
     }
     $event = Get-Content -Raw -LiteralPath $env:GITHUB_EVENT_PATH | ConvertFrom-Json
@@ -25,6 +26,8 @@ try {
     $report.imageVersion = $env:ImageVersion
     $report.workflowCommit = $env:GITHUB_SHA
     $report.runId = $env:GITHUB_RUN_ID
+    $report.runAttempt = $env:GITHUB_RUN_ATTEMPT
+    $report.retentionRequested = [bool]$RetainCandidate
     $image = @($pins.images | Where-Object { $_.version -ceq $env:ImageVersion })
     if ($image.Count -ne 1) { throw 'Runner image differs from reviewed inputs' }
     $report.imageSourceCommit = $image[0].sourceCommit
@@ -119,7 +122,12 @@ try {
     if ($report.dll.bytes -gt 32MB -or $report.jar.bytes -gt 32MB) { throw 'Output exceeds 32 MiB per file' }
     # dumpbin parses the library as data. No LoadLibrary, JVM JNI load or ctest.
     Run -tool (Join-Path $vcBin 'dumpbin.exe') -arguments @('/DEPENDENTS',$dll)
-    Run -tool (Join-Path $vcBin 'dumpbin.exe') -arguments @('/EXPORTS',$dll)
+    foreach ($inspection in @(@('/EXPORTS','exports.txt'),@('/IMPORTS','imports.txt'))) {
+        $text = & (Join-Path $vcBin 'dumpbin.exe') $inspection[0] $dll
+        if ($LASTEXITCODE -ne 0) { throw 'Static DLL inspection failed' }
+        $text | Set-Content -Encoding utf8 -LiteralPath (Join-Path $root $inspection[1])
+        Write-Output $text
+    }
     Run -tool git -arguments @('-C',$source,'diff','--exit-code','HEAD','--')
     $report.freeAfter = $drive.AvailableFreeSpace
     $files = @(Get-ChildItem -LiteralPath $root -File -Recurse)
@@ -132,6 +140,16 @@ try {
     $report.errors += $_.Exception.Message
 } finally {
     $report.elapsedMs = $watch.ElapsedMilliseconds
+    if ($RetainCandidate -and $report.status -ceq 'compiled-unadopted-native-candidate') {
+        try {
+            . (Join-Path $PSScriptRoot 'native-candidate.ps1')
+            $manifest = Export-NativeCandidate -Root $root -Report $report
+            Write-Output ('Staged candidate bytes: '+$manifest.totalBytes)
+        } catch {
+            $report.status = 'refused'
+            $report.errors += $_.Exception.Message
+        }
+    }
     Write-Output 'MOE_NATIVE_BUILD_REPORT_BEGIN'
     $report | ConvertTo-Json -Depth 10
     Write-Output 'MOE_NATIVE_BUILD_REPORT_END'
