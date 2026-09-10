@@ -17,6 +17,12 @@ public static class NodeDatabaseIdentity
     public const int MaximumModules = 256;
     public const long MaximumHashedBytes = 128L * 1024L * 1024L;
 
+    // Exact host component observed in ergo-node-system-component-provenance.json.
+    // No WinSxS directory, signer, version family or basename wildcard is trusted.
+    private const string CommonControlsPath = @"C:\WINDOWS\WinSxS\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.19041.6456_none_60b8a6cb71f64256\COMCTL32.dll";
+    private const string CommonControlsSha256 = "4f3c45946d2e04915691d93b0606bdea1ebf60d89b884a42cbe226e65a03ea56";
+    private const long CommonControlsBytes = 2715536L;
+
     private const uint ErrorSuccess = 0;
     private const uint ErrorFileNotFound = 2;
     private const uint StillActive = 259;
@@ -315,6 +321,7 @@ public static class NodeDatabaseIdentity
         Dictionary<string, string> pins = BuildPinnedPaths(bundle, pinnedBundleManifest);
         long totalBytes = 0;
         int rocksCount = 0;
+        int commonControlsCount = 0;
         ModuleRecord[] verified = new ModuleRecord[modules.Length];
         for (int index = 0; index < modules.Length; index++)
         {
@@ -346,6 +353,13 @@ public static class NodeDatabaseIdentity
                         throw new InvalidOperationException("Loaded pinned-bundle module hash differs from its manifest");
                     classification = "bundle-pinned";
                 }
+                else if (String.Equals(path, CommonControlsPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (++commonControlsCount != 1 || item.LengthBytes != CommonControlsBytes ||
+                        !String.Equals(hash, CommonControlsSha256, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Loaded Common Controls module differs from the exact reviewed component");
+                    classification = "system-component-pinned";
+                }
                 else if (IsUnderRoot(path, system))
                 {
                     if (IsUnpinnedRocksNativeLibrary(path))
@@ -354,7 +368,7 @@ public static class NodeDatabaseIdentity
                 }
                 else
                 {
-                    throw new InvalidOperationException("Loaded module is outside the expected RocksDB path, pinned bundle, and system directory: " + path);
+                    throw new InvalidOperationException("Loaded module is outside the expected RocksDB path, pinned bundle, exact reviewed component, and system directory: " + path);
                 }
             }
             verified[index] = new ModuleRecord(path, hash, item.LengthBytes, classification);

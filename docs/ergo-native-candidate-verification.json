@@ -4192,7 +4192,7 @@
     "The exact packaged JNI target project is retained. Complete compiler/link invocations, core RocksDB project/object provenance and transitive toolchain attestation remain unavailable.",
     "Seven missing JNI bindings remain excluded only for the specified offline worker; a general Ergo replacement is not established. Generated JAR is inspection-only and contains test helpers.",
     "Compression-free candidate fits the fresh explicit NO_COMPRESSION control configuration only; arbitrary existing databases and full-node compression compatibility remain open.",
-    "Native pin adoption, module-policy preparation, 1-second sampling ceiling and fixed 64 MiB database controls remain unmet. Read-only WinSxS provenance is recorded separately; no runtime approval follows.",
+    "Exact offline native pin and component policy are prepared separately. One-second sampling ceiling, fixed 64 MiB database controls and general runtime adoption remain unestablished. No candidate load, database retry or volume allocation.",
     "Artifact digest and manifest bind observed provider bytes; no independent build reproducibility or complete transitive toolchain attestation is claimed."
   ],
   "review": {
@@ -4289,6 +4289,25 @@
     "previousImageVersion": "20260830.290.1",
     "selectedToolsAndDependenciesIdentical": true,
     "nativeDeltaUnexplained": true,
-    "nativeDeltaLimit": "Executable and data bytes differ across the two reviewed runner images despite equal recorded tool hashes; no cause, semantic equivalence or reproducibility is established."
+    "nativeDeltaLimit": "Executable and data bytes differ across the two reviewed runner images despite equal recorded tool hashes; no cause, semantic equivalence or reproducibility is established.",
+    "furtherInspection": {
+      "dataDifferingBytes": 1001,
+      "lambdaIdentifiers": 33,
+      "anonymousNamespaceIdentifiers": 1,
+      "dataNormalizationPatterns": [
+        "lambda_[0-9a-f]{32}",
+        "\\?A0x[0-9a-f]{8}"
+      ],
+      "dataEqualAfterFixedWidthHexNormalization": true,
+      "runtimeFunctionRecordsPerDll": 25915,
+      "changedRuntimeFunctionRecords": 46,
+      "executableObservation": "Some local function-layout permutations and corresponding pointer/unwind changes; complete cause and semantic equivalence unproved."
+    }
+  },
+  "offlinePreparation": {
+    "decision": "decisions/2026-09.md#2026-09-10--prepare-the-exact-native-candidate-for-the-offline-control",
+    "status": "accepted exact-candidate preparation after independent candidate and patch review; no runtime execution",
+    "candidateLoaded": false,
+    "scope": "Fresh NO_COMPRESSION 64 MiB control with unchanged stock JAR and resource limits; no general Ergo adoption or malicious-native containment."
   }
 }

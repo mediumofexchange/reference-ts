@@ -1,7 +1,7 @@
 # Windows native build qualification
 
-Status: 2026-09-10, corrected candidate and exact packaged-target project imported
-and statically inspected; native-byte equivalence and runtime adoption remain open.
+Status: 2026-09-10, corrected candidate selected for offline control preparation;
+native-byte equivalence, runtime acceptance and general adoption remain open.
 This implements the [preparation preference](../decisions/2026-09.md#2026-09-10--qualify-a-consistent-windows-database-build).
 The [published artifact mismatch](ERGO_NODE_PREFLIGHT.md#published-windows-native-reconciliation)
 and the existing database-control refusals remain unresolved for execution.
@@ -451,7 +451,21 @@ Compared with the prior retained DLL, **8,608 bytes differ**: 7,202 in `.text`,
 `.rsrc` and `.reloc` are identical. Both independent readers reproduced the
 counts. The cause and semantic equivalence of these executable/data changes
 are unestablished; matching selected tools and interfaces is insufficient.
+Further independent inspection classifies all 1,001 `.data` changes as 33
+lambda hex identifiers and one anonymous-namespace identifier. Replacing only
+those fixed-width hex patterns makes the entire section equal. Both binaries
+have 25,915 x64 runtime-function records; 46 differ. Some executable/pointer/unwind
+changes show local function-layout permutations. These observations do not
+establish the complete cause or semantic equivalence of executable changes.
 No metadata-only delta, reproducible build or native runtime clearance is claimed.
+
+The [preparation decision](../decisions/2026-09.md#2026-09-10--prepare-the-exact-native-candidate-for-the-offline-control)
+selects this exact source-built candidate for the fixed trusted offline worker.
+Neither earlier candidate was adopted; equality to its binary is not itself an
+acceptance rule. Source/build identity, scoped linkage and exact ingestion are
+the preparation basis. Existing process/volume limits are not containment of
+malicious native code. A future authorized control must establish its own loaded
+identity, version, persistence, NoSpace and accounting results without widening limits.
 
 Independent PE parsing confirms x64, 1,524 named/nonzero executable exports,
 no forwarded or unnamed exports, and the same complete name/RVA table as the
@@ -513,10 +527,11 @@ process exit; this review does not establish general leak-free lifecycle.
 Native allocation failure, fatal assertions, memory corruption, arbitrary
 callbacks and JVM/OS native behavior remain outside the static call graph.
 
-Before execution, review the exact native pin, unexplained native-byte differences
-and narrow module-policy preparation. Read-only [WinSxS provenance](ergo-node-system-component-provenance.json)
+The offline harness now prepares the exact native pin and narrow component
+policy under that decision; runtime acceptance remains outstanding.
+Read-only [WinSxS provenance](ergo-node-system-component-provenance.json)
 now binds the previously refused file to its Microsoft catalog and component
-manifest; it does not change the policy or establish a complete module graph.
+manifest; its exact path/hash/length exception does not establish a complete module graph.
 Keep the stock JAR, compression-free fresh-database profile, fixed 64 MiB
 control and unchanged one-second sampling ceiling. No native load, database
 retry, node start, peer connection or volume allocation occurred here.
@@ -557,5 +572,8 @@ No unresolved material finding remains within static retention/reporting;
 the unexplained native-byte differences and runtime adoption gates remain explicit.
 Baseline `9ea1c16` passed every CI job in
 [run 34505552007](https://github.com/mediumofexchange/reference-ts/actions/runs/34505552007).
-This follow-up changes evidence/documentation only; documentation and link checks
-pass, and unchanged runtime checks reuse that baseline.
+The retained-target evidence update at `37425da` changed documentation only and
+passed CI run `34510048192`. The subsequent exact-candidate preparation passed
+independent candidate/patch review, 58 identity, 21 native-file and 37 accounting
+cases, plus full `npm run check`: 96 files / 1,795 tests in 279.87 s and all
+remaining project checks. Native loading and database acceptance remain untested.

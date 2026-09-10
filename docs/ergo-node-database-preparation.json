@@ -1,10 +1,10 @@
 {
-  "status": "prepared-offline-database-control-version-diagnostics",
-  "observedAtUtc": "2026-09-10T14:12:52.6007637Z",
+  "status": "prepared-exact-offline-native-candidate",
+  "observedAtUtc": "2026-09-10T18:07:37.2072663Z",
   "preflight": {
     "status": "prepared-read-only-database-control",
     "executeRequested": false,
-    "observedAtUtc": "2026-09-10T14:12:47.7502233Z",
+    "observedAtUtc": "2026-09-10T18:07:37.2072663Z",
     "imagePath": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-database-control\\control.vhd",
     "virtualBytes": 67108864,
     "maximumBackingBytes": 68157440,
@@ -26,18 +26,27 @@
     "partition": null,
     "volumeBefore": null,
     "volumeAfter": null,
-    "hostFreeBefore": 531745345536,
+    "hostFreeBefore": 531868954624,
     "hostFreeAfter": null,
     "backingBytes": null,
     "compilerSha256": "cde026ff966b48b5e5f148b6f041ceff3cf4f85cf75155f4ec0f40e4ee14b545",
-    "jniSha256": "0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7",
+    "jniSha256": "b0370fa9a8afe8942d0d2ccba1557b29ab08472a09da7c1bde7005eca7cdd21c",
+    "jniBytes": 8998912,
+    "nativeCandidate": {
+      "source": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\retained-native-target\\candidate\\librocksdbjni-win64.dll",
+      "bytes": 8998912,
+      "sha256": "b0370fa9a8afe8942d0d2ccba1557b29ab08472a09da7c1bde7005eca7cdd21c",
+      "copied": false
+    },
     "files": {
-      "node-database-control.ps1": "7c10b194294ee299206b11f0902e4c05f2a82913de0646d402ca02a5558ce197",
+      "node-database-control.ps1": "44e8449ebd11605e30797a3b77fd99e5d9c4f969bb8727d428affe8f4f8a41ce",
       "node-database-evidence.ps1": "603c98e7dc4dbad3fea966bc78b06b54806875b1b6ec475c241a69a36342f54c",
       "node-database-evidence.test.ps1": "561dd3e6b10987d9bec18a85a868107ddfd922321317fffcb5eafa9827d18764",
+      "node-database-native.ps1": "76ca07b0ce12819644bc07364891ab0cc865ce33a88e2ce0e3dc22c35b186bd0",
+      "node-database-native.test.ps1": "1bb77d14a735603925e390649019c73178a24588b5b4f9192e97fc72fa5398bb",
       "NodeDatabaseControl.java": "9b31cdd78bb38773400771d689bf7c97d89b44e9962142dff06a043d15b86313",
-      "NodeDatabaseIdentity.cs": "3d684b732e17d4139e8cab922b988782fe18081d7ddf00fa94dd1080582ca04c",
-      "node-database-identity.test.ps1": "3bb118f720055b81ddc413c4bcfd3a3124c9d4f60d7d224c73c226c2a769b534",
+      "NodeDatabaseIdentity.cs": "81affe2838590e968502c262285e47d7bab58f2ab866ea20010e8161fcfcc10f",
+      "node-database-identity.test.ps1": "afb624d42877a2268b3ffcc4aec847ac22a05b72c32012bdd40d5f685b02e1a7",
       "NodeProbeDisk.cs": "b2c95f52447d159fe6c4af213ad3f83f27b92be58a216c16e48e94eb075e8b23",
       "node-disk-evidence.ps1": "2cb5e0007a19bff6f7f82bcf0cc14efe6885d67617916cef1f79405f7597d65b",
       "NodeProbeProcess.cs": "bef224d4fd27d9a06ac2960f2d85b8b06dc5cf0048d473b7e12e20eee690979d",
@@ -372,13 +381,21 @@
       "Trusted stable host administration and source/input paths assumed. This does not demonstrate VHD mapping, module identity, disk-full behavior or traffic containment."
     ]
   },
-  "identityChecks": 46,
+  "identityChecks": 58,
   "accountingEvidenceChecks": 37,
   "pureJavaChecks": 24,
-  "fullProjectCheck": "passed: 96 files / 1795 tests, package, pilot, store-crash, spent-set",
-  "independentReview": "closed: exact native version gate retained after bounded provenance handshake; pinned export corroborated",
-  "runtimeExperimentExecuted": true,
-  "runtimeResult": "unresolved; see ergo-node-database-verification.json",
-  "observedNativeVersion": "10.1.3",
-  "requiredNativeVersion": "10.2.1"
+  "fullProjectCheck": "passed: 96 files / 1795 tests in 279.87 s; docs, typecheck, build, package, pilot, store-crash, spent-set",
+  "independentReview": "closed: independent candidate disposition, actual patch inspection, 58 identity and 21 native-file cases plus ten separate adversarial probes; no material finding within preparation scope",
+  "runtimeExperimentExecuted": false,
+  "runtimeResult": "new candidate not executed",
+  "observedNativeVersion": null,
+  "requiredNativeVersion": "10.2.1",
+  "compilationEvidenceReusedFromRevision": "37425da5eb920fe4018e208f7b12a5c779e9b588",
+  "nativeFileChecks": 21,
+  "previousRuntime": {
+    "evidence": "ergo-node-database-verification.json",
+    "nativeVersion": "10.1.3",
+    "result": "unresolved; old published DLL and module-policy refusals"
+  },
+  "additionalIndependentProbes": 10
 }

@@ -6,12 +6,17 @@ Set-StrictMode -Version Latest
 if (-not $IsWindows -or -not [Environment]::Is64BitProcess) { throw 'Windows x64 / PowerShell 7 required' }
 . (Join-Path $PSScriptRoot 'node-disk-evidence.ps1')
 . (Join-Path $PSScriptRoot 'node-database-evidence.ps1')
+. (Join-Path $PSScriptRoot 'node-database-native.ps1')
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $run=Join-Path $repo 'scratch/node-database-control'
 $imagePath=Join-Path $run 'control.vhd'
 $bundle=Join-Path $repo 'scratch/node-startup/bundle'
 $compiler=Join-Path $repo 'scratch/sync-preparation/ecj-3.37.0.jar'
-$jniHash='0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7'
+$nativeCandidate=Join-Path $repo 'scratch/retained-native-target/candidate/librocksdbjni-win64.dll'
+# Run 34507404910 / attempt 1, reviewed in ergo-native-candidate-verification.json.
+# This selects only the fresh compression-free offline control, not the Ergo node.
+$jniHash='b0370fa9a8afe8942d0d2ccba1557b29ab08472a09da7c1bde7005eca7cdd21c'
+$jniBytes=8998912L
 $report=[ordered]@{ status='unresolved-database-preflight'; executeRequested=[bool]$Execute;
     observedAtUtc=[DateTime]::UtcNow.ToString('o'); imagePath=$imagePath; virtualBytes=67108864L;
     maximumBackingBytes=68157440L; hostReserveBytes=107374182400L;
@@ -20,7 +25,7 @@ $report=[ordered]@{ status='unresolved-database-preflight'; executeRequested=[bo
     mutationsStarted=$false; detached=$false; mappingRemoved=$false; artifactRemoved=$false;
     driveLetter=$null; volumeRoot=$null; nativeDisk=$null; disk=$null; partition=$null; volumeBefore=$null; volumeAfter=$null;
     hostFreeBefore=$null; hostFreeAfter=$null; backingBytes=$null; compilerSha256=$null;
-    jniSha256=$jniHash; files=[ordered]@{}; cases=@(); errors=@();
+    jniSha256=$jniHash; jniBytes=$jniBytes; nativeCandidate=$null; files=[ordered]@{}; cases=@(); errors=@();
     limitations=@('Trusted offline fixed worker only; no Ergo services, peers, public release or full-sized allocation.',
         'Stable trusted host administration and paths assumed; drive mapping and Job Object are not a filesystem sandbox.',
         'Synchronous storage, module reads and supervisor calls have no hard deadline; late samples refuse evidence but cannot stop a permanently stalled supervisor.',
@@ -40,6 +45,7 @@ function Assert-OrdinaryAncestors([string]$Path) {
 }
 try {
     foreach ($file in @('node-database-control.ps1','node-database-evidence.ps1','node-database-evidence.test.ps1',
+        'node-database-native.ps1','node-database-native.test.ps1',
         'NodeDatabaseControl.java','NodeDatabaseIdentity.cs','node-database-identity.test.ps1',
         'NodeProbeDisk.cs','node-disk-evidence.ps1','NodeProbeProcess.cs','NodeTrafficCounter.cs')) {
         $report.files[$file]=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $file)).Hash.ToLowerInvariant()
@@ -68,6 +74,7 @@ try {
     if ($count -ne 167 -or ((Get-Item -LiteralPath $compiler).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Missing bundle files or redirected compiler' }
     $report.compilerSha256=(Get-FileHash -LiteralPath $compiler).Hash.ToLowerInvariant()
     if ($report.compilerSha256 -cne 'cde026ff966b48b5e5f148b6f041ceff3cf4f85cf75155f4ec0f40e4ee14b545') { throw 'Compiler pin mismatch' }
+    $report.nativeCandidate=Confirm-DatabaseNative -Source $nativeCandidate -ExpectedBytes $jniBytes -ExpectedSha256 $jniHash
     if (-not $Execute) { $report.status='prepared-read-only-database-control'; return }
     $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
     try { $admin=[Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
@@ -139,26 +146,11 @@ try {
         if (Test-Path -LiteralPath $root) { throw 'Worker root already exists' }
         foreach ($path in @($root,"$root/tmp","$root/home","$root/native","$root/classes")) { [void][IO.Directory]::CreateDirectory($path) }
         # The pinned explicit-directory overload applies getJniLibraryFileName
-        # to "rocksdbjni", yielding a second "jni". Preserve the exact archive
-        # bytes/hash while using the basename that this loader actually requests.
+        # to "rocksdbjni", yielding a second "jni". Preserve the exact candidate
+        # bytes/hash while using the basename this loader requests.
         $jni=Join-Path $root 'native/librocksdbjnijni-win64.dll'
         $jar=Join-Path $bundle 'ergo-6.1.5.jar'
-        $archive=[IO.Compression.ZipFile]::OpenRead($jar)
-        try {
-            $members=@($archive.Entries | Where-Object FullName -CEQ 'librocksdbjni-win64.dll')
-            if ($members.Count -ne 1 -or $members[0].Length -ne 8869888) { throw 'JNI entry pin mismatch' }
-            $inputStream=$members[0].Open()
-            try {
-                $outputStream=[IO.File]::Open($jni,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
-                try {
-                    $buffer=[byte[]]::new(65536); $written=0L
-                    while (($n=$inputStream.Read($buffer,0,$buffer.Length)) -gt 0) {
-                        $written+=$n; if ($written -gt 8869888) { throw 'JNI extraction limit' }; $outputStream.Write($buffer,0,$n)
-                    }
-                } finally { $outputStream.Dispose() }
-            } finally { $inputStream.Dispose() }
-        } finally { $archive.Dispose() }
-        if ((Get-Item -LiteralPath $jni).Length -ne 8869888 -or (Get-FileHash -LiteralPath $jni).Hash -ine $jniHash) { throw 'Extracted JNI mismatch' }
+        $report.nativeCandidate=Confirm-DatabaseNative -Source $nativeCandidate -ExpectedBytes $jniBytes -ExpectedSha256 $jniHash -Destination $jni
         $java=Join-Path $bundle 'jre/bin/java.exe'
         $jvm=@('-Xms32m','-Xmx256m',"-Djava.io.tmpdir=$root/tmp","-Duser.home=$root/home", "-Djava.library.path=$root/native",
             '-XX:-UsePerfData','-XX:-CreateCoredumpOnCrash',"-XX:ErrorFile=$root/hs_err.log")

@@ -168,12 +168,21 @@ The next fixed control is prepared separately:
 pwsh -NoProfile -File experiments/ergo-range/node-database-control.ps1
 pwsh -NoProfile -File experiments/ergo-range/node-database-identity.test.ps1
 pwsh -NoProfile -File experiments/ergo-range/node-database-evidence.test.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-database-native.test.ps1
 pwsh -NoProfile -File experiments/ergo-range/node-database-compile.test.ps1
 ```
 
 The first command only reads prerequisites and reports source hashes. The
 identity/evidence tests use synthetic cases plus a read-only unused-letter
-query. The compilation test uses the same pinned bundle/compiler above and an
+query; native-file tests create and remove only synthetic scratch files.
+The control requires the exact separately retained DLL at
+`scratch/retained-native-target/candidate/librocksdbjni-win64.dll`, verified
+against the fixed hash/length in the harness. It checks again through one open
+source handle when copying to the owned volume. The stock Ergo JAR stays intact;
+the generated build JAR is inspection-only, and no published-DLL fallback exists.
+The module policy permits only the reviewed Common Controls path/hash/length
+outside the original directories, preserving all resource/timing bounds.
+The compilation test uses the same pinned bundle/compiler above and an
 absent `scratch/node-database-compile-test/`; it compiles the worker and runs
 pure Java status/path tests without invoking its main method or loading JNI.
 It emits JSON with exact artifact/class hashes and process evidence.

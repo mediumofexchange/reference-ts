@@ -734,18 +734,28 @@ checks ownership before removing the access path, confirms letter absence
 and image detachment, then deletes only that successfully verified image.
 Failures retain the bounded image and exact unresolved evidence.
 
-The pinned JAR contains an 8,869,888-byte `librocksdbjni-win64.dll`, SHA-256
-`0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7`.
+The [reviewed native candidate](ERGO_NATIVE_BUILD.md#actual-retained-output) is
+8,998,912 bytes, SHA-256
+`b0370fa9a8afe8942d0d2ccba1557b29ab08472a09da7c1bde7005eca7cdd21c`.
+The harness selects its fixed retained path, verifies its ordinary ancestors,
+length and hash in preflight, then reopens and rechecks it at copy time. One
+source handle denies write/delete sharing through hash and copy; the new
+destination is checked through its exclusive handle before any worker starts.
 It is streamed into the volume's otherwise empty native directory as
 `librocksdbjnijni-win64.dll`. The pinned explicit-directory overload calls
 `Environment.getJniLibraryFileName("rocksdbjni")`, adding that second suffix;
-the original archive member and exact bytes/hash remain unchanged. The
+the stock JAR and its embedded published DLL remain unchanged, and there is
+no fallback to that older native member or the generated inspection-only JAR. The
 [worker](../experiments/ergo-range/NodeDatabaseControl.java) uses RocksDB's
 [explicit directory loader](https://github.com/facebook/rocksdb/blob/v10.2.1/java/src/main/java/org/rocksdb/RocksDB.java),
 validates JRE/version/write roots, and waits for the supervisor to inspect
 actual loaded module paths and hashes before opening a database. The bounded
 snapshot requires the exact JNI, pins bundled modules, records system modules
-and refuses unpinned optional compression libraries. This is a point-in-time
+and refuses unpinned optional compression libraries. One Common Controls
+exception requires the exact reviewed WinSxS path, hash and length; wrong
+versions/locations/bytes and duplicate entries refuse. Comparing the already
+hashed record adds no signature query or file read to the timed observer.
+This is a point-in-time
 identity observation, not a native-code audit or exhaustive lifetime trace.
 
 At most six sequential JVMs each have 30 seconds, 1 GiB aggregate/process
@@ -779,13 +789,17 @@ options are fixed control settings, not a claim that the stock node uses them.
 Successful execution would demonstrate this small composition only; stock
 node operation and the larger sync envelope remain separate work.
 
-The [preparation report](ergo-node-database-preparation.json) captures a passing
-read-only preflight, exact source/artifact pins, warning-free compilation and
+The [preparation report](ergo-node-database-preparation.json) captures the new
+passing read-only preflight, exact source/native pins and hostile file/module
+checks. Its unchanged Java-worker evidence is reused from the preceding
+preparation: warning-free compilation and
 24 pure Java status/path/filename/version checks. Compilation took 6,652 ms with 150,196,224
 peak commit bytes; tests took 354 ms with 101,203,968 bytes. Both processes exited
-0 with installed limits and empty jobs. Separately, 46 identity and 37
-accounting/evidence cases pass; the full project check passes 1,795 tests plus
-package, pilot, store-crash and spent-set checks. Its test runner required the
+0 with installed limits and empty jobs. Separately, 58 identity, 21 synthetic
+native-file and 37 accounting/evidence cases pass. The exact-candidate follow-up's
+full project check passed: 96 files / 1,795 tests in 279.87 s plus documentation,
+typecheck, build, package, pilot, store-crash and spent-set checks.
+The earlier preparation's test runner required the
 ordinary host after the filesystem sandbox refused configuration access.
 
 Fresh independent review matched all 167 bundle hashes, source/compiler/class
@@ -797,6 +811,12 @@ observer samples. Focused readback and hostile cases close both findings; no
 material preparation finding remains. The mapped-volume/JNI/database and
 cleanup experiment required separate authorization; its first attempt and
 loader correction are recorded below.
+
+The exact-candidate follow-up passed independent ingestion/module-policy review
+and ten additional probes for path/stream aliases, duplicate case aliases,
+existing writer/self-destination and refusal nonmutation. The default preflight
+verified the retained DLL with `copied=false`, no process cases and no mutations.
+Neither the candidate nor the changed component policy has been exercised by a JVM.
 
 The [first authorized attempt](ergo-node-database-first-attempt.json) at
 `2251836` created/mapped the owned disk and compiled the worker successfully
@@ -956,11 +976,12 @@ This supports the expected component family, not a complete activation trace.
 These are observations through the current host's trust store, not independent
 OS attestation or an online revocation guarantee. PowerShell's
 [signature reader](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/get-authenticodesignature?view=powershell-7.5)
-uses Windows catalog signatures when available. The module policy still refuses
-this path. The next preparation can review an exception for its exact path,
-hash and length while preserving other refusals; it must also review the exact
-new native pin and the existing sampling cost before any database retry.
-No native load, policy change or volume allocation accompanies this evidence.
+uses Windows catalog signatures when available. The
+[offline preparation decision](../decisions/2026-09.md#2026-09-10--prepare-the-exact-native-candidate-for-the-offline-control)
+now selects an exception for that exact path, hash and length, preserving other
+refusals and the existing sampling cost. Windows servicing that changes the
+file or path will refuse until separately reviewed. The provenance observation
+predates the policy patch; no native load or volume allocation accompanies either.
 
 The [build qualification](ERGO_NATIVE_BUILD.md) now prepares a fixed manual
 hosted Windows compilation with pinned source/dependencies, explicit features

@@ -166,6 +166,36 @@ Expect-Reject 'module hash byte budget exceeded' {
     $modules[0]=[NodeDatabaseIdentity+ModuleRecord]::new("$bundle\jre\bin\java.exe",$hashA,134217729)
     [NodeDatabaseIdentity]::VerifyModulePolicyForTest($modules,$run,$bundle,$rocks,$hashC,$manifest)
 }
+$component='C:\WINDOWS\WinSxS\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.19041.6456_none_60b8a6cb71f64256\COMCTL32.dll'
+$componentHash='4f3c45946d2e04915691d93b0606bdea1ebf60d89b884a42cbe226e65a03ea56'
+Expect-Pass 'exact reviewed Common Controls component' {
+    $modules=New-ModuleFixtureWith ([NodeDatabaseIdentity+ModuleRecord]::new($component,$componentHash,2715536L))
+    $verified=[NodeDatabaseIdentity]::VerifyModulePolicyForTest($modules,$run,$bundle,$rocks,$hashC,$manifest)
+    if ($verified[-1].Classification -cne 'system-component-pinned') { throw 'Missing exact component classification' }
+}
+foreach($length in @(0L,2715535L,2715537L)) {
+    Expect-Reject 'Common Controls wrong length' {
+        $modules=New-ModuleFixtureWith ([NodeDatabaseIdentity+ModuleRecord]::new($component,$componentHash,$length))
+        [NodeDatabaseIdentity]::VerifyModulePolicyForTest($modules,$run,$bundle,$rocks,$hashC,$manifest)
+    }
+}
+Expect-Reject 'Common Controls wrong hash' {
+    $modules=New-ModuleFixtureWith ([NodeDatabaseIdentity+ModuleRecord]::new($component,$hashA,2715536L))
+    [NodeDatabaseIdentity]::VerifyModulePolicyForTest($modules,$run,$bundle,$rocks,$hashC,$manifest)
+}
+Expect-Reject 'duplicate Common Controls entry' {
+    $modules=New-ModuleFixtureWith ([NodeDatabaseIdentity+ModuleRecord]::new($component,$componentHash,2715536L))
+    $modules+=[NodeDatabaseIdentity+ModuleRecord]::new($component,$componentHash,2715536L)
+    [NodeDatabaseIdentity]::VerifyModulePolicyForTest($modules,$run,$bundle,$rocks,$hashC,$manifest)
+}
+foreach($wrongPath in @($component.Replace('amd64_','x86_'),$component.Replace('6.0.19041.6456','6.0.19041.9999'),
+    $component.Replace('C:\','D:\'),$component.Replace('COMCTL32.dll','other.dll'),$component.Replace('WinSxS','WinSxS-copy'),
+    'C:\unreviewed\COMCTL32.dll')) {
+    Expect-Reject 'same bytes at an unreviewed component path' {
+        $modules=New-ModuleFixtureWith ([NodeDatabaseIdentity+ModuleRecord]::new($wrongPath,$componentHash,2715536L))
+        [NodeDatabaseIdentity]::VerifyModulePolicyForTest($modules,$run,$bundle,$rocks,$hashC,$manifest)
+    }
+}
 Expect-Reject 'module count budget exceeded' {
     $modules=[Collections.Generic.List[NodeDatabaseIdentity+ModuleRecord]]::new()
     1..257 | ForEach-Object { $modules.Add([NodeDatabaseIdentity+ModuleRecord]::new(
