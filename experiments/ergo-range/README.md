@@ -28,6 +28,28 @@ It creates no external connections and changes no host settings. No WSL
 installation or distro-wide change is needed. This command is separate from
 the Windows startup and default CI checks below.
 
+The native traffic accounting/stop control is also separate from startup:
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-traffic-counter.test.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-traffic-evidence.test.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-traffic-control.ps1
+```
+
+The first two commands are worker-free. The last makes one bounded HTTPS GET
+of the already-public, immutable fixture through system curl, under the
+existing Job Object supervisor. It counts all exposed host-interface receive
+and send deltas and stops at 16 KiB; final accepted observations must not exceed
+2 MiB. Maximum sample gap is 1 s, stop decision to confirmed empty job 2 s,
+and final sampling delay 1 s. curl allows at most 64 KiB response bytes at
+8 KiB/s for 8 s; the job permits 10 s, 256 MiB and one process. No Ergo peers,
+proxy, redirects, retries or credentials. Run without concurrent repository
+checks or intentional host transfers; unrelated traffic is still counted.
+Exit 0 establishes only the finite observed stop response. Exit 2 preserves
+an unresolved report; a baseline/launch error fails before acceptance. The
+counter boundary excludes errored traffic and is not a wire/billing quota.
+Keep the JSON output when comparing controls; never raise limits automatically.
+
 This does not change the offline decoder commands above. On Windows x64 with
 PowerShell 7, the node experiment has no npm/default-check integration:
 

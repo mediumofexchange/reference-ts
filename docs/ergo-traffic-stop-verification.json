@@ -1,0 +1,13 @@
+{
+  "status": "refused-before-traffic-worker",
+  "observedAtUtc": "2026-09-10T07:33:37.2286325Z",
+  "exitCode": 1,
+  "stage": "baseline interface enumeration",
+  "reason": "Host interface has no IPv4 index for GetIPStatistics",
+  "workerLaunched": false,
+  "fixtureRequestLaunched": false,
+  "counterChecks": 105,
+  "evidenceChecks": 25,
+  "sourceBoundary": "Reviewed GetIPStatistics wrapper with a required positive IPv4 index; failing baseline precedes NodeProbeProcess.Run",
+  "limits": "No traffic-stop response or sync acceptance established; no automatic retry or budget increase."
+}
