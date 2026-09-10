@@ -162,6 +162,46 @@ absolute-path controls. Exit 0 means the expected incompatibility was reproduced
 it does not mean a volume or database worked. Compile and probe each have
 30 seconds, 1 GiB commit, 25% CPU, one process and 64 KiB output.
 
+The next fixed control is prepared separately:
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-database-control.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-database-identity.test.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-database-evidence.test.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-database-compile.test.ps1
+```
+
+The first command only reads prerequisites and reports source hashes. The
+identity/evidence tests use synthetic cases plus a read-only unused-letter
+query. The compilation test uses the same pinned bundle/compiler above and an
+absent `scratch/node-database-compile-test/`; it compiles the worker and runs
+pure Java status/path tests without invoking its main method or loading JNI.
+It emits JSON with exact artifact/class hashes and process evidence.
+
+After separate approval, the concrete elevated command would be:
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-database-control.ps1 -Execute
+```
+
+This requires absent `scratch/node-database-control/` and creates only its own
+fixed 64 MiB VHD. It selects an unused letter, verifies its image/partition/GUID
+mapping, and routes Java cwd/temp/home/native/diagnostic/database writes there.
+Six sequential JVMs at most compile the worker, test four injected observer
+refusals during database work, and exercise bounded RocksDB disk exhaustion.
+Each has 30 seconds, 1 GiB commit, 25% CPU, one process and 64 KiB output.
+Actual interface accounting has a 1 MiB trigger and 2 MiB final ceiling per
+JVM, a 1 second sample/final delay ceiling and 2 second stop-to-empty ceiling.
+Injected observations remain separate from real traffic measurements.
+
+The command emits a JSON report; preserve it outside the owned volume.
+Successful completion removes the mapping, detaches and deletes the exact
+owned image, with readback. A failed attempt retains its bounded image after
+attempting safe cleanup; inspect its report before any retry. The existing
+native disk control is unchanged. No Ergo node, peers, arbitrary disk selector
+or full-sized allocation is included. See the
+[prepared control and evidence limits](../../docs/ERGO_NODE_PREFLIGHT.md#prepared-offline-database-control).
+
 The original `npm run check:ergo:range` command runs both the block-root/Fleet experiment and the
 [full binary decoder experiment](../../docs/POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility).
 `decoder-check.mjs` launches the fixed corpus in a child process with a 30-second

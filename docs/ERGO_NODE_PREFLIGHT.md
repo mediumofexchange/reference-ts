@@ -715,6 +715,86 @@ an outer in-process capture wrapper initially misread a stale PowerShell
 and spent-set checks); final documentation checks pass separately. The review
 did not rerun the probe or establish mounted-volume/database behavior.
 
+### Prepared offline database control
+
+The [fixed harness](../experiments/ergo-range/node-database-control.ps1) now
+prepares the drive-letter candidate above. Its default is read-only. The
+[reproduction commands](../experiments/ergo-range/README.md) distinguish that
+preflight, pure preparation checks and the separately authorized elevated
+`-Execute` experiment. Neither database execution nor a mapped-volume result
+is claimed by preparation.
+
+Execution would create one new fixed 64 MiB VHD at the harness's fixed scratch
+path. There are no disk-number, existing-image, path or capacity arguments.
+It correlates image, physical disk, GPT partition and NTFS volume; selects an
+unused ordinary letter using logical-drive and DOS-device views; and checks
+that both the letter and volume GUID resolve to the same native volume.
+These checks precede worker writes and recur during observation. Cleanup
+checks ownership before removing the access path, confirms letter absence
+and image detachment, then deletes only that successfully verified image.
+Failures retain the bounded image and exact unresolved evidence.
+
+The pinned JAR contains an 8,869,888-byte `librocksdbjni-win64.dll`, SHA-256
+`0f384322229c35bbb551ecf9bb49794c263e680b80cf8990024f28a69f489bc7`.
+It is streamed into the volume's otherwise empty native directory. The
+[worker](../experiments/ergo-range/NodeDatabaseControl.java) uses RocksDB's
+[explicit directory loader](https://github.com/facebook/rocksdb/blob/v10.2.1/java/src/main/java/org/rocksdb/RocksDB.java),
+validates JRE/version/write roots, and waits for the supervisor to inspect
+actual loaded module paths and hashes before opening a database. The bounded
+snapshot requires the exact JNI, pins bundled modules, records system modules
+and refuses unpinned optional compression libraries. This is a point-in-time
+identity observation, not a native-code audit or exhaustive lifetime trace.
+
+At most six sequential JVMs each have 30 seconds, 1 GiB aggregate/process
+commit, 256 MiB maximum Java heap, 25% CPU rate, one process and 64 KiB output.
+Compilation is followed by four database cases exercising synthetic threshold,
+missing, late and failing observations, then a disk-full case. Each database
+case first writes, reads, flushes, closes, reopens and reads a baseline value.
+The stop cases then make bounded paced writes while the same observer code
+handles the injected refusal. The final case attempts at most 64 MiB + 4 KiB
+payload, with compression/automatic compaction off and awaited flushes.
+Only RocksDB `IOError/NoSpace` counts as disk exhaustion; other failures and
+close errors are retained. The
+[Windows mapping](https://github.com/facebook/rocksdb/blob/v10.2.1/port/win/io_win.h)
+and [status enum](https://github.com/facebook/rocksdb/blob/v10.2.1/java/src/main/java/org/rocksdb/Status.java)
+support that narrow classifier.
+
+Real host-interface accounting remains separate from the injected samples.
+For every JVM, including compilation, it starts before launch and attempts a
+final sample even when launch, observation or cleanup throws. Actual traffic
+triggers at 1 MiB and final acceptance is at most 2 MiB per JVM; any actual
+threshold, missing/late sample or reader error refuses this offline control.
+Sample gaps/final delay are at most 1 second, and injected stop to confirmed
+empty job at most 2 seconds. A module snapshot that overruns the sample budget
+also refuses. Recursive file inventory happens only after all jobs are empty,
+bounded by 1,024 entries, 64 MiB logical bytes and a 5 second refusal deadline.
+
+These limits do not contain a permanently stalled supervisor, host services,
+paging or transitive native/JRE/OS writes. There is no network quota, public
+peer data, complete write trace or full-size sufficiency result. The database
+options are fixed control settings, not a claim that the stock node uses them.
+Successful execution would demonstrate this small composition only; stock
+node operation and the larger sync envelope remain separate work.
+
+The [preparation report](ergo-node-database-preparation.json) captures a passing
+read-only preflight, exact source/artifact pins, warning-free compilation and
+16 pure Java status/path checks. Compilation took 6,826 ms with 153,784,320
+peak commit bytes; tests took 717 ms with 99,823,616 bytes. Both processes exited
+0 with installed limits and empty jobs. Separately, 46 identity and 37
+accounting/evidence cases pass; the full project check passes 1,795 tests plus
+package, pilot, store-crash and spent-set checks. Its test runner required the
+ordinary host after the filesystem sandbox refused configuration access.
+
+Fresh independent review matched all 167 bundle hashes, source/compiler/class
+pins and captured process results. It caught unpinned optional compression
+names passing as system modules; the policy now covers the pinned loader's
+complete names and rejects alternate JNI paths. A post-exit marker read avoids
+rejecting a fast completed disk-full worker merely because it finished between
+observer samples. Focused readback and hostile cases close both findings; no
+material preparation finding remains. The mapped-volume/JNI/database and
+cleanup experiment itself has not run. Prior native-worker elevation approval
+does not cover this new worker or drive-letter mapping.
+
 ### Combined experiment proposal
 
 The smallest route reuses the native fixed disk, existing detached JVM Job

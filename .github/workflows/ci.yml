@@ -97,6 +97,13 @@ jobs:
       - name: Reference, installed package and durable payment acceptance
         run: npm run check
 
+      - name: Offline database control identity and accounting guards
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          ./experiments/ergo-range/node-database-identity.test.ps1
+          ./experiments/ergo-range/node-database-evidence.test.ps1
+
       - name: Install pinned offline Ergo probe dependencies
         if: matrix.node == 24
         run: npm --prefix experiments/ergo-range ci --ignore-scripts --no-audit --no-fund
