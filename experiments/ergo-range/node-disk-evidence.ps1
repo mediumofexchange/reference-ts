@@ -39,6 +39,8 @@ function Assert-ProbePartition($Partition, $Disk, $Expected) {
 function Assert-ProbeDiskCompletion($Process, $Fill, $Volume, [bool]$Detached, [long]$FileBytes,
     [long]$HostFreeBefore, [long]$HostFreeAfter) {
     if (-not $Process.LimitsReadBackBeforeResume -or -not $Process.JobEmptyAfterCleanup -or
+        $Process.LaunchMode -cne 'inherited-console' -or $Process.CreationFlags -ne 525316 -or
+        -not $Process.ParentConsoleVerified -or $Process.TotalProcesses -ne 1 -or
         $Process.Outcome -cne 'exited' -or $Process.ExitCode -ne 0 -or
         $Process.CommitLimitBytes -ne 536870912UL -or
         $Process.PeakCommitBytes -gt 536870912UL -or

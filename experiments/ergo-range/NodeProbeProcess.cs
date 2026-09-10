@@ -165,6 +165,7 @@ public static class NodeProbeProcess {
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetProcessTimes(IntPtr process, out long created, out long exited, out long kernel, out long user);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool PeekNamedPipe(IntPtr pipe, IntPtr data, uint size, IntPtr read, out uint available, IntPtr left);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool ReadFile(IntPtr file, byte[] buffer, uint count, out uint read, IntPtr overlapped);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern uint GetConsoleProcessList([Out] uint[] ids, uint capacity);
 
     public sealed class Result {
         public string Case, Outcome, Output, LaunchMode;
@@ -181,7 +182,7 @@ public static class NodeProbeProcess {
         public uint MemorySamples;
         public uint MaxSampledAssociatedProcesses;
         public ProcessObservation[] ObservedProcesses;
-        public bool LimitsReadBackBeforeResume, JobEmptyAfterCleanup;
+        public bool LimitsReadBackBeforeResume, JobEmptyAfterCleanup, ParentConsoleVerified;
     }
     public sealed class ProcessObservation {
         public uint ProcessId;
@@ -220,11 +221,32 @@ public static class NodeProbeProcess {
         return "\"" + arg + "\"";
     }
     public static Result Run(string executable, string[] arguments, string directory, string name, ulong memory, uint wallMs, uint outputBytes, Func<uint, long, bool> observe) {
+        return RunCore(executable, arguments, directory, name, memory, wallMs, outputBytes, observe, false);
+    }
+    // Only for the trusted offline disk worker: PowerShell ConsoleHost requires a console.
+    // No console is allocated/attached or reconfigured. Shared console lifetime/control
+    // and its existing host's resources remain outside this worker's Job Object.
+    public static void RequireExistingConsole() {
+        var ids = new uint[256];
+        uint count = GetConsoleProcessList(ids, (uint)ids.Length);
+        if (count == 0 || count > ids.Length) throw new Exception("Existing parent console unresolved");
+        uint parent;
+        using (var current = Process.GetCurrentProcess()) parent = checked((uint)current.Id);
+        for (int i = 0; i < count; i++) if (ids[i] == parent) return;
+        throw new Exception("Parent missing from existing console");
+    }
+    public static Result RunWithInheritedConsole(string executable, string[] arguments, string directory, string name, ulong memory, uint wallMs, uint outputBytes, Func<uint, long, bool> observe) {
+        RequireExistingConsole();
+        return RunCore(executable, arguments, directory, name, memory, wallMs, outputBytes, observe, true);
+    }
+    static Result RunCore(string executable, string[] arguments, string directory, string name, ulong memory, uint wallMs, uint outputBytes, Func<uint, long, bool> observe, bool inheritConsole) {
         if (IntPtr.Size != 8 || wallMs == 0 || wallMs > 120000 || outputBytes == 0 || outputBytes > 16777216 || memory < 268435456UL || memory > 4294967296UL)
             throw new ArgumentException("Requires x64 and finite budgets");
-        // Detached, suspended, explicit Unicode environment and creation-time job assignment.
-        const string launchMode = "detached";
-        const uint creationFlags = 0x4 | 0x80000 | 0x8 | 0x400;
+        // Suspended, explicit Unicode environment and creation-time job assignment.
+        // All existing callers retain DETACHED_PROCESS; the fixed disk worker can
+        // inherit a verified existing console without requesting another conhost.
+        string launchMode = inheritConsole ? "inherited-console" : "detached";
+        uint creationFlags = 0x4U | 0x80000U | 0x400U | (inheritConsole ? 0U : 0x8U);
         const uint flags = 0x8 | 0x100 | 0x200 | 0x400 | 0x2000;
         IntPtr job = IntPtr.Zero, read = IntPtr.Zero, write = IntPtr.Zero, input = IntPtr.Zero;
         IntPtr list = IntPtr.Zero, handles = IntPtr.Zero, jobs = IntPtr.Zero, environment = IntPtr.Zero;
@@ -336,7 +358,7 @@ public static class NodeProbeProcess {
             Require(QueryInformationJobObject(job, 1, out Accounting accounting,
                 (uint)Marshal.SizeOf<Accounting>(), IntPtr.Zero));
             result = new Result { Case = name, Outcome = outcome, ExitCode = exit, ElapsedMs = clock.ElapsedMilliseconds,
-                LaunchMode = launchMode, CreationFlags = creationFlags,
+                LaunchMode = launchMode, CreationFlags = creationFlags, ParentConsoleVerified = inheritConsole,
                 PeakCommitBytes = measured.PeakJobMemory.ToUInt64(),
                 PeakProcessCommitBytes = measured.PeakProcessMemory.ToUInt64(), CommitLimitBytes = memory,
                 BeforeResumePeakCommitBytes = installed.PeakJobMemory.ToUInt64(),

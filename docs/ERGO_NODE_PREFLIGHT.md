@@ -384,6 +384,31 @@ PowerShell worker exited 0 in 208 ms with no output; no fill happened. The
 classifier refused the missing result and image detachment passed. Source
 hashes identify `53c2bec`; this refusal is preserved without reclassification.
 
+Harmless startup probes reproduced empty exit 0 even for an explicit exit 72.
+PowerShell 7.6.5's
+[entry point](https://github.com/PowerShell/PowerShell/blob/v7.6.5/src/Microsoft.PowerShell.ConsoleHost/host/msh/ManagedEntrance.cs)
+returns its initial exit code on selected console-handle exceptions; its
+[ConsoleHost](https://github.com/PowerShell/PowerShell/blob/v7.6.5/src/Microsoft.PowerShell.ConsoleHost/host/msh/ConsoleHost.cs)
+registers a console handler before running the command. Together with the
+managed-entry trace, this supports an early console failure, not a successful
+fill. A no-window probe ran commands but added a second associated process.
+
+The fixed trusted worker now opts into the parent's **existing console**.
+Before disk creation and again before worker launch, a bounded
+[`GetConsoleProcessList`](https://learn.microsoft.com/en-us/windows/console/getconsoleprocesslist)
+query must include the parent PID. Only `DETACHED_PROCESS` is removed from
+the creation flags; existing node/traffic callers stay detached. No console
+is created, attached or reconfigured. Job assignment, inherited standard
+handles, minimal environment and all resource limits are unchanged.
+The existing console host's resources and shared control/lifetime are outside
+the worker job; this mode is only for the trusted offline control. It supplies
+no isolation from console APIs or console closure. A new compiled host was
+unnecessary given this scope and would add build/runtime obligations.
+The classifier requires the exact mode/flags, verified parent console and
+one total job process, including transient processes. The
+[harmless startup test](../experiments/ergo-range/node-disk-startup.test.ps1)
+requires exact stdout and an explicit nonzero exit code in separate launches.
+
 The existing Job Object does not supply the combined traffic control:
 Microsoft's
 [network rate structure](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_net_rate_control_information)

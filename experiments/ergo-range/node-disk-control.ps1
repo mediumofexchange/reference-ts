@@ -9,7 +9,7 @@ $run = Join-Path $repo 'scratch/node-disk-control'
 $imagePath = Join-Path $run 'control.vhd'
 $hashes = [ordered]@{}
 foreach ($file in @('NodeProbeDisk.cs','NodeProbeProcess.cs','node-disk-control.ps1',
-    'node-disk-worker.ps1','node-disk-evidence.ps1','node-disk-evidence.test.ps1')) {
+    'node-disk-worker.ps1','node-disk-evidence.ps1','node-disk-evidence.test.ps1','node-disk-startup.test.ps1')) {
     $hashes[$file] = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $file) -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -26,6 +26,7 @@ $report = [ordered]@{ status='unresolved-disk-preflight'; observedAtUtc=[DateTim
     limitations=@('Fixed trusted offline control only; no Ergo node, peers, full-sized allocation or production gate.',
         'Stable trusted host and no concurrent storage/admin/path changes assumed; not a filesystem sandbox.',
         'Worker has a Job Object deadline; synchronous Windows storage setup/detach calls have no hard deadline.',
+        'Trusted worker shares the verified existing parent console; its host resources and shared control/lifetime are outside the worker Job Object.',
         'The host reserve is checked before/after; unrelated host writers are not contained.',
         'No existing image is reused; a failed attempt retains its exact artifact for inspection.') }
 try {
@@ -53,6 +54,7 @@ try {
     $report.status = 'unresolved-disk-control'
     Add-Type -Path (Join-Path $PSScriptRoot 'NodeProbeDisk.cs')
     Add-Type -Path (Join-Path $PSScriptRoot 'NodeProbeProcess.cs')
+    [NodeProbeProcess]::RequireExistingConsole()
     [void][IO.Directory]::CreateDirectory($run)
     $report.mutationsStarted = $true
     $ownedDisk = $null
@@ -107,7 +109,7 @@ try {
         $report.volumeBefore = $volume | Select-Object Path,UniqueId,FileSystem,FileSystemLabel,Size,SizeRemaining
         $worker = Join-Path $PSScriptRoot 'node-disk-worker.ps1'
         $powershell = Join-Path $PSHOME 'pwsh.exe'
-        $report.process = [NodeProbeProcess]::Run($powershell,
+        $report.process = [NodeProbeProcess]::RunWithInheritedConsole($powershell,
             @('-NoLogo','-NoProfile','-NonInteractive','-File',$worker,'-Volume',$volumeRoot.TrimEnd('\')),
             $run,'fixed-disk-full',536870912UL,30000,65536,$null)
         $report.fill = ConvertFrom-Json -InputObject $report.process.Output

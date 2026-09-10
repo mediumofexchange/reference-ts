@@ -27,7 +27,7 @@ function New-PartitionFixture {
         Expected=[pscustomobject]@{ Guid='{11111111-2222-3333-4444-555555555555}'; PartitionNumber=1; Offset=1048576UL; Size=66060288UL } }
 }
 function New-CompletionFixture {
-    [pscustomobject]@{ Process=[pscustomobject]@{ LimitsReadBackBeforeResume=$true; JobEmptyAfterCleanup=$true; Outcome='exited'; ExitCode=0; CommitLimitBytes=536870912UL; PeakCommitBytes=536870912UL; PeakProcessCommitBytes=536870912UL; SampledPeakPrivateCommitBytes=536870912UL; CpuRateFlags=5; CpuRatePer10000=2500; BeforeResumeActiveProcesses=1; MaxSampledAssociatedProcesses=1; ElapsedMs=30000; CapturedOutputBytes=65536 }
+    [pscustomobject]@{ Process=[pscustomobject]@{ LaunchMode='inherited-console'; CreationFlags=525316; ParentConsoleVerified=$true; TotalProcesses=1; LimitsReadBackBeforeResume=$true; JobEmptyAfterCleanup=$true; Outcome='exited'; ExitCode=0; CommitLimitBytes=536870912UL; PeakCommitBytes=536870912UL; PeakProcessCommitBytes=536870912UL; SampledPeakPrivateCommitBytes=536870912UL; CpuRateFlags=5; CpuRatePer10000=2500; BeforeResumeActiveProcesses=1; MaxSampledAssociatedProcesses=1; ElapsedMs=30000; CapturedOutputBytes=65536 }
         Fill=[pscustomobject]@{ Status='disk-full'; NativeError=112; BytesWritten=67108864UL; AttemptedBytes=68157440UL }
         Volume=[pscustomobject]@{ FileSystem='NTFS'; Size=67108864UL; SizeRemaining=0L }
         Detached=$true; FileBytes=67108864L; HostFreeBefore=107442339840L; HostFreeAfter=107374182400L }
@@ -89,6 +89,10 @@ Expect-Reject 'observed Windows default 64 KiB offset, otherwise stable partitio
 ) | ForEach-Object { $case=$_; Expect-Reject $case.n { Invoke-Partition $case.m } }
 
 @(
+    @{ n='wrong launch mode'; m={param($f) $f.Process.LaunchMode='detached'} },
+    @{ n='wrong creation flags'; m={param($f) $f.Process.CreationFlags=525324} },
+    @{ n='unverified parent console'; m={param($f) $f.Process.ParentConsoleVerified=$false} },
+    @{ n='transient extra process'; m={param($f) $f.Process.TotalProcesses=2} },
     @{ n='disk-full false positive status'; m={param($f) $f.Fill.Status='completed'} },
     @{ n='disk-full false positive error'; m={param($f) $f.Fill.NativeError=0} },
     @{ n='fill oversize'; m={param($f) $f.Fill.AttemptedBytes=68157441UL} },
