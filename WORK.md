@@ -4,81 +4,76 @@ Updated: 2026-09-10
 
 ## Goal
 
-Qualify a consistent RocksDB Java/native candidate for the bounded offline
-Windows control. Static artifact reconciliation is complete; no native code
-was run in this slice. The published 10.2.1 Windows package combines newer
-Java classes with native executable bytes matching published 10.1.3.
-Database acceptance remains unmet; keep trials stopped and all guards intact.
+Demonstrate a bounded compile-only Windows build of pinned RocksDB 10.2.1,
+then qualify an actual native candidate before any local database trial.
+The fixed manual hosted workflow is prepared and independently reviewed;
+execution is next. No candidate DLL is loaded or adopted by this slice.
 
-Development branch: `docs/rocksdb-native-provenance`, from `ee88a47`.
+Development branch: `docs/rocksdb-build-feasibility`, from `f2e511a`.
 Companion specification: `money-from-first-principles/main` at `7ea0ee8`.
-No normative change, native adoption, Ergo peers or full-sized allocation.
+No normative change, local toolchain installation, peers or disk allocation.
 
 ## Status
 
-- All 253 RocksDB Java classes and the native DLL in the pinned Ergo JAR
-  match the published Maven 10.2.1 Windows classifier. The mismatch is
-  already present in that dependency, not the harness's extraction.
-- Published 10.1.3 and 10.2.1 DLLs differ in only 36 metadata bytes; complete
-  executable sections match. Both embed source commit `5823cf08...`, tag
-  v10.1.3 and native version 10/1/3. Eleven Java class files differ.
-- Distribution identity and executable-byte correspondence do not establish
-  complete build provenance or mixed-version API/ABI compatibility.
-- The [route decision](decisions/2026-09.md#2026-09-10--qualify-a-consistent-windows-database-build)
-  prefers preparation of a source-controlled native 10.2.1 build for the
-  current Java baseline. Independent review accepted this preparation choice;
-  adoption and database acceptance remain unresolved. Delivery targets `main`.
-- The 10/2/1 gate, native hash, module paths, 1-second sampling ceiling and
-  resource budgets remain unchanged. No compiler or replacement DLL installed.
+- The [build plan](docs/ERGO_NATIVE_BUILD.md) selects an existing public standard
+  Windows runner: local compiler/SDK/CMake/JDK were not found in scoped inventory.
+  WSL2 Ubuntu exists but was not started. Local runtime controls remain intact.
+- [Workflow](.github/workflows/rocksdb-native-build.yml): manual public-main-only,
+  read-only token, fixed image/source, 30 minutes, build parallelism two.
+  Five Java build JARs are URL/size/SHA-256 pinned, 3,144,161 bytes total.
+- C++17, static CRT, portable CPU, compression-free JNI profile; no tests run.
+  Initial/final disk observations are refusal checks, not quotas. Selected tool
+  hashes and effective CMake configuration are logged, not full attestations.
+  No artifact/cache uploads; generated binaries disappear with the runner.
+- Fresh independent review found no material workflow/source/permission blocker.
+  Java test classes generate JNI headers only; native target does not run them.
+- All existing local version/hash/module/resource gates remain unchanged.
+  Published Java 10.2.1/native 10.1.3 mismatch and WinSxS refusal still block
+  database acceptance. A build result alone will not clear either runtime gate.
 
 ## Evidence
 
-- [Static report](docs/ergo-node-native-provenance.json): all archive/member
-  hashes, class comparison, PE sections, version export, every differing byte,
-  exact source refs, reproduction method and evidence limits.
-- [Current account](docs/ERGO_NODE_PREFLIGHT.md#published-windows-native-reconciliation)
-  relates the published mismatch to the existing execution refusals. Independent
-  ZIP/PE parsing reproduced the core static claims and metadata locations.
-  Exact source endpoints expose a histogram mapping difference; no executed
-  DLL failure or Ergo call-path reachability is claimed.
-- Prior [database diagnostic](docs/ergo-node-database-verification.json) reached
-  neither accepted JNI handshake nor database work: the version is 10/1/3 and
-  the module policy refused WinSxS COMCTL32. Its maximum sample gap was 954 ms.
-  Both jobs were empty with valid final counters. All three owned images and
-  drive mappings were removed; the fixed control root remains absent.
-- Previous `ee88a47` CI passed all jobs in run `34488164778`. This slice changes
-  documentation/evidence only; `npm run check:docs` and diff checks pass.
-  Verify the final pushed revision's CI separately.
+- `f2e511a` CI passed all jobs in run `34489837246`; main matched upstream at
+  session entry. The prior static reconciliation remains in
+  [the native report](docs/ergo-node-native-provenance.json).
+- Exact upstream CMake source exposed unconditional Java build downloads and
+  JNI test-helper header requirements. The prepared workflow addresses both
+  without patching upstream source or widening loader paths.
+- PowerShell parsing and local-host refusal passed. Full `npm run check` passed:
+  96 files / 1,795 tests, package consumer, pilot, store-crash and spent-set checks.
+  Hosted execution and delivered-revision CI remain pending.
+- Last [database diagnostic](docs/ergo-node-database-verification.json) loaded
+  native version 10/1/3 and stopped before PROCEED on WinSxS COMCTL32.
+  Maximum sample gap was 954 ms against a 1 s ceiling. All three images and
+  mappings were removed; no write/flush/reopen or disk-full result was shown.
 
 ## Next
 
-1. Prepare a bounded build-feasibility plan for pinned native 10.2.1: inventory
-   installed compiler/JDK/CMake, resolve immutable build/dependency inputs,
-   select explicit compression features, and estimate disk/time cost before
-   installing or building. Inspect Java/JNI mapping and source differences.
-   If Windows requires disproportionate work, compare the mixed-package review
-   and Linux control costs using concrete evidence rather than changing a gate.
-2. Before any candidate load, review its actual source/flags/output hashes and
-   bundle/module-pin patch. Separately establish narrow Windows side-by-side
-   component provenance. Preserve the 954 ms timing concern and 1 s ceiling.
-3. Retry the fixed 64 MiB offline control only after those prerequisites are
-   concretely reviewed. Existing execution authority covers that small control;
-   it does not authorize larger disks or public peers. Do not repeat a known
-   failing trial with the unchanged candidate.
-4. A later 30 min / 20 GiB / 100 GiB reserve sync harness with 8 GiB traffic
-   trigger / 10 GiB final maximum still needs preparation and separate approval,
-   plus public-peer parser/JRE review. No complete sync combination is shown.
+1. Finish full checks, deliver the reviewed workflow under standing authority,
+   dispatch it once, and capture its exact run/revision/report and static output
+   or refusal. Keep image mismatch and compile errors; do not automatically
+   update inputs, disable warnings or raise limits. Record measured cost.
+2. After build feasibility, prepare a retained candidate with complete input,
+   Java/JNI and compression-profile evidence. Review actual output and the
+   concrete local bundle/native pin patch before any library load. The generated
+   compile-only JAR is not silently substituted into the Ergo baseline.
+3. Establish narrow WinSxS component provenance separately; retain the sampling
+   concern and 1 s ceiling. Retry the existing fixed 64 MiB control only after
+   the candidate and module-policy prerequisites are concretely reviewed.
+4. Larger sync still requires separate preparation/approval: 30 min, 20 GiB
+   disk, 100 GiB host reserve, 8 GiB traffic trigger/10 GiB final maximum,
+   public-peer parser/JRE review. No complete sync combination is shown.
 
 ## Open questions
 
-- Runtime remains v2, refuses silence clauses and has no pool wallet.
-  C2.10.13/A8, same-index order/A9, authenticated ranges and v3 adoption remain.
-- Native/JRE/OS write coverage, stalled supervisor/storage behavior, retained
-  history, fixture ancestry and authenticated ranges remain unestablished.
-- Stay with the current instance for the bounded build-feasibility plan: the
-  artifact and review context is fresh. This is an efficiency recommendation,
-  not measured comparative model performance.
+- Runner labels roll; exact image gating can refuse. Recorded selected hashes
+  do not prove full toolchain/OS provenance or reproducible outputs. Candidate
+  retention/transfer and runtime compatibility remain separate work.
+- Runtime remains v2, refuses silence clauses and has no pool wallet. Recovery,
+  authenticated ranges, fixture ancestry and v3 adoption remain unestablished.
+- Stay with this instance through build qualification: the source, input and
+  review context is fresh. This is not measured comparative model performance.
 - Estimate unchanged: **45% done / 55% remaining**, plausible done range
-  **35-55%**. This reconciliation closes no end-to-end gate. Runtime/recovery,
-  wallet/transport, authenticated evidence, witness publication and custody/
-  rollback assurance dominate remaining effort and may require redesign.
+  **35-55%**. This tooling slice closes no end-to-end product gate. Runtime/
+  recovery, wallet/transport, authenticated evidence, witness publication and
+  custody/rollback assurance dominate remaining effort and may require redesign.

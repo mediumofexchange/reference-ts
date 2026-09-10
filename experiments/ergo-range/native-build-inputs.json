@@ -1,0 +1,15 @@
+{
+  "sourceCommit": "4b2122578e475cb88aef4dcf152cccd5dbf51060",
+  "imageVersion": "20260907.297.1",
+  "imageSourceCommit": "3e99119430a6c4ead03a20a2a4020a71782eede1",
+  "cmakeVersion": "3.31.6",
+  "javaVersion": "21.0.12",
+  "windowsSdkVersion": "10.0.19041.0",
+  "dependencies": [
+    {"file":"junit-4.13.1.jar","path":"junit/junit/4.13.1/junit-4.13.1.jar","bytes":382708,"sha256":"c30719db974d6452793fe191b3638a5777005485bae145924044530ffa5f6122"},
+    {"file":"hamcrest-2.2.jar","path":"org/hamcrest/hamcrest/2.2/hamcrest-2.2.jar","bytes":123360,"sha256":"5e62846a89f05cd78cd9c1a553f340d002458380c320455dd1f8fc5497a8a1c1"},
+    {"file":"mockito-all-1.10.19.jar","path":"org/mockito/mockito-all/1.10.19/mockito-all-1.10.19.jar","bytes":1234599,"sha256":"d1a7a7ef14b3db5c0fc3e0a63a81b374b510afe85add9f7984b97911f4c70605"},
+    {"file":"cglib-3.3.0.jar","path":"cglib/cglib/3.3.0/cglib-3.3.0.jar","bytes":306864,"sha256":"9fe0c26d7464140ccdfe019ac687be1fb906122b508ab54beb810db0f09a9212"},
+    {"file":"assertj-core-2.9.0.jar","path":"org/assertj/assertj-core/2.9.0/assertj-core-2.9.0.jar","bytes":1096630,"sha256":"5e88ea3ecbe3c48aa1346fec76c84979fa9c8d22499f11479011691230e8babf"}
+  ]
+}

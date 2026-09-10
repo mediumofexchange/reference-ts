@@ -943,6 +943,11 @@ execution guard remain unchanged. Establish narrow Windows side-by-side
 component provenance separately; the observed 954 ms module-sampling gap also
 remains close to the unchanged 1-second ceiling.
 
+The [build qualification](ERGO_NATIVE_BUILD.md) now prepares a fixed manual
+hosted Windows compilation with pinned source/dependencies, explicit features
+and recorded toolchain evidence. It does not load the output or change the
+local control's acceptance gates.
+
 ### Combined experiment proposal
 
 The smallest route reuses the native fixed disk, existing detached JVM Job

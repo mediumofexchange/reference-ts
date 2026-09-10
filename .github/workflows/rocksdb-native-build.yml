@@ -1,0 +1,33 @@
+name: RocksDB native build qualification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rocksdb-native-build-qualification
+  cancel-in-progress: false
+
+jobs:
+  compile:
+    if: github.repository == 'mediumofexchange/reference-ts' && github.ref == 'refs/heads/main' && !github.event.repository.private
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: facebook/rocksdb
+          ref: 4b2122578e475cb88aef4dcf152cccd5dbf51060
+          path: scratch/native-build/source
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Compile fixed source and record static identity
+        shell: pwsh
+        run: ./experiments/ergo-range/native-build.ps1
+      # Logs carry the bounded report. No artifact/cache upload, native test,
+      # local host installation, release or node execution is part of this job.
