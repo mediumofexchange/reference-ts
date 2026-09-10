@@ -15,8 +15,9 @@ No peers or full-sized allocation. Companion specification:
 
 ## Status
 
-- Preparation slice complete at `1374f5b` on `chore/ergo-sync-preparation`,
-  ready for authorized fast-forward delivery to `main` after final docs checks.
+- Preparation slice `1374f5b` and handoff `52eb44f` fast-forwarded/pushed to
+  `main`; exact remote parity confirmed. Development branch:
+  `chore/ergo-sync-preparation`. This final handoff refresh follows on `main`.
 - [Effective settings and write inventory](docs/ERGO_NODE_PREFLIGHT.md#effective-settings-readback)
   and [combined proposal](docs/ERGO_NODE_PREFLIGHT.md#combined-experiment-proposal)
   replace the open-ended source inventory with explicit measured prerequisites.
@@ -45,8 +46,9 @@ No peers or full-sized allocation. Companion specification:
 - Reacquired bundle, compiler, generated class/run files and temporary source
   copies were removed after capture/review. Reproduction is in the experiment
   README. No disk image, node service, peer connection or full sync was launched.
-- At session start upstream main equaled `d7f65cf`, CI passed; branch protection
-  was absent and rulesets empty. Refresh fetch/parity and CI on delivery.
+- Final upstream refresh found no intervening commits; branch protection
+  absent and rulesets empty. Prior `d7f65cf` CI passed; the new push was not yet
+  listed by Actions at readback. Check available CI for the current revision.
 
 ## Next
 
