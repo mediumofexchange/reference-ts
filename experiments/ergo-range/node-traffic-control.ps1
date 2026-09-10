@@ -5,6 +5,8 @@ Add-Type -Path (Join-Path $PSScriptRoot 'NodeProbeProcess.cs')
 Add-Type -Path (Join-Path $PSScriptRoot 'NodeTrafficCounter.cs')
 . (Join-Path $PSScriptRoot 'node-traffic-evidence.ps1')
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+$controlDirectory=Join-Path $repo 'scratch/node-traffic-control'
+New-Item -ItemType Directory -Force -Path $controlDirectory | Out-Null
 $curl = Join-Path ([Environment]::GetFolderPath('System')) 'curl.exe'
 if (-not (Test-Path -LiteralPath $curl -PathType Leaf)) { throw 'System curl is unavailable' }
 $url = 'https://raw.githubusercontent.com/mediumofexchange/reference-ts/4af6af4e02997ae880147ebacbd0f38f61303aa8/experiments/ergo-range/fixtures/mainnet-1000000.json'
@@ -24,7 +26,7 @@ $observer = [Func[uint32,long,bool]] {
         $sample = [NodeTrafficCounter]::Read($script:trafficClock)
         $script:trafficState.samples++
         $stop = $script:trafficBudget.Observe($sample)
-    } catch [Net.NetworkInformation.NetworkInformationException] {
+    } catch [ComponentModel.Win32Exception] {
         $script:trafficState.readError=$_.Exception.Message; $stop=$true
     } catch [InvalidOperationException] {
         $script:trafficState.readError=$_.Exception.Message; $stop=$true
@@ -32,7 +34,7 @@ $observer = [Func[uint32,long,bool]] {
     if ($stop) { $script:trafficState.stopDecisionMs=$script:trafficClock.ElapsedMilliseconds }
     return $stop
 }
-$result = [NodeProbeProcess]::Run($curl,$arguments,$repo,'host-traffic-stop',268435456UL,10000,65536,$observer)
+$result = [NodeProbeProcess]::Run($curl,$arguments,$controlDirectory,'host-traffic-stop',268435456UL,10000,65536,$observer)
 if ($result.JobEmptyAfterCleanup) { $script:trafficState.emptyConfirmedMs=$script:trafficClock.ElapsedMilliseconds }
 # Always attempt final accounting; a failed/late sample never becomes zero traffic.
 try {
@@ -41,7 +43,7 @@ try {
     $script:trafficState.finalSampleFinishedMs=$final.FinishedMs
     $script:trafficState.samples++
     [void]$script:trafficBudget.Observe($final)
-} catch [Net.NetworkInformation.NetworkInformationException] {
+} catch [ComponentModel.Win32Exception] {
     $script:trafficState.readError=$_.Exception.Message
 } catch [InvalidOperationException] {
     $script:trafficState.readError=$_.Exception.Message

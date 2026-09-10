@@ -4,9 +4,10 @@
 // same identity and counter values between two observations.
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
-using System.Net.NetworkInformation;
+using System.Runtime.InteropServices;
 
 public static class NodeTrafficCounter
 {
@@ -257,54 +258,56 @@ public static class NodeTrafficCounter
             throw new PlatformNotSupportedException("Windows host-interface counters are required");
         if (clock == null || !clock.IsRunning)
             throw new ArgumentException("A running monotonic clock is required", nameof(clock));
+        ValidateNativeLayout();
 
         long startedMs = clock.ElapsedMilliseconds;
-        NetworkInterface[] interfaces = NetworkInterface.GetAllNetworkInterfaces();
-        if (interfaces.Length == 0 || interfaces.Length > 256)
-            throw new InvalidOperationException("Host-interface inventory is empty or exceeds 256 rows");
-
-        var rows = new Row[interfaces.Length];
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        for (int i = 0; i < interfaces.Length; i++)
+        IntPtr table = IntPtr.Zero;
+        Row[] rows;
+        try
         {
-            NetworkInterface item = interfaces[i];
-            string rawId = item.Id;
-            if (String.IsNullOrWhiteSpace(rawId))
-                throw new InvalidOperationException("Host interface has no stable identifier");
+            uint result = GetIfTable2(out table);
+            if (result != 0)
+                throw new Win32Exception(unchecked((int)result), "GetIfTable2 failed");
+            if (table == IntPtr.Zero)
+                throw new InvalidOperationException("GetIfTable2 returned no table");
 
-            IPInterfaceProperties properties = item.GetIPProperties();
-            int ipv4Index = 0;
-            int ipv6Index = 0;
-            if (!item.Supports(NetworkInterfaceComponent.IPv4))
-                throw new InvalidOperationException("Host interface has no IPv4 index for GetIPStatistics");
-            IPv4InterfaceProperties ipv4 = properties.GetIPv4Properties();
-            if (ipv4 == null || ipv4.Index <= 0)
-                throw new InvalidOperationException("Host interface has an invalid IPv4 index for GetIPStatistics");
-            ipv4Index = ipv4.Index;
-            if (item.Supports(NetworkInterfaceComponent.IPv6))
+            uint count = unchecked((uint)Marshal.ReadInt32(table));
+            if (count == 0 || count > 256)
+                throw new InvalidOperationException("Host-interface inventory is empty or exceeds 256 rows");
+
+            rows = new Row[count];
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < rows.Length; i++)
             {
-                IPv6InterfaceProperties ipv6 = properties.GetIPv6Properties();
-                if (ipv6 == null || ipv6.Index <= 0)
-                    throw new InvalidOperationException("Host interface has an invalid IPv6 index");
-                ipv6Index = ipv6.Index;
-            }
-            string id = rawId.Length.ToString(CultureInfo.InvariantCulture) + ":" + rawId +
-                "|v4:" + ipv4Index.ToString(CultureInfo.InvariantCulture) +
-                "|v6:" + (ipv6Index == 0 ? "-" : ipv6Index.ToString(CultureInfo.InvariantCulture));
-            if (!ids.Add(id))
-                throw new InvalidOperationException("Host-interface identifier is not unique");
+                int offset = checked(TableRowOffset + i * NativeRowSize);
+                MibIfRow2 item = Marshal.PtrToStructure<MibIfRow2>(IntPtr.Add(table, offset));
+                if (item.InterfaceLuid == 0 || item.InterfaceIndex == 0)
+                    throw new InvalidOperationException("Host interface has a zero LUID or index");
+                if (item.Type > Int32.MaxValue || item.OperStatus > Int32.MaxValue)
+                    throw new InvalidOperationException("Host-interface type or status exceeds the public range");
 
-            IPInterfaceStatistics stats = item.GetIPStatistics();
-            rows[i] = new Row(
-                id,
-                (int)item.NetworkInterfaceType,
-                (int)item.OperationalStatus,
-                Unsigned(stats.BytesReceived, "BytesReceived"),
-                Unsigned(stats.BytesSent, "BytesSent"),
-                Unsigned(stats.IncomingPacketsWithErrors, "IncomingPacketsWithErrors"),
-                Unsigned(stats.OutgoingPacketsWithErrors, "OutgoingPacketsWithErrors"),
-                Unsigned(stats.IncomingPacketsDiscarded, "IncomingPacketsDiscarded"),
-                Unsigned(stats.OutgoingPacketsDiscarded, "OutgoingPacketsDiscarded"));
+                string id = "luid:" + item.InterfaceLuid.ToString("X16", CultureInfo.InvariantCulture) +
+                    "|guid:" + item.InterfaceGuid.ToString("D") +
+                    "|index:" + item.InterfaceIndex.ToString(CultureInfo.InvariantCulture);
+                if (!ids.Add(id))
+                    throw new InvalidOperationException("Host-interface identifier is not unique");
+
+                rows[i] = new Row(
+                    id,
+                    (int)item.Type,
+                    (int)item.OperStatus,
+                    item.InOctets,
+                    item.OutOctets,
+                    item.InErrors,
+                    item.OutErrors,
+                    item.InDiscards,
+                    item.OutDiscards);
+            }
+        }
+        finally
+        {
+            if (table != IntPtr.Zero)
+                FreeMibTable(table);
         }
         long finishedMs = clock.ElapsedMilliseconds;
         if (startedMs < 0 || finishedMs < startedMs)
@@ -312,11 +315,86 @@ public static class NodeTrafficCounter
         return new Sample(startedMs, finishedMs, rows);
     }
 
-    private static ulong Unsigned(long value, string name)
+    private const int TableRowOffset = 8;
+    private const int NativeRowSize = 1352;
+
+    [DllImport("iphlpapi.dll")]
+    private static extern uint GetIfTable2(out IntPtr table);
+
+    [DllImport("iphlpapi.dll")]
+    private static extern void FreeMibTable(IntPtr memory);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct MibIfRow2
     {
-        if (value < 0)
-            throw new InvalidOperationException(name + " exceeded the signed public API range");
-        return checked((ulong)value);
+        public ulong InterfaceLuid;
+        public uint InterfaceIndex;
+        public Guid InterfaceGuid;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 257)] public string Alias;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 257)] public string Description;
+        public uint PhysicalAddressLength;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32, ArraySubType = UnmanagedType.U1)] public byte[] PhysicalAddress;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32, ArraySubType = UnmanagedType.U1)] public byte[] PermanentPhysicalAddress;
+        public uint Mtu;
+        public uint Type;
+        public uint TunnelType;
+        public uint MediaType;
+        public uint PhysicalMediumType;
+        public uint AccessType;
+        public uint DirectionType;
+        public byte InterfaceAndOperStatusFlags;
+        public uint OperStatus;
+        public uint AdminStatus;
+        public uint MediaConnectState;
+        public Guid NetworkGuid;
+        public uint ConnectionType;
+        public ulong TransmitLinkSpeed;
+        public ulong ReceiveLinkSpeed;
+        public ulong InOctets;
+        public ulong InUcastPkts;
+        public ulong InNUcastPkts;
+        public ulong InDiscards;
+        public ulong InErrors;
+        public ulong InUnknownProtos;
+        public ulong InUcastOctets;
+        public ulong InMulticastOctets;
+        public ulong InBroadcastOctets;
+        public ulong OutOctets;
+        public ulong OutUcastPkts;
+        public ulong OutNUcastPkts;
+        public ulong OutDiscards;
+        public ulong OutErrors;
+        public ulong OutUcastOctets;
+        public ulong OutMulticastOctets;
+        public ulong OutBroadcastOctets;
+        public ulong OutQLen;
+    }
+
+    private static void ValidateNativeLayout()
+    {
+        if (IntPtr.Size != 8 || Marshal.SizeOf<MibIfRow2>() != NativeRowSize ||
+            OffsetOf(nameof(MibIfRow2.InterfaceIndex)) != 8 ||
+            OffsetOf(nameof(MibIfRow2.InterfaceGuid)) != 12 ||
+            OffsetOf(nameof(MibIfRow2.Alias)) != 28 ||
+            OffsetOf(nameof(MibIfRow2.Description)) != 542 ||
+            OffsetOf(nameof(MibIfRow2.PhysicalAddressLength)) != 1056 ||
+            OffsetOf(nameof(MibIfRow2.PhysicalAddress)) != 1060 ||
+            OffsetOf(nameof(MibIfRow2.PermanentPhysicalAddress)) != 1092 ||
+            OffsetOf(nameof(MibIfRow2.Mtu)) != 1124 ||
+            OffsetOf(nameof(MibIfRow2.InterfaceAndOperStatusFlags)) != 1152 ||
+            OffsetOf(nameof(MibIfRow2.OperStatus)) != 1156 ||
+            OffsetOf(nameof(MibIfRow2.NetworkGuid)) != 1168 ||
+            OffsetOf(nameof(MibIfRow2.ConnectionType)) != 1184 ||
+            OffsetOf(nameof(MibIfRow2.TransmitLinkSpeed)) != 1192 ||
+            OffsetOf(nameof(MibIfRow2.InOctets)) != 1208 ||
+            OffsetOf(nameof(MibIfRow2.OutOctets)) != 1280 ||
+            OffsetOf(nameof(MibIfRow2.OutQLen)) != 1344)
+            throw new InvalidOperationException("MIB_IF_ROW2 ABI does not match the required x64 Windows layout");
+    }
+
+    private static int OffsetOf(string field)
+    {
+        return checked((int)Marshal.OffsetOf<MibIfRow2>(field));
     }
 
     private static bool TrySnapshot(

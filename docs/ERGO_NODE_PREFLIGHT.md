@@ -326,24 +326,33 @@ sync. A gateway could cap admitted bytes, but does not prevent arbitrary
 incoming physical-link consumption before local rejection. No hard network
 quota or isolation is inferred from this selection.
 
-The native control uses `NetworkInterface.GetAllNetworkInterfaces()` and
-`GetIPStatistics()` without an active-interface or IPv4-traffic filter.
-Its compatibility guard requires a positive IPv4 interface index, and a
-positive IPv6 index when IPv6 is supported. The inspected
-[.NET v10.0.1 wrapper](https://github.com/dotnet/runtime/blob/v10.0.1/src/libraries/System.Net.NetworkInformation/src/System/Net/NetworkInformation/SystemNetworkInterface.cs)
-passes the IPv4 index to
-[GetIfEntry2](https://github.com/dotnet/runtime/blob/v10.0.1/src/libraries/System.Net.NetworkInformation/src/System/Net/NetworkInformation/SystemIPInterfaceStatistics.cs),
-whose zero-index path otherwise returns zero statistics. Refuse incompatible
-interfaces rather than omit their traffic. Signed public getter values below
-zero are also refused; internal deltas/sums use checked unsigned 64-bit values.
-Interface identity includes both indices, type and operational status.
+The first [.NET wrapper attempt](https://github.com/mediumofexchange/reference-ts/blob/bae0515/docs/ergo-traffic-stop-verification.json)
+refused baseline enumeration because one exposed interface lacked a usable
+IPv4 index. It launched neither the worker nor its request. That refusal
+remains preserved; skipping the interface would leave incomplete accounting.
+The inspected .NET wrapper could otherwise turn index zero into zero counters.
 
-The loaded runtime reports `.NET 10.0.11`; its network assembly's informational
-source revision `e2f47b0110ed922f21a1522da67279133ce28f32` was unavailable in the
-public upstream repository. The v10.0.1 source explains the conservative guard;
-it is not asserted to be the exact loaded binary's source. The probe relies
-on the public interface-statistics API contract and records runtime identity.
-No reproducible-build or full interface-lifecycle proof follows from this.
+The replacement reads the native
+[GetIfTable2 table](https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-getiftable2)
+of logical and physical interfaces directly, without active/IP-family filters,
+and releases its buffer with `FreeMibTable`. Its Windows x64 binding follows
+the full `MIB_IF_ROW2` layout, including alignment: 1,352-byte rows and an
+eight-byte offset to the first row. At most 256 rows are accepted. Identity
+binds interface LUID, GUID and index, with type and operational-status continuity.
+Native counters and checked deltas/sums remain unsigned 64-bit values. No
+public-wrapper signed conversion or index-zero fallback remains. This still
+does not establish a full interface-lifecycle or reproducible-build proof.
+
+The [native control report](ergo-traffic-stop-verification.json) records
+83 interfaces and four samples: 42,399 received plus 11,449 sent octets,
+53,848 total. The final observation exceeds the early 16 KiB trigger by
+37,464 bytes but stays below the separately declared 2 MiB acceptance maximum.
+Maximum sample gap was 240 ms; stop decision at 339 ms was followed by
+confirmed empty job at 346 ms and final sampling at 347–350 ms. The job's
+exit code is `0xE0000001`, the supervisor's termination code. This is host
+aggregate evidence, including unrelated/duplicate traffic; it does not
+attribute those bytes to curl or prove a completed fixture download. The
+controlled worker ran for 271 ms under the installed process limits.
 
 The existing WSL 2 / Ubuntu 20.04 installation offers a second route without
 Windows elevation. A fixed

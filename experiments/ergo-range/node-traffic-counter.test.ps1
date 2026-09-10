@@ -46,6 +46,21 @@ function Assert-InvalidObserve {
     Assert-True ($acc.Observe($valid) -and -not $acc.AccountingValid -and $acc.TotalBytes -eq 0 -and $acc.StopReason -eq $before) "Invalid state was not terminal: $Reason"
 }
 
+# Validate the exact x64 SDK layout without calling GetIfTable2.
+$binding=[Reflection.BindingFlags]'NonPublic,Static'
+$nativeType=[NodeTrafficCounter].GetNestedType('MibIfRow2',[Reflection.BindingFlags]'NonPublic')
+Assert-True ($null -ne $nativeType) 'Native row type is missing'
+$sizeOf=[Runtime.InteropServices.Marshal].GetMethods() | Where-Object { $_.Name -eq 'SizeOf' -and -not $_.IsGenericMethod -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType -eq [Type] }
+Assert-True ($sizeOf.Invoke($null,@($nativeType)) -eq 1352) 'Native row size mismatch'
+Assert-True ([Runtime.InteropServices.Marshal]::OffsetOf($nativeType,'InterfaceAndOperStatusFlags').ToInt32() -eq 1152) 'Native flags offset mismatch'
+Assert-True ([Runtime.InteropServices.Marshal]::OffsetOf($nativeType,'InOctets').ToInt32() -eq 1208) 'Native receive-octet offset mismatch'
+Assert-True ([Runtime.InteropServices.Marshal]::OffsetOf($nativeType,'OutOctets').ToInt32() -eq 1280) 'Native send-octet offset mismatch'
+$ulongFields=@('TransmitLinkSpeed','ReceiveLinkSpeed','InOctets','InUcastPkts','InNUcastPkts','InDiscards','InErrors','InUnknownProtos','InUcastOctets','InMulticastOctets','InBroadcastOctets','OutOctets','OutUcastPkts','OutNUcastPkts','OutDiscards','OutErrors','OutUcastOctets','OutMulticastOctets','OutBroadcastOctets','OutQLen')
+Assert-True (-not ($ulongFields | Where-Object { $nativeType.GetField($_).FieldType -ne [UInt64] })) 'Native trailing UInt64 field set mismatch'
+$validate=[NodeTrafficCounter].GetMethod('ValidateNativeLayout',$binding)
+$validate.Invoke($null,@()) | Out-Null
+Assert-True $true 'Native layout self-check failed'
+
 # Independent receive/send deltas, exact trigger, and valid final post-stop accounting.
 $baseline=New-Sample 0 2 @((New-Row 'a' -Received 100 -Sent 200),(New-Row 'b' -Received 10 -Sent 20))
 $acc=New-Accumulator $baseline 15 100
