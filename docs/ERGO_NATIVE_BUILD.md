@@ -176,8 +176,9 @@ This is one observation, not a worst-case bound or reproducibility result.
 
 [Static inspection](ergo-native-build-static.json) retains all 1,524 export
 names/RVAs and direct imports: SHLWAPI.dll, RPCRT4.dll and KERNEL32.dll.
-The published baseline had 1,603 exports; name/Java binding and semantic
-compatibility still need investigation before adoption. Import names do not
+The published baseline had 1,603 exports; the [static comparison below](#javajni-name-compatibility)
+accounts for the difference and identifies unresolved Java bindings. Semantic
+compatibility remains open before adoption. Import names do not
 authenticate the eventual loaded Windows components or their transitive graph.
 The generated binaries were not retained; a later build is a new candidate
 whose actual bytes must be captured and reviewed, not assumed to match these hashes.
@@ -202,3 +203,102 @@ differences, review the exact bundle/native pin change and narrow WinSxS
 component provenance. The prior 954 ms sampling gap remains close to the
 unchanged 1-second ceiling. Neither build success nor static exports satisfy
 those gates; the fixed 64 MiB database control has not yet passed.
+
+## Java/JNI name compatibility
+
+Static comparison on 2026-09-10 found **seven native declarations without a
+matching export in the compile-only build**, four more than in the published
+Windows DLL. The [machine-readable evidence](ergo-native-jni-compatibility.json)
+retains the complete difference, missing descriptors, unused exports, class
+hashes and source hashes. This closes the export-count question and rules out
+a blanket compatibility claim. It does not adopt or execute a candidate.
+
+Rehashed the complete pinned Ergo 6.1.5 JAR and its embedded published DLL,
+matching the [earlier provenance](ergo-node-native-provenance.json). Enumerated
+all 253 `org/rocksdb/` class files, including eight below `util/`, and read
+their class-file method tables: 1,519 declarations carry `ACC_NATIVE`.
+Descriptors and static/instance flags come from compiled classes, not a
+source regex. Compared the DLL's PE export-name directory with the hosted
+build's retained export list; the built DLL and generated JAR are unavailable.
+The exact-commit source archive also matches the previously recorded hash.
+
+| Static quantity | Published DLL | Compile-only build |
+|---|---:|---:|
+| Named exports | 1,603 | 1,524 |
+| Java declarations with a matching name | 1,516 | 1,512 |
+| Java declarations without a matching name | 3 | 7 |
+| Exports unused by these Java declarations | 87 | 12 |
+
+Applied the [Java 21 JNI name rules](https://docs.oracle.com/en/java/javase/21/docs/specs/jni/design.html#resolving-native-method-names):
+search the escaped short name first, then the long name containing the
+argument descriptor. No short-name match aliases multiple native overloads
+in these inputs. Name coverage does not check return types, calling
+conventions, callbacks, argument semantics or runtime behavior.
+
+There are no added exports. The 79 removed names partition exactly as follows:
+
+- **71 `LZ4_*` exports**, consistent with the explicit compression-free build.
+  None is the JNI name of a native declaration in the pinned Java classes.
+- **Four obsolete option bindings**: `setMaxWriteBufferNumberToMaintain` and
+  `maxWriteBufferNumberToMaintain` on both `Options` and `ColumnFamilyOptions`.
+  These are absent from the pinned Java declarations and 10.2.1 JNI source.
+- **Four still-declared option bindings**: `setFailIfOptionsFileError(JZ)V`
+  and `failIfOptionsFileError(J)Z` on both `Options` and `DBOptions`.
+  The public Java methods still call these private static natives. The
+  10.2.1 Java source retains them, while `java/rocksjni/options.cc` has no
+  corresponding implementation. This is a source/binding gap, not evidence
+  that a compression switch removed an otherwise available JNI method.
+
+The 12 remaining unused build exports are JNI test helpers: six exception
+helpers, one comparator helper, three write-batch internal helpers, one
+write-batch contents helper and one event-listener helper.
+The exact names are retained in the JSON evidence. They correspond to the
+upstream test-helper sources included in the build; the stock Ergo class set
+contains none of their declaring classes.
+
+Three further declarations lack names in both DLL export sets:
+
+| Declaring class and method | Pinned-source evidence and scope |
+|---|---|
+| `LiveFileMetaData.newLiveFileMetaDataHandle` | Public wrapper calls a private native; no matching JNI definition was found. `export_import_files_metadatajni.cc` includes its header but only defines disposal of `ExportImportFilesMetaData`. |
+| `RocksEnv.disposeInternalJni(J)V` | `env.cc` defines the old `disposeInternal` spelling. `Env.getDefault()` disowns the singleton handle, so that ordinary close path need not call this native. This does not establish every environment lifecycle. |
+| `WBWIRocksIterator.refresh0Jni(J)V` | A source definition exists in `write_batch_with_index.cc`, but neither recorded export set contains its JNI name. Source presence alone does not prove Windows export availability. |
+
+No `RegisterNatives` or `JNI_OnLoad` occurrence was found under the pinned
+`java/` source tree. These are unresolved names under ordinary JNI lookup;
+no runtime failure was reproduced and no whole-Ergo reachability claim follows.
+The reviewed [database worker](../experiments/ergo-range/NodeDatabaseControl.java)
+does not directly call the missing wrappers. Its fresh database, explicit
+`NO_COMPRESSION` for ordinary and bottommost data, and disabled automatic
+compactions fit the intended narrow offline profile. That source inspection
+does not prove every transitive call or any retained candidate's runtime result.
+
+The pinned Java CMake list includes all 85 `java/rocksjni/*.cc` files; no
+translation-unit omission explains the missing names. Independent readback
+used a separate ZIP/class parser and PE export-address parser. It reproduced
+the archive/class hashes, declaration/export digests, missing and unused lists,
+and all source hashes in the report. It found no short-name overload collisions,
+zero published export addresses or published forwarded exports. Source and
+prose review found no unresolved material finding within this static scope.
+The discarded candidate's export addresses and generated Java classes could
+not be independently examined. Documentation and link checks passed; unchanged
+runtime checks reuse `e917849` evidence above.
+
+### Compression and next acceptance boundary
+
+Root CMake explicitly disables codec discovery in the qualified configuration;
+`util/compression.h` selects support through compile-time codec macros.
+The absence of LZ4 exports supports that profile but is not a complete codec
+inventory of the published DLL. A successful no-compression control would
+establish neither decoding of previously compressed data nor the stock Ergo
+configuration. Do not substitute the compile-only JAR for the pinned Ergo JAR.
+
+The next slice should prepare bounded retention/transfer of the narrow
+offline candidate and inspect its actual DLL, generated JAR, export addresses,
+Java descriptors, JNI signatures and build configuration. Preserve the seven
+gaps as explicit exclusions; demonstrate the control's required call path
+before relying on it. A general Ergo replacement must resolve the binding
+gaps and compression profile separately. Do not add placeholder JNI methods
+or relax the native version, module or resource gates to make adoption pass.
+WinSxS provenance and the previous 954 ms sampling gap remain separate blockers
+to the fixed 64 MiB control.
