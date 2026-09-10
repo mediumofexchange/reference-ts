@@ -435,6 +435,11 @@ those identity checks are evidenced by the reviewed executed path, not by
 independent replay of their original native types. The separate detached-image
 query corroborates cleanup. The final focused suite has 79 worker-free cases;
 the harmless inherited-console and unchanged detached-Node checks also pass.
+The captured image and inspected startup profile were subsequently removed
+after another exact-path detached readback; only resulting empty directories
+were removed. The raw report's `artifactRemoved=false` describes measurement
+time and is intentionally unchanged. Final `npm run check` passes: 96 files /
+1,795 tests, package consumer, pilot, store-crash and spent-set checks.
 
 The existing Job Object does not supply the combined traffic control:
 Microsoft's
