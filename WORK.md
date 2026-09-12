@@ -11,10 +11,10 @@ Fresh seedless audit and receiver processes agree on the replayed public state;
 the receiver reconstructs change and a local membership path from seed/public
 bytes. All results remain unspendable with unresolved full authority/currentness.
 
-Implementation branch feat/successor-local-replay starts at main e983f67.
+Implementation main includes df06b00 from feat/successor-local-replay.
 Companion money-from-first-principles/main stays 60f380c; normative content
 7ea0ee8. No normative, runtime, circuit, key, dependency or configuration change.
-Review and final acceptance passed; authorized delivery remains to complete.
+Independent review and final acceptance passed.
 
 ## Status
 
@@ -43,7 +43,7 @@ Review and final acceptance passed; authorized delivery remains to complete.
   and lightweight checks passed. No unresolved material findings remain.
 - Existing `node scripts/pool/delivery/evidence-check.mjs`: all 14 groups passed
   after extracting seedless local evidence authentication. Its retained source
-  report is refreshed. Final docs and diff checks passed; delivery remains.
+  report is refreshed. Final docs and diff checks passed; main is integrated.
 - Reuse unchanged full/runtime/real-proof baseline e983f67: all seven hosted
   CI jobs passed, run 34716395928, verified this session. New replay command
   runs after existing conformance in both v3 CI jobs. No production code changed.
@@ -78,7 +78,7 @@ Review and final acceptance passed; authorized delivery remains to complete.
 
 ## Next
 
-1. Complete authorized delivery, verify remote main parity and latest hosted CI.
+1. Verify delivered main parity and hosted CI for the commit with this handoff.
 2. Resolve the v3 configuration/terms declaration boundary: configuration frame,
    six artifact/key identities, delivery profile and backing evidence encoding.
    Keep declaration disabled until all adoption prerequisites hold. Independently
