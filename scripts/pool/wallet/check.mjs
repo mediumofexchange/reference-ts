@@ -135,6 +135,7 @@ try {
   await cli('prepare-burn', receiver); await cli('submit-burn', receiver); await checkpoint('burn');
   assert.equal((await cli('prepare-burn-change', payer)).quantity, '3');
   await cli('submit-burn', payer); await checkpoint('burn-change');
+  assert.equal((await cli('note-spent', receiver)).note, 'spent');
   await assert.rejects(cli('prepare-burn', receiver), /held note is already spent/);
   // Inspect the actual service request schema: only canonical public statement
   // frames were sent. Receiver root/secret/opening are never service fields.

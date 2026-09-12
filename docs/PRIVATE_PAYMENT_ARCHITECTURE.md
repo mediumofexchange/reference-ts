@@ -19,7 +19,7 @@ wallet, external witness write adapter. [WORK](../WORK.md) owns the next task;
 | `pool/receipt*.ts` | Acceptance signatures, exact evidence attestation, semantic history inclusion, repair and present record verdicts. See [receipt APIs](POOL_RECEIPTS.md). | A receipt is not a balance. Silence verdicts remain model-only; exact evidence attestation is not checkpoint proof binding. |
 | `pool/store.ts`, `pool/store-codec.ts` | Node 24 journal for openings, admissions, original receipts, signed counter and outbox; restart fencing, revalidation and complete used canonical evidence retention. See [PoolStore](POOL_STORE.md). | Refuses silence clauses. Copied journals/rollback and coordinated backup custody remain open. |
 | `pool/service-*.ts` | Local HTTP service and client for existing v2 submit/commit/publish semantics; bounded framing, operation credentials, caller-domain binding and fenced status without evidence construction. Separate-process retry/restart evidence in [service guide](POOL_SERVICE.md). | No evidence retrieval, independent witness authentication, public deployment or recovery interface. |
-| `pool/wallet.ts`, `pool/wallet-store.ts` | Local v2 derivation, durable fresh receiver requests, complete pending statements, input reservations and verified once-only local invoice records. [Wallet fixture](POOL_WALLET.md) connects separate wallet processes using pinned real proofs, a public-only audit and abrupt commit-boundary crash tests. | Plaintext local custody and known local venue; no rollback protection, private delivery transport, automatic note selection, replacement or seed-only restoration. |
+| `pool/wallet.ts`, `pool/wallet-store.ts` | Local v2 derivation, durable requests, pending statements, reservations and historical invoice records. Receiver-owned note checks report spent/unspent at the exact verified checkpoint; saved fulfillment lookup reconciles lost replies without another write. [Wallet fixture](POOL_WALLET.md) connects real proofs, public audit and abrupt crash recovery. | Plaintext local custody and known local venue; no latest-state assertion, rollback protection, private delivery, note selection, replacement or seed-only restoration. |
 | `venue.ts`, `ergo.ts` | Local witness and read-only Ergo direction; predecessor reads over sparse sequences. Ergo refresh publishes a complete candidate snapshot atomically, refuses record reads during refresh, and retains the previous snapshot on failure. | External write adapter, pinned-node publication and stable commitment envelope. Ergo is not exported from the root barrel. |
 
 Record readers are tied to the captured view. Refresh after record changes,
@@ -56,13 +56,37 @@ Production still needs authenticated complete interval retrieval.
 | `scripts/pool/spent-set/` | A22's selected compressed-root candidate, independent oracle and measured per-insert replay cost; v2 remains fixed. | v3 runtime implements the selected roots with atomic statement/import validation and takes over these cases and measurements. |
 | Transparent `ledger.ts`, `oplog.ts`, `messages.ts`, `sequencer.ts`, presentation/recovery/replacement/fault modules and tests | Frozen profile, differential oracle and adversarial case library. | Corresponding pool rules pass the ported cases. Never port the retired exhibit walk or signed opening claim. |
 | `pilot-store.ts`, `pilot-http.ts`, `pilot-wire.ts`, pilot CLI | Durable-command pattern and process integration harness on the frozen path. [Pilot guide](PILOT.md). | A pool equivalent covers its integration behavior; retain useful persistence patterns. |
-| `experiments/private-payment/` | Frozen research fixture. Core circuit/admission, wallet restart/crash/retry and separate real-proof public-audit cases now have pool coverage. Research receiver acceptance additionally rejects an already-spent note; pool fulfillment records historical payment inclusion and duplicate fulfillment is refused rather than returning prior success. | Resolve and port the current-unspent receiver check and explicitly map replay semantics before removal. Then remove the duplicate host/journal/circuit framework, preserving useful results and vectors. |
 | `docs/pool-*-verification.json` and [deployment probes](POOL_DEPLOYMENT_PROBES.md) | Pinned observations and reproducible benchmark instructions. | Replaced by explicitly identified evidence; old measurements never establish a new version's properties. |
 | `decisions/` and selected checked reviews in `decisions/archive/` | Durable choices, accepted costs and independent findings still relevant to open gates. | Superseded investigation/session drafts live in Git history, not alongside active guidance. |
 
 No live-value migration is assumed. Later retirement of an implementation
 used for real claims requires a successor backing and swap; deleting a
 journal or changing a verifier under the same identity is not migration.
+
+### Private-payment experiment case map
+
+The duplicate host, journal, compiler, circuits and dependency tree are ready
+for removal now that receiver checks joined the active pool path. They remain
+in `experiments/private-payment/` pending cleanup approval. The [historical contract](https://github.com/mediumofexchange/reference-ts/blob/af398eaf4506b39d41685218c3ab1717a37842f3/experiments/private-payment/RESEARCH.md)
+and [measured report](https://github.com/mediumofexchange/reference-ts/blob/af398eaf4506b39d41685218c3ab1717a37842f3/experiments/private-payment/results/2026-09-05-windows.json)
+remain evidence for that research profile only. Active equivalents are:
+
+| Research behavior | Active verification |
+|---|---|
+| Private issue/pay/burn, real witnesses and hostile ownership/range/conservation/path cases | `scripts/pool/check.mjs`, `scripts/pool/wallet/check.mjs --real` |
+| Admission, authorized issuance, shared nullifiers, duplicate outputs, anchors, replay and races | `test/pool-admission.test.ts`, `test/pool-store.test.ts` |
+| Exact history, equal-output/different-spent histories, missing/corrupt/reordered proofs and independent supply | `test/pool-checkpoint.test.ts`, `test/pool-segment.test.ts`, `scripts/pool/wallet/audit.mjs` and real wallet acceptance |
+| Receiver owner, positive value, inclusion and spent-note refusal | `test/pool-wallet.test.ts`, CLI `checkNote` before fulfillment and proof preparation |
+| Withheld suffix/older-prefix limits | Wallet regressions for an older unspent checkpoint, later spent checkpoint and ignored unverified tail |
+| Accept-once persistence, copies, lost reply, reopening and before/after commit failure | Wallet unit tests and `scripts/pool/wallet/crash.mjs`; `fulfillment` returns the saved original record, duplicate writes remain conflicts |
+
+Protocol statement replay still returns its prior receipt. Wallet lookup never
+authorizes a second external credit. Zero outputs remain valid padding, but are
+not receiver payments. Note status is exact-checkpoint-scoped; neither framework
+establishes latest external finality, supported custody or private transport.
+Research-specific JSON journal formats and capacity knobs are not retained as
+another product mechanism. The shared proving-parameter cache keeps its existing
+`scratch/private-payment-crs` name; active pool tools still use it.
 
 ## Where to read next
 
@@ -71,4 +95,3 @@ journal or changing a verifier under the same identity is not migration.
 - [v3 recovery map](POOL_V3_RECOVERY_MAP.md): candidate v3 objects, one complete trace, record ranges, resource assumptions and probes.
 - [Deployment probes](POOL_DEPLOYMENT_PROBES.md): device, venue and restoration evidence.
 - [Wallet direction](WALLET_DIRECTION.md): product direction and unselected fixed-creditor proposal.
-- [Experiment contract](../experiments/private-payment/RESEARCH.md): historical feasibility relation; not v2's normative layouts.

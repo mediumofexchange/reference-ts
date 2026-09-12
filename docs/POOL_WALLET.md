@@ -33,12 +33,27 @@ venue and complete evidence. Fulfillment requires the exact segment, receipt
 position, statement identity and history hash in that verified checkpoint.
 Missing evidence returns unavailable without recording fulfillment.
 
+`checkNote(id, opening, evidence)` is read-only. It matches the persisted request
+and receiver secret, requires the note commitment in the verified event history,
+and derives its nullifier locally to report `unspent` or `spent`. Its result names
+the exact checkpoint and includes the verified history for proof preparation.
+It checks imported events too, but requires the wallet's configured segment.
+The CLI requires `unspent` before fulfillment and before preparing another spend.
+This check does not authenticate the payer's receipt; fulfillment still does.
+An older checkpoint can report unspent after a later spend. Neither this result
+nor local reservations establish current spendability or latest external state.
+
 SQLite transactions record each invoice and payment commitment only once.
 `received(id)` reads the saved opening after a restart or lost fulfillment
 reply. Duplicate fulfillment is refused. This establishes one local record;
 an external goods or payout system still needs its own idempotent delivery
 integration. A received opening is historical payment evidence, not a claim
 that the note remains unspent today.
+`fulfillment(id)` returns the original opening, receipt and checkpoint as owned
+copies. After a lost reply, callers reconcile against that record rather than
+crediting the invoice again. Historical `fulfill()` remains available even for
+a subsequently spent note; applications requiring an unspent note must check it
+before calling. A saved record never authorizes a second external delivery.
 
 ## Local derivation
 
@@ -118,7 +133,7 @@ limits do not bound wallet history replay, proof work or disk growth.
 
 The [production requirements](PRODUCTION_REQUIREMENTS.md) and
 [retirement map](PRIVATE_PAYMENT_ARCHITECTURE.md#retained-evidence-and-retirement-conditions)
-retain remaining receiver-current-unspent policy and supported custody work.
+retain supported custody and external-evidence work.
 Invoice fulfillment records historical payment inclusion; it is not a new
-verification API for a note's current spendability. The CLI checks spentness
-against verified events before constructing another spend or burn.
+claim of a note's current spendability. Checkpoint-scoped note verification is
+separate from historical fulfillment and from receipt authentication.

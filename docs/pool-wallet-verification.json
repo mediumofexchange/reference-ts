@@ -1,69 +1,56 @@
 {
   "date": "2026-09-12",
   "status": "passed-local-checks",
-  "baselineCommit": "c042cd463f8424c9b592c12329b7d6c7013a58fa",
+  "baselineCommit": "af398eaf4506b39d41685218c3ab1717a37842f3",
   "node": "v24.6.0",
   "platform": "win32",
   "sourceSha256": {
     "src/pool/wallet.ts": "254f1652e0aa3f21b0908df3280862360ab79f138bc005bee8702b6df15b3ead",
-    "src/pool/wallet-store.ts": "b8c1b4591481fa006a61112457211692186d08c92d3b21f741a9af8e5edd45f4",
-    "test/pool-wallet.test.ts": "ce423e9891b20a25958bf21d90a57b737d38c3c23c82ec7ad83dcac7c54b7a6d",
-    "scripts/pool/wallet/check.mjs": "1eb1bb0fd1a0d0da1719e1568105092b8a557e680e73ce836b284f22f9825e1d",
-    "scripts/pool/wallet/cli.mjs": "45c10a830e743117db9f0ebd2680a102470a254a254995cb7368f0059346c67d",
+    "src/pool/wallet-store.ts": "71f0334e8491b602932480ebe3e989d97a5272549cb491da98343b510cd11f80",
+    "test/pool-wallet.test.ts": "08405b98c5c22eac153146968b4420fd0dd2a74a377f1ae2821c9ec75208b3cc",
+    "scripts/pool/wallet/check.mjs": "7e8f34a34a063cd4604ec6189edf78965a4ebb54f1c8c3e3c46786bfb8ce725d",
+    "scripts/pool/wallet/cli.mjs": "e4e44bb94a8b9f1d5e41e5f3ae8f4ceabe44baad173d3f3a462d858007baa311",
     "scripts/pool/wallet/profile.mjs": "0054648a16e7b33c2cc6ca9c2448edd2084dc1a22ef299e9008aaf24bc6e535a",
     "scripts/pool/wallet/proofs.mjs": "d7bb991dedb137586627d700bff83b025dcb6ecde1da6c3c83020d45d5fc647e",
     "scripts/pool/wallet/audit.mjs": "1fb022ab66ed394bbaf5a7ddec70f6efea5d81645709a4ebacb8cb0df63ac947",
     "scripts/pool/wallet/crash.mjs": "e08ba7abbcda27ac4d8feae649cdcdc147a40469024d867dcde719e77853d27b",
-    "scripts/pool/wallet/crash-worker.mjs": "3bbc136bf72a8c39668e77f31e2b45d16c862980d706b0f920560b785a5da105",
+    "scripts/pool/wallet/crash-worker.mjs": "4a062732dfb574ce6c65a533df82b3ce55b0ab26f933aaa76821c748496d1a0a",
     "package.json": "fb62451db4fc89bdd746dd18a15cfa29abccd56bc3317be01925c3352681f334",
     ".github/workflows/ci.yml": "c64535e0fdf45f2c904a212fc483dc9cc2311a9f7d943a589464b7bb6760eff7",
     "src/pool/circuits/manifest.json": "c762654f10e1d6ef0da542e907c82d72939ddd1c5ae5244fc7669236ec9d835e"
   },
-  "reusedBaseline": {
-    "commit": "c042cd463f8424c9b592c12329b7d6c7013a58fa",
-    "ciRun": 34694216066,
-    "ciJobsPassed": 7,
-    "verification": {
+  "verification": [
+    {
       "command": "npm run check",
       "exitCode": 0,
       "testFilesPassed": 100,
-      "testsPassed": 1815,
-      "walletTestsPassed": 7,
-      "vitestDurationSeconds": 273.6,
+      "testsPassed": 1820,
+      "walletTestsPassed": 12,
+      "vitestDurationSeconds": 374.46,
       "stages": [
         "documentation and links",
         "typecheck",
-        "unit and model tests",
+        "unit/model tests",
         "build",
         "installed-package consumer",
         "pilot",
-        "pool-store crash acceptance",
-        "pool service acceptance",
-        "two-wallet acceptance",
+        "operator store crash",
+        "pool service",
+        "ideal wallet",
+        "eight wallet crashes/recoveries",
         "spent-set checks"
-      ],
-      "environment": "Normal user context. Initial restricted-sandbox attempt failed before tests because esbuild could not traverse the project parent directory; no test or gate changed."
+      ]
     },
-    "review": {
-      "type": "Independent adversarial source review, boundary probes and fix readback",
-      "findings": [
-        "Initial CLI discarded the payer change opening. Fixed by atomic pending/change persistence and verified change recovery/burn acceptance.",
-        "Near-fix delivery checked to exclude the newly retained payer change opening. Exact delivery keys are now asserted."
-      ],
-      "retracted": "Initial callback identity-mutation suspicion: decoded statement identity fields were already frozen; no alternate-identity defect was established.",
-      "independentProbes": [
-        "u64 request quantity boundaries",
-        "derivation field/count/order/slot boundaries"
-      ],
-      "unresolvedMaterialFindings": 0
+    {
+      "command": "npx vitest run test/pool-wallet.test.ts",
+      "exitCode": 0,
+      "testsPassed": 12,
+      "scope": "Final added exact-authority and grandchild imported-spentness assertions; focused independent review executed the prior 11-test patch."
     },
-    "scope": "Runtime, unit/model tests, dependencies/toolchain, circuit pins and package exports are unchanged. Full suite was not repeated locally for this isolated tooling slice; current CI continues to require full checks."
-  },
-  "verification": [
     {
       "command": "npm run check:pool-wallet-real",
       "exitCode": 0,
-      "mode": "pinned v2 real proofs",
+      "mode": "pinned real v2, current runtime and CLI",
       "finalCheckpoint": {
         "issued": "10",
         "burned": "10",
@@ -71,33 +58,9 @@
       }
     },
     {
-      "command": "npm run check:pool-wallet",
-      "exitCode": 0,
-      "mode": "ideal fixture; executed independently by reviewer too"
-    },
-    {
-      "command": "npm run check:pool-wallet-crash",
-      "exitCode": 0,
-      "abruptExits": 8,
-      "freshRecoveries": 8,
-      "mode": "ideal fixture; independently executed by builder and reviewer"
-    },
-    {
-      "command": "npm run typecheck",
-      "exitCode": 0
-    },
-    {
       "command": "npm run check:docs",
       "exitCode": 0,
       "linkedFiles": 33
-    },
-    {
-      "command": "node --check scripts/pool/wallet/*.mjs (each file)",
-      "exitCode": 0
-    },
-    {
-      "command": "git diff --check",
-      "exitCode": 0
     }
   ],
   "walletAcceptance": [
@@ -140,14 +103,21 @@
     "timeout": "Each child must reach its deliberate exit rather than a timeout; each recovery must exit successfully."
   },
   "review": {
-    "type": "Independent adversarial inspection of actual integration, crash execution, counterexample probes and critical fix readback",
-    "findings": [
+    "type": "Independent adversarial design/source review, focused execution and test readback",
+    "choice": "Use one read-only note check both before receiver fulfillment and before payer proof preparation; add owned saved-record lookup, preserve historical fulfillment and duplicate-write rejection.",
+    "specification": "Pinned pool-v2 sections 3 and 8–11 already define note ownership, verified output inclusion and nullifiers. No normative/circuit/encoding amendment.",
+    "findings": [],
+    "testReadback": [
+      "Exact authority mismatch asserted against otherwise valid successor evidence.",
+      "Grandchild regression isolates nullifiers imported from a previously spent history."
+    ],
+    "priorResolvedFindings": [
       "CLI initially built paths from unverified served tail. Fixed to consume verified prefix events and reject unsupported imported segments; regression acceptance passes.",
       "An initial proof-cache shortcut ignored changed recipient intent. Fixed to reuse only proof bytes while rechecking reconstructed pending intent; changed-owner regression passes.",
       "V8 deserialization can alias the serialized Buffer: corruption probes copied Buffer bytes before decoding so restoring the baseline is exact. Independent probe and final real run verify the fix."
     ],
     "unresolvedMaterialFindings": 0,
-    "executionGate": "Final reviewed real acceptance passed after fix readback."
+    "executionGate": "Full local runtime checks and current real/ideal/crash acceptance passed."
   },
   "limits": [
     "Known LocalVenue ledger and public fixture obligor keys, not authenticated external finality or real funds.",
@@ -157,7 +127,30 @@
     "Abrupt process-exit tests do not cover power loss or storage corruption; their proof fixtures are ideal. Real acceptance separately retains actual proof bytes across process restarts.",
     "Historical fulfillment and received records are not current-spendability assertions or exactly-once external goods/payout.",
     "CLI currently supports one pinned segment without imports; no automatic note selection, reservation release or lapse/replacement support.",
-    "Frozen research receiver already-spent rejection and accept-once replay semantics still need an explicit retirement mapping.",
     "No normative changes, new circuit pins, deployment or release. This record summarizes inspected sources and observed results, not a raw transcript."
-  ]
+  ],
+  "previousCi": {
+    "commit": "af398eaf4506b39d41685218c3ab1717a37842f3",
+    "run": 34695714652,
+    "jobsPassed": 7
+  },
+  "receiverBoundary": {
+    "api": "checkNote(requestId, opening, caller-owned checkpoint evidence)",
+    "result": "unspent or spent at the exact returned checkpoint, or typed unavailable/invalid; unknown local request throws UNKNOWN",
+    "checks": [
+      "Stored request backing/value/owner and locally derived ownership match.",
+      "Commitment inclusion precedes nullifier status.",
+      "Only verified deduplicated event closure is read, including imported outputs and imported spentness.",
+      "A payment checkpoint remains unspent after a later burn checkpoint reports spent; unverified served tails do not affect status.",
+      "Missing, corrupt, mismatched, absent-note and wrong-authority evidence never reports unspent and never consumes an invoice.",
+      "Note and target bytes are owned before asynchronous proof callbacks.",
+      "CLI checks unspent before fulfillment or preparing proofs; historical fulfill remains unchanged.",
+      "fulfillment(id) restores the original opening, receipt and checkpoint across restart/crash; duplicate writes still conflict and returned-byte mutation cannot alter saved state."
+    ],
+    "limits": [
+      "One caller-configured segment per handle. No newest external-state claim or assurance of present spendability.",
+      "No receipt authentication by checkNote; fulfill still authenticates the exact delivery.",
+      "Saved fulfillment is not another authorization to credit or deliver goods."
+    ]
+  }
 }

@@ -5,10 +5,10 @@ import { DatabaseSync } from "node:sqlite";
 import { randomBytes } from "node:crypto";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes } from "../bytes.js";
-import { encodeCommitment } from "../commitment.js";
+import { decodeCommitment, encodeCommitment, type Commitment } from "../commitment.js";
 import { isValue } from "./field.js";
-import { commitmentOf, copyNoteOpening, ownerOf, type NoteOpening } from "./notes.js";
-import { readPoolCheckpoint, type PoolCheckpointResult } from "./checkpoint.js";
+import { commitmentOf, copyNoteOpening, isNoteOpening, nullifierOf, ownerOf, type NoteOpening } from "./notes.js";
+import { readPoolCheckpoint, type PoolCheckpointFailure, type PoolCheckpointResult } from "./checkpoint.js";
 import { poolReceiptCovers, type PoolReceipt } from "./receipt.js";
 import { copySegmentAuthority, decodeStatement, encodeStatement, parsePublicInputs, segmentIdentity, type SegmentAuthority, type Statement } from "./statement.js";
 import { decodeStoredReceipt, encodeStoredReceipt } from "./store-codec.js";
@@ -16,6 +16,13 @@ import { deriveWalletField, type WalletPurpose } from "./wallet.js";
 
 export interface WalletRequest { readonly id: string; readonly backing: Uint8Array; readonly value: bigint; readonly owner: bigint }
 export interface WalletDelivery { readonly statement: Statement; readonly opening: NoteOpening; readonly receipt: PoolReceipt }
+export interface WalletFulfillment { readonly opening: NoteOpening; readonly receipt: PoolReceipt; readonly checkpoint: Commitment }
+/** Unspent in the exact selected history, not latest state or authorization to spend. */
+export type WalletNoteResult = PoolCheckpointFailure | {
+  readonly kind: "unspent" | "spent";
+  readonly checkpoint: Commitment;
+  readonly verified: Extract<PoolCheckpointResult, { kind: "final" }>;
+};
 export class PoolWalletError extends Error {
   constructor(readonly code: "CONFLICT" | "UNKNOWN" | "INVALID" | "UNAVAILABLE", message: string) { super(message); this.name = "PoolWalletError"; }
 }
@@ -130,6 +137,38 @@ export class PoolWalletStore {
   received(requestId: string): NoteOpening | undefined {
     const row = this.db.prepare("SELECT opening FROM wallet_fulfilled WHERE id=?").get(id(requestId));
     return row === undefined ? undefined : readNote(row["opening"] as string);
+  }
+  /** Read the original local fulfillment after a lost reply. This is historical
+   * evidence, never another authorization to deliver goods or credit an invoice. */
+  fulfillment(requestId: string): WalletFulfillment | undefined {
+    const row = this.db.prepare("SELECT opening, receipt, checkpoint FROM wallet_fulfilled WHERE id=?").get(id(requestId));
+    return row === undefined ? undefined : { opening: readNote(row["opening"] as string),
+      receipt: decodeStoredReceipt(row["receipt"] as string), checkpoint: decodeCommitment(hexToBytes(row["checkpoint"] as string)) };
+  }
+  /** pool-v2 §§3, 10: check a receiver-owned note against verified history before
+   * fulfillment or proof preparation. No receipt validation or state mutation.
+   * An older checkpoint can still report unspent after a later spend. */
+  async checkNote(requestId: string, opening: NoteOpening, args: Parameters<typeof readPoolCheckpoint>[0]): Promise<WalletNoteResult> {
+    const row = this.db.prepare("SELECT * FROM wallet_requests WHERE id=?").get(id(requestId));
+    requireThat(row !== undefined, "UNKNOWN", "unknown request");
+    if (!isNoteOpening(opening)) return { kind: "invalid", reason: "malformed note opening" };
+    const note = copyNoteOpening(opening), secret = BigInt(row["secret"] as string);
+    if (row["backing"] !== bytesToHex(note.backing) || row["value"] !== note.value.toString() ||
+        row["owner"] !== note.owner.toString() || note.value === 0n || ownerOf(secret) !== note.owner) {
+      return { kind: "invalid", reason: "note does not match receiver request" };
+    }
+    const cm = commitmentOf(this.authority.domain, note), nf = nullifierOf(this.authority.domain, cm, secret);
+    // The checkpoint reader owns its arguments before proof callbacks. Capture
+    // the same exact target for the returned result before any await as well.
+    let checkpoint: Commitment;
+    try { checkpoint = decodeCommitment(encodeCommitment(args.checkpoint)); }
+    catch { return { kind: "invalid", reason: "malformed note checkpoint" }; }
+    const result = await readPoolCheckpoint({ ...args, checkpoint });
+    if (result.kind !== "final") return result;
+    if (!same(segmentIdentity(result.prefix.header), this.authority.segment)) return { kind: "invalid", reason: "note checkpoint authority differs" };
+    if (!result.prefix.events.some(event => event.outputs.includes(cm))) return { kind: "invalid", reason: "note is absent from verified checkpoint" };
+    return { kind: result.prefix.events.some(event => event.nullifiers.includes(nf)) ? "spent" : "unspent",
+      checkpoint, verified: result };
   }
   /** Verify caller-owned checkpoint/venue evidence before recording one local
    * fulfillment. Missing history returns unavailable and changes no state. */

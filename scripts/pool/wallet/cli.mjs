@@ -16,8 +16,7 @@ import { commitmentOf, nullifierOf, ownerOf } from '@mediumofexchange/reference/
 import { NoteTree } from '@mediumofexchange/reference/pool/note-tree';
 import { limbsOf } from '@mediumofexchange/reference/pool/field';
 import { ScopeTree } from '@mediumofexchange/reference/pool/scope';
-import { ISSUE, SPEND, BURN, segmentIdentity, statementBytes } from '@mediumofexchange/reference/pool/statement';
-import { readPoolCheckpoint } from '@mediumofexchange/reference/pool/checkpoint';
+import { ISSUE, SPEND, BURN, statementBytes } from '@mediumofexchange/reference/pool/statement';
 import { encodeStoredReceipt } from '@mediumofexchange/reference/pool/store-codec';
 import { poolReceiptCovers, poolReceiptAttestsEvidence } from '@mediumofexchange/reference/pool/receipt';
 import { IdealVerifier } from '../service/fixture.mjs';
@@ -25,7 +24,7 @@ import { walletProfile, BACKER_SECRET } from './profile.mjs';
 
 const [mode, database, baseUrl, exchange, evidenceFile, ledgerFile, compiled] = process.argv.slice(2);
 const { AUTHORITY, DOMAIN, CONFIG, VENUE, TERMS, WALLET, HEADER } = walletProfile(Boolean(compiled));
-const needsProofs = ['issue', 'fund', 'change', 'receive', 'missing', 'replay', 'prepare-pay', 'reprove-pay', 'prepare-burn', 'prepare-burn-change'].includes(mode);
+const needsProofs = ['issue', 'fund', 'change', 'receive', 'missing', 'replay', 'note-spent', 'prepare-pay', 'reprove-pay', 'prepare-burn', 'prepare-burn-change'].includes(mode);
 const proofs = compiled && needsProofs ? await (await import('./proofs.mjs')).openWalletProofs(compiled) : undefined;
 const wallet = new PoolWalletStore(database, AUTHORITY), client = new PoolServiceClient(baseUrl, WALLET);
 const load = path => deserialize(readFileSync(path));
@@ -65,31 +64,48 @@ try {
       { ...common, ...scoped, backing: limbsOf(backing).map(String), quantity: '10', cm: String(commitmentOf(DOMAIN, opening)), owner: String(opening.owner), rho: String(opening.rho) }, opening);
     await wallet.submit('issue', client); const pending = wallet.pending('issue');
     save(exchange, pending); result = { receipt: encodeStoredReceipt(pending.receipt) };
+  } else if (mode === 'note-spent') {
+    const saved = wallet.fulfillment('invoice'); assert.ok(saved);
+    const checked = await wallet.checkNote('invoice', saved.opening, evidenceArgs());
+    assert.equal(checked.kind, 'spent');
+    assert.deepEqual(wallet.fulfillment('invoice'), saved, 'spent check cannot rewrite historical fulfillment');
+    result = { note: checked.kind };
   } else if (mode === 'fund' || mode === 'change' || mode === 'receive' || mode === 'missing' || mode === 'replay') {
     const pending = mode === 'change' ? wallet.pending('pay') : undefined;
     const delivery = pending ? { statement: pending.statement, opening: pending.change, receipt: pending.receipt } : load(exchange), args = evidenceArgs();
     if (mode === 'missing') args.evidence = [];
     if (mode === 'replay') {
+      const saved = wallet.fulfillment('invoice'); assert.ok(saved);
+      assert.deepEqual(saved.opening, delivery.opening);
+      assert.equal(encodeStoredReceipt(saved.receipt), encodeStoredReceipt(delivery.receipt));
       await assert.rejects(wallet.fulfill('invoice', delivery, args), { code: 'CONFLICT' }); result = { replayRejected: true };
+      assert.deepEqual(wallet.fulfillment('invoice'), saved);
     } else {
-      const verified = await wallet.fulfill(mode === 'fund' ? 'fund' : mode === 'change' ? 'change' : 'invoice', delivery, args);
-      assert.equal(verified.kind, mode === 'missing' ? 'unavailable' : 'final', verified.kind === 'invalid' ? verified.reason : undefined);
-      result = { finality: verified.kind, ...(mode === 'change' ? { change: wallet.received('change').value.toString() } : {}) };
+      const requestId = mode === 'fund' ? 'fund' : mode === 'change' ? 'change' : 'invoice';
+      const checked = await wallet.checkNote(requestId, delivery.opening, args);
+      assert.equal(checked.kind, mode === 'missing' ? 'unavailable' : 'unspent', checked.kind === 'invalid' ? checked.reason : undefined);
+      if (checked.kind === 'unavailable') {
+        assert.equal(wallet.fulfillment(requestId), undefined); result = { finality: checked.kind };
+      } else {
+        // The read-only note check does not authenticate a payer's receipt.
+        // Fulfillment independently checks the exact delivery before its write.
+        const verified = await wallet.fulfill(requestId, delivery, args); assert.equal(verified.kind, 'final');
+        result = { finality: verified.kind, ...(mode === 'change' ? { change: wallet.received('change').value.toString() } : {}) };
+      }
     }
   } else if (mode === 'prepare-pay' || mode === 'reprove-pay' || mode === 'prepare-burn' || mode === 'prepare-burn-change') {
     const burning = mode.startsWith('prepare-burn'), inputId = mode === 'prepare-burn-change' ? 'change' : burning ? 'invoice' : 'fund';
     const held = wallet.received(inputId);
     assert.ok(held);
     const secret = wallet.secret(inputId), nf = nullifierOf(DOMAIN, commitmentOf(DOMAIN, held), secret);
-    const args = evidenceArgs(), verified = await readPoolCheckpoint(args); assert.equal(verified.kind, 'final');
-    assert.deepEqual(segmentIdentity(verified.prefix.header), AUTHORITY.segment, 'wallet fixture needs its pinned segment');
+    const checked = await wallet.checkNote(inputId, held, evidenceArgs());
+    assert.equal(checked.kind, 'unspent', 'held note is already spent or unverifiable at the selected checkpoint');
+    const verified = checked.verified;
     assert.equal(verified.prefix.length, BigInt(verified.prefix.events.length), 'wallet fixture has no imported events');
     const tree = new NoteTree();
     // The reader may legitimately ignore an unverified served tail beyond the
     // checkpoint. Only replayed events can supply a wallet membership path.
     for (const event of verified.prefix.events) tree.appendAll(event.outputs);
-    assert.ok(tree.has(commitmentOf(DOMAIN, held)));
-    assert.equal(verified.prefix.events.some(event => event.nullifiers.includes(nf)), false, 'held note is already spent at the verified checkpoint');
     const paddingSecret = wallet.derive('padding-secret', [nf]);
     const padding = { backing, value: 0n, owner: ownerOf(paddingSecret), rho: wallet.derive('padding-rho', [nf]) };
     const paddedNf = nullifierOf(DOMAIN, commitmentOf(DOMAIN, padding), paddingSecret);

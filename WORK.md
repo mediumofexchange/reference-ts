@@ -4,46 +4,48 @@ Updated: 2026-09-12
 
 ## Goal
 
-Complete real-proof two-wallet acceptance and abrupt persistence checks, then
-continue toward a usable receiver path. The real flow now issues 10, pays 7,
-verifies receipt and retained change, burns both holdings and independently
-checks public outstanding supply zero. No normative or circuit bytes changed.
+Receiver note verification is implemented and locally verified: unspent/spent
+at an exact caller-selected checkpoint, saved fulfillment lookup after lost
+replies, and no second fulfillment. The next product slice is private delivery
+using the existing wallet; the duplicate experiment is ready for approved removal.
 
-Delivery: reference-ts/main; working slice follows c042cd4.
-Companion money-from-first-principles/main at 7ea0ee8 is unchanged.
-Runtime remains the README-pinned v2 profile. Hosted checks follow the push.
+Delivery: reference-ts/main; working slice follows af398ea (CI 34695714652 passed).
+Companion money-from-first-principles/main at 7ea0ee8 remains unchanged.
+Pinned v2 sections 3 and 8–11 already define the implemented note checks.
+No normative, circuit, proof-key, database-schema or protocol byte change.
 
 ## Status
 
-- [Wallet](docs/POOL_WALLET.md): durable fresh requests, full pending proof and
-  both output openings, reservations, authenticated receipts and one verified
-  local invoice record. The same CLI now uses pinned real v2 proofs.
-- Separate public-input audit checks exact history and supply, including missing,
-  corrupted, reordered and different valid history with unchanged outputs/totals.
-- Eight actual wallet exits before/after request, pending, receipt and fulfillment
-  COMMITs recover in eight fresh processes with rollback or exact retained state.
-- Independent review fixed witness paths consuming unverified tails and cached
-  preparation ignoring changed recipient intent. Both regressions pass. The
-  adversarial audit copies serialized bytes before mutation to prevent aliasing.
-  Final reviewed real acceptance passed; no unresolved material findings.
-- Earlier cleanup removed 58 merged local branches and 360,689,609 bytes of
-  verified obsolete bundles/archives/logs across the workspace. Frozen research
-  remains for the specific receiver cases in the retirement map.
+- [Wallet](docs/POOL_WALLET.md): checkNote validates request/owner, exact verified
+  output inclusion and locally derived nullifier status. It reads imported
+  events too; a handle remains bound to one configured segment.
+- CLI checks unspent before receiver fulfillment and payer proof preparation.
+  An old checkpoint may still report unspent after a later spend. Historical
+  fulfill/received semantics remain unchanged; no latest-state assertion.
+- fulfillment(id) returns owned original opening/receipt/checkpoint bytes for
+  lost-reply reconciliation. Duplicate writes remain conflicts; a saved record
+  never authorizes another external credit or delivery.
+- Independent design and patch review found no unresolved material defect.
+  Readback strengthened exact authority rejection and imported-spentness tests.
+- [Experiment case map](docs/PRIVATE_PAYMENT_ARCHITECTURE.md#private-payment-experiment-case-map)
+  now maps receiver, proof, admission, replay, audit and crash cases to active
+  coverage. No unique protocol case requiring the duplicate framework was found.
+  Historical contract/results have immutable Git links; original files remain.
 
 ## Evidence
 
-- [Wallet evidence](docs/pool-wallet-verification.json) records current real and
-  ideal acceptance, independent crash execution/review, source hashes and limits.
-- Reused unchanged runtime baseline c042cd4: full local check, 100 files / 1,815
-  tests, build/package and acceptance stages; all seven CI jobs in 34694216066.
-  Current source, tests, dependencies, circuits and package exports are unchanged.
-  Current focused checks cover new tooling; CI runs full checks and real wallets.
-- Real mode checks manifest source/toolchain/bytecode/key pins. Normal-user
-  execution is required where sandbox directory access blocks the toolchain.
-- Local fixture venue and public obligor keys prove no external finality.
-  Plaintext DB/WAL/backups are custody material; public audit process separation
-  is not an OS sandbox. Crash tests use ideal proofs and abrupt process exit,
-  not power loss, rollback or external-goods atomicity. SQLite requires Node 24;
+- [Wallet evidence](docs/pool-wallet-verification.json): full local npm check
+  passed: 100 files / 1,820 tests, build, package, pilot, service, ideal wallet,
+  eight wallet crash/recovery cases and spent-set acceptance.
+- Final focused wallet suite passed 12 tests, including the added grandchild
+  imported-nullifier regression. Independent review executed the earlier
+  11-test patch and read back added coverage.
+- Current real-proof wallet acceptance passed: issue 10, pay 7, verified receiver
+  and change, burn 7 + 3, separate public audit outstanding zero, hostile
+  histories, exact retries and receiver spent status with unchanged saved record.
+- Local fixture venue, public obligor keys and plaintext DB/WAL/backups remain.
+  No external finality, supported custody, rollback protection, private network
+  delivery or external-goods atomicity is claimed. SQLite requires Node 24;
   Node 20 root imports remain supported. No deployment or real funds.
 
 ### Retained Ergo evidence; node stopped
@@ -63,30 +65,29 @@ Runtime remains the README-pinned v2 profile. Hosted checks follow the push.
 
 ## Next
 
-1. Complete the receiver boundary: distinguish historical payment inclusion
-   from current spendability against caller-owned verified history. Port the
-   frozen receiver's already-spent-note case and map exact fulfillment replay
-   to the saved record without double delivery. Review semantics before code;
-   do not silently change the existing historical received-record contract.
-2. Retire the duplicate private-payment host only after an explicit case map
-   accounts for those differences. Preserve useful vectors and evidence.
-3. Extend the same wallet toward supported custody/private authenticated delivery
-   and imported-segment note paths. Current CLI is one pinned segment/no imports;
-   bulk local files do not establish private delivery or external finality.
-   No capsules or successor C4 derivation may be added to v2.
-4. Independently applied Ergo history remains open. At fixture heights 100,000,
-   1,000,000 and 1,500,000 compare bounded parent links and bodies against pinned
-   upper IDs. Body presence alone proves no ancestry; additional sync preparation
-   must be justified separately from wallet progress.
+1. Cleanup approval is pending for experiments/private-payment/: 20 tracked
+   files plus reinstallable local dependencies. Automatic approval review
+   rejected recursive removal as beyond the prior cleanup authorization.
+   Do not retry without new approval. Preserve Git history, shared proving cache
+   scratch/private-payment-crs and the retained Ergo image. The case map and
+   historical links are ready; check docs/package commands after removal.
+2. Develop private authenticated delivery and supported wallet custody with
+   existing v2 outputs and fresh receiver requests. Select a concrete local
+   transport/custody boundary before implementation; do not add successor C4
+   derivation or capsules to v2. Full seed-only restoration remains separate.
+3. Imported note checks are covered, but CLI proof paths still require one
+   segment/no imports. Extend path selection using the existing verified forest
+   when a concrete multi-segment wallet flow requires it.
+4. Applied Ergo history remains open. At heights 100,000, 1,000,000 and 1,500,000
+   compare bounded parent links and bodies against pinned upper IDs. Body
+   presence alone proves no ancestry; additional sync needs separate justification.
 
 ## Open questions
 
 - Full recovery, authenticated evidence/publication, supported custody/rollback,
   private delivery and practical devices remain the largest product blocks.
-  Local history replay/proof work is not bounded by HTTP limits.
 - Estimate **about 45% done / 55% remaining**, plausible done range **35–55%**.
-  Real proofs and crash acceptance close integration uncertainty within this
-  coarse estimate; external delivery, custody and recovery gates remain open.
-- Stay with this instance for the receiver boundary: wallet integration and its
-  review context are fresh. This is an efficiency recommendation, not a measured
-  model comparison.
+  Receiver verification resolves another integration boundary within this coarse
+  estimate; the main external delivery, custody and recovery gates remain open.
+- Stay with this instance for wallet delivery: integration context is fresh.
+  This is an efficiency recommendation, not a measured model comparison.

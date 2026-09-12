@@ -18,12 +18,15 @@ and restart evidence. The [local wallet fixture](POOL_WALLET.md) retains receive
 requests, pending payments and verified local fulfillment through restarts.
 The same flow uses pinned real v2 proofs with a separate public supply audit;
 abrupt wallet-process tests cover four transaction boundaries. The venue remains
-a local fixture. Silence recovery is modeled but not implemented in the
+a local fixture. Receiver note checks distinguish spent/unspent at an exact
+verified checkpoint; saved fulfillment lookup recovers historical records.
+Silence recovery is modeled but not implemented in the
 runtime; usable wallet custody and an external witness write adapter remain open.
 
 The frozen transparent implementation and its local pilot remain adversarial
-and integration evidence. The private-payment experiment retains real-proof
-feasibility checks while its remaining cases are migrated.
+and integration evidence. The duplicate private-payment experiment's cases now
+have active equivalents; its removal is pending. The case map and immutable
+historical report are in the architecture guide.
 
 Use [the architecture map](PRIVATE_PAYMENT_ARCHITECTURE.md) for component
 boundaries and retirement conditions, [production requirements](PRODUCTION_REQUIREMENTS.md)

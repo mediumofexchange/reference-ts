@@ -160,9 +160,14 @@ try {
     }
     if (operation === 'fulfillment') {
       assert.deepEqual(wallet.received('invoice'), survived ? expected.opening : undefined);
+      assert.equal(wallet.fulfillment('invoice') === undefined, !survived);
       if (!survived) assert.equal((await perform(expected)).kind, 'final');
       await assert.rejects(perform(expected), { code: 'CONFLICT' });
       assert.deepEqual(wallet.received('invoice'), expected.opening);
+      const saved = wallet.fulfillment('invoice');
+      assert.deepEqual(saved.opening, expected.opening);
+      assert.equal(codec.encodeStoredReceipt(saved.receipt), codec.encodeStoredReceipt(expected.receipt));
+      assert.deepEqual(commitment.encodeCommitment(saved.checkpoint), commitment.encodeCommitment(expected.checkpoint.commitment));
       wallet.received('invoice').backing.fill(0);
       assert.deepEqual(wallet.received('invoice'), expected.opening);
       const db = new sqlite.DatabaseSync(file, { readOnly: true });
