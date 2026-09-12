@@ -10,7 +10,8 @@ import { serialize, deserialize } from 'node:v8';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { encodeCommitment } from '@mediumofexchange/reference/commitment';
 import { LocalVenue } from '@mediumofexchange/reference/venue';
-import { ADMIN, CONFIG, IdealVerifier, OPERATOR_SECRET, TERMS, VENUE, WALLET } from '../service/fixture.mjs';
+import { IdealVerifier } from '../service/fixture.mjs';
+import { walletProfile } from './profile.mjs';
 
 if (Number(process.versions.node.split('.')[0]) < 24) {
   console.log('SKIP pool wallet acceptance: local SQLite custody requires Node 24.'); process.exit(0);
@@ -25,14 +26,24 @@ const root = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), '../.
 const scratchPath = join(root, 'scratch'); mkdirSync(scratchPath, { recursive: true });
 const scratch = realpathSync(scratchPath); assert.equal(scratch, scratchPath);
 const directory = realpathSync(mkdtempSync(join(scratch, 'pool-wallet-cli-')));
+assert.ok(process.argv.slice(2).every(arg => arg === '--real'), 'unknown wallet acceptance argument');
+const real = process.argv.includes('--real');
+const { ADMIN, CONFIG, OPERATOR_SECRET, TERMS, VENUE, WALLET } = walletProfile(real);
 const run = promisify(execFile), ledger = [], requests = [];
-const ledgerFile = join(directory, 'ledger.json'), evidenceFile = join(directory, 'evidence.bin');
+const publicDirectory = join(directory, 'public'); mkdirSync(publicDirectory);
+const ledgerFile = join(publicDirectory, 'ledger.json'), evidenceFile = join(publicDirectory, 'evidence.bin');
+const compiled = real ? join(directory, 'circuits') : undefined;
 const payer = join(directory, 'payer.db'), receiver = join(directory, 'receiver.db');
 const requestFile = join(directory, 'request.bin'), deliveryFile = join(directory, 'delivery.bin'), fundingFile = join(directory, 'fund.bin');
 const venue = new LocalVenue(VENUE), publish = venue.publish.bind(venue);
 venue.publish = c => { publish(c); ledger.push(bytesToHex(encodeCommitment(c))); writeFileSync(ledgerFile, JSON.stringify(ledger)); };
-const store = new PoolStore(join(directory, 'operator.db'), CONFIG, OPERATOR_SECRET, venue, new IdealVerifier());
+let proofs, store;
 let server, drop = false, droppedReceipt;
+function resultOf(stdout) {
+  const prefix = 'MOE_WALLET_RESULT=', lines = stdout.split(/\r?\n/).filter(line => line.startsWith(prefix));
+  assert.equal(lines.length, 1, 'worker must return one framed result');
+  return JSON.parse(lines[0].slice(prefix.length));
+}
 async function start() {
   server = createPoolService(store, { walletToken: WALLET, adminToken: ADMIN });
   server.prependListener('request', (request, response) => {
@@ -49,31 +60,82 @@ async function start() {
 }
 async function cli(mode, database, exchange = deliveryFile) {
   const { stdout } = await run(process.execPath, [join(root, 'scripts/pool/wallet/cli.mjs'), mode, database,
-    `http://127.0.0.1:${server.address().port}/`, exchange, evidenceFile, ledgerFile],
-    { cwd: root, windowsHide: true, timeout: 30_000, maxBuffer: 1024 * 1024 });
-  const result = JSON.parse(stdout); assert.notEqual(result.pid, process.pid); return result;
+    `http://127.0.0.1:${server.address().port}/`, exchange, evidenceFile, ledgerFile, ...(compiled ? [compiled] : [])],
+    { cwd: root, windowsHide: true, timeout: real ? 180_000 : 30_000, maxBuffer: 1024 * 1024 });
+  const result = resultOf(stdout); assert.notEqual(result.pid, process.pid); return result;
 }
-async function checkpoint(id) { await store.commit(id); await store.publish(); writeFileSync(evidenceFile, serialize(await store.view())); }
+async function checkpoint(id) {
+  await store.commit(id); await store.publish(); writeFileSync(evidenceFile, serialize(await store.view()));
+  if (real) console.log('PASS real wallet checkpoint: ' + id);
+}
+async function audit(expected, kind, amounts) {
+  const { stdout } = await run(process.execPath, [join(root, 'scripts/pool/wallet/audit.mjs'), publicDirectory, compiled, expected],
+    { cwd: publicDirectory, windowsHide: true, timeout: 180_000, maxBuffer: 1024 * 1024 });
+  const result = resultOf(stdout); assert.notEqual(result.pid, process.pid); assert.equal(result.kind, kind);
+  if (amounts) assert.deepEqual(result.supply[bytesToHex(TERMS.backing.name)], amounts);
+  return result;
+}
 try {
+  if (real) {
+    const { stdout } = await run(process.execPath, [join(root, 'scripts/pool/compile.mjs'), compiled],
+      { cwd: root, windowsHide: true, timeout: 300_000, maxBuffer: 2_000_000 });
+    process.stdout.write(stdout);
+    proofs = await (await import('./proofs.mjs')).openWalletProofs(compiled);
+  }
+  store = new PoolStore(join(directory, 'operator.db'), CONFIG, OPERATOR_SECRET, venue, proofs?.verifier ?? new IdealVerifier());
   await store.activate('opening', [TERMS]); await store.publish(); await start();
   await cli('issue', payer, fundingFile); await checkpoint('fund'); await cli('fund', payer, fundingFile);
   const request = await cli('request', receiver, requestFile);
   assert.deepEqual(request.fields, ['backing', 'id', 'owner', 'value']);
   assert.deepEqual(await cli('request', receiver, requestFile).then(r => r.owner), request.owner);
   const originalRequestBytes = readFileSync(requestFile);
+  const fundingEvidence = readFileSync(evidenceFile), withTail = deserialize(Buffer.from(fundingEvidence));
+  const funded = withTail.checkpoints.find(e => e.commitment.sequence === withTail.latest.sequence);
+  funded.history.trail.statements.push(funded.history.trail.statements[0]);
+  writeFileSync(evidenceFile, serialize(withTail));
   await cli('prepare-pay', payer, requestFile);
+  writeFileSync(evidenceFile, fundingEvidence);
+  await cli('prepare-pay', payer, requestFile);
+  const changedRequest = deserialize(Buffer.from(originalRequestBytes)); changedRequest.owner = changedRequest.owner === 1n ? 2n : 1n;
+  writeFileSync(requestFile, serialize(changedRequest));
+  await assert.rejects(cli('prepare-pay', payer, requestFile), /pending command changed/);
+  writeFileSync(requestFile, originalRequestBytes);
   drop = true; await cli('lost-pay', payer); assert.ok(droppedReceipt);
   const first = await cli('submit-pay', payer);
   assert.deepEqual(Object.keys(deserialize(readFileSync(deliveryFile))).sort(), ['opening', 'receipt', 'statement']);
   assert.equal(encodeStoredReceipt(replyReceipt(decodePoolServiceReply(JSON.parse(droppedReceipt)))), first.receipt);
   const second = await cli('submit-pay', payer); assert.equal(first.receipt, second.receipt);
+  if (real) assert.equal((await cli('reprove-pay', payer, requestFile)).reproved, true);
   assert.deepEqual(readFileSync(requestFile), originalRequestBytes);
   await checkpoint('payment');
+  if (real) {
+    const expected = bytesToHex(encodeCommitment((await store.view()).latest));
+    await audit(expected, 'final', { issued: '10', burned: '0', outstanding: '10' });
+    const original = readFileSync(evidenceFile), missing = deserialize(Buffer.from(original));
+    const selected = bundle => bundle.checkpoints.find(e => bytesToHex(encodeCommitment(e.commitment)) === expected);
+    delete selected(missing).history;
+    writeFileSync(evidenceFile, serialize(missing)); await audit(expected, 'unavailable');
+    const corrupt = deserialize(Buffer.from(original)); selected(corrupt).history.trail.statements.at(-1).proof[100] ^= 1;
+    writeFileSync(evidenceFile, serialize(corrupt)); await audit(expected, 'invalid');
+    const reordered = deserialize(Buffer.from(original)); selected(reordered).history.trail.statements.reverse();
+    writeFileSync(evidenceFile, serialize(reordered)); await audit(expected, 'invalid');
+    const substituted = deserialize(Buffer.from(original)), alternateFile = join(publicDirectory, 'alternate.bin');
+    const alternate = deserialize(readFileSync(alternateFile));
+    assert.equal(await proofs.verifier.verify(alternate.kind, alternate.publicInputs, alternate.proof), true);
+    const old = selected(substituted).history.trail.statements.at(-1);
+    assert.deepEqual(alternate.publicInputs.slice(9), old.publicInputs.slice(9), 'alternate keeps both note outputs');
+    assert.notEqual(alternate.publicInputs[8], old.publicInputs[8], 'alternate changes only padding spentness');
+    selected(substituted).history.trail.statements[1] = alternate;
+    writeFileSync(evidenceFile, serialize(substituted)); await audit(expected, 'invalid');
+    rmSync(alternateFile);
+    writeFileSync(evidenceFile, original);
+  }
   assert.equal((await cli('change', payer)).change, '3');
   await cli('missing', receiver); await cli('receive', receiver); await cli('replay', receiver);
   await cli('prepare-burn', receiver); await cli('submit-burn', receiver); await checkpoint('burn');
   assert.equal((await cli('prepare-burn-change', payer)).quantity, '3');
   await cli('submit-burn', payer); await checkpoint('burn-change');
+  await assert.rejects(cli('prepare-burn', receiver), /held note is already spent/);
   // Inspect the actual service request schema: only canonical public statement
   // frames were sent. Receiver root/secret/opening are never service fields.
   assert.ok(requests.length >= 6);
@@ -91,11 +153,16 @@ try {
   const final = await store.view();
   const latest = final.checkpoints.find(e => e.commitment.sequence === final.latest.sequence);
   assert.equal(latest.snapshots[0].issued, 10n); assert.equal(latest.snapshots[0].burned, 10n);
+  if (real) {
+    await audit(bytesToHex(encodeCommitment(final.latest)), 'final', { issued: '10', burned: '10', outstanding: '0' });
+    assert.deepEqual((await import('node:fs')).readdirSync(publicDirectory).sort(), ['evidence.bin', 'ledger.json']);
+  }
   console.log('PASS two-wallet v2 CLI: issue 10, request/pay 7, receiver checkpoint verification, fulfill once, burn 7; restore/verify/burn payer change 3 to outstanding 0; process restarts, lost accepted reply, exact/changed-proof retries, unavailable history and invoice replay rejection. Service traffic contains only public statement frames.');
-  console.log('Scope: trusted plaintext local custody, public fixture obligor keys, ideal proofs, bulk local fixture history and known LocalVenue; no external finality, private transport, rollback protection, production proof or external-goods atomicity claim.');
+  console.log(real ? 'PASS pinned real v2 wallet proofs and separate public-only audit: supply, missing history, corrupted proof, reordered history and different valid history with unchanged outputs/totals.' : 'Scope: ideal proof fixture only.');
+  console.log('Scope: trusted plaintext local custody, public fixture obligor keys, bulk local fixture history and known LocalVenue; no external finality, private transport, rollback protection or external-goods atomicity claim.');
 } finally {
   if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
-  store.close();
+  store?.close(); if (proofs) await proofs.close();
   const target = realpathSync(directory);
   if (dirname(target) !== scratch || !target.startsWith(scratch + sep) || !target.startsWith(join(scratch, 'pool-wallet-cli-'))) throw new Error('unsafe wallet cleanup path');
   rmSync(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });

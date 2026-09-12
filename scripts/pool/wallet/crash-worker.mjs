@@ -1,0 +1,178 @@
+// Test-only COMMIT interception keeps crash callbacks out of the wallet API.
+// No close/finally runs after process.exit. Expected private state is retained
+// only in this harness's disposable local directory. Successful worker output
+// contains only the operation and phase.
+if (Number(process.versions.node.split('.')[0]) < 24) {
+  console.log('SKIP pool wallet crash worker: Node.js 24 or newer is required.');
+  process.exit(0);
+}
+
+const [operation, phase, file, action] = process.argv.slice(2);
+if (!['request', 'pending', 'receipt', 'fulfillment'].includes(operation) || !['before', 'after'].includes(phase) ||
+  typeof file !== 'string' || !['crash', 'restore'].includes(action)) {
+  console.error('usage: crash-worker.mjs <request|pending|receipt|fulfillment> <before|after> <database> <crash|restore>');
+  process.exit(2);
+}
+
+const [assertModule, fs, v8, sqlite, hashes, commitment, venueModule, walletModule, notes, treeModule, field, statement,
+  segmentModule, receiptModule, codec, fixture] = await Promise.all([
+  import('node:assert/strict'), import('node:fs'), import('node:v8'), import('node:sqlite'),
+  import('@noble/hashes/sha2.js'), import('@mediumofexchange/reference/commitment'),
+  import('@mediumofexchange/reference/venue'), import('@mediumofexchange/reference/pool/wallet-store'),
+  import('@mediumofexchange/reference/pool/notes'), import('@mediumofexchange/reference/pool/note-tree'),
+  import('@mediumofexchange/reference/pool/field'), import('@mediumofexchange/reference/pool/statement'),
+  import('@mediumofexchange/reference/pool/segment'), import('@mediumofexchange/reference/pool/receipt'),
+  import('@mediumofexchange/reference/pool/store-codec'), import('../service/fixture.mjs'),
+]);
+const assert = assertModule.default;
+const { AUTHORITY, DOMAIN, CONFIG, VENUE, OPERATOR, OPERATOR_SECRET, TERMS, IdealVerifier, issue } = fixture;
+const { PoolWalletStore } = walletModule, backing = TERMS.backing.name;
+const wallet = new PoolWalletStore(file, AUTHORITY);
+const expectedFile = `${file}.expected`;
+const frame = value => statement.encodeStatement(DOMAIN, value);
+const copy = value => v8.deserialize(v8.serialize(value));
+
+async function baseline() {
+  // The root already committed in construction. Predict the two counter
+  // derivations before request() writes anything, to expose counter reuse.
+  const secret = wallet.derive('request-secret', [1n]);
+  const request = { id: 'invoice', backing, value: 7n, owner: notes.ownerOf(secret) };
+  const expected = { request, secret, nextOwner: notes.ownerOf(wallet.derive('request-secret', [2n])) };
+  if (operation === 'request') return expected;
+  assert.deepEqual(wallet.request('invoice', backing, 7n), request);
+  const changeRequest = wallet.request('change', backing, 3n);
+  const opening = { backing, value: 7n, owner: request.owner, rho: wallet.derive('output-rho', [11n]) };
+  const change = { backing, value: 3n, owner: changeRequest.owner, rho: wallet.derive('output-rho', [11n], 1) };
+  const input = { backing, value: 10n, owner: notes.ownerOf(99n), rho: 100n };
+  const tree = new treeModule.NoteTree(); tree.appendAll([notes.commitmentOf(DOMAIN, input)]);
+  const publicInputs = [...field.limbsOf(DOMAIN), ...field.limbsOf(AUTHORITY.segment), AUTHORITY.scopeRoot,
+    tree.root(), tree.root(), 11n, 12n, notes.commitmentOf(DOMAIN, opening), notes.commitmentOf(DOMAIN, change)];
+  const payment = { kind: statement.SPEND, publicInputs,
+    proof: hashes.sha256(statement.statementBytes(DOMAIN, statement.SPEND, publicInputs)) };
+  const segment = new segmentModule.Segment(CONFIG, { domain: DOMAIN, venue: VENUE, operator: OPERATOR,
+    sequence: 1n, entries: [{ backing, link: backing }] }, [], new IdealVerifier());
+  segment.register(TERMS.backing, TERMS.signature);
+  await segment.admit(issue(notes.commitmentOf(DOMAIN, input)));
+  const accepted = await segment.admit(payment);
+  const receipt = receiptModule.signPoolReceipt(OPERATOR_SECRET, AUTHORITY, accepted, 0n);
+  const directory = segment.directory(), trail = segment.trail();
+  const checkpoint = { commitment: commitment.signCommitment(OPERATOR_SECRET, 1n, commitment.directoryRoot(directory)), directory,
+    snapshots: [{ backing, header: trail.header, historyHash: segment.historyHash(), issued: 10n, burned: 0n, backings: trail.backings }],
+    history: { trail, length: segment.length } };
+  Object.assign(expected, { payment, opening, change, receipt, checkpoint, changeRequest, changeSecret: wallet.secret('change') });
+  if (operation !== 'pending') wallet.prepare('pay', payment, opening, change);
+  if (operation === 'fulfillment') await wallet.submit('pay', { submit: async () => receipt });
+  return expected;
+}
+
+function evidence(expected) {
+  const venue = new venueModule.LocalVenue(VENUE); venue.publish(expected.checkpoint.commitment);
+  return { configuration: CONFIG, venue, verifier: new IdealVerifier(), checkpoint: expected.checkpoint.commitment,
+    evidence: [expected.checkpoint] };
+}
+function delivery(expected) {
+  return { statement: expected.payment, opening: expected.opening, receipt: expected.receipt };
+}
+async function submit(expected) {
+  return wallet.submit('pay', { submit: async input => {
+    assert.deepEqual(input.domain, DOMAIN);
+    assert.deepEqual(frame(input.statement), frame(expected.payment));
+    // A client owns its submitted copy; mutating it cannot affect retained
+    // statement bytes or the receipt validation against the original.
+    input.statement.proof.fill(0); input.domain.fill(0);
+    return copy(expected.receipt);
+  } });
+}
+async function perform(expected) {
+  if (operation === 'request') return wallet.request('invoice', backing, 7n);
+  if (operation === 'pending') return wallet.prepare('pay', expected.payment, expected.opening, expected.change);
+  if (operation === 'receipt') return submit(expected);
+  return wallet.fulfill('invoice', delivery(expected), evidence(expected));
+}
+
+function assertRequests(expected) {
+  assert.deepEqual(wallet.request('invoice', backing, 7n), expected.request);
+  assert.equal(wallet.secret('invoice'), expected.secret);
+  assert.throws(() => wallet.request('invoice', backing, 8n), { code: 'CONFLICT' });
+  if (operation === 'request') {
+    assert.equal(wallet.request('next', backing, 7n).owner, expected.nextOwner);
+    assert.notEqual(expected.nextOwner, expected.request.owner);
+  } else {
+    assert.deepEqual(wallet.request('change', backing, 3n), expected.changeRequest);
+    assert.equal(wallet.secret('change'), expected.changeSecret);
+  }
+}
+function assertPending(expected, withReceipt) {
+  const pending = wallet.pending('pay');
+  assert.deepEqual(frame(pending.statement), frame(expected.payment));
+  assert.deepEqual(pending.opening, expected.opening);
+  assert.deepEqual(pending.change, expected.change);
+  assert.equal(pending.receipt === undefined ? undefined : codec.encodeStoredReceipt(pending.receipt),
+    withReceipt ? codec.encodeStoredReceipt(expected.receipt) : undefined);
+  wallet.prepare('pay', expected.payment, expected.opening, expected.change);
+  // Probe each reservation separately, including the second input.
+  for (const index of [7, 8]) {
+    const conflict = copy(expected.payment); conflict.publicInputs[index] = 13n;
+    assert.throws(() => wallet.prepare(`other-${index}`, conflict, expected.opening, expected.change), { code: 'CONFLICT' });
+    assert.throws(() => wallet.pending(`other-${index}`), { code: 'UNKNOWN' });
+  }
+  const changed = copy(expected.payment); changed.proof.fill(0);
+  assert.throws(() => wallet.prepare('pay', changed, expected.opening, expected.change), { code: 'CONFLICT' });
+  assert.throws(() => wallet.prepare('pay', expected.payment, expected.opening), { code: 'CONFLICT' });
+  pending.statement.proof.fill(0); pending.opening.backing.fill(0); pending.change.backing.fill(0);
+  assert.deepEqual(frame(wallet.pending('pay').statement), frame(expected.payment));
+  assert.deepEqual(wallet.pending('pay').opening, expected.opening);
+  assert.deepEqual(wallet.pending('pay').change, expected.change);
+}
+
+try {
+  if (action === 'crash') {
+    const expected = await baseline();
+    fs.writeFileSync(expectedFile, v8.serialize(expected), { mode: 0o600, flag: 'wx' });
+    const original = sqlite.DatabaseSync.prototype.exec;
+    // Setup has completed. Only the single target wallet transaction remains.
+    sqlite.DatabaseSync.prototype.exec = function (sql) {
+      if (sql.trim().toUpperCase() !== 'COMMIT') return original.call(this, sql);
+      if (phase === 'before') process.exit(71);
+      original.call(this, sql);
+      process.exit(71);
+    };
+    await perform(expected);
+    throw new Error('target transaction never reached COMMIT');
+  }
+  const expected = v8.deserialize(fs.readFileSync(expectedFile)), survived = phase === 'after';
+  if (operation === 'request') {
+    if (survived) assert.equal(wallet.secret('invoice'), expected.secret);
+    else assert.throws(() => wallet.secret('invoice'), { code: 'UNKNOWN' });
+    assertRequests(expected);
+  } else {
+    assertRequests(expected);
+    if (operation === 'pending' && !survived) {
+      assert.throws(() => wallet.pending('pay'), { code: 'UNKNOWN' });
+      // If either reservation survived without its pending row, this fails.
+      wallet.prepare('pay', expected.payment, expected.opening, expected.change);
+    }
+    assertPending(expected, operation === 'fulfillment' || (operation === 'receipt' && survived));
+    if (operation === 'receipt') {
+      assert.equal(codec.encodeStoredReceipt(await submit(expected)), codec.encodeStoredReceipt(expected.receipt));
+      assert.equal(codec.encodeStoredReceipt(await submit(expected)), codec.encodeStoredReceipt(expected.receipt));
+      assertPending(expected, true);
+    }
+    if (operation === 'fulfillment') {
+      assert.deepEqual(wallet.received('invoice'), survived ? expected.opening : undefined);
+      if (!survived) assert.equal((await perform(expected)).kind, 'final');
+      await assert.rejects(perform(expected), { code: 'CONFLICT' });
+      assert.deepEqual(wallet.received('invoice'), expected.opening);
+      wallet.received('invoice').backing.fill(0);
+      assert.deepEqual(wallet.received('invoice'), expected.opening);
+      const db = new sqlite.DatabaseSync(file, { readOnly: true });
+      try {
+        const rows = db.prepare('SELECT receipt, checkpoint FROM wallet_fulfilled').all();
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0].receipt, codec.encodeStoredReceipt(expected.receipt));
+        assert.equal(rows[0].checkpoint, Buffer.from(commitment.encodeCommitment(expected.checkpoint.commitment)).toString('hex'));
+      } finally { db.close(); }
+    }
+  }
+  console.log(JSON.stringify({ restored: operation, phase }));
+} finally { wallet.close(); }

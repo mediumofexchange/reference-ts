@@ -16,9 +16,10 @@ The [local service/client transport](POOL_SERVICE.md) exposes durable submission
 commitment and publication retry, with separate-process lost-response, fencing
 and restart evidence. The [local wallet fixture](POOL_WALLET.md) retains receiver
 requests, pending payments and verified local fulfillment through restarts.
-Its proof verifier and venue are fixtures. Silence recovery is modeled but
-not implemented in the runtime; usable wallet custody, real-proof wallet
-integration and an external witness write adapter remain open.
+The same flow uses pinned real v2 proofs with a separate public supply audit;
+abrupt wallet-process tests cover four transaction boundaries. The venue remains
+a local fixture. Silence recovery is modeled but not implemented in the
+runtime; usable wallet custody and an external witness write adapter remain open.
 
 The frozen transparent implementation and its local pilot remain adversarial
 and integration evidence. The private-payment experiment retains real-proof

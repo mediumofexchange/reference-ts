@@ -18,8 +18,9 @@ have executable models and conformance checks; they are not runtime support.
 A [local Node 24 service and client](docs/POOL_SERVICE.md) now expose durable
 pool submission, commitment and publication retry. A [local wallet fixture](docs/POOL_WALLET.md)
 adds durable requests, payment retries and verified, once-only invoice records.
-It uses ideal proofs and a local venue; a usable wallet and external witness
-write adapter remain open. The API and wire format are experimental, the
+Its real-proof mode checks public supply in a separate process, and crash
+tests cover wallet commits. It still uses a local venue; a usable wallet and
+external witness write adapter remain open. The API and wire format are experimental, the
 package is not published to npm, and no completed security audit or live
 deployment is claimed.
 

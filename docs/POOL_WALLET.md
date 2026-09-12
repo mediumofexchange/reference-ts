@@ -3,8 +3,11 @@
 The Node 24 `PoolWalletStore` retains v2 payment requests, complete pending
 statements, receipts and one local fulfillment record per invoice. The local
 acceptance CLI connects two wallet databases to the existing pool HTTP service.
-It is a developer fixture with ideal proofs and a known local venue record.
-It is not an end-user wallet or evidence of private payments with real proofs.
+It is a developer fixture with a known local venue record. The same CLI runs
+with either an ideal verifier or the pinned real v2 circuits and verifier.
+Real mode constructs private witnesses locally and sends only canonical
+statements to the service. It is not an end-user wallet or a deployed private
+delivery system.
 
 ## Persistence and verification
 
@@ -58,9 +61,13 @@ database, including the request counter and private delivery records.
 ```sh
 npm run build
 npm run check:pool-wallet
+npm run check:pool-wallet-real
+npm run check:pool-wallet-crash
 ```
 
-The ordinary `npm run check` includes this acceptance on Node 24. The optional
+The ordinary `npm run check` includes ideal wallet and crash acceptance on
+Node 24. Hosted CI also runs real-wallet acceptance on Linux and Windows.
+The optional
 SQLite module is imported through
 `@mediumofexchange/reference/pool/wallet-store`; it is not in the Node 20 root
 export. Derivation is available through `@mediumofexchange/reference/pool/wallet`.
@@ -72,7 +79,32 @@ changed-proof resubmission, withholds checkpoint history and refuses invoice
 replay. The service observes only public statement frames; private change
 openings stay out of the receiver delivery file.
 The [verification record](pool-wallet-verification.json) pins the tested source,
-full check result, independent review finding and evidence limits.
+reused full-check baseline, current acceptance, review findings and evidence limits.
+
+## Real proofs, public audit and interruption
+
+Real mode uses the existing isolated compiler and Barretenberg verifier, checks
+source, toolchain, bytecode and verification-key pins, and constructs note and
+scope paths from verified local events. An extra unverified served tail cannot
+change the wallet's anchor. Repeated preparation retains the saved proof but
+still checks the reconstructed recipient and outputs; changed requests fail.
+The fixture currently supports one pinned segment with no imported events.
+
+A separate audit process receives public history, a known local venue ledger,
+compiled circuits and an expected exact commitment supplied separately from
+the history. It derives public issued/burned/outstanding totals after replay.
+Negative cases withhold history, corrupt a proof, reorder statements and
+substitute a different valid proof/history with unchanged note outputs and
+totals. The last case must fail the history binding even though its proof is
+valid. Public-input/process separation is not an operating-system sandbox.
+
+The crash harness exits child processes immediately before and after SQLite
+COMMIT for request, pending statement, receipt and fulfillment. Fresh processes
+check rollback or exact retained state, both input reservations, private change
+and one local fulfillment. Test-only interception of SQLite calls keeps crash
+hooks out of the runtime. This checks process interruption, not power loss,
+storage corruption or database rollback. Crash cases use ideal proof fixtures;
+the real flow separately exercises complete proof persistence and lost replies.
 
 ## Boundaries
 
@@ -86,4 +118,7 @@ limits do not bound wallet history replay, proof work or disk growth.
 
 The [production requirements](PRODUCTION_REQUIREMENTS.md) and
 [retirement map](PRIVATE_PAYMENT_ARCHITECTURE.md#retained-evidence-and-retirement-conditions)
-retain the missing real-proof receiver, independent-audit and crash evidence.
+retain remaining receiver-current-unspent policy and supported custody work.
+Invoice fulfillment records historical payment inclusion; it is not a new
+verification API for a note's current spendability. The CLI checks spentness
+against verified events before constructing another spend or burn.
