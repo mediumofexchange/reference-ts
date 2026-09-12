@@ -10,6 +10,7 @@ refusal and fresh seedless/receiver agreement passed. V2 still refuses v3;
 no adoption, currentness or spendability claim.
 
 Implementation main includes 2d3f997 from feat/v3-configuration-evidence.
+Follow-up branch: test/v3-identity-signature-oracle; test-only CI portability fix.
 Companion: spec/v3-configuration-evidence, 916bffb merged/pushed to main.
 No production runtime, circuit, key, dependency or host-control change.
 
@@ -43,6 +44,9 @@ No production runtime, circuit, key, dependency or host-control change.
 - Issue 10, pay 7/change 3, burn 5/change 2; public outstanding 5. Fresh audit
   and receiver agree with all six artifact identities checked. Candidate terms
   validity never sets the full terms-authority/currentness flags.
+- CI 34719550226: both v3 proof jobs passed; Node 24.20 general checks exposed
+  a Node/OpenSSL identity-R oracle difference. The test now constructs A=B,
+  R=identity, S=k directly; focused 10 tests passed. Final CI still owed.
 
 ## Existing local product and custody boundary
 

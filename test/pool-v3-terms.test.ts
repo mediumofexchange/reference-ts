@@ -157,17 +157,19 @@ describe("v3 model constant-root terms", () => {
   });
 
   it("preserves the existing strict rule accepting canonical identity R with a valid equation", () => {
-    // Independent RFC8032 scalar expansion and equation fixture with nonce r = 0.
+    // Construct an independent equation witness: A = B, R = identity, S = k.
+    // Then [S]B - R - [k]A = 0 without asking another verifier to interpret
+    // this edge case. Node/OpenSSL's acceptance of identity R varies by version;
+    // ordinary signatures above still use its independent signing/verification.
     const l = (1n << 252n) + 27742317777372353535851937790883648493n;
     const little = (v: Uint8Array): bigint => BigInt(`0x${Buffer.from(v).reverse().toString("hex")}`);
-    const expanded = createHash("sha512").update(secret).digest().subarray(0, 32);
-    expanded[0] = expanded[0]! & 248; expanded[31] = (expanded[31]! & 63) | 64;
-    const bytes = raw(fields()), message = cat(Buffer.from("moe/backing-signature/v1"), hash(bytes));
+    const base = Buffer.from(`58${"66".repeat(31)}`, "hex"); // canonical Ed25519 base point
+    const bytes = raw({ ...fields(), obligor: base }), message = cat(Buffer.from("moe/backing-signature/v1"), hash(bytes));
     const r = Buffer.alloc(32); r[0] = 1;
-    const k = little(createHash("sha512").update(cat(r, obligor, message)).digest()) % l;
-    const signature = cat(r, uint((k * little(expanded)) % l, 32).reverse());
-    expect(verify(null, message, createPublicKey(sk(secret)), signature)).toBe(true);
+    const k = little(createHash("sha512").update(cat(r, base, message)).digest()) % l;
+    const signature = cat(r, uint(k, 32).reverse());
     expect(terms.verifyRootTermsSignature(bytes, signature)).toBe(true);
+    expect(terms.verifyRootTermsSignature(bytes, cat(r, uint((k + 1n) % l, 32).reverse()))).toBe(false);
     const noncanonicalR = Buffer.from(r); noncanonicalR[31] = 128;
     expect(terms.verifyRootTermsSignature(bytes, cat(noncanonicalR, signature.subarray(32)))).toBe(false);
     expect(terms.verifyRootTermsSignature(bytes, cat(r, uint(l, 32).reverse()))).toBe(false);
