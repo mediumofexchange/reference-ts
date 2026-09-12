@@ -10,7 +10,7 @@ refusal and fresh seedless/receiver agreement passed. V2 still refuses v3;
 no adoption, currentness or spendability claim.
 
 Implementation main includes 2d3f997 from feat/v3-configuration-evidence.
-Follow-up branch: test/v3-identity-signature-oracle; test-only CI portability fix.
+Main also includes 9eac77b from test/v3-identity-signature-oracle (test-only).
 Companion: spec/v3-configuration-evidence, 916bffb merged/pushed to main.
 No production runtime, circuit, key, dependency or host-control change.
 
@@ -44,9 +44,10 @@ No production runtime, circuit, key, dependency or host-control change.
 - Issue 10, pay 7/change 3, burn 5/change 2; public outstanding 5. Fresh audit
   and receiver agree with all six artifact identities checked. Candidate terms
   validity never sets the full terms-authority/currentness flags.
-- CI 34719550226: both v3 proof jobs passed; Node 24.20 general checks exposed
-  a Node/OpenSSL identity-R oracle difference. The test now constructs A=B,
-  R=identity, S=k directly; focused 10 tests passed. Final CI still owed.
+- CI 34719876691: all seven Linux/Windows and Node 20/24 jobs passed on
+  9eac77b. The identity-R test now uses an independently reviewed equation
+  witness; no Node/OpenSSL edge-case-policy assumption. This docs-only handoff
+  reuses that final implementation baseline; no further runtime check is owed.
 
 ## Existing local product and custody boundary
 
@@ -76,12 +77,11 @@ No production runtime, circuit, key, dependency or host-control change.
 
 ## Next
 
-1. Verify delivered main parity and hosted CI for this handoff revision.
-2. Define complete certificate/dependency framing and authenticated record-range
+1. Define complete certificate/dependency framing and authenticated record-range
    inputs, then integrate complete replay against
    the [package checks](docs/POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay).
    Independently review/commit normative certificate gaps before code.
-3. Configuration approval stays disabled until all adoption prerequisites hold.
+2. Configuration approval stays disabled until all adoption prerequisites hold.
    Device qualification and external publication remain separate dependencies;
    do not alter this workstation's controls.
 
