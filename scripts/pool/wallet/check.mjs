@@ -1,7 +1,8 @@
 // Two wallet processes and an HTTP service, using only public fixture keys,
 // ideal proofs and an independently reconstructed known local venue ledger.
 import assert from 'node:assert/strict';
-import { execFile, fork } from 'node:child_process';
+import { execFile, fork, spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { promisify } from 'node:util';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve, sep } from 'node:path';
@@ -33,7 +34,7 @@ const run = promisify(execFile), ledger = [], requests = [];
 const publicDirectory = join(directory, 'public'); mkdirSync(publicDirectory);
 const ledgerFile = join(publicDirectory, 'ledger.json'), evidenceFile = join(publicDirectory, 'evidence.bin');
 const compiled = real ? join(directory, 'circuits') : undefined;
-const payer = join(directory, 'payer.db'), receiver = join(directory, 'receiver.db');
+let payer = join(directory, 'payer.db'), receiver = join(directory, 'receiver.db');
 const requestFile = join(directory, 'request.bin'), deliveryFile = join(directory, 'delivery.bin'), fundingFile = join(directory, 'fund.bin');
 const pairingFile = join(directory, 'pairing.json');
 const venue = new LocalVenue(VENUE), publish = venue.publish.bind(venue);
@@ -105,6 +106,24 @@ async function checkpoint(id) {
   await store.commit(id); await store.publish(); writeFileSync(evidenceFile, serialize(await store.view()));
   if (real) console.log('PASS real wallet checkpoint: ' + id);
 }
+const custodyEvidence = [];
+function recover(database, name) {
+  const key = randomBytes(32), file = join(directory, `${name}.encrypted`), destination = join(directory, `${name}-restored.db`);
+  function custody(mode, path, digest) {
+    const result = spawnSync(process.execPath, [join(root, 'scripts/pool/wallet/custody.mjs'), mode, path, file, real ? 'real' : 'ideal'], {
+      cwd: root, windowsHide: true, timeout: 30_000, maxBuffer: 1024 * 1024, encoding: 'utf8',
+      input: JSON.stringify({ key: key.toString('hex'), digest }),
+    });
+    assert.equal(result.status, 0, result.stderr || result.error?.message);
+    const output = JSON.parse(result.stdout.trim()); assert.notEqual(output.pid, process.pid); return output;
+  }
+  try {
+    const exported = custody('export', database);
+    assert.equal(custody('restore', destination, exported.digest).restoredFrom, exported.digest);
+    custodyEvidence.push({ wallet: name, bytes: exported.bytes });
+    return destination;
+  } finally { key.fill(0); }
+}
 async function audit(expected, kind, amounts) {
   const { stdout } = await run(process.execPath, [join(root, 'scripts/pool/wallet/audit.mjs'), publicDirectory, compiled, expected],
     { cwd: publicDirectory, windowsHide: true, timeout: 180_000, maxBuffer: 1024 * 1024 });
@@ -142,6 +161,9 @@ try {
   await assert.rejects(cli('prepare-pay', payer, requestFile), /pairing request differs/);
   writeFileSync(requestFile, originalRequestBytes);
   drop = true; await cli('lost-pay', payer); assert.ok(droppedReceipt);
+  // The service accepted the pending command but its receipt was lost. Restore
+  // the complete reserved statement before reconciling the exact remote reply.
+  payer = recover(payer, 'payer');
   const first = await cli('submit-pay', payer);
   assert.equal(existsSync(deliveryFile), false, 'private payer delivery must cross HTTPS, not a shared delivery file');
   assert.equal(encodeStoredReceipt(replyReceipt(decodePoolServiceReply(JSON.parse(droppedReceipt)))), first.receipt);
@@ -151,7 +173,9 @@ try {
   await cli('lost-delivery', payer);
   const stored = await cli('inbox-status', receiver);
   assert.equal(stored.stored, true); assert.equal(stored.fulfilled, false);
-  await stopReceiver(); await startReceiver();
+  await stopReceiver();
+  receiver = recover(receiver, 'receiver');
+  await startReceiver();
   assert.equal(JSON.parse(readFileSync(pairingFile, 'utf8')).token, pairing.token);
   assert.equal((await cli('deliver-pay', payer)).ack, stored.hash);
   assert.equal((await cli('deliver-pay', payer)).ack, stored.hash);
@@ -214,7 +238,8 @@ try {
   console.log('PASS two-wallet v2 CLI: issue 10, request/pay 7, receiver checkpoint verification, fulfill once, burn 7; restore/verify/burn payer change 3 to outstanding 0; process restarts, lost accepted reply, exact/changed-proof retries, unavailable history and invoice replay rejection. Service traffic contains only public statement frames.');
   console.log(real ? 'PASS pinned real v2 wallet proofs and separate public-only audit: supply, missing history, corrupted proof, reordered history and different valid history with unchanged outputs/totals.' : 'Scope: ideal proof fixture only.');
   console.log('PASS private HTTPS inbox: original attested delivery, dropped acknowledgment, receiver restart, exact retry and separate fulfillment.');
-  console.log('Scope: trusted plaintext local custody, public fixture TLS/obligor keys, authenticated fixture pairing and known LocalVenue; no external finality, supported custody, rollback protection or external-goods atomicity claim.');
+  console.log('PASS encrypted offline wallet handoff in fresh processes: ' + JSON.stringify(custodyEvidence));
+  console.log('Scope: protected local storage is a deployment precondition; fixture DB/WAL are plaintext. Offline handoff needs independently retained key/latest digest and one active restore. Public fixture TLS/obligor keys, trusted pairing and known LocalVenue; no external finality, continuous backup, rollback prevention or external-goods atomicity claim.');
 } catch (error) { acceptanceFailure = error; }
 finally {
   const failures = acceptanceFailure ? [acceptanceFailure] : [];

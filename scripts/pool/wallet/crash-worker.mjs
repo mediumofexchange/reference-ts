@@ -8,9 +8,9 @@ if (Number(process.versions.node.split('.')[0]) < 24) {
 }
 
 const [operation, phase, file, action] = process.argv.slice(2);
-if (!['request', 'pending', 'receipt', 'fulfillment', 'capability', 'inbox'].includes(operation) || !['before', 'after'].includes(phase) ||
+if (!['request', 'pending', 'receipt', 'fulfillment', 'capability', 'inbox', 'export', 'import'].includes(operation) || !['before', 'after'].includes(phase) ||
   typeof file !== 'string' || !['crash', 'restore'].includes(action)) {
-  console.error('usage: crash-worker.mjs <request|pending|receipt|fulfillment|capability|inbox> <before|after> <database> <crash|restore>');
+  console.error('usage: crash-worker.mjs <request|pending|receipt|fulfillment|capability|inbox|export|import> <before|after> <database> <crash|restore>');
   process.exit(2);
 }
 
@@ -27,7 +27,9 @@ const [assertModule, fs, v8, sqlite, hashes, commitment, venueModule, walletModu
 const assert = assertModule.default;
 const { AUTHORITY, DOMAIN, CONFIG, VENUE, OPERATOR, OPERATOR_SECRET, TERMS, IdealVerifier, issue } = fixture;
 const { PoolWalletStore } = walletModule, backing = TERMS.backing.name;
-const wallet = new PoolWalletStore(file, AUTHORITY);
+let wallet = new PoolWalletStore(file, AUTHORITY);
+const { walletBackupDigest } = await import('@mediumofexchange/reference/pool/wallet-backup');
+const backupKey = new Uint8Array(32).fill(83); // public fixture key, never funds
 const expectedFile = `${file}.expected`;
 const frame = value => statement.encodeStatement(DOMAIN, value);
 const copy = value => v8.deserialize(v8.serialize(value));
@@ -63,6 +65,14 @@ async function baseline() {
   Object.assign(expected, { payment, opening, change, receipt, checkpoint, changeRequest, changeSecret: wallet.secret('change') });
   if (operation !== 'pending') wallet.prepare('pay', payment, opening, change);
   if (operation === 'fulfillment') await wallet.submit('pay', { submit: async () => receipt });
+  if (operation === 'export' || operation === 'import') {
+    await wallet.submit('pay', { submit: async () => receipt });
+    expected.token = wallet.deliveryToken('invoice');
+    wallet.receiveDelivery('invoice', delivery(expected));
+    await wallet.fulfill('invoice', delivery(expected), evidence(expected));
+    expected.nextAfterRecovery = notes.ownerOf(wallet.derive('request-secret', [3n]));
+    if (operation === 'import') expected.backup = wallet.exportBackup(backupKey);
+  }
   return expected;
 }
 
@@ -85,6 +95,9 @@ async function submit(expected) {
   } });
 }
 async function perform(expected) {
+  if (operation === 'export') return wallet.exportBackup(backupKey);
+  if (operation === 'import') return PoolWalletStore.restoreBackup(`${file}.restored`, AUTHORITY,
+    expected.backup, backupKey, walletBackupDigest(expected.backup));
   if (operation === 'request') return wallet.request('invoice', backing, 7n);
   if (operation === 'capability') return wallet.deliveryToken('invoice');
   if (operation === 'inbox') return wallet.receiveDelivery('invoice', delivery(expected));
@@ -136,6 +149,13 @@ try {
     // Setup has completed. Only the single target wallet transaction remains.
     sqlite.DatabaseSync.prototype.exec = function (sql) {
       if (sql.trim().toUpperCase() !== 'COMMIT') return original.call(this, sql);
+      // Restore initializes a distinct empty wallet first; interrupt only the
+      // transaction that imports the complete old identity and its provenance.
+      if (operation === 'import' && this.prepare('SELECT restored_from FROM wallet_custody WHERE singleton=1').get().restored_from === null) return original.call(this, sql);
+      if (operation === 'export') {
+        expected.backup = this.prepare('SELECT export FROM wallet_custody WHERE singleton=1').get().export;
+        fs.writeFileSync(expectedFile, v8.serialize(expected), { mode: 0o600 });
+      }
       if (operation === 'capability') {
         expected.token = this.prepare('SELECT token FROM wallet_delivery_tokens WHERE id=?').get('invoice').token;
         fs.writeFileSync(expectedFile, v8.serialize(expected), { mode: 0o600 });
@@ -148,7 +168,37 @@ try {
     throw new Error('target transaction never reached COMMIT');
   }
   const expected = v8.deserialize(fs.readFileSync(expectedFile)), survived = phase === 'after';
-  if (operation === 'capability') {
+  if (operation === 'export' || operation === 'import') {
+    let bytes = expected.backup;
+    if (operation === 'export') {
+      assert.equal(wallet.custody().frozen, survived);
+      bytes = wallet.exportBackup(backupKey);
+      if (survived) assert.deepEqual(bytes, Uint8Array.from(expected.backup));
+      assert.equal(wallet.custody().frozen, true);
+      assert.throws(() => wallet.prepare('pay', expected.payment, expected.opening, expected.change), { code: 'CONFLICT' });
+      wallet.close();
+      wallet = PoolWalletStore.restoreBackup(`${file}.restored`, AUTHORITY, bytes, backupKey, walletBackupDigest(bytes));
+    } else {
+      assert.equal(wallet.custody().frozen, true); wallet.close();
+      wallet = new PoolWalletStore(`${file}.restored`, AUTHORITY);
+      if (!survived) {
+        assert.equal(wallet.custody().restoredFrom, undefined);
+        assert.throws(() => wallet.secret('invoice'), { code: 'UNKNOWN' });
+        assert.throws(() => wallet.pending('pay'), { code: 'UNKNOWN' });
+        // This destination never acquired the source identity. After inspecting
+        // it, explicitly select a new path; never overwrite or blind retry.
+        wallet.close();
+        wallet = PoolWalletStore.restoreBackup(`${file}.retry`, AUTHORITY, bytes, backupKey, walletBackupDigest(bytes));
+      }
+    }
+    assert.equal(wallet.custody().restoredFrom, walletBackupDigest(bytes));
+    assertRequests(expected); assertPending(expected, true);
+    assert.equal(wallet.deliveryToken('invoice'), expected.token);
+    assert.deepEqual(wallet.inbox('invoice'), delivery(expected));
+    assert.deepEqual(wallet.fulfillment('invoice').opening, expected.opening);
+    await assert.rejects(wallet.fulfill('invoice', delivery(expected), evidence(expected)), { code: 'CONFLICT' });
+    assert.equal(wallet.request('next', backing, 7n).owner, expected.nextAfterRecovery);
+  } else if (operation === 'capability') {
     assert.deepEqual(wallet.request('invoice', backing, 7n), expected.request);
     assert.equal(wallet.authorizesDelivery('invoice', expected.token), survived);
     const token = wallet.deliveryToken('invoice');

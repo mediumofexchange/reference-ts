@@ -1,8 +1,10 @@
 // Optional Node 24 local wallet. Plaintext custody: the database, WAL and
-// backups are secrets. Assumes trusted local storage without rollback/copies.
+// host backups are secrets. Offline exports are encrypted; rollback/copies
+// still require an independently retained recovery identity and one active copy.
 // Fulfillment means one durable local record, not exactly-once external goods.
 import { DatabaseSync } from "node:sqlite";
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { closeSync, existsSync, openSync } from "node:fs";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes } from "../bytes.js";
 import { decodeCommitment, encodeCommitment, type Commitment } from "../commitment.js";
@@ -14,6 +16,7 @@ import { copySegmentAuthority, decodeStatement, encodeStatement, parsePublicInpu
 import { decodeStoredReceipt, encodeStoredReceipt } from "./store-codec.js";
 import { deriveWalletField, type WalletPurpose } from "./wallet.js";
 import { decodeWalletDelivery, encodeWalletDelivery, walletDeliveryHash } from "./wallet-delivery-wire.js";
+import { MAX_WALLET_BACKUP_BYTES, openWalletBackup, sealWalletBackup, walletAuthorityBytes, walletBackupDigest } from "./wallet-backup.js";
 
 export interface WalletRequest { readonly id: string; readonly backing: Uint8Array; readonly value: bigint; readonly owner: bigint }
 export interface WalletDelivery { readonly statement: Statement; readonly opening: NoteOpening; readonly receipt: PoolReceipt }
@@ -43,31 +46,183 @@ function readNote(text: string): NoteOpening {
 }
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 
+// Fixed table/column names, never SQL supplied by the backup. The custody row
+// is deliberately not transferable: the old source remains frozen forever.
+const TABLES = [
+  ["wallet_meta", ["singleton", "domain", "root", "counter"]],
+  ["wallet_requests", ["id", "backing", "value", "secret", "owner"]],
+  ["wallet_pending", ["id", "frame", "opening", "change_opening", "receipt"]],
+  ["wallet_reservations", ["nullifier", "pending"]],
+  ["wallet_fulfilled", ["id", "commitment", "opening", "receipt", "checkpoint"]],
+  ["wallet_delivery_tokens", ["id", "token"]],
+  ["wallet_inbox", ["id", "frame"]],
+] as const;
+type Snapshot = (string | number | null)[][][];
+function decodeSnapshot(bytes: Uint8Array, authority: SegmentAuthority): Snapshot {
+  let state: unknown, text: string;
+  try { text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes); state = JSON.parse(text); }
+  catch { throw new PoolWalletError("INVALID", "invalid wallet snapshot"); }
+  requireThat(JSON.stringify(state) === text && Array.isArray(state) && state.length === TABLES.length, "INVALID", "invalid wallet snapshot layout");
+  const tables = state as unknown[];
+  for (let t = 0; t < TABLES.length; t++) {
+    const rows = tables[t];
+    requireThat(Array.isArray(rows), "INVALID", "invalid wallet snapshot rows");
+    for (const row of rows) {
+      requireThat(Array.isArray(row) && row.length === TABLES[t]![1].length, "INVALID", "invalid wallet snapshot columns");
+      for (let c = 0; c < row.length; c++) requireThat(
+        t === 0 && c === 0 ? row[c] === 1 : typeof row[c] === "string" || (t === 2 && c >= 2 && row[c] === null),
+        "INVALID", "invalid wallet snapshot cell");
+    }
+  }
+  const snapshot = tables as Snapshot, meta = snapshot[0]!;
+  requireThat(meta.length === 1 && meta[0]![1] === bytesToHex(authority.domain) &&
+    /^[0-9a-f]{64}$/.test(meta[0]![2] as string) && /^(0|[1-9][0-9]*)$/.test(meta[0]![3] as string), "INVALID", "invalid wallet snapshot identity");
+  return snapshot;
+}
+
 export class PoolWalletStore {
   private readonly db: DatabaseSync;
   private readonly authority: SegmentAuthority;
-  constructor(path: string, authority: SegmentAuthority) {
+  private readonly readOnly: boolean;
+  constructor(path: string, authority: SegmentAuthority, options: { readOnly?: boolean } = {}) {
     this.authority = copySegmentAuthority(authority);
-    this.db = new DatabaseSync(path);
+    walletAuthorityBytes(this.authority);
+    this.readOnly = options.readOnly === true;
+    this.db = new DatabaseSync(path, { readOnly: this.readOnly });
     try {
-      this.db.exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
+      if (this.readOnly) {
+        const meta = this.db.prepare("SELECT domain FROM wallet_meta WHERE singleton=1").get();
+        requireThat(meta?.["domain"] === bytesToHex(this.authority.domain), "CONFLICT", "wallet domain changed");
+        requireThat(this.db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='wallet_custody'").get() !== undefined,
+          "INVALID", "migrate legacy wallet with its original writable authority before read-only inspection");
+        return; // Explicit evidence reader may select another verified segment.
+      }
+      this.db.exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA temp_store=MEMORY;
         CREATE TABLE IF NOT EXISTS wallet_meta (singleton INTEGER PRIMARY KEY CHECK(singleton=1), domain TEXT NOT NULL, root TEXT NOT NULL, counter TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS wallet_requests (id TEXT PRIMARY KEY, backing TEXT NOT NULL, value TEXT NOT NULL, secret TEXT NOT NULL, owner TEXT NOT NULL UNIQUE);
         CREATE TABLE IF NOT EXISTS wallet_pending (id TEXT PRIMARY KEY, frame TEXT NOT NULL, opening TEXT, change_opening TEXT, receipt TEXT);
         CREATE TABLE IF NOT EXISTS wallet_reservations (nullifier TEXT PRIMARY KEY, pending TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS wallet_fulfilled (id TEXT PRIMARY KEY, commitment TEXT NOT NULL UNIQUE, opening TEXT NOT NULL, receipt TEXT NOT NULL, checkpoint TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS wallet_delivery_tokens (id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE);
-        CREATE TABLE IF NOT EXISTS wallet_inbox (id TEXT PRIMARY KEY, frame TEXT NOT NULL);`);
-      this.db.prepare("INSERT OR IGNORE INTO wallet_meta VALUES (1, ?, ?, '0')").run(bytesToHex(this.authority.domain), randomBytes(32).toString("hex"));
-      const meta = this.db.prepare("SELECT domain FROM wallet_meta WHERE singleton=1").get()!;
-      requireThat(meta["domain"] === bytesToHex(this.authority.domain), "CONFLICT", "wallet domain changed");
+        CREATE TABLE IF NOT EXISTS wallet_inbox (id TEXT PRIMARY KEY, frame TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS wallet_custody (singleton INTEGER PRIMARY KEY CHECK(singleton=1), authority TEXT NOT NULL, export BLOB, restored_from TEXT);`);
+      this.transaction(() => {
+        this.db.prepare("INSERT OR IGNORE INTO wallet_meta VALUES (1, ?, ?, '0')").run(bytesToHex(this.authority.domain), randomBytes(32).toString("hex"));
+        const meta = this.db.prepare("SELECT domain FROM wallet_meta WHERE singleton=1").get()!;
+        requireThat(meta["domain"] === bytesToHex(this.authority.domain), "CONFLICT", "wallet domain changed");
+        const authority = bytesToHex(walletAuthorityBytes(this.authority));
+        const custody = this.db.prepare("SELECT authority FROM wallet_custody WHERE singleton=1").get();
+        if (custody) requireThat(custody["authority"] === authority, "CONFLICT", "wallet authority changed");
+        else {
+          this.checkStoredAuthority();
+          this.db.prepare("INSERT INTO wallet_custody VALUES (1, ?, NULL, NULL)").run(authority);
+        }
+      }, true);
     } catch (error) { this.db.close(); throw error; }
   }
   close(): void { this.db.close(); }
-  private transaction<T>(action: () => T): T {
+  private active(): void {
+    requireThat(!this.readOnly, "CONFLICT", "wallet is read-only");
+    requireThat(this.db.prepare("SELECT 1 FROM wallet_custody WHERE export IS NOT NULL").get() === undefined, "CONFLICT", "wallet source is frozen for offline recovery");
+  }
+  private transaction<T>(action: () => T, custodyOperation = false): T {
+    requireThat(!this.readOnly, "CONFLICT", "wallet is read-only");
     this.db.exec("BEGIN IMMEDIATE");
-    try { const result = action(); this.db.exec("COMMIT"); return result; }
+    try { if (!custodyOperation) this.active(); const result = action(); this.db.exec("COMMIT"); return result; }
     catch (error) { this.db.exec("ROLLBACK"); throw error; }
+  }
+  /** Migration/export checks cannot relabel existing evidence to another authority. */
+  private checkStoredAuthority(): void {
+    const receipt = (text: string): void => {
+      requireThat(same(walletAuthorityBytes(decodeStoredReceipt(text)), walletAuthorityBytes(this.authority)), "CONFLICT", "saved receipt authority differs");
+    };
+    const statement = (s: Statement): void => {
+      const p = parsePublicInputs(s.kind, s.publicInputs);
+      requireThat(same(p.domain, this.authority.domain) && same(p.segment, this.authority.segment) && p.scopeRoot === this.authority.scopeRoot, "CONFLICT", "saved statement authority differs");
+    };
+    for (const row of this.db.prepare("SELECT frame, receipt FROM wallet_pending").iterate()) {
+      statement(decodeStatement(hexToBytes(row["frame"] as string)).statement);
+      if (row["receipt"] !== null) receipt(row["receipt"] as string);
+    }
+    for (const row of this.db.prepare("SELECT receipt FROM wallet_fulfilled").iterate()) receipt(row["receipt"] as string);
+    for (const row of this.db.prepare("SELECT frame FROM wallet_inbox").iterate()) {
+      const delivery = decodeWalletDelivery(row["frame"] as string).delivery;
+      statement(delivery.statement); receipt(encodeStoredReceipt(delivery.receipt));
+    }
+  }
+  /** Read only: reconcile a lost restore reply by checking this exact digest. */
+  custody(): { frozen: boolean; restoredFrom?: string } {
+    const row = this.db.prepare("SELECT export IS NOT NULL AS frozen, restored_from FROM wallet_custody WHERE singleton=1").get()!;
+    return { frozen: row["frozen"] === 1, ...(row["restored_from"] === null ? {} : { restoredFrom: row["restored_from"] as string }) };
+  }
+  /** Offline handoff: quiesce application workflows first. The source's complete
+   * state and recoverable encrypted export freeze in the same transaction.
+   * Retain key and exact digest independently; never activate two restores. */
+  exportBackup(key: Uint8Array): Uint8Array {
+    return this.transaction(() => {
+      const old = this.db.prepare("SELECT export FROM wallet_custody WHERE singleton=1").get()!["export"];
+      if (old !== null) {
+        const bytes = Uint8Array.from(old as Uint8Array);
+        openWalletBackup(bytes, key, this.authority, walletBackupDigest(bytes)).fill(0);
+        return bytes;
+      }
+      const names = this.db.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all().map(row => row["name"] as string).sort();
+      requireThat(JSON.stringify(names) === JSON.stringify([...TABLES.map(t => t[0]), "wallet_custody"].sort()), "INVALID", "unsupported wallet schema");
+      const snapshot: Snapshot = [];
+      let estimatedBytes = 0;
+      for (const [table, columns] of TABLES) {
+        const actual = this.db.prepare(`PRAGMA table_info(${table})`).all().map(row => row["name"]);
+        requireThat(JSON.stringify(actual) === JSON.stringify(columns), "INVALID", "unsupported wallet columns");
+        const rows: Snapshot[number] = [];
+        for (const row of this.db.prepare(`SELECT ${columns.join(",")} FROM ${table} ORDER BY ${columns[0]}`).iterate()) {
+          const cells = columns.map(column => row[column] as string | number | null);
+          estimatedBytes += Buffer.byteLength(JSON.stringify(cells)) + 1;
+          requireThat(estimatedBytes <= MAX_WALLET_BACKUP_BYTES, "INVALID", "wallet exceeds offline backup limit");
+          rows.push(cells);
+        }
+        snapshot.push(rows);
+      }
+      this.checkStoredAuthority();
+      const plaintext = Buffer.from(JSON.stringify(snapshot));
+      try {
+        decodeSnapshot(plaintext, this.authority);
+        const bytes = sealWalletBackup(plaintext, key, this.authority);
+        this.db.prepare("UPDATE wallet_custody SET export=? WHERE singleton=1").run(bytes);
+        return bytes;
+      } finally { plaintext.fill(0); }
+    }, true);
+  }
+  /** Fresh destination only. A failed/interrupted restore may leave a fresh
+   * empty wallet; a committed restore retains its digest for reply recovery.
+   * Never overwrite a database or blindly retry into a second destination. */
+  static restoreBackup(path: string, authority: SegmentAuthority, bytes: Uint8Array, key: Uint8Array, expectedDigest: string): PoolWalletStore {
+    const ownedAuthority = copySegmentAuthority(authority);
+    const plaintext = openWalletBackup(bytes, key, ownedAuthority, expectedDigest);
+    let state: Snapshot;
+    try { state = decodeSnapshot(plaintext, ownedAuthority); } finally { plaintext.fill(0); }
+    requireThat(path !== ":memory:" && !existsSync(path + "-wal") && !existsSync(path + "-shm"), "CONFLICT", "recovery requires a new destination");
+    // Exclusive creation refuses files and symlinks; the parent is trusted local
+    // storage. No destructive cleanup: interrupted destinations stay inspectable.
+    closeSync(openSync(path, "wx", 0o600));
+    const wallet = new PoolWalletStore(path, ownedAuthority);
+    try {
+      wallet.transaction(() => {
+        // Another process can open the newly initialized destination before
+        // this transaction. Never erase an acknowledged request or command.
+        requireThat(wallet.db.prepare("SELECT counter FROM wallet_meta WHERE singleton=1").get()!["counter"] === "0" &&
+          wallet.custody().restoredFrom === undefined && TABLES.slice(1).every(([table]) =>
+            wallet.db.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get() === undefined), "CONFLICT", "recovery destination is no longer pristine");
+        for (let t = 0; t < TABLES.length; t++) {
+          const [table, columns] = TABLES[t]!;
+          wallet.db.exec(`DELETE FROM ${table}`);
+          const insert = wallet.db.prepare(`INSERT INTO ${table} (${columns.join(",")}) VALUES (${columns.map(() => "?").join(",")})`);
+          for (const row of state[t]!) insert.run(...row);
+        }
+        wallet.checkStoredAuthority();
+        wallet.db.prepare("UPDATE wallet_custody SET restored_from=? WHERE singleton=1").run(expectedDigest);
+      });
+      return wallet;
+    } catch (error) { wallet.close(); throw error; }
   }
   derive(purpose: WalletPurpose, inputs: readonly bigint[], slot = 0): bigint {
     const root = this.db.prepare("SELECT root FROM wallet_meta WHERE singleton=1").get()!["root"] as string;
@@ -111,6 +266,7 @@ export class PoolWalletStore {
   }
   /** Authorization checks never create requests or rotate capabilities. */
   authorizesDelivery(requestId: string, token: string): boolean {
+    if (this.readOnly || this.custody().frozen) return false;
     if (typeof requestId !== "string" || !/^[a-zA-Z0-9_-]{1,80}$/.test(requestId) ||
         typeof token !== "string" || !/^[0-9a-f]{64}$/.test(token)) return false;
     const row = this.db.prepare("SELECT token FROM wallet_delivery_tokens WHERE id=?").get(requestId);
@@ -163,6 +319,7 @@ export class PoolWalletStore {
       ...(row["receipt"] === null ? {} : { receipt: decodeStoredReceipt(row["receipt"] as string) }) };
   }
   async submit(commandId: string, client: { submit(input: { domain: Uint8Array; statement: Statement }): Promise<PoolReceipt> }): Promise<PoolReceipt> {
+    this.active();
     const pending = this.pending(commandId);
     const submitted = decodeStatement(encodeStatement(this.authority.domain, pending.statement)).statement;
     const receipt = await client.submit({ domain: this.authority.domain.slice(), statement: submitted });
@@ -226,6 +383,7 @@ export class PoolWalletStore {
   /** Verify caller-owned checkpoint/venue evidence before recording one local
    * fulfillment. Missing history returns unavailable and changes no state. */
   async fulfill(requestId: string, delivery: WalletDelivery, args: Parameters<typeof readPoolCheckpoint>[0]): Promise<PoolCheckpointResult> {
+    this.active();
     const { opening, receipt, cm } = this.payment(requestId, delivery);
     const checkpoint = encodeCommitment(args.checkpoint);
     const result = await readPoolCheckpoint(args);

@@ -19,7 +19,11 @@ requests, pending payments, private HTTPS inbox deliveries and verified local
 fulfillment through restarts. Scoped durable capabilities and exact retry protect
 inbox admission; checkpoint verification remains separate from acknowledgment.
 The same flow uses pinned real v2 proofs with a separate public supply audit;
-abrupt wallet-process tests cover six transaction boundaries. Venue, TLS keys
+abrupt wallet-process tests cover eight transaction boundaries. Encrypted offline
+exports freeze the source and retain complete state and reservations; fresh
+restores require the exact independently retained digest and record provenance.
+Protected device storage and one active restore remain explicit preconditions.
+Venue, TLS keys
 and trusted pairing remain fixtures. Receiver note checks distinguish spent/unspent at an exact
 verified checkpoint; saved fulfillment lookup recovers historical records.
 Silence recovery is modeled but not implemented in the

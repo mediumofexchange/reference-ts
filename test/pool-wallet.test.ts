@@ -168,13 +168,13 @@ describe.skipIf(Number(process.versions.node.split(".")[0]) < 24)("local pool wa
     const root = f.segment.prefix().roots.at(-1)!;
     await child.admit(f.oracle.accept(spendStatement(child.authority(), [root, root], [nf, 7n], [11n, 12n])));
     const successor = evidence(child); f.args.venue.publish(successor.commitment);
-    const scoped = new PoolWalletStore(f.path, child.authority()); wallets.push(scoped);
+    const scoped = new PoolWalletStore(f.path, child.authority(), { readOnly: true }); wallets.push(scoped);
     const checked = await scoped.checkNote("invoice", f.opening, { ...f.args, checkpoint: successor.commitment, evidence: [successor, target] });
     expect(checked.kind).toBe("spent");
     expect(scoped.fulfillment("invoice")).toBeUndefined();
     const grandchild = open(f.args.venue, target.history!.trail.backings, f.oracle, 3n, [{ checkpoint: successor, segment: child }]);
     const importedSpend = evidence(grandchild); f.args.venue.publish(importedSpend.commitment);
-    const imported = new PoolWalletStore(f.path, grandchild.authority()); wallets.push(imported);
+    const imported = new PoolWalletStore(f.path, grandchild.authority(), { readOnly: true }); wallets.push(imported);
     expect((await imported.checkNote("invoice", f.opening, { ...f.args, checkpoint: importedSpend.commitment,
       evidence: [importedSpend, successor, target] })).kind).toBe("spent");
   });

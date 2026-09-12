@@ -4,46 +4,51 @@ Updated: 2026-09-12
 
 ## Goal
 
-Complete private HTTPS delivery between the existing v2 wallets: durable scoped
-invoice capability, bounded canonical inbox frame committed before acknowledgment,
-exact retry after lost replies/restart, and separate checkpoint verification.
-Delivery: reference-ts/main, following b1773d2 (CI 34697364624 passed).
-Use hosted CI for the exact delivered revision's platform results.
-Companion money-from-first-principles/main at 7ea0ee8 is unchanged; runtime pin
-and v2 circuits are unchanged. This is a local application profile under v2
-sections 3 and 9, not v3 restoration, external finality or deployment.
+Complete encrypted offline wallet handoff/recovery: preserve the full private
+state, freeze the source atomically with its export, restore against an
+independently retained exact digest, then receive/pay with existing v2 proofs.
+Work: reference-ts/main; baseline e50e0e7 (CI 34699471934 passed), custody decision
+c40be8e. Local verification is complete; delivery follows that design commit.
+Hosted CI runs on each delivered main revision; inspect its exact platform result.
+Companion money-from-first-principles/main at 7ea0ee8 is unchanged; runtime pin,
+v2 circuits and derivation are unchanged. This is a local application custody
+profile under v2 sections 3 and 9, not seed-only or protocol failure recovery.
 
 ## Status
 
-- [Wallet](docs/POOL_WALLET.md): private delivery now crosses HTTPS between
-  wallet processes. Durable per-invoice capabilities and immutable canonical
-  inbox frames survive restart; exact replay returns the original hash.
-- Original receipt proof/signature attestation is checked before inbox storage.
-  Otherwise-valid re-proving cannot replace the original delivery. A stored
-  acknowledgment never fulfills an invoice or asserts proof validity/finality.
-- Receiver checkNote and fulfill still use caller-owned checkpoint evidence.
-  Historical fulfillment lookup remains separate from current spendability.
-- Independent adversarial design/patch review is complete. BOM framing and
-  child-cleanup findings were fixed, exercised and read back; no material issue
-  remains. Full local, real and ideal acceptance passed; hosted platform checks
-  run on the delivered revision.
-- Old duplicate private-payment framework was removed at b1773d2: 20 tracked
-  files and dependencies, 203,307,820 bytes. Its [case map](docs/PRIVATE_PAYMENT_ARCHITECTURE.md#private-payment-experiment-case-map)
-  retains active equivalents and immutable history links. No further broad
-  deletion is needed; this slice's scratch evidence is captured in the record.
+- [Wallet custody](docs/POOL_WALLET.md#encrypted-offline-handoff-and-recovery):
+  bounded AES-256-GCM whole-state exports commit with durable source freeze.
+  Exact repeated export survives a lost reply. No plaintext staging file.
+- Restore requires a fresh destination, key and independently retained digest.
+  All seven state tables and import provenance commit atomically. Concurrent
+  destination writes are retained and make import refuse. Reservations remain.
+- Writable sessions pin full authority. Explicit SQLite read-only sessions
+  preserve verification of imported notes under another same-domain segment.
+  Source/reader guards run before callbacks and inside write transactions.
+- Independent design and actual-source review/readback are complete. Findings
+  addressed source authority, post-await freeze guards, destination write races,
+  lost-import provenance and owning ciphertext before authentication. No material
+  finding remains within the documented trusted current-version profile.
+- Real acceptance passed: recover payer after accepted/lost reply and receiver
+  after inbox storage, then exact retry, verify and burn 7+3 to outstanding zero.
+  Exports were 64,330 and 32,174 bytes. Full npm check passed.
 
 ## Evidence
 
-- Full npm check passed: 101 files / 1,836 tests, build, installed-package imports
-  and all acceptance stages. Ideal and real flows include forced receiver
-  termination with observed exit. Real issue 10/pay 7/burn 7+3 audits to zero.
-- [Wallet evidence](docs/pool-wallet-verification.json) records
-  current source hashes, TLS/HTTP/parser cases, real payment/public audit and
-  12 abrupt exits plus 12 fresh recoveries across six transaction boundaries.
-- The known venue, public TLS/obligor keys and trusted local pairing remain
-  fixtures. Plaintext DB/WAL/backups, supported custody, rollback protection,
-  authenticated pairing/discovery and certificate lifecycle remain open.
-  SQLite requires Node 24; non-SQLite delivery imports retain Node 20 support.
+- Full npm check passed: 102 files / 1,851 tests, build, installed-package imports
+  and all acceptance stages. No runtime or circuit pin changed after verification.
+- Focused backup suite: 15 tests passed. Covers complete state, both reservations,
+  counter freshness, key/context/digest/framing, aliasing, independent handles,
+  in-flight submission/fulfillment, read-only sessions, unsupported/oversize state
+  refusal, legacy context and raced destination retention. Typecheck passed.
+- Abrupt-commit harness: 16 exits and 16 fresh recoveries across request, pending,
+  receipt, fulfillment, capability, inbox, export and import. All passed.
+- Ideal and pinned real two-wallet HTTPS/recovery/public-audit acceptance passed.
+  Final source pins and consolidated results belong in
+  [wallet evidence](docs/pool-wallet-verification.json).
+- Protected active storage, a separately retained random key/current digest,
+  one active restored copy and current binaries are preconditions. No automatic
+  rollback detection, continuous backup or encrypted-device qualification claim.
 
 ### Retained Ergo evidence; node stopped
 
@@ -62,25 +67,25 @@ sections 3 and 9, not v3 restoration, external finality or deployment.
 
 ## Next
 
-1. Next product slice: select a concrete supported wallet custody and backup
-   boundary, independently review it, then demonstrate private receive/pay after
-   restart and explicit recovery without leaking secrets or reusing reservations.
-   Resolve copied-database/rollback limits explicitly; do not add successor C4
-   derivation or seed-only restoration capsules to the pinned v2 profile.
-2. CLI proof paths still require one segment/no imports. Extend selection from
-   the verified forest when a concrete multi-segment wallet flow requires it.
-3. Applied Ergo history remains open. At heights 100,000, 1,000,000 and 1,500,000
-   compare bounded parent links and bodies against pinned upper IDs. Body presence
-   alone proves no ancestry; additional sync needs separate justification.
+1. Next product slice: replace public fixture TLS credentials and manual trusted
+   pairing with private per-wallet credentials and authenticated pairing, including
+   restart, rotation and rejection of stale/wrong bindings. Keep it local until
+   deployment is separately authorized; do not let pairing authorize fulfillment.
+2. Continuous/device-loss recovery needs its own concrete custody boundary.
+   Offline export cannot safely resume stale state after later wallet activity.
+   Do not add C4 derivation or successor seed capsules to pinned v2.
+3. CLI proof paths still need one segment/no imports. Extend selection from the
+   verified forest only when a concrete multi-segment wallet flow requires it.
+   Applied Ergo history/publication remains unestablished; more sync needs separate
+   justification and exact ancestor/body checks against pinned upper IDs.
 
 ## Open questions
 
-- Runtime recovery, authenticated evidence/publication, supported custody and
-  rollback, deployed pairing/credentials and practical devices are the largest
-  product blocks. HTTPS closes a local delivery boundary, not these release gates.
-- About **45% done / 55% remaining**, plausible done range **35–55%**. Keep the
-  coarse estimate: this integration fits within the existing uncertainty and
-  the largest custody, external evidence and recovery work remains open.
-- Recommend switching to a fresh instance for custody design once delivery is
-  complete: use this handoff and wallet evidence; the next boundary benefits
-  from fresh context. This is an efficiency judgment, not measured performance.
+- Runtime failure recovery, authenticated evidence/publication, qualified device
+  custody/continuous recovery and credential lifecycle remain the largest blocks.
+- About **45% done / 55% remaining**, plausible done range **35–55%**. This
+  controlled offline recovery improves the wallet within existing uncertainty;
+  it does not close continuous custody or the operator/witness recovery gates.
+- Recommend a fresh instance for credential/pairing design after delivery. The
+  next boundary benefits from fresh context; this is an efficiency judgment,
+  not measured comparative model performance.

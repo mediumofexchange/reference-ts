@@ -38,6 +38,12 @@ and receiver secret, requires the note commitment in the verified event history,
 and derives its nullifier locally to report `unspent` or `spent`. Its result names
 the exact checkpoint and includes the verified history for proof preparation.
 It checks imported events too, but requires the wallet's configured segment.
+Writable sessions now pin the full domain, segment, operator and scope authority.
+For reading imported history under another same-domain segment, open an explicit
+`new PoolWalletStore(path, authority, { readOnly: true })` session. It uses SQLite's
+read-only mode and cannot prepare, submit, fulfill, authorize delivery or export.
+Legacy databases must first be opened with their original writable authority to
+validate saved contextual records and install the custody metadata.
 The CLI requires `unspent` before fulfillment and before preparing another spend.
 This check does not authenticate the payer's receipt; fulfillment still does.
 An older checkpoint can report unspent after a later spend. Neither this result
@@ -88,7 +94,7 @@ checkpoint evidence; missing history leaves the inbox unfulfilled.
 
 The token and inbox tables are additive to the existing wallet schema. Inbox
 admission avoids proof work; it does not bound total storage or history replay.
-Local database/WAL/backup secrecy remains a custody requirement. TLS also does
+Local database/WAL/host-backup secrecy remains a custody requirement. TLS also does
 not hide endpoint identity, timing or message size from network observers.
 
 ## Local derivation
@@ -106,6 +112,76 @@ This reuses the project's HMAC mechanism with a distinct local wallet frame.
 It does not implement successor C4 derivation, capsules or seed restoration,
 and it changes no v2 protocol bytes. Restoring this wallet requires its
 database, including the request counter and private delivery records.
+
+## Encrypted offline handoff and recovery
+
+The selected local custody profile uses one active wallet on a trusted device,
+with user-controlled protected storage for the database, WAL, swap, crash dumps
+and host backups. Encryption and access protection of that device are deployment
+preconditions, not configured or demonstrated by this fixture. An encrypted
+offline export can be stored outside that device; retain its random recovery key
+separately and its exact digest in an independently trusted current recovery record.
+The operator and backup storage provider receive no recovery authority.
+
+`exportBackup(key)` captures all seven wallet tables in one write transaction:
+root and request counter, requests and spend secrets, complete pending proofs,
+both private openings, receipts, input reservations, fulfillment checkpoints,
+delivery capabilities and inbox frames. It persists the encrypted bytes and a
+frozen-source marker together before returning. All current-version writable
+connections subsequently refuse mutation, including after restart. Repeating
+export with the same key returns identical bytes, allowing a lost reply or
+failed file copy to be retried. Reads still expose the owner's local secrets;
+freezing does not erase or revoke them. There is no unfreeze operation.
+
+`pool/wallet-backup` supplies `createWalletBackupKey()` and
+`walletBackupDigest(bytes)`. Use a fresh random 32-byte key for each handoff,
+not a password or a wallet spend/root secret. The `moe/wallet-offline/v1`
+envelope uses AES-256-GCM with a random 12-byte nonce, a full 16-byte tag and
+authenticated fixed version/authority bytes. Its ciphertext is bounded at
+16 MiB including framing. The canonical logical state is encrypted in memory;
+there is no plaintext staging file, and SQLite temporary sorting uses memory.
+Size, timing and possession of a wallet export are not hidden. JavaScript strings,
+process memory, and a compromised host are outside the secrecy guarantee.
+
+The application performs this explicit sequence:
+
+1. Stop receiver transport and quiesce wallet workflows. Export under the current
+   authority. Store the returned ciphertext durably, read it back, and retain its
+   exact digest independently along with the intended authority. Keep the recovery
+   key separately. A failed export transaction leaves the source active; a lost
+   successful export reply leaves it frozen with retrievable identical bytes.
+2. Restore with `PoolWalletStore.restoreBackup(newPath, authority, bytes, key,
+   expectedDigest)`. The digest must come from the trusted current handoff record,
+   not be computed from whichever file a backup provider returns. Restoration
+   refuses an existing destination or sidecar and refuses any state written by
+   another connection during initialization. It never merges or overwrites wallets.
+3. After a lost restore reply, reopen that same destination and inspect
+   `custody().restoredFrom`. The exact expected digest establishes that this
+   import committed; `custody().frozen` also shows whether it was later exported.
+   A crash before import COMMIT may leave a distinct empty wallet with no import
+   provenance. Inspect it before choosing a new destination. Do not blindly retry
+   restoration into another path.
+4. Resume only the single selected restored copy. Reconcile outstanding commands
+   by their saved exact statement bytes; verify notes against caller-owned
+   checkpoint evidence before preparing a spend. Saved reservations remain in
+   force. A remote submission already in flight can land after local freeze;
+   the pending command is retained for its idempotent retry. The freeze cannot
+   cancel remote activity, establish finality or imply that a note is unspent.
+
+An export is a controlled offline transfer, **not continuous backup**. It does
+not restore requests or payments made after a later copy resumes. Keeping only
+an old export cannot recover a subsequently lost active device safely. Ciphertext
+authentication and a digest do not detect rollback of the trusted recovery record
+itself; copied databases and two restored active copies cannot be prevented
+without an additional coordination boundary. The holder must maintain the current
+record and one active copy. Executables predating custody guards must not access
+these wallets. Arbitrary key-holder-created snapshots, corrupted local databases
+and future schemas are not supported migration inputs: restoration authenticates
+this implementation's complete exports, not arbitrary wallet semantics.
+
+This local format changes no v2 derivation, circuit, protocol frame or witness
+rule. Seed-only restoration, successor capsules, continuous disaster recovery,
+device provisioning and automatic rollback protection remain open.
 
 ## Run the acceptance
 
@@ -138,6 +214,13 @@ current acceptance, review findings and evidence limits.
 
 ## Real proofs, public audit and interruption
 
+The payer exports after the service accepted its payment but the reply was lost;
+a fresh process restores it before exact retry. The receiver stops, exports its
+stored inbox, restores to a fresh database and resumes the same delivery
+capability before verification and burning. Neither recovery key travels in
+command arguments or operator requests. The custody worker receives it on stdin;
+the test parent retains the expected digest independently of the encrypted file.
+
 Real mode uses the existing isolated compiler and Barretenberg verifier, checks
 source, toolchain, bytecode and verification-key pins, and constructs note and
 scope paths from verified local events. An extra unverified served tail cannot
@@ -155,18 +238,22 @@ valid. Public-input/process separation is not an operating-system sandbox.
 
 The crash harness exits child processes immediately before and after SQLite
 COMMIT for request, pending statement, receipt, fulfillment, capability and inbox
-(12 abrupt exits and 12 fresh recoveries). Fresh processes
+(16 abrupt exits and 16 fresh recoveries, including export and import). Fresh processes
 check rollback or exact retained state, both input reservations, private change
 and one local fulfillment. Test-only interception of SQLite calls keeps crash
 hooks out of the runtime. This checks process interruption, not power loss,
-storage corruption or database rollback. Crash cases use ideal proof fixtures;
+storage corruption or database rollback. Export tests check freeze/export atomicity;
+import tests check the whole state and provenance against an empty pre-commit
+destination. Crash cases use ideal proof fixtures;
 the real flow separately exercises complete proof persistence and lost replies.
 
 ## Boundaries
 
-The database, SQLite WAL and backups contain plaintext secrets. This slice
-assumes trusted local storage and no copied or rolled-back wallet database.
-It has no key custody service, seed-only restore, note selection, automatic
+The database, SQLite WAL and host backups contain plaintext secrets; only the
+explicit offline export is encrypted. The selected custody profile requires
+protected local storage, trusted current binaries, an independent current recovery
+record and one active copy. The fixture does not qualify device protection.
+It has no key custody service, continuous backup, seed-only restore, note selection, automatic
 reservation release, lapse/replacement handling or external witness adapter.
 The fixture uses public TLS keys and trusted local pairing; supported deployment
 still needs private credentials, authenticated pairing and their lifecycle.

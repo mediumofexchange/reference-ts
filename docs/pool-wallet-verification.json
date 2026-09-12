@@ -1,20 +1,20 @@
 {
   "date": "2026-09-12",
   "status": "passed-local-checks",
-  "baselineCommit": "b1773d215c0f4bcd825edf3bd1e34ada8268ca8a",
+  "baselineCommit": "e50e0e7a5fbdfd861f45897184e2128d45c2a716",
   "node": "v24.6.0",
   "platform": "win32",
   "sourceSha256": {
     "src/pool/wallet.ts": "254f1652e0aa3f21b0908df3280862360ab79f138bc005bee8702b6df15b3ead",
-    "src/pool/wallet-store.ts": "759ce4918060a51cb1251296d527f667befcab895f8450fff339f5bbbb1f3e4b",
-    "test/pool-wallet.test.ts": "3c11bab9556ef7f783352beb068afb407457f35bcd1ff2d208cbf3f827083fdf",
-    "scripts/pool/wallet/check.mjs": "566a3b8583c42cd5d987a1b59d92440aaeb9101fd31822763bf5488d30683f72",
+    "src/pool/wallet-store.ts": "dfae67f4de9ec120456635815d1746aaf0c71a948e0ef0c3a227a49ae8c156be",
+    "test/pool-wallet.test.ts": "f6dbb5140720075971ca411abf4b09da5cd571947e808462ddcdfa1a37288f71",
+    "scripts/pool/wallet/check.mjs": "e2d637e4688d0dc6a99fd3666e38723c7dbf8046225df165dfe5eab7d127287a",
     "scripts/pool/wallet/cli.mjs": "3159bdfccbcb9d90cffd376326bab909df358e1e4325e317850e99588257e7e0",
     "scripts/pool/wallet/profile.mjs": "0054648a16e7b33c2cc6ca9c2448edd2084dc1a22ef299e9008aaf24bc6e535a",
     "scripts/pool/wallet/proofs.mjs": "d7bb991dedb137586627d700bff83b025dcb6ecde1da6c3c83020d45d5fc647e",
     "scripts/pool/wallet/audit.mjs": "1fb022ab66ed394bbaf5a7ddec70f6efea5d81645709a4ebacb8cb0df63ac947",
-    "scripts/pool/wallet/crash.mjs": "fffd4a99733089a5c08d8821b82b8b5c9fe4ae39bbd3b83019a336c937fa109b",
-    "scripts/pool/wallet/crash-worker.mjs": "4255b7cb71004015415d1ea04be4b9c4f355abc67858c7c88fd3e94f01b3fa9e",
+    "scripts/pool/wallet/crash.mjs": "7caf9490858d7da5ef6c7bcd53ac01126971eea7c623c42e019dc95179bcbe4d",
+    "scripts/pool/wallet/crash-worker.mjs": "9aa44e26584bbbf1d12510ab82c9b5b1bf4b00e9c15093d9bf130de74a20093a",
     "package.json": "e17712c36d42ee2f9ce024fcab62cd6ec293e5acb1b41f66aa6bf01d92ee829f",
     ".github/workflows/ci.yml": "c64535e0fdf45f2c904a212fc483dc9cc2311a9f7d943a589464b7bb6760eff7",
     "src/pool/circuits/manifest.json": "c762654f10e1d6ef0da542e907c82d72939ddd1c5ae5244fc7669236ec9d835e",
@@ -24,40 +24,43 @@
     "test/fixtures/wallet-tls/localhost-cert.pem": "4960358c978f5cfa6c85d9a170ca6c874ff44d7f6b6426face3945b1e088a642",
     "test/fixtures/wallet-tls/localhost-key.pem": "72ca0dbd12e4fdf08ea290354a9b40a6656198044acb0ecb0eeaa4c3a5cd0e86",
     "scripts/pool/wallet/receiver-server.mjs": "cc648084b82bb553acd1a1bddee561c18de4db3d797eb05f665b7149d65129a2",
-    "scripts/check-package.mjs": "fe7d98d5ead9515b0e654670d91b0751b1e891164491e9c8ebd790a76bf2988f"
+    "scripts/check-package.mjs": "5244f832167c571d2fefe28ff6c8dec90f896c5f6540ad82dbc20cf7f005975c",
+    "src/pool/wallet-backup.ts": "b6864b907a9266356ea27fa33ec8d019558cecb4c74715ccb32b94417e8e075c",
+    "test/pool-wallet-backup.test.ts": "fe0938b8cead93c03c2b4cc319a7f8b7e60a64e18472d40661f1f7842a231520",
+    "scripts/pool/wallet/custody.mjs": "4e0b54cf44b909060000ac5d99568c91a2a0a907da0703ea65a0927bfab7731e"
   },
   "verification": [
     {
       "command": "npm run check",
       "exitCode": 0,
-      "testFilesPassed": 101,
-      "testsPassed": 1836,
+      "testFilesPassed": 102,
+      "testsPassed": 1851,
       "walletTestsPassed": 15,
       "deliveryTestsPassed": 13,
-      "vitestDurationSeconds": 286.6,
+      "backupTestsPassed": 15,
       "stages": [
         "documentation and links",
         "typecheck",
         "unit/model tests",
         "build",
-        "installed-package consumer including delivery imports",
+        "installed-package imports including Node 20 compatible backup helper",
         "pilot",
         "operator store crash",
         "pool service",
-        "ideal wallet with HTTPS and forced receiver shutdown",
-        "twelve wallet crashes/recoveries",
+        "ideal wallets with HTTPS and encrypted offline recovery",
+        "sixteen wallet crashes/recoveries",
         "spent-set checks"
       ]
     },
     {
-      "command": "npm run check:pool-wallet",
+      "command": "npx vitest run test/pool-wallet-backup.test.ts",
       "exitCode": 0,
-      "scope": "Final cleanup fix: forced receiver termination and observed exit; HTTPS acknowledgment loss/restart/retry."
+      "testsPassed": 15
     },
     {
       "command": "npm run check:pool-wallet-real",
       "exitCode": 0,
-      "mode": "Pinned real v2, current HTTPS runtime and CLI",
+      "mode": "Pinned real v2, HTTPS, payer and receiver encrypted offline recovery in fresh processes",
       "finalCheckpoint": {
         "issued": "10",
         "burned": "10",
@@ -78,7 +81,10 @@
     "Real alternate valid proof with the original receipt is rejected before inbox storage; original receipt-attested delivery then succeeds.",
     "Receiver HTTPS process commits before dropping its acknowledgment; restart retains the invoice capability and exact delivery, and exact retries return the same frame hash without fulfillment.",
     "Private payer delivery never uses the former shared delivery file. Operator requests contain neither private openings nor invoice capability.",
-    "A noncooperating fixture receiver is forcibly terminated and exit is observed; independent cleanup runs after failures."
+    "A noncooperating fixture receiver is forcibly terminated and exit is observed; independent cleanup runs after failures.",
+    "Payer freezes/exports after accepted submission loses its reply; fresh restored process resubmits identical full proof/reservations and receives the original receipt.",
+    "Receiver freezes/exports stored inbox before fulfillment; fresh restored database resumes the same capability and exact delivery, verifies checkpoint and burns its note.",
+    "Read-only same-domain sessions retain imported/grandchild spentness checks while writable sessions pin full authority."
   ],
   "publicAudit": {
     "process": "Separate process receives public evidence files, compiled public circuits and a separately supplied exact expected commitment; no wallet database or opening input.",
@@ -99,7 +105,9 @@
       "receipt",
       "fulfillment",
       "capability",
-      "inbox"
+      "inbox",
+      "export",
+      "import"
     ],
     "assertions": [
       "Before COMMIT recovers prior state; after COMMIT retains exact bytes.",
@@ -108,42 +116,52 @@
       "Original receipt survives retry and callback-return mutation.",
       "Fulfillment retains its original checkpoint/receipt and one row across fresh-process replay.",
       "Capability commits are stable after restart; interrupted uncommitted capability is unauthorized and replaced by fresh randomness.",
-      "Inbox commit is absent before or exact after interruption; repeated delivery returns the same hash and never records fulfillment."
+      "Inbox commit is absent before or exact after interruption; repeated delivery returns the same hash and never records fulfillment.",
+      "Export bytes and source freeze commit together; lost reply returns the original stored ciphertext. Before COMMIT source remains active.",
+      "Import commits all seven tables and exact digest provenance together. Before COMMIT destination has a different empty identity; after COMMIT fresh reopen identifies complete imported state.",
+      "Recovered request derivation, both reservations, full proof/private change, original receipt, capability, inbox and fulfillment remain exact."
     ],
     "timeout": "Each child must reach its deliberate exit rather than a timeout; each recovery must exit successfully.",
-    "abruptExits": 12,
-    "freshRecoveries": 12
+    "abruptExits": 16,
+    "freshRecoveries": 16
   },
   "review": {
     "type": "Independent adversarial design and actual source/diff review, focused execution and critical fix readback",
-    "choice": "Use standard HTTPS with a durable invoice capability and immutable canonical inbox; original receipt attestation prevents altered-proof poisoning; fulfillment remains separate.",
+    "choice": "Use standard HTTPS with a durable invoice capability and immutable canonical inbox; original receipt attestation prevents altered-proof poisoning; fulfillment remains separate. Offline custody uses a bounded authenticated whole-wallet export, transactional source freeze and exact fresh-path restoration with independently retained digest.",
     "specification": "Pinned pool-v2 sections 3 and 9 already provide the private delivery and receipt relations. No normative, circuit or signed-frame amendment.",
     "resolvedFindings": [
       "UTF-8 decoding silently removed a BOM. Preserve it so canonical reconstruction rejects alternate request and acknowledgment bytes; both regressions passed.",
-      "Receiver cleanup could relinquish child ownership before exit and skip independent cleanup on failure. Retain ownership until observed exit, bound forced termination, aggregate cleanup failures and exercise a noncooperating child in both ideal and real acceptance."
+      "Receiver cleanup could relinquish child ownership before exit and skip independent cleanup on failure. Retain ownership until observed exit, bound forced termination, aggregate cleanup failures and exercise a noncooperating child in both ideal and real acceptance.",
+      "Domain-only reopening could relabel saved contextual state. Writable authority is now pinned; migration validates saved statement/receipt context. Explicit SQLite read-only sessions preserve imported-history verification.",
+      "Submission and fulfillment could finish after freeze. Pre-callback guards and transactional post-await checks retain exact pending commands for reconciliation.",
+      "Another connection could write to a newly initialized restore destination before import. Pristine checks now run inside the import transaction before any deletion; regression retains the other acknowledged request.",
+      "Lost import replies require provenance, not blind cloning. Complete import and its externally supplied digest commit together; interruption acceptance checks both sides.",
+      "Ciphertext is owned before digest and authentication to keep both checks on the same bytes."
     ],
     "execution": [
       "Independent wallet/transport focused suite before final regression additions",
       "Independent final BOM/header/acknowledgment regressions",
       "Independent immediate parent-disconnect probe: receiver exited, no surviving child",
-      "Final cleanup readback: no unresolved material findings"
+      "Final cleanup readback: no unresolved material findings",
+      "Independent custody design/source review and critical fixes/read-only/worker/docs readback: no unresolved material findings. Reviewer did not rerun full/real checks; integration evidence is separate."
     ],
     "unresolvedMaterialFindings": 0,
-    "executionGate": "Full local check and final ideal/real HTTPS acceptance passed."
+    "executionGate": "Full local check, focused backup regressions, sixteen interruption recoveries and real-proof encrypted wallet acceptance passed."
   },
   "limits": [
     "Known LocalVenue ledger and public fixture obligor keys, not authenticated external finality or real funds.",
-    "Plaintext DB/WAL/backups; no copied-database rollback protection, supported device custody or seed-only restore.",
+    "Active DB/WAL/host backups remain plaintext: protected device storage is a precondition, not qualified here. Only offline export ciphertext is protected. Latest independent recovery identity, separate random key and one active restore are operating requirements, not automatic rollback prevention.",
     "HTTPS uses public fixture TLS keys and a trusted local pairing file. Authenticated pairing/discovery, private deployed credentials and certificate lifecycle are not implemented; TLS does not hide network metadata.",
     "Separate public-input audit is not an operating-system sandbox.",
     "Abrupt process-exit tests do not cover power loss or storage corruption; their proof fixtures are ideal. Real acceptance separately retains actual proof bytes across process restarts.",
     "Historical fulfillment and received records are not current-spendability assertions or exactly-once external goods/payout.",
     "CLI currently supports one pinned segment without imports; no automatic note selection, reservation release or lapse/replacement support.",
-    "No normative changes, new circuit pins, deployment or release. This record summarizes inspected sources and observed results, not a raw transcript."
+    "No normative changes, new circuit pins, deployment or release. This record summarizes inspected sources and observed results, not a raw transcript.",
+    "No continuous backup or safe arbitrary stale-backup restoration; no pre-custody executables, arbitrary key-holder-created snapshot semantics or hostile local database mutation support. No power-loss/device-loss assurance from controlled handoff."
   ],
   "previousCi": {
-    "commit": "b1773d215c0f4bcd825edf3bd1e34ada8268ca8a",
-    "run": 34697364624,
+    "commit": "e50e0e7a5fbdfd861f45897184e2128d45c2a716",
+    "run": 34699471934,
     "jobsPassed": 7
   },
   "receiverBoundary": {
@@ -160,7 +178,7 @@
       "fulfillment(id) restores the original opening, receipt and checkpoint across restart/crash; duplicate writes still conflict and returned-byte mutation cannot alter saved state."
     ],
     "limits": [
-      "One caller-configured segment per handle. No newest external-state claim or assurance of present spendability.",
+      "One selected segment per handle. Writable authority is pinned; explicit read-only sessions can select another same-domain segment. No latest external-state assertion.",
       "No receipt authentication by checkNote; fulfill still authenticates the exact delivery.",
       "Saved fulfillment is not another authorization to credit or deliver goods."
     ]
@@ -221,5 +239,23 @@
       "otherwise valid alternate proof and altered original signature",
       "two-handle exact/conflicting replay"
     ]
+  },
+  "custodyBoundary": {
+    "profile": "moe/wallet-offline/v1",
+    "envelopeMaxBytes": 16777216,
+    "observedRealFixtureExportBytes": {
+      "payer": 64330,
+      "receiver": 32174
+    },
+    "cipher": "AES-256-GCM",
+    "randomKeyBytes": 32,
+    "randomNonceBytes": 12,
+    "tagBytes": 16,
+    "authority": "Authenticated fixed domain, segment, operator and scope root; versioned header",
+    "state": "Seven complete logical wallet tables; source custody marker stays behind; destination records expected export digest",
+    "source": "Export/freeze same BEGIN IMMEDIATE transaction; exact retry; all current-version source mutations refused across connections/restarts",
+    "restore": "Authenticate owned ciphertext and independent expected digest before fresh exclusive path creation; all state/provenance imported atomically; reject raced destination writes",
+    "secretHandling": "No plaintext staging files; temp_store=MEMORY; worker key only via stdin; no key/operator traffic. JS strings/process memory are not securely erased.",
+    "evidenceScope": "Private local fixture process acceptance, not qualified encrypted-device custody, continuous disaster recovery or automatic rollback protection"
   }
 }
