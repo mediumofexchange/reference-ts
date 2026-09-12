@@ -4,51 +4,60 @@ Updated: 2026-09-12
 
 ## Goal
 
-Device custody profile and read-only preflight delivered in b9d85b8; malformed,
-adverse and unavailable observations refuse, and offline handoff remains distinct
-from active-device loss. No real secrets or machine controls changed.
-CI fix a86d9e4 stops the expected invalid-input child's exit 2 leaking from the
-passing suite. New CI-invocation regression passed; all seven hosted CI jobs
-passed on a86d9e4 (run 34714971567), including Windows and real-proof acceptance.
-Progress guidance now uses brief reassessment after meaningful product changes
-and omits unchanged percentages for routine fixes/tooling. Both repositories
-use main; companion money-from-first-principles/main 60f380c changes AGENTS.md
-only. Normative content remains at 7ea0ee8. No runtime, circuit, derivation,
-dependency or custody-schema changes. Check latest delivery CI on resumption.
+Successor restoration now connects real capsule recovery to exact local v3
+record evidence in a fresh process. It authenticates signed directories,
+snapshot preimages, headers and ordered local records before scanning; a
+replica cannot replace the independently selected fixture checkpoint or supply
+a separate spent list. Results are unspendable candidates with unresolved
+coverage, never a full-replay or current-range claim.
+
+Implementation branch: feat/successor-restoration-evidence, based on main
+3f07307. Companion money-from-first-principles/main remains 60f380c; normative
+content stays 7ea0ee8. No normative, runtime, circuit, key, dependency or
+configuration change. Review and final acceptance passed; delivery in progress.
 
 ## Status
 
-- [Device custody contract](docs/POOL_WALLET_DEVICE.md) selects one Windows
-  holder account/device, a protected flat directory on its BitLocker OS volume,
-  PIN startup and explicit OS spill/backup controls. Provisioning is not performed.
-- Current paper recovery record binds one exact destination. Mark the export
-  historical before activating a matching unfrozen restore; lost replies stay
-  with that same destination. Old exports cannot resume after later activity.
-- Read-only preflight inspects path/volume, conservative directory/file ACLs,
-  encryption status/protector types, Secure Boot and TEMP/TMP. It does not query
-  recovery keys. Its report always has qualified=false and lists manual evidence.
-- Independent design and actual-source adversarial review closed. Fixed provider
-  array/truthiness coercion and non-exact GUID anchors; nearby cases regressed.
-- Configured v2 remains one initial constant-payout backing, no imports/recovery
-  clauses; exact saved retries need no artifacts, new verification uses real pins.
-  Local venue and independent digest authentication remain modeled.
-
+- [Restoration experiment](docs/POOL_DEPLOYMENT_PROBES.md#restoration-from-exact-local-evidence):
+  issue 10, payment 7/change 3, later payment 5/receiver change 2. Fresh processes
+  recover the appropriate change without request records, payer secrets or
+  original operator callbacks. Burn's nullifier/change positions also exercised.
+- Current selection rejects stale and same-sequence alternative packages.
+  Missing/reordered/substituted records and capsules return no partial results.
+  Retained independent bytes survive source loss; wrong seed/no matches never
+  imply complete zero balance. Current/stale request journals cannot override
+  evidence; the fixture IPC rejects journal fields. Imports/recovery refuse.
 ## Evidence
 
-- Final focused suite: 320 assertions passed, independently rerun; synthetic
-  providers/in-memory ACLs plus real isolated invalid-path CLI. Added Windows CI
-  invocation regression failed before the exit fix and passed afterward; this
-  now runs in the Windows step. Focused self-review, docs and diff checks passed.
-- [Source pins and observed report](docs/pool-wallet-device-verification.json):
-  read-only run outside sandbox, process exit 2/automatic fail. OS-volume/NTFS,
-  path and TEMP/TMP observations passed; directory ACL refused; BitLocker/PIN and
-  Secure Boot unavailable. No host security settings or permissions were changed.
-- Reused unchanged runtime/full/real proof baseline main 1f06f1b, hosted CI
-  34712726859 success, verified this session. That acceptance funds 4+6, pays 7,
-  freezes/restores before checkpoint, reconciles exact retries, rotates receiver
-  credentials and spends change 3; separate public audit outstanding 10.
-- No target physical theft, cross-account, power-loss, backup-isolation or
-  continuous recovery evidence. A preflight pass would not close those gates.
+- `npm run check:pool:restoration`: 14 focused groups passed, independently rerun.
+  Actual-source adversarial review closed without material issues; burn and
+  unauthenticated terms cases added and read back. [Report](docs/pool-restoration-evidence-verification.json)
+  records LF-normalized source hashes and exact experiment limits.
+- Tests deliberately retain synthetic proofs/history/terms/authority, accept
+  authenticated invalid supply totals and unverified terms as local evidence,
+  and keep all candidates unspendable. No deployed availability, authenticated
+  venue range, full replay, certified path or durable invoice-restoration claim.
+- Reuse unchanged full/runtime/real-proof baseline main 3f07307: all seven
+  hosted CI jobs passed, run 34715502862, verified this session. New experiment
+  runs in the existing Linux/Windows delivery CI command. Final
+  `npm run check:pool:delivery`, docs and diff checks passed; merge/push remains.
+
+## Existing local product and custody boundary
+
+- Configured v2 supports one initial constant-payout backing, real-proof local
+  payments and independent public audit. Exact saved retries need no artifacts;
+  new verification uses real pins. Venue and digest authentication are modeled.
+- Encrypted offline handoff freezes the source and binds one exact destination.
+  Mark the paper export historical before activating the matching unfrozen
+  restore; lost replies stay with that destination. Old exports cannot resume
+  after activity. Continuous recovery after active-device loss is not delivered.
+- [Device custody contract](docs/POOL_WALLET_DEVICE.md) selects Windows account,
+  protected flat directory, BitLocker OS volume/PIN startup and OS spill/backup
+  controls. Read-only preflight always has qualified=false and manual evidence.
+  [Observed report](docs/pool-wallet-device-verification.json): automatic fail;
+  directory ACL refused, BitLocker/PIN and Secure Boot unavailable. No host
+  controls or secrets changed. Physical theft, cross-account, power-loss,
+  backup-isolation and continuous-recovery qualification require separate authority.
 
 ## Retained Ergo evidence; node stopped
 
@@ -65,26 +74,22 @@ dependency or custody-schema changes. Check latest delivery CI on resumption.
 
 ## Next
 
-1. Verify delivered main parity and hosted CI for the commit with this handoff.
-2. Device qualification needs separately authorized provisioning/test hardware
-   for the contract's cross-account, PIN startup, power-loss and handoff drills.
-   Do not alter this workstation's controls under development-only authorization.
-3. Continue independent recovery work: inspect the existing successor delivery
-   experiment and contract, then define an end-to-end wallet/public-evidence
-   restoration experiment with omitted/current/stale request and delivery data.
-   Keep it outside pinned v2; commit any normative gap before dependent code.
-   Imported-note selection, consolidation and external witness publication remain
-   open; no applied Ergo-history claim is established.
+1. Finish final checks and authorized delivery; verify hosted CI and main parity.
+2. Define the complete initial-segment public-package replay boundary: terms,
+   configuration/key authority, proof/state replay and authenticated current
+   record ranges. Reuse the v3 codecs and restoration cases; commit reviewed
+   normative gaps before dependent runtime code. Adoption remains unset.
+3. Device qualification needs separately authorized provisioning/test hardware;
+   do not alter this workstation's controls. Imported-note selection,
+   consolidation, external publication and applied Ergo-history evidence remain open.
 
 ## Open questions
 
-- Last reassessed 2026-09-12: **roughly 50% done / 50% remaining**, plausible
-  done range **40-60%**. The old 45% predated working local wallet flows; verified
-  payments, private delivery, configured operation and offline handoff now earn
-  reusable progress despite open release gates. This is coarse judgment, not a
-  measured score; the device probe and CI repair themselves add no product credit.
+- Reassessed 2026-09-12: roughly **50% done / 50% remaining**, plausible done
+  range **40-60%**. This experiment connects reusable boundaries but does not
+  materially move that coarse estimate or close runtime recovery gates.
 - Largest blocks: runtime recovery and authenticated evidence/publication,
   qualified device custody/continuous recovery and supported user operation.
-- Switch to a fresh instance for successor restoration integration: the next
-  work crosses protocol/version boundaries beyond this OS probe, and fresh
-  context should be more efficient. This is not a measured model comparison.
+- Stay with this instance for the next public-package boundary: its current
+  context includes the exact authentication/replay gap and reusable sources.
+  This is an efficiency recommendation, not measured model performance.

@@ -1,0 +1,66 @@
+{
+  "schema": "moe-successor-restoration-evidence-experiment-1",
+  "node": "v24.6.0",
+  "platform": "win32",
+  "specification": "7ea0ee8",
+  "checks": [
+    "fresh receiver restores only change 2 from exact signed local evidence, without a request journal",
+    "payer restores change 3; issued input, spent payment, zero and foreign outputs are filtered",
+    "burn nullifiers remove the received note and its bound change remains discoverable",
+    "old complete package is historical only and cannot substitute for the current selection",
+    "same-sequence signed alternative and wrong operator cannot replace independent selection",
+    "omitted record, reordered records and missing or corrupted capsule leave no partial candidates",
+    "substituted proof, authorization, snapshot, directory and commitment signature refuse",
+    "missing public components and empty view never become complete zero balance",
+    "request journal cannot override public spentness or supply an output",
+    "retained independent bytes survive source loss; replacement restores unavailable evidence",
+    "wrong venue/domain and authenticated foreign statement context refuse",
+    "imports and recovery statements remain explicit unsupported scope",
+    "bound local bytes authenticate even invalid proof and totals; never certify replay or spendability",
+    "reader budgets are resource refusal and unexpected code errors propagate"
+  ],
+  "sourceSha256Lf": {
+    "scripts/pool/delivery/evidence-reader.mjs": "ec71bf81ee48491f62e25e3cfc025cb4ca73a659e4919f6939c13dfcdd96a0bd",
+    "scripts/pool/delivery/evidence-worker.mjs": "6458e97ba8a7ec535f09e16043794c498f434b2b87b9b5de874644e7d5de955e",
+    "scripts/pool/delivery/evidence-check.mjs": "0feb5059a348018ecbb210b98a83dd9597ec7ece258f115f0ec1865c8a410948",
+    "scripts/pool/delivery/crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
+    "model/pool-v3-trail.ts": "f4d46232470855944cb60d490a7b41d96ad1a93e6082e4f8e3f64734346bac2d",
+    "model/pool-v3-records.ts": "fc651fc4bd36bc339d849ea2e8fc2ee01409d02fbbabb69623336fa3a01f1be1",
+    "model/pool-v3-headers.ts": "892248209fcfe92b1b10d113517c9b828cb01f78f2c7a8984d9fd8f00b8aee86",
+    "model/pool-v3-commitments.ts": "2cbde8c1dcbd351a14bc163c559338915025614656f7ed25251db12f72138d88"
+  },
+  "fixtureBytes": {
+    "currentTrail": 2858,
+    "historicalTrail": 1916
+  },
+  "currentReceiver": {
+    "status": "selected-evidence-candidates",
+    "candidates": [
+      {
+        "cm": "20016450400229862260315982978080574655659914606566423218115411022269768934182",
+        "nf": "12058497498415675965741768832675609032006684716902679217780292869582944906659",
+        "backing": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d",
+        "value": "2",
+        "observedAt": "13",
+        "spendable": false
+      }
+    ],
+    "stats": {
+      "trials": 9,
+      "matches": 4
+    },
+    "evidenceScope": "selected-local-v3-trail-only",
+    "selectionSource": "independent-test-fixture",
+    "authenticatedFullV3Finality": false,
+    "completenessClaim": false,
+    "noMatchesMeansZeroBalance": false,
+    "unresolvedCoverage": true,
+    "spendable": false
+  },
+  "limitations": [
+    "Synthetic proofs, history root, terms, authority and venue selection; no final v3 configuration.",
+    "Local byte authentication and capsule scanning only; no full replay, supply verification, range completeness or certified paths.",
+    "Single backing/segment without imports or recovery; candidates never authorize spending.",
+    "Memory-only local fixture IPC; no custody, network retrieval, permanent retention or durable invoice restoration evidence."
+  ]
+}

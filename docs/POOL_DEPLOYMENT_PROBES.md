@@ -144,6 +144,44 @@ paths. Seed recovery does not discover unknown venues/backings, prove a
 complete balance or guarantee permanent availability. Device and full-history
 replay costs remain additional gates.
 
+### Restoration from exact local evidence
+
+`npm run check:pool:restoration` connects the existing capsule scanner to the
+canonical v3 served-trail, record, snapshot and header codecs. It also runs in
+`check:pool:delivery`, including Linux/Windows CI. The
+[retained result](pool-restoration-evidence-verification.json) pins the sources;
+temporary codec builds are removed after the run.
+
+A fresh child receives only a synthetic seed, an independently selected fixture
+identity and public package bytes. It verifies the operator signature, complete
+single-entry directory, snapshot preimage, segment context and ordered local
+evidence chain before scanning bound capsules. Output commitments and spent
+nullifiers come from those records, never a separately supplied replica list.
+No request journal, payer secrets or original operator callbacks enter the child.
+The fixture issues 10, pays 7 with change 3, then pays 5 with receiver change 2.
+Restoration finds the appropriate change and filters spent, zero and foreign
+outputs. A separate burn case exercises its nullifier/change layout.
+
+An old package yields historical candidates only when explicitly selected as
+historical. Against the current independently supplied fixture selection it
+refuses, including a validly signed alternative at the same sequence. Missing
+records/capsules, reordering, substitution and lost source copies are exercised.
+Current or stale request journals cannot override the public evidence: the IPC
+rejects journal fields. A retained independent copy restores the same candidates.
+Resource refusal is distinct from unresolved evidence; neither is operator fault.
+
+**These are candidate notes, never permission to spend.** The judging index and
+checkpoint selection are test inputs, not authenticated venue ranges. Proofs,
+history roots, backing terms and authority are synthetic; successful local
+authentication deliberately also accepts signed invalid totals and does not
+validate term signatures. All results retain unresolved coverage, no complete
+balance or full-finality claim, and `spendable=false`. The experiment supports
+one backing and one segment with an empty opening; imports and recovery records
+refuse. Complete replay, independently authenticated current ranges, certified
+paths, durable invoice restoration and network retention remain dependencies
+for the end-to-end restoration target. No v2 bytes, circuits, keys or runtime
+APIs change, and no v3 configuration is adopted.
+
 ## Transfer shape and ordinary fees
 
 Run the retained comparison and hostile checks with Node 24:

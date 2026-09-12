@@ -66,7 +66,11 @@ pinned real circuits and multi-segment replay separately from the ordinary
 test suite. With Node 24, `npm run check:pool:delivery` exercises the
 [successor delivery/restoration probes](POOL_DEPLOYMENT_PROBES.md#delivery-and-seed-restoration):
 seed-encrypted capsules, fresh-process recovery over synthetic public data,
-and real proof binding. `npm run check:pool:fees` compares the successor
+real proof binding, and [candidate restoration from exact signed local evidence](POOL_DEPLOYMENT_PROBES.md#restoration-from-exact-local-evidence).
+The latter authenticates local record bytes and refuses stale or substituted
+packages against an independent fixture selection; all candidates remain
+unspendable without full replay, authenticated ranges and certified paths.
+`npm run check:pool:fees` compares the successor
 [transfer shapes and ordinary fees](POOL_DEPLOYMENT_PROBES.md#transfer-shape-and-ordinary-fees)
 with real proofs. These probes do not implement a pool wallet or v3 finality.
 `npm run check:pool:spent` verifies the successor's
