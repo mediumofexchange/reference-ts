@@ -219,14 +219,47 @@ Failed runs retain their image after best-effort cleanup and cannot claim empty
 jobs or reusable database state. Stable host administration/path identity is
 assumed; these are owned-volume controls, not a hostile-code filesystem sandbox.
 
-Windows requires elevation for the disk operations, and this trusted offline
-node inherits it. Public-peer execution must instead separate a small elevated
-disk owner from an ordinary-user node supervisor. The next gate is actual
-cross-session mapping/write access, bounded fresh handoff and parent-failure
-cleanup ordering. Only then add named fixed 20 GiB / 30-minute entrypoints and
-review the concrete connected launch before separate execution authorization.
-The historical custom-RocksDB module/version controls are not prerequisites.
-No connected run or large allocation occurred. See
+Windows requires elevation for disk operations. The earlier control above
+inherited elevation; the current
+[split launcher](../experiments/ergo-range/node-volume-split.ps1) starts the
+node under an ordinary user and checks its token before resume. A separate
+fixed elevated owner creates and retains the VHD; it never starts Java. The
+ordinary session verifies the volume GUID/DOS mapping and actual file access.
+
+A fresh named job is opened by the owner before it publishes its bounded
+GUID/PID/creation-time handoff. Normal completion follows node termination,
+final traffic accounting, API-reader disposal and volume inventory. The owner
+then terminates and verifies the job empty **after** authenticated completion
+or bound-parent death closes further launch admission, before unmapping and
+detaching. Independent review caught a stale empty-job check on an error path;
+the final check now follows admission closure. Twelve native handoff/job guard
+cases supplement the existing 26 process/traffic evidence cases.
+
+The owner's nominal four-minute timeout stops current job members but retains
+the volume until parent completion or death. This prevents a paused parent
+from later launching against a removed volume; a stuck live parent can retain
+the helper and disk indefinitely. Helper termination itself can detach the
+volume before Java exits and remains outside the cleanup claim. Host identity
+and same-user IPC remain trusted. No ACLs, native package or protocol rules
+changed. The [actual split result](ergo-node-volume-split-verification.json)
+passed on 2026-09-12: ordinary parent and verified non-elevated child, one JVM
+for 71,409 ms, 440,512,512 bytes peak commit, expected genesis UTXO state,
+275 loopback socket samples, empty peers/secrets and wallet HTTP 403. Traffic
+was 7,520,534 bytes across 277 samples with a 373 ms maximum gap; stop to empty
+job took 48 ms and final accounting finished 6 ms later. Normal cleanup removed
+the mapping, detached the disk and deleted its exact 67,109,376-byte image.
+
+The separate failure control killed its dedicated ordinary supervisor at the
+first JVM observation with one active job member. Its bound owner recorded
+parent exit, terminated and verified the job empty, removed the mapping and
+detached/deleted its own image without error. Both images, the six recorded
+process IDs and the logical/DOS drive reservation were independently absent
+afterward. This demonstrates parent-death cleanup, not a general failure matrix.
+
+Next add named fixed 20 GiB / 30-minute entrypoints and review the concrete
+connected launch before separate execution authorization. Historical custom
+RocksDB module/version controls are not prerequisites. No connected run or
+large allocation occurred. See
 [reproduction](../experiments/ergo-range/README.md#offline-node-on-a-capped-volume).
 
 ## Earlier prerelease candidate and measured artifact

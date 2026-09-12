@@ -97,7 +97,7 @@ jobs:
       - name: Reference, installed package and durable payment acceptance
         run: npm run check
 
-      - name: Offline database control identity and accounting guards
+      - name: Offline node identity, accounting and volume handoff guards
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
@@ -105,6 +105,8 @@ jobs:
           ./experiments/ergo-range/node-database-evidence.test.ps1
           ./experiments/ergo-range/node-database-native.test.ps1
           ./experiments/ergo-range/native-candidate.test.ps1
+          ./experiments/ergo-range/node-volume-evidence.test.ps1
+          ./experiments/ergo-range/node-volume-handoff.test.ps1
 
       - name: Install pinned offline Ergo probe dependencies
         if: matrix.node == 24

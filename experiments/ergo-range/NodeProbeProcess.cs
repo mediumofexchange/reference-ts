@@ -141,6 +141,12 @@ public static class NodeProbeProcess {
         public uint ProcessId, ThreadId;
     }
     [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr CreateJobObjectW(IntPtr sa, IntPtr name);
+    [DllImport("kernel32.dll", EntryPoint = "CreateJobObjectW", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr CreateNamedJob(IntPtr sa, string name);
+    [DllImport("kernel32.dll", EntryPoint = "OpenJobObjectW", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr OpenNamedJob(uint access, bool inherit, string name);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool DuplicateHandle(IntPtr sourceProcess, IntPtr source, IntPtr targetProcess, out IntPtr target, uint access, bool inherit, uint options);
+    [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+    [DllImport("advapi32.dll", SetLastError = true)] static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+    [DllImport("advapi32.dll", SetLastError = true)] static extern bool GetTokenInformation(IntPtr token, int cls, out int value, int size, out int returned);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetInformationJobObject(IntPtr job, int cls, ref Limits info, uint size);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool QueryInformationJobObject(IntPtr job, int cls, out Limits info, uint size, IntPtr returned);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool QueryInformationJobObject(IntPtr job, int cls, out Accounting info, uint size, IntPtr returned);
@@ -183,6 +189,60 @@ public static class NodeProbeProcess {
         public uint MaxSampledAssociatedProcesses;
         public ProcessObservation[] ObservedProcesses;
         public bool LimitsReadBackBeforeResume, JobEmptyAfterCleanup, ParentConsoleVerified;
+        public bool ChildTokenChecked, ChildElevated;
+    }
+    // Trusted-host lease shared only with the fixed disk owner. The owner must
+    // terminate and observe an empty job before removing the node's volume.
+    // Holding its handle means parent death alone no longer triggers kill-on-close.
+    public sealed class VolumeJob : IDisposable {
+        internal IntPtr Handle;
+        internal bool Creator;
+        internal bool Used;
+        internal VolumeJob(IntPtr handle, bool creator) { Handle = handle; Creator = creator; }
+        public uint ActiveProcesses {
+            get {
+                if (Handle == IntPtr.Zero) throw new ObjectDisposedException("VolumeJob");
+                Require(QueryInformationJobObject(Handle, 1, out Accounting a, (uint)Marshal.SizeOf<Accounting>(), IntPtr.Zero));
+                return a.ActiveProcesses;
+            }
+        }
+        public void StopAndConfirmEmpty() {
+            if (Handle == IntPtr.Zero) throw new ObjectDisposedException("VolumeJob");
+            Require(TerminateJobObject(Handle, 0xe0000001));
+            var clock = Stopwatch.StartNew();
+            while (ActiveProcesses != 0) {
+                if (clock.ElapsedMilliseconds > 5000) throw new Exception("Volume job termination unresolved");
+                Thread.Sleep(25);
+            }
+        }
+        public void Dispose() {
+            if (Handle == IntPtr.Zero) return;
+            StopAndConfirmEmpty();
+            Require(CloseHandle(Handle)); Handle = IntPtr.Zero;
+        }
+    }
+    static string VolumeJobName(string nonce) {
+        if (!Guid.TryParseExact(nonce, "N", out Guid parsed) || parsed == Guid.Empty)
+            throw new ArgumentException("Fresh volume run GUID required");
+        return "Local\\moe-node-volume-" + nonce;
+    }
+    public static VolumeJob CreateVolumeJob(string nonce) {
+        IntPtr handle = CreateNamedJob(IntPtr.Zero, VolumeJobName(nonce));
+        int error = Marshal.GetLastWin32Error();
+        Require(handle != IntPtr.Zero);
+        if (error == 183) { CloseHandle(handle); throw new Exception("Volume job already exists"); }
+        return new VolumeJob(handle, true);
+    }
+    public static VolumeJob OpenVolumeJob(string nonce) {
+        IntPtr handle = OpenNamedJob(0x4 | 0x8, false, VolumeJobName(nonce)); // QUERY | TERMINATE
+        Require(handle != IntPtr.Zero);
+        return new VolumeJob(handle, false);
+    }
+    public static Result RunOnVolumeJob(VolumeJob lease, string executable, string[] arguments, string directory, Func<uint, long, bool> observe) {
+        if (lease == null || !lease.Creator || lease.Used || lease.Handle == IntPtr.Zero || lease.ActiveProcesses != 0)
+            throw new ArgumentException("Fresh creator volume job required");
+        lease.Used = true;
+        return RunCore(executable, arguments, directory, "offline-volume-node", 4294967296UL, 120000, 15728640, observe, false, lease.Handle);
     }
     public sealed class ProcessObservation {
         public uint ProcessId;
@@ -239,7 +299,7 @@ public static class NodeProbeProcess {
         RequireExistingConsole();
         return RunCore(executable, arguments, directory, name, memory, wallMs, outputBytes, observe, true);
     }
-    static Result RunCore(string executable, string[] arguments, string directory, string name, ulong memory, uint wallMs, uint outputBytes, Func<uint, long, bool> observe, bool inheritConsole) {
+    static Result RunCore(string executable, string[] arguments, string directory, string name, ulong memory, uint wallMs, uint outputBytes, Func<uint, long, bool> observe, bool inheritConsole, IntPtr volumeJob = default(IntPtr)) {
         if (IntPtr.Size != 8 || wallMs == 0 || wallMs > 120000 || outputBytes == 0 || outputBytes > 16777216 || memory < 268435456UL || memory > 4294967296UL)
             throw new ArgumentException("Requires x64 and finite budgets");
         // Suspended, explicit Unicode environment and creation-time job assignment.
@@ -254,7 +314,8 @@ public static class NodeProbeProcess {
         ProcessInfo child = new ProcessInfo();
         Result result = null;
         try {
-            job = CreateJobObjectW(IntPtr.Zero, IntPtr.Zero); Require(job != IntPtr.Zero);
+            if (volumeJob == IntPtr.Zero) { job = CreateJobObjectW(IntPtr.Zero, IntPtr.Zero); Require(job != IntPtr.Zero); }
+            else Require(DuplicateHandle(GetCurrentProcess(), volumeJob, GetCurrentProcess(), out job, 0, false, 2));
             var limits = new Limits { Basic = new Basic { Flags = flags, ActiveProcesses = 1 },
                 ProcessMemory = new UIntPtr(memory), JobMemory = new UIntPtr(memory) };
             uint size = (uint)Marshal.SizeOf<Limits>();
@@ -292,6 +353,13 @@ public static class NodeProbeProcess {
             Require(CreateProcessW(executable, command, IntPtr.Zero, IntPtr.Zero, true, creationFlags,
                 environment, directory, ref startup, out child));
             assigned = true;
+            if (volumeJob != IntPtr.Zero) {
+                Require(OpenProcessToken(child.Process, 0x8, out IntPtr token));
+                try {
+                    Require(GetTokenInformation(token, 20, out int elevated, 4, out int returned));
+                    if (returned != 4 || elevated != 0) throw new Exception("Volume node must have an ordinary token");
+                } finally { CloseHandle(token); }
+            }
             Require(IsProcessInJob(child.Process, job, out bool member));
             if (!member) throw new Exception("Child not in configured job");
             Require(QueryInformationJobObject(job, 9, out Limits installed, size, IntPtr.Zero));
@@ -358,6 +426,7 @@ public static class NodeProbeProcess {
             Require(QueryInformationJobObject(job, 1, out Accounting accounting,
                 (uint)Marshal.SizeOf<Accounting>(), IntPtr.Zero));
             result = new Result { Case = name, Outcome = outcome, ExitCode = exit, ElapsedMs = clock.ElapsedMilliseconds,
+                ChildTokenChecked = volumeJob != IntPtr.Zero, ChildElevated = false,
                 LaunchMode = launchMode, CreationFlags = creationFlags, ParentConsoleVerified = inheritConsole,
                 PeakCommitBytes = measured.PeakJobMemory.ToUInt64(),
                 PeakProcessCommitBytes = measured.PeakProcessMemory.ToUInt64(), CommitLimitBytes = memory,

@@ -123,46 +123,58 @@ traffic and process controls remain necessary before connected execution.
 
 ## Offline node on a capped volume
 
-`node-volume-control.ps1` combines the verified standard node and maintained
-Java with the existing fixed 64 MiB Windows VHD, drive-letter mapping, process
-job and real host-interface accounting. Default invocation is read-only:
+`node-volume-split.ps1` uses an ordinary-user supervisor and node. A separate
+UAC-elevated `node-volume-owner.ps1` creates, formats and maps one fresh fixed
+64 MiB VHD and holds its native handle. Neither script selects an existing disk,
+changes ACLs or starts public-peer connections. Default invocation is read-only:
 
 ```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-volume-handoff.test.ps1
 pwsh -NoProfile -File experiments/ergo-range/node-volume-evidence.test.ps1
-pwsh -NoProfile -File experiments/ergo-range/node-volume-control.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-volume-split.ps1
 ```
 
-The fixed execution requires an elevated Windows PowerShell 7 session and an
-absent `scratch/node-volume-control/`. It never opens an existing disk and has
-no disk selector, size option or connected mode:
+Execute from an **ordinary** PowerShell 7 session. The script requests UAC only
+for the disk owner. It creates a fresh GUID directory below
+`scratch/node-volume-split/` and leaves small `result.json` and `owner.json`
+reports there. A successful run removes its own VHD:
 
 ```powershell
-pwsh -NoProfile -File experiments/ergo-range/node-volume-control.ps1 -Execute > scratch/ergo-java/volume-control-result.json
+pwsh -NoProfile -File experiments/ergo-range/node-volume-split.ps1 -Execute
 ```
 
-One offline node JVM runs for at most nominally 120 seconds, with 4 GiB commit,
-2 GiB heap, 25% CPU scheduling, one process and 15 MiB captured output. Node
-data, home, temp and configured diagnostics use the verified volume. The
-supervisor observes the fixed diagnostic paths without scanning live databases.
-After 60 seconds, three fixed asynchronous loopback reads check genesis state,
-empty peers and unauthenticated wallet refusal; ten more seconds precede the
-whole-job stop. This is not graceful shutdown or a crash-recovery test.
+The [recorded acceptance](../../docs/ergo-node-volume-split-verification.json)
+contains successful ordinary-node startup and parent-death cleanup on this host.
 
-The real traffic window uses the planned 8 GiB trigger / 10 GiB final ceiling,
-including unrelated host traffic, with a 1-second maximum sample/final gap and
-2-second stop-to-empty evidence check. Synchronous OS calls can stall; failed
-timing invalidates evidence rather than proving independent hard deadlines.
-The host retains at least 100 GiB free. The 64 MiB VHD bounds its files, not all
-OS/JRE writes or supervisor memory. Final diagnostics/output and the report
-have 16 MiB checks. Normal success requires empty job, final accounting, empty
-secrets, identity/capacity readback, removed mapping and detached/deleted image.
-Failures retain the image after best-effort cleanup; inspect the report before
-retrying, and never substitute a different disk or recursive cleanup target.
+The fixed parent-failure control must run in its own process: it deliberately
+kills that process at the first Java observation. Inspect the resulting
+`parent-failure.json` and `owner.json`; the interrupted parent has no result:
 
-The node inherits this control's elevation. It is restricted to the reviewed
-offline configuration. A connected launcher still needs separate privileged
-disk ownership and ordinary-user node execution, with actual mapping visibility
-and cleanup evidence, before the proposed 20 GiB / 30-minute run.
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-volume-split.ps1 -Execute -ParentFailureControl
+```
+
+One node JVM uses the pinned offline config and standard packages, 4 GiB commit,
+2 GiB heap, 25% CPU, 120-second nominal wall time and 15 MiB captured output.
+Its token is checked before resume. Data, home, temp and diagnostics use the
+verified volume. Three bounded loopback reads after 60 seconds check genesis,
+empty peers and wallet refusal; ten more seconds precede the whole-job stop.
+Real traffic accounting retains the 8 GiB trigger / 10 GiB final maximum,
+1-second sampling/final gaps and 2-second stop-to-empty acceptance. These are
+observed timing checks, not independent hard deadlines. Host reserve is 100 GiB.
+
+A fresh named job and GUID/PID/creation-time handoff bind parent and owner.
+The owner verifies an empty job **after** parent completion or death closes
+future admission, then removes only its own mapping and image. At its nominal
+four-minute timeout it stops the job but retains the mounted volume until the
+parent finishes or dies; a stuck live parent can therefore retain the helper
+and disk indefinitely. Killing the helper itself is outside the demonstrated
+cleanup ordering. This trusted-host IPC is not protection against malicious
+same-user file mutation, and the volume is not a whole-host filesystem sandbox.
+
+The earlier elevated `node-volume-control.ps1` and its
+[recorded result](../../docs/ergo-node-volume-verification.json) remain historical
+reproduction. No connected mode, 20 GiB allocation or 30-minute run exists yet.
 
 ## Earlier platform controls
 Its [first-sync control selection](../../docs/ERGO_NODE_PREFLIGHT.md#first-sync-control-selection)
