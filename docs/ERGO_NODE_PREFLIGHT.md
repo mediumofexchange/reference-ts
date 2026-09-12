@@ -1,24 +1,71 @@
 # Dedicated Ergo node probe
 
-Status: 2026-09-10, artifact inspection and launch requirements. The
+Status: 2026-09-12, stable package selected with ordinary storage evidence. The
 [stock no-spending-key decision](../decisions/2026-09.md#2026-09-10--keep-the-source-probe-free-of-spending-keys)
 permits a finite, source-configured offline startup on a trusted host. The runtime remains v2;
 this does not select a production source, change a parser budget or establish
 an authenticated range. Companion specification: `main` at `7ea0ee8`.
 
 Current direction: [prefer the standard Ergo distribution](../decisions/2026-09.md#2026-09-10--prefer-the-standard-ergo-distribution).
-The custom native trial is suspended. Stock Windows startup already passed;
-later standalone version/module refusals do not establish a node storage bug.
-The source-built NO_COMPRESSION candidate does not exercise Ergo's normal LZ4
-configuration. Compare stable v6.0.5 with the prerelease fixture requirements
-and test actual stock storage before considering native substitution.
-Historical preparation and refusal evidence below remain valid within their
-original scope; they are not the current execution queue.
+Select the unmodified stable **v6.0.5 Windows x64 bundle** for the next source
+probe. It uses LevelDB and avoids the prerelease's RocksDB migration. The custom
+native trial remains suspended. Earlier v6.1.5 preparation and refusals below
+remain historical evidence, not the current execution queue.
 
-## Candidate and measured artifact
+## Stable package and ordinary storage result
 
-Keep the fixture baseline, Ergo **v6.1.5**, rather than changing consensus
-versions during the comparison. The
+The [stable evidence](ergo-stable-verification.json) records the official
+108,916,979-byte archive and verified GitHub SHA-256 digest
+`28be43dd010792bc72d320952dcfde368a9a21e3926409f78757e6218583ea06`.
+It expands to 167 files / 131,488,960 bytes. The unchanged node JAR is
+82,384,324 bytes, SHA-256
+`2a7e2978cb09538ed6780d85ae3aa39c1ecce10e5e5a6e0dc3cd8ab087851588`.
+All 164 bundled Java runtime files equal the earlier measured stock runtime.
+Java 21.0.1 is also checked by the new worker; no Java replacement or installation
+was needed for this control. Runtime maintenance remains a separate question.
+
+The stable source commit is `5528ef569a41ebccbc8658212e6ee3c97d990b96`.
+An independently reviewed comparison finds identical Git blobs for 18 relevant
+files: block/transaction/header formats, required block routes, history reader,
+stats, settings and mainnet defaults, and node/wallet/network entrypoints.
+No inspected witness-source requirement needs the later RocksDB migration.
+This is scoped source compatibility; existing fixture provenance pins remain
+unchanged, and no stable-node sync or fixture ancestry has been demonstrated.
+Keeping all historical blocks also does not guarantee historical AD proofs:
+the shared UTXO path retains generated proofs only within its configured suffix.
+The current fixture comparison needs transaction spending proofs instead.
+
+On 2026-09-12, the [worker](../experiments/ergo-range/NodeStableStorage.java)
+and [launcher](../experiments/ergo-range/node-stable-storage.ps1) successfully
+exercised the actual stock `LDBVersionedStore`, using ordinary node options:
+
+- Write version 1; write version 2 with an update, removal and insertion.
+- In a fresh JVM, verify version 2, reject an unknown rollback target without
+  changing values/version, then roll back and verify version 1.
+- In another fresh JVM, verify that version 1 and its restored values persisted.
+
+Every `Try` result is checked, and success is emitted only after closing the
+store. All three workers selected the native `JniDBFactory`; experimental
+pure-Java fallback is refused. The compiler and workers exited 0 with empty
+process jobs. Their durations were 3,077 / 10,412 / 10,870 / 10,367 ms.
+There were 136 socket observations with no sockets, and the final run contained
+22 files / 2,675,278 bytes, including three extracted native-library files.
+The initial helper compilation failed on an ambiguous Scala bridge method;
+the corrected direct Buffer-to-Seq conversion compiled and passed the run.
+
+The reused supervisor limits each process to nominally 30 seconds, 1 GiB commit,
+25% CPU scheduling and 64 KiB output; the launcher observes a 16 MiB file threshold.
+These observations are not hard disk/network containment, and synchronous
+observer calls can delay the wall deadline. Native factory selection does not
+hash the actually loaded module. The upstream store uses non-sync writes;
+normal close/reopen does not establish power-loss durability, crash recovery,
+disk-full behavior, compaction stress, full sync or protocol recovery acceptance.
+See [reproduction](../experiments/ergo-range/README.md#stable-stock-storage-control).
+
+## Earlier prerelease candidate and measured artifact
+
+The earlier comparison kept the fixture baseline, Ergo **v6.1.5**. Its source
+and artifact identities remain historical provenance. The
 [tag reference](https://api.github.com/repos/ergoplatform/ergo/git/ref/tags/v6.1.5)
 resolves directly to `c36466405abc9a2ddda37e890635f00d593041f5`.
 The [release](https://github.com/ergoplatform/ergo/releases/tag/v6.1.5)

@@ -16,6 +16,42 @@ Do not expose this probe as an arbitrary-file or network verification API.
 
 The separate [dedicated-node preflight](../../docs/ERGO_NODE_PREFLIGHT.md)
 pins a Windows distribution and records the separate finite node-startup probe.
+
+## Stable stock storage control
+
+The current candidate is the complete stable v6.0.5 Windows x64 package.
+The later RocksDB/custom-native controls below retain earlier evidence and are
+suspended. Existing fixture provenance remains pinned separately.
+
+Download into an existing `scratch/ergo-stable/`, check the official artifact,
+then extract into an absent `bundle/` (PowerShell 7):
+
+```powershell
+$stableZip = 'scratch/ergo-stable/ergo-node-v6.0.5-windows-x64.zip'
+curl.exe --fail --location --proto '=https' --proto-redir '=https' --max-time 180 --max-filesize 115343360 --limit-rate 8M --output $stableZip https://github.com/ergoplatform/ergo/releases/download/v6.0.5/ergo-node-v6.0.5-windows-x64.zip
+if ($LASTEXITCODE -ne 0) { throw 'Download failed' }
+if ((Get-Item -LiteralPath $stableZip).Length -ne 108916979 -or (Get-FileHash -LiteralPath $stableZip -Algorithm SHA256).Hash -ine '28be43dd010792bc72d320952dcfde368a9a21e3926409f78757e6218583ea06') { throw 'Package mismatch' }
+if (Test-Path -LiteralPath 'scratch/ergo-stable/bundle') { throw 'Fresh bundle directory required' }
+Expand-Archive -LiteralPath $stableZip -DestinationPath 'scratch/ergo-stable/bundle'
+pwsh -NoProfile -File experiments/ergo-range/node-stable-storage.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-stable-storage.ps1 -Execute > scratch/ergo-stable/storage-result.json
+```
+
+The existing pinned Eclipse compiler at `scratch/sync-preparation/ecj-3.37.0.jar`
+is required. Default mode checks the node JAR and all 164 JRE files without
+execution. `-Execute` requires absent `scratch/ergo-stable/storage-run/`; it
+compiles the worker and runs three separate JVMs against the stock versioned
+store for write, reopen/rollback and reopen verification. It starts no node,
+wallet or peers. Preserve the report before removing the exact owned run folder.
+On failure, `storage-run/processes.json` preserves returned process results;
+observer/launch exceptions can occur before a result is returned.
+
+This is an ordinary persistence control with native factory selection, not a
+crash/disk-full test, loaded-module attestation or full-sync acceptance. Limits,
+source comparison and measured results are in the preflight and
+[stable evidence](../../docs/ergo-stable-verification.json).
+
+## Earlier platform controls
 Its [first-sync control selection](../../docs/ERGO_NODE_PREFLIGHT.md#first-sync-control-selection)
 also records a narrow rootless WSL control. From the repository root in the
 existing Ubuntu 20.04 distro, run `sh experiments/ergo-range/sync-namespace-control.sh`.

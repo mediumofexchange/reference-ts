@@ -1,76 +1,73 @@
 # Current work
 
-Updated: 2026-09-10
+Updated: 2026-09-12
 
 ## Goal
 
-Return the Ergo witness probe to a complete, unmodified upstream distribution.
-Next acceptance: select a practical standard package/runtime, check its fit to
-fixture requirements, and prepare a bounded offline test of actual Ergo storage.
-Custom native execution is suspended. No sync, peers, deployment or installation
-in this reassessment.
+Stable Ergo v6.0.5 Windows package selected and its actual versioned storage
+passed ordinary write, reopen and rollback checks in separate JVMs. Deliver this
+bounded result; next prepare stock-node startup/settings against this package.
+No sync, peers, deployment, custom native build or host installation.
 
-Delivery: `main`; baseline `baacb26`.
+Delivery: `main`; baseline `6b4ad87`.
 Companion specification: `money-from-first-principles/main` at `7ea0ee8`.
-No normative change.
+No normative change; original fixture provenance pins remain unchanged.
 
 ## Status
 
-- [Route correction](decisions/2026-09.md#2026-09-10--prefer-the-standard-ergo-distribution)
-  replaces custom native qualification as the next prerequisite. Independent
-  source review agrees that current evidence does not establish its necessity.
+- [Standard route](decisions/2026-09.md#2026-09-10--prefer-the-standard-ergo-distribution)
+  now selects the complete stable Windows bundle, using LevelDB rather than the
+  prerelease RocksDB migration. No inspected witness-source feature needs v6.1.5.
+- [Evidence](docs/ergo-stable-verification.json) records exact package/source pins,
+  the successful storage run, independent review and verified scratch cleanup.
+- Bundle remains at `scratch/ergo-stable/bundle/`; archive and manifest beside it.
+  Jar SHA-256: `2a7e2978cb09538ed6780d85ae3aa39c1ecce10e5e5a6e0dc3cd8ab087851588`.
+  All 164 bundled JRE files equal the earlier stock Java 21.0.1 runtime.
+- The custom-DLL trial is suspended. Do not run its prepared scratch launcher.
+  Earlier native refusals and source-build evidence remain historical, not gates
+  that the stable LevelDB candidate must satisfy.
 
 ## Evidence
 
-- Stock v6.1.5 Windows already passed offline startup on Java 21.0.1: `/info` 200,
-  no connected peers, exit 0. This proves startup only, not storage recovery,
-  sync or all Java/native compatibility.
-- Later standalone refusals came from our native-version gate and module policy
-  before database operations. The 10.1.3 Windows DLL finding is real; it is not
-  a demonstrated failure of Ergo's storage path.
-- Inspected upstream RocksDBFactory and versioned store have no native-version
-  equality gate or histogram call. Factory uses LZ4; the custom NO_COMPRESSION
-  candidate does not cover that ordinary node configuration.
-- Standard and Windows Maven 10.2.1 downloads contain the same DLL and all 253
-  RocksDB classes as Ergo. Exact pins remain in native provenance docs.
-- Upstream v6.1.5 Docker/integration setup uses Temurin 11 on Ubuntu. Another JRE
-  cannot change the version in the same Windows DLL. Maintained Java 11 is an
-  operating-baseline candidate, not a proven fix for that mismatch.
-- GitHub latest-release API on 2026-09-10 identifies stable v6.0.5 with Windows
-  and Linux x64 bundles. Existing v6.1.5 is a prerelease fixture baseline;
-  assess whether its features are actually needed before retaining it.
-- WSL listing confirms Ubuntu-20.04 is installed. Earlier namespace checks
-  passed, but Linux Java/storage/network/process limits remain unqualified.
-  Docker was not found on PATH; this is not a complete installation inventory.
+- Stable commit `5528ef569a41ebccbc8658212e6ee3c97d990b96`: 18 relevant source
+  files exactly match the prerelease, covering formats/API/settings and service
+  boundaries. This is scoped source fit, not full dependency or binary equivalence.
+- Four processes (compiler plus three storage JVMs) exited 0 with empty jobs,
+  verified limits and native LevelDB factory selection. Write/update/delete,
+  fresh-process reopen, unknown rollback refusal, known rollback and another
+  fresh-process reopen passed. No node actors or keys were involved.
+- Durations: 3,077 / 10,412 / 10,870 / 10,367 ms; maximum peak commit 145,022,976
+  bytes. 136 socket samples observed none. Final 22 files totaled 2,675,278 bytes.
+  Independent readback reproduced source/report hashes and the inventory.
+- The initial helper compilation failed on an ambiguous Scala bridge method;
+  the corrected direct Buffer-to-Seq conversion passed. Its refusal is preserved.
+- Normal non-sync writes and close/reopen do not prove crash/power-loss durability,
+  disk-full behavior, sync or protocol recovery. Factory identity is observed;
+  loaded DLL identity is not hashed. Sampling is not disk/network containment.
+- Full project checks passed: 96 files / 1,795 tests in 267.18 s, plus docs,
+  typecheck, build/package, pilot, store-crash and spent-set checks. The sandbox
+  initially blocked esbuild's config read; the same checks passed on the host.
 
 ## Next
 
-1. Compare stable v6.0.5's required witness/API behavior with the v6.1.5 fixture
-   baseline. Prefer the stable whole package if suitable; keep artifacts distinct
-   and do not silently change fixture or consensus pins.
-2. Choose the simplest standard host/runtime. Existing Windows startup is useful;
-   maintained Java 11/Linux is an upstream-aligned alternative. Avoid replacing
-   individual RocksDB dependencies inside the node.
-3. Test actual stock storage operations, normal options/compression, persistence
-   and failure behavior within explicit bounds. Review concrete required
-   compatibility differences. Exact artifact identity remains useful; matching
-   source-version labels alone do not prove operational suitability.
-4. Keep the custom build as an unexecuted fallback. Its pinned preparation and
-   passing code checks remain recorded. Do not launch
-   `scratch/native-control-trial/launch.ps1`. No control volume was created.
-5. Larger sync still needs its bounded execution plan: 30 min, 20 GiB disk,
-   100 GiB host reserve, 8 GiB traffic trigger/10 GiB maximum and peer-parser/JRE
-   review. No full sync combination is established. Windows controls are not
-   Linux evidence; do not silently widen limits.
+1. Reuse the reviewed stock startup/settings helpers with explicit stable-package
+   pins and fresh scratch paths. Preserve the no-spending-key, no-peer, loopback
+   configuration and record actual startup/settings; do not claim old prerelease
+   runtime evidence as a new stable run. Review the changed launcher before use.
+2. Resolve only concrete blockers to a bounded source sync. Its existing plan is
+   30 min, 20 GiB disk, 100 GiB reserve, 8 GiB traffic trigger/10 GiB maximum plus
+   peer-parser/JRE review. Do not revive custom builds without demonstrated need
+   or silently relax limits. No full sync combination is established.
+3. Then compare the three fixtures against a validated ancestor of a stable tip.
+   Full-history retention does not guarantee historical AD proofs; the current
+   comparison needs transaction spending proofs. Stable fixture fetch/ancestry
+   and authenticated source publication remain owed.
 
 ## Open questions
 
-- Preparation code at `bb560a5` passed full checks: 96 files / 1,795 tests,
-  plus docs, build/package, pilot and store checks; CI 34512630234 passed.
-  This reassessment changes documentation only.
-- Stay with this instance for the standard-package comparison: observed failures
-  and untested alternatives are fresh. This is an efficiency recommendation,
-  not measured comparative model performance.
+- Stay with this instance for stable startup/settings preparation: the package,
+  source equality and reusable controls are fresh. This is an efficiency
+  recommendation, not measured comparative model performance.
 - Estimate unchanged: **45% done / 55% remaining**, plausible done range **35-55%**.
   Runtime/recovery, wallet/transport, authenticated evidence/publication and
   custody/rollback assurance dominate remaining effort. No product gate closed.

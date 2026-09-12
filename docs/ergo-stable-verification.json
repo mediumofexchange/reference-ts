@@ -1,0 +1,320 @@
+{
+  "status": "stable-package-selected-with-narrow-storage-evidence",
+  "packageObservedDate": "2026-09-10",
+  "runtimeObservedDate": "2026-09-12",
+  "release": {
+    "tag": "v6.0.5",
+    "commit": "5528ef569a41ebccbc8658212e6ee3c97d990b96",
+    "releaseId": 380407303,
+    "assetId": 539400459,
+    "prerelease": false,
+    "url": "https://github.com/ergoplatform/ergo/releases/download/v6.0.5/ergo-node-v6.0.5-windows-x64.zip",
+    "archiveBytes": 108916979,
+    "archiveSha256": "28be43dd010792bc72d320952dcfde368a9a21e3926409f78757e6218583ea06",
+    "githubDigestMatched": true,
+    "entries": 192,
+    "expandedBytes": 131488960,
+    "files": 167,
+    "jarBytes": 82384324,
+    "jarSha256": "2a7e2978cb09538ed6780d85ae3aa39c1ecce10e5e5a6e0dc3cd8ab087851588",
+    "jreVersion": "21.0.1",
+    "jreFilesEqualPriorStockBundle": 164,
+    "identityLimit": "HTTPS distribution and digest identity; no reproducible-build or independent publisher-signature attestation."
+  },
+  "staticNativeMember": {
+    "path": "META-INF/native/windows64/leveldbjni.dll",
+    "bytes": 887296,
+    "sha256": "3e16e6ef776cd5f5d5846b6566ffc9706a0c78faa4d6d6552f9caca1b9d41373",
+    "actualLoadedModuleHashVerified": false
+  },
+  "sourceComparison": {
+    "prereleaseCommit": "c36466405abc9a2ddda37e890635f00d593041f5",
+    "comparisonUrl": "https://github.com/ergoplatform/ergo/compare/5528ef569a41ebccbc8658212e6ee3c97d990b96...c36466405abc9a2ddda37e890635f00d593041f5",
+    "ahead": 38,
+    "behind": 0,
+    "changedFiles": 59,
+    "method": "Compare exact Git blob identities in untruncated official recursive trees; independently inspect relevant stable sources.",
+    "equalFiles": [
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/modifiers/ErgoFullBlock.scala",
+        "blob": "f59e9cb360ba7c9d80d3f9762396a9e861122097"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/modifiers/history/ADProofs.scala",
+        "blob": "380600129cd6103b0db77000a5baf5bbd995fdb2"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/modifiers/history/BlockTransactions.scala",
+        "blob": "417c20ca40b60a3a687e3bcb7b89c9c53ff7d2d0"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/modifiers/history/header/Header.scala",
+        "blob": "639f5e0c0fcddeff1575adb3b3f6d1e45619c660"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/modifiers/history/header/HeaderSerializer.scala",
+        "blob": "c7688bac617c18440780d845c8e85651e5a41264"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/modifiers/mempool/ErgoTransaction.scala",
+        "blob": "a7fff2350e0c8e868ee8e0fcc504f5ca4c7f2b05"
+      },
+      {
+        "path": "src/main/resources/mainnet.conf",
+        "blob": "f83a7c2fe55f0a50c7ca320433ce99dfb497bef2"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/ErgoApp.scala",
+        "blob": "9f1e8fbf6304d05a9f8ced8c864d98de327a9bd6"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/http/ErgoHttpService.scala",
+        "blob": "eb99d040a231242d2d4dff557b6d6bd36b78a876"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/http/api/BlocksApiRoute.scala",
+        "blob": "1dfee3c5703647ef023c49d31fe8eb679aa49520"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/http/api/WalletApiRoute.scala",
+        "blob": "767c19daab866f6bd218811340c64009710b006f"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/local/ErgoStatsCollector.scala",
+        "blob": "931ff7841cdb422b74d55ef32bfd5908459f0120"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/nodeView/ErgoNodeViewHolder.scala",
+        "blob": "0363d7bd26cde207a1147b807b79d5858f28fe63"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/nodeView/history/ErgoHistoryReader.scala",
+        "blob": "9f7a45f0fe343173ec8b35babedae5c6f4b53840"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/nodeView/wallet/ErgoWalletService.scala",
+        "blob": "8d4fbc341ac75ec11ff721f20159b18b24a96f35"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/settings/ErgoSettingsReader.scala",
+        "blob": "4cacd4be02032a928322993f2f5dea5a07eea5ce"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/settings/NodeConfigurationSettings.scala",
+        "blob": "ae45758b594d2843e5b83c9e4b935bb784d2c31d"
+      },
+      {
+        "path": "src/main/scala/scorex/core/network/NetworkController.scala",
+        "blob": "0cec487f35b09947b64f37e6ffae017ea999f25e"
+      }
+    ],
+    "storageSources": [
+      {
+        "path": "avldb/src/main/scala/scorex/db/LDBFactory.scala",
+        "sha": "65fca5a3972e188bce94dd18f29efb661fe4d406"
+      },
+      {
+        "path": "avldb/src/main/scala/scorex/db/LDBKVStore.scala",
+        "sha": "1c8215315f3c163bc014ffecfa21aa9cfad7eee4"
+      },
+      {
+        "path": "avldb/src/main/scala/scorex/db/LDBVersionedStore.scala",
+        "sha": "51340723f9d63e33913c62f37d7884242c2dce8d"
+      }
+    ],
+    "limits": [
+      "Equality of selected source files, not all dependency behavior or reproducible JAR/source correspondence.",
+      "Fixture provenance pins remain unchanged; no stable-node fixture fetch or validated ancestry yet.",
+      "Historical AD proofs may be absent outside the retained proof suffix. Fixture comparison needs transaction spending proofs, not all historical AD proofs.",
+      "Normal LevelDB versioned-store writes use the upstream default non-sync WriteOptions. Orderly reopen is not power-loss durability."
+    ]
+  },
+  "initialCompile": {
+    "outcome": "exited",
+    "exitCode": 4294967295,
+    "jobEmpty": true,
+    "output": "----------\r\n1. ERROR in C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\experiments\\ergo-range\\NodeStableStorage.java (at line 18)\r\n\treturn JavaConverters.asScalaBufferConverter(values).asScala().toSeq();\r\n\t                                                               ^^^^^\r\nThe method toSeq() is ambiguous for the type Buffer<T>\r\n----------\r\n1 problem (1 error)\r\n",
+    "resolution": "Return the Scala Buffer as Seq directly; remove ambiguous inherited toSeq call. No database worker ran in this attempt."
+  },
+  "runtime": {
+    "status": "stock-versioned-store-operational-only",
+    "jarSha256": "2a7e2978cb09538ed6780d85ae3aa39c1ecce10e5e5a6e0dc3cd8ab087851588",
+    "workerSha256": "ee53ff6edff2b2f98d91228c7b31c0ca6a90aa2a608aed46f956e388e4c54d73",
+    "launcherSha256": "0e446bc0617e5fc19b82f217d6a9740c02340898c52f7441a53652c146a95dcb",
+    "supervisorSha256": "bef224d4fd27d9a06ac2960f2d85b8b06dc5cf0048d473b7e12e20eee690979d",
+    "javaVersion": "21.0.1",
+    "socketSamples": 136,
+    "files": 22,
+    "bytes": 2675278.0,
+    "processes": {
+      "compile": {
+        "Case": "compile",
+        "Outcome": "exited",
+        "Output": "",
+        "LaunchMode": "detached",
+        "ExitCode": 0,
+        "CreationFlags": 525324,
+        "ElapsedMs": 3077,
+        "CapturedOutputBytes": 0,
+        "PeakCommitBytes": 145022976,
+        "PeakProcessCommitBytes": 145022976,
+        "CommitLimitBytes": 1073741824,
+        "BeforeResumePeakCommitBytes": 397312,
+        "BeforeResumePeakProcessCommitBytes": 397312,
+        "UserCpuTicks": 47968750,
+        "KernelCpuTicks": 3125000,
+        "JobUserCpuTicks": 47968750,
+        "JobKernelCpuTicks": 3125000,
+        "CpuRateFlags": 5,
+        "CpuRatePer10000": 2500,
+        "TotalProcesses": 1,
+        "ActiveProcessesAfterExit": 0,
+        "LimitTerminatedProcesses": 0,
+        "BeforeResumeTotalProcesses": 1,
+        "BeforeResumeActiveProcesses": 1,
+        "SampledPeakPrivateCommitBytes": 145022976,
+        "SampledMaxPrivateCommitBytes": 143646720,
+        "BeforeResumePrivateCommitBytes": 397312,
+        "MemorySamples": 157,
+        "MaxSampledAssociatedProcesses": 1,
+        "ObservedProcesses": [
+          {
+            "ProcessId": 5276,
+            "Image": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\ergo-stable\\bundle\\jre\\bin\\java.exe",
+            "QueryError": 0
+          }
+        ],
+        "LimitsReadBackBeforeResume": true,
+        "JobEmptyAfterCleanup": true,
+        "ParentConsoleVerified": false
+      },
+      "write": {
+        "Case": "write",
+        "Outcome": "exited",
+        "Output": "INFO Loaded org.fusesource.leveldbjni.JniDBFactory with leveldbjni version 1.8\r\nMOE_STABLE_STORAGE=write:passed;engine=org.fusesource.leveldbjni.JniDBFactory\r\n",
+        "LaunchMode": "detached",
+        "ExitCode": 0,
+        "CreationFlags": 525324,
+        "ElapsedMs": 10412,
+        "CapturedOutputBytes": 159,
+        "PeakCommitBytes": 120918016,
+        "PeakProcessCommitBytes": 120918016,
+        "CommitLimitBytes": 1073741824,
+        "BeforeResumePeakCommitBytes": 397312,
+        "BeforeResumePeakProcessCommitBytes": 397312,
+        "UserCpuTicks": 64531250,
+        "KernelCpuTicks": 3437500,
+        "JobUserCpuTicks": 64531250,
+        "JobKernelCpuTicks": 3437500,
+        "CpuRateFlags": 5,
+        "CpuRatePer10000": 2500,
+        "TotalProcesses": 1,
+        "ActiveProcessesAfterExit": 0,
+        "LimitTerminatedProcesses": 0,
+        "BeforeResumeTotalProcesses": 1,
+        "BeforeResumeActiveProcesses": 1,
+        "SampledPeakPrivateCommitBytes": 120918016,
+        "SampledMaxPrivateCommitBytes": 120918016,
+        "BeforeResumePrivateCommitBytes": 397312,
+        "MemorySamples": 626,
+        "MaxSampledAssociatedProcesses": 1,
+        "ObservedProcesses": [
+          {
+            "ProcessId": 32684,
+            "Image": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\ergo-stable\\bundle\\jre\\bin\\java.exe",
+            "QueryError": 0
+          }
+        ],
+        "LimitsReadBackBeforeResume": true,
+        "JobEmptyAfterCleanup": true,
+        "ParentConsoleVerified": false
+      },
+      "rollback": {
+        "Case": "rollback",
+        "Outcome": "exited",
+        "Output": "INFO Loaded org.fusesource.leveldbjni.JniDBFactory with leveldbjni version 1.8\r\nMOE_STABLE_STORAGE=rollback:passed;engine=org.fusesource.leveldbjni.JniDBFactory\r\n",
+        "LaunchMode": "detached",
+        "ExitCode": 0,
+        "CreationFlags": 525324,
+        "ElapsedMs": 10870,
+        "CapturedOutputBytes": 162,
+        "PeakCommitBytes": 121384960,
+        "PeakProcessCommitBytes": 121384960,
+        "CommitLimitBytes": 1073741824,
+        "BeforeResumePeakCommitBytes": 397312,
+        "BeforeResumePeakProcessCommitBytes": 397312,
+        "UserCpuTicks": 68281250,
+        "KernelCpuTicks": 5156250,
+        "JobUserCpuTicks": 68281250,
+        "JobKernelCpuTicks": 5156250,
+        "CpuRateFlags": 5,
+        "CpuRatePer10000": 2500,
+        "TotalProcesses": 1,
+        "ActiveProcessesAfterExit": 0,
+        "LimitTerminatedProcesses": 0,
+        "BeforeResumeTotalProcesses": 1,
+        "BeforeResumeActiveProcesses": 1,
+        "SampledPeakPrivateCommitBytes": 121384960,
+        "SampledMaxPrivateCommitBytes": 121303040,
+        "BeforeResumePrivateCommitBytes": 397312,
+        "MemorySamples": 635,
+        "MaxSampledAssociatedProcesses": 1,
+        "ObservedProcesses": [
+          {
+            "ProcessId": 23104,
+            "Image": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\ergo-stable\\bundle\\jre\\bin\\java.exe",
+            "QueryError": 0
+          }
+        ],
+        "LimitsReadBackBeforeResume": true,
+        "JobEmptyAfterCleanup": true,
+        "ParentConsoleVerified": false
+      },
+      "verify": {
+        "Case": "verify",
+        "Outcome": "exited",
+        "Output": "INFO Loaded org.fusesource.leveldbjni.JniDBFactory with leveldbjni version 1.8\r\nMOE_STABLE_STORAGE=verify:passed;engine=org.fusesource.leveldbjni.JniDBFactory\r\n",
+        "LaunchMode": "detached",
+        "ExitCode": 0,
+        "CreationFlags": 525324,
+        "ElapsedMs": 10367,
+        "CapturedOutputBytes": 160,
+        "PeakCommitBytes": 121180160,
+        "PeakProcessCommitBytes": 121180160,
+        "CommitLimitBytes": 1073741824,
+        "BeforeResumePeakCommitBytes": 397312,
+        "BeforeResumePeakProcessCommitBytes": 397312,
+        "UserCpuTicks": 80937500,
+        "KernelCpuTicks": 3437500,
+        "JobUserCpuTicks": 80937500,
+        "JobKernelCpuTicks": 3437500,
+        "CpuRateFlags": 5,
+        "CpuRatePer10000": 2500,
+        "TotalProcesses": 1,
+        "ActiveProcessesAfterExit": 1,
+        "LimitTerminatedProcesses": 0,
+        "BeforeResumeTotalProcesses": 1,
+        "BeforeResumeActiveProcesses": 1,
+        "SampledPeakPrivateCommitBytes": 121180160,
+        "SampledMaxPrivateCommitBytes": 120664064,
+        "BeforeResumePrivateCommitBytes": 397312,
+        "MemorySamples": 631,
+        "MaxSampledAssociatedProcesses": 1,
+        "ObservedProcesses": [
+          {
+            "ProcessId": 32332,
+            "Image": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\ergo-stable\\bundle\\jre\\bin\\java.exe",
+            "QueryError": 0
+          }
+        ],
+        "LimitsReadBackBeforeResume": true,
+        "JobEmptyAfterCleanup": true,
+        "ParentConsoleVerified": false
+      }
+    },
+    "limits": "Four sequential processes; each 30 seconds, 1 GiB commit, 25% CPU scheduling, 64 KiB output. 16 MiB observed file threshold; no hard disk/network sandbox.",
+    "limitations": "Normal close/reopen and known/unknown rollback only. Factory selection is observed, loaded DLL identity is not hashed. Synchronous observer calls can delay the nominal wall deadline. No power-loss/crash/disk-full/compaction stress, sync, native ABI proof or product recovery acceptance."
+  },
+  "review": "Independent source-fit, actual worker/launcher and final runtime readback passed. Report/source hashes, all four process results, exact success markers and the final 22-file/2,675,278-byte inventory were independently reproduced. No material finding remains in this narrow scope.",
+  "cleanup": "After independent readback and durable report capture, the exact owned storage-run directory was removed and its absence verified. All process jobs were empty. Downloaded stable package/bundle retained for the next stock-node slice."
+}
