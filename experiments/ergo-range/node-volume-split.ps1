@@ -1,5 +1,5 @@
 # Fixed ordinary-user node profiles. Default is read-only; UAC is disk ownership only.
-param([switch]$Execute,[switch]$ParentFailureControl,[switch]$Sync30Minutes)
+param([switch]$Execute,[switch]$ParentFailureControl,[switch]$Sync30Minutes,[switch]$ResumeSync)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 if (-not $IsWindows -or -not [Environment]::Is64BitProcess) { throw 'Windows x64 / PowerShell 7 required' }
@@ -12,6 +12,7 @@ $bundle=Join-Path $repo 'scratch/ergo-stable/bundle'
 $report=[ordered]@{status='unresolved-ordinary-volume-control';nonce=$nonce;run=$run;profile=$profile;observedAtUtc=[DateTime]::UtcNow.ToString('o');executeRequested=[bool]$Execute;errors=@();files=[ordered]@{}}
 $lease=$null; $owner=$null; $maySignalDone=$false
 try {
+    if ($ResumeSync -and -not $Sync30Minutes) { throw 'Resume requires the fixed connected profile' }
     if ($Sync30Minutes -and $ParentFailureControl) { throw 'Parent failure injection is only a 64 MiB offline control' }
     foreach ($file in @('node-volume-split.ps1','node-volume-worker.ps1','node-volume-owner.ps1','node-volume-handoff.ps1','NodeProbeProcess.cs','NodeProbeDisk.cs','NodeDatabaseIdentity.cs','NodeTrafficCounter.cs','node-java.ps1','node-volume-evidence.ps1','node-disk-evidence.ps1','node-database-evidence.ps1','node-evidence.ps1')) {
         $report.files[$file]=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $file)).Hash.ToLowerInvariant()
@@ -35,6 +36,14 @@ try {
         if ($report.files['node-sync-network.conf'] -cne 'a4f9e317402870527ee8b08556a4932739299de174a591e61aac7d67ac5d4c81') { throw 'Exact previously verified peer overlay required' }
         $overlay=Get-Content -Raw (Join-Path $PSScriptRoot 'node-sync-network.conf')
         . (Join-Path $PSScriptRoot 'node-sync-evidence.ps1')
+        if ($ResumeSync) {
+            . (Join-Path $PSScriptRoot 'node-sync-resume.ps1')
+            $report.files['node-sync-resume.ps1']=(Get-FileHash (Join-Path $PSScriptRoot 'node-sync-resume.ps1')).Hash.ToLowerInvariant()
+            $resume=Get-SyncResumeDescriptor $repo
+            Add-Type -Path (Join-Path $PSScriptRoot 'NodeProbeDisk.cs')
+            [void][NodeProbeDisk]::ValidateRetainedSync20GiBImage($resume.imagePath)
+            $report.resume=$resume
+        }
     }
     $manifestPath=Join-Path $repo 'scratch/ergo-stable/bundle-manifest.json'
     if ((Get-FileHash -LiteralPath $manifestPath).Hash -ine 'df98bdbfa029ad3aaeabb3968a2b73cdaa92769d93192bc25b4c8f298102dce6') { throw 'Stable manifest mismatch' }
@@ -70,6 +79,7 @@ try {
     $ownerPath=Join-Path $PSScriptRoot 'node-volume-owner.ps1'
     $ownerArgs="-NoProfile -File `"$ownerPath`" -Nonce $nonce -ParentId $PID -ParentStarted $started"
     if ($Sync30Minutes) { $ownerArgs+=' -Sync30Minutes' }
+    if ($ResumeSync) { $ownerArgs+=' -ResumeSync' }
     $owner=Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList $ownerArgs -Verb RunAs -WindowStyle Hidden -PassThru
     $maySignalDone=$true
     $wait=[Diagnostics.Stopwatch]::StartNew()
@@ -86,6 +96,7 @@ try {
         $ready.volume.Size -le 0 -or $ready.volume.Size -gt $profile.virtualBytes -or $ready.volume.FileSystem -cne 'NTFS') { throw 'Wrong volume handoff' }
     $letter=[char]$ready.driveLetter; $driveRoot=([string]$letter)+':\'; $volumeRoot=$ready.volumeRoot
     $report.ownerReady=$ready
+    if ($ResumeSync) { Assert-SyncResumeVolume $ready.volume $resume }
     function Assert-OwnedVolume {
         if ($owner.HasExited) { throw 'Disk owner exited' }
         [NodeDatabaseIdentity]::VerifyDriveMapping($letter,$volumeRoot) | Out-Null

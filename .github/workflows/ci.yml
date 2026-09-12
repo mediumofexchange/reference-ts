@@ -109,6 +109,8 @@ jobs:
           ./experiments/ergo-range/node-volume-handoff.test.ps1
           ./experiments/ergo-range/node-sync-profile.test.ps1
           ./experiments/ergo-range/node-sync-reader.test.ps1
+          ./experiments/ergo-range/node-sync-resume-native.test.ps1
+          ./experiments/ergo-range/node-sync-resume.test.ps1
 
       - name: Install pinned offline Ergo probe dependencies
         if: matrix.node == 24

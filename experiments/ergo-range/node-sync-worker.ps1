@@ -1,8 +1,11 @@
 # Invoked only by the ordinary supervisor after the reviewed sync profile handoff.
 if (-not $Sync30Minutes -or $profile.name -cne 'sync-30-minutes') { throw 'Fixed sync profile required' }
 $root=Join-Path $driveRoot 'run'
-if (Test-Path -LiteralPath $root) { throw 'Worker root already exists' }
-foreach ($directory in @($root,"$root/data","$root/secrets","$root/home","$root/tmp")) { [void][IO.Directory]::CreateDirectory($directory) }
+if ($ResumeSync) { Assert-SyncResumeWorker $root $resume; $report.retainedDatabaseValidated=$true }
+else {
+    if (Test-Path -LiteralPath $root) { throw 'Worker root already exists' }
+    foreach ($directory in @($root,"$root/data","$root/secrets","$root/home","$root/tmp")) { [void][IO.Directory]::CreateDirectory($directory) }
+}
 $oldPath=[regex]::Match($prior.config,'ergo.directory = "(.+)/data"').Groups[1].Value
 if (-not $oldPath) { throw 'Recorded root missing' }
 $config=$prior.config.Replace($oldPath,$root.Replace('\','/'))+"`n"+$overlay

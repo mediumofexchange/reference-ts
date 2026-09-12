@@ -1,10 +1,11 @@
 // Fixed-purpose Windows disk-full control for the node experiment.
-// The only virtual disk this helper can create is a new, fixed 64 MiB VHD.
-// It deliberately has no open/reuse, formatting, partitioning, deletion,
+// Creates only new, fixed 64 MiB or 20 GiB VHDs; can reopen one pinned sync image.
+// It deliberately has no general open/reuse, formatting, partitioning, deletion,
 // privilege-adjustment, process, or arbitrary-size surface.
 //
 // ABI source: virtdisk.h as documented by Microsoft Learn:
-// CreateVirtualDisk, AttachVirtualDisk, DetachVirtualDisk,
+// CreateVirtualDisk, OpenVirtualDisk, OPEN_VIRTUAL_DISK_PARAMETERS,
+// AttachVirtualDisk, DetachVirtualDisk,
 // GetVirtualDiskInformation, and GetVirtualDiskPhysicalPath.
 using System;
 using System.ComponentModel;
@@ -20,6 +21,10 @@ public static class NodeProbeDisk
     public const long FillLimitBytes = 65L * 1024L * 1024L;
     public const int FillBlockBytes = 1024 * 1024;
     public const string FillFileName = "fill.bin";
+    public const long RetainedSyncVirtualBytes = 21474836480L;
+    public const long RetainedSyncBackingBytes = 21474836992L;
+    public const string RetainedSyncSuffix = @"\scratch\node-source-sync\f2dc2b779ba7441eba7528b01928476d\control.vhd";
+    private static readonly Guid RetainedSyncDiskGuid = new Guid("ad70ec67-79dc-47ab-8d93-8c831533123c");
 
     private const uint ErrorSuccess = 0;
     private const uint ErrorInsufficientBuffer = 122;
@@ -27,6 +32,8 @@ public static class NodeProbeDisk
 
     // VIRTUAL_DISK_ACCESS_MASK: ATTACH_RW | DETACH | GET_INFO | CREATE.
     private const uint VirtualDiskAccess = 0x001E0000;
+    // Existing-image access: ATTACH_RW | DETACH | GET_INFO, never CREATE.
+    private const uint RetainedSyncAccess = 0x000E0000;
     // CREATE_VIRTUAL_DISK_FLAG_FULL_PHYSICAL_ALLOCATION.
     private const uint CreateFixed = 0x00000001;
     // ATTACH_VIRTUAL_DISK_FLAG_NO_DRIVE_LETTER.  PERMANENT_LIFETIME is omitted.
@@ -235,6 +242,139 @@ public static class NodeProbeDisk
     public static AttachedDisk CreateSync20GiB(string imagePath)
     {
         return CreateSized(imagePath, 20L * 1024L * 1024L * 1024L);
+    }
+
+    // Reopens only the retained experiment image. No attachment occurs until
+    // the owner calls Attach; existing non-permanent handle cleanup is reused.
+    public static AttachedDisk OpenRetainedSync20GiB(string imagePath)
+    {
+        RequireWindowsX64();
+        ValidateNativeLayout();
+        string fullPath = ValidateRetainedSync20GiBPath(imagePath);
+        SafeVirtualDiskHandle handle = null;
+        try
+        {
+            // Denying delete keeps this file from replacement/rename through
+            // native open. Read/write sharing permits the VHD provider's open.
+            // This is a trusted same-user host check, not hostile-file security:
+            // other writers and ancestor replacement races are not excluded.
+            using (FileStream image = OpenRetainedSyncForValidation(fullPath))
+            {
+                ValidateRetainedSync20GiBPath(fullPath);
+                ValidateRetainedSyncStream(image);
+                VirtualStorageType storageType = new VirtualStorageType
+                {
+                    DeviceId = VirtualStorageTypeDeviceVhd,
+                    VendorId = MicrosoftVirtualStorageVendor
+                };
+                OpenVirtualDiskParametersV1 parameters = new OpenVirtualDiskParametersV1
+                {
+                    Version = 1,
+                    RWDepth = 1
+                };
+                IntPtr nativeHandle;
+                uint error = OpenVirtualDisk(ref storageType, fullPath, RetainedSyncAccess,
+                    0, ref parameters, out nativeHandle);
+                // Output is undefined on failure; acquire ownership only on success.
+                ThrowIfFailed("OpenVirtualDisk(retained sync)", error);
+                handle = SafeVirtualDiskHandle.FromSuccessfulCreate(nativeHandle);
+                DiskSize size = ReadSize(handle);
+                uint subtype = ReadProviderSubtype(handle);
+                ValidateRetainedSync20GiBNativeInfo(size.VirtualSizeBytes, subtype);
+                ValidateRetainedSync20GiBPath(fullPath);
+                return new AttachedDisk(handle, fullPath,
+                    new DiskInfo(size.VirtualSizeBytes, size.BackingSizeBytes, subtype, null));
+            }
+        }
+        catch (Exception primary)
+        {
+            if (handle != null)
+            {
+                uint closeError = handle.CloseChecked();
+                if (closeError != ErrorSuccess)
+                    throw new InvalidOperationException("Retained VHD open failed and close failed with Win32 error " + closeError, primary);
+            }
+            throw;
+        }
+    }
+
+    // Read-only preflight: never invokes OpenVirtualDisk or attaches the disk.
+    public static string ValidateRetainedSync20GiBImage(string imagePath)
+    {
+        string fullPath = ValidateRetainedSync20GiBPath(imagePath);
+        using (FileStream image = OpenRetainedSyncForValidation(fullPath))
+        {
+            ValidateRetainedSync20GiBPath(fullPath);
+            ValidateRetainedSyncStream(image);
+        }
+        return fullPath;
+    }
+
+    public static string ValidateRetainedSync20GiBPath(string imagePath)
+    {
+        if (String.IsNullOrWhiteSpace(imagePath) || !ImagePathPattern.IsMatch(imagePath) ||
+            !imagePath.EndsWith(RetainedSyncSuffix, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Retained VHD must have the exact local sync image suffix", nameof(imagePath));
+        string fullPath = Path.GetFullPath(imagePath);
+        if (!String.Equals(imagePath, fullPath, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Retained VHD path must already be normalized", nameof(imagePath));
+        foreach (string component in fullPath.Substring(3).Split('\\'))
+            if (component.EndsWith(".", StringComparison.Ordinal) || component.EndsWith(" ", StringComparison.Ordinal))
+                throw new ArgumentException("Retained VHD path contains a Windows path alias", nameof(imagePath));
+        if (new DriveInfo(Path.GetPathRoot(fullPath)).DriveType != DriveType.Fixed)
+            throw new ArgumentException("Retained VHD requires a local fixed drive", nameof(imagePath));
+        RejectReparsePointAncestors(Path.GetDirectoryName(fullPath));
+        FileAttributes attributes = File.GetAttributes(fullPath);
+        if ((attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint | FileAttributes.Device)) != 0)
+            throw new IOException("Retained VHD must be an ordinary file without reparse points");
+        return fullPath;
+    }
+
+    private static FileStream OpenRetainedSyncForValidation(string fullPath)
+    {
+        return new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
+            1024, FileOptions.RandomAccess);
+    }
+
+    private static void ValidateRetainedSyncStream(FileStream image)
+    {
+        if (image.Length != RetainedSyncBackingBytes)
+            throw new InvalidOperationException("Retained VHD backing length differs from the recorded image");
+        // Fixed VHD data starts at offset zero. Read only MBR and primary GPT.
+        byte[] firstSectors = new byte[1024];
+        int read = 0;
+        while (read < firstSectors.Length)
+        {
+            int count = image.Read(firstSectors, read, firstSectors.Length - read);
+            if (count == 0) throw new EndOfStreamException("Retained VHD GPT header is truncated");
+            read += count;
+        }
+        ValidateRetainedSync20GiBHeader(firstSectors, image.Length);
+    }
+
+    // Pure identity check, not a full GPT integrity parser or content hash.
+    public static void ValidateRetainedSync20GiBHeader(byte[] firstSectors, long backingBytes)
+    {
+        if (backingBytes != RetainedSyncBackingBytes)
+            throw new InvalidOperationException("Retained VHD backing length differs from the recorded image");
+        if (firstSectors == null || firstSectors.Length != 1024)
+            throw new ArgumentException("Retained VHD check requires exactly the first two 512-byte sectors", nameof(firstSectors));
+        if (Encoding.ASCII.GetString(firstSectors, 512, 8) != "EFI PART" ||
+            BitConverter.ToUInt32(firstSectors, 520) != 0x00010000 ||
+            BitConverter.ToUInt32(firstSectors, 524) != 92 ||
+            BitConverter.ToUInt32(firstSectors, 532) != 0 ||
+            BitConverter.ToUInt64(firstSectors, 536) != 1)
+            throw new InvalidOperationException("Retained VHD primary GPT header is invalid");
+        byte[] diskGuid = new byte[16];
+        Buffer.BlockCopy(firstSectors, 568, diskGuid, 0, diskGuid.Length);
+        if (new Guid(diskGuid) != RetainedSyncDiskGuid)
+            throw new InvalidOperationException("Retained VHD GPT disk identity differs from the recorded image");
+    }
+
+    public static void ValidateRetainedSync20GiBNativeInfo(long virtualBytes, uint providerSubtype)
+    {
+        if (virtualBytes != RetainedSyncVirtualBytes || providerSubtype != ProviderSubtypeFixed)
+            throw new InvalidOperationException("Retained VHD provider must report the exact fixed 20 GiB image");
     }
 
     private static AttachedDisk CreateSized(string imagePath, long virtualBytes)
@@ -527,6 +667,9 @@ public static class NodeProbeDisk
             OffsetOf<CreateVirtualDiskParameters>(nameof(CreateVirtualDiskParameters.SectorSizeInBytes)) != 36 ||
             OffsetOf<CreateVirtualDiskParameters>(nameof(CreateVirtualDiskParameters.ParentPath)) != 40 ||
             OffsetOf<CreateVirtualDiskParameters>(nameof(CreateVirtualDiskParameters.SourcePath)) != 48 ||
+            Marshal.SizeOf(typeof(OpenVirtualDiskParametersV1)) != 8 ||
+            OffsetOf<OpenVirtualDiskParametersV1>(nameof(OpenVirtualDiskParametersV1.Version)) != 0 ||
+            OffsetOf<OpenVirtualDiskParametersV1>(nameof(OpenVirtualDiskParametersV1.RWDepth)) != 4 ||
             Marshal.SizeOf(typeof(GetVirtualDiskInfo)) != 32 ||
             OffsetOf<GetVirtualDiskInfo>(nameof(GetVirtualDiskInfo.Version)) != 0 ||
             OffsetOf<GetVirtualDiskInfo>(nameof(GetVirtualDiskInfo.VirtualSize)) != 8 ||
@@ -589,6 +732,17 @@ public static class NodeProbeDisk
         [FieldOffset(36)] public uint SectorSizeInBytes;
         [FieldOffset(40)] public IntPtr ParentPath;
         [FieldOffset(48)] public IntPtr SourcePath;
+    }
+
+    // OPEN_VIRTUAL_DISK_PARAMETERS uses a DWORD version and a DWORD-aligned
+    // union (unlike CREATE). Declare only the selected version-1 prefix; later
+    // SDK union members increase sizeof but do not move Version1.RWDepth.
+    // https://learn.microsoft.com/en-us/windows/win32/api/virtdisk/ns-virtdisk-open_virtual_disk_parameters
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct OpenVirtualDiskParametersV1
+    {
+        [FieldOffset(0)] public uint Version;
+        [FieldOffset(4)] public uint RWDepth;
     }
 
     // GET_VIRTUAL_DISK_INFO has a DWORD version followed by an x64-aligned union.
@@ -661,6 +815,16 @@ public static class NodeProbeDisk
         uint providerSpecificFlags,
         ref CreateVirtualDiskParameters parameters,
         IntPtr overlapped,
+        out IntPtr handle);
+
+    // https://learn.microsoft.com/en-us/windows/win32/api/virtdisk/nf-virtdisk-openvirtualdisk
+    [DllImport("virtdisk.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern uint OpenVirtualDisk(
+        ref VirtualStorageType virtualStorageType,
+        string path,
+        uint virtualDiskAccessMask,
+        uint flags,
+        ref OpenVirtualDiskParametersV1 parameters,
         out IntPtr handle);
 
     [DllImport("virtdisk.dll", ExactSpelling = true)]

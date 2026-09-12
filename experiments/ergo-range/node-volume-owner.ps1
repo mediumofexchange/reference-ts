@@ -1,7 +1,7 @@
-# Elevated owner for one fresh, fixed 64 MiB offline VHD. Never starts Java.
+# Elevated disk owner for fixed profiles and one identified retained sync VHD. Never starts Java.
 param([Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{32}$')][string]$Nonce,
     [Parameter(Mandatory)][ValidateRange(1,2147483647)][int]$ParentId,
-    [Parameter(Mandatory)][long]$ParentStarted,[switch]$Sync30Minutes)
+    [Parameter(Mandatory)][long]$ParentStarted,[switch]$Sync30Minutes,[switch]$ResumeSync)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 foreach ($file in @('node-volume-handoff.ps1','node-disk-evidence.ps1','node-database-evidence.ps1')) { . (Join-Path $PSScriptRoot $file) }
@@ -9,14 +9,19 @@ $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $profile=Get-NodeVolumeProfile ([bool]$Sync30Minutes)
 $run=Join-Path $repo "scratch/$($profile.scratchName)/$Nonce"
 $imagePath=Join-Path $run 'control.vhd'
+if ($ResumeSync) {
+    if (-not $Sync30Minutes) { throw 'Resume requires the fixed connected profile' }
+    . (Join-Path $PSScriptRoot 'node-sync-resume.ps1')
+    $resume=Get-SyncResumeDescriptor $repo; $imagePath=$resume.imagePath
+}
 $report=[ordered]@{status='unresolved-owned-volume';nonce=$Nonce;profile=$profile.name;imagePath=$imagePath;parentId=$ParentId;parentStarted=$ParentStarted;ownerId=$PID;errors=@();jobEmpty=$false;mappingRemoved=$false;detached=$false;artifactRemoved=$false;reason=$null}
-$owned=$null; $lease=$null; $parentProcess=$null; $mappingAttempted=$false; $readyPublished=$false
+$owned=$null; $lease=$null; $parentProcess=$null; $mappingAttempted=$false; $readyPublished=$false; $resumeLock=$null
 try {
     $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
     try { if (-not [Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Disk owner requires elevation' } }
     finally { $identity.Dispose() }
     Assert-OrdinaryAncestors $run
-    if (-not (Test-Path -LiteralPath $run) -or (Test-Path -LiteralPath $imagePath) -or (Test-Path -LiteralPath (Join-Path $run 'ready.json')) -or (Test-Path -LiteralPath (Join-Path $run 'owner.json'))) { throw 'Fresh parent directory required' }
+    if (-not (Test-Path -LiteralPath $run) -or (-not $ResumeSync -and (Test-Path -LiteralPath $imagePath)) -or (Test-Path -LiteralPath (Join-Path $run 'ready.json')) -or (Test-Path -LiteralPath (Join-Path $run 'owner.json'))) { throw 'Fresh parent directory required' }
     $parentProcess=[Diagnostics.Process]::GetProcessById($ParentId)
     [void]$parentProcess.Handle # Retain the exact process object, not repeated PID lookup.
     if ($parentProcess.StartTime.ToFileTimeUtc() -ne $ParentStarted -or $parentProcess.HasExited) { throw 'Parent identity mismatch' }
@@ -30,7 +35,17 @@ try {
     $driveRoot=([string]$letter)+':\'
     $clock=[Diagnostics.Stopwatch]::StartNew()
     try {
-        $owned=if ($Sync30Minutes) { [NodeProbeDisk]::CreateSync20GiB($imagePath) } else { [NodeProbeDisk]::Create($imagePath) }
+        if ($ResumeSync) {
+            Assert-OrdinaryAncestors ([IO.Path]::GetDirectoryName($imagePath))
+            $lockPath=$imagePath+'.resume-lock'
+            if ((Test-Path -LiteralPath $lockPath) -and ((Get-Item -LiteralPath $lockPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Redirected resume lock' }
+            $resumeLock=[IO.File]::Open($lockPath,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+            $images=@(Storage\Get-DiskImage -ImagePath $imagePath)
+            if ($images.Count -ne 1 -or $images[0].Attached -isnot [bool] -or $images[0].Attached) { throw 'Retained disk is already attached or unknown' }
+            $owned=[NodeProbeDisk]::OpenRetainedSync20GiB($imagePath)
+            $report.resumed=$true
+        } elseif ($Sync30Minutes) { $owned=[NodeProbeDisk]::CreateSync20GiB($imagePath) }
+        else { $owned=[NodeProbeDisk]::Create($imagePath) }
         $owned.Attach(); $report.nativeDisk=$owned.Info
         function Read-OwnedVolumeDisk([string]$Style) {
             $images=@(Storage\Get-DiskImage -ImagePath $imagePath)
@@ -41,10 +56,15 @@ try {
             $report.disk=$disks[0] | Select-Object Number,Path,UniqueId,Guid,Size,PartitionStyle
             return $disks[0]
         }
+        if ($ResumeSync) {
+            $disk=Read-OwnedVolumeDisk 'GPT'
+            if ($disk.Guid -ine $resume.diskGuid) { throw 'Retained disk GUID changed' }
+            $expected=$resume.partition
+        } else {
         $disk=Read-OwnedVolumeDisk 'RAW'
         if (@(Storage\Get-Partition -Disk $disk).Count) { throw 'New disk already has partitions' }
         Storage\Initialize-Disk -InputObject $disk -PartitionStyle GPT -Confirm:$false
-        $disk=Read-OwnedVolumeDisk 'GPT'; $diskId=$disk.UniqueId; $diskPath=$disk.Path; $diskGuid=$disk.Guid
+        $disk=Read-OwnedVolumeDisk 'GPT'
         $report.initializedPartitions=@(Storage\Get-Partition -Disk $disk | Select-Object DiskNumber,PartitionNumber,Guid,GptType,Offset,Size)
         if ($Sync30Minutes) {
             # Windows initializes a reserved partition on the larger GPT image.
@@ -54,6 +74,8 @@ try {
         } else { $created=@(Storage\New-Partition -InputObject $disk -Offset 1048576UL -UseMaximumSize -AssignDriveLetter:$false) }
         if ($created.Count -ne 1) { throw 'Ambiguous created partition' }
         $expected=$created[0]; Assert-ProbePartition $expected $disk $null ([bool]$Sync30Minutes)
+        }
+        $diskId=$disk.UniqueId; $diskPath=$disk.Path; $diskGuid=$disk.Guid
         $report.partition=$expected | Select-Object DiskNumber,PartitionNumber,Guid,Offset,Size,GptType
         function Read-OwnedVolumePartition([bool]$Mapped=$false) {
             $d=Read-OwnedVolumeDisk 'GPT'
@@ -65,9 +87,15 @@ try {
             return $parts[0]
         }
         $partition=Read-OwnedVolumePartition
+        $report.partition=$partition | Select-Object DiskNumber,PartitionNumber,Guid,Offset,Size,GptType
         $volumes=@(Storage\Get-Volume -Partition $partition)
-        if ($volumes.Count -ne 1 -or $volumes[0].FileSystem -notin @('','RAW')) { throw 'New volume is not empty' }
-        Storage\Format-Volume -Partition $partition -FileSystem NTFS -NewFileSystemLabel 'MOE_NODE_CONTROL' -AllocationUnitSize 4096 -Confirm:$false | Out-Null
+        if ($ResumeSync) {
+            if ($volumes.Count -ne 1) { throw 'Ambiguous retained volume' }
+            Assert-SyncResumeVolume $volumes[0] $resume
+        } else {
+            if ($volumes.Count -ne 1 -or $volumes[0].FileSystem -notin @('','RAW')) { throw 'New volume is not empty' }
+            Storage\Format-Volume -Partition $partition -FileSystem NTFS -NewFileSystemLabel 'MOE_NODE_CONTROL' -AllocationUnitSize 4096 -Confirm:$false | Out-Null
+        }
         $partition=Read-OwnedVolumePartition
         $volumes=@(Storage\Get-Volume -Partition $partition)
         if ($volumes.Count -ne 1) { throw 'Ambiguous formatted volume' }
@@ -171,6 +199,7 @@ try {
     }
 } catch { if ($report.errors.Count -lt 16) { $report.errors+=$_.Exception.Message } }
 finally {
+    if ($null -ne $resumeLock) { $resumeLock.Dispose() }
     if ($null -ne $lease) { $lease.Dispose() }
     if ($null -ne $parentProcess) { $parentProcess.Dispose() }
     Write-VolumeHandoff (Join-Path $run 'owner.json') $report

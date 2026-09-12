@@ -318,6 +318,47 @@ comparison. See the pinned [download gate](https://github.com/ergoplatform/ergo/
 and [logging override](https://github.com/ergoplatform/ergo/blob/5528ef569a41ebccbc8658212e6ee3c97d990b96/src/main/scala/org/ergoplatform/settings/ErgoSettingsReader.scala#L30).
 Historical custom RocksDB controls are not prerequisites or fallback work.
 
+### Retained-image continuation
+
+The next bounded measurement explicitly uses `-ResumeSync` with the corrected
+logging and the existing fixed image. Native opening checks its normalized
+recorded path suffix, exact backing size and GPT disk identity, then fixed-provider
+size. The elevated owner verifies the recorded GPT disk, partition GUID, offset,
+size and NTFS volume before exposing a drive letter. The ordinary worker checks
+the original configuration and empty secrets before reusing data. No partition
+initialization, formatting, resize or image deletion occurs in this branch.
+An exclusive owner lock rejects concurrent continuation and an already-attached
+image is refused. This is limited to the first recorded configuration, rather
+than an arbitrary database reopening interface. The native call follows
+[OpenVirtualDisk](https://learn.microsoft.com/en-us/windows/win32/api/virtdisk/nf-virtdisk-openvirtualdisk)
+version 1 with read/write depth 1 and only attach, detach and information access.
+The trusted-host and helper-failure limitations above still apply.
+
+Acceptance for this continuation is surviving database restart, measured header
+or applied-state progress, preserved resource bounds and verified detachment.
+If it remains header-only, preserve that result and move to pool service/client
+transport. The authenticated external-history gate remains open; it does not
+block independent local transport and wallet integration work.
+
+The [actual continuation](ergo-node-sync-resume-verification.json) reopened the
+same image and observed three peers and 97,923 headers over 415,386 ms. Captured
+output was only 1,905 bytes, confirming the logging correction; host traffic
+was 418,472,522 bytes. Full heights remained null. The measurement was manually
+ended once restart and continued header progress were established, rather than
+waiting for full-chain synchronization. The separate stop record confirms one
+process became zero in 24 ms. Owner cleanup removed the drive mapping and
+detached the retained image; independent process/drive/exclusive-file checks passed.
+
+The automatic report remains unresolved because external exit does not meet
+its observer-stop contract. Its raw result is preserved, without weakening that
+guard. The last API sample preceded termination by about 55 seconds; final worker
+secrets, volume and diagnostic checks were not reached. Initial empty secrets,
+wallet refusal, final owner cleanup and the manual-stop record remain distinct
+observations. No full-state application, ancestry or full-sync claim is made.
+The node is currently stopped. Unattended background synchronization is an
+allowed follow-up, but this one-time configuration-pinned launcher is not yet a
+general long-running node service. Product transport work proceeds independently.
+
 ## Predeclared resource envelope
 
 The implemented limits below belong to the explicitly approved first bounded

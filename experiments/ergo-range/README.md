@@ -196,11 +196,39 @@ pwsh -NoProfile -File experiments/ergo-range/node-settings.ps1 -Stable -Maintain
 This settings-only regression requires an absent
 `scratch/ergo-stable/sync-logging-settings-run` directory and starts no node services.
 
+The explicit `-ResumeSync` mode continues only the first recorded image at
+`scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd`.
+It checks its fixed size and GPT identity, then the recorded partition, volume
+and original configuration; it never initializes or formats that image. A new
+report directory preserves the earlier observations. The same node, traffic,
+time and host-space bounds apply, with no additional large image allocation.
+This mode is a single continuation from the recorded original configuration;
+it refuses a later changed configuration rather than guessing its provenance.
+The [recorded continuation](../../docs/ergo-node-sync-resume-verification.json)
+was manually stopped after roughly seven minutes and 97,923 API-observed headers.
+Cleanup detached the retained image. The raw automatic report stays unresolved
+because an external stop is not its observer-stop acceptance; no full-state
+application or final worker secrets check is claimed. The node is stopped, and
+the rewritten configuration deliberately prevents blindly repeating this command.
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-volume-split.ps1 -Sync30Minutes -ResumeSync
+pwsh -NoProfile -File experiments/ergo-range/node-volume-split.ps1 -Sync30Minutes -ResumeSync -Execute
+```
+
+The first command is read-only. Execution follows the explicit continuation
+instruction under the unchanged bounded profile. The owner refuses an already
+attached image and holds an exclusive local resume lock until cleanup. Native
+handle lifetime and the existing parent-completion protocol control detachment.
+Trusted same-user writers and ancestor replacement are outside this identity
+check's guarantees; it is not a hostile image parser.
+
 The reviewed `-Sync30Minutes` profile retains the standard packages, ordinary
 node token, 4 GiB commit / 2 GiB heap / 25% CPU, 100 GiB host reserve and
 8 GiB traffic trigger / 10 GiB final maximum. It creates exactly one new
 20 GiB VHD, uses the pinned four-peer overlay and keeps REST/P2P listeners on
-loopback. It never reopens an existing image or installs wallet keys. Read-only
+loopback. Fresh mode never reopens an image; resume selects only the recorded
+image described above. Neither mode installs wallet keys. Read-only
 preparation checks package/config pins, free space and unused probe ports:
 
 ```powershell
