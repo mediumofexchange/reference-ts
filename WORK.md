@@ -11,10 +11,11 @@ replica cannot replace the independently selected fixture checkpoint or supply
 a separate spent list. Results are unspendable candidates with unresolved
 coverage, never a full-replay or current-range claim.
 
-Implementation branch: feat/successor-restoration-evidence, based on main
-3f07307. Companion money-from-first-principles/main remains 60f380c; normative
+Implementation main includes 41d82af, fast-forwarded from
+feat/successor-restoration-evidence. Companion money-from-first-principles/main
+remains 60f380c; normative
 content stays 7ea0ee8. No normative, runtime, circuit, key, dependency or
-configuration change. Review and final acceptance passed; delivery in progress.
+configuration change. Independent review and final acceptance passed.
 
 ## Status
 
@@ -40,7 +41,8 @@ configuration change. Review and final acceptance passed; delivery in progress.
 - Reuse unchanged full/runtime/real-proof baseline main 3f07307: all seven
   hosted CI jobs passed, run 34715502862, verified this session. New experiment
   runs in the existing Linux/Windows delivery CI command. Final
-  `npm run check:pool:delivery`, docs and diff checks passed; merge/push remains.
+  `npm run check:pool:delivery`, docs and diff checks passed. Main has no required
+  branch checks/rules. Verify latest push parity and hosted CI on resumption.
 
 ## Existing local product and custody boundary
 
@@ -74,7 +76,7 @@ configuration change. Review and final acceptance passed; delivery in progress.
 
 ## Next
 
-1. Finish final checks and authorized delivery; verify hosted CI and main parity.
+1. Verify delivered main parity and hosted CI for the commit with this handoff.
 2. Define the complete initial-segment public-package replay boundary: terms,
    configuration/key authority, proof/state replay and authenticated current
    record ranges. Reuse the v3 codecs and restoration cases; commit reviewed
