@@ -97,10 +97,12 @@ type Command =
   | { kind: "admit"; statement: string }
   | { kind: "published"; sequence: string };
 
-export interface PoolStoreView {
+export interface PoolStoreSummary {
   readonly highestSignedSequence: bigint;
-  readonly trail?: SegmentTrail;
   readonly latest?: Commitment;
+}
+export interface PoolStoreView extends PoolStoreSummary {
+  readonly trail?: SegmentTrail;
   /** Local checkpoints and retained validation evidence, including directory-
    * or snapshot-only descent steps and retired segments. */
   readonly checkpoints: readonly PoolCheckpointEvidence[];
@@ -109,6 +111,8 @@ export interface PoolStoreView {
 export type PoolStoreCheckpoint = "applied" | "stored" | "committed";
 
 export class PoolStore {
+  /** Public construction identity, copied so transport checks cannot mutate it. */
+  get configurationDomain(): Uint8Array { return copyBytes(this.domain); }
   private readonly db: DatabaseSync;
   private readonly config: PoolConfiguration;
   private readonly secret: Uint8Array;
@@ -560,6 +564,16 @@ export class PoolStore {
   }
   private checkpointEvidence(s: Pick<Signed, "segment" | "length" | "commitment">): PoolCheckpointEvidence {
     return replayedPoolEvidence(decodeCommitment(encodeCommitment(s.commitment)), s.segment, s.length);
+  }
+  /** Fenced public status without constructing trails or checkpoint evidence.
+   * Initial journal loading still performs the existing complete replay. */
+  async summary(): Promise<PoolStoreSummary> {
+    return this.run(async engine => {
+      this.transaction(() => {});
+      const latest = engine.signed.at(-1)?.commitment;
+      return { highestSignedSequence: latest?.sequence ?? 0n,
+        ...(latest === undefined ? {} : { latest: decodeCommitment(encodeCommitment(latest)) }) };
+    });
   }
   async view(): Promise<PoolStoreView> {
     return this.run(async engine => {

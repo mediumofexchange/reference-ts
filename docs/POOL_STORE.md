@@ -4,6 +4,7 @@
 `@mediumofexchange/reference/pool/store`. It implements durable activation,
 admission, commitment signing and publication retry over the pool's existing
 record readers and `Segment`. It does not run a server or commit timer.
+The separate [local service](POOL_SERVICE.md) exposes its existing operations.
 
 ## Operations
 
@@ -30,6 +31,11 @@ journal. A different identity cannot reopen it.
   commitment, local checkpoints and their retained validation evidence. Some
   evidence contains only a directory or snapshot, without history. Receipts
   establish acceptance; this view does not classify spendability or recovery.
+- `summary()` returns only copied highest sequence and latest commitment under
+  the same journal fencing, without constructing trails or checkpoint evidence.
+  Initial journal loading still performs the existing complete replay.
+- `configurationDomain` exposes a fresh copy of the public construction hash
+  for transport domain checks; it supplies no authority to mutate state.
 - `close()` closes the database and clears the store's copy of the signing key.
 
 Publish the opening before requesting receipts. Subsequent operations recheck

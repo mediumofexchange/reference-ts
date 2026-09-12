@@ -1,0 +1,61 @@
+{
+  "date": "2026-09-12",
+  "status": "passed-local-checks",
+  "baselineCommit": "d8829dd7cbbebe4fa51ce0f02f8fb3eb90c60620",
+  "node": "v24.6.0",
+  "sourceSha256": {
+    "src/pool/store.ts": "596a14d67c06082482e358cc79a35fa4fd35541eb0238bad57f1f90d269e017d",
+    "src/pool/service-wire.ts": "5ca7ad74ebdd1c3b763d668d43a9195d017c9e5d57f796ae4bba039851209d73",
+    "src/pool/service-http.ts": "4a72536c2f6ae47be713e0761b1b94e315fdb923eac57d491971310d328ee898",
+    "src/pool/service-client.ts": "29f2f014a5e8008dd96a6bba997cc2f6ae3fe764d9bc1a542e3c55b8aefc3b0b",
+    "test/pool-service-wire.test.ts": "a8bf54ef1b734162d416357228388b5cf59d391e3b877e28e77cdb39ac1348d6",
+    "test/pool-service-http.test.ts": "c57e4605d16048b225593878bb5fb46e2e10b7d934a2285ac6adffd8d74d1507",
+    "test/pool-service-client.test.ts": "85a9ed9f1fecbc80fdcb208688e5360f389071ac71a3ce492d9964a1a6742658",
+    "scripts/pool/service/fixture.mjs": "ecfddb41c59910f98cd015b16c4a2f05a44ad03cf1472fe10933630d65de83e5",
+    "scripts/pool/service/server.mjs": "26fbefcdc84a5e54ac2ef34130718527d0f4261b7e20c80e245bc6420f939390",
+    "scripts/pool/service/client.mjs": "790869ef75fbbb9c1bafb7de6e06ba6e0323d1fe9513189e064fc16780fabcb1",
+    "scripts/pool/service/check.mjs": "cec591fd2b2d353ecfa7103c4021399e070638ba5999e7f75296fddba1670573",
+    "scripts/check-package.mjs": "646d2b15a887c92b58a52a8c4be41737de66142f03b35d2f5a2b5b20dea47415",
+    "package.json": "cf51dae885ff7ba414ed8bb7a0cef1ee3a9bcf4e6c37df4e139b123e94a0b52a"
+  },
+  "verification": {
+    "command": "npm run check",
+    "exitCode": 0,
+    "testFilesPassed": 99,
+    "testsPassed": 1808,
+    "vitestDurationSeconds": 253.78,
+    "stages": [
+      "documentation and links",
+      "typecheck",
+      "unit and model tests",
+      "build",
+      "installed-package consumer",
+      "pilot",
+      "pool-store crash acceptance",
+      "separate-process pool service acceptance",
+      "pool spent-set checks"
+    ]
+  },
+  "serviceAcceptance": [
+    "caller-bound authenticated receipts",
+    "changed-proof retry preserves the original receipt",
+    "seven rejected requests",
+    "lost completed-commit response followed by exact persisted retry",
+    "old service process fenced by a new store instance",
+    "graceful restart retains sequence 3 and known local venue publication"
+  ],
+  "review": {
+    "type": "independent adversarial source review and fix readback",
+    "finding": "Status initially constructed full proof histories; changed to fenced copied summary and covered history-copy refusal and aliasing.",
+    "unresolvedMaterialFindings": 0,
+    "harnessReview": "Independent source inspection; reviewer did not execute tests."
+  },
+  "limits": [
+    "Public fixture keys and ideal proof verifier; no new real-proof evidence.",
+    "Known local venue ledger is fixture evidence, not authenticated external finality.",
+    "Graceful service restart and lost replies do not establish abrupt service-process crash recovery; separate PoolStore crash checks passed.",
+    "No private wallet delivery, production custody, rollback protection or deployment claim.",
+    "Initial journal replay and proof validation costs are not bounded by transport byte and time limits.",
+    "This record summarizes observed command output; it is not a retained raw test transcript."
+  ]
+}

@@ -4,86 +4,90 @@ Updated: 2026-09-12
 
 ## Goal
 
-Obtain independently applied Ergo history for the three fixture comparisons.
-The approved connected run is complete: header progress, early output stop
-and cleanup demonstrated; no applied full-state progress observed.
-The relevant logging defect is corrected and verified through the stock loader.
+The local PoolStore v2 service/client slice is complete: separate processes
+demonstrate accepted submissions, durable exact retries, lost commit replies,
+old-process fencing and restored local publication. Next is a two-wallet v2
+payment path with durable pending requests and receiver fulfillment.
 
-Delivery: main; baseline 7c27a06 (CI 34688754933 passed), followed by d40b823
-(scope verification and sustain end-to-end slices) and this change.
-Companion specification: money-from-first-principles/main at 7ea0ee8;
-no normative/provenance change. Runtime remains v2.
+Delivery branch: reference-ts/main; these changes follow d8829dd, whose CI
+34690932138 passed. Check CI for the final service commit after delivery.
+Companion: money-from-first-principles/main at 7ea0ee8, unchanged.
+Runtime remains the README-pinned v2 profile; no normative change.
 
 ## Status
 
-- AGENTS.md now selects checks from affected behavior and groups related
-  implementation, review, execution and evidence into sustained slices.
-  Shared runtime/protocol, dependency, API, packaging, broad CI/build changes
-  and uncertain impact still require full checks. Required CI gates remain.
-- [Actual connected evidence](docs/ergo-node-sync-verification.json):
-  282,315 ms, stopped at the 12 MiB console trigger; three peers observed.
-  API headers reached 25,733; later log reached 33,263. Last API read was about
-  42 seconds before stop. All sampled full heights were null; no applied-state
-  or fixture-ancestry claim follows from these observations.
-- Observed host traffic 133,770,818 bytes; peak node commit 625,156,096 bytes;
-  max accounting gap 382 ms; stop-to-empty 105 ms; final accounting 6 ms later.
-  Ordinary node, loopback listeners, wallet 403 and empty secrets observed.
-- Job empty, mapping removed and disk detached. Independent post-run checks
-  found recorded processes and drive reservation absent, opened the image
-  exclusively and matched its GPT disk GUID. Keep the 21,474,836,992-byte image:
-  scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd.
-  Do not delete, automatically resume, or allocate an extra retained image.
-- Standard Ergo 6.0.5 / Temurin 21.0.12.1+1 and normal LevelDB work. Custom
-  database candidates were removed earlier; no system Java/ACL changes.
-- The first disk preparation failed on a Windows reserved GPT partition.
-  [Evidence](docs/ergo-node-sync-first-preparation.json) records identity and
-  cleanup; that unused image was deleted. Reviewed automatic placement fixed it.
-- Node settings override XML root WARN with inherited INFO. The worker now
-  explicitly selects scorex.logging.level = WARN, preserving UtxoState INFO.
-  [Logging regression](docs/ergo-node-sync-logging-verification.json) exercised
-  the actual pinned loader, reproduced INFO override and verified correction.
-  No second connected run is claimed; original executed hashes are preserved.
-
+- [Pool service](docs/POOL_SERVICE.md): bounded loopback HTTP commands and
+  typed client, separate wallet/admin credentials, canonical frames, explicit
+  missing evidence, request-bound receipts and caller-owned verification.
+- The fenced Store summary returns copied status without constructing proof
+  histories on each poll. Independent adversarial review found this cost in
+  the original status implementation; the fix and nearby cases were read back.
+  No unresolved material findings remain for the service or acceptance harness.
 ## Evidence
 
-- Seven affected guard groups passed: profile/evidence 25, reader 49,
-  identity 58, database accounting 37, native identity 21, offline evidence 26,
-  handoff 12 (228 cases). Syntax/native compilation and read-only preflight pass.
-- Two additional actual-loader logging cases pass, with no node services,
-  state, secrets or disk image created. Focused documentation/link checks apply.
-- Independent source review and executed-evidence readback found no unresolved
-  material issue. Logging-only correction received focused self-review.
-- Reused unchanged full-suite baseline: 96 files / 1,795 tests and all checks
-  at 7c27a06; its CI passed. Required final-revision CI remains in force.
+- [Service evidence](docs/pool-service-verification.json): final `npm run check`
+  passed, including 99 files / 1,808 tests, build, installed-package consumer,
+  pilot, pool-store crash checks, separate-process service and spent-set checks.
+  Focused cases cover real HTTP stalls, redirects, byte limits, wrong-context
+  receipts, status aliasing and status without history copying.
+- Acceptance uses public fixture keys, an ideal proof verifier and a known
+  local venue ledger. It proves neither external finality nor wallet privacy,
+  deployment readiness or abrupt service-process crash recovery. Existing
+  store-crash evidence remains separate. Node 20 root imports stay supported;
+  the SQLite store and HTTP server require Node 24.
+
+### Ergo measurement closed; node stopped
+
+- [Retained continuation](docs/ergo-node-sync-resume-verification.json) restarted
+  the standard Ergo 6.0.5 / Temurin 21.0.12.1+1 database with corrected logging.
+  It was manually stopped after 415,386 ms; sampled headers reached 97,923,
+  peers reached three, traffic was 418,472,522 bytes and output 1,905 bytes.
+  All sampled full heights were null. No applied history or ancestry claim.
+- The last API sample was about 55 seconds before stop. The automatic result
+  remains unresolved because the stop was external; final worker checks were
+  not reached. Owner cleanup plus independent checks established an empty job,
+  absent processes/mapping, exclusive image access and matching GPT identity.
+- Retain the detached fixed 20 GiB image and actual run reports for inspection:
+  scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd.
+  Do not delete it or allocate another. ResumeSync's original configuration
+  pin is spent; blindly repeating that one-time command will refuse admission.
+- Resume checks passed: native 56 (including a bounded real image read), disk
+  79, sync profile 25 and PowerShell resume 12; read-only preflight passed.
+  Independent source and partial-result review found no material contradiction.
+- Background sync is permitted, but no unattended run has been started. The
+  one-time bounded launcher is not a full-sync service. Further setup must be
+  justified separately from wallet progress; completing sync is not a blocker
+  for the next slice. Standard packages work; custom candidates were removed.
 
 ## Next
 
-1. Prepare a narrowly scoped, reviewed continuation of the retained owned
-   image with the corrected logging, preserving progress rather than creating
-   another fresh database. The current launcher deliberately has no reopen API.
-   Define exact image identity, attachment/cleanup checks and finite resource
-   envelope before another execution; existing approval covered the completed run.
-2. Target near-current headers, then first demonstrated full-block application.
-   Stock 6.0.5 schedules no full blocks before a recent header (about 200 minutes
-   from its clock under current defaults). Header-only early progress is normal.
-3. Once applied history reaches fixtures at 100,000 / 1,000,000 / 1,500,000,
-   implement bounded parent-chain and body comparison. Bind upper IDs, exact
-   links and heights; body presence and /blocks/at are insufficient. Current
-   full-state catch-up is not itself required for historical fixture acceptance.
+1. Build a local two-wallet v2 CLI: issue → request → pay → verify → fulfill
+   once → burn, including restart and exact retry. Persist the receiver's
+   fresh secret/request before sharing only its owner. Persist the complete
+   pending statement before submission and derive v2 randomness as specified.
+2. Deliver opening and statement/segment identity privately. Verify receipts
+   against caller-owned authority and distinguish acceptance from finality.
+   Use explicit bulk fixture evidence with the existing checkpoint reader for
+   local finality; missing evidence must remain unavailable.
+3. Acceptance: lost replies, restored pending requests, changed-proof retries,
+   invoice replay rejection and receiver secrets absent from service traffic.
+   Review the sensitive wallet/state changes independently before delivery.
+   The delivery restore worker uses a synthetic v3 view; it cannot establish
+   v2 wallet restoration or justify adding capsules to v2. Keep frozen pilot
+   and receiver evidence until equivalent crash/fulfillment cases pass.
+4. Independently applied Ergo history remains open. When available at fixture
+   heights 100,000 / 1,000,000 / 1,500,000, compare bounded parent links and
+   bodies against pinned upper IDs. Body presence alone proves no ancestry.
 
 ## Open questions
 
-- This run did not exercise 30-minute endurance or the 8 GiB traffic trigger.
-  Transaction application rate and storage to the fixtures remain unmeasured.
-- Stuck supervisor/helper-crash ordering remain unproved. Socket/traffic
-  sampling is not a firewall or independent hard deadline; some OS/JRE writes
-  are outside the volume. Incoming proof/snapshot parsing remains possible.
-- Full UTXO/genesis/no-bootstrap/retain-all is the selected experiment route,
-  not a normative requirement that every eventual user retain all Ergo blocks.
-  Independent conservation/history/order verification and unavailable evidence
-  never establishing omission remain binding. No alternate trust route selected.
-- Stay with this instance for continuation: control and evidence context is
-  fresh. This is an efficiency recommendation, not measured model performance.
-- Estimate **45% done / 55% remaining**, plausible done range **35-55%**.
-  Runtime/recovery, wallet/transport, authenticated evidence/publication and
-  custody/rollback dominate. Header progress alone closes no product gate.
+- Full recovery, authenticated bulk evidence/external finality and publication,
+  custody/rollback and practical wallet operation remain major product gates.
+  Initial journal replay retains its current cost; HTTP limits are not whole-
+  process or proof-worker quotas. No live deployment or real funds are involved.
+- Estimate **45% done / 55% remaining**, plausible done range **35–55%**.
+  Local service delivery is useful progress within this coarse range; it does
+  not establish a usable private payment or close recovery/deployment gates.
+- Stay with this instance for wallet integration: the service and durable
+  retry context is fresh. This is an efficiency recommendation, not a measured
+  comparison between models.

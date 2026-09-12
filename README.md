@@ -15,8 +15,9 @@ of issuance and conservation. It implements v2 proofs, canonical history,
 receipt readers and durable sequencing. Recovery and successor v3 formats
 have executable models and conformance checks; they are not runtime support.
 
-There is no pool wallet, service transport or external witness write adapter
-yet. The API and wire format are experimental, the package is not published
+A [local Node 24 service and client](docs/POOL_SERVICE.md) now expose durable
+pool submission, commitment and publication retry. There is no pool wallet or
+external witness write adapter yet. The API and wire format are experimental, the package is not published
 to npm, and no completed security audit or live deployment is claimed.
 
 The runtime tracks specification revision

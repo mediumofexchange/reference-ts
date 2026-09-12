@@ -12,8 +12,10 @@ deployment, and no completed security audit.
 The active implementation is the shielded pool in `src/pool/`: pinned v2
 circuits and proofs, private notes, public supply replay, record-derived
 authority and canonical history, receipt readers, and durable sequencing.
-Silence recovery is modeled but not implemented in the runtime. There is no
-pool wallet, service transport or external witness write adapter yet.
+The [local service/client transport](POOL_SERVICE.md) exposes durable submission,
+commitment and publication retry, with separate-process lost-response, fencing
+and restart evidence. Silence recovery is modeled but not implemented in the
+runtime. There is no pool wallet or external witness write adapter yet.
 
 The frozen transparent implementation and its local pilot remain adversarial
 and integration evidence. The private-payment experiment retains real-proof
