@@ -1,6 +1,6 @@
 # Production requirements
 
-Status: release contract, revised 2026-09-05; estimate method clarified 2026-09-10. This document defines what a
+Status: release contract, revised 2026-09-05; estimate method clarified 2026-09-12. This document defines what a
 finished implementation of the protocol must deliver and the evidence each
 gate needs. It does not amend the normative protocol; protocol choices land in
 Construction first, and the implementation tracks the revision pinned in the
@@ -42,23 +42,29 @@ overstate the available evidence. The gate table is an evidence checklist:
 partially implemented gates can represent substantial completed work, while
 one unresolved dependency can prevent every usable product path.
 
-Reassess by inspecting the active implementation and gate evidence, identifying
-new demonstrated outcomes, and estimating what remains across runtime/recovery,
-wallet/transport, authenticated evidence/publication and operating assurance.
-Count reusable implementation and resolved consequential uncertainties; avoid
-double-counting models, their tests and their later integration. Allow for
-integration and redesign, state a broad range, and explain why an estimate
-changes or stays the same. Do not assign equal weight to gates or infer a
-percentage from files, commits, test totals or the fraction of gates passed.
+After meaningful product progress or a consequential new blocker, make a brief
+qualitative reassessment from evidence already gathered for that work. Do not
+run extra research, tests, inventories or delegation solely to update a number
+unless explicitly asked for a progress audit. Use coarse rounded values (about
+five or ten percentage points) with a broad uncertainty range. Credit reusable
+implementation and resolved uncertainty even while their release gates remain
+open; a gate is not an all-or-nothing unit of engineering effort. Avoid counting
+models and their later implementation twice. Allow for integration/redesign and
+move the estimate backward when new evidence warrants it. Never infer it from
+files, commits, test totals or the fraction of gates passed, or raise it just to
+make progress visible.
 
-Most remaining effort is v3 recovery/evidence formats and circuits, runtime
-integration, a pool wallet and deployment transport, authenticated delivery and
-restoration, witness publication, and deployment/security assurance. Device
-limits, custody/rollback and evidence availability can force redesign. Update
-the estimate when demonstrated outcomes or new evidence change the remaining
-work; allow it to move backward and explain why. Workflow/documentation cleanup
-alone does not increase it. Keep the current estimate in `WORK.md` and include
-done/remaining, uncertainty and the largest blockers in development wrap-ups.
+Keep the current estimate, last reassessment and a short reason in `WORK.md`.
+Include it and the main blockers in reports when materially changed or requested;
+omit unchanged percentages for routine fixes, documentation and tooling. Those
+tasks do not by themselves advance the product estimate. An unchanged number
+means no material reassessment, not a fresh confirmation of its accuracy.
+
+Most remaining effort is successor recovery/evidence integration, continuous
+wallet restoration, external witness publication and deployment/security
+assurance. The configured local wallet already demonstrates private payment,
+verified note selection, authenticated delivery and planned offline handoff;
+those are reusable product progress despite the remaining device/venue gates.
 
 ## Release contract
 

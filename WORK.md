@@ -4,22 +4,17 @@ Updated: 2026-09-12
 
 ## Goal
 
-Delivery fix from fix/device-custody-ci-exit, based on b9d85b8: CI 34714054055
-passed 320 Windows assertions but propagated the expected invalid-input child's
-exit 2. The new CI-invocation regression reproduces that failure; explicit suite
-success follows all assertions/cleanup. Runtime and custody guards are unchanged.
-Final hosted Windows delivery status must be checked for this handoff's commit.
-
-Select the configured wallet's smallest device custody/recovery boundary and
-deliver a read-only storage preflight, current-record procedures and failure
-drills. Acceptance met: adverse/unavailable/malformed observations cannot pass,
-the observed workspace refuses qualification, and offline handoff remains
-distinct from active-device loss. No machine controls or real secrets changed.
-Delivery target: reference-ts/main; slice from feat/local-wallet-device-boundary
-based on 1f06f1b. Implementation, review and local verification are complete.
-Read delivery parity/CI for the commit containing this handoff on resumption.
-Companion money-from-first-principles/main 7ea0ee8 unchanged; no normative,
-runtime, circuit, derivation, dependency or custody-schema changes.
+Device custody profile and read-only preflight delivered in b9d85b8; malformed,
+adverse and unavailable observations refuse, and offline handoff remains distinct
+from active-device loss. No real secrets or machine controls changed.
+CI fix a86d9e4 stops the expected invalid-input child's exit 2 leaking from the
+passing suite. New CI-invocation regression passed; all seven hosted CI jobs
+passed on a86d9e4 (run 34714971567), including Windows and real-proof acceptance.
+Progress guidance now uses brief reassessment after meaningful product changes
+and omits unchanged percentages for routine fixes/tooling. Both repositories
+use main; companion money-from-first-principles/main 60f380c changes AGENTS.md
+only. Normative content remains at 7ea0ee8. No runtime, circuit, derivation,
+dependency or custody-schema changes. Check latest delivery CI on resumption.
 
 ## Status
 
@@ -83,9 +78,11 @@ runtime, circuit, derivation, dependency or custody-schema changes.
 
 ## Open questions
 
-- About **45% done / 55% remaining**, plausible done range **35-55%**. This slice
-  resolves deployment requirements and refusal behavior; it closes no device or
-  recovery gate, so the coarse effort estimate is unchanged.
+- Last reassessed 2026-09-12: **roughly 50% done / 50% remaining**, plausible
+  done range **40-60%**. The old 45% predated working local wallet flows; verified
+  payments, private delivery, configured operation and offline handoff now earn
+  reusable progress despite open release gates. This is coarse judgment, not a
+  measured score; the device probe and CI repair themselves add no product credit.
 - Largest blocks: runtime recovery and authenticated evidence/publication,
   qualified device custody/continuous recovery and supported user operation.
 - Switch to a fresh instance for successor restoration integration: the next
