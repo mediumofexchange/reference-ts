@@ -4,16 +4,21 @@ Updated: 2026-09-12
 
 ## Goal
 
-Prepare the fixed 20 GiB / 30-minute connected source-sync launcher using the
-working ordinary-user node plus elevated disk owner. The standard package and
-maintained Java now pass ordinary-token offline startup on a capped VHD and
-parent-death cleanup. No connected sync or large allocation has occurred.
-Next acceptance: reviewed concrete launcher, then separately authorized bounded
-sync producing an applied full-state tip and honest progress/resource evidence.
+Carry the fixed 20 GiB / 30-minute connected source-sync experiment through
+implementation, focused checks, independent review, execution and measured
+evidence. Reuse the standard packages and proven ordinary-user disk-owner
+split. Accept honest partial header/applied-state progress; fixtures above the
+applied height remain not reached. Keep 100 GiB host reserve, 8 GiB traffic
+trigger / 10 GiB final ceiling; retain the detached sync image for inspection.
+No public release, fund movement, wallet keys or inbound public listener.
 
-Delivery: `main`; baseline `a83a5b9` (CI 34687643612 passed).
-Companion specification: `money-from-first-principles/main` at `7ea0ee8`.
-No normative change; original fixture provenance pins remain unchanged.
+Delivery: `main`; baseline `7c27a06` (local full checks passed; inspect CI
+34688754933). Companion specification: `money-from-first-principles/main`
+at `7ea0ee8`. No normative change or fixture provenance migration.
+Verification scope: changed native/PowerShell launcher guards, exact config,
+syntax, actual bounded node run and docs. Reuse unchanged 1,795-test baseline;
+no full protocol rerun for isolated experiment changes. Group connected steps
+into one sustained slice; intermediate commits are not stopping points.
 
 ## Status
 
