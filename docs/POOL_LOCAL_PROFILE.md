@@ -183,3 +183,8 @@ hard links, SQLite sidecars, partial export recovery and secret-free parse error
 Protected device storage, independently authenticated digests and one active
 copy remain preconditions. This is offline handoff, not continuous backup or
 device-loss recovery.
+
+The [device custody profile](POOL_WALLET_DEVICE.md) selects a Windows storage
+boundary, current recovery-record procedure and target qualification drills.
+Its read-only preflight reports partial observations; it never qualifies a device
+or authorizes restore. Physical provisioning and continuous recovery remain open.

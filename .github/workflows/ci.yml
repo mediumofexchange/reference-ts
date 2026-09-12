@@ -116,6 +116,11 @@ jobs:
           ./experiments/ergo-range/node-sync-resume-native.test.ps1
           ./experiments/ergo-range/node-sync-resume.test.ps1
 
+      - name: Wallet device custody observations with synthetic providers
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: ./scripts/pool/local/device-storage.test.ps1
+
       - name: Install pinned offline Ergo probe dependencies
         if: matrix.node == 24
         run: npm --prefix experiments/ergo-range ci --ignore-scripts --no-audit --no-fund

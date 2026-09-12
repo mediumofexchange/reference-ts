@@ -198,6 +198,10 @@ This local format changes no v2 derivation, circuit, protocol frame or witness
 rule. Seed-only restoration, successor capsules, continuous disaster recovery,
 device provisioning and automatic rollback protection remain open.
 
+The [configured device custody profile](POOL_WALLET_DEVICE.md) now selects the
+first Windows qualification target and manual handoff record. Its partial
+read-only preflight and synthetic failure checks do not establish device custody.
+
 ## Run the acceptance
 
 ```sh

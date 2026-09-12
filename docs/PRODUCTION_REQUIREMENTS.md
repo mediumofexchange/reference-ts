@@ -13,6 +13,9 @@ integration alongside the core to expose constraints before formats are fixed.
 The approved [deployment probes](POOL_DEPLOYMENT_PROBES.md) bring provisional
 device/venue and recovery evidence forward before v3's layouts are frozen.
 They do not change the specification-first rule for production implementation.
+The selected [Windows wallet custody boundary](POOL_WALLET_DEVICE.md) adds a
+read-only storage preflight and target failure drills. Its synthetic checks and
+host refusal evidence do not close device qualification or continuous recovery.
 
 ## Progress estimate
 

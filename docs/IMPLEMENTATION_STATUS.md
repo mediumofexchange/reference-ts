@@ -40,6 +40,10 @@ Configured encrypted offline handoff freezes and restores both wallets with
 independently retained profile/recovery digests; exact payment retry and receiver
 credential rotation continue into another verified payment. No custody schema
 or protocol bytes change; one active copy remains a precondition.
+The [device custody profile](POOL_WALLET_DEVICE.md) selects Windows protected
+storage and a manual current recovery record. Its read-only preflight refuses
+adverse/unknown observations and never qualifies a device. Provisioned target
+hardware, physical failure drills and continuous recovery remain open.
 An exact segment constraint prevents another profile from fencing an existing
 operator journal or signing another scope. Local ledger authentication, device
 custody and continuous recovery remain deployment preconditions and open work.

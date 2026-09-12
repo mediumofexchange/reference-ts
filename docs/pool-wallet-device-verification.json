@@ -1,0 +1,99 @@
+{
+  "schema": "moe/wallet-device-verification/1",
+  "date": "2026-09-12",
+  "baseCommit": "1f06f1ba81640bd8b60684650880cb20f0fa13fc",
+  "scope": "Read-only Windows custody observations; no wallet runtime changes or device provisioning",
+  "runtime": {
+    "powershell": "7.6.5",
+    "windows": "10.0.19045.0"
+  },
+  "sourceSha256": {
+    "scripts/pool/local/device-storage.ps1": "0a195d052f1ba1a213b965be49db7060a144bff09d9db22cb26e0dddd6f4d508",
+    "scripts/pool/local/device-preflight.ps1": "4d5db23b8755f95867a297206ed778407647a78eec121e28c5dce5a8e35125b2",
+    "scripts/pool/local/device-storage.test.ps1": "ceb9a704148ad64e67016684f5fc2862b413fc13fde8e8e852ac66e727aea9c4"
+  },
+  "focusedChecks": {
+    "result": "pass",
+    "assertions": 320,
+    "evidence": "Synthetic providers, in-memory ACLs, real isolated invalid-path CLI; no device controls changed",
+    "command": "pwsh -NoProfile -File scripts/pool/local/device-storage.test.ps1"
+  },
+  "baseline": {
+    "commit": "1f06f1ba81640bd8b60684650880cb20f0fa13fc",
+    "conclusion": "success",
+    "ci": "https://github.com/mediumofexchange/reference-ts/actions/runs/34712726859",
+    "reuse": "Runtime, circuits, dependencies and real-payment acceptance sources unchanged"
+  },
+  "hostObservation": {
+    "target": "Existing development repository; deliberately not a provisioned custody directory",
+    "context": "Read-only process outside filesystem/network sandbox; no administrator elevation requested",
+    "report": {
+      "schema": "moe/wallet-device-preflight/1",
+      "automaticChecks": "fail",
+      "qualified": false,
+      "checks": [
+        {
+          "id": "windows",
+          "status": "pass"
+        },
+        {
+          "id": "literal-directory",
+          "status": "pass"
+        },
+        {
+          "id": "directory-chain",
+          "status": "pass"
+        },
+        {
+          "id": "os-volume",
+          "status": "pass"
+        },
+        {
+          "id": "local-ntfs",
+          "status": "pass"
+        },
+        {
+          "id": "bitlocker-protection",
+          "status": "unknown"
+        },
+        {
+          "id": "pin-protector-types",
+          "status": "unknown"
+        },
+        {
+          "id": "secure-boot",
+          "status": "unknown"
+        },
+        {
+          "id": "flat-directory-acls",
+          "status": "fail"
+        },
+        {
+          "id": "temporary-storage",
+          "status": "pass"
+        }
+      ],
+      "outstanding": [
+        "ancestor-access-and-hardlinks",
+        "physical-storage-and-standard-account",
+        "pin-startup-and-network-unlock",
+        "paging-dumps-and-backup-exclusions",
+        "trusted-software-and-secret-entry",
+        "recovery-material-and-single-active-copy",
+        "target-power-loss-and-handoff-drills"
+      ]
+    },
+    "exitCode": 2
+  },
+  "review": {
+    "patch": "Independent adversarial source review; scalar coercion and GUID end-anchor findings fixed with regressions; final actual-source readback and independent 320-assertion rerun passed; no unresolved material findings",
+    "design": "Independent actual-source review; no material recovery authorization issue"
+  },
+  "limitations": [
+    "No qualified device",
+    "BitLocker/PIN and Secure Boot evidence unavailable on observed host",
+    "No cross-account or physical theft/power-loss drills",
+    "No continuous recovery or automatic rollback detection",
+    "No machine encryption, ACL, account, firmware or power-policy changes"
+  ]
+}
