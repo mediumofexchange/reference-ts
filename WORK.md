@@ -4,6 +4,12 @@ Updated: 2026-09-12
 
 ## Goal
 
+Delivery fix from fix/device-custody-ci-exit, based on b9d85b8: CI 34714054055
+passed 320 Windows assertions but propagated the expected invalid-input child's
+exit 2. The new CI-invocation regression reproduces that failure; explicit suite
+success follows all assertions/cleanup. Runtime and custody guards are unchanged.
+Final hosted Windows delivery status must be checked for this handoff's commit.
+
 Select the configured wallet's smallest device custody/recovery boundary and
 deliver a read-only storage preflight, current-record procedures and failure
 drills. Acceptance met: adverse/unavailable/malformed observations cannot pass,
@@ -36,7 +42,8 @@ runtime, circuit, derivation, dependency or custody-schema changes.
 
 - Final focused suite: 320 assertions passed, independently rerun; synthetic
   providers/in-memory ACLs plus real isolated invalid-path CLI. Added Windows CI
-  step without altering existing gates. Documentation and diff checks passed.
+  invocation regression failed before the exit fix and passed afterward; this
+  now runs in the Windows step. Focused self-review, docs and diff checks passed.
 - [Source pins and observed report](docs/pool-wallet-device-verification.json):
   read-only run outside sandbox, process exit 2/automatic fail. OS-volume/NTFS,
   path and TEMP/TMP observations passed; directory ACL refused; BitLocker/PIN and

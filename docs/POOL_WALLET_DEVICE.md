@@ -138,7 +138,7 @@ Windows, using an existing pre-provisioned directory:
 
 ```powershell
 pwsh -NoProfile -File scripts/pool/local/device-preflight.ps1 -Directory C:\Wallet
-pwsh -NoProfile -File scripts/pool/local/device-storage.test.ps1
+pwsh -NoProfile -File scripts/pool/local/device-storage-runner.test.ps1
 ```
 
 Even all automatic passes leave ancestry replacement rights and hardlinks, physical backing
@@ -177,6 +177,10 @@ strict unique protector IDs, links, directory bounds and private-error refusal.
 Independent review found PowerShell array/truthiness coercion and a regex
 end-anchor accepting a final newline; scalar/typed observations and exact anchors
 fix those cases. Final independent readback and the same focused suite passed.
+The CI invocation regression also checks the suite's process result: its expected
+invalid-input child exits 2, but the suite exits 0 only after all assertions and
+cleanup pass. The original hosted run passed assertions but failed by propagating
+that child's status; the regression reproduced exit 2 before the fix.
 The existing development repository returned `fail`, with its directory ACL
 outside the selected policy and BitLocker/PIN/Secure Boot observations `unknown`.
 No key material was queried and no settings changed. This is useful refusal

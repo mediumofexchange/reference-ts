@@ -119,7 +119,7 @@ jobs:
       - name: Wallet device custody observations with synthetic providers
         if: matrix.os == 'windows-latest'
         shell: pwsh
-        run: ./scripts/pool/local/device-storage.test.ps1
+        run: ./scripts/pool/local/device-storage-runner.test.ps1
 
       - name: Install pinned offline Ergo probe dependencies
         if: matrix.node == 24

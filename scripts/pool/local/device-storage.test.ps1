@@ -192,3 +192,6 @@ try {
     Assert-Check ($cliReport.qualified -ceq $false -and $cliReport.automaticChecks -eq 'fail') 'CLI refusal report changed'
 } finally { $env:TEMP = $savedTemp; $env:TMP = $savedTmp }
 Write-Output "Device storage checks passed ($cases assertions; synthetic providers, in-memory ACLs; no device changes)."
+# The rejected CLI deliberately exits 2. Report this suite's own success only
+# after every assertion and cleanup passed, rather than leaking that child exit.
+exit 0

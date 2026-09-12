@@ -10,13 +10,22 @@
   "sourceSha256": {
     "scripts/pool/local/device-storage.ps1": "0a195d052f1ba1a213b965be49db7060a144bff09d9db22cb26e0dddd6f4d508",
     "scripts/pool/local/device-preflight.ps1": "4d5db23b8755f95867a297206ed778407647a78eec121e28c5dce5a8e35125b2",
-    "scripts/pool/local/device-storage.test.ps1": "ceb9a704148ad64e67016684f5fc2862b413fc13fde8e8e852ac66e727aea9c4"
+    "scripts/pool/local/device-storage.test.ps1": "f4ee62854d7a17ee5c676356a6e49a86cf99acddfa8b017d21854ea04df6b7a9",
+    "scripts/pool/local/device-storage-runner.test.ps1": "dabb50731684864b4bac018ff44dcfa672af53bfc126638634a8f6dc9101558c"
   },
   "focusedChecks": {
     "result": "pass",
     "assertions": 320,
     "evidence": "Synthetic providers, in-memory ACLs, real isolated invalid-path CLI; no device controls changed",
-    "command": "pwsh -NoProfile -File scripts/pool/local/device-storage.test.ps1"
+    "command": "pwsh -NoProfile -File scripts/pool/local/device-storage-runner.test.ps1",
+    "ciInvocation": {
+      "failingRun": "https://github.com/mediumofexchange/reference-ts/actions/runs/34714054055",
+      "beforeFixExit": 2,
+      "review": "Focused self-review; test and CI invocation only, no custody observation/runtime changes",
+      "afterFixExit": 0,
+      "fix": "Explicit suite success after assertions and cleanup; regression uses hosted-style LASTEXITCODE propagation",
+      "cause": "Expected invalid-input CLI exit leaked from passing suite"
+    }
   },
   "baseline": {
     "commit": "1f06f1ba81640bd8b60684650880cb20f0fa13fc",
