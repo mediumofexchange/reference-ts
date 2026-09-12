@@ -23,7 +23,7 @@ export async function checkWalletOperation(options) {
   assert.ok([root, directory, baseUrl, evidenceFile, ledgerFile, compiled].every(value => typeof value === 'string') &&
     typeof checkpoint === 'function', 'invalid wallet operation check options');
   const commands = join(root, 'scripts/pool/wallet/commands.mjs');
-  const payer = join(directory, 'operation-payer.db'), receiver = join(directory, 'operation-receiver.db');
+  let payer = join(directory, 'operation-payer.db'), receiver = join(directory, 'operation-receiver.db'), expectedReceiverGeneration = 1n;
   for (const database of [payer, receiver]) assert.equal(resolve(database).startsWith(resolve(directory) + sep), true, 'wallet database escaped operation directory');
   let receiverWallet, server, receiverPort = 0;
   const children = new Set(), closedChildren = new WeakSet();
@@ -146,6 +146,11 @@ export async function checkWalletOperation(options) {
       'inbox acceptance must remain distinct from checkpoint finality');
     await stopReceiver();
 
+    if (options.handoff) {
+      const restored = await options.handoff({ payer, receiver, firstPrepared, firstAccepted, firstEnrollment, firstRequest });
+      payer = restored.payer; receiver = restored.receiver; expectedReceiverGeneration = restored.receiverGeneration;
+    }
+
     await checkpoint('operation-payment-7');
     const receivedFirst = await command('receive', receiver, { id: 'order17' });
     assert.equal(receivedFirst.kind, 'final'); assert.equal(receivedFirst.reconciled, false);
@@ -159,7 +164,7 @@ export async function checkWalletOperation(options) {
     const secondRequest = await command('request', receiver, { id: 'order3', value: '3' });
     assert.equal(secondRequest.kind, 'request');
     const secondEndpoint = await startReceiver('order3');
-    assert.equal(receiverWallet.deliveryCredentials().generation, 1n, 'receiver restart must retain its endpoint key generation');
+    assert.equal(receiverWallet.deliveryCredentials().generation, expectedReceiverGeneration, 'receiver restart must retain its endpoint key generation');
     assert.equal((await command('enroll', payer, { alias: 'payment3', invitation: secondEndpoint.invitation,
       trustedDigest: secondEndpoint.digest, expectedRequest: secondRequest.request })).kind, 'enrolled');
     const secondPrepared = await command('prepare', payer, { alias: 'payment3' });

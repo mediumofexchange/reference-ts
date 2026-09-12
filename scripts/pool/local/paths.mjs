@@ -53,7 +53,12 @@ function add(label, item, all) {
 
 /** Validate local file paths before opening proof, wallet or operator state. */
 export function assertLocalPaths(database, profileFile, ledgerFile, evidenceFile) {
-  const values = { database: identity(database), profileFile: identity(profileFile), ledgerFile: identity(ledgerFile), evidenceFile: identity(evidenceFile) };
+  return assertWalletPaths(database, { profileFile, ledgerFile, evidenceFile });
+}
+
+/** Wallet custody files must also be distinct from every database sidecar. */
+export function assertWalletPaths(database, files) {
+  const values = { database: identity(database), ...Object.fromEntries(Object.entries(files).map(([name, path]) => [name, identity(path)])) };
   const all = new Map();
   add('database', values.database, all);
   for (const suffix of SQLITE_SIDECARS) {
@@ -61,6 +66,6 @@ export function assertLocalPaths(database, profileFile, ledgerFile, evidenceFile
     add(`database${suffix}`, lexicalSidecar, all);
     if (values.database.physical !== values.database.lexical) add(`database${suffix}`, identity(values.database.physical + suffix), all);
   }
-  add('profileFile', values.profileFile, all); add('ledgerFile', values.ledgerFile, all); add('evidenceFile', values.evidenceFile, all);
+  for (const name of Object.keys(files)) add(name, values[name], all);
   return Object.freeze(Object.fromEntries(Object.entries(values).map(([name, item]) => [name, item.lexical])));
 }

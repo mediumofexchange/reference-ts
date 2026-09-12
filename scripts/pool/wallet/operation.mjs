@@ -199,5 +199,7 @@ export async function readCommandInput() {
     assert.ok(size <= MAX_INPUT_BYTES, 'command input exceeds limit'); chunks.push(chunk);
   }
   const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks, size));
-  assert.ok(text.length > 0, 'command input is required'); return JSON.parse(text);
+  assert.ok(text.length > 0, 'command input is required');
+  // Native JSON parse errors can quote credential-bearing stdin in stderr.
+  try { return JSON.parse(text); } catch { throw new Error('invalid command JSON'); }
 }

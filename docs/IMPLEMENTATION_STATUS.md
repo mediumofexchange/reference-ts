@@ -36,6 +36,10 @@ distinct; imported-note selection and automatic consolidation remain open.
 The [caller-configured local profile](POOL_LOCAL_PROFILE.md) supplies authenticated
 signed terms and initial authority to holder, receiver and operator commands,
 using the pinned real verifier. Holder processes have no fixture issuance keys.
+Configured encrypted offline handoff freezes and restores both wallets with
+independently retained profile/recovery digests; exact payment retry and receiver
+credential rotation continue into another verified payment. No custody schema
+or protocol bytes change; one active copy remains a precondition.
 An exact segment constraint prevents another profile from fencing an existing
 operator journal or signing another scope. Local ledger authentication, device
 custody and continuous recovery remain deployment preconditions and open work.

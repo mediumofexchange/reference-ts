@@ -105,8 +105,26 @@ After creating an invoice, the receiver command installs private TLS credentials
 if needed, serves that invoice and prints its private invitation, digest and
 bound port. Keep that output private. The printed digest alone is not a payer's
 trust anchor; authenticate it independently. Restart on the same port preserves
-the endpoint and saved credentials. Existing API credential rotation remains
-available; no new rotation or wallet recovery format is introduced here.
+the endpoint and saved credentials. The optional sixth argument is the expected
+current credential generation:
+
+```sh
+node scripts/pool/local/receiver.mjs DATABASE PROFILE DIGEST REQUEST_ID PORT EXPECTED_GENERATION
+```
+
+It compares the saved generation, installs a fresh private TLS key/certificate
+and revokes all old invoice capabilities using the existing atomic rotation API.
+The result includes the saved generation as a decimal string. Stop the obsolete
+listener and restart on the same port; independently authenticate the new private
+invitation. Payer `enroll` updates also require the previous accepted digest.
+Saved statements and receipts survive rotation and exact payment retry.
+
+Rotation commits before the listener opens. If the port is occupied or the ready
+reply is lost, restart **without** `EXPECTED_GENERATION` and inspect the emitted
+generation/invitation. Repeating the old expected generation refuses and cannot
+rotate twice. This command generates credentials internally; its recovery is
+readback/restart, while exact installation retry with retained credentials remains
+available through the underlying API. No protocol or custody format changes.
 
 Operator inputs/outputs must be distinct by filesystem identity, including
 Windows case aliases, hard links and SQLite sidecars. Files and their parent
@@ -117,3 +135,51 @@ durability, hostile rollback prevention or device-loss recovery. A local ledger
 has a 100,000-commitment cap; beyond it publication refuses with its durable
 outbox pending, while existing records remain readable and restartable. This is
 an explicit local capacity limit, not an automatic venue migration mechanism.
+
+## Encrypted offline handoff
+
+Stop receiver listeners and quiesce all holder workflows before export. On a
+protected local device, use a separately generated random 32-byte recovery key;
+retain that key separately from the encrypted file. Keep the profile digest and
+the latest exact export digest in an independently trusted recovery record.
+
+```sh
+node scripts/pool/local/custody.mjs export DATABASE PROFILE PROFILE_DIGEST BACKUP
+node scripts/pool/local/custody.mjs restore NEW_DATABASE PROFILE PROFILE_DIGEST BACKUP
+node scripts/pool/local/custody.mjs inspect DATABASE PROFILE PROFILE_DIGEST
+```
+
+Export stdin is `{ "key": "<64 lowercase hex>" }`; restore stdin adds
+`"digest": "<independently retained export digest>"`. Keys never belong in
+arguments or logs. Inspection requires no secret input and prints `frozen` and,
+for a completed restore, `restoredFrom`. The source and inspection database must
+already exist. Profile authentication and file-identity checks precede wallet
+access. Restore requires a fresh destination and no SQLite sidecars; it never
+overwrites or merges an existing wallet. No proof artifacts or operator service
+are needed for these commands.
+
+Export atomically freezes the source and retains the existing encrypted nine-table
+snapshot before writing and flushing the output file. The source stays frozen
+even if copying fails. A lost successful reply can be retried with the same key
+and path, returning identical bytes/digest. An existing different or partial
+output is preserved and refused; copy the frozen export to a fresh output path
+and retain its same digest. This produces another encrypted file, not another
+active wallet. File flush/readback is not a directory durability guarantee.
+
+Restore retains requests, counters, pending payments, reservations, receipts,
+inbox and fulfillment records, private transport credentials and accepted
+pairings. After a lost restore reply, inspect the **same** destination and compare
+`restoredFrom` with the independently retained digest. Do not blindly retry to
+another destination. An absent/mismatching digest is unresolved recovery, not
+permission to replace an existing wallet. Activate only one restored wallet;
+never resume an older offline export after subsequent wallet activity.
+
+Configured real-proof acceptance freezes/restores both wallets after delivery
+of the first payment and before its checkpoint, reconciles the exact saved
+statement/receipt/inbox, rotates receiver credentials, rejects stale delivery,
+authenticates the new invitation, then verifies and spends change 3. Hostile
+checks cover wrong profile/key/digest, altered ciphertext, existing files,
+hard links, SQLite sidecars, partial export recovery and secret-free parse errors.
+Protected device storage, independently authenticated digests and one active
+copy remain preconditions. This is offline handoff, not continuous backup or
+device-loss recovery.

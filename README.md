@@ -21,6 +21,7 @@ adds durable requests, private HTTPS delivery, payment retries and verified,
 once-only invoice records.
 The [configured local commands](docs/POOL_LOCAL_PROFILE.md) use caller-held signed
 terms and pinned real proofs, with separate holder and operator credentials.
+They support encrypted offline wallet handoff and receiver credential rotation.
 Its real-proof mode checks public supply in a separate process, and crash
 tests cover wallet commits. It still uses a local venue; a usable wallet and
 external witness write adapter remain open. The API and wire format are experimental, the

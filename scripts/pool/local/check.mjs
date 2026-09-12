@@ -23,6 +23,7 @@ import { decodeWalletPairing, walletPairingDigest } from '@mediumofexchange/refe
 import { encodeLocalProfile, readLocalProfile } from './profile.mjs';
 import { pinnedConfiguration } from '../wallet/pins.mjs';
 import { checkWalletOperation } from '../wallet/operation-check.mjs';
+import { checkConfiguredCustody } from './custody-check.mjs';
 
 const root = realpathSync(fileURLToPath(new URL('../../../', import.meta.url)));
 const scratchPath = join(root, 'scratch'); mkdirSync(scratchPath, { recursive: true });
@@ -81,8 +82,8 @@ async function startOperator() {
     { operatorSecret: operatorSecret.toString('hex'), walletToken, adminToken });
   operatorChild = started.child; baseUrl = started.ready.baseUrl; client = new PoolServiceClient(baseUrl, walletToken, adminToken);
 }
-async function listen(databasePath, id, port = 0) {
-  return start('receiver.mjs', [databasePath, profileFile, digest, id, String(port)]);
+async function listen(databasePath, id, port = 0, expectedGeneration) {
+  return start('receiver.mjs', [databasePath, profileFile, digest, id, String(port), ...(expectedGeneration === undefined ? [] : [String(expectedGeneration)])]);
 }
 function args(mode, wallet, evidence = evidenceFile, artifacts = compiled) {
   return [join(root, 'scripts/pool/local/holder.mjs'), mode, wallet, profileFile, digest, baseUrl, evidence, ledgerFile, artifacts];
@@ -130,6 +131,8 @@ try {
     },
     startReceiver: async (wallet, id) => { const started = await listen(wallet, id, receiverPort); receiverChild = started.child; receiverPort = started.ready.port; return started.ready; },
     stopReceiver: async () => { await stop(receiverChild); receiverChild = undefined; },
+    handoff: async state => checkConfiguredCustody({ ...state, root, directory, profileFile, profileDigest: digest,
+      holder, listen: (wallet, id, generation) => listen(wallet, id, receiverPort, generation), stop }),
     fund: async (wallet, command) => {
       for (const value of [4n, 6n]) {
         const id = 'fund' + value, request = JSON.parse((await command('request', wallet, { id, value: String(value) })).request);

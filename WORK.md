@@ -4,41 +4,47 @@ Updated: 2026-09-12
 
 ## Goal
 
-Complete a caller-configured local wallet/operator payment flow.
-Acceptance: authenticated public signed terms and exact initial authority,
-pinned real v2 proofs, holder commands without fixture signing keys or issuance,
-locally configured operator, private payment and change followed by another
-payment, rejection of changed/unsupported profiles, and exact restart/retry.
-Work: reference-ts/main, configured profile slice from feat/local-wallet-profile,
-based on e566ade (hosted CI 34709509899 passed). Local checks and independent
-review are complete. Read hosted CI for the current main delivery before the next
-slice. Companion money-from-first-principles/main 7ea0ee8 is unchanged: existing v2
-only, no protocol, circuit, derivation or custody schema change.
+Extend configured wallets through encrypted offline handoff and credential
+rotation. Acceptance: pay, stop listeners, freeze/export, restore with separately
+retained profile/recovery digests, reconcile exact payment retries, rotate
+receiver credentials with stale-binding refusal, then spend verified change.
+Reject wrong credentials, conflicting files and occupied restore destinations.
+Work: reference-ts/main, custody slice from feat/local-wallet-custody based on
+af5ab7f. Hosted baseline CI 34711462707 passed. Implementation, independent review
+and final full/real acceptance are complete. Read delivery CI for the commit
+containing this handoff before the next slice.
+Companion money-from-first-principles/main 7ea0ee8 remains unchanged: existing v2
+and custody APIs only; no protocol, circuit, derivation or backup schema change.
 
 ## Status
 
-- [Configured local profile](docs/POOL_LOCAL_PROFILE.md) authenticates canonical
-  signed terms and initial authority against a caller-held digest and real v2 pins.
-  Separate holder, receiver and operator commands share ordinary payment logic;
-  the holder import graph excludes fixture keys and cannot issue.
+- [Configured local profile](docs/POOL_LOCAL_PROFILE.md) now exposes encrypted
+  export/restore/inspection and expected-generation receiver credential rotation.
+  Existing backup schema, transaction fencing and pinned v2 proofs are unchanged.
+- Export freezes before copying; exact file retries succeed and partial/conflicting
+  files remain preserved. Restore requires a fresh destination. Lost replies are
+  reconciled through the same destination's saved digest. One active copy remains
+  a precondition; rotation readback uses restart without another generation change.
+- Independent actual-source review closed with no unresolved material finding.
+  Fixed native JSON parse errors quoting credential-bearing input; independent
+  failed-process probe verified generic errors without the supplied secret prefix.
+  File identities include Windows aliases, links and SQLite sidecars.
 - One initial constant-payout backing, no reliance/imports/recovery clauses.
   Exact saved retries need no proof artifacts; new verification always uses the
   pinned real verifier. Local venue records and digest authentication stay modeled.
-- Independent design/source review and narrow fix readbacks are closed with no
-  unresolved material finding. Store header constraints check before fencing and
-  signing. File identity guards cover Windows aliases, links and SQLite sidecars;
-  atomic file replacement, bounded publication and IPC cleanup are explicit.
 ## Evidence
 
-- Final full check passed 105 files / 1,882 tests and all process stages. Profile
-  and path checks passed, including otherwise-valid unsupported terms. Six new
-  store guard tests passed. Results/source hashes:
+- Final full check passed 105 files / 1,882 tests and all process stages, including
+  22 abrupt wallet commit exits/recoveries. Initial sandbox attempt could not
+  start esbuild; the complete rerun outside that restriction passed.
+- Final configured real-proof flow funds 4 + 6, pays 7, freezes/restores both
+  wallets before checkpoint, compares the restored inbox before redelivery,
+  reconciles exact statements/receipts without artifacts, rotates credentials,
+  verifies change 3 and spends it. Separate audit: issued 10, burned 0,
+  outstanding 10. All workers exited and owned acceptance directories removed.
+- Hostile credentials/files, partial export recovery, busy-port rotation readback
+  and stale bindings/generations passed. Source/log hashes and review disposition:
   [configured evidence](docs/pool-local-verification.json).
-- Existing HTTPS rotation, encrypted offline restores and 22 abrupt wallet commit
-  exits/recoveries passed. Configured real-proof acceptance funds 4 + 6 through
-  private issuance delivery, pays 7, restarts the operator, records change 3 and
-  pays it exactly. Separate public audit: issued 10, burned 0, outstanding 10.
-  All configured workers exited and their generated scratch files were removed.
 
 ## Retained Ergo evidence; node stopped
 
@@ -58,10 +64,10 @@ only, no protocol, circuit, derivation or custody schema change.
 ## Next
 
 1. Verify remote parity and hosted CI for delivered main.
-2. Extend the configured flow through encrypted offline export/restore and
-   credential rotation using the existing custody format, without fixture
-   profiles. Acceptance: pay, freeze/export, restore using independently retained
-   profile/recovery digests, then exact retry and another verified payment.
+2. Define and independently review the smallest supported device custody and
+   recovery boundary for the configured wallet. Select concrete protected
+   database/WAL/key storage and recovery-record procedures, with failure drills
+   and a falsifiable acceptance result, before claiming a usable wallet.
 3. Continuous/device-loss recovery needs its own concrete custody boundary.
    An old offline export cannot resume safely after later wallet activity. Do
    not add successor derivation/capsules to pinned v2. Imported-note selection
@@ -75,6 +81,6 @@ only, no protocol, circuit, derivation or custody schema change.
   uncertainty; no external witness, device custody or runtime recovery gate closes.
 - Largest blocks: runtime recovery and authenticated evidence/publication,
   qualified device custody and continuous recovery, supported user operation.
-- Switch to a fresh instance for the next configured custody/recovery slice: it
-  benefits from fresh context after this detailed command/path review. This is
-  an efficiency judgment, not measured comparative model performance.
+- Switch to a fresh instance for the next device custody/recovery design slice:
+  it needs fresh assessment of deployment assumptions beyond this command review.
+  This is an efficiency judgment, not measured comparative model performance.
