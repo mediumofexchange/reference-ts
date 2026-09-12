@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-12` [Transfer complete wallets through encrypted offline exports](decisions/2026-09.md#2026-09-12--transfer-complete-wallets-through-encrypted-offline-exports)
 - `2026-09-12` [Deliver v2 wallet openings over authenticated HTTPS](decisions/2026-09.md#2026-09-12--deliver-v2-wallet-openings-over-authenticated-https)
 - `2026-09-10` [Prefer the standard Ergo distribution](decisions/2026-09.md#2026-09-10--prefer-the-standard-ergo-distribution)
 - `2026-09-10` [Prepare the exact native candidate for the offline control](decisions/2026-09.md#2026-09-10--prepare-the-exact-native-candidate-for-the-offline-control)
