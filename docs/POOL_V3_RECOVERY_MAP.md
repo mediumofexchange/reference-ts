@@ -260,8 +260,9 @@ mutation tests are selected-backend evidence, not a general nonmalleability
 proof or evidence of presenter-key participation. Single desktop timings
 do not establish device budgets.
 
-**Final pinning acceptance.** Fix the remaining configuration preimage,
-delivery-profile encoding and remaining bounds, then independently review and
+**Final pinning acceptance.** Section 11 fixes configuration framing and the
+delivery-profile byte. Settle remaining certificate/replay/resource bounds,
+then independently review and
 commit the complete source/helper/toolchain/bytecode/key identities together
 before runtime adoption. Rerun affected proofs on that exact build and domain.
 A passing v2 proof or this uninstantiated-domain suite cannot substitute for
@@ -817,9 +818,11 @@ acceptance/release/withdrawal bytes; and history/evidence/snapshot/receipt
 frames, segment headers, portable fault-evidence records and served-trail transport. Remaining
 prerequisites are authenticated range-source evidence, replay/import/adoption
 state and order, complete opening verification and its certificate dependency
-frames, final artifact
-identities, and the configuration preimage over those identities, the helper
-and bounds, whose hash becomes the v3 domain. A1–A3, A5–A7 and A16–A21 were decided on
+frames and final approved artifact/configuration identities. Section 11 now
+fixes the configuration frame over all six bytecode/key pairs, the helper,
+bounds and delivery profile, plus signed constant-root terms. Candidate
+configuration/terms checks leave adoption and authority unresolved.
+A1–A3, A5–A7 and A16–A21 were decided on
 2026-09-09 in the contracts, and A4 is measured. A12's requirement to settle
 F3/F4 together is satisfied: delivery changes three relations, and
 spend has two inputs/four outputs. A22 selects compressed spent roots, and

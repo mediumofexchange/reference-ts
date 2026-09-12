@@ -192,8 +192,12 @@ The [retained report](pool-v3-local-replay-verification.json) records source,
 bytecode/key hashes, real-proof checks and the resulting public audit.
 
 The fixture issues 10, pays 7 with change 3, then burns 5 with receiver change
-2. A seedless public verifier checks every proof under its independently
-selected key, verifies the issuer's signature over the canonical statement,
+2. A seedless public verifier checks the 439-byte candidate configuration and
+all six source/toolchain/bytecode/key identities against its independently held
+manifest. It derives the candidate domain from that frame and the issuer key
+from canonical signed constant-root terms under
+[pool-v3 §11](https://github.com/mediumofexchange/money-from-first-principles/blob/916bffb/pool-v3.md#11-configuration-and-backing-evidence-before-adoption).
+It checks every proof under the kind's own key and the issuer's statement signature,
 derives the header's scope root, and replays accepted anchors, spent nullifiers,
 new outputs and bounded totals. It reconstructs the local note tree, compressed
 spent root, per-event history chain and terminal snapshot. A separate fresh
@@ -209,11 +213,12 @@ returns partial totals or candidate notes. Exact repeated reads agree; repeating
 a statement inside the served history refuses. Historical candidates remain
 historical, and no-match scanning makes no complete-zero-balance claim.
 Inputs are copied before asynchronous proof verification. Shared-memory
-buffers refuse: cloning alone would leave the issuer key and seed mutable
-while a proof check is awaiting. The regression reproduces a wrong shared
-issuer key becoming accepted before this guard and requires refusal before
-any verifier call afterward. A changed local key artifact also fails its
-independently held fixture hash before verification.
+buffers refuse: cloning alone would leave terms, configuration and seed mutable
+while a proof check is awaiting. The earlier loose-key regression is preserved
+by checking shared storage before any verifier call. Loose issuer overrides
+now refuse. Changed sources, all six bytecodes and retained keys, including
+unused recovery keys, fail independent pins. Changed terms signatures, names,
+domains, venues and original-operator/genesis-link assumptions refuse as well.
 
 The complete public-package boundary still requires the following inputs and
 checks. This table separates what this experiment establishes from prerequisites
@@ -221,20 +226,22 @@ that a production reader must establish before returning spendable holdings.
 
 | Boundary | Experiment evidence | Still required |
 |---|---|---|
-| Construction and key routing | Real compiled successor keys, identified by bytecode/VK hashes; served records cannot select keys | Adopted v3 configuration preimage, artifact/source/helper pins, declared proof system and authenticated construction domain |
-| Backing and scope authority | Header-derived scope root and real issuance signature under an independent fixture issuer key | Canonical v3-declaring terms/name/signature validation, registered immutable terms, replacement links and force at the judging record |
+| Construction and key routing | Exact configuration preimage and candidate domain; all six independently pinned source/toolchain/bytecode/key identities and fixed helper/bounds/profile | Approved configuration/artifact identities after full adoption prerequisites; setup provenance and deployment qualification |
+| Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and terms-derived issuance key; header-derived scope root | Registered immutable terms, replacement links and force at the judging record; no revocation or prior opening inferred from a signature |
 | Local state | Issue/spend/burn proof and state checks, compressed spent root, note paths, totals and both chains | Recovery statements, locks, recursively verified imports, deduplicated closure and all scoped snapshots |
 | Witness and continuity | Exact fixture-selected signed checkpoint; old package mismatch tested | Complete authenticated venue ranges and same-index order, initial empty-opening justification, revocation/lapse/fault and last-valid-prefix checks |
 | Wallet restoration | Seed-only candidate openings and local paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
 
-The issuer key, domain and checkpoint selection remain independent **test
-fixture assumptions**. Opaque terms are not authenticated, and a signed history
-does not establish the force of those terms. `fullV3Replay`,
+The candidate manifest, checkpoint selection and initial empty-opening force
+remain explicit **test fixture assumptions**. Signed terms establish identity,
+and configuration checks bind the candidate keys; neither establishes adoption
+or the force of those terms. `candidateConfigurationChecked` and
+`signedTermsAuthenticated` report only those narrower successful checks. `fullV3Replay`,
 `currentRangeAuthenticated`, `termsAuthorityAuthenticated`, completeness and
 spendability remain false; coverage remains unresolved. A local path is not a
 certified anchor. The required full-package checks derive from pool-delivery
-C4.6, pool-v3 §§1/7/10 and the authority/fault contracts; this experiment adds no
-normative rule or new signature scheme.
+C4.6, pool-v3 §§1/7/10/11 and the authority/fault contracts. Section 11 adds
+configuration/terms framing for conformance, with the existing signature rule.
 
 ## Transfer shape and ordinary fees
 

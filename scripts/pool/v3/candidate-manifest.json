@@ -1,0 +1,46 @@
+{
+  "purpose": "conformance-only",
+  "specification": "916bffb",
+  "toolchain": {
+    "@aztec/bb.js": "5.2.0",
+    "@noir-lang/noir_js": "1.0.0-beta.26",
+    "@noir-lang/noir_wasm": "1.0.0-beta.26"
+  },
+  "verifierTarget": "noir-recursive",
+  "sources": {
+    "issue.nr": "dfc3a4c8c39e870e942d6c7c512af2a6d07e5a5f5eb01bbccf9fbf03a5c91167",
+    "spend.nr": "bde18e670aac3c1771419211a5685e5531da8c75fe1297f78e489855e511fdf7",
+    "burn.nr": "fc701db0ddf076004621ec91dcd25972d46b91bef5f2b00277155ef8a73b8fe5",
+    "demand.nr": "c0fe4af4fb64f8494b16a40f49a526b048e9c41b68924c471e99ef898c15c349",
+    "settle.nr": "5c7ed9ce647fa4440a11b6e43d62d889bd65f26016d9267b702bbac5393ad92d",
+    "request.nr": "d6abd650c01efb37bd5ced2c38068ab64c99e62f3cba02468ec1107f985dca27",
+    "notes.nr": "c606dd994e523631a969de861b909128b834be8f6fba4be11a4e2a217262270d",
+    "poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"
+  },
+  "circuits": {
+    "issue": {
+      "bytecode": "0c6c904321ff16bc8fdce2298257f3cd54035bc20e53bc6e711d0be5356d211c",
+      "vk": "65cc0ada6618c79df403d8276cd6a201e36936fb6264e516a34c4bf225729da0"
+    },
+    "spend": {
+      "bytecode": "47f3a125a0fcfc22cd15e482db2c75173ed70eb413f5df43b38ec00f5fa51087",
+      "vk": "850131fcd564ce15a238142051a0780623c8c759ccaffb4e389aad5a5056acba"
+    },
+    "burn": {
+      "bytecode": "d36344f2b2424fa6569c01bb7d8450da98fab641251ee385914332f5437c4b72",
+      "vk": "ce55384238c5448505f7c34b938ae92152ea75c3c412c779b20aea57bf82f3be"
+    },
+    "demand": {
+      "bytecode": "cab1f519db1b93cb5e2b6ec89052c5c69706990960fc3c0e617f996d843e5187",
+      "vk": "cf3912b74b1c72eef4114049f792b76462cb3cf38f19181a90dd279175b61aa4"
+    },
+    "settle": {
+      "bytecode": "ccad2b665539a22c1be4692e05a87bae01ccd6756ce464fc327d8a41b7938b23",
+      "vk": "ea5b3e66ced10ded8cd72bae33c6cf4dd7d2704735713ce3b7f2f76126967654"
+    },
+    "request": {
+      "bytecode": "4b1a0e76a48b651a33f19a25dcad2e45e708aabd70d757528153a2098a929084",
+      "vk": "1f048f189568b0b6ffdac39c71957aee34ed3485490d8594aba86d800e2aeaf4"
+    }
+  }
+}

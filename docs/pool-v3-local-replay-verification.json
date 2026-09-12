@@ -1,9 +1,16 @@
 {
-  "schema": "moe-v3-local-replay-experiment-1",
-  "specification": "7ea0ee8",
+  "schema": "moe-v3-local-replay-experiment-2",
+  "specification": "916bffb",
   "node": "v24.6.0",
+  "candidateDomain": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
+  "configurationBytes": 439,
+  "backing": "6d7882f0074b4fca2c5caec1642b2d5fd2dcf64e4e407e62053b099bf2b84b7a",
   "platform": "win32",
   "checks": [
+    "all six candidate sources, bytecodes and retained keys match independent pins",
+    "configuration substitutions and loose issuer overrides refuse before any proof",
+    "signed scoped terms refuse changed signature, payout, key and name independently",
+    "otherwise valid empty evidence cannot borrow wrong terms domain, venue or original scope",
     "shared key, seed and selection storage refuses before asynchronous verification",
     "real proof replay derives supply 10 minus 5 and the receiver's local path to change 2",
     "exact repeated reads agree while duplicate history records refuse",
@@ -34,6 +41,18 @@
     "burn": {
       "bytecode": "d36344f2b2424fa6569c01bb7d8450da98fab641251ee385914332f5437c4b72",
       "vk": "ce55384238c5448505f7c34b938ae92152ea75c3c412c779b20aea57bf82f3be"
+    },
+    "demand": {
+      "bytecode": "cab1f519db1b93cb5e2b6ec89052c5c69706990960fc3c0e617f996d843e5187",
+      "vk": "cf3912b74b1c72eef4114049f792b76462cb3cf38f19181a90dd279175b61aa4"
+    },
+    "settle": {
+      "bytecode": "ccad2b665539a22c1be4692e05a87bae01ccd6756ce464fc327d8a41b7938b23",
+      "vk": "ea5b3e66ced10ded8cd72bae33c6cf4dd7d2704735713ce3b7f2f76126967654"
+    },
+    "request": {
+      "bytecode": "4b1a0e76a48b651a33f19a25dcad2e45e708aabd70d757528153a2098a929084",
+      "vk": "1f048f189568b0b6ffdac39c71957aee34ed3485490d8594aba86d800e2aeaf4"
     }
   },
   "metrics": [
@@ -41,55 +60,55 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2381.9373000000014
+      "elapsedMs": 2652.113800000003
     },
     {
       "label": "pay 7, change 3",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 7557.960299999999
+      "elapsedMs": 5415.239000000001
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 5258.337200000002
+      "elapsedMs": 4871.338600000003
     },
     {
       "label": "valid maximum issuance",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1772.7482999999993
+      "elapsedMs": 1648.024900000004
     },
     {
       "label": "valid proof, different scope",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2215.938900000001
+      "elapsedMs": 1658.693299999999
     },
     {
       "label": "valid proof, unaccepted anchor",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6720.452600000004
+      "elapsedMs": 4825.128700000001
     },
     {
       "label": "valid proof, spent input",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 7184.950799999999
+      "elapsedMs": 5067.683900000004
     },
     {
       "label": "valid proof, duplicate output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 9285.098900000005
+      "elapsedMs": 5777.910100000001
     }
   ],
   "sourceSha256Lf": {
-    "scripts/pool/v3/local-replay.mjs": "c67946b64afa1026dc8dc6c5f6eeaeedb91501e58973b5a57362b01f3438f736",
-    "scripts/pool/v3/local-worker.mjs": "dc3f723292b30bfef54930872cb5a681dc1507b62caeaca7ca7b8d1a292ab7aa",
-    "scripts/pool/v3/local-check.mjs": "9d02c4bd053e14134c05a0927fd2d36527edab2281c28ef25c171cbf43d3e162",
+    "scripts/pool/v3/local-replay.mjs": "c9fe53c4d9eebe4cc6a5dad6d7e7103cf93b7a0aead76ab283702d1aff59275b",
+    "scripts/pool/v3/local-worker.mjs": "6e515ed50a29e530eee466bca7c30c4dc9ca1d3e21e6c55fff8e7d00b63d6552",
+    "scripts/pool/v3/local-check.mjs": "4693db173527416006d2488a61cf0bc54f2db8d4dc90d797398bdc899dc10380",
     "scripts/pool/delivery/evidence-reader.mjs": "65f1a13caf29cadd7db46f10769920ccfd66c879f12d064c091be632a86fdf66",
     "scripts/pool/delivery/crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
     "scripts/pool/spent-set/radix.mjs": "a65c10fcca67cd6f486c73f3e66f4eba254f4aa4a6d2be8c12d2debe66af4953",
@@ -97,6 +116,10 @@
     "model/pool-v3-commitments.ts": "2cbde8c1dcbd351a14bc163c559338915025614656f7ed25251db12f72138d88",
     "model/pool-v3-trail.ts": "f4d46232470855944cb60d490a7b41d96ad1a93e6082e4f8e3f64734346bac2d",
     "model/pool-v3-headers.ts": "892248209fcfe92b1b10d113517c9b828cb01f78f2c7a8984d9fd8f00b8aee86",
+    "model/pool-v3-configuration.ts": "a88d260621bd7a81f6a6827931e703cc4a405394ad4bb0a2aed11f1d72ae9802",
+    "model/pool-v3-terms.ts": "67f29459be62e28d86fd0789f748c6ca58a45b30bf042fd6132c93247ded0cbf",
+    "scripts/pool/v3/candidate.mjs": "cda541d6d39493e73197890f1c8a93be13627d584eff04e64ca59f2e60758f48",
+    "scripts/pool/v3/candidate-manifest.json": "a5f34d76b1ac9cba71d322c5263fee75120a7756d0b5609720682c344e5049ae",
     "src/pool/note-tree.ts": "264c93ecf4af95209374657bc5c56c8841abab71b292ed557940b23540dfd1d4",
     "src/pool/scope.ts": "534fde370703af75f2a52c3f282833805d6f1ccd4e949918ad335347a5cd6b47",
     "scripts/pool/v3/circuits/issue.nr": "dfc3a4c8c39e870e942d6c7c512af2a6d07e5a5f5eb01bbccf9fbf03a5c91167",
@@ -107,6 +130,8 @@
     "status": "selected-local-replay",
     "fullV3Replay": false,
     "currentRangeAuthenticated": false,
+    "candidateConfigurationChecked": true,
+    "signedTermsAuthenticated": true,
     "termsAuthorityAuthenticated": false,
     "completenessClaim": false,
     "noMatchesMeansZeroBalance": false,
@@ -117,10 +142,10 @@
       "issued": "10",
       "burned": "5",
       "outstanding": "5",
-      "noteRoot": "18421363053037759831013544217568146396413487106222029354409871737723722611264",
-      "spentRoot": "6fd385c8d05c831c744e30467bc39ee25464d122af6b0cc2976808380606baae",
-      "historyHash": "56c25d003dad4e91656b0785ff068aaf5cdd8a17a3efc04384578910898517c7",
-      "evidenceHash": "9c51e83a45fb8577e4c444db6a0cc29bc4020f8173063c295e5bc069ada4082c"
+      "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
+      "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
+      "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
+      "evidenceHash": "b43443ad6dc9ba456236130b7c18d06daf9b563abb8937191314cf9bd734555b"
     },
     "candidates": []
   },
@@ -128,6 +153,8 @@
     "status": "selected-local-replay",
     "fullV3Replay": false,
     "currentRangeAuthenticated": false,
+    "candidateConfigurationChecked": true,
+    "signedTermsAuthenticated": true,
     "termsAuthorityAuthenticated": false,
     "completenessClaim": false,
     "noMatchesMeansZeroBalance": false,
@@ -138,22 +165,22 @@
       "issued": "10",
       "burned": "5",
       "outstanding": "5",
-      "noteRoot": "18421363053037759831013544217568146396413487106222029354409871737723722611264",
-      "spentRoot": "6fd385c8d05c831c744e30467bc39ee25464d122af6b0cc2976808380606baae",
-      "historyHash": "56c25d003dad4e91656b0785ff068aaf5cdd8a17a3efc04384578910898517c7",
-      "evidenceHash": "9c51e83a45fb8577e4c444db6a0cc29bc4020f8173063c295e5bc069ada4082c"
+      "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
+      "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
+      "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
+      "evidenceHash": "b43443ad6dc9ba456236130b7c18d06daf9b563abb8937191314cf9bd734555b"
     },
     "candidates": [
       {
-        "cm": "20016450400229862260315982978080574655659914606566423218115411022269768934182",
-        "nf": "12058497498415675965741768832675609032006684716902679217780292869582944906659",
+        "cm": "10326922216088708015180145815258559892842247201728495363410386232740092467111",
+        "nf": "7868903482523746521708034529803514938539177265459798823149349013295763305947",
         "value": "2",
         "leaf": "5",
-        "anchor": "18421363053037759831013544217568146396413487106222029354409871737723722611264",
+        "anchor": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
         "siblings": [
-          "15363475724211809784089603561354387421457837711024659859394273757188500562979",
+          "14865023788522090749458538143417556461836565607410214284943852689902631499145",
           "16257989699773466206393016511488115181357775227253857822747532441271299011144",
-          "3344496576948750758529419585755131349048785517100663856291451004870705483350",
+          "21078798499265497343671245842256160022575081710774087419686718146616512655296",
           "1935094829533267935830464563796710052445228582946993128186972021230315590035",
           "18383913181606838331795460117774658566856597132399717689821053927504534850729",
           "6650121914657515867260011416921319045587517571339686030450569779952452434446",
@@ -224,7 +251,7 @@
     ]
   },
   "limits": [
-    "Synthetic domain, independent fixture issuer key and selected checkpoint; signed backing terms/configuration/authority are not established.",
+    "Candidate configuration and signed constant-root terms checked; no adopted domain or registered/current authority. Selected checkpoint and empty opening remain fixture assumptions.",
     "Only issue/spend/burn in one empty-opening segment; no recovery, imports, revocation, clock or venue-range validation.",
     "Real proof/signature/state replay and local membership paths do not grant full finality, current completeness or spending permission."
   ]

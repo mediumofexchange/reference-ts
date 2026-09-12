@@ -19,6 +19,8 @@ import { loadEvidenceCodecs, LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { field } from "../fixtures.mjs";
+import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration,
+  readCandidateKeys, loadConfigurationCodecs } from "./candidate.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../../..");
 mkdirSync(join(root, "scratch"), { recursive: true });
@@ -34,33 +36,37 @@ try {
   const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
   if (config.error) throw new Error("TypeScript configuration unreadable");
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const program = ts.createProgram([join(root, "model/pool-v3-trail.ts")], {
+  const program = ts.createProgram(["trail", "configuration", "terms"].map(name => join(root, `model/pool-v3-${name}.ts`)), {
     ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false,
   });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0); assert.equal(program.emit().emitSkipped, false);
-  const codec = await loadEvidenceCodecs(url);
+  const codec = { ...await loadEvidenceCodecs(url), ...await loadConfigurationCodecs(url) };
+  const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
+  const configuration = candidateConfiguration(manifest, codec), configurationBytes = codec.configurationBytes(configuration);
   execFileSync(process.execPath, [join(here, "compile.mjs"), build], { cwd: root, stdio: "inherit", windowsHide: true, timeout: 300_000 });
-  const circuits = {}, identities = {}, pins = { keys: {} }, options = { verifierTarget: "noir-recursive" };
-  const manifest = JSON.parse(readFileSync(join(root, "src/pool/circuits/manifest.json"), "utf8"));
-  for (const [name, version] of Object.entries(manifest.toolchain)) {
-    assert.equal(JSON.parse(readFileSync(join(root, "node_modules", name, "package.json"), "utf8")).version, version);
-  }
+  checkCandidateSources(manifest);
+  const circuits = {}, identities = {}, options = { verifierTarget: manifest.verifierTarget };
   api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath: join(scratch, "private-payment-crs") });
-  for (const [kind, name] of [[1, "issue"], [2, "spend"], [3, "burn"]]) {
+  for (const [kind, name] of RELATION_KINDS) {
     const artifact = JSON.parse(readFileSync(join(build, `${name}.json`), "utf8"));
     const backend = new UltraHonkBackend(artifact.bytecode, api), vk = await backend.getVerificationKey(options);
     circuits[kind] = { backend, noir: new Noir(artifact), vk };
     identities[name] = { bytecode: sha(Buffer.from(artifact.bytecode, "base64")), vk: sha(vk) };
-    pins.keys[kind] = sha(vk); writeFileSync(join(build, `${kind}.vk`), vk);
+    assert.deepEqual(identities[name], manifest.circuits[name]);
+    writeFileSync(join(build, `${kind}.vk`), vk);
   }
-  writeFileSync(join(build, "pins.json"), JSON.stringify(pins));
+  const keys = readCandidateKeys(build, manifest);
   const verifierBackend = new UltraHonkVerifierBackend(api);
-  const verifier = { verify: (kind, publicInputs, proof) => verifierBackend.verifyProof({
-    proof, publicInputs: publicInputs.map(field), verificationKey: circuits[kind].vk,
+  const verifier = { configuration, verify: (kind, publicInputs, proof) => verifierBackend.verifyProof({
+    proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
   }, options) };
-  const domain = b(11), venue = b(12), backing = b(13), link = b(14), issuerSecret = b(15), operatorSecret = b(16);
+  const domain = codec.configurationHash(configuration), venue = b(12), issuerSecret = b(15), operatorSecret = b(16);
   const payerSeed = b(21), receiverSeed = b(22), issuerKey = ed25519.getPublicKey(issuerSecret);
   const operator = ed25519.getPublicKey(operatorSecret);
+  const termsFields = { obligor: issuerKey, payout: { thing: "test units", quantumExponent: 0, perUnit: 1n },
+    operator, configuration: domain, venue, interval: 10n };
+  const termsBytes = codec.encodeRootTerms(termsFields), backing = codec.rootTermsName(termsBytes), link = backing;
+  const signedTerms = { terms: termsBytes, signature: ed25519.sign(codec.rootTermsSignatureMessage(termsBytes), issuerSecret) };
   const header = codec.segmentBytes({ domain, venue, operator, sequence: 1n, entries: [{ backing, link }] });
   const segment = new Uint8Array(Buffer.from(sha(header), "hex")), scope = new ScopeTree([{ backing, link }]);
   const sp = scope.path(0), prefix = [...limbsOf(domain), ...limbsOf(segment), scope.root()];
@@ -133,10 +139,10 @@ try {
     snapshot = { ...snapshot, evidenceHash: evidence };
     const directory = [{ name: backing, digest: codec.snapshotDigest(snapshot) }];
     const commitment = signCommitment(operatorSecret, 3n, directoryRoot(directory));
-    return { issuerKey, selection: { domain, venue, backing, operator, sequence: 3n, root: commitment.root,
+    return { selection: { domain, venue, backing, operator, sequence: 3n, root: commitment.root,
       judgingIndex: 20n, mode: "current-fixture" },
-      package: { commitment: encodeCommitment(commitment), directory, snapshot: codec.snapshotBytes(snapshot),
-        trail: codec.encodeTrail({ header, terms: [{ terms: b(1), signature: new Uint8Array(64) }], records: records.map(codec.encodeRecord) }, LIMITS) } };
+      package: { configuration: configurationBytes, commitment: encodeCommitment(commitment), directory, snapshot: codec.snapshotBytes(snapshot),
+        trail: codec.encodeTrail({ header, terms: [signedTerms], records: records.map(codec.encodeRecord) }, LIMITS) } };
   }
   const records = [issue, payment, burn], effects = [
     { outputs: [funded.cm], nullifiers: [] },
@@ -150,17 +156,84 @@ try {
     assert.equal(result.audit, null); assert.deepEqual(result.candidates, []);
   }
   let receiver, audit;
+  await test("all six candidate sources, bytecodes and retained keys match independent pins", () => {
+    for (const [kind, name] of RELATION_KINDS) {
+      const bad = clone(manifest); bad.sources[`${name}.nr`] = "00".repeat(32);
+      assert.throws(() => checkCandidateSources(bad), /candidate identity mismatch/);
+      for (const filename of [`${kind}.vk`, `${name}.json`]) {
+        const path = join(build, filename), original = readFileSync(path);
+        try {
+          if (filename.endsWith(".vk")) {
+            const changed = Buffer.from(original); changed[0] ^= 1; writeFileSync(path, changed);
+          } else {
+            const artifact = JSON.parse(original); const changed = Buffer.from(artifact.bytecode, "base64");
+            changed[0] ^= 1; artifact.bytecode = changed.toString("base64"); writeFileSync(path, JSON.stringify(artifact));
+          }
+          assert.throws(() => readCandidateKeys(build, manifest), /candidate identity mismatch/);
+        } finally { writeFileSync(path, original); }
+      }
+    }
+  });
+  await test("configuration substitutions and loose issuer overrides refuse before any proof", async () => {
+    const beforeProof = { configuration, verify() { throw new Error("configuration guard ran too late"); } };
+    for (const offset of [18, 18 + 5 * 64 + 32, 438]) {
+      const payload = clone(complete); payload.package.configuration[offset] ^= 1;
+      const result = await replayLocalPackage(payload, beforeProof, codec);
+      assert.equal(result.check, "CONFIGURATION"); assert.equal(result.audit, null);
+    }
+    const missing = clone(complete); delete missing.package.configuration;
+    assert.equal((await replayLocalPackage(missing, beforeProof, codec)).check, "CONFIGURATION");
+    assert.equal((await replayLocalPackage({ ...complete, issuerKey }, beforeProof, codec)).check, "INPUT_FIELDS");
+    const domainSwap = clone(complete); domainSwap.selection.domain = b(88);
+    assert.equal((await replayLocalPackage(domainSwap, beforeProof, codec)).check, "CONFIGURATION");
+  });
+  await test("signed scoped terms refuse changed signature, payout, key and name independently", async () => {
+    const replaceTerms = signed => {
+      const payload = clone(complete), trail = codec.decodeTrail(payload.package.trail, LIMITS);
+      payload.package.trail = codec.encodeTrail({ ...trail, terms: [signed] }, LIMITS); return payload;
+    };
+    const bad = clone(signedTerms); bad.signature[0] ^= 1;
+    await reject(replaceTerms(bad), "TERMS_SIGNATURE");
+    for (const fields of [{ ...termsFields, payout: { ...termsFields.payout, perUnit: 2n } },
+      { ...termsFields, obligor: ed25519.getPublicKey(b(91)) }]) {
+      const terms = codec.encodeRootTerms(fields);
+      await reject(replaceTerms({ terms, signature: signedTerms.signature }), "TERMS_SIGNATURE");
+      const secret = fields.obligor === issuerKey ? issuerSecret : b(91);
+      await reject(replaceTerms({ terms, signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), secret) }), "TERMS_NAME");
+    }
+  });
+  await test("otherwise valid empty evidence cannot borrow wrong terms domain, venue or original scope", async () => {
+    function empty(fields, headerFields = {}) {
+      const terms = codec.encodeRootTerms(fields), name = codec.rootTermsName(terms);
+      const h = codec.segmentBytes({ domain, venue, operator, sequence: 1n, entries: [{ backing: name, link: name }], ...headerFields });
+      const segment = new Uint8Array(Buffer.from(sha(h), "hex"));
+      const s = { backing: name, segment, historyHash: codec.genesisHistoryHash(segment), evidenceHash: codec.genesisEvidenceHash(segment), issued: 0n, burned: 0n };
+      const directory = [{ name, digest: codec.snapshotDigest(s) }], c = signCommitment(operatorSecret, 3n, directoryRoot(directory));
+      return { selection: { ...complete.selection, backing: name, root: c.root }, package: {
+        configuration: configurationBytes, commitment: encodeCommitment(c), directory, snapshot: codec.snapshotBytes(s),
+        trail: codec.encodeTrail({ header: h, terms: [{ terms, signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), issuerSecret) }], records: [] }, LIMITS),
+      } };
+    }
+    const valid = await replayLocalPackage(empty(termsFields), verifier, codec);
+    assert.equal(valid.status, "selected-local-replay"); assert.equal(valid.audit.outstanding, "0");
+    assert.equal(valid.noMatchesMeansZeroBalance, false); assert.equal(valid.spendable, false);
+    await reject(empty({ ...termsFields, configuration: b(92) }), "TERMS_CONTEXT");
+    await reject(empty({ ...termsFields, venue: b(92) }), "TERMS_CONTEXT");
+    await reject(empty({ ...termsFields, operator: ed25519.getPublicKey(b(92)) }), "TERMS_INITIAL_SCOPE");
+    await reject(empty(termsFields, { entries: [{ backing, link: b(92) }] }), "TERMS_INITIAL_SCOPE");
+  });
   await test("shared key, seed and selection storage refuses before asynchronous verification", async () => {
-    for (const field of ["issuerKey", "seed", "domain"]) {
+    for (const field of ["configuration", "seed", "domain", "trail"]) {
       const payload = { ...clone(complete), seed: clone(receiverSeed) };
-      const shared = new Uint8Array(new SharedArrayBuffer(32));
-      shared.set(field === "issuerKey" ? ed25519.getPublicKey(b(99)) : field === "seed" ? b(99) : domain);
+      const original = field === "configuration" || field === "trail" ? payload.package[field] : field === "seed" ? receiverSeed : domain;
+      const shared = new Uint8Array(new SharedArrayBuffer(original.length)); shared.set(original);
       if (field === "domain") payload.selection.domain = shared;
-      else payload[field] = shared;
+      else if (field === "seed") payload.seed = shared;
+      else payload.package[field] = shared;
       let calls = 0;
-      const mutating = { verify: async (...args) => {
+      const mutating = { configuration, verify: async (...args) => {
         calls += 1;
-        shared.set(field === "issuerKey" ? issuerKey : field === "seed" ? receiverSeed : b(99));
+        shared.fill(99);
         return verifier.verify(...args);
       } };
       const result = await replayLocalPackage(payload, mutating, codec);
@@ -191,7 +264,7 @@ try {
     await reject(seal([issue, payment, crossKind], snapshot), "PROOF");
     const wrongSignature = clone(issue); wrongSignature.authorization[0] ^= 1;
     await reject(seal([wrongSignature, payment, burn], snapshot), "SIGNATURE");
-    await reject({ ...complete, issuerKey: ed25519.getPublicKey(b(99)) }, "SIGNATURE");
+    await reject({ ...complete, issuerKey: ed25519.getPublicKey(b(99)) }, "INPUT_FIELDS");
   });
   await test("operator-signed false totals or history root cannot authenticate a state assertion", async () => {
     for (const bad of [{ ...snapshot, issued: 11n }, { ...snapshot, burned: 6n }, { ...snapshot, historyHash: b(77) }]) {
@@ -255,13 +328,13 @@ try {
   });
   await test("inputs are owned across asynchronous proof verification and unexpected failures propagate", async () => {
     const payload = clone(complete); let calls = 0;
-    const mutating = { verify: async (...args) => {
-      if (calls++ === 0) { payload.selection.root.fill(0); payload.package.snapshot.fill(0); payload.issuerKey.fill(0); }
+    const mutating = { configuration, verify: async (...args) => {
+      if (calls++ === 0) { payload.selection.root.fill(0); payload.package.snapshot.fill(0); payload.package.trail.fill(0); payload.package.configuration.fill(0); }
       return verifier.verify(...args);
     } };
     assert.deepEqual(await replayLocalPackage(payload, mutating, codec), audit);
     const failure = new Error("verifier unavailable");
-    await assert.rejects(replayLocalPackage(complete, { verify() { throw failure; } }, codec), error => error === failure);
+    await assert.rejects(replayLocalPackage(complete, { configuration, verify() { throw failure; } }, codec), error => error === failure);
   });
   await test("historical replay and wrong seed never assert current spendability or a complete zero balance", async () => {
     const historical = packageFor([issue, payment], effects.slice(0, 2), { issued: 10n, burned: 0n });
@@ -283,23 +356,26 @@ try {
     return JSON.parse(child.stdout.toString());
   }
   await test("fresh public verifier has no wallet seed; separate receiver restores from public evidence only", () => {
-    assert.deepEqual(Object.keys(complete).sort(), ["issuerKey", "package", "selection"]);
+    assert.deepEqual(Object.keys(complete).sort(), ["package", "selection"]);
     assert.deepEqual(worker(complete), audit);
     assert.deepEqual(worker({ ...complete, seed: receiverSeed }), receiver);
   });
   await test("fresh verifier refuses a changed artifact against its independently held key pin", () => {
-    const key = readFileSync(join(build, "2.vk"));
-    try {
-      writeFileSync(join(build, "2.vk"), readFileSync(join(build, "3.vk")));
-      const child = spawnSync(process.execPath, [join(here, "local-worker.mjs"), url], {
-        input: serialize(complete), timeout: 60_000, cwd: build, windowsHide: true, maxBuffer: 1_048_576,
-      });
-      assert.equal(child.error, undefined); assert.equal(child.status, 1); assert.equal(child.stdout.length, 0);
-      assert.equal(child.stderr.toString(), "local replay fixture failed\n");
-    } finally { writeFileSync(join(build, "2.vk"), key); }
+    for (const kind of [2, 7]) {
+      const keyPath = join(build, `${kind}.vk`), key = readFileSync(keyPath);
+      try {
+        writeFileSync(keyPath, readFileSync(join(build, "3.vk")));
+        const child = spawnSync(process.execPath, [join(here, "local-worker.mjs"), url], {
+          input: serialize(complete), timeout: 60_000, cwd: build, windowsHide: true, maxBuffer: 1_048_576,
+        });
+        assert.equal(child.error, undefined); assert.equal(child.status, 1); assert.equal(child.stdout.length, 0);
+        assert.equal(child.stderr.toString(), "local replay fixture failed\n");
+      } finally { writeFileSync(keyPath, key); }
+    }
   });
   await test("successful replay retains unresolved production authority and currentness", () => {
     for (const result of [receiver, audit]) {
+      assert.equal(result.candidateConfigurationChecked, true); assert.equal(result.signedTermsAuthenticated, true);
       for (const key of ["fullV3Replay", "currentRangeAuthenticated", "termsAuthorityAuthenticated", "completenessClaim", "noMatchesMeansZeroBalance", "spendable"]) assert.equal(result[key], false);
       assert.equal(result.unresolvedCoverage, true);
       result.candidates.forEach(x => assert.equal(x.spendable, false));
@@ -308,12 +384,15 @@ try {
   const sources = ["scripts/pool/v3/local-replay.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/local-check.mjs",
     "scripts/pool/delivery/evidence-reader.mjs", "scripts/pool/delivery/crypto.mjs", "scripts/pool/spent-set/radix.mjs",
     "model/pool-v3-records.ts", "model/pool-v3-commitments.ts", "model/pool-v3-trail.ts", "model/pool-v3-headers.ts",
+    "model/pool-v3-configuration.ts", "model/pool-v3-terms.ts", "scripts/pool/v3/candidate.mjs", "scripts/pool/v3/candidate-manifest.json",
     "src/pool/note-tree.ts", "src/pool/scope.ts", "scripts/pool/v3/circuits/issue.nr", "scripts/pool/v3/circuits/spend.nr", "scripts/pool/v3/circuits/burn.nr"];
-  const report = { schema: "moe-v3-local-replay-experiment-1", specification: "7ea0ee8", node: process.version,
+  checkCandidateSources(manifest);
+  const report = { schema: "moe-v3-local-replay-experiment-2", specification: "916bffb", node: process.version,
+    candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
     platform: process.platform, checks, identities, metrics,
     sourceSha256Lf: Object.fromEntries(sources.map(path => [path, sha(readFileSync(join(root, path), "utf8").replaceAll("\r\n", "\n"))])),
     audit, receiver,
-    limits: ["Synthetic domain, independent fixture issuer key and selected checkpoint; signed backing terms/configuration/authority are not established.",
+    limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain or registered/current authority. Selected checkpoint and empty opening remain fixture assumptions.",
       "Only issue/spend/burn in one empty-opening segment; no recovery, imports, revocation, clock or venue-range validation.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, current completeness or spending permission."] };
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");

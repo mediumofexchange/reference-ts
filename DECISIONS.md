@@ -37,6 +37,7 @@ as current instructions.
 ## Index
 
 - `2026-09-12` [Bound local wallet custody to a qualified device and offline handoff](decisions/2026-09.md#2026-09-12--bound-local-wallet-custody-to-a-qualified-device-and-offline-handoff)
+- `2026-09-12` [Check candidate v3 configuration and signed root terms before local replay](decisions/2026-09.md#2026-09-12--check-candidate-v3-configuration-and-signed-root-terms-before-local-replay)
 - `2026-09-12` [Configure local holders from authenticated signed terms](decisions/2026-09.md#2026-09-12--configure-local-holders-from-authenticated-signed-terms)
 - `2026-09-12` [Operate local wallets with verified note selection](decisions/2026-09.md#2026-09-12--operate-local-wallets-with-verified-note-selection)
 - `2026-09-12` [Authenticate local wallet invitations and rotate private credentials](decisions/2026-09.md#2026-09-12--authenticate-local-wallet-invitations-and-rotate-private-credentials)

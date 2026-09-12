@@ -1,7 +1,7 @@
 // Conditional initial-segment experiment, not an adopted v3 runtime.
 // pool-v3 §§3,5,7,10; pool-v2 §8 host checks; pool-spent C1.2.8–9.
 import { compareBytes, EncodingError } from "../../../dist/bytes.js";
-import { verifySignatureStrict, isValidPublicKey } from "../../../dist/keys.js";
+import { verifySignatureStrict } from "../../../dist/keys.js";
 import { fieldToBytes, identifierOf, VALUE_BOUND } from "../../../dist/pool/field.js";
 import { NoteTree, EMPTY_NOTE_ROOT, NOTE_TREE_CAPACITY } from "../../../dist/pool/note-tree.js";
 import { ScopeTree } from "../../../dist/pool/scope.js";
@@ -32,20 +32,35 @@ function ownInputs(input) {
   return copy;
 }
 
-/** All inputs are fixture-local. issuerKey is independently selected, NOT
- * authenticated from the opaque terms. verifier is pinned by the harness,
- * never selected by a served record. No complete opening/finality verdict.
+/** verifier.configuration is independently selected and its six keys checked
+ * by the harness. Issuer identity comes from signed scoped terms (§11).
+ * No approved configuration, complete opening or finality verdict.
  * Nothing is exposed until every record and terminal assertion passes. */
 export async function replayLocalPackage(input, verifier, codec) {
   const flags = { fullV3Replay: false, currentRangeAuthenticated: false,
+    candidateConfigurationChecked: false, signedTermsAuthenticated: false,
     termsAuthorityAuthenticated: false, completenessClaim: false, noMatchesMeansZeroBalance: false,
     unresolvedCoverage: true, spendable: false };
   const refused = (status, check = null) => ({ status, check, ...flags, audit: null, candidates: [] });
   try {
     // Own selection, seed and supplied bytes before any asynchronous verifier.
-    const { selection, package: supplied, issuerKey, seed } = ownInputs(input);
+    const owned = ownInputs(input);
+    if (owned === null || typeof owned !== "object") throw new EncodingError("invalid replay input");
+    const { selection, package: supplied, seed } = owned;
+    // Do not silently keep the retired issuer override as an alternate input.
+    requireReplay(Object.keys(owned).sort().join(",") === (seed === undefined ? "package,selection" : "package,seed,selection"), "INPUT_FIELDS");
+    requireReplay(codec.verifyConfiguration(supplied?.configuration, verifier.configuration), "CONFIGURATION");
+    const domain = codec.configurationHash(codec.decodeConfiguration(supplied.configuration));
+    requireReplay(selection?.domain instanceof Uint8Array && same(domain, selection.domain), "CONFIGURATION");
     const { snapshot, trail, header } = readLocalEvidence(selection, supplied, codec);
-    requireReplay(isValidPublicKey(issuerKey), "ISSUER_KEY");
+    const signed = trail.terms[0], terms = codec.decodeRootTerms(signed.terms);
+    requireReplay(codec.verifyRootTermsSignature(signed.terms, signed.signature), "TERMS_SIGNATURE");
+    requireReplay(same(codec.rootTermsName(signed.terms), header.entries[0].backing), "TERMS_NAME");
+    requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
+    // Local fixture is limited to original operator/genesis link. This is no
+    // proof of absent replacement, revocation or previous commitments.
+    requireReplay(same(terms.operator, header.operator) && same(header.entries[0].link, selection.backing), "TERMS_INITIAL_SCOPE");
+    const issuerKey = terms.obligor;
     const scope = new ScopeTree(header.entries).root();
     const tree = new NoteTree(), spent = new RadixSpentSet(), anchors = new Set([EMPTY_NOTE_ROOT]);
     const statements = new Set(), outputPositions = new Map();
@@ -104,7 +119,8 @@ export async function replayLocalPackage(input, verifier, codec) {
       }
     }
     return { status: selection.mode === "historical-fixture" ? "historical-local-replay" : "selected-local-replay",
-      ...flags, audit: { records: position.toString(), issued: issued.toString(), burned: burned.toString(),
+      ...flags, candidateConfigurationChecked: true, signedTermsAuthenticated: true,
+      audit: { records: position.toString(), issued: issued.toString(), burned: burned.toString(),
         outstanding: (issued - burned).toString(), noteRoot: tree.root().toString(), spentRoot: hex(spent.root()),
         historyHash: hex(history), evidenceHash: hex(snapshot.evidenceHash) }, candidates };
   } catch (error) {

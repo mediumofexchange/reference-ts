@@ -72,8 +72,10 @@ packages against an independent fixture selection; all candidates remain
 unspendable without full replay, authenticated ranges and certified paths.
 The [conditional initial-segment replay](POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay)
 adds real successor proof/signature checks, replayed roots/totals and local note
-paths, with a fresh seedless audit process. Terms/configuration/key authority,
-complete current ranges, imports and recovery remain outside that experiment.
+paths, with a fresh seedless audit process. It checks candidate configuration
+and all six artifact identities plus canonical signed root terms under
+[pool-v3 §11](https://github.com/mediumofexchange/money-from-first-principles/blob/916bffb/pool-v3.md#11-configuration-and-backing-evidence-before-adoption).
+Adoption, terms force, complete current ranges, imports and recovery remain open.
 `npm run check:pool:fees` compares the successor
 [transfer shapes and ordinary fees](POOL_DEPLOYMENT_PROBES.md#transfer-shape-and-ordinary-fees)
 with real proofs. These probes do not implement a pool wallet or v3 finality.
@@ -95,7 +97,7 @@ equivalence and authenticated complete-range reads remain unimplemented.
 [canonical record layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/ca727f6/pool-v3.md#5-canonical-statement-records).
 `npm test` checks exact bytes, hostile parsing, delivery association and
 signature-message binding. This codec is not exported or used for admission;
-v3 configuration, finality and adoption remain undefined.
+approved v3 configuration, finality and adoption remain undefined.
 `model/pool-v3-commitments.ts` adds the reviewed history/evidence chains,
 snapshot and receipt frames from [pool-v3 §7](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md#7-history-evidence-snapshots-and-receipts).
 Its tests distinguish authenticated failing evidence from substituted bytes
@@ -158,5 +160,5 @@ fix six relations and public-input orders. `npm run check:pool:v3` compiles
 and proves them together, including delivery on issue/burn, four spend
 outputs, canonical demand padding, refresh binding and equal-count cross-key
 rejection. See the [conformance suite](../scripts/pool/v3/README.md). V3 remains
-an incomplete construction: no configuration hash, approved artifact pins,
+an incomplete construction: no approved configuration hash or artifact pins,
 backing adoption or runtime support is defined.
