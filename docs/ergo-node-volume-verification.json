@@ -1,0 +1,782 @@
+{
+  "status": "offline-node-volume-composition-only",
+  "executeRequested": true,
+  "observedAtUtc": "2026-09-12T09:58:08.8736018Z",
+  "imagePath": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\node-volume-control\\control.vhd",
+  "virtualBytes": 67108864,
+  "maximumBackingBytes": 68157440,
+  "hostReserveBytes": 107374182400,
+  "wallMs": 120000,
+  "commitBytes": 4294967296,
+  "heapBytes": 2147483648,
+  "cpuRatePer10000": 2500,
+  "trafficTriggerBytes": 8589934592,
+  "finalTrafficMaximumBytes": 10737418240,
+  "diagnosticBytesMaximum": 16777216,
+  "mutationsStarted": true,
+  "mappingRemoved": true,
+  "detached": true,
+  "artifactRemoved": true,
+  "process": {
+    "Case": "offline-volume-node",
+    "Outcome": "observer-complete",
+    "Output": "INFO org.ergoplatform.ErgoApp - Running with args: Args(Some(Z:\\run/ergo.conf),Some(MainNet))\r\nINFO org.ergoplatform.settings.ErgoSettingsReader$ - Running in mainnet network mode\r\nINFO org.ergoplatform.settings.ErgoSettingsReader$ - Log level set to INFO\r\nINFO org.ergoplatform.ErgoApp - Working directory: Z:/run/data\r\nINFO org.ergoplatform.ErgoApp - Secret directory: Z:/run/secrets\r\nINFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started\r\nINFO org.ergoplatform.nodeView.ErgoReadersHolder - Readers are not initialized yet : (None,None,None,None)\r\nINFO scorex.core.network.NetworkController - Declared address: None\r\nINFO org.ergoplatform.nodeView.state.ErgoState$ - Generating genesis UTXO state\r\nINFO scorex.db.LDBFactory$ - Loaded org.fusesource.leveldbjni.JniDBFactory with leveldbjni version 1.8\r\nINFO scorex.core.network.NetworkController - Successfully bound to the port 19030\r\nINFO org.ergoplatform.network.peer.PeerManager - No peers in database, seeding peers database with nodes from config\r\nINFO org.ergoplatform.nodeView.state.ErgoState$ - Genesis UTXO state generated with hex digest a5df145d41ab15a01e0cd3ffbab046f0d029e5412293072ad0f5827428589b9302\r\nINFO org.ergoplatform.nodeView.history.ErgoHistory$ - History database read\r\nINFO org.ergoplatform.nodeView.wallet.ErgoWalletActor - Initializing wallet actor\r\nINFO org.ergoplatform.nodeView.mempool.ErgoMemPool$ - Sorting mempool by fee-per-byte\r\nINFO org.ergoplatform.nodeView.wallet.ErgoWalletServiceImpl - Trying to read wallet in secure mode ..\r\nWARN org.ergoplatform.nodeView.wallet.ErgoWalletServiceImpl - Failed to read wallet. Manual initialization is required. Details: \r\njava.lang.Exception: Cannot readSecretStorage: Secret file not found in dir 'Z:\\run\\secrets'\r\n\tat org.ergoplatform.wallet.secrets.JsonSecretStorage$.readFile(JsonSecretStorage.scala:146)\r\n\tat org.ergoplatform.nodeView.wallet.ErgoWalletServiceImpl.readWallet(ErgoWalletService.scala:282)\r\n\tat org.ergoplatform.nodeView.wallet.ErgoWalletActor$$anonfun$emptyWallet$1.applyOrElse(ErgoWalletActor.scala:78)\r\n\tat akka.actor.Actor.aroundReceive(Actor.scala:537)\r\n\tat akka.actor.Actor.aroundReceive$(Actor.scala:535)\r\n\tat org.ergoplatform.nodeView.wallet.ErgoWalletActor.aroundReceive(ErgoWalletActor.scala:26)\r\n\tat akka.actor.ActorCell.receiveMessage(ActorCell.scala:577)\r\n\tat akka.actor.ActorCell.invoke(ActorCell.scala:547)\r\n\tat akka.dispatch.Mailbox.processMailbox(Mailbox.scala:270)\r\n\tat akka.dispatch.Mailbox.run(Mailbox.scala:231)\r\n\tat akka.dispatch.Mailbox.exec(Mailbox.scala:243)\r\n\tat java.base/java.util.concurrent.ForkJoinTask.doExec(Unknown Source)\r\n\tat java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(Unknown Source)\r\n\tat java.base/java.util.concurrent.ForkJoinPool.scan(Unknown Source)\r\n\tat java.base/java.util.concurrent.ForkJoinPool.runWorker(Unknown Source)\r\n\tat java.base/java.util.concurrent.ForkJoinWorkerThread.run(Unknown Source)\r\nINFO org.ergoplatform.ErgoApp - Available processors: 4\r\nINFO org.ergoplatform.ErgoApp - Max memory available: 2147483648\r\nINFO org.ergoplatform.ErgoApp - RPC is allowed at /127.0.0.1:19053\r\nINFO org.ergoplatform.local.CleanupWorker - Cleanup worker started\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\nWARN org.ergoplatform.network.ErgoNodeViewSynchronizer - No peers available in requestDownload\r\n",
+    "LaunchMode": "detached",
+    "ExitCode": 3758096385,
+    "CreationFlags": 525324,
+    "ElapsedMs": 71117,
+    "CapturedOutputBytes": 4326,
+    "PeakCommitBytes": 372654080,
+    "PeakProcessCommitBytes": 372654080,
+    "CommitLimitBytes": 4294967296,
+    "BeforeResumePeakCommitBytes": 393216,
+    "BeforeResumePeakProcessCommitBytes": 393216,
+    "UserCpuTicks": 109375000,
+    "KernelCpuTicks": 13281250,
+    "JobUserCpuTicks": 109375000,
+    "JobKernelCpuTicks": 12812500,
+    "CpuRateFlags": 5,
+    "CpuRatePer10000": 2500,
+    "TotalProcesses": 1,
+    "ActiveProcessesAfterExit": 0,
+    "LimitTerminatedProcesses": 0,
+    "BeforeResumeTotalProcesses": 1,
+    "BeforeResumeActiveProcesses": 1,
+    "SampledPeakPrivateCommitBytes": 372654080,
+    "SampledMaxPrivateCommitBytes": 372625408,
+    "BeforeResumePrivateCommitBytes": 393216,
+    "MemorySamples": 4296,
+    "MaxSampledAssociatedProcesses": 1,
+    "ObservedProcesses": [
+      {
+        "ProcessId": 25124,
+        "Image": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\ergo-java\\bundle\\jdk-21.0.12.1+1-jre\\bin\\java.exe",
+        "QueryError": 0
+      }
+    ],
+    "LimitsReadBackBeforeResume": true,
+    "JobEmptyAfterCleanup": true,
+    "ParentConsoleVerified": false
+  },
+  "traffic": {
+    "ReceivedBytes": 1820070,
+    "SentBytes": 1624679,
+    "TotalBytes": 3444749,
+    "StopReason": null,
+    "FirstStopMs": -1,
+    "AccountingValid": true,
+    "LastSampleMs": 71213,
+    "MaxGapMs": 1000,
+    "MaxGapMsObserved": 309
+  },
+  "observations": {
+    "stopDecisionMs": 71165,
+    "emptyConfirmedMs": 71209,
+    "finalSampleStartedMs": 71211,
+    "finalSampleFinishedMs": 71213,
+    "readError": null,
+    "samples": 278,
+    "finalAttempted": true
+  },
+  "files": {
+    "node-volume-control.ps1": "8bb62b016f94e4fde7f335e19773dc9fe5251c86e7caf02e1b322e372107544f",
+    "node-volume-evidence.ps1": "6142eb30d1f42019f06d5e0fc59546cdc33e2b2542eda5c4ec3b03a7b0615a9d",
+    "node-java.ps1": "bcdb5371a95188fec1951e77208b207ea3e3cbf5d6be331e8500a483420f6f9e",
+    "node-disk-evidence.ps1": "2cb5e0007a19bff6f7f82bcf0cc14efe6885d67617916cef1f79405f7597d65b",
+    "node-database-evidence.ps1": "603c98e7dc4dbad3fea966bc78b06b54806875b1b6ec475c241a69a36342f54c",
+    "node-evidence.ps1": "570f340b38c2dd20ac149df3f01645d4ae9c7d0275bd3c0423b9d92494308438",
+    "NodeProbeDisk.cs": "b2c95f52447d159fe6c4af213ad3f83f27b92be58a216c16e48e94eb075e8b23",
+    "NodeProbeProcess.cs": "bef224d4fd27d9a06ac2960f2d85b8b06dc5cf0048d473b7e12e20eee690979d",
+    "NodeTrafficCounter.cs": "4ad99aabf1f2df82b7854f8604f76ae33c1381d125b49ad5bd6a03168589c3c5",
+    "NodeDatabaseIdentity.cs": "81affe2838590e968502c262285e47d7bab58f2ab866ea20010e8161fcfcc10f"
+  },
+  "errors": [],
+  "limitations": [
+    "Trusted offline node inherits elevation needed for this disk control. Never use this launcher with public peers.",
+    "Connected operation needs separate elevated disk ownership and ordinary-token Java execution; neither 20 GiB nor 30 minutes is implemented here.",
+    "The fixed volume bounds its files, not all JRE/OS writes. Host paging, caches, package reads and supervisor/report allocations are outside it.",
+    "Real counters include unrelated and possibly duplicated virtual-interface traffic. They are sampled accounting, not an egress firewall.",
+    "Synchronous native/supervisor calls can stall. One-second accounting and two-second stop checks refuse late evidence; they are not hard independent deadlines.",
+    "Termination is a whole-job stop, not a graceful close, crash-recovery result or synchronized chain.",
+    "Cleanup follows supervisor cleanup attempts on all exits. Failed launch/cleanup retains the image and supplies no empty-job acceptance."
+  ],
+  "hostFreeBefore": 528408092672,
+  "java": {
+    "path": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\ergo-java\\bundle\\jdk-21.0.12.1+1-jre\\bin\\java.exe",
+    "version": "21.0.12.1",
+    "sha256": "82051fdab26319d77d20cc0065045d05ec00b3e3d05f44935d7c06b96b621d55",
+    "manifestSha256": "fab21196a9f51cdc4678b5ffbe4ba3ad5ccdf945863024b16400d15a7c03ac1d",
+    "manifest": {
+      "archiveSha256": "d35f31e712f0fcf6ac5a093edc90204fbff22f720ba3950bd09d331d5e621636",
+      "entries": 378,
+      "expandedBytes": 151524241,
+      "files": {
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-console-l1-1-0.dll": "88ace577a9c51061cb7d1a36babbbefa48212fadc838ffde98fdfff60de18386",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-console-l1-2-0.dll": "c062477ad3bfdc57b0cc402179637a214dab5045c8d644592c7decca7d18aa50",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-datetime-l1-1-0.dll": "1bd81dfd19204b44662510d9054852fb77c9f25c1088d647881c9b976cc16818",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-debug-l1-1-0.dll": "591358eb4d1531e9563ee0813e4301c552ce364c912ce684d16576eabf195dc3",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-errorhandling-l1-1-0.dll": "d56ce7b1cd76108ad6c137326ec694a14c99d48c3d7b0ace8c3ff4d9bcee3ce8",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-fibers-l1-1-0.dll": "91d249d7bc0e38ef6bcb17158b1fdc6dd8888dc086615c9b8b750b87e52a5fb3",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-fibers-l1-1-1.dll": "fc9d86cec621383eab636ebc87ddd3f5c19a3cb2a33d97be112c051d0b275429",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-file-l1-1-0.dll": "1ca895aba4e7435563a6b43e85eba67a0f8c74aa6a6a94d0fc48fa35535e2585",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-file-l1-2-0.dll": "4cadbc0c39da7c6722206fdcebd670abe5b8d261e7b041dd94f9397a89d1990d",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-file-l2-1-0.dll": "93c624b366ba16c643fc8933070a26f03b073ad0cf7f80173266d67536c61989",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-handle-l1-1-0.dll": "39095f59c41d76ec81bb2723d646fde4c148e7cc3402f4980d2ade95cb9c84f9",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-heap-l1-1-0.dll": "8f105771b236dbcb859de271f0a6822ce1cb79c36988dd42c9e3f6f55c5f7eb9",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-interlocked-l1-1-0.dll": "53b25e753ca785bf8b695d89dde5818a318890211dc992a89146f16658f0b606",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-kernel32-legacy-l1-1-1.dll": "a9b13a1cd1b8c19b0c6b4afcd5bb0dd29c0e2288231ac9e6db8510094ce68ba6",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-libraryloader-l1-1-0.dll": "7f39ba298b41e4963047341288cab36b6a241835ee11ba4ad70f44dacd40906c",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-localization-l1-2-0.dll": "6ee44dd0d8510dc024c9f7c79b1b9fa88c987b26b6beb6653ddd11751c34e5dc",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-memory-l1-1-0.dll": "0512a35316ec9180437f86696a84c5c06a7e4e82e050055a656e5bf9fca206f9",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-namedpipe-l1-1-0.dll": "c05f1fffe3b5a2738ea54ce9485cca026fb9635f982626fba1e1dcc531897273",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-processenvironment-l1-1-0.dll": "c4eca98c3c67b6395d5b005b00ac1eb0318b86b23aa71035a44c2b1602befba9",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-processthreads-l1-1-0.dll": "5ccb89e93d67bc3288d4e84649c5346e66e15e3d7cd65d989daf3f4cb584be9a",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-processthreads-l1-1-1.dll": "4ad565a8ba3ef0ea8ab87221ad11f83ee0bc844ce236607958406663b407333e",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-profile-l1-1-0.dll": "7809160932f44e59b021699f5bc68799eb7293ee1fa926d6fcca3c3445302e61",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-rtlsupport-l1-1-0.dll": "9dc1e91e71c7c054854bd1487cb4e6946d82c9f463430f1c4e8d1471005172b1",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-string-l1-1-0.dll": "60fc31d2a0c634412f529dba76af3b9bf991352877c6dae528186d3935704cfd",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-synch-l1-1-0.dll": "3a72b4f29f39a265d32ad12f0ce15dbf60129c840e10d84d427829ede45e78ad",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-synch-l1-2-0.dll": "efc1e4460984a73cf47a3def033af1c8f3b1dbc1a56cd27781d3aacf3e3330cb",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-sysinfo-l1-1-0.dll": "b203d862ddef1dd62bf623fc866c7f7a9c317c1c2ae30d1f52cb41f955b5698e",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-sysinfo-l1-2-0.dll": "2703635d835396afd0f138d7c73751afe7e33a24f4225d08c1690b0a371932c0",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-timezone-l1-1-0.dll": "33f4fddc181066fce06b2227bded813f95e94ed1f3d785e982c6b6b56c510c57",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-core-util-l1-1-0.dll": "6eda016742a6171205a387a14b3c0b331841567740376f56768f8c151724207d",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-conio-l1-1-0.dll": "b762061b688aae679afe788904d2c9970f74a7dac98f3b42463d08f25e483d3f",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-convert-l1-1-0.dll": "ebb2ae5535a64f65daeab8235585114fc9dd2cf1a49f5852d446250b998b6ae4",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-environment-l1-1-0.dll": "17d63275d00bdd8670422b95bd264c532998e0a1b041079e54fce4b6b7a55819",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-filesystem-l1-1-0.dll": "9a9e2a65a281644e368d0f272b95ba5f6b445d1c35910d06056c5ebeb77402db",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-heap-l1-1-0.dll": "bab9ac3ec83e380ae51e4295ef3bf2c738627812d3a49d1e713661abbc8dc57a",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-locale-l1-1-0.dll": "bd14c67ea28e21d6257ad780a37122c9b5773f69e693f5db6bffaee4d839526e",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-math-l1-1-0.dll": "606d66d82db562ea7979179d06486a0f94d079941d26b80a1e2c49d29959df6f",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-multibyte-l1-1-0.dll": "95f49efbe8107786733fa7c474025cf3fee0ac632f240367b296c736d06572aa",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-private-l1-1-0.dll": "1bc82bed6143d2bf1b6b08a7809f4a5e29317d6fddd338a7da3c0223522e4bbf",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-process-l1-1-0.dll": "f6156b1020380ec4f0e48577ebedaaef5fb1ab1f337d8b4e72e6a33a7567a9cc",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-runtime-l1-1-0.dll": "c5902934d026d7e15fbe9917d474f3322846a41a25e66f4b2b1f758801879f4b",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-stdio-l1-1-0.dll": "a9c5a153d8c0286f9b41a2b1c65854ad9e6471b8755b7de87bae4470e60bcab6",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-string-l1-1-0.dll": "25b8f83a7767211b11132775a0e27a45aa4ec8ab4e6572599f9c172ae3606b40",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-time-l1-1-0.dll": "7c7f6393f06de11750adb09cc5698ae55cd9fb27b2e51e207286feb1b5b2b156",
+        "jdk-21.0.12.1+1-jre/bin/api-ms-win-crt-utility-l1-1-0.dll": "d8ba5f17b9ffcbf3aeaf3fa1da226832d2fa90f81acce0cd669464e76ce434ac",
+        "jdk-21.0.12.1+1-jre/bin/awt.dll": "6fd29b7267eb02df00229b44f34d561be1e56b313ada754bcea1acf7c3562a83",
+        "jdk-21.0.12.1+1-jre/bin/dt_socket.dll": "4ac7c5a219c0e6ffe580575d3938ef66c5e588f53a857e242cd7aa805b69c80b",
+        "jdk-21.0.12.1+1-jre/bin/extnet.dll": "eb6b8f2f52c0488c4d00a88d9f6bc61ab665808d5b1549c0960a60ae1ead3390",
+        "jdk-21.0.12.1+1-jre/bin/fontmanager.dll": "2cd3b5ebc97aff79685c34024ef13a3880aed9c26bb9d82c673ee765b134b6a5",
+        "jdk-21.0.12.1+1-jre/bin/freetype.dll": "213a2ed1d5130ce40b5d3b8495fd41d9841c844da1116fd3a2b4eab85259c20c",
+        "jdk-21.0.12.1+1-jre/bin/instrument.dll": "06254d6d72a98f8222adc61223a2421da32862918e6ce7f3217fb169d8bc8d25",
+        "jdk-21.0.12.1+1-jre/bin/j2gss.dll": "2087c0a7f3e13baa2dff6e964973447ae6b0ca1e2b4a4dbad17d921f26d30354",
+        "jdk-21.0.12.1+1-jre/bin/j2pcsc.dll": "75072bd82258964cdcd103a423f2ad414fd471f6576af4355b1e713d1a72ae80",
+        "jdk-21.0.12.1+1-jre/bin/j2pkcs11.dll": "4e534b0d5cb52f0ad3757a588e0c61a9175022d21d11b4b92beabf0454d77576",
+        "jdk-21.0.12.1+1-jre/bin/jaas.dll": "d68238ac8c72ef8ec17b09da2cd3f5285f7a00533477c27eea7ec1c29d42dc9a",
+        "jdk-21.0.12.1+1-jre/bin/jabswitch.exe": "4403b7e0e46e907db3ba70489756aba52e9b72de1392580fea7f6ab0837d3096",
+        "jdk-21.0.12.1+1-jre/bin/jaccessinspector.exe": "d229e7c8a41921e44daa8b1964895c6ac8ac41344ea157b1d035072c565032cd",
+        "jdk-21.0.12.1+1-jre/bin/jaccesswalker.exe": "24c4a09d2b06da7e56685df101389473baacaad7bccf1e5e84128b80919ff894",
+        "jdk-21.0.12.1+1-jre/bin/java.dll": "9b484b6a703e890292ab3bdb43c81c17eac1eecce585a28205d32ae42c3bc049",
+        "jdk-21.0.12.1+1-jre/bin/java.exe": "82051fdab26319d77d20cc0065045d05ec00b3e3d05f44935d7c06b96b621d55",
+        "jdk-21.0.12.1+1-jre/bin/javaaccessbridge.dll": "6491c705845e53841db92658040c2e4c40e0fa1486ea357e412bf1091e767b87",
+        "jdk-21.0.12.1+1-jre/bin/javajpeg.dll": "bc96c9e9e4a3eb21b06a5f3107229d411415ecc686c10219421626f8a1871147",
+        "jdk-21.0.12.1+1-jre/bin/javaw.exe": "0d0448174d811b743faed2c1600b6174f33e65506e196b177effe0cd7a04cdb2",
+        "jdk-21.0.12.1+1-jre/bin/jawt.dll": "a3a888fed957b49b88cd42ceea4335123ea4ca50fcfaf60f88ab961bdbd6289e",
+        "jdk-21.0.12.1+1-jre/bin/jdwp.dll": "195e07cbdc22d8667c00978de0e669b34639287383b3a5c3467d6343560c66ba",
+        "jdk-21.0.12.1+1-jre/bin/jfr.exe": "5c7e26a40b605745eda687bac35686c6c2e601a75ea93b66aec48ea92dc94da6",
+        "jdk-21.0.12.1+1-jre/bin/jimage.dll": "8123408896077c9fcdcb0d5809d5bdf6e96a3e3a1a15bec2dc7432f68b42acf4",
+        "jdk-21.0.12.1+1-jre/bin/jli.dll": "1e189c727f043e924cb8779b673702ba836faa7c9e752e2743b69cde70a2c1fb",
+        "jdk-21.0.12.1+1-jre/bin/jrunscript.exe": "5e8b3d23c6852bd12b3f1e484cd41695404caaa1433bf9236a45f465da9067f4",
+        "jdk-21.0.12.1+1-jre/bin/jsound.dll": "a0fa7096c74f91b8213eecd457422f3a4e5ec8f8a6e3fccc9b1a0be1036fde5f",
+        "jdk-21.0.12.1+1-jre/bin/jsvml.dll": "83c96f64abf06a065a33a0419ca43e413f166bddcbad713cbf526805c87fa107",
+        "jdk-21.0.12.1+1-jre/bin/jwebserver.exe": "549cdc4f3e15f4e535e6d12cbb70489adb3596ef05e81a6dd62b5d95d7e949ca",
+        "jdk-21.0.12.1+1-jre/bin/keytool.exe": "3576ba983634afd753814ea089a98be965ac5da270b3b83deb1e9a5ac53fa3d7",
+        "jdk-21.0.12.1+1-jre/bin/kinit.exe": "6338e98bafc24247d838deb544acb37384fba2fd71dacd70eb693668849a8e2b",
+        "jdk-21.0.12.1+1-jre/bin/klist.exe": "8b05722ec514487b3caf338b38f8c27f5010afac6ee389bf6f93ec1dc1a632ad",
+        "jdk-21.0.12.1+1-jre/bin/ktab.exe": "1967793ed0979cda5803659ce25ccbe38242d178a5205e145203da33e22a0537",
+        "jdk-21.0.12.1+1-jre/bin/lcms.dll": "ece80974504b25cfabd0d3a1860db0f17935d83a6010511dd47b21f0f0353d46",
+        "jdk-21.0.12.1+1-jre/bin/management.dll": "06c6f86f3e731f88361d7e670f84a80761a8fc80c6eebac914e8072e706c4385",
+        "jdk-21.0.12.1+1-jre/bin/management_agent.dll": "2ac35d1345aaeb5db9baeb164b083261f1944494205c444260f6e5f659473c95",
+        "jdk-21.0.12.1+1-jre/bin/management_ext.dll": "61fcd7c911af730d6bca121d91673fb57c8db077a9e29b6cdb6fa2770c11d22a",
+        "jdk-21.0.12.1+1-jre/bin/mlib_image.dll": "4dcd756b9d4405ada3786d69a1d2bdc9fc9ce770c8401d0a382d178fdcabc4e1",
+        "jdk-21.0.12.1+1-jre/bin/msvcp140.dll": "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde",
+        "jdk-21.0.12.1+1-jre/bin/net.dll": "da8fe694d71e287cb1c74d478d8854f55d6ea26aba17e58050b772a0a7ef79d8",
+        "jdk-21.0.12.1+1-jre/bin/nio.dll": "50cddbcea627390ed9dee80da7ca9d1942c4c7b1e3f138276693d487a6dd589c",
+        "jdk-21.0.12.1+1-jre/bin/prefs.dll": "3c64fee48d8cf5d4ac97bbc10d335b2aae48ac539a1434d740d7a1d51e840e4c",
+        "jdk-21.0.12.1+1-jre/bin/rmi.dll": "0849b3bf75c35be042dff76ce530e2f153b649a1202f50d575238648f2bde4ae",
+        "jdk-21.0.12.1+1-jre/bin/rmiregistry.exe": "95ba7eb6775feb0d49e59c4a39d6da9309809acfbcc97d131b1b0af88266379d",
+        "jdk-21.0.12.1+1-jre/bin/server/classes.jsa": "5e3eb8c78614b6ae1f0a72e38e33278a3c14f0a363d6dfdc8bc7ace509c0948b",
+        "jdk-21.0.12.1+1-jre/bin/server/classes_nocoops.jsa": "9c18bbf9f8fdc567759097664c5ef71bc8ff1a47f1a7364c85f0b24971800bca",
+        "jdk-21.0.12.1+1-jre/bin/server/jvm.dll": "3df13bd73c7dbeef26693cef664b4ede84649720f7a12f0203215a65656d25f4",
+        "jdk-21.0.12.1+1-jre/bin/splashscreen.dll": "d5b0ccbc32429dbb1617d88bbd4adb471a4debd5a9dd3967b8b7484e6fc9214a",
+        "jdk-21.0.12.1+1-jre/bin/sspi_bridge.dll": "45ff75813743beda329b799961ade6244a4fd56365fa27582127327d01542a79",
+        "jdk-21.0.12.1+1-jre/bin/sunmscapi.dll": "31f542d6ea0856fc2b3919aa76048d2e1f6e04f7bff6f70cbeda89faf5d931c7",
+        "jdk-21.0.12.1+1-jre/bin/syslookup.dll": "0702917a944d3b779881b3c5da4cf50a6c94903a60883eac868696723e551221",
+        "jdk-21.0.12.1+1-jre/bin/ucrtbase.dll": "2e5fb14b7bf8540278f3614a12f0226e56a7cc9e64b81cbd976c6fcf2f71cbfb",
+        "jdk-21.0.12.1+1-jre/bin/vcruntime140.dll": "02c6aa0e6e624411a9f19b0360a7865ab15908e26024510e5c38a9c08362c35a",
+        "jdk-21.0.12.1+1-jre/bin/vcruntime140_1.dll": "7dd9aa02e271c68ca6d5f18d651d23a15d7259715af43326578f7dde27f37637",
+        "jdk-21.0.12.1+1-jre/bin/verify.dll": "dd1d4af0d2c1348f29a143c358922be9d071addbf0d103d15910332cf3b74a58",
+        "jdk-21.0.12.1+1-jre/bin/w2k_lsa_auth.dll": "0977602efe64e68a6b1a5119795dad4f18f4e961441572fd015037686a8ea5f5",
+        "jdk-21.0.12.1+1-jre/bin/windowsaccessbridge-64.dll": "e66506b4e3d4614ae3c9f9ee3c6b60cddc110a5439d80e5d4a58f4c5ed76fd95",
+        "jdk-21.0.12.1+1-jre/bin/zip.dll": "a9ae352e10a098403f497ea69442818be1148a737792a21a7d568a4836d2dc06",
+        "jdk-21.0.12.1+1-jre/conf/jaxp.properties": "7d95c49465d0c836d608d02856d3b097934dfb5dc4bd2279affaf337d045b708",
+        "jdk-21.0.12.1+1-jre/conf/logging.properties": "b62d2733ab99556b108a1951d894c5a8d76b1ac7a00c02c388f9eb9be046c56f",
+        "jdk-21.0.12.1+1-jre/conf/management/jmxremote.access": "0c25d26ee212ca1e8c33f67c3c460d43fe849c3a1d23dbe341148517602b280c",
+        "jdk-21.0.12.1+1-jre/conf/management/jmxremote.password.template": "0273b6a6b9e20e6ce54c5aee70164028e0395063b2b7d39060a40b6495543dbf",
+        "jdk-21.0.12.1+1-jre/conf/management/management.properties": "07dffdd85b01c19bf46ca320a699aba48dd6b01043eb0bd6a9528c7993312bad",
+        "jdk-21.0.12.1+1-jre/conf/net.properties": "56dd1f6095c189c1052f6baa32e457efc09de4832e19cdb82bb236dc8abfee9f",
+        "jdk-21.0.12.1+1-jre/conf/security/java.policy": "d51bcab7ed301caeff3779a5e777e6019864cecee5e2abc102ef991b0de77af2",
+        "jdk-21.0.12.1+1-jre/conf/security/java.security": "7eff0eef66774d0c6a07f6c69fae02d8a7dff9b2ef3d7751af9af87a4dda33e6",
+        "jdk-21.0.12.1+1-jre/conf/security/policy/limited/default_local.policy": "2b2627548e61316150d47ffc3e6cad465ca05b3cccd4785eb7d21aa7baa0f441",
+        "jdk-21.0.12.1+1-jre/conf/security/policy/limited/default_US_export.policy": "758b930a526fc670ab7537f8c26321527050a31f5f42149a2dda623c56a0a1a9",
+        "jdk-21.0.12.1+1-jre/conf/security/policy/limited/exempt_local.policy": "8c3d7648abcd95a272ce12db870082937f4d7f6878d730d83cb7fbb31eb8b2c9",
+        "jdk-21.0.12.1+1-jre/conf/security/policy/README.txt": "6da0747334b0fea7592fd92614b2bbc8b126535e129b1fee483774d914e98eb5",
+        "jdk-21.0.12.1+1-jre/conf/security/policy/unlimited/default_local.policy": "8d8a318e6d90dfd7e26612d2b6385aa704f686ca6134c551f8928418d92b851a",
+        "jdk-21.0.12.1+1-jre/conf/security/policy/unlimited/default_US_export.policy": "758b930a526fc670ab7537f8c26321527050a31f5f42149a2dda623c56a0a1a9",
+        "jdk-21.0.12.1+1-jre/conf/sound.properties": "299c2360b6155eb28990ec49cd21753f97e43442fe8fab03e04f3e213df43a66",
+        "jdk-21.0.12.1+1-jre/legal/java.base/ADDITIONAL_LICENSE_INFO": "a69bce275ba7a3570af6579cb0f55682cd75fedfcd49e0e8e9022270c447c916",
+        "jdk-21.0.12.1+1-jre/legal/java.base/aes.md": "45c6d4da48325edfbff3dcf71c704e504c057904435ed23c6d57046d551eb69d",
+        "jdk-21.0.12.1+1-jre/legal/java.base/asm.md": "683be15695bd248272d60f5b7fbe5e126a935ea6bf231a624a9aa164733e1d1d",
+        "jdk-21.0.12.1+1-jre/legal/java.base/ASSEMBLY_EXCEPTION": "75292f03bf23d3db7c985aecc191029b93883200721ed23ed34a2e601463df33",
+        "jdk-21.0.12.1+1-jre/legal/java.base/c-libutl.md": "bef40679922d6fdfb7e4ddb223ad6722300f6054ba737bbf6188d60fcec517f9",
+        "jdk-21.0.12.1+1-jre/legal/java.base/cldr.md": "19515e14a240e022640e95b61b5095127fa9690755950b4a2b0a02e783e08163",
+        "jdk-21.0.12.1+1-jre/legal/java.base/icu.md": "1bf28459c6e0af9f3429f4f8becd1668d6544055f8df240277456bc4b3d8a752",
+        "jdk-21.0.12.1+1-jre/legal/java.base/LICENSE": "4b9abebc4338048a7c2dc184e9f800deb349366bdf28eb23c2677a77b4c87726",
+        "jdk-21.0.12.1+1-jre/legal/java.base/public_suffix.md": "861de1e4992a7d28f1de25c73cd50d26a94779ebd749c0643fecfa56442c3429",
+        "jdk-21.0.12.1+1-jre/legal/java.base/siphash.md": "5a792b5a74ad2a5f3d6a7ad8b7a841116e58a772c18bc6e392320a365b222c76",
+        "jdk-21.0.12.1+1-jre/legal/java.base/unicode.md": "6f72f10d166b2c2e8a395e03e734c5afc852b59aeca73ced124f6b9c96268d53",
+        "jdk-21.0.12.1+1-jre/legal/java.base/wepoll.md": "3ac2992770080453b98c42afa807ba4b2c1738ef756b92a55c645f55e7df48f0",
+        "jdk-21.0.12.1+1-jre/legal/java.base/zlib.md": "c9c70c36a1f0325e8788771906202d42ba6ab4205caca44ec0f665707e83226b",
+        "jdk-21.0.12.1+1-jre/legal/java.compiler/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.compiler/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.compiler/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.datatransfer/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.datatransfer/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.datatransfer/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.desktop/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.desktop/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.desktop/colorimaging.md": "04d61e3e8e71dd452ebe52008af5378d9f6640d14578aeb515dc5375973b0189",
+        "jdk-21.0.12.1+1-jre/legal/java.desktop/freetype.md": "553e804baecb7de7129d77c7259a6b70037d1893f1c600b41b35201695fb7758",
+        "jdk-21.0.12.1+1-jre/legal/java.desktop/giflib.md": "206aab89ec75968e48a6a1ed6df7d8b9bfb7aea12cbe4c9345d93e5d97460a25",
+        "jdk-21.0.12.1+1-jre/legal/java.desktop/harfbuzz.md": "5ec7cba7f8e7fc3a089213140aab6fa1b3bd5bf8a91bf8bddb3b8d315fc5f7d0",
+        "jdk-21.0.12.1+1-jre/legal/java.desktop/jpeg.md": "c1dfb9719a71ad9f861f8728550542d681e25c8ef40e6393606e6e2a0c1d653a",
+        "jdk-21.0.12.1+1-jre/legal/java.desktop/lcms.md": "843f9f6fa9c3f8109fcf4d5fe74caf7f2ae8e9bcd92238e4aff2d428c932b24b",
+        "jdk-21.0.12.1+1-jre/legal/java.desktop/libpng.md": "f73afb394792f3aeecd959e89487603677a430e56b44eba596d8b572accfd540",
+        "jdk-21.0.12.1+1-jre/legal/java.desktop/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.desktop/mesa3d.md": "63f4e6f75caebbccb95d903fb43e46ac7111b3624d0a34f146b276d7d9e7b152",
+        "jdk-21.0.12.1+1-jre/legal/java.instrument/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.instrument/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.instrument/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.logging/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.logging/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.logging/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.management/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.management/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.management/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.management.rmi/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.management.rmi/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.management.rmi/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.naming/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.naming/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.naming/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.net.http/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.net.http/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.net.http/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.prefs/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.prefs/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.prefs/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.rmi/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.rmi/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.rmi/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.scripting/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.scripting/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.scripting/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.se/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.se/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.se/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.security.jgss/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.security.jgss/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.security.jgss/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.security.sasl/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.security.sasl/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.security.sasl/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.smartcardio/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.smartcardio/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.smartcardio/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.sql/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.sql/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.sql/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.sql.rowset/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.sql.rowset/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.sql.rowset/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.transaction.xa/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.transaction.xa/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.transaction.xa/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.xml/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.xml/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.xml/bcel.md": "cd578186ad93de46cca29ec8ace2b11f9da751987f3f140e6095c528596cc8c1",
+        "jdk-21.0.12.1+1-jre/legal/java.xml/dom.md": "6686e8877667584a3a7c07344baadca1a03e29f677162d87c3c0811e990d1148",
+        "jdk-21.0.12.1+1-jre/legal/java.xml/jcup.md": "8d5dcfdf50455a3c34c753a98f21e953248af200415a9084e3f102cb6c43b8bf",
+        "jdk-21.0.12.1+1-jre/legal/java.xml/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.xml/xalan.md": "c27eb875da4be683d4d7422be986e5e30f636ede31958ff1d39f9cd6109e7a00",
+        "jdk-21.0.12.1+1-jre/legal/java.xml/xerces.md": "4a6bf6b367193ee68681cb2d9fed30ffc5d62dd2d477bd62e0271707d71b3244",
+        "jdk-21.0.12.1+1-jre/legal/java.xml.crypto/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/java.xml.crypto/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/java.xml.crypto/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/java.xml.crypto/santuario.md": "d08690d25f660f145c73365d260ed522cd0aace8a0e1396706551b7a1ae8c9a3",
+        "jdk-21.0.12.1+1-jre/legal/jdk.accessibility/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.accessibility/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.accessibility/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.charsets/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.charsets/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.charsets/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.crypto.cryptoki/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.crypto.cryptoki/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.crypto.cryptoki/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.crypto.cryptoki/pkcs11cryptotoken.md": "1f36ff1342a581142c858f90064e20633d43529ac82adb85345bd902a14e18b2",
+        "jdk-21.0.12.1+1-jre/legal/jdk.crypto.cryptoki/pkcs11wrapper.md": "371974b1fca3744a3892c7ee1fcc593b8b4281fc218f4cafd2f709e9df5fd81d",
+        "jdk-21.0.12.1+1-jre/legal/jdk.crypto.ec/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.crypto.ec/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.crypto.ec/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.crypto.mscapi/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.crypto.mscapi/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.crypto.mscapi/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.dynalink/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.dynalink/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.dynalink/dynalink.md": "17312591cabee3ef6c34ed8897d92e4e361ba9cea41ec00dcd61a322a8fc2cdb",
+        "jdk-21.0.12.1+1-jre/legal/jdk.dynalink/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.httpserver/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.httpserver/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.httpserver/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.incubator.vector/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.incubator.vector/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.incubator.vector/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.internal.vm.ci/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.internal.vm.ci/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.internal.vm.ci/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.internal.vm.compiler/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.internal.vm.compiler/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.internal.vm.compiler/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.internal.vm.compiler.management/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.internal.vm.compiler.management/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.internal.vm.compiler.management/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.jdwp.agent/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.jdwp.agent/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.jdwp.agent/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.jfr/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.jfr/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.jfr/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.jsobject/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.jsobject/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.jsobject/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.localedata/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.localedata/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.localedata/cldr.md": "09972449731a1d1a0863af0384aeb7839f84cac74983c96856e6c305e31ed8b2",
+        "jdk-21.0.12.1+1-jre/legal/jdk.localedata/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.localedata/thaidict.md": "c326144a2351c9608fa708b5d7d3c5a3da03e82b66479b128e9db4969539824a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.management/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.management/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.management/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.management.agent/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.management.agent/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.management.agent/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.management.jfr/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.management.jfr/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.management.jfr/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.naming.dns/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.naming.dns/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.naming.dns/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.naming.rmi/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.naming.rmi/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.naming.rmi/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.net/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.net/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.net/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.nio.mapmode/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.nio.mapmode/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.nio.mapmode/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.sctp/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.sctp/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.sctp/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.security.auth/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.security.auth/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.security.auth/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.security.jgss/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.security.jgss/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.security.jgss/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.unsupported/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.unsupported/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.unsupported/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.xml.dom/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.xml.dom/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.xml.dom/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/legal/jdk.zipfs/ADDITIONAL_LICENSE_INFO": "ebf9777bd307ed789ceabf282a9aca168c391c7f48e15a60939352efb3ea33f9",
+        "jdk-21.0.12.1+1-jre/legal/jdk.zipfs/ASSEMBLY_EXCEPTION": "b998cda101e5a1ebcfb5ff9cddd76ed43a2f2169676592d428b7c0d780665f2a",
+        "jdk-21.0.12.1+1-jre/legal/jdk.zipfs/LICENSE": "86e0516b888276a492b19f9a84f5a866ed36925fae1510b3a94a0b6213e69192",
+        "jdk-21.0.12.1+1-jre/lib/classlist": "bee5fb44a1db38097034c3e6f85af40c76df6da815f75d5fe782ff0d296081c0",
+        "jdk-21.0.12.1+1-jre/lib/fontconfig.bfc": "c7e2e76b908cb6330823e698889943c162e9861a4575501cbb59c9b830158ab0",
+        "jdk-21.0.12.1+1-jre/lib/fontconfig.properties.src": "74e6c464ae1e63983ada241869fdc66ef8c28cef403ee2301e0a90db9555b00c",
+        "jdk-21.0.12.1+1-jre/lib/jawt.lib": "af64af138d14b9fd0849d7f66ad6b529a4e5ec9c25476557bf6b3d65a8ac6884",
+        "jdk-21.0.12.1+1-jre/lib/jfr/default.jfc": "4fed4b508c5f1b69578293df84f94a63752f86b4259d97e12884e3b2ec56ef50",
+        "jdk-21.0.12.1+1-jre/lib/jfr/profile.jfc": "485fb90dbecee9a950c45247464351162b1eb0c35387fbb929f002c600807251",
+        "jdk-21.0.12.1+1-jre/lib/jrt-fs.jar": "45fc41e80103af6ac9e9dd1403c9228271b77a9719f262e96a800486b9646952",
+        "jdk-21.0.12.1+1-jre/lib/jvm.cfg": "aa9efb969444c1484e29adecab55a122458090616e766b2f1230ef05bc3867e0",
+        "jdk-21.0.12.1+1-jre/lib/jvm.lib": "58fbee0f29d91056c2b251a11627d1c090f19a877ec254eb02ecb02d1477d50a",
+        "jdk-21.0.12.1+1-jre/lib/modules": "7ee86dcf1d08f0ff492d6f8bfc6ed6806a3bfd3a85db2cf1df29247869cc9b66",
+        "jdk-21.0.12.1+1-jre/lib/psfont.properties.ja": "5a4bd51b969bf187ff86d94f4a71fdfbfa602762975fa3c73d264b4575f7c78f",
+        "jdk-21.0.12.1+1-jre/lib/psfontj2d.properties": "780c565d5af3ee6f68b887b75c041cdf46a0592f67012f12eeb691283e92630a",
+        "jdk-21.0.12.1+1-jre/lib/security/blocked.certs": "583500b76965eb54b03493372989ab4d3426f85462d1db232c5ae6706a4d6c58",
+        "jdk-21.0.12.1+1-jre/lib/security/cacerts": "98d34a90fca2688ef5674862d2a484e09e5ca25d2f07c5d654aa28f1581f3419",
+        "jdk-21.0.12.1+1-jre/lib/security/default.policy": "69790a79bb9d4bef6b544c1878410bfa0c6a92171834c188772a0ba1ca8c0d95",
+        "jdk-21.0.12.1+1-jre/lib/security/public_suffix_list.dat": "37e71e43c8605f29b9072f152d0ea4708735cdf335a5b68b2bc2f875760806c3",
+        "jdk-21.0.12.1+1-jre/lib/tzdb.dat": "5906b44e25a8a730131d7ba1beb5d15af27043f6536f1a169ca8a5d8b8bed8f8",
+        "jdk-21.0.12.1+1-jre/lib/tzmappings": "b41575b332809b37ad423bdca30c7c48cdef3d82f82fa9d534781a6f15d6a2ab",
+        "jdk-21.0.12.1+1-jre/NOTICE": "c02756bcd9fa8191bf0fda4451bc018414dd44ee35bf09922c24377a475e4b5a",
+        "jdk-21.0.12.1+1-jre/release": "01c001ff8bfce9df22eb29b3daaa60b0d8b73a09840fcf8e9f53da6310d5e1ac"
+      }
+    }
+  },
+  "jarSha256": "2a7e2978cb09538ed6780d85ae3aa39c1ecce10e5e5a6e0dc3cd8ab087851588",
+  "elevated": true,
+  "driveLetter": "Z",
+  "nativeDisk": {
+    "VirtualSizeBytes": 67108864,
+    "BackingSizeBytes": 67109376,
+    "ProviderSubtype": 2,
+    "PhysicalPath": "\\\\.\\PhysicalDrive1"
+  },
+  "disk": {
+    "Number": 1,
+    "Path": "\\\\?\\scsi#disk&ven_msft&prod_virtual_disk#2&1f4adffe&1&000002#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}",
+    "UniqueId": "600224807B2FF9335AD8D9112EF1920C",
+    "Guid": "{e7b7b4b5-8f61-4884-bdd0-9d13ba79a71c}",
+    "Size": 67108864,
+    "PartitionStyle": "GPT"
+  },
+  "partition": {
+    "DiskNumber": 1,
+    "PartitionNumber": 1,
+    "Guid": "{fc1bb882-9c3a-4a14-9419-a895190b9f4f}",
+    "Offset": 1048576,
+    "Size": 65994752,
+    "GptType": "{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}"
+  },
+  "volumeRoot": "\\\\?\\Volume{fc1bb882-9c3a-4a14-9419-a895190b9f4f}\\",
+  "volumeBefore": {
+    "Path": "\\\\?\\Volume{fc1bb882-9c3a-4a14-9419-a895190b9f4f}\\",
+    "UniqueId": "\\\\?\\Volume{fc1bb882-9c3a-4a14-9419-a895190b9f4f}\\",
+    "FileSystem": "NTFS",
+    "FileSystemLabel": "MOE_NODE_CONTROL",
+    "Size": 65990656,
+    "SizeRemaining": 53633024
+  },
+  "mappingBefore": {
+    "DriveLetter": "Z",
+    "DriveRoot": "Z:\\",
+    "VolumeGuidRoot": "\\\\?\\Volume{fc1bb882-9c3a-4a14-9419-a895190b9f4f}\\",
+    "NativeTarget": "\\Device\\HarddiskVolume11"
+  },
+  "config": "ergo.directory = \"Z:/run/data\"\nergo.networkType = \"mainnet\"\nergo.node {\n  stateType = \"utxo\"\n  verifyTransactions = true\n  blocksToKeep = -1\n  utxo.utxoBootstrap = false\n  utxo.storingUtxoSnapshots = 0\n  nipopow.nipopowBootstrap = false\n  checkpoint = null\n  mining = false\n  offlineGeneration = false\n  extraIndex = false\n}\nergo.wallet.secretStorage.secretDir = \"Z:/run/secrets\"\nergo.wallet.testMnemonic = null\nergo.wallet.testKeysQty = null\nscorex.dataDir = \"Z:/run/data\"\nscorex.logDir = \"Z:/run\"\nscorex.logging.level = \"INFO\"\nscorex.restApi {\n  bindAddress = \"127.0.0.1:19053\"\n  apiKeyHash = \"a2aa2a7635baf02dbee9428f10667c92402604e1a0cf296bc76383218f3dc36a\"\n  publicUrl = null\n  corsAllowedOrigin = null\n}\nscorex.network {\n  bindAddress = \"127.0.0.1:19030\"\n  knownPeers = []\n  bannedPeers = []\n  peerDiscovery = false\n  maxConnections = 0\n  upnpEnabled = false\n  declaredAddress = null\n  nodeName = \"moe-offline-source-probe\"\n}",
+  "configSha256": "b9a7d06cf0d0b039e7189004998e24975c3f9884c2003a51fc57d607ac462f9f",
+  "arguments": [
+    "-Xms128m",
+    "-Xmx2g",
+    "-Duser.home=Z:\\run/home",
+    "-Djava.io.tmpdir=Z:\\run/tmp",
+    "-Dlogback.configurationFile=Z:\\run/logback.xml",
+    "-Djava.net.preferIPv4Stack=true",
+    "-XX:ErrorFile=Z:\\run/hs_err.log",
+    "-XX:-CreateCoredumpOnCrash",
+    "-XX:-UsePerfData",
+    "-jar",
+    "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\ergo-stable\\bundle/ergo-6.0.5.jar",
+    "--mainnet",
+    "-c",
+    "Z:\\run/ergo.conf"
+  ],
+  "launchFailure": null,
+  "progress": {
+    "socketSamples": 276,
+    "replies": {
+      "/info": {
+        "status": 200,
+        "body": "{\n  \"lastMemPoolUpdateTime\" : 1789207121684,\n  \"currentTime\" : 1789207171815,\n  \"network\" : \"mainnet\",\n  \"name\" : \"moe-offline-source-probe\",\n  \"stateType\" : \"utxo\",\n  \"difficulty\" : null,\n  \"bestFullHeaderId\" : null,\n  \"bestHeaderId\" : null,\n  \"peersCount\" : 0,\n  \"unconfirmedCount\" : 0,\n  \"appVersion\" : \"6.0.5\",\n  \"eip37Supported\" : true,\n  \"stateRoot\" : \"a5df145d41ab15a01e0cd3ffbab046f0d029e5412293072ad0f5827428589b9302\",\n  \"genesisBlockId\" : null,\n  \"previousFullHeaderId\" : null,\n  \"fullHeight\" : null,\n  \"headersHeight\" : null,\n  \"stateVersion\" : \"0000000000000000000000000000000000000000000000000000000000000000\",\n  \"fullBlocksScore\" : null,\n  \"maxPeerHeight\" : null,\n  \"launchTime\" : 1789207121684,\n  \"isExplorer\" : false,\n  \"lastSeenMessageTime\" : 0,\n  \"eip27Supported\" : true,\n  \"headersScore\" : null,\n  \"parameters\" : {\n    \"outputCost\" : 100,\n    \"tokenAccessCost\" : 100,\n    \"maxBlockCost\" : 1000000,\n    \"height\" : 0,\n    \"maxBlockSize\" : 524288,\n    \"dataInputCost\" : 100,\n    \"blockVersion\" : 1,\n    \"inputCost\" : 2000,\n    \"storageFeeFactor\" : 1250000,\n    \"subblocksPerBlock\" : null,\n    \"minValuePerByte\" : 360\n  },\n  \"isMining\" : false\n}"
+      },
+      "/peers/connected": {
+        "status": 200,
+        "body": "[\n]"
+      },
+      "/wallet/status": {
+        "status": 403,
+        "body": "{\n  \"error\" : 403,\n  \"reason\" : \"forbidden\",\n  \"detail\" : \"The supplied authentication is not authorized to access this resource\"\n}"
+      }
+    },
+    "pending": null,
+    "endpoint": "/wallet/status",
+    "readyAtMs": 61077,
+    "reason": "offline-ready",
+    "diagnosticPeakBytes": 1156,
+    "readerDisposed": true
+  },
+  "volumeAfter": {
+    "Path": "\\\\?\\Volume{fc1bb882-9c3a-4a14-9419-a895190b9f4f}\\",
+    "UniqueId": "\\\\?\\Volume{fc1bb882-9c3a-4a14-9419-a895190b9f4f}\\",
+    "FileSystem": "NTFS",
+    "FileSystemLabel": "MOE_NODE_CONTROL",
+    "Size": 65990656,
+    "SizeRemaining": 52670464
+  },
+  "mappingAfter": {
+    "DriveLetter": "Z",
+    "DriveRoot": "Z:\\",
+    "VolumeGuidRoot": "\\\\?\\Volume{fc1bb882-9c3a-4a14-9419-a895190b9f4f}\\",
+    "NativeTarget": "\\Device\\HarddiskVolume11"
+  },
+  "finalInventory": [
+    {
+      "path": "ergo.conf",
+      "bytes": 931
+    },
+    {
+      "path": "logback.xml",
+      "bytes": 225
+    },
+    {
+      "path": "tmp\\leveldbjni-64-6-17726899774503518217.0",
+      "bytes": 887296
+    },
+    {
+      "path": "tmp\\mainnet.conf",
+      "bytes": 6698
+    },
+    {
+      "path": "data\\peers\\000003.log",
+      "bytes": 0
+    },
+    {
+      "path": "data\\peers\\CURRENT",
+      "bytes": 16
+    },
+    {
+      "path": "data\\peers\\LOCK",
+      "bytes": 0
+    },
+    {
+      "path": "data\\peers\\LOG",
+      "bytes": 47
+    },
+    {
+      "path": "data\\peers\\MANIFEST-000002",
+      "bytes": 50
+    },
+    {
+      "path": "data\\snapshots\\000003.log",
+      "bytes": 0
+    },
+    {
+      "path": "data\\snapshots\\CURRENT",
+      "bytes": 16
+    },
+    {
+      "path": "data\\snapshots\\LOCK",
+      "bytes": 0
+    },
+    {
+      "path": "data\\snapshots\\LOG",
+      "bytes": 46
+    },
+    {
+      "path": "data\\snapshots\\MANIFEST-000002",
+      "bytes": 50
+    },
+    {
+      "path": "data\\history\\extra\\000003.log",
+      "bytes": 0
+    },
+    {
+      "path": "data\\history\\extra\\CURRENT",
+      "bytes": 16
+    },
+    {
+      "path": "data\\history\\extra\\LOCK",
+      "bytes": 0
+    },
+    {
+      "path": "data\\history\\extra\\LOG",
+      "bytes": 46
+    },
+    {
+      "path": "data\\history\\extra\\MANIFEST-000002",
+      "bytes": 50
+    },
+    {
+      "path": "data\\history\\index\\000003.log",
+      "bytes": 0
+    },
+    {
+      "path": "data\\history\\index\\CURRENT",
+      "bytes": 16
+    },
+    {
+      "path": "data\\history\\index\\LOCK",
+      "bytes": 0
+    },
+    {
+      "path": "data\\history\\index\\LOG",
+      "bytes": 46
+    },
+    {
+      "path": "data\\history\\index\\MANIFEST-000002",
+      "bytes": 50
+    },
+    {
+      "path": "data\\history\\objects\\000003.log",
+      "bytes": 0
+    },
+    {
+      "path": "data\\history\\objects\\CURRENT",
+      "bytes": 16
+    },
+    {
+      "path": "data\\history\\objects\\LOCK",
+      "bytes": 0
+    },
+    {
+      "path": "data\\history\\objects\\LOG",
+      "bytes": 46
+    },
+    {
+      "path": "data\\history\\objects\\MANIFEST-000002",
+      "bytes": 50
+    },
+    {
+      "path": "data\\state\\ldb_main\\000003.log",
+      "bytes": 2335
+    },
+    {
+      "path": "data\\state\\ldb_main\\CURRENT",
+      "bytes": 16
+    },
+    {
+      "path": "data\\state\\ldb_main\\LOCK",
+      "bytes": 0
+    },
+    {
+      "path": "data\\state\\ldb_main\\LOG",
+      "bytes": 46
+    },
+    {
+      "path": "data\\state\\ldb_main\\MANIFEST-000002",
+      "bytes": 50
+    },
+    {
+      "path": "data\\state\\ldb_undo\\000003.log",
+      "bytes": 1111
+    },
+    {
+      "path": "data\\state\\ldb_undo\\CURRENT",
+      "bytes": 16
+    },
+    {
+      "path": "data\\state\\ldb_undo\\LOCK",
+      "bytes": 0
+    },
+    {
+      "path": "data\\state\\ldb_undo\\LOG",
+      "bytes": 46
+    },
+    {
+      "path": "data\\state\\ldb_undo\\MANIFEST-000002",
+      "bytes": 50
+    },
+    {
+      "path": "data\\wallet\\storage\\000003.log",
+      "bytes": 0
+    },
+    {
+      "path": "data\\wallet\\storage\\CURRENT",
+      "bytes": 16
+    },
+    {
+      "path": "data\\wallet\\storage\\LOCK",
+      "bytes": 0
+    },
+    {
+      "path": "data\\wallet\\storage\\LOG",
+      "bytes": 47
+    },
+    {
+      "path": "data\\wallet\\storage\\MANIFEST-000002",
+      "bytes": 50
+    },
+    {
+      "path": "data\\wallet\\registry\\ldb_main\\000003.log",
+      "bytes": 19
+    },
+    {
+      "path": "data\\wallet\\registry\\ldb_main\\CURRENT",
+      "bytes": 16
+    },
+    {
+      "path": "data\\wallet\\registry\\ldb_main\\LOCK",
+      "bytes": 0
+    },
+    {
+      "path": "data\\wallet\\registry\\ldb_main\\LOG",
+      "bytes": 47
+    },
+    {
+      "path": "data\\wallet\\registry\\ldb_main\\MANIFEST-000002",
+      "bytes": 50
+    },
+    {
+      "path": "data\\wallet\\registry\\ldb_undo\\000003.log",
+      "bytes": 64
+    },
+    {
+      "path": "data\\wallet\\registry\\ldb_undo\\CURRENT",
+      "bytes": 16
+    },
+    {
+      "path": "data\\wallet\\registry\\ldb_undo\\LOCK",
+      "bytes": 0
+    },
+    {
+      "path": "data\\wallet\\registry\\ldb_undo\\LOG",
+      "bytes": 47
+    },
+    {
+      "path": "data\\wallet\\registry\\ldb_undo\\MANIFEST-000002",
+      "bytes": 50
+    }
+  ],
+  "finalFileBytes": 899803,
+  "finalDiagnosticBytes": 1156,
+  "secretsEmpty": true,
+  "backingBytes": 67109376,
+  "hostFreeAfter": 528338808832,
+  "postRunVerification": {
+    "reviewedBeforeExecution": true,
+    "reviewCorrection": "Duplicate HTTP-reader disposal removed before execution; final diagnostic lengths checked after empty-job cleanup.",
+    "actualReportReview": "All ten source hashes, standard package/config substitution, process limits/empty job, disk/partition/volume/map identity, traffic timing and inventories verified; no material findings.",
+    "mappingAbsence": "Independent native readback found no logical drive or DOS reservation for Z after cleanup; image absent.",
+    "evidenceTests": {
+      "cases": 26,
+      "result": "passed",
+      "scriptSha256": "e2e1131d596d501634afe20934f2bbb5ea0bef5abf06d3954b17d473c7af07cc"
+    },
+    "launcherWrapperSha256": "d8ee35f01a4fc141dabc19144a08ee6c46d7bcb1517f707e6b3300c5c08103ed",
+    "cleanup": "Owned image removed by launcher. Empty scratch/node-volume-control directory, fixed UAC wrapper, duplicate result and disposable preflight removed after durable capture.",
+    "evidenceLimit": "This elevated offline result does not establish ordinary-token mapping visibility, parent-failure handoff cleanup, connected sync, traffic-threshold stress, crash recovery or independent hard deadlines.",
+    "projectChecks": {
+      "command": "npm run check",
+      "exitCode": 0,
+      "testFiles": 96,
+      "tests": 1795,
+      "vitestDurationSeconds": 253.31,
+      "additional": [
+        "docs and links",
+        "typecheck",
+        "build",
+        "package",
+        "pilot",
+        "store crash",
+        "spent set"
+      ],
+      "finalDocsAndDiffChecks": "passed"
+    }
+  }
+}

@@ -172,17 +172,62 @@ listed no published advisories when checked; this is not absence-of-defects
 evidence. [Issue 2470](https://github.com/ergoplatform/ergo/issues/2470) describes
 a 6.0.3RC1 chain-tip wedge, not a verified exploit against this candidate.
 
-The remaining engineering gate is one composed launch under the existing
-30-minute / 20 GiB disk / 100 GiB host-reserve / 8 GiB traffic-trigger / 10 GiB
-final-traffic envelope. Reuse the owned-volume, drive-letter, Job Object and
-traffic mechanisms below with the standard LevelDB node. Their historical
-custom-RocksDB module/version controls are not prerequisites for this candidate.
-The existing supervisor accepts at most 120 seconds and the disk helper creates
-only a fixed 64 MiB image; a 30-minute/20 GiB launch has not been implemented or
-tested. Prepare and review that concrete composition before seeking the separate
-full-allocation/connected-execution authorization. Do not silently replace the
-disk ceiling with file-size sampling. No connected run or large allocation has
-occurred. See [reproduction](../experiments/ergo-range/README.md#maintained-standard-java).
+## Offline node on the capped volume
+
+The [fixed launcher](../experiments/ergo-range/node-volume-control.ps1) now
+combines the standard stable node and maintained JRE with the existing disk,
+drive-letter, process-job and traffic controls. Its default is read-only; its
+only execution mode is offline on a newly created fixed 64 MiB VHD. There is no
+existing-disk selector, custom library or connected mode. Exact reviewed
+offline-config bytes are checked before substituting the owned run path and a
+new unavailable API-authentication target. All known worker data/temp/home and
+diagnostic paths use the mapped volume. Synchronous observation reads only
+counters, mapping, host reserve, sockets and fixed diagnostic names; it does
+not walk a live database tree. Three asynchronous bounded API reads start after
+60 seconds, followed by ten seconds of observation and a whole-job stop.
+
+The [actual result](ergo-node-volume-verification.json) passed on 2026-09-12:
+
+- One node process, 71,117 ms, peak commit 372,654,080 bytes, with 4 GiB commit,
+  2 GiB heap, 25% CPU scheduling and 120-second nominal wall limits.
+- Expected Ergo 6.0.5 genesis UTXO state, empty peers, wallet HTTP 403 and
+  276 loopback-only socket observations. Secret storage was empty at the end.
+- Real host traffic 3,444,749 bytes across 278 samples; largest gap 309 ms.
+  The stop decision was at 71,165 ms, empty job confirmed at 71,209 ms, and
+  final sample spanned 71,211–71,213 ms. Accounting remained valid.
+- Fixed virtual size 67,108,864 bytes; backing file 67,109,376 bytes. The
+  formatted NTFS volume was 65,990,656 bytes, including its metadata capacity.
+  Final inventory: 54 files / 899,803 logical bytes. Fixed diagnostics were
+  1,156 bytes and captured console output 4,326 bytes.
+- The owned mapping was removed, disk detached and exact image deleted after
+  successful process, final-accounting and identity checks. Recorded host free
+  space before allocation and after detach exceeded the 100 GiB reserve.
+
+Independent review found and corrected a duplicate HTTP-reader disposal before
+execution; disposal now occurs once before final accounting. Final diagnostic
+lengths are checked after the job is empty. Twenty-six pure evidence cases
+cover successful boundaries and rejection of wrong exits, missing cleanup,
+excess resources, invalid counters and late stop/final timing.
+
+The real window uses the planned 8 GiB trigger / 10 GiB final-traffic maximum,
+including unrelated host traffic. It does not claim an exercised 8 GiB transfer
+or measured worst-case stop overshoot. The fixed VHD bounds its contents, not
+all JRE/OS writes, paging or supervisor allocations. Synchronous OS calls may
+stall; timing checks reject late evidence rather than proving independent hard
+deadlines. The stop is not graceful shutdown, crash recovery or chain sync.
+Failed runs retain their image after best-effort cleanup and cannot claim empty
+jobs or reusable database state. Stable host administration/path identity is
+assumed; these are owned-volume controls, not a hostile-code filesystem sandbox.
+
+Windows requires elevation for the disk operations, and this trusted offline
+node inherits it. Public-peer execution must instead separate a small elevated
+disk owner from an ordinary-user node supervisor. The next gate is actual
+cross-session mapping/write access, bounded fresh handoff and parent-failure
+cleanup ordering. Only then add named fixed 20 GiB / 30-minute entrypoints and
+review the concrete connected launch before separate execution authorization.
+The historical custom-RocksDB module/version controls are not prerequisites.
+No connected run or large allocation occurred. See
+[reproduction](../experiments/ergo-range/README.md#offline-node-on-a-capped-volume).
 
 ## Earlier prerelease candidate and measured artifact
 

@@ -121,6 +121,49 @@ the candidate as a node. The candidate's peer addresses and connection target
 are not an enforced egress policy or kernel socket quota. The composed disk,
 traffic and process controls remain necessary before connected execution.
 
+## Offline node on a capped volume
+
+`node-volume-control.ps1` combines the verified standard node and maintained
+Java with the existing fixed 64 MiB Windows VHD, drive-letter mapping, process
+job and real host-interface accounting. Default invocation is read-only:
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-volume-evidence.test.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-volume-control.ps1
+```
+
+The fixed execution requires an elevated Windows PowerShell 7 session and an
+absent `scratch/node-volume-control/`. It never opens an existing disk and has
+no disk selector, size option or connected mode:
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-volume-control.ps1 -Execute > scratch/ergo-java/volume-control-result.json
+```
+
+One offline node JVM runs for at most nominally 120 seconds, with 4 GiB commit,
+2 GiB heap, 25% CPU scheduling, one process and 15 MiB captured output. Node
+data, home, temp and configured diagnostics use the verified volume. The
+supervisor observes the fixed diagnostic paths without scanning live databases.
+After 60 seconds, three fixed asynchronous loopback reads check genesis state,
+empty peers and unauthenticated wallet refusal; ten more seconds precede the
+whole-job stop. This is not graceful shutdown or a crash-recovery test.
+
+The real traffic window uses the planned 8 GiB trigger / 10 GiB final ceiling,
+including unrelated host traffic, with a 1-second maximum sample/final gap and
+2-second stop-to-empty evidence check. Synchronous OS calls can stall; failed
+timing invalidates evidence rather than proving independent hard deadlines.
+The host retains at least 100 GiB free. The 64 MiB VHD bounds its files, not all
+OS/JRE writes or supervisor memory. Final diagnostics/output and the report
+have 16 MiB checks. Normal success requires empty job, final accounting, empty
+secrets, identity/capacity readback, removed mapping and detached/deleted image.
+Failures retain the image after best-effort cleanup; inspect the report before
+retrying, and never substitute a different disk or recursive cleanup target.
+
+The node inherits this control's elevation. It is restricted to the reviewed
+offline configuration. A connected launcher still needs separate privileged
+disk ownership and ordinary-user node execution, with actual mapping visibility
+and cleanup evidence, before the proposed 20 GiB / 30-minute run.
+
 ## Earlier platform controls
 Its [first-sync control selection](../../docs/ERGO_NODE_PREFLIGHT.md#first-sync-control-selection)
 also records a narrow rootless WSL control. From the repository root in the
