@@ -3,8 +3,8 @@ dist/
 *.log
 *.tgz
 
-# Scratch verification scripts — the .mjs probes that prove a bug and then
-# prove the fix. Gitignored, and kept in scratch/ so the repo root shows only
-# the durable project files. Supported implementation code lives in src/.
+# Disposable probes and generated artifacts. Keep reproducible sources in
+# scripts/ or experiments/ and durable results in docs/. WORK.md identifies
+# local evidence that must be retained until its open investigation closes.
 /scratch/
 /*.mjs
