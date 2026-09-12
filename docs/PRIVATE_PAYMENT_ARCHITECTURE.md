@@ -65,9 +65,8 @@ journal or changing a verifier under the same identity is not migration.
 
 ### Private-payment experiment case map
 
-The duplicate host, journal, compiler, circuits and dependency tree are ready
-for removal now that receiver checks joined the active pool path. They remain
-in `experiments/private-payment/` pending cleanup approval. The [historical contract](https://github.com/mediumofexchange/reference-ts/blob/af398eaf4506b39d41685218c3ab1717a37842f3/experiments/private-payment/RESEARCH.md)
+The duplicate host, journal, compiler, circuits and dependency tree were removed
+after receiver checks joined the active pool path. The [historical contract](https://github.com/mediumofexchange/reference-ts/blob/af398eaf4506b39d41685218c3ab1717a37842f3/experiments/private-payment/RESEARCH.md)
 and [measured report](https://github.com/mediumofexchange/reference-ts/blob/af398eaf4506b39d41685218c3ab1717a37842f3/experiments/private-payment/results/2026-09-05-windows.json)
 remain evidence for that research profile only. Active equivalents are:
 

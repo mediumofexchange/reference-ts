@@ -66,7 +66,7 @@ and [v3 conformance guide](scripts/pool/v3/README.md) for proof setup and limits
 | [Decisions](DECISIONS.md) | Dated choices, rationale, evidence and specification changes. |
 
 The frozen transparent path remains test evidence until its remaining cases
-move to the pool. The private-payment research framework is ready for retirement;
+move to the pool. The private-payment research framework has been retired;
 its active equivalents and historical results are mapped in the
 [retirement map](docs/PRIVATE_PAYMENT_ARCHITECTURE.md#retained-evidence-and-retirement-conditions).
 The [local pilot guide](docs/PILOT.md) documents the transparent integration harness.

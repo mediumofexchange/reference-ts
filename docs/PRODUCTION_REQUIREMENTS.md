@@ -176,7 +176,7 @@ Maintain one production path. The transparent path is **frozen**: no new
 features, no review rounds, cases ported to the pool path as each rule lands,
 and the code deleted when the pool path passes them. The pilot is a harness for
 the durable-command layer; its transport and CLI go with a pool equivalent. The
-private-payment experiment is ready for removal following the active case map in
+private-payment experiment is retired following the active case map in
 the [retirement map](PRIVATE_PAYMENT_ARCHITECTURE.md#retained-evidence-and-retirement-conditions).
 Two mechanisms in the frozen code are retired by the
 specification — whole-served-state exhibits and the signed opening claim

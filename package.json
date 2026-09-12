@@ -53,7 +53,6 @@
     "check:package": "node scripts/check-package.mjs",
     "check:pilot": "node scripts/pilot-demo.mjs",
     "pilot:demo": "npm run build && npm run check:pilot",
-    "check:privacy": "npm run build && npm --prefix experiments/private-payment run check",
     "check:pool": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/check.mjs",
     "check:pool:v3": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/check.mjs",
     "bench:pool:prepare": "node scripts/pool/browser/prepare.mjs",

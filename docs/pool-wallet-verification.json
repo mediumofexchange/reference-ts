@@ -15,7 +15,7 @@
     "scripts/pool/wallet/audit.mjs": "1fb022ab66ed394bbaf5a7ddec70f6efea5d81645709a4ebacb8cb0df63ac947",
     "scripts/pool/wallet/crash.mjs": "e08ba7abbcda27ac4d8feae649cdcdc147a40469024d867dcde719e77853d27b",
     "scripts/pool/wallet/crash-worker.mjs": "4a062732dfb574ce6c65a533df82b3ce55b0ab26f933aaa76821c748496d1a0a",
-    "package.json": "fb62451db4fc89bdd746dd18a15cfa29abccd56bc3317be01925c3352681f334",
+    "package.json": "e17712c36d42ee2f9ce024fcab62cd6ec293e5acb1b41f66aa6bf01d92ee829f",
     ".github/workflows/ci.yml": "c64535e0fdf45f2c904a212fc483dc9cc2311a9f7d943a589464b7bb6760eff7",
     "src/pool/circuits/manifest.json": "c762654f10e1d6ef0da542e907c82d72939ddd1c5ae5244fc7669236ec9d835e"
   },
@@ -151,6 +151,35 @@
       "One caller-configured segment per handle. No newest external-state claim or assurance of present spendability.",
       "No receipt authentication by checkNote; fulfill still authenticates the exact delivery.",
       "Saved fulfillment is not another authorization to credit or deliver goods."
+    ]
+  },
+  "retirement": {
+    "status": "removed",
+    "path": "experiments/private-payment/",
+    "trackedFiles": 20,
+    "totalBytesIncludingDependencies": 203307820,
+    "caseMap": "docs/PRIVATE_PAYMENT_ARCHITECTURE.md#private-payment-experiment-case-map",
+    "historicalRevision": "af398eaf4506b39d41685218c3ab1717a37842f3",
+    "review": "Bounded independent comparison found active equivalents for receiver, proof, admission, history, audit and crash cases. Framework-specific journal formats are not a product contract.",
+    "retained": [
+      "Git history and immutable contract/report links",
+      "scratch/private-payment-crs",
+      "retained Ergo node image"
+    ],
+    "verification": [
+      {
+        "command": "npm run check:docs",
+        "exitCode": 0,
+        "linkedFiles": 30
+      },
+      {
+        "command": "npm run check:package",
+        "exitCode": 0
+      },
+      {
+        "command": "git diff --check",
+        "exitCode": 0
+      }
     ]
   }
 }

@@ -24,9 +24,8 @@ Silence recovery is modeled but not implemented in the
 runtime; usable wallet custody and an external witness write adapter remain open.
 
 The frozen transparent implementation and its local pilot remain adversarial
-and integration evidence. The duplicate private-payment experiment's cases now
-have active equivalents; its removal is pending. The case map and immutable
-historical report are in the architecture guide.
+and integration evidence. The duplicate private-payment experiment is retired;
+its active case map and immutable historical report are in the architecture guide.
 
 Use [the architecture map](PRIVATE_PAYMENT_ARCHITECTURE.md) for component
 boundaries and retirement conditions, [production requirements](PRODUCTION_REQUIREMENTS.md)

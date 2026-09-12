@@ -7,9 +7,9 @@ Updated: 2026-09-12
 Receiver note verification is implemented and locally verified: unspent/spent
 at an exact caller-selected checkpoint, saved fulfillment lookup after lost
 replies, and no second fulfillment. The next product slice is private delivery
-using the existing wallet; the duplicate experiment is ready for approved removal.
+using the existing wallet; the duplicate experiment has been removed.
 
-Delivery: reference-ts/main; working slice follows af398ea (CI 34695714652 passed).
+Delivery: reference-ts/main; receiver implementation 6ac2d18, cleanup follows it.
 Companion money-from-first-principles/main at 7ea0ee8 remains unchanged.
 Pinned v2 sections 3 and 8–11 already define the implemented note checks.
 No normative, circuit, proof-key, database-schema or protocol byte change.
@@ -30,7 +30,8 @@ No normative, circuit, proof-key, database-schema or protocol byte change.
 - [Experiment case map](docs/PRIVATE_PAYMENT_ARCHITECTURE.md#private-payment-experiment-case-map)
   now maps receiver, proof, admission, replay, audit and crash cases to active
   coverage. No unique protocol case requiring the duplicate framework was found.
-  Historical contract/results have immutable Git links; original files remain.
+  Historical contract/results have immutable Git links. Removed 20 tracked
+  framework files and their dependencies: 203,307,820 bytes in total.
 
 ## Evidence
 
@@ -65,20 +66,14 @@ No normative, circuit, proof-key, database-schema or protocol byte change.
 
 ## Next
 
-1. Cleanup approval is pending for experiments/private-payment/: 20 tracked
-   files plus reinstallable local dependencies. Automatic approval review
-   rejected recursive removal as beyond the prior cleanup authorization.
-   Do not retry without new approval. Preserve Git history, shared proving cache
-   scratch/private-payment-crs and the retained Ergo image. The case map and
-   historical links are ready; check docs/package commands after removal.
-2. Develop private authenticated delivery and supported wallet custody with
+1. Develop private authenticated delivery and supported wallet custody with
    existing v2 outputs and fresh receiver requests. Select a concrete local
    transport/custody boundary before implementation; do not add successor C4
    derivation or capsules to v2. Full seed-only restoration remains separate.
-3. Imported note checks are covered, but CLI proof paths still require one
+2. Imported note checks are covered, but CLI proof paths still require one
    segment/no imports. Extend path selection using the existing verified forest
    when a concrete multi-segment wallet flow requires it.
-4. Applied Ergo history remains open. At heights 100,000, 1,000,000 and 1,500,000
+3. Applied Ergo history remains open. At heights 100,000, 1,000,000 and 1,500,000
    compare bounded parent links and bodies against pinned upper IDs. Body
    presence alone proves no ancestry; additional sync needs separate justification.
 
