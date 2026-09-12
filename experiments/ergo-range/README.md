@@ -32,7 +32,7 @@ curl.exe --fail --location --proto '=https' --proto-redir '=https' --max-time 18
 if ($LASTEXITCODE -ne 0) { throw 'Download failed' }
 if ((Get-Item -LiteralPath $stableZip).Length -ne 108916979 -or (Get-FileHash -LiteralPath $stableZip -Algorithm SHA256).Hash -ine '28be43dd010792bc72d320952dcfde368a9a21e3926409f78757e6218583ea06') { throw 'Package mismatch' }
 if (Test-Path -LiteralPath 'scratch/ergo-stable/bundle') { throw 'Fresh bundle directory required' }
-Expand-Archive -LiteralPath $stableZip -DestinationPath 'scratch/ergo-stable/bundle'
+pwsh -NoProfile -File experiments/ergo-range/node-prepare.ps1 -Stable
 pwsh -NoProfile -File experiments/ergo-range/node-stable-storage.ps1
 pwsh -NoProfile -File experiments/ergo-range/node-stable-storage.ps1 -Execute > scratch/ergo-stable/storage-result.json
 ```
@@ -50,6 +50,31 @@ This is an ordinary persistence control with native factory selection, not a
 crash/disk-full test, loaded-module attestation or full-sync acceptance. Limits,
 source comparison and measured results are in the preflight and
 [stable evidence](../../docs/ergo-stable-verification.json).
+
+## Stable node startup and settings
+
+Use the same complete stable bundle for the finite offline node startup:
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-startup.ps1 -Stable > scratch/ergo-stable/startup-result.json
+```
+
+This requires absent `scratch/ergo-stable/run/` and free loopback ports 19030
+and 19053. It retains the original 120-second, 4 GiB process-commit and 16 MiB
+observed file/output bounds, disables peers/discovery, uses an empty secret
+directory and allows only three fixed local HTTP observations. A successful
+report must be checked and captured as `docs/ergo-stable-startup-verification.json`
+before the settings readback:
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-settings.ps1 -Stable > scratch/ergo-stable/settings-result.json
+```
+
+Readback requires absent `scratch/ergo-stable/settings-run/`. It checks the
+baseline plus JVM pruning override and omitted-checkpoint controls, using the
+stock typed settings loader without starting node services. Omitting `-Stable`
+retains the earlier prerelease reproduction paths and pins; it never falls back
+between packages. The deleted custom artifacts are not prerequisites here.
 
 ## Earlier platform controls
 Its [first-sync control selection](../../docs/ERGO_NODE_PREFLIGHT.md#first-sync-control-selection)

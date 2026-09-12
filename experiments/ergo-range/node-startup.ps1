@@ -1,15 +1,20 @@
 # Finite stock-node experiment. No sync, signing, arbitrary URL or private API client.
+param([switch]$Stable)
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows -or -not [Environment]::Is64BitProcess) { throw 'Requires Windows x64 / PowerShell 7' }
 Add-Type -Path (Join-Path $PSScriptRoot 'NodeProbeProcess.cs')
 . (Join-Path $PSScriptRoot 'node-evidence.ps1')
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$scratch = Join-Path $repo 'scratch/node-startup'
+$packageVersion = if ($Stable) { '6.0.5' } else { '6.1.5' }
+$manifestHash = if ($Stable) { 'df98bdbfa029ad3aaeabb3968a2b73cdaa92769d93192bc25b4c8f298102dce6' } else { '5a5d8e06d006f53b15502e4e64b8f158a8112fd8ee65b75ff84790718ac2d067' }
+$archiveHash = if ($Stable) { '28be43dd010792bc72d320952dcfde368a9a21e3926409f78757e6218583ea06' } else { '7d8c010b781841631f8968e424e30ea99f2352ac0cd40ef32c72e90c37d0af73' }
+$jarHash = if ($Stable) { '2a7e2978cb09538ed6780d85ae3aa39c1ecce10e5e5a6e0dc3cd8ab087851588' } else { '4ada5520636a65d7be09b6ec3ff8044b8fdc5baf552633b8c4f6335f71b93928' }
+$scratch = Join-Path $repo $(if ($Stable) { 'scratch/ergo-stable' } else { 'scratch/node-startup' })
 $bundle = Join-Path $scratch 'bundle'
 $run = Join-Path $scratch 'run'
 if (Test-Path -LiteralPath $run) { throw 'Startup requires an absent run directory' }
 $manifestPath=Join-Path $scratch 'bundle-manifest.json'
-if ((Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -ne '5a5d8e06d006f53b15502e4e64b8f158a8112fd8ee65b75ff84790718ac2d067') { throw 'Manifest bytes changed' }
+if ((Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -ine $manifestHash) { throw 'Manifest bytes changed' }
 $manifest = Get-Content -Raw $manifestPath | ConvertFrom-Json -AsHashtable
 foreach ($root in @((Join-Path $repo 'scratch'),$scratch,$bundle)) {
     if ((Get-Item -LiteralPath $root).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Reparse root refused' }
@@ -17,14 +22,14 @@ foreach ($root in @((Join-Path $repo 'scratch'),$scratch,$bundle)) {
 $bundleEntries=@(Get-ChildItem -LiteralPath $bundle -Recurse -Force)
 if (@($bundleEntries | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count -ne 0 -or
     @($bundleEntries | Where-Object { -not $_.PSIsContainer }).Count -ne 167) { throw 'Unexpected bundle entry' }
-if ($manifest.archiveSha256 -ne '7d8c010b781841631f8968e424e30ea99f2352ac0cd40ef32c72e90c37d0af73' -or $manifest.files.Count -ne 167) { throw 'Bundle manifest mismatch' }
+if ($manifest.archiveSha256 -ne $archiveHash -or $manifest.files.Count -ne 167) { throw 'Bundle manifest mismatch' }
 foreach ($entry in $manifest.files.GetEnumerator()) {
     $file = [IO.Path]::GetFullPath((Join-Path $bundle $entry.Key))
     if (-not $file.StartsWith($bundle + [IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase) -or
         (Get-Item -LiteralPath $file).Attributes -band [IO.FileAttributes]::ReparsePoint -or
         (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -cne $entry.Value) { throw 'Bundle file changed' }
 }
-if ($manifest.files['ergo-6.1.5.jar'] -ne '4ada5520636a65d7be09b6ec3ff8044b8fdc5baf552633b8c4f6335f71b93928') { throw 'JAR mismatch' }
+if ($manifest.files["ergo-$packageVersion.jar"] -ne $jarHash) { throw 'JAR mismatch' }
 foreach ($port in @(19053,19030)) {
     if ([Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners().Port -contains $port) { throw 'Probe port already in use' }
 }
@@ -78,7 +83,7 @@ if ($version.Outcome -ne 'exited' -or $version.ExitCode -ne 0 -or -not $version.
 $arguments = @('-Xms128m','-Xmx2g',"-Duser.home=$run/home","-Djava.io.tmpdir=$run/tmp",
     "-Dlogback.configurationFile=$run/logback.xml",'-Djava.net.preferIPv4Stack=true',
     "-XX:ErrorFile=$run/hs_err.log",'-XX:-CreateCoredumpOnCrash',
-    '-jar',"$bundle/ergo-6.1.5.jar",'--mainnet','-c',"$run/ergo.conf")
+    '-jar',"$bundle/ergo-$packageVersion.jar",'--mainnet','-c',"$run/ergo.conf")
 $reader=[NodeProbeProcess+StartupReader]::new()
 $script:nodeObservation = [ordered]@{ socketSamples=0; sockets=[Collections.Generic.List[object]]::new();
     replies=[ordered]@{}; apiBytes=0L; readyAtMs=-1L; nextProbeMs=0L; filesPeakBytes=0L;
@@ -148,7 +153,7 @@ try { Assert-NodeObservedBytes $result.CapturedOutputBytes $state.filesPeakBytes
 $hashes=[ordered]@{}
 foreach ($file in @('NodeProbeProcess.cs','node-startup.ps1','node-prepare.ps1','node-evidence.ps1')) { $hashes[$file]=(Get-FileHash (Join-Path $PSScriptRoot $file) -Algorithm SHA256).Hash.ToLowerInvariant() }
 [ordered]@{ status=$(if ($state.unresolved.Count) {'unresolved-node-startup'} else {'stock-node-offline-startup-only'});
-    archiveSha256=$manifest.archiveSha256; bundleManifest=$manifest; javaVersion=$version;
+    packageVersion=$packageVersion; archiveSha256=$manifest.archiveSha256; bundleManifest=$manifest; javaVersion=$version;
     arguments=$arguments; config=$config; configSha256=(Get-FileHash "$run/ergo.conf" -Algorithm SHA256).Hash.ToLowerInvariant();
     result=$result; observations=$state; files=$hashes;
     limits=@('Source-configured offline and sampled TCP/UDP sockets, not zero-packet proof or network sandbox.',

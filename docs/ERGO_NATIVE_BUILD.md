@@ -1,7 +1,10 @@
 # Windows native build qualification
 
-Status: 2026-09-10, corrected candidate selected for offline control preparation;
-native-byte equivalence, runtime acceptance and general adoption remain open.
+Status: 2026-09-12, historical build evidence only. The standard stable Ergo
+package is selected instead. Both local custom candidates, their archives and
+the unexecuted trial launcher were removed from scratch; committed findings and
+build recipes remain. Native-byte equivalence, runtime acceptance and general
+adoption were never established by this build work.
 This implements the [preparation preference](../decisions/2026-09.md#2026-09-10--qualify-a-consistent-windows-database-build).
 The [published artifact mismatch](ERGO_NODE_PREFLIGHT.md#published-windows-native-reconciliation)
 and the existing database-control refusals remain unresolved for execution.

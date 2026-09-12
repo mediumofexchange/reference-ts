@@ -11,6 +11,9 @@ Select the unmodified stable **v6.0.5 Windows x64 bundle** for the next source
 probe. It uses LevelDB and avoids the prerelease's RocksDB migration. The custom
 native trial remains suspended. Earlier v6.1.5 preparation and refusals below
 remain historical evidence, not the current execution queue.
+The two custom candidates, their archives and unexecuted trial launcher have
+now been removed from scratch (224 files / 55,859,988 bytes). Their committed
+findings and build recipes remain; no standard-package dependency was removed.
 
 ## Stable package and ordinary storage result
 
@@ -61,6 +64,43 @@ hash the actually loaded module. The upstream store uses non-sync writes;
 normal close/reopen does not establish power-loss durability, crash recovery,
 disk-full behavior, compaction stress, full sync or protocol recovery acceptance.
 See [reproduction](../experiments/ergo-range/README.md#stable-stock-storage-control).
+
+## Stable offline startup and settings
+
+The existing preparation, startup and settings scripts accept explicit
+`-Stable`; without it their historical prerelease paths/pins remain available.
+Each selection has fixed artifact hashes and separate scratch paths, with no
+automatic fallback. Stable extraction reproduced the exact manifest SHA-256
+`df98bdbfa029ad3aaeabb3968a2b73cdaa92769d93192bc25b4c8f298102dce6`.
+
+The [actual stable startup report](ergo-stable-startup-verification.json) passed
+on 2026-09-12. `/info` returned 200 and `appVersion=6.0.5`, expected mainnet UTXO
+genesis state, absent header/full-block fields, mining false and zero peers.
+`/peers/connected` returned an empty array; unauthenticated `/wallet/status`
+returned 403. The secret directory stayed empty. The run took 74,377 ms, peaked
+at 341,958,656 process-job commit bytes, and observed 966,600 combined file/output
+bytes. All 287 socket samples were consistent with loopback TCP only, and the
+process job was empty after cleanup. This is source-configured offline startup,
+not network isolation, a synchronized chain or a production deployment.
+
+The [stable typed-settings report](ergo-stable-settings-verification.json) used
+the actual stock loader after startup. The baseline selected mainnet UTXO,
+transaction verification, all retained blocks, explicit absent checkpoint,
+disabled UTXO/NiPoPoW bootstrap, zero stored snapshots, no mining/extra index,
+and absent test mnemonic/key count. The JVM pruning override was detected and
+rejected as a validation profile; removing checkpoint=null restored the mainnet
+default and was likewise rejected. All three processes exited 0 with empty jobs:
+8,023 / 9,429 / 6,480 ms. Final files were 9,319 bytes and data/secrets stayed empty.
+
+Independent review checked the actual package-selection patch before execution
+and the actual reports afterward. The same startup reply and combined-byte
+predicates accept the stable observations; process/resource/HTTP controls remain
+unchanged. Preparation and startup establish distribution identity and observed
+behavior, not reproducible-build provenance, crash durability, complete effective
+configuration or zero packets. Wallet actors/routes and wildcard CORS remain
+under the previously recorded no-spending-key experiment scope. The next source
+step is bounded sync preparation and peer-parser/runtime review, not native
+library qualification. See [reproduction](../experiments/ergo-range/README.md#stable-node-startup-and-settings).
 
 ## Earlier prerelease candidate and measured artifact
 

@@ -1,15 +1,20 @@
 # Fixed offline settings readback. No node services, sockets, peers or disk image.
+param([switch]$Stable)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if (-not $IsWindows -or -not [Environment]::Is64BitProcess) { throw 'Windows x64 / PowerShell 7 required' }
 Add-Type -Path (Join-Path $PSScriptRoot 'NodeProbeProcess.cs')
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$bundle = Join-Path $repo 'scratch/node-startup/bundle'
+$packageVersion = if ($Stable) { '6.0.5' } else { '6.1.5' }
+$bundle = Join-Path $repo $(if ($Stable) { 'scratch/ergo-stable/bundle' } else { 'scratch/node-startup/bundle' })
 $compiler = Join-Path $repo 'scratch/sync-preparation/ecj-3.37.0.jar'
-$run = Join-Path $repo 'scratch/node-settings'
+$run = Join-Path $repo $(if ($Stable) { 'scratch/ergo-stable/settings-run' } else { 'scratch/node-settings' })
 $source = Join-Path $PSScriptRoot 'NodeSettingsReadback.java'
 if (Test-Path -LiteralPath $run) { throw 'Readback requires an absent run directory' }
-$prior = Get-Content -Raw (Join-Path $repo 'docs/ergo-node-startup-verification.json') | ConvertFrom-Json -AsHashtable
+$priorPath = if ($Stable) { 'docs/ergo-stable-startup-verification.json' } else { 'docs/ergo-node-startup-verification.json' }
+$prior = Get-Content -Raw (Join-Path $repo $priorPath) | ConvertFrom-Json -AsHashtable
+if ($Stable -and ($prior.status -cne 'stock-node-offline-startup-only' -or
+    $prior.bundleManifest.files['ergo-6.0.5.jar'] -cne '2a7e2978cb09538ed6780d85ae3aa39c1ecce10e5e5a6e0dc3cd8ab087851588')) { throw 'Stable startup evidence required' }
 foreach ($entry in $prior.bundleManifest.files.GetEnumerator()) {
     $file = Join-Path $bundle $entry.Key
     if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ine $entry.Value) { throw 'Pinned bundle mismatch' }
@@ -27,7 +32,7 @@ $config = [regex]::Replace($config,'apiKeyHash = "[0-9a-f]{64}"',
 [IO.File]::WriteAllText("$run/ergo.conf",$config,[Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText("$run/logback.xml",'<configuration><appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender"><encoder><pattern>%level %logger - %msg%n</pattern></encoder></appender><root level="INFO"><appender-ref ref="STDOUT"/></root></configuration>',[Text.UTF8Encoding]::new($false))
 $java = Join-Path $bundle 'jre/bin/java.exe'
-$jar = Join-Path $bundle 'ergo-6.1.5.jar'
+$jar = Join-Path $bundle "ergo-$packageVersion.jar"
 $jvm = @('-Xms32m','-Xmx512m',"-Duser.home=$run/home","-Djava.io.tmpdir=$run/tmp",
     "-Dlogback.configurationFile=$run/logback.xml",'-Djava.net.preferIPv4Stack=true',
     "-XX:ErrorFile=$run/hs_err.log",'-XX:-CreateCoredumpOnCrash','-XX:-UsePerfData')
@@ -77,7 +82,7 @@ foreach ($file in @('NodeSettingsReadback.java','node-settings.ps1','NodeProbePr
     $hashes[$file] = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $file) -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 [ordered]@{ status='offline-settings-readback-only'; observedAtUtc=[DateTime]::UtcNow.ToString('o');
-    jarSha256=$prior.bundleManifest.files['ergo-6.1.5.jar']; compilerSha256=(Get-FileHash $compiler -Algorithm SHA256).Hash.ToLowerInvariant();
+    packageVersion=$packageVersion; jarSha256=$prior.bundleManifest.files["ergo-$packageVersion.jar"]; compilerSha256=(Get-FileHash $compiler -Algorithm SHA256).Hash.ToLowerInvariant();
     javaSha256=$prior.bundleManifest.files['jre/bin/java.exe']; config=$config;
     configSha256=(Get-FileHash "$run/ergo.conf" -Algorithm SHA256).Hash.ToLowerInvariant();
     compile=$compile; compileArguments=$compileArgs; cases=$cases; files=$hashes; finalRunBytes=$bytes;

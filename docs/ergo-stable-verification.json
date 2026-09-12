@@ -316,5 +316,46 @@
     "limitations": "Normal close/reopen and known/unknown rollback only. Factory selection is observed, loaded DLL identity is not hashed. Synchronous observer calls can delay the nominal wall deadline. No power-loss/crash/disk-full/compaction stress, sync, native ABI proof or product recovery acceptance."
   },
   "review": "Independent source-fit, actual worker/launcher and final runtime readback passed. Report/source hashes, all four process results, exact success markers and the final 22-file/2,675,278-byte inventory were independently reproduced. No material finding remains in this narrow scope.",
-  "cleanup": "After independent readback and durable report capture, the exact owned storage-run directory was removed and its absence verified. All process jobs were empty. Downloaded stable package/bundle retained for the next stock-node slice."
+  "cleanup": "After independent readback and durable report capture, the exact owned storage-run directory was removed and its absence verified. All process jobs were empty. Downloaded stable package/bundle retained for the next stock-node slice.",
+  "customArtifactsCleanup": {
+    "date": "2026-09-12",
+    "removed": [
+      {
+        "path": "scratch/retained-native-review",
+        "files": 110,
+        "bytes": 27948148.0
+      },
+      {
+        "path": "scratch/retained-native-target",
+        "files": 110,
+        "bytes": 27886373.0
+      },
+      {
+        "path": "scratch/native-control-trial",
+        "files": 2,
+        "bytes": 6270.0
+      },
+      {
+        "path": "scratch/import-373db50",
+        "files": 2,
+        "bytes": 19197.0
+      }
+    ],
+    "absentVerified": true,
+    "retained": "Historical committed findings, build recipes and stable distribution; no custom artifact executed."
+  },
+  "startupAndSettings": {
+    "date": "2026-09-12",
+    "startupReport": "ergo-stable-startup-verification.json",
+    "settingsReport": "ergo-stable-settings-verification.json",
+    "review": "Independent actual patch and report review passed. All source, bundle, configuration and compiler pins match; six JVM process records show expected outcomes and empty jobs. Stable reply/byte predicates and existing observer controls pass.",
+    "startupFileCount": 54,
+    "startupFileBytes": 900133,
+    "settingsFileCount": 4,
+    "settingsFileBytes": 9319,
+    "secretDirectoriesEmpty": true,
+    "settingsDataEmpty": true,
+    "cleanup": "After durable report capture and independent readback, both exact run directories were removed and absence verified. Stable bundle/archive retained.",
+    "scope": "Offline startup/settings only; no sync, packet containment, graceful shutdown, crash durability or proof of chain validation."
+  }
 }

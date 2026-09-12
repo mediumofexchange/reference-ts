@@ -34,3 +34,9 @@ foreach ($bytes in @(@(5,16777212,0),@(5,0,16777212),@(-1,0,0))) {
     if (-not $refused) {throw 'Combined byte-envelope failure accepted'}; $checks++
 }
 Write-Output "Node startup evidence regressions passed ($checks cases; no process launched)."
+
+# Stable node observations must satisfy the same predicates as the prerelease.
+$stable=Get-Content -Raw (Join-Path $repo 'docs/ergo-stable-startup-verification.json') | ConvertFrom-Json -AsHashtable
+Assert-InitialNodeReplies $stable.observations.replies
+Assert-NodeObservedBytes $stable.result.CapturedOutputBytes $stable.observations.filesPeakBytes $stable.observations.finalFileBytes
+Write-Output 'Stable startup reply and combined-byte observations passed (2 cases; no process launched).'
