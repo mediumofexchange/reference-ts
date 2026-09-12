@@ -4,12 +4,13 @@ Updated: 2026-09-12
 
 ## Goal
 
-Complete encrypted offline wallet handoff/recovery: preserve the full private
-state, freeze the source atomically with its export, restore against an
-independently retained exact digest, then receive/pay with existing v2 proofs.
-Work: reference-ts/main; baseline e50e0e7 (CI 34699471934 passed), custody decision
-c40be8e. Local verification is complete; delivery follows that design commit.
-Hosted CI runs on each delivered main revision; inspect its exact platform result.
+Complete local private wallet credentials and authenticated invoice pairing.
+Acceptance: independently authenticate an invitation digest, persist its exact
+invoice/endpoint/certificate binding, restart and rotate with stale credentials
+refused, then complete the existing real-proof payment and offline recovery flow.
+Work: reference-ts/main; baseline 1d5366b, hosted CI 34702129809 passed.
+Design and independent review precede implementation; full check, hostile
+transport/rotation/backup cases and real wallet acceptance precede delivery.
 Companion money-from-first-principles/main at 7ea0ee8 is unchanged; runtime pin,
 v2 circuits and derivation are unchanged. This is a local application custody
 profile under v2 sections 3 and 9, not seed-only or protocol failure recovery.
@@ -67,7 +68,7 @@ profile under v2 sections 3 and 9, not seed-only or protocol failure recovery.
 
 ## Next
 
-1. Next product slice: replace public fixture TLS credentials and manual trusted
+1. Active product slice: replace public fixture TLS credentials and manual trusted
    pairing with private per-wallet credentials and authenticated pairing, including
    restart, rotation and rejection of stale/wrong bindings. Keep it local until
    deployment is separately authorized; do not let pairing authorize fulfillment.
