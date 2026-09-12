@@ -4,12 +4,12 @@ Updated: 2026-09-12
 
 ## Goal
 
-Check candidate v3 configuration and signed constant-root terms before real
-local replay. Acceptance: canonical config/terms vectors, independent review,
-hostile substitution refusal, fresh seedless/receiver agreement, v2 still
-refuses v3; no adoption, currentness or spendability claim.
+Candidate v3 configuration and signed constant-root terms are checked before
+real local replay. Canonical vectors, independent review, hostile substitution
+refusal and fresh seedless/receiver agreement passed. V2 still refuses v3;
+no adoption, currentness or spendability claim.
 
-Implementation branch: feat/v3-configuration-evidence, base e440bdb.
+Implementation main includes 2d3f997 from feat/v3-configuration-evidence.
 Companion: spec/v3-configuration-evidence, 916bffb merged/pushed to main.
 No production runtime, circuit, key, dependency or host-control change.
 
@@ -72,8 +72,9 @@ No production runtime, circuit, key, dependency or host-control change.
 
 ## Next
 
-1. Integrate/push the reviewed implementation and verify main parity/hosted CI.
-2. Build authenticated record-range and complete replay integration against
+1. Verify delivered main parity and hosted CI for this handoff revision.
+2. Define complete certificate/dependency framing and authenticated record-range
+   inputs, then integrate complete replay against
    the [package checks](docs/POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay).
    Independently review/commit normative certificate gaps before code.
 3. Configuration approval stays disabled until all adoption prerequisites hold.
@@ -87,6 +88,6 @@ No production runtime, circuit, key, dependency or host-control change.
   progress; they do not materially move the coarse estimate while recovery and
   authority gates remain. Largest blocks: runtime recovery, authenticated range
   evidence/publication, qualified custody/continuous recovery and user operation.
-- Stay with current integration instance until the connected slice is delivered;
-  recommend fresh context for complete range/certificate authority design next.
+- Switch to a fresh instance for complete range/certificate authority design;
+  this completed slice and its retained report isolate the configuration checks.
   This is a context-efficiency recommendation, not measured model performance.
