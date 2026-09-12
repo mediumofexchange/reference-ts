@@ -36,7 +36,7 @@ async function run(operation, phase, file, action, expectedCode) {
 }
 
 try {
-  for (const operation of ['request', 'pending', 'receipt', 'fulfillment', 'capability', 'inbox', 'export', 'import']) {
+  for (const operation of ['request', 'pending', 'receipt', 'fulfillment', 'capability', 'credentials', 'invitation', 'pairing', 'inbox', 'export', 'import']) {
     for (const phase of ['before', 'after']) {
       const file = join(directory, `${operation}-${phase}.sqlite`);
       await run(operation, phase, file, 'crash', 71);
@@ -44,7 +44,7 @@ try {
     }
     console.log(`PASS wallet ${operation}: abrupt exit before/after COMMIT, restored state and replay checks.`);
   }
-  console.log('Pool wallet crash check passed: sixteen abrupt exits and sixteen fresh-process recoveries.');
+  console.log('Pool wallet crash check passed: twenty-two abrupt exits and twenty-two fresh-process recoveries.');
 } finally {
   const target = realpathSync(directory);
   if (dirname(target) !== scratch || !target.startsWith(scratch + sep) || !target.startsWith(join(scratch, 'pool-wallet-crash-'))) {

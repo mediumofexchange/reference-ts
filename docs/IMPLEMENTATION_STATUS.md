@@ -19,12 +19,14 @@ requests, pending payments, private HTTPS inbox deliveries and verified local
 fulfillment through restarts. Scoped durable capabilities and exact retry protect
 inbox admission; checkpoint verification remains separate from acknowledgment.
 The same flow uses pinned real v2 proofs with a separate public supply audit;
-abrupt wallet-process tests cover eight transaction boundaries. Encrypted offline
+abrupt wallet-process tests cover eleven transaction boundaries. Encrypted offline
 exports freeze the source and retain complete state and reservations; fresh
 restores require the exact independently retained digest and record provenance.
 Protected device storage and one active restore remain explicit preconditions.
-Venue, TLS keys
-and trusted pairing remain fixtures. Receiver note checks distinguish spent/unspent at an exact
+Private TLS credentials and digest-authenticated invoice bindings now persist
+with the wallet; rotation revokes capabilities and fences obsolete servers.
+Independent digest authentication is modeled locally; a user authentication
+channel and external venue remain unqualified. Receiver note checks distinguish spent/unspent at an exact
 verified checkpoint; saved fulfillment lookup recovers historical records.
 Silence recovery is modeled but not implemented in the
 runtime; usable wallet custody and an external witness write adapter remain open.

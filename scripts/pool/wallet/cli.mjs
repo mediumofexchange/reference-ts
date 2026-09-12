@@ -21,10 +21,10 @@ import { encodeStoredReceipt } from '@mediumofexchange/reference/pool/store-code
 import { poolReceiptCovers, poolReceiptAttestsEvidence } from '@mediumofexchange/reference/pool/receipt';
 import { IdealVerifier } from '../service/fixture.mjs';
 import { walletProfile, BACKER_SECRET } from './profile.mjs';
-import { WalletDeliveryClient } from '@mediumofexchange/reference/pool/wallet-delivery-http';
+import { decodeWalletPairing } from '@mediumofexchange/reference/pool/wallet-pairing';
 import { encodeWalletDelivery, walletDeliveryHash } from '@mediumofexchange/reference/pool/wallet-delivery-wire';
 
-const [mode, database, baseUrl, exchange, evidenceFile, ledgerFile, compiled, pairingFile] = process.argv.slice(2);
+const [mode, database, baseUrl, exchange, evidenceFile, ledgerFile, compiled, pairingFile, trustedDigest, priorDigest] = process.argv.slice(2);
 const { AUTHORITY, DOMAIN, CONFIG, VENUE, TERMS, WALLET, HEADER } = walletProfile(Boolean(compiled));
 const needsProofs = ['issue', 'fund', 'change', 'receive', 'missing', 'replay', 'note-spent', 'prepare-pay', 'reprove-pay', 'prepare-burn', 'prepare-burn-change'].includes(mode);
 const proofs = compiled && needsProofs ? await (await import('./proofs.mjs')).openWalletProofs(compiled) : undefined;
@@ -33,7 +33,7 @@ const load = path => deserialize(readFileSync(path));
 const save = (path, value) => writeFileSync(path, serialize(value), { mode: 0o600 });
 const backing = TERMS.backing.name;
 function pairing() {
-  const pair = JSON.parse(readFileSync(pairingFile, 'utf8'));
+  const pair = decodeWalletPairing(wallet.pairing('receiver-invoice'));
   assert.equal(pair.domain, Buffer.from(DOMAIN).toString('hex'));
   assert.equal(pair.request.id, 'invoice');
   assert.equal(pair.request.backing, Buffer.from(backing).toString('hex'));
@@ -45,7 +45,7 @@ function receiverClient(opening) {
   assert.deepEqual({ id: 'invoice', backing: Buffer.from(opening.backing).toString('hex'),
     value: opening.value.toString(), owner: opening.owner.toString() }, pair.request, 'pairing request differs');
   assert.equal(new URL(pair.endpoint).pathname, '/delivery/invoice');
-  return new WalletDeliveryClient(pair.endpoint, pair.token, pair.ca);
+  return wallet.pairedDeliveryClient('receiver-invoice');
 }
 const head = [...limbsOf(DOMAIN), ...limbsOf(AUTHORITY.segment), AUTHORITY.scopeRoot];
 const prove = async (kind, publicInputs, witness) => ({ kind, publicInputs,
@@ -70,7 +70,10 @@ function evidenceArgs() {
 }
 let result;
 try {
-  if (mode === 'request') {
+  if (mode === 'pair') {
+    const digest = wallet.acceptPairing('receiver-invoice', readFileSync(pairingFile, 'utf8'), trustedDigest, load(exchange), priorDigest || undefined);
+    result = { paired: digest };
+  } else if (mode === 'request') {
     const request = wallet.request('invoice', backing, 7n);
     save(exchange, request); result = { owner: request.owner.toString(), fields: Object.keys(request).sort() };
   } else if (mode === 'issue') {

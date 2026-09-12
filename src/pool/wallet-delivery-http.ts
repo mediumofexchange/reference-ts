@@ -1,16 +1,18 @@
 import { createServer, request as httpsRequest, type Server } from "node:https";
 import type { IncomingMessage } from "node:http";
 import type { TLSSocket } from "node:tls";
+import { createHash } from "node:crypto";
 import { EncodingError } from "../bytes.js";
 import { decodeWalletDelivery, encodeWalletDelivery, MAX_WALLET_DELIVERY_BYTES, WALLET_DELIVERY_PROFILE, walletDeliveryHash } from "./wallet-delivery-wire.js";
 import type { WalletDelivery } from "./wallet-store.js";
+import { walletCertificateDigest, type WalletCredentialBinding, type WalletPairing } from "./wallet-pairing.js";
 
 const DEADLINE_MS = 15_000, MAX_REPLY_BYTES = 1_024;
 const route = /^\/delivery\/([A-Za-z0-9_-]{1,80})$/;
 const tokenPattern = /^[0-9a-f]{64}$/;
 interface DeliveryStore {
-  authorizesDelivery(id: string, token: string): boolean;
-  receiveDelivery(id: string, delivery: WalletDelivery): string;
+  authorizesDelivery(id: string, token: string, credential?: WalletCredentialBinding): boolean;
+  receiveAuthorizedDelivery(id: string, token: string, delivery: WalletDelivery, credential?: WalletCredentialBinding): string;
 }
 const failure = (): Error => new Error("wallet delivery failed");
 function headerCount(message: IncomingMessage, name: string): number {
@@ -38,8 +40,9 @@ function acknowledgement(requestId: string, deliveryHash: string): string {
 
 /** The supplied certificate authenticates the receiver. The per-request
  * bearer capability admits an inbox write; it never authorizes fulfillment. */
-export function createWalletDeliveryServer(store: DeliveryStore, tls: { key: string; cert: string }): Server {
-  const server = createServer({ ...tls, minVersion: "TLSv1.3", maxHeaderSize: 8_192, handshakeTimeout: DEADLINE_MS }, async (request, response) => {
+export function createWalletDeliveryServer(store: DeliveryStore, tls: { key: string; cert: string; generation?: bigint }): Server {
+  const credential = tls.generation === undefined ? undefined : Object.freeze({ generation: tls.generation, certificateDigest: walletCertificateDigest(tls.cert) });
+  const server = createServer({ key: tls.key, cert: tls.cert, minVersion: "TLSv1.3", maxHeaderSize: 8_192, handshakeTimeout: DEADLINE_MS }, async (request, response) => {
     response.setHeader("content-type", "application/json");
     response.setHeader("cache-control", "no-store");
     response.setHeader("connection", "close");
@@ -52,14 +55,14 @@ export function createWalletDeliveryServer(store: DeliveryStore, tls: { key: str
       if (request.method !== "POST" || !match) { send(404, '{"code":"REJECTED"}'); request.resume(); return; }
       const requestId = match[1]!, auth = request.headers.authorization;
       if (headerCount(request, "authorization") !== 1 || typeof auth !== "string" || !auth.startsWith("Bearer ") ||
-          !tokenPattern.test(auth.slice(7)) || !store.authorizesDelivery(requestId, auth.slice(7))) {
+          !tokenPattern.test(auth.slice(7)) || !store.authorizesDelivery(requestId, auth.slice(7), credential)) {
         send(401, '{"code":"REJECTED"}'); request.resume(); return;
       }
       const frame = await body(request, MAX_WALLET_DELIVERY_BYTES), decoded = decodeWalletDelivery(frame);
       if (decoded.requestId !== requestId) throw failure();
       const expected = walletDeliveryHash(frame);
       // Synchronous durable storage commits before the reply can be emitted.
-      if (store.receiveDelivery(requestId, decoded.delivery) !== expected) throw failure();
+      if (store.receiveAuthorizedDelivery(requestId, auth.slice(7), decoded.delivery, credential) !== expected) throw failure();
       send(200, acknowledgement(requestId, expected));
     } catch {
       // Do not expose storage errors, request data, receipts, or capabilities.
@@ -85,15 +88,25 @@ export class WalletDeliveryClient {
   private readonly requestId: string;
   private readonly token: string;
   private readonly ca: string | undefined;
-  constructor(endpoint: string, token: string, ca?: string) {
+  private readonly binding: { pair: WalletPairing; current: () => boolean } | undefined;
+  constructor(endpoint: string, token: string, ca?: string, binding?: { pair: WalletPairing; current: () => boolean }) {
     let url: URL;
     try { url = new URL(endpoint); } catch { throw new EncodingError("invalid wallet delivery endpoint"); }
     const match = route.exec(url.pathname);
     if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || !match ||
         url.href !== endpoint || !tokenPattern.test(token)) throw new EncodingError("invalid wallet delivery endpoint or capability");
     this.endpoint = url; this.requestId = match[1]!; this.token = token; this.ca = ca;
+    this.binding = binding === undefined ? undefined : { pair: structuredClone(binding.pair), current: binding.current };
   }
   async deliver(domain: Uint8Array, delivery: WalletDelivery): Promise<string> {
+    const binding = this.binding;
+    if (binding) {
+      const pair = binding.pair, opening = delivery.opening;
+      if (!binding.current() || Buffer.from(domain).toString("hex") !== pair.domain ||
+        pair.endpoint !== this.endpoint.href || pair.token !== this.token || pair.cert !== this.ca ||
+        Buffer.from(opening.backing).toString("hex") !== pair.request.backing || opening.value.toString() !== pair.request.value ||
+        opening.owner.toString() !== pair.request.owner) throw failure();
+    }
     const frame = encodeWalletDelivery(this.requestId, domain, delivery), expected = walletDeliveryHash(frame);
     return new Promise<string>((resolve, reject) => {
       const request = httpsRequest(this.endpoint, { method: "POST", agent: false, rejectUnauthorized: true,
@@ -113,8 +126,12 @@ export class WalletDeliveryClient {
       });
       request.once("socket", socket => {
         socket.once("secureConnect", () => {
-          if (!(socket as TLSSocket).authorized) { request.destroy(failure()); return; }
-          request.end(frame);
+          try {
+            const tls = socket as TLSSocket;
+            if (!tls.authorized || binding && (!binding.current() ||
+              createHash("sha256").update(tls.getPeerCertificate().raw).digest("hex") !== walletCertificateDigest(binding.pair.cert))) throw failure();
+            request.end(frame);
+          } catch { request.destroy(failure()); }
         });
       });
     });

@@ -44,6 +44,7 @@ import { deriveWalletField } from '@mediumofexchange/reference/pool/wallet';
 import { createWalletBackupKey, walletBackupDigest, MAX_WALLET_BACKUP_BYTES } from '@mediumofexchange/reference/pool/wallet-backup';
 import { WalletDeliveryClient, createWalletDeliveryServer } from '@mediumofexchange/reference/pool/wallet-delivery-http';
 import { WALLET_DELIVERY_PROFILE, MAX_WALLET_DELIVERY_BYTES } from '@mediumofexchange/reference/pool/wallet-delivery-wire';
+import { WALLET_PAIRING_PROFILE, MAX_WALLET_PAIRING_BYTES } from '@mediumofexchange/reference/pool/wallet-pairing';
 import { poolReceiptBytes } from '@mediumofexchange/reference/pool/receipt';
 import { readPoolReceiptRecord, readPoolReceiptCheckpoint } from '@mediumofexchange/reference/pool/receipt-record';
 import { readPoolReceiptRepair } from '@mediumofexchange/reference/pool/receipt-repair';
@@ -87,6 +88,8 @@ assert.equal(MAX_WALLET_BACKUP_BYTES, 16 * 1024 * 1024);
 assert.equal(typeof WalletDeliveryClient, 'function');
 assert.equal(typeof createWalletDeliveryServer, 'function');
 assert.equal(WALLET_DELIVERY_PROFILE, 'wallet-delivery/v2');
+assert.equal(WALLET_PAIRING_PROFILE, 'moe/wallet-pairing/v1');
+assert.equal(MAX_WALLET_PAIRING_BYTES, 16384);
 assert.equal(MAX_WALLET_DELIVERY_BYTES, 300_000);
 if (Number(process.versions.node.split('.')[0]) >= 24) {
   const { PilotStore } = await import('@mediumofexchange/reference/pilot-store');

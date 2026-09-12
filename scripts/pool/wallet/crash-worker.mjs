@@ -8,17 +8,18 @@ if (Number(process.versions.node.split('.')[0]) < 24) {
 }
 
 const [operation, phase, file, action] = process.argv.slice(2);
-if (!['request', 'pending', 'receipt', 'fulfillment', 'capability', 'inbox', 'export', 'import'].includes(operation) || !['before', 'after'].includes(phase) ||
+if (!['request', 'pending', 'receipt', 'fulfillment', 'capability', 'credentials', 'invitation', 'pairing', 'inbox', 'export', 'import'].includes(operation) || !['before', 'after'].includes(phase) ||
   typeof file !== 'string' || !['crash', 'restore'].includes(action)) {
-  console.error('usage: crash-worker.mjs <request|pending|receipt|fulfillment|capability|inbox|export|import> <before|after> <database> <crash|restore>');
+  console.error('usage: crash-worker.mjs <request|pending|receipt|fulfillment|capability|credentials|invitation|pairing|inbox|export|import> <before|after> <database> <crash|restore>');
   process.exit(2);
 }
 
-const [assertModule, fs, v8, sqlite, hashes, commitment, venueModule, walletModule, notes, treeModule, field, statement,
+const [assertModule, fs, v8, sqlite, hashes, commitment, venueModule, walletModule, pairingModule, tlsModule, notes, treeModule, field, statement,
   segmentModule, receiptModule, codec, fixture] = await Promise.all([
   import('node:assert/strict'), import('node:fs'), import('node:v8'), import('node:sqlite'),
   import('@noble/hashes/sha2.js'), import('@mediumofexchange/reference/commitment'),
   import('@mediumofexchange/reference/venue'), import('@mediumofexchange/reference/pool/wallet-store'),
+  import('@mediumofexchange/reference/pool/wallet-pairing'), import('./tls.mjs'),
   import('@mediumofexchange/reference/pool/notes'), import('@mediumofexchange/reference/pool/note-tree'),
   import('@mediumofexchange/reference/pool/field'), import('@mediumofexchange/reference/pool/statement'),
   import('@mediumofexchange/reference/pool/segment'), import('@mediumofexchange/reference/pool/receipt'),
@@ -31,8 +32,20 @@ let wallet = new PoolWalletStore(file, AUTHORITY);
 const { walletBackupDigest } = await import('@mediumofexchange/reference/pool/wallet-backup');
 const backupKey = new Uint8Array(32).fill(83); // public fixture key, never funds
 const expectedFile = `${file}.expected`;
+const endpoint = 'https://localhost/delivery/invoice';
+const pairingAlias = 'receiver-invoice';
 const frame = value => statement.encodeStatement(DOMAIN, value);
 const copy = value => v8.deserialize(v8.serialize(value));
+
+async function provisionPairing(expected) {
+  expected.tls = await tlsModule.generateWalletTls();
+  assert.equal(wallet.installDeliveryCredentials(expected.tls, 0n), 1n);
+  expected.credentials = wallet.deliveryCredentials();
+  expected.invitation = wallet.deliveryInvitation('invoice', endpoint);
+  expected.pairingDigest = pairingModule.walletPairingDigest(expected.invitation);
+  expected.token = pairingModule.decodeWalletPairing(expected.invitation).token;
+  assert.equal(wallet.acceptPairing(pairingAlias, expected.invitation, expected.pairingDigest, expected.request), expected.pairingDigest);
+}
 
 async function baseline() {
   // The root already committed in construction. Predict the two counter
@@ -43,6 +56,30 @@ async function baseline() {
   if (operation === 'request') return expected;
   assert.deepEqual(wallet.request('invoice', backing, 7n), request);
   if (operation === 'capability') return expected;
+  if (operation === 'credentials') {
+    expected.oldTls = await tlsModule.generateWalletTls();
+    assert.equal(wallet.installDeliveryCredentials(expected.oldTls, 0n), 1n);
+    expected.oldCredentials = wallet.deliveryCredentials();
+    expected.oldToken = wallet.deliveryToken('invoice');
+    expected.newTls = await tlsModule.generateWalletTls();
+    return expected;
+  }
+  if (operation === 'invitation') {
+    expected.tls = await tlsModule.generateWalletTls();
+    assert.equal(wallet.installDeliveryCredentials(expected.tls, 0n), 1n);
+    expected.credentials = wallet.deliveryCredentials();
+    expected.endpoint = endpoint;
+    return expected;
+  }
+  if (operation === 'pairing') {
+    expected.tls = await tlsModule.generateWalletTls();
+    assert.equal(wallet.installDeliveryCredentials(expected.tls, 0n), 1n);
+    expected.credentials = wallet.deliveryCredentials();
+    expected.invitation = wallet.deliveryInvitation('invoice', endpoint);
+    expected.pairingDigest = pairingModule.walletPairingDigest(expected.invitation);
+    expected.token = pairingModule.decodeWalletPairing(expected.invitation).token;
+    return expected;
+  }
   const changeRequest = wallet.request('change', backing, 3n);
   const opening = { backing, value: 7n, owner: request.owner, rho: wallet.derive('output-rho', [11n]) };
   const change = { backing, value: 3n, owner: changeRequest.owner, rho: wallet.derive('output-rho', [11n], 1) };
@@ -67,7 +104,7 @@ async function baseline() {
   if (operation === 'fulfillment') await wallet.submit('pay', { submit: async () => receipt });
   if (operation === 'export' || operation === 'import') {
     await wallet.submit('pay', { submit: async () => receipt });
-    expected.token = wallet.deliveryToken('invoice');
+    await provisionPairing(expected);
     wallet.receiveDelivery('invoice', delivery(expected));
     await wallet.fulfill('invoice', delivery(expected), evidence(expected));
     expected.nextAfterRecovery = notes.ownerOf(wallet.derive('request-secret', [3n]));
@@ -98,6 +135,10 @@ async function perform(expected) {
   if (operation === 'export') return wallet.exportBackup(backupKey);
   if (operation === 'import') return PoolWalletStore.restoreBackup(`${file}.restored`, AUTHORITY,
     expected.backup, backupKey, walletBackupDigest(expected.backup));
+  if (operation === 'credentials') return wallet.installDeliveryCredentials(expected.newTls, 1n);
+  if (operation === 'invitation') return wallet.deliveryInvitation('invoice', expected.endpoint);
+  if (operation === 'pairing') return wallet.acceptPairing(pairingAlias, expected.invitation,
+    expected.pairingDigest, expected.request);
   if (operation === 'request') return wallet.request('invoice', backing, 7n);
   if (operation === 'capability') return wallet.deliveryToken('invoice');
   if (operation === 'inbox') return wallet.receiveDelivery('invoice', delivery(expected));
@@ -160,6 +201,13 @@ try {
         expected.token = this.prepare('SELECT token FROM wallet_delivery_tokens WHERE id=?').get('invoice').token;
         fs.writeFileSync(expectedFile, v8.serialize(expected), { mode: 0o600 });
       }
+      if (operation === 'invitation') {
+        expected.token = this.prepare('SELECT token FROM wallet_delivery_tokens WHERE id=?').get('invoice').token;
+        expected.invitation = pairingModule.encodeWalletPairing({ profile: pairingModule.WALLET_PAIRING_PROFILE,
+          domain: Buffer.from(DOMAIN).toString('hex'), request: pairingModule.walletRequestText(expected.request),
+          generation: '1', endpoint: expected.endpoint, token: expected.token, cert: expected.tls.cert });
+        fs.writeFileSync(expectedFile, v8.serialize(expected), { mode: 0o600 });
+      }
       if (phase === 'before') process.exit(71);
       original.call(this, sql);
       process.exit(71);
@@ -194,10 +242,38 @@ try {
     assert.equal(wallet.custody().restoredFrom, walletBackupDigest(bytes));
     assertRequests(expected); assertPending(expected, true);
     assert.equal(wallet.deliveryToken('invoice'), expected.token);
+    assert.deepEqual(wallet.deliveryCredentials(), expected.credentials);
+    assert.equal(wallet.pairing(pairingAlias), expected.invitation);
     assert.deepEqual(wallet.inbox('invoice'), delivery(expected));
     assert.deepEqual(wallet.fulfillment('invoice').opening, expected.opening);
     await assert.rejects(wallet.fulfill('invoice', delivery(expected), evidence(expected)), { code: 'CONFLICT' });
     assert.equal(wallet.request('next', backing, 7n).owner, expected.nextAfterRecovery);
+  } else if (operation === 'credentials') {
+    assert.deepEqual(wallet.deliveryCredentials(), survived ? { ...expected.newTls, generation: 2n } : expected.oldCredentials);
+    const oldBinding = { generation: 1n, certificateDigest: pairingModule.walletCertificateDigest(expected.oldTls.cert) };
+    assert.equal(wallet.authorizesDelivery('invoice', expected.oldToken, oldBinding), !survived);
+    assert.equal(await perform(expected), 2n);
+    assert.equal(wallet.authorizesDelivery('invoice', expected.oldToken, oldBinding), false);
+    const newBinding = { generation: 2n, certificateDigest: pairingModule.walletCertificateDigest(expected.newTls.cert) };
+    const freshToken = wallet.deliveryToken('invoice');
+    assert.equal(wallet.authorizesDelivery('invoice', freshToken, newBinding), true);
+    assert.equal(await perform(expected), 2n);
+    assert.deepEqual(wallet.deliveryCredentials(), { ...expected.newTls, generation: 2n });
+    assert.equal(wallet.authorizesDelivery('invoice', freshToken, newBinding), true);
+  } else if (operation === 'invitation') {
+    const binding = { generation: 1n, certificateDigest: pairingModule.walletCertificateDigest(expected.tls.cert) };
+    assert.equal(wallet.authorizesDelivery('invoice', expected.token, binding), survived);
+    const invitation = await perform(expected), parsed = pairingModule.decodeWalletPairing(invitation);
+    if (survived) assert.equal(invitation, expected.invitation);
+    else assert.notEqual(parsed.token, expected.token);
+    assert.equal(await perform(expected), invitation);
+    assert.equal(wallet.authorizesDelivery('invoice', parsed.token, binding), true);
+  } else if (operation === 'pairing') {
+    if (survived) assert.equal(wallet.pairing(pairingAlias), expected.invitation);
+    else assert.throws(() => wallet.pairing(pairingAlias), { code: 'UNKNOWN' });
+    assert.equal(await perform(expected), expected.pairingDigest);
+    assert.equal(await perform(expected), expected.pairingDigest);
+    assert.equal(wallet.pairing(pairingAlias), expected.invitation);
   } else if (operation === 'capability') {
     assert.deepEqual(wallet.request('invoice', backing, 7n), expected.request);
     assert.equal(wallet.authorizesDelivery('invoice', expected.token), survived);

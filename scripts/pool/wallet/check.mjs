@@ -1,4 +1,4 @@
-// Two wallet processes and an HTTP service, using only public fixture keys,
+// Two wallet processes and an HTTP service, using public fixture obligor keys,
 // ideal proofs and an independently reconstructed known local venue ledger.
 import assert from 'node:assert/strict';
 import { execFile, fork, spawnSync } from 'node:child_process';
@@ -41,9 +41,9 @@ const venue = new LocalVenue(VENUE), publish = venue.publish.bind(venue);
 venue.publish = c => { publish(c); ledger.push(bytesToHex(encodeCommitment(c))); writeFileSync(ledgerFile, JSON.stringify(ledger)); };
 let proofs, store;
 let server, drop = false, droppedReceipt;
-let receiverServer;
-async function startReceiver(dropOnce = false, ignoreStop = false) {
-  const child = fork(join(root, 'scripts/pool/wallet/receiver-server.mjs'), [receiver, pairingFile, real ? 'real' : 'ideal', dropOnce ? 'drop-once' : '', ignoreStop ? 'ignore-stop' : ''],
+let receiverServer, receiverPort = 0, trustedDigest;
+async function startReceiver(dropOnce = false, ignoreStop = false, rotate = false) {
+  const child = fork(join(root, 'scripts/pool/wallet/receiver-server.mjs'), [receiver, pairingFile, real ? 'real' : 'ideal', dropOnce ? 'drop-once' : '', ignoreStop ? 'ignore-stop' : '', String(receiverPort), rotate ? 'rotate' : ''],
     { cwd: root, windowsHide: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
   receiverServer = child;
   await new Promise((resolve, reject) => {
@@ -52,7 +52,9 @@ async function startReceiver(dropOnce = false, ignoreStop = false) {
     child.once('error', failed); child.once('exit', failed);
     child.once('message', value => {
       clearTimeout(timer); child.off('error', failed); child.off('exit', failed);
-      if (value?.ready === true) resolve(); else reject(new Error('invalid receiver readiness'));
+      if (value?.ready === true && /^[0-9a-f]{64}$/.test(value.digest) && Number.isInteger(value.port) && value.port > 0 && value.port <= 65535) {
+        receiverPort = value.port; trustedDigest = value.digest; resolve();
+      } else reject(new Error('invalid receiver readiness'));
     });
   });
 }
@@ -96,9 +98,9 @@ async function start() {
   });
   await new Promise((resolve, reject) => server.listen(0, '127.0.0.1', resolve).once('error', reject));
 }
-async function cli(mode, database, exchange = deliveryFile) {
+async function cli(mode, database, exchange = deliveryFile, digest = '', prior = '') {
   const { stdout } = await run(process.execPath, [join(root, 'scripts/pool/wallet/cli.mjs'), mode, database,
-    `http://127.0.0.1:${server.address().port}/`, exchange, evidenceFile, ledgerFile, compiled ?? '', pairingFile],
+    `http://127.0.0.1:${server.address().port}/`, exchange, evidenceFile, ledgerFile, compiled ?? '', pairingFile, digest, prior],
     { cwd: root, windowsHide: true, timeout: real ? 180_000 : 30_000, maxBuffer: 1024 * 1024 });
   const result = resultOf(stdout); assert.notEqual(result.pid, process.pid); return result;
 }
@@ -148,6 +150,11 @@ try {
   await startReceiver(true);
   const pairing = JSON.parse(readFileSync(pairingFile, 'utf8'));
   assert.equal(pairing.request.owner, request.owner);
+  const originalInvitation = readFileSync(pairingFile, 'utf8'), firstDigest = trustedDigest;
+  // Only this parent-owned IPC value models the independent authentication
+  // channel. Never compute the trusted digest from the invitation file.
+  await assert.rejects(cli('pair', payer, requestFile, '00'.repeat(32)), /pairing request or digest differs/);
+  assert.equal((await cli('pair', payer, requestFile, trustedDigest)).paired, trustedDigest);
   const originalRequestBytes = readFileSync(requestFile);
   const fundingEvidence = readFileSync(evidenceFile), withTail = deserialize(Buffer.from(fundingEvidence));
   const funded = withTail.checkpoints.find(e => e.commitment.sequence === withTail.latest.sequence);
@@ -177,7 +184,18 @@ try {
   receiver = recover(receiver, 'receiver');
   await startReceiver();
   assert.equal(JSON.parse(readFileSync(pairingFile, 'utf8')).token, pairing.token);
+  assert.equal(trustedDigest, firstDigest, 'restart must preserve endpoint and invitation');
   assert.equal((await cli('deliver-pay', payer)).ack, stored.hash);
+  await stopReceiver();
+  await startReceiver(false, false, true);
+  const rotatedInvitation = readFileSync(pairingFile, 'utf8'), rotated = JSON.parse(rotatedInvitation);
+  assert.notEqual(rotated.cert, pairing.cert); assert.notEqual(rotated.token, pairing.token);
+  await assert.rejects(cli('deliver-pay', payer), /wallet delivery failed/);
+  await assert.rejects(cli('pair', payer, requestFile, trustedDigest), /pairing update is stale/);
+  assert.equal((await cli('pair', payer, requestFile, trustedDigest, firstDigest)).paired, trustedDigest);
+  writeFileSync(pairingFile, originalInvitation);
+  await assert.rejects(cli('pair', payer, requestFile, firstDigest, trustedDigest), /pairing update is stale/);
+  writeFileSync(pairingFile, rotatedInvitation);
   assert.equal((await cli('deliver-pay', payer)).ack, stored.hash);
   assert.deepEqual(readFileSync(requestFile), originalRequestBytes);
   await checkpoint('payment');
@@ -215,6 +233,7 @@ try {
   assert.ok(requests.length >= 6);
   for (const text of requests) {
     assert.equal(text.includes(pairing.token), false, 'invoice capability reached operator');
+    assert.equal(text.includes(rotated.token), false, 'rotated invoice capability reached operator');
     const body = JSON.parse(text);
     assert.deepEqual(Object.keys(body).sort(), ['kind', 'profile', 'statement', 'version']);
     assert.equal(body.kind, 'submit');
@@ -238,8 +257,9 @@ try {
   console.log('PASS two-wallet v2 CLI: issue 10, request/pay 7, receiver checkpoint verification, fulfill once, burn 7; restore/verify/burn payer change 3 to outstanding 0; process restarts, lost accepted reply, exact/changed-proof retries, unavailable history and invoice replay rejection. Service traffic contains only public statement frames.');
   console.log(real ? 'PASS pinned real v2 wallet proofs and separate public-only audit: supply, missing history, corrupted proof, reordered history and different valid history with unchanged outputs/totals.' : 'Scope: ideal proof fixture only.');
   console.log('PASS private HTTPS inbox: original attested delivery, dropped acknowledgment, receiver restart, exact retry and separate fulfillment.');
+  console.log('PASS private per-wallet TLS and digest-authenticated enrollment: durable restart, credential/capability rotation, stale certificate/pairing rejection and exact payment retry. Independent digest authentication is modeled through parent-owned IPC.');
   console.log('PASS encrypted offline wallet handoff in fresh processes: ' + JSON.stringify(custodyEvidence));
-  console.log('Scope: protected local storage is a deployment precondition; fixture DB/WAL are plaintext. Offline handoff needs independently retained key/latest digest and one active restore. Public fixture TLS/obligor keys, trusted pairing and known LocalVenue; no external finality, continuous backup, rollback prevention or external-goods atomicity claim.');
+  console.log('Scope: protected local storage is a deployment precondition; fixture DB/WAL are plaintext. Offline handoff needs independently retained key/latest digest and one active restore. Public fixture obligor keys, modeled independent digest authentication and known LocalVenue; no qualified user pairing channel, external finality, continuous backup, rollback prevention or external-goods atomicity claim.');
 } catch (error) { acceptanceFailure = error; }
 finally {
   const failures = acceptanceFailure ? [acceptanceFailure] : [];

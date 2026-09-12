@@ -17,6 +17,8 @@ import { decodeStoredReceipt, encodeStoredReceipt } from "./store-codec.js";
 import { deriveWalletField, type WalletPurpose } from "./wallet.js";
 import { decodeWalletDelivery, encodeWalletDelivery, walletDeliveryHash } from "./wallet-delivery-wire.js";
 import { MAX_WALLET_BACKUP_BYTES, openWalletBackup, sealWalletBackup, walletAuthorityBytes, walletBackupDigest } from "./wallet-backup.js";
+import { decodeWalletPairing, encodeWalletPairing, sameWalletTlsKey, validateWalletTls, WALLET_PAIRING_PROFILE, walletCertificateDigest, walletPairingDigest, walletRequestText, type WalletCredentialBinding, type WalletTlsCredentials } from "./wallet-pairing.js";
+import { WalletDeliveryClient } from "./wallet-delivery-http.js";
 
 export interface WalletRequest { readonly id: string; readonly backing: Uint8Array; readonly value: bigint; readonly owner: bigint }
 export interface WalletDelivery { readonly statement: Statement; readonly opening: NoteOpening; readonly receipt: PoolReceipt }
@@ -56,14 +58,17 @@ const TABLES = [
   ["wallet_fulfilled", ["id", "commitment", "opening", "receipt", "checkpoint"]],
   ["wallet_delivery_tokens", ["id", "token"]],
   ["wallet_inbox", ["id", "frame"]],
+  ["wallet_transport", ["id", "generation", "key", "cert"]],
+  ["wallet_pairings", ["id", "frame"]],
 ] as const;
 type Snapshot = (string | number | null)[][][];
 function decodeSnapshot(bytes: Uint8Array, authority: SegmentAuthority): Snapshot {
   let state: unknown, text: string;
   try { text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes); state = JSON.parse(text); }
   catch { throw new PoolWalletError("INVALID", "invalid wallet snapshot"); }
-  requireThat(JSON.stringify(state) === text && Array.isArray(state) && state.length === TABLES.length, "INVALID", "invalid wallet snapshot layout");
+  requireThat(JSON.stringify(state) === text && Array.isArray(state) && (state.length === 7 || state.length === TABLES.length), "INVALID", "invalid wallet snapshot layout");
   const tables = state as unknown[];
+  if (tables.length === 7) tables.push([], []); // Historical application snapshots contain no transport state.
   for (let t = 0; t < TABLES.length; t++) {
     const rows = tables[t];
     requireThat(Array.isArray(rows), "INVALID", "invalid wallet snapshot rows");
@@ -105,6 +110,8 @@ export class PoolWalletStore {
         CREATE TABLE IF NOT EXISTS wallet_fulfilled (id TEXT PRIMARY KEY, commitment TEXT NOT NULL UNIQUE, opening TEXT NOT NULL, receipt TEXT NOT NULL, checkpoint TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS wallet_delivery_tokens (id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE);
         CREATE TABLE IF NOT EXISTS wallet_inbox (id TEXT PRIMARY KEY, frame TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS wallet_transport (id TEXT PRIMARY KEY CHECK(id='tls'), generation TEXT NOT NULL, key TEXT NOT NULL, cert TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS wallet_pairings (id TEXT PRIMARY KEY, frame TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS wallet_custody (singleton INTEGER PRIMARY KEY CHECK(singleton=1), authority TEXT NOT NULL, export BLOB, restored_from TEXT);`);
       this.transaction(() => {
         this.db.prepare("INSERT OR IGNORE INTO wallet_meta VALUES (1, ?, ?, '0')").run(bytesToHex(this.authority.domain), randomBytes(32).toString("hex"));
@@ -133,6 +140,15 @@ export class PoolWalletStore {
   }
   /** Migration/export checks cannot relabel existing evidence to another authority. */
   private checkStoredAuthority(): void {
+    for (const row of this.db.prepare("SELECT generation, key, cert FROM wallet_transport").iterate()) {
+      const generation = row["generation"] as string;
+      requireThat(/^[1-9][0-9]{0,19}$/.test(generation) && BigInt(generation) < 1n << 64n, "INVALID", "invalid credential generation");
+      validateWalletTls({ key: row["key"] as string, cert: row["cert"] as string }, false);
+    }
+    for (const row of this.db.prepare("SELECT id, frame FROM wallet_pairings").iterate()) {
+      id(row["id"] as string);
+      requireThat(decodeWalletPairing(row["frame"] as string).domain === bytesToHex(this.authority.domain), "CONFLICT", "pairing domain differs");
+    }
     const receipt = (text: string): void => {
       requireThat(same(walletAuthorityBytes(decodeStoredReceipt(text)), walletAuthorityBytes(this.authority)), "CONFLICT", "saved receipt authority differs");
     };
@@ -255,20 +271,84 @@ export class PoolWalletStore {
    * authenticated channel. A capability grants invoice access, not identity. */
   deliveryToken(requestId: string): string {
     id(requestId);
+    return this.transaction(() => this.tokenFor(requestId));
+  }
+  private tokenFor(requestId: string): string {
+    requireThat(this.db.prepare("SELECT 1 FROM wallet_requests WHERE id=?").get(requestId) !== undefined, "UNKNOWN", "unknown request");
+    const old = this.db.prepare("SELECT token FROM wallet_delivery_tokens WHERE id=?").get(requestId);
+    if (old) return old["token"] as string;
+    const token = randomBytes(32).toString("hex");
+    this.db.prepare("INSERT INTO wallet_delivery_tokens VALUES (?, ?)").run(requestId, token);
+    return token;
+  }
+  deliveryCredentials(): (WalletTlsCredentials & { generation: bigint }) | undefined {
+    this.active();
+    const row = this.db.prepare("SELECT generation, key, cert FROM wallet_transport WHERE id='tls'").get();
+    return row === undefined ? undefined : { generation: BigInt(row["generation"] as string), key: row["key"] as string, cert: row["cert"] as string };
+  }
+  /** CAS and exact retry cover a lost install/rotation reply. All old tokens revoke atomically. */
+  installDeliveryCredentials(tls: WalletTlsCredentials, expectedGeneration: bigint): bigint {
+    this.active();
+    const owned = { key: tls.key, cert: tls.cert }; validateWalletTls(owned);
+    requireThat(typeof expectedGeneration === "bigint" && expectedGeneration >= 0n && expectedGeneration < (1n << 64n) - 1n, "INVALID", "invalid credential generation");
     return this.transaction(() => {
-      requireThat(this.db.prepare("SELECT 1 FROM wallet_requests WHERE id=?").get(requestId) !== undefined, "UNKNOWN", "unknown request");
-      const old = this.db.prepare("SELECT token FROM wallet_delivery_tokens WHERE id=?").get(requestId);
-      if (old) return old["token"] as string;
-      const token = randomBytes(32).toString("hex");
-      this.db.prepare("INSERT INTO wallet_delivery_tokens VALUES (?, ?)").run(requestId, token);
-      return token;
+      const old = this.deliveryCredentials(), next = expectedGeneration + 1n;
+      if (old?.generation === next && old.key === owned.key && old.cert === owned.cert) return next;
+      requireThat((old?.generation ?? 0n) === expectedGeneration, "CONFLICT", "credential generation changed");
+      requireThat(old === undefined || !sameWalletTlsKey(old.cert, owned.cert), "CONFLICT", "rotation requires a fresh TLS key");
+      this.db.prepare("INSERT OR REPLACE INTO wallet_transport VALUES ('tls', ?, ?, ?)").run(next.toString(), owned.key, owned.cert);
+      this.db.exec("DELETE FROM wallet_delivery_tokens");
+      return next;
     });
   }
+  /** One snapshot prevents mixing a rotated certificate with an old capability. */
+  deliveryInvitation(requestId: string, endpoint: string): string {
+    id(requestId);
+    return this.transaction(() => {
+      const tls = this.deliveryCredentials(); requireThat(tls !== undefined, "UNKNOWN", "wallet credentials are not provisioned");
+      validateWalletTls(tls);
+      const row = this.db.prepare("SELECT backing, value, owner FROM wallet_requests WHERE id=?").get(requestId);
+      requireThat(row !== undefined, "UNKNOWN", "unknown request");
+      return encodeWalletPairing({ profile: WALLET_PAIRING_PROFILE, domain: bytesToHex(this.authority.domain),
+        request: { id: requestId, backing: row["backing"] as string, value: row["value"] as string, owner: row["owner"] as string },
+        generation: tls.generation.toString(), endpoint, token: this.tokenFor(requestId), cert: tls.cert });
+    });
+  }
+  /** expectedDigest is independently authenticated input, never derived from the received file. */
+  acceptPairing(alias: string, frame: string, expectedDigest: string, expectedRequest: WalletRequest, previousDigest?: string): string {
+    id(alias); this.active();
+    const pair = decodeWalletPairing(frame), digest = walletPairingDigest(frame);
+    requireThat(digest === expectedDigest && pair.domain === bytesToHex(this.authority.domain) &&
+      JSON.stringify(pair.request) === JSON.stringify(walletRequestText(expectedRequest)), "INVALID", "pairing request or digest differs");
+    return this.transaction(() => {
+      const old = this.db.prepare("SELECT frame FROM wallet_pairings WHERE id=?").get(alias)?.["frame"] as string | undefined;
+      if (old === frame) return digest;
+      if (old !== undefined) {
+        const prior = decodeWalletPairing(old);
+        requireThat(previousDigest === walletPairingDigest(old) && prior.domain === pair.domain &&
+          JSON.stringify(prior.request) === JSON.stringify(pair.request) && BigInt(pair.generation) > BigInt(prior.generation),
+          "CONFLICT", "pairing update is stale or changes invoice");
+      } else requireThat(previousDigest === undefined, "CONFLICT", "pairing predecessor is missing");
+      this.db.prepare("INSERT OR REPLACE INTO wallet_pairings VALUES (?, ?)").run(alias, frame);
+      return digest;
+    });
+  }
+  pairing(alias: string): string {
+    this.active();
+    const frame = this.db.prepare("SELECT frame FROM wallet_pairings WHERE id=?").get(id(alias))?.["frame"];
+    requireThat(typeof frame === "string", "UNKNOWN", "unknown pairing"); return frame;
+  }
+  pairedDeliveryClient(alias: string): WalletDeliveryClient {
+    const frame = this.pairing(alias), pair = decodeWalletPairing(frame);
+    return new WalletDeliveryClient(pair.endpoint, pair.token, pair.cert, { pair, current: () => this.pairing(alias) === frame });
+  }
   /** Authorization checks never create requests or rotate capabilities. */
-  authorizesDelivery(requestId: string, token: string): boolean {
+  authorizesDelivery(requestId: string, token: string, credential?: WalletCredentialBinding): boolean {
     if (this.readOnly || this.custody().frozen) return false;
     if (typeof requestId !== "string" || !/^[a-zA-Z0-9_-]{1,80}$/.test(requestId) ||
         typeof token !== "string" || !/^[0-9a-f]{64}$/.test(token)) return false;
+    const tls = this.deliveryCredentials();
+    if (tls ? credential?.generation !== tls.generation || credential.certificateDigest !== walletCertificateDigest(tls.cert) : credential !== undefined) return false;
     const row = this.db.prepare("SELECT token FROM wallet_delivery_tokens WHERE id=?").get(requestId);
     return row !== undefined && timingSafeEqual(Buffer.from(token, "hex"), Buffer.from(row["token"] as string, "hex"));
   }
@@ -276,10 +356,17 @@ export class PoolWalletStore {
    * handler authorizes capability access; this method validates the payment.
    * Storage is neither proof verification, checkpoint finality nor fulfillment. */
   receiveDelivery(requestId: string, delivery: WalletDelivery): string {
+    return this.storeDelivery(requestId, delivery);
+  }
+  receiveAuthorizedDelivery(requestId: string, token: string, delivery: WalletDelivery, credential?: WalletCredentialBinding): string {
+    return this.storeDelivery(requestId, delivery, { token, credential });
+  }
+  private storeDelivery(requestId: string, delivery: WalletDelivery, auth?: { token: string; credential: WalletCredentialBinding | undefined }): string {
     const { statement, opening, receipt } = this.payment(requestId, delivery);
     requireThat(poolReceiptAttestsEvidence(this.authority, statement, receipt), "INVALID", "delivery differs from receipt evidence");
     const frame = encodeWalletDelivery(requestId, this.authority.domain, { statement, opening, receipt });
     return this.transaction(() => {
+      if (auth) requireThat(this.authorizesDelivery(requestId, auth.token, auth.credential), "CONFLICT", "delivery credentials changed");
       const old = this.db.prepare("SELECT frame FROM wallet_inbox WHERE id=?").get(requestId);
       if (old) requireThat(old["frame"] === frame, "CONFLICT", "inbox delivery changed");
       else this.db.prepare("INSERT INTO wallet_inbox VALUES (?, ?)").run(requestId, frame);

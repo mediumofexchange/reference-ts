@@ -69,10 +69,16 @@ TLS 1.3 and certificate chain/hostname verification authenticate the configured
 endpoint. A durable random 256-bit bearer capability admits writes only to its
 existing invoice; it does not identify the payer or authorize fulfillment.
 `deliveryToken(id)` provisions it transactionally and returns the same token
-after restart. The caller must pair the endpoint, certificate trust, capability,
-domain and payment request through an authenticated private channel. The
-acceptance uses a trusted local pairing file and public test TLS credentials.
-Pairing discovery and certificate lifecycle are not implemented.
+after restart. The [local pairing profile](POOL_WALLET_PAIRING.md) binds endpoint,
+exact certificate, capability, domain and invoice through an independently
+authenticated invitation digest. `acceptPairing` persists that exact binding;
+`pairedDeliveryClient` reads it and rechecks active custody after TLS negotiation.
+`installDeliveryCredentials` atomically rotates a private key/certificate and
+revokes existing capabilities. Servers pin their actual certificate and
+generation, with authorization checked again inside the inbox transaction.
+The acceptance generates private receiver credentials and models independent
+digest authentication through parent-owned IPC. A usable human authentication
+channel, discovery and deployed endpoint operation remain unqualified.
 
 `pool/wallet-delivery-wire` defines the bounded canonical JSON envelope. It
 contains the invoice ID, domain, canonical statement, receiver opening and
@@ -92,7 +98,7 @@ refused. The acknowledgment is emitted after the SQLite commit and means
 The receiver separately runs `checkNote` and `fulfill` with caller-owned
 checkpoint evidence; missing history leaves the inbox unfulfilled.
 
-The token and inbox tables are additive to the existing wallet schema. Inbox
+The token, inbox, transport credential and pairing tables are additive to the wallet schema. Inbox
 admission avoids proof work; it does not bound total storage or history replay.
 Local database/WAL/host-backup secrecy remains a custody requirement. TLS also does
 not hide endpoint identity, timing or message size from network observers.
@@ -123,7 +129,10 @@ offline export can be stored outside that device; retain its random recovery key
 separately and its exact digest in an independently trusted current recovery record.
 The operator and backup storage provider receive no recovery authority.
 
-`exportBackup(key)` captures all seven wallet tables in one write transaction:
+`exportBackup(key)` captures all nine wallet tables in one write transaction,
+including private TLS credentials and accepted invitation bindings. Historical
+seven-table exports restore with empty transport/pairing state; new exports
+require current binaries. The retained payment state includes:
 root and request counter, requests and spend secrets, complete pending proofs,
 both private openings, receipts, input reservations, fulfillment checkpoints,
 delivery capabilities and inbox frames. It persists the encrypted bytes and a
@@ -194,6 +203,11 @@ npm run check:pool-wallet-crash
 
 The ordinary `npm run check` includes ideal wallet and crash acceptance on
 Node 24. Hosted CI also runs real-wallet acceptance on Linux and Windows.
+Private localhost certificates require an installed OpenSSL 3 executable. The
+helper discovers OpenSSL on PATH or standard Git for Windows paths; `MOE_OPENSSL`
+can name an explicit executable. Keys remain in memory during provisioning,
+then commit with the wallet. Certificate validity is 30 days; rotate before use
+after expiry. This transport clock never controls protocol finality.
 The optional
 SQLite module is imported through
 `@mediumofexchange/reference/pool/wallet-store`; it is not in the Node 20 root
@@ -204,7 +218,9 @@ payer's 3-unit change after wallet restarts, then burns both holdings. It drops
 an accepted service reply, compares the exact receipt on retry, exercises
 changed-proof resubmission, withholds checkpoint history and refuses invoice
 replay. The receiver HTTPS process drops a committed inbox acknowledgment,
-restarts with the same capability and accepts exact retries. A different real
+restarts with the same private credentials, capability and invitation, rotates
+credentials, rejects the stale certificate and old invitation, then authenticates
+the replacement and accepts the original payment's exact retry. A different real
 proof cannot poison the inbox before the original delivery arrives. A
 noncooperating test receiver is forcibly stopped and its exit observed; cleanup
 attempts independent resources even when one fails. The service observes only
@@ -237,14 +253,17 @@ totals. The last case must fail the history binding even though its proof is
 valid. Public-input/process separation is not an operating-system sandbox.
 
 The crash harness exits child processes immediately before and after SQLite
-COMMIT for request, pending statement, receipt, fulfillment, capability and inbox
-(16 abrupt exits and 16 fresh recoveries, including export and import). Fresh processes
+COMMIT for request, pending statement, receipt, fulfillment, capability,
+credential rotation, invitation mint, pairing import, inbox, export and import
+(22 abrupt exits and 22 fresh recoveries). Fresh processes
 check rollback or exact retained state, both input reservations, private change
 and one local fulfillment. Test-only interception of SQLite calls keeps crash
 hooks out of the runtime. This checks process interruption, not power loss,
 storage corruption or database rollback. Export tests check freeze/export atomicity;
 import tests check the whole state and provenance against an empty pre-commit
-destination. Crash cases use ideal proof fixtures;
+destination. Credential rotation checks that revocation and new credentials
+commit together; invitation/import checks retain exact authenticated bindings
+and lost-reply retries. Crash cases use ideal proof fixtures;
 the real flow separately exercises complete proof persistence and lost replies.
 
 ## Boundaries
@@ -255,8 +274,10 @@ protected local storage, trusted current binaries, an independent current recove
 record and one active copy. The fixture does not qualify device protection.
 It has no key custody service, continuous backup, seed-only restore, note selection, automatic
 reservation release, lapse/replacement handling or external witness adapter.
-The fixture uses public TLS keys and trusted local pairing; supported deployment
-still needs private credentials, authenticated pairing and their lifecycle.
+The fixture uses private per-wallet TLS keys and durable digest-checked pairing.
+Supported deployment still needs a qualified independent authentication channel,
+device protection and endpoint operation. The invitation file alone conveys no
+trust; comparing a digest distributed with that same file is insufficient.
 Transport byte limits do not bound wallet history replay, proof work or disk growth.
 
 The [production requirements](PRODUCTION_REQUIREMENTS.md) and

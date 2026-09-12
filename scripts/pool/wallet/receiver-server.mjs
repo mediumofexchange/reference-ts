@@ -1,18 +1,19 @@
-// Separate local receiver for acceptance only. TLS keys are PUBLIC fixtures.
-// Pairing file models an authenticated out-of-band handoff, not discovery.
-import { readFileSync, writeFileSync } from 'node:fs';
-import { bytesToHex } from '@noble/hashes/utils.js';
+// Separate local receiver. The harness models independent digest authentication
+// through parent-owned IPC; the invitation file is never a source of trust.
+import { writeFileSync } from 'node:fs';
 import { PoolWalletStore } from '@mediumofexchange/reference/pool/wallet-store';
 import { createWalletDeliveryServer } from '@mediumofexchange/reference/pool/wallet-delivery-http';
 import { walletProfile } from './profile.mjs';
+import { generateWalletTls } from './tls.mjs';
+import { walletPairingDigest } from '@mediumofexchange/reference/pool/wallet-pairing';
 
-const [database, pairingFile, mode, dropReply, stopMode] = process.argv.slice(2);
+const [database, pairingFile, mode, dropReply, stopMode, port = '0', rotate] = process.argv.slice(2);
 const { AUTHORITY, DOMAIN, TERMS } = walletProfile(mode === 'real');
 const wallet = new PoolWalletStore(database, AUTHORITY);
-const request = wallet.request('invoice', TERMS.backing.name, 7n), token = wallet.deliveryToken('invoice');
-const cert = readFileSync(new URL('../../../test/fixtures/wallet-tls/localhost-cert.pem', import.meta.url), 'utf8');
-const key = readFileSync(new URL('../../../test/fixtures/wallet-tls/localhost-key.pem', import.meta.url), 'utf8');
-const server = createWalletDeliveryServer(wallet, { cert, key });
+wallet.request('invoice', TERMS.backing.name, 7n);
+const old = wallet.deliveryCredentials();
+if (!old || rotate === 'rotate') wallet.installDeliveryCredentials(await generateWalletTls(), old?.generation ?? 0n);
+const server = createWalletDeliveryServer(wallet, wallet.deliveryCredentials());
 let drop = dropReply === 'drop-once';
 server.prependListener('request', (_request, response) => {
   const end = response.end;
@@ -21,11 +22,10 @@ server.prependListener('request', (_request, response) => {
     return end.call(this, chunk, ...args);
   };
 });
-await new Promise((resolve, reject) => server.listen(0, '127.0.0.1', resolve).once('error', reject));
-writeFileSync(pairingFile, JSON.stringify({ domain: bytesToHex(DOMAIN),
-  request: { id: request.id, backing: bytesToHex(request.backing), value: request.value.toString(), owner: request.owner.toString() },
-  endpoint: `https://localhost:${server.address().port}/delivery/invoice`, token, ca: cert }), { mode: 0o600 });
-process.send?.({ ready: true });
+await new Promise((resolve, reject) => server.listen(Number(port), '127.0.0.1', resolve).once('error', reject));
+const invitation = wallet.deliveryInvitation('invoice', `https://localhost:${server.address().port}/delivery/invoice`);
+writeFileSync(pairingFile, invitation, { mode: 0o600 });
+process.send?.({ ready: true, port: server.address().port, digest: walletPairingDigest(invitation) });
 let stopping = false;
 function stop() {
   if (stopping) return; stopping = true;

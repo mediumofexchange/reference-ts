@@ -5,53 +5,46 @@ Updated: 2026-09-12
 ## Goal
 
 Complete local private wallet credentials and authenticated invoice pairing.
-Acceptance: independently authenticate an invitation digest, persist its exact
+Acceptance: authenticate an independent invitation digest, persist its exact
 invoice/endpoint/certificate binding, restart and rotate with stale credentials
-refused, then complete the existing real-proof payment and offline recovery flow.
-Work: reference-ts/main; baseline 1d5366b, hosted CI 34702129809 passed.
-Design and independent review precede implementation; full check, hostile
-transport/rotation/backup cases and real wallet acceptance precede delivery.
+refused, then complete the real-proof payment and offline recovery flow.
+Work: reference-ts/main; baseline 1d5366b (CI 34702129809 passed), reviewed local
+profile decision 0499af8. The credential/pairing slice is reviewed and locally
+verified for main delivery. Inspect hosted CI for the exact delivered revision.
 Companion money-from-first-principles/main at 7ea0ee8 is unchanged; runtime pin,
-v2 circuits and derivation are unchanged. This is a local application custody
-profile under v2 sections 3 and 9, not seed-only or protocol failure recovery.
+v2 circuits and derivation are unchanged. This is a local application profile
+under v2 sections 3 and 9, not protocol failure recovery or deployment.
 
 ## Status
 
-- [Wallet custody](docs/POOL_WALLET.md#encrypted-offline-handoff-and-recovery):
-  bounded AES-256-GCM whole-state exports commit with durable source freeze.
-  Exact repeated export survives a lost reply. No plaintext staging file.
-- Restore requires a fresh destination, key and independently retained digest.
-  All seven state tables and import provenance commit atomically. Concurrent
-  destination writes are retained and make import refuse. Reservations remain.
-- Writable sessions pin full authority. Explicit SQLite read-only sessions
-  preserve verification of imported notes under another same-domain segment.
-  Source/reader guards run before callbacks and inside write transactions.
-- Independent design and actual-source review/readback are complete. Findings
-  addressed source authority, post-await freeze guards, destination write races,
-  lost-import provenance and owning ciphertext before authentication. No material
-  finding remains within the documented trusted current-version profile.
-- Real acceptance passed: recover payer after accepted/lost reply and receiver
-  after inbox storage, then exact retry, verify and burn 7+3 to outstanding zero.
-  Exports were 64,330 and 32,174 bytes. Full npm check passed.
-
+- [Pairing profile](docs/POOL_WALLET_PAIRING.md): private per-wallet TLS keys,
+  canonical invitations and independently authenticated full digests. Accepted
+  bindings and credentials persist with complete encrypted offline exports.
+- Rotation atomically changes generation/key and revokes capabilities. Servers
+  bind their actual certificate and generation, including inside inbox commit.
+  Payer sends check invoice terms, exact leaf and active custody before disclosure.
+- Independent design/source review and narrow fix readback are complete. Resolved
+  nonstring invoice IDs and self-issued certificate checks; no material finding
+  remains within the local profile. Ordinary TLS accepts the hostile alternate
+  leaf; exact pinning refuses it before HTTP application data.
 ## Evidence
 
-- Full npm check passed: 102 files / 1,851 tests, build, installed-package imports
-  and all acceptance stages. No runtime or circuit pin changed after verification.
-- Focused backup suite: 15 tests passed. Covers complete state, both reservations,
-  counter freshness, key/context/digest/framing, aliasing, independent handles,
-  in-flight submission/fulfillment, read-only sessions, unsupported/oversize state
-  refusal, legacy context and raced destination retention. Typecheck passed.
-- Abrupt-commit harness: 16 exits and 16 fresh recoveries across request, pending,
-  receipt, fulfillment, capability, inbox, export and import. All passed.
-- Ideal and pinned real two-wallet HTTPS/recovery/public-audit acceptance passed.
-  Final source pins and consolidated results belong in
-  [wallet evidence](docs/pool-wallet-verification.json).
-- Protected active storage, a separately retained random key/current digest,
-  one active restored copy and current binaries are preconditions. No automatic
-  rollback detection, continuous backup or encrypted-device qualification claim.
+- OpenSSL 3 provisions RSA-2048 keys/certificates through bounded private stdout,
+  with no key staging file. Final helper passed 10 sequential and 8 concurrent
+  generations after removing unreliable Windows named-pipe input.
+- Abrupt-commit acceptance passed 22 exits and 22 fresh recoveries across eleven
+  wallet operations, including rotation, invitation mint and pairing acceptance.
+- Full npm check passed: 103 files / 1,863 tests, build, installed-package imports
+  and all acceptance stages. Focused pairing suite: 12 passed. Final real-proof
+  wallets passed both offline restores, rotation, retries and public audit to
+  outstanding zero. Exports: payer 66,102 bytes, receiver 35,144 bytes. Exact source
+  pins and review evidence: [wallet evidence](docs/pool-wallet-verification.json).
+- Independent digest authentication is modeled through parent-owned IPC. A
+  qualified human/device channel, protected storage and reachable endpoint remain
+  deployment obligations. Latest recovery identity, one active restored copy
+  and current binaries remain custody preconditions.
 
-### Retained Ergo evidence; node stopped
+## Retained Ergo evidence; node stopped
 
 - [Continuation report](docs/ergo-node-sync-resume-verification.json): bounded
   Ergo 6.0.5 / Temurin 21.0.12.1+1 restart stopped externally after 415,386 ms.
@@ -68,10 +61,11 @@ profile under v2 sections 3 and 9, not seed-only or protocol failure recovery.
 
 ## Next
 
-1. Active product slice: replace public fixture TLS credentials and manual trusted
-   pairing with private per-wallet credentials and authenticated pairing, including
-   restart, rotation and rejection of stale/wrong bindings. Keep it local until
-   deployment is separately authorized; do not let pairing authorize fulfillment.
+1. Inspect hosted CI for the delivered main revision, then extend ordinary wallet
+   operation beyond the fixed acceptance invoice:
+   caller-selected requests, authenticated enrollment and payment/status commands
+   using verified note selection. State the smallest supported flow before coding;
+   preserve local custody and explicit unavailable evidence. Keep it local.
 2. Continuous/device-loss recovery needs its own concrete custody boundary.
    Offline export cannot safely resume stale state after later wallet activity.
    Do not add C4 derivation or successor seed capsules to pinned v2.
@@ -82,11 +76,11 @@ profile under v2 sections 3 and 9, not seed-only or protocol failure recovery.
 
 ## Open questions
 
-- Runtime failure recovery, authenticated evidence/publication, qualified device
-  custody/continuous recovery and credential lifecycle remain the largest blocks.
-- About **45% done / 55% remaining**, plausible done range **35–55%**. This
-  controlled offline recovery improves the wallet within existing uncertainty;
-  it does not close continuous custody or the operator/witness recovery gates.
-- Recommend a fresh instance for credential/pairing design after delivery. The
-  next boundary benefits from fresh context; this is an efficiency judgment,
-  not measured comparative model performance.
+- Runtime recovery, authenticated evidence/publication, qualified device custody,
+  continuous recovery and ordinary user operation remain the largest blocks.
+- About **45% done / 55% remaining**, plausible done range **35–55%**. Transport
+  lifecycle work reduces a wallet risk within this coarse uncertainty; no external
+  witness, continuous custody or recovery gate is closed by local pairing.
+- Use a fresh instance for the next ordinary-wallet flow: it benefits from fresh
+  product context after
+  this transport review. This is an efficiency judgment, not measured performance.

@@ -60,4 +60,32 @@ rotation/import replies, independent handles, frozen readers and complete backup
 restoration. The real two-wallet flow must preserve payment and public supply
 verification with the new transport boundary. Independent design review required
 the atomic server/invitation guards, fresh public keys, post-handshake custody
-guards and expired-credential recovery. Actual-source review remains a merge gate.
+guards and expired-credential recovery. Independent actual-source review resolved
+nonstring invoice IDs and self-issued certificate checks. The discriminating
+pin regression first accepts a different leaf through ordinary TLS, then refuses
+it through the paired client. No material review finding remains within this
+local profile; execution results are pinned in [wallet evidence](pool-wallet-verification.json).
+
+## Application integration
+
+The receiver provisions `installDeliveryCredentials({key, cert}, 0n)`, starts
+`createWalletDeliveryServer(receiver, receiver.deliveryCredentials())`, then
+creates `deliveryInvitation(invoiceId, exactHttpsEndpoint)`. Deliver its bytes
+privately; authenticate `walletPairingDigest(invitation)` on the independent
+channel. Never derive the payer's trusted digest from the received invitation.
+
+The payer calls `acceptPairing(localAlias, invitation, independentlyTrustedDigest,
+expectedRequest)`. Before proof creation, read `decodeWalletPairing(pairing(alias))`
+and compare its invoice with the intended output. After acceptance by the pool,
+use `pairedDeliveryClient(alias).deliver(domain, delivery)`; it enforces the same
+terms again before connecting. It cannot authenticate how the application
+obtained its expected request or digest.
+
+For rotation, retain the proposed new private credentials until the install
+result is reconciled. Call `installDeliveryCredentials(newTls, priorGeneration)`;
+an exact retry returns the already-installed generation. Read back the current
+credentials and start the new server. New invitations require new independent
+authentication. Payer updates also supply the previous accepted digest; exact
+reimport is safe after a lost reply. Stop obsolete listeners for resource cleanup
+even though their application writes are fenced. Backup restore retains this
+state; it does not restore an OS listener, DNS or a reachable network endpoint.

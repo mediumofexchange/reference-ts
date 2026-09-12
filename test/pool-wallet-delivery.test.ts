@@ -37,7 +37,7 @@ const endpoint = (port: number) => `https://localhost:${port}/delivery/${id}`;
 function store() {
   const calls: WalletDelivery[] = [];
   return { calls, authorizesDelivery: (requestId: string, candidate: string) => requestId === id && candidate === token,
-    receiveDelivery: (requestId: string, value: WalletDelivery) => { calls.push(value); return walletDeliveryHash(encodeWalletDelivery(requestId, DOMAIN, value)); } };
+    receiveAuthorizedDelivery: (requestId: string, _token: string, value: WalletDelivery) => { calls.push(value); return walletDeliveryHash(encodeWalletDelivery(requestId, DOMAIN, value)); } };
 }
 function raw(port: number, text: string | Buffer, options: { path?: string; headers?: string[]; chunked?: boolean } = {}): Promise<{ status: number; text: string }> {
   return new Promise((resolve, reject) => {
@@ -139,7 +139,7 @@ describe("authenticated HTTPS inbox transport", () => {
     expect(inbox.calls).toHaveLength(0);
   });
   it("never acknowledges a failed durable write or leaks its error", async () => {
-    const inbox = store(); inbox.receiveDelivery = () => { throw new Error(token + frame); };
+    const inbox = store(); inbox.receiveAuthorizedDelivery = () => { throw new Error(token + frame); };
     const port = await listen(createWalletDeliveryServer(inbox, { cert, key }));
     const response = await raw(port, frame); expect(response).toEqual({ status: 400, text: '{"code":"REJECTED"}' });
     await expect(new WalletDeliveryClient(endpoint(port), token, cert).deliver(DOMAIN, delivery)).rejects.toThrow("wallet delivery failed");
