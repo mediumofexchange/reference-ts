@@ -4,90 +4,91 @@ Updated: 2026-09-12
 
 ## Goal
 
-The local PoolStore v2 service/client slice is complete: separate processes
-demonstrate accepted submissions, durable exact retries, lost commit replies,
-old-process fencing and restored local publication. Next is a two-wallet v2
-payment path with durable pending requests and receiver fulfillment.
+The local two-wallet v2 fixture completes issue, request, pay, verify, fulfill
+once and burn, including restored payer change. Independent review and the
+full repository check passed. Next connect this
+wallet flow to the pinned real prover and a separate public-only verifier,
+then exercise abrupt wallet-process interruption at persistence boundaries.
 
-Delivery branch: reference-ts/main; these changes follow d8829dd, whose CI
-34690932138 passed. Check CI for the final service commit after delivery.
-Companion: money-from-first-principles/main at 7ea0ee8, unchanged.
-Runtime remains the README-pinned v2 profile; no normative change.
+Delivery: reference-ts/main; baseline 8991651 (CI 34692938742 passed), cleanup
+commit 2ec7cc6. Companion money-from-first-principles/main at 7ea0ee8 is unchanged.
+Runtime remains the README-pinned v2 profile; no normative bytes change.
 
 ## Status
 
-- [Pool service](docs/POOL_SERVICE.md): bounded loopback HTTP commands and
-  typed client, separate wallet/admin credentials, canonical frames, explicit
-  missing evidence, request-bound receipts and caller-owned verification.
-- The fenced Store summary returns copied status without constructing proof
-  histories on each poll. Independent adversarial review found this cost in
-  the original status implementation; the fix and nearby cases were read back.
-  No unresolved material findings remain for the service or acceptance harness.
+- [Wallet](docs/POOL_WALLET.md): fresh durable receiver requests, root-derived
+  v2 randomness, full pending statement and private output retention, input
+  reservations, authenticated receipts and verified once-only invoice records.
+- Separate wallet processes issue 10, pay 7, fulfill the receiver invoice,
+  restore/verify payer change 3, then burn both holdings to outstanding zero.
+  Lost replies, exact/changed-proof retry and missing evidence remain explicit.
+- Review found discarded payer change in the first harness. Both output
+  openings now persist before submission; change stays out of receiver delivery.
+  Independent fix/nearby-privacy readback has no unresolved material findings.
+- Cleanup removed 58 fully merged local branches across the four repositories
+  and 360,689,609 bytes of verified old bundles, duplicate archives and logs.
+  Active dependencies, proof artifacts, current Java and sync evidence remain.
+
 ## Evidence
 
-- [Service evidence](docs/pool-service-verification.json): final `npm run check`
-  passed, including 99 files / 1,808 tests, build, installed-package consumer,
-  pilot, pool-store crash checks, separate-process service and spent-set checks.
-  Focused cases cover real HTTP stalls, redirects, byte limits, wrong-context
-  receipts, status aliasing and status without history copying.
-- Acceptance uses public fixture keys, an ideal proof verifier and a known
-  local venue ledger. It proves neither external finality nor wallet privacy,
-  deployment readiness or abrupt service-process crash recovery. Existing
-  store-crash evidence remains separate. Node 20 root imports stay supported;
-  the SQLite store and HTTP server require Node 24.
+- [Wallet evidence](docs/pool-wallet-verification.json): `npm run check` passed,
+  including 100 files / 1,815 tests, build, installed package, pilot, store crash,
+  service, two-wallet acceptance and spent-set checks. Seven wallet tests passed.
+- Independent review inspected actual runtime/tests/harness, and separately
+  probed request quantity and derivation boundaries. The earlier callback
+  identity-mutation suspicion was retracted: decoded identity fields freeze.
+- Local acceptance uses ideal proofs, public fixture obligor keys and a known
+  LocalVenue ledger with explicit bulk evidence. It proves no external finality,
+  real-proof wallet privacy, rollback protection or external-goods atomicity.
+  Plaintext DB/WAL/backups are custody material. Restarts between CLI commands
+  are not abrupt-crash evidence. Node 20 root imports remain supported;
+  SQLite wallet and service require Node 24.
+- The initial sandbox attempt failed before tests at bundler directory access;
+  normal-user verification passed without changing tests or gates.
 
-### Ergo measurement closed; node stopped
+### Retained Ergo evidence; node stopped
 
-- [Retained continuation](docs/ergo-node-sync-resume-verification.json) restarted
-  the standard Ergo 6.0.5 / Temurin 21.0.12.1+1 database with corrected logging.
-  It was manually stopped after 415,386 ms; sampled headers reached 97,923,
-  peers reached three, traffic was 418,472,522 bytes and output 1,905 bytes.
-  All sampled full heights were null. No applied history or ancestry claim.
-- The last API sample was about 55 seconds before stop. The automatic result
-  remains unresolved because the stop was external; final worker checks were
-  not reached. Owner cleanup plus independent checks established an empty job,
-  absent processes/mapping, exclusive image access and matching GPT identity.
-- Retain the detached fixed 20 GiB image and actual run reports for inspection:
+- [Continuation report](docs/ergo-node-sync-resume-verification.json): bounded
+  Ergo 6.0.5 / Temurin 21.0.12.1+1 restart stopped externally after 415,386 ms.
+  Sampled headers reached 97,923; all sampled full heights were null. No applied
+  history or ancestry claim. The automatic result is unresolved; final worker
+  checks were not reached. Independent owner cleanup established no surviving
+  processes/mapping, exclusive image access and matching GPT identity.
+- Retain the detached fixed 20 GiB image and actual run reports:
   scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd.
-  Do not delete it or allocate another. ResumeSync's original configuration
-  pin is spent; blindly repeating that one-time command will refuse admission.
-- Resume checks passed: native 56 (including a bounded real image read), disk
-  79, sync profile 25 and PowerShell resume 12; read-only preflight passed.
-  Independent source and partial-result review found no material contradiction.
-- Background sync is permitted, but no unattended run has been started. The
-  one-time bounded launcher is not a full-sync service. Further setup must be
-  justified separately from wallet progress; completing sync is not a blocker
-  for the next slice. Standard packages work; custom candidates were removed.
+  Do not delete it or allocate another. ResumeSync's original configuration pin
+  is spent; blindly repeating the one-time command will refuse admission.
+- Native resume 56, disk 79, sync profile 25 and PowerShell resume 12 checks
+  passed; read-only preflight passed. Background sync is permitted but no
+  unattended run is active. Full sync is independent of wallet progress.
 
 ## Next
 
-1. Build a local two-wallet v2 CLI: issue → request → pay → verify → fulfill
-   once → burn, including restart and exact retry. Persist the receiver's
-   fresh secret/request before sharing only its owner. Persist the complete
-   pending statement before submission and derive v2 randomness as specified.
-2. Deliver opening and statement/segment identity privately. Verify receipts
-   against caller-owned authority and distinguish acceptance from finality.
-   Use explicit bulk fixture evidence with the existing checkpoint reader for
-   local finality; missing evidence must remain unavailable.
-3. Acceptance: lost replies, restored pending requests, changed-proof retries,
-   invoice replay rejection and receiver secrets absent from service traffic.
-   Review the sensitive wallet/state changes independently before delivery.
-   The delivery restore worker uses a synthetic v3 view; it cannot establish
-   v2 wallet restoration or justify adding capsules to v2. Keep frozen pilot
-   and receiver evidence until equivalent crash/fulfillment cases pass.
-4. Independently applied Ergo history remains open. When available at fixture
-   heights 100,000 / 1,000,000 / 1,500,000, compare bounded parent links and
-   bodies against pinned upper IDs. Body presence alone proves no ancestry.
+1. Use the existing pinned v2 prover with the same durable wallet requests,
+   pending statements and change handling. Acceptance: real proof issue/pay/
+   receive/burn, exact retry after a lost reply, and a separate verifier checking
+   public supply without wallet secrets. Avoid a second wallet/prover framework.
+2. Add bounded abrupt wallet-process crash tests before/after request, pending,
+   receipt and fulfillment commits; verify restored exact bytes and one local
+   fulfillment. Port remaining real-proof receiver/public-audit cases before
+   retiring the frozen private-payment experiment or transparent pilot.
+3. Keep caller-owned authority and explicit checkpoint evidence. Local fixture
+   files do not establish private network delivery or authenticated external
+   finality. No capsules or successor C4 derivation may be added to v2.
+4. Independently applied Ergo history remains open. At fixture heights 100,000,
+   1,000,000 and 1,500,000 compare bounded parent links and bodies against pinned
+   upper IDs. Body presence alone proves no ancestry; more sync preparation
+   must be justified separately from wallet progress.
 
 ## Open questions
 
 - Full recovery, authenticated bulk evidence/external finality and publication,
-  custody/rollback and practical wallet operation remain major product gates.
-  Initial journal replay retains its current cost; HTTP limits are not whole-
-  process or proof-worker quotas. No live deployment or real funds are involved.
+  supported custody/rollback, private delivery and practical devices remain
+  major product gates. Local history replay/proof work is not bounded by HTTP
+  limits. No live deployment, release or real funds are involved.
 - Estimate **45% done / 55% remaining**, plausible done range **35–55%**.
-  Local service delivery is useful progress within this coarse range; it does
-  not establish a usable private payment or close recovery/deployment gates.
-- Stay with this instance for wallet integration: the service and durable
-  retry context is fresh. This is an efficiency recommendation, not a measured
-  comparison between models.
+  The wallet fixture adds reusable integration evidence within this coarse
+  range; it does not close the usable private payment or recovery gates.
+- Stay with this instance for real-proof wallet integration: wallet persistence,
+  service and review context are fresh. This is an efficiency recommendation,
+  not a measured model comparison.

@@ -16,9 +16,12 @@ receipt readers and durable sequencing. Recovery and successor v3 formats
 have executable models and conformance checks; they are not runtime support.
 
 A [local Node 24 service and client](docs/POOL_SERVICE.md) now expose durable
-pool submission, commitment and publication retry. There is no pool wallet or
-external witness write adapter yet. The API and wire format are experimental, the package is not published
-to npm, and no completed security audit or live deployment is claimed.
+pool submission, commitment and publication retry. A [local wallet fixture](docs/POOL_WALLET.md)
+adds durable requests, payment retries and verified, once-only invoice records.
+It uses ideal proofs and a local venue; a usable wallet and external witness
+write adapter remain open. The API and wire format are experimental, the
+package is not published to npm, and no completed security audit or live
+deployment is claimed.
 
 The runtime tracks specification revision
 [`3676757a1c8ddc0df607352c6bddbb48f6d85a09`](https://github.com/mediumofexchange/money-from-first-principles/tree/3676757a1c8ddc0df607352c6bddbb48f6d85a09).

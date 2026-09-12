@@ -14,8 +14,11 @@ circuits and proofs, private notes, public supply replay, record-derived
 authority and canonical history, receipt readers, and durable sequencing.
 The [local service/client transport](POOL_SERVICE.md) exposes durable submission,
 commitment and publication retry, with separate-process lost-response, fencing
-and restart evidence. Silence recovery is modeled but not implemented in the
-runtime. There is no pool wallet or external witness write adapter yet.
+and restart evidence. The [local wallet fixture](POOL_WALLET.md) retains receiver
+requests, pending payments and verified local fulfillment through restarts.
+Its proof verifier and venue are fixtures. Silence recovery is modeled but
+not implemented in the runtime; usable wallet custody, real-proof wallet
+integration and an external witness write adapter remain open.
 
 The frozen transparent implementation and its local pilot remain adversarial
 and integration evidence. The private-payment experiment retains real-proof

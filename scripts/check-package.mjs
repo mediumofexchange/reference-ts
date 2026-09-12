@@ -40,6 +40,7 @@ import { makeBacking, encodeBacking, decodeBacking, signBacking, verifyBackingSi
 import { PILOT_PROFILE } from '@mediumofexchange/reference/pilot-wire';
 import { POOL_SERVICE_PROFILE } from '@mediumofexchange/reference/pool/service-wire';
 import { PoolServiceClient } from '@mediumofexchange/reference/pool/service-client';
+import { deriveWalletField } from '@mediumofexchange/reference/pool/wallet';
 import { poolReceiptBytes } from '@mediumofexchange/reference/pool/receipt';
 import { readPoolReceiptRecord, readPoolReceiptCheckpoint } from '@mediumofexchange/reference/pool/receipt-record';
 import { readPoolReceiptRepair } from '@mediumofexchange/reference/pool/receipt-repair';
@@ -76,10 +77,14 @@ assert.equal(typeof core.poolReceiptInHistory, 'function');
 assert.equal(PILOT_PROFILE, 'transparent-pilot/v0-directory-v1');
 assert.equal(POOL_SERVICE_PROFILE, 'pool-store/v2');
 assert.equal(new PoolServiceClient('http://127.0.0.1:9031/', '11'.repeat(32)).baseUrl, 'http://127.0.0.1:9031/');
+assert.equal(typeof deriveWalletField, 'function');
 if (Number(process.versions.node.split('.')[0]) >= 24) {
   const { PilotStore } = await import('@mediumofexchange/reference/pilot-store');
   const { PoolStore, PoolStoreError } = await import('@mediumofexchange/reference/pool/store');
   const { createPoolService } = await import('@mediumofexchange/reference/pool/service-http');
+  const { PoolWalletStore } = await import('@mediumofexchange/reference/pool/wallet-store');
+  assert.equal(typeof PoolWalletStore, 'function');
+  assert.equal(core.PoolWalletStore, undefined);
   assert.equal(typeof createPoolService, 'function');
   const { createPilotServer } = await import('@mediumofexchange/reference/pilot-http');
   assert.equal(typeof PilotStore, 'function');

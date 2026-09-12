@@ -1,0 +1,70 @@
+{
+  "date": "2026-09-12",
+  "status": "passed-local-checks",
+  "baselineCommit": "8991651a5961f63c088eb679c877958966cb24fd",
+  "node": "v24.6.0",
+  "platform": "win32",
+  "sourceSha256": {
+    "src/pool/wallet.ts": "254f1652e0aa3f21b0908df3280862360ab79f138bc005bee8702b6df15b3ead",
+    "src/pool/wallet-store.ts": "b8c1b4591481fa006a61112457211692186d08c92d3b21f741a9af8e5edd45f4",
+    "test/pool-wallet.test.ts": "ce423e9891b20a25958bf21d90a57b737d38c3c23c82ec7ad83dcac7c54b7a6d",
+    "scripts/pool/wallet/check.mjs": "e4d97b141fae99dc5936b56bec9f27046fd194cf632500324761099b1f61ef25",
+    "scripts/pool/wallet/cli.mjs": "72de00480fe4860bc0c1931f5aefa94aec5fca52ad94a99fa8382cff75baedf1",
+    "package.json": "d7465ec96e34bc79f92bd486b9947ac1c16c8607cb8a2d0f842d103955a2178f",
+    "scripts/check-package.mjs": "870be2fd9f24d5739edb7150a1377671c452b17494ca5a02d1df8d12a30c1bbc"
+  },
+  "verification": {
+    "command": "npm run check",
+    "exitCode": 0,
+    "testFilesPassed": 100,
+    "testsPassed": 1815,
+    "walletTestsPassed": 7,
+    "vitestDurationSeconds": 273.6,
+    "stages": [
+      "documentation and links",
+      "typecheck",
+      "unit and model tests",
+      "build",
+      "installed-package consumer",
+      "pilot",
+      "pool-store crash acceptance",
+      "pool service acceptance",
+      "two-wallet acceptance",
+      "spent-set checks"
+    ],
+    "environment": "Normal user context. Initial restricted-sandbox attempt failed before tests because esbuild could not traverse the project parent directory; no test or gate changed."
+  },
+  "walletAcceptance": [
+    "Issue 10, pay 7, receiver verifies exact output and checkpoint inclusion before one local fulfillment.",
+    "Payer change 3 persists before submission, restores in a fresh process, verifies against the payment checkpoint and remains usable for burn.",
+    "Receiver burns 7 and payer burns 3: final fixture issued 10, burned 10, outstanding 0.",
+    "Completed accepted HTTP reply is dropped; retry from a new wallet process returns exactly the dropped receipt.",
+    "Exact and changed-proof retries preserve the original authenticated receipt.",
+    "Withheld history returns unavailable without fulfillment; repeated invoice fulfillment is refused.",
+    "Private delivery contains only receiver opening, statement and receipt; payer change stays local.",
+    "Actual service request frames exclude receiver root/secret bytes; fixture proofs hash only public statement bytes."
+  ],
+  "review": {
+    "type": "Independent adversarial source review, boundary probes and fix readback",
+    "findings": [
+      "Initial CLI discarded the payer change opening. Fixed by atomic pending/change persistence and verified change recovery/burn acceptance.",
+      "Near-fix delivery checked to exclude the newly retained payer change opening. Exact delivery keys are now asserted."
+    ],
+    "retracted": "Initial callback identity-mutation suspicion: decoded statement identity fields were already frozen; no alternate-identity defect was established.",
+    "independentProbes": [
+      "u64 request quantity boundaries",
+      "derivation field/count/order/slot boundaries"
+    ],
+    "unresolvedMaterialFindings": 0
+  },
+  "limits": [
+    "Ideal proof verifier and public fixture obligor keys; no new real-proof wallet evidence.",
+    "Known LocalVenue ledger and explicit bulk fixture evidence are not authenticated external finality.",
+    "Trusted plaintext database/WAL/backups; no copied-database rollback protection or seed-only restore.",
+    "Private local files are fixture delivery, not an authenticated private network channel.",
+    "One local fulfillment record is not exactly-once delivery of external goods or payout.",
+    "Fresh processes between commands do not establish abrupt wallet-process crash safety; existing operator-store crash evidence is separate.",
+    "No note selection, reservation release, lapse/replacement support, live deployment or real funds.",
+    "This record summarizes observed output and inspected sources, not a retained raw transcript."
+  ]
+}

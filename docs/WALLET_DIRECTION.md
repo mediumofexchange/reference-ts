@@ -3,6 +3,8 @@
 Discussion draft, 2026-09-07. This records the product direction
 and a proposed minimum for evaluation. It does not change Construction, approve a
 new claim layer, or describe an implemented wallet.
+The [local v2 wallet fixture](POOL_WALLET.md) implements a narrower payment
+and persistence slice; the proposed fixed-creditor instrument remains unselected.
 
 ## Product direction
 
