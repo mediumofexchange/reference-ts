@@ -4,13 +4,13 @@ Updated: 2026-09-12
 
 ## Goal
 
-Complete local private wallet credentials and authenticated invoice pairing.
-Acceptance: authenticate an independent invitation digest, persist its exact
-invoice/endpoint/certificate binding, restart and rotate with stale credentials
-refused, then complete the real-proof payment and offline recovery flow.
-Work: reference-ts/main; baseline 1d5366b (CI 34702129809 passed), reviewed local
-profile decision 0499af8. The credential/pairing slice is reviewed and locally
-verified for main delivery. Inspect hosted CI for the exact delivered revision.
+Extend local wallet operation beyond the fixed acceptance invoice.
+Acceptance: caller-selected invoices, digest-authenticated enrollment, verified
+selection of up to two notes, exact durable payment retry, private delivery,
+checkpoint-scoped status and receipt/change recording, followed by another pay.
+Work: reference-ts/main; baseline 150fdbd (hosted CI 34704797024 passed).
+The [operation profile](docs/POOL_WALLET_OPERATION.md) is under independent
+design review before implementation. No new protocol or custody format.
 Companion money-from-first-principles/main at 7ea0ee8 is unchanged; runtime pin,
 v2 circuits and derivation are unchanged. This is a local application profile
 under v2 sections 3 and 9, not protocol failure recovery or deployment.
