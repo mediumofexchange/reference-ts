@@ -191,4 +191,56 @@ describe.skipIf(Number(process.versions.node.split(".")[0]) < 24)("local pool wa
     await expect(restored.fulfill("invoice", delivery, f.args)).rejects.toThrow(/already fulfilled/);
     expect(restored.fulfillment("invoice")).toEqual(expected);
   });
+  it("retains scoped delivery capabilities and exact inbox bytes without fulfilling", async () => {
+    const f = await setup(), delivery = { statement: f.statement, opening: f.opening, receipt: f.receipt };
+    expect(f.wallet.authorizesDelivery("invoice", "00".repeat(32))).toBe(false);
+    expect(() => f.wallet.deliveryToken("unknown")).toThrow(/unknown request/);
+    const token = f.wallet.deliveryToken("invoice");
+    f.wallet.request("another", f.request.backing, 10n);
+    expect(f.wallet.deliveryToken("another")).not.toBe(token);
+    expect(f.wallet.authorizesDelivery("another", token)).toBe(false);
+    expect(f.wallet.authorizesDelivery("invoice", token)).toBe(true);
+    const first = f.wallet.receiveDelivery("invoice", delivery);
+    expect(f.wallet.receiveDelivery("invoice", delivery)).toBe(first);
+    expect(f.wallet.fulfillment("invoice")).toBeUndefined();
+    f.wallet.close(); wallets.pop(); const restored = f.create();
+    expect(restored.deliveryToken("invoice")).toBe(token);
+    expect(restored.authorizesDelivery("invoice", token)).toBe(true);
+    expect(restored.inbox("invoice")).toEqual(delivery);
+    const returned = restored.inbox("invoice")!;
+    returned.opening.backing.fill(0); returned.statement.proof.fill(0); returned.receipt.signature.fill(0);
+    expect(restored.inbox("invoice")).toEqual(delivery);
+    expect(restored.receiveDelivery("invoice", delivery)).toBe(first);
+    expect((await restored.checkNote("invoice", restored.inbox("invoice")!.opening, { ...f.args, evidence: [] })).kind).toBe("unavailable");
+    expect(restored.fulfillment("invoice")).toBeUndefined();
+  });
+  it("rejects wrong requests and unattested evidence before an inbox can be occupied", async () => {
+    const f = await setup(), delivery = { statement: f.statement, opening: f.opening, receipt: f.receipt };
+    expect(() => f.wallet.receiveDelivery("invoice", { ...delivery, opening: { ...f.opening, value: 9n } })).toThrow(/match/);
+    const reproved = f.oracle.accept({ ...f.statement, proof: new Uint8Array(32).fill(42) });
+    expect(await f.oracle.verify(reproved.kind, reproved.publicInputs, reproved.proof)).toBe(true);
+    expect(() => f.wallet.receiveDelivery("invoice", { ...delivery, statement: reproved })).toThrow(/receipt evidence/);
+    const signature = { ...f.statement, obligorSignature: new Uint8Array(64) };
+    expect(() => f.wallet.receiveDelivery("invoice", { ...delivery, statement: signature })).toThrow(/receipt evidence/);
+    expect(f.wallet.inbox("invoice")).toBeUndefined();
+    f.wallet.receiveDelivery("invoice", delivery);
+    expect(f.wallet.inbox("invoice")).toEqual(delivery);
+  });
+  it("serializes exact and conflicting delivery races into one immutable inbox entry", async () => {
+    const f = await setup(), second = f.create();
+    const delivery = { statement: f.statement, opening: f.opening, receipt: f.receipt };
+    const otherOpening = { ...f.opening, rho: f.opening.rho + 1n };
+    const otherStatement = f.oracle.accept(issueStatement(f.authority, f.request.backing, 10n, commitmentOf(DOMAIN, otherOpening), SECRETS.backer));
+    const otherReceipt = signPoolReceipt(SECRETS.operator, f.authority, await f.segment.admit(otherStatement), 0n);
+    const conflict = { statement: otherStatement, opening: otherOpening, receipt: otherReceipt };
+    const outcomes = await Promise.allSettled([
+      Promise.resolve().then(() => f.wallet.receiveDelivery("invoice", delivery)),
+      Promise.resolve().then(() => second.receiveDelivery("invoice", delivery)),
+      Promise.resolve().then(() => second.receiveDelivery("invoice", conflict)),
+    ]);
+    expect(outcomes.filter(r => r.status === "fulfilled")).toHaveLength(2);
+    expect(outcomes.filter(r => r.status === "rejected")).toHaveLength(1);
+    expect(second.inbox("invoice")).toEqual(delivery);
+    expect(second.fulfillment("invoice")).toBeUndefined();
+  });
 });

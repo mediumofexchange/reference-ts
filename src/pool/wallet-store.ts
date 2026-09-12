@@ -2,17 +2,18 @@
 // backups are secrets. Assumes trusted local storage without rollback/copies.
 // Fulfillment means one durable local record, not exactly-once external goods.
 import { DatabaseSync } from "node:sqlite";
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes } from "../bytes.js";
 import { decodeCommitment, encodeCommitment, type Commitment } from "../commitment.js";
 import { isValue } from "./field.js";
 import { commitmentOf, copyNoteOpening, isNoteOpening, nullifierOf, ownerOf, type NoteOpening } from "./notes.js";
 import { readPoolCheckpoint, type PoolCheckpointFailure, type PoolCheckpointResult } from "./checkpoint.js";
-import { poolReceiptCovers, type PoolReceipt } from "./receipt.js";
+import { poolReceiptAttestsEvidence, poolReceiptCovers, type PoolReceipt } from "./receipt.js";
 import { copySegmentAuthority, decodeStatement, encodeStatement, parsePublicInputs, segmentIdentity, type SegmentAuthority, type Statement } from "./statement.js";
 import { decodeStoredReceipt, encodeStoredReceipt } from "./store-codec.js";
 import { deriveWalletField, type WalletPurpose } from "./wallet.js";
+import { decodeWalletDelivery, encodeWalletDelivery, walletDeliveryHash } from "./wallet-delivery-wire.js";
 
 export interface WalletRequest { readonly id: string; readonly backing: Uint8Array; readonly value: bigint; readonly owner: bigint }
 export interface WalletDelivery { readonly statement: Statement; readonly opening: NoteOpening; readonly receipt: PoolReceipt }
@@ -54,7 +55,9 @@ export class PoolWalletStore {
         CREATE TABLE IF NOT EXISTS wallet_requests (id TEXT PRIMARY KEY, backing TEXT NOT NULL, value TEXT NOT NULL, secret TEXT NOT NULL, owner TEXT NOT NULL UNIQUE);
         CREATE TABLE IF NOT EXISTS wallet_pending (id TEXT PRIMARY KEY, frame TEXT NOT NULL, opening TEXT, change_opening TEXT, receipt TEXT);
         CREATE TABLE IF NOT EXISTS wallet_reservations (nullifier TEXT PRIMARY KEY, pending TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS wallet_fulfilled (id TEXT PRIMARY KEY, commitment TEXT NOT NULL UNIQUE, opening TEXT NOT NULL, receipt TEXT NOT NULL, checkpoint TEXT NOT NULL);`);
+        CREATE TABLE IF NOT EXISTS wallet_fulfilled (id TEXT PRIMARY KEY, commitment TEXT NOT NULL UNIQUE, opening TEXT NOT NULL, receipt TEXT NOT NULL, checkpoint TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS wallet_delivery_tokens (id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE);
+        CREATE TABLE IF NOT EXISTS wallet_inbox (id TEXT PRIMARY KEY, frame TEXT NOT NULL);`);
       this.db.prepare("INSERT OR IGNORE INTO wallet_meta VALUES (1, ?, ?, '0')").run(bytesToHex(this.authority.domain), randomBytes(32).toString("hex"));
       const meta = this.db.prepare("SELECT domain FROM wallet_meta WHERE singleton=1").get()!;
       requireThat(meta["domain"] === bytesToHex(this.authority.domain), "CONFLICT", "wallet domain changed");
@@ -92,6 +95,44 @@ export class PoolWalletStore {
   secret(requestId: string): bigint {
     const row = this.db.prepare("SELECT secret FROM wallet_requests WHERE id=?").get(id(requestId));
     requireThat(row !== undefined, "UNKNOWN", "unknown request"); return BigInt(row["secret"] as string);
+  }
+  /** Provision locally, then share only with the intended payer over an
+   * authenticated channel. A capability grants invoice access, not identity. */
+  deliveryToken(requestId: string): string {
+    id(requestId);
+    return this.transaction(() => {
+      requireThat(this.db.prepare("SELECT 1 FROM wallet_requests WHERE id=?").get(requestId) !== undefined, "UNKNOWN", "unknown request");
+      const old = this.db.prepare("SELECT token FROM wallet_delivery_tokens WHERE id=?").get(requestId);
+      if (old) return old["token"] as string;
+      const token = randomBytes(32).toString("hex");
+      this.db.prepare("INSERT INTO wallet_delivery_tokens VALUES (?, ?)").run(requestId, token);
+      return token;
+    });
+  }
+  /** Authorization checks never create requests or rotate capabilities. */
+  authorizesDelivery(requestId: string, token: string): boolean {
+    if (typeof requestId !== "string" || !/^[a-zA-Z0-9_-]{1,80}$/.test(requestId) ||
+        typeof token !== "string" || !/^[0-9a-f]{64}$/.test(token)) return false;
+    const row = this.db.prepare("SELECT token FROM wallet_delivery_tokens WHERE id=?").get(requestId);
+    return row !== undefined && timingSafeEqual(Buffer.from(token, "hex"), Buffer.from(row["token"] as string, "hex"));
+  }
+  /** Save original attested delivery before transport acknowledgment. The
+   * handler authorizes capability access; this method validates the payment.
+   * Storage is neither proof verification, checkpoint finality nor fulfillment. */
+  receiveDelivery(requestId: string, delivery: WalletDelivery): string {
+    const { statement, opening, receipt } = this.payment(requestId, delivery);
+    requireThat(poolReceiptAttestsEvidence(this.authority, statement, receipt), "INVALID", "delivery differs from receipt evidence");
+    const frame = encodeWalletDelivery(requestId, this.authority.domain, { statement, opening, receipt });
+    return this.transaction(() => {
+      const old = this.db.prepare("SELECT frame FROM wallet_inbox WHERE id=?").get(requestId);
+      if (old) requireThat(old["frame"] === frame, "CONFLICT", "inbox delivery changed");
+      else this.db.prepare("INSERT INTO wallet_inbox VALUES (?, ?)").run(requestId, frame);
+      return walletDeliveryHash(frame);
+    });
+  }
+  inbox(requestId: string): WalletDelivery | undefined {
+    const row = this.db.prepare("SELECT frame FROM wallet_inbox WHERE id=?").get(id(requestId));
+    return row === undefined ? undefined : decodeWalletDelivery(row["frame"] as string).delivery;
   }
   /** Persist the complete proof/signature and private delivery before submit.
    * Reservation refuses rebuilding an input under a different local command.
@@ -170,9 +211,7 @@ export class PoolWalletStore {
     return { kind: result.prefix.events.some(event => event.nullifiers.includes(nf)) ? "spent" : "unspent",
       checkpoint, verified: result };
   }
-  /** Verify caller-owned checkpoint/venue evidence before recording one local
-   * fulfillment. Missing history returns unavailable and changes no state. */
-  async fulfill(requestId: string, delivery: WalletDelivery, args: Parameters<typeof readPoolCheckpoint>[0]): Promise<PoolCheckpointResult> {
+  private payment(requestId: string, delivery: WalletDelivery): WalletDelivery & { cm: bigint } {
     id(requestId);
     const statement = decodeStatement(encodeStatement(this.authority.domain, delivery.statement)).statement;
     const opening = copyNoteOpening(delivery.opening), receipt = decodeStoredReceipt(encodeStoredReceipt(delivery.receipt));
@@ -182,6 +221,12 @@ export class PoolWalletStore {
       row["owner"] === opening.owner.toString() && opening.value > 0n, "INVALID", "payment does not match receiver request");
     const cm = commitmentOf(this.authority.domain, opening);
     requireThat(poolReceiptCovers(this.authority, statement, receipt) && parsePublicInputs(statement.kind, statement.publicInputs).outputs.includes(cm), "INVALID", "invalid payment receipt or output");
+    return { statement, opening, receipt, cm };
+  }
+  /** Verify caller-owned checkpoint/venue evidence before recording one local
+   * fulfillment. Missing history returns unavailable and changes no state. */
+  async fulfill(requestId: string, delivery: WalletDelivery, args: Parameters<typeof readPoolCheckpoint>[0]): Promise<PoolCheckpointResult> {
+    const { opening, receipt, cm } = this.payment(requestId, delivery);
     const checkpoint = encodeCommitment(args.checkpoint);
     const result = await readPoolCheckpoint(args);
     if (result.kind !== "final") return result;

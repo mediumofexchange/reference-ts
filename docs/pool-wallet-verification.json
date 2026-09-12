@@ -1,66 +1,68 @@
 {
   "date": "2026-09-12",
   "status": "passed-local-checks",
-  "baselineCommit": "af398eaf4506b39d41685218c3ab1717a37842f3",
+  "baselineCommit": "b1773d215c0f4bcd825edf3bd1e34ada8268ca8a",
   "node": "v24.6.0",
   "platform": "win32",
   "sourceSha256": {
     "src/pool/wallet.ts": "254f1652e0aa3f21b0908df3280862360ab79f138bc005bee8702b6df15b3ead",
-    "src/pool/wallet-store.ts": "71f0334e8491b602932480ebe3e989d97a5272549cb491da98343b510cd11f80",
-    "test/pool-wallet.test.ts": "08405b98c5c22eac153146968b4420fd0dd2a74a377f1ae2821c9ec75208b3cc",
-    "scripts/pool/wallet/check.mjs": "7e8f34a34a063cd4604ec6189edf78965a4ebb54f1c8c3e3c46786bfb8ce725d",
-    "scripts/pool/wallet/cli.mjs": "e4e44bb94a8b9f1d5e41e5f3ae8f4ceabe44baad173d3f3a462d858007baa311",
+    "src/pool/wallet-store.ts": "759ce4918060a51cb1251296d527f667befcab895f8450fff339f5bbbb1f3e4b",
+    "test/pool-wallet.test.ts": "3c11bab9556ef7f783352beb068afb407457f35bcd1ff2d208cbf3f827083fdf",
+    "scripts/pool/wallet/check.mjs": "566a3b8583c42cd5d987a1b59d92440aaeb9101fd31822763bf5488d30683f72",
+    "scripts/pool/wallet/cli.mjs": "3159bdfccbcb9d90cffd376326bab909df358e1e4325e317850e99588257e7e0",
     "scripts/pool/wallet/profile.mjs": "0054648a16e7b33c2cc6ca9c2448edd2084dc1a22ef299e9008aaf24bc6e535a",
     "scripts/pool/wallet/proofs.mjs": "d7bb991dedb137586627d700bff83b025dcb6ecde1da6c3c83020d45d5fc647e",
     "scripts/pool/wallet/audit.mjs": "1fb022ab66ed394bbaf5a7ddec70f6efea5d81645709a4ebacb8cb0df63ac947",
-    "scripts/pool/wallet/crash.mjs": "e08ba7abbcda27ac4d8feae649cdcdc147a40469024d867dcde719e77853d27b",
-    "scripts/pool/wallet/crash-worker.mjs": "4a062732dfb574ce6c65a533df82b3ce55b0ab26f933aaa76821c748496d1a0a",
+    "scripts/pool/wallet/crash.mjs": "fffd4a99733089a5c08d8821b82b8b5c9fe4ae39bbd3b83019a336c937fa109b",
+    "scripts/pool/wallet/crash-worker.mjs": "4255b7cb71004015415d1ea04be4b9c4f355abc67858c7c88fd3e94f01b3fa9e",
     "package.json": "e17712c36d42ee2f9ce024fcab62cd6ec293e5acb1b41f66aa6bf01d92ee829f",
     ".github/workflows/ci.yml": "c64535e0fdf45f2c904a212fc483dc9cc2311a9f7d943a589464b7bb6760eff7",
-    "src/pool/circuits/manifest.json": "c762654f10e1d6ef0da542e907c82d72939ddd1c5ae5244fc7669236ec9d835e"
+    "src/pool/circuits/manifest.json": "c762654f10e1d6ef0da542e907c82d72939ddd1c5ae5244fc7669236ec9d835e",
+    "src/pool/wallet-delivery-wire.ts": "24a19147ee4425a0ad5a39150cec4e9e758939fa0da12d27f7fd64e7dd2040ea",
+    "src/pool/wallet-delivery-http.ts": "3386f8360fcb24fe571854a6ff3d26946cc78d51d58fe1e57d004e3f61cdaf71",
+    "test/pool-wallet-delivery.test.ts": "962151705f565aba612b05e13efe7e69ab88f98ca0c4e9c75dd4f925b80ade1e",
+    "test/fixtures/wallet-tls/localhost-cert.pem": "4960358c978f5cfa6c85d9a170ca6c874ff44d7f6b6426face3945b1e088a642",
+    "test/fixtures/wallet-tls/localhost-key.pem": "72ca0dbd12e4fdf08ea290354a9b40a6656198044acb0ecb0eeaa4c3a5cd0e86",
+    "scripts/pool/wallet/receiver-server.mjs": "cc648084b82bb553acd1a1bddee561c18de4db3d797eb05f665b7149d65129a2",
+    "scripts/check-package.mjs": "fe7d98d5ead9515b0e654670d91b0751b1e891164491e9c8ebd790a76bf2988f"
   },
   "verification": [
     {
       "command": "npm run check",
       "exitCode": 0,
-      "testFilesPassed": 100,
-      "testsPassed": 1820,
-      "walletTestsPassed": 12,
-      "vitestDurationSeconds": 374.46,
+      "testFilesPassed": 101,
+      "testsPassed": 1836,
+      "walletTestsPassed": 15,
+      "deliveryTestsPassed": 13,
+      "vitestDurationSeconds": 286.6,
       "stages": [
         "documentation and links",
         "typecheck",
         "unit/model tests",
         "build",
-        "installed-package consumer",
+        "installed-package consumer including delivery imports",
         "pilot",
         "operator store crash",
         "pool service",
-        "ideal wallet",
-        "eight wallet crashes/recoveries",
+        "ideal wallet with HTTPS and forced receiver shutdown",
+        "twelve wallet crashes/recoveries",
         "spent-set checks"
       ]
     },
     {
-      "command": "npx vitest run test/pool-wallet.test.ts",
+      "command": "npm run check:pool-wallet",
       "exitCode": 0,
-      "testsPassed": 12,
-      "scope": "Final added exact-authority and grandchild imported-spentness assertions; focused independent review executed the prior 11-test patch."
+      "scope": "Final cleanup fix: forced receiver termination and observed exit; HTTPS acknowledgment loss/restart/retry."
     },
     {
       "command": "npm run check:pool-wallet-real",
       "exitCode": 0,
-      "mode": "pinned real v2, current runtime and CLI",
+      "mode": "Pinned real v2, current HTTPS runtime and CLI",
       "finalCheckpoint": {
         "issued": "10",
         "burned": "10",
         "outstanding": "0"
       }
-    },
-    {
-      "command": "npm run check:docs",
-      "exitCode": 0,
-      "linkedFiles": 33
     }
   ],
   "walletAcceptance": [
@@ -70,9 +72,13 @@
     "Re-prove the same payment with the pinned real prover: different valid proof bytes yield the same prior receipt, which still attests only the original proof.",
     "Withheld history returns unavailable without fulfillment; duplicate invoice fulfillment is refused.",
     "Witness paths use only verified prefix events; an appended unverified tail cannot change the proof anchor.",
-    "Exact preparation retains its saved proof; a changed recipient request is rejected as changed pending intent.",
+    "Exact preparation retains its saved proof; a changed recipient request is rejected against authenticated fixture pairing.",
     "A second spend/burn preparation of the already-spent receiver input is rejected against verified history.",
-    "Service request frames contain only public statement bytes; delivery contains only receiver opening, statement and receipt, excluding payer change."
+    "Service request frames contain only public statement bytes; delivery contains only receiver opening, statement and receipt, excluding payer change.",
+    "Real alternate valid proof with the original receipt is rejected before inbox storage; original receipt-attested delivery then succeeds.",
+    "Receiver HTTPS process commits before dropping its acknowledgment; restart retains the invoice capability and exact delivery, and exact retries return the same frame hash without fulfillment.",
+    "Private payer delivery never uses the former shared delivery file. Operator requests contain neither private openings nor invoice capability.",
+    "A noncooperating fixture receiver is forcibly terminated and exit is observed; independent cleanup runs after failures."
   ],
   "publicAudit": {
     "process": "Separate process receives public evidence files, compiled public circuits and a separately supplied exact expected commitment; no wallet database or opening input.",
@@ -91,38 +97,44 @@
       "request",
       "pending",
       "receipt",
-      "fulfillment"
+      "fulfillment",
+      "capability",
+      "inbox"
     ],
     "assertions": [
       "Before COMMIT recovers prior state; after COMMIT retains exact bytes.",
       "Request secret/counter replay remains stable without reusing freshness for another request.",
       "Pending proof, both openings and both input reservations recover together.",
       "Original receipt survives retry and callback-return mutation.",
-      "Fulfillment retains its original checkpoint/receipt and one row across fresh-process replay."
+      "Fulfillment retains its original checkpoint/receipt and one row across fresh-process replay.",
+      "Capability commits are stable after restart; interrupted uncommitted capability is unauthorized and replaced by fresh randomness.",
+      "Inbox commit is absent before or exact after interruption; repeated delivery returns the same hash and never records fulfillment."
     ],
-    "timeout": "Each child must reach its deliberate exit rather than a timeout; each recovery must exit successfully."
+    "timeout": "Each child must reach its deliberate exit rather than a timeout; each recovery must exit successfully.",
+    "abruptExits": 12,
+    "freshRecoveries": 12
   },
   "review": {
-    "type": "Independent adversarial design/source review, focused execution and test readback",
-    "choice": "Use one read-only note check both before receiver fulfillment and before payer proof preparation; add owned saved-record lookup, preserve historical fulfillment and duplicate-write rejection.",
-    "specification": "Pinned pool-v2 sections 3 and 8–11 already define note ownership, verified output inclusion and nullifiers. No normative/circuit/encoding amendment.",
-    "findings": [],
-    "testReadback": [
-      "Exact authority mismatch asserted against otherwise valid successor evidence.",
-      "Grandchild regression isolates nullifiers imported from a previously spent history."
+    "type": "Independent adversarial design and actual source/diff review, focused execution and critical fix readback",
+    "choice": "Use standard HTTPS with a durable invoice capability and immutable canonical inbox; original receipt attestation prevents altered-proof poisoning; fulfillment remains separate.",
+    "specification": "Pinned pool-v2 sections 3 and 9 already provide the private delivery and receipt relations. No normative, circuit or signed-frame amendment.",
+    "resolvedFindings": [
+      "UTF-8 decoding silently removed a BOM. Preserve it so canonical reconstruction rejects alternate request and acknowledgment bytes; both regressions passed.",
+      "Receiver cleanup could relinquish child ownership before exit and skip independent cleanup on failure. Retain ownership until observed exit, bound forced termination, aggregate cleanup failures and exercise a noncooperating child in both ideal and real acceptance."
     ],
-    "priorResolvedFindings": [
-      "CLI initially built paths from unverified served tail. Fixed to consume verified prefix events and reject unsupported imported segments; regression acceptance passes.",
-      "An initial proof-cache shortcut ignored changed recipient intent. Fixed to reuse only proof bytes while rechecking reconstructed pending intent; changed-owner regression passes.",
-      "V8 deserialization can alias the serialized Buffer: corruption probes copied Buffer bytes before decoding so restoring the baseline is exact. Independent probe and final real run verify the fix."
+    "execution": [
+      "Independent wallet/transport focused suite before final regression additions",
+      "Independent final BOM/header/acknowledgment regressions",
+      "Independent immediate parent-disconnect probe: receiver exited, no surviving child",
+      "Final cleanup readback: no unresolved material findings"
     ],
     "unresolvedMaterialFindings": 0,
-    "executionGate": "Full local runtime checks and current real/ideal/crash acceptance passed."
+    "executionGate": "Full local check and final ideal/real HTTPS acceptance passed."
   },
   "limits": [
     "Known LocalVenue ledger and public fixture obligor keys, not authenticated external finality or real funds.",
     "Plaintext DB/WAL/backups; no copied-database rollback protection, supported device custody or seed-only restore.",
-    "Private local files are fixture delivery, not an authenticated private network channel.",
+    "HTTPS uses public fixture TLS keys and a trusted local pairing file. Authenticated pairing/discovery, private deployed credentials and certificate lifecycle are not implemented; TLS does not hide network metadata.",
     "Separate public-input audit is not an operating-system sandbox.",
     "Abrupt process-exit tests do not cover power loss or storage corruption; their proof fixtures are ideal. Real acceptance separately retains actual proof bytes across process restarts.",
     "Historical fulfillment and received records are not current-spendability assertions or exactly-once external goods/payout.",
@@ -130,8 +142,8 @@
     "No normative changes, new circuit pins, deployment or release. This record summarizes inspected sources and observed results, not a raw transcript."
   ],
   "previousCi": {
-    "commit": "af398eaf4506b39d41685218c3ab1717a37842f3",
-    "run": 34695714652,
+    "commit": "b1773d215c0f4bcd825edf3bd1e34ada8268ca8a",
+    "run": 34697364624,
     "jobsPassed": 7
   },
   "receiverBoundary": {
@@ -180,6 +192,34 @@
         "command": "git diff --check",
         "exitCode": 0
       }
+    ]
+  },
+  "deliveryBoundary": {
+    "profile": "wallet-delivery/v2",
+    "path": "/delivery/<requestId>",
+    "tlsMinimum": "TLSv1.3",
+    "envelopeMaxBytes": 300000,
+    "replyMaxBytes": 1024,
+    "absoluteDeadlineMs": 15000,
+    "maxConnections": 16,
+    "admission": "Trusted authenticated pairing binds request/domain/endpoint/CA and durable random 256-bit scoped bearer capability. Standard certificate chain/hostname verification; no redirects or TLS bypass.",
+    "storage": "Original receipt-attested statement and matching receiver opening are committed as one immutable canonical frame. Exact replay returns its SHA-256 hash; conflict refuses replacement.",
+    "acknowledgment": "Durably stored only; no proof verification, checkpoint finality, invoice fulfillment or external credit.",
+    "schema": "Two additive tables in the existing wallet database; token and inbox persist across restart.",
+    "hostileCases": [
+      "TLS trust and hostname mismatch",
+      "TLS 1.2 rejection",
+      "plaintext impostor",
+      "duplicate/wrong/missing credentials",
+      "wrong path/request/domain",
+      "noncanonical/duplicate/extra fields and invalid UTF-8/BOM",
+      "compressed/oversized bodies",
+      "excess/ambiguous headers",
+      "failed durable write",
+      "redirect and wrong-frame acknowledgment",
+      "absolute silent/slow-peer deadlines",
+      "otherwise valid alternate proof and altered original signature",
+      "two-handle exact/conflicting replay"
     ]
   }
 }

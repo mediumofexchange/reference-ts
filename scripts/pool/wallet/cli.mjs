@@ -21,8 +21,10 @@ import { encodeStoredReceipt } from '@mediumofexchange/reference/pool/store-code
 import { poolReceiptCovers, poolReceiptAttestsEvidence } from '@mediumofexchange/reference/pool/receipt';
 import { IdealVerifier } from '../service/fixture.mjs';
 import { walletProfile, BACKER_SECRET } from './profile.mjs';
+import { WalletDeliveryClient } from '@mediumofexchange/reference/pool/wallet-delivery-http';
+import { encodeWalletDelivery, walletDeliveryHash } from '@mediumofexchange/reference/pool/wallet-delivery-wire';
 
-const [mode, database, baseUrl, exchange, evidenceFile, ledgerFile, compiled] = process.argv.slice(2);
+const [mode, database, baseUrl, exchange, evidenceFile, ledgerFile, compiled, pairingFile] = process.argv.slice(2);
 const { AUTHORITY, DOMAIN, CONFIG, VENUE, TERMS, WALLET, HEADER } = walletProfile(Boolean(compiled));
 const needsProofs = ['issue', 'fund', 'change', 'receive', 'missing', 'replay', 'note-spent', 'prepare-pay', 'reprove-pay', 'prepare-burn', 'prepare-burn-change'].includes(mode);
 const proofs = compiled && needsProofs ? await (await import('./proofs.mjs')).openWalletProofs(compiled) : undefined;
@@ -30,6 +32,21 @@ const wallet = new PoolWalletStore(database, AUTHORITY), client = new PoolServic
 const load = path => deserialize(readFileSync(path));
 const save = (path, value) => writeFileSync(path, serialize(value), { mode: 0o600 });
 const backing = TERMS.backing.name;
+function pairing() {
+  const pair = JSON.parse(readFileSync(pairingFile, 'utf8'));
+  assert.equal(pair.domain, Buffer.from(DOMAIN).toString('hex'));
+  assert.equal(pair.request.id, 'invoice');
+  assert.equal(pair.request.backing, Buffer.from(backing).toString('hex'));
+  assert.equal(pair.request.value, '7');
+  return pair;
+}
+function receiverClient(opening) {
+  const pair = pairing();
+  assert.deepEqual({ id: 'invoice', backing: Buffer.from(opening.backing).toString('hex'),
+    value: opening.value.toString(), owner: opening.owner.toString() }, pair.request, 'pairing request differs');
+  assert.equal(new URL(pair.endpoint).pathname, '/delivery/invoice');
+  return new WalletDeliveryClient(pair.endpoint, pair.token, pair.ca);
+}
 const head = [...limbsOf(DOMAIN), ...limbsOf(AUTHORITY.segment), AUTHORITY.scopeRoot];
 const prove = async (kind, publicInputs, witness) => ({ kind, publicInputs,
   proof: proofs ? await proofs.prove(kind, witness, publicInputs) : sha256(statementBytes(DOMAIN, kind, publicInputs)),
@@ -64,6 +81,18 @@ try {
       { ...common, ...scoped, backing: limbsOf(backing).map(String), quantity: '10', cm: String(commitmentOf(DOMAIN, opening)), owner: String(opening.owner), rho: String(opening.rho) }, opening);
     await wallet.submit('issue', client); const pending = wallet.pending('issue');
     save(exchange, pending); result = { receipt: encodeStoredReceipt(pending.receipt) };
+  } else if (mode === 'deliver-pay' || mode === 'lost-delivery') {
+    const pending = wallet.pending('pay'), delivery = { statement: pending.statement, opening: pending.opening, receipt: pending.receipt };
+    const recipient = receiverClient(delivery.opening);
+    if (mode === 'lost-delivery') {
+      await assert.rejects(recipient.deliver(DOMAIN, delivery), /wallet delivery failed/);
+      result = { deliveryReplyLost: true };
+    } else result = { ack: await recipient.deliver(DOMAIN, delivery) };
+  } else if (mode === 'inbox-status') {
+    const delivery = wallet.inbox('invoice');
+    if (delivery) assert.deepEqual(Object.keys(delivery).sort(), ['opening', 'receipt', 'statement']);
+    result = { stored: delivery !== undefined, fulfilled: wallet.fulfillment('invoice') !== undefined,
+      ...(delivery ? { hash: walletDeliveryHash(encodeWalletDelivery('invoice', DOMAIN, delivery)) } : {}) };
   } else if (mode === 'note-spent') {
     const saved = wallet.fulfillment('invoice'); assert.ok(saved);
     const checked = await wallet.checkNote('invoice', saved.opening, evidenceArgs());
@@ -72,7 +101,9 @@ try {
     result = { note: checked.kind };
   } else if (mode === 'fund' || mode === 'change' || mode === 'receive' || mode === 'missing' || mode === 'replay') {
     const pending = mode === 'change' ? wallet.pending('pay') : undefined;
-    const delivery = pending ? { statement: pending.statement, opening: pending.change, receipt: pending.receipt } : load(exchange), args = evidenceArgs();
+    const delivery = pending ? { statement: pending.statement, opening: pending.change, receipt: pending.receipt } :
+      mode === 'fund' ? load(exchange) : wallet.inbox('invoice'), args = evidenceArgs();
+    assert.ok(delivery, 'receiver delivery is absent');
     if (mode === 'missing') args.evidence = [];
     if (mode === 'replay') {
       const saved = wallet.fulfillment('invoice'); assert.ok(saved);
@@ -122,6 +153,8 @@ try {
     } else {
       const request = load(exchange), changeRequest = wallet.request('change', backing, held.value - request.value);
       assert.deepEqual(request.backing, backing); assert.equal(request.value, 7n);
+      assert.deepEqual({ id: request.id, backing: Buffer.from(request.backing).toString('hex'),
+        value: request.value.toString(), owner: request.owner.toString() }, pairing().request, 'pairing request differs');
       const output = { backing, value: request.value, owner: request.owner, rho: wallet.derive('output-rho', [nf]) };
       const change = { backing, value: changeRequest.value, owner: changeRequest.owner, rho: wallet.derive('output-rho', [nf], 1) };
       const publicInputs = [...head, ...anchors, ...nullifiers, commitmentOf(DOMAIN, output), commitmentOf(DOMAIN, change)];
@@ -135,6 +168,8 @@ try {
         const receipt = await client.submit({ domain: DOMAIN, statement: alternate });
         assert.equal(encodeStoredReceipt(receipt), encodeStoredReceipt(pending.receipt));
         assert.equal(poolReceiptAttestsEvidence(AUTHORITY, alternate, receipt), false);
+        await assert.rejects(receiverClient(pending.opening).deliver(DOMAIN,
+          { statement: alternate, opening: pending.opening, receipt: pending.receipt }), /wallet delivery failed/);
         // Different valid padding changes the statement/spent history while
         // preserving note outputs and supply. This is an adversarial record,
         // never a pending wallet request or an authorized retry policy.
@@ -158,7 +193,6 @@ try {
       assert.equal(wallet.pending(name).receipt, undefined); result = { pendingAfterLostReply: true };
     } else {
       const receipt = await wallet.submit(name, client), pending = wallet.pending(name);
-      if (name === 'pay') save(exchange, { statement: pending.statement, opening: pending.opening, receipt: pending.receipt });
       const changed = { ...pending.statement, proof: new Uint8Array(32).fill(9) };
       const retry = await client.submit({ domain: DOMAIN, statement: changed });
       assert.equal(encodeStoredReceipt(receipt), encodeStoredReceipt(retry));

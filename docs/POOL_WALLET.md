@@ -1,13 +1,13 @@
 # Local pool wallet
 
 The Node 24 `PoolWalletStore` retains v2 payment requests, complete pending
-statements, receipts and one local fulfillment record per invoice. The local
-acceptance CLI connects two wallet databases to the existing pool HTTP service.
+statements, receipts, private inbox deliveries and one local fulfillment record
+per invoice. The local acceptance CLI connects two wallet databases to the
+existing pool HTTP service and delivers the receiver's opening over HTTPS.
 It is a developer fixture with a known local venue record. The same CLI runs
 with either an ideal verifier or the pinned real v2 circuits and verifier.
 Real mode constructs private witnesses locally and sends only canonical
-statements to the service. It is not an end-user wallet or a deployed private
-delivery system.
+statements to the service. It is a developer fixture, not an end-user wallet.
 
 ## Persistence and verification
 
@@ -55,6 +55,42 @@ crediting the invoice again. Historical `fulfill()` remains available even for
 a subsequently spent note; applications requiring an unspent note must check it
 before calling. A saved record never authorizes a second external delivery.
 
+## Private HTTPS delivery
+
+`pool/wallet-delivery-http` provides `WalletDeliveryClient` and
+`createWalletDeliveryServer`. The endpoint is HTTPS `/delivery/<requestId>`.
+TLS 1.3 and certificate chain/hostname verification authenticate the configured
+endpoint. A durable random 256-bit bearer capability admits writes only to its
+existing invoice; it does not identify the payer or authorize fulfillment.
+`deliveryToken(id)` provisions it transactionally and returns the same token
+after restart. The caller must pair the endpoint, certificate trust, capability,
+domain and payment request through an authenticated private channel. The
+acceptance uses a trusted local pairing file and public test TLS credentials.
+Pairing discovery and certificate lifecycle are not implemented.
+
+`pool/wallet-delivery-wire` defines the bounded canonical JSON envelope. It
+contains the invoice ID, domain, canonical statement, receiver opening and
+original receipt, with a 300,000-byte maximum. Duplicate/unknown keys, alternate
+encodings, byte-order markers, malformed UTF-8 and wrong context are rejected.
+No private change or receiver spend secret is transmitted. HTTP headers,
+connections and reply sizes are bounded; each connection has an absolute
+15-second deadline. The client refuses redirects and exposes no TLS bypass.
+
+`receiveDelivery(id, delivery)` checks the exact request/output and authenticated
+receipt, including its original proof/signature attestation, before saving an
+immutable inbox frame. An alternate valid proof may receive the same receipt
+on protocol resubmission, but cannot replace the originally attested delivery.
+Exact transport replay returns the same frame hash; conflicting replay is
+refused. The acknowledgment is emitted after the SQLite commit and means
+**stored**, not verified, final or fulfilled. `inbox(id)` returns owned copies.
+The receiver separately runs `checkNote` and `fulfill` with caller-owned
+checkpoint evidence; missing history leaves the inbox unfulfilled.
+
+The token and inbox tables are additive to the existing wallet schema. Inbox
+admission avoids proof work; it does not bound total storage or history replay.
+Local database/WAL/backup secrecy remains a custody requirement. TLS also does
+not hide endpoint identity, timing or message size from network observers.
+
 ## Local derivation
 
 Pool-v2 §3 requires deterministic note randomness but leaves the wallet's
@@ -91,10 +127,14 @@ The fixture issues 10 units, pays 7, verifies the receiver's payment and the
 payer's 3-unit change after wallet restarts, then burns both holdings. It drops
 an accepted service reply, compares the exact receipt on retry, exercises
 changed-proof resubmission, withholds checkpoint history and refuses invoice
-replay. The service observes only public statement frames; private change
-openings stay out of the receiver delivery file.
+replay. The receiver HTTPS process drops a committed inbox acknowledgment,
+restarts with the same capability and accepts exact retries. A different real
+proof cannot poison the inbox before the original delivery arrives. A
+noncooperating test receiver is forcibly stopped and its exit observed; cleanup
+attempts independent resources even when one fails. The service observes only
+public statement frames; private change stays out of receiver delivery.
 The [verification record](pool-wallet-verification.json) pins the tested source,
-reused full-check baseline, current acceptance, review findings and evidence limits.
+current acceptance, review findings and evidence limits.
 
 ## Real proofs, public audit and interruption
 
@@ -114,7 +154,8 @@ totals. The last case must fail the history binding even though its proof is
 valid. Public-input/process separation is not an operating-system sandbox.
 
 The crash harness exits child processes immediately before and after SQLite
-COMMIT for request, pending statement, receipt and fulfillment. Fresh processes
+COMMIT for request, pending statement, receipt, fulfillment, capability and inbox
+(12 abrupt exits and 12 fresh recoveries). Fresh processes
 check rollback or exact retained state, both input reservations, private change
 and one local fulfillment. Test-only interception of SQLite calls keeps crash
 hooks out of the runtime. This checks process interruption, not power loss,
@@ -127,9 +168,9 @@ The database, SQLite WAL and backups contain plaintext secrets. This slice
 assumes trusted local storage and no copied or rolled-back wallet database.
 It has no key custody service, seed-only restore, note selection, automatic
 reservation release, lapse/replacement handling or external witness adapter.
-The fixture transfers private delivery data through local files; a deployed
-wallet still needs a private, authenticated delivery channel. Transport byte
-limits do not bound wallet history replay, proof work or disk growth.
+The fixture uses public TLS keys and trusted local pairing; supported deployment
+still needs private credentials, authenticated pairing and their lifecycle.
+Transport byte limits do not bound wallet history replay, proof work or disk growth.
 
 The [production requirements](PRODUCTION_REQUIREMENTS.md) and
 [retirement map](PRIVATE_PAYMENT_ARCHITECTURE.md#retained-evidence-and-retirement-conditions)

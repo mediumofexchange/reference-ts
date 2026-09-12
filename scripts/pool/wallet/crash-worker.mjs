@@ -8,9 +8,9 @@ if (Number(process.versions.node.split('.')[0]) < 24) {
 }
 
 const [operation, phase, file, action] = process.argv.slice(2);
-if (!['request', 'pending', 'receipt', 'fulfillment'].includes(operation) || !['before', 'after'].includes(phase) ||
+if (!['request', 'pending', 'receipt', 'fulfillment', 'capability', 'inbox'].includes(operation) || !['before', 'after'].includes(phase) ||
   typeof file !== 'string' || !['crash', 'restore'].includes(action)) {
-  console.error('usage: crash-worker.mjs <request|pending|receipt|fulfillment> <before|after> <database> <crash|restore>');
+  console.error('usage: crash-worker.mjs <request|pending|receipt|fulfillment|capability|inbox> <before|after> <database> <crash|restore>');
   process.exit(2);
 }
 
@@ -40,6 +40,7 @@ async function baseline() {
   const expected = { request, secret, nextOwner: notes.ownerOf(wallet.derive('request-secret', [2n])) };
   if (operation === 'request') return expected;
   assert.deepEqual(wallet.request('invoice', backing, 7n), request);
+  if (operation === 'capability') return expected;
   const changeRequest = wallet.request('change', backing, 3n);
   const opening = { backing, value: 7n, owner: request.owner, rho: wallet.derive('output-rho', [11n]) };
   const change = { backing, value: 3n, owner: changeRequest.owner, rho: wallet.derive('output-rho', [11n], 1) };
@@ -85,6 +86,8 @@ async function submit(expected) {
 }
 async function perform(expected) {
   if (operation === 'request') return wallet.request('invoice', backing, 7n);
+  if (operation === 'capability') return wallet.deliveryToken('invoice');
+  if (operation === 'inbox') return wallet.receiveDelivery('invoice', delivery(expected));
   if (operation === 'pending') return wallet.prepare('pay', expected.payment, expected.opening, expected.change);
   if (operation === 'receipt') return submit(expected);
   return wallet.fulfill('invoice', delivery(expected), evidence(expected));
@@ -133,6 +136,10 @@ try {
     // Setup has completed. Only the single target wallet transaction remains.
     sqlite.DatabaseSync.prototype.exec = function (sql) {
       if (sql.trim().toUpperCase() !== 'COMMIT') return original.call(this, sql);
+      if (operation === 'capability') {
+        expected.token = this.prepare('SELECT token FROM wallet_delivery_tokens WHERE id=?').get('invoice').token;
+        fs.writeFileSync(expectedFile, v8.serialize(expected), { mode: 0o600 });
+      }
       if (phase === 'before') process.exit(71);
       original.call(this, sql);
       process.exit(71);
@@ -141,7 +148,16 @@ try {
     throw new Error('target transaction never reached COMMIT');
   }
   const expected = v8.deserialize(fs.readFileSync(expectedFile)), survived = phase === 'after';
-  if (operation === 'request') {
+  if (operation === 'capability') {
+    assert.deepEqual(wallet.request('invoice', backing, 7n), expected.request);
+    assert.equal(wallet.authorizesDelivery('invoice', expected.token), survived);
+    const token = wallet.deliveryToken('invoice');
+    if (survived) assert.equal(token, expected.token);
+    else assert.notEqual(token, expected.token);
+    assert.equal(wallet.deliveryToken('invoice'), token);
+    assert.equal(wallet.authorizesDelivery('invoice', token), true);
+    assert.equal(wallet.fulfillment('invoice'), undefined);
+  } else if (operation === 'request') {
     if (survived) assert.equal(wallet.secret('invoice'), expected.secret);
     else assert.throws(() => wallet.secret('invoice'), { code: 'UNKNOWN' });
     assertRequests(expected);
@@ -157,6 +173,13 @@ try {
       assert.equal(codec.encodeStoredReceipt(await submit(expected)), codec.encodeStoredReceipt(expected.receipt));
       assert.equal(codec.encodeStoredReceipt(await submit(expected)), codec.encodeStoredReceipt(expected.receipt));
       assertPending(expected, true);
+    }
+    if (operation === 'inbox') {
+      assert.deepEqual(wallet.inbox('invoice'), survived ? delivery(expected) : undefined);
+      const acknowledged = await perform(expected);
+      assert.equal(await perform(expected), acknowledged);
+      assert.deepEqual(wallet.inbox('invoice'), delivery(expected));
+      assert.equal(wallet.fulfillment('invoice'), undefined);
     }
     if (operation === 'fulfillment') {
       assert.deepEqual(wallet.received('invoice'), survived ? expected.opening : undefined);

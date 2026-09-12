@@ -1,9 +1,9 @@
 // Two wallet processes and an HTTP service, using only public fixture keys,
 // ideal proofs and an independently reconstructed known local venue ledger.
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, fork } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serialize, deserialize } from 'node:v8';
@@ -35,10 +35,47 @@ const ledgerFile = join(publicDirectory, 'ledger.json'), evidenceFile = join(pub
 const compiled = real ? join(directory, 'circuits') : undefined;
 const payer = join(directory, 'payer.db'), receiver = join(directory, 'receiver.db');
 const requestFile = join(directory, 'request.bin'), deliveryFile = join(directory, 'delivery.bin'), fundingFile = join(directory, 'fund.bin');
+const pairingFile = join(directory, 'pairing.json');
 const venue = new LocalVenue(VENUE), publish = venue.publish.bind(venue);
 venue.publish = c => { publish(c); ledger.push(bytesToHex(encodeCommitment(c))); writeFileSync(ledgerFile, JSON.stringify(ledger)); };
 let proofs, store;
 let server, drop = false, droppedReceipt;
+let receiverServer;
+async function startReceiver(dropOnce = false, ignoreStop = false) {
+  const child = fork(join(root, 'scripts/pool/wallet/receiver-server.mjs'), [receiver, pairingFile, real ? 'real' : 'ideal', dropOnce ? 'drop-once' : '', ignoreStop ? 'ignore-stop' : ''],
+    { cwd: root, windowsHide: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
+  receiverServer = child;
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { child.kill(); reject(new Error('receiver startup timed out')); }, 15_000);
+    const failed = () => { clearTimeout(timer); reject(new Error('receiver exited before readiness')); };
+    child.once('error', failed); child.once('exit', failed);
+    child.once('message', value => {
+      clearTimeout(timer); child.off('error', failed); child.off('exit', failed);
+      if (value?.ready === true) resolve(); else reject(new Error('invalid receiver readiness'));
+    });
+  });
+}
+async function stopReceiver(allowForced = false) {
+  const child = receiverServer; if (!child) return false;
+  if (child.exitCode !== null || child.signalCode !== null) { receiverServer = undefined; return false; }
+  let forced = false;
+  await new Promise((resolve, reject) => {
+    let killTimer;
+    const force = () => {
+      if (forced) return; forced = true; child.kill();
+      killTimer = setTimeout(() => reject(new Error('receiver did not exit after termination; ownership retained')), 5_000);
+    };
+    const timer = setTimeout(force, 5_000);
+    child.once('error', force);
+    child.once('exit', code => {
+      clearTimeout(timer); clearTimeout(killTimer); child.off('error', force);
+      receiverServer = undefined;
+      if (code === 0 || forced && allowForced) resolve(); else reject(new Error('receiver shutdown failed'));
+    });
+    if (child.connected) child.send('stop', error => { if (error) force(); }); else force();
+  });
+  return forced;
+}
 function resultOf(stdout) {
   const prefix = 'MOE_WALLET_RESULT=', lines = stdout.split(/\r?\n/).filter(line => line.startsWith(prefix));
   assert.equal(lines.length, 1, 'worker must return one framed result');
@@ -60,7 +97,7 @@ async function start() {
 }
 async function cli(mode, database, exchange = deliveryFile) {
   const { stdout } = await run(process.execPath, [join(root, 'scripts/pool/wallet/cli.mjs'), mode, database,
-    `http://127.0.0.1:${server.address().port}/`, exchange, evidenceFile, ledgerFile, ...(compiled ? [compiled] : [])],
+    `http://127.0.0.1:${server.address().port}/`, exchange, evidenceFile, ledgerFile, compiled ?? '', pairingFile],
     { cwd: root, windowsHide: true, timeout: real ? 180_000 : 30_000, maxBuffer: 1024 * 1024 });
   const result = resultOf(stdout); assert.notEqual(result.pid, process.pid); return result;
 }
@@ -75,6 +112,7 @@ async function audit(expected, kind, amounts) {
   if (amounts) assert.deepEqual(result.supply[bytesToHex(TERMS.backing.name)], amounts);
   return result;
 }
+let acceptanceFailure;
 try {
   if (real) {
     const { stdout } = await run(process.execPath, [join(root, 'scripts/pool/compile.mjs'), compiled],
@@ -88,6 +126,9 @@ try {
   const request = await cli('request', receiver, requestFile);
   assert.deepEqual(request.fields, ['backing', 'id', 'owner', 'value']);
   assert.deepEqual(await cli('request', receiver, requestFile).then(r => r.owner), request.owner);
+  await startReceiver(true);
+  const pairing = JSON.parse(readFileSync(pairingFile, 'utf8'));
+  assert.equal(pairing.request.owner, request.owner);
   const originalRequestBytes = readFileSync(requestFile);
   const fundingEvidence = readFileSync(evidenceFile), withTail = deserialize(Buffer.from(fundingEvidence));
   const funded = withTail.checkpoints.find(e => e.commitment.sequence === withTail.latest.sequence);
@@ -98,14 +139,22 @@ try {
   await cli('prepare-pay', payer, requestFile);
   const changedRequest = deserialize(Buffer.from(originalRequestBytes)); changedRequest.owner = changedRequest.owner === 1n ? 2n : 1n;
   writeFileSync(requestFile, serialize(changedRequest));
-  await assert.rejects(cli('prepare-pay', payer, requestFile), /pending command changed/);
+  await assert.rejects(cli('prepare-pay', payer, requestFile), /pairing request differs/);
   writeFileSync(requestFile, originalRequestBytes);
   drop = true; await cli('lost-pay', payer); assert.ok(droppedReceipt);
   const first = await cli('submit-pay', payer);
-  assert.deepEqual(Object.keys(deserialize(readFileSync(deliveryFile))).sort(), ['opening', 'receipt', 'statement']);
+  assert.equal(existsSync(deliveryFile), false, 'private payer delivery must cross HTTPS, not a shared delivery file');
   assert.equal(encodeStoredReceipt(replyReceipt(decodePoolServiceReply(JSON.parse(droppedReceipt)))), first.receipt);
   const second = await cli('submit-pay', payer); assert.equal(first.receipt, second.receipt);
   if (real) assert.equal((await cli('reprove-pay', payer, requestFile)).reproved, true);
+  assert.equal((await cli('inbox-status', receiver)).stored, false);
+  await cli('lost-delivery', payer);
+  const stored = await cli('inbox-status', receiver);
+  assert.equal(stored.stored, true); assert.equal(stored.fulfilled, false);
+  await stopReceiver(); await startReceiver();
+  assert.equal(JSON.parse(readFileSync(pairingFile, 'utf8')).token, pairing.token);
+  assert.equal((await cli('deliver-pay', payer)).ack, stored.hash);
+  assert.equal((await cli('deliver-pay', payer)).ack, stored.hash);
   assert.deepEqual(readFileSync(requestFile), originalRequestBytes);
   await checkpoint('payment');
   if (real) {
@@ -141,6 +190,7 @@ try {
   // frames were sent. Receiver root/secret/opening are never service fields.
   assert.ok(requests.length >= 6);
   for (const text of requests) {
+    assert.equal(text.includes(pairing.token), false, 'invoice capability reached operator');
     const body = JSON.parse(text);
     assert.deepEqual(Object.keys(body).sort(), ['kind', 'profile', 'statement', 'version']);
     assert.equal(body.kind, 'submit');
@@ -158,13 +208,23 @@ try {
     await audit(bytesToHex(encodeCommitment(final.latest)), 'final', { issued: '10', burned: '10', outstanding: '0' });
     assert.deepEqual((await import('node:fs')).readdirSync(publicDirectory).sort(), ['evidence.bin', 'ledger.json']);
   }
+  await stopReceiver();
+  await startReceiver(false, true);
+  assert.equal(await stopReceiver(true), true, 'noncooperating receiver must be terminated and its exit observed');
   console.log('PASS two-wallet v2 CLI: issue 10, request/pay 7, receiver checkpoint verification, fulfill once, burn 7; restore/verify/burn payer change 3 to outstanding 0; process restarts, lost accepted reply, exact/changed-proof retries, unavailable history and invoice replay rejection. Service traffic contains only public statement frames.');
   console.log(real ? 'PASS pinned real v2 wallet proofs and separate public-only audit: supply, missing history, corrupted proof, reordered history and different valid history with unchanged outputs/totals.' : 'Scope: ideal proof fixture only.');
-  console.log('Scope: trusted plaintext local custody, public fixture obligor keys, bulk local fixture history and known LocalVenue; no external finality, private transport, rollback protection or external-goods atomicity claim.');
-} finally {
-  if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
-  store?.close(); if (proofs) await proofs.close();
-  const target = realpathSync(directory);
-  if (dirname(target) !== scratch || !target.startsWith(scratch + sep) || !target.startsWith(join(scratch, 'pool-wallet-cli-'))) throw new Error('unsafe wallet cleanup path');
-  rmSync(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  console.log('PASS private HTTPS inbox: original attested delivery, dropped acknowledgment, receiver restart, exact retry and separate fulfillment.');
+  console.log('Scope: trusted plaintext local custody, public fixture TLS/obligor keys, authenticated fixture pairing and known LocalVenue; no external finality, supported custody, rollback protection or external-goods atomicity claim.');
+} catch (error) { acceptanceFailure = error; }
+finally {
+  const failures = acceptanceFailure ? [acceptanceFailure] : [];
+  for (const close of [() => stopReceiver(), async () => {
+    if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+  }, () => store?.close(), () => proofs?.close(), () => {
+    if (receiverServer) throw new Error('receiver still owns scratch; directory preserved');
+    const target = realpathSync(directory);
+    if (dirname(target) !== scratch || !target.startsWith(scratch + sep) || !target.startsWith(join(scratch, 'pool-wallet-cli-'))) throw new Error('unsafe wallet cleanup path');
+    rmSync(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  }]) { try { await close(); } catch (error) { failures.push(error); } }
+  if (failures.length) throw new AggregateError(failures, 'wallet acceptance or cleanup failed');
 }
