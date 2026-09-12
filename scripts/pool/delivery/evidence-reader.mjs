@@ -20,11 +20,39 @@ export async function loadEvidenceCodecs(buildUrl) {
   return { ...trail, ...records, ...headers, ...snapshots, CodecEncodingError: bytes.EncodingError };
 }
 
-class EvidenceRefusal extends Error {
+export class EvidenceRefusal extends Error {
   constructor(status) { super(status); this.status = status; }
 }
 function requireEvidence(condition, status = "unresolved-evidence") {
   if (!condition) throw new EvidenceRefusal(status);
+}
+
+/** Authenticate owned local evidence without a wallet seed. No replay verdict. */
+export function readLocalEvidence(selection, supplied, codec) {
+  for (const key of ["domain", "venue", "backing", "operator", "root"]) {
+    requireEvidence(selection?.[key] instanceof Uint8Array && selection[key].length === 32);
+  }
+  requireEvidence(isValue(selection.sequence) && selection.sequence > 0n && isValue(selection.judgingIndex));
+  requireEvidence(selection.mode === "current-fixture" || selection.mode === "historical-fixture");
+  requireEvidence(supplied?.commitment instanceof Uint8Array && supplied?.snapshot instanceof Uint8Array &&
+    supplied?.trail instanceof Uint8Array && Array.isArray(supplied?.directory));
+  requireEvidence(supplied.directory.length === 1, "unsupported-scope");
+  const commitment = decodeCommitment(supplied.commitment);
+  requireEvidence(verifyCommitment(commitment));
+  requireEvidence(same(commitment.operator, selection.operator) && commitment.sequence === selection.sequence &&
+    same(commitment.root, selection.root), "selection-mismatch");
+  requireEvidence(same(directoryRoot(supplied.directory), commitment.root));
+  const entry = supplied.directory[0];
+  requireEvidence(same(entry.name, selection.backing));
+  const snapshot = codec.decodeSnapshot(supplied.snapshot);
+  const trail = codec.decodeTrail(supplied.trail, LIMITS);
+  const header = codec.decodeSegmentHeader(trail.header);
+  requireEvidence(same(header.domain, selection.domain) && same(header.venue, selection.venue) &&
+    same(header.operator, selection.operator) && header.sequence <= selection.sequence);
+  requireEvidence(header.entries.length === 1 && header.entries[0].opening === undefined, "unsupported-scope");
+  requireEvidence(codec.verifyTrailEvidence({ backing: selection.backing, segment: snapshot.segment,
+    digest: entry.digest }, snapshot, trail, LIMITS));
+  return { snapshot, trail, header };
 }
 
 /** selection is an independent TEST FIXTURE input, never a replica assertion.
@@ -43,30 +71,7 @@ export function inspectRestorationEvidence(seed, selection, supplied, codec) {
     spendable: false,
   });
   try {
-    for (const key of ["domain", "venue", "backing", "operator", "root"]) {
-      requireEvidence(selection?.[key] instanceof Uint8Array && selection[key].length === 32);
-    }
-    requireEvidence(isValue(selection.sequence) && selection.sequence > 0n && isValue(selection.judgingIndex));
-    requireEvidence(selection.mode === "current-fixture" || selection.mode === "historical-fixture");
-    requireEvidence(supplied?.commitment instanceof Uint8Array && supplied?.snapshot instanceof Uint8Array &&
-      supplied?.trail instanceof Uint8Array && Array.isArray(supplied?.directory));
-    // This experiment has one backing, an empty opening and no recovery/imports.
-    requireEvidence(supplied.directory.length === 1, "unsupported-scope");
-    const commitment = decodeCommitment(supplied.commitment);
-    requireEvidence(verifyCommitment(commitment));
-    requireEvidence(same(commitment.operator, selection.operator) && commitment.sequence === selection.sequence &&
-      same(commitment.root, selection.root), "selection-mismatch");
-    requireEvidence(same(directoryRoot(supplied.directory), commitment.root));
-    const entry = supplied.directory[0];
-    requireEvidence(same(entry.name, selection.backing));
-    const snapshot = codec.decodeSnapshot(supplied.snapshot);
-    const trail = codec.decodeTrail(supplied.trail, LIMITS);
-    const header = codec.decodeSegmentHeader(trail.header);
-    requireEvidence(same(header.domain, selection.domain) && same(header.venue, selection.venue) &&
-      same(header.operator, selection.operator) && header.sequence <= selection.sequence);
-    requireEvidence(header.entries.length === 1 && header.entries[0].opening === undefined, "unsupported-scope");
-    requireEvidence(codec.verifyTrailEvidence({ backing: selection.backing, segment: snapshot.segment,
-      digest: entry.digest }, snapshot, trail, LIMITS));
+    const { snapshot, trail } = readLocalEvidence(selection, supplied, codec);
 
     // Read only authenticated records. A replica cannot supply a separate spent
     // list, output list or finality marker. Still no proof/authorization replay.

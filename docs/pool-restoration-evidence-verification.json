@@ -20,7 +20,7 @@
     "reader budgets are resource refusal and unexpected code errors propagate"
   ],
   "sourceSha256Lf": {
-    "scripts/pool/delivery/evidence-reader.mjs": "ec71bf81ee48491f62e25e3cfc025cb4ca73a659e4919f6939c13dfcdd96a0bd",
+    "scripts/pool/delivery/evidence-reader.mjs": "65f1a13caf29cadd7db46f10769920ccfd66c879f12d064c091be632a86fdf66",
     "scripts/pool/delivery/evidence-worker.mjs": "6458e97ba8a7ec535f09e16043794c498f434b2b87b9b5de874644e7d5de955e",
     "scripts/pool/delivery/evidence-check.mjs": "0feb5059a348018ecbb210b98a83dd9597ec7ece258f115f0ec1865c8a410948",
     "scripts/pool/delivery/crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",

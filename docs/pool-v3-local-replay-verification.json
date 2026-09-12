@@ -1,0 +1,231 @@
+{
+  "schema": "moe-v3-local-replay-experiment-1",
+  "specification": "7ea0ee8",
+  "node": "v24.6.0",
+  "platform": "win32",
+  "checks": [
+    "shared key, seed and selection storage refuses before asynchronous verification",
+    "real proof replay derives supply 10 minus 5 and the receiver's local path to change 2",
+    "exact repeated reads agree while duplicate history records refuse",
+    "authenticated invalid proof, wrong proof kind and wrong issuer signature fail independently",
+    "operator-signed false totals or history root cannot authenticate a state assertion",
+    "individually valid issuances cannot overflow the public u64 total",
+    "a real proof for a different scope root cannot borrow the selected header",
+    "otherwise valid proof of an absent anchor refuses",
+    "a distinct valid spend of a spent input refuses at the spent set",
+    "a separately valid spend cannot append a duplicate output",
+    "replica substitution stays unresolved rather than becoming invalid local replay",
+    "unsupported recovery records and imported openings do not produce partial audit results",
+    "inputs are owned across asynchronous proof verification and unexpected failures propagate",
+    "historical replay and wrong seed never assert current spendability or a complete zero balance",
+    "fresh public verifier has no wallet seed; separate receiver restores from public evidence only",
+    "fresh verifier refuses a changed artifact against its independently held key pin",
+    "successful replay retains unresolved production authority and currentness"
+  ],
+  "identities": {
+    "issue": {
+      "bytecode": "0c6c904321ff16bc8fdce2298257f3cd54035bc20e53bc6e711d0be5356d211c",
+      "vk": "65cc0ada6618c79df403d8276cd6a201e36936fb6264e516a34c4bf225729da0"
+    },
+    "spend": {
+      "bytecode": "47f3a125a0fcfc22cd15e482db2c75173ed70eb413f5df43b38ec00f5fa51087",
+      "vk": "850131fcd564ce15a238142051a0780623c8c759ccaffb4e389aad5a5056acba"
+    },
+    "burn": {
+      "bytecode": "d36344f2b2424fa6569c01bb7d8450da98fab641251ee385914332f5437c4b72",
+      "vk": "ce55384238c5448505f7c34b938ae92152ea75c3c412c779b20aea57bf82f3be"
+    }
+  },
+  "metrics": [
+    {
+      "label": "issue 10",
+      "kind": 1,
+      "proofBytes": 14656,
+      "elapsedMs": 2381.9373000000014
+    },
+    {
+      "label": "pay 7, change 3",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 7557.960299999999
+    },
+    {
+      "label": "burn 5, change 2",
+      "kind": 3,
+      "proofBytes": 14656,
+      "elapsedMs": 5258.337200000002
+    },
+    {
+      "label": "valid maximum issuance",
+      "kind": 1,
+      "proofBytes": 14656,
+      "elapsedMs": 1772.7482999999993
+    },
+    {
+      "label": "valid proof, different scope",
+      "kind": 1,
+      "proofBytes": 14656,
+      "elapsedMs": 2215.938900000001
+    },
+    {
+      "label": "valid proof, unaccepted anchor",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 6720.452600000004
+    },
+    {
+      "label": "valid proof, spent input",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 7184.950799999999
+    },
+    {
+      "label": "valid proof, duplicate output",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 9285.098900000005
+    }
+  ],
+  "sourceSha256Lf": {
+    "scripts/pool/v3/local-replay.mjs": "c67946b64afa1026dc8dc6c5f6eeaeedb91501e58973b5a57362b01f3438f736",
+    "scripts/pool/v3/local-worker.mjs": "dc3f723292b30bfef54930872cb5a681dc1507b62caeaca7ca7b8d1a292ab7aa",
+    "scripts/pool/v3/local-check.mjs": "9d02c4bd053e14134c05a0927fd2d36527edab2281c28ef25c171cbf43d3e162",
+    "scripts/pool/delivery/evidence-reader.mjs": "65f1a13caf29cadd7db46f10769920ccfd66c879f12d064c091be632a86fdf66",
+    "scripts/pool/delivery/crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
+    "scripts/pool/spent-set/radix.mjs": "a65c10fcca67cd6f486c73f3e66f4eba254f4aa4a6d2be8c12d2debe66af4953",
+    "model/pool-v3-records.ts": "fc651fc4bd36bc339d849ea2e8fc2ee01409d02fbbabb69623336fa3a01f1be1",
+    "model/pool-v3-commitments.ts": "2cbde8c1dcbd351a14bc163c559338915025614656f7ed25251db12f72138d88",
+    "model/pool-v3-trail.ts": "f4d46232470855944cb60d490a7b41d96ad1a93e6082e4f8e3f64734346bac2d",
+    "model/pool-v3-headers.ts": "892248209fcfe92b1b10d113517c9b828cb01f78f2c7a8984d9fd8f00b8aee86",
+    "src/pool/note-tree.ts": "264c93ecf4af95209374657bc5c56c8841abab71b292ed557940b23540dfd1d4",
+    "src/pool/scope.ts": "534fde370703af75f2a52c3f282833805d6f1ccd4e949918ad335347a5cd6b47",
+    "scripts/pool/v3/circuits/issue.nr": "dfc3a4c8c39e870e942d6c7c512af2a6d07e5a5f5eb01bbccf9fbf03a5c91167",
+    "scripts/pool/v3/circuits/spend.nr": "bde18e670aac3c1771419211a5685e5531da8c75fe1297f78e489855e511fdf7",
+    "scripts/pool/v3/circuits/burn.nr": "fc701db0ddf076004621ec91dcd25972d46b91bef5f2b00277155ef8a73b8fe5"
+  },
+  "audit": {
+    "status": "selected-local-replay",
+    "fullV3Replay": false,
+    "currentRangeAuthenticated": false,
+    "termsAuthorityAuthenticated": false,
+    "completenessClaim": false,
+    "noMatchesMeansZeroBalance": false,
+    "unresolvedCoverage": true,
+    "spendable": false,
+    "audit": {
+      "records": "3",
+      "issued": "10",
+      "burned": "5",
+      "outstanding": "5",
+      "noteRoot": "18421363053037759831013544217568146396413487106222029354409871737723722611264",
+      "spentRoot": "6fd385c8d05c831c744e30467bc39ee25464d122af6b0cc2976808380606baae",
+      "historyHash": "56c25d003dad4e91656b0785ff068aaf5cdd8a17a3efc04384578910898517c7",
+      "evidenceHash": "9c51e83a45fb8577e4c444db6a0cc29bc4020f8173063c295e5bc069ada4082c"
+    },
+    "candidates": []
+  },
+  "receiver": {
+    "status": "selected-local-replay",
+    "fullV3Replay": false,
+    "currentRangeAuthenticated": false,
+    "termsAuthorityAuthenticated": false,
+    "completenessClaim": false,
+    "noMatchesMeansZeroBalance": false,
+    "unresolvedCoverage": true,
+    "spendable": false,
+    "audit": {
+      "records": "3",
+      "issued": "10",
+      "burned": "5",
+      "outstanding": "5",
+      "noteRoot": "18421363053037759831013544217568146396413487106222029354409871737723722611264",
+      "spentRoot": "6fd385c8d05c831c744e30467bc39ee25464d122af6b0cc2976808380606baae",
+      "historyHash": "56c25d003dad4e91656b0785ff068aaf5cdd8a17a3efc04384578910898517c7",
+      "evidenceHash": "9c51e83a45fb8577e4c444db6a0cc29bc4020f8173063c295e5bc069ada4082c"
+    },
+    "candidates": [
+      {
+        "cm": "20016450400229862260315982978080574655659914606566423218115411022269768934182",
+        "nf": "12058497498415675965741768832675609032006684716902679217780292869582944906659",
+        "value": "2",
+        "leaf": "5",
+        "anchor": "18421363053037759831013544217568146396413487106222029354409871737723722611264",
+        "siblings": [
+          "15363475724211809784089603561354387421457837711024659859394273757188500562979",
+          "16257989699773466206393016511488115181357775227253857822747532441271299011144",
+          "3344496576948750758529419585755131349048785517100663856291451004870705483350",
+          "1935094829533267935830464563796710052445228582946993128186972021230315590035",
+          "18383913181606838331795460117774658566856597132399717689821053927504534850729",
+          "6650121914657515867260011416921319045587517571339686030450569779952452434446",
+          "845043333535205747680782585765216487309952857158244204638951000115525663969",
+          "1798565372180516634517843282450706694542445499858350052460863933410324420334",
+          "12082351775801795992599119410575771090046502720172243783387647860247227871902",
+          "17392670516229609273138538435194690200647498693429087923197847846467620878366",
+          "18270147803583966115185581568756452890223528135804716937646296736746340714319",
+          "6245281075527541134368495049517243664719812052214528999106154137816504162189",
+          "5771305936450134295237779198955973617491950584355028563949759501589674323328",
+          "8375117846537600003339886617732755020518140880023263272035782507904755134166",
+          "1402956623894417358519384271339285842133055840035948184830517042721409232939",
+          "10518453832655181976446617300434900287841057900980895845234303440776175031342",
+          "15485975685389868597531359628984423612206441834147218371890432861420618086233",
+          "15422680120123365729179431955186502234992765602151752301487612439836632415437",
+          "3956483861973015592013083471667691148363938305872047999848739786219821549630",
+          "1086051623285356080920660076036760901133490110146331619651622591312371431716",
+          "2915904499750125353540875529397177727199377493198348513681582475949711605897",
+          "20164087144993267523342657261822731817585018270367494699207673407082461049973",
+          "6242064092034472953019862381003839448720318820550567656011695795729872763820",
+          "486473096388032301890231500231637785138514345257938344321238940657971574478",
+          "8682912164133426756325886608207438073742770514324345939761663338459940455365",
+          "9032327814826196994352281082085265791527933228092108861697327508420029459713",
+          "11946683638986745115214649685278219707650430060924747485486585022833169300696",
+          "19219361000372015911425077088009647148763037724375627703239846977182347147882",
+          "20250997086726519601015986826877099693245538547315475919513141220642229899021",
+          "14413420282722522993748367414404798853361893034082534437626176948595980240628",
+          "4920301475339101562902404357157229632407380396727250905915335784284364493374",
+          "3490399488954770152131810821200763799606626796619604090245668179171764908058"
+        ],
+        "right": [
+          true,
+          false,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "pathScope": "replayed-local-tree-only",
+        "spendable": false
+      }
+    ]
+  },
+  "limits": [
+    "Synthetic domain, independent fixture issuer key and selected checkpoint; signed backing terms/configuration/authority are not established.",
+    "Only issue/spend/burn in one empty-opening segment; no recovery, imports, revocation, clock or venue-range validation.",
+    "Real proof/signature/state replay and local membership paths do not grant full finality, current completeness or spending permission."
+  ]
+}

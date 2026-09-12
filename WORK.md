@@ -4,62 +4,64 @@ Updated: 2026-09-12
 
 ## Goal
 
-Successor restoration now connects real capsule recovery to exact local v3
-record evidence in a fresh process. It authenticates signed directories,
-snapshot preimages, headers and ordered local records before scanning; a
-replica cannot replace the independently selected fixture checkpoint or supply
-a separate spent list. Results are unspendable candidates with unresolved
-coverage, never a full-replay or current-range claim.
+Conditional successor local replay now verifies real issue/spend/burn proofs,
+issuance signatures, header-derived scope, accepted anchors, new outputs,
+compressed spent roots, bounded totals and the terminal history/snapshot.
+Fresh seedless audit and receiver processes agree on the replayed public state;
+the receiver reconstructs change and a local membership path from seed/public
+bytes. All results remain unspendable with unresolved full authority/currentness.
 
-Implementation main includes 41d82af, fast-forwarded from
-feat/successor-restoration-evidence. Companion money-from-first-principles/main
-remains 60f380c; normative
-content stays 7ea0ee8. No normative, runtime, circuit, key, dependency or
-configuration change. Independent review and final acceptance passed.
+Implementation branch feat/successor-local-replay starts at main e983f67.
+Companion money-from-first-principles/main stays 60f380c; normative content
+7ea0ee8. No normative, runtime, circuit, key, dependency or configuration change.
+Review and final acceptance passed; authorized delivery remains to complete.
 
 ## Status
 
-- [Restoration experiment](docs/POOL_DEPLOYMENT_PROBES.md#restoration-from-exact-local-evidence):
-  issue 10, payment 7/change 3, later payment 5/receiver change 2. Fresh processes
-  recover the appropriate change without request records, payer secrets or
-  original operator callbacks. Burn's nullifier/change positions also exercised.
-- Current selection rejects stale and same-sequence alternative packages.
-  Missing/reordered/substituted records and capsules return no partial results.
-  Retained independent bytes survive source loss; wrong seed/no matches never
-  imply complete zero balance. Current/stale request journals cannot override
-  evidence; the fixture IPC rejects journal fields. Imports/recovery refuse.
+- [Initial-segment experiment](docs/POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay):
+  issue 10, pay 7/change 3, burn 5/change 2. Public outstanding is 5; payer and
+  receiver recover 3 and 2 respectively. Local paths reproduce the final root.
+- Every proof is verified under independently selected fixture keys. Supply,
+  roots and history derive from records, not issuer totals. Wrong proof/key,
+  signature, snapshot, spent input, output reuse, unaccepted anchor and scope
+  refuse without partial audit/candidates. Repeated reads agree; repeated
+  records refuse. Historical and missing evidence retain explicit limits.
+- Full package requirements are tabulated in the experiment guide. Synthetic
+  domain, issuer key/terms, initial empty-opening force and checkpoint selection
+  remain fixture assumptions. No adopted v3 config, authenticated current
+  ranges, recovery/import/clock/revocation replay or certified spending anchor.
+
 ## Evidence
 
-- `npm run check:pool:restoration`: 14 focused groups passed, independently rerun.
-  Actual-source adversarial review closed without material issues; burn and
-  unauthenticated terms cases added and read back. [Report](docs/pool-restoration-evidence-verification.json)
-  records LF-normalized source hashes and exact experiment limits.
-- Tests deliberately retain synthetic proofs/history/terms/authority, accept
-  authenticated invalid supply totals and unverified terms as local evidence,
-  and keep all candidates unspendable. No deployed availability, authenticated
-  venue range, full replay, certified path or durable invoice-restoration claim.
-- Reuse unchanged full/runtime/real-proof baseline main 3f07307: all seven
-  hosted CI jobs passed, run 34715502862, verified this session. New experiment
-  runs in the existing Linux/Windows delivery CI command. Final
-  `npm run check:pool:delivery`, docs and diff checks passed. Main has no required
-  branch checks/rules. Verify latest push parity and hosted CI on resumption.
+- `npm run check:pool:local-replay`: 17 groups and 8 real proofs passed on final
+  code. [Report](docs/pool-v3-local-replay-verification.json) pins sources and
+  bytecode/VK identities; worker checks locally retained key hashes before use.
+- Independent actual-source review found SharedArrayBuffer aliasing through
+  structuredClone. The real-proof regression failed before the fix: a wrong
+  shared issuer key changed during verification and was accepted. Shared key,
+  seed and domain buffers now refuse before verifier calls; independent readback
+  and lightweight checks passed. No unresolved material findings remain.
+- Existing `node scripts/pool/delivery/evidence-check.mjs`: all 14 groups passed
+  after extracting seedless local evidence authentication. Its retained source
+  report is refreshed. Final docs and diff checks passed; delivery remains.
+- Reuse unchanged full/runtime/real-proof baseline e983f67: all seven hosted
+  CI jobs passed, run 34716395928, verified this session. New replay command
+  runs after existing conformance in both v3 CI jobs. No production code changed.
 
 ## Existing local product and custody boundary
 
-- Configured v2 supports one initial constant-payout backing, real-proof local
-  payments and independent public audit. Exact saved retries need no artifacts;
-  new verification uses real pins. Venue and digest authentication are modeled.
-- Encrypted offline handoff freezes the source and binds one exact destination.
-  Mark the paper export historical before activating the matching unfrozen
-  restore; lost replies stay with that destination. Old exports cannot resume
-  after activity. Continuous recovery after active-device loss is not delivered.
-- [Device custody contract](docs/POOL_WALLET_DEVICE.md) selects Windows account,
-  protected flat directory, BitLocker OS volume/PIN startup and OS spill/backup
-  controls. Read-only preflight always has qualified=false and manual evidence.
-  [Observed report](docs/pool-wallet-device-verification.json): automatic fail;
-  directory ACL refused, BitLocker/PIN and Secure Boot unavailable. No host
-  controls or secrets changed. Physical theft, cross-account, power-loss,
-  backup-isolation and continuous-recovery qualification require separate authority.
+- Configured v2 supports one constant-payout backing, real-proof local payments,
+  private delivery and independent public audit. Venue/digest authentication
+  are locally modeled. No real funds or host controls changed.
+- Offline handoff freezes the source and binds one exact destination. Mark the
+  paper export historical before activating the matching unfrozen restore;
+  lost replies stay with that destination. Old exports cannot resume after
+  activity. Active-device loss/continuous recovery remains open.
+- [Device contract](docs/POOL_WALLET_DEVICE.md) and
+  [observations](docs/pool-wallet-device-verification.json): automatic preflight
+  fail; directory ACL refused, BitLocker/PIN and Secure Boot unavailable.
+  Physical theft, cross-account, power-loss, backup isolation and continuous
+  recovery qualification need separately authorized test hardware/provisioning.
 
 ## Retained Ergo evidence; node stopped
 
@@ -76,22 +78,22 @@ configuration change. Independent review and final acceptance passed.
 
 ## Next
 
-1. Verify delivered main parity and hosted CI for the commit with this handoff.
-2. Define the complete initial-segment public-package replay boundary: terms,
-   configuration/key authority, proof/state replay and authenticated current
-   record ranges. Reuse the v3 codecs and restoration cases; commit reviewed
-   normative gaps before dependent runtime code. Adoption remains unset.
-3. Device qualification needs separately authorized provisioning/test hardware;
-   do not alter this workstation's controls. Imported-note selection,
-   consolidation, external publication and applied Ergo-history evidence remain open.
+1. Complete authorized delivery, verify remote main parity and latest hosted CI.
+2. Resolve the v3 configuration/terms declaration boundary: configuration frame,
+   six artifact/key identities, delivery profile and backing evidence encoding.
+   Keep declaration disabled until all adoption prerequisites hold. Independently
+   review/commit normative gaps before code; then replace fixture key/term inputs.
+3. Build authenticated record-range and complete replay integration against the
+   documented package checks. Device qualification and external publication
+   remain separate dependencies; do not alter this workstation's controls.
 
 ## Open questions
 
 - Reassessed 2026-09-12: roughly **50% done / 50% remaining**, plausible done
-  range **40-60%**. This experiment connects reusable boundaries but does not
-  materially move that coarse estimate or close runtime recovery gates.
-- Largest blocks: runtime recovery and authenticated evidence/publication,
-  qualified device custody/continuous recovery and supported user operation.
-- Stay with this instance for the next public-package boundary: its current
-  context includes the exact authentication/replay gap and reusable sources.
-  This is an efficiency recommendation, not measured model performance.
+  range **40-60%**. Real successor local replay is reusable progress; it does
+  not materially change this coarse estimate while authority/recovery gates remain.
+- Largest blocks: runtime recovery, authenticated configuration/evidence and
+  publication, qualified custody/continuous recovery and supported user operation.
+- Switch to a fresh instance for configuration/authority design. The next work
+  changes protocol declarations; the handoff isolates the replay evidence and
+  prerequisites from this proof-tooling context. Not a measured model comparison.

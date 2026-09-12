@@ -70,6 +70,10 @@ real proof binding, and [candidate restoration from exact signed local evidence]
 The latter authenticates local record bytes and refuses stale or substituted
 packages against an independent fixture selection; all candidates remain
 unspendable without full replay, authenticated ranges and certified paths.
+The [conditional initial-segment replay](POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay)
+adds real successor proof/signature checks, replayed roots/totals and local note
+paths, with a fresh seedless audit process. Terms/configuration/key authority,
+complete current ranges, imports and recovery remain outside that experiment.
 `npm run check:pool:fees` compares the successor
 [transfer shapes and ordinary fees](POOL_DEPLOYMENT_PROBES.md#transfer-shape-and-ordinary-fees)
 with real proofs. These probes do not implement a pool wallet or v3 finality.

@@ -47,6 +47,7 @@ Production still needs authenticated complete interval retrieval.
 
 | Material | Why it remains | Remove when |
 |---|---|---|
+| `scripts/pool/v3/local-{replay,worker,check}.mjs` | Real-proof issue/spend/burn replay and candidate note paths in one empty-opening segment, with a fresh seedless audit process. Issuer, configuration and venue authority remain fixture assumptions. | V3 runtime takes over these host checks and cases with complete terms/configuration, recovery/import replay, authenticated ranges and finality. |
 | `scripts/pool/delivery/evidence-{reader,worker,check}.mjs` | Fresh-process capsule scanning over exact signed local v3 evidence, with independent fixture selection, historical/current mismatch and omission/substitution cases. Candidate notes remain unspendable; no replay or current-range claim. | V3 wallet and verified public-package reader take over the cases with full replay, certified paths and authenticated ranges. |
 | `model/pool-v3-trail.ts` | Served-trail transport and local event evidence authentication with byte/event budgets; opaque terms and imported state are not verified. | V3 runtime takes over the codec and hostile cases with complete dependencies, term validation and replay; no second production path. |
 | `model/pool-v3-fault-evidence.ts` | Portable exact-byte fault-evidence frames and bounded authentication with explicit local budgets; no checkpoint verdict. | V3 runtime takes over the codec and hostile cases, together with authenticated certificate dependencies and replay. |

@@ -182,6 +182,60 @@ paths, durable invoice restoration and network retention remain dependencies
 for the end-to-end restoration target. No v2 bytes, circuits, keys or runtime
 APIs change, and no v3 configuration is adopted.
 
+### Conditional initial-segment replay
+
+`npm run check:pool:local-replay` runs real successor issue, spend and burn
+proofs through an independent reader of one empty-opening segment. The command
+also runs in the Linux/Windows v3 CI job. This extends local evidence scanning
+with state checks; it does not adopt a v3 configuration or reinterpret v2.
+The [retained report](pool-v3-local-replay-verification.json) records source,
+bytecode/key hashes, real-proof checks and the resulting public audit.
+
+The fixture issues 10, pays 7 with change 3, then burns 5 with receiver change
+2. A seedless public verifier checks every proof under its independently
+selected key, verifies the issuer's signature over the canonical statement,
+derives the header's scope root, and replays accepted anchors, spent nullifiers,
+new outputs and bounded totals. It reconstructs the local note tree, compressed
+spent root, per-event history chain and terminal snapshot. A separate fresh
+receiver process reconstructs its unspent change and a local membership path
+from its seed and those public bytes. No witness or original wallet journal
+enters either process. The public outstanding amount is 10 minus 5 = 5.
+
+Valid proofs against an unaccepted anchor, a spent input, a duplicate output,
+a different scope and overflowing aggregate issuance isolate the host checks.
+Authenticated bad proof/signature bytes and false snapshot assertions fail
+local replay. Replica substitutions remain unresolved evidence. No failure
+returns partial totals or candidate notes. Exact repeated reads agree; repeating
+a statement inside the served history refuses. Historical candidates remain
+historical, and no-match scanning makes no complete-zero-balance claim.
+Inputs are copied before asynchronous proof verification. Shared-memory
+buffers refuse: cloning alone would leave the issuer key and seed mutable
+while a proof check is awaiting. The regression reproduces a wrong shared
+issuer key becoming accepted before this guard and requires refusal before
+any verifier call afterward. A changed local key artifact also fails its
+independently held fixture hash before verification.
+
+The complete public-package boundary still requires the following inputs and
+checks. This table separates what this experiment establishes from prerequisites
+that a production reader must establish before returning spendable holdings.
+
+| Boundary | Experiment evidence | Still required |
+|---|---|---|
+| Construction and key routing | Real compiled successor keys, identified by bytecode/VK hashes; served records cannot select keys | Adopted v3 configuration preimage, artifact/source/helper pins, declared proof system and authenticated construction domain |
+| Backing and scope authority | Header-derived scope root and real issuance signature under an independent fixture issuer key | Canonical v3-declaring terms/name/signature validation, registered immutable terms, replacement links and force at the judging record |
+| Local state | Issue/spend/burn proof and state checks, compressed spent root, note paths, totals and both chains | Recovery statements, locks, recursively verified imports, deduplicated closure and all scoped snapshots |
+| Witness and continuity | Exact fixture-selected signed checkpoint; old package mismatch tested | Complete authenticated venue ranges and same-index order, initial empty-opening justification, revocation/lapse/fault and last-valid-prefix checks |
+| Wallet restoration | Seed-only candidate openings and local paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
+
+The issuer key, domain and checkpoint selection remain independent **test
+fixture assumptions**. Opaque terms are not authenticated, and a signed history
+does not establish the force of those terms. `fullV3Replay`,
+`currentRangeAuthenticated`, `termsAuthorityAuthenticated`, completeness and
+spendability remain false; coverage remains unresolved. A local path is not a
+certified anchor. The required full-package checks derive from pool-delivery
+C4.6, pool-v3 §§1/7/10 and the authority/fault contracts; this experiment adds no
+normative rule or new signature scheme.
+
 ## Transfer shape and ordinary fees
 
 Run the retained comparison and hostile checks with Node 24:
