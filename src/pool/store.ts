@@ -17,7 +17,7 @@ import { preparePoolOpening } from "./opening.js";
 import { poolReceiptInHistory, poolReceiptAttestsEvidence, signPoolReceipt, type PoolReceipt } from "./receipt.js";
 import { Segment, type ImportEvidence, type SegmentTrail, type SignedBacking, type StatementVerifier } from "./segment.js";
 import { configurationHash, copyConfiguration, copySegmentHeader, decodeStatement, encodeStatement, ISSUE,
-  parsePublicInputs, statementHash, type OpeningCheckpoint, type PoolConfiguration, type SegmentHeader, type Statement } from "./statement.js";
+  parsePublicInputs, segmentBytes, statementHash, type OpeningCheckpoint, type PoolConfiguration, type SegmentHeader, type Statement } from "./statement.js";
 import { copyPoolCheckpointEvidence, decodeStoredOpening, decodeStoredReceipt, encodeStoredOpening, encodeStoredReceipt } from "./store-codec.js";
 
 const PROFILE = "pool-store/v2";
@@ -126,12 +126,17 @@ export class PoolStore {
   private engine: Engine | undefined;
   private busy = false;
   private closed = false;
+  private readonly requiredSegment: Uint8Array | undefined;
 
   constructor(path: string, configuration: PoolConfiguration, secret: Uint8Array,
     private readonly venue: Venue, private readonly verifier: StatementVerifier,
-    private readonly checkpoint?: (phase: PoolStoreCheckpoint) => void) {
+    private readonly checkpoint?: (phase: PoolStoreCheckpoint) => void,
+    requiredSegment?: SegmentHeader) {
     requireThat(typeof path === "string" && path.trim() !== "" && path !== ":memory:" && !path.startsWith("file:"), "STORAGE", "a persistent filesystem path is required");
     this.config = copyConfiguration(configuration); this.domain = configurationHash(this.config);
+    // Optional local operating constraint, never a replacement for authority,
+    // replay or finality. Own the bytes before invoking the venue adapter.
+    this.requiredSegment = requiredSegment === undefined ? undefined : segmentBytes(requiredSegment);
     this.secret = copyBytes(secret); this.operator = ed25519.getPublicKey(this.secret);
     this.venueId = copyBytes(venue.id); this.lag = venue.lag(); this.observedIndex = venue.witnessedIndex();
     this.clock();
@@ -154,6 +159,16 @@ export class PoolStore {
         meta = this.metadata()!;
       }
       this.identity(meta);
+      if (this.requiredSegment !== undefined) {
+        // Check within the ownership transaction, before fencing another handle.
+        // Every retained opening must match; later scopes cannot be hidden by
+        // selecting only the first opening. Full replay still follows on use.
+        const rows = this.db.prepare("SELECT command FROM events WHERE json_extract(command,'$.kind')='open'").all();
+        for (const row of rows) {
+          const command = JSON.parse(String(row.command)) as { opening: string };
+          this.requireSegment(decodeStoredOpening(command.opening, this.config).trail.header);
+        }
+      }
       const now = this.clock();
       requireThat(now >= decimal(meta.observed), "STORAGE", "venue clock is behind the durable journal");
       requireThat(typeof meta.owner === "bigint" && meta.owner < SQLITE_LIMIT, "STORAGE", "journal owner counter exhausted");
@@ -170,6 +185,10 @@ export class PoolStore {
   private metadata() {
     const query = this.db.prepare("SELECT * FROM identity WHERE id=1"); query.setReadBigInts(true);
     return query.get();
+  }
+  private requireSegment(header: SegmentHeader): void {
+    requireThat(this.requiredSegment === undefined || same(this.requiredSegment, segmentBytes(header)),
+      "UNSUPPORTED", "journal segment differs from the configured local profile");
   }
   private identity(meta: ReturnType<PoolStore["metadata"]>): void {
     requireThat(meta?.profile === PROFILE && meta.domain === bytesToHex(this.domain) &&
@@ -450,6 +469,7 @@ export class PoolStore {
       recheck();
       this.stable(now, observed);
       const segment = prepared.segment;
+      this.requireSegment(segment.header);
       const validation = prepared.evidence.map(e => copyPoolCheckpointEvidence(e, this.config));
       const allImports = requiredImports(segment.header, historyImports(validation));
       const opening = encodeStoredOpening(segment.trail(), allImports, validation);

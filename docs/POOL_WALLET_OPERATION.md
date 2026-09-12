@@ -71,6 +71,11 @@ the shared payment builder with pinned real proofs and public supply replay.
 
 ## Local developer commands
 
+For caller-held signed terms, independently pinned settings and holder commands
+without fixture issuance, use the [configured local profile](POOL_LOCAL_PROFILE.md).
+The commands below remain the public-key acceptance fixtures; both use the same
+ordinary payment operation implementation.
+
 Build with `npm run build`, then invoke:
 
 ```sh

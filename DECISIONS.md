@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-12` [Configure local holders from authenticated signed terms](decisions/2026-09.md#2026-09-12--configure-local-holders-from-authenticated-signed-terms)
 - `2026-09-12` [Operate local wallets with verified note selection](decisions/2026-09.md#2026-09-12--operate-local-wallets-with-verified-note-selection)
 - `2026-09-12` [Authenticate local wallet invitations and rotate private credentials](decisions/2026-09.md#2026-09-12--authenticate-local-wallet-invitations-and-rotate-private-credentials)
 - `2026-09-12` [Transfer complete wallets through encrypted offline exports](decisions/2026-09.md#2026-09-12--transfer-complete-wallets-through-encrypted-offline-exports)

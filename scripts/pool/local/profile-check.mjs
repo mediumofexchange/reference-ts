@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { bytesToHex } from '@noble/hashes/utils';
+import { sha256 } from '@noble/hashes/sha2';
+import { makeBacking, signBacking } from '@mediumofexchange/reference/backing';
+import { configurationHash, segmentAuthority, segmentBytes } from '@mediumofexchange/reference/pool/statement';
+import { decodeLocalProfile, encodeLocalProfile, readLocalProfile } from './profile.mjs';
+import { pinnedConfiguration } from '../wallet/pins.mjs';
+
+const config = pinnedConfiguration();
+const domain = configurationHash(config);
+const venue = randomBytes(32), operatorSecret = randomBytes(32), obligorSecret = randomBytes(32);
+const operator = ed25519.getPublicKey(operatorSecret), obligor = ed25519.getPublicKey(obligorSecret);
+const backing = makeBacking({ obligor, payout: { thing: 'EUR', quantumExponent: -2, perUnit: 100n }, reliance: [],
+  evidence: { setting: 'pool', operator, construction: 'moe/pool/v2', configuration: domain, witnessing: { venue, interval: 1n } } });
+const terms = { backing, signature: signBacking(obligorSecret, backing) };
+const header = { domain, venue, operator, sequence: 1n, entries: [{ backing: backing.name, link: backing.name }] };
+const text = encodeLocalProfile(terms, header), digest = bytesToHex(sha256(new TextEncoder().encode(text)));
+const encoded = new TextEncoder().encode(text), loaded = decodeLocalProfile(encoded, digest);
+const temp = mkdtempSync(join(process.cwd(), 'scratch', 'local-profile-check-'));
+writeFileSync(join(temp, 'profile.json'), encoded);
+assert.equal(bytesToHex(readLocalProfile(join(temp, 'profile.json'), digest).TERMS.backing.name), bytesToHex(backing.name));
+rmSync(temp, { recursive: true, force: true });
+assert.equal(bytesToHex(loaded.TERMS.backing.name), bytesToHex(backing.name));
+assert.equal(bytesToHex(loaded.AUTHORITY.segment), bytesToHex(segmentAuthority(header).segment));
+
+const reject = (value, expected = /profile/) => {
+  const bytes = value instanceof Uint8Array ? value : new TextEncoder().encode(value);
+  const d = bytesToHex(sha256(bytes));
+  assert.throws(() => decodeLocalProfile(bytes, d), expected);
+};
+const json = () => JSON.parse(text);
+const profile = (t = terms, h = { ...header, entries: [{ backing: t.backing.name, link: t.backing.name }] }) => encodeLocalProfile(t, h);
+const signed = (fields = {}, top = {}) => { const b = makeBacking({ obligor, payout: { thing: 'EUR', quantumExponent: -2, perUnit: 100n }, reliance: [], evidence: { setting: 'pool', operator, construction: 'moe/pool/v2', configuration: domain, witnessing: { venue, interval: 1n }, ...fields }, ...top }); return { backing: b, signature: signBacking(obligorSecret, b) }; };
+reject(new TextEncoder().encode(text).map((b, i) => i === 0 ? 0xff : b), /UTF-8/);
+assert.throws(() => decodeLocalProfile(encoded, digest.slice(0, -1) + (digest.endsWith('0') ? '1' : '0')), /digest mismatch/);
+reject(text.replace('"signature":"' + bytesToHex(terms.signature), '"signature":"' + '00'.repeat(64)), /signature/);
+reject(text.replace('"profile":"pool-local/v2"', '"profile":"pool-local/v2","profile":"pool-local/v2"'), /canonical/);
+reject(text.replace('"version":1', ' "version" : 1'), /canonical/);
+reject(profile(signed({}), { ...header, domain: randomBytes(32) }), /authority/);
+reject(profile(signed({}), { ...header, venue: randomBytes(32) }), /authority/);
+reject(profile(signed({}), { ...header, operator: ed25519.getPublicKey(randomBytes(32)) }), /authority/);
+reject(profile(signed({}), { ...header, sequence: 2n }), /authority/);
+reject(profile(signed({}), { ...header, entries: [{ backing: backing.name, link: randomBytes(32) }] }), /authority/);
+reject(profile(signed({}), { ...header, entries: [{ backing: backing.name, link: backing.name, opening: { operator: ed25519.getPublicKey(randomBytes(32)), sequence: 1n, root: randomBytes(32) } }] }), /authority|canonical/);
+reject(profile(signed({}, { reliance: [{ target: randomBytes(32), count: 1n }] })), /unsupported/);
+const claim = makeBacking({ obligor, payout: { backing: randomBytes(32), perUnit: 1n }, reliance: [], evidence: { setting: 'pool', operator, construction: 'moe/pool/v2', configuration: domain, witnessing: { venue, interval: 1n } } });
+reject(profile({ backing: claim, signature: signBacking(obligorSecret, claim) }), /unsupported/);
+reject(profile(signed({ silence: { noCommitmentDuration: 1n, challengeWindow: 1n } })), /unsupported/);
+reject(profile(signed({ nonService: { duration: 1n, count: 1n, window: 1n } })), /unsupported/);
+reject('{"version":1,"profile":"pool-local/v2","backing":"00"}', /canonical|profile/);
+const oversized = new Uint8Array(128 * 1024 + 1); oversized.fill(0x20); assert.throws(() => decodeLocalProfile(oversized, bytesToHex(sha256(oversized))), /too large/);
+console.log('local profile checks passed');

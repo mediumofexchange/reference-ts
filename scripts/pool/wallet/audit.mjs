@@ -9,12 +9,14 @@ import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { decodeCommitment } from '@mediumofexchange/reference/commitment';
 import { LocalVenue } from '@mediumofexchange/reference/venue';
 import { readPoolCheckpoint } from '@mediumofexchange/reference/pool/checkpoint';
-import { walletProfile } from './profile.mjs';
+import { readLocalProfile } from '../local/profile.mjs';
 import { openWalletProofs } from './proofs.mjs';
 
-const [publicDirectory, compiled, expected] = process.argv.slice(2);
+const [publicDirectory, compiled, expected, profileFile, profileDigest] = process.argv.slice(2);
 assert.ok(expected, 'caller-owned exact commitment required');
-const { CONFIG, VENUE } = walletProfile(true), proofs = await openWalletProofs(compiled);
+const { CONFIG, VENUE } = profileFile ? readLocalProfile(profileFile, profileDigest) :
+  (await import('./profile.mjs')).walletProfile(true);
+const proofs = await openWalletProofs(compiled);
 try {
   const venue = new LocalVenue(VENUE);
   for (const frame of JSON.parse(readFileSync(join(publicDirectory, 'ledger.json'), 'utf8'))) venue.publish(decodeCommitment(hexToBytes(frame)));

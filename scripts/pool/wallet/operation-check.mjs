@@ -19,6 +19,7 @@ const MAX_CHILD_OUTPUT = 1024 * 1024;
 export async function checkWalletOperation(options) {
   const { root, directory, baseUrl, evidenceFile, ledgerFile, checkpoint } = options;
   const compiled = options.compiled ?? '';
+  const profile = options.profile ?? walletProfile(Boolean(compiled));
   assert.ok([root, directory, baseUrl, evidenceFile, ledgerFile, compiled].every(value => typeof value === 'string') &&
     typeof checkpoint === 'function', 'invalid wallet operation check options');
   const commands = join(root, 'scripts/pool/wallet/commands.mjs');
@@ -37,7 +38,8 @@ export async function checkWalletOperation(options) {
   }
 
   async function command(mode, database, body, publicEvidence = evidenceFile) {
-    const args = [commands, mode, database, baseUrl, publicEvidence, ledgerFile, compiled];
+    const args = options.commandArgs ? options.commandArgs(mode, database, publicEvidence) :
+      [commands, mode, database, baseUrl, publicEvidence, ledgerFile, compiled];
     return new Promise((resolveResult, reject) => {
       const child = spawn(process.execPath, args, { cwd: root, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
       children.add(child);
@@ -73,16 +75,18 @@ export async function checkWalletOperation(options) {
           resolveResult(result);
         } catch (error) { reject(error); }
       });
-      child.stdin.end(JSON.stringify(body));
+      child.stdin.end(JSON.stringify(options.commandBody ? options.commandBody(body) : body));
     });
   }
   async function stopReceiver() {
     const active = server; server = undefined;
     if (active) { active.closeAllConnections(); await new Promise(resolveClose => active.close(resolveClose)); }
+    if (options.stopReceiver) await options.stopReceiver();
     receiverWallet?.close(); receiverWallet = undefined;
   }
   async function startReceiver(requestId) {
-    receiverWallet = new PoolWalletStore(receiver, walletProfile(Boolean(compiled)).AUTHORITY);
+    receiverWallet = new PoolWalletStore(receiver, profile.AUTHORITY);
+    if (options.startReceiver) return options.startReceiver(receiver, requestId);
     let credentials = receiverWallet.deliveryCredentials();
     if (credentials === undefined) {
       const generated = await generateWalletTls();
@@ -98,11 +102,14 @@ export async function checkWalletOperation(options) {
   }
 
   try {
+    if (options.fund) await options.fund(payer, command);
+    else {
     assert.equal((await command('issue', payer, { id: 'fund4', value: '4' })).kind, 'accepted');
     assert.equal((await command('issue', payer, { id: 'fund6', value: '6' })).kind, 'accepted');
     await checkpoint('operation-funding');
     assert.equal((await command('record-issued', payer, { id: 'fund4' })).kind, 'final');
     assert.equal((await command('record-issued', payer, { id: 'fund6' })).kind, 'final');
+    }
 
     const funded = await command('status', payer, {});
     assert.equal(funded.kind, 'final'); assert.deepEqual(funded.notes.map(note => [note.id, note.value, note.state]),
@@ -123,6 +130,7 @@ export async function checkWalletOperation(options) {
 
     const firstPrepared = await command('prepare', payer, { alias: 'payment17' });
     assert.equal(firstPrepared.kind, 'prepared'); assert.equal(firstPrepared.hasChange, true);
+    if (options.retryPrepared) await options.retryPrepared(payer, 'payment17', firstPrepared.statement);
     const reserved = await command('status', payer, {});
     assert.equal(reserved.kind, 'final');
     assert.equal(reserved.notes.filter(note => note.reservation === 'payment17' && note.state === 'unspent').length, 2,

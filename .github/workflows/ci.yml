@@ -66,6 +66,8 @@ jobs:
         run: npm run check:pool
       - name: Real-proof wallets and separate public supply audit
         run: npm run check:pool-wallet-real
+      - name: Caller-configured real-proof holder and operator
+        run: npm run check:pool-local-real
       - name: Delivery and seed restoration candidate
         run: npm run check:pool:delivery
       - name: Four-output transfers and ordinary fees candidate

@@ -1,0 +1,114 @@
+{
+  "date": "2026-09-12",
+  "status": "passed-local-checks",
+  "baselineCommit": "e566adef340a27d9c14b0f8c56f8e97893938280",
+  "node": "v24.6.0",
+  "platform": "win32",
+  "sourceSha256": {
+    ".github/workflows/ci.yml": "f94af8b105cc0c8ca3c6d2db2e0ebf5b3923e71afe02cf3805479a86bc07471c",
+    "package.json": "a28185fed1f308b05561f88e164dae29565513b9c008eb9c6445baf432114abc",
+    "scripts/pool/local/check.mjs": "08d4a7a10dcf0b5e30fd8e976ea46014d5581f0648c24b63f12085202879f23a",
+    "scripts/pool/local/files.mjs": "543454a9755cb0cc0a7c676e99285c4afb6125433ce0dc9a325513ac54eaa52b",
+    "scripts/pool/local/holder.mjs": "fd1d5b2806498145c462cafc6422eaf45b5f9719bf9271bf0c75d85eb235d1c1",
+    "scripts/pool/local/operator.mjs": "d26a92595ac0ecdceed21d329284d6f37eb54a5aec069cc35253a797e49097bc",
+    "scripts/pool/local/paths-check.mjs": "1d343e9966ce47362ecc0d6fb5ca1a7fc7f935cbc890bb654abc580aeb58adb2",
+    "scripts/pool/local/paths.mjs": "e0a7a31ca2824a8a9c672b786a5852925d6121209bf0db7bc5339b9335ca5c8c",
+    "scripts/pool/local/profile-check.mjs": "d6312835816f2fb02eca4d3ebe5e1849907510f99609f166b5dbb84fee6b84cb",
+    "scripts/pool/local/profile.mjs": "09aa5fad509b7158222618b5e144f94037b54becca9fee05be637c74707dbc2b",
+    "scripts/pool/local/receiver.mjs": "a22b71c81f589959ad9d711281f2434b179243f46896554dd4a434bc7232d0b8",
+    "scripts/pool/wallet/audit.mjs": "b6b50baa27b211e11715cd206c3164628ff59db7a396bd410996b6af691a29e9",
+    "scripts/pool/wallet/commands.mjs": "94a52809ec0f09d061106fa0cf0fa8ca10cf2ac52fc6beff0d60f4733b9f311a",
+    "scripts/pool/wallet/fixture-issue.mjs": "f25a2feb3336f721ba8a8b0ff23f59c5f415b0c1777060591e7f29b1ef9b0697",
+    "scripts/pool/wallet/operation-check.mjs": "3f29dcb8d8d676f2d812087afe049ed8d3eed1143c36265a2ed8003ef19c79ab",
+    "scripts/pool/wallet/operation.mjs": "c95a580a5035f12bd3352a3c5daf013ee0040627fef4042134659d408c5498ab",
+    "scripts/pool/wallet/pins.mjs": "f386775958b717df33b0ca0bc2d3f3c2eb047f123cb910216b52b1023f7f4587",
+    "scripts/pool/wallet/profile.mjs": "5247af465b5786a55c58fbf5e7b06ebc4a66d60c27a908dec5c6501b6306d246",
+    "scripts/pool/wallet/proofs.mjs": "c399b6be964c641e78f0bfdb13de184da0ad9d26466ec4685828ec5b57c1a733",
+    "src/pool/authority.ts": "59bb7cea79a9d7362c89630aecbc45dd997f1ee9a23e3b7360b2c9f901023fa8",
+    "src/pool/circuits/manifest.json": "c762654f10e1d6ef0da542e907c82d72939ddd1c5ae5244fc7669236ec9d835e",
+    "src/pool/statement.ts": "5723d491f96ca3e814096f4b6936d999fdad66dc7df6c94445340a84b08b9f00",
+    "src/pool/store.ts": "86de7c6b6d0f0dd28ff88856d7d8aa52617ba54a7352df6bf9dd26c8130a5fe8",
+    "src/pool/wallet-payment.ts": "336ce0640e764c0f556daeaed4ef8e05d6479d8e2bb3e6d691806f61dc3502d8",
+    "src/pool/wallet-store.ts": "2ac7376ce05e66710dd4b8871d4cebdfb637ff8b8dd55a4d9804b393f1af100f",
+    "test/pool-local-store.test.ts": "e7b4391030122c8667cb241446e9978a2640b4a48240019657f6ad116642e826"
+  },
+  "verification": [
+    {
+      "command": "npm run check",
+      "exitCode": 0,
+      "files": 105,
+      "tests": 1882,
+      "logSha256": "a337b4fb3902086ae705294af1f589c82dd72c68286a15a24383dde29e015889",
+      "stages": "docs, typecheck, tests, build, package, local profile/paths, pilot, pool store/service/wallet, 22 wallet crash exits/recoveries, spent-set candidate"
+    },
+    {
+      "command": "npm run check:pool-local-real",
+      "exitCode": 0,
+      "logSha256": "f3c08cb94a34609a474ad2b01ea695df650ef0ed789f586c23f58e50781c3f7b",
+      "funding": [
+        "4",
+        "6"
+      ],
+      "payment": "7",
+      "change": "3",
+      "secondPayment": "3",
+      "operatorRestart": true,
+      "receiverRestart": true,
+      "freshIssuerAndOperatorKeys": true,
+      "independentPublicAudit": {
+        "issued": "10",
+        "burned": "0",
+        "outstanding": "10"
+      },
+      "noArtifactSavedRetry": true,
+      "wrongKeyNoJournal": true,
+      "changedProfileNoWallet": true,
+      "pathCollisionNoJournal": true,
+      "allWorkersExited": true
+    },
+    {
+      "command": "node scripts/pool/local/profile-check.mjs",
+      "exitCode": 0,
+      "notes": "Final hostile terms have matching scope names; tests do not rely on unrelated authority failure."
+    },
+    {
+      "command": "node scripts/pool/local/paths-check.mjs",
+      "exitCode": 0,
+      "notes": "Direct/relative/Windows path aliases, hard links, available symlinks and SQLite sidecars."
+    },
+    {
+      "command": "npm run check:docs",
+      "exitCode": 0
+    }
+  ],
+  "review": {
+    "status": "closed-no-unresolved-material-findings",
+    "independent": true,
+    "resolved": [
+      "profile mismatch before operator fencing/signing",
+      "transitive fixture key imports",
+      "configured funding and receiver path",
+      "filesystem identity and SQLite sidecar collisions",
+      "relative Windows trailing-dot/space/stream aliases"
+    ],
+    "observedFixes": [
+      "IPC workers disconnect after graceful close",
+      "complete temporary file replacement",
+      "publication cap retains pending outbox"
+    ]
+  },
+  "limits": [
+    "Local complete ledger and independent digest authentication are trusted inputs, not external witnessing.",
+    "Protected files/directories and one active wallet remain custody preconditions; no hostile path-substitution guarantee.",
+    "Local file replacement is not directory-fsync, device-loss, backup or rollback assurance.",
+    "100000 local commitments; further publication refuses with durable outbox pending.",
+    "One initial constant-payout backing only; no imported-note selection, automatic consolidation or runtime recovery.",
+    "Configured export/restore and rotation commands remain next work; existing API/fixture custody evidence is separate.",
+    "Earlier exploratory fixture run was invalidated by a concurrent build; the final complete run used stable compiled output."
+  ],
+  "hostedCi": {
+    "baselineRun": "34709509899",
+    "baselineConclusion": "success",
+    "delivery": "Read the CI run for the commit containing this record; configured real-proof flow is included in both pool jobs."
+  }
+}

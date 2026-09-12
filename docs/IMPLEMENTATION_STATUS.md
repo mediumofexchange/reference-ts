@@ -33,6 +33,12 @@ invoices, selects up to two verified unreserved notes, persists one payment per
 authenticated alias and spends verified change in another payment. Both CLIs
 share its builder. Historical status, reservations and fulfillment remain
 distinct; imported-note selection and automatic consolidation remain open.
+The [caller-configured local profile](POOL_LOCAL_PROFILE.md) supplies authenticated
+signed terms and initial authority to holder, receiver and operator commands,
+using the pinned real verifier. Holder processes have no fixture issuance keys.
+An exact segment constraint prevents another profile from fencing an existing
+operator journal or signing another scope. Local ledger authentication, device
+custody and continuous recovery remain deployment preconditions and open work.
 Silence recovery is modeled but not implemented in the
 runtime; usable wallet custody and an external witness write adapter remain open.
 

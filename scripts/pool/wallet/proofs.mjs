@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { Noir } from '@noir-lang/noir_js';
 import { Barretenberg, BackendType, UltraHonkBackend } from '@aztec/bb.js';
 import { barretenbergPool, PROOF_OPTIONS } from '@mediumofexchange/reference/pool/barretenberg';
-import { pins } from './profile.mjs';
+import { pins } from './pins.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
