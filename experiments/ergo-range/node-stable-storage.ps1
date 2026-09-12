@@ -1,12 +1,18 @@
 # Small stock-store operational test, not a disk-full, crash or sync qualification.
 # Requires the separately inspected complete stable bundle; installs nothing.
-param([switch]$Execute)
+param([switch]$Execute, [switch]$MaintainedJava)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if (-not $IsWindows -or -not [Environment]::Is64BitProcess) { throw 'Windows x64 PowerShell 7 required' }
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $bundle = Join-Path $repo 'scratch/ergo-stable/bundle'
 $run = Join-Path $repo 'scratch/ergo-stable/storage-run'
+$javaSelection = $null
+if ($MaintainedJava) {
+    . (Join-Path $PSScriptRoot 'node-java.ps1')
+    $javaSelection = Get-MaintainedNodeJava $repo
+    $run = Join-Path $repo 'scratch/ergo-stable/maintained-java-storage-run'
+}
 $source = Join-Path $PSScriptRoot 'NodeStableStorage.java'
 $compiler = Join-Path $repo 'scratch/sync-preparation/ecj-3.37.0.jar'
 $jar = Join-Path $bundle 'ergo-6.0.5.jar'
@@ -27,13 +33,15 @@ foreach ($entry in $jreFiles) {
 }
 if (-not $Execute) {
     [ordered]@{ status='prepared'; jarSha256='2a7e2978cb09538ed6780d85ae3aa39c1ecce10e5e5a6e0dc3cd8ab087851588';
-        jreFiles=$jreFiles.Count; executed=$false } | ConvertTo-Json
+        jreFiles=$jreFiles.Count; maintainedJava=$javaSelection; executed=$false } | ConvertTo-Json -Depth 6
     exit 0
 }
 Add-Type -Path (Join-Path $PSScriptRoot 'NodeProbeProcess.cs')
 foreach ($directory in @($run,"$run/data","$run/classes","$run/home","$run/tmp")) { New-Item -ItemType Directory -Path $directory | Out-Null }
 [IO.File]::WriteAllText("$run/logback.xml",'<configuration><appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender"><encoder><pattern>%level %msg%n</pattern></encoder></appender><root level="INFO"><appender-ref ref="STDOUT"/></root></configuration>')
 $java = Join-Path $bundle 'jre/bin/java.exe'
+$expectedJava = '21.0.1'
+if ($MaintainedJava) { $java = $javaSelection.path; $expectedJava = $javaSelection.version }
 $jvm = @('-Xms32m','-Xmx256m',"-Duser.home=$run/home","-Djava.io.tmpdir=$run/tmp",
     "-Dlogback.configurationFile=$run/logback.xml","-XX:ErrorFile=$run/hs_err.log",'-XX:-CreateCoredumpOnCrash','-XX:-UsePerfData')
 $results = [ordered]@{}
@@ -51,7 +59,7 @@ foreach ($mode in @('compile','write','rollback','verify')) {
     $arguments = if ($mode -eq 'compile') {
         $jvm + @('-jar',$compiler,'-proc:none','-encoding','UTF-8','-source','8','-target','8','-classpath',$jar,'-d',"$run/classes",$source)
     } else {
-        $jvm + @('-cp',"$run/classes;$jar",'NodeStableStorage',$mode,"$run/data")
+        $jvm + @('-cp',"$run/classes;$jar",'NodeStableStorage',$mode,"$run/data",$expectedJava)
     }
     $result = [NodeProbeProcess]::Run($java,$arguments,$run,$mode,1073741824UL,30000,65536,$observe)
     $results[$mode] = $result
@@ -72,7 +80,7 @@ if ($finalFiles.Count -gt 1024 -or $bytes -gt 16777216) { throw 'Final run budge
     workerSha256=(Get-FileHash $source -Algorithm SHA256).Hash.ToLowerInvariant();
     launcherSha256=(Get-FileHash $PSCommandPath -Algorithm SHA256).Hash.ToLowerInvariant();
     supervisorSha256=(Get-FileHash (Join-Path $PSScriptRoot 'NodeProbeProcess.cs') -Algorithm SHA256).Hash.ToLowerInvariant();
-    javaVersion='21.0.1'; socketSamples=$socketSamples; files=$finalFiles.Count; bytes=$bytes; processes=$results;
+    javaVersion=$expectedJava; maintainedJava=$javaSelection; socketSamples=$socketSamples; files=$finalFiles.Count; bytes=$bytes; processes=$results;
     limits='Four sequential processes; each 30 seconds, 1 GiB commit, 25% CPU scheduling, 64 KiB output. 16 MiB observed file threshold; no hard disk/network sandbox.';
     limitations='Normal close/reopen and known/unknown rollback only. Factory selection is observed, loaded DLL identity is not hashed. Synchronous observer calls can delay the nominal wall deadline. No power-loss/crash/disk-full/compaction stress, sync, native ABI proof or product recovery acceptance.'
 } | ConvertTo-Json -Depth 10

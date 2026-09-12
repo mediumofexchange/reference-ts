@@ -1,6 +1,7 @@
 # Finite stock-node experiment. No sync, signing, arbitrary URL or private API client.
-param([switch]$Stable)
+param([switch]$Stable, [switch]$MaintainedJava)
 $ErrorActionPreference = 'Stop'
+if ($MaintainedJava -and -not $Stable) { throw 'Maintained Java is selected only with the stable node' }
 if (-not $IsWindows -or -not [Environment]::Is64BitProcess) { throw 'Requires Windows x64 / PowerShell 7' }
 Add-Type -Path (Join-Path $PSScriptRoot 'NodeProbeProcess.cs')
 . (Join-Path $PSScriptRoot 'node-evidence.ps1')
@@ -12,6 +13,12 @@ $jarHash = if ($Stable) { '2a7e2978cb09538ed6780d85ae3aa39c1ecce10e5e5a6e0dc3cd8
 $scratch = Join-Path $repo $(if ($Stable) { 'scratch/ergo-stable' } else { 'scratch/node-startup' })
 $bundle = Join-Path $scratch 'bundle'
 $run = Join-Path $scratch 'run'
+$javaSelection = $null
+if ($MaintainedJava) {
+    . (Join-Path $PSScriptRoot 'node-java.ps1')
+    $javaSelection = Get-MaintainedNodeJava $repo
+    $run = Join-Path $scratch 'maintained-java-run'
+}
 if (Test-Path -LiteralPath $run) { throw 'Startup requires an absent run directory' }
 $manifestPath=Join-Path $scratch 'bundle-manifest.json'
 if ((Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -ine $manifestHash) { throw 'Manifest bytes changed' }
@@ -78,8 +85,11 @@ scorex.network {
 [IO.File]::WriteAllText("$run/ergo.conf",$config,[Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText("$run/logback.xml",'<configuration><appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender"><encoder><pattern>%level %logger - %msg%n</pattern></encoder></appender><root level="INFO"><appender-ref ref="STDOUT"/></root></configuration>',[Text.UTF8Encoding]::new($false))
 $java = Join-Path $bundle 'jre/bin/java.exe'
+$expectedJava = '21.0.1'
+if ($MaintainedJava) { $java = $javaSelection.path; $expectedJava = $javaSelection.version }
 $version = [NodeProbeProcess]::Run($java,@('-XshowSettings:properties',"-Duser.home=$run/home","-Djava.io.tmpdir=$run/tmp",'-version'),$run,'java-version',4294967296UL,15000,65536,$null)
-if ($version.Outcome -ne 'exited' -or $version.ExitCode -ne 0 -or -not $version.JobEmptyAfterCleanup -or $version.Output -notmatch 'java.version = 21\.0\.1') { throw "Pinned Java startup failed: $($version.Output)" }
+if ($version.Outcome -ne 'exited' -or $version.ExitCode -ne 0 -or -not $version.JobEmptyAfterCleanup -or
+    $version.Output -notmatch ('(?m)^\s*java.version = ' + [regex]::Escape($expectedJava) + '\r?$')) { throw "Pinned Java startup failed: $($version.Output)" }
 $arguments = @('-Xms128m','-Xmx2g',"-Duser.home=$run/home","-Djava.io.tmpdir=$run/tmp",
     "-Dlogback.configurationFile=$run/logback.xml",'-Djava.net.preferIPv4Stack=true',
     "-XX:ErrorFile=$run/hs_err.log",'-XX:-CreateCoredumpOnCrash',
@@ -152,8 +162,10 @@ $state.observedFileAndOutputBytes=[Math]::Max($state.filesPeakBytes,$state.final
 try { Assert-NodeObservedBytes $result.CapturedOutputBytes $state.filesPeakBytes $state.finalFileBytes } catch { $state.unresolved.Add($_.Exception.Message) }
 $hashes=[ordered]@{}
 foreach ($file in @('NodeProbeProcess.cs','node-startup.ps1','node-prepare.ps1','node-evidence.ps1')) { $hashes[$file]=(Get-FileHash (Join-Path $PSScriptRoot $file) -Algorithm SHA256).Hash.ToLowerInvariant() }
+if ($MaintainedJava) { $hashes['node-java.ps1']=(Get-FileHash (Join-Path $PSScriptRoot 'node-java.ps1')).Hash.ToLowerInvariant() }
 [ordered]@{ status=$(if ($state.unresolved.Count) {'unresolved-node-startup'} else {'stock-node-offline-startup-only'});
     packageVersion=$packageVersion; archiveSha256=$manifest.archiveSha256; bundleManifest=$manifest; javaVersion=$version;
+    maintainedJava=$javaSelection;
     arguments=$arguments; config=$config; configSha256=(Get-FileHash "$run/ergo.conf" -Algorithm SHA256).Hash.ToLowerInvariant();
     result=$result; observations=$state; files=$hashes;
     limits=@('Source-configured offline and sampled TCP/UDP sockets, not zero-packet proof or network sandbox.',

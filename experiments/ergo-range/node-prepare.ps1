@@ -1,7 +1,8 @@
 # Inspect/extract exactly one pinned distribution into fresh ignored scratch.
 # Download is a separate bounded operation; this script never starts Java.
-param([switch]$Stable)
+param([switch]$Stable, [switch]$MaintainedJava)
 $ErrorActionPreference = 'Stop'
+if ($Stable -and $MaintainedJava) { throw 'Prepare the stable node and maintained Java separately' }
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $version = if ($Stable) { '6.0.5' } else { '6.1.5' }
 $archiveBytes = if ($Stable) { 108916979 } else { 179682635 }
@@ -11,6 +12,16 @@ $jarHash = if ($Stable) { '2a7e2978cb09538ed6780d85ae3aa39c1ecce10e5e5a6e0dc3cd8
 $scratch = Join-Path $repo $(if ($Stable) { 'scratch/ergo-stable' } else { 'scratch/node-startup' })
 $archivePath = Join-Path $scratch "ergo-node-v$version-windows-x64.zip"
 $bundle = Join-Path $scratch 'bundle'
+$entryCount = 192
+if ($MaintainedJava) {
+    $scratch = Join-Path $repo 'scratch/ergo-java'
+    $archivePath = Join-Path $scratch 'OpenJDK21U-jre_x64_windows_hotspot_21.0.12.1_1.zip'
+    $bundle = Join-Path $scratch 'bundle'
+    $archiveBytes = 48999141
+    $expandedBytes = 151524241
+    $archiveHash = 'd35f31e712f0fcf6ac5a093edc90204fbff22f720ba3950bd09d331d5e621636'
+    $entryCount = 378
+}
 $clock = [Diagnostics.Stopwatch]::StartNew()
 foreach ($path in @((Join-Path $repo 'scratch'), $scratch, $archivePath)) {
     if ((Get-Item -LiteralPath $path).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Reparse path refused' }
@@ -20,12 +31,12 @@ if ((Get-Item -LiteralPath $archivePath).Length -ne $archiveBytes -or
     (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash -ine $archiveHash) { throw 'Archive pin mismatch' }
 $archive = [IO.Compression.ZipFile]::OpenRead($archivePath)
 try {
-    if ($archive.Entries.Count -ne 192) { throw 'Archive member count mismatch' }
+    if ($archive.Entries.Count -ne $entryCount) { throw 'Archive member count mismatch' }
     $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $total = 0L
     foreach ($entry in $archive.Entries) {
         $name = $entry.FullName
-        if ($name -notmatch '^[a-zA-Z0-9._/-]+$' -or $name.StartsWith('/')) { throw 'Invalid archive path' }
+        if ($name -notmatch '^[a-zA-Z0-9._/+-]+$' -or $name.StartsWith('/')) { throw 'Invalid archive path' }
         foreach ($part in $name.TrimEnd('/').Split('/')) {
             if ($part -in @('','.','..') -or $part.EndsWith('.') -or
                 $part -match '^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)') { throw 'Unsafe archive path segment' }
@@ -61,9 +72,10 @@ try {
         } finally { $inputStream.Dispose() }
         $hashes[$entry.FullName] = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
     }
-    if ($hashes["ergo-$version.jar"] -ne $jarHash) { throw 'JAR pin mismatch' }
+    if (-not $MaintainedJava -and $hashes["ergo-$version.jar"] -ne $jarHash) { throw 'JAR pin mismatch' }
+    if ($MaintainedJava -and ($hashes.Count -ne 315 -or -not $hashes.Contains('jdk-21.0.12.1+1-jre/bin/java.exe'))) { throw 'Java member mismatch' }
     [ordered]@{ archiveSha256=$archiveHash;
-        entries=192; expandedBytes=$total; files=$hashes } | ConvertTo-Json -Depth 4 |
+        entries=$entryCount; expandedBytes=$total; files=$hashes } | ConvertTo-Json -Depth 4 |
         Set-Content -Encoding utf8 (Join-Path $scratch 'bundle-manifest.json')
     Write-Output "Pinned bundle extracted: $($hashes.Count) files; $total bytes; no executable started."
 } finally { $archive.Dispose() }

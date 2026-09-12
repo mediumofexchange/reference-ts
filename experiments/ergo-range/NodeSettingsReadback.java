@@ -62,6 +62,29 @@ public final class NodeSettingsReadback {
         typed.put("testMnemonicAbsent", settings.walletSettings().testMnemonic().isEmpty());
         typed.put("testKeysQtyAbsent", settings.walletSettings().testKeysQty().isEmpty());
         result.put("typed", typed);
+        NetworkSettings networkSettings = settings.scorexSettings().network();
+        Map<String, Object> peers = new LinkedHashMap<String, Object>();
+        peers.put("maxConnections", networkSettings.maxConnections());
+        peers.put("peerDiscovery", networkSettings.peerDiscovery());
+        peers.put("allowLocal", networkSettings.allowLocal());
+        peers.put("upnpEnabled", networkSettings.upnpEnabled());
+        peers.put("declaredAddressAbsent", networkSettings.declaredAddress().isEmpty());
+        peers.put("bindAddress", networkSettings.bindAddress().getAddress().getHostAddress());
+        peers.put("bindPort", networkSettings.bindAddress().getPort());
+        java.util.List<String> seeds = new java.util.ArrayList<String>();
+        for (java.net.InetSocketAddress seed : scala.collection.JavaConverters
+                .seqAsJavaListConverter(networkSettings.knownPeers()).asJava()) {
+            seeds.add(seed.getAddress().getHostAddress() + ":" + seed.getPort());
+        }
+        peers.put("knownPeers", seeds);
+        peers.put("connectionTimeoutMs", networkSettings.connectionTimeout().toMillis());
+        peers.put("handshakeTimeoutMs", networkSettings.handshakeTimeout().toMillis());
+        peers.put("deliveryTimeoutMs", networkSettings.deliveryTimeout().toMillis());
+        peers.put("inactiveConnectionDeadlineMs", networkSettings.inactiveConnectionDeadline().toMillis());
+        peers.put("maxDeliveryChecks", networkSettings.maxDeliveryChecks());
+        peers.put("maxPeerSpecObjects", networkSettings.maxPeerSpecObjects());
+        peers.put("desiredInvObjects", networkSettings.desiredInvObjects());
+        result.put("network", peers);
         Map<String, Object> properties = new LinkedHashMap<String, Object>();
         for (String name : new String[] {"java.version", "java.io.tmpdir", "user.home", "user.dir",
                 "logback.configurationFile", "java.library.path"}) properties.put(name, System.getProperty(name));

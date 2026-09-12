@@ -1,0 +1,453 @@
+{
+  "status": "maintained-standard-runtime-and-offline-sync-profile-verified",
+  "observedDate": "2026-09-12",
+  "baselineCommit": "81e4810c308187f59fc9c287716f11ab7670d81c",
+  "release": {
+    "tag": "jdk-21.0.12.1+1",
+    "publishedAt": "2026-08-19T12:10:19Z",
+    "releaseId": 373020271,
+    "assetId": 523668910,
+    "prerelease": false,
+    "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_x64_windows_hotspot_21.0.12.1_1.zip",
+    "archiveBytes": 48999141,
+    "archiveSha256": "d35f31e712f0fcf6ac5a093edc90204fbff22f720ba3950bd09d331d5e621636",
+    "githubDigestMatched": true,
+    "expandedBytes": 151524241,
+    "files": 315,
+    "manifestSha256": "fab21196a9f51cdc4678b5ffbe4ba3ad5ccdf945863024b16400d15a7c03ac1d",
+    "javaExeSha256": "82051fdab26319d77d20cc0065045d05ec00b3e3d05f44935d7c06b96b621d55",
+    "identityLimit": "Official HTTPS release and digest identity; not reproducible-build or independent publisher-signature attestation."
+  },
+  "node": {
+    "tag": "v6.0.5",
+    "jarSha256": "2a7e2978cb09538ed6780d85ae3aa39c1ecce10e5e5a6e0dc3cd8ab087851588",
+    "unchangedBundle": true,
+    "systemInstallation": false,
+    "customNativePackage": false
+  },
+  "reports": {
+    "storage": "ergo-maintained-java-storage-verification.json",
+    "startup": "ergo-maintained-java-startup-verification.json",
+    "settings": "ergo-maintained-java-settings-verification.json",
+    "syncSettings": "ergo-sync-settings-verification.json"
+  },
+  "selectionHelperSha256": "bcdb5371a95188fec1951e77208b207ea3e3cbf5d6be331e8500a483420f6f9e",
+  "initialSyncReaderCompile": {
+    "result": "refused-before-settings-execution",
+    "reason": "Scala Seq.iterator was ambiguous to the Eclipse compiler",
+    "resolution": "Use JavaConverters.seqAsJavaListConverter; recompile and run all four actual settings cases successfully.",
+    "removedFailedRunFiles": 2,
+    "removedFailedRunBytes": 2294
+  },
+  "independentReview": {
+    "patch": "No material findings in fixed runtime selection, inventory pins, legacy defaults or unchanged offline bounds.",
+    "runtime": "Actual six storage/startup process records, final ordinary settings compiler/three cases, source/config/package hashes, process cleanup, HTTP replies and inventories reviewed; no material finding.",
+    "syncSettings": "Actual five processes, exact four seeds and timing/count settings, rejected pruning/checkpoint/fifth-peer controls, empty data/secrets and 13,239-byte inventory reviewed; no material finding."
+  },
+  "peerSourceReview": {
+    "repository": "https://github.com/ergoplatform/ergo",
+    "commit": "5528ef569a41ebccbc8658212e6ee3c97d990b96",
+    "treeSha256": "4eda824150d561e8e3033e2575d9c2fee0abd156edcfc3b3a0476ae08cab87b0",
+    "matchingBlobs": 86,
+    "mismatches": 0,
+    "scope": "Finite trusted-host no-spending-key probe: networking, settings, snapshot parsing, ordinary native storage entry and headers versus full UTXO state. Not a complete consensus or native-code audit.",
+    "findings": "See ERGO_NODE_PREFLIGHT.md: Maintained Java and connected candidate.",
+    "files": [
+      {
+        "path": "avldb/src/main/scala/org/ergoplatform/serialization/ManifestSerializer.scala",
+        "gitBlob": "985eb421fe85775007acbbef24fc399aea377e1e"
+      },
+      {
+        "path": "avldb/src/main/scala/org/ergoplatform/serialization/SubtreeSerializer.scala",
+        "gitBlob": "f4822bbe3eb571d72f6c78d32b80ca21d7a79cdc"
+      },
+      {
+        "path": "avldb/src/main/scala/scorex/db/ByteArrayUtils.scala",
+        "gitBlob": "23a5b92280515174baadd8be325639dd8726c69d"
+      },
+      {
+        "path": "avldb/src/main/scala/scorex/db/LDBFactory.scala",
+        "gitBlob": "65fca5a3972e188bce94dd18f29efb661fe4d406"
+      },
+      {
+        "path": "avldb/src/main/scala/scorex/db/LDBVersionedStore.scala",
+        "gitBlob": "51340723f9d63e33913c62f37d7884242c2dce8d"
+      },
+      {
+        "path": "avldb/src/test/scala/scorex/crypto/authds/avltree/batch/benchmark/LDBVersionedStoreBenchmark.scala",
+        "gitBlob": "62c16fcc108a63e07231a0002625d737aa076ec6"
+      },
+      {
+        "path": "avldb/src/test/scala/scorex/crypto/authds/avltree/batch/LDBVersionedStoreSpecification.scala",
+        "gitBlob": "c1fe98d5dfef68a1683aaa813963bc3e73e2afc9"
+      },
+      {
+        "path": "avldb/src/test/scala/scorex/db/ByteArrayUtilsSpec.scala",
+        "gitBlob": "2e39a304c5996fd06aaa1008b1f145fba46a1579"
+      },
+      {
+        "path": "avldb/src/test/scala/scorex/db/LDBVersionedStoreSpec.scala",
+        "gitBlob": "59863452ab026f1605d75ea821ae6c95049f795d"
+      },
+      {
+        "path": "build.sbt",
+        "gitBlob": "be61e3d1a6674f6ad65aa570e3c8af0c2028a3c3"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/local/NipopowVerifier.scala",
+        "gitBlob": "74e344323d13cbf09d3342d4e66c2cf4fafc123a"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/Handshake.scala",
+        "gitBlob": "bd80167127e7c5a06e035dc1264cc6b8c37794e7"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/HandshakeSerializer.scala",
+        "gitBlob": "f2e6d3db97b8123cd2a862ea5d6547bd5cb2f35e"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/message/GetNipopowProofSpec.scala",
+        "gitBlob": "a28dd40e7c78d759d1efe211d69d953308a25c28"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/message/InvData.scala",
+        "gitBlob": "1cad7677e15cdf2e3a2dd57d989f1779354736fb"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/message/InvSpec.scala",
+        "gitBlob": "dec5a769022afaf03329b690ea8411a9a49c3f32"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/message/MessageBase.scala",
+        "gitBlob": "d348cbfb6335be1c90d12c7b0790cf3a3b792c79"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/message/MessageConstants.scala",
+        "gitBlob": "78c75ebb39cd26aa1c15f96c6397966358aaf496"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/message/MessageSpec.scala",
+        "gitBlob": "f622f484b1162711167ca36bc8c09a1f0d7339fa"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/message/ModifiersData.scala",
+        "gitBlob": "ad010352528f71d330a07dc3e603ee53e2e866b3"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/message/ModifiersSpec.scala",
+        "gitBlob": "725c3a21308adadf3065d9fd9c3bc88e03d63b7e"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/message/NipopowProofData.scala",
+        "gitBlob": "1d7f0b8ed40ff8658b627bf85523c44c6a7fd1f2"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/message/NipopowProofSpec.scala",
+        "gitBlob": "98069611269d7e6d0d88a381710dc67be831d280"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/message/RequestModifierSpec.scala",
+        "gitBlob": "1cf0e4d0d6ffb45feb3ce71d2fad96dc8064ad30"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/message/SyncInfoMessageSpec.scala",
+        "gitBlob": "824365b62ba3a0217db118355f8931f5f6d1fa87"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/ModePeerFeature.scala",
+        "gitBlob": "373b0d79eedab48beb9be107ee64c76e8ebbfd98"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/peer/LocalAddressPeerFeature.scala",
+        "gitBlob": "07439ec30057899071dc3b31572eaa2d9d8393b4"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/peer/RestApiUrlPeerFeature.scala",
+        "gitBlob": "54d9a911d12c65ad36b8538f7211479dabb9b463"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/peer/SessionIdPeerFeature.scala",
+        "gitBlob": "608947e946ae642e0d5dcbc3a04b3523bbc303a4"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/PeerFeature.scala",
+        "gitBlob": "64a831130cd9cb3c8a9dade636b899f2ab7ff22b"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/PeerSpec.scala",
+        "gitBlob": "1dcd755400c3cd033a06a46f173933f042adc70b"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/network/Version.scala",
+        "gitBlob": "a91ae9b7977b61f7456c6668e978919c9e5b06ad"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/nodeView/history/ErgoSyncInfo.scala",
+        "gitBlob": "005bf61d9274d83d1fd02d6750a6a9d36f3b0e31"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/settings/ChainSettings.scala",
+        "gitBlob": "28a2d9e4e0a8045454090b3dbdb3c453abb3248b"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/settings/ErgoValidationSettings.scala",
+        "gitBlob": "846cece555efe36031b93956a1c60a881e3b0c9d"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/settings/NipopowSettings.scala",
+        "gitBlob": "99086221124243aa2329a3cd011f24e0b4389ceb"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/settings/ReemissionSettings.scala",
+        "gitBlob": "aa869754a98b73db739f666cae3b2b381f5ccfcd"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/settings/Settings.scala",
+        "gitBlob": "bf3c60c1851a249b3424cf692c1d5a4d1f7e66da"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/settings/UtxoSettings.scala",
+        "gitBlob": "949b92fffb4361d12f1ee29b3384e50ca60afaf6"
+      },
+      {
+        "path": "ergo-core/src/main/scala/org/ergoplatform/settings/VotingSettings.scala",
+        "gitBlob": "a488996119a09f3a2244bd2ecd12caba00b4fae9"
+      },
+      {
+        "path": "ergo-wallet/src/main/scala/org/ergoplatform/wallet/settings/SecretStorageSettings.scala",
+        "gitBlob": "d71c3ee02ac238138987b51262d4085a3e42987d"
+      },
+      {
+        "path": "src/main/resources/application.conf",
+        "gitBlob": "bc8db13f0ea0b4c6baa2be104ae96937c8414e64"
+      },
+      {
+        "path": "src/main/resources/mainnet.conf",
+        "gitBlob": "f83a7c2fe55f0a50c7ca320433ce99dfb497bef2"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/ErgoApp.scala",
+        "gitBlob": "9f1e8fbf6304d05a9f8ced8c864d98de327a9bd6"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/network/ElementPartitioner.scala",
+        "gitBlob": "939c45f71daaa90471b8a7c71280f056ca5d547a"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/network/ErgoNodeViewSynchronizer.scala",
+        "gitBlob": "ced63d1e8a1c9beb3c0d77bff77d26e7e84d8fc4"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/network/ErgoNodeViewSynchronizerMessages.scala",
+        "gitBlob": "e7784ed7c3df7a215e92827bbf83474d7a8de425"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/network/ErgoPeerStatus.scala",
+        "gitBlob": "32b73f31b52e3e68a9c1771705eab688378a55d3"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/network/ErgoSyncTracker.scala",
+        "gitBlob": "b3072028211f0d7890eb4dab827f3ca43005898a"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/network/FixedSizeApproximateCacheQueue.scala",
+        "gitBlob": "407ed3381e36d4795391d01294f28df48e9955e5"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/network/message/BasicMessagesRepo.scala",
+        "gitBlob": "151d61099f4a843e38a90c1a27ed114b09d3ca98"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/network/message/Message.scala",
+        "gitBlob": "f24f3ebec819f4e27b7e20f09063f51237be005b"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/network/message/MessageSerializer.scala",
+        "gitBlob": "3ca470d76c071b74c48c59d5b453a7e95b54b9d3"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/network/peer/PeerDatabase.scala",
+        "gitBlob": "8a3c62479140ef6e3a83e8962b070e1c8f96d505"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/network/peer/PeerInfo.scala",
+        "gitBlob": "8b191d5a3df00c1feca0f351634b00ac884e117f"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/network/peer/PeerManager.scala",
+        "gitBlob": "96b7b392d70b6a7875ec1e17b1e992b8df856c70"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/network/peer/PenaltyType.scala",
+        "gitBlob": "07409469f6904c06ed40b4dc1543592326e5efaa"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/network/VersionBasedPeerFilteringRule.scala",
+        "gitBlob": "e3b357eeb435f3ccfce00625cde8470755365176"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/nodeView/ErgoNodeViewHolder.scala",
+        "gitBlob": "0363d7bd26cde207a1147b807b79d5858f28fe63"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/nodeView/history/ErgoHistory.scala",
+        "gitBlob": "c001dd8e6418a954452029ae997dec0b5bffec84"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/nodeView/history/ErgoHistoryReader.scala",
+        "gitBlob": "9f7a45f0fe343173ec8b35babedae5c6f4b53840"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/nodeView/history/storage/modifierprocessors/FullBlockProcessor.scala",
+        "gitBlob": "8c84852f098ba2f35be4502c2ea478962ee7f989"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/nodeView/history/storage/modifierprocessors/FullBlockPruningProcessor.scala",
+        "gitBlob": "95de235c498a93ec17d874b7d3dbfd59e57175f9"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/nodeView/history/storage/modifierprocessors/FullBlockSectionProcessor.scala",
+        "gitBlob": "b9c36f987dedb9547d4f694fbb1cf124441f8974"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/nodeView/history/storage/modifierprocessors/HeadersProcessor.scala",
+        "gitBlob": "0a801ccd5e62d631726da1af915bbd301c0ff123"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/nodeView/history/storage/modifierprocessors/PopowProcessor.scala",
+        "gitBlob": "5e2ebd2183cb3bad0512d4692ce8082cac6280dc"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/nodeView/history/storage/modifierprocessors/ToDownloadProcessor.scala",
+        "gitBlob": "090610c3c2a8b19354766a5eb35b5ab368c67880"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/nodeView/state/UtxoState.scala",
+        "gitBlob": "a16f29265b7ba03b2b35d35a4475a07c175a345d"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/settings/CacheSettings.scala",
+        "gitBlob": "ad00e343b2fa0918cd3cf00fe9116d4b5d8011a3"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/settings/ErgoSettings.scala",
+        "gitBlob": "150312cbb8af529f1dac5b441822c1808b43f3e4"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/settings/NodeConfigurationSettings.scala",
+        "gitBlob": "ae45758b594d2843e5b83c9e4b935bb784d2c31d"
+      },
+      {
+        "path": "src/main/scala/org/ergoplatform/settings/WalletSettings.scala",
+        "gitBlob": "d6e0f0e1ad0c549e8ed5466aa2c5a3120761ddd7"
+      },
+      {
+        "path": "src/main/scala/scorex/core/network/ConnectedPeer.scala",
+        "gitBlob": "38461c3ddfb190a90e98c4f702bf7beff44135bb"
+      },
+      {
+        "path": "src/main/scala/scorex/core/network/ConnectionDescription.scala",
+        "gitBlob": "024f6113b5ae65e389e7522aac458ff349a2934a"
+      },
+      {
+        "path": "src/main/scala/scorex/core/network/ConnectionDirection.scala",
+        "gitBlob": "d84fc1e1696fe873442496701dd7aa5593b9754e"
+      },
+      {
+        "path": "src/main/scala/scorex/core/network/ConnectionId.scala",
+        "gitBlob": "b4917d729d89614c66a67e5d6e1d384f7e4c6f26"
+      },
+      {
+        "path": "src/main/scala/scorex/core/network/DeliveryTracker.scala",
+        "gitBlob": "5dad5781d4408e36774bdd48282b1ded2694eb71"
+      },
+      {
+        "path": "src/main/scala/scorex/core/network/MaliciousBehaviorException.scala",
+        "gitBlob": "8309c486f88f89b5679ff09c846fedd43dfa3ca8"
+      },
+      {
+        "path": "src/main/scala/scorex/core/network/ModifiersStatus.scala",
+        "gitBlob": "5c8ae5b79794814fa7f4e35ca70f6473b46af9b5"
+      },
+      {
+        "path": "src/main/scala/scorex/core/network/NetworkController.scala",
+        "gitBlob": "0cec487f35b09947b64f37e6ffae017ea999f25e"
+      },
+      {
+        "path": "src/main/scala/scorex/core/network/PeerConnectionHandler.scala",
+        "gitBlob": "bd6a573beda5dd10f1d57b4ec01be02615d8c9c4"
+      },
+      {
+        "path": "src/main/scala/scorex/core/network/PeerSynchronizer.scala",
+        "gitBlob": "6843b5b1519f5a69a1bb02756a3ce0371e88abac"
+      },
+      {
+        "path": "src/main/scala/scorex/core/network/SendingStrategy.scala",
+        "gitBlob": "3977fdcc664f9a081b5f160920e6c841eb9a794a"
+      },
+      {
+        "path": "src/main/scala/scorex/core/network/Synchronizer.scala",
+        "gitBlob": "8e13836bf9691e97c6a58e7b1119989720039213"
+      },
+      {
+        "path": "src/main/scala/scorex/core/network/UPnP.scala",
+        "gitBlob": "2f82e4dcaae6ae95a678df8b390c774bb16e837e"
+      },
+      {
+        "path": "src/main/scala/scorex/core/utils/NetworkUtils.scala",
+        "gitBlob": "43946581e3a78b62766e7887e9ae5351565ad988"
+      }
+    ]
+  },
+  "limits": [
+    "Offline compatibility and configuration only; no connected sync or full-sized allocation.",
+    "Source-configured offline, sampled sockets and file sizes do not establish packet isolation or a hard disk quota.",
+    "Ordinary LevelDB close/reopen is not crash recovery or full-sync acceptance.",
+    "Incoming proof and snapshot parsing remains reachable. Header height is not applied full-state ancestry.",
+    "The 30-minute/20 GiB/8 GiB trigger/10 GiB final traffic composition is not yet implemented or verified."
+  ],
+  "cleanup": {
+    "reason": "Actual results, source pins and review findings captured durably; remove disposable run and downloaded review sources.",
+    "directories": [
+      {
+        "path": "scratch/ergo-stable/maintained-java-storage-run",
+        "removed": true
+      },
+      {
+        "path": "scratch/ergo-stable/maintained-java-run",
+        "removed": true
+      },
+      {
+        "path": "scratch/ergo-stable/maintained-java-settings-run",
+        "removed": true
+      },
+      {
+        "path": "scratch/ergo-stable/sync-settings-run",
+        "removed": true
+      },
+      {
+        "path": "scratch/peer-scope",
+        "removed": true
+      }
+    ],
+    "initialAttempt": "Sandbox removed storage run and most startup files, then could not delete Java hsperfdata_Bob. Host cleanup completed the same verified scratch targets; no permission/ACL changes.",
+    "retained": "Official stable and Java archives, complete bundles, manifests, compiler and final reports."
+  },
+  "verification": {
+    "command": "npm run check",
+    "exitCode": 0,
+    "testFiles": 96,
+    "tests": 1795,
+    "vitestDurationSeconds": 233.65,
+    "additional": [
+      "documentation and links",
+      "typecheck",
+      "build",
+      "package",
+      "pilot",
+      "store crash",
+      "spent set"
+    ],
+    "finalDocsAndDiffChecks": "passed"
+  }
+}

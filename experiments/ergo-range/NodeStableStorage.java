@@ -38,8 +38,9 @@ public final class NodeStableStorage {
             && Arrays.equals(store.lastVersionID().get(), bytes(expected)), "Unexpected version");
     }
     public static void main(String[] args) throws Exception {
-        require(args.length == 2, "Mode and dedicated database directory required");
-        require("21.0.1".equals(System.getProperty("java.version")), "Unexpected Java runtime");
+        require(args.length == 3, "Mode, dedicated database directory and pinned Java version required");
+        require(args[2].equals("21.0.1") || args[2].equals("21.0.12.1"), "Unknown Java selection");
+        require(args[2].equals(System.getProperty("java.version")), "Unexpected Java runtime");
         String mode = args[0];
         require(mode.equals("write") || mode.equals("rollback") || mode.equals("verify"), "Unknown mode");
         File root = new File(args[1]).getCanonicalFile();

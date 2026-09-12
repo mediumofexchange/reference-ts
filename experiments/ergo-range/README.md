@@ -76,6 +76,51 @@ stock typed settings loader without starting node services. Omitting `-Stable`
 retains the earlier prerelease reproduction paths and pins; it never falls back
 between packages. The deleted custom artifacts are not prerequisites here.
 
+## Maintained standard Java
+
+The selected next runtime is the official Temurin **21.0.12.1+1 Windows x64
+JRE**, alongside the unchanged stable Ergo bundle. It does not replace bundle
+members, change system Java, or install a package. Download into an existing
+`scratch/ergo-java/`; preparation requires its `bundle/` to be absent:
+
+```powershell
+$javaZip = 'scratch/ergo-java/OpenJDK21U-jre_x64_windows_hotspot_21.0.12.1_1.zip'
+curl.exe --fail --location --proto '=https' --proto-redir '=https' --max-time 120 --max-filesize 48999141 --limit-rate 8M --output $javaZip 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_x64_windows_hotspot_21.0.12.1_1.zip'
+if ($LASTEXITCODE -ne 0) { throw 'Download failed' }
+pwsh -NoProfile -File experiments/ergo-range/node-prepare.ps1 -MaintainedJava
+pwsh -NoProfile -File experiments/ergo-range/node-stable-storage.ps1 -MaintainedJava -Execute > scratch/ergo-java/storage-result.json
+pwsh -NoProfile -File experiments/ergo-range/node-startup.ps1 -Stable -MaintainedJava > scratch/ergo-java/startup-result.json
+```
+
+Preparation checks the exact archive size/hash and extracts 315 files /
+151,524,241 bytes. Each consumer verifies the complete pinned Java inventory.
+After checking the successful startup report, capture it as
+`docs/ergo-maintained-java-startup-verification.json`, then run:
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-settings.ps1 -Stable -MaintainedJava > scratch/ergo-java/settings-result.json
+```
+
+Each test requires its absent `maintained-java-storage-run/`,
+`maintained-java-run/` or `maintained-java-settings-run/` under
+`scratch/ergo-stable/`. Existing process, socket and observed file bounds apply.
+Without the explicit flag, the earlier bundled-Java reproduction remains.
+These are offline compatibility observations, not a connected sync or runtime
+security certification. See the [current preflight](../../docs/ERGO_NODE_PREFLIGHT.md).
+
+The additional candidate readback appends `node-sync-network.conf` to that
+same baseline, reads its typed settings and tests a fifth-peer JVM override:
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-settings.ps1 -Stable -MaintainedJava -SyncProfile > scratch/ergo-java/sync-settings-result.json
+```
+
+This requires absent `scratch/ergo-stable/sync-settings-run/` and starts only
+the settings reader, with at most four cases plus one compiler. It never runs
+the candidate as a node. The candidate's peer addresses and connection target
+are not an enforced egress policy or kernel socket quota. The composed disk,
+traffic and process controls remain necessary before connected execution.
+
 ## Earlier platform controls
 Its [first-sync control selection](../../docs/ERGO_NODE_PREFLIGHT.md#first-sync-control-selection)
 also records a narrow rootless WSL control. From the repository root in the

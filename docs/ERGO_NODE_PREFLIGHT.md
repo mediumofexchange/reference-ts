@@ -102,6 +102,88 @@ under the previously recorded no-spending-key experiment scope. The next source
 step is bounded sync preparation and peer-parser/runtime review, not native
 library qualification. See [reproduction](../experiments/ergo-range/README.md#stable-node-startup-and-settings).
 
+## Maintained Java and connected candidate
+
+The next standard-node candidate uses the unchanged stable JAR with the official
+[Temurin 21.0.12.1+1 Windows x64 JRE](https://github.com/adoptium/temurin21-binaries/releases/tag/jdk-21.0.12.1%2B1),
+published 2026-08-19. The separately downloaded ZIP is 48,999,141 bytes, SHA-256
+`d35f31e712f0fcf6ac5a093edc90204fbff22f720ba3950bd09d331d5e621636`, matching the
+GitHub asset digest. It expands to 315 files / 151,524,241 bytes; the generated
+manifest is pinned at `fab21196a9f51cdc4678b5ffbe4ba3ad5ccdf945863024b16400d15a7c03ac1d`.
+Every consumer verifies that complete inventory. The runtime remains alongside
+the original bundle in scratch; system Java and bundle members are unchanged.
+This selects a current standard Java 21 maintenance release, not a custom build
+or a claim that a runtime update fixes an observed database failure.
+The [combined evidence](ergo-maintained-java-verification.json) records artifact
+identity, independent reviews, the source inventory and disposable-file cleanup.
+
+The [storage result](ergo-maintained-java-storage-verification.json) passed
+write/update/delete, fresh-process rollback and another fresh-process readback.
+The [startup result](ergo-maintained-java-startup-verification.json) observed
+Java 21.0.12.1 and Ergo 6.0.5, expected genesis UTXO state, zero peers and wallet
+HTTP 403. Startup lasted 73,624 ms with 341,065,728 peak job-commit bytes;
+285 socket samples were loopback-only and combined file/output bytes were
+966,056. The [settings result](ergo-maintained-java-settings-verification.json)
+retains baseline and pruning/checkpoint controls. Existing evidence limits and
+process budgets apply; these results do not establish connected sync, disk
+isolation, crash recovery or runtime security certification.
+
+The [candidate network overlay](../experiments/ergo-range/node-sync-network.conf)
+is only combined with the fresh full-UTXO/no-spending-key baseline. It selects
+four mainnet seed addresses, four target connections, no discovery, no local
+peers, loopback listeners and no UPnP/declared address. Connect/handshake/delivery
+timeouts are 1/30/10 seconds; inactivity is 2 minutes with the source's 60-second
+sweep. The [actual typed readback](ergo-sync-settings-verification.json) checks
+the exact candidate and rejects a JVM override to five connections, along with
+the existing pruning and checkpoint controls. It starts no actors or sockets.
+The first candidate-reader compilation refused an ambiguous Scala iterator
+bridge; the corrected JavaConverters bridge compiled and all four cases passed.
+The five compiler/readback processes exited 0 with verified limits and empty
+jobs, peaking at 206,827,520 commit bytes. Final files were 13,239 bytes, with
+empty data and secrets directories.
+The peers are untrusted bootstrap endpoints from pinned mainnet configuration;
+their current availability is untested. Peer count is a scheduler target, and
+the addresses are not a kernel connection quota or an egress allowlist.
+
+An independent bounded source review checked 86 files against their Git blobs
+at stable commit `5528ef569a41ebccbc8658212e6ee3c97d990b96`. The
+[framing parser](https://github.com/ergoplatform/ergo/blob/5528ef569a41ebccbc8658212e6ee3c97d990b96/src/main/scala/org/ergoplatform/network/message/MessageSerializer.scala)
+caps payloads at 16,388,608 bytes. The
+[peer handler](https://github.com/ergoplatform/ergo/blob/5528ef569a41ebccbc8658212e6ee3c97d990b96/src/main/scala/scorex/core/network/PeerConnectionHandler.scala)
+bounds its backpressured outbound buffer to 16,388,621 bytes / 64 messages per
+peer, but supplies no independent per-frame completion deadline or message-rate
+cap. Other queues, parsing, validation and logging can exhaust resources or
+stall sync. Such an outcome ends the finite experiment without accepted sync
+evidence. This is not a general hostile-code sandbox or a complete node audit.
+
+Disabled bootstrap/snapshot flags do not unregister every incoming parser.
+Unsolicited NiPoPoW proofs can supply sparse headers while no best header exists;
+this is a limit on interpreting header height, not a demonstrated bypass of full
+UTXO validation. The
+[full-block height rule](https://github.com/ergoplatform/ergo/blob/5528ef569a41ebccbc8658212e6ee3c97d990b96/src/main/scala/org/ergoplatform/nodeView/history/storage/modifierprocessors/FullBlockPruningProcessor.scala#L48)
+starts full blocks at genesis under the selected settings, and
+[UTXO application](https://github.com/ergoplatform/ergo/blob/5528ef569a41ebccbc8658212e6ee3c97d990b96/src/main/scala/org/ergoplatform/nodeView/state/UtxoState.scala#L112)
+executes transactions and checks state roots. Keep normal proof-quorum settings;
+require applied full-state ancestry for fixture acceptance. Snapshot subtree
+parsing also remains reachable. No native decompressor call was found in the
+inspected wire parser paths; ordinary native LevelDB storage remains reachable.
+The [official advisory index](https://github.com/ergoplatform/ergo/security/advisories)
+listed no published advisories when checked; this is not absence-of-defects
+evidence. [Issue 2470](https://github.com/ergoplatform/ergo/issues/2470) describes
+a 6.0.3RC1 chain-tip wedge, not a verified exploit against this candidate.
+
+The remaining engineering gate is one composed launch under the existing
+30-minute / 20 GiB disk / 100 GiB host-reserve / 8 GiB traffic-trigger / 10 GiB
+final-traffic envelope. Reuse the owned-volume, drive-letter, Job Object and
+traffic mechanisms below with the standard LevelDB node. Their historical
+custom-RocksDB module/version controls are not prerequisites for this candidate.
+The existing supervisor accepts at most 120 seconds and the disk helper creates
+only a fixed 64 MiB image; a 30-minute/20 GiB launch has not been implemented or
+tested. Prepare and review that concrete composition before seeking the separate
+full-allocation/connected-execution authorization. Do not silently replace the
+disk ceiling with file-size sampling. No connected run or large allocation has
+occurred. See [reproduction](../experiments/ergo-range/README.md#maintained-standard-java).
+
 ## Earlier prerelease candidate and measured artifact
 
 The earlier comparison kept the fixture baseline, Ergo **v6.1.5**. Its source
