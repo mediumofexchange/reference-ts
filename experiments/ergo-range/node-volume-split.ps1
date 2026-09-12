@@ -1,16 +1,18 @@
-# Fixed offline ordinary-user control. Default is read-only; Execute requests UAC for disk ownership only.
-param([switch]$Execute,[switch]$ParentFailureControl)
+# Fixed ordinary-user node profiles. Default is read-only; UAC is disk ownership only.
+param([switch]$Execute,[switch]$ParentFailureControl,[switch]$Sync30Minutes)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 if (-not $IsWindows -or -not [Environment]::Is64BitProcess) { throw 'Windows x64 / PowerShell 7 required' }
 foreach ($file in @('node-java.ps1','node-disk-evidence.ps1','node-database-evidence.ps1','node-evidence.ps1','node-volume-evidence.ps1','node-volume-handoff.ps1')) { . (Join-Path $PSScriptRoot $file) }
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $nonce=[guid]::NewGuid().ToString('N')
-$run=Join-Path $repo "scratch/node-volume-split/$nonce"
+$profile=Get-NodeVolumeProfile ([bool]$Sync30Minutes)
+$run=Join-Path $repo "scratch/$($profile.scratchName)/$nonce"
 $bundle=Join-Path $repo 'scratch/ergo-stable/bundle'
-$report=[ordered]@{status='unresolved-ordinary-volume-control';nonce=$nonce;run=$run;observedAtUtc=[DateTime]::UtcNow.ToString('o');executeRequested=[bool]$Execute;errors=@();files=[ordered]@{}}
+$report=[ordered]@{status='unresolved-ordinary-volume-control';nonce=$nonce;run=$run;profile=$profile;observedAtUtc=[DateTime]::UtcNow.ToString('o');executeRequested=[bool]$Execute;errors=@();files=[ordered]@{}}
 $lease=$null; $owner=$null; $maySignalDone=$false
 try {
+    if ($Sync30Minutes -and $ParentFailureControl) { throw 'Parent failure injection is only a 64 MiB offline control' }
     foreach ($file in @('node-volume-split.ps1','node-volume-worker.ps1','node-volume-owner.ps1','node-volume-handoff.ps1','NodeProbeProcess.cs','NodeProbeDisk.cs','NodeDatabaseIdentity.cs','NodeTrafficCounter.cs','node-java.ps1','node-volume-evidence.ps1','node-disk-evidence.ps1','node-database-evidence.ps1','node-evidence.ps1')) {
         $report.files[$file]=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $file)).Hash.ToLowerInvariant()
     }
@@ -20,12 +22,20 @@ try {
     $drive=[IO.DriveInfo]::new([IO.Path]::GetPathRoot($repo))
     if ($drive.DriveFormat -cne 'NTFS' -or $drive.DriveType -ne [IO.DriveType]::Fixed) { throw 'Fixed NTFS host required' }
     $report.hostFreeBefore=$drive.AvailableFreeSpace
-    if ($report.hostFreeBefore -lt 108011716608L) { throw 'Need 100 GiB reserve plus 65 MiB image, 512 MiB preparation and 16 MiB report allowance' }
+    if ($report.hostFreeBefore -lt $profile.minimumHostFree) { throw 'Insufficient host reserve for the selected fixed volume profile' }
     $report.java=Get-MaintainedNodeJava $repo
     $prior=Get-Content -Raw (Join-Path $repo 'docs/ergo-maintained-java-startup-verification.json') | ConvertFrom-Json -AsHashtable
     $configHash=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($prior.config))).ToLowerInvariant()
     if ($prior.status -cne 'stock-node-offline-startup-only' -or
         $configHash -cne 'c8f156ed686c159ccb6b03134b8fd5393517eb1a473d4170b97a8d08f1063dc1') { throw 'Exact reviewed offline config required' }
+    if ($Sync30Minutes) {
+        foreach ($file in @('NodeSyncReader.cs','node-sync-worker.ps1','node-sync-evidence.ps1','node-sync-network.conf')) {
+            $report.files[$file]=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $file)).Hash.ToLowerInvariant()
+        }
+        if ($report.files['node-sync-network.conf'] -cne 'a4f9e317402870527ee8b08556a4932739299de174a591e61aac7d67ac5d4c81') { throw 'Exact previously verified peer overlay required' }
+        $overlay=Get-Content -Raw (Join-Path $PSScriptRoot 'node-sync-network.conf')
+        . (Join-Path $PSScriptRoot 'node-sync-evidence.ps1')
+    }
     $manifestPath=Join-Path $repo 'scratch/ergo-stable/bundle-manifest.json'
     if ((Get-FileHash -LiteralPath $manifestPath).Hash -ine 'df98bdbfa029ad3aaeabb3968a2b73cdaa92769d93192bc25b4c8f298102dce6') { throw 'Stable manifest mismatch' }
     $pins=(Get-Content -Raw $manifestPath | ConvertFrom-Json -AsHashtable).files
@@ -48,16 +58,18 @@ try {
     $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
     try { $report.elevated=[Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
     finally { $identity.Dispose() }
-    if (-not $Execute) { $report.status='prepared-read-only-ordinary-volume-control'; return }
+    if (-not $Execute) { $report.status=if ($Sync30Minutes) { 'prepared-read-only-source-sync' } else { 'prepared-read-only-ordinary-volume-control' }; return }
     if ($report.elevated) { throw 'Run the split supervisor as an ordinary user' }
 
     foreach ($file in @('NodeProbeProcess.cs','NodeTrafficCounter.cs','NodeDatabaseIdentity.cs')) { Add-Type -Path (Join-Path $PSScriptRoot $file) }
+    if ($Sync30Minutes) { Add-Type -Path (Join-Path $PSScriptRoot 'NodeSyncReader.cs') }
     [void][IO.Directory]::CreateDirectory($run)
     $lease=[NodeProbeProcess]::CreateVolumeJob($nonce)
     $self=[Diagnostics.Process]::GetCurrentProcess()
     try { $started=$self.StartTime.ToFileTimeUtc() } finally { $self.Dispose() }
     $ownerPath=Join-Path $PSScriptRoot 'node-volume-owner.ps1'
     $ownerArgs="-NoProfile -File `"$ownerPath`" -Nonce $nonce -ParentId $PID -ParentStarted $started"
+    if ($Sync30Minutes) { $ownerArgs+=' -Sync30Minutes' }
     $owner=Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList $ownerArgs -Verb RunAs -WindowStyle Hidden -PassThru
     $maySignalDone=$true
     $wait=[Diagnostics.Stopwatch]::StartNew()
@@ -70,7 +82,8 @@ try {
     $ready=Read-VolumeHandoff $readyPath
     if ($ready.nonce -cne $nonce -or $ready.parentId -ne $PID -or $ready.parentStarted -ne $started -or $ready.ownerId -ne $owner.Id -or
         $ready.driveLetter -cnotmatch '^[D-Z]$' -or $ready.volumeRoot -cnotmatch '^\\\\\?\\Volume\{[0-9a-fA-F-]{36}\}\\$' -or
-        $ready.volume.Size -le 0 -or $ready.volume.Size -gt 67108864 -or $ready.volume.FileSystem -cne 'NTFS') { throw 'Wrong volume handoff' }
+        $ready.profile -cne $profile.name -or $ready.nativeDisk.VirtualSizeBytes -ne $profile.virtualBytes -or
+        $ready.volume.Size -le 0 -or $ready.volume.Size -gt $profile.virtualBytes -or $ready.volume.FileSystem -cne 'NTFS') { throw 'Wrong volume handoff' }
     $letter=[char]$ready.driveLetter; $driveRoot=([string]$letter)+':\'; $volumeRoot=$ready.volumeRoot
     $report.ownerReady=$ready
     function Assert-OwnedVolume {
@@ -85,9 +98,10 @@ try {
     $report.mappingBefore=[NodeDatabaseIdentity]::VerifyDriveMapping($letter,$volumeRoot)
     # The failure control kills this dedicated supervisor at the first Java observation.
     # The elevated owner must observe parent death, stop the job and remove its disk.
-    . (Join-Path $PSScriptRoot 'node-volume-worker.ps1')
+    if ($Sync30Minutes) { . (Join-Path $PSScriptRoot 'node-sync-worker.ps1') }
+    else { . (Join-Path $PSScriptRoot 'node-volume-worker.ps1') }
     if (-not $report.process.ChildTokenChecked -or $report.process.ChildElevated) { throw 'Ordinary child token evidence missing' }
-    $report.status='ordinary-offline-node-volume-only'
+    $report.status=if ($Sync30Minutes) { 'bounded-source-sync-measurement' } else { 'ordinary-offline-node-volume-only' }
 } catch { $report.errors+=$_.Exception.Message }
 finally {
     if ($null -ne $lease) {
@@ -105,7 +119,9 @@ finally {
         while (-not $owner.HasExited -and $wait.ElapsedMilliseconds -lt 30000) { Start-Sleep -Milliseconds 250 }
         if ($owner.HasExited -and (Test-Path -LiteralPath (Join-Path $run 'owner.json'))) {
             $report.owner=Read-VolumeHandoff (Join-Path $run 'owner.json')
-            if ($report.owner.status -cne 'owned-volume-removed' -or -not $report.owner.jobEmpty -or -not $report.owner.mappingRemoved -or -not $report.owner.detached -or -not $report.owner.artifactRemoved) {
+            $expectedStatus=if ($Sync30Minutes) { 'owned-volume-retained-detached' } else { 'owned-volume-removed' }
+            if ($report.owner.status -cne $expectedStatus -or -not $report.owner.jobEmpty -or -not $report.owner.mappingRemoved -or -not $report.owner.detached -or
+                (-not $Sync30Minutes -and -not $report.owner.artifactRemoved)) {
                 $report.errors+='Disk owner cleanup unresolved'; $report.status='unresolved-ordinary-volume-control'
             }
         } else { $report.errors+='Disk owner still running or report unavailable'; $report.status='unresolved-ordinary-volume-control' }
@@ -116,4 +132,4 @@ finally {
     if ($Execute -and (Test-Path -LiteralPath $run)) { [IO.File]::WriteAllText((Join-Path $run 'result.json'),$json) }
     $json
 }
-if ($report.status -notin @('prepared-read-only-ordinary-volume-control','ordinary-offline-node-volume-only')) { exit 2 }
+if ($report.status -notin @('prepared-read-only-ordinary-volume-control','ordinary-offline-node-volume-only','prepared-read-only-source-sync','bounded-source-sync-measurement')) { exit 2 }

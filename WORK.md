@@ -4,87 +4,86 @@ Updated: 2026-09-12
 
 ## Goal
 
-Carry the fixed 20 GiB / 30-minute connected source-sync experiment through
-implementation, focused checks, independent review, execution and measured
-evidence. Reuse the standard packages and proven ordinary-user disk-owner
-split. Accept honest partial header/applied-state progress; fixtures above the
-applied height remain not reached. Keep 100 GiB host reserve, 8 GiB traffic
-trigger / 10 GiB final ceiling; retain the detached sync image for inspection.
-No public release, fund movement, wallet keys or inbound public listener.
+Obtain independently applied Ergo history for the three fixture comparisons.
+The approved connected run is complete: header progress, early output stop
+and cleanup demonstrated; no applied full-state progress observed.
+The relevant logging defect is corrected and verified through the stock loader.
 
-Delivery: `main`; baseline `7c27a06` (local full checks passed; inspect CI
-34688754933). Companion specification: `money-from-first-principles/main`
-at `7ea0ee8`. No normative change or fixture provenance migration.
-Verification scope: changed native/PowerShell launcher guards, exact config,
-syntax, actual bounded node run and docs. Reuse unchanged 1,795-test baseline;
-no full protocol rerun for isolated experiment changes. Group connected steps
-into one sustained slice; intermediate commits are not stopping points.
+Delivery: main; baseline 7c27a06 (CI 34688754933 passed), followed by d40b823
+(scope verification and sustain end-to-end slices) and this change.
+Companion specification: money-from-first-principles/main at 7ea0ee8;
+no normative/provenance change. Runtime remains v2.
 
 ## Status
 
-- [Split evidence](docs/ergo-node-volume-split-verification.json) contains actual
-  ordinary-node and parent-death controls. `node-volume-split.ps1` defaults to
-  read-only; execution requests UAC only for the disk owner. It creates one
-  fresh fixed 64 MiB image and never selects an existing disk or launches peers.
-- The ordinary parent creates a fresh named job; the elevated owner opens it
-  before publishing the bounded GUID/PID/creation-time handoff. The node joins
-  at creation; its token is checked before resume. No ACL changes were needed.
-- Owner cleanup verifies the job empty after parent completion/death closes
-  future launch admission, then removes its own mapping and VHD. On timeout,
-  it stops current members but retains the disk until the parent finishes/dies.
-- Official node remains at `scratch/ergo-stable/bundle/`; official Temurin
-  21.0.12.1+1 JRE at `scratch/ergo-java/bundle/`. Pinned archives/manifests and
-  compiler remain; custom candidates remain deleted. No Java/system install.
-- [Prior evidence](docs/ergo-maintained-java-verification.json) covers standard
-  storage/startup/settings and four-peer candidate readback. The candidate
-  overlay is not enabled by the offline launcher.
+- AGENTS.md now selects checks from affected behavior and groups related
+  implementation, review, execution and evidence into sustained slices.
+  Shared runtime/protocol, dependency, API, packaging, broad CI/build changes
+  and uncertain impact still require full checks. Required CI gates remain.
+- [Actual connected evidence](docs/ergo-node-sync-verification.json):
+  282,315 ms, stopped at the 12 MiB console trigger; three peers observed.
+  API headers reached 25,733; later log reached 33,263. Last API read was about
+  42 seconds before stop. All sampled full heights were null; no applied-state
+  or fixture-ancestry claim follows from these observations.
+- Observed host traffic 133,770,818 bytes; peak node commit 625,156,096 bytes;
+  max accounting gap 382 ms; stop-to-empty 105 ms; final accounting 6 ms later.
+  Ordinary node, loopback listeners, wallet 403 and empty secrets observed.
+- Job empty, mapping removed and disk detached. Independent post-run checks
+  found recorded processes and drive reservation absent, opened the image
+  exclusively and matched its GPT disk GUID. Keep the 21,474,836,992-byte image:
+  scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd.
+  Do not delete, automatically resume, or allocate an extra retained image.
+- Standard Ergo 6.0.5 / Temurin 21.0.12.1+1 and normal LevelDB work. Custom
+  database candidates were removed earlier; no system Java/ACL changes.
+- The first disk preparation failed on a Windows reserved GPT partition.
+  [Evidence](docs/ergo-node-sync-first-preparation.json) records identity and
+  cleanup; that unused image was deleted. Reviewed automatic placement fixed it.
+- Node settings override XML root WARN with inherited INFO. The worker now
+  explicitly selects scorex.logging.level = WARN, preserving UtxoState INFO.
+  [Logging regression](docs/ergo-node-sync-logging-verification.json) exercised
+  the actual pinned loader, reproduced INFO override and verified correction.
+  No second connected run is claimed; original executed hashes are preserved.
 
 ## Evidence
 
-- Actual ordinary node: one JVM, 71,409 ms, 440,512,512 bytes peak commit,
-  4 GiB commit / 2 GiB heap / 25% CPU / 120-second nominal limit.
-- Expected Ergo 6.0.5 genesis UTXO, zero peers, wallet HTTP403, empty secrets
-  and 275 loopback socket observations. No chain-membership claim.
-- Real host traffic 7,520,534 bytes / 277 samples / 373 ms maximum gap.
-  Stop to empty job 48 ms; final accounting finished 6 ms after empty.
-- Fixed disk 67,108,864 bytes, backing 67,109,376. Final logical node files
-  899,809 bytes, diagnostics 1,156, captured output 4,338. Normal cleanup passed.
-- Failure injection killed the dedicated parent with one active Java job
-  member. Owner observed parent exit, stopped/verified empty job and removed
-  mapping, detached/deleted image. Both images, six recorded process IDs and
-  Z logical/DOS reservations were independently absent afterward.
-- Independent source/evidence review found and corrected the cleanup loop's
-  stale empty-job check; final check follows admission closure. All 13 executed
-  source hashes verified. No unresolved material finding.
-- Twelve handoff/job and 26 volume-evidence cases passed. Both are now in the
-  Windows CI guard step. Full project checks passed: 96 files / 1,795 tests in
-  262.70 s, plus docs/typecheck, build/package, pilot, store-crash and spent-set.
-  Final docs/links pass separately; inspect delivery CI.
+- Seven affected guard groups passed: profile/evidence 25, reader 49,
+  identity 58, database accounting 37, native identity 21, offline evidence 26,
+  handoff 12 (228 cases). Syntax/native compilation and read-only preflight pass.
+- Two additional actual-loader logging cases pass, with no node services,
+  state, secrets or disk image created. Focused documentation/link checks apply.
+- Independent source review and executed-evidence readback found no unresolved
+  material issue. Logging-only correction received focused self-review.
+- Reused unchanged full-suite baseline: 96 files / 1,795 tests and all checks
+  at 7c27a06; its CI passed. Required final-revision CI remains in force.
 
 ## Next
 
-1. Add named fixed 20 GiB disk and 30-minute process entrypoints; preserve old
-   64 MiB / 120-second controls. Keep 100 GiB host reserve, 8 GiB traffic trigger
-   / 10 GiB final maximum and bounded diagnostics/readbacks. Review concrete
-   code before separate full-allocation/connected-run authorization.
-2. Use the measured baseline plus candidate overlay. After bounded sync, compare
-   all three fixtures as ancestors of an applied full-state tip; headers or
-   /info alone are insufficient. These fixtures use transaction spending proofs.
+1. Prepare a narrowly scoped, reviewed continuation of the retained owned
+   image with the corrected logging, preserving progress rather than creating
+   another fresh database. The current launcher deliberately has no reopen API.
+   Define exact image identity, attachment/cleanup checks and finite resource
+   envelope before another execution; existing approval covered the completed run.
+2. Target near-current headers, then first demonstrated full-block application.
+   Stock 6.0.5 schedules no full blocks before a recent header (about 200 minutes
+   from its clock under current defaults). Header-only early progress is normal.
+3. Once applied history reaches fixtures at 100,000 / 1,000,000 / 1,500,000,
+   implement bounded parent-chain and body comparison. Bind upper IDs, exact
+   links and heights; body presence and /blocks/at are insufficient. Current
+   full-state catch-up is not itself required for historical fixture acceptance.
 
 ## Open questions
 
-- A stuck live parent can retain the disk/helper indefinitely after owner
-  timeout. Killing the elevated helper may detach before Java exits; helper
-  crash ordering is not demonstrated. Same-user IPC/host identity are trusted.
-- Synchronous OS calls can stall; observed timing is not independent hard
-  enforcement. The volume excludes some OS/JRE/supervisor writes/allocations.
-  No 8 GiB threshold stress, general crash recovery or connected sync proved.
-- Full block application starts at genesis; incoming proof/snapshot parsing
-  remains possible. No proof-quorum workaround.
-- Consolidate historical preflight once connected launch is concrete; preserve
-  immutable evidence links rather than adding parallel plans.
-- Stay with this instance: next work directly extends the reviewed ownership
-  and process controls. This is an efficiency recommendation, not a benchmark.
+- This run did not exercise 30-minute endurance or the 8 GiB traffic trigger.
+  Transaction application rate and storage to the fixtures remain unmeasured.
+- Stuck supervisor/helper-crash ordering remain unproved. Socket/traffic
+  sampling is not a firewall or independent hard deadline; some OS/JRE writes
+  are outside the volume. Incoming proof/snapshot parsing remains possible.
+- Full UTXO/genesis/no-bootstrap/retain-all is the selected experiment route,
+  not a normative requirement that every eventual user retain all Ergo blocks.
+  Independent conservation/history/order verification and unavailable evidence
+  never establishing omission remain binding. No alternate trust route selected.
+- Stay with this instance for continuation: control and evidence context is
+  fresh. This is an efficiency recommendation, not measured model performance.
 - Estimate **45% done / 55% remaining**, plausible done range **35-55%**.
   Runtime/recovery, wallet/transport, authenticated evidence/publication and
-  custody/rollback dominate remaining effort. No product gate closed here.
+  custody/rollback dominate. Header progress alone closes no product gate.

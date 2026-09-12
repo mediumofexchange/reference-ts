@@ -57,7 +57,7 @@ function Assert-DatabaseTraffic($State, $Budget, [bool]$Stopped) {
     if ($Stopped -and ($State.stopDecisionMs -lt 0 -or $State.emptyConfirmedMs -lt $State.stopDecisionMs -or
         $State.emptyConfirmedMs-$State.stopDecisionMs -gt 2000)) { throw 'Stop-to-empty evidence missing or above 2 seconds' }
 }
-function Assert-DatabaseMappedPartition($Partition, $Disk, $Expected, [char]$Letter) {
+function Assert-DatabaseMappedPartition($Partition, $Disk, $Expected, [char]$Letter, [bool]$Sync20GiB=$false) {
     if ($Partition.DriveLetter -ine $Letter) { throw 'Owned partition drive letter changed' }
     # Reuse the GUID-only native guard on a projection after checking the sole
     # intentional difference. The original native control remains unchanged.
@@ -66,7 +66,7 @@ function Assert-DatabaseMappedPartition($Partition, $Disk, $Expected, [char]$Let
         $copy[$name]=$Partition.$name
     }
     $copy.DriveLetter=[char]0
-    Assert-ProbePartition ([pscustomobject]$copy) $Disk $Expected
+    Assert-ProbePartition ([pscustomobject]$copy) $Disk $Expected $Sync20GiB
 }
 function Read-DatabaseMarker([string]$Path, [string]$Expected) {
     if (-not [IO.File]::Exists($Path)) { return $false }

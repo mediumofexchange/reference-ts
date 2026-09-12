@@ -125,8 +125,9 @@ traffic and process controls remain necessary before connected execution.
 
 `node-volume-split.ps1` uses an ordinary-user supervisor and node. A separate
 UAC-elevated `node-volume-owner.ps1` creates, formats and maps one fresh fixed
-64 MiB VHD and holds its native handle. Neither script selects an existing disk,
-changes ACLs or starts public-peer connections. Default invocation is read-only:
+64 MiB VHD and holds its native handle. The default offline profile never
+selects an existing disk, changes ACLs or starts public-peer connections.
+Default invocation is read-only:
 
 ```powershell
 pwsh -NoProfile -File experiments/ergo-range/node-volume-handoff.test.ps1
@@ -174,7 +175,73 @@ same-user file mutation, and the volume is not a whole-host filesystem sandbox.
 
 The earlier elevated `node-volume-control.ps1` and its
 [recorded result](../../docs/ergo-node-volume-verification.json) remain historical
-reproduction. No connected mode, 20 GiB allocation or 30-minute run exists yet.
+reproduction. The separately selected connected profile is described below.
+
+## Bounded connected source sync
+
+The [first connected measurement](../../docs/ergo-node-sync-verification.json)
+ran for 282 seconds, observed three peers and 25,733 headers through the API
+(the later log reached 33,263), then stopped at the console budget. No applied
+full-state progress or fixture ancestry was observed. The 20 GiB image is
+retained detached, with process exit and drive removal independently checked.
+The inherited INFO logging override is now corrected with
+`scorex.logging.level = WARN`, preserving the explicit UtxoState INFO logger.
+The [offline regression](../../docs/ergo-node-sync-logging-verification.json)
+uses the actual settings loader; a second connected execution is not claimed.
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-settings.ps1 -Stable -MaintainedJava -SyncProfile -LoggingProfile
+```
+
+This settings-only regression requires an absent
+`scratch/ergo-stable/sync-logging-settings-run` directory and starts no node services.
+
+The reviewed `-Sync30Minutes` profile retains the standard packages, ordinary
+node token, 4 GiB commit / 2 GiB heap / 25% CPU, 100 GiB host reserve and
+8 GiB traffic trigger / 10 GiB final maximum. It creates exactly one new
+20 GiB VHD, uses the pinned four-peer overlay and keeps REST/P2P listeners on
+loopback. It never reopens an existing image or installs wallet keys. Read-only
+preparation checks package/config pins, free space and unused probe ports:
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-sync-profile.test.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-sync-reader.test.ps1
+pwsh -NoProfile -File experiments/ergo-range/node-volume-split.ps1 -Sync30Minutes
+```
+
+After the separate resource/execution approval, launch from an ordinary session:
+
+```powershell
+pwsh -NoProfile -File experiments/ergo-range/node-volume-split.ps1 -Sync30Minutes -Execute
+```
+
+The native process has a 30-minute wall limit; the observer requests stop ten
+seconds earlier. Earlier stops include the traffic trigger, 64 MiB remaining
+on the data volume, 12 MiB captured console output, or five minutes with no
+peer/header progress. Synchronous OS calls remain a timing limitation. The
+owner's 36-minute deadline stops existing members but retains the mounted disk
+until parent completion/death closes future admission. Shared cleanup and
+helper-crash limitations from the offline profile still apply.
+
+`scratch/node-source-sync/<GUID>/progress.json` reports bounded live progress.
+`result.json` contains metadata, limits, traffic and partial applied-state
+observations. `owner.json` records empty-job cleanup, removed mapping and
+detachment. The exact 20 GiB image is **retained detached**, including on
+unsuccessful node observations; it is not automatically deleted or resumed.
+Inspect these reports before deciding how to use or remove that owned image.
+
+The local metadata reader permits 128 requests, 1 MiB per body and 8 MiB total,
+with a five-second request deadline. It checks `/info`, connected peers, wallet
+refusal and the full tip's header. Historical applied-tip correlation requires
+matching ID/height/root and the specific UTXO application log; view stability
+is reported separately. Header progress alone is not applied-state evidence.
+Fixtures above the observed full height are `not-reached`; reaching their height
+without a checked parent chain is `ancestry-not-checked`, never verified.
+Only bounded console prefix/tail and a digest of all captured text are retained
+in the report; live databases are not recursively inventoried.
+
+The [preparation record](../../docs/ergo-node-sync-preparation.json) captures
+source pins, focused checks and review. It is not a connected execution result.
 
 ## Earlier platform controls
 Its [first-sync control selection](../../docs/ERGO_NODE_PREFLIGHT.md#first-sync-control-selection)

@@ -24,6 +24,16 @@ public final class NodeSettingsReadback {
         Config config = (Config) readConfig.invoke(reader, args);
         ErgoSettings settings = reader.fromConfig(config, network);
         Map<String, Object> result = new LinkedHashMap<String, Object>();
+        Map<String, Object> logging = new LinkedHashMap<String, Object>();
+        ch.qos.logback.classic.Logger root = (ch.qos.logback.classic.Logger)
+            org.slf4j.LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+        ch.qos.logback.classic.Logger state = (ch.qos.logback.classic.Logger)
+            org.slf4j.LoggerFactory.getLogger("org.ergoplatform.nodeView.state.UtxoState");
+        logging.put("root", root.getEffectiveLevel().toString());
+        logging.put("utxoState", state.getEffectiveLevel().toString());
+        org.slf4j.LoggerFactory.getLogger("moe.logging.control").info("MOE_ROOT_INFO_SENTINEL");
+        state.info("MOE_UTXO_INFO_SENTINEL");
+        result.put("logging", logging);
         Map<String, Object> resolved = new LinkedHashMap<String, Object>();
         String[] paths = {
             "ergo.directory", "ergo.networkType", "ergo.node.stateType",

@@ -1,6 +1,7 @@
 # Pure guards for the fixed, trusted-host 64 MiB disk control. No storage writes.
 Set-StrictMode -Version Latest
-function Assert-ProbeDiskIdentity($Image, $Disk, [string]$ImagePath, [string]$PhysicalPath, [string]$Style) {
+function Assert-ProbeDiskIdentity($Image, $Disk, [string]$ImagePath, [string]$PhysicalPath, [string]$Style, [bool]$Sync20GiB=$false) {
+    $virtualBytes=if ($Sync20GiB) { 21474836480UL } else { 67108864UL }
     if ($PhysicalPath -cnotmatch '^\\\\\.\\PhysicalDrive(0|[1-9][0-9]*)\z') { throw 'Malformed physical disk path' }
     $number = [uint32]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture)
     # Storage's type data projects BusType to a display string (for example
@@ -8,7 +9,7 @@ function Assert-ProbeDiskIdentity($Image, $Disk, [string]$ImagePath, [string]$Ph
     $busType = $Disk.CimInstanceProperties['BusType'].Value
     if ($Image.Attached -isnot [bool] -or -not $Image.Attached -or
         $Image.ImagePath -ine $ImagePath -or $Image.DevicePath -ine $PhysicalPath -or
-        $Disk.Number -ne $number -or $Disk.Size -ne 67108864UL -or
+        $Disk.Number -ne $number -or $Disk.Size -ne $virtualBytes -or
         $busType -isnot [uint16] -or $busType -ne 15 -or $Disk.PartitionStyle.ToString() -cne $Style -or
         $Disk.IsBoot -isnot [bool] -or $Disk.IsBoot -or
         $Disk.IsSystem -isnot [bool] -or $Disk.IsSystem -or
@@ -19,7 +20,8 @@ function Assert-ProbeDiskIdentity($Image, $Disk, [string]$ImagePath, [string]$Ph
     }
     if ($Style -eq 'RAW' -and $Disk.NumberOfPartitions -ne 0) { throw 'New disk is not empty' }
 }
-function Assert-ProbePartition($Partition, $Disk, $Expected) {
+function Assert-ProbePartition($Partition, $Disk, $Expected, [bool]$Sync20GiB=$false) {
+    $virtualBytes=if ($Sync20GiB) { 21474836480UL } else { 67108864UL }
     if ($Partition.DiskNumber -ne $Disk.Number -or
         $Partition.GptType -ine '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}' -or
         $Partition.IsBoot -isnot [bool] -or $Partition.IsBoot -or
@@ -27,8 +29,8 @@ function Assert-ProbePartition($Partition, $Disk, $Expected) {
         $Partition.IsReadOnly -isnot [bool] -or $Partition.IsReadOnly -or
         $Partition.IsOffline -isnot [bool] -or $Partition.IsOffline -or
         ($Partition.DriveLetter -and [int][char]$Partition.DriveLetter -ne 0) -or
-        $Partition.Offset -lt 1048576UL -or $Partition.Offset -ge 67108864UL -or $Partition.Size -le 0 -or
-        $Partition.Size -gt 67108864UL - $Partition.Offset -or
+        $Partition.Offset -lt 1048576UL -or $Partition.Offset -ge $virtualBytes -or $Partition.Size -le 0 -or
+        $Partition.Size -gt $virtualBytes - $Partition.Offset -or
         [string]::IsNullOrWhiteSpace($Partition.Guid)) { throw 'Unexpected new data partition' }
     if ($null -ne $Expected -and ($Partition.Guid -ine $Expected.Guid -or
         $Partition.PartitionNumber -ne $Expected.PartitionNumber -or

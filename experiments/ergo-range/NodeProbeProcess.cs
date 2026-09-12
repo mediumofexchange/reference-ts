@@ -239,10 +239,17 @@ public static class NodeProbeProcess {
         return new VolumeJob(handle, false);
     }
     public static Result RunOnVolumeJob(VolumeJob lease, string executable, string[] arguments, string directory, Func<uint, long, bool> observe) {
+        return RunVolumeCore(lease, executable, arguments, directory, observe, false);
+    }
+    public static Result RunSync30Minutes(VolumeJob lease, string executable, string[] arguments, string directory, Func<uint, long, bool> observe) {
+        return RunVolumeCore(lease, executable, arguments, directory, observe, true);
+    }
+    static Result RunVolumeCore(VolumeJob lease, string executable, string[] arguments, string directory, Func<uint, long, bool> observe, bool sync30Minutes) {
         if (lease == null || !lease.Creator || lease.Used || lease.Handle == IntPtr.Zero || lease.ActiveProcesses != 0)
             throw new ArgumentException("Fresh creator volume job required");
         lease.Used = true;
-        return RunCore(executable, arguments, directory, "offline-volume-node", 4294967296UL, 120000, 15728640, observe, false, lease.Handle);
+        uint wall = sync30Minutes ? 1800000U : 120000U;
+        return RunCore(executable, arguments, directory, sync30Minutes ? "bounded-source-sync" : "offline-volume-node", 4294967296UL, wall, 15728640, observe, false, lease.Handle, wall);
     }
     public sealed class ProcessObservation {
         public uint ProcessId;
@@ -299,8 +306,8 @@ public static class NodeProbeProcess {
         RequireExistingConsole();
         return RunCore(executable, arguments, directory, name, memory, wallMs, outputBytes, observe, true);
     }
-    static Result RunCore(string executable, string[] arguments, string directory, string name, ulong memory, uint wallMs, uint outputBytes, Func<uint, long, bool> observe, bool inheritConsole, IntPtr volumeJob = default(IntPtr)) {
-        if (IntPtr.Size != 8 || wallMs == 0 || wallMs > 120000 || outputBytes == 0 || outputBytes > 16777216 || memory < 268435456UL || memory > 4294967296UL)
+    static Result RunCore(string executable, string[] arguments, string directory, string name, ulong memory, uint wallMs, uint outputBytes, Func<uint, long, bool> observe, bool inheritConsole, IntPtr volumeJob = default(IntPtr), uint maximumWallMs = 120000) {
+        if (IntPtr.Size != 8 || wallMs == 0 || wallMs > maximumWallMs || outputBytes == 0 || outputBytes > 16777216 || memory < 268435456UL || memory > 4294967296UL)
             throw new ArgumentException("Requires x64 and finite budgets");
         // Suspended, explicit Unicode environment and creation-time job assignment.
         // All existing callers retain DETACHED_PROCESS; the fixed disk worker can

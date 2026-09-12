@@ -1,8 +1,9 @@
 # Fixed offline settings readback. No node services, sockets, peers or disk image.
-param([switch]$Stable, [switch]$MaintainedJava, [switch]$SyncProfile)
+param([switch]$Stable, [switch]$MaintainedJava, [switch]$SyncProfile, [switch]$LoggingProfile)
 $ErrorActionPreference = 'Stop'
 if ($MaintainedJava -and -not $Stable) { throw 'Maintained Java is selected only with the stable node' }
 if ($SyncProfile -and -not $MaintainedJava) { throw 'Sync profile requires the selected maintained Java and stable node' }
+if ($LoggingProfile -and -not $SyncProfile) { throw 'Logging regression requires the sync profile' }
 Set-StrictMode -Version Latest
 if (-not $IsWindows -or -not [Environment]::Is64BitProcess) { throw 'Windows x64 / PowerShell 7 required' }
 Add-Type -Path (Join-Path $PSScriptRoot 'NodeProbeProcess.cs')
@@ -18,6 +19,7 @@ if ($MaintainedJava) {
     $run = Join-Path $repo 'scratch/ergo-stable/maintained-java-settings-run'
 }
 if ($SyncProfile) { $run = Join-Path $repo 'scratch/ergo-stable/sync-settings-run' }
+if ($LoggingProfile) { $run = Join-Path $repo 'scratch/ergo-stable/sync-logging-settings-run' }
 $source = Join-Path $PSScriptRoot 'NodeSettingsReadback.java'
 if (Test-Path -LiteralPath $run) { throw 'Readback requires an absent run directory' }
 $priorPath = if ($Stable) { 'docs/ergo-stable-startup-verification.json' } else { 'docs/ergo-node-startup-verification.json' }
@@ -38,10 +40,18 @@ $oldPath = [regex]::Match($prior.config, 'ergo.directory = "(.+)/data"').Groups[
 if (-not $oldPath) { throw 'Recorded startup config path missing' }
 $config = $prior.config.Replace($oldPath,$path)
 if ($SyncProfile) { $config += "`n" + (Get-Content -Raw (Join-Path $PSScriptRoot 'node-sync-network.conf')) }
+if ($LoggingProfile) { $config += "`nscorex.logging.level = WARN`n" }
 $config = [regex]::Replace($config,'apiKeyHash = "[0-9a-f]{64}"',
     ('apiKeyHash = "' + [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant() + '"'))
 [IO.File]::WriteAllText("$run/ergo.conf",$config,[Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText("$run/logback.xml",'<configuration><appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender"><encoder><pattern>%level %logger - %msg%n</pattern></encoder></appender><root level="INFO"><appender-ref ref="STDOUT"/></root></configuration>',[Text.UTF8Encoding]::new($false))
+if ($LoggingProfile) {
+    # Use the exact worker XML, so logger category spelling and level changes are exercised.
+    $worker=Get-Content -Raw (Join-Path $PSScriptRoot 'node-sync-worker.ps1')
+    $xml=[regex]::Match($worker,"'<configuration>.*?</configuration>'").Value.Trim("'")
+    if (-not $xml) { throw 'Worker logging XML missing' }
+    [IO.File]::WriteAllText("$run/logback.xml",$xml,[Text.UTF8Encoding]::new($false))
+}
 $java = Join-Path $bundle 'jre/bin/java.exe'
 $expectedJava = '21.0.1'
 if ($MaintainedJava) { $java = $javaSelection.path; $expectedJava = $javaSelection.version }
@@ -62,11 +72,13 @@ Assert-ReadbackProcess $compile
 $cases = [ordered]@{}
 $caseNames = @('baseline','pruning-override','checkpoint-fallback')
 if ($SyncProfile) { $caseNames += 'peer-override' }
+if ($LoggingProfile) { $caseNames = @('baseline','logging-override') }
 foreach ($case in $caseNames) {
     $configPath = "$run/ergo.conf"
     $options = @()
     if ($case -eq 'pruning-override') { $options = @('-Dergo.node.blocksToKeep=10') }
     if ($case -eq 'peer-override') { $options = @('-Dscorex.network.maxConnections=5') }
+    if ($case -eq 'logging-override') { $options = @('-Dscorex.logging.level=INFO') }
     if ($case -eq 'checkpoint-fallback') {
         $configPath = "$run/checkpoint-fallback.conf"
         [IO.File]::WriteAllText($configPath,$config.Replace('checkpoint = null',''),[Text.UTF8Encoding]::new($false))
@@ -95,7 +107,13 @@ foreach ($case in $caseNames) {
             $network.maxDeliveryChecks -eq 100 -and $network.maxPeerSpecObjects -eq 64 -and $network.desiredInvObjects -eq 400
         if ($case -eq 'peer-override' -and $network.maxConnections -ne 5) { throw 'JVM peer override control failed' }
     }
-    if (($case -eq 'baseline') -ne $acceptable) { throw "Unexpected acceptance for $case" }
+    if ($LoggingProfile) {
+        if (-not $acceptable -or $settings.logging.utxoState -cne 'INFO' -or
+            -not $result.Output.Contains('MOE_UTXO_INFO_SENTINEL')) { throw 'Logging regression changed profile or lost application logger' }
+        $expectRoot=if ($case -eq 'baseline') { 'WARN' } else { 'INFO' }
+        if ($settings.logging.root -cne $expectRoot -or
+            $result.Output.Contains('MOE_ROOT_INFO_SENTINEL') -ne ($expectRoot -ceq 'INFO')) { throw 'Effective logging level regression' }
+    } elseif (($case -eq 'baseline') -ne $acceptable) { throw "Unexpected acceptance for $case" }
     if ($case -eq 'pruning-override' -and ($typed.blocksToKeep -ne 10 -or -not $typed.isFullBlocksPruned)) { throw 'JVM override control failed' }
     if ($case -eq 'checkpoint-fallback' -and $typed.checkpointAbsent) { throw 'Mainnet checkpoint fallback control failed' }
     $cases[$case] = [ordered]@{ acceptedProfile=$acceptable; arguments=$arguments; process=$result; settings=$settings }
@@ -111,10 +129,12 @@ foreach ($file in @('NodeSettingsReadback.java','node-settings.ps1','NodeProbePr
 }
 if ($MaintainedJava) { $hashes['node-java.ps1']=(Get-FileHash (Join-Path $PSScriptRoot 'node-java.ps1')).Hash.ToLowerInvariant() }
 if ($SyncProfile) { $hashes['node-sync-network.conf']=(Get-FileHash (Join-Path $PSScriptRoot 'node-sync-network.conf')).Hash.ToLowerInvariant() }
+if ($LoggingProfile) { $hashes['node-sync-worker.ps1']=(Get-FileHash (Join-Path $PSScriptRoot 'node-sync-worker.ps1')).Hash.ToLowerInvariant() }
 [ordered]@{ status='offline-settings-readback-only'; observedAtUtc=[DateTime]::UtcNow.ToString('o');
     packageVersion=$packageVersion; jarSha256=$prior.bundleManifest.files["ergo-$packageVersion.jar"]; compilerSha256=(Get-FileHash $compiler -Algorithm SHA256).Hash.ToLowerInvariant();
     javaSha256=(Get-FileHash -LiteralPath $java).Hash.ToLowerInvariant(); maintainedJava=$javaSelection; config=$config;
     syncProfile=[bool]$SyncProfile;
+    loggingProfile=[bool]$LoggingProfile;
     configSha256=(Get-FileHash "$run/ergo.conf" -Algorithm SHA256).Hash.ToLowerInvariant();
     compile=$compile; compileArguments=$compileArgs; cases=$cases; files=$hashes; finalRunBytes=$bytes;
     finalFiles=@($files | ForEach-Object { [ordered]@{ path=[IO.Path]::GetRelativePath($run,$_.FullName); bytes=$_.Length } });

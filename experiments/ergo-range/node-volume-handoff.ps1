@@ -1,5 +1,13 @@
 # Fixed local, trusted-host handoff. No caller-selected disk or executable.
 Set-StrictMode -Version Latest
+function Get-NodeVolumeProfile([bool]$Sync30Minutes=$false) {
+    if ($Sync30Minutes) {
+        return @{name='sync-30-minutes';scratchName='node-source-sync';virtualBytes=21474836480L;
+            maximumBackingBytes=21475885056L;minimumHostFree=129922760704L;ownerWallMs=2160000L;childWallMs=1800000L}
+    }
+    return @{name='offline-64-mib';scratchName='node-volume-split';virtualBytes=67108864L;
+        maximumBackingBytes=68157440L;minimumHostFree=108011716608L;ownerWallMs=240000L;childWallMs=120000L}
+}
 function Assert-OrdinaryAncestors([string]$Path) {
     $cursor=[IO.Path]::GetFullPath($Path)
     while ($cursor) {

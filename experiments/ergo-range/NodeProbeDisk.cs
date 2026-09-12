@@ -229,6 +229,16 @@ public static class NodeProbeDisk
     // CreateVirtualDisk is the create-new operation and this helper never opens it.
     public static AttachedDisk Create(string imagePath)
     {
+        return CreateSized(imagePath, VirtualDiskBytes);
+    }
+
+    public static AttachedDisk CreateSync20GiB(string imagePath)
+    {
+        return CreateSized(imagePath, 20L * 1024L * 1024L * 1024L);
+    }
+
+    private static AttachedDisk CreateSized(string imagePath, long virtualBytes)
+    {
         RequireWindowsX64();
         ValidateNativeLayout();
         string fullImagePath = ValidateImagePathForCreate(imagePath);
@@ -245,7 +255,7 @@ public static class NodeProbeDisk
             {
                 Version = 1,
                 UniqueId = Guid.Empty,
-                MaximumSize = unchecked((ulong)VirtualDiskBytes),
+                MaximumSize = unchecked((ulong)virtualBytes),
                 BlockSizeInBytes = 0,
                 SectorSizeInBytes = 512,
                 ParentPath = IntPtr.Zero,
@@ -272,7 +282,7 @@ public static class NodeProbeDisk
 
             DiskSize size = ReadSize(handle);
             uint providerSubtype = ReadProviderSubtype(handle);
-            if (size.VirtualSizeBytes != VirtualDiskBytes)
+            if (size.VirtualSizeBytes != virtualBytes)
                 throw new InvalidOperationException("Created VHD has an unexpected virtual size");
             if (providerSubtype != ProviderSubtypeFixed)
                 throw new InvalidOperationException("Created VHD is not reported as fixed by its provider");
