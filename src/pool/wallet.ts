@@ -1,9 +1,19 @@
 // Local wallet derivation, not a new protocol frame or delivery profile.
 // pool-v2 §3 leaves the wallet KDF local; HMAC-SHA256 rejection sampling
 // produces nonzero canonical fields without reducing biased digest values.
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { ByteWriter, EncodingError } from "../bytes.js";
-import { FIELD_MODULUS, fieldToBytes } from "./field.js";
+import { FIELD_MODULUS, fieldToBytes, isValue } from "./field.js";
+
+/** Application identifier only, never a protocol frame or note derivation. */
+export function walletChangeRequestId(alias: string, value: bigint): string {
+  if (typeof alias !== "string" || !/^[a-zA-Z0-9_-]{1,80}$/.test(alias) || !isValue(value) || value === 0n) {
+    throw new EncodingError("invalid change request identity");
+  }
+  const w = new ByteWriter(); w.context(new TextEncoder().encode("moe/local-wallet/change-id"));
+  w.lengthPrefixed(new TextEncoder().encode(alias)); w.u64(value);
+  return "change_" + createHash("sha256").update(w.finish()).digest("hex");
+}
 
 export type WalletPurpose = "request-secret" | "issue-rho" | "output-rho" | "padding-rho" | "padding-secret";
 const purposes: readonly WalletPurpose[] = ["request-secret", "issue-rho", "output-rho", "padding-rho", "padding-secret"];

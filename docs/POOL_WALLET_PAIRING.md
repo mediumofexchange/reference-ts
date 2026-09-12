@@ -25,6 +25,10 @@ reimport is idempotent. Updates preserve the domain and invoice, require a newer
 generation, a newly authenticated digest and compare-and-swap of the previous
 digest. Payment code reads the durable binding and checks the complete request
 against the output before making a network connection.
+Ordinary payment operation assigns one command to that alias. Enrollment refuses
+another alias for the same receiver owner in the domain; new preparation also
+refuses ambiguous historical aliases or another pending output to that owner.
+Already-saved exact payment retries remain available.
 
 Credential rotation compares the stored generation, atomically installs a fresh
 key/certificate and revokes existing capabilities. A receiver process is fenced

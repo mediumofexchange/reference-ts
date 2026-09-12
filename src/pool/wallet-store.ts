@@ -14,7 +14,7 @@ import { readPoolCheckpoint, type PoolCheckpointFailure, type PoolCheckpointResu
 import { poolReceiptAttestsEvidence, poolReceiptCovers, type PoolReceipt } from "./receipt.js";
 import { copySegmentAuthority, decodeStatement, encodeStatement, parsePublicInputs, segmentIdentity, type SegmentAuthority, type Statement } from "./statement.js";
 import { decodeStoredReceipt, encodeStoredReceipt } from "./store-codec.js";
-import { deriveWalletField, type WalletPurpose } from "./wallet.js";
+import { deriveWalletField, walletChangeRequestId, type WalletPurpose } from "./wallet.js";
 import { decodeWalletDelivery, encodeWalletDelivery, walletDeliveryHash } from "./wallet-delivery-wire.js";
 import { MAX_WALLET_BACKUP_BYTES, openWalletBackup, sealWalletBackup, walletAuthorityBytes, walletBackupDigest } from "./wallet-backup.js";
 import { decodeWalletPairing, encodeWalletPairing, sameWalletTlsKey, validateWalletTls, WALLET_PAIRING_PROFILE, walletCertificateDigest, walletPairingDigest, walletRequestText, type WalletCredentialBinding, type WalletTlsCredentials } from "./wallet-pairing.js";
@@ -28,6 +28,19 @@ export type WalletNoteResult = PoolCheckpointFailure | {
   readonly kind: "unspent" | "spent";
   readonly checkpoint: Commitment;
   readonly verified: Extract<PoolCheckpointResult, { kind: "final" }>;
+};
+export interface WalletHolding {
+  readonly id: string;
+  readonly opening: NoteOpening;
+  readonly nullifier: bigint;
+  readonly state: "absent" | "spent" | "unspent";
+  readonly reservation?: string;
+}
+export type WalletHoldingsResult = PoolCheckpointFailure | {
+  readonly kind: "final";
+  readonly checkpoint: Commitment;
+  readonly verified: Extract<PoolCheckpointResult, { kind: "final" }>;
+  readonly notes: readonly WalletHolding[];
 };
 export class PoolWalletError extends Error {
   constructor(readonly code: "CONFLICT" | "UNKNOWN" | "INVALID" | "UNAVAILABLE", message: string) { super(message); this.name = "PoolWalletError"; }
@@ -128,6 +141,7 @@ export class PoolWalletStore {
     } catch (error) { this.db.close(); throw error; }
   }
   close(): void { this.db.close(); }
+  context(): SegmentAuthority { return copySegmentAuthority(this.authority); }
   private active(): void {
     requireThat(!this.readOnly, "CONFLICT", "wallet is read-only");
     requireThat(this.db.prepare("SELECT 1 FROM wallet_custody WHERE export IS NOT NULL").get() === undefined, "CONFLICT", "wallet source is frozen for offline recovery");
@@ -246,15 +260,33 @@ export class PoolWalletStore {
   }
   /** Secret and counter commit before this public request is returned. */
   request(requestId: string, backing: Uint8Array, value: bigint): WalletRequest {
+    return this.makeRequest(requestId, backing, value, false);
+  }
+  /** Internal change owners cannot alias an already-used invoice. */
+  changeRequest(alias: string, backing: Uint8Array, value: bigint): WalletRequest {
+    return this.makeRequest(walletChangeRequestId(alias, value), backing, value, true);
+  }
+  private unusedChange(requestId: string): void {
+    requireThat(["wallet_fulfilled", "wallet_inbox", "wallet_delivery_tokens"].every(table =>
+      this.db.prepare(`SELECT 1 FROM ${table} WHERE id=?`).get(requestId) === undefined), "CONFLICT", "change request is already used");
+    const owner = this.db.prepare("SELECT owner FROM wallet_requests WHERE id=?").get(requestId)?.["owner"];
+    if (owner !== undefined) for (const row of this.db.prepare("SELECT opening, change_opening FROM wallet_pending").iterate()) {
+      for (const column of ["opening", "change_opening"]) requireThat(row[column] === null ||
+        readNote(row[column] as string).owner.toString() !== owner, "CONFLICT", "change owner already has a prepared output");
+    }
+  }
+  private makeRequest(requestId: string, backing: Uint8Array, value: bigint, change: boolean): WalletRequest {
     id(requestId);
     requireThat(backing instanceof Uint8Array && backing.length === 32 && isValue(value) && value > 0n, "INVALID", "request needs a backing and positive u64 value");
     const name = bytesToHex(backing);
     return this.transaction(() => {
+      if (change) this.unusedChange(requestId);
       const old = this.db.prepare("SELECT * FROM wallet_requests WHERE id=?").get(requestId);
       if (old) {
         requireThat(old["backing"] === name && old["value"] === value.toString(), "CONFLICT", "request id reused with changed terms");
         return { id: requestId, backing: hexToBytes(name), value, owner: BigInt(old["owner"] as string) };
       }
+      requireThat(change || !requestId.startsWith("change_"), "INVALID", "change request namespace is reserved");
       const counter = BigInt(this.db.prepare("SELECT counter FROM wallet_meta WHERE singleton=1").get()!["counter"] as string) + 1n;
       const secret = this.derive("request-secret", [counter]), owner = ownerOf(secret);
       this.db.prepare("UPDATE wallet_meta SET counter=? WHERE singleton=1").run(counter.toString());
@@ -323,6 +355,12 @@ export class PoolWalletStore {
     return this.transaction(() => {
       const old = this.db.prepare("SELECT frame FROM wallet_pairings WHERE id=?").get(alias)?.["frame"] as string | undefined;
       if (old === frame) return digest;
+      // Existing aliases keep their invoice on rotation. Historical duplicate
+      // aliases must not strand an already-prepared payment on expired TLS.
+      if (old === undefined) for (const row of this.db.prepare("SELECT id, frame FROM wallet_pairings WHERE id<>?").iterate(alias)) {
+        const other = decodeWalletPairing(row["frame"] as string);
+        requireThat(other.domain !== pair.domain || other.request.owner !== pair.request.owner, "CONFLICT", "receiver owner already enrolled under another alias");
+      }
       if (old !== undefined) {
         const prior = decodeWalletPairing(old);
         requireThat(previousDigest === walletPairingDigest(old) && prior.domain === pair.domain &&
@@ -341,6 +379,38 @@ export class PoolWalletStore {
   pairedDeliveryClient(alias: string): WalletDeliveryClient {
     const frame = this.pairing(alias), pair = decodeWalletPairing(frame);
     return new WalletDeliveryClient(pair.endpoint, pair.token, pair.cert, { pair, current: () => this.pairing(alias) === frame });
+  }
+  /** Preflight and commit guard for NEW ordinary payments. Existing saved
+   * commands remain retryable even in historical wallets with duplicate aliases. */
+  assertNewPayment(alias: string): void {
+    const pair = decodeWalletPairing(this.pairing(alias));
+    for (const row of this.db.prepare("SELECT id, frame FROM wallet_pairings WHERE id<>?").iterate(alias)) {
+      const other = decodeWalletPairing(row["frame"] as string);
+      requireThat(other.domain !== pair.domain || other.request.owner !== pair.request.owner, "CONFLICT", "receiver owner has ambiguous aliases");
+    }
+    for (const row of this.db.prepare("SELECT opening, change_opening FROM wallet_pending WHERE id<>?").iterate(alias)) {
+      for (const column of ["opening", "change_opening"]) requireThat(row[column] === null ||
+        readNote(row[column] as string).owner.toString() !== pair.request.owner,
+        "CONFLICT", "receiver owner already has a prepared payment");
+    }
+  }
+  /** Keep the final pairing guard and nullifier reservation in one transaction. */
+  preparePayment(alias: string, statement: Statement, opening: NoteOpening, change: NoteOpening): void {
+    this.savePending(alias, statement, opening, change, () => {
+      this.assertNewPayment(alias);
+      const pair = decodeWalletPairing(this.pairing(alias));
+      requireThat(statement.kind === 2 && bytesToHex(opening.backing) === pair.request.backing &&
+        opening.value.toString() === pair.request.value && opening.owner.toString() === pair.request.owner,
+        "CONFLICT", "payment differs from paired invoice");
+      if (change.value > 0n) {
+        const requestId = walletChangeRequestId(alias, change.value);
+        this.unusedChange(requestId);
+        const request = this.db.prepare("SELECT backing, value, owner FROM wallet_requests WHERE id=?").get(requestId);
+        requireThat(request !== undefined && request["backing"] === bytesToHex(change.backing) &&
+          request["value"] === change.value.toString() && request["owner"] === change.owner.toString(),
+          "CONFLICT", "change differs from internal request");
+      }
+    });
   }
   /** Authorization checks never create requests or rotate capabilities. */
   authorizesDelivery(requestId: string, token: string, credential?: WalletCredentialBinding): boolean {
@@ -381,6 +451,9 @@ export class PoolWalletStore {
    * Reservation refuses rebuilding an input under a different local command.
    * This first slice does not release inputs or support lapse/replacement. */
   prepare(commandId: string, statement: Statement, opening?: NoteOpening, change?: NoteOpening): void {
+    this.savePending(commandId, statement, opening, change);
+  }
+  private savePending(commandId: string, statement: Statement, opening?: NoteOpening, change?: NoteOpening, guard?: () => void): void {
     id(commandId);
     const frame = bytesToHex(encodeStatement(this.authority.domain, statement));
     const own = decodeStatement(hexToBytes(frame)).statement, inputs = parsePublicInputs(own.kind, own.publicInputs);
@@ -392,6 +465,7 @@ export class PoolWalletStore {
     this.transaction(() => {
       const old = this.db.prepare("SELECT frame, opening, change_opening FROM wallet_pending WHERE id=?").get(commandId);
       if (old) { requireThat(old["frame"] === frame && old["opening"] === note && old["change_opening"] === changeNote, "CONFLICT", "pending command changed"); return; }
+      guard?.();
       for (const nf of inputs.nullifiers) requireThat(this.db.prepare("SELECT 1 FROM wallet_reservations WHERE nullifier=?").get(nf.toString()) === undefined, "CONFLICT", "input already reserved");
       this.db.prepare("INSERT INTO wallet_pending VALUES (?, ?, ?, ?, NULL)").run(commandId, frame, note, changeNote);
       for (const nf of inputs.nullifiers) this.db.prepare("INSERT INTO wallet_reservations VALUES (?, ?)").run(nf.toString(), commandId);
@@ -429,6 +503,34 @@ export class PoolWalletStore {
     const row = this.db.prepare("SELECT opening, receipt, checkpoint FROM wallet_fulfilled WHERE id=?").get(id(requestId));
     return row === undefined ? undefined : { opening: readNote(row["opening"] as string),
       receipt: decodeStoredReceipt(row["receipt"] as string), checkpoint: decodeCommitment(hexToBytes(row["checkpoint"] as string)) };
+  }
+  /** Inventory only of durably fulfilled notes. Replay once for the whole
+   * inventory; never query a server for a held leaf. Reservations are local
+   * facts, separate from spentness at this exact historical checkpoint. */
+  async inspectNotes(args: Parameters<typeof readPoolCheckpoint>[0]): Promise<WalletHoldingsResult> {
+    const holdings = this.db.prepare(`SELECT f.id, f.opening, r.backing, r.value, r.owner, r.secret
+      FROM wallet_fulfilled f JOIN wallet_requests r ON r.id=f.id ORDER BY f.id`).all().map(row => {
+      const opening = readNote(row["opening"] as string), secret = BigInt(row["secret"] as string);
+      requireThat(row["backing"] === bytesToHex(opening.backing) && row["value"] === opening.value.toString() &&
+        row["owner"] === opening.owner.toString() && opening.value > 0n && ownerOf(secret) === opening.owner,
+        "INVALID", "saved holding differs from request");
+      const cm = commitmentOf(this.authority.domain, opening);
+      return { id: row["id"] as string, opening, cm, nullifier: nullifierOf(this.authority.domain, cm, secret) };
+    });
+    let checkpoint: Commitment;
+    try { checkpoint = decodeCommitment(encodeCommitment(args.checkpoint)); }
+    catch { return { kind: "invalid", reason: "malformed inventory checkpoint" }; }
+    const verified = await readPoolCheckpoint({ ...args, checkpoint });
+    if (verified.kind !== "final") return verified;
+    if (!same(segmentIdentity(verified.prefix.header), this.authority.segment)) return { kind: "invalid", reason: "inventory checkpoint authority differs" };
+    const outputs = new Set(verified.prefix.events.flatMap(e => [...e.outputs]));
+    const spent = new Set(verified.prefix.events.flatMap(e => [...e.nullifiers]));
+    const notes = holdings.map(({ cm, ...holding }): WalletHolding => {
+      const reservation = this.db.prepare("SELECT pending FROM wallet_reservations WHERE nullifier=?").get(holding.nullifier.toString())?.["pending"] as string | undefined;
+      return { ...holding, state: !outputs.has(cm) ? "absent" : spent.has(holding.nullifier) ? "spent" : "unspent",
+        ...(reservation === undefined ? {} : { reservation }) };
+    });
+    return { kind: "final", checkpoint, verified, notes };
   }
   /** pool-v2 §§3, 10: check a receiver-owned note against verified history before
    * fulfillment or proof preparation. No receipt validation or state mutation.

@@ -12,6 +12,7 @@ import { LocalVenue } from '@mediumofexchange/reference/venue';
 import { PoolServiceClient } from '@mediumofexchange/reference/pool/service-client';
 import { PoolWalletStore } from '@mediumofexchange/reference/pool/wallet-store';
 import { deriveWalletField } from '@mediumofexchange/reference/pool/wallet';
+import { prepareWalletPayment, walletChangeRequestId } from '@mediumofexchange/reference/pool/wallet-payment';
 import { commitmentOf, nullifierOf, ownerOf } from '@mediumofexchange/reference/pool/notes';
 import { NoteTree } from '@mediumofexchange/reference/pool/note-tree';
 import { limbsOf } from '@mediumofexchange/reference/pool/field';
@@ -33,7 +34,7 @@ const load = path => deserialize(readFileSync(path));
 const save = (path, value) => writeFileSync(path, serialize(value), { mode: 0o600 });
 const backing = TERMS.backing.name;
 function pairing() {
-  const pair = decodeWalletPairing(wallet.pairing('receiver-invoice'));
+  const pair = decodeWalletPairing(wallet.pairing('pay'));
   assert.equal(pair.domain, Buffer.from(DOMAIN).toString('hex'));
   assert.equal(pair.request.id, 'invoice');
   assert.equal(pair.request.backing, Buffer.from(backing).toString('hex'));
@@ -45,7 +46,7 @@ function receiverClient(opening) {
   assert.deepEqual({ id: 'invoice', backing: Buffer.from(opening.backing).toString('hex'),
     value: opening.value.toString(), owner: opening.owner.toString() }, pair.request, 'pairing request differs');
   assert.equal(new URL(pair.endpoint).pathname, '/delivery/invoice');
-  return wallet.pairedDeliveryClient('receiver-invoice');
+  return wallet.pairedDeliveryClient('pay');
 }
 const head = [...limbsOf(DOMAIN), ...limbsOf(AUTHORITY.segment), AUTHORITY.scopeRoot];
 const prove = async (kind, publicInputs, witness) => ({ kind, publicInputs,
@@ -71,7 +72,7 @@ function evidenceArgs() {
 let result;
 try {
   if (mode === 'pair') {
-    const digest = wallet.acceptPairing('receiver-invoice', readFileSync(pairingFile, 'utf8'), trustedDigest, load(exchange), priorDigest || undefined);
+    const digest = wallet.acceptPairing('pay', readFileSync(pairingFile, 'utf8'), trustedDigest, load(exchange), priorDigest || undefined);
     result = { paired: digest };
   } else if (mode === 'request') {
     const request = wallet.request('invoice', backing, 7n);
@@ -115,7 +116,7 @@ try {
       await assert.rejects(wallet.fulfill('invoice', delivery, args), { code: 'CONFLICT' }); result = { replayRejected: true };
       assert.deepEqual(wallet.fulfillment('invoice'), saved);
     } else {
-      const requestId = mode === 'fund' ? 'fund' : mode === 'change' ? 'change' : 'invoice';
+      const requestId = mode === 'fund' ? 'fund' : mode === 'change' ? walletChangeRequestId('pay', delivery.opening.value) : 'invoice';
       const checked = await wallet.checkNote(requestId, delivery.opening, args);
       assert.equal(checked.kind, mode === 'missing' ? 'unavailable' : 'unspent', checked.kind === 'invalid' ? checked.reason : undefined);
       if (checked.kind === 'unavailable') {
@@ -124,11 +125,18 @@ try {
         // The read-only note check does not authenticate a payer's receipt.
         // Fulfillment independently checks the exact delivery before its write.
         const verified = await wallet.fulfill(requestId, delivery, args); assert.equal(verified.kind, 'final');
-        result = { finality: verified.kind, ...(mode === 'change' ? { change: wallet.received('change').value.toString() } : {}) };
+        result = { finality: verified.kind, ...(mode === 'change' ? { change: wallet.received(requestId).value.toString() } : {}) };
       }
     }
-  } else if (mode === 'prepare-pay' || mode === 'reprove-pay' || mode === 'prepare-burn' || mode === 'prepare-burn-change') {
-    const burning = mode.startsWith('prepare-burn'), inputId = mode === 'prepare-burn-change' ? 'change' : burning ? 'invoice' : 'fund';
+  } else if (mode === 'prepare-pay') {
+    const request = load(exchange);
+    assert.deepEqual({ id: request.id, backing: Buffer.from(request.backing).toString('hex'),
+      value: request.value.toString(), owner: request.owner.toString() }, pairing().request, 'pairing request differs');
+    const prepared = await prepareWalletPayment(wallet, 'pay', evidenceArgs(), async (publicInputs, witness) =>
+      (await prove(SPEND, publicInputs, witness)).proof);
+    assert.equal(prepared.kind, 'prepared'); result = { prepared: 'pay' };
+  } else if (mode === 'reprove-pay' || mode === 'prepare-burn' || mode === 'prepare-burn-change') {
+    const burning = mode.startsWith('prepare-burn'), inputId = mode === 'prepare-burn-change' ? walletChangeRequestId('pay', wallet.pending('pay').change.value) : burning ? 'invoice' : 'fund';
     const held = wallet.received(inputId);
     assert.ok(held);
     const secret = wallet.secret(inputId), nf = nullifierOf(DOMAIN, commitmentOf(DOMAIN, held), secret);
@@ -154,7 +162,9 @@ try {
         { ...inputs, ...scoped, backing: limbsOf(backing).map(String), quantity: String(held.value), cm_change: String(commitmentOf(DOMAIN, change)), change: note(change) });
       result = { prepared: 'burn', quantity: held.value.toString() };
     } else {
-      const request = load(exchange), changeRequest = wallet.request('change', backing, held.value - request.value);
+      const request = load(exchange), changeRequest = wallet.pending('pay').change;
+      assert.ok(changeRequest); assert.deepEqual(changeRequest.backing, backing);
+      assert.equal(changeRequest.value, held.value - request.value);
       assert.deepEqual(request.backing, backing); assert.equal(request.value, 7n);
       assert.deepEqual({ id: request.id, backing: Buffer.from(request.backing).toString('hex'),
         value: request.value.toString(), owner: request.owner.toString() }, pairing().request, 'pairing request differs');
@@ -184,9 +194,6 @@ try {
           secrets: [secret, otherSecret].map(String), nullifiers: [nf, otherNullifier].map(String) };
         save(join(dirname(evidenceFile), 'alternate.bin'), await prove(SPEND, alternateInputs, alternateWitness));
         result = { reproved: true, proofBytes: alternate.proof.length };
-      } else {
-        await prepare('pay', SPEND, publicInputs, witness, output, change);
-        result = { prepared: 'pay' };
       }
     }
   } else if (mode === 'submit-pay' || mode === 'submit-burn' || mode === 'lost-pay') {

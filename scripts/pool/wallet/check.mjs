@@ -18,6 +18,7 @@ if (Number(process.versions.node.split('.')[0]) < 24) {
   console.log('SKIP pool wallet acceptance: local SQLite custody requires Node 24.'); process.exit(0);
 }
 const { PoolStore } = await import('@mediumofexchange/reference/pool/store');
+const { checkWalletOperation } = await import('./operation-check.mjs');
 const { createPoolService } = await import('@mediumofexchange/reference/pool/service-http');
 const { decodePoolServiceReply, replyReceipt } = await import('@mediumofexchange/reference/pool/service-wire');
 const { encodeStoredReceipt } = await import('@mediumofexchange/reference/pool/store-codec');
@@ -259,6 +260,13 @@ try {
   console.log('PASS private HTTPS inbox: original attested delivery, dropped acknowledgment, receiver restart, exact retry and separate fulfillment.');
   console.log('PASS private per-wallet TLS and digest-authenticated enrollment: durable restart, credential/capability rotation, stale certificate/pairing rejection and exact payment retry. Independent digest authentication is modeled through parent-owned IPC.');
   console.log('PASS encrypted offline wallet handoff in fresh processes: ' + JSON.stringify(custodyEvidence));
+  const operation = await checkWalletOperation({ root, directory, baseUrl: `http://127.0.0.1:${server.address().port}/`,
+    evidenceFile, ledgerFile, compiled, checkpoint });
+  const operated = await store.view();
+  const operatedSnapshot = operated.checkpoints.find(e => e.commitment.sequence === operated.latest.sequence).snapshots[0];
+  assert.equal(operatedSnapshot.issued, 20n); assert.equal(operatedSnapshot.burned, 10n);
+  if (real) await audit(bytesToHex(encodeCommitment(operated.latest)), 'final', { issued: '20', burned: '10', outstanding: '10' });
+  console.log('PASS caller-selected wallet commands and verified selection: ' + JSON.stringify(operation));
   console.log('Scope: protected local storage is a deployment precondition; fixture DB/WAL are plaintext. Offline handoff needs independently retained key/latest digest and one active restore. Public fixture obligor keys, modeled independent digest authentication and known LocalVenue; no qualified user pairing channel, external finality, continuous backup, rollback prevention or external-goods atomicity claim.');
 } catch (error) { acceptanceFailure = error; }
 finally {
@@ -266,6 +274,7 @@ finally {
   for (const close of [() => stopReceiver(), async () => {
     if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   }, () => store?.close(), () => proofs?.close(), () => {
+    if (acceptanceFailure?.preserveWalletDirectory) throw new Error('operation resource ownership unresolved; directory preserved');
     if (receiverServer) throw new Error('receiver still owns scratch; directory preserved');
     const target = realpathSync(directory);
     if (dirname(target) !== scratch || !target.startsWith(scratch + sep) || !target.startsWith(join(scratch, 'pool-wallet-cli-'))) throw new Error('unsafe wallet cleanup path');

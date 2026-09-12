@@ -28,6 +28,11 @@ with the wallet; rotation revokes capabilities and fences obsolete servers.
 Independent digest authentication is modeled locally; a user authentication
 channel and external venue remain unqualified. Receiver note checks distinguish spent/unspent at an exact
 verified checkpoint; saved fulfillment lookup recovers historical records.
+The [ordinary local operation](POOL_WALLET_OPERATION.md) accepts caller-selected
+invoices, selects up to two verified unreserved notes, persists one payment per
+authenticated alias and spends verified change in another payment. Both CLIs
+share its builder. Historical status, reservations and fulfillment remain
+distinct; imported-note selection and automatic consolidation remain open.
 Silence recovery is modeled but not implemented in the
 runtime; usable wallet custody and an external witness write adapter remain open.
 

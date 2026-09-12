@@ -1,15 +1,15 @@
 {
   "date": "2026-09-12",
   "status": "passed-local-checks",
-  "baselineCommit": "1d5366be298b1943fa7c1391c25ba654e3583722",
+  "baselineCommit": "150fdbd7548deceac52a72f7436a0823dd844727",
   "node": "v24.6.0",
   "platform": "win32",
   "sourceSha256": {
-    "src/pool/wallet.ts": "254f1652e0aa3f21b0908df3280862360ab79f138bc005bee8702b6df15b3ead",
-    "src/pool/wallet-store.ts": "3d4c2a5f060ee477e667251f2e480aca464142c55aecf2b84041dc89ac460514",
+    "src/pool/wallet.ts": "fcdccd46c6d531c2ee7d458afdec334720e22e7def263d29e6dcaf7c97b46120",
+    "src/pool/wallet-store.ts": "2ac7376ce05e66710dd4b8871d4cebdfb637ff8b8dd55a4d9804b393f1af100f",
     "test/pool-wallet.test.ts": "f6dbb5140720075971ca411abf4b09da5cd571947e808462ddcdfa1a37288f71",
-    "scripts/pool/wallet/check.mjs": "b3822ea8fcf84b329855bf6d22dc6485c1e2170577c5d154fb74f0c3fcbfdbae",
-    "scripts/pool/wallet/cli.mjs": "c2b3cc17d028d1f923adb117c7a4947afe08cbbc8e7ff325b6b0607f702994d6",
+    "scripts/pool/wallet/check.mjs": "1df8ec0bfbb78d88e7d0dc86bb59591b080a9cc8f2f4db5626293b0f3a22c8c9",
+    "scripts/pool/wallet/cli.mjs": "caf20282fb69b5f2ab61add3d6412d5dfb96cb6c1c18418b3f818329ec5c500c",
     "scripts/pool/wallet/profile.mjs": "0054648a16e7b33c2cc6ca9c2448edd2084dc1a22ef299e9008aaf24bc6e535a",
     "scripts/pool/wallet/proofs.mjs": "d7bb991dedb137586627d700bff83b025dcb6ecde1da6c3c83020d45d5fc647e",
     "scripts/pool/wallet/audit.mjs": "1fb022ab66ed394bbaf5a7ddec70f6efea5d81645709a4ebacb8cb0df63ac947",
@@ -32,16 +32,19 @@
     "test/pool-wallet-pairing.test.ts": "6dccccb4e1ce61592d2152471344a553c06df447f8a3dd4af164d2e4f9239be0",
     "scripts/pool/wallet/tls.mjs": "e8c8f48a79dcbfd0af8040f010faea0ca0601d985e9c1fb7a07c70ac22929f59",
     "test/fixtures/wallet-tls/pin-ca-cert.pem": "dfb8ea1017da0e30a9732285304d5a46446a66445a33eb752325b48193004081",
-    "test/fixtures/wallet-tls/pin-leaf-cert.pem": "9bd6d6b58d5b795951ff8e781e7bb89e96ae1cdedbc1add6db11b606db96ada8"
+    "test/fixtures/wallet-tls/pin-leaf-cert.pem": "9bd6d6b58d5b795951ff8e781e7bb89e96ae1cdedbc1add6db11b606db96ada8",
+    "src/pool/wallet-payment.ts": "336ce0640e764c0f556daeaed4ef8e05d6479d8e2bb3e6d691806f61dc3502d8",
+    "test/pool-wallet-operation.test.ts": "d860280c4f76f271ac204e0ec62a18a54288b2855962041b78d69162cf28e628",
+    "scripts/pool/wallet/commands.mjs": "1795ce7ff5afd1aabe0e941cbb1d5a250e39c48dbfaad61b72b20f175c722d63",
+    "scripts/pool/wallet/operation-check.mjs": "947edd328c04bbe18a5f46126652203dee5983b889c06f0dcc5c26dd4b6896bc"
   },
   "verification": [
     {
       "command": "npm run check",
       "status": "passed",
-      "previousAttempt": "1862 passed; new custody test counted the second callback after its expected exception. Replaced with a behavioral connection-time freeze witness; focused suite then passed.",
       "exitCode": 0,
-      "testFilesPassed": 103,
-      "testsPassed": 1863,
+      "testFilesPassed": 104,
+      "testsPassed": 1876,
       "walletTestsPassed": 15,
       "deliveryTestsPassed": 13,
       "backupTestsPassed": 15,
@@ -55,35 +58,35 @@
         "pilot",
         "operator store crash",
         "pool service",
-        "ideal wallets with private TLS, enrollment, rotation and encrypted recovery",
+        "ideal wallets with authenticated enrollment, rotation, encrypted recovery, arbitrary invoices and verified one/two-note selection",
         "twenty-two wallet crashes/recoveries",
         "spent-set checks"
-      ]
+      ],
+      "operationTestsPassed": 13
     },
     {
-      "command": "npx vitest run test/pool-wallet-pairing.test.ts",
+      "command": "npx vitest run test/pool-wallet-operation.test.ts test/pool-wallet-pairing.test.ts",
       "exitCode": 0,
-      "testsPassed": 12
+      "testsPassed": 25,
+      "scope": "Final compatibility and pairing guards, including legacy credential rotation"
     },
     {
-      "command": "npx vitest run test/pool-wallet-delivery.test.ts test/pool-wallet-backup.test.ts",
-      "exitCode": 0,
-      "testsPassed": 28
-    },
-    {
-      "command": "node scripts/pool/wallet/crash.mjs",
-      "exitCode": 0,
-      "abruptExits": 22,
-      "freshRecoveries": 22
+      "command": "npm run typecheck",
+      "exitCode": 0
     },
     {
       "command": "npm run check:pool-wallet-real",
       "exitCode": 0,
-      "mode": "Final built v2 runtime, private per-wallet TLS, independent-digest enrollment, rotation, two encrypted restores and separate public audit",
-      "finalCheckpoint": {
+      "mode": "Pinned real v2 proofs: original recovery/rotation/burn flow and caller-selected two-input payment followed by exact payment from verified change",
+      "originalBurnCheckpoint": {
         "issued": "10",
         "burned": "10",
         "outstanding": "0"
+      },
+      "finalCheckpoint": {
+        "issued": "20",
+        "burned": "10",
+        "outstanding": "10"
       }
     }
   ],
@@ -106,7 +109,9 @@
     "Read-only same-domain sessions retain imported/grandchild spentness checks while writable sessions pin full authority.",
     "Private per-wallet TLS keys and exact invitation bindings survive both offline restores and receiver restart at the same endpoint.",
     "Rotation changes key/generation and revokes capabilities. The prior certificate and stale pairing are refused; newly authenticated enrollment permits the same payment retry.",
-    "Trusted invitation digests are supplied through parent-owned IPC separately from invitation bytes; this models independent authentication, not a qualified user channel."
+    "Trusted invitation digests are supplied through parent-owned IPC separately from invitation bytes; this models independent authentication, not a qualified user channel.",
+    "Caller-selected command processes issue 4 and 6, authenticate invoice order17 for 7, select both inputs, submit/retry exact bytes, deliver over private HTTPS, verify historical receipt and change 3, then authenticate order3 and spend verified change exactly. Zero change is not a holding.",
+    "Checkpoint inventory reports missing/invalid evidence separately from absent/spent/unspent notes and persistent local reservations; proof creation never uses an unverified served tail or a reserved input."
   ],
   "publicAudit": {
     "process": "Separate process receives public evidence files, compiled public circuits and a separately supplied exact expected commitment; no wallet database or opening input.",
@@ -115,7 +120,8 @@
       "Missing history returns unavailable.",
       "Corrupted proof returns invalid.",
       "Reordered statement history returns invalid.",
-      "Alternate independently verified real spend proof changes only the padding nullifier, preserving outputs and totals, but cannot replace the expected exact history."
+      "Alternate independently verified real spend proof changes only the padding nullifier, preserving outputs and totals, but cannot replace the expected exact history.",
+      "Combined original and ordinary flows independently derive issued 20, burned 10 and outstanding 10 from public evidence."
     ],
     "isOperatingSystemSandbox": false
   },
@@ -143,7 +149,7 @@
       "Capability commits are stable after restart; interrupted uncommitted capability is unauthorized and replaced by fresh randomness.",
       "Inbox commit is absent before or exact after interruption; repeated delivery returns the same hash and never records fulfillment.",
       "Export bytes and source freeze commit together; lost reply returns the original stored ciphertext. Before COMMIT source remains active.",
-      "Import commits all seven tables and exact digest provenance together. Before COMMIT destination has a different empty identity; after COMMIT fresh reopen identifies complete imported state.",
+      "Import commits the complete snapshot and exact digest provenance together. Before COMMIT destination has a different empty identity; after COMMIT fresh reopen identifies complete imported state.",
       "Recovered request derivation, both reservations, full proof/private change, original receipt, capability, inbox and fulfillment remain exact.",
       "Credential replacement and capability revocation commit atomically; exact lost-reply retry stays at generation 2.",
       "Invitation token mint and accepted pairing retain exact frames/digests after commit; pre-commit interruption leaves prior state.",
@@ -155,8 +161,8 @@
   },
   "review": {
     "type": "Independent adversarial design and actual source/diff review, focused execution and critical fix readback",
-    "choice": "Use standard HTTPS with a durable invoice capability and immutable canonical inbox; original receipt attestation prevents altered-proof poisoning; fulfillment remains separate. Offline custody uses a bounded authenticated whole-wallet export, transactional source freeze and exact fresh-path restoration with independently retained digest. Private transport credentials and invoice bindings now persist in the same wallet; independent digest authentication, monotonic CAS rotation, exact leaf pins and atomic server fencing preserve the local trust boundary.",
-    "specification": "Pinned pool-v2 sections 3 and 9 already provide the private delivery and receipt relations. No normative, circuit or signed-frame amendment.",
+    "choice": "Use standard HTTPS with a durable invoice capability and immutable canonical inbox; original receipt attestation prevents altered-proof poisoning; fulfillment remains separate. Offline custody uses a bounded authenticated whole-wallet export, transactional source freeze and exact fresh-path restoration with independently retained digest. Private transport credentials and invoice bindings now persist in the same wallet; independent digest authentication, monotonic CAS rotation, exact leaf pins and atomic server fencing preserve the local trust boundary. Ordinary local operation reuses fulfilled notes as inventory, one checkpoint replay, at most two same-backing inputs, one immutable payment per authenticated alias and the same durable reservation transaction.",
+    "specification": "Pinned pool-v2 sections 3, 4, 7.2 and 9 supply the fresh owners, deterministic randomness, local paths, spend shape and evidence relations. No normative, circuit or signed-frame amendment.",
     "resolvedFindings": [
       "UTF-8 decoding silently removed a BOM. Preserve it so canonical reconstruction rejects alternate request and acknowledgment bytes; both regressions passed.",
       "Receiver cleanup could relinquish child ownership before exit and skip independent cleanup on failure. Retain ownership until observed exit, bound forced termination, aggregate cleanup failures and exercise a noncooperating child in both ideal and real acceptance.",
@@ -167,7 +173,10 @@
       "Ciphertext is owned before digest and authentication to keep both checks on the same bytes.",
       "Independent design/source review required atomic invitation snapshots, actual certificate/generation server fencing, post-handshake custody checks and expired-key recoverability.",
       "Pairing request IDs were RegExp-coerced; explicit string validation now rejects otherwise valid numeric/boolean ID frames. Self-signed certificates also require matching issuer and subject.",
-      "Repeated Windows key generation exposed unreliable named-pipe input. The final helper generates keys/certificates through bounded OpenSSL-native stdout and validates exact PEM roles; sequential/concurrent probes passed."
+      "Repeated Windows key generation exposed unreliable named-pipe input. The final helper generates keys/certificates through bounded OpenSSL-native stdout and validates exact PEM roles; sequential/concurrent probes passed.",
+      "Duplicate invoice aliases could create two payments. New enrollment refuses a duplicate owner; new preparation also refuses ambiguous historical aliases and any other pending primary/change output to that owner. Existing saved retries and authenticated credential rotation remain available.",
+      "A deterministic change ID could reuse an invoice owner, including while proof creation yielded. New invoice IDs reserve the change namespace; historical exact request replay survives. Change creation and reservation commit both check unused inbox/fulfillment/capability state, both pending output columns, and exact stored change terms.",
+      "Operation-check imports are deferred until after the Node 20 skip, path containment uses platform separators, child output drains before completion, and unresolved child ownership propagates to parent scratch preservation. Reproof reads existing change; saved prepare retry requires neither evidence files nor a proof engine."
     ],
     "execution": [
       "Independent wallet/transport focused suite before final regression additions",
@@ -175,10 +184,11 @@
       "Independent immediate parent-disconnect probe: receiver exited, no surviving child",
       "Final cleanup readback: no unresolved material findings",
       "Independent custody design/source review and critical fixes/read-only/worker/docs readback: no unresolved material findings. Reviewer did not rerun full/real checks; integration evidence is separate.",
-      "Independent final canonical parser, TLS-valid alternate-leaf pin regression and simplified OpenSSL helper smoke passed; no unresolved material source-review finding."
+      "Independent final canonical parser, TLS-valid alternate-leaf pin regression and simplified OpenSSL helper smoke passed; no unresolved material source-review finding.",
+      "Independent ordinary-operation design/source review and targeted compatibility/change-race/integration readbacks closed with no material finding. Full and focused execution remain separately recorded."
     ],
     "unresolvedMaterialFindings": 0,
-    "executionGate": "Final full local check, 12 focused pairing regressions, 22 interruption recoveries and final-helper real-proof wallet acceptance passed."
+    "executionGate": "Full local check (104 files / 1,876 tests and all acceptance stages), final focused operation/pairing (25 tests), 22 crash recoveries, final typecheck and pinned real-proof ordinary/recovery/public-audit flow passed."
   },
   "limits": [
     "Known LocalVenue ledger and public fixture obligor keys, not authenticated external finality or real funds.",
@@ -187,13 +197,13 @@
     "Separate public-input audit is not an operating-system sandbox.",
     "Abrupt process-exit tests do not cover power loss or storage corruption; their proof fixtures are ideal. Real acceptance separately retains actual proof bytes across process restarts.",
     "Historical fulfillment and received records are not current-spendability assertions or exactly-once external goods/payout.",
-    "CLI currently supports one pinned segment without imports; no automatic note selection, reservation release or lapse/replacement support.",
+    "Local commands support one pinned segment without imports and up to two same-backing notes. No automatic consolidation, reservation release or lapse/replacement support; large-wallet replay, pair search and device costs remain unqualified.",
     "No normative changes, new circuit pins, deployment or release. This record summarizes inspected sources and observed results, not a raw transcript.",
     "No continuous backup or safe arbitrary stale-backup restoration; no pre-custody executables, arbitrary key-holder-created snapshot semantics or hostile local database mutation support. No power-loss/device-loss assurance from controlled handoff."
   ],
   "previousCi": {
-    "commit": "1d5366be298b1943fa7c1391c25ba654e3583722",
-    "run": 34702129809,
+    "commit": "150fdbd7548deceac52a72f7436a0823dd844727",
+    "run": 34704797024,
     "jobsPassed": 7
   },
   "receiverBoundary": {
@@ -282,8 +292,8 @@
     "profile": "moe/wallet-offline/v1",
     "envelopeMaxBytes": 16777216,
     "observedRealFixtureExportBytes": {
-      "payer": 66102,
-      "receiver": 35144
+      "payer": 66157,
+      "receiver": 35143
     },
     "cipher": "AES-256-GCM",
     "randomKeyBytes": 32,
@@ -304,5 +314,32 @@
     "keyGeneration": "OpenSSL 3 RSA-2048, SHA-256 self-signed localhost leaf, 30-day validity; bounded stdout contains exactly one private-key PEM and one certificate PEM; no key staging file.",
     "helperEvidence": "Final Windows helper: 10 sequential and 8 concurrent key/certificate generations passed; separate independent key-match and no-created-file smoke passed.",
     "expiry": "Structural backup validation permits expired credentials to restore and rotate; TLS validity remains transport policy, not protocol time."
+  },
+  "ordinaryOperation": {
+    "profile": "docs/POOL_WALLET_OPERATION.md",
+    "builder": "src/pool/wallet-payment.ts",
+    "commands": "scripts/pool/wallet/commands.mjs",
+    "inventory": "Existing fulfilled records; one verified checkpoint replay; local reservations remain separate",
+    "selection": "Smallest sufficient single note, otherwise least-total sufficient pair with request-ID tie breaking; real nullifiers sorted before derivation",
+    "funding": [
+      "4",
+      "6"
+    ],
+    "payments": [
+      {
+        "value": "7",
+        "realInputs": 2,
+        "change": "3"
+      },
+      {
+        "value": "3",
+        "realInputs": 1,
+        "change": "0"
+      }
+    ],
+    "freshProcesses": true,
+    "receiverRestarts": 1,
+    "authentication": "Parent-owned receiver object supplies the independently trusted digest; no qualified human authentication channel claim",
+    "schemaChange": false
   }
 }

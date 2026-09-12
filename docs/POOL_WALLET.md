@@ -8,6 +8,9 @@ It is a developer fixture with a known local venue record. The same CLI runs
 with either an ideal verifier or the pinned real v2 circuits and verifier.
 Real mode constructs private witnesses locally and sends only canonical
 statements to the service. It is a developer fixture, not an end-user wallet.
+The [ordinary operation profile](POOL_WALLET_OPERATION.md) adds caller-selected
+invoices and verified one/two-note payments through `commands.mjs`. Both command
+flows use the same `pool/wallet-payment` builder.
 
 ## Persistence and verification
 
@@ -45,6 +48,9 @@ read-only mode and cannot prepare, submit, fulfill, authorize delivery or export
 Legacy databases must first be opened with their original writable authority to
 validate saved contextual records and install the custody metadata.
 The CLI requires `unspent` before fulfillment and before preparing another spend.
+`inspectNotes(evidence)` replays once for all fulfilled holdings, reporting
+`absent`, `spent` or `unspent` at that checkpoint and each local reservation
+separately. Missing or invalid evidence has no balance interpretation.
 This check does not authenticate the payer's receipt; fulfillment still does.
 An older checkpoint can report unspent after a later spend. Neither this result
 nor local reservations establish current spendability or latest external state.
@@ -272,8 +278,10 @@ The database, SQLite WAL and host backups contain plaintext secrets; only the
 explicit offline export is encrypted. The selected custody profile requires
 protected local storage, trusted current binaries, an independent current recovery
 record and one active copy. The fixture does not qualify device protection.
-It has no key custody service, continuous backup, seed-only restore, note selection, automatic
+It has no key custody service, continuous backup, seed-only restore, automatic
 reservation release, lapse/replacement handling or external witness adapter.
+Selection supports up to two same-backing notes in one segment without imports;
+larger funding shapes need consolidation, which is not yet provided.
 The fixture uses private per-wallet TLS keys and durable digest-checked pairing.
 Supported deployment still needs a qualified independent authentication channel,
 device protection and endpoint operation. The invitation file alone conveys no
