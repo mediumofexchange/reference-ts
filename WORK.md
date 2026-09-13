@@ -4,22 +4,21 @@ Updated: 2026-09-13
 
 ## Goal
 
-Active slice: frame a portable exact-byte evidence package and use it for fresh
-seedless/receiver local replay. Acceptance: independently reviewed normative
-framing committed before codecs; canonical vectors, malformed/duplicate/order,
-budget and aliasing refusals; real-proof package replay agrees with existing
-audit without granting authority or completeness. Range authentication remains
-a separate venue-profile dependency, not a fixture boolean.
-Branches: reference `feat/v3-evidence-package`; companion
-`spec/v3-evidence-package`. Both started at clean main with fetched parity.
+Portable exact-byte v3 evidence packages now feed fresh seedless/receiver local
+replay. Canonical vectors, hostile cases, independent review and final real
+proofs passed. Package parsing grants no authority, completeness or spendability.
+Implementation: f9ea004 and ac54032, branch `feat/v3-evidence-package`.
+Companion: `spec/v3-evidence-package`, 10dcf67 merged/pushed to main.
+No production runtime, circuit, key, dependency or host-control change.
 
 ## Status
 
 - Specification §12 at 10dcf67 fixes canonical source-neutral evidence transport
   and the exact-request venue-evidence boundary. Independent normative review
   clarified the 355-byte receipt-record item; no material findings remain.
-- Model codec and fresh-process package integration are implemented. Final
-  codec tests, independent implementation review and delivery remain pending.
+- Implementation f9ea004 plus allocation fix ac54032 are independently reviewed
+  with no unresolved material findings. The portable boundary decodes within
+  budgets before copying and owns only viewed selection/seed bytes.
 - Prior §11 configuration/signed-terms checks remain unchanged, including
   the existing exact cofactored signature equation and canonical identity R.
 - Model-only codecs and candidate manifest/tooling are implemented. Replay
@@ -34,15 +33,20 @@ Branches: reference `feat/v3-evidence-package`; companion
 
 - Baseline main 3eeac8b: CI 34720418325 passed. Both repositories fetched with
   parity before branching; no branch protections/rulesets reported.
-- Typecheck and real `check:pool:local-replay`: 24 groups/8 proofs passed,
+- Final sequential `check:pool:local-replay`: 24 groups/8 proofs passed,
   including canonical package worker replay, omitted/conflicting objects,
   unsupported range assertions, budgets, shared storage and async ownership.
-  Current run is scratch/pool-v3-local-replay-results.json; promote after review.
+  [Retained report](docs/pool-v3-local-replay-verification.json): 47,509-byte
+  package, all 20 source hashes match final files, including ac54032.
 - Issue 10, pay 7/change 3, burn 5/change 2; public outstanding 5. Fresh audit
   and receiver agree with all six artifact identities checked. Candidate terms
   validity never sets the full terms-authority/currentness flags.
-- Circuits/configuration/keys and production runtime are unchanged; reuse
-  baseline conformance. Current typecheck and focused codec evidence are due.
+- Codec tests: 12 passed. Full `npm run check`: 1,908 tests plus package,
+  service/wallet/crash/spent checks passed. Keep shared `dist` rebuilds sequential.
+  Initial sandbox esbuild refusal was resolved with the required filesystem
+  access. A concurrent-build replay failure was rerun sequentially and passed.
+- Circuits/configuration/keys/runtime are unchanged; reuse baseline conformance.
+  Final delivery CI is pending; inspect the main revision's run next.
 
 ## Existing local product and custody boundary
 
@@ -72,21 +76,20 @@ Branches: reference `feat/v3-evidence-package`; companion
 
 ## Next
 
-1. Finish package codec tests, independent review, documentation and delivery.
-2. Define authenticated record-range profile and complete dependency replay against
+1. Check final main CI, then define authenticated record-range profile and complete dependency replay against
    the [package checks](docs/POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay).
    Independently review/commit normative certificate gaps before code.
-3. Configuration approval stays disabled until all adoption prerequisites hold.
+2. Configuration approval stays disabled until all adoption prerequisites hold.
    Device qualification and external publication remain separate dependencies;
    do not alter this workstation's controls.
 
 ## Open questions
 
-- Reassessed 2026-09-12: roughly **50% done / 50% remaining**, plausible done
-  range **40-60%**. Checked candidate configuration and signed terms are reusable
-  progress; they do not materially move the coarse estimate while recovery and
+- Reassessed 2026-09-13: roughly **50% done / 50% remaining**, plausible done
+  range **40-60%**. Portable packages are reusable progress but do not materially
+  move the coarse estimate while recovery and
   authority gates remain. Largest blocks: runtime recovery, authenticated range
   evidence/publication, qualified custody/continuous recovery and user operation.
-- Stay with the current instance through package acceptance; switch to a fresh
-  instance for venue-range authority design. This is a context-efficiency
+- Switch to a fresh instance for venue-range authority design; this completed
+  package slice isolates transport and its evidence. This is a context-efficiency
   recommendation, not measured model performance.

@@ -205,7 +205,7 @@ receiver process reconstructs its unspent change and a local membership path
 from its seed and those public bytes. No witness or original wallet journal
 enters either process. The public outstanding amount is 10 minus 5 = 5.
 
-Fresh readers receive the canonical [§12 evidence package](https://github.com/mediumofexchange/money-from-first-principles/blob/10dcf67/pool-v3.md#12-evidence-packages-and-dependency-retention):
+Fresh readers receive the 47,509-byte canonical [§12 evidence package](https://github.com/mediumofexchange/money-from-first-principles/blob/10dcf67/pool-v3.md#12-evidence-packages-and-dependency-retention):
 exact configuration, commitment, complete directory preimage, snapshot and
 trail bytes, ordered by kind and payload hash. Local limits are 1 MiB and 1,024
 items, checked with all field boundaries before hashing payloads. The bounded
@@ -214,7 +214,9 @@ engine as the in-memory fixture. Missing objects, duplicate/conflicting
 objects, unsupported dependencies, false range-completeness assertions and
 replica substitutions yield no partial audit or candidates. Package bytes,
 selection and seed are owned before asynchronous verification; shared input
-refuses. Generic transport can retain all eleven specified evidence kinds,
+refuses. Decoding checks budgets before ownership copying, and fixed-width
+selection/seed views are copied without their unused backing allocations.
+Generic transport can retain all eleven specified evidence kinds,
 including opaque malformed inner bytes, without interpreting them as valid.
 Venue evidence and complete dependency replay remain unsupported by this reader.
 

@@ -64,55 +64,55 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 3383.2321999999986
+      "elapsedMs": 3356.4487999999983
     },
     {
       "label": "pay 7, change 3",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 7096.450700000005
+      "elapsedMs": 6261.9156
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 5207.962699999996
+      "elapsedMs": 5653.899000000001
     },
     {
       "label": "valid maximum issuance",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2751.3940999999977
+      "elapsedMs": 1717.7886999999973
     },
     {
       "label": "valid proof, different scope",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2558.4812999999995
+      "elapsedMs": 1683.388500000001
     },
     {
       "label": "valid proof, unaccepted anchor",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5499.872199999998
+      "elapsedMs": 4893.214200000002
     },
     {
       "label": "valid proof, spent input",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 7260.164000000004
+      "elapsedMs": 4997.8778999999995
     },
     {
       "label": "valid proof, duplicate output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5444.856
+      "elapsedMs": 4865.984899999996
     }
   ],
   "sourceSha256Lf": {
-    "scripts/pool/v3/local-replay.mjs": "1db1073605a291ee1048c3fc7c549e39917a506b3f0a834cb91a60934c7fae42",
+    "scripts/pool/v3/local-replay.mjs": "722b6fc1c9d912af5fbf2f1f288ed707738c98c65cc3483244eba10f8c7489b3",
     "scripts/pool/v3/local-worker.mjs": "26c9a84532ca627ddedb0b07fcb99eb4908ce74079092e9aae6ebcd0e28b937c",
-    "scripts/pool/v3/local-check.mjs": "0fb5d7c93f35f336bbdbba6fbe2a4ecd5d160a980460cd49479d4826201cddce",
+    "scripts/pool/v3/local-check.mjs": "1f9f26084757c276d39c159632c97ea85558dfdc059758c90cd30419cb30c887",
     "scripts/pool/delivery/evidence-reader.mjs": "65f1a13caf29cadd7db46f10769920ccfd66c879f12d064c091be632a86fdf66",
     "scripts/pool/delivery/crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
     "scripts/pool/spent-set/radix.mjs": "a65c10fcca67cd6f486c73f3e66f4eba254f4aa4a6d2be8c12d2debe66af4953",
@@ -150,7 +150,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "651caad713ee88eb0f1ce0eb83bcdeb3ed1bd1030c9a464be9aab36834b6d7d5"
+      "evidenceHash": "71193b353720abb8d73c3f7b35edc57ddfb870e2ff821ec56814426254906a58"
     },
     "candidates": []
   },
@@ -173,7 +173,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "651caad713ee88eb0f1ce0eb83bcdeb3ed1bd1030c9a464be9aab36834b6d7d5"
+      "evidenceHash": "71193b353720abb8d73c3f7b35edc57ddfb870e2ff821ec56814426254906a58"
     },
     "candidates": [
       {
