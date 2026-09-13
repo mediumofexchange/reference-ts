@@ -5,14 +5,15 @@ import { fileURLToPath } from "node:url";
 import { deserialize } from "node:v8";
 import { Barretenberg, BackendType, UltraHonkVerifierBackend } from "@aztec/bb.js";
 import { loadEvidenceCodecs } from "../delivery/evidence-reader.mjs";
-import { replayLocalPackage } from "./local-replay.mjs";
+import { replayEvidencePackage } from "./local-replay.mjs";
 import { field } from "../fixtures.mjs";
 import { loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys,
   loadConfigurationCodecs } from "./candidate.mjs";
 
 let api;
 try {
-  const codec = { ...await loadEvidenceCodecs(process.argv[2]), ...await loadConfigurationCodecs(process.argv[2]) };
+  const codec = { ...await loadEvidenceCodecs(process.argv[2]), ...await loadConfigurationCodecs(process.argv[2]),
+    ...await import(new URL("model/pool-v3-package.js", process.argv[2])) };
   const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
   const configuration = candidateConfiguration(manifest, codec);
   const keys = readCandidateKeys(fileURLToPath(process.argv[2]), manifest);
@@ -31,7 +32,7 @@ try {
   const verifier = { configuration, verify: (kind, publicInputs, proof) => backend.verifyProof({
     proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
   }, { verifierTarget: "noir-recursive" }) };
-  process.stdout.write(JSON.stringify(await replayLocalPackage(input, verifier, codec)));
+  process.stdout.write(JSON.stringify(await replayEvidencePackage(input, verifier, codec)));
 } catch {
   process.stderr.write("local replay fixture failed\n");
   process.exitCode = 1;

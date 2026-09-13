@@ -17,7 +17,7 @@ import { signCommitment, encodeCommitment, directoryRoot } from "../../../dist/c
 import { prepareExactOutput } from "../delivery/crypto.mjs";
 import { loadEvidenceCodecs, LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../spent-set/radix.mjs";
-import { replayLocalPackage } from "./local-replay.mjs";
+import { replayLocalPackage, replayEvidencePackage, PACKAGE_LIMITS } from "./local-replay.mjs";
 import { field } from "../fixtures.mjs";
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration,
   readCandidateKeys, loadConfigurationCodecs } from "./candidate.mjs";
@@ -36,11 +36,20 @@ try {
   const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
   if (config.error) throw new Error("TypeScript configuration unreadable");
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const program = ts.createProgram(["trail", "configuration", "terms"].map(name => join(root, `model/pool-v3-${name}.ts`)), {
+  const program = ts.createProgram(["trail", "configuration", "terms", "package"].map(name => join(root, `model/pool-v3-${name}.ts`)), {
     ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false,
   });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0); assert.equal(program.emit().emitSkipped, false);
-  const codec = { ...await loadEvidenceCodecs(url), ...await loadConfigurationCodecs(url) };
+  const codec = { ...await loadEvidenceCodecs(url), ...await loadConfigurationCodecs(url),
+    ...await import(new URL("model/pool-v3-package.js", url)) };
+  function portable(input) {
+    const p = input.package;
+    return { ...input, package: codec.encodeEvidencePackage([
+      { kind: 1, payload: p.configuration }, { kind: 2, payload: p.commitment },
+      { kind: 3, payload: codec.encodeEvidenceDirectory(p.directory, PACKAGE_LIMITS) },
+      { kind: 4, payload: p.snapshot }, { kind: 6, payload: p.trail },
+    ], PACKAGE_LIMITS) };
+  }
   const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
   const configuration = candidateConfiguration(manifest, codec), configurationBytes = codec.configurationBytes(configuration);
   execFileSync(process.execPath, [join(here, "compile.mjs"), build], { cwd: root, stdio: "inherit", windowsHide: true, timeout: 300_000 });
@@ -347,10 +356,59 @@ try {
     const wrongSeed = await replayLocalPackage({ ...complete, seed: b(62) }, verifier, codec);
     assert.deepEqual(wrongSeed.candidates, []); assert.equal(wrongSeed.noMatchesMeansZeroBalance, false);
   });
+  await test("canonical evidence package replays the same audit and receiver through one engine", async () => {
+    assert.deepEqual(await replayEvidencePackage(portable(complete), verifier, codec), audit);
+    assert.deepEqual(await replayEvidencePackage(portable({ ...complete, seed: receiverSeed }), verifier, codec), receiver);
+    const historical = portable({ ...complete, selection: { ...complete.selection, mode: "historical-fixture" } });
+    assert.equal((await replayEvidencePackage(historical, verifier, codec)).status, "historical-local-replay");
+  });
+  await test("missing, conflicting, unsupported and resource-limited package evidence returns no partial result", async () => {
+    const packed = portable(complete), items = codec.decodeEvidencePackage(packed.package, PACKAGE_LIMITS);
+    const beforeProof = { configuration, verify() { throw new Error("package guard ran too late"); } };
+    async function refuse(p, status) {
+      const result = await replayEvidencePackage(p, beforeProof, codec);
+      assert.equal(result.status, status); assert.equal(result.audit, null); assert.deepEqual(result.candidates, []);
+      assert.equal(result.spendable, false); assert.equal(result.currentRangeAuthenticated, false);
+    }
+    for (let i = 0; i < items.length; i++) {
+      await refuse({ ...packed, package: codec.encodeEvidencePackage(items.filter((_, j) => i !== j), PACKAGE_LIMITS) }, "unresolved-evidence");
+    }
+    const order = entries => entries.sort((a, b) => a.kind - b.kind || Buffer.compare(Buffer.from(sha(a.payload), "hex"), Buffer.from(sha(b.payload), "hex")));
+    const other = { kind: 2, payload: encodeCommitment(signCommitment(operatorSecret, 4n, b(94))) };
+    await refuse({ ...packed, package: codec.encodeEvidencePackage(order([...items, other]), PACKAGE_LIMITS) }, "unsupported-scope");
+    const claimedRange = { kind: 11, payload: Buffer.from('{"complete":true,"final":true}') };
+    await refuse({ ...packed, package: codec.encodeEvidencePackage([...items, claimedRange], PACKAGE_LIMITS) }, "unsupported-scope");
+    await refuse({ ...packed, package: new Uint8Array(Number(PACKAGE_LIMITS.maxBytes) + 1) }, "resource-refusal");
+    await refuse({ ...packed, package: packed.package.subarray(0, packed.package.length - 1) }, "unresolved-evidence");
+    await refuse({ ...packed, package: complete.package }, "unresolved-evidence");
+    await refuse({ ...packed, complete: true }, "invalid-local-replay");
+    for (const tag of [2, 3, 4, 6]) {
+      const changed = items.map(item => ({ ...item, payload: new Uint8Array(item.payload) }));
+      const entry = changed.find(item => item.kind === tag); entry.payload[entry.payload.length - 1] ^= 1;
+      await refuse({ ...packed, package: codec.encodeEvidencePackage(changed, PACKAGE_LIMITS) }, "unresolved-evidence");
+    }
+    await refuse({ ...packed, selection: { ...packed.selection, root: b(93) } }, "selection-mismatch");
+  });
+  await test("portable bytes and seed are owned before proof awaits; shared input and source failures cannot certify", async () => {
+    const packed = portable(clone({ ...complete, seed: receiverSeed })); let calls = 0;
+    const mutating = { configuration, verify: async (...args) => {
+      if (calls++ === 0) { packed.package.fill(0); packed.selection.root.fill(0); packed.seed.fill(0); }
+      return verifier.verify(...args);
+    } };
+    assert.deepEqual(await replayEvidencePackage(packed, mutating, codec), receiver);
+    for (const field of ["package", "seed"]) {
+      const p = portable({ ...complete, seed: receiverSeed }), original = p[field];
+      p[field] = new Uint8Array(new SharedArrayBuffer(original.length)); p[field].set(original);
+      const result = await replayEvidencePackage(p, { configuration, verify() { throw new Error("shared input reached proof"); } }, codec);
+      assert.equal(result.status, "unresolved-evidence"); assert.equal(result.audit, null);
+    }
+    const failure = new Error("range/proof service unavailable");
+    await assert.rejects(replayEvidencePackage(portable(complete), { configuration, verify() { throw failure; } }, codec), error => error === failure);
+  });
   await api.destroy(); api = undefined;
   function worker(payload) {
     const child = spawnSync(process.execPath, [join(here, "local-worker.mjs"), url], {
-      input: serialize(payload), timeout: 60_000, cwd: build, windowsHide: true, maxBuffer: 1_048_576,
+      input: serialize(portable(payload)), timeout: 60_000, cwd: build, windowsHide: true, maxBuffer: 1_048_576,
     });
     assert.equal(child.error, undefined); assert.equal(child.status, 0, child.stderr.toString());
     return JSON.parse(child.stdout.toString());
@@ -366,7 +424,7 @@ try {
       try {
         writeFileSync(keyPath, readFileSync(join(build, "3.vk")));
         const child = spawnSync(process.execPath, [join(here, "local-worker.mjs"), url], {
-          input: serialize(complete), timeout: 60_000, cwd: build, windowsHide: true, maxBuffer: 1_048_576,
+          input: serialize(portable(complete)), timeout: 60_000, cwd: build, windowsHide: true, maxBuffer: 1_048_576,
         });
         assert.equal(child.error, undefined); assert.equal(child.status, 1); assert.equal(child.stdout.length, 0);
         assert.equal(child.stderr.toString(), "local replay fixture failed\n");
@@ -384,10 +442,11 @@ try {
   const sources = ["scripts/pool/v3/local-replay.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/local-check.mjs",
     "scripts/pool/delivery/evidence-reader.mjs", "scripts/pool/delivery/crypto.mjs", "scripts/pool/spent-set/radix.mjs",
     "model/pool-v3-records.ts", "model/pool-v3-commitments.ts", "model/pool-v3-trail.ts", "model/pool-v3-headers.ts",
-    "model/pool-v3-configuration.ts", "model/pool-v3-terms.ts", "scripts/pool/v3/candidate.mjs", "scripts/pool/v3/candidate-manifest.json",
+    "model/pool-v3-configuration.ts", "model/pool-v3-terms.ts", "model/pool-v3-package.ts", "scripts/pool/v3/candidate.mjs", "scripts/pool/v3/candidate-manifest.json",
     "src/pool/note-tree.ts", "src/pool/scope.ts", "scripts/pool/v3/circuits/issue.nr", "scripts/pool/v3/circuits/spend.nr", "scripts/pool/v3/circuits/burn.nr"];
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-2", specification: "916bffb", node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-3", specification: "10dcf67", node: process.version,
+    packageBytes: portable(complete).package.length,
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
     platform: process.platform, checks, identities, metrics,
     sourceSha256Lf: Object.fromEntries(sources.map(path => [path, sha(readFileSync(join(root, path), "utf8").replaceAll("\r\n", "\n"))])),

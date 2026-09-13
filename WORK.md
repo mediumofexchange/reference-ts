@@ -1,53 +1,48 @@
 # Current work
 
-Updated: 2026-09-12
+Updated: 2026-09-13
 
 ## Goal
 
-Candidate v3 configuration and signed constant-root terms are checked before
-real local replay. Canonical vectors, independent review, hostile substitution
-refusal and fresh seedless/receiver agreement passed. V2 still refuses v3;
-no adoption, currentness or spendability claim.
-
-Implementation main includes 2d3f997 from feat/v3-configuration-evidence.
-Main also includes 9eac77b from test/v3-identity-signature-oracle (test-only).
-Companion: spec/v3-configuration-evidence, 916bffb merged/pushed to main.
-No production runtime, circuit, key, dependency or host-control change.
+Active slice: frame a portable exact-byte evidence package and use it for fresh
+seedless/receiver local replay. Acceptance: independently reviewed normative
+framing committed before codecs; canonical vectors, malformed/duplicate/order,
+budget and aliasing refusals; real-proof package replay agrees with existing
+audit without granting authority or completeness. Range authentication remains
+a separate venue-profile dependency, not a fixture boolean.
+Branches: reference `feat/v3-evidence-package`; companion
+`spec/v3-evidence-package`. Both started at clean main with fetched parity.
 
 ## Status
 
-- Specification §11 fixes a 439-byte configuration (six circuit/key pairs,
-  helper, bounds, delivery profile) and signed constant-root terms. Independent
-  review resolved a signature-wording ambiguity: preserve the existing exact
-  cofactored verification equation, including canonical identity R.
+- Specification §12 at 10dcf67 fixes canonical source-neutral evidence transport
+  and the exact-request venue-evidence boundary. Independent normative review
+  clarified the 355-byte receipt-record item; no material findings remain.
+- Model codec and fresh-process package integration are implemented. Final
+  codec tests, independent implementation review and delivery remain pending.
+- Prior §11 configuration/signed-terms checks remain unchanged, including
+  the existing exact cofactored signature equation and canonical identity R.
 - Model-only codecs and candidate manifest/tooling are implemented. Replay
   derives its candidate domain from the frame and issuance key from signed
   terms. Original operator/genesis link restrict the fixture only; replacement,
   revocation, empty opening and checkpoint force still require venue evidence.
 - Configuration and signed terms checks are separate from full authority.
   All candidates remain unspendable. No runtime Backing or declaration support.
-- Independent implementation review and final real-proof acceptance passed.
-  [Decision](decisions/2026-09.md#2026-09-12--check-candidate-v3-configuration-and-signed-root-terms-before-local-replay).
+- [Active decision](decisions/2026-09.md#2026-09-13--transport-exact-evidence-without-asserting-certificate-completeness).
 
 ## Evidence
 
-- New codec tests: 14 passed; full `npm run check`: 1,896 tests plus package,
-  service/wallet/crash checks passed. Canonical independent byte/hash
-  oracles, every config identity, strict terms signatures, hostile lengths,
-  clause order, minimal integers, shared buffers and v2 refusal are covered.
-- Prior e440bdb CI: all seven jobs passed, run 34717617310; both main branches
-  had remote parity before this slice. No branch protections/rulesets reported.
-- Combined `npm run check:pool:v3`: 304 checks/18 real proofs plus 21 local
-  replay groups/8 proofs passed. Final local replay passed after relation-order
-  freezing; [report](docs/pool-v3-local-replay-verification.json) source hashes
-  all match final files. Independent review reproduced the candidate domain.
+- Baseline main 3eeac8b: CI 34720418325 passed. Both repositories fetched with
+  parity before branching; no branch protections/rulesets reported.
+- Typecheck and real `check:pool:local-replay`: 24 groups/8 proofs passed,
+  including canonical package worker replay, omitted/conflicting objects,
+  unsupported range assertions, budgets, shared storage and async ownership.
+  Current run is scratch/pool-v3-local-replay-results.json; promote after review.
 - Issue 10, pay 7/change 3, burn 5/change 2; public outstanding 5. Fresh audit
   and receiver agree with all six artifact identities checked. Candidate terms
   validity never sets the full terms-authority/currentness flags.
-- CI 34719876691: all seven Linux/Windows and Node 20/24 jobs passed on
-  9eac77b. The identity-R test now uses an independently reviewed equation
-  witness; no Node/OpenSSL edge-case-policy assumption. This docs-only handoff
-  reuses that final implementation baseline; no further runtime check is owed.
+- Circuits/configuration/keys and production runtime are unchanged; reuse
+  baseline conformance. Current typecheck and focused codec evidence are due.
 
 ## Existing local product and custody boundary
 
@@ -77,11 +72,11 @@ No production runtime, circuit, key, dependency or host-control change.
 
 ## Next
 
-1. Define complete certificate/dependency framing and authenticated record-range
-   inputs, then integrate complete replay against
+1. Finish package codec tests, independent review, documentation and delivery.
+2. Define authenticated record-range profile and complete dependency replay against
    the [package checks](docs/POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay).
    Independently review/commit normative certificate gaps before code.
-2. Configuration approval stays disabled until all adoption prerequisites hold.
+3. Configuration approval stays disabled until all adoption prerequisites hold.
    Device qualification and external publication remain separate dependencies;
    do not alter this workstation's controls.
 
@@ -92,6 +87,6 @@ No production runtime, circuit, key, dependency or host-control change.
   progress; they do not materially move the coarse estimate while recovery and
   authority gates remain. Largest blocks: runtime recovery, authenticated range
   evidence/publication, qualified custody/continuous recovery and user operation.
-- Switch to a fresh instance for complete range/certificate authority design;
-  this completed slice and its retained report isolate the configuration checks.
-  This is a context-efficiency recommendation, not measured model performance.
+- Stay with the current instance through package acceptance; switch to a fresh
+  instance for venue-range authority design. This is a context-efficiency
+  recommendation, not measured model performance.

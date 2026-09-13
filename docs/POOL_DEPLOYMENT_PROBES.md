@@ -205,6 +205,19 @@ receiver process reconstructs its unspent change and a local membership path
 from its seed and those public bytes. No witness or original wallet journal
 enters either process. The public outstanding amount is 10 minus 5 = 5.
 
+Fresh readers receive the canonical [§12 evidence package](https://github.com/mediumofexchange/money-from-first-principles/blob/10dcf67/pool-v3.md#12-evidence-packages-and-dependency-retention):
+exact configuration, commitment, complete directory preimage, snapshot and
+trail bytes, ordered by kind and payload hash. Local limits are 1 MiB and 1,024
+items, checked with all field boundaries before hashing payloads. The bounded
+reader requires exactly one of each supported object and uses the same replay
+engine as the in-memory fixture. Missing objects, duplicate/conflicting
+objects, unsupported dependencies, false range-completeness assertions and
+replica substitutions yield no partial audit or candidates. Package bytes,
+selection and seed are owned before asynchronous verification; shared input
+refuses. Generic transport can retain all eleven specified evidence kinds,
+including opaque malformed inner bytes, without interpreting them as valid.
+Venue evidence and complete dependency replay remain unsupported by this reader.
+
 Valid proofs against an unaccepted anchor, a spent input, a duplicate output,
 a different scope and overflowing aggregate issuance isolate the host checks.
 Authenticated bad proof/signature bytes and false snapshot assertions fail
@@ -242,6 +255,10 @@ spendability remain false; coverage remains unresolved. A local path is not a
 certified anchor. The required full-package checks derive from pool-delivery
 C4.6, pool-v3 §§1/7/10/11 and the authority/fault contracts. Section 11 adds
 configuration/terms framing for conformance, with the existing signature rule.
+Section 12 adds source-neutral transport and an exact-request range verifier
+contract; it supplies no venue wire profile or authority. No package-level
+completeness flag is accepted, and V8 remains only the local fixture IPC for
+the independent selection and seed alongside the canonical package bytes.
 
 ## Transfer shape and ordinary fees
 

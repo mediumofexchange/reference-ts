@@ -1,7 +1,8 @@
 {
-  "schema": "moe-v3-local-replay-experiment-2",
-  "specification": "916bffb",
+  "schema": "moe-v3-local-replay-experiment-3",
+  "specification": "10dcf67",
   "node": "v24.6.0",
+  "packageBytes": 47509,
   "candidateDomain": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
   "configurationBytes": 439,
   "backing": "6d7882f0074b4fca2c5caec1642b2d5fd2dcf64e4e407e62053b099bf2b84b7a",
@@ -25,6 +26,9 @@
     "unsupported recovery records and imported openings do not produce partial audit results",
     "inputs are owned across asynchronous proof verification and unexpected failures propagate",
     "historical replay and wrong seed never assert current spendability or a complete zero balance",
+    "canonical evidence package replays the same audit and receiver through one engine",
+    "missing, conflicting, unsupported and resource-limited package evidence returns no partial result",
+    "portable bytes and seed are owned before proof awaits; shared input and source failures cannot certify",
     "fresh public verifier has no wallet seed; separate receiver restores from public evidence only",
     "fresh verifier refuses a changed artifact against its independently held key pin",
     "successful replay retains unresolved production authority and currentness"
@@ -60,55 +64,55 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2652.113800000003
+      "elapsedMs": 3383.2321999999986
     },
     {
       "label": "pay 7, change 3",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5415.239000000001
+      "elapsedMs": 7096.450700000005
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 4871.338600000003
+      "elapsedMs": 5207.962699999996
     },
     {
       "label": "valid maximum issuance",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1648.024900000004
+      "elapsedMs": 2751.3940999999977
     },
     {
       "label": "valid proof, different scope",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1658.693299999999
+      "elapsedMs": 2558.4812999999995
     },
     {
       "label": "valid proof, unaccepted anchor",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 4825.128700000001
+      "elapsedMs": 5499.872199999998
     },
     {
       "label": "valid proof, spent input",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5067.683900000004
+      "elapsedMs": 7260.164000000004
     },
     {
       "label": "valid proof, duplicate output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5777.910100000001
+      "elapsedMs": 5444.856
     }
   ],
   "sourceSha256Lf": {
-    "scripts/pool/v3/local-replay.mjs": "c9fe53c4d9eebe4cc6a5dad6d7e7103cf93b7a0aead76ab283702d1aff59275b",
-    "scripts/pool/v3/local-worker.mjs": "6e515ed50a29e530eee466bca7c30c4dc9ca1d3e21e6c55fff8e7d00b63d6552",
-    "scripts/pool/v3/local-check.mjs": "4693db173527416006d2488a61cf0bc54f2db8d4dc90d797398bdc899dc10380",
+    "scripts/pool/v3/local-replay.mjs": "1db1073605a291ee1048c3fc7c549e39917a506b3f0a834cb91a60934c7fae42",
+    "scripts/pool/v3/local-worker.mjs": "26c9a84532ca627ddedb0b07fcb99eb4908ce74079092e9aae6ebcd0e28b937c",
+    "scripts/pool/v3/local-check.mjs": "0fb5d7c93f35f336bbdbba6fbe2a4ecd5d160a980460cd49479d4826201cddce",
     "scripts/pool/delivery/evidence-reader.mjs": "65f1a13caf29cadd7db46f10769920ccfd66c879f12d064c091be632a86fdf66",
     "scripts/pool/delivery/crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
     "scripts/pool/spent-set/radix.mjs": "a65c10fcca67cd6f486c73f3e66f4eba254f4aa4a6d2be8c12d2debe66af4953",
@@ -118,6 +122,7 @@
     "model/pool-v3-headers.ts": "892248209fcfe92b1b10d113517c9b828cb01f78f2c7a8984d9fd8f00b8aee86",
     "model/pool-v3-configuration.ts": "a88d260621bd7a81f6a6827931e703cc4a405394ad4bb0a2aed11f1d72ae9802",
     "model/pool-v3-terms.ts": "67f29459be62e28d86fd0789f748c6ca58a45b30bf042fd6132c93247ded0cbf",
+    "model/pool-v3-package.ts": "7c48ec95df778198bb8ad8be4214a40fa8730dce3270ab26dae7aae35e61c73f",
     "scripts/pool/v3/candidate.mjs": "cda541d6d39493e73197890f1c8a93be13627d584eff04e64ca59f2e60758f48",
     "scripts/pool/v3/candidate-manifest.json": "a5f34d76b1ac9cba71d322c5263fee75120a7756d0b5609720682c344e5049ae",
     "src/pool/note-tree.ts": "264c93ecf4af95209374657bc5c56c8841abab71b292ed557940b23540dfd1d4",
@@ -145,7 +150,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "b43443ad6dc9ba456236130b7c18d06daf9b563abb8937191314cf9bd734555b"
+      "evidenceHash": "651caad713ee88eb0f1ce0eb83bcdeb3ed1bd1030c9a464be9aab36834b6d7d5"
     },
     "candidates": []
   },
@@ -168,7 +173,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "b43443ad6dc9ba456236130b7c18d06daf9b563abb8937191314cf9bd734555b"
+      "evidenceHash": "651caad713ee88eb0f1ce0eb83bcdeb3ed1bd1030c9a464be9aab36834b6d7d5"
     },
     "candidates": [
       {

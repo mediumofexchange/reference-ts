@@ -118,6 +118,14 @@ decodable records. It does not authenticate scoped terms, replay history or
 imports, resolve record ranges/adoption or establish a complete opening.
 Opaque terms still require their own decoding, name/signature and force checks.
 
+`model/pool-v3-package.ts` implements [§12 evidence transport](https://github.com/mediumofexchange/money-from-first-principles/blob/10dcf67/pool-v3.md#12-evidence-packages-and-dependency-retention):
+canonical typed exact-byte inventory, local byte/item limits before payload
+hashing, and the existing MOED directory-root preimage. Fresh local replay
+uses package bytes with exactly one configuration, signed commitment,
+directory, snapshot and trail. Other dependency shapes refuse without a
+verdict. The in-memory fixture shares the same replay engine. Range-source
+authentication, recursive dependency replay, authority and adoption remain open.
+
 ## Runtime pin and recovery models
 
 The runtime follows specification revision

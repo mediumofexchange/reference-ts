@@ -22,6 +22,12 @@ The candidate domain is derived from the configuration; issuance keys come
 from the signed terms. The manifest cannot enable adoption. See the
 [local replay evidence and limits](../../../docs/POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay).
 
+Fresh readers additionally decode the canonical §12 evidence package at
+specification `10dcf67`. One config/commitment/directory/snapshot/trail is
+supported, with byte/item budgets and no first-match selection of conflicting
+objects. The same local replay engine checks the contents; package framing
+cannot establish complete dependencies, authenticated ranges or spendability.
+
 The npm command verifies parameter cache/download lengths and SHA-256 hashes
 with `../prepare-crs.mjs` before starting the suite. It checks both upstream
 hosts on download failure; an empty or corrupt successful HTTP response is

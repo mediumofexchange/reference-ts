@@ -36,6 +36,8 @@ as current instructions.
 
 ## Index
 
+- `2026-09-13` [Transport exact evidence without asserting certificate completeness](decisions/2026-09.md#2026-09-13--transport-exact-evidence-without-asserting-certificate-completeness)
+
 - `2026-09-12` [Bound local wallet custody to a qualified device and offline handoff](decisions/2026-09.md#2026-09-12--bound-local-wallet-custody-to-a-qualified-device-and-offline-handoff)
 - `2026-09-12` [Check candidate v3 configuration and signed root terms before local replay](decisions/2026-09.md#2026-09-12--check-candidate-v3-configuration-and-signed-root-terms-before-local-replay)
 - `2026-09-12` [Configure local holders from authenticated signed terms](decisions/2026-09.md#2026-09-12--configure-local-holders-from-authenticated-signed-terms)

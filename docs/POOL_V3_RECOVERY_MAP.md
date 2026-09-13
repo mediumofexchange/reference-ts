@@ -514,8 +514,11 @@ decoder and authenticated contiguous headers remain prerequisites; A8/A9
 are open. The [binary decoder probe](POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility)
 recovers all 65 fixture outputs with sigma-rust and rejects the observed
 noncanonical encodings after an exact round trip, but has no hard memory
-boundary or general node-equivalence evidence. Develop this source before fixing certificate packaging, whose
-dependencies must reflect the evidence actually consumed by replay.
+boundary or general node-equivalence evidence. Develop this source before fixing
+the venue-specific certificate dependencies, which must reflect evidence
+actually consumed by replay. [V3 §12](https://github.com/mediumofexchange/money-from-first-principles/blob/10dcf67/pool-v3.md#12-evidence-packages-and-dependency-retention)
+fixes only source-neutral inventory transport; its opaque venue evidence kind
+does not supply a range profile, dependency graph or certificate verdict.
 
 Retention obligations, by party: the operator and its replicas keep every
 statement record exactly as admitted, since a re-proof no longer classifies

@@ -11,6 +11,12 @@ import { EvidenceRefusal, readLocalEvidence } from "../delivery/evidence-reader.
 
 const same = (a, b) => compareBytes(a, b) === 0;
 const hex = bytes => Buffer.from(bytes).toString("hex");
+export const PACKAGE_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxItems: 1024n });
+const flags = Object.freeze({ fullV3Replay: false, currentRangeAuthenticated: false,
+  candidateConfigurationChecked: false, signedTermsAuthenticated: false,
+  termsAuthorityAuthenticated: false, completenessClaim: false, noMatchesMeansZeroBalance: false,
+  unresolvedCoverage: true, spendable: false });
+const refused = (status, check = null) => ({ status, check, ...flags, audit: null, candidates: [] });
 class ReplayRefusal extends Error {
   constructor(check) { super(check); this.check = check; }
 }
@@ -37,11 +43,6 @@ function ownInputs(input) {
  * No approved configuration, complete opening or finality verdict.
  * Nothing is exposed until every record and terminal assertion passes. */
 export async function replayLocalPackage(input, verifier, codec) {
-  const flags = { fullV3Replay: false, currentRangeAuthenticated: false,
-    candidateConfigurationChecked: false, signedTermsAuthenticated: false,
-    termsAuthorityAuthenticated: false, completenessClaim: false, noMatchesMeansZeroBalance: false,
-    unresolvedCoverage: true, spendable: false };
-  const refused = (status, check = null) => ({ status, check, ...flags, audit: null, candidates: [] });
   try {
     // Own selection, seed and supplied bytes before any asynchronous verifier.
     const owned = ownInputs(input);
@@ -129,6 +130,33 @@ export async function replayLocalPackage(input, verifier, codec) {
     if (error instanceof codec.TrailLimitError) return refused("resource-refusal");
     if (error instanceof EncodingError || error instanceof codec.CodecEncodingError ||
       error instanceof CapsuleFormatError || error instanceof CapsuleAssociationError) return refused("unresolved-evidence");
+    throw error;
+  }
+}
+
+/** Portable §12 boundary for the bounded local experiment. Select exactly one
+ * config/commitment/directory/snapshot/trail; multi-checkpoint dependencies,
+ * fault/range witnesses and other kinds require a later reader. No first-match
+ * lookup can silently discard conflicting or unsupported evidence. The same
+ * replay engine then authenticates every relationship against selection. */
+export async function replayEvidencePackage(input, verifier, codec) {
+  try {
+    const owned = ownInputs(input);
+    if (owned === null || typeof owned !== "object") throw new EncodingError("invalid package input");
+    const expected = owned.seed === undefined ? "package,selection" : "package,seed,selection";
+    requireReplay(Object.keys(owned).sort().join(",") === expected, "INPUT_FIELDS");
+    const items = codec.decodeEvidencePackage(owned.package, PACKAGE_LIMITS);
+    const required = [1, 2, 3, 4, 6];
+    if (items.some(item => !required.includes(item.kind)) ||
+        required.some(kind => items.filter(item => item.kind === kind).length > 1)) return refused("unsupported-scope");
+    if (items.length !== required.length) return refused("unresolved-evidence");
+    const [configuration, commitment, directory, snapshot, trail] = items.map(item => item.payload);
+    return await replayLocalPackage({ ...owned, package: { configuration, commitment,
+      directory: codec.decodeEvidenceDirectory(directory, PACKAGE_LIMITS), snapshot, trail } }, verifier, codec);
+  } catch (error) {
+    if (error instanceof ReplayRefusal) return refused("invalid-local-replay", error.check);
+    if (error instanceof codec.PackageLimitError) return refused("resource-refusal");
+    if (error instanceof EncodingError || error instanceof codec.CodecEncodingError) return refused("unresolved-evidence");
     throw error;
   }
 }
