@@ -1,8 +1,8 @@
 // Conditional initial-segment experiment, not an adopted v3 runtime.
 // pool-v3 §§3,5,7,10; pool-v2 §8 host checks; pool-spent C1.2.8–9.
-import { compareBytes, EncodingError } from "../../../dist/bytes.js";
+import { compareBytes, copyBytes, EncodingError } from "../../../dist/bytes.js";
 import { verifySignatureStrict } from "../../../dist/keys.js";
-import { fieldToBytes, identifierOf, VALUE_BOUND } from "../../../dist/pool/field.js";
+import { fieldToBytes, identifierOf, isValue, VALUE_BOUND } from "../../../dist/pool/field.js";
 import { NoteTree, EMPTY_NOTE_ROOT, NOTE_TREE_CAPACITY } from "../../../dist/pool/note-tree.js";
 import { ScopeTree } from "../../../dist/pool/scope.js";
 import { RadixSpentSet } from "../spent-set/radix.mjs";
@@ -141,11 +141,27 @@ export async function replayLocalPackage(input, verifier, codec) {
  * replay engine then authenticates every relationship against selection. */
 export async function replayEvidencePackage(input, verifier, codec) {
   try {
-    const owned = ownInputs(input);
-    if (owned === null || typeof owned !== "object") throw new EncodingError("invalid package input");
-    const expected = owned.seed === undefined ? "package,selection" : "package,seed,selection";
-    requireReplay(Object.keys(owned).sort().join(",") === expected, "INPUT_FIELDS");
-    const items = codec.decodeEvidencePackage(owned.package, PACKAGE_LIMITS);
+    if (input === null || typeof input !== "object") throw new EncodingError("invalid package input");
+    const expected = input.seed === undefined ? "package,selection" : "package,seed,selection";
+    requireReplay(Object.keys(input).sort().join(",") === expected, "INPUT_FIELDS");
+    // Decode synchronously before ownership copying: the codec checks the byte
+    // and item budgets before copying payloads. structuredClone would copy even
+    // the unused backing allocation of a small subview before checking bounds.
+    const items = codec.decodeEvidencePackage(input.package, PACKAGE_LIMITS);
+    const source = input.selection;
+    if (source === null || typeof source !== "object" ||
+        Object.keys(source).sort().join(",") !== "backing,domain,judgingIndex,mode,operator,root,sequence,venue" ||
+        !isValue(source.sequence) || source.sequence === 0n || !isValue(source.judgingIndex) ||
+        !["current-fixture", "historical-fixture"].includes(source.mode)) throw new EncodingError("invalid selection");
+    const fields = ["backing", "domain", "operator", "root", "venue"];
+    const fixed = fields.map(key => source[key]);
+    if (input.seed !== undefined) fixed.push(input.seed);
+    if (fixed.some(value => !(value instanceof Uint8Array) || value.length !== 32 || value.buffer instanceof SharedArrayBuffer)) {
+      throw new EncodingError("invalid or shared selection/seed bytes");
+    }
+    const selection = { mode: source.mode, sequence: source.sequence, judgingIndex: source.judgingIndex,
+      ...Object.fromEntries(fields.map(key => [key, copyBytes(source[key])])) };
+    const owned = { selection, ...(input.seed === undefined ? {} : { seed: copyBytes(input.seed) }) };
     const required = [1, 2, 3, 4, 6];
     if (items.some(item => !required.includes(item.kind)) ||
         required.some(kind => items.filter(item => item.kind === kind).length > 1)) return refused("unsupported-scope");

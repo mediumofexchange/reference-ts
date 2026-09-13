@@ -379,6 +379,13 @@ try {
     const claimedRange = { kind: 11, payload: Buffer.from('{"complete":true,"final":true}') };
     await refuse({ ...packed, package: codec.encodeEvidencePackage([...items, claimedRange], PACKAGE_LIMITS) }, "unsupported-scope");
     await refuse({ ...packed, package: new Uint8Array(Number(PACKAGE_LIMITS.maxBytes) + 1) }, "resource-refusal");
+    const originalClone = globalThis.structuredClone;
+    try {
+      globalThis.structuredClone = () => { throw new Error("unbounded input reached ownership copy"); };
+      await refuse({ ...packed, package: new Uint8Array(Number(PACKAGE_LIMITS.maxBytes) + 1) }, "resource-refusal");
+      await refuse({ ...packed, selection: { ...packed.selection, extra: new Uint8Array(2048) } }, "unresolved-evidence");
+      await refuse({ ...packed, seed: new Uint8Array(33) }, "unresolved-evidence");
+    } finally { globalThis.structuredClone = originalClone; }
     await refuse({ ...packed, package: packed.package.subarray(0, packed.package.length - 1) }, "unresolved-evidence");
     await refuse({ ...packed, package: complete.package }, "unresolved-evidence");
     await refuse({ ...packed, complete: true }, "invalid-local-replay");
@@ -396,6 +403,27 @@ try {
       return verifier.verify(...args);
     } };
     assert.deepEqual(await replayEvidencePackage(packed, mutating, codec), receiver);
+    const viewed = portable(clone({ ...complete, seed: receiverSeed }));
+    for (const key of ["package", "seed"]) {
+      const storage = new Uint8Array(2_097_152); storage.set(viewed[key], 17);
+      viewed[key] = storage.subarray(17, 17 + viewed[key].length);
+    }
+    const storage = new Uint8Array(2_097_152); storage.set(viewed.selection.root, 17);
+    viewed.selection.root = storage.subarray(17, 49);
+    const originalClone = globalThis.structuredClone;
+    let ownershipCopies = 0;
+    try {
+      globalThis.structuredClone = (value, ...options) => {
+        if (value?.package && value?.selection) {
+          ownershipCopies += 1;
+          assert.equal(value.package.configuration.buffer.byteLength, value.package.configuration.length);
+          assert.equal(value.selection.root.buffer.byteLength, 32); assert.equal(value.seed.buffer.byteLength, 32);
+        }
+        return originalClone(value, ...options);
+      };
+      assert.deepEqual(await replayEvidencePackage(viewed, verifier, codec), receiver);
+      assert.equal(ownershipCopies, 1);
+    } finally { globalThis.structuredClone = originalClone; }
     for (const field of ["package", "seed"]) {
       const p = portable({ ...complete, seed: receiverSeed }), original = p[field];
       p[field] = new Uint8Array(new SharedArrayBuffer(original.length)); p[field].set(original);
