@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-14` [Fix source-neutral record-range answers for C2.10.13](decisions/2026-09.md#2026-09-14--fix-source-neutral-record-range-answers-for-c21013)
 - `2026-09-13` [Transport exact evidence without asserting certificate completeness](decisions/2026-09.md#2026-09-13--transport-exact-evidence-without-asserting-certificate-completeness)
 
 - `2026-09-12` [Bound local wallet custody to a qualified device and offline handoff](decisions/2026-09.md#2026-09-12--bound-local-wallet-custody-to-a-qualified-device-and-offline-handoff)

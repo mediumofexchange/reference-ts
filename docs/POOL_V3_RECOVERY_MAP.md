@@ -519,6 +519,11 @@ the venue-specific certificate dependencies, which must reflect evidence
 actually consumed by replay. [V3 §12](https://github.com/mediumofexchange/money-from-first-principles/blob/10dcf67/pool-v3.md#12-evidence-packages-and-dependency-retention)
 fixes only source-neutral inventory transport; its opaque venue evidence kind
 does not supply a range profile, dependency graph or certificate verdict.
+[V3 §13](https://github.com/mediumofexchange/money-from-first-principles/blob/6272040/pool-v3.md#13-record-range-evidence)
+fixes the answer a venue-evidence verifier returns for each read above —
+index and, for publications, intra-index ordinal per exact object — and the
+reader's held/chain/revocation/publication rules over it; which venue
+evidence establishes an answer remains the venue profile's.
 
 Retention obligations, by party: the operator and its replicas keep every
 statement record exactly as admitted, since a re-proof no longer classifies
@@ -604,14 +609,20 @@ Each names the rule, the candidate, the alternative, and what closes it.
   it. No supply or finality effect.
 - **A8 Authenticated range completeness.** C2.10.13's first item has no
   authenticated source on Ergo today ([§6](#6-what-each-read-needs-from-the-record)).
-  A withheld box reads as silence or as a repair hole. Closed by P4 and a
-  venue decision; until then the node is a trust assumption the release
+  A withheld box reads as silence or as a repair hole. The answer form and
+  the verifier's obligation (completeness by exhaustion, no answer otherwise)
+  are fixed by pool-v3 §13 (2026-09-14); the source is closed by P4 and a
+  venue decision, and until then the node is a trust assumption the release
   record must state.
-- **A9 Same-index order.** Publications at one index are read in the
-  venue's order (C2b.3.2). `ErgoBoxView` carries no transaction or output
-  index, so ties follow the node. Candidate: order by block transaction
-  index then output index, authenticated with P4. Closed by the venue
-  adapter's specification.
+- **A9 Same-index order.** Decided 2026-09-14 in pool-v3 §13: an operator's
+  commitments at one index are read in ascending sequence from the records
+  alone, so no intra-index order is needed for kinds 1–3; `extending()`'s
+  sequence sort matches it for distinct sequences, while its same-sequence
+  tie (the node's box order) is remaining adapter work against §13.3's
+  lesser record bytes; publications carry the venue's
+  intra-index ordinal (for a chain, transaction then output order), which a
+  venue profile must authenticate, comparable across backings for C2b.4.2.
+  The Ergo ordinal derivation is closed by the venue adapter's specification.
 - **A10 The instant window against real inclusion.** The window is one lag
   wide (C3.3); a venue publication must land in `[instant + lag, instant +
   2·lag]` or has no force. With Ergo's lag `d + 1` the holder's margin is

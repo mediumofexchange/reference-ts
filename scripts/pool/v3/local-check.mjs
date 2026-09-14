@@ -14,10 +14,13 @@ import { NoteTree, notePathProves } from "../../../dist/pool/note-tree.js";
 import { ScopeTree } from "../../../dist/pool/scope.js";
 import { limbsOf, fieldToBytes } from "../../../dist/pool/field.js";
 import { signCommitment, encodeCommitment, directoryRoot } from "../../../dist/commitment.js";
+import { encodeReplacement, replacementMessage, ROLE_OPERATOR } from "../../../dist/replacement.js";
+import { encodeRevocation, signRevocation } from "../../../dist/revocation.js";
 import { prepareExactOutput } from "../delivery/crypto.mjs";
 import { loadEvidenceCodecs, LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../spent-set/radix.mjs";
-import { replayLocalPackage, replayEvidencePackage, PACKAGE_LIMITS } from "./local-replay.mjs";
+import { replayLocalPackage, replayEvidencePackage, PACKAGE_LIMITS, RANGE_LIMITS } from "./local-replay.mjs";
+import { FixtureVenue } from "./fixture-venue.mjs";
 import { field } from "../fixtures.mjs";
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration,
   readCandidateKeys, loadConfigurationCodecs } from "./candidate.mjs";
@@ -36,19 +39,20 @@ try {
   const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
   if (config.error) throw new Error("TypeScript configuration unreadable");
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const program = ts.createProgram(["trail", "configuration", "terms", "package"].map(name => join(root, `model/pool-v3-${name}.ts`)), {
+  const program = ts.createProgram(["trail", "configuration", "terms", "package", "range"].map(name => join(root, `model/pool-v3-${name}.ts`)), {
     ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false,
   });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0); assert.equal(program.emit().emitSkipped, false);
   const codec = { ...await loadEvidenceCodecs(url), ...await loadConfigurationCodecs(url),
-    ...await import(new URL("model/pool-v3-package.js", url)) };
+    ...await import(new URL("model/pool-v3-package.js", url)), ...await import(new URL("model/pool-v3-range.js", url)) };
+  const canonical = items => items.sort((a, b) => a.kind - b.kind || Buffer.compare(Buffer.from(sha(a.payload), "hex"), Buffer.from(sha(b.payload), "hex")));
   function portable(input) {
-    const p = input.package;
-    return { ...input, package: codec.encodeEvidencePackage([
+    const p = input.package, directories = [p.directory, ...(p.directories ?? [])];
+    return { ...input, package: codec.encodeEvidencePackage(canonical([
       { kind: 1, payload: p.configuration }, { kind: 2, payload: p.commitment },
-      { kind: 3, payload: codec.encodeEvidenceDirectory(p.directory, PACKAGE_LIMITS) },
+      ...directories.map(entries => ({ kind: 3, payload: codec.encodeEvidenceDirectory(entries, PACKAGE_LIMITS) })),
       { kind: 4, payload: p.snapshot }, { kind: 6, payload: p.trail },
-    ], PACKAGE_LIMITS) };
+    ]), PACKAGE_LIMITS) };
   }
   const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
   const configuration = candidateConfiguration(manifest, codec), configurationBytes = codec.configurationBytes(configuration);
@@ -66,9 +70,14 @@ try {
   }
   const keys = readCandidateKeys(build, manifest);
   const verifierBackend = new UltraHonkVerifierBackend(api);
+  // The harness selects the range verifier: a fixture venue rebuilt from the
+  // fixture's own witnessed records (pool-v3 §13.2), never from the package.
   const verifier = { configuration, verify: (kind, publicInputs, proof) => verifierBackend.verifyProof({
     proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
-  }, options) };
+  }, options), record: data => {
+    const witnessed = FixtureVenue.from(data);
+    return { range: request => witnessed.answer(request, codec, RANGE_LIMITS), witnessedIndex: () => witnessed.witnessedIndex };
+  } };
   const domain = codec.configurationHash(configuration), venue = b(12), issuerSecret = b(15), operatorSecret = b(16);
   const payerSeed = b(21), receiverSeed = b(22), issuerKey = ed25519.getPublicKey(issuerSecret);
   const operator = ed25519.getPublicKey(operatorSecret);
@@ -141,6 +150,18 @@ try {
     const snapshot = { backing, segment, historyHash: history, evidenceHash: evidence, ...totals };
     return seal(records, snapshot);
   }
+  // The fixture venue holds the operator's commitments 1 (index 1) and 4
+  // (index 7) carrying another backing, around the selected checkpoint 3 at
+  // index 3; the reader must pass both by their directories (C2.4.2, C2.7.3).
+  const otherName = b(77), before = [{ name: otherName, digest: b(78) }], after = [{ name: otherName, digest: b(79) }];
+  const earlier = signCommitment(operatorSecret, 1n, directoryRoot(before)), later = signCommitment(operatorSecret, 4n, directoryRoot(after));
+  function witnessed(commitment) {
+    const record = new FixtureVenue(venue, 20n);
+    record.witness(1, operator, 1n, encodeCommitment(earlier));
+    record.witness(1, operator, 3n, encodeCommitment(commitment));
+    record.witness(1, operator, 7n, encodeCommitment(later));
+    return record.export();
+  }
   function seal(records, snapshot) {
     // Recompute exact evidence even for an operator-authenticated bad proof.
     let evidence = codec.genesisEvidenceHash(segment);
@@ -150,8 +171,23 @@ try {
     const commitment = signCommitment(operatorSecret, 3n, directoryRoot(directory));
     return { selection: { domain, venue, backing, operator, sequence: 3n, root: commitment.root,
       judgingIndex: 20n, mode: "current-fixture" },
-      package: { configuration: configurationBytes, commitment: encodeCommitment(commitment), directory, snapshot: codec.snapshotBytes(snapshot),
-        trail: codec.encodeTrail({ header, terms: [signedTerms], records: records.map(codec.encodeRecord) }, LIMITS) } };
+      package: { configuration: configurationBytes, commitment: encodeCommitment(commitment), directory, directories: [before, after],
+        snapshot: codec.snapshotBytes(snapshot),
+        trail: codec.encodeTrail({ header, terms: [signedTerms], records: records.map(codec.encodeRecord) }, LIMITS) },
+      venue: witnessed(commitment) };
+  }
+  function emptyPackage(fields, headerFields = {}) {
+    const terms = codec.encodeRootTerms(fields), name = codec.rootTermsName(terms);
+    const h = codec.segmentBytes({ domain, venue, operator, sequence: 1n, entries: [{ backing: name, link: name }], ...headerFields });
+    const emptySegment = new Uint8Array(Buffer.from(sha(h), "hex"));
+    const s = { backing: name, segment: emptySegment, historyHash: codec.genesisHistoryHash(emptySegment),
+      evidenceHash: codec.genesisEvidenceHash(emptySegment), issued: 0n, burned: 0n };
+    const directory = [{ name, digest: codec.snapshotDigest(s) }], c = signCommitment(operatorSecret, 3n, directoryRoot(directory));
+    return { selection: { domain, venue, backing: name, operator, sequence: 3n, root: c.root, judgingIndex: 20n, mode: "current-fixture" },
+      package: { configuration: configurationBytes, commitment: encodeCommitment(c), directory, directories: [before, after],
+        snapshot: codec.snapshotBytes(s),
+        trail: codec.encodeTrail({ header: h, terms: [{ terms, signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), issuerSecret) }], records: [] }, LIMITS) },
+      venue: witnessed(c) };
   }
   const records = [issue, payment, burn], effects = [
     { outputs: [funded.cm], nullifiers: [] },
@@ -184,7 +220,7 @@ try {
     }
   });
   await test("configuration substitutions and loose issuer overrides refuse before any proof", async () => {
-    const beforeProof = { configuration, verify() { throw new Error("configuration guard ran too late"); } };
+    const beforeProof = { ...verifier, verify() { throw new Error("configuration guard ran too late"); } };
     for (const offset of [18, 18 + 5 * 64 + 32, 438]) {
       const payload = clone(complete); payload.package.configuration[offset] ^= 1;
       const result = await replayLocalPackage(payload, beforeProof, codec);
@@ -212,17 +248,7 @@ try {
     }
   });
   await test("otherwise valid empty evidence cannot borrow wrong terms domain, venue or original scope", async () => {
-    function empty(fields, headerFields = {}) {
-      const terms = codec.encodeRootTerms(fields), name = codec.rootTermsName(terms);
-      const h = codec.segmentBytes({ domain, venue, operator, sequence: 1n, entries: [{ backing: name, link: name }], ...headerFields });
-      const segment = new Uint8Array(Buffer.from(sha(h), "hex"));
-      const s = { backing: name, segment, historyHash: codec.genesisHistoryHash(segment), evidenceHash: codec.genesisEvidenceHash(segment), issued: 0n, burned: 0n };
-      const directory = [{ name, digest: codec.snapshotDigest(s) }], c = signCommitment(operatorSecret, 3n, directoryRoot(directory));
-      return { selection: { ...complete.selection, backing: name, root: c.root }, package: {
-        configuration: configurationBytes, commitment: encodeCommitment(c), directory, snapshot: codec.snapshotBytes(s),
-        trail: codec.encodeTrail({ header: h, terms: [{ terms, signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), issuerSecret) }], records: [] }, LIMITS),
-      } };
-    }
+    const empty = emptyPackage;
     const valid = await replayLocalPackage(empty(termsFields), verifier, codec);
     assert.equal(valid.status, "selected-local-replay"); assert.equal(valid.audit.outstanding, "0");
     assert.equal(valid.noMatchesMeansZeroBalance, false); assert.equal(valid.spendable, false);
@@ -240,7 +266,7 @@ try {
       else if (field === "seed") payload.seed = shared;
       else payload.package[field] = shared;
       let calls = 0;
-      const mutating = { configuration, verify: async (...args) => {
+      const mutating = { ...verifier, verify: async (...args) => {
         calls += 1;
         shared.fill(99);
         return verifier.verify(...args);
@@ -337,13 +363,13 @@ try {
   });
   await test("inputs are owned across asynchronous proof verification and unexpected failures propagate", async () => {
     const payload = clone(complete); let calls = 0;
-    const mutating = { configuration, verify: async (...args) => {
+    const mutating = { ...verifier, verify: async (...args) => {
       if (calls++ === 0) { payload.selection.root.fill(0); payload.package.snapshot.fill(0); payload.package.trail.fill(0); payload.package.configuration.fill(0); }
       return verifier.verify(...args);
     } };
     assert.deepEqual(await replayLocalPackage(payload, mutating, codec), audit);
     const failure = new Error("verifier unavailable");
-    await assert.rejects(replayLocalPackage(complete, { configuration, verify() { throw failure; } }, codec), error => error === failure);
+    await assert.rejects(replayLocalPackage(complete, { ...verifier, verify() { throw failure; } }, codec), error => error === failure);
   });
   await test("historical replay and wrong seed never assert current spendability or a complete zero balance", async () => {
     const historical = packageFor([issue, payment], effects.slice(0, 2), { issued: 10n, burned: 0n });
@@ -356,6 +382,103 @@ try {
     const wrongSeed = await replayLocalPackage({ ...complete, seed: b(62) }, verifier, codec);
     assert.deepEqual(wrongSeed.candidates, []); assert.equal(wrongSeed.noMatchesMeansZeroBalance, false);
   });
+  await test("fixture record ranges establish the held checkpoint, empty opening, currency, chain and revocation", async () => {
+    assert.equal(audit.rangeEvidence, "fixture-verifier"); assert.equal(audit.currentRangeAuthenticated, true);
+    assert.equal(audit.termsAuthorityAuthenticated, true); assert.equal(audit.fullV3Replay, false);
+    assert.deepEqual(audit.audit.range, { judgingIndex: "20", checkpointIndex: "3", revokedAt: null, heldBefore: 1, heldAfter: 1 });
+    // Junk at the operator's location: a forged signature, another key, a
+    // repeated and a stale sequence. None is held; none is a hole (§13.3).
+    const noisy = clone(complete), forged = encodeCommitment(signCommitment(operatorSecret, 2n, b(80))); forged[135] ^= 1;
+    noisy.venue.records.push({ kind: 1, subject: operator, index: 2n, record: forged },
+      { kind: 1, subject: operator, index: 2n, record: encodeCommitment(signCommitment(b(81), 2n, b(80))) },
+      { kind: 1, subject: operator, index: 5n, record: encodeCommitment(signCommitment(operatorSecret, 3n, b(82))) },
+      { kind: 1, subject: operator, index: 9n, record: encodeCommitment(signCommitment(operatorSecret, 2n, b(83))) },
+      { kind: 3, subject: issuerKey, index: 4n, record: encodeRevocation(signRevocation(b(81))) });
+    assert.deepEqual(await replayLocalPackage(noisy, verifier, codec), audit);
+    const historical = clone(complete); historical.selection.mode = "historical-fixture"; historical.selection.judgingIndex = 8n;
+    const past = await replayLocalPackage(historical, verifier, codec);
+    assert.equal(past.status, "historical-local-replay"); assert.equal(past.currentRangeAuthenticated, false);
+    assert.equal(past.rangeEvidence, "fixture-verifier");
+    assert.deepEqual(past.audit.range, { judgingIndex: "8", checkpointIndex: "3", revokedAt: null, heldBefore: 1, heldAfter: 1 });
+  });
+  await test("record ranges refuse a contradicted empty opening, a later carrying checkpoint, a missing directory, a revoked issuer and a replaced operator", async () => {
+    const carryingBefore = [{ name: backing, digest: b(84) }], c1 = signCommitment(operatorSecret, 1n, directoryRoot(carryingBefore));
+    const carried = clone(complete); carried.venue.records[0] = { kind: 1, subject: operator, index: 1n, record: encodeCommitment(c1) };
+    carried.package.directories = [carryingBefore, after];
+    await reject(carried, "OPENING");
+    const carryingAfter = [{ name: backing, digest: b(85) }], c4 = signCommitment(operatorSecret, 4n, directoryRoot(carryingAfter));
+    const superseded = clone(complete); superseded.venue.records[2] = { kind: 1, subject: operator, index: 7n, record: encodeCommitment(c4) };
+    superseded.package.directories = [before, carryingAfter];
+    assert.equal((await replayLocalPackage(superseded, verifier, codec)).status, "unsupported-scope");
+    const missing = clone(complete); missing.package.directories = [before];
+    assert.equal((await replayLocalPackage(missing, verifier, codec)).status, "unresolved-evidence");
+    const revocation = encodeRevocation(signRevocation(issuerSecret));
+    for (const at of [2n, 3n]) {
+      const revoked = clone(complete); revoked.venue.records.push({ kind: 3, subject: issuerKey, index: at, record: revocation });
+      await reject(revoked, "REVOKED");
+    }
+    const revokedLater = clone(complete); revokedLater.venue.records.push({ kind: 3, subject: issuerKey, index: 10n, record: revocation });
+    const later = await replayLocalPackage(revokedLater, verifier, codec);
+    assert.equal(later.status, "selected-local-replay"); assert.equal(later.audit.range.revokedAt, "10");
+    const ruleSecret = b(87), successorSecret = b(89), ruled = emptyPackage({ ...termsFields, replacementRule: ed25519.getPublicKey(ruleSecret) });
+    const name = ruled.selection.backing, successor = ed25519.getPublicKey(successorSecret);
+    const fields = { role: ROLE_OPERATOR, successor, predecessor: name, effective: 40n, signature: new Uint8Array(64), successorSignature: new Uint8Array(64) };
+    const message = replacementMessage(name, fields);
+    const signed = { ...fields, signature: ed25519.sign(message, ruleSecret), successorSignature: ed25519.sign(message, successorSecret) };
+    assert.equal((await replayLocalPackage(ruled, verifier, codec)).status, "selected-local-replay");
+    const replaced = clone(ruled); replaced.venue.records.push({ kind: 2, subject: name, index: 5n, record: encodeReplacement(name, signed) });
+    assert.equal((await replayLocalPackage(replaced, verifier, codec)).status, "unsupported-scope");
+    const strangers = clone(ruled);
+    strangers.venue.records.push({ kind: 2, subject: name, index: 5n, record: encodeReplacement(name, { ...signed, signature: ed25519.sign(message, b(90)) }) });
+    assert.equal((await replayLocalPackage(strangers, verifier, codec)).status, "selected-local-replay");
+    const unruled = clone(complete); unruled.venue.records.push({ kind: 2, subject: backing, index: 5n, record: encodeReplacement(backing, signed) });
+    assert.deepEqual(await replayLocalPackage(unruled, verifier, codec), audit);
+    // With an admitted replacement the party in force at index 1 is not established here: no opening verdict.
+    const both = clone(replaced); both.venue.records[0] = { kind: 1, subject: operator, index: 1n, record: encodeCommitment(c1) };
+    both.package.directories = [carryingBefore, after];
+    const undecided = await replayLocalPackage(both, verifier, codec);
+    assert.equal(undecided.status, "unsupported-scope"); assert.equal(undecided.check, null);
+  });
+  await test("record ranges are the verifier's own: another venue, an unwitnessed index, a stale answer or an unheld selection cannot certify", async () => {
+    const elsewhere = clone(complete); elsewhere.venue.id = b(13);
+    assert.equal((await replayLocalPackage(elsewhere, verifier, codec)).status, "unresolved-evidence");
+    const future = clone(complete); future.selection.judgingIndex = 21n;
+    assert.equal((await replayLocalPackage(future, verifier, codec)).status, "unresolved-evidence");
+    const notNow = clone(complete); notNow.selection.judgingIndex = 15n;
+    assert.equal((await replayLocalPackage(notNow, verifier, codec)).status, "unresolved-evidence");
+    const unheld = clone(complete); unheld.venue.records.splice(1, 1);
+    assert.equal((await replayLocalPackage(unheld, verifier, codec)).status, "selection-mismatch");
+    // Another root at sequence 3 and index 3: the lesser record bytes stand for the sequence (§13.3).
+    const selected = complete.package.commitment;
+    let twin, fill = 91;
+    do { twin = encodeCommitment(signCommitment(operatorSecret, 3n, b(fill++))); } while (Buffer.compare(twin, selected) > 0);
+    const outranked = clone(complete); outranked.venue.records.splice(1, 0, { kind: 1, subject: operator, index: 3n, record: twin });
+    assert.equal((await replayLocalPackage(outranked, verifier, codec)).status, "selection-mismatch");
+    do { twin = encodeCommitment(signCommitment(operatorSecret, 3n, b(fill++))); } while (Buffer.compare(twin, selected) < 0);
+    const outranking = clone(complete); outranking.venue.records.splice(1, 0, { kind: 1, subject: operator, index: 3n, record: twin });
+    assert.deepEqual(await replayLocalPackage(outranking, verifier, codec), audit);
+    const stale = { ...verifier, record: data => {
+      const own = verifier.record(data);
+      return { ...own, range: request => own.range({ ...request, toIndex: request.toIndex - 1n }) };
+    } };
+    assert.equal((await replayLocalPackage(complete, stale, codec)).status, "unresolved-evidence");
+    const silent = { ...verifier, record: () => ({ range: () => undefined, witnessedIndex: () => 20n }) };
+    assert.equal((await replayLocalPackage(complete, silent, codec)).status, "unresolved-evidence");
+    // A flood at the operator's location beyond the reader's entry budget is a resource refusal, never a verdict.
+    const flooded = clone(complete), junk = new Uint8Array(136).fill(7);
+    for (let i = 0; i <= Number(RANGE_LIMITS.maxEntries); i++) flooded.venue.records.push({ kind: 1, subject: operator, index: 2n, record: junk });
+    const refusal = await replayLocalPackage(flooded, verifier, codec);
+    assert.equal(refusal.status, "resource-refusal"); assert.equal(refusal.audit, null);
+    assert.equal((await replayLocalPackage(complete, { configuration, verify: verifier.verify }, codec)).status, "unresolved-evidence");
+    const failure = new Error("range service unavailable");
+    await assert.rejects(replayLocalPackage(complete, { ...verifier, record: () => ({ range() { throw failure; }, witnessedIndex: () => 20n }) }, codec), error => error === failure);
+    const { venue: omitted, ...withoutVenue } = complete;
+    assert.equal(omitted.records.length, 3);
+    const plain = await replayLocalPackage(withoutVenue, verifier, codec);
+    assert.equal(plain.status, "selected-local-replay"); assert.equal(plain.rangeEvidence, "none");
+    assert.equal(plain.currentRangeAuthenticated, false); assert.equal(plain.termsAuthorityAuthenticated, false); assert.equal(plain.audit.range, null);
+    assert.equal((await replayEvidencePackage(portable(withoutVenue), verifier, codec)).status, "unsupported-scope");
+  });
   await test("canonical evidence package replays the same audit and receiver through one engine", async () => {
     assert.deepEqual(await replayEvidencePackage(portable(complete), verifier, codec), audit);
     assert.deepEqual(await replayEvidencePackage(portable({ ...complete, seed: receiverSeed }), verifier, codec), receiver);
@@ -364,7 +487,7 @@ try {
   });
   await test("missing, conflicting, unsupported and resource-limited package evidence returns no partial result", async () => {
     const packed = portable(complete), items = codec.decodeEvidencePackage(packed.package, PACKAGE_LIMITS);
-    const beforeProof = { configuration, verify() { throw new Error("package guard ran too late"); } };
+    const beforeProof = { ...verifier, verify() { throw new Error("package guard ran too late"); } };
     async function refuse(p, status) {
       const result = await replayEvidencePackage(p, beforeProof, codec);
       assert.equal(result.status, status); assert.equal(result.audit, null); assert.deepEqual(result.candidates, []);
@@ -392,13 +515,13 @@ try {
     for (const tag of [2, 3, 4, 6]) {
       const changed = items.map(item => ({ ...item, payload: new Uint8Array(item.payload) }));
       const entry = changed.find(item => item.kind === tag); entry.payload[entry.payload.length - 1] ^= 1;
-      await refuse({ ...packed, package: codec.encodeEvidencePackage(changed, PACKAGE_LIMITS) }, "unresolved-evidence");
+      await refuse({ ...packed, package: codec.encodeEvidencePackage(canonical(changed), PACKAGE_LIMITS) }, "unresolved-evidence");
     }
     await refuse({ ...packed, selection: { ...packed.selection, root: b(93) } }, "selection-mismatch");
   });
   await test("portable bytes and seed are owned before proof awaits; shared input and source failures cannot certify", async () => {
     const packed = portable(clone({ ...complete, seed: receiverSeed })); let calls = 0;
-    const mutating = { configuration, verify: async (...args) => {
+    const mutating = { ...verifier, verify: async (...args) => {
       if (calls++ === 0) { packed.package.fill(0); packed.selection.root.fill(0); packed.seed.fill(0); }
       return verifier.verify(...args);
     } };
@@ -427,11 +550,11 @@ try {
     for (const field of ["package", "seed"]) {
       const p = portable({ ...complete, seed: receiverSeed }), original = p[field];
       p[field] = new Uint8Array(new SharedArrayBuffer(original.length)); p[field].set(original);
-      const result = await replayEvidencePackage(p, { configuration, verify() { throw new Error("shared input reached proof"); } }, codec);
+      const result = await replayEvidencePackage(p, { ...verifier, verify() { throw new Error("shared input reached proof"); } }, codec);
       assert.equal(result.status, "unresolved-evidence"); assert.equal(result.audit, null);
     }
     const failure = new Error("range/proof service unavailable");
-    await assert.rejects(replayEvidencePackage(portable(complete), { configuration, verify() { throw failure; } }, codec), error => error === failure);
+    await assert.rejects(replayEvidencePackage(portable(complete), { ...verifier, verify() { throw failure; } }, codec), error => error === failure);
   });
   await api.destroy(); api = undefined;
   function worker(payload) {
@@ -442,7 +565,7 @@ try {
     return JSON.parse(child.stdout.toString());
   }
   await test("fresh public verifier has no wallet seed; separate receiver restores from public evidence only", () => {
-    assert.deepEqual(Object.keys(complete).sort(), ["package", "selection"]);
+    assert.deepEqual(Object.keys(complete).sort(), ["package", "selection", "venue"]);
     assert.deepEqual(worker(complete), audit);
     assert.deepEqual(worker({ ...complete, seed: receiverSeed }), receiver);
   });
@@ -459,29 +582,33 @@ try {
       } finally { writeFileSync(keyPath, key); }
     }
   });
-  await test("successful replay retains unresolved production authority and currentness", () => {
+  await test("successful replay retains unresolved production authority; ranges are the fixture verifier's only", () => {
     for (const result of [receiver, audit]) {
       assert.equal(result.candidateConfigurationChecked, true); assert.equal(result.signedTermsAuthenticated, true);
-      for (const key of ["fullV3Replay", "currentRangeAuthenticated", "termsAuthorityAuthenticated", "completenessClaim", "noMatchesMeansZeroBalance", "spendable"]) assert.equal(result[key], false);
+      assert.equal(result.currentRangeAuthenticated, true); assert.equal(result.termsAuthorityAuthenticated, true);
+      assert.equal(result.rangeEvidence, "fixture-verifier");
+      for (const key of ["fullV3Replay", "completenessClaim", "noMatchesMeansZeroBalance", "spendable"]) assert.equal(result[key], false);
       assert.equal(result.unresolvedCoverage, true);
       result.candidates.forEach(x => assert.equal(x.spendable, false));
     }
   });
   const sources = ["scripts/pool/v3/local-replay.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/local-check.mjs",
+    "scripts/pool/v3/fixture-venue.mjs",
     "scripts/pool/delivery/evidence-reader.mjs", "scripts/pool/delivery/crypto.mjs", "scripts/pool/spent-set/radix.mjs",
     "model/pool-v3-records.ts", "model/pool-v3-commitments.ts", "model/pool-v3-trail.ts", "model/pool-v3-headers.ts",
-    "model/pool-v3-configuration.ts", "model/pool-v3-terms.ts", "model/pool-v3-package.ts", "scripts/pool/v3/candidate.mjs", "scripts/pool/v3/candidate-manifest.json",
+    "model/pool-v3-configuration.ts", "model/pool-v3-terms.ts", "model/pool-v3-package.ts", "model/pool-v3-range.ts",
+    "scripts/pool/v3/candidate.mjs", "scripts/pool/v3/candidate-manifest.json",
     "src/pool/note-tree.ts", "src/pool/scope.ts", "scripts/pool/v3/circuits/issue.nr", "scripts/pool/v3/circuits/spend.nr", "scripts/pool/v3/circuits/burn.nr"];
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-3", specification: "10dcf67", node: process.version,
-    packageBytes: portable(complete).package.length,
+  const report = { schema: "moe-v3-local-replay-experiment-4", specification: "6272040", node: process.version,
+    packageBytes: portable(complete).package.length, fixtureVenueRecords: complete.venue.records.length,
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
     platform: process.platform, checks, identities, metrics,
     sourceSha256Lf: Object.fromEntries(sources.map(path => [path, sha(readFileSync(join(root, path), "utf8").replaceAll("\r\n", "\n"))])),
     audit, receiver,
-    limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain or registered/current authority. Selected checkpoint and empty opening remain fixture assumptions.",
-      "Only issue/spend/burn in one empty-opening segment; no recovery, imports, revocation, clock or venue-range validation.",
-      "Real proof/signature/state replay and local membership paths do not grant full finality, current completeness or spending permission."] };
+    limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The selected checkpoint, its empty opening, currency, the original operator's force and the absent revocation are established against a harness-owned fixture venue record only, not a venue profile or authenticated chain evidence.",
+      "Only issue/spend/burn in one empty-opening segment; no recovery, imports, clock, later carrying checkpoints or replacement chains.",
+      "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");
   console.log(`PASS: ${checks.length} local replay groups, ${metrics.length} real proofs; scratch/pool-v3-local-replay-results.json`);
 } finally {

@@ -205,20 +205,43 @@ receiver process reconstructs its unspent change and a local membership path
 from its seed and those public bytes. No witness or original wallet journal
 enters either process. The public outstanding amount is 10 minus 5 = 5.
 
-Fresh readers receive the 47,509-byte canonical [§12 evidence package](https://github.com/mediumofexchange/money-from-first-principles/blob/10dcf67/pool-v3.md#12-evidence-packages-and-dependency-retention):
-exact configuration, commitment, complete directory preimage, snapshot and
-trail bytes, ordered by kind and payload hash. Local limits are 1 MiB and 1,024
-items, checked with all field boundaries before hashing payloads. The bounded
-reader requires exactly one of each supported object and uses the same replay
-engine as the in-memory fixture. Missing objects, duplicate/conflicting
-objects, unsupported dependencies, false range-completeness assertions and
-replica substitutions yield no partial audit or candidates. Package bytes,
-selection and seed are owned before asynchronous verification; shared input
-refuses. Decoding checks budgets before ownership copying, and fixed-width
-selection/seed views are copied without their unused backing allocations.
-Generic transport can retain all eleven specified evidence kinds,
-including opaque malformed inner bytes, without interpreting them as valid.
-Venue evidence and complete dependency replay remain unsupported by this reader.
+Fresh readers receive the 47,665-byte canonical [§12 evidence package](https://github.com/mediumofexchange/money-from-first-principles/blob/10dcf67/pool-v3.md#12-evidence-packages-and-dependency-retention):
+exact configuration, commitment, the complete directory preimage of every
+held commitment in range, snapshot and trail bytes, ordered by kind and
+payload hash. Local limits are 1 MiB and 1,024 items, checked with all field
+boundaries before hashing payloads. The bounded reader requires exactly one
+configuration, commitment, snapshot and trail, resolves the selection's
+directory by root, and uses the same replay engine as the in-memory fixture.
+Missing objects, duplicate/conflicting objects, unsupported dependencies,
+false range-completeness assertions and replica substitutions yield no partial
+audit or candidates. Package bytes, selection and seed are owned before
+asynchronous verification; shared input refuses. Decoding checks budgets
+before ownership copying, and fixed-width selection/seed views are copied
+without their unused backing allocations. Generic transport can retain all
+eleven specified evidence kinds, including opaque malformed inner bytes,
+without interpreting them as valid.
+
+The reader's record reads follow [pool-v3 §13](https://github.com/mediumofexchange/money-from-first-principles/blob/6272040/pool-v3.md#13-record-range-evidence).
+Its venue-evidence verifier is a harness-owned fixture venue record beside the
+selection and candidate manifest: it answers the reader's own requests for the
+operator's commitments, the backing's replacements and K's revocations from
+index zero through the judging index, or returns no answer. From those answers
+the reader derives the held commitments (C2.3.3 by ascending sequence within
+an index), requires the selected checkpoint to be held, passes every other
+held commitment by its packaged directory (an earlier carrying commitment
+contradicts the header's empty opening; a later one needs its own
+classification and is unsupported), requires no admitted replacement under
+the terms' rule key, and voids issuance finalized at or after K's revocation.
+A current read requires the judging index to be the verifier's clock. Junk at
+the operator's location, a stale lower sequence and a repeated sequence are
+disregarded without becoming holes; a same-sequence twin with the lesser
+record bytes stands for the sequence, so the selection is then not held. An
+answer for another venue or request, an unwitnessed judging index, a silent
+or absent verifier and a missing directory all leave the read unresolved; a
+flood beyond the reader's entry budget is a resource refusal; an answer
+supplied inside the package is an unsupported kind, never evidence. Without a fixture venue the reader runs as before and claims
+no range. A venue profile and authenticated chain evidence behind such answers
+remain unimplemented; the fixture record is a trust input, not a venue.
 
 Valid proofs against an unaccepted anchor, a spent input, a duplicate output,
 a different scope and overflowing aggregate issuance isolate the host checks.
@@ -242,25 +265,29 @@ that a production reader must establish before returning spendable holdings.
 | Boundary | Experiment evidence | Still required |
 |---|---|---|
 | Construction and key routing | Exact configuration preimage and candidate domain; all six independently pinned source/toolchain/bytecode/key identities and fixed helper/bounds/profile | Approved configuration/artifact identities after full adoption prerequisites; setup provenance and deployment qualification |
-| Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and terms-derived issuance key; header-derived scope root | Registered immutable terms, replacement links and force at the judging record; no revocation or prior opening inferred from a signature |
+| Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and terms-derived issuance key; header-derived scope root; against the fixture venue, no admitted replacement (original operator in force) and no revocation at or before the checkpoint | Replacement chains beyond the original operator; a venue profile and authenticated evidence behind the fixture answers |
 | Local state | Issue/spend/burn proof and state checks, compressed spent root, note paths, totals and both chains | Recovery statements, locks, recursively verified imports, deduplicated closure and all scoped snapshots |
-| Witness and continuity | Exact fixture-selected signed checkpoint; old package mismatch tested | Complete authenticated venue ranges and same-index order, initial empty-opening justification, revocation/lapse/fault and last-valid-prefix checks |
+| Witness and continuity | Exact fixture-selected signed checkpoint held in the fixture venue's §13 answers; every other held commitment through the judging index passed by its directory (empty opening, currency); old package mismatch tested | A venue profile and authenticated chain evidence, later carrying checkpoints' classification, lapse/fault and last-valid-prefix checks, publications and the clock |
 | Wallet restoration | Seed-only candidate openings and local paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
 
-The candidate manifest, checkpoint selection and initial empty-opening force
+The candidate manifest, checkpoint selection and the fixture venue record
 remain explicit **test fixture assumptions**. Signed terms establish identity,
 and configuration checks bind the candidate keys; neither establishes adoption
 or the force of those terms. `candidateConfigurationChecked` and
-`signedTermsAuthenticated` report only those narrower successful checks. `fullV3Replay`,
-`currentRangeAuthenticated`, `termsAuthorityAuthenticated`, completeness and
-spendability remain false; coverage remains unresolved. A local path is not a
-certified anchor. The required full-package checks derive from pool-delivery
-C4.6, pool-v3 §§1/7/10/11 and the authority/fault contracts. Section 11 adds
-configuration/terms framing for conformance, with the existing signature rule.
-Section 12 adds source-neutral transport and an exact-request range verifier
-contract; it supplies no venue wire profile or authority. No package-level
-completeness flag is accepted, and V8 remains only the local fixture IPC for
-the independent selection and seed alongside the canonical package bytes.
+`signedTermsAuthenticated` report only those narrower successful checks.
+`currentRangeAuthenticated` and `termsAuthorityAuthenticated` are true only
+with `rangeEvidence: "fixture-verifier"`, meaning the §13 reads passed against
+the harness's fixture record; a historical read leaves currency false.
+`fullV3Replay`, completeness and spendability remain false; coverage remains
+unresolved. A local path is not a certified anchor. The required full-package
+checks derive from pool-delivery C4.6, pool-v3 §§1/7/10/11/13 and the
+authority/fault contracts. Section 11 adds configuration/terms framing for
+conformance, with the existing signature rule. Section 12 adds source-neutral
+transport; Section 13 fixes the record-range answer and the reader's
+held/chain/revocation/publication rules, with no venue wire profile or
+authority. No package-level completeness flag is accepted, and V8 remains
+only the local fixture IPC for the independent selection, seed and fixture
+venue record alongside the canonical package bytes.
 
 ## Transfer shape and ordinary fees
 

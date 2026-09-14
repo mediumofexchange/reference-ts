@@ -1,8 +1,9 @@
 {
-  "schema": "moe-v3-local-replay-experiment-3",
-  "specification": "10dcf67",
+  "schema": "moe-v3-local-replay-experiment-4",
+  "specification": "6272040",
   "node": "v24.6.0",
-  "packageBytes": 47509,
+  "packageBytes": 47665,
+  "fixtureVenueRecords": 3,
   "candidateDomain": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
   "configurationBytes": 439,
   "backing": "6d7882f0074b4fca2c5caec1642b2d5fd2dcf64e4e407e62053b099bf2b84b7a",
@@ -26,12 +27,15 @@
     "unsupported recovery records and imported openings do not produce partial audit results",
     "inputs are owned across asynchronous proof verification and unexpected failures propagate",
     "historical replay and wrong seed never assert current spendability or a complete zero balance",
+    "fixture record ranges establish the held checkpoint, empty opening, currency, chain and revocation",
+    "record ranges refuse a contradicted empty opening, a later carrying checkpoint, a missing directory, a revoked issuer and a replaced operator",
+    "record ranges are the verifier's own: another venue, an unwitnessed index, a stale answer or an unheld selection cannot certify",
     "canonical evidence package replays the same audit and receiver through one engine",
     "missing, conflicting, unsupported and resource-limited package evidence returns no partial result",
     "portable bytes and seed are owned before proof awaits; shared input and source failures cannot certify",
     "fresh public verifier has no wallet seed; separate receiver restores from public evidence only",
     "fresh verifier refuses a changed artifact against its independently held key pin",
-    "successful replay retains unresolved production authority and currentness"
+    "successful replay retains unresolved production authority; ranges are the fixture verifier's only"
   ],
   "identities": {
     "issue": {
@@ -64,55 +68,56 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 3356.4487999999983
+      "elapsedMs": 1887.1270000000004
     },
     {
       "label": "pay 7, change 3",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6261.9156
+      "elapsedMs": 5547.9378
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 5653.899000000001
+      "elapsedMs": 5120.466899999999
     },
     {
       "label": "valid maximum issuance",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1717.7886999999973
+      "elapsedMs": 1655.2599000000046
     },
     {
       "label": "valid proof, different scope",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1683.388500000001
+      "elapsedMs": 1688.8757000000041
     },
     {
       "label": "valid proof, unaccepted anchor",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 4893.214200000002
+      "elapsedMs": 4855.7255000000005
     },
     {
       "label": "valid proof, spent input",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 4997.8778999999995
+      "elapsedMs": 4798.586800000005
     },
     {
       "label": "valid proof, duplicate output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 4865.984899999996
+      "elapsedMs": 4757.131799999996
     }
   ],
   "sourceSha256Lf": {
-    "scripts/pool/v3/local-replay.mjs": "722b6fc1c9d912af5fbf2f1f288ed707738c98c65cc3483244eba10f8c7489b3",
-    "scripts/pool/v3/local-worker.mjs": "26c9a84532ca627ddedb0b07fcb99eb4908ce74079092e9aae6ebcd0e28b937c",
-    "scripts/pool/v3/local-check.mjs": "1f9f26084757c276d39c159632c97ea85558dfdc059758c90cd30419cb30c887",
+    "scripts/pool/v3/local-replay.mjs": "21329b472287edea5f473f0cc8b5284ad842c8ac75aa9b1d71b35811c92c019f",
+    "scripts/pool/v3/local-worker.mjs": "bb12f4a9063dc57dffade81e74c94f11ded0b11ce03dd0281861f12a4659c980",
+    "scripts/pool/v3/local-check.mjs": "e62caae34f724c15d0dd3247fc8c69aa201085c55d77999ff68300ca84fe2e03",
+    "scripts/pool/v3/fixture-venue.mjs": "dbaf6d35db28d6e719fdbabaa812b92a8f57fc810c3797bd62a6411cb1d09b1e",
     "scripts/pool/delivery/evidence-reader.mjs": "65f1a13caf29cadd7db46f10769920ccfd66c879f12d064c091be632a86fdf66",
     "scripts/pool/delivery/crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
     "scripts/pool/spent-set/radix.mjs": "a65c10fcca67cd6f486c73f3e66f4eba254f4aa4a6d2be8c12d2debe66af4953",
@@ -123,6 +128,7 @@
     "model/pool-v3-configuration.ts": "a88d260621bd7a81f6a6827931e703cc4a405394ad4bb0a2aed11f1d72ae9802",
     "model/pool-v3-terms.ts": "67f29459be62e28d86fd0789f748c6ca58a45b30bf042fd6132c93247ded0cbf",
     "model/pool-v3-package.ts": "7c48ec95df778198bb8ad8be4214a40fa8730dce3270ab26dae7aae35e61c73f",
+    "model/pool-v3-range.ts": "d54a4b137e0c7b5f334568071b4514e91dc37259f1fee84f837bc82d57cf42c4",
     "scripts/pool/v3/candidate.mjs": "cda541d6d39493e73197890f1c8a93be13627d584eff04e64ca59f2e60758f48",
     "scripts/pool/v3/candidate-manifest.json": "a5f34d76b1ac9cba71d322c5263fee75120a7756d0b5609720682c344e5049ae",
     "src/pool/note-tree.ts": "264c93ecf4af95209374657bc5c56c8841abab71b292ed557940b23540dfd1d4",
@@ -134,14 +140,15 @@
   "audit": {
     "status": "selected-local-replay",
     "fullV3Replay": false,
-    "currentRangeAuthenticated": false,
+    "currentRangeAuthenticated": true,
     "candidateConfigurationChecked": true,
     "signedTermsAuthenticated": true,
-    "termsAuthorityAuthenticated": false,
+    "termsAuthorityAuthenticated": true,
     "completenessClaim": false,
     "noMatchesMeansZeroBalance": false,
     "unresolvedCoverage": true,
     "spendable": false,
+    "rangeEvidence": "fixture-verifier",
     "audit": {
       "records": "3",
       "issued": "10",
@@ -150,21 +157,29 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "71193b353720abb8d73c3f7b35edc57ddfb870e2ff821ec56814426254906a58"
+      "evidenceHash": "2b49242ef29d0fecbe1956b00d3dfae04686e1ade3df87a5dc2c09b28d27e4e5",
+      "range": {
+        "judgingIndex": "20",
+        "checkpointIndex": "3",
+        "revokedAt": null,
+        "heldBefore": 1,
+        "heldAfter": 1
+      }
     },
     "candidates": []
   },
   "receiver": {
     "status": "selected-local-replay",
     "fullV3Replay": false,
-    "currentRangeAuthenticated": false,
+    "currentRangeAuthenticated": true,
     "candidateConfigurationChecked": true,
     "signedTermsAuthenticated": true,
-    "termsAuthorityAuthenticated": false,
+    "termsAuthorityAuthenticated": true,
     "completenessClaim": false,
     "noMatchesMeansZeroBalance": false,
     "unresolvedCoverage": true,
     "spendable": false,
+    "rangeEvidence": "fixture-verifier",
     "audit": {
       "records": "3",
       "issued": "10",
@@ -173,7 +188,14 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "71193b353720abb8d73c3f7b35edc57ddfb870e2ff821ec56814426254906a58"
+      "evidenceHash": "2b49242ef29d0fecbe1956b00d3dfae04686e1ade3df87a5dc2c09b28d27e4e5",
+      "range": {
+        "judgingIndex": "20",
+        "checkpointIndex": "3",
+        "revokedAt": null,
+        "heldBefore": 1,
+        "heldAfter": 1
+      }
     },
     "candidates": [
       {
@@ -256,8 +278,8 @@
     ]
   },
   "limits": [
-    "Candidate configuration and signed constant-root terms checked; no adopted domain or registered/current authority. Selected checkpoint and empty opening remain fixture assumptions.",
-    "Only issue/spend/burn in one empty-opening segment; no recovery, imports, revocation, clock or venue-range validation.",
-    "Real proof/signature/state replay and local membership paths do not grant full finality, current completeness or spending permission."
+    "Candidate configuration and signed constant-root terms checked; no adopted domain. The selected checkpoint, its empty opening, currency, the original operator's force and the absent revocation are established against a harness-owned fixture venue record only, not a venue profile or authenticated chain evidence.",
+    "Only issue/spend/burn in one empty-opening segment; no recovery, imports, clock, later carrying checkpoints or replacement chains.",
+    "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."
   ]
 }
