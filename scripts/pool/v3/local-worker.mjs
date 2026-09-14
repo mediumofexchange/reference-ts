@@ -39,7 +39,7 @@ try {
     proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
   }, { verifierTarget: "noir-recursive" }), record: data => {
     const witnessed = FixtureVenue.from(data);
-    return { range: request => witnessed.answer(request, codec, RANGE_LIMITS), witnessedIndex: () => witnessed.witnessedIndex };
+    return { range: request => witnessed.answer(request, codec, RANGE_LIMITS), witnessedIndex: () => witnessed.witnessedIndex, lag: () => witnessed.lag };
   } };
   process.stdout.write(JSON.stringify(await replayEvidencePackage(input, verifier, codec)));
 } catch {

@@ -346,3 +346,101 @@ describe("v3 revocation and replacement records from ranges", () => {
     expect(() => range.admittedReplacements({ request: request(4, backing), entries: [] }, rule)).toThrow(/wrong range kind/);
   });
 });
+
+describe("v3 replacement chain from ranges", () => {
+  // Records for a given backing name, signed by whom the fixture says.
+  function signedReplacement(name: Uint8Array, signer: Uint8Array, successorSecret: Uint8Array, predecessor: Uint8Array, effective: bigint): Replacement {
+    const fields = { role: ROLE_OPERATOR, successor: ed25519.getPublicKey(successorSecret), predecessor, effective,
+      signature: new Uint8Array(64), successorSignature: new Uint8Array(64) };
+    const message = replacementMessage(name, fields);
+    return { ...fields, signature: ed25519.sign(message, signer), successorSignature: ed25519.sign(message, successorSecret) };
+  }
+  const links = (chain: readonly range.ChainLink[]): unknown =>
+    chain.map(link => ({ operator: Array.from(link.operator), from: link.from, link: Array.from(link.link) }));
+  function walk(entries: { index: bigint; record: Uint8Array }[], lag: bigint, now = 20n): range.ReplacementChain {
+    const answer: range.RangeAnswer = { request: request(2, backing, 0n, now), entries: ordered(entries, 2) };
+    return range.replacementChain(range.admittedReplacements(answer, rule), { backing, original: operator, lag, now });
+  }
+  const at = (index: bigint, r: { record: Uint8Array }): { index: bigint; record: Uint8Array } => ({ index, record: r.record });
+
+  it("applies the lead floor from the venue's lag: a record below it is no replacement (C2.5.3)", () => {
+    const early = replacement(9n), exact = replacement(10n);
+    expect(walk([at(5n, early)], 2n).chain).toHaveLength(1);
+    expect(walk([at(5n, exact)], 2n).chain.map(l => l.from)).toEqual([0n, 10n]);
+    expect(walk([at(5n, early)], 0n).chain.map(l => l.from)).toEqual([0n, 9n]);
+    expect(walk([at(5n, exact)], 5n).chain).toHaveLength(1);
+    expect(() => range.replacementChain([], { backing, original: operator, lag: -1n, now: 20n })).toThrow(EncodingError);
+    expect(() => range.replacementChain([], { backing, original: b(1).subarray(0, 31), lag: 0n, now: 20n })).toThrow(EncodingError);
+  });
+
+  it("supersedes only before the standing candidate's force, revokes by naming the incumbent and ties by the lesser identity (C2.5.4-5)", () => {
+    const first = replacement(15n), second = replacement(12n, b(45)), revoke = replacement(12n, operatorSecret);
+    const s2 = ed25519.getPublicKey(b(45));
+    expect(walk([at(5n, first), at(8n, second)], 0n).chain.map(l => [Array.from(l.operator), l.from]))
+      .toEqual([[Array.from(operator), 0n], [Array.from(s2), 12n]]);
+    // Witnessed at or after the standing candidate's effective index, the later record names a link the chain has left.
+    expect(walk([at(5n, first), at(15n, second)], 0n).chain.map(l => l.from)).toEqual([0n, 15n]);
+    expect(walk([at(5n, first), at(8n, revoke)], 0n).chain).toHaveLength(1);
+    const pending = walk([at(5n, replacement(30n))], 0n);
+    expect(pending.chain).toHaveLength(1); expect(pending.pending?.from).toBe(30n);
+    // Two at one index: the lesser identity stands, and the greater is not the later of anything.
+    const both = range.admittedReplacements({ request: request(2, backing), entries: ordered([at(5n, first), at(5n, second)], 2) }, rule);
+    const lesser = Buffer.compare(both[0]!.identity, both[1]!.identity) < 0 ? both[0]! : both[1]!;
+    expect(walk([at(5n, first), at(5n, second)], 0n).chain[1]!.from).toBe(lesser.replacement.effective);
+    // A record naming a link at or before its force is void unless it revokes (C2.5.4).
+    const successorLink = walk([at(5n, first)], 0n).chain[1]!.link;
+    const back = { record: encodeReplacement(backing, signedReplacement(backing, ruleSecret, b(46), successorLink, 15n)) };
+    expect(walk([at(5n, first), at(6n, back)], 0n).chain).toHaveLength(2);
+    const onward = { record: encodeReplacement(backing, signedReplacement(backing, ruleSecret, b(46), successorLink, 16n)) };
+    const three = walk([at(5n, first), at(6n, onward)], 0n).chain;
+    expect(three.map(l => l.from)).toEqual([0n, 15n, 16n]);
+    expect(Object.isFrozen(three) && Object.isFrozen(three[1])).toBe(true);
+    expect(range.linkInForce(three, 15n).from).toBe(15n);
+    expect(range.linkInForce(three, 14n).from).toBe(0n);
+    expect(range.linkInForce(three, 400n).from).toBe(16n);
+    expect(() => range.linkInForce([], 3n)).toThrow(EncodingError);
+  });
+
+  it("agrees with the runtime walk over the same records in every scenario", async () => {
+    const { makeBacking } = await import("../src/backing.js");
+    const { LocalVenue } = await import("../src/venue.js");
+    const { successionAhead, successionOf } = await import("../src/replacement.js");
+    const { KEYS, SECRETS } = await import("./support.js");
+    const s1 = b(47), s2 = b(48);
+    interface Step { at: bigint; effective: bigint; successor: Uint8Array; predecessor: "backing" | number; signer?: Uint8Array }
+    const scenarios: Step[][] = [
+      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }],
+      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 12n, effective: 20n, successor: s2, predecessor: 0 }],
+      [{ at: 5n, effective: 15n, successor: s1, predecessor: "backing" }, { at: 8n, effective: 12n, successor: s2, predecessor: "backing" }],
+      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 10n, effective: 20n, successor: s2, predecessor: "backing" }],
+      [{ at: 5n, effective: 15n, successor: s1, predecessor: "backing" }, { at: 8n, effective: 12n, successor: SECRETS.operator, predecessor: "backing" }],
+      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 5n, effective: 11n, successor: s2, predecessor: "backing" }],
+      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 6n, effective: 10n, successor: s2, predecessor: 0 }],
+      [{ at: 5n, effective: 30n, successor: s1, predecessor: "backing" }],
+      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 12n, effective: 20n, successor: SECRETS.operator, predecessor: 0 }],
+      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing", signer: b(49) }, { at: 6n, effective: 12n, successor: s2, predecessor: "backing" }],
+      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 12n, effective: 20n, successor: s2, predecessor: 0 },
+        { at: 12n, effective: 19n, successor: SECRETS.operator, predecessor: 0 }],
+      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 7n, effective: 9n, successor: s2, predecessor: "backing" },
+        { at: 8n, effective: 8n, successor: s2, predecessor: "backing" }],
+    ];
+    for (const steps of scenarios) {
+      const venue = new LocalVenue(), runtime = makeBacking({
+        obligor: KEYS.backer, payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n }, reliance: [],
+        evidence: { setting: "transparent", operator: KEYS.operator, silence: { noCommitmentDuration: 10n, challengeWindow: 5n }, replacementRule: KEYS.backer },
+      });
+      const name = runtime.name, published: Replacement[] = [], entries: { index: bigint; record: Uint8Array }[] = [];
+      for (const step of steps) {
+        const predecessor = step.predecessor === "backing" ? name : sha(replacementMessage(name, published[step.predecessor]!));
+        const r = signedReplacement(name, step.signer ?? SECRETS.backer, step.successor, predecessor, step.effective);
+        if (venue.witnessedIndex() < step.at) venue.advance(step.at - venue.witnessedIndex());
+        venue.publishReplacement(name, r); published.push(r); entries.push({ index: step.at, record: encodeReplacement(name, r) });
+      }
+      if (venue.witnessedIndex() < 20n) venue.advance(20n - venue.witnessedIndex());
+      const answer: range.RangeAnswer = { request: request(2, name, 0n, 20n), entries: ordered(entries, 2) };
+      const ours = range.replacementChain(range.admittedReplacements(answer, KEYS.backer), { backing: name, original: KEYS.operator, lag: venue.lag(), now: 20n });
+      expect(links(ours.chain)).toEqual(links(successionOf(runtime, venue)));
+      expect(links([...ours.chain, ...(ours.pending === undefined ? [] : [ours.pending])])).toEqual(links(successionAhead(runtime, venue)));
+    }
+  });
+});

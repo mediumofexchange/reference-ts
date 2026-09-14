@@ -1,8 +1,9 @@
 {
-  "schema": "moe-v3-local-replay-experiment-4",
-  "specification": "6272040",
+  "schema": "moe-v3-local-replay-experiment-5",
+  "specification": "3ed1800",
   "node": "v24.6.0",
   "packageBytes": 47665,
+  "dependencyPackageBytes": 110054,
   "fixtureVenueRecords": 3,
   "candidateDomain": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
   "configurationBytes": 439,
@@ -28,8 +29,12 @@
     "inputs are owned across asynchronous proof verification and unexpected failures propagate",
     "historical replay and wrong seed never assert current spendability or a complete zero balance",
     "fixture record ranges establish the held checkpoint, empty opening, currency, chain and revocation",
-    "record ranges refuse a contradicted empty opening, a later carrying checkpoint, a missing directory, a revoked issuer and a replaced operator",
+    "record ranges refuse a contradicted empty opening, another segment's later checkpoint, a missing directory, a revoked issuer and a pending handover",
+    "the chain from kind-2 answers fixes the party in force: lead floor, supersession, revocation, term end and a successor's commitments",
     "record ranges are the verifier's own: another venue, an unwitnessed index, a stale answer or an unheld selection cannot certify",
+    "a second checkpoint of the segment is classified from its own trail and extends the last valid prefix (C2.10.4, C2.10.12)",
+    "excluded checkpoints are passed: a stale twin, diverging evidence or a bad suffix never moves the last valid prefix (C2.10.12)",
+    "dependency evidence must be complete and authenticated: missing, substituted or ambiguous snapshots and trails leave the read unresolved",
     "canonical evidence package replays the same audit and receiver through one engine",
     "missing, conflicting, unsupported and resource-limited package evidence returns no partial result",
     "portable bytes and seed are owned before proof awaits; shared input and source failures cannot certify",
@@ -68,56 +73,62 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1887.1270000000004
+      "elapsedMs": 2072.737699999998
     },
     {
       "label": "pay 7, change 3",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5547.9378
+      "elapsedMs": 5243.446200000006
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 5120.466899999999
+      "elapsedMs": 4238.775200000004
+    },
+    {
+      "label": "pay 2, change 1",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 5317.089
     },
     {
       "label": "valid maximum issuance",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1655.2599000000046
+      "elapsedMs": 3170.1949000000022
     },
     {
       "label": "valid proof, different scope",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1688.8757000000041
+      "elapsedMs": 1976.3352999999988
     },
     {
       "label": "valid proof, unaccepted anchor",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 4855.7255000000005
+      "elapsedMs": 6916.497799999997
     },
     {
       "label": "valid proof, spent input",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 4798.586800000005
+      "elapsedMs": 4947.133600000001
     },
     {
       "label": "valid proof, duplicate output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 4757.131799999996
+      "elapsedMs": 4200.744999999995
     }
   ],
   "sourceSha256Lf": {
-    "scripts/pool/v3/local-replay.mjs": "21329b472287edea5f473f0cc8b5284ad842c8ac75aa9b1d71b35811c92c019f",
-    "scripts/pool/v3/local-worker.mjs": "bb12f4a9063dc57dffade81e74c94f11ded0b11ce03dd0281861f12a4659c980",
-    "scripts/pool/v3/local-check.mjs": "e62caae34f724c15d0dd3247fc8c69aa201085c55d77999ff68300ca84fe2e03",
-    "scripts/pool/v3/fixture-venue.mjs": "dbaf6d35db28d6e719fdbabaa812b92a8f57fc810c3797bd62a6411cb1d09b1e",
+    "scripts/pool/v3/local-replay.mjs": "34cab6e89558444b7da4b5bec81043a72da3b3b38b3913f15a06215633e95204",
+    "scripts/pool/v3/local-worker.mjs": "4074fcd80fd6bb858818a5ba24181fa695001cf70882e70942765f3f192d6ccd",
+    "scripts/pool/v3/local-check.mjs": "a5b22ebae26dd11e19fbea785a11d1d52ab8bec3ec7f78b8bceefa3d2e7b49ca",
+    "scripts/pool/v3/fixture-venue.mjs": "757300134c7f51737fe35c620756e44351c26ad38b981bac27bf5d411d4d6c35",
     "scripts/pool/delivery/evidence-reader.mjs": "65f1a13caf29cadd7db46f10769920ccfd66c879f12d064c091be632a86fdf66",
     "scripts/pool/delivery/crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
     "scripts/pool/spent-set/radix.mjs": "a65c10fcca67cd6f486c73f3e66f4eba254f4aa4a6d2be8c12d2debe66af4953",
@@ -128,7 +139,7 @@
     "model/pool-v3-configuration.ts": "a88d260621bd7a81f6a6827931e703cc4a405394ad4bb0a2aed11f1d72ae9802",
     "model/pool-v3-terms.ts": "67f29459be62e28d86fd0789f748c6ca58a45b30bf042fd6132c93247ded0cbf",
     "model/pool-v3-package.ts": "7c48ec95df778198bb8ad8be4214a40fa8730dce3270ab26dae7aae35e61c73f",
-    "model/pool-v3-range.ts": "d54a4b137e0c7b5f334568071b4514e91dc37259f1fee84f837bc82d57cf42c4",
+    "model/pool-v3-range.ts": "2191df8ff41695e37e5dde1ebf5d8befa16c80e3b9596b83ac4a63dad392155d",
     "scripts/pool/v3/candidate.mjs": "cda541d6d39493e73197890f1c8a93be13627d584eff04e64ca59f2e60758f48",
     "scripts/pool/v3/candidate-manifest.json": "a5f34d76b1ac9cba71d322c5263fee75120a7756d0b5609720682c344e5049ae",
     "src/pool/note-tree.ts": "264c93ecf4af95209374657bc5c56c8841abab71b292ed557940b23540dfd1d4",
@@ -157,13 +168,28 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "2b49242ef29d0fecbe1956b00d3dfae04686e1ade3df87a5dc2c09b28d27e4e5",
+      "evidenceHash": "9b3238c7ca1dd793294dcfa71941b3487121c6198b11efff24970c0302deba58",
       "range": {
         "judgingIndex": "20",
+        "lag": "2",
         "checkpointIndex": "3",
         "revokedAt": null,
         "heldBefore": 1,
-        "heldAfter": 1
+        "heldAfter": 1,
+        "chain": [
+          {
+            "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+            "from": "0",
+            "link": "6d7882f0074b4fca2c5caec1642b2d5fd2dcf64e4e407e62053b099bf2b84b7a"
+          }
+        ],
+        "carrying": [
+          {
+            "sequence": "3",
+            "index": "3",
+            "class": "valid"
+          }
+        ]
       }
     },
     "candidates": []
@@ -188,13 +214,28 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "2b49242ef29d0fecbe1956b00d3dfae04686e1ade3df87a5dc2c09b28d27e4e5",
+      "evidenceHash": "9b3238c7ca1dd793294dcfa71941b3487121c6198b11efff24970c0302deba58",
       "range": {
         "judgingIndex": "20",
+        "lag": "2",
         "checkpointIndex": "3",
         "revokedAt": null,
         "heldBefore": 1,
-        "heldAfter": 1
+        "heldAfter": 1,
+        "chain": [
+          {
+            "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+            "from": "0",
+            "link": "6d7882f0074b4fca2c5caec1642b2d5fd2dcf64e4e407e62053b099bf2b84b7a"
+          }
+        ],
+        "carrying": [
+          {
+            "sequence": "3",
+            "index": "3",
+            "class": "valid"
+          }
+        ]
       }
     },
     "candidates": [
@@ -277,9 +318,60 @@
       }
     ]
   },
+  "dependency": {
+    "status": "selected-local-replay",
+    "fullV3Replay": false,
+    "currentRangeAuthenticated": true,
+    "candidateConfigurationChecked": true,
+    "signedTermsAuthenticated": true,
+    "termsAuthorityAuthenticated": true,
+    "completenessClaim": false,
+    "noMatchesMeansZeroBalance": false,
+    "unresolvedCoverage": true,
+    "spendable": false,
+    "rangeEvidence": "fixture-verifier",
+    "audit": {
+      "records": "4",
+      "issued": "10",
+      "burned": "5",
+      "outstanding": "5",
+      "noteRoot": "20289920090942748033438979157172403900844036366309329327868430363638482059158",
+      "spentRoot": "60aed429711fd5c3d866b0b176d16795f8f991e41bb32a33d9531b909fa188a5",
+      "historyHash": "1826aca87b0ca270a877273b8be927fb84a547894e99ea1de7ce73aea7d52942",
+      "evidenceHash": "95ba0970196446f5ccdfba8227241ff162e57d1d79956a52a50ffd13aba95326",
+      "range": {
+        "judgingIndex": "20",
+        "lag": "2",
+        "checkpointIndex": "7",
+        "revokedAt": null,
+        "heldBefore": 2,
+        "heldAfter": 0,
+        "chain": [
+          {
+            "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+            "from": "0",
+            "link": "6d7882f0074b4fca2c5caec1642b2d5fd2dcf64e4e407e62053b099bf2b84b7a"
+          }
+        ],
+        "carrying": [
+          {
+            "sequence": "3",
+            "index": "3",
+            "class": "valid"
+          },
+          {
+            "sequence": "4",
+            "index": "7",
+            "class": "valid"
+          }
+        ]
+      }
+    },
+    "candidates": []
+  },
   "limits": [
-    "Candidate configuration and signed constant-root terms checked; no adopted domain. The selected checkpoint, its empty opening, currency, the original operator's force and the absent revocation are established against a harness-owned fixture venue record only, not a venue profile or authenticated chain evidence.",
-    "Only issue/spend/burn in one empty-opening segment; no recovery, imports, clock, later carrying checkpoints or replacement chains.",
+    "Candidate configuration and signed constant-root terms checked; no adopted domain. The replacement chain, the selected checkpoint's record prefix, currency, its operator's force and the absent revocation are established against a harness-owned fixture venue record only, not a venue profile or authenticated chain evidence.",
+    "Only issue/spend/burn in one empty-opening segment of the original operator; every carrying checkpoint of that segment is classified from its own trail with last-valid-prefix continuity. No imports, silence clock, successor segments, same-operator scope changes or recovery publications.",
     "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."
   ]
 }

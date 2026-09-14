@@ -310,3 +310,65 @@ export function mergeVenueOrder(answers: readonly RangeAnswer[]): readonly Order
   return Object.freeze(merged.map(entry => Object.freeze({ index: entry.index, ordinal: entry.ordinal,
     record: copyBytes(entry.record), subject: copyBytes(entry.subject) })));
 }
+
+export interface ChainLink { readonly operator: Uint8Array; readonly from: bigint; readonly link: Uint8Array }
+export interface ReplacementChain { readonly chain: readonly ChainLink[]; readonly pending?: ChainLink }
+export interface ChainContext {
+  readonly backing: Uint8Array;
+  /** The operator the backing's terms name: the genesis link's key. */
+  readonly original: Uint8Array;
+  /** The venue's lag (C2.3.5), a constant of the venue profile (§13.2). */
+  readonly lag: bigint;
+  /** The index the chain is read at; a link effective later is pending. */
+  readonly now: bigint;
+}
+/** C2.5's walk over the admitted records of one answer (§13.3), the rules of
+ * `src/replacement.ts`'s walk read from range entries: a record whose
+ * effective index is below its witnessing plus twice the lag plus one is no
+ * replacement (C2.5.3); a candidate names the current link and is strictly
+ * later than the incumbent's force, or names the incumbent and revokes
+ * (C2.5.4); candidates are read by witnessed index, one per index by the
+ * lesser identity, and a later one supersedes the standing candidate only
+ * where witnessed strictly before its effective index (C2.5.5). A link whose
+ * effective index is past `now` is pending, not in force. Records after
+ * `now` are not in the answer, so the chain is the chain at `now`. */
+export function replacementChain(admitted: readonly AdmittedReplacement[], context: ChainContext): ReplacementChain {
+  if (context === null || typeof context !== "object" || !Array.isArray(admitted)) throw new EncodingError("invalid chain context");
+  const { backing, original, lag, now } = context;
+  bytes(backing, 32); bytes(original, 32);
+  if (!u64(lag) || !u64(now)) throw new EncodingError("invalid chain context");
+  const floored = admitted.filter(a => a.replacement.effective >= a.index + 2n * lag + 1n);
+  const chain: ChainLink[] = [Object.freeze({ operator: copyBytes(original), from: 0n, link: copyBytes(backing) })];
+  const seen: Uint8Array[] = [backing];
+  let link = backing;
+  for (;;) {
+    const incumbent = chain[chain.length - 1]!;
+    const candidates = floored
+      .filter(a => compareBytes(a.replacement.predecessor, link) === 0 &&
+        (a.replacement.effective > incumbent.from || compareBytes(a.replacement.successor, incumbent.operator) === 0))
+      .sort((x, y) => (x.index < y.index ? -1 : x.index > y.index ? 1 : compareBytes(x.identity, y.identity)));
+    let chosen: AdmittedReplacement | undefined, consideredAt: bigint | undefined;
+    for (const candidate of candidates) {
+      if (consideredAt !== undefined && candidate.index === consideredAt) continue;
+      if (chosen !== undefined && candidate.index >= chosen.replacement.effective) break;
+      consideredAt = candidate.index;
+      chosen = compareBytes(candidate.replacement.successor, incumbent.operator) === 0 ? undefined : candidate;
+    }
+    if (chosen === undefined) return Object.freeze({ chain: Object.freeze(chain) });
+    const next = Object.freeze({ operator: copyBytes(chosen.replacement.successor), from: chosen.replacement.effective,
+      link: copyBytes(chosen.identity) });
+    if (next.from > now) return Object.freeze({ chain: Object.freeze(chain), pending: next });
+    // A hash cycle cannot be built; this bounds the walk on any input.
+    if (seen.some(earlier => compareBytes(earlier, chosen.identity) === 0)) return Object.freeze({ chain: Object.freeze(chain) });
+    seen.push(chosen.identity);
+    chain.push(next); link = chosen.identity;
+  }
+}
+
+/** The link in force at `index`: the last whose effective index has arrived. */
+export function linkInForce(chain: readonly ChainLink[], index: bigint): ChainLink {
+  if (!Array.isArray(chain) || chain.length === 0 || !u64(index)) throw new EncodingError("invalid chain");
+  let inForce = chain[0]!;
+  for (const link of chain) if (link.from <= index) inForce = link;
+  return inForce;
+}

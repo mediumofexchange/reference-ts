@@ -77,9 +77,11 @@ and all six artifact identities plus canonical signed root terms under
 [pool-v3 §11](https://github.com/mediumofexchange/money-from-first-principles/blob/916bffb/pool-v3.md#11-configuration-and-backing-evidence-before-adoption).
 With [pool-v3 §13](https://github.com/mediumofexchange/money-from-first-principles/blob/6272040/pool-v3.md#13-record-range-evidence)
 record-range answers from a harness-owned fixture venue, it establishes the
-checkpoint's record prefix, currency, original-operator force and revocation
-absence against that fixture only. Adoption, a venue profile, imports and
-recovery remain open.
+replacement chain, the checkpoint's record prefix, currency, its operator's
+force and revocation absence against that fixture only, and classifies every
+carrying checkpoint of the segment from its own trail with
+[last-valid-prefix continuity](https://github.com/mediumofexchange/money-from-first-principles/blob/3ed1800/pool-v3.md#71-authentication-precedes-validity).
+Adoption, a venue profile, imports, the silence clock and recovery remain open.
 `npm run check:pool:fees` compares the successor
 [transfer shapes and ordinary fees](POOL_DEPLOYMENT_PROBES.md#transfer-shape-and-ordinary-fees)
 with real proofs. These probes do not implement a pool wallet or v3 finality.
@@ -125,8 +127,10 @@ Opaque terms still require their own decoding, name/signature and force checks.
 `model/pool-v3-package.ts` implements [§12 evidence transport](https://github.com/mediumofexchange/money-from-first-principles/blob/10dcf67/pool-v3.md#12-evidence-packages-and-dependency-retention):
 canonical typed exact-byte inventory, local byte/item limits before payload
 hashing, and the existing MOED directory-root preimage. Fresh local replay
-uses package bytes with exactly one configuration, signed commitment,
-snapshot and trail plus the directory preimages its range read needs. Other
+uses package bytes with exactly one configuration and signed commitment; the
+selection's snapshot is the one its directory names and its trail the one
+that authenticates it, both by hash, with the directory preimages, snapshots
+and trails of the other carrying checkpoints its range read classifies. Other
 dependency shapes refuse without a verdict. The in-memory fixture shares the
 same replay engine.
 
@@ -134,9 +138,12 @@ same replay engine.
 the request/answer frame with kind bounds and budgets, held commitments per
 C2.3.3 by ascending sequence within an index with lesser-bytes ties and
 reader-established priors, replacement identities, first-entry revocations
-and the cross-backing venue order for publications. `scripts/pool/v3/fixture-venue.mjs`
-is the harness's fixture verifier. Venue-source authentication, replacement
-chains, recursive dependency replay, authority and adoption remain open.
+the cross-backing venue order for publications, and C2.5's walk over admitted
+replacements (lead floor from the venue's lag, supersession, revocation and
+the lesser identity at one index), checked against the runtime walk.
+`scripts/pool/v3/fixture-venue.mjs` is the harness's fixture verifier.
+Venue-source authentication, imports, the silence clock, authority and
+adoption remain open.
 
 ## Runtime pin and recovery models
 

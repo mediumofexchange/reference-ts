@@ -10,13 +10,15 @@ const key32 = value => value instanceof Uint8Array && value.length === 32 && !(v
 const index = value => typeof value === "bigint" && value >= 0n && value < (1n << 64n);
 
 export class FixtureVenue {
-  #id; #witnessed = 0n; #records = [];
-  constructor(id, witnessedIndex = 0n) {
-    if (!key32(id) || !index(witnessedIndex)) throw new Error("fixture venue identity");
-    this.#id = copyBytes(id); this.#witnessed = witnessedIndex;
+  #id; #witnessed = 0n; #lag = 0n; #records = [];
+  /** The lag (C2.3.5) is a constant of the venue, read by the chain walk. */
+  constructor(id, witnessedIndex = 0n, lag = 0n) {
+    if (!key32(id) || !index(witnessedIndex) || !index(lag)) throw new Error("fixture venue identity");
+    this.#id = copyBytes(id); this.#witnessed = witnessedIndex; this.#lag = lag;
   }
   get id() { return copyBytes(this.#id); }
   get witnessedIndex() { return this.#witnessed; }
+  get lag() { return this.#lag; }
   /** The clock only moves forward; a record is witnessed at or below it. */
   advance(to) {
     if (!index(to) || to < this.#witnessed) throw new Error("fixture venue clock");
@@ -47,12 +49,12 @@ export class FixtureVenue {
   /** Plain data for the fixture IPC; the fresh process rebuilds its own record
    * in the same order, so it derives the same ordinals. */
   export() {
-    return { id: copyBytes(this.#id), witnessedIndex: this.#witnessed,
+    return { id: copyBytes(this.#id), witnessedIndex: this.#witnessed, lag: this.#lag,
       records: this.#records.map(r => ({ kind: r.kind, subject: copyBytes(r.subject), index: r.index, record: copyBytes(r.record) })) };
   }
   static from(data) {
     if (data === null || typeof data !== "object" || !Array.isArray(data.records)) throw new Error("fixture venue data");
-    const venue = new FixtureVenue(data.id, data.witnessedIndex);
+    const venue = new FixtureVenue(data.id, data.witnessedIndex, data.lag);
     for (const r of data.records) venue.witness(r.kind, r.subject, r.index, r.record);
     return venue;
   }

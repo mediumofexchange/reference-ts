@@ -210,8 +210,13 @@ exact configuration, commitment, the complete directory preimage of every
 held commitment in range, snapshot and trail bytes, ordered by kind and
 payload hash. Local limits are 1 MiB and 1,024 items, checked with all field
 boundaries before hashing payloads. The bounded reader requires exactly one
-configuration, commitment, snapshot and trail, resolves the selection's
-directory by root, and uses the same replay engine as the in-memory fixture.
+configuration and commitment, resolves the selection's directory by root, its
+snapshot by the digest that directory names and its trail by evidence
+authentication, refuses two trails that authenticate one snapshot as
+ambiguous, and uses the same replay engine as the in-memory fixture. Every
+other directory, snapshot and trail is a dependency for the range read: the
+110,054-byte dependency package carries two checkpoints of the segment (three
+and four records) with three directory preimages.
 Missing objects, duplicate/conflicting objects, unsupported dependencies,
 false range-completeness assertions and replica substitutions yield no partial
 audit or candidates. Package bytes, selection and seed are owned before
@@ -225,13 +230,30 @@ The reader's record reads follow [pool-v3 §13](https://github.com/mediumofexcha
 Its venue-evidence verifier is a harness-owned fixture venue record beside the
 selection and candidate manifest: it answers the reader's own requests for the
 operator's commitments, the backing's replacements and K's revocations from
-index zero through the judging index, or returns no answer. From those answers
-the reader derives the held commitments (C2.3.3 by ascending sequence within
-an index), requires the selected checkpoint to be held, passes every other
-held commitment by its packaged directory (an earlier carrying commitment
-contradicts the header's empty opening; a later one needs its own
-classification and is unsupported), requires no admitted replacement under
-the terms' rule key, and voids issuance finalized at or after K's revocation.
+index zero through the judging index, or returns no answer; its lag is the
+venue's constant. From those answers the reader walks the replacement chain
+(C2.5.3–5 under the terms' rule key: lead floor from the lag, supersession
+before the standing candidate's force, revocation by naming the incumbent,
+the lesser identity at one index; a link past the judging index is pending),
+derives each party in force's held commitments (C2.3.3 by ascending sequence
+within an index) for its term, requires the selected checkpoint to be held
+inside the original operator's term (a selection at or after the term's end
+is `lapsed-selection`), passes every non-carrying commitment by its packaged
+directory, and classifies every carrying checkpoint of the original operator
+in held order from its own snapshot and trail (C2.10.11): a deterministic
+replay failure excludes it and it is passed; a valid one must reach the last
+valid checkpoint's length and reproduce its history and evidence hashes there
+(C2.10.12, pool-v3 §7.1), the evidence before its proofs; a valid later one
+makes the selection `superseded-selection` (C2.7.5). An earlier carrying
+checkpoint of another segment contradicts the header's empty opening; a
+later one, a successor's carrying commitment, a carrying checkpoint naming
+other backings and a declared silence clause are unsupported. Issuance
+witnessed at or after K's revocation is void, and a position the last valid
+checkpoint finalized was witnessed at that checkpoint's index, not the
+child's (C2b.1). A trail that does not decode is no evidence and does not
+block the read; two trails that both authenticate one snapshot are refused
+as ambiguous. The audit records the verifier's lag, the chain and each
+carrying checkpoint's class beside the held counts of the classified term.
 A current read requires the judging index to be the verifier's clock. Junk at
 the operator's location, a stale lower sequence and a repeated sequence are
 disregarded without becoming holes; a same-sequence twin with the lesser
