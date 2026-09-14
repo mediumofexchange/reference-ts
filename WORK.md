@@ -1,52 +1,56 @@
 # Current work
 
-Updated: 2026-09-13
+Updated: 2026-09-14
 
 ## Goal
 
-Portable exact-byte v3 evidence packages now feed fresh seedless/receiver local
-replay. Canonical vectors, hostile cases, independent review and final real
-proofs passed. Package parsing grants no authority, completeness or spendability.
-Implementation: f9ea004 and ac54032, branch `feat/v3-evidence-package`.
-Companion: `spec/v3-evidence-package`, 10dcf67 merged/pushed to main.
-No production runtime, circuit, key, dependency or host-control change.
+Record-range answers (pool-v3 §13) fix the source-neutral request/answer a
+venue-evidence verifier returns and the reader's held/chain/revocation/
+publication rules. The local replay now derives the selected checkpoint's
+record prefix, currency, original-operator force and revocation absence from a
+harness-owned fixture venue instead of assuming them. Implementation: branch
+`feat/v3-record-ranges`, 78978d8. Companion: `spec/v3-record-ranges`,
+6272040 merged/pushed to main. No production runtime, circuit, key,
+dependency or host-control change.
 
 ## Status
 
-- Specification §12 at 10dcf67 fixes canonical source-neutral evidence transport
-  and the exact-request venue-evidence boundary. Independent normative review
-  clarified the 355-byte receipt-record item; no material findings remain.
-- Implementation f9ea004 plus allocation fix ac54032 are independently reviewed
-  with no unresolved material findings. The portable boundary decodes within
-  budgets before copying and owns only viewed selection/seed bytes.
-- Prior §11 configuration/signed-terms checks remain unchanged, including
-  the existing exact cofactored signature equation and canonical identity R.
-- Model-only codecs and candidate manifest/tooling are implemented. Replay
-  derives its candidate domain from the frame and issuance key from signed
-  terms. Original operator/genesis link restrict the fixture only; replacement,
-  revocation, empty opening and checkpoint force still require venue evidence.
-- Configuration and signed terms checks are separate from full authority.
-  All candidates remain unspendable. No runtime Backing or declaration support.
-- [Active decision](decisions/2026-09.md#2026-09-13--transport-exact-evidence-without-asserting-certificate-completeness).
+- Specification §13 at 6272040 fixes the frame (102 fixed + 20 bytes per
+  entry; four closed kinds), completeness by exhaustion with no answer
+  otherwise, the per-index sequence reading of C2.3.3, replacement identity
+  as the signed-message hash and the kind-4 ordinal. Independent adversarial
+  review resolved five blockers and one readback blocker; no material
+  finding remains. §1/§12.1 and pool-fault §10 reference it.
+- `model/pool-v3-range.ts` and `scripts/pool/v3/fixture-venue.mjs` are new;
+  `local-replay.mjs` reads kinds 1–3 over `[0, t]` from the verifier the
+  harness selects. Independent implementation review found three blockers
+  (verdict order under an unsupported scope, in-memory answer validation,
+  merge kind), all fixed and read back; no material finding remains.
+- The fixture venue is a trust input, not a venue profile. Flags
+  `currentRangeAuthenticated`/`termsAuthorityAuthenticated` are true only with
+  `rangeEvidence: "fixture-verifier"`; `fullV3Replay`, completeness and
+  spendability stay false. A later carrying checkpoint, a replacement chain
+  and publications remain unsupported by the experiment.
+- [Active decision](decisions/2026-09.md#2026-09-14--fix-source-neutral-record-range-answers-for-c21013).
 
 ## Evidence
 
-- Baseline main 3eeac8b: CI 34720418325 passed. Both repositories fetched with
-  parity before branching; no branch protections/rulesets reported.
-- Final sequential `check:pool:local-replay`: 24 groups/8 proofs passed,
-  including canonical package worker replay, omitted/conflicting objects,
-  unsupported range assertions, budgets, shared storage and async ownership.
-  [Retained report](docs/pool-v3-local-replay-verification.json): 47,509-byte
-  package, all 20 source hashes match final files, including ac54032.
-- Issue 10, pay 7/change 3, burn 5/change 2; public outstanding 5. Fresh audit
-  and receiver agree with all six artifact identities checked. Candidate terms
-  validity never sets the full terms-authority/currentness flags.
-- Codec tests: 12 passed. Full `npm run check`: 1,908 tests plus package,
-  service/wallet/crash/spent checks passed. Keep shared `dist` rebuilds sequential.
-  Initial sandbox esbuild refusal was resolved with the required filesystem
-  access. A concurrent-build replay failure was rerun sequentially and passed.
-- Circuits/configuration/keys/runtime are unchanged; reuse baseline conformance.
-  Final delivery CI is pending; inspect the main revision's run next.
+- Baseline main 3ca4016: CI 34736771360 passed; both repositories at parity
+  before branching; no branch protections reported.
+- Final sequential `check:pool:local-replay`: 27 groups/8 proofs
+  passed, including three range groups (fixture ranges; contradicted opening,
+  later carrying checkpoint, missing directory, revocation before/at/after,
+  replaced/unruled operator; other venue, unwitnessed index, stale answer,
+  unheld selection, lesser-bytes twin, silent or absent verifier).
+  [Retained report](docs/pool-v3-local-replay-verification.json):
+  47,665-byte package with three directory preimages, 3 fixture venue
+  records, all 22 source hashes match final files. Range audit: judging
+  index 20, checkpoint index 3, one held commitment before and one after, no
+  revocation; outstanding 5; fresh audit and receiver agree.
+- Codec tests: 14 passed. Full `npm run check`: 1922 tests plus package, service/wallet/crash/spent
+  checks passed on the final sources; typecheck and build clean.
+- Circuits/configuration/keys/runtime unchanged; reuse baseline conformance.
+  Delivery CI is pending; inspect the main revision's run next.
 
 ## Existing local product and custody boundary
 
@@ -61,35 +65,35 @@ No production runtime, circuit, key, dependency or host-control change.
   fail; directory ACL refused, BitLocker/PIN and Secure Boot unavailable.
   Physical theft, cross-account, power-loss, backup isolation and continuous
   recovery qualification need separately authorized test hardware/provisioning.
-
-## Retained Ergo evidence; node stopped
-
-- [Continuation report](docs/ergo-node-sync-resume-verification.json): Ergo 6.0.5 /
-  Temurin 21.0.12.1+1 restart stopped externally after 415,386 ms. Headers reached
-  97,923; full heights null. No applied history/ancestry claim; unresolved result.
-  Cleanup found no workers/mapping; exclusive image access and GPT identity held.
-- Retain detached fixed 20 GiB image:
-  scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd.
-  Do not delete it or allocate another. Original ResumeSync pin is spent; blind
-  repetition refuses. Native resume 56, disk 79, sync profile 25, PowerShell
-  resume 12 checks and read-only preflight passed. No sync run is active.
+- Ergo node stopped; [continuation report](docs/ergo-node-sync-resume-verification.json)
+  (headers 97,923, full heights null, unresolved). Retain the detached 20 GiB
+  image scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd;
+  do not delete it or allocate another. No sync run is active.
 
 ## Next
 
-1. Check final main CI, then define authenticated record-range profile and complete dependency replay against
-   the [package checks](docs/POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay).
-   Independently review/commit normative certificate gaps before code.
-2. Configuration approval stays disabled until all adoption prerequisites hold.
-   Device qualification and external publication remain separate dependencies;
-   do not alter this workstation's controls.
+1. Check final main CI. Then complete dependency replay in the local
+   experiment: a second checkpoint of the same segment extending the first
+   (C2.10.4/12 last-valid-prefix continuity), classification of a later
+   carrying checkpoint from its own trail, and the C2.5 chain walk over
+   kind-2 answers (lead floor, supersession, lesser identity), reusing
+   `src/replacement.ts`'s rules. Acceptance: the range reader passes or
+   refuses each with its own evidence; no fixture assumption replaces it.
+2. Then a venue profile candidate for §13 answers: the Ergo full-block
+   verifier from `experiments/ergo-range` (attribution bound to the venue id,
+   kind-4 ordinals from transaction/output order, completeness by exhaustion
+   against authenticated headers). A8 is a stated trust assumption until then.
+3. Configuration approval stays disabled until all adoption prerequisites
+   hold; device qualification and external publication remain separate
+   dependencies. Do not alter this workstation's controls.
 
 ## Open questions
 
-- Reassessed 2026-09-13: roughly **50% done / 50% remaining**, plausible done
-  range **40-60%**. Portable packages are reusable progress but do not materially
-  move the coarse estimate while recovery and
-  authority gates remain. Largest blocks: runtime recovery, authenticated range
-  evidence/publication, qualified custody/continuous recovery and user operation.
-- Switch to a fresh instance for venue-range authority design; this completed
-  package slice isolates transport and its evidence. This is a context-efficiency
-  recommendation, not measured model performance.
+- Reassessed 2026-09-14: unchanged, roughly **50% done / 50% remaining**,
+  plausible range **40-60%**. Deriving the record prefix and currency from
+  range answers is reusable; the venue profile behind those answers, runtime
+  recovery, qualified custody and user operation remain the largest blocks.
+- Switch to a fresh instance for the dependency-replay slice: this session's
+  context is long and the next slice reads different rules (C2.10.4/5/12,
+  C2.5). This is a context-efficiency recommendation, not measured model
+  performance.
