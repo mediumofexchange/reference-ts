@@ -8,7 +8,7 @@ Dependency replay in the local experiment: every carrying checkpoint of the
 original operator's segment is classified from its own trail (C2.10.11) with
 last-valid-prefix continuity (C2.10.12, pool-v3 §7.1), and the party in force
 at every index follows C2.5's walk over the kind-2 answers under the verifier's
-lag. Implementation: branch `feat/v3-dependency-replay`. Companion:
+lag. Implementation: branch `feat/v3-dependency-replay`, d8a6649. Companion:
 `spec/v3-dependency-replay`, 3ed1800 (pool-v3 §7.1 fixes the continuity
 reading). No production runtime, circuit, key, dependency or host-control
 change.
