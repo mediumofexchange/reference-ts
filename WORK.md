@@ -39,8 +39,8 @@ change.
 
 ## Evidence
 
-- Baseline main 2d246bf: CI 34840706258 passed; both repositories at parity
-  before branching.
+- Baseline main 2d246bf: CI 34840706258 passed; delivery main 8b0dadc: CI
+  34899459533 passed; both repositories at parity.
 - Range/chain codec tests: `test/pool-v3-range.test.ts` 17 passed, including
   12 chain scenarios agreeing with the runtime walk.
 - `check:pool:local-replay` on the reviewed sources: 31 groups and 9 real
@@ -75,15 +75,14 @@ change.
 
 ## Next
 
-1. Check the main revision's CI run.
-2. Then a venue profile candidate for §13 answers: the Ergo full-block
+1. A venue profile candidate for §13 answers: the Ergo full-block
    verifier from `experiments/ergo-range` (attribution bound to the venue id,
    kind-4 ordinals from transaction/output order, completeness by exhaustion
    against authenticated headers). A8 is a stated trust assumption until then.
-3. Remaining local-experiment dependencies after that: the C2b.6.1 clock over
+2. Remaining local-experiment dependencies after that: the C2b.6.1 clock over
    the classified carrying checkpoints, and a successor's or scope-changed
    segment with its C2.10.5 imports.
-4. Configuration approval stays disabled until all adoption prerequisites
+3. Configuration approval stays disabled until all adoption prerequisites
    hold; device qualification and external publication remain separate
    dependencies. Do not alter this workstation's controls.
 
