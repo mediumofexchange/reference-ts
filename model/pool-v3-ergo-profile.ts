@@ -192,6 +192,51 @@ function attributeOwned(profile: ErgoProfile, transactions: readonly ErgoTransac
   });
   return Object.freeze(objects);
 }
+/** Every view is read once, field by field, into an owned frozen copy
+ * before anything is judged, so no accessor can pass one value to a check
+ * and another to a use. A malformed view is undefined. */
+function ownOutput(output: ErgoOutputView): ErgoOutputView | undefined {
+  if (output === null || typeof output !== "object") return undefined;
+  const { ergoTree, registers } = output;
+  if (!isBytes(ergoTree) || registers === null || typeof registers !== "object") return undefined;
+  // A null prototype, so a register named like a prototype property is an own entry like any other.
+  const ownedRegisters: Record<string, Uint8Array> = Object.create(null) as Record<string, Uint8Array>;
+  for (const [name, value] of Object.entries(registers)) {
+    if (!isBytes(value)) return undefined;
+    ownedRegisters[name] = copyBytes(value);
+  }
+  return Object.freeze({ ergoTree: copyBytes(ergoTree), registers: Object.freeze(ownedRegisters) });
+}
+function ownTransaction(transaction: ErgoTransactionView): ErgoTransactionView | undefined {
+  if (transaction === null || typeof transaction !== "object") return undefined;
+  const { id, witnessId, outputs } = transaction;
+  if (!isBytes(id, 32) || !isBytes(witnessId, 31) || !Array.isArray(outputs)) return undefined;
+  const ownedOutputs: ErgoOutputView[] = [];
+  for (const output of outputs) {
+    const owned = ownOutput(output);
+    if (owned === undefined) return undefined;
+    ownedOutputs.push(owned);
+  }
+  return Object.freeze({ id: copyBytes(id), witnessId: copyBytes(witnessId), outputs: Object.freeze(ownedOutputs) });
+}
+function ownBlock(block: ErgoBlockView): ErgoBlockView | undefined {
+  if (block === null || typeof block !== "object") return undefined;
+  const { headerId, transactions } = block;
+  if (!isBytes(headerId, 32) || !Array.isArray(transactions)) return undefined;
+  const ownedTransactions: ErgoTransactionView[] = [];
+  for (const transaction of transactions) {
+    const owned = ownTransaction(transaction);
+    if (owned === undefined) return undefined;
+    ownedTransactions.push(owned);
+  }
+  return Object.freeze({ headerId: copyBytes(headerId), transactions: Object.freeze(ownedTransactions) });
+}
+function ownHeader(header: ErgoHeaderView): ErgoHeaderView | undefined {
+  if (header === null || typeof header !== "object") return undefined;
+  const { id, parentId, height, version, transactionsRoot } = header;
+  if (!isBytes(id, 32) || !isBytes(parentId, 32) || !isBytes(transactionsRoot, 32) || !u64(height) || !u64(version)) return undefined;
+  return Object.freeze({ id: copyBytes(id), parentId: copyBytes(parentId), height, version, transactionsRoot: copyBytes(transactionsRoot) });
+}
 /** Every object the profile attributes in one block's transaction section,
  * in venue order. Kinds 1–3 are one output each, at exactly the kind's
  * length. A kind-4 object is the maximal run of adjacent outputs of one
@@ -199,7 +244,11 @@ function attributeOwned(profile: ErgoProfile, transactions: readonly ErgoTransac
  * pieces' bytes in output order, its ordinal the first output's; a run
  * longer than the kind's bound is no object. */
 export function attributeBlock(profile: ErgoProfile, transactions: readonly ErgoTransactionView[]): readonly AttributedObject[] {
-  return attributeOwned(ownProfile(profile), transactions);
+  const owned = ownProfile(profile);
+  if (!Array.isArray(transactions)) throw new EncodingError("invalid Ergo transactions");
+  const ownedTransactions = transactions.map(ownTransaction);
+  if (ownedTransactions.some(transaction => transaction === undefined)) throw new EncodingError("invalid Ergo transaction view");
+  return attributeOwned(owned, ownedTransactions as ErgoTransactionView[]);
 }
 
 /** The venue's constants and one §13 answer per request, or none where the
@@ -211,47 +260,31 @@ export interface ErgoRangeVerifier {
   witnessedIndex(): bigint;
   range(request: RangeRequest, limits: RangeLimits): Uint8Array | undefined;
 }
-function requireEvidence(evidence: ErgoRangeEvidence): void {
+/** §13.2 over the reader's retained evidence. The headers are the reader's
+ * own chain: each is read once into an owned copy, a malformed one is a
+ * programming failure, and headers that are not one contiguous linked
+ * chain, or a chain starting at height 1 that does not start at the
+ * profile's genesis, give no verifier. Blocks may come from any supplier:
+ * a block supplies the section of a height only where it is a well-formed
+ * view, belongs to a header of the chain and reproduces that header's
+ * transaction root; any other block is passed over, so no supplier can deny
+ * every read by adding a block, and a height whose section is missing
+ * leaves only the ranges through it unresolved. There is no answer for a
+ * range not yet witnessed under the depth, for a height without its
+ * section, or for heights below the first header unless the chain is
+ * anchored at the genesis, below which nothing exists. Every field of the
+ * profile, of each header, block, transaction and output, and of each
+ * request is read once into an owned copy before it is judged; only the two
+ * evidence arrays are read as containers, and every element of the array
+ * that is iterated is owned. */
+export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvidence): ErgoRangeVerifier | undefined {
+  const owned = ownProfile(profile);
   if (evidence === null || typeof evidence !== "object" || !Array.isArray(evidence.headers) || !Array.isArray(evidence.blocks)) {
     throw new EncodingError("invalid Ergo range evidence");
   }
-  for (const header of evidence.headers) {
-    if (header === null || typeof header !== "object" || !isBytes(header.id, 32) || !isBytes(header.parentId, 32) ||
-        !isBytes(header.transactionsRoot, 32) || !u64(header.height) || !u64(header.version)) throw new EncodingError("invalid Ergo header view");
-  }
-  for (const block of evidence.blocks) {
-    if (block === null || typeof block !== "object" || !isBytes(block.headerId, 32) || !Array.isArray(block.transactions)) {
-      throw new EncodingError("invalid Ergo block view");
-    }
-    for (const transaction of block.transactions) {
-      if (transaction === null || typeof transaction !== "object" || !isBytes(transaction.id, 32) || !isBytes(transaction.witnessId, 31) ||
-          !Array.isArray(transaction.outputs)) throw new EncodingError("invalid Ergo transaction view");
-      for (const output of transaction.outputs) {
-        if (output === null || typeof output !== "object" || !isBytes(output.ergoTree) || output.registers === null ||
-            typeof output.registers !== "object" || Object.values(output.registers).some(value => !isBytes(value))) {
-          throw new EncodingError("invalid Ergo output view");
-        }
-      }
-    }
-  }
-}
-/** §13.2 over the reader's retained evidence. The headers must be one
- * contiguous linked chain, and a chain starting at height 1 must start at
- * the profile's genesis; otherwise there is no verifier. A block supplies
- * the section of a height only where it belongs to a header of the chain
- * and reproduces that header's transaction root; a block of another chain,
- * a second block for an established height or one failing its root is
- * passed over, so no supplier can deny every read by adding a block, and a
- * height whose section is missing leaves only the ranges through it
- * unresolved. There is no answer for a range not yet witnessed under the
- * depth, for a height without its section, or for heights below the first
- * header unless the chain is anchored at the genesis, below which nothing
- * exists. The profile and the evidence are read during construction only;
- * each request is copied before it is answered. */
-export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvidence): ErgoRangeVerifier | undefined {
-  const owned = ownProfile(profile);
-  requireEvidence(evidence);
-  const identity = ergoProfileIdentity(owned), { headers, blocks } = evidence, depth = owned.depth;
+  const headers = evidence.headers.map(ownHeader);
+  if (headers.some(header => header === undefined)) throw new EncodingError("invalid Ergo header view");
+  const identity = ergoProfileIdentity(owned), depth = owned.depth;
   const first = headers[0];
   if (first === undefined || first.height < GENESIS_HEIGHT) return undefined;
   if (first.height === GENESIS_HEIGHT && (compareBytes(first.parentId, ZERO32) !== 0 || compareBytes(first.id, owned.genesis) !== 0)) return undefined;
@@ -263,7 +296,9 @@ export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvide
     byId.set(bytesToHex(header.id), header);
   }
   const sectionAt = new Map<bigint, readonly AttributedObject[]>();
-  for (const block of blocks) {
+  for (const supplied of evidence.blocks) {
+    const block = ownBlock(supplied);
+    if (block === undefined) continue;
     const header = byId.get(bytesToHex(block.headerId));
     if (header === undefined || sectionAt.has(header.height) || block.transactions.length === 0 ||
         compareBytes(transactionsRoot(header.version, block.transactions), header.transactionsRoot) !== 0) continue;
@@ -274,7 +309,7 @@ export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvide
       throw error;
     }
   }
-  const firstHeight = first.height, tip = headers[headers.length - 1]!.height, witnessed = tip > depth ? tip - depth : 0n;
+  const firstHeight = first.height, tip = (headers[headers.length - 1] as ErgoHeaderView).height, witnessed = tip > depth ? tip - depth : 0n;
   return Object.freeze({
     get identity() { return copyBytes(identity); },
     lag: () => depth + 1n,

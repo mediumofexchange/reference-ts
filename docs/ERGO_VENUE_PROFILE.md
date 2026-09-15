@@ -104,18 +104,20 @@ of the chain and reproduces that header's transaction root, recomputed from
 the decoder's ids (block version 1 commits to the ids alone; later versions
 to all ids followed by all witness ids, over scrypto's tree with leaf prefix
 0, internal prefix 1, an absent right sibling contributing no bytes and a
-lone leaf keeping its parent). A block of another chain, a second block for
-an established height or a block failing its root is passed over, so no
-supplier of venue evidence can deny every read by adding a block; a height
-without a section leaves only the ranges through it unresolved. A request is
-answered by scanning every output of every transaction of every block in
-its range, so an empty answer is proven by exhaustion (§13.2). There is no
-answer where `toIndex` is above the tip less the depth, where a height in the
-range has no section, where the range starts below the first header of a
-chain not anchored at the genesis, where the request names another venue, or
-where the reader's answer budget is exceeded. Each request is read once into
-the reader's own copy before it is judged. Answers are the reader's own
-output over its retained evidence and can be reproduced from it.
+lone leaf keeping its parent). A block that is not a well-formed section
+view, belongs to another chain, duplicates an established height or fails
+its root is passed over, so no supplier of venue evidence can deny every
+read by adding a block; a height without a section leaves only the ranges
+through it unresolved. A request is answered by scanning every output of
+every transaction of every block in its range, so an empty answer is proven
+by exhaustion (§13.2). There is no answer where `toIndex` is above the tip
+less the depth, where a height in the range has no section, where the range
+starts below the first header of a chain not anchored at the genesis, where
+the request names another venue, or where the reader's answer budget is
+exceeded. Every field of the profile, the headers, the blocks and each
+request is read once into the reader's own copy before it is judged, so no
+accessor can pass one value to a check and another to a use. Answers are the
+reader's own output over its retained evidence and can be reproduced from it.
 
 ## Costs and limits
 

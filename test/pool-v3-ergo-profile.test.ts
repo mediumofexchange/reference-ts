@@ -249,12 +249,16 @@ describe("Ergo venue-profile candidate", () => {
       expect(through(v, 0n, 6n)).toBeUndefined();
       expect(through(v, 0n, 4n)).toBeInstanceOf(Uint8Array);
     }
-    // A duplicate section, a block of another chain, an empty section and a root-failing twin change no answer.
+    // A duplicate section, a block of another chain, an empty section, a root-failing twin and a malformed block change no answer.
     const twin = structuredClone(chain.blocks[3]!);
     (twin.transactions[0] as { id: Uint8Array }).id = b(7);
-    const noisy = { ...chain, blocks: [twin, { headerId: b(9), transactions: chain.blocks[0]!.transactions },
+    const malformed = { headerId: chain.headers[2]!.id, transactions: [{ id: b(1), witnessId: b(1), outputs: [] }] } as unknown as profile.ErgoBlockView;
+    const noisy = { ...chain, blocks: [twin, { headerId: b(9), transactions: chain.blocks[0]!.transactions }, malformed,
       { headerId: chain.headers[0]!.id, transactions: [] }, ...chain.blocks, chain.blocks[3]!] };
     expect(Buffer.from(through(profile.ergoRangeVerifier(base, noisy)!, 0n, 6n)!)).toEqual(full);
+    const onlyMalformed = profile.ergoRangeVerifier(base, { ...chain, blocks: [malformed] })!;
+    expect(through(onlyMalformed, 0n, 0n)).toHaveLength(102);
+    expect(through(onlyMalformed, 3n, 3n)).toBeUndefined();
     expect(Buffer.from(through(profile.ergoRangeVerifier(base, { ...chain, blocks: [...chain.blocks].reverse() })!, 0n, 6n)!)).toEqual(full);
   });
 
@@ -274,10 +278,11 @@ describe("Ergo venue-profile candidate", () => {
     // A chain not starting at the genesis is accepted as the header source's word; version 1 blocks commit ids alone.
     const old = evidence(spec, 3n, 8n, 1n);
     expect(profile.ergoRangeVerifier(profileOf(old), old)).toBeDefined();
-    for (const garbage of [{ headers: [{ ...chain.headers[0]!, id: "x" }], blocks: [] }, { headers: chain.headers, blocks: [{ headerId: b(1), transactions: [{ id: b(1), witnessId: b(1), outputs: [] }] }] },
-      { headers: chain.headers, blocks: [{ headerId: b(1), transactions: [{ id: b(1), witnessId: b(1, 31), outputs: [{ ergoTree: b(1), registers: { R4: "0e" } }] }] }] }]) {
+    // Headers are the reader's own chain, so a malformed one is a programming failure; a malformed block is a supplier's and is passed over.
+    for (const garbage of [{ headers: [{ ...chain.headers[0]!, id: "x" }], blocks: [] }, { headers: [{ ...chain.headers[0]!, height: 1 }], blocks: [] }, null, { headers: chain.headers }]) {
       expect(() => profile.ergoRangeVerifier(base, garbage as unknown as profile.ErgoRangeEvidence)).toThrow(EncodingError);
     }
+    expect(() => profile.attributeBlock(base, [{ id: b(1), witnessId: b(1, 31), outputs: [{ ergoTree: b(1), registers: { R4: "0e" } }] }] as unknown as profile.ErgoTransactionView[])).toThrow(EncodingError);
   });
 
   it("owns the profile, the evidence and each request: later reads and mutations change no answer", () => {
@@ -296,6 +301,16 @@ describe("Ergo venue-profile candidate", () => {
     const drifted = verifier.range(drifting, wide)!;
     const decoded = range.decodeRangeAnswer(drifted, request(verifier.identity, 1, operator, 0n, 4n), wide);
     expect(decoded.entries.map(e => e.index)).toEqual([2n, 3n, 4n, 4n]);
+    // Evidence whose fields drift after their single read: a header's height and a transaction's id.
+    let heightReads = 0, idReads = 0;
+    const drifted2 = chain.headers[1]!, driftedHeader = { ...drifted2, get height() { return heightReads++ === 0 ? drifted2.height : 4n; } };
+    const trueId = chain.blocks[3]!.transactions[0]!.id;
+    const driftedTransaction = { ...chain.blocks[3]!.transactions[0]!, get id() { return idReads++ === 0 ? trueId : b(7); } };
+    const driftingEvidence = { headers: chain.headers.map((h, i) => (i === 1 ? driftedHeader : h)),
+      blocks: chain.blocks.map((block, i) => (i === 3 ? { ...block, transactions: [driftedTransaction, ...block.transactions.slice(1)] } : block)) };
+    const stable = profile.ergoRangeVerifier(base, driftingEvidence)!;
+    expect(Buffer.from(stable.range(request(stable.identity, 1, operator), wide)!)).toEqual(before);
+    expect(stable.range(request(stable.identity, 1, operator, 2n, 2n), wide)).toHaveLength(102 + 20 + 136);
     // Evidence mutated after construction.
     chain.blocks[1]!.transactions[0]!.outputs[1]!.registers["R5"]!.fill(0);
     (chain.headers[7] as { height: bigint }).height = 100n;

@@ -629,9 +629,10 @@ output index. `model/pool-v3-ergo-profile.ts` answers a request by
 recomputing every block's transaction root from decoder-derived ids and
 scanning every output in the range, so an empty answer is proven by
 exhaustion; unwitnessed, gapped or unlinked evidence gives no answer, and a
-block of another chain, a duplicate or one failing its root is passed over
-so that no supplied block can deny a read for a height whose section is
-present.
+block that is malformed, of another chain, a duplicate or one failing its
+root is passed over so that no supplied block can deny a read for a height
+whose section is present. The profile, every header, block and output, and
+each request are read once into owned copies before they are judged.
 
 `experiments/ergo-range/profile-check.mjs` compiles the model and drives it
 through the pinned Fleet serializer and sigma-rust decoder. The
@@ -651,8 +652,9 @@ first witnessing, 8,284 publication bytes merged in venue order) decode
 under the §13.3 reader rules. A flipped record byte decodes as another
 transaction and fails its block's root, leaving that height without a
 section while later ranges answer; a truncated transaction fails the strict
-decode; a root-failing twin, a stray block and a duplicate beside the true
-sections change no answer byte; a missing block, an unlinked header, another
+decode; a root-failing twin, a stray block, a malformed block and a
+duplicate beside the true sections change no answer byte; a missing block,
+an unlinked header, another
 genesis, a range above the witnessed index and an exceeded budget give no
 answer. The three mainnet fixtures pass through the same verifier as
 one-block ranges at depth 0: the model reproduces the real transaction roots

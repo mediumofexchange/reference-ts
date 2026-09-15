@@ -221,8 +221,9 @@ try {
   ok(ask(1, operator, 5n, t, damaged) !== undefined, "ranges past the damaged height answer");
   equal(decodeTransaction(original.subarray(0, original.length - 1)), undefined, "a truncated transaction does not decode");
   const noisy = profile.ergoRangeVerifier(candidate, { headers: chain.headers,
-    blocks: [twin, { headerId: b(9), transactions: chain.blocks[0].transactions }, ...chain.blocks, chain.blocks[5]] });
-  equal(hex(ask(1, operator, 0n, t, noisy).bytes), hex(commitments.bytes), "a root-failing twin, a stray block and a duplicate change no answer");
+    blocks: [twin, { headerId: b(9), transactions: chain.blocks[0].transactions }, { headerId: chain.headers[2].id, transactions: [{ id: b(1), witnessId: b(1), outputs: [] }] },
+      ...chain.blocks, chain.blocks[5]] });
+  equal(hex(ask(1, operator, 0n, t, noisy).bytes), hex(commitments.bytes), "a root-failing twin, a stray block, a malformed block and a duplicate change no answer");
   const unlinked = { ...chain, headers: chain.headers.map((h, i) => (i === 5 ? { ...h, parentId: b(0) } : h)) };
   equal(profile.ergoRangeVerifier(candidate, unlinked), undefined, "an unlinked header is no chain");
   const partial = profile.ergoRangeVerifier(candidate, { headers: chain.headers, blocks: chain.blocks.filter((_block, i) => i !== 6) });

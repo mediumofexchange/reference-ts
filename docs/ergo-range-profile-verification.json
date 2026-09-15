@@ -22,10 +22,10 @@
   },
   "inputManifestSha256": "2ee407f63c1297ca3262762a1534f5526694f4ef273658cf1060ef1d51c85c07",
   "files": {
-    "experiments/ergo-range/profile-check.mjs": "2cc7037bc7fac3cb63da05cd2c4fea9379182c0ab3610eb1698a0469af076397",
+    "experiments/ergo-range/profile-check.mjs": "43c2e015c58821c2c09f7a86ea9a3fb4054b39fc81abc1ee07b47572dad2e2cb",
     "experiments/ergo-range/package.json": "04c62481ee551c2cf2dd088d2af2afe68b1ba74c0cbc40f41b92b8e85139de89",
     "experiments/ergo-range/package-lock.json": "3c2055dc1a71712fb19a99eb895794c392d9e2c169e5a1d6a0d697ce03b9f79e",
-    "model/pool-v3-ergo-profile.ts": "f318b4e5f6e77a6ea967338f43eadd9f20b39ee776d143f3c98c798f2cff2a26",
+    "model/pool-v3-ergo-profile.ts": "e29de9a4c260f50715fb2786db9a53a10f596e211584853dfaad3e1ce7b91e6e",
     "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f"
   },
   "genesis": {
