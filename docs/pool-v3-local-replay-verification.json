@@ -74,61 +74,61 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2158.6052999999993
+      "elapsedMs": 2132.715
     },
     {
       "label": "pay 7, change 3",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6361.1145
+      "elapsedMs": 5360.680499999999
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 5398.075600000004
+      "elapsedMs": 4292.9238000000005
     },
     {
       "label": "pay 2, change 1",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6195.496400000004
+      "elapsedMs": 5838.998
     },
     {
       "label": "valid maximum issuance",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1699.9256999999998
+      "elapsedMs": 2098.5638000000035
     },
     {
       "label": "valid proof, different scope",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1721.5619000000006
+      "elapsedMs": 2080.3721000000005
     },
     {
       "label": "valid proof, unaccepted anchor",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5080.126999999993
+      "elapsedMs": 6191.4257
     },
     {
       "label": "valid proof, spent input",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5095.966400000005
+      "elapsedMs": 5041.768900000003
     },
     {
       "label": "valid proof, duplicate output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5151.161499999995
+      "elapsedMs": 5136.304499999998
     }
   ],
   "sourceSha256Lf": {
-    "scripts/pool/v3/local-replay.mjs": "718f1c4b91f90c94ecfceae2ce821c534db1145d78a78326ca9178c0ac681412",
+    "scripts/pool/v3/local-replay.mjs": "477763f53c5dd2f53c877e6266420ac8e55add577ea36d08bdcd8ad8fd1fefd0",
     "scripts/pool/v3/local-worker.mjs": "4074fcd80fd6bb858818a5ba24181fa695001cf70882e70942765f3f192d6ccd",
-    "scripts/pool/v3/local-check.mjs": "92cf1cce60460d6e1ac528f0dadcfa80858e965a25999a855ed450e1d8d853e6",
+    "scripts/pool/v3/local-check.mjs": "8a6911e52616765315af75ccdc230792082eb7374f46806f42788be4632b1c35",
     "scripts/pool/v3/fixture-venue.mjs": "757300134c7f51737fe35c620756e44351c26ad38b981bac27bf5d411d4d6c35",
     "scripts/pool/delivery/evidence-reader.mjs": "65f1a13caf29cadd7db46f10769920ccfd66c879f12d064c091be632a86fdf66",
     "scripts/pool/delivery/crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
@@ -169,7 +169,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "5b2458bb32229fd1f5f0e975267e5b7f4c2b3b71ca9f299fbae94e75f55cded6",
+      "evidenceHash": "d1d45bac770af1dae5999460b04740d3ee30e1cbc899d4b8729a79752e12b578",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -216,7 +216,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "5b2458bb32229fd1f5f0e975267e5b7f4c2b3b71ca9f299fbae94e75f55cded6",
+      "evidenceHash": "d1d45bac770af1dae5999460b04740d3ee30e1cbc899d4b8729a79752e12b578",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -341,7 +341,7 @@
       "noteRoot": "20289920090942748033438979157172403900844036366309329327868430363638482059158",
       "spentRoot": "60aed429711fd5c3d866b0b176d16795f8f991e41bb32a33d9531b909fa188a5",
       "historyHash": "1826aca87b0ca270a877273b8be927fb84a547894e99ea1de7ce73aea7d52942",
-      "evidenceHash": "19d6688b664e691ddcf3fa9447ca45c3796683570a1b6d1a6a65c0cf7b57bb44",
+      "evidenceHash": "73f076c1cf9619f4164c1924962faf74e17829c9ae97b9ded93794469877d48e",
       "range": {
         "judgingIndex": "20",
         "lag": "2",

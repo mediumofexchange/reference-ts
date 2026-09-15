@@ -4,55 +4,55 @@ Updated: 2026-09-15
 
 ## Goal
 
-A venue profile candidate behind pool-v3 §13 answers: the Ergo full-block
-verifier, with attribution bound to the venue identity, kind-4 ordinals from
-transaction then output order, and completeness by exhaustion over
-root-checked block sections behind a linked header chain. Delivered to main
-at 1d8f735 (feature 4cd9e56, review fixes 6f4e1e7 and 1d8f735). No
-specification change: §13 still selects no profile. No runtime, circuit,
-key, dependency or host-control change.
+The no-commitment clock in the local experiment: under a declared silence
+clause the walk that classifies the original segment's carrying checkpoints
+reads C2b.6.1's clock at the judging index, the segment's silence boundary
+after its opening checkpoint, and the lapse of any continuation witnessed
+past it (C2b.4.1). Implementation: branch `feat/v3-silence-clock`, d5e6166.
+No specification change: the rules are pool-fault §5 and pool-recovery
+C2b.6.1/C2b.4.1 as adopted 2026-09-08. No runtime, circuit, key, dependency
+or host-control change.
 
 ## Status
 
-- Delivered result: for a request naming the candidate identity, the
-  verifier answers from the reader's headers and decoded block sections
-  exactly the objects at the kind's location with the profile's shape, at
-  their inclusion height and venue order, or returns no answer where the
-  evidence does not cover the range, is above the witnessed index or is not
-  one linked chain; a malformed, foreign, duplicate or root-failing block is
-  passed over. [Candidate profile](docs/ERGO_VENUE_PROFILE.md);
-  [decision](decisions/2026-09.md#2026-09-15--candidate-ergo-venue-profile-full-block-exhaustion-behind-13-answers).
-- `model/pool-v3-ergo-profile.ts`: identity over genesis, depth and four
-  exact ErgoTrees; `R4` subject and `R5` bytes as `Coll[Byte]` constants;
-  kinds 1–3 at exact length, kind 4 as one transaction's maximal run of
-  adjacent same-subject outputs; ordinal `position · 2^32 + index`; roots
-  recomputed from decoder ids; profile, evidence and requests owned once.
-- Independent adversarial review: four blockers and five optional findings
-  resolved; the readback's residual blocker (evidence not owned) and
-  optional finding (malformed block denial) fixed; the second readback
-  confirmed no material finding remains. Dispositions are in the decision.
-- Decided: the kind-4 ceiling is a parser bound; a 15,498-byte release
-  under the pinned 14,656-byte proofs fits one transaction's measured
-  95,544-byte capacity, an adoption condition of the profile. Recorded,
-  not resolved: a decoder-refused transaction denies every range through
-  its height; chain and revocation reads from index zero scan the genesis.
+- Expected result: with a clause, `c(i)` is the last valid carrying
+  checkpoint strictly before `i`, the gap is open where `i − c(i)` exceeds
+  the duration, the boundary is the first open index strictly after the
+  opening checkpoint, and a later checkpoint witnessed while the gap is
+  open is `lapsed`: held, its trail neither resolved nor replayed, closing
+  nothing, refusing `lapsed-selection` with the clock record when
+  selected. The empty-opening contradiction and segment identity are
+  settled before the clock. The audit's `clock` reports the duration,
+  `c(t)`, the gap, whether it is open, the boundary and the opening index.
+  The opening checkpoint is the carrying checkpoint at the header's
+  opening sequence (C2b.4.1), exempt from lapse; a held opening carrying
+  nothing for the backing is the contradiction `OPENING`, a missing one is
+  unresolved; without ranges a clause stays unsupported; without a clause
+  the clock is null.
+  [Decision](decisions/2026-09.md#2026-09-15--read-the-no-commitment-clock-from-the-classified-carrying-checkpoints).
+- Earlier today on main: the [candidate Ergo venue profile](docs/ERGO_VENUE_PROFILE.md)
+  (1d8f735, CI 34958350541 passed) and the capacity decision that a
+  configuration's publications fit one Ergo transaction (72d54fd, CI
+  34961693625 passed).
+- Independent adversarial review of the clock: in progress; findings and
+  their disposition go in the decision entry before merge.
+- Recorded, not resolved: one node-valid transaction the reader's decoder
+  refuses denies every range through its height; chain and revocation reads
+  from index zero scan the genesis on a real chain.
 
 ## Evidence
 
-- Baseline main 559bfdf: CI 34900291794 passed. Delivery main 8c21d25
-  (code at 1d8f735, handoff after): CI 34958350541 passed on all seven
-  jobs; both repositories at parity.
-- `test/pool-v3-ergo-profile.test.ts`: 9 tests passed; full `npm test`
-  1934 passed on 6f4e1e7, affected tests rerun on the final sources;
-  typecheck and `npm run check:docs` clean.
-- `npm run check:ergo:range` on the final sources (block-root and decoder
-  reports regenerated): [profile report](docs/ergo-range-profile-verification.json),
-  247 checks; the pinned genesis header anchors an empty answer for index
-  0; synthetic chain 15 transactions, 11,896 serialized bytes; answers
-  1,038 (commitments, five held of six), 355 (replacement pending), 334
-  (revocation at first witnessing), 8,284 (publications in venue order);
-  fixture roots reproduced for versions 1 and 3, 65 outputs scanned, 57
-  real register constants agreeing with sigma-rust's decoder.
+- Baseline main 72d54fd: CI 34961693625 passed.
+- `npm run check:pool:local-replay` on d5e6166: 32 groups and 9 real proofs
+  passed, including the clock group (opening closes the interval from index
+  zero; closed and open gaps at the judging index; a lapsed continuation
+  refused when selected and passed otherwise; a checkpoint at the last
+  allowed index superseding; two lapsed at one index; an excluded checkpoint
+  closing nothing; a historical read before the boundary; a zero duration; a
+  first checkpoint judged from the opening; an opening carrying nothing; no
+  ranges; the portable package agreeing). [Retained report](docs/pool-v3-local-replay-verification.json).
+- `npm run check:docs` OK. The change touches only `scripts/pool/v3` and
+  docs; the full suite last passed on 6f4e1e7 with no runtime change since.
 
 ## Existing local product and custody boundary
 
@@ -74,26 +74,25 @@ key, dependency or host-control change.
 
 ## Next
 
-1. P2 (publication on a node) confirms the measured 24-piece transaction is
-   relayed and reassembles after its boxes are spent; then P4's real-chain
-   cost of exhaustion from index zero and a possible start-index rule.
-   Decoder node equivalence is a selection prerequisite.
-2. Remaining local-experiment dependencies: the C2b.6.1 clock over the
-   classified carrying checkpoints, and a successor's or scope-changed
-   segment with its C2.10.5 imports; then wire the profile verifier into
-   the local replay in place of the fixture venue (an adapter binds the budget).
-3. Configuration approval stays disabled until all adoption prerequisites
+1. Close the review, merge and push, check CI for the delivery commit.
+2. A successor's or scope-changed segment with its C2.10.5 imports in the
+   local replay, then wire the candidate Ergo profile verifier into it in
+   place of the fixture venue (an adapter binds the budget).
+3. P2 (publication on a node) confirms the measured 24-piece transaction;
+   P4 measures exhaustion from index zero on a real chain; decoder node
+   equivalence is a selection prerequisite.
+4. Configuration approval stays disabled until all adoption prerequisites
    hold; device qualification and external publication remain separate
    dependencies. Do not alter this workstation's controls.
 
 ## Open questions
 
 - Reassessed 2026-09-15: unchanged, roughly **50% done / 50% remaining**,
-  plausible range **40-60%**. The profile candidate is reusable behind the
-  answers; header authentication, a node-equivalent contained decoder,
-  publication on a node, runtime recovery, qualified custody and user
+  plausible range **40-60%**. The clock closes one recovery dependency in
+  the experiment; successor segments, a selected venue profile, a
+  node-equivalent decoder, runtime recovery, qualified custody and user
   operation remain the largest blocks.
-- Switch to a fresh instance for the next slice: the kind-4 bound and P2
-  work read pool-v3 §6 sizes and the node's limits, not this slice's
-  sources, and this session's context is long. A context-efficiency
-  recommendation, not measured model performance.
+- Switch to a fresh instance for the successor-segment slice: it reads
+  C2.10.5 imports and pool-v3 §8 headers, not this session's sources, and
+  this context is long. A context-efficiency recommendation, not measured
+  model performance.

@@ -251,13 +251,19 @@ other backings are unsupported. Under a declared silence clause the same
 walk reads the no-commitment clock (C2b.6.1): `c(i)` is the last valid
 carrying checkpoint strictly before `i`, the gap is open where `i − c(i)`
 exceeds the duration, the segment's silence boundary is the first open
-index strictly after its opening checkpoint, which must carry the backing
-and is exempt from lapse, and a later checkpoint witnessed while the gap is
-open is `lapsed`: held, replayed for nothing, closing nothing, refusing as
-`lapsed-selection` when selected (C2b.4.1). The audit's `clock` reports the
-duration, the snapshot index, the gap, whether it is open and the boundary;
-an opening carrying nothing for the backing leaves the read unresolved, and
-without record ranges a clause is unsupported. Issuance
+index strictly after its opening checkpoint, which carries the backing and
+is exempt from lapse, and a later checkpoint of this segment witnessed
+while the gap is open or after the boundary is `lapsed`: held, its snapshot
+resolved to establish the segment, its trail neither resolved nor replayed,
+closing nothing; selected, the read refuses `lapsed-selection` with the
+clock record proving the lapse (C2b.4.1). The empty-opening contradiction
+and the segment identity are settled before the clock, so a lower-sequence
+checkpoint still refuses `OPENING` and another segment's checkpoint stays
+unsupported. The audit's `clock` reports the duration, the snapshot index,
+the gap, whether it is open, the boundary and the opening index; a held
+opening whose directory carries nothing for the backing is a proven
+contradiction (`OPENING`), an opening the record does not hold is
+unresolved, and without record ranges a clause is unsupported. Issuance
 witnessed at or after K's revocation is void, and a position the last valid
 checkpoint finalized was witnessed at that checkpoint's index, not the
 child's (C2b.1). A trail that does not decode is no evidence and does not

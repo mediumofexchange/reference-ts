@@ -553,80 +553,105 @@ try {
     // Empty-segment checkpoints under terms declaring a clause: the opening checkpoint at sequence 1 carries
     // the backing with its empty state (C2b.4.1), and every later one carries the same empty snapshot, so
     // classification and the clock turn on witnessed indices and committed totals alone.
-    const openingAt = 1n, checkpoint = (sequence, at, totals) => ({ sequence, at, ...(totals === undefined ? {} : { totals }) });
-    function silentPackage({ duration = 10n, checkpoints = [checkpoint(3n, 3n)], selected = 0, judgingIndex = 20n, mode = "current-fixture", opens = true } = {}) {
+    const openingAt = 1n, checkpoint = (sequence, at, totals, foreign = false) => ({ sequence, at, foreign, ...(totals === undefined ? {} : { totals }) });
+    function silentPackage({ duration = 10n, checkpoints = [checkpoint(3n, 3n)], selected = 0, judgingIndex = 20n, mode = "current-fixture",
+      opens = true, headerSequence = 1n, openingAtIndex = openingAt, openingTotals, extra = [] } = {}) {
       const fields = { ...termsFields, silence: { noCommitmentDuration: duration, challengeWindow: 5n } };
       const terms = codec.encodeRootTerms(fields), name = codec.rootTermsName(terms);
-      const h = codec.segmentBytes({ domain, venue, operator, sequence: 1n, entries: [{ backing: name, link: name }] });
-      const emptySegment = new Uint8Array(Buffer.from(sha(h), "hex"));
+      const segmentOf = sequence => new Uint8Array(Buffer.from(sha(codec.segmentBytes({ domain, venue, operator, sequence, entries: [{ backing: name, link: name }] })), "hex"));
+      const h = codec.segmentBytes({ domain, venue, operator, sequence: headerSequence, entries: [{ backing: name, link: name }] });
+      const emptySegment = segmentOf(headerSequence), foreignSegment = segmentOf(9n);
       const signed = { terms, signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), issuerSecret) };
       const trailBytes = codec.encodeTrail({ header: h, terms: [signed], records: [] }, LIMITS);
-      const all = opens ? [checkpoint(1n, openingAt), ...checkpoints] : checkpoints, chosenAt = opens ? selected + 1 : selected;
-      const built = all.map(({ sequence, at, totals = { issued: 0n, burned: 0n } }) => {
-        const s = { backing: name, segment: emptySegment, historyHash: codec.genesisHistoryHash(emptySegment),
-          evidenceHash: codec.genesisEvidenceHash(emptySegment), ...totals };
+      const all = opens === true ? [checkpoint(headerSequence, openingAtIndex, openingTotals), ...checkpoints] : checkpoints, chosenAt = opens === true ? selected + 1 : selected;
+      const built = all.map(({ sequence, at, totals = { issued: 0n, burned: 0n }, foreign }) => {
+        const segment = foreign ? foreignSegment : emptySegment;
+        const s = { backing: name, segment, historyHash: codec.genesisHistoryHash(segment), evidenceHash: codec.genesisEvidenceHash(segment), ...totals };
         const directory = [{ name, digest: codec.snapshotDigest(s) }];
         return { at, snapshot: codec.snapshotBytes(s), directory, commitment: signCommitment(operatorSecret, sequence, directoryRoot(directory)) };
       });
       const record = new FixtureVenue(venue, 20n, 2n);
-      // Without an opening carrying the backing, the operator's sequence 1 carries another backing, as in the proof fixtures.
-      if (!opens) record.witness(1, operator, openingAt, encodeCommitment(earlier));
+      // "other": the operator's sequence 1 carries another backing, as in the proof fixtures; false: nothing at the opening sequence.
+      if (opens === "other") record.witness(1, operator, openingAt, encodeCommitment(earlier));
       for (const c of built) record.witness(1, operator, c.at, encodeCommitment(c.commitment));
+      for (const e of extra) record.witness(1, operator, e.at, encodeCommitment(signCommitment(operatorSecret, e.sequence, directoryRoot(e.directory))));
       const chosen = built[chosenAt], rest = built.filter((_, i) => i !== chosenAt);
       // Checkpoints sharing the empty snapshot share one payload; the §12 inventory carries each once.
       const distinct = (items, key) => items.filter((item, i) => items.findIndex(other => key(other) === key(item)) === i);
       const snapshots = distinct(rest.map(x => x.snapshot), hex).filter(s => hex(s) !== hex(chosen.snapshot));
-      const directories = distinct(rest.map(x => x.directory), d => hex(directoryRoot(d))).filter(d => hex(directoryRoot(d)) !== hex(directoryRoot(chosen.directory)));
+      const directories = distinct([...rest.map(x => x.directory), ...extra.map(e => e.directory)], d => hex(directoryRoot(d)))
+        .filter(d => hex(directoryRoot(d)) !== hex(directoryRoot(chosen.directory)));
       return { selection: { domain, venue, backing: name, operator, sequence: chosen.commitment.sequence, root: chosen.commitment.root, judgingIndex, mode },
         package: { configuration: configurationBytes, commitment: encodeCommitment(chosen.commitment), directory: chosen.directory,
           directories: [before, ...directories], snapshot: chosen.snapshot, snapshots, trail: trailBytes, trails: [] },
         venue: record.export() };
     }
+    const silentName = duration => codec.rootTermsName(codec.encodeRootTerms({ ...termsFields, silence: { noCommitmentDuration: duration, challengeWindow: 5n } }));
     const clockOf = result => result.audit.range.clock, classes = result => result.audit.range.carrying.map(c => c.class);
-    const settled = async (input, expected = "selected-local-replay") => {
+    const clock = (duration, snapshotIndex, gap, open, boundary, opening = "1") => ({ duration, snapshotIndex, gap, open, boundary, opening });
+    const settled = async (input, expected = "selected-local-replay", check = null) => {
       const result = await replayLocalPackage(input, verifier, codec);
-      assert.equal(result.status, expected, `${result.status} ${result.check}`);
+      assert.equal(result.status, expected, `${result.status} ${result.check}`); assert.equal(result.check ?? null, check);
       return result;
     };
     // The opening checkpoint at index 1 closes the interval that ran from index zero; the selection at 3 is the snapshot at 20.
     const single = await settled(silentPackage());
     assert.deepEqual(classes(single), ["valid", "valid"]);
-    assert.deepEqual(clockOf(single), { duration: "10", snapshotIndex: "3", gap: "17", open: true, boundary: "14" });
-    assert.deepEqual(clockOf(await settled(silentPackage({ duration: 20n }))), { duration: "20", snapshotIndex: "3", gap: "17", open: false, boundary: null });
-    // A continuation witnessed after the boundary is lapsed for its whole scope: selecting it refuses, the earlier stays the snapshot.
+    assert.deepEqual(clockOf(single), clock("10", "3", "17", true, "14"));
+    assert.deepEqual(clockOf(await settled(silentPackage({ duration: 20n }))), clock("20", "3", "17", false, null));
+    // A continuation witnessed after the boundary is lapsed for its whole scope: selecting it refuses with the clock
+    // record proving the lapse, and the earlier checkpoint stays the snapshot.
     const pair = [checkpoint(3n, 3n), checkpoint(4n, 15n)];
-    await settled(silentPackage({ checkpoints: pair, selected: 1 }), "lapsed-selection");
+    const lapsed = await settled(silentPackage({ checkpoints: pair, selected: 1 }), "lapsed-selection");
+    assert.equal(lapsed.audit, null); assert.deepEqual(lapsed.clock, clock("10", "3", "12", true, "14"));
     const kept = await settled(silentPackage({ checkpoints: pair }));
     assert.deepEqual(classes(kept), ["valid", "valid", "lapsed"]);
-    assert.deepEqual(clockOf(kept), { duration: "10", snapshotIndex: "3", gap: "17", open: true, boundary: "14" });
+    assert.deepEqual(clockOf(kept), clock("10", "3", "17", true, "14"));
     // Witnessed at the last index the duration allows, a checkpoint closes the interval and supersedes.
     const inTime = [checkpoint(3n, 3n), checkpoint(4n, 13n)];
     await settled(silentPackage({ checkpoints: inTime }), "superseded-selection");
-    assert.deepEqual(clockOf(await settled(silentPackage({ checkpoints: inTime, selected: 1 }))), { duration: "10", snapshotIndex: "13", gap: "7", open: false, boundary: null });
-    // Two at one index after the gap opened: neither is strictly before the other, both lapse.
+    assert.deepEqual(clockOf(await settled(silentPackage({ checkpoints: inTime, selected: 1 }))), clock("10", "13", "7", false, null));
+    // Two at one index after the gap opened both lapse; the same-index rule shows where a checkpoint stands at the
+    // judging index itself: it is not strictly before it, so the snapshot at that index is the opening.
     const twinned = await settled(silentPackage({ checkpoints: [checkpoint(3n, 3n), checkpoint(4n, 14n), checkpoint(5n, 14n)] }));
     assert.deepEqual(classes(twinned), ["valid", "valid", "lapsed", "lapsed"]);
+    const atJudging = await settled(silentPackage({ checkpoints: [checkpoint(3n, 11n)], judgingIndex: 11n, mode: "historical-fixture" }), "historical-local-replay");
+    assert.deepEqual(classes(atJudging), ["valid", "valid"]); assert.deepEqual(clockOf(atJudging), clock("10", "1", "10", false, null));
+    // Non-opening checkpoints at the opening's own index lapse under a zero duration whatever their sequence order.
+    const sameIndex = await settled(silentPackage({ duration: 0n, checkpoints: [checkpoint(2n, 1n), checkpoint(3n, 1n)], selected: -1 }));
+    assert.deepEqual(classes(sameIndex), ["valid", "lapsed", "lapsed"]); assert.deepEqual(clockOf(sameIndex), clock("0", "1", "19", true, "2"));
     // An excluded checkpoint closes nothing, so the next lapses; valid, it closes and the next stands.
     const broken = [checkpoint(3n, 3n), checkpoint(4n, 8n, { issued: 1n, burned: 0n }), checkpoint(5n, 15n)];
     const passed = await settled(silentPackage({ checkpoints: broken }));
     assert.deepEqual(passed.audit.range.carrying.map(c => [c.class, c.check ?? null]), [["valid", null], ["valid", null], ["excluded", "SNAPSHOT"], ["lapsed", null]]);
-    assert.deepEqual(clockOf(passed), { duration: "10", snapshotIndex: "3", gap: "17", open: true, boundary: "14" });
+    assert.deepEqual(clockOf(passed), clock("10", "3", "17", true, "14"));
     const standing = await settled(silentPackage({ checkpoints: [checkpoint(3n, 3n), checkpoint(4n, 8n), checkpoint(5n, 15n)], selected: 2 }));
     assert.deepEqual(classes(standing), ["valid", "valid", "valid", "valid"]);
-    assert.deepEqual(clockOf(standing), { duration: "10", snapshotIndex: "15", gap: "5", open: false, boundary: null });
+    assert.deepEqual(clockOf(standing), clock("10", "15", "5", false, null));
+    // An excluded opening anchors the boundary but closes nothing: the clock runs from index zero.
+    const openingBroken = { issued: 1n, burned: 0n };
+    const unclosed = await settled(silentPackage({ openingTotals: openingBroken }));
+    assert.deepEqual(classes(unclosed), ["excluded", "valid"]); assert.deepEqual(clockOf(unclosed), clock("10", "3", "17", true, "14"));
+    const fromZero = await settled(silentPackage({ openingTotals: openingBroken, duration: 2n }), "lapsed-selection");
+    assert.deepEqual(fromZero.clock, clock("2", "0", "3", true, "3"));
     // Read at an earlier index the boundary is not reached.
     const then = await settled(silentPackage({ judgingIndex: 12n, mode: "historical-fixture" }), "historical-local-replay");
-    assert.deepEqual(clockOf(then), { duration: "10", snapshotIndex: "3", gap: "9", open: false, boundary: null });
+    assert.deepEqual(clockOf(then), clock("10", "3", "9", false, null));
     // A zero duration: only the opening ever stands, and the gap opens at the index after it.
     const zero = await settled(silentPackage({ duration: 0n, selected: -1 }));
-    assert.deepEqual(classes(zero), ["valid", "lapsed"]);
-    assert.deepEqual(clockOf(zero), { duration: "0", snapshotIndex: "1", gap: "19", open: true, boundary: "2" });
+    assert.deepEqual(classes(zero), ["valid", "lapsed"]); assert.deepEqual(clockOf(zero), clock("0", "1", "19", true, "2"));
     // The first carrying checkpoint after the opening is judged from the opening, not from index zero.
     const late = await settled(silentPackage({ duration: 5n, checkpoints: [checkpoint(3n, 6n)] }));
-    assert.deepEqual(classes(late), ["valid", "valid"]);
-    assert.deepEqual(clockOf(late), { duration: "5", snapshotIndex: "6", gap: "14", open: true, boundary: "12" });
+    assert.deepEqual(classes(late), ["valid", "valid"]); assert.deepEqual(clockOf(late), clock("5", "6", "14", true, "12"));
     await settled(silentPackage({ duration: 4n, checkpoints: [checkpoint(3n, 6n)] }), "lapsed-selection");
-    // An opening that carries nothing for the backing leaves the boundary unanchored; without ranges the clock is not read.
+    // A lower-sequence carrying checkpoint contradicts the empty opening before any clock is read (C2.7.3), and a
+    // checkpoint of another segment witnessed after the boundary is that segment's, not a lapse of this one.
+    const earlierSegment = { sequence: 1n, at: 6n, directory: [{ name: silentName(5n), digest: b(86) }] };
+    await settled(silentPackage({ duration: 5n, headerSequence: 2n, openingAtIndex: 7n, checkpoints: [checkpoint(3n, 8n)], extra: [earlierSegment] }), "invalid-local-replay", "OPENING");
+    await settled(silentPackage({ checkpoints: [checkpoint(3n, 3n), checkpoint(4n, 15n, undefined, true)] }), "unsupported-scope");
+    // An opening carrying nothing for the backing is a contradiction the record proves; an opening the record does
+    // not hold is missing evidence; without ranges the clock is not read.
+    await settled(silentPackage({ opens: "other" }), "invalid-local-replay", "OPENING");
     await settled(silentPackage({ opens: false }), "unresolved-evidence");
     const { venue: _unread, ...noVenue } = silentPackage();
     await settled(noVenue, "unsupported-scope");

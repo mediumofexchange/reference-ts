@@ -112,10 +112,12 @@ async function readRecordRanges(selection, terms, header, directories, record, c
       if (carries(h) !== undefined) throw new EvidenceRefusal("unsupported-scope");
     }
   }
-  // The segment's opening checkpoint carries every scoped backing (C2b.4.1); a commitment at the opening
-  // sequence carrying nothing for the backing is not this segment's opening.
+  // The segment's opening checkpoint carries every scoped backing (C2b.4.1). A held commitment at the
+  // opening sequence whose resolved directory carries nothing for the backing contradicts the header;
+  // an opening sequence the record does not hold is missing evidence.
   const opening = carrying.find(c => c.sequence === header.sequence)?.index;
-  return { judgingIndex: t, lag, checkpointIndex: held[at].index, revokedAt, heldBefore: at, heldAfter: term.length - at - 1, chain, carrying, opening };
+  const openingHeld = term.some(h => h.commitment.sequence === header.sequence);
+  return { judgingIndex: t, lag, checkpointIndex: held[at].index, revokedAt, heldBefore: at, heldAfter: term.length - at - 1, chain, carrying, opening, openingHeld };
 }
 
 /** Trails that decode under the budget; one that does not decode is no
@@ -196,34 +198,34 @@ async function replayTrail({ selection, terms, header, verifier, codec }, snapsh
  * is the last valid carrying checkpoint strictly before index i, the gap is
  * open at i where i − c(i) exceeds the duration, the segment's silence
  * boundary is the first index strictly after its opening at which the gap
- * is open, and a non-opening checkpoint witnessed while the gap is open or
- * after the boundary is lapsed for its whole scope: held, replayed for
- * nothing, closing nothing. Otherwise each is valid, excluded or unresolved
- * from its own snapshot and trail, and the segment continues from its last
- * valid checkpoint (C2.10.12). A carrying checkpoint of another segment
- * contradicts the header's empty opening before the selection (C2.7.3) and
- * is an unsupported segment after it. A valid later checkpoint supersedes
- * the selection (C2.7.5); an excluded or lapsed one is passed. Unresolved
- * evidence anywhere in the order stops the read. The clock at the judging
- * index follows from the same walk; without a clause there is no gap. */
+ * is open, and a non-opening checkpoint of this segment witnessed while the
+ * gap is open or after the boundary is lapsed for its whole scope: held,
+ * its snapshot resolved to establish the segment but its trail neither
+ * resolved nor replayed, closing nothing. Otherwise each is valid, excluded
+ * or unresolved from its own snapshot and trail, and the segment continues
+ * from its last valid checkpoint (C2.10.12). A carrying checkpoint of
+ * another segment contradicts the header's empty opening before the
+ * selection (C2.7.3) and is an unsupported segment after it, whatever the
+ * clock says. A valid later checkpoint supersedes the selection (C2.7.5);
+ * an excluded or lapsed one is passed. Unresolved evidence anywhere in the
+ * order stops the read. The clock at the judging index follows from the
+ * same walk; a lapsed selection refuses with the clock record proving the
+ * lapse; without a clause there is no gap. */
 async function classifyCarrying(context, ranges, evidence) {
   const { selection, header, terms, codec } = context, { snapshot, trail, snapshots } = evidence;
   const trails = decodedTrails(evidence.trails, codec), carrying = [];
   const duration = terms.silence?.noCommitmentDuration, opening = ranges.opening, later = (a, b) => (a > b ? a : b);
-  if (duration !== undefined && opening === undefined) throw new EvidenceRefusal("unresolved-evidence");
+  if (duration !== undefined && opening === undefined) {
+    if (ranges.openingHeld) throw new ReplayRefusal("OPENING");
+    throw new EvidenceRefusal("unresolved-evidence");
+  }
+  const clockRecord = (at, snapshotIndex, boundaryAt) => ({ duration: duration.toString(), snapshotIndex: snapshotIndex.toString(),
+    gap: (at - snapshotIndex).toString(), open: at - snapshotIndex > duration, boundary: boundaryAt === undefined ? null : boundaryAt.toString(),
+    opening: opening.toString() });
   let lastValid, state, latestValid = 0n, closing = 0n, currentIndex = -1n, boundary;
   for (const c of ranges.carrying) {
     // c(i) reads only checkpoints strictly before i: two at one index do not close each other's gap.
     if (c.index !== currentIndex) { closing = latestValid; currentIndex = c.index; }
-    if (duration !== undefined && c.sequence !== header.sequence) {
-      const open = c.index - closing > duration;
-      if (open && boundary === undefined && c.index > opening) boundary = later(closing + duration + 1n, opening + 1n);
-      if (open || (boundary !== undefined && boundary < c.index)) {
-        carrying.push({ sequence: c.sequence.toString(), index: c.index.toString(), class: "lapsed" });
-        if (c.position === "selected") throw new EvidenceRefusal("lapsed-selection");
-        continue;
-      }
-    }
     let s = snapshot, tr = trail;
     if (c.position !== "selected") {
       // The record pins an earlier state of this operator that the header's empty opening denies.
@@ -235,6 +237,18 @@ async function classifyCarrying(context, ranges, evidence) {
         if (c.position === "before") throw new ReplayRefusal("OPENING");
         throw new EvidenceRefusal("unsupported-scope");
       }
+    }
+    // Lapse by silence (C2b.4.1): a non-opening checkpoint of this segment witnessed while the gap is open or past the boundary.
+    if (duration !== undefined && c.sequence !== header.sequence) {
+      const open = c.index - closing > duration;
+      if (open && boundary === undefined && c.index > opening) boundary = later(closing + duration + 1n, opening + 1n);
+      if (open || (boundary !== undefined && boundary < c.index)) {
+        carrying.push({ sequence: c.sequence.toString(), index: c.index.toString(), class: "lapsed" });
+        if (c.position === "selected") throw Object.assign(new EvidenceRefusal("lapsed-selection"), { clock: clockRecord(c.index, closing, boundary) });
+        continue;
+      }
+    }
+    if (c.position !== "selected") {
       // Its trail is the one that authenticates its committed evidence (§10.1); two distinct ones cannot.
       const expected = { backing: selection.backing, segment: s.segment, digest: c.digest };
       const matching = trails.filter(x => codec.verifyTrailEvidence(expected, s, x, LIMITS));
@@ -261,10 +275,9 @@ async function classifyCarrying(context, ranges, evidence) {
   let clock = null;
   if (duration !== undefined) {
     // The gap at the judging index t: c(t) is the last valid carrying checkpoint strictly before t.
-    const t = ranges.judgingIndex, snapshotIndex = latestValid < t ? latestValid : closing, gap = t - snapshotIndex, open = gap > duration;
-    if (open && boundary === undefined && t > opening) boundary = later(snapshotIndex + duration + 1n, opening + 1n);
-    clock = { duration: duration.toString(), snapshotIndex: snapshotIndex.toString(), gap: gap.toString(), open,
-      boundary: boundary === undefined ? null : boundary.toString() };
+    const t = ranges.judgingIndex, snapshotIndex = latestValid < t ? latestValid : closing;
+    if (t - snapshotIndex > duration && boundary === undefined && t > opening) boundary = later(snapshotIndex + duration + 1n, opening + 1n);
+    clock = clockRecord(t, snapshotIndex, boundary);
   }
   return { carrying, state, clock };
 }
@@ -344,7 +357,8 @@ export async function replayLocalPackage(input, verifier, codec) {
           carrying, clock } }, candidates };
   } catch (error) {
     if (error instanceof ReplayRefusal) return refused("invalid-local-replay", error.check);
-    if (error instanceof EvidenceRefusal) return refused(error.status);
+    // A lapsed selection carries the clock record proving the lapse (C2b.4.1) beside the refusal.
+    if (error instanceof EvidenceRefusal) return { ...refused(error.status), ...(error.clock === undefined ? {} : { clock: error.clock }) };
     if (error instanceof codec.TrailLimitError || error instanceof codec.RangeLimitError) return refused("resource-refusal");
     if (error instanceof EncodingError || error instanceof codec.CodecEncodingError ||
       error instanceof CapsuleFormatError || error instanceof CapsuleAssociationError) return refused("unresolved-evidence");
