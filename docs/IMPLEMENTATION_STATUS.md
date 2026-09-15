@@ -81,7 +81,11 @@ replacement chain, the checkpoint's record prefix, currency, its operator's
 force and revocation absence against that fixture only, and classifies every
 carrying checkpoint of the segment from its own trail with
 [last-valid-prefix continuity](https://github.com/mediumofexchange/money-from-first-principles/blob/3ed1800/pool-v3.md#71-authentication-precedes-validity).
-Adoption, a venue profile, imports, the silence clock and recovery remain open.
+Under a declared silence clause it reads the no-commitment clock from those
+classified checkpoints (C2b.6.1): the gap at the judging index, the segment's
+silence boundary after its opening checkpoint, and the lapse of any
+continuation witnessed past it (C2b.4.1). Adoption, a selected venue
+profile, imports and recovery remain open.
 `npm run check:pool:fees` compares the successor
 [transfer shapes and ordinary fees](POOL_DEPLOYMENT_PROBES.md#transfer-shape-and-ordinary-fees)
 with real proofs. These probes do not implement a pool wallet or v3 finality.

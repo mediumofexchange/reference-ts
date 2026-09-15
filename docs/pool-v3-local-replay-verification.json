@@ -31,6 +31,7 @@
     "fixture record ranges establish the held checkpoint, empty opening, currency, chain and revocation",
     "record ranges refuse a contradicted empty opening, another segment's later checkpoint, a missing directory, a revoked issuer and a pending handover",
     "the chain from kind-2 answers fixes the party in force: lead floor, supersession, revocation, term end and a successor's commitments",
+    "the no-commitment clock reads the classified carrying checkpoints, and silence retires the segment (C2b.6.1, C2b.4.1)",
     "record ranges are the verifier's own: another venue, an unwitnessed index, a stale answer or an unheld selection cannot certify",
     "a second checkpoint of the segment is classified from its own trail and extends the last valid prefix (C2.10.4, C2.10.12)",
     "excluded checkpoints are passed: a stale twin, diverging evidence or a bad suffix never moves the last valid prefix (C2.10.12)",
@@ -73,61 +74,61 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2072.737699999998
+      "elapsedMs": 2158.6052999999993
     },
     {
       "label": "pay 7, change 3",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5243.446200000006
+      "elapsedMs": 6361.1145
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 4238.775200000004
+      "elapsedMs": 5398.075600000004
     },
     {
       "label": "pay 2, change 1",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5317.089
+      "elapsedMs": 6195.496400000004
     },
     {
       "label": "valid maximum issuance",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 3170.1949000000022
+      "elapsedMs": 1699.9256999999998
     },
     {
       "label": "valid proof, different scope",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1976.3352999999988
+      "elapsedMs": 1721.5619000000006
     },
     {
       "label": "valid proof, unaccepted anchor",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6916.497799999997
+      "elapsedMs": 5080.126999999993
     },
     {
       "label": "valid proof, spent input",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 4947.133600000001
+      "elapsedMs": 5095.966400000005
     },
     {
       "label": "valid proof, duplicate output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 4200.744999999995
+      "elapsedMs": 5151.161499999995
     }
   ],
   "sourceSha256Lf": {
-    "scripts/pool/v3/local-replay.mjs": "34cab6e89558444b7da4b5bec81043a72da3b3b38b3913f15a06215633e95204",
+    "scripts/pool/v3/local-replay.mjs": "718f1c4b91f90c94ecfceae2ce821c534db1145d78a78326ca9178c0ac681412",
     "scripts/pool/v3/local-worker.mjs": "4074fcd80fd6bb858818a5ba24181fa695001cf70882e70942765f3f192d6ccd",
-    "scripts/pool/v3/local-check.mjs": "a5b22ebae26dd11e19fbea785a11d1d52ab8bec3ec7f78b8bceefa3d2e7b49ca",
+    "scripts/pool/v3/local-check.mjs": "92cf1cce60460d6e1ac528f0dadcfa80858e965a25999a855ed450e1d8d853e6",
     "scripts/pool/v3/fixture-venue.mjs": "757300134c7f51737fe35c620756e44351c26ad38b981bac27bf5d411d4d6c35",
     "scripts/pool/delivery/evidence-reader.mjs": "65f1a13caf29cadd7db46f10769920ccfd66c879f12d064c091be632a86fdf66",
     "scripts/pool/delivery/crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
@@ -139,7 +140,7 @@
     "model/pool-v3-configuration.ts": "a88d260621bd7a81f6a6827931e703cc4a405394ad4bb0a2aed11f1d72ae9802",
     "model/pool-v3-terms.ts": "67f29459be62e28d86fd0789f748c6ca58a45b30bf042fd6132c93247ded0cbf",
     "model/pool-v3-package.ts": "7c48ec95df778198bb8ad8be4214a40fa8730dce3270ab26dae7aae35e61c73f",
-    "model/pool-v3-range.ts": "2191df8ff41695e37e5dde1ebf5d8befa16c80e3b9596b83ac4a63dad392155d",
+    "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f",
     "scripts/pool/v3/candidate.mjs": "cda541d6d39493e73197890f1c8a93be13627d584eff04e64ca59f2e60758f48",
     "scripts/pool/v3/candidate-manifest.json": "a5f34d76b1ac9cba71d322c5263fee75120a7756d0b5609720682c344e5049ae",
     "src/pool/note-tree.ts": "264c93ecf4af95209374657bc5c56c8841abab71b292ed557940b23540dfd1d4",
@@ -168,7 +169,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "9b3238c7ca1dd793294dcfa71941b3487121c6198b11efff24970c0302deba58",
+      "evidenceHash": "5b2458bb32229fd1f5f0e975267e5b7f4c2b3b71ca9f299fbae94e75f55cded6",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -189,7 +190,8 @@
             "index": "3",
             "class": "valid"
           }
-        ]
+        ],
+        "clock": null
       }
     },
     "candidates": []
@@ -214,7 +216,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "9b3238c7ca1dd793294dcfa71941b3487121c6198b11efff24970c0302deba58",
+      "evidenceHash": "5b2458bb32229fd1f5f0e975267e5b7f4c2b3b71ca9f299fbae94e75f55cded6",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -235,7 +237,8 @@
             "index": "3",
             "class": "valid"
           }
-        ]
+        ],
+        "clock": null
       }
     },
     "candidates": [
@@ -338,7 +341,7 @@
       "noteRoot": "20289920090942748033438979157172403900844036366309329327868430363638482059158",
       "spentRoot": "60aed429711fd5c3d866b0b176d16795f8f991e41bb32a33d9531b909fa188a5",
       "historyHash": "1826aca87b0ca270a877273b8be927fb84a547894e99ea1de7ce73aea7d52942",
-      "evidenceHash": "95ba0970196446f5ccdfba8227241ff162e57d1d79956a52a50ffd13aba95326",
+      "evidenceHash": "19d6688b664e691ddcf3fa9447ca45c3796683570a1b6d1a6a65c0cf7b57bb44",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -364,7 +367,8 @@
             "index": "7",
             "class": "valid"
           }
-        ]
+        ],
+        "clock": null
       }
     },
     "candidates": []

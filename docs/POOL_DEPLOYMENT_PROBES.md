@@ -246,8 +246,18 @@ valid checkpoint's length and reproduce its history and evidence hashes there
 (C2.10.12, pool-v3 §7.1), the evidence before its proofs; a valid later one
 makes the selection `superseded-selection` (C2.7.5). An earlier carrying
 checkpoint of another segment contradicts the header's empty opening; a
-later one, a successor's carrying commitment, a carrying checkpoint naming
-other backings and a declared silence clause are unsupported. Issuance
+later one, a successor's carrying commitment and a carrying checkpoint naming
+other backings are unsupported. Under a declared silence clause the same
+walk reads the no-commitment clock (C2b.6.1): `c(i)` is the last valid
+carrying checkpoint strictly before `i`, the gap is open where `i − c(i)`
+exceeds the duration, the segment's silence boundary is the first open
+index strictly after its opening checkpoint, which must carry the backing
+and is exempt from lapse, and a later checkpoint witnessed while the gap is
+open is `lapsed`: held, replayed for nothing, closing nothing, refusing as
+`lapsed-selection` when selected (C2b.4.1). The audit's `clock` reports the
+duration, the snapshot index, the gap, whether it is open and the boundary;
+an opening carrying nothing for the backing leaves the read unresolved, and
+without record ranges a clause is unsupported. Issuance
 witnessed at or after K's revocation is void, and a position the last valid
 checkpoint finalized was witnessed at that checkpoint's index, not the
 child's (C2b.1). A trail that does not decode is no evidence and does not
@@ -289,7 +299,7 @@ that a production reader must establish before returning spendable holdings.
 | Construction and key routing | Exact configuration preimage and candidate domain; all six independently pinned source/toolchain/bytecode/key identities and fixed helper/bounds/profile | Approved configuration/artifact identities after full adoption prerequisites; setup provenance and deployment qualification |
 | Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and terms-derived issuance key; header-derived scope root; against the fixture venue, no admitted replacement (original operator in force) and no revocation at or before the checkpoint | Replacement chains beyond the original operator; a venue profile and authenticated evidence behind the fixture answers |
 | Local state | Issue/spend/burn proof and state checks, compressed spent root, note paths, totals and both chains | Recovery statements, locks, recursively verified imports, deduplicated closure and all scoped snapshots |
-| Witness and continuity | Exact fixture-selected signed checkpoint held in the fixture venue's §13 answers; every other held commitment through the judging index passed by its directory (empty opening, currency); old package mismatch tested | A venue profile and authenticated chain evidence, later carrying checkpoints' classification, lapse/fault and last-valid-prefix checks, publications and the clock |
+| Witness and continuity | Exact fixture-selected signed checkpoint held in the fixture venue's §13 answers; every other held commitment through the judging index passed by its directory (empty opening, currency); old package mismatch tested | A selected venue profile and authenticated chain evidence, successor and scope-changed segments with imports, publications, receipts and the count |
 | Wallet restoration | Seed-only candidate openings and local paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
 
 The candidate manifest, checkpoint selection and the fixture venue record

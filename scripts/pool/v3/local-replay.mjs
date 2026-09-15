@@ -58,8 +58,10 @@ function byteList(value, name) {
  * lag are the verifier's; a supplied answer is never evidence. The selection
  * must be held by the original operator inside its term, else it is lapsed
  * (C2.10.11); a successor's carrying commitment opens a segment this
- * experiment cannot classify. Nothing here classifies a checkpoint. */
-async function readRecordRanges(selection, terms, directories, record, codec) {
+ * experiment cannot classify. The segment's opening checkpoint (C2.10.9a)
+ * is the carrying checkpoint at the header's opening sequence; its index
+ * anchors the silence boundary (C2b.4.1). Nothing here classifies a checkpoint. */
+async function readRecordRanges(selection, terms, header, directories, record, codec) {
   const t = selection.judgingIndex, now = await record.witnessedIndex(), lag = await record.lag();
   if (typeof now !== "bigint" || typeof lag !== "bigint" || t > now || (selection.mode === "current-fixture" && t !== now)) {
     throw new EvidenceRefusal("unresolved-evidence");
@@ -110,7 +112,10 @@ async function readRecordRanges(selection, terms, directories, record, codec) {
       if (carries(h) !== undefined) throw new EvidenceRefusal("unsupported-scope");
     }
   }
-  return { judgingIndex: t, lag, checkpointIndex: held[at].index, revokedAt, heldBefore: at, heldAfter: term.length - at - 1, chain, carrying };
+  // The segment's opening checkpoint carries every scoped backing (C2b.4.1); a commitment at the opening
+  // sequence carrying nothing for the backing is not this segment's opening.
+  const opening = carrying.find(c => c.sequence === header.sequence)?.index;
+  return { judgingIndex: t, lag, checkpointIndex: held[at].index, revokedAt, heldBefore: at, heldAfter: term.length - at - 1, chain, carrying, opening };
 }
 
 /** Trails that decode under the budget; one that does not decode is no
@@ -186,18 +191,39 @@ async function replayTrail({ selection, terms, header, verifier, codec }, snapsh
 }
 
 /** C2.10.11 over the original operator's carrying checkpoints in held order,
- * each at its own record prefix. Lapse is settled by the chain, so each is
- * valid, excluded or unresolved from its own snapshot and trail, and the
- * segment continues from its last valid checkpoint (C2.10.12). A carrying
- * checkpoint of another segment contradicts the header's empty opening
- * before the selection (C2.7.3) and is an unsupported segment after it. A
- * valid later checkpoint supersedes the selection (C2.7.5); an excluded one
- * is passed. Unresolved evidence anywhere in the order stops the read. */
+ * each at its own record prefix. Lapse by term is settled by the chain; lapse
+ * by silence is read here (C2b.6.1, C2b.4.1): under a declared clause, c(i)
+ * is the last valid carrying checkpoint strictly before index i, the gap is
+ * open at i where i − c(i) exceeds the duration, the segment's silence
+ * boundary is the first index strictly after its opening at which the gap
+ * is open, and a non-opening checkpoint witnessed while the gap is open or
+ * after the boundary is lapsed for its whole scope: held, replayed for
+ * nothing, closing nothing. Otherwise each is valid, excluded or unresolved
+ * from its own snapshot and trail, and the segment continues from its last
+ * valid checkpoint (C2.10.12). A carrying checkpoint of another segment
+ * contradicts the header's empty opening before the selection (C2.7.3) and
+ * is an unsupported segment after it. A valid later checkpoint supersedes
+ * the selection (C2.7.5); an excluded or lapsed one is passed. Unresolved
+ * evidence anywhere in the order stops the read. The clock at the judging
+ * index follows from the same walk; without a clause there is no gap. */
 async function classifyCarrying(context, ranges, evidence) {
-  const { selection, header, codec } = context, { snapshot, trail, snapshots } = evidence;
+  const { selection, header, terms, codec } = context, { snapshot, trail, snapshots } = evidence;
   const trails = decodedTrails(evidence.trails, codec), carrying = [];
-  let lastValid, state;
+  const duration = terms.silence?.noCommitmentDuration, opening = ranges.opening, later = (a, b) => (a > b ? a : b);
+  if (duration !== undefined && opening === undefined) throw new EvidenceRefusal("unresolved-evidence");
+  let lastValid, state, latestValid = 0n, closing = 0n, currentIndex = -1n, boundary;
   for (const c of ranges.carrying) {
+    // c(i) reads only checkpoints strictly before i: two at one index do not close each other's gap.
+    if (c.index !== currentIndex) { closing = latestValid; currentIndex = c.index; }
+    if (duration !== undefined && c.sequence !== header.sequence) {
+      const open = c.index - closing > duration;
+      if (open && boundary === undefined && c.index > opening) boundary = later(closing + duration + 1n, opening + 1n);
+      if (open || (boundary !== undefined && boundary < c.index)) {
+        carrying.push({ sequence: c.sequence.toString(), index: c.index.toString(), class: "lapsed" });
+        if (c.position === "selected") throw new EvidenceRefusal("lapsed-selection");
+        continue;
+      }
+    }
     let s = snapshot, tr = trail;
     if (c.position !== "selected") {
       // The record pins an earlier state of this operator that the header's empty opening denies.
@@ -223,6 +249,7 @@ async function classifyCarrying(context, ranges, evidence) {
     try {
       const replayed = await replayTrail(context, s, tr, { index: c.index, revokedAt: ranges.revokedAt, lastValid });
       verdict = { class: "valid" }; lastValid = { position: replayed.position, historyHash: s.historyHash, evidenceHash: s.evidenceHash };
+      latestValid = c.index;
       if (c.position === "selected") state = replayed;
     } catch (error) {
       if (!(error instanceof ReplayRefusal) || c.position === "selected") throw error;
@@ -231,7 +258,15 @@ async function classifyCarrying(context, ranges, evidence) {
     carrying.push({ sequence: c.sequence.toString(), index: c.index.toString(), ...verdict });
     if (verdict.class === "valid" && c.position === "after") throw new EvidenceRefusal("superseded-selection");
   }
-  return { carrying, state };
+  let clock = null;
+  if (duration !== undefined) {
+    // The gap at the judging index t: c(t) is the last valid carrying checkpoint strictly before t.
+    const t = ranges.judgingIndex, snapshotIndex = latestValid < t ? latestValid : closing, gap = t - snapshotIndex, open = gap > duration;
+    if (open && boundary === undefined && t > opening) boundary = later(snapshotIndex + duration + 1n, opening + 1n);
+    clock = { duration: duration.toString(), snapshotIndex: snapshotIndex.toString(), gap: gap.toString(), open,
+      boundary: boundary === undefined ? null : boundary.toString() };
+  }
+  return { carrying, state, clock };
 }
 
 /** verifier.configuration is independently selected and its six keys checked
@@ -260,10 +295,8 @@ export async function replayLocalPackage(input, verifier, codec) {
     // Local fixture is limited to original operator/genesis link. Without
     // ranges this is no proof of absent replacement, revocation or commitments.
     requireReplay(same(terms.operator, header.operator) && same(header.entries[0].link, selection.backing), "TERMS_INITIAL_SCOPE");
-    // A silence clause needs the clock (C2b.6.1), which this experiment does not read.
-    if (terms.silence !== undefined) throw new EvidenceRefusal("unsupported-scope");
     const context = { selection, terms, header, verifier, codec };
-    let ranges = null, carrying = null, state;
+    let ranges = null, carrying = null, clock = null, state;
     if (venue !== undefined) {
       if (typeof verifier.record !== "function") throw new EvidenceRefusal("unresolved-evidence");
       const others = supplied.directories === undefined ? [] : supplied.directories;
@@ -273,9 +306,11 @@ export async function replayLocalPackage(input, verifier, codec) {
       const distinct = list => list.filter((item, i) => list.findIndex(other => same(other, item)) === i);
       const snapshots = distinct([supplied.snapshot, ...byteList(supplied.snapshots, "snapshots")]);
       const trails = distinct([supplied.trail, ...byteList(supplied.trails, "trails")]);
-      ranges = await readRecordRanges(selection, terms, directories, verifier.record(venue), codec);
-      ({ carrying, state } = await classifyCarrying(context, ranges, { snapshot, trail, snapshots, trails }));
+      ranges = await readRecordRanges(selection, terms, header, directories, verifier.record(venue), codec);
+      ({ carrying, state, clock } = await classifyCarrying(context, ranges, { snapshot, trail, snapshots, trails }));
     } else {
+      // A silence clause needs the clock (C2b.6.1), which is read from the record ranges alone.
+      if (terms.silence !== undefined) throw new EvidenceRefusal("unsupported-scope");
       state = await replayTrail(context, snapshot, trail, {});
     }
     if (state === undefined) throw new Error("the selection was not classified");
@@ -306,7 +341,7 @@ export async function replayLocalPackage(input, verifier, codec) {
           revokedAt: ranges.revokedAt === undefined ? null : ranges.revokedAt.toString(),
           heldBefore: ranges.heldBefore, heldAfter: ranges.heldAfter,
           chain: ranges.chain.map(link => ({ operator: hex(link.operator), from: link.from.toString(), link: hex(link.link) })),
-          carrying } }, candidates };
+          carrying, clock } }, candidates };
   } catch (error) {
     if (error instanceof ReplayRefusal) return refused("invalid-local-replay", error.check);
     if (error instanceof EvidenceRefusal) return refused(error.status);

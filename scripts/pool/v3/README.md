@@ -29,6 +29,10 @@ checkpoints' directories, snapshots and trails are its dependencies, with
 byte/item budgets and no first-match selection of conflicting objects. The
 same local replay engine checks the contents; package framing cannot
 establish complete dependencies, authenticated ranges or spendability.
+With a fixture venue, every carrying checkpoint of the original segment is
+classified from its own trail, and under a declared silence clause the
+no-commitment clock, the silence boundary and lapse by silence are read
+from that walk (C2b.6.1, C2b.4.1); a successor's segment is unsupported.
 
 The npm command verifies parameter cache/download lengths and SHA-256 hashes
 with `../prepare-crs.mjs` before starting the suite. It checks both upstream
