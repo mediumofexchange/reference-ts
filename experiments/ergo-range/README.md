@@ -484,9 +484,12 @@ sigma-rust's strict round trip, and checks the
 [candidate venue profile](../../docs/ERGO_VENUE_PROFILE.md): pool-v3 §13
 answers by exhaustion over root-checked blocks, the reader's rules over them,
 refusals for unwitnessed, gapped, unlinked, substituted or truncated
-evidence, and the three fixture roots through the same verifier. Its
-[retained report](../../docs/ergo-range-profile-verification.json) is an
-offline observation; nothing connects to a node or selects the profile.
+evidence, tolerance of stray and duplicate blocks, the pinned mainnet
+genesis header (`fixtures/mainnet-genesis-header.json`, listed under the
+manifest's `headers`) as the chain's anchor, and the three fixture blocks
+through the same verifier with every real register constant decoded beside
+sigma-rust's. Its [retained report](../../docs/ergo-range-profile-verification.json)
+is an offline observation; nothing connects to a node or selects the profile.
 
 The separate Windows x64 / PowerShell 7 containment probe is run explicitly:
 

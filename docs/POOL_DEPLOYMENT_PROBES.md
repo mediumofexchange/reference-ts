@@ -628,12 +628,18 @@ the inclusion height as index; and the ordinal as transaction position then
 output index. `model/pool-v3-ergo-profile.ts` answers a request by
 recomputing every block's transaction root from decoder-derived ids and
 scanning every output in the range, so an empty answer is proven by
-exhaustion; it refuses unwitnessed, gapped, unlinked or root-failing evidence.
+exhaustion; unwitnessed, gapped or unlinked evidence gives no answer, and a
+block of another chain, a duplicate or one failing its root is passed over
+so that no supplied block can deny a read for a height whose section is
+present.
 
 `experiments/ergo-range/profile-check.mjs` compiles the model and drives it
 through the pinned Fleet serializer and sigma-rust decoder. The
-[retained report](ergo-range-profile-verification.json) has 121 passing
-checks: a twelve-height synthetic chain at depth 2 (witnessed index 10) with
+[retained report](ergo-range-profile-verification.json) has 242 passing
+checks. The mainnet genesis header, pinned as a fixture (height 1, version
+1, a zero parent id, 279 wire bytes), anchors a chain from which index 0
+answers empty in 102 bytes while height 1 needs its section. A
+twelve-height synthetic chain at depth 2 (witnessed index 10) with
 15 transactions and 11,896 serialized bytes carries real signed commitments,
 a replacement, two revocation witnessings, single-piece publications for two
 backings, a three-piece run and a two-piece run of 3,900-byte pieces; every
@@ -643,21 +649,28 @@ carried objects of which five are held, 355 replacement bytes with the
 successor pending at the lead floor, 334 revocation bytes revoked at the
 first witnessing, 8,284 publication bytes merged in venue order) decode
 under the §13.3 reader rules. A flipped record byte decodes as another
-transaction and fails its block's root; a truncated transaction fails the
-strict decode; a missing block, an unlinked header, another genesis, a range
-above the witnessed index and an exceeded budget give no answer. The three
-mainnet fixtures pass through the same verifier as one-block ranges at depth
-0: the model reproduces the real transaction roots of block versions 1 and 3
-from decoder-derived ids, scans all 65 outputs, attributes nothing and
-answers empty in 102 bytes.
+transaction and fails its block's root, leaving that height without a
+section while later ranges answer; a truncated transaction fails the strict
+decode; a root-failing twin, a stray block and a duplicate beside the true
+sections change no answer byte; a missing block, an unlinked header, another
+genesis, a range above the witnessed index and an exceeded budget give no
+answer. The three mainnet fixtures pass through the same verifier as
+one-block ranges at depth 0: the model reproduces the real transaction roots
+of block versions 1 and 3 from decoder-derived ids, scans all 65 outputs,
+decodes all 57 real register constants beside sigma-rust's constant decoder
+(42 `Coll[Byte]` equal byte for byte, 15 of other types refused), attributes
+nothing at four throwaway locations and answers empty in 102 bytes.
 
 Not established: header authentication (proof of work, chain selection and
-finality are the reader's header source), decoder containment, acceptance
-of the synthetic transactions by a node, reassembly on a node after boxes
-are spent, and the cost of exhaustion from index zero on a real chain. One
-limit is now concrete: a kind-4 run is one transaction's outputs, so the
+finality are the reader's header source), decoder containment and node
+equivalence, acceptance of the synthetic transactions by a node, reassembly
+on a node after boxes are spent, and the cost of exhaustion from index zero
+on a real chain. Two limits are now concrete: a transaction the reader's
+decoder refuses leaves its height without a section, so one node-valid
+transaction the decoder cannot read denies every range through it until the
+decoder is repaired; and a kind-4 run is one transaction's outputs, so the
 kind-4 bound of 131,914 bytes exceeds what the pinned node's 98,304-byte
-mempool transaction limit can carry, and the largest kind-6 record has no
+mempool transaction policy relays, and the largest kind-6 record has no
 location under this rule. No specification selects the profile.
 
 ## Windows process containment feasibility

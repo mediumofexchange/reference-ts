@@ -14,7 +14,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b";
 import { serializeTransaction } from "@fleet-sdk/serializer";
-import { Address, ErgoTree, Transaction } from "ergo-lib-wasm-nodejs";
+import { Address, Constant, ErgoTree, Transaction } from "ergo-lib-wasm-nodejs";
 
 const here = import.meta.dirname, root = resolve(here, "../..");
 const sha256 = bytes => createHash("sha256").update(bytes).digest();
@@ -24,6 +24,12 @@ const manifest = JSON.parse(readFileSync(join(here, "fixtures/manifest.json")));
 let checks = 0;
 const equal = (actual, expected, message) => { assert.deepEqual(actual, expected, message); checks++; };
 const ok = (value, message) => { assert(value, message); checks++; };
+// Node 24's source text keeps the fixtures' large integers exact.
+const parseFixture = raw => JSON.parse(raw, (_key, value, context) => {
+  if (typeof value !== "number") return value;
+  assert.match(context.source, /^-?\d+$/);
+  return BigInt(context.source);
+});
 
 // The model is compiled from source into a disposable build, as the local replay does.
 mkdirSync(join(root, "scratch"), { recursive: true });
@@ -45,6 +51,7 @@ try {
   const { encodeReplacement, replacementMessage, ROLE_OPERATOR } = await import(new URL("src/replacement.js", url));
   const { encodeRevocation, signRevocation } = await import(new URL("src/revocation.js", url));
   const wide = { maxBytes: 1n << 40n, maxEntries: 1n << 20n };
+  const b = (n, width = 32) => Buffer.alloc(width, n);
 
   // Locations: four distinct pay-to-public-key trees of throwaway keys. A
   // deployment chooses its own; the identity binds whichever it names.
@@ -85,10 +92,28 @@ try {
   };
   const oracleRoot = (version, txs) => merkle(version === 1n ? txs.map(fleetId) : [...txs.map(fleetId), ...txs.map(fleetWitness)]);
 
+  // The real genesis header, pinned: the chain's first header is at height 1 with a zero parent id,
+  // which is what the profile's genesis anchor and its "index 0 is below the genesis" rule rest on.
+  const [genesisPin] = manifest.headers;
+  const genesisRaw = readFileSync(join(here, genesisPin.file));
+  equal(hex(sha256(genesisRaw)), genesisPin.sha256, "genesis header pin before parsing");
+  const genesis = parseFixture(genesisRaw.toString("utf8"));
+  equal([genesis.height, genesis.version, genesis.id, genesis.parentId], [1n, 1n, genesisPin.headerId, "00".repeat(32)],
+    "the pinned genesis header is at height 1 with a zero parent id");
+  const genesisView = { id: Buffer.from(genesis.id, "hex"), parentId: Buffer.from(genesis.parentId, "hex"), height: genesis.height,
+    version: genesis.version, transactionsRoot: Buffer.from(genesis.transactionsRoot, "hex") };
+  const anchored = { genesis: genesisView.id, depth: 0n, scripts }, anchoredId = profile.ergoProfileIdentity(anchored);
+  const atGenesis = profile.ergoRangeVerifier(anchored, { headers: [genesisView], blocks: [] });
+  ok(atGenesis !== undefined, "the real genesis header anchors a chain");
+  equal(atGenesis.witnessedIndex(), 1n, "height 1 is witnessed at depth 0");
+  equal(atGenesis.range({ venue: anchoredId, kind: 2, subject: b(17), fromIndex: 0n, toIndex: 0n }, wide).length, 102,
+    "index 0 is below the genesis: an empty answer from the header alone");
+  equal(atGenesis.range({ venue: anchoredId, kind: 2, subject: b(17), fromIndex: 0n, toIndex: 1n }, wide), undefined, "height 1 needs its section");
+  equal(profile.ergoRangeVerifier({ ...anchored, genesis: b(1) }, { headers: [genesisView], blocks: [] }), undefined, "another genesis refuses the real header");
+
   // Synthetic contiguous chain with real signed records in register constants.
   const vlq = n => { const out = []; do { let byte = n & 0x7f; n = Math.floor(n / 128); if (n > 0) byte |= 0x80; out.push(byte); } while (n > 0); return Buffer.from(out); };
   const coll = bytes => "0e" + hex(vlq(bytes.length)) + hex(bytes);
-  const b = (n, width = 32) => Buffer.alloc(width, n);
   const operatorSecret = b(29), operator = ed25519.getPublicKey(operatorSecret);
   const otherSecret = b(31), other = ed25519.getPublicKey(otherSecret);
   const ruleSecret = b(37), rule = ed25519.getPublicKey(ruleSecret);
@@ -149,8 +174,8 @@ try {
   equal(verifier.witnessedIndex(), heights - depth, "witnessed index is the tip less the depth");
   equal(verifier.lag(), depth + 1n, "lag is the depth plus one");
   const t = verifier.witnessedIndex();
-  const ask = (kind, subject, fromIndex = 0n, toIndex = t) => {
-    const request = { venue: identity, kind, subject, fromIndex, toIndex }, bytes = verifier.range(request, wide);
+  const ask = (kind, subject, fromIndex = 0n, toIndex = t, from = verifier) => {
+    const request = { venue: identity, kind, subject, fromIndex, toIndex }, bytes = from.range(request, wide);
     return bytes === undefined ? undefined : { bytes, answer: range.decodeRangeAnswer(bytes, request, wide) };
   };
   const answers = {};
@@ -184,31 +209,32 @@ try {
   assert.throws(() => verifier.range({ venue: identity, kind: 1, subject: operator, fromIndex: 0n, toIndex: t }, { maxBytes: 300n, maxEntries: 8n }), range.RangeLimitError); checks++;
 
   // Hostile evidence: a flipped byte inside a record still decodes, as another transaction whose id fails the
-  // block's root, so output bytes are bound to the header through the decoder's id; a truncated transaction
-  // fails the strict decode and is unsupported evidence; a broken link fails the chain.
+  // block's root, so output bytes are bound to the header through the decoder's id and that height has no
+  // section; a truncated transaction fails the strict decode and is unsupported evidence; a broken link fails
+  // the chain; stray, duplicate and root-failing blocks beside the true sections change no answer.
   const original = txBytesAt.get(4n)[0], flipped = Buffer.from(original); flipped[flipped.length - 20] ^= 1;
   const reread = decodeTransaction(flipped);
   ok(reread !== undefined && hex(reread.id) !== hex(chain.blocks[3].transactions[0].id), "a flipped record byte is another transaction");
-  const substituted = { headers: chain.headers, blocks: chain.blocks.map((block, i) => (i === 3 ? { ...block, transactions: [reread, block.transactions[1]] } : block)) };
-  equal(profile.ergoRangeVerifier(candidate, substituted), undefined, "the flipped transaction fails its block's root");
+  const twin = { ...chain.blocks[3], transactions: [reread, chain.blocks[3].transactions[1]] };
+  const damaged = profile.ergoRangeVerifier(candidate, { headers: chain.headers, blocks: chain.blocks.map((block, i) => (i === 3 ? twin : block)) });
+  equal(ask(1, operator, 0n, t, damaged), undefined, "the flipped section fails its root, so ranges through height 4 are unresolved");
+  ok(ask(1, operator, 5n, t, damaged) !== undefined, "ranges past the damaged height answer");
   equal(decodeTransaction(original.subarray(0, original.length - 1)), undefined, "a truncated transaction does not decode");
+  const noisy = profile.ergoRangeVerifier(candidate, { headers: chain.headers,
+    blocks: [twin, { headerId: b(9), transactions: chain.blocks[0].transactions }, ...chain.blocks, chain.blocks[5]] });
+  equal(hex(ask(1, operator, 0n, t, noisy).bytes), hex(commitments.bytes), "a root-failing twin, a stray block and a duplicate change no answer");
   const unlinked = { ...chain, headers: chain.headers.map((h, i) => (i === 5 ? { ...h, parentId: b(0) } : h)) };
   equal(profile.ergoRangeVerifier(candidate, unlinked), undefined, "an unlinked header is no chain");
-  const gapped = { headers: chain.headers, blocks: chain.blocks.filter((_block, i) => i !== 6) };
-  const partial = profile.ergoRangeVerifier(candidate, gapped);
-  equal(partial.range({ venue: identity, kind: 4, subject: backing, fromIndex: 0n, toIndex: t }, wide), undefined, "a missing block leaves the range unresolved");
-  ok(partial.range({ venue: identity, kind: 4, subject: backing, fromIndex: 8n, toIndex: t }, wide) instanceof Uint8Array, "ranges without the gap answer");
+  const partial = profile.ergoRangeVerifier(candidate, { headers: chain.headers, blocks: chain.blocks.filter((_block, i) => i !== 6) });
+  equal(ask(4, backing, 0n, t, partial), undefined, "a missing block leaves the range unresolved");
+  ok(ask(4, backing, 8n, t, partial) !== undefined, "ranges without the gap answer");
   equal(profile.ergoRangeVerifier({ ...candidate, genesis: b(1) }, chain), undefined, "another genesis is another venue");
 
   // Real fixtures: one-block ranges at depth 0. The model's root reproduces the node's header roots for block
-  // versions 1 and 3 from decoder-derived ids, and exhaustion over every output attributes nothing.
-  const parseFixture = raw => JSON.parse(raw, (_key, value, context) => {
-    if (typeof value !== "number") return value;
-    assert.match(context.source, /^-?\d+$/);
-    return BigInt(context.source);
-  });
+  // versions 1 and 3 from decoder-derived ids; every real register constant is decoded beside sigma-rust's own
+  // constant decoder; exhaustion over every output attributes nothing at four throwaway locations.
   const sdkIndex = value => { assert(value >= 0n && value <= 0x7fffffffn); return Number(value); };
-  const fixtures = [];
+  const fixtures = [], registers = { total: 0, collByte: 0, other: 0 };
   for (const fixture of manifest.fixtures) {
     const raw = readFileSync(join(here, fixture.file));
     equal(hex(sha256(raw)), fixture.sha256, "fixture pin before parsing");
@@ -217,20 +243,30 @@ try {
     const decoded = txs.map(t => decodeTransaction(serializeTransaction(t).toBytes()));
     ok(decoded.every(d => d !== undefined), "every fixture transaction decodes");
     decoded.forEach((d, i) => equal(hex(d.id), txs[i].id, "decoded id equals the node's"));
+    for (const d of decoded) for (const output of d.outputs) for (const value of Object.values(output.registers)) {
+      const constant = Constant.decode_from_base16(hex(value));
+      try {
+        equal(hex(constant.sigma_serialize_bytes()), hex(value), "a real register constant reserializes exactly");
+        const ours = profile.collBytes(value);
+        registers.total++;
+        if (constant.dbg_tpe() === "SColl(SByte)") { equal(hex(ours), hex(constant.to_byte_array()), "Coll[Byte] bytes equal sigma-rust's"); registers.collByte++; }
+        else { equal(ours, undefined, "a constant of another type is not the shape"); registers.other++; }
+      } finally { constant.free(); }
+    }
     const view = { id: Buffer.from(header.id, "hex"), parentId: Buffer.from(header.parentId, "hex"), height: header.height, version: header.version,
       transactionsRoot: Buffer.from(header.transactionsRoot, "hex") };
     const fixtureProfile = { genesis: b(0), depth: 0n, scripts };
     const single = profile.ergoRangeVerifier(fixtureProfile, { headers: [view], blocks: [{ headerId: view.id, transactions: decoded }] });
-    ok(single !== undefined, "the model reproduces the real transaction root");
-    equal(single.witnessedIndex(), header.height, "witnessed at depth 0");
     const request = { venue: profile.ergoProfileIdentity(fixtureProfile), kind: 1, subject: b(0), fromIndex: header.height, toIndex: header.height };
-    equal(single.range(request, wide).length, 102, "exhaustion over the real block answers empty");
-    equal(profile.attributeBlock(fixtureProfile, decoded).length, 0, "no fixture output is at a location");
+    ok(single !== undefined && single.range(request, wide) !== undefined, "the model reproduces the real transaction root, so the height has its section");
+    equal(single.witnessedIndex(), header.height, "witnessed at depth 0");
+    equal(single.range(request, wide).length, 102, "exhaustion over the real block answers empty at four throwaway locations");
     const outputs = decoded.reduce((n, d) => n + d.outputs.length, 0);
     equal(String(outputs), String(txs.reduce((n, t) => n + t.outputs.length, 0)), "every output scanned");
     fixtures.push({ height: fixture.height, version: fixture.version, transactions: fixture.transactions, outputs: String(outputs),
       headerWireBytes: header.size.toString(), rootReproduced: true, emptyAnswerBytes: 102 });
   }
+  ok(registers.collByte > 0 && registers.other > 0, "the register oracle saw both shapes");
 
   Object.assign(report, {
     status: "offline-profile-candidate-only", node: process.version, checks,
@@ -239,14 +275,17 @@ try {
     sources: manifest.sources, inputManifestSha256: hex(sha256(readFileSync(join(here, "fixtures/manifest.json")))),
     files: Object.fromEntries(["experiments/ergo-range/profile-check.mjs", "experiments/ergo-range/package.json", "experiments/ergo-range/package-lock.json",
       "model/pool-v3-ergo-profile.ts", "model/pool-v3-range.ts"].map(file => [file, fileHash(file)])),
+    genesis: { height: genesis.height.toString(), version: genesis.version.toString(), id: genesis.id, parentIdZero: true,
+      headerWireBytes: genesis.size.toString(), emptyAnswerBytesAtIndexZero: 102 },
     synthetic: { heights: heights.toString(), witnessedIndex: t.toString(), transactions: String(transactions), serializedTransactionBytes: String(serializedBytes),
       headers: String(chain.headers.length), answerBytes: answers, heldCommitments: held.held.length, mergedPublications: merged.length },
-    fixtures,
+    fixtures, registerConstants: registers,
     ergoBounds: { maxBoxBytes: 4096, mempoolMaxTransactionBytes: 98304, kind4RecordBound: range.MAX_RANGE_RECORD_BYTES[4],
-      note: "a kind-4 object is one transaction's run of outputs, so a publication above what one transaction carries has no location here" },
+      note: "a kind-4 object is one transaction's run of outputs; under the pinned mempool policy a larger publication has no location here" },
     limitations: [
       "Headers are the reader's own source: linkage, contiguity and the genesis anchor are checked; proof of work, chain selection and finality are not.",
-      "Synthetic blocks are serialized by Fleet from local objects and were never accepted by a node; the fixtures are three non-contiguous real blocks.",
+      "A transaction the reader's decoder refuses is unsupported evidence: its height has no section and every range through it stays unresolved until the decoder is repaired, a denial one node-valid transaction can trigger.",
+      "Synthetic blocks are serialized by Fleet from local objects and were never accepted by a node; the fixtures are three non-contiguous real blocks and the real genesis header.",
       "sigma-rust's strict round trip is the decoder boundary; it has no hard memory limit and no node-equivalence proof (see the decoder probe).",
       "No range from index zero was read on a real chain; the cost of exhaustion over real block bytes is not measured here.",
       "No runtime path, spec selection, publication, chunking on a node or C2.10.13 completeness claim for any real venue follows.",

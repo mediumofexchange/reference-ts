@@ -52,5 +52,16 @@
         "5"
       ]
     }
+  ],
+  "headers": [
+    {
+      "file": "fixtures/mainnet-genesis-header.json",
+      "sha256": "0488601088dddd9ab8cfa21d98a48dfce008c767bf325592164e5d38dc5bb16b",
+      "height": "1",
+      "version": "1",
+      "headerId": "b0244dfc267baca974a4caee06120321562784303a8a688976ae56170e4d175b",
+      "parentId": "0000000000000000000000000000000000000000000000000000000000000000",
+      "source": "https://node.ergo.watch/blocks/b0244dfc267baca974a4caee06120321562784303a8a688976ae56170e4d175b/header"
+    }
   ]
 }

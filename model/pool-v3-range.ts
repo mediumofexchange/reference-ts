@@ -70,10 +70,14 @@ export function sameRequest(a: RangeRequest, b: RangeRequest): boolean {
   return a.kind === b.kind && a.fromIndex === b.fromIndex && a.toIndex === b.toIndex &&
     compareBytes(a.venue, b.venue) === 0 && compareBytes(a.subject, b.subject) === 0;
 }
+/** Each field is read once, then judged and copied, so a caller's accessor
+ * cannot pass one value to the check and another to the copy. */
 export function copyRequest(r: RangeRequest): RangeRequest {
-  if (!isWellFormedRequest(r)) throw new EncodingError("malformed range request");
-  return Object.freeze({ venue: copyBytes(r.venue), kind: r.kind, subject: copyBytes(r.subject),
-    fromIndex: r.fromIndex, toIndex: r.toIndex });
+  if (r === null || typeof r !== "object") throw new EncodingError("malformed range request");
+  const captured = { venue: r.venue, kind: r.kind, subject: r.subject, fromIndex: r.fromIndex, toIndex: r.toIndex };
+  if (!isWellFormedRequest(captured)) throw new EncodingError("malformed range request");
+  return Object.freeze({ venue: copyBytes(captured.venue), kind: captured.kind, subject: copyBytes(captured.subject),
+    fromIndex: captured.fromIndex, toIndex: captured.toIndex });
 }
 
 /** §13.1's structure over caller objects, read once: every entry's fields

@@ -17,7 +17,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { ByteWriter, compareBytes, copyBytes, EncodingError } from "../src/bytes.js";
 import { utf8Encoder } from "../src/contexts.js";
-import { encodeRangeAnswer, isWellFormedRequest, MAX_RANGE_RECORD_BYTES, PUBLICATION_RANGE,
+import { copyRequest, encodeRangeAnswer, MAX_RANGE_RECORD_BYTES, PUBLICATION_RANGE,
   type RangeEntry, type RangeLimits, type RangeRequest, type RecordKind } from "./pool-v3-range.js";
 
 export const ERGO_PROFILE_CONTEXT = "moe/venue/ergo/v2";
@@ -35,34 +35,40 @@ export interface ErgoProfile {
   readonly depth: bigint;
   readonly scripts: Readonly<Record<RecordKind, Uint8Array>>;
 }
-function requireProfile(profile: ErgoProfile): void {
-  if (profile === null || typeof profile !== "object" || !isBytes(profile.genesis, 32) || !u64(profile.depth) ||
-      profile.depth === MAX_U64 || profile.scripts === null || typeof profile.scripts !== "object") {
+/** The profile is read once and owned: the identity is hashed over, and every
+ * output attributed by, the same bytes (§13.1: two attribution rules are two venues). */
+function ownProfile(profile: ErgoProfile): ErgoProfile {
+  if (profile === null || typeof profile !== "object") throw new EncodingError("invalid Ergo profile");
+  const { genesis, depth, scripts } = profile;
+  if (!isBytes(genesis, 32) || !u64(depth) || depth === MAX_U64 || scripts === null || typeof scripts !== "object") {
     throw new EncodingError("invalid Ergo profile");
   }
+  const owned: Partial<Record<RecordKind, Uint8Array>> = {};
   for (const kind of RECORD_KINDS) {
-    const script = profile.scripts[kind];
+    const script = scripts[kind];
     if (!isBytes(script) || script.length === 0) throw new EncodingError("invalid Ergo profile script");
-    // One location attributes to one kind; two kinds at one script would make one object two objects.
+    owned[kind] = copyBytes(script);
+  }
+  // One location attributes to one kind; two kinds at one script would make one object two objects.
+  for (const kind of RECORD_KINDS) {
     for (const other of RECORD_KINDS) {
-      if (other < kind && compareBytes(profile.scripts[other], script) === 0) throw new EncodingError("two kinds at one location");
+      if (other < kind && compareBytes(owned[other]!, owned[kind]!) === 0) throw new EncodingError("two kinds at one location");
     }
   }
+  return Object.freeze({ genesis: copyBytes(genesis), depth, scripts: Object.freeze(owned as Record<RecordKind, Uint8Array>) });
 }
 /** Naming the venue is agreeing the chain, the depth and the attribution rule (C2.3.2, §13.1). */
 export function ergoProfileIdentity(profile: ErgoProfile): Uint8Array {
-  requireProfile(profile);
-  const w = new ByteWriter();
+  const owned = ownProfile(profile), w = new ByteWriter();
   w.lengthPrefixed(utf8Encoder.encode(ERGO_PROFILE_CONTEXT));
-  w.key32(profile.genesis, "genesis header id");
-  w.u64(profile.depth);
-  for (const kind of RECORD_KINDS) w.lengthPrefixed(profile.scripts[kind]);
+  w.key32(owned.genesis, "genesis header id");
+  w.u64(owned.depth);
+  for (const kind of RECORD_KINDS) w.lengthPrefixed(owned.scripts[kind]);
   return sha256(w.finish());
 }
 /** C2.3.5: a transaction submitted at clock `c` lands at height `c + depth + 1` at the earliest. */
 export function ergoLag(profile: ErgoProfile): bigint {
-  requireProfile(profile);
-  return profile.depth + 1n;
+  return ownProfile(profile).depth + 1n;
 }
 
 /** Header fields the verifier reads; the reader's header source authenticates them. */
@@ -101,11 +107,11 @@ export function merkleRoot(leaves: readonly Uint8Array[]): Uint8Array {
   } while (level.length > 1);
   return level[0]!;
 }
-/** Block version 1 commits to the transaction ids alone; later versions to
- * all ids followed by all witness ids, as the pinned node reads them. */
+/** Block versions above 1 commit to all transaction ids followed by all
+ * witness ids; version 1 to the ids alone, as the pinned node reads them. */
 export function transactionsRoot(version: bigint, transactions: readonly ErgoTransactionView[]): Uint8Array {
   const ids = transactions.map(transaction => transaction.id);
-  return merkleRoot(version === 1n ? ids : [...ids, ...transactions.map(transaction => transaction.witnessId)]);
+  return merkleRoot(version > 1n ? [...ids, ...transactions.map(transaction => transaction.witnessId)] : ids);
 }
 
 /** A `Coll[Byte]` constant as a box carries it: type code 0x0e, a minimal
@@ -131,14 +137,16 @@ export function collBytes(constant: Uint8Array): Uint8Array | undefined {
 export interface AttributedObject { readonly kind: RecordKind; readonly subject: Uint8Array; readonly ordinal: bigint; readonly record: Uint8Array }
 interface Piece { readonly kind: RecordKind; readonly subject: Uint8Array; readonly piece: Uint8Array }
 /** Location is the exact ErgoTree of one kind; shape is R4 a 32-byte
- * `Coll[Byte]` (the subject) and R5 a `Coll[Byte]` (the bytes). Other
- * registers are not read. */
+ * `Coll[Byte]` (the subject) and R5 a `Coll[Byte]` (the bytes), both the
+ * output's own registers. Other registers are not read. */
 function attributeOutput(profile: ErgoProfile, output: ErgoOutputView): Piece | undefined {
   if (output === null || typeof output !== "object" || !isBytes(output.ergoTree) ||
       output.registers === null || typeof output.registers !== "object") throw new EncodingError("invalid Ergo output view");
   const kind = RECORD_KINDS.find(candidate => compareBytes(profile.scripts[candidate], output.ergoTree) === 0);
   if (kind === undefined) return undefined;
-  const r4 = output.registers["R4"], r5 = output.registers["R5"];
+  const { registers } = output;
+  const r4 = Object.hasOwn(registers, "R4") ? registers["R4"] : undefined;
+  const r5 = Object.hasOwn(registers, "R5") ? registers["R5"] : undefined;
   if (r4 === undefined || r5 === undefined) return undefined;
   const subject = collBytes(r4), piece = collBytes(r5);
   if (subject === undefined || subject.length !== 32 || piece === undefined) return undefined;
@@ -151,14 +159,7 @@ export function ergoOrdinal(transaction: number, output: number): bigint {
       BigInt(transaction) > MAX_U32 || BigInt(output) > MAX_U32) throw new EncodingError("Ergo position out of range");
   return (BigInt(transaction) << 32n) | BigInt(output);
 }
-/** Every object the profile attributes in one block's transaction section,
- * in venue order. Kinds 1–3 are one output each, at exactly the kind's
- * length. A kind-4 object is the maximal run of adjacent outputs of one
- * transaction at the kind-4 location with one subject, its record the
- * pieces' bytes in output order, its ordinal the first output's; a run
- * longer than the kind's bound is no object. */
-export function attributeBlock(profile: ErgoProfile, transactions: readonly ErgoTransactionView[]): readonly AttributedObject[] {
-  requireProfile(profile);
+function attributeOwned(profile: ErgoProfile, transactions: readonly ErgoTransactionView[]): readonly AttributedObject[] {
   if (!Array.isArray(transactions)) throw new EncodingError("invalid Ergo transactions");
   const objects: AttributedObject[] = [];
   transactions.forEach((transaction, position) => {
@@ -185,14 +186,25 @@ export function attributeBlock(profile: ErgoProfile, transactions: readonly Ergo
       if (record.length <= MAX_RANGE_RECORD_BYTES[PUBLICATION_RANGE]) {
         objects.push(Object.freeze({ kind: PUBLICATION_RANGE, subject: copyBytes(first.subject), ordinal, record }));
       }
+      // The boundary output is read again as the next object's first candidate.
       at = end - 1;
     }
   });
   return Object.freeze(objects);
 }
+/** Every object the profile attributes in one block's transaction section,
+ * in venue order. Kinds 1–3 are one output each, at exactly the kind's
+ * length. A kind-4 object is the maximal run of adjacent outputs of one
+ * transaction at the kind-4 location with one subject, its record the
+ * pieces' bytes in output order, its ordinal the first output's; a run
+ * longer than the kind's bound is no object. */
+export function attributeBlock(profile: ErgoProfile, transactions: readonly ErgoTransactionView[]): readonly AttributedObject[] {
+  return attributeOwned(ownProfile(profile), transactions);
+}
 
-/** The shape `scripts/pool/v3/local-replay.mjs` reads: the venue's constants
- * and one §13 answer per request, or none where the evidence does not establish it. */
+/** The venue's constants and one §13 answer per request, or none where the
+ * evidence does not establish it. A reader's adapter binds its own answer
+ * budget when it hands `range` to a replay. */
 export interface ErgoRangeVerifier {
   readonly identity: Uint8Array;
   lag(): bigint;
@@ -224,20 +236,25 @@ function requireEvidence(evidence: ErgoRangeEvidence): void {
   }
 }
 /** §13.2 over the reader's retained evidence. The headers must be one
- * contiguous linked chain; a chain starting at height 1 must start at the
- * profile's genesis; every block must belong to a header and reproduce its
- * transaction root. Otherwise there is no verifier, as there is no answer
- * for a request the evidence does not cover: a range not yet witnessed under
- * the depth, a height without its block, or heights below the first header
- * unless the chain is anchored at the genesis, below which nothing exists.
- * Evidence is read once here; nothing of the caller's is read later. */
+ * contiguous linked chain, and a chain starting at height 1 must start at
+ * the profile's genesis; otherwise there is no verifier. A block supplies
+ * the section of a height only where it belongs to a header of the chain
+ * and reproduces that header's transaction root; a block of another chain,
+ * a second block for an established height or one failing its root is
+ * passed over, so no supplier can deny every read by adding a block, and a
+ * height whose section is missing leaves only the ranges through it
+ * unresolved. There is no answer for a range not yet witnessed under the
+ * depth, for a height without its section, or for heights below the first
+ * header unless the chain is anchored at the genesis, below which nothing
+ * exists. The profile and the evidence are read during construction only;
+ * each request is copied before it is answered. */
 export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvidence): ErgoRangeVerifier | undefined {
-  requireProfile(profile);
+  const owned = ownProfile(profile);
   requireEvidence(evidence);
-  const identity = ergoProfileIdentity(profile), { headers, blocks } = evidence, depth = profile.depth;
+  const identity = ergoProfileIdentity(owned), { headers, blocks } = evidence, depth = owned.depth;
   const first = headers[0];
   if (first === undefined || first.height < GENESIS_HEIGHT) return undefined;
-  if (first.height === GENESIS_HEIGHT && (compareBytes(first.parentId, ZERO32) !== 0 || compareBytes(first.id, profile.genesis) !== 0)) return undefined;
+  if (first.height === GENESIS_HEIGHT && (compareBytes(first.parentId, ZERO32) !== 0 || compareBytes(first.id, owned.genesis) !== 0)) return undefined;
   const byId = new Map<string, ErgoHeaderView>();
   for (let i = 0; i < headers.length; i++) {
     const header = headers[i]!, previous = headers[i - 1];
@@ -245,15 +262,15 @@ export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvide
     if (previous !== undefined && (header.height !== previous.height + 1n || compareBytes(header.parentId, previous.id) !== 0)) return undefined;
     byId.set(bytesToHex(header.id), header);
   }
-  const objectsAt = new Map<bigint, readonly AttributedObject[]>();
+  const sectionAt = new Map<bigint, readonly AttributedObject[]>();
   for (const block of blocks) {
     const header = byId.get(bytesToHex(block.headerId));
-    if (header === undefined || objectsAt.has(header.height) || block.transactions.length === 0 ||
-        compareBytes(transactionsRoot(header.version, block.transactions), header.transactionsRoot) !== 0) return undefined;
+    if (header === undefined || sectionAt.has(header.height) || block.transactions.length === 0 ||
+        compareBytes(transactionsRoot(header.version, block.transactions), header.transactionsRoot) !== 0) continue;
     try {
-      objectsAt.set(header.height, attributeBlock(profile, block.transactions));
+      sectionAt.set(header.height, attributeOwned(owned, block.transactions));
     } catch (error) {
-      if (error instanceof EncodingError) return undefined;
+      if (error instanceof EncodingError) continue;
       throw error;
     }
   }
@@ -263,20 +280,26 @@ export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvide
     lag: () => depth + 1n,
     witnessedIndex: () => witnessed,
     range(request: RangeRequest, limits: RangeLimits): Uint8Array | undefined {
-      if (!isWellFormedRequest(request) || compareBytes(request.venue, identity) !== 0 || request.toIndex > witnessed) return undefined;
-      const low = request.fromIndex < GENESIS_HEIGHT ? GENESIS_HEIGHT : request.fromIndex;
+      // The request is read once, into the reader's own copy, before anything is judged.
+      let own: RangeRequest;
+      try { own = copyRequest(request); } catch (error) {
+        if (error instanceof EncodingError) return undefined;
+        throw error;
+      }
+      if (compareBytes(own.venue, identity) !== 0 || own.toIndex > witnessed) return undefined;
+      const low = own.fromIndex < GENESIS_HEIGHT ? GENESIS_HEIGHT : own.fromIndex;
       if (low < firstHeight) return undefined;
       const entries: RangeEntry[] = [];
-      for (let height = low; height <= request.toIndex; height++) {
-        const objects = objectsAt.get(height);
+      for (let height = low; height <= own.toIndex; height++) {
+        const objects = sectionAt.get(height);
         if (objects === undefined) return undefined;
         const matching = objects
-          .filter(object => object.kind === request.kind && compareBytes(object.subject, request.subject) === 0)
-          .map(object => ({ index: height, ordinal: request.kind === PUBLICATION_RANGE ? object.ordinal : 0n, record: copyBytes(object.record) }));
-        if (request.kind !== PUBLICATION_RANGE) matching.sort((a, b) => compareBytes(a.record, b.record));
+          .filter(object => object.kind === own.kind && compareBytes(object.subject, own.subject) === 0)
+          .map(object => ({ index: height, ordinal: own.kind === PUBLICATION_RANGE ? object.ordinal : 0n, record: copyBytes(object.record) }));
+        if (own.kind !== PUBLICATION_RANGE) matching.sort((a, b) => compareBytes(a.record, b.record));
         for (const entry of matching) entries.push(entry);
       }
-      return encodeRangeAnswer({ request, entries }, limits);
+      return encodeRangeAnswer({ request: own, entries }, limits);
     },
   });
 }

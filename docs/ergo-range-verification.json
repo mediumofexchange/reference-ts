@@ -8,7 +8,7 @@
     "scrypto": "https://github.com/ergoplatform/scrypto/tree/70b36102b2ed8f7a443cfc92f9f135665d777a37",
     "fleetSerializer": "https://github.com/fleet-sdk/fleet/tree/7d06847afea124c5fdc71c0e8d813db0a1791978"
   },
-  "inputManifestSha256": "00976f84cf1e311d5f10ec6edeb58290aadb43a83856529b453da1c56907620e",
+  "inputManifestSha256": "2ee407f63c1297ca3262762a1534f5526694f4ef273658cf1060ef1d51c85c07",
   "files": {
     "check.mjs": "92fb2522e427c1b65d4810e191466ee3f4bffff5f2e3f89a306a33c6c7bc31e0",
     "package.json": "04c62481ee551c2cf2dd088d2af2afe68b1ba74c0cbc40f41b92b8e85139de89",

@@ -9,7 +9,7 @@
     "provenance": "npm gitHead metadata; package integrity pinned, build not independently reproduced",
     "wasmSha256": "5c39a0933a07031492efbe956fb4f957da745e295a94c06efddb475d9d1db4e5"
   },
-  "inputManifestSha256": "00976f84cf1e311d5f10ec6edeb58290aadb43a83856529b453da1c56907620e",
+  "inputManifestSha256": "2ee407f63c1297ca3262762a1534f5526694f4ef273658cf1060ef1d51c85c07",
   "files": {
     "decoder-check.mjs": "4429cd582eee5d639bc0a485e49f6caa3a407f98b6f3ffa39ff7dc221331202b",
     "decoder-cases.mjs": "d71d5f65edce30502665d4df5c3adb68b694b2f12ee33b56532aa07531ca6f9e",

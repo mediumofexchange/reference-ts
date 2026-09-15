@@ -1,59 +1,55 @@
 # Current work
 
-Updated: 2026-09-14
+Updated: 2026-09-15
 
 ## Goal
 
-Dependency replay in the local experiment: every carrying checkpoint of the
-original operator's segment is classified from its own trail (C2.10.11) with
-last-valid-prefix continuity (C2.10.12, pool-v3 §7.1), and the party in force
-at every index follows C2.5's walk over the kind-2 answers under the verifier's
-lag. Implementation: branch `feat/v3-dependency-replay`, d8a6649. Companion:
-`spec/v3-dependency-replay`, 3ed1800 (pool-v3 §7.1 fixes the continuity
-reading). No production runtime, circuit, key, dependency or host-control
-change.
+A venue profile candidate behind pool-v3 §13 answers: the Ergo full-block
+verifier, with attribution bound to the venue identity, kind-4 ordinals from
+transaction then output order, and completeness by exhaustion over
+root-checked block sections behind a linked header chain. Implementation:
+branch `feat/v3-ergo-venue-profile`. No specification change: §13 still
+selects no profile. No runtime, circuit, key, dependency or host-control
+change; the experiment's check script gains a third step.
 
 ## Status
 
-- Expected result: the range reader passes or refuses each carrying
-  checkpoint with its own evidence. A second checkpoint of the segment that
-  extends the first replays as the selection with the first classified
-  valid; a stale twin, diverging evidence or a bad suffix is excluded and
-  passed; a valid later checkpoint makes the selection `superseded-selection`;
-  a handover in force before the selection's index makes it
-  `lapsed-selection`; missing or ambiguous dependency evidence is unresolved
-  before any proof. No fixture assumption replaces a read.
-- `model/pool-v3-range.ts` gains `replacementChain`/`linkInForce` (C2.5.3–5
-  over admitted entries, checked differentially against `successionOf`);
-  `local-replay.mjs` replays each checkpoint through one `replayTrail`,
-  resolves dependencies by snapshot digest and trail authentication, and
-  reads every term's commitments; the fixture venue carries a lag.
-- Unsupported and refused explicitly: a declared silence clause (the
-  C2b.6.1 clock is not read), a successor's carrying commitment or a
-  same-operator scope change (new segments, imports), recovery publications.
-- Independent adversarial review found one blocker (the revocation rule
-  re-judged a prefix an earlier valid checkpoint had finalized), fixed with
-  cases; six optional findings adopted or recorded in the decision entry.
-  The readback confirmed the fixes; no material finding remains.
-- [Active decision](decisions/2026-09.md#2026-09-14--classify-same-segment-dependencies-from-their-own-trails).
+- Expected result: for a request naming the candidate identity, the verifier
+  answers from the reader's headers and decoded block sections exactly the
+  objects at the kind's location with the profile's shape, at their inclusion
+  height and venue order, or returns no answer where the evidence does not
+  cover the range, is unlinked, fails a root, is above the witnessed index
+  or refuses to decode. [Candidate profile](docs/ERGO_VENUE_PROFILE.md);
+  [active decision](decisions/2026-09.md#2026-09-15--candidate-ergo-venue-profile-full-block-exhaustion-behind-13-answers).
+- `model/pool-v3-ergo-profile.ts`: identity over genesis, depth and four
+  exact ErgoTrees; `R4` subject and `R5` bytes as `Coll[Byte]` constants;
+  kinds 1–3 at exact length, kind 4 as one transaction's maximal run of
+  adjacent same-subject outputs; ordinal `position · 2^32 + index`; roots
+  recomputed from decoder ids under the pinned node's rule.
+- `experiments/ergo-range/profile-check.mjs` drives the model through Fleet
+  and sigma-rust on a twelve-height synthetic chain and the three fixture
+  blocks; `npm run check:ergo:range` runs it third.
+- Findings recorded, not resolved: the kind-4 bound (131914 bytes) exceeds
+  the pinned node's 98304-byte mempool transaction limit, so the largest
+  kind-6 record has no location under the one-transaction run rule; chain
+  and revocation reads from index zero are a scan from the genesis on a
+  real chain.
+- Independent adversarial review: in progress; findings and their
+  disposition go in the decision entry before merge.
 
 ## Evidence
 
-- Baseline main 2d246bf: CI 34840706258 passed; delivery main 8b0dadc: CI
-  34899459533 passed; both repositories at parity.
-- Range/chain codec tests: `test/pool-v3-range.test.ts` 17 passed, including
-  12 chain scenarios agreeing with the runtime walk.
-- `check:pool:local-replay` on the reviewed sources: 31 groups and 9 real
-  proofs passed (a fourth statement extends the segment), including the
-  dependency, exclusion, evidence and chain groups. [Retained report](docs/pool-v3-local-replay-verification.json):
-  47,665-byte single package, 110,054-byte dependency package (two
-  checkpoints, three directory preimages); dependency audit at checkpoint
-  index 7 with carrying classes valid/valid, outstanding 5; the fresh worker
-  agrees on audit, receiver and dependency results.
-- Full `npm run check` (1925 tests plus package, service, wallet, crash and
-  spent-set checks) passed before the review fixes; those fixes touched only
-  `scripts/pool/v3` (covered by the final harness run) and docs
-  (`check:docs` rerun); typecheck and build clean.
+- Baseline main 559bfdf: CI passed for 8b0dadc (34899459533).
+- `test/pool-v3-ergo-profile.test.ts`: 8 tests passed; full `npm test`
+  1933 passed; `npm run typecheck` clean; `npm run check:docs` OK.
+- `npm run check:ergo:range` on the committed sources: block-root and
+  decoder reports regenerated (only the package hash changed);
+  [profile report](docs/ergo-range-profile-verification.json): 121 checks;
+  synthetic chain 15 transactions, 11,896 serialized bytes; answers 1,038
+  (commitments, five held of six carried), 355 (replacement, successor
+  pending), 334 (revocation at first witnessing), 8,284 (publications in
+  venue order); fixture roots reproduced for versions 1 and 3, 65 outputs
+  scanned, empty answers of 102 bytes.
 
 ## Existing local product and custody boundary
 
@@ -75,24 +71,28 @@ change.
 
 ## Next
 
-1. A venue profile candidate for §13 answers: the Ergo full-block
-   verifier from `experiments/ergo-range` (attribution bound to the venue id,
-   kind-4 ordinals from transaction/output order, completeness by exhaustion
-   against authenticated headers). A8 is a stated trust assumption until then.
-2. Remaining local-experiment dependencies after that: the C2b.6.1 clock over
-   the classified carrying checkpoints, and a successor's or scope-changed
-   segment with its C2.10.5 imports.
-3. Configuration approval stays disabled until all adoption prerequisites
+1. Close the review, merge and push, check CI for the delivery commit.
+2. Decide the kind-4 bound question with P2 (publication on a node): runs
+   across transactions in the profile, or a smaller kind-6 record in
+   pool-v3 §6; then P4's real-chain cost of exhaustion from index zero and
+   a possible start-index rule.
+3. Remaining local-experiment dependencies: the C2b.6.1 clock over the
+   classified carrying checkpoints, and a successor's or scope-changed
+   segment with its C2.10.5 imports; then wire the profile verifier into
+   the local replay in place of the fixture venue.
+4. Configuration approval stays disabled until all adoption prerequisites
    hold; device qualification and external publication remain separate
    dependencies. Do not alter this workstation's controls.
 
 ## Open questions
 
-- Reassessed 2026-09-14: unchanged, roughly **50% done / 50% remaining**,
-  plausible range **40-60%**. Classification with continuity and the chain
-  walk are reusable; the venue profile behind the answers, runtime recovery,
-  qualified custody and user operation remain the largest blocks.
-- Switch to a fresh instance for the venue-profile slice: this session's
-  context is long and that slice reads `experiments/ergo-range` and the
-  Ergo header/block rules instead of C2.10. This is a context-efficiency
-  recommendation, not measured model performance.
+- Reassessed 2026-09-15: unchanged, roughly **50% done / 50% remaining**,
+  plausible range **40-60%**. The profile candidate is reusable behind the
+  answers, but header authentication, decoder containment, publication on
+  a node, runtime recovery, qualified custody and user operation remain
+  the largest blocks.
+- Stay with the current instance for the review close and delivery; switch
+  to a fresh instance for the kind-4 bound and P2 work, which reads
+  pool-v3 §6 sizes and the node's transaction limits rather than this
+  slice's sources. This is a context-efficiency recommendation, not
+  measured model performance.
