@@ -8,7 +8,7 @@ The no-commitment clock in the local experiment: under a declared silence
 clause the walk that classifies the original segment's carrying checkpoints
 reads C2b.6.1's clock at the judging index, the segment's silence boundary
 after its opening checkpoint, and the lapse of any continuation witnessed
-past it (C2b.4.1). Implementation: branch `feat/v3-silence-clock`, d5e6166.
+past it (C2b.4.1). Delivered to main at b18cc1a (feature d5e6166, review fixes 51b33f8 and e3ec24f).
 No specification change: the rules are pool-fault §5 and pool-recovery
 C2b.6.1/C2b.4.1 as adopted 2026-09-08. No runtime, circuit, key, dependency
 or host-control change.
@@ -43,7 +43,8 @@ or host-control change.
 
 ## Evidence
 
-- Baseline main 72d54fd: CI 34961693625 passed.
+- Baseline main 72d54fd: CI 34961693625 passed. Delivery main b18cc1a:
+  CI 34989288167 passed on all seven jobs; both repositories at parity.
 - `npm run check:pool:local-replay` on the final sources: 32 groups and 9
   real proofs passed, including the clock group's nineteen cases (gaps
   closed and open, lapse and refusal, supersession at the last allowed
@@ -73,14 +74,13 @@ or host-control change.
 
 ## Next
 
-1. Close the review, merge and push, check CI for the delivery commit.
-2. A successor's or scope-changed segment with its C2.10.5 imports in the
+1. A successor's or scope-changed segment with its C2.10.5 imports in the
    local replay, then wire the candidate Ergo profile verifier into it in
    place of the fixture venue (an adapter binds the budget).
-3. P2 (publication on a node) confirms the measured 24-piece transaction;
+2. P2 (publication on a node) confirms the measured 24-piece transaction;
    P4 measures exhaustion from index zero on a real chain; decoder node
    equivalence is a selection prerequisite.
-4. Configuration approval stays disabled until all adoption prerequisites
+3. Configuration approval stays disabled until all adoption prerequisites
    hold; device qualification and external publication remain separate
    dependencies. Do not alter this workstation's controls.
 
