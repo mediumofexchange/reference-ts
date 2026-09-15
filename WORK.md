@@ -39,8 +39,9 @@ key, dependency or host-control change.
 
 ## Evidence
 
-- Baseline main 559bfdf: CI 34900291794 passed. Delivery main 1d8f735:
-  CI 34958100723 in progress at handoff; check its result first.
+- Baseline main 559bfdf: CI 34900291794 passed. Delivery main 8c21d25
+  (code at 1d8f735, handoff after): CI 34958350541 passed on all seven
+  jobs; both repositories at parity.
 - `test/pool-v3-ergo-profile.test.ts`: 9 tests passed; full `npm test`
   1934 passed on 6f4e1e7, affected tests rerun on the final sources;
   typecheck and `npm run check:docs` clean.
@@ -73,16 +74,15 @@ key, dependency or host-control change.
 
 ## Next
 
-1. Record CI 34958100723's result for 1d8f735.
-2. Decide the kind-4 bound with P2 (publication on a node): runs across
+1. Decide the kind-4 bound with P2 (publication on a node): runs across
    transactions in the profile, or a smaller kind-6 record in pool-v3 §6;
    then P4's real-chain cost of exhaustion from index zero and a possible
    start-index rule. Decoder node equivalence is a selection prerequisite.
-3. Remaining local-experiment dependencies: the C2b.6.1 clock over the
+2. Remaining local-experiment dependencies: the C2b.6.1 clock over the
    classified carrying checkpoints, and a successor's or scope-changed
    segment with its C2.10.5 imports; then wire the profile verifier into
    the local replay in place of the fixture venue (an adapter binds the budget).
-4. Configuration approval stays disabled until all adoption prerequisites
+3. Configuration approval stays disabled until all adoption prerequisites
    hold; device qualification and external publication remain separate
    dependencies. Do not alter this workstation's controls.
 
