@@ -1,7 +1,7 @@
 {
   "status": "offline-profile-candidate-only",
   "node": "v24.6.0",
-  "checks": 242,
+  "checks": 247,
   "profile": {
     "context": "moe/venue/ergo/v2",
     "identity": "cabee4f5548ee624a8010c9f5bb17a9f78025914e0daf14d68fcd95b240aeb4c",
@@ -22,7 +22,7 @@
   },
   "inputManifestSha256": "2ee407f63c1297ca3262762a1534f5526694f4ef273658cf1060ef1d51c85c07",
   "files": {
-    "experiments/ergo-range/profile-check.mjs": "43c2e015c58821c2c09f7a86ea9a3fb4054b39fc81abc1ee07b47572dad2e2cb",
+    "experiments/ergo-range/profile-check.mjs": "a5cc3c2ce74718117f293cd798fc870df2f2185484f35ee4c25c10a3346eb600",
     "experiments/ergo-range/package.json": "04c62481ee551c2cf2dd088d2af2afe68b1ba74c0cbc40f41b92b8e85139de89",
     "experiments/ergo-range/package-lock.json": "3c2055dc1a71712fb19a99eb895794c392d9e2c169e5a1d6a0d697ce03b9f79e",
     "model/pool-v3-ergo-profile.ts": "e29de9a4c260f50715fb2786db9a53a10f596e211584853dfaad3e1ce7b91e6e",
@@ -85,11 +85,21 @@
     "collByte": 42,
     "other": 15
   },
-  "ergoBounds": {
+  "capacity": {
     "maxBoxBytes": 4096,
     "mempoolMaxTransactionBytes": 98304,
-    "kind4RecordBound": 131914,
-    "note": "a kind-4 object is one transaction's run of outputs; under the pinned mempool policy a larger publication has no location here"
+    "maxPieceBytes": 3981,
+    "piecesPerTransaction": 24,
+    "transactionBytes": 97526,
+    "payloadCapacity": 95544,
+    "observedProofBytes": 14656,
+    "releasePublicationBytes": 15498,
+    "releasePieces": 4,
+    "demandPublicationBytes": 15330,
+    "requestPublicationBytes": 15042,
+    "largestProofThatFits": 94702,
+    "frameCeiling": 131914,
+    "note": "a kind-4 object is one transaction's run of outputs; a configuration is publishable here only where its largest publication fits one transaction"
   },
   "limitations": [
     "Headers are the reader's own source: linkage, contiguity and the genesis anchor are checked; proof of work, chain selection and finality are not.",
@@ -97,6 +107,7 @@
     "Synthetic blocks are serialized by Fleet from local objects and were never accepted by a node; the fixtures are three non-contiguous real blocks and the real genesis header.",
     "sigma-rust's strict round trip is the decoder boundary; it has no hard memory limit and no node-equivalence proof (see the decoder probe).",
     "No range from index zero was read on a real chain; the cost of exhaustion over real block bytes is not measured here.",
+    "Capacity is measured by serialization against the box limit and the pinned mempool policy; no transaction was relayed or accepted by a node.",
     "No runtime path, spec selection, publication, chunking on a node or C2.10.13 completeness claim for any real venue follows."
   ]
 }

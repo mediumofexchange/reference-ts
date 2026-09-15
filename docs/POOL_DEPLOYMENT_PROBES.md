@@ -636,7 +636,7 @@ each request are read once into owned copies before they are judged.
 
 `experiments/ergo-range/profile-check.mjs` compiles the model and drives it
 through the pinned Fleet serializer and sigma-rust decoder. The
-[retained report](ergo-range-profile-verification.json) has 242 passing
+[retained report](ergo-range-profile-verification.json) has 247 passing
 checks. The mainnet genesis header, pinned as a fixture (height 1, version
 1, a zero parent id, 279 wire bytes), anchors a chain from which index 0
 answers empty in 102 bytes while height 1 needs its section. A
@@ -667,13 +667,18 @@ Not established: header authentication (proof of work, chain selection and
 finality are the reader's header source), decoder containment and node
 equivalence, acceptance of the synthetic transactions by a node, reassembly
 on a node after boxes are spent, and the cost of exhaustion from index zero
-on a real chain. Two limits are now concrete: a transaction the reader's
-decoder refuses leaves its height without a section, so one node-valid
-transaction the decoder cannot read denies every range through it until the
-decoder is repaired; and a kind-4 run is one transaction's outputs, so the
-kind-4 bound of 131,914 bytes exceeds what the pinned node's 98,304-byte
-mempool transaction policy relays, and the largest kind-6 record has no
-location under this rule. No specification selects the profile.
+on a real chain. One limit is concrete: a transaction the reader's decoder
+refuses leaves its height without a section, so one node-valid transaction
+the decoder cannot read denies every range through it until the decoder is
+repaired. One is measured: a kind-4 run is one transaction's outputs, and
+under this layout a box carries a 3,981-byte piece and a transaction under
+the pinned 98,304-byte mempool policy carries 24 pieces, 95,544 bytes; the
+largest publication under the observed 14,656-byte proofs is a release of
+15,498 bytes in four pieces, and any proof up to 94,702 bytes fits, so the
+frame's 131,914-byte ceiling is a parser bound no configuration-conformant
+publication approaches. A configuration is publishable here only where its
+largest publication fits one transaction. No specification selects the
+profile.
 
 ## Windows process containment feasibility
 

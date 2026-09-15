@@ -269,6 +269,27 @@ try {
   }
   ok(registers.collByte > 0 && registers.other > 0, "the register oracle saw both shapes");
 
+  // Capacity under the profile's layout: the largest R5 piece whose box stays within the 4,096-byte box
+  // limit with its 34 bytes of transaction id and index, and the most such boxes one transaction carries
+  // under the pinned node's 98,304-byte mempool policy. The largest publication a configuration can
+  // produce is fixed by its pinned proof size (pool-v3 §11.1); 14,656 bytes is every retained relation's.
+  const chunkTx = (k, n) => ({ inputs: [{ boxId: "11".repeat(32), spendingProof: { proofBytes: "", extension: {} } }], dataInputs: [],
+    outputs: Array.from({ length: k }, () => ({ value: 1000000n, ergoTree: hex(scripts[4]), creationHeight: 2000000, assets: [],
+      additionalRegisters: { R4: coll(backing), R5: coll(b(9, n)) } })) });
+  const txSize = (k, n) => { try { return serializeTransaction(chunkTx(k, n)).toBytes().length; } catch { return Infinity; } };
+  const boxBytes = n => txSize(2, n) - txSize(1, n) + 34;
+  let pieceBytes = 4000; while (boxBytes(pieceBytes) > 4096) pieceBytes--;
+  ok(boxBytes(pieceBytes) <= 4096 && boxBytes(pieceBytes + 1) > 4096, "the largest piece is exact");
+  let pieces = 1; while (txSize(pieces + 1, pieceBytes) <= 98304) pieces++;
+  const payloadCapacity = pieces * pieceBytes, observedProofBytes = 14656, statement = n => 58 + 32 * n;
+  const publication = { release: 92 + statement(17) + 4 + observedProofBytes + 4 + 136 + 4, demand: 92 + statement(16) + 4 + observedProofBytes + 4 + 4,
+    request: 92 + statement(7) + 4 + observedProofBytes + 4 + 4 };
+  ok(publication.release > publication.demand && publication.demand > publication.request, "the release is the largest publication");
+  ok(publication.release <= payloadCapacity, "the largest publication under the observed proof size fits one transaction");
+  equal(Math.ceil(publication.release / pieceBytes), 4, "a release is four pieces");
+  const largestProofThatFits = payloadCapacity - (92 + statement(17) + 4 + 4 + 136 + 4);
+  ok(largestProofThatFits > observedProofBytes && largestProofThatFits < 131072, "the capacity lies between the observed proof and pool-v2 §12's ceiling");
+
   Object.assign(report, {
     status: "offline-profile-candidate-only", node: process.version, checks,
     profile: { context: profile.ERGO_PROFILE_CONTEXT, identity: hex(identity), depth: depth.toString(), lag: verifier.lag().toString(),
@@ -281,14 +302,18 @@ try {
     synthetic: { heights: heights.toString(), witnessedIndex: t.toString(), transactions: String(transactions), serializedTransactionBytes: String(serializedBytes),
       headers: String(chain.headers.length), answerBytes: answers, heldCommitments: held.held.length, mergedPublications: merged.length },
     fixtures, registerConstants: registers,
-    ergoBounds: { maxBoxBytes: 4096, mempoolMaxTransactionBytes: 98304, kind4RecordBound: range.MAX_RANGE_RECORD_BYTES[4],
-      note: "a kind-4 object is one transaction's run of outputs; under the pinned mempool policy a larger publication has no location here" },
+    capacity: { maxBoxBytes: 4096, mempoolMaxTransactionBytes: 98304, maxPieceBytes: pieceBytes, piecesPerTransaction: pieces,
+      transactionBytes: txSize(pieces, pieceBytes), payloadCapacity, observedProofBytes, releasePublicationBytes: publication.release,
+      releasePieces: Math.ceil(publication.release / pieceBytes), demandPublicationBytes: publication.demand, requestPublicationBytes: publication.request,
+      largestProofThatFits, frameCeiling: range.MAX_RANGE_RECORD_BYTES[4],
+      note: "a kind-4 object is one transaction's run of outputs; a configuration is publishable here only where its largest publication fits one transaction" },
     limitations: [
       "Headers are the reader's own source: linkage, contiguity and the genesis anchor are checked; proof of work, chain selection and finality are not.",
       "A transaction the reader's decoder refuses is unsupported evidence: its height has no section and every range through it stays unresolved until the decoder is repaired, a denial one node-valid transaction can trigger.",
       "Synthetic blocks are serialized by Fleet from local objects and were never accepted by a node; the fixtures are three non-contiguous real blocks and the real genesis header.",
       "sigma-rust's strict round trip is the decoder boundary; it has no hard memory limit and no node-equivalence proof (see the decoder probe).",
       "No range from index zero was read on a real chain; the cost of exhaustion over real block bytes is not measured here.",
+      "Capacity is measured by serialization against the box limit and the pinned mempool policy; no transaction was relayed or accepted by a node.",
       "No runtime path, spec selection, publication, chunking on a node or C2.10.13 completeness claim for any real venue follows.",
     ] });
 } finally {

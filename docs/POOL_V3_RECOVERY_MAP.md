@@ -624,7 +624,9 @@ Each names the rule, the candidate, the alternative, and what closes it.
   chain; the header source's authenticity, the decoder's containment and
   node equivalence (one transaction the decoder refuses denies every range
   through its height) and the cost on a real chain (P4) are the remaining
-  trust assumptions, and the kind-4 bound exceeds one Ergo transaction.
+  trust assumptions. A publication must fit one transaction: 95,544 bytes
+  in 24 pieces under the pinned mempool policy, against a 15,498-byte
+  release under the observed proofs; the frame's ceiling is a parser bound.
 - **A9 Same-index order.** Decided 2026-09-14 in pool-v3 §13: an operator's
   commitments at one index are read in ascending sequence from the records
   alone, so no intra-index order is needed for kinds 1–3; `extending()`'s

@@ -130,13 +130,19 @@ reader's own output over its retained evidence and can be reproduced from it.
   transactions ([the block probe](POOL_DEPLOYMENT_PROBES.md#full-block-commitment-feasibility));
   sigma-rust decodes all 24 but carries no equivalence proof ([the decoder
   probe](POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility)).
-- An Ergo box holds at most 4,096 bytes and the pinned node's mempool policy
-  relays transactions of at most 98,304 bytes ([the offline size probe](POOL_DEPLOYMENT_PROBES.md#venue-publication-sizes-offline)),
-  so one run of one transaction carries a publication of roughly 94 KB.
-  §13's kind-4 bound is 131,914 bytes, the framing over the largest kind-6
-  record: under this rule and that policy the largest settle record has no
-  location on Ergo. Either the profile must reassemble across transactions
-  or the record must shrink; this is open and recorded in the decision.
+- A kind-4 object is one transaction's run, so a publication must fit one
+  transaction. Under this layout a box carries a 3,981-byte piece within
+  Ergo's 4,096-byte box limit, and one transaction under the pinned node's
+  98,304-byte mempool policy carries 24 pieces, 95,544 bytes of
+  publication ([measured](ergo-range-profile-verification.json)). §13's
+  kind-4 ceiling of 131,914 bytes is the frame's parser bound over pool-v2
+  §12's generic 131,072-byte proof limit; a configuration fixes its proof
+  size through its pinned keys (pool-v3 §11.1), and every retained relation
+  proves in 14,656 bytes, so the largest publication is a release of 15,498
+  bytes in four pieces. A configuration is publishable here only where its
+  largest publication fits one transaction, which holds for any proof up to
+  94,702 bytes; that is an adoption condition of the profile, not a change
+  to the frame ([decision](../decisions/2026-09.md#2026-09-15--a-configurations-publications-fit-one-ergo-transaction)).
 - Exhaustion costs the range's block bytes. The replacement chain and a
   revocation are read from index zero (§13.3), which on a real chain is a
   scan from the genesis unless a rule bounds the start; the reader may keep
@@ -170,5 +176,6 @@ the profile, evidence and request, and every refusal without an Ergo library.
 A specification decision selects a venue profile and pins its identity;
 before that: P4's measurements against a real chain, an authenticated header
 source a reader can run, a node-equivalent contained decoder, publication and
-reassembly on a node (P2), the kind-4 bound question above, and the
+reassembly on a node (P2) confirming the measured capacity, the adoption
+condition above checked against the selected configuration, and the
 runtime's adoption in place of the v2 materialized view.

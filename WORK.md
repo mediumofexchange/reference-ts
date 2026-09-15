@@ -31,11 +31,11 @@ key, dependency or host-control change.
   resolved; the readback's residual blocker (evidence not owned) and
   optional finding (malformed block denial) fixed; the second readback
   confirmed no material finding remains. Dispositions are in the decision.
-- Recorded, not resolved: the kind-4 bound (131914 bytes) exceeds the
-  pinned node's 98304-byte mempool policy, so the largest kind-6 record has
-  no location under the one-transaction run rule; one node-valid
-  transaction the reader's decoder refuses denies every range through its
-  height; chain and revocation reads from index zero scan from the genesis.
+- Decided: the kind-4 ceiling is a parser bound; a 15,498-byte release
+  under the pinned 14,656-byte proofs fits one transaction's measured
+  95,544-byte capacity, an adoption condition of the profile. Recorded,
+  not resolved: a decoder-refused transaction denies every range through
+  its height; chain and revocation reads from index zero scan the genesis.
 
 ## Evidence
 
@@ -47,7 +47,7 @@ key, dependency or host-control change.
   typecheck and `npm run check:docs` clean.
 - `npm run check:ergo:range` on the final sources (block-root and decoder
   reports regenerated): [profile report](docs/ergo-range-profile-verification.json),
-  242 checks; the pinned genesis header anchors an empty answer for index
+  247 checks; the pinned genesis header anchors an empty answer for index
   0; synthetic chain 15 transactions, 11,896 serialized bytes; answers
   1,038 (commitments, five held of six), 355 (replacement pending), 334
   (revocation at first witnessing), 8,284 (publications in venue order);
@@ -74,10 +74,10 @@ key, dependency or host-control change.
 
 ## Next
 
-1. Decide the kind-4 bound with P2 (publication on a node): runs across
-   transactions in the profile, or a smaller kind-6 record in pool-v3 §6;
-   then P4's real-chain cost of exhaustion from index zero and a possible
-   start-index rule. Decoder node equivalence is a selection prerequisite.
+1. P2 (publication on a node) confirms the measured 24-piece transaction is
+   relayed and reassembles after its boxes are spent; then P4's real-chain
+   cost of exhaustion from index zero and a possible start-index rule.
+   Decoder node equivalence is a selection prerequisite.
 2. Remaining local-experiment dependencies: the C2b.6.1 clock over the
    classified carrying checkpoints, and a successor's or scope-changed
    segment with its C2.10.5 imports; then wire the profile verifier into
