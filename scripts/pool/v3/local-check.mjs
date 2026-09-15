@@ -151,15 +151,25 @@ try {
     const snapshot = { backing, segment, historyHash: history, evidenceHash: evidence, ...totals };
     return seal(records, snapshot);
   }
-  // The fixture venue holds the operator's commitments 1 (index 1) and 4
-  // (index 7) carrying another backing, around the selected checkpoint 3 at
-  // index 3; the reader must pass both by their directories (C2.4.2, C2.7.3).
+  // The fixture venue holds the segment's opening checkpoint 1 (index 1) carrying the backing with its
+  // empty state (C2b.4.1), the operator's commitments 2 (index 2) and 4 (index 7) carrying another
+  // backing, and the selected checkpoint 3 at index 3; the reader classifies the opening and passes the
+  // other two by their directories (C2.4.2, C2.7.3).
   const otherName = b(77), before = [{ name: otherName, digest: b(78) }], after = [{ name: otherName, digest: b(79) }];
-  const earlier = signCommitment(operatorSecret, 1n, directoryRoot(before)), later = signCommitment(operatorSecret, 4n, directoryRoot(after));
+  const earlier = signCommitment(operatorSecret, 2n, directoryRoot(before)), later = signCommitment(operatorSecret, 4n, directoryRoot(after));
+  function openingOf(name, openedSegment, trailHeader, signed) {
+    const state = { backing: name, segment: openedSegment, historyHash: codec.genesisHistoryHash(openedSegment),
+      evidenceHash: codec.genesisEvidenceHash(openedSegment), issued: 0n, burned: 0n };
+    const directory = [{ name, digest: codec.snapshotDigest(state) }];
+    return { commitment: signCommitment(operatorSecret, 1n, directoryRoot(directory)), directory, snapshot: codec.snapshotBytes(state),
+      trail: codec.encodeTrail({ header: trailHeader, terms: [signed], records: [] }, LIMITS) };
+  }
+  const opening = openingOf(backing, segment, header, signedTerms);
   // The fixture venue's lag is 2, so a replacement's lead floor is its witnessing plus 5 (C2.5.3).
-  function witnessed(commitment, { at = 3n, laterAt = 7n, extra = [] } = {}) {
+  function witnessed(commitment, { at = 3n, laterAt = 7n, extra = [], opens = opening.commitment } = {}) {
     const record = new FixtureVenue(venue, 20n, 2n);
-    record.witness(1, operator, 1n, encodeCommitment(earlier));
+    record.witness(1, operator, 1n, encodeCommitment(opens));
+    record.witness(1, operator, 2n, encodeCommitment(earlier));
     record.witness(1, operator, at, encodeCommitment(commitment));
     record.witness(1, operator, laterAt, encodeCommitment(later));
     for (const r of extra) record.witness(r.kind, r.subject, r.index, r.record);
@@ -174,23 +184,23 @@ try {
     const commitment = signCommitment(operatorSecret, 3n, directoryRoot(directory));
     return { selection: { domain, venue, backing, operator, sequence: 3n, root: commitment.root,
       judgingIndex: 20n, mode: "current-fixture" },
-      package: { configuration: configurationBytes, commitment: encodeCommitment(commitment), directory, directories: [before, after],
-        snapshot: codec.snapshotBytes(snapshot),
-        trail: codec.encodeTrail({ header, terms: [signedTerms], records: records.map(codec.encodeRecord) }, LIMITS) },
+      package: { configuration: configurationBytes, commitment: encodeCommitment(commitment), directory,
+        directories: [opening.directory, before, after], snapshot: codec.snapshotBytes(snapshot), snapshots: [opening.snapshot],
+        trail: codec.encodeTrail({ header, terms: [signedTerms], records: records.map(codec.encodeRecord) }, LIMITS), trails: [opening.trail] },
       venue: witnessed(commitment) };
   }
+  // An empty segment: the opening at sequence 1 and the selection at sequence 3 commit the same empty
+  // state, so one directory, snapshot and trail serve both (the §12 inventory carries each once).
   function emptyPackage(fields, headerFields = {}, venueOptions = {}) {
     const terms = codec.encodeRootTerms(fields), name = codec.rootTermsName(terms);
     const h = codec.segmentBytes({ domain, venue, operator, sequence: 1n, entries: [{ backing: name, link: name }], ...headerFields });
     const emptySegment = new Uint8Array(Buffer.from(sha(h), "hex"));
-    const s = { backing: name, segment: emptySegment, historyHash: codec.genesisHistoryHash(emptySegment),
-      evidenceHash: codec.genesisEvidenceHash(emptySegment), issued: 0n, burned: 0n };
-    const directory = [{ name, digest: codec.snapshotDigest(s) }], c = signCommitment(operatorSecret, 3n, directoryRoot(directory));
+    const signed = { terms, signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), issuerSecret) };
+    const opened = openingOf(name, emptySegment, h, signed), c = signCommitment(operatorSecret, 3n, directoryRoot(opened.directory));
     return { selection: { domain, venue, backing: name, operator, sequence: 3n, root: c.root, judgingIndex: 20n, mode: "current-fixture" },
-      package: { configuration: configurationBytes, commitment: encodeCommitment(c), directory, directories: [before, after],
-        snapshot: codec.snapshotBytes(s),
-        trail: codec.encodeTrail({ header: h, terms: [{ terms, signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), issuerSecret) }], records: [] }, LIMITS) },
-      venue: witnessed(c, venueOptions) };
+      package: { configuration: configurationBytes, commitment: encodeCommitment(c), directory: opened.directory, directories: [before, after],
+        snapshot: opened.snapshot, trail: opened.trail },
+      venue: witnessed(c, { ...venueOptions, opens: opened.commitment }) };
   }
   const records = [issue, payment, burn], effects = [
     { outputs: [funded.cm], nullifiers: [] },
@@ -225,14 +235,15 @@ try {
   // witnessed at its index, with the others' evidence packaged beside it.
   function compose(checkpoints, selected, { judgingIndex = 20n, extra = [] } = {}) {
     const record = new FixtureVenue(venue, 20n, 2n);
-    record.witness(1, operator, 1n, encodeCommitment(earlier));
+    record.witness(1, operator, 1n, encodeCommitment(opening.commitment));
+    record.witness(1, operator, 2n, encodeCommitment(earlier));
     for (const { checkpoint, at } of checkpoints) record.witness(1, operator, at, encodeCommitment(checkpoint.commitment));
     for (const r of extra) record.witness(r.kind, r.subject, r.index, r.record);
     const chosen = checkpoints[selected].checkpoint, rest = checkpoints.filter((_, i) => i !== selected).map(x => x.checkpoint);
     return { selection: { domain, venue, backing, operator, sequence: chosen.commitment.sequence, root: chosen.commitment.root, judgingIndex, mode: "current-fixture" },
       package: { configuration: configurationBytes, commitment: encodeCommitment(chosen.commitment), directory: chosen.directory,
-        directories: [before, ...rest.map(x => x.directory)], snapshot: chosen.snapshot, snapshots: rest.map(x => x.snapshot),
-        trail: chosen.trail, trails: rest.map(x => x.trail) },
+        directories: [opening.directory, before, ...rest.map(x => x.directory)], snapshot: chosen.snapshot, snapshots: [opening.snapshot, ...rest.map(x => x.snapshot)],
+        trail: chosen.trail, trails: [opening.trail, ...rest.map(x => x.trail)] },
       venue: record.export() };
   }
   const third = checkpointOf(records, effects, 3n), fourth = checkpointOf(records4, effects4, 4n);
@@ -438,8 +449,8 @@ try {
   await test("fixture record ranges establish the held checkpoint, empty opening, currency, chain and revocation", async () => {
     assert.equal(audit.rangeEvidence, "fixture-verifier"); assert.equal(audit.currentRangeAuthenticated, true);
     assert.equal(audit.termsAuthorityAuthenticated, true); assert.equal(audit.fullV3Replay, false);
-    assert.deepEqual(audit.audit.range, { judgingIndex: "20", lag: "2", checkpointIndex: "3", revokedAt: null, heldBefore: 1, heldAfter: 1,
-      chain: genesisChain, carrying: [{ sequence: "3", index: "3", class: "valid" }], clock: null });
+    assert.deepEqual(audit.audit.range, { judgingIndex: "20", lag: "2", checkpointIndex: "3", revokedAt: null, heldBefore: 2, heldAfter: 1,
+      chain: genesisChain, carrying: [{ sequence: "1", index: "1", class: "valid" }, { sequence: "3", index: "3", class: "valid" }], clock: null });
     // Junk at the operator's location: a forged signature, another key, a
     // repeated and a stale sequence. None is held; none is a hole (§13.3).
     const noisy = clone(complete), forged = encodeCommitment(signCommitment(operatorSecret, 2n, b(80))); forged[135] ^= 1;
@@ -453,26 +464,26 @@ try {
     const past = await replayLocalPackage(historical, verifier, codec);
     assert.equal(past.status, "historical-local-replay"); assert.equal(past.currentRangeAuthenticated, false);
     assert.equal(past.rangeEvidence, "fixture-verifier");
-    assert.deepEqual(past.audit.range, { judgingIndex: "8", lag: "2", checkpointIndex: "3", revokedAt: null, heldBefore: 1, heldAfter: 1,
-      chain: genesisChain, carrying: [{ sequence: "3", index: "3", class: "valid" }], clock: null });
+    assert.deepEqual(past.audit.range, { judgingIndex: "8", lag: "2", checkpointIndex: "3", revokedAt: null, heldBefore: 2, heldAfter: 1,
+      chain: genesisChain, carrying: [{ sequence: "1", index: "1", class: "valid" }, { sequence: "3", index: "3", class: "valid" }], clock: null });
   });
   await test("record ranges refuse a contradicted empty opening, another segment's later checkpoint, a missing directory, a revoked issuer and a pending handover", async () => {
     // An earlier carrying commitment of this operator: of another segment it contradicts the
     // header's empty opening (C2.7.3); without its snapshot preimage the read is unresolved.
     const c1 = signCommitment(operatorSecret, 1n, directoryRoot(foreignDirectory));
     const carried = clone(complete); carried.venue.records[0] = { kind: 1, subject: operator, index: 1n, record: encodeCommitment(c1) };
-    carried.package.directories = [foreignDirectory, after]; carried.package.snapshots = [codec.snapshotBytes(foreign)];
+    carried.package.directories = [foreignDirectory, before, after]; carried.package.snapshots = [codec.snapshotBytes(foreign)];
     await reject(carried, "OPENING");
     const unopened = clone(carried); unopened.package.snapshots = [];
     assert.equal((await replayLocalPackage(unopened, verifier, codec)).status, "unresolved-evidence");
     // A later carrying commitment of another segment is a scope change this experiment cannot classify.
     const c4 = signCommitment(operatorSecret, 4n, directoryRoot(foreignDirectory));
-    const changed = clone(complete); changed.venue.records[2] = { kind: 1, subject: operator, index: 7n, record: encodeCommitment(c4) };
-    changed.package.directories = [before, foreignDirectory]; changed.package.snapshots = [codec.snapshotBytes(foreign)];
+    const changed = clone(complete); changed.venue.records[3] = { kind: 1, subject: operator, index: 7n, record: encodeCommitment(c4) };
+    changed.package.directories = [opening.directory, before, foreignDirectory]; changed.package.snapshots = [opening.snapshot, codec.snapshotBytes(foreign)];
     assert.equal((await replayLocalPackage(changed, verifier, codec)).status, "unsupported-scope");
-    const unread = clone(changed); unread.package.snapshots = [];
+    const unread = clone(changed); unread.package.snapshots = [opening.snapshot];
     assert.equal((await replayLocalPackage(unread, verifier, codec)).status, "unresolved-evidence");
-    const missing = clone(complete); missing.package.directories = [before];
+    const missing = clone(complete); missing.package.directories = [opening.directory, before];
     assert.equal((await replayLocalPackage(missing, verifier, codec)).status, "unresolved-evidence");
     const revocation = encodeRevocation(signRevocation(issuerSecret));
     for (const at of [2n, 3n]) {
@@ -546,7 +557,7 @@ try {
     const foreignName = { ...foreign, backing: name }, foreignNameDirectory = [{ name, digest: codec.snapshotDigest(foreignName) }];
     const contradicted = withRecords([inForce]);
     contradicted.venue.records[0] = { kind: 1, subject: operator, index: 1n, record: encodeCommitment(signCommitment(operatorSecret, 1n, directoryRoot(foreignNameDirectory))) };
-    contradicted.package.directories = [foreignNameDirectory, after]; contradicted.package.snapshots = [codec.snapshotBytes(foreignName)];
+    contradicted.package.directories = [foreignNameDirectory, before, after]; contradicted.package.snapshots = [codec.snapshotBytes(foreignName)];
     await reject(contradicted, "OPENING");
   });
   await test("the no-commitment clock reads the classified carrying checkpoints, and silence retires the segment (C2b.6.1, C2b.4.1)", async () => {
@@ -571,8 +582,8 @@ try {
         return { at, snapshot: codec.snapshotBytes(s), directory, commitment: signCommitment(operatorSecret, sequence, directoryRoot(directory)) };
       });
       const record = new FixtureVenue(venue, 20n, 2n);
-      // "other": the operator's sequence 1 carries another backing, as in the proof fixtures; false: nothing at the opening sequence.
-      if (opens === "other") record.witness(1, operator, openingAt, encodeCommitment(earlier));
+      // "other": the operator's sequence 1 carries another backing; false: nothing at the opening sequence.
+      if (opens === "other") record.witness(1, operator, openingAt, encodeCommitment(signCommitment(operatorSecret, 1n, directoryRoot(before))));
       for (const c of built) record.witness(1, operator, c.at, encodeCommitment(c.commitment));
       for (const e of extra) record.witness(1, operator, e.at, encodeCommitment(signCommitment(operatorSecret, e.sequence, directoryRoot(e.directory))));
       const chosen = built[chosenAt], rest = built.filter((_, i) => i !== chosenAt);
@@ -665,7 +676,7 @@ try {
     assert.equal((await replayLocalPackage(future, verifier, codec)).status, "unresolved-evidence");
     const notNow = clone(complete); notNow.selection.judgingIndex = 15n;
     assert.equal((await replayLocalPackage(notNow, verifier, codec)).status, "unresolved-evidence");
-    const unheld = clone(complete); unheld.venue.records.splice(1, 1);
+    const unheld = clone(complete); unheld.venue.records.splice(2, 1);
     assert.equal((await replayLocalPackage(unheld, verifier, codec)).status, "selection-mismatch");
     // Another root at sequence 3 and index 3: the lesser record bytes stand for the sequence (§13.3).
     const selected = complete.package.commitment;
@@ -692,7 +703,7 @@ try {
     const failure = new Error("range service unavailable");
     await assert.rejects(replayLocalPackage(complete, { ...verifier, record: () => ({ range() { throw failure; }, witnessedIndex: () => 20n, lag: () => 2n }) }, codec), error => error === failure);
     const { venue: omitted, ...withoutVenue } = complete;
-    assert.equal(omitted.records.length, 3);
+    assert.equal(omitted.records.length, 4);
     const plain = await replayLocalPackage(withoutVenue, verifier, codec);
     assert.equal(plain.status, "selected-local-replay"); assert.equal(plain.rangeEvidence, "none");
     assert.equal(plain.currentRangeAuthenticated, false); assert.equal(plain.termsAuthorityAuthenticated, false); assert.equal(plain.audit.range, null);
@@ -702,8 +713,8 @@ try {
   await test("a second checkpoint of the segment is classified from its own trail and extends the last valid prefix (C2.10.4, C2.10.12)", async () => {
     dependency = await replayLocalPackage(extended, verifier, codec);
     assert.equal(dependency.status, "selected-local-replay"); assert.equal(dependency.audit.records, "4"); assert.equal(dependency.audit.outstanding, "5");
-    assert.deepEqual(dependency.audit.range, { judgingIndex: "20", lag: "2", checkpointIndex: "7", revokedAt: null, heldBefore: 2, heldAfter: 0, chain: genesisChain,
-      carrying: [{ sequence: "3", index: "3", class: "valid" }, { sequence: "4", index: "7", class: "valid" }], clock: null });
+    assert.deepEqual(dependency.audit.range, { judgingIndex: "20", lag: "2", checkpointIndex: "7", revokedAt: null, heldBefore: 3, heldAfter: 0, chain: genesisChain,
+      carrying: [{ sequence: "1", index: "1", class: "valid" }, { sequence: "3", index: "3", class: "valid" }, { sequence: "4", index: "7", class: "valid" }], clock: null });
     const receiver2 = await replayLocalPackage({ ...extended, seed: receiverSeed }, verifier, codec);
     assert.deepEqual(receiver2.candidates.map(x => [x.cm, x.value]), [[burnChange.cm.toString(), "2"], [paid2.cm.toString(), "2"]]);
     const payer2 = await replayLocalPackage({ ...extended, seed: payerSeed }, verifier, codec);
@@ -713,22 +724,23 @@ try {
     assert.equal((await replayLocalPackage(behind, verifier, codec)).status, "superseded-selection");
     const earlierRead = clone(behind); earlierRead.selection.mode = "historical-fixture"; earlierRead.selection.judgingIndex = 5n;
     const then = await replayLocalPackage(earlierRead, verifier, codec);
-    assert.equal(then.status, "historical-local-replay"); assert.deepEqual(then.audit.range.carrying, [{ sequence: "3", index: "3", class: "valid" }]);
+    assert.equal(then.status, "historical-local-replay");
+    assert.deepEqual(then.audit.range.carrying, [{ sequence: "1", index: "1", class: "valid" }, { sequence: "3", index: "3", class: "valid" }]);
     // At one index the lower sequence is the higher one's own prefix (C2.10.4).
     const sameIndex = [{ checkpoint: third, at: 7n }, { checkpoint: fourth, at: 7n }];
     const together = await replayLocalPackage(compose(sameIndex, 1), verifier, codec);
     assert.equal(together.status, "selected-local-replay"); assert.equal(together.audit.range.checkpointIndex, "7");
-    assert.deepEqual(together.audit.range.carrying.map(c => c.class), ["valid", "valid"]);
+    assert.deepEqual(together.audit.range.carrying.map(c => c.class), ["valid", "valid", "valid"]);
     assert.equal((await replayLocalPackage(compose(sameIndex, 0), verifier, codec)).status, "superseded-selection");
     // A re-commitment of the same state extends its own length.
     const repeated = await replayLocalPackage(compose([{ checkpoint: third, at: 3n }, { checkpoint: checkpointOf(records, effects, 4n), at: 7n }], 1), verifier, codec);
-    assert.equal(repeated.status, "selected-local-replay"); assert.deepEqual(repeated.audit.range.carrying.map(c => c.class), ["valid", "valid"]);
+    assert.equal(repeated.status, "selected-local-replay"); assert.deepEqual(repeated.audit.range.carrying.map(c => c.class), ["valid", "valid", "valid"]);
     // K's revocation voids only issuance witnessed at or after it (C2b.1): a prefix a valid checkpoint finalized before it stands.
     const pair = [{ checkpoint: third, at: 3n }, { checkpoint: fourth, at: 7n }], revocation = encodeRevocation(signRevocation(issuerSecret));
     const revokedBetween = { extra: [{ kind: 3, subject: issuerKey, index: 5n, record: revocation }] };
     const continued = await replayLocalPackage(compose(pair, 1, revokedBetween), verifier, codec);
     assert.equal(continued.status, "selected-local-replay"); assert.equal(continued.audit.range.revokedAt, "5");
-    assert.deepEqual(continued.audit.range.carrying.map(c => c.class), ["valid", "valid"]);
+    assert.deepEqual(continued.audit.range.carrying.map(c => c.class), ["valid", "valid", "valid"]);
     assert.equal((await replayLocalPackage(compose(pair, 0, revokedBetween), verifier, codec)).status, "superseded-selection");
     // Revoked at the first checkpoint's index, it is excluded and the later one witnesses the issuance anew, after the revocation.
     const revokedAtFirst = { extra: [{ kind: 3, subject: issuerKey, index: 3n, record: revocation }] };
@@ -737,8 +749,8 @@ try {
     // A carrying checkpoint naming other backings too is outside the experiment's one-backing scope, as a selection is.
     const wideDirectory = [{ name: backing, digest: third.directory[0].digest }, { name: otherName, digest: b(79) }].sort((x, y) => Buffer.compare(x.name, y.name));
     const wide = clone(extended);
-    wide.venue.records[1] = { kind: 1, subject: operator, index: 3n, record: encodeCommitment(signCommitment(operatorSecret, 3n, directoryRoot(wideDirectory))) };
-    wide.package.directories = [before, wideDirectory];
+    wide.venue.records[2] = { kind: 1, subject: operator, index: 3n, record: encodeCommitment(signCommitment(operatorSecret, 3n, directoryRoot(wideDirectory))) };
+    wide.package.directories = [opening.directory, before, wideDirectory];
     assert.equal((await replayLocalPackage(wide, verifier, codec)).status, "unsupported-scope");
   });
   await test("excluded checkpoints are passed: a stale twin, diverging evidence or a bad suffix never moves the last valid prefix (C2.10.12)", async () => {
@@ -749,7 +761,7 @@ try {
     for (const [checkpoint, check] of [[twin, "CONTINUITY"], [diverging, "CONTINUITY"], [badSuffix, "PROOF"]]) {
       const passed = await replayLocalPackage(compose([{ checkpoint: third, at: 3n }, { checkpoint, at: 7n }], 0), verifier, codec);
       assert.equal(passed.status, "selected-local-replay"); assert.equal(passed.currentRangeAuthenticated, true);
-      assert.deepEqual(passed.audit.range.carrying, [{ sequence: "3", index: "3", class: "valid" }, { sequence: "4", index: "7", class: "excluded", check }]);
+      assert.deepEqual(passed.audit.range.carrying, [{ sequence: "1", index: "1", class: "valid" }, { sequence: "3", index: "3", class: "valid" }, { sequence: "4", index: "7", class: "excluded", check }]);
       assert.deepEqual(passed.audit, { ...audit.audit, range: passed.audit.range });
       // Selected, the same checkpoint refuses on its own check.
       await reject(compose([{ checkpoint: third, at: 3n }, { checkpoint, at: 7n }], 1), check);
@@ -758,15 +770,15 @@ try {
     const badThird = checkpointOf([issue, payment, corrupt(burn)], effects, 3n);
     const repaired = await replayLocalPackage(compose([{ checkpoint: badThird, at: 3n }, { checkpoint: fourth, at: 7n }], 1), verifier, codec);
     assert.equal(repaired.status, "selected-local-replay");
-    assert.deepEqual(repaired.audit.range.carrying, [{ sequence: "3", index: "3", class: "excluded", check: "PROOF" }, { sequence: "4", index: "7", class: "valid" }]);
+    assert.deepEqual(repaired.audit.range.carrying, [{ sequence: "1", index: "1", class: "valid" }, { sequence: "3", index: "3", class: "excluded", check: "PROOF" }, { sequence: "4", index: "7", class: "valid" }]);
     assert.deepEqual({ ...repaired.audit, range: null }, { ...dependency.audit, range: null });
     const shorter = await replayLocalPackage(compose([{ checkpoint: badThird, at: 3n }, { checkpoint: twin, at: 7n }], 1), verifier, codec);
     assert.equal(shorter.status, "selected-local-replay"); assert.equal(shorter.audit.records, "2");
-    assert.deepEqual(shorter.audit.range.carrying.map(c => c.class), ["excluded", "valid"]);
+    assert.deepEqual(shorter.audit.range.carrying.map(c => c.class), ["valid", "excluded", "valid"]);
     // Three checkpoints with the middle one excluded: the last extends the first.
     const three = [{ checkpoint: third, at: 3n }, { checkpoint: diverging, at: 7n }, { checkpoint: checkpointOf(records4, effects4, 5n), at: 12n }];
     const last = await replayLocalPackage(compose(three, 2), verifier, codec);
-    assert.equal(last.status, "selected-local-replay"); assert.deepEqual(last.audit.range.carrying.map(c => c.class), ["valid", "excluded", "valid"]);
+    assert.equal(last.status, "selected-local-replay"); assert.deepEqual(last.audit.range.carrying.map(c => c.class), ["valid", "valid", "excluded", "valid"]);
     assert.equal((await replayLocalPackage(compose(three, 0), verifier, codec)).status, "superseded-selection");
     assert.equal((await replayLocalPackage(compose(three, 1), verifier, codec)).status, "invalid-local-replay");
   });
@@ -774,14 +786,14 @@ try {
     const without = key => { const p = clone(extended); p.package[key] = []; return p; };
     assert.equal((await replayLocalPackage(without("snapshots"), verifier, codec)).status, "unresolved-evidence");
     assert.equal((await replayLocalPackage(without("trails"), verifier, codec)).status, "unresolved-evidence");
-    const substituted = clone(extended); substituted.package.trails[0][substituted.package.trails[0].length - 1] ^= 1;
+    const substituted = clone(extended); substituted.package.trails[1][substituted.package.trails[1].length - 1] ^= 1;
     assert.equal((await replayLocalPackage(substituted, verifier, codec)).status, "unresolved-evidence");
     // Two trails authenticate one snapshot's evidence, since the terms signature is outside the chain: ambiguous, so unsupported.
     const decoded = codec.decodeTrail(third.trail, LIMITS), badTerms = clone(signedTerms); badTerms.signature[0] ^= 1;
     const other = codec.encodeTrail({ ...decoded, terms: [badTerms] }, LIMITS);
-    const ambiguous = clone(extended); ambiguous.package.trails = [third.trail, other];
+    const ambiguous = clone(extended); ambiguous.package.trails = [opening.trail, third.trail, other];
     assert.equal((await replayLocalPackage(ambiguous, verifier, codec)).status, "unsupported-scope");
-    const unsigned = clone(extended); unsigned.package.trails = [other];
+    const unsigned = clone(extended); unsigned.package.trails = [opening.trail, other];
     assert.equal((await replayLocalPackage(unsigned, verifier, codec)).status, "unresolved-evidence");
     // A trail that does not decode is no evidence for any checkpoint and does not block the read, in either form.
     const junk = clone(extended); junk.package.trails.push(new Uint8Array(40).fill(3));
@@ -797,13 +809,13 @@ try {
     assert.deepEqual(await replayEvidencePackage(portable({ ...extended, seed: receiverSeed }), verifier, codec),
       await replayLocalPackage({ ...extended, seed: receiverSeed }, verifier, codec));
     const packed = portable(extended), items = codec.decodeEvidencePackage(packed.package, PACKAGE_LIMITS);
-    assert.equal(items.filter(i => i.kind === 4).length, 2); assert.equal(items.filter(i => i.kind === 6).length, 2);
+    assert.equal(items.filter(i => i.kind === 4).length, 3); assert.equal(items.filter(i => i.kind === 6).length, 3);
     for (const [kind, payload] of [[4, third.snapshot], [6, third.trail]]) {
       const dropped = items.filter(item => !(item.kind === kind && Buffer.compare(item.payload, payload) === 0));
       assert.equal((await replayEvidencePackage({ ...packed, package: codec.encodeEvidencePackage(dropped, PACKAGE_LIMITS) }, verifier, codec)).status, "unresolved-evidence");
     }
     const { venue: omitted, ...withoutVenue } = extended;
-    assert.equal(omitted.records.length, 3);
+    assert.equal(omitted.records.length, 4);
     assert.equal((await replayEvidencePackage(portable(withoutVenue), verifier, codec)).status, "unsupported-scope");
   });
   await test("canonical evidence package replays the same audit and receiver through one engine", async () => {

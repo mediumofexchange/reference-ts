@@ -112,9 +112,7 @@ async function readRecordRanges(selection, terms, header, directories, record, c
       if (carries(h) !== undefined) throw new EvidenceRefusal("unsupported-scope");
     }
   }
-  // The segment's opening checkpoint carries every scoped backing (C2b.4.1). A held commitment at the
-  // opening sequence whose resolved directory carries nothing for the backing contradicts the header;
-  // an opening sequence the record does not hold is missing evidence.
+  // The segment's opening checkpoint is the carrying checkpoint at the header's opening sequence (C2b.4.1).
   const opening = carrying.find(c => c.sequence === header.sequence)?.index;
   const openingHeld = term.some(h => h.commitment.sequence === header.sequence);
   return { judgingIndex: t, lag, checkpointIndex: held[at].index, revokedAt, heldBefore: at, heldAfter: term.length - at - 1, chain, carrying, opening, openingHeld };
@@ -215,7 +213,10 @@ async function classifyCarrying(context, ranges, evidence) {
   const { selection, header, terms, codec } = context, { snapshot, trail, snapshots } = evidence;
   const trails = decodedTrails(evidence.trails, codec), carrying = [];
   const duration = terms.silence?.noCommitmentDuration, opening = ranges.opening, later = (a, b) => (a > b ? a : b);
-  if (duration !== undefined && opening === undefined) {
+  // The segment's opening checkpoint carries every scoped backing (C2b.4.1, C2.10.9a), clause or not: a held
+  // commitment at the opening sequence carrying nothing for the backing contradicts the header; an opening
+  // sequence the record does not hold is missing evidence.
+  if (opening === undefined) {
     if (ranges.openingHeld) throw new ReplayRefusal("OPENING");
     throw new EvidenceRefusal("unresolved-evidence");
   }

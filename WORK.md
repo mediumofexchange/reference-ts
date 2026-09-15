@@ -25,10 +25,11 @@ or host-control change.
   settled before the clock. The audit's `clock` reports the duration,
   `c(t)`, the gap, whether it is open, the boundary and the opening index.
   The opening checkpoint is the carrying checkpoint at the header's
-  opening sequence (C2b.4.1), exempt from lapse; a held opening carrying
-  nothing for the backing is the contradiction `OPENING`, a missing one is
-  unresolved; without ranges a clause stays unsupported; without a clause
-  the clock is null.
+  opening sequence (C2b.4.1), exempt from lapse; whenever ranges are read,
+  a held opening carrying nothing for the backing is the contradiction
+  `OPENING` and a missing one is unresolved, so the proof fixtures now open
+  with the backing at sequence 1; without ranges a clause stays
+  unsupported; without a clause the clock is null.
   [Decision](decisions/2026-09.md#2026-09-15--read-the-no-commitment-clock-from-the-classified-carrying-checkpoints).
 - Earlier today on main: the [candidate Ergo venue profile](docs/ERGO_VENUE_PROFILE.md)
   (1d8f735, CI 34958350541 passed) and the capacity decision that a
