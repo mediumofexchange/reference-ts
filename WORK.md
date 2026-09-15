@@ -32,26 +32,24 @@ or host-control change.
   unsupported; without a clause the clock is null.
   [Decision](decisions/2026-09.md#2026-09-15--read-the-no-commitment-clock-from-the-classified-carrying-checkpoints).
 - Earlier today on main: the [candidate Ergo venue profile](docs/ERGO_VENUE_PROFILE.md)
-  (1d8f735, CI 34958350541 passed) and the capacity decision that a
-  configuration's publications fit one Ergo transaction (72d54fd, CI
-  34961693625 passed).
-- Independent adversarial review of the clock: in progress; findings and
-  their disposition go in the decision entry before merge.
-- Recorded, not resolved: one node-valid transaction the reader's decoder
-  refuses denies every range through its height; chain and revocation reads
-  from index zero scan the genesis on a real chain.
+  (1d8f735, CI 34958350541) and the one-transaction capacity decision (72d54fd, CI 34961693625), both passed.
+- Independent adversarial review of the clock: two blockers (lapse tested
+  before the opening contradiction and segment identity) and four optional
+  findings fixed; the readback's residual (the opening's carriage read only
+  under a clause) fixed by ungating it and rebuilding the proof fixtures;
+  a further readback confirmed no material finding remains.
+- Recorded, not resolved: a decoder-refused transaction denies every range
+  through its height; reads from index zero scan the genesis on a real chain.
 
 ## Evidence
 
 - Baseline main 72d54fd: CI 34961693625 passed.
-- `npm run check:pool:local-replay` on d5e6166: 32 groups and 9 real proofs
-  passed, including the clock group (opening closes the interval from index
-  zero; closed and open gaps at the judging index; a lapsed continuation
-  refused when selected and passed otherwise; a checkpoint at the last
-  allowed index superseding; two lapsed at one index; an excluded checkpoint
-  closing nothing; a historical read before the boundary; a zero duration; a
-  first checkpoint judged from the opening; an opening carrying nothing; no
-  ranges; the portable package agreeing). [Retained report](docs/pool-v3-local-replay-verification.json).
+- `npm run check:pool:local-replay` on the final sources: 32 groups and 9
+  real proofs passed, including the clock group's nineteen cases (gaps
+  closed and open, lapse and refusal, supersession at the last allowed
+  index, same-index twins, excluded and opening checkpoints, historical and
+  zero-duration reads, both review blockers, the portable package).
+  [Retained report](docs/pool-v3-local-replay-verification.json).
 - `npm run check:docs` OK. The change touches only `scripts/pool/v3` and
   docs; the full suite last passed on 6f4e1e7 with no runtime change since.
 
