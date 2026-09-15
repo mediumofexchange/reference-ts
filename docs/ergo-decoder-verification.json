@@ -13,7 +13,7 @@
   "files": {
     "decoder-check.mjs": "4429cd582eee5d639bc0a485e49f6caa3a407f98b6f3ffa39ff7dc221331202b",
     "decoder-cases.mjs": "d71d5f65edce30502665d4df5c3adb68b694b2f12ee33b56532aa07531ca6f9e",
-    "package.json": "e3d76787e32df293fe93bb2db309cef948d96a5ea8974d02ec08e97af9743e30",
+    "package.json": "04c62481ee551c2cf2dd088d2af2afe68b1ba74c0cbc40f41b92b8e85139de89",
     "package-lock.json": "3c2055dc1a71712fb19a99eb895794c392d9e2c169e5a1d6a0d697ce03b9f79e"
   },
   "blocks": [

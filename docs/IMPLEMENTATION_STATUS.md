@@ -96,6 +96,14 @@ The [binary decoder corpus](POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasib
 recovers all 65 fixture outputs and exposes permissive parsing, with strict
 round-trip rejection controls. Hard memory containment, supported node
 equivalence and authenticated complete-range reads remain unimplemented.
+The [candidate Ergo venue profile](ERGO_VENUE_PROFILE.md) and
+`model/pool-v3-ergo-profile.ts` fix attribution by exact tree and `R4`/`R5`
+shape, run reassembly, transaction-then-output ordinals and a §13 verifier
+by exhaustion over root-checked blocks behind a linked header chain; the
+[profile experiment](POOL_DEPLOYMENT_PROBES.md#ergo-venue-profile-candidate-and-full-block-range-verifier)
+reproduces the three fixture roots and answers synthetic ranges through
+Fleet and sigma-rust. No specification selects it; header authentication,
+decoder containment and real-chain cost remain open.
 
 ## Successor record conformance
 

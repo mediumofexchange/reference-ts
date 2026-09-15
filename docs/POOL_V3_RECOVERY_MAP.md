@@ -523,7 +523,12 @@ does not supply a range profile, dependency graph or certificate verdict.
 fixes the answer a venue-evidence verifier returns for each read above —
 index and, for publications, intra-index ordinal per exact object — and the
 reader's held/chain/revocation/publication rules over it; which venue
-evidence establishes an answer remains the venue profile's.
+evidence establishes an answer remains the venue profile's. The
+[candidate Ergo profile](ERGO_VENUE_PROFILE.md) (2026-09-15) fixes
+attribution, reassembly and the ordinal for full-block evidence, and its
+verifier reproduces the three fixture roots and answers synthetic ranges by
+exhaustion; header authentication, decoder containment and the real-chain
+cost remain open.
 
 Retention obligations, by party: the operator and its replicas keep every
 statement record exactly as admitted, since a re-proof no longer classifies
@@ -613,7 +618,12 @@ Each names the rule, the candidate, the alternative, and what closes it.
   the verifier's obligation (completeness by exhaustion, no answer otherwise)
   are fixed by pool-v3 §13 (2026-09-14); the source is closed by P4 and a
   venue decision, and until then the node is a trust assumption the release
-  record must state.
+  record must state. **Candidate 2026-09-15:** the
+  [Ergo profile](ERGO_VENUE_PROFILE.md)'s verifier establishes completeness
+  by exhaustion over root-checked block sections behind a linked header
+  chain; the header source's authenticity, the decoder's containment and the
+  cost on a real chain (P4) are the remaining trust assumptions, and the
+  kind-4 bound exceeds one Ergo transaction.
 - **A9 Same-index order.** Decided 2026-09-14 in pool-v3 §13: an operator's
   commitments at one index are read in ascending sequence from the records
   alone, so no intra-index order is needed for kinds 1–3; `extending()`'s
@@ -622,7 +632,9 @@ Each names the rule, the candidate, the alternative, and what closes it.
   lesser record bytes; publications carry the venue's
   intra-index ordinal (for a chain, transaction then output order), which a
   venue profile must authenticate, comparable across backings for C2b.4.2.
-  The Ergo ordinal derivation is closed by the venue adapter's specification.
+  The candidate Ergo profile derives the ordinal as transaction position then
+  output index, packed in one `u64`, and the model reader applies §13.3's
+  lesser-bytes tie; `extending()`'s tie remains v2 adapter work.
 - **A10 The instant window against real inclusion.** The window is one lag
   wide (C3.3); a venue publication must land in `[instant + lag, instant +
   2·lag]` or has no force. With Ergo's lag `d + 1` the holder's margin is

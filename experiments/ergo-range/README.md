@@ -475,6 +475,19 @@ fields/IDs, every proper transaction prefix, trailing bytes, nonminimal counts
 and JSON field-boundary aliases. Input budgets are experimental refusal limits;
 there is no hard process/WASM memory cap and no production decoder selection.
 
+`profile-check.mjs`, the third step of that command, compiles
+`model/pool-v3-ergo-profile.ts` with the repository root's TypeScript into a
+disposable `scratch/` build, so run it after `npm ci` at the root. It builds
+a twelve-height synthetic chain from Fleet-serialized transactions carrying
+real signed records in `R4`/`R5` register constants, decodes them with
+sigma-rust's strict round trip, and checks the
+[candidate venue profile](../../docs/ERGO_VENUE_PROFILE.md): pool-v3 §13
+answers by exhaustion over root-checked blocks, the reader's rules over them,
+refusals for unwitnessed, gapped, unlinked, substituted or truncated
+evidence, and the three fixture roots through the same verifier. Its
+[retained report](../../docs/ergo-range-profile-verification.json) is an
+offline observation; nothing connects to a node or selects the profile.
+
 The separate Windows x64 / PowerShell 7 containment probe is run explicitly:
 
 ```powershell

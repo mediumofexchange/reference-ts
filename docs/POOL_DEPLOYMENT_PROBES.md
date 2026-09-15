@@ -617,6 +617,49 @@ authenticated headers and stable transaction/output order. A8/A9, chain
 selection/finality, build provenance and publication admission remain open.
 No runtime API, venue profile or protocol rule changes in this experiment.
 
+## Ergo venue-profile candidate and full-block range verifier
+
+The [candidate Ergo venue profile](ERGO_VENUE_PROFILE.md) fixes what pool-v3
+§13 leaves to a profile: an identity over the genesis header, the finality
+depth and one exact ErgoTree per record kind; attribution by that tree with
+`R4` a 32-byte subject and `R5` the bytes; kinds 1–3 at exact length and
+kind 4 as one transaction's maximal run of adjacent same-subject outputs;
+the inclusion height as index; and the ordinal as transaction position then
+output index. `model/pool-v3-ergo-profile.ts` answers a request by
+recomputing every block's transaction root from decoder-derived ids and
+scanning every output in the range, so an empty answer is proven by
+exhaustion; it refuses unwitnessed, gapped, unlinked or root-failing evidence.
+
+`experiments/ergo-range/profile-check.mjs` compiles the model and drives it
+through the pinned Fleet serializer and sigma-rust decoder. The
+[retained report](ergo-range-profile-verification.json) has 121 passing
+checks: a twelve-height synthetic chain at depth 2 (witnessed index 10) with
+15 transactions and 11,896 serialized bytes carries real signed commitments,
+a replacement, two revocation witnessings, single-piece publications for two
+backings, a three-piece run and a two-piece run of 3,900-byte pieces; every
+decoder id equals Fleet's unsigned-bytes hash, every block root equals an
+independent oracle, and the answers (1,038 commitment bytes with six
+carried objects of which five are held, 355 replacement bytes with the
+successor pending at the lead floor, 334 revocation bytes revoked at the
+first witnessing, 8,284 publication bytes merged in venue order) decode
+under the §13.3 reader rules. A flipped record byte decodes as another
+transaction and fails its block's root; a truncated transaction fails the
+strict decode; a missing block, an unlinked header, another genesis, a range
+above the witnessed index and an exceeded budget give no answer. The three
+mainnet fixtures pass through the same verifier as one-block ranges at depth
+0: the model reproduces the real transaction roots of block versions 1 and 3
+from decoder-derived ids, scans all 65 outputs, attributes nothing and
+answers empty in 102 bytes.
+
+Not established: header authentication (proof of work, chain selection and
+finality are the reader's header source), decoder containment, acceptance
+of the synthetic transactions by a node, reassembly on a node after boxes
+are spent, and the cost of exhaustion from index zero on a real chain. One
+limit is now concrete: a kind-4 run is one transaction's outputs, so the
+kind-4 bound of 131,914 bytes exceeds what the pinned node's 98,304-byte
+mempool transaction limit can carry, and the largest kind-6 record has no
+location under this rule. No specification selects the profile.
+
 ## Windows process containment feasibility
 
 The private `experiments/ergo-range/contained-check.ps1` probe compares fixed

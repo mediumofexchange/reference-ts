@@ -1,0 +1,88 @@
+{
+  "status": "offline-profile-candidate-only",
+  "node": "v24.6.0",
+  "checks": 121,
+  "profile": {
+    "context": "moe/venue/ergo/v2",
+    "identity": "cabee4f5548ee624a8010c9f5bb17a9f78025914e0daf14d68fcd95b240aeb4c",
+    "depth": "2",
+    "lag": "3",
+    "locations": {
+      "1": "0008cd031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f",
+      "2": "0008cd024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766",
+      "3": "0008cd02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe337",
+      "4": "0008cd03462779ad4aad39514614751a71085f2f10e1c7a593e4e030efb5b8721ce55b0b"
+    }
+  },
+  "sources": {
+    "ergoNode": "https://github.com/ergoplatform/ergo/tree/c36466405abc9a2ddda37e890635f00d593041f5",
+    "sigmaInterpreter": "https://github.com/ergoplatform/sigmastate-interpreter/tree/ab0b15ceb9d34f2ccd6e68e3e2a8aa27cd16a042",
+    "scrypto": "https://github.com/ergoplatform/scrypto/tree/70b36102b2ed8f7a443cfc92f9f135665d777a37",
+    "fleetSerializer": "https://github.com/fleet-sdk/fleet/tree/7d06847afea124c5fdc71c0e8d813db0a1791978"
+  },
+  "inputManifestSha256": "00976f84cf1e311d5f10ec6edeb58290aadb43a83856529b453da1c56907620e",
+  "files": {
+    "experiments/ergo-range/profile-check.mjs": "1ab7b7b24588a2101158e83d9ed106f55b62138004d42f3aa24f9b2004c324ba",
+    "experiments/ergo-range/package.json": "04c62481ee551c2cf2dd088d2af2afe68b1ba74c0cbc40f41b92b8e85139de89",
+    "experiments/ergo-range/package-lock.json": "3c2055dc1a71712fb19a99eb895794c392d9e2c169e5a1d6a0d697ce03b9f79e",
+    "model/pool-v3-ergo-profile.ts": "077cb20225dcb392c738e92247578a051897e5a48bd814443492368fbf1c5245",
+    "model/pool-v3-range.ts": "2191df8ff41695e37e5dde1ebf5d8befa16c80e3b9596b83ac4a63dad392155d"
+  },
+  "synthetic": {
+    "heights": "12",
+    "witnessedIndex": "10",
+    "transactions": "15",
+    "serializedTransactionBytes": "11896",
+    "headers": "12",
+    "answerBytes": {
+      "commitments": 1038,
+      "replacements": 355,
+      "revocations": 334,
+      "publications": 8284
+    },
+    "heldCommitments": 5,
+    "mergedPublications": 4
+  },
+  "fixtures": [
+    {
+      "height": "100000",
+      "version": "1",
+      "transactions": "1",
+      "outputs": "2",
+      "headerWireBytes": "281",
+      "rootReproduced": true,
+      "emptyAnswerBytes": 102
+    },
+    {
+      "height": "1000000",
+      "version": "3",
+      "transactions": "17",
+      "outputs": "46",
+      "headerWireBytes": "221",
+      "rootReproduced": true,
+      "emptyAnswerBytes": 102
+    },
+    {
+      "height": "1500000",
+      "version": "3",
+      "transactions": "6",
+      "outputs": "17",
+      "headerWireBytes": "221",
+      "rootReproduced": true,
+      "emptyAnswerBytes": 102
+    }
+  ],
+  "ergoBounds": {
+    "maxBoxBytes": 4096,
+    "mempoolMaxTransactionBytes": 98304,
+    "kind4RecordBound": 131914,
+    "note": "a kind-4 object is one transaction's run of outputs, so a publication above what one transaction carries has no location here"
+  },
+  "limitations": [
+    "Headers are the reader's own source: linkage, contiguity and the genesis anchor are checked; proof of work, chain selection and finality are not.",
+    "Synthetic blocks are serialized by Fleet from local objects and were never accepted by a node; the fixtures are three non-contiguous real blocks.",
+    "sigma-rust's strict round trip is the decoder boundary; it has no hard memory limit and no node-equivalence proof (see the decoder probe).",
+    "No range from index zero was read on a real chain; the cost of exhaustion over real block bytes is not measured here.",
+    "No runtime path, spec selection, publication, chunking on a node or C2.10.13 completeness claim for any real venue follows."
+  ]
+}
