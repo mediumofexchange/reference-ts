@@ -4,8 +4,8 @@ Updated: 2026-09-19
 
 ## Goal
 
-Completed same-index fresh silence openings on `feat/v3-same-index-openings`
-from cfa91a5. Companion `spec/same-index-return-predecessor` is delivered on
+Completed same-index fresh silence openings in 21af018, merged and pushed to
+`main` from `feat/v3-same-index-openings`. Companion `spec/same-index-return-predecessor` is delivered on
 specification `main` at fb7dd07, committed before dependent code.
 
 Acceptance: fresh openings import the latest valid child-relative predecessor,
@@ -19,8 +19,9 @@ No live-chain or configuration-adoption claim.
 - Main cfa91a5 hosted CI 35458301811 passed; upstream fetched, clean baseline.
 - Fresh openings reuse C2.10.4–5 while preserving the strict-before snapshot
   for publication force and clocks. Independent normative and patch reviews
-  found no material blockers. Real-proof acceptance passed; delivery target
-  is implementation `main`.
+  found no material blockers. Real-proof acceptance passed; both repositories
+  are clean and match remote `main`. Implementation CI 35460549644 was queued
+  for 21af018; check the latest handoff revision's CI on resumption.
 
 ## Evidence
 
