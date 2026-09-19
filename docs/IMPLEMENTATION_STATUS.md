@@ -88,12 +88,18 @@ continuation witnessed past it (C2b.4.1). A selection with imports additionally
 validates the exact single-backing predecessor
 closure through replacement, reappointment and same-operator restart; it
 retains imported spent state, roots, totals and original-tree wallet paths.
-Normal two-backing histories additionally split and rejoin shared ancestry,
+Two-backing histories additionally split and rejoin shared ancestry,
 deduplicate events, check every scoped snapshot and canonical predecessor,
 and preserve per-backing totals and original-tree paths through a later
 continuation. Distinct-event nullifier/output conflicts refuse the whole replay.
-Multi-backing recovery clauses, recovery records and receipt queries remain
-unsupported; the existing single-backing recovery path is separate.
+Multi-backing recovery preserves each backing's inherited adoption index and
+unions owed publications in global venue order. Causal event frontiers preserve
+shared demand ancestry and refuse incomparable lock/settlement/spend conflicts.
+Original-prefix clocks retire the whole scope when any scoped backing is silent;
+scopes with mixed silence durations are invalid. The conditional fixtures cover
+exact adoption, unequal obligations, seedless audit, restored issuer notes and
+later payment. Multi-backing non-service clauses and receipt queries remain
+unsupported; the existing single-backing receipt/count path is separate.
 Silence-bearing imports read an independently answered publication range.
 Demand, withdrawal and release force use the original snapshot and venue order;
 return adopts the exact complete block through its opening index. Standing
@@ -104,7 +110,7 @@ canonical lower same-operator sequence under
 [C2b.4.1 at fb7dd07](https://github.com/mediumofexchange/money-from-first-principles/blob/fb7dd07/pool-recovery.md#6-return),
 preserving the inherited adoption index and exact block still owed.
 Import lapse still requires full
-trail evidence. Configuration adoption, a selected venue profile, multi-backing
+trail evidence. Configuration adoption, a selected venue profile and runtime
 imports remain open. Signed non-service terms now drive a single-backing
 real-proof count against the strictly preceding canonical state, preserving
 first request indices, distinct tags and spent/lock status across handover.

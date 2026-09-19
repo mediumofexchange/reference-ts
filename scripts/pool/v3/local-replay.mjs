@@ -11,7 +11,7 @@ import { ownerOf, commitmentOf, nullifierOf } from "../../../dist/pool/notes.js"
 import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { createCapsuleScanner, deriveSettlementOwnerSecret, CapsuleAssociationError, CapsuleFormatError } from "../delivery/crypto.mjs";
 import { EvidenceRefusal, LIMITS, readLocalEvidence } from "../delivery/evidence-reader.mjs";
-import { recoveryState, effectOf, checkRecovery, applyRecovery } from "./recovery-state.mjs";
+import { recoveryState, effectOf, checkRecovery, applyRecovery, tagOf } from "./recovery-state.mjs";
 import { receiptWalk } from "./receipt-state.mjs";
 import { countNonService } from "./non-service.mjs";
 import { classifyScopes } from "./scope-replay.mjs";
@@ -149,7 +149,7 @@ function decodedTrails(trails, codec) {
  * trail must reach its length and reproduce its evidence and history hashes
  * there (C2.10.12, pool-v3 §7.1), the evidence before any verification. */
 async function replayTrail({ selection, terms, scopedTerms, header, verifier, codec, contextReceipt }, snapshot, trail,
-  { index, revokedAt, revocations, lastValid, imported, block = [], openingIndex, isOpening = false }) {
+  { index, revokedAt, revocations, lastValid, imported, block = [], openingIndex, isOpening = false, chargeEvents = () => {} }) {
   const scope = new ScopeTree(header.entries).root();
   const tree = new NoteTree(), spent = new RadixSpentSet(), anchors = new Set(imported?.anchors ?? [EMPTY_NOTE_ROOT]);
   const nullifiers = new Set(imported?.nullifiers), outputsSeen = new Set(imported?.outputsSeen);
@@ -158,6 +158,13 @@ async function replayTrail({ selection, terms, scopedTerms, header, verifier, co
   const recovery = recoveryState(imported), eventIndices = [];
   const events = new Map(imported?.events), totals = new Map(
     [...(imported?.totals ?? [])].map(([key, value]) => [key, { ...value }]));
+  // One immutable imported frontier per local segment replay, shared by its
+  // events. Local positions order themselves without quadratic ancestor sets.
+  const ancestry = new Map();
+  for (const event of events.values()) {
+    chargeEvents(1n);
+    if (event.segment !== undefined && (ancestry.get(event.segment) ?? 0n) < event.position) ancestry.set(event.segment, event.position);
+  }
   const totalFor = backing => {
     const key = hex(backing);
     if (!totals.has(key)) totals.set(key, { issued: 0n, burned: 0n });
@@ -169,9 +176,10 @@ async function replayTrail({ selection, terms, scopedTerms, header, verifier, co
   for (const bytes of trail.records) {
     const record = codec.decodeRecord(bytes), p = record.publicInputs, kind = record.kind;
     if (![1, 2, 3, 4, 5, 6].includes(kind)) throw new EvidenceRefusal("unsupported-scope");
-    const backing = kind !== 2 && kind !== 5 ? identifierOf(p[5], p[6]) : selection.backing;
+    const demandId = kind === 5 || kind === 6 ? hex(identifierOf(p[kind === 5 ? 5 : 15], p[kind === 5 ? 6 : 16])) : undefined;
+    const demand = demandId === undefined ? undefined : recovery.demands.get(demandId);
+    const backing = kind === 5 ? demand?.backing ?? selection.backing : kind !== 2 ? identifierOf(p[5], p[6]) : selection.backing;
     const ownTerms = scopedTerms === undefined ? terms : scopedTerms.get(hex(backing));
-    if (kind !== 2 && kind !== 5) requireReplay(ownTerms !== undefined, "BACKING");
     const issuerKey = ownTerms?.obligor ?? terms.obligor;
     const total = totalFor(backing);
     const adopted = block[Number(position)];
@@ -181,6 +189,8 @@ async function replayTrail({ selection, terms, scopedTerms, header, verifier, co
       requireReplay(same(record.domain, selection.domain) && same(identifierOf(p[2], p[3]), snapshot.segment), "CONTEXT");
       requireReplay(p[4] === scope, "SCOPE");
     }
+    if (kind !== 2) requireReplay(ownTerms !== undefined, "BACKING");
+    if (kind === 5) requireReplay(demand !== undefined && (scopedTerms !== undefined || same(backing, selection.backing)), "DEMAND");
     const at = adopted?.index ?? lastValid?.eventIndices?.[Number(position)] ?? index;
     if (kind >= 4 && at === undefined) throw new EvidenceRefusal("unsupported-scope");
     const identity = codec.statementHash(record), id = hex(identity);
@@ -221,7 +231,10 @@ async function replayTrail({ selection, terms, scopedTerms, header, verifier, co
     if (kind === 1) total.issued += p[7];
     if (kind === 3) total.burned += p[7];
     position += 1n;
-    events.set(`${hex(snapshot.segment)}:${position}`, { identity: id, record });
+    const tags = kind === 4 ? p.slice(10, 12).filter(tag => tag !== 0n) :
+      kind === 5 ? demand?.tags.filter(tag => tag !== 0n) ?? [] : nfs.map(tagOf);
+    events.set(`${hex(snapshot.segment)}:${position}`, { identity: id, record,
+      segment: hex(snapshot.segment), position, ancestry, tags, demand: kind === 4 ? id : demandId });
     anchors.add(tree.root()); statements.add(id);
     history = codec.nextHistoryHash(history, identity, tree.root(), spent.root(), position);
     if (contextReceipt?.position === position && same(contextReceipt.segment, snapshot.segment)) {
@@ -232,7 +245,10 @@ async function replayTrail({ selection, terms, scopedTerms, header, verifier, co
   requireReplay(lastValid === undefined || position >= lastValid.position, "CONTINUITY");
   const { issued, burned } = totalFor(snapshot.backing);
   requireReplay(same(history, snapshot.historyHash) && issued === snapshot.issued && burned === snapshot.burned, "SNAPSHOT");
-  return { tree, spent, issued, burned, position, history, scanOutputs, outputPositions, anchors, nullifiers, outputsSeen,
+  const adoptionIndices = new Map(imported?.adoptionIndices);
+  for (const entry of header.entries) adoptionIndices.set(hex(entry.backing), isOpening ?
+    imported?.adoptionIndices?.get(hex(entry.backing)) ?? 0n : openingIndex ?? 0n);
+  return { tree, spent, issued, burned, position, history, scanOutputs, outputPositions, anchors, nullifiers, outputsSeen, adoptionIndices,
     ...recovery, events, totals, receiptEvent, eventIndices, adoptionIndex: isOpening ? imported?.adoptionIndex ?? 0n : openingIndex ?? 0n };
 }
 

@@ -283,7 +283,7 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
     // predecessor, even when its complete bytes and proofs are supplied.
     await refused(compose([a0, { ...a1, at: 6n }, x0], x0, x, [toB]), "invalid-local-replay", "IMPORT");
   });
-  await test("a recovery clause in required shared ancestry refuses even after selection shrinks scope", async () => {
+  await test("a mixed silence clause excludes required shared ancestry even after selection shrinks scope", async () => {
     const terms = codec.encodeRootTerms({ obligor: issuer, operator, configuration: domain, venue, interval: 10n,
       payout: { thing: "unsupported scoped recovery ancestor", quantumExponent: 0, perUnit: 1n },
       silence: { noCommitmentDuration: 4n, challengeWindow: 5n } });
@@ -292,7 +292,7 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
     const supply = new Map([[hex(y), { issued: 0n, burned: 0n }], [hex(backing), { issued: 0n, burned: 0n }]]);
     const original = checkpoint(segment(operatorSecret, 1n, [entry(y), entry(backing)]), 1n, 1n, [], [], { supply });
     const smaller = checkpoint(segment(operatorSecret, 2n, [entry(y, y, original)]), 2n, 2n, [], [], { supply });
-    await refused(compose([original, smaller], smaller, y, []), "unsupported-scope");
+    await refused(compose([original, smaller], smaller, y, []), "invalid-local-replay", "IMPORT");
   });
   await test("one stale opening cannot substitute for either required split predecessor", async () => {
     for (const [openX, openY] of [[x0, y1], [x1, y0], [a1, y1], [x1, a1]]) {

@@ -306,14 +306,14 @@ all output commitments and accepted roots. Local trees and chains start
 fresh; later checkpoints replay from the same fixed imported base. Candidate
 paths for imported outputs use their original trees and are labeled
 `replayed-imported-tree-only`. The walk supports reappointment and
-same-operator restart, including lower-sequence imports at the same index
-where no silence clause is declared.
+same-operator restart, including lower-sequence same-operator imports at the
+same index, with the recovery obligations below where a silence clause is declared.
 It caps total work at 128 held checkpoints and 8192 event operations,
 counting repeated checkpoint prefixes, publication classification, recovery
 folds and failed replays. The original-segment clock path retains the limits
 above, and the separate local-only restoration scanner still refuses imports.
 
-Normal multi-backing histories use a cached whole-checkpoint classifier under
+Multi-backing histories use a cached whole-checkpoint classifier under
 C2.10.3–7. Every scoped backing contributes signed terms, a record-derived
 canonical predecessor and an authenticated snapshot; every check must pass
 before any audit or wallet candidate is returned. Shared events are identified
@@ -325,10 +325,18 @@ The real-proof fixture splits a shared two-backing prefix, continues each
 branch, rejoins them, spends against distinct imported anchors and burns in a
 later continuation. Fresh public and wallet processes replay the same package.
 The same checkpoint/event budgets bound visited commitments and replay/merge
-operations; existing byte, item and range bounds also apply. Multi-scope range
+operations, causal frontier construction, conflict comparisons and clock scans;
+existing byte, item and range bounds also apply. Multi-scope range
 audit counts describe classified dependencies, not all non-carrying commitments.
-Required ancestry with silence/non-service clauses or demand/withdraw/settle
-records, and multi-backing receipt queries, remain explicitly unsupported.
+Recovery scopes retain each backing's own adoption index and original-prefix
+clock. Returning scopes adopt the owed publication union in global venue order,
+including publications at the opening index and obligations inherited through
+same-index fresh openings. Shared demand ancestry is applied once; incomparable
+lock, settlement, withdrawal or spend conflicts refuse regardless of parent
+order. A two-backing fixture restores both settlement notes and continues with
+a payment; unequal obligations prove that neither a scalar minimum nor maximum
+can substitute for the per-backing indices. Required ancestry with non-service
+clauses, and multi-backing receipt queries, remain explicitly unsupported.
 
 With a silence clause, the same walk reads one backing clock across every
 term, freezes its reset index across checkpoints at the same witnessed index,
@@ -405,7 +413,7 @@ that a production reader must establish before returning spendable holdings.
 | Construction and key routing | Exact configuration preimage and candidate domain; all six independently pinned source/toolchain/bytecode/key identities and fixed helper/bounds/profile | Approved configuration/artifact identities after full adoption prerequisites; setup provenance and deployment qualification |
 | Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and per-backing issuance keys; header-derived scope root; fixture replacement/reappointment links and revocation checked across each complete scope | A venue profile and authenticated evidence behind the fixture answers |
 | Local state | Issue/spend/burn across deduplicated shared ancestry and every scoped snapshot, with per-backing totals, shared spent state and original-tree paths; single-backing demand/withdraw/settle and locks | Multi-backing recovery and runtime integration |
-| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; whole-scope classification, last-valid continuity and split/rejoin imports; single-backing publication force, exact ordered adoption, receipts and non-service counts | A selected venue profile and authenticated chain evidence; multi-backing recovery ordering |
+| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; whole-scope classification, last-valid continuity and split/rejoin imports; multi-backing publication force and exact ordered adoption; single-backing receipts and non-service counts | A selected venue profile and authenticated chain evidence; multi-backing receipt/non-service reads |
 | Wallet restoration | Seed-only capsule and lit-settlement openings with local or imported-tree paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
 
 The candidate manifest, checkpoint selection and the fixture venue evidence

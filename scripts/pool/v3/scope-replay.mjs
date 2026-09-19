@@ -1,10 +1,11 @@
-// Conditional C2.10.3–7 finalized scope replay. No recovery/adoption support.
+// Conditional C2.10.3–7 / C2b.4 finalized scope replay. Not runtime support.
 import { createHash } from "node:crypto";
 import { compareBytes } from "../../../dist/bytes.js";
 import { identifierOf, VALUE_BOUND } from "../../../dist/pool/field.js";
 import { EMPTY_NOTE_ROOT } from "../../../dist/pool/note-tree.js";
 import { EvidenceRefusal, LIMITS } from "../delivery/evidence-reader.mjs";
-import { effectOf } from "./recovery-state.mjs";
+import { effectOf, applyRecovery } from "./recovery-state.mjs";
+import { scopeRecovery, venueOrder } from "./scope-recovery.mjs";
 
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const same = (a, b) => compareBytes(a, b) === 0;
@@ -12,22 +13,29 @@ const hash = bytes => hex(createHash("sha256").update(bytes).digest());
 const keyOf = c => `${hex(c.operator)}:${c.sequence}:${hex(c.root)}`;
 const matches = (a, b) => a !== undefined && b !== undefined && keyOf(a) === keyOf(b);
 const before = (held, child) => child === undefined || held.index < child.index ||
-  (held.index === child.index && same(held.commitment.operator, child.commitment.operator) &&
+  (held.index === child.index && !child.strict && same(held.commitment.operator, child.commitment.operator) &&
     held.commitment.sequence < child.commitment.sequence);
 
 // Imported roots retain their original trees. Repeated events agree by
 // statement identity, while distinct events may never share effects.
-export function mergeFinalizedPrefixes(parents, { check, chargeEvents }) {
+export function mergeFinalizedPrefixes(parents, { check, chargeEvents, codec }) {
   const result = { events: new Map(), totals: new Map(), nullifiers: new Set(), outputsSeen: new Set(),
     anchors: new Set([EMPTY_NOTE_ROOT]), scanOutputs: [], outputPositions: new Map(),
-    demands: new Map(), effective: new Set(), spentTags: new Set() };
-  const scans = new Map();
+    demands: new Map(), effective: new Set(), spentTags: new Set(), adoptionIndices: new Map() };
+  const scans = new Map(), touched = new Map();
+  const precedes = (a, b) => a.segment !== undefined && b.segment !== undefined &&
+    (a.segment === b.segment ? a.position < b.position : (b.ancestry?.get(a.segment) ?? 0n) >= a.position);
   for (const parent of new Set(parents)) {
     if (parent === undefined) continue;
     for (const [id, event] of parent.state.events) {
       chargeEvents(1n);
       const prior = result.events.get(id);
       if (prior !== undefined) { check(prior.identity === event.identity, "CONTINUITY"); continue; }
+      for (const key of [...(event.tags ?? []).map(tag => `tag:${tag}`), ...(event.demand === undefined ? [] : [`demand:${event.demand}`])]) {
+        const previous = touched.get(key) ?? [];
+        for (const other of previous) { chargeEvents(1n); check(precedes(other, event) || precedes(event, other), "RECOVERY_CONFLICT"); }
+        previous.push(event); touched.set(key, previous);
+      }
       const { nfs, outputs } = effectOf(event.record);
       check(new Set(nfs).size === nfs.length && nfs.every(nf => nf !== 0n && !result.nullifiers.has(nf)), "SPENT");
       check(new Set(outputs).size === outputs.length && outputs.every(cm => cm !== 0n && !result.outputsSeen.has(cm)), "OUTPUT");
@@ -39,6 +47,10 @@ export function mergeFinalizedPrefixes(parents, { check, chargeEvents }) {
         result.totals.set(backing, total);
       }
       result.events.set(id, event);
+      if (codec !== undefined) {
+        if (event.record.kind >= 4) check(!result.effective.has(event.identity), "REPEATED_STATEMENT");
+        applyRecovery(event.record, result, codec);
+      }
     }
     for (const root of parent.state.anchors) result.anchors.add(root);
     for (const output of parent.state.scanOutputs) if (!scans.has(output.cm)) scans.set(output.cm, output);
@@ -68,7 +80,7 @@ export async function classifyScopes(context, directories, record, evidence, hel
   };
   const viewFor = async (backing, terms) => {
     const id = hex(backing);
-    if (terms.silence !== undefined || terms.nonService !== undefined) throw new EvidenceRefusal("unsupported-scope");
+    if (terms.nonService !== undefined) throw new EvidenceRefusal("unsupported-scope");
     if (!views.has(id)) views.set(id, readRecordView({ ...selection, backing }, terms, directories, record, codec));
     return views.get(id);
   };
@@ -80,14 +92,14 @@ export async function classifyScopes(context, directories, record, evidence, hel
   // Descend authenticated carriage in reverse rank order. A valid candidate
   // recursively resolves its own predecessors; unrelated old trails are not read.
   const latest = async (backing, terms, child) => {
-    const cacheKey = `${hex(backing)}:${child === undefined ? "current" : keyOf(child.commitment)}`;
+    const cacheKey = `${hex(backing)}:${child === undefined ? "current" : child.strict ? `before:${child.index}` : keyOf(child.commitment)}`;
     if (latestCache.has(cacheKey)) return latestCache.get(cacheKey);
     const pending = (async () => {
       const view = await viewFor(backing, terms);
       for (let i = view.chain.length - 1; i >= 0; i--) {
         const term = view.chain[i];
         if (child !== undefined && (term.from > child.index ||
-            (term.from === child.index && !same(term.operator, child.commitment.operator)))) continue;
+            (term.from === child.index && (child.strict || !same(term.operator, child.commitment.operator))))) continue;
         const held = await view.heldBy(term.operator);
         for (let j = held.length - 1; j >= 0; j--) {
           const candidate = held[j];
@@ -103,6 +115,7 @@ export async function classifyScopes(context, directories, record, evidence, hel
     latestCache.set(cacheKey, pending);
     return pending;
   };
+  const recovery = scopeRecovery({ context, viewFor, latest, check, charge: chargeEvents, ReplayRefusal });
   const classify = async (held, backing) => {
     const id = keyOf(held.commitment);
     if (verified.has(id)) return verified.get(id);
@@ -123,16 +136,17 @@ export async function classifyScopes(context, directories, record, evidence, hel
         if (signed === undefined || !same(codec.rootTermsName(signed.terms), scoped.backing) ||
             !codec.verifyRootTermsSignature(signed.terms, signed.signature)) throw new EvidenceRefusal("unresolved-evidence");
         const terms = codec.decodeRootTerms(signed.terms);
-        if (terms.silence !== undefined || terms.nonService !== undefined) throw new EvidenceRefusal("unsupported-scope");
+        if (terms.nonService !== undefined) throw new EvidenceRefusal("unsupported-scope");
         scopedTerms.set(hex(scoped.backing), terms);
       }
-      for (const bytes of trail.records) if (codec.decodeRecord(bytes).kind >= 4) throw new EvidenceRefusal("unsupported-scope");
       const base = { commitment: c, index: held.index, segment: snapshot.segment, header, snapshot };
       try {
         check(same(header.domain, selection.domain) && same(header.venue, selection.venue) &&
           same(header.operator, c.operator) && header.sequence <= c.sequence, "CONTEXT");
         check(directory.length === header.entries.length && header.entries.every(scoped =>
           directory.some(item => same(item.name, scoped.backing))), "SCOPE");
+        const durations = [...scopedTerms.values()].map(terms => terms.silence?.noCommitmentDuration);
+        check(durations.every(duration => duration === durations[0]), "SILENCE_SCOPE");
         let lapsed = false;
         for (const scoped of header.entries) {
           const terms = scopedTerms.get(hex(scoped.backing));
@@ -153,7 +167,7 @@ export async function classifyScopes(context, directories, record, evidence, hel
         });
         const parents = [];
         for (const scoped of header.entries) parents.push(await latest(scoped.backing, scopedTerms.get(hex(scoped.backing)), held));
-        let imported, lastValid;
+        let imported, lastValid, block = [], openingIndex;
         const opening = c.sequence === header.sequence;
         if (opening) {
           check(trail.records.length === 0, "OPENING");
@@ -165,7 +179,14 @@ export async function classifyScopes(context, directories, record, evidence, hel
               check(parent.index < codec.linkInForce(view.chain, held.index).from, "IMPORT_RANK");
             }
           }
-          imported = mergeFinalizedPrefixes(parents, { check, chargeEvents });
+          imported = mergeFinalizedPrefixes(parents, { check, chargeEvents, codec });
+          for (let i = 0; i < header.entries.length; i++) {
+            const scoped = header.entries[i], name = hex(scoped.backing);
+            imported.adoptionIndices.set(name, parents[i]?.state.adoptionIndices.get(name) ?? 0n);
+            const published = await recovery.forces(scoped.backing, scopedTerms.get(name), held.index);
+            block.push(...published.force.filter(event => event.index > imported.adoptionIndices.get(name)));
+          }
+          block.sort(venueOrder); openingIndex = held.index;
         } else {
           const firstView = scopeViews.values().next().value;
           const openingHeld = (await firstView.heldBy(c.operator)).find(item => item.commitment.sequence === header.sequence);
@@ -176,9 +197,14 @@ export async function classifyScopes(context, directories, record, evidence, hel
           check(openingDirectory.some(item => same(item.name, backing)), "OPENING");
           const opened = await classify(openingHeld, backing);
           check(opened.class === "valid" && same(opened.segment, snapshot.segment), "OPENING");
+          for (const scoped of header.entries) {
+            const clock = await recovery.clock(scoped.backing, scopedTerms.get(hex(scoped.backing)), opened.index, held.index);
+            if (clock !== null && (clock.open || (clock.boundary !== undefined && clock.boundary < held.index))) return { ...base, class: "lapsed" };
+          }
           check(parents.every(parent => parent !== undefined && same(parent.segment, snapshot.segment) &&
             matches(parent.commitment, parents[0].commitment)), "CONTINUITY");
           imported = opened.state;
+          block = opened.block; openingIndex = opened.index;
           const previous = parents[0];
           lastValid = { position: previous.state.position, historyHash: previous.snapshot.historyHash,
             evidenceHash: previous.snapshot.evidenceHash, eventIndices: previous.state.eventIndices };
@@ -186,12 +212,13 @@ export async function classifyScopes(context, directories, record, evidence, hel
         chargeEvents(BigInt(trail.records.length));
         const selectedTerms = scopedTerms.get(hex(backing)), revocations = new Map([...scopeViews].map(([name, view]) => [name, view.revokedAt]));
         const state = await replayTrail({ ...context, selection: { ...selection, backing }, terms: selectedTerms, header, scopedTerms },
-          snapshot, trail, { index: held.index, revocations, lastValid, imported, isOpening: opening });
+          snapshot, trail, { index: held.index, revocations, lastValid, imported, isOpening: opening,
+            block: opening ? [] : block, openingIndex, chargeEvents });
         for (const s of scopedSnapshots) {
           const total = state.totals.get(hex(s.backing)) ?? { issued: 0n, burned: 0n };
           check(s.issued === total.issued && s.burned === total.burned, "SNAPSHOT");
         }
-        return { ...base, state, class: "valid" };
+        return { ...base, state, block, scopedTerms, openingIndex, class: "valid" };
       } catch (error) {
         if (!(error instanceof ReplayRefusal)) throw error;
         return { ...base, class: "excluded", check: error.check };
@@ -209,13 +236,26 @@ export async function classifyScopes(context, directories, record, evidence, hel
   check(selected.class === "valid", selected.check);
   const current = await latest(selection.backing, context.terms);
   if (!matches(current?.commitment, selection)) throw new EvidenceRefusal("superseded-selection");
+  const publications = [], clocks = [];
+  for (const scoped of selected.header.entries) {
+    const terms = selected.scopedTerms.get(hex(scoped.backing));
+    publications.push(...(await recovery.forces(scoped.backing, terms, selection.judgingIndex)).verdicts);
+    clocks.push(await recovery.clock(scoped.backing, terms, selected.openingIndex, selection.judgingIndex));
+  }
+  const selectedClock = clocks[selected.header.entries.findIndex(entry => same(entry.backing, selection.backing))];
+  if (selectedClock !== null) for (const scopedClock of clocks) {
+    if (scopedClock.boundary !== undefined && (selectedClock.boundary === undefined || scopedClock.boundary < selectedClock.boundary)) selectedClock.boundary = scopedClock.boundary;
+  }
+  const clock = selectedClock === null ? null : Object.fromEntries(Object.entries(selectedClock).map(([key, value]) =>
+    [key, typeof value === "bigint" ? value.toString() : value ?? null]));
+  publications.sort((a, b) => venueOrder({ index: BigInt(a.index), ordinal: BigInt(a.ordinal) }, { index: BigInt(b.index), ordinal: BigInt(b.ordinal) }));
   const results = await Promise.all(verified.values());
   const carrying = results.sort((a, b) => a.index < b.index ? -1 : a.index > b.index ? 1 :
     a.commitment.sequence < b.commitment.sequence ? -1 : a.commitment.sequence > b.commitment.sequence ? 1 : 0)
     .map(item => ({ operator: hex(item.commitment.operator), sequence: item.commitment.sequence.toString(), index: item.index.toString(),
       class: item.class, ...(item.check === undefined ? {} : { check: item.check }) }));
-  return { state: selected.state, carrying, clock: null, ranges: { judgingIndex: view.t, lag: view.lag,
+  return { state: selected.state, carrying, clock, ranges: { judgingIndex: view.t, lag: view.lag,
     checkpointIndex: selectedHeld.index, revokedAt: view.revokedAt, chain: view.chain,
     heldBefore: results.filter(item => before(item, selectedHeld)).length,
-    heldAfter: results.filter(item => before(selectedHeld, item)).length } };
+    heldAfter: results.filter(item => before(selectedHeld, item)).length, publications } };
 }

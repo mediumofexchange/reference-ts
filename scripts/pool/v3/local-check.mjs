@@ -23,6 +23,7 @@ import { replayLocalPackage, replayEvidencePackage, PACKAGE_LIMITS, RANGE_LIMITS
 import { FixtureVenue } from "./fixture-venue.mjs";
 import { checkImports } from "./import-check.mjs";
 import { checkScopes } from "./scope-check.mjs";
+import { checkScopeRecovery } from "./scope-recovery-check.mjs";
 import { checkRecovery } from "./recovery-check.mjs";
 import { checkErgoReplay } from "./ergo-check.mjs";
 import { field } from "../fixtures.mjs";
@@ -944,6 +945,10 @@ try {
   });
   const scoped = await checkScopes({ codec, verifier, configurationBytes, domain, venue, prove, test,
     operatorSecret, issuerSecret, receiverSeed, payerSeed });
+  const scopeRecovery = await checkScopeRecovery({ codec, verifier, configurationBytes, domain, venue, prove, test,
+    operatorSecret, issuerSecret, receiverSeed, payerSeed });
+  assert.deepEqual(await replayEvidencePackage(portable(scopeRecovery.payload), verifier, codec), scopeRecovery.result);
+  assert.deepEqual(await replayEvidencePackage(portable(scopeRecovery.unequal.payload), verifier, codec), scopeRecovery.unequal.result);
   const imported = await checkImports({ codec, verifier, configurationBytes, domain,
     venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove, test,
     operatorSecret, issuerSecret, receiverSeed, payerSeed });
@@ -1022,6 +1027,13 @@ try {
     assert.deepEqual(worker(scoped.payload), scoped.result);
     assert.deepEqual(worker({ ...scoped.payload, seed: receiverSeed }), scoped.receiver);
     assert.deepEqual(worker({ ...scoped.payloadY, seed: receiverSeed }), scoped.receiverY);
+    assert.deepEqual(worker(scopeRecovery.payload), scopeRecovery.result);
+    assert.deepEqual(worker(scopeRecovery.payloadY), scopeRecovery.resultY);
+    assert.deepEqual(worker({ ...scopeRecovery.payload, seed: receiverSeed }), scopeRecovery.receiver);
+    assert.deepEqual(worker({ ...scopeRecovery.issuerPayload, seed: scopeRecovery.issuerSeed }), scopeRecovery.issuerRestored);
+    assert.deepEqual(worker({ ...scopeRecovery.issuerPayloadY, seed: scopeRecovery.issuerSeed }), scopeRecovery.issuerRestoredY);
+    assert.deepEqual(worker(scopeRecovery.unequal.payload), scopeRecovery.unequal.result);
+    assert.deepEqual(worker({ ...scopeRecovery.unequal.payload, seed: scopeRecovery.issuerSeed }), scopeRecovery.unequal.restored);
     assert.deepEqual(worker(silent.payload), silent.result);
     assert.deepEqual(worker({ ...silent.payload, seed: receiverSeed }), silent.receiver);
     assert.deepEqual(worker(recovery.payload), recovery.result);
@@ -1073,6 +1085,7 @@ try {
   const sources = ["scripts/pool/v3/local-replay.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/local-check.mjs",
     "scripts/pool/v3/fixture-venue.mjs", "scripts/pool/v3/import-check.mjs", "scripts/pool/v3/ergo-check.mjs",
     "scripts/pool/v3/scope-replay.mjs", "scripts/pool/v3/scope-check.mjs",
+    "scripts/pool/v3/scope-recovery.mjs", "scripts/pool/v3/scope-recovery-check.mjs",
     "scripts/pool/v3/recovery-state.mjs", "scripts/pool/v3/recovery-check.mjs",
     "scripts/pool/v3/receipt-state.mjs", "scripts/pool/v3/receipt-check.mjs",
     "scripts/pool/v3/non-service.mjs", "scripts/pool/v3/non-service-check.mjs",
@@ -1087,7 +1100,7 @@ try {
     "experiments/ergo-range/replay-venue.mjs", "experiments/ergo-range/replay-fixture.mjs",
     "experiments/ergo-range/replay-venue-check.mjs", "experiments/ergo-range/package-lock.json");
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-13", specification: "fb7dd07", node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-14", specification: "fb7dd07", node: process.version,
     packageBytes: portable(complete).package.length, dependencyPackageBytes: portable(extended).package.length,
     fixtureVenueRecords: complete.venue.records.length,
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
@@ -1098,6 +1111,10 @@ try {
     silenceImports: { packageBytes: portable(silent.payload).package.length, audit: silent.result, receiver: silent.receiver },
     scopeImports: { packageBytes: portable(scoped.payload).package.length,
       audit: scoped.result, receiver: scoped.receiver, receiverOtherBacking: scoped.receiverY },
+    scopeRecovery: { packageBytes: portable(scopeRecovery.payload).package.length,
+      audit: scopeRecovery.result, otherBacking: scopeRecovery.resultY, receiver: scopeRecovery.receiver,
+      issuerRestored: scopeRecovery.issuerRestored, issuerOtherBacking: scopeRecovery.issuerRestoredY,
+      unequalAdoption: scopeRecovery.unequal.result, unequalRestored: scopeRecovery.unequal.restored },
     recovery: { packageBytes: portable(recovery.payload).package.length, audit: recovery.result,
       receiver: recovery.receiver, issuerRestored: recovery.issuerRestored },
     sameIndexReturns: { packageBytes: portable(recovery.sameIndex.payload).package.length,
@@ -1108,7 +1125,7 @@ try {
     ...(withErgo ? { ergo: { evidence: "synthetic-headers-and-exact-transaction-bytes", rawBytes: ergo.rawBytes,
       blocks: ergo.payload.venue.blocks.length, audit: ergo.result, receiver: ergo.receiver } } : {}),
     limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
-      "Normal multi-backing imports validate every scoped predecessor and snapshot, merge shared events once, and retain per-backing totals and original-tree paths through split, rejoin and continuation. Required multi-backing ancestry with recovery/non-service clauses or demand/withdraw/settle records and multi-backing receipt queries remain unsupported. Single-backing imports retain publication force, standing locks, exact recovery adoption, same-index openings, receipts and non-service counts. Import lapse currently requires full trail evidence.",
+      "Multi-backing imports validate every scoped predecessor and snapshot, merge shared events once with causal recovery conflict checks, and retain per-backing totals, adoption indices and original-tree paths through split, rejoin, exact recovery adoption and continuation. Required multi-backing ancestry with non-service clauses and multi-backing receipt queries remain unsupported. Single-backing imports retain receipts and non-service counts. Import lapse currently requires full trail evidence. Checkpoint/event work remains bounded; large histories can refuse resources.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };
   if (withErgo) report.limits.push("The candidate Ergo adapter checks exact transaction decoding and roots against independently selected synthetic headers. No proof of work, chain selection, decoder node equivalence/containment, node acceptance or venue-profile adoption is established.");
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");
