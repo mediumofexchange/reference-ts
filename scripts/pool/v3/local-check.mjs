@@ -309,6 +309,35 @@ try {
     const domainSwap = clone(complete); domainSwap.selection.domain = b(88);
     assert.equal((await replayLocalPackage(domainSwap, beforeProof, codec)).check, "CONFIGURATION");
   });
+  await test("non-service terms work without silence and retain the full unsigned calibration", async () => {
+    for (const grade of [
+      { duration: 0n, count: 0n, window: 0n },
+      { duration: (1n << 64n) - 1n, count: (1n << 32n) - 1n, window: 0n },
+    ]) {
+      const payload = emptyPackage({ ...termsFields, nonService: grade });
+      const result = await replayLocalPackage(payload, verifier, codec);
+      assert.equal(result.status, "selected-local-replay");
+      assert.equal(result.audit.range.clock, null);
+      assert.deepEqual(result.audit.range.nonService, { duration: String(grade.duration), threshold: String(grade.count),
+        window: String(grade.window), count: "0", fires: grade.count === 0n, incumbent: hex(operator), snapshotIndex: "3" });
+      const unavailable = { ...verifier, record(data) { const record = verifier.record(data); return { ...record,
+        range: request => request.kind === 4 ? undefined : record.range(request) }; } };
+      assert.equal((await replayLocalPackage(payload, unavailable, codec)).status, "unresolved-evidence");
+      const { venue: _, ...withoutRecord } = payload;
+      assert.equal((await replayLocalPackage(withoutRecord, verifier, codec)).status, "unsupported-scope");
+      // An opening at t is final for the state audit, but there is no canonical
+      // checkpoint strictly before t for the count. Zero threshold is literal.
+      const opening = signCommitment(operatorSecret, 1n, payload.selection.root);
+      const record = new FixtureVenue(venue, 1n, 2n);
+      record.witness(1, operator, 1n, encodeCommitment(opening));
+      const justOpened = { ...payload, selection: { ...payload.selection, sequence: 1n, judgingIndex: 1n },
+        package: { ...payload.package, commitment: encodeCommitment(opening) }, venue: record.export() };
+      const atOpening = await replayLocalPackage(justOpened, verifier, codec);
+      assert.equal(atOpening.status, "selected-local-replay");
+      assert.deepEqual(atOpening.audit.range.nonService, { ...result.audit.range.nonService, snapshotIndex: null });
+    }
+    assert.equal((await replayLocalPackage(emptyPackage(termsFields), verifier, codec)).audit.range.nonService, undefined);
+  });
   await test("signed scoped terms refuse changed signature, payout, key and name independently", async () => {
     const replaceTerms = signed => {
       const payload = clone(complete), trail = codec.decodeTrail(payload.package.trail, LIMITS);
@@ -922,6 +951,12 @@ try {
     venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove,
     test: (name, fn) => test(`Recovery: ${name}`, fn), operatorSecret, issuerSecret, receiverSeed, payerSeed });
   assert.deepEqual(await replayEvidencePackage(portable(recovery.payload), verifier, codec), recovery.result);
+  assert.deepEqual(await replayEvidencePackage(portable(recovery.nonService.payload), verifier, codec), recovery.nonService.result);
+  await test("request verification failure remains unavailable evidence rather than a zero count", async () => {
+    const failure = new Error("request verification unavailable"), throwing = { ...verifier,
+      verify: (kind, ...args) => { if (kind === 7) throw failure; return verifier.verify(kind, ...args); } };
+    await assert.rejects(replayEvidencePackage(portable(recovery.nonService.payload), throwing, codec), error => error === failure);
+  });
   assert.deepEqual(await replayEvidencePackage(portable(recovery.receipts.payload), verifier, codec), recovery.receipts.result);
   assert.deepEqual(await replayEvidencePackage(portable(recovery.receipts.adoptedPayload), verifier, codec), recovery.receipts.adoptedResult);
   await test("receipt package queries are bounded, seedless and own their signed bytes", async () => {
@@ -980,6 +1015,7 @@ try {
     assert.deepEqual(worker(silent.payload), silent.result);
     assert.deepEqual(worker({ ...silent.payload, seed: receiverSeed }), silent.receiver);
     assert.deepEqual(worker(recovery.payload), recovery.result);
+    assert.deepEqual(worker(recovery.nonService.payload), recovery.nonService.result);
     assert.deepEqual(worker({ ...recovery.payload, seed: receiverSeed }), recovery.receiver);
     assert.deepEqual(worker({ ...recovery.issuerPayload, seed: recovery.issuerSeed }), recovery.issuerRestored);
     assert.deepEqual(worker(recovery.receipts.payload), recovery.receipts.result);
@@ -1026,18 +1062,19 @@ try {
     "scripts/pool/v3/fixture-venue.mjs", "scripts/pool/v3/import-check.mjs", "scripts/pool/v3/ergo-check.mjs",
     "scripts/pool/v3/recovery-state.mjs", "scripts/pool/v3/recovery-check.mjs",
     "scripts/pool/v3/receipt-state.mjs", "scripts/pool/v3/receipt-check.mjs",
+    "scripts/pool/v3/non-service.mjs", "scripts/pool/v3/non-service-check.mjs",
     "scripts/pool/delivery/evidence-reader.mjs", "scripts/pool/delivery/crypto.mjs", "scripts/pool/spent-set/radix.mjs",
     "model/pool-v3-records.ts", "model/pool-v3-commitments.ts", "model/pool-v3-trail.ts", "model/pool-v3-headers.ts",
     "model/pool-v3-configuration.ts", "model/pool-v3-terms.ts", "model/pool-v3-package.ts", "model/pool-v3-range.ts",
     "scripts/pool/v3/candidate.mjs", "scripts/pool/v3/candidate-manifest.json",
     "src/pool/note-tree.ts", "src/pool/notes.ts", "src/pool/poseidon2.ts", "src/pool/scope.ts",
     "scripts/pool/v3/circuits/issue.nr", "scripts/pool/v3/circuits/spend.nr", "scripts/pool/v3/circuits/burn.nr",
-    "scripts/pool/v3/circuits/demand.nr", "scripts/pool/v3/circuits/settle.nr"];
+    "scripts/pool/v3/circuits/demand.nr", "scripts/pool/v3/circuits/settle.nr", "scripts/pool/v3/circuits/request.nr"];
   if (withErgo) sources.push("model/pool-v3-ergo-profile.ts", "experiments/ergo-range/decoder.mjs",
     "experiments/ergo-range/replay-venue.mjs", "experiments/ergo-range/replay-fixture.mjs",
     "experiments/ergo-range/replay-venue-check.mjs", "experiments/ergo-range/package-lock.json");
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-10", specification: "3ed1800", node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-11", specification: "3ed1800", node: process.version,
     packageBytes: portable(complete).package.length, dependencyPackageBytes: portable(extended).package.length,
     fixtureVenueRecords: complete.venue.records.length,
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
@@ -1050,10 +1087,11 @@ try {
       receiver: recovery.receiver, issuerRestored: recovery.issuerRestored },
     receipts: { packageBytes: portable(recovery.receipts.payload).package.length, original: recovery.receipts.result,
       adopted: recovery.receipts.adoptedResult },
+    nonService: { packageBytes: portable(recovery.nonService.payload).package.length, audit: recovery.nonService.result },
     ...(withErgo ? { ergo: { evidence: "synthetic-headers-and-exact-transaction-bytes", rawBytes: ergo.rawBytes,
       blocks: ergo.payload.venue.blocks.length, audit: ergo.result, receiver: ergo.receiver } } : {}),
     limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
-      "Single-backing imports validate finalized closure through replacement, reappointment and restart, with publication force, standing locks and exact ordered recovery adoption. Single-receipt queries classify exact inclusion and liability through silence and term boundaries. Same-index fresh silence openings with a same-index predecessor, multi-backing scopes and non-service counts remain unsupported. Import lapse currently requires full trail evidence.",
+      "Single-backing imports validate finalized closure through replacement, reappointment and restart, with publication force, standing locks and exact ordered recovery adoption. Single-receipt queries classify exact inclusion and liability through silence and term boundaries. Non-service counts use signed terms, first request identities and the strictly preceding canonical state. Same-index fresh silence openings with a same-index predecessor and multi-backing scopes remain unsupported. Import lapse currently requires full trail evidence.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };
   if (withErgo) report.limits.push("The candidate Ergo adapter checks exact transaction decoding and roots against independently selected synthetic headers. No proof of work, chain selection, decoder node equivalence/containment, node acceptance or venue-profile adoption is established.");
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");

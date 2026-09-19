@@ -13,6 +13,7 @@ import { createCapsuleScanner, deriveSettlementOwnerSecret, CapsuleAssociationEr
 import { EvidenceRefusal, LIMITS, readLocalEvidence } from "../delivery/evidence-reader.mjs";
 import { recoveryState, effectOf, checkRecovery, applyRecovery } from "./recovery-state.mjs";
 import { receiptWalk } from "./receipt-state.mjs";
+import { countNonService } from "./non-service.mjs";
 
 const same = (a, b) => compareBytes(a, b) === 0;
 const hex = bytes => Buffer.from(bytes).toString("hex");
@@ -322,7 +323,8 @@ async function classifyImports(context, directories, record, evidence) {
   const view = await readRecordView(selection, terms, directories, record, codec);
   const { chain, heldBy, termEnd, carries, revokedAt, t, lag } = view;
   const duration = terms.silence?.noCommitmentDuration;
-  let publications = duration === undefined ? [] : context.receiptBytes === undefined ?
+  const counting = terms.nonService !== undefined && context.receiptBytes === undefined;
+  let publications = duration === undefined && !counting ? [] : context.receiptBytes === undefined ?
     (await view.ask(4, selection.backing)).entries : undefined;
   const selectedHeld = (await heldBy(selection.operator)).find(h => h.commitment.sequence === selection.sequence && same(h.commitment.root, selection.root));
   if (selectedHeld === undefined) throw new EvidenceRefusal("selection-mismatch");
@@ -333,13 +335,15 @@ async function classifyImports(context, directories, record, evidence) {
   context.receiptWalk = walk;
   context.contextReceipt = walk?.receipt;
   const matches = (a, b) => a !== undefined && b !== undefined && a.sequence === b.sequence && same(a.operator, b.operator) && same(a.root, b.root);
-  let canonical, selectedState, selectedClock, checkpoints = 0n, events = 0n, heldBefore = 0, heldAfter = 0;
+  let canonical, countSnapshot, selectedState, selectedClock, checkpoints = 0n, events = 0n, heldBefore = 0, heldAfter = 0;
   let publicationAt = 0;
   const force = [], publicationVerdicts = [];
   const charge = () => { if (++events > IMPORT_LIMITS.maxEvents) throw new EvidenceRefusal("resource-refusal"); };
   // At one index the whole publication group is read BEFORE any checkpoint.
   // Effects change recovery state but never extend the snapshot's forest.
   const publishThrough = async through => {
+    // A non-service clause alone gives requests a count, never recovery force.
+    if (duration === undefined) return;
     // Receipt inclusion before any gap needs no later publication evidence.
     if (publications === undefined) {
       if (canonical === undefined || through - canonical.index <= duration) return;
@@ -488,6 +492,7 @@ async function classifyImports(context, directories, record, evidence) {
             block: c.sequence === header.sequence ? [] : segment.block, openingIndex: segment.openingIndex, isOpening: c.sequence === header.sequence });
         segment.lastValid = { position: state.position, historyHash: snapshot.historyHash, evidenceHash: snapshot.evidenceHash, eventIndices: state.eventIndices };
         canonical = { commitment: c, index: held.index, segment: snapshot.segment, scope: new ScopeTree(header.entries).root(), state };
+        if (held.index < t) countSnapshot = canonical;
         latestValid = held.index;
         carrying.push({ ...item, class: "valid" });
         const verdict = walk?.checkpoint(held, snapshot.segment, state, header, "valid");
@@ -506,8 +511,10 @@ async function classifyImports(context, directories, record, evidence) {
   if (walk) return { receipt: walk.boundary(t, clocks.get(hex(walk.receipt.segment))) ?? walk.finish() };
   await publishThrough(t);
   const clock = duration === undefined ? null : clockRecord(t, selectedClock);
+  const nonService = counting ? await countNonService(context, view, countSnapshot, publications, charge) : undefined;
   return { state: selectedState, carrying, clock,
-    ranges: { judgingIndex: t, lag, checkpointIndex: selectedHeld.index, revokedAt, heldBefore, heldAfter, chain, publications: publicationVerdicts } };
+    ranges: { judgingIndex: t, lag, checkpointIndex: selectedHeld.index, revokedAt, heldBefore, heldAfter, chain,
+      publications: publicationVerdicts, ...(nonService === undefined ? {} : { nonService }) } };
 }
 
 /** verifier.configuration is independently selected and its six keys checked
@@ -563,7 +570,7 @@ export async function replayLocalPackage(input, verifier, codec) {
       const distinct = list => list.filter((item, i) => list.findIndex(other => same(other, item)) === i);
       const snapshots = distinct([supplied.snapshot, ...byteList(supplied.snapshots, "snapshots")]);
       const trails = distinct([supplied.trail, ...byteList(supplied.trails, "trails")]);
-      if (imports || supplied.receipt !== undefined) {
+      if (imports || supplied.receipt !== undefined || terms.nonService !== undefined) {
         const result = await classifyImports(context, directories, record, { snapshots, trails });
         if (result.receipt !== undefined) return { ...refused("receipt-status"), receipt: result.receipt, rangeEvidence,
           candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
@@ -574,8 +581,8 @@ export async function replayLocalPackage(input, verifier, codec) {
         ({ carrying, state, clock } = await classifyCarrying(context, ranges, { snapshot, trail, snapshots, trails }));
       }
     } else {
-      // A silence clause needs the clock (C2b.6.1), which is read from the record ranges alone.
-      if (terms.silence !== undefined) throw new EvidenceRefusal("unsupported-scope");
+      // Both grades need the independently answered record ranges.
+      if (terms.silence !== undefined || terms.nonService !== undefined) throw new EvidenceRefusal("unsupported-scope");
       state = await replayTrail(context, snapshot, trail, {});
     }
     if (state === undefined) throw new Error("the selection was not classified");
@@ -615,7 +622,8 @@ export async function replayLocalPackage(input, verifier, codec) {
           revokedAt: ranges.revokedAt === undefined ? null : ranges.revokedAt.toString(),
           heldBefore: ranges.heldBefore, heldAfter: ranges.heldAfter,
           chain: ranges.chain.map(link => ({ operator: hex(link.operator), from: link.from.toString(), link: hex(link.link) })),
-          carrying, clock, ...(ranges.publications === undefined ? {} : { publications: ranges.publications }) } }, candidates };
+          carrying, clock, ...(ranges.publications === undefined ? {} : { publications: ranges.publications }),
+          ...(ranges.nonService === undefined ? {} : { nonService: ranges.nonService }) } }, candidates };
   } catch (error) {
     if (error instanceof ReplayRefusal) return failure("invalid-local-replay", error.check);
     // A lapsed selection carries the clock record proving the lapse (C2b.4.1) beside the refusal.

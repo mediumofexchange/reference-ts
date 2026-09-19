@@ -14,6 +14,7 @@ import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
 import { checkReceipts } from "./receipt-check.mjs";
+import { checkNonService } from "./non-service-check.mjs";
 
 const b = n => new Uint8Array(32).fill(n);
 const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
@@ -29,7 +30,8 @@ export async function checkRecovery({ codec, verifier, configurationBytes, domai
   const operator = ed25519.getPublicKey(operatorSecret), issuer = ed25519.getPublicKey(issuerSecret);
   const terms = codec.encodeRootTerms({ obligor: issuer, operator, configuration: domain, venue, interval: 10n,
     payout: { thing: "recovery fixture units", quantumExponent: 0, perUnit: 1n },
-    replacementRule: ed25519.getPublicKey(ruleSecret), silence: { noCommitmentDuration: 4n, challengeWindow: 5n } });
+    replacementRule: ed25519.getPublicKey(ruleSecret), silence: { noCommitmentDuration: 4n, challengeWindow: 5n },
+    nonService: { duration: 2n, count: 1n, window: 5n } });
   const backing = codec.rootTermsName(terms);
   const signedTerms = { terms, signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), issuerSecret) };
   const reference = cp => ({ operator: cp.commitment.operator, sequence: cp.commitment.sequence, root: cp.commitment.root });
@@ -310,5 +312,9 @@ export async function checkRecovery({ codec, verifier, configurationBytes, domai
   const receipts = await checkReceipts({ codec, verifier, test, compose, checkpoint, segment, reference, operatorSecret,
     original, originalOpening, originalState, issuance, funded, returnOpening, returned, adopted, finalCheckpoint,
     ancestry, publications, payload, adoptedRecords, adoptedEffects, finalRecords, finalEffects });
-  return { payload, result, receiver, issuerSeed, issuerPayload, issuerRestored, settlement: released.output, receipts };
+  const nonService = await checkNonService({ codec, verifier, prove, test, compose, checkpoint, segment, reference,
+    publication, demand, note, domain, venue, backing, signedTerms, operatorSecret, ruleSecret, payerSeed,
+    original, originalOpening, originalState, originalTree, issuance, funded, firstDemand,
+    ancestry, publications, finalCheckpoint, paid, change });
+  return { payload, result, receiver, issuerSeed, issuerPayload, issuerRestored, settlement: released.output, receipts, nonService };
 }

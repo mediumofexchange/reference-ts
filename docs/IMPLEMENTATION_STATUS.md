@@ -96,7 +96,10 @@ from the seed and public evidence. The clock retains each segment's retirement
 after a fresh opening resets the gap. Same-index fresh silence openings with a
 same-index predecessor remain unsupported. Import lapse still requires full
 trail evidence. Configuration adoption, a selected venue profile, multi-backing
-imports and non-service counts remain open. Single-backing receipt reads reuse
+imports remain open. Signed non-service terms now drive a single-backing
+real-proof count against the strictly preceding canonical state, preserving
+first request indices, distinct tags and spent/lock status across handover.
+Single-backing receipt reads reuse
 the verified checkpoint walk: exact original/adopted event inclusion, liability
 precedence, repair and silence/term lapse, with no spendability claim.
 `npm run check:pool:fees` compares the successor

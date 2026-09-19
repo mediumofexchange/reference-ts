@@ -4,43 +4,37 @@ Updated: 2026-09-19
 
 ## Goal
 
-Receipt finality across silence/return on `feat/v3-receipt-finality` from
-dfc4dbc, for delivery on `main`. Companion specification stays `main` at
-3ed1800; no normative change.
+Completed C2b.5.2 non-service counting on `feat/v3-non-service-count` from
+5aff3a7, for delivery on `main`. Companion specification remains `main` at
+3ed1800; existing signed terms/configuration and request relation suffice.
 
-Acceptance: real-proof original and adopted receipts retain exact inclusion
-and liability precedence across silence, lapse unfinished tails, distinguish
-repair from abandonment, refuse missing dependencies, and agree in a fresh
-process. No live-chain or configuration-adoption claim.
+Acceptance: seedless real-proof counts read the last canonical state strictly
+before the judging index; bind the signed grade and candidate configuration;
+preserve first request identity indices and distinct tags across handover;
+exclude spent/locked notes; refuse missing dependencies; agree in fresh processes.
+No live-chain or configuration-adoption claim.
 
 ## Status
 
-- Implemented a seedless single-receipt query using package kind 10 and the
-  existing verified checkpoint/import walk. It authenticates the opening,
-  scope and held reference, comparing all five event fields. Adopted receipts
-  name the new segment and position but retain source proof/signature hashes.
-- Inclusion wins immediately. Contradiction and abandonment survive later
-  silence; unfinished receipts lapse at the earlier silence or term boundary.
-  Excluded/noncarrying checkpoints occupy sequences without making holes.
-- Missing later evidence cannot erase an already returned inclusion. Refusals
-  retain proven contradictions; no receipt result exposes wallet state.
-- Independent source review found one fact-preservation gap on late encoding
-  or resource refusal. All expected refusal branches now retain contradictions;
-  readback resolved the finding. Source and test review closed with no
-  unresolved material findings; final execution passed.
+- Main 5aff3a7 hosted CI 35455624167 passed; upstream fetched, clean baseline.
+- Implemented the count using existing signed terms, kind-7 proofs and the
+  classified checkpoint/import walk. Identity windows survive handover;
+  canonical spent tags and deadline-sensitive locks determine service.
+- Independent source review and hostile helper probes found no material
+  issues. Final real-proof acceptance passed; delivery target is `main`.
 
 ## Evidence
 
-- Main dfc4dbc hosted CI 35453949661 passed all seven jobs this session.
-  Reuse its unchanged runtime/circuit/dependency baseline: 1,934 tests and
-  package/service/wallet/crash/spent plus real v2/v3 proof acceptance.
-- Final `npm run check:pool:ergo-replay`: 91 groups / 31 real proofs pass,
-  including original and adopted receipts in fresh processes. The first run
-  exposed a too-early replacement fixture; corrected under the unchanged rule.
-  Syntax, docs and focused diff checks pass. The [retained report](docs/pool-v3-local-replay-verification.json)
-  has source hashes verified against final files.
-- Delivery target is `main`; final hosted CI must be checked separately.
-  No branch protection or required rulesets exist; no safeguards changed.
+- Reuse main 5aff3a7's passing hosted runtime/circuit/dependency baseline;
+  runtime, circuits, keys and dependencies are unchanged.
+- Final `npm run check:pool:ergo-replay`: 104 groups / 37 real proofs pass,
+  including seedless count agreement through the package in a fresh process.
+  Coverage includes identity/proof variants, both window endpoints, refresh,
+  canonical lock expiry/spend, handover, missing evidence and verifier failure.
+- Documentation, syntax and focused diff checks pass. The [retained report](docs/pool-v3-local-replay-verification.json)
+  has all source hashes verified against final files. Final main hosted CI
+  must be checked separately. No protection or required rulesets exist;
+  no safeguards changed.
 
 ## Existing local product and custody boundary
 
@@ -62,11 +56,13 @@ process. No live-chain or configuration-adoption claim.
 
 ## Next
 
-1. Read final main hosted CI, then implement the non-service count and its
-   signed terms/configuration dependencies as the next complete recovery path.
+1. Check final main CI, then close same-index fresh silence openings. Resolve
+   C2.10.4/C2b.4.1's predecessor distinction with independent review before
+   changing dependent code; demonstrate the currently refused case with real
+   proofs while preserving silence retirement and exact adopted publications.
 2. Same-index fresh silence openings with a same-index predecessor and
    multi-backing closure remain unsupported. Import lapse requires full trails.
-   Authenticated venue evidence remains open; receipt queries retain the same
+   Authenticated venue evidence remains open; counts and receipts retain the same
    conditional fixture boundary as checkpoint replay.
 3. P2 confirms the measured 24-piece transaction on a node; P4 measures
    exhaustion from index zero on a real chain. Decoder node equivalence is a
@@ -84,5 +80,5 @@ plausible range **40-60%**. Reusable recovery logic has advanced; selected
 venue/decoder, complete recovery, qualified custody and user operation remain
 the largest blocks. No percentage change is warranted.
 
-A fresh instance is recommended for the non-service count: it begins a
-separate terms/configuration slice, with this receipt work fully handed off.
+A fresh instance is recommended for the next predecessor-boundary slice;
+the completed count is handed off, and that rule needs fresh source review.

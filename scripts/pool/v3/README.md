@@ -46,7 +46,7 @@ segment adopts the complete block through its opening index in venue order,
 retaining the exact proof and authorization bytes. Standing demands and locks
 survive imports; settlement outputs restore from public fields and the seed.
 Same-index fresh silence openings with a same-index canonical predecessor,
-multi-backing scopes, non-service counts and configuration adoption remain
+multi-backing scopes and configuration adoption remain
 unsupported. Full trails are still
 required for import lapse. The local-only restoration scanner continues to
 refuse imports.
@@ -60,6 +60,16 @@ proven contradictions in `receiptEvidence`. Adopted receipts name the new
 segment and position while retaining original proof and authorization hashes.
 Receipt results expose no wallet candidates or spending authority. Multiple
 receipts per package and receipt reads without venue evidence are unsupported.
+
+Signed non-service terms enable a seedless C2b.5.2 count in the audit. The
+reader uses the canonical checkpoint strictly before the judging index,
+including imported roots, spent tags and standing locks. It groups request
+publications by statement identity at their first index, verifies any proof
+variant available strictly before judgment, and counts distinct unserved
+tags in the signed window. Handover preserves requests and changes the
+incumbent. A non-service clause needs no silence clause; without the former
+there is no count. Missing range or ancestry evidence returns no audit.
+The count shares the import work budget and fixture authority boundary.
 
 For the same import/payment/burn trace through exact synthetic Ergo transaction
 bytes, install the pinned optional experiment dependencies with

@@ -328,7 +328,7 @@ read at each publication's original index, in venue order, against the
 strictly preceding snapshot and intervening force (C2b.3.2). Recovery effects
 never extend that snapshot's forest. Malformed or invalid publications have
 no force; missing evidence remains unresolved. Acceptance and request have
-no force; dishonour and non-service counts remain separate.
+no recovery force; the non-service count is a separate canonical-state read.
 
 Each return opening remains empty and inherits its predecessor's adoption
 index. Every non-opening checkpoint starts with the full adopted block through
@@ -361,6 +361,23 @@ receipt judgments use the fixture venue and expose no audit state, recovered
 candidates or spending authority. One query adds only the existing 355-byte
 receipt plus package framing and reuses the replay's work budgets.
 
+Signed non-service terms enable C2b.5.2 in `audit.range.nonService`, with
+duration, threshold, window, count, firing status, incumbent and snapshot
+index. It uses the last valid carrying checkpoint strictly before judgment,
+passing excluded and lapsed checkpoints and retaining imported roots, spent
+tags and locks. Request publications are read from index zero, strictly before
+judgment: the first statement identity fixes its window even if that copy's
+proof fails; any later valid proof variant in the prefix can establish it.
+Both window endpoints are inclusive. Refresh creates another identity, but
+each unspent and unlocked tag counts once. Handover changes the incumbent
+without resetting requests. Recovery publications do not serve a request
+until the canonical checkpoint adopts their effects. The existing kind-7 key
+in the checked configuration verifies requests; no new signed object, frame
+or authority is introduced. Non-service terms need no silence clause; missing
+terms mean no count, and missing range/ancestry evidence means no audit.
+The count uses the shared replay work budget and retains the same conditional
+fixture boundary as the other audit fields.
+
 The complete public-package boundary still requires the following inputs and
 checks. This table separates what this experiment establishes from prerequisites
 that a production reader must establish before returning spendable holdings.
@@ -370,7 +387,7 @@ that a production reader must establish before returning spendable holdings.
 | Construction and key routing | Exact configuration preimage and candidate domain; all six independently pinned source/toolchain/bytecode/key identities and fixed helper/bounds/profile | Approved configuration/artifact identities after full adoption prerequisites; setup provenance and deployment qualification |
 | Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and terms-derived issuance key; header-derived scope root; fixture replacement/reappointment links and revocation checked at each checkpoint | Multi-backing authority; a venue profile and authenticated evidence behind the fixture answers |
 | Local state | Issue/spend/burn and demand/withdraw/settle state checks, locks, compressed spent root, note paths, totals and both chains; exact single-backing transitive imports with fresh local trees | Multi-backing closure deduplication and all scoped snapshots |
-| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; carrying-checkpoint classification, last-valid continuity, replacement/reappointment/restart imports; publication force, exact ordered adoption and single-backing receipt verdicts | A selected venue profile and authenticated chain evidence, multi-backing scope changes and the count |
+| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; carrying-checkpoint classification, last-valid continuity, replacement/reappointment/restart imports; publication force, exact ordered adoption, single-backing receipt verdicts and non-service counts | A selected venue profile and authenticated chain evidence, multi-backing scope changes |
 | Wallet restoration | Seed-only capsule and lit-settlement openings with local or imported-tree paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
 
 The candidate manifest, checkpoint selection and the fixture venue evidence
