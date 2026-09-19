@@ -88,6 +88,12 @@ continuation witnessed past it (C2b.4.1). A selection with imports additionally
 validates the exact single-backing predecessor
 closure through replacement, reappointment and same-operator restart; it
 retains imported spent state, roots, totals and original-tree wallet paths.
+Normal two-backing histories additionally split and rejoin shared ancestry,
+deduplicate events, check every scoped snapshot and canonical predecessor,
+and preserve per-backing totals and original-tree paths through a later
+continuation. Distinct-event nullifier/output conflicts refuse the whole replay.
+Multi-backing recovery clauses, recovery records and receipt queries remain
+unsupported; the existing single-backing recovery path is separate.
 Silence-bearing imports read an independently answered publication range.
 Demand, withdrawal and release force use the original snapshot and venue order;
 return adopts the exact complete block through its opening index. Standing

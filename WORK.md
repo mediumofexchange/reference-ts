@@ -4,61 +4,57 @@ Updated: 2026-09-19
 
 ## Goal
 
-Next product slice: complete two-backing finalized import/replay at the conditional
-v3 layer, through shared ancestry and a scope change, with seedless public audit
-and restored candidate note paths. This is one capability slice with internal
-milestones, not separate tasks for each helper or regression test.
+Completed slice: two-backing finalized import/replay at the conditional v3 layer,
+through shared ancestry, split/rejoin and a later continuation, with seedless
+public audit and restored candidate note paths.
 
-Acceptance: every scoped predecessor is canonical and finalized; common events
-count once; distinct-event nullifier/output conflicts fail; totals and roots
-agree for independent fresh readers; one missing/stale scoped dependency refuses
-the whole checkpoint without partial audit or wallet candidates. Carry the trace
-through a later valid continuation. Preserve silence retirement and exact adoption.
-No live-chain, configuration-adoption or production spendability claim.
+Every scoped predecessor must be canonical and finalized; common events count
+once; distinct-event nullifier/output conflicts fail. Independent readers must
+agree on totals/roots. A missing/stale dependency refuses the complete checkpoint
+without partial audit or wallet candidates. Existing single-backing silence
+retirement, exact adoption and receipts must remain valid. No runtime adoption,
+live-chain or production spendability claim. Stop after acceptance, review and
+verified delivery, not at an internal helper or fixture milestone.
 
 ## Status
 
-- Implementation main includes same-index openings (21af018) and handoff 8329bd3.
-  Hosted CI 35460587446 passed all seven jobs on Linux/Windows and Node 20/24.
-- Companion specification main is e41cac8 (documentation cleanup); the latest
-  normative amendment remains fb7dd07, committed before its dependent code.
-- Agent/workflow cleanup: shorter shared guidance, explicit capability slices,
-  risk-based review boundaries, focused iteration and exact-baseline reuse.
-  Current docs distinguish v2 runtime from v3 experiments and local wallet limits.
-- Removed 25 fully merged local branches and 12 obsolete scratch entries.
-  Remaining active branch is main in both repositories; no unfinished feature
-  branch. Workspace-root guidance is local; repository guidance is tracked.
-- Cleanup is documentation-only. Check its final commit/CI from git on resumption;
-  a follow-up commit just to insert its own hash is unnecessary.
-
+- Implementation main includes this two-backing slice, delivered from
+  `feat/two-backing-finalized-replay`. Baseline hosted CI 35461587920 passed all
+  seven jobs; inspect this delivery revision's hosted run separately.
+- Shared replay tracks event identities and per-backing totals. The normal-scope
+  classifier resolves whole checkpoints and child-relative predecessors, merges
+  common history once and preserves original-tree paths. Separate issuers and
+  revocation cutoffs are checked for every backing. Wallet queries filter the
+  selected backing when one seed owns notes across the shared history.
+- Scope changes follow existing C2.10.3–7; no normative amendment. Companion
+  specification stays on main e41cac8; normative pin remains fb7dd07.
 ## Evidence
 
-- Final same-index acceptance: `npm run check:pool:ergo-replay` passed 106 groups
-  and 37 real proofs, including seedless/issuer fresh-process agreement.
-  [Retained report](docs/pool-v3-local-replay-verification.json) binds 41 source hashes.
-- Normative and independent adversarial patch reviews found no material blockers.
-  Shared runtime, circuits, keys and dependencies are unchanged by cleanup;
-  reuse 8329bd3's passing hosted baseline.
-- Cleanup: instruction constraint comparison, focused diff review, documentation
-  checks and links across all four repositories; CLAUDE imports remain exact.
-  No protections, required checks, host permissions or model settings changed.
+- Fifteen focused fixture groups passed with an ideal proof oracle, including
+  whole-scope lapse, same-index predecessor order, missing unselected evidence,
+  conflicting merges and unsupported recovery ancestry. This is not proof evidence.
+- Independent design and integrated adversarial reviews found no remaining
+  material blockers. Required real-proof/fresh-process acceptance passed.
+- `npm run check` passed: 1,934 tests plus packaging, profile, service, wallet,
+  crash-recovery and spent-set acceptance.
+- Final real replay (`prepare-crs.mjs`, then `local-check.mjs --ergo`) passed
+  121 groups and 45 real proofs, including fresh seedless and wallet processes.
+  The [retained report](docs/pool-v3-local-replay-verification.json) binds the
+  43 exact source hashes, unchanged circuit identities and candidate configuration.
+- Required multi-scope ancestry with silence/non-service clauses or recovery
+  records and multi-backing receipt queries is explicitly unsupported. The
+  existing single-backing recovery classifier remains separate.
 
 ## Next
 
-1. Read C2.10.3–7 in companion `pool-authority.md`, the relevant C2b.4 rules,
-   and v3 header/trail layouts. Use `model/pool-authority.ts` and its tests as
-   existing semantic evidence; inspect `scripts/pool/v3/local-replay.mjs`,
-   `import-check.mjs`, `recovery-check.mjs` and relevant codec callers.
-2. First probe a two-backing shared-prefix import and otherwise-valid conflicting
-   ancestry. Reuse the existing closure rules; resolve any concrete ambiguity
-   with independent review and a spec commit before dependent implementation.
-   Then complete the real-proof audit/restoration path above and deliver it.
-3. Use focused checks during iteration, then final real-proof replay and the
-   appropriate broader checks from AGENTS.md. Review the integrated sensitive
-   patch; do not stop at the first passing fixture.
-4. Import lapse still needs full trails. A future proof-fixture cache must bind
+1. Check main/remote parity and hosted CI for the delivery commit from Git.
+2. Next product slice: multi-backing recovery through a scope change. Start with
+   C2b.4's per-backing adoption obligations and venue-ordered publication union,
+   then probe shared ancestry with two backing clocks before dependent code.
+   Require seedless audit, restoration and continuation after exact adoption.
+3. Import lapse still needs full trails. A future proof-fixture cache must bind
    exact sources, artifacts and configuration and retain independent generation
-   checks; repeated fixture corrections currently regenerate unchanged proofs.
+   checks. Neither improvement should interrupt the active capability slice.
 
 ## Retained boundaries and local state
 
@@ -75,17 +71,15 @@ No live-chain, configuration-adoption or production spendability claim.
   [Sync handoff](docs/ergo-node-sync-resume-verification.json): headers 97,923;
   full heights null/unresolved. P2 node publication, P4 real-chain exhaustion,
   decoder equivalence and authenticated venue evidence remain open.
-- The registered legacy Temp/moeclean worktree points at a different
-  Claude_local checkout in its .git file; preserved rather than altering that
-  checkout during this workspace cleanup.
-- Configuration approval stays disabled. Device qualification and external
-  publication remain separate dependencies.
+- The legacy Temp/moeclean worktree points at a different Claude_local checkout;
+  preserve it. Configuration approval stays disabled. Device qualification and
+  external publication remain separate dependencies.
 
 ## Open questions
 
-Roughly **50% done / 50% remaining**, plausible range **40–60%**. Selected
-venue/decoder, complete recovery, qualified custody and user operation remain
-the largest blocks. Cleanup does not change the estimate.
+Roughly **50% done / 50% remaining**, plausible range **40–60%**. Normal shared
+history replay is reusable progress; complete recovery, selected venue/decoder,
+qualified custody and user operation still dominate remaining work.
 
-Switch to a fresh instance for the two-backing capability slice; this instance
-has completed cleanup and the next work needs concentrated protocol context.
+After delivery, switch to a fresh instance for multi-backing recovery: it needs
+concentrated context for publication ordering and adoption across backing clocks.

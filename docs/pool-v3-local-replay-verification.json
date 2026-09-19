@@ -1,5 +1,5 @@
 {
-  "schema": "moe-v3-local-replay-experiment-12",
+  "schema": "moe-v3-local-replay-experiment-13",
   "specification": "fb7dd07",
   "node": "v24.6.0",
   "packageBytes": 48466,
@@ -41,6 +41,21 @@
     "canonical evidence package replays the same audit and receiver through one engine",
     "missing, conflicting, unsupported and resource-limited package evidence returns no partial result",
     "portable bytes and seed are owned before proof awaits; shared input and source failures cannot certify",
+    "shared two-backing prefix restores only the independently selected backing",
+    "split scopes independently continue one shared prefix without duplicating its issuance",
+    "rejoined scope unions exact shared events once and accepts distinct imported anchors",
+    "later shared continuation preserves independent totals and selected-backing wallet paths",
+    "every withheld dependency of the other selected scope fails without partial restoration",
+    "each scoped issuer's revocation voids new issuance but preserves its finalized earlier prefix",
+    "one ended operator term lapses the whole shared scope while a new smaller scope passes it",
+    "same-index lower held sequences qualify as exact predecessors and stale references fail",
+    "a recovery clause in required shared ancestry refuses even after selection shrinks scope",
+    "one stale opening cannot substitute for either required split predecessor",
+    "a proof-invalid scoped tail is excluded for every backing before the split",
+    "a signed partial directory cannot finalize any part of a two-backing scope",
+    "wrong totals in the unselected backing invalidate the shared checkpoint atomically",
+    "otherwise valid joined proofs cannot reuse imported nullifiers or output commitments",
+    "isolated finalized-prefix merge deduplicates common events and rejects conflicting histories",
     "successor imports the finalized source prefix into an empty local tree and restores its original path",
     "real spend of an imported note and continuation preserve totals and append only local outputs",
     "A to B to A and restarted imports keep one transitive closure and original-tree wallet paths",
@@ -148,239 +163,289 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2406.0005999999994
+      "elapsedMs": 2725.353599999995
     },
     {
       "label": "pay 7, change 3",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6417.801100000001
+      "elapsedMs": 7210.926899999999
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 7189.950499999999
+      "elapsedMs": 7094.976299999995
     },
     {
       "label": "pay 2, change 1",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6639.2672999999995
+      "elapsedMs": 11927.959900000009
     },
     {
       "label": "valid maximum issuance",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 3388.242999999995
+      "elapsedMs": 3112.090400000001
     },
     {
       "label": "valid proof, different scope",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2907.4452999999994
+      "elapsedMs": 3201.306899999996
     },
     {
       "label": "valid proof, unaccepted anchor",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 10610.648199999996
+      "elapsedMs": 10458.81210000001
     },
     {
       "label": "valid proof, spent input",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 10229.674499999994
+      "elapsedMs": 8150.1391999999905
     },
     {
       "label": "valid proof, duplicate output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 8481.217200000014
+      "elapsedMs": 7131.786999999997
+    },
+    {
+      "label": "scope shared issue x 10",
+      "kind": 1,
+      "proofBytes": 14656,
+      "elapsedMs": 2266.1075999999885
+    },
+    {
+      "label": "scope shared issue y 20",
+      "kind": 1,
+      "proofBytes": 14656,
+      "elapsedMs": 2360.156400000007
+    },
+    {
+      "label": "scope independent x payment",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 7398.967700000008
+    },
+    {
+      "label": "scope independent y payment",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 10798.546499999997
+    },
+    {
+      "label": "scope joined mixed spend with distinct anchors",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 8086.320199999987
+    },
+    {
+      "label": "scope joined continuation burns x 1",
+      "kind": 3,
+      "proofBytes": 14656,
+      "elapsedMs": 10713.559299999994
+    },
+    {
+      "label": "scope valid proof reuses a nullifier from a split history",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 10255.950599999982
+    },
+    {
+      "label": "scope valid issue proof repeats an output from a split history",
+      "kind": 1,
+      "proofBytes": 14656,
+      "elapsedMs": 3469.2201999999816
     },
     {
       "label": "import A issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1752.6626999999862
+      "elapsedMs": 3111.480900000024
     },
     {
       "label": "import B spends A note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 8055.89009999999
+      "elapsedMs": 8626.392099999997
     },
     {
       "label": "import B continuation burns 1 with change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 5933.387799999997
+      "elapsedMs": 5713.227499999979
     },
     {
       "label": "import C valid proof for imported spent note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5766.15399999998
+      "elapsedMs": 7467.7071
     },
     {
       "label": "import C valid issuance proof for imported duplicate output",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1717.447599999985
+      "elapsedMs": 3174.7984999999753
     },
     {
       "label": "import A issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1708.4291999999841
+      "elapsedMs": 3036.6981999999844
     },
     {
       "label": "import B spends A note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5000.94769999999
+      "elapsedMs": 10499.74350000004
     },
     {
       "label": "import B continuation burns 1 with change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 4373.670199999993
+      "elapsedMs": 7235.717000000004
     },
     {
       "label": "import C valid proof for imported spent note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6712.745500000019
+      "elapsedMs": 5294.58189999999
     },
     {
       "label": "import C valid issuance proof for imported duplicate output",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2078.6540000000095
+      "elapsedMs": 1711.431099999987
     },
     {
       "label": "recovery issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1794.5809000000008
+      "elapsedMs": 2091.3305999999866
     },
     {
       "label": "gap demand then withdrawal",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 4563.182599999971
+      "elapsedMs": 4256.732799999998
     },
     {
       "label": "gap demand then release",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 7869.012099999993
+      "elapsedMs": 4189.7813000000315
     },
     {
       "label": "gap settlement pays issuer-owned output",
       "kind": 6,
       "proofBytes": 14656,
-      "elapsedMs": 7066.458500000008
+      "elapsedMs": 4187.449199999974
     },
     {
       "label": "returned segment pays settlement output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6184.977500000037
+      "elapsedMs": 5001.085199999972
     },
     {
       "label": "closed-gap demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 5842.669300000009
+      "elapsedMs": 4288.720600000001
     },
     {
       "label": "wrong-time gap demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 4297.811099999992
+      "elapsedMs": 4906.7071
     },
     {
       "label": "future-anchor gap demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 4680.173499999975
+      "elapsedMs": 5250.256700000027
     },
     {
       "label": "short recovery lock",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 4592.8045000000275
+      "elapsedMs": 4579.107900000003
     },
     {
       "label": "live recovery lock spend",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6744.752700000012
+      "elapsedMs": 5883.840399999986
     },
     {
       "label": "spent imported note demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 6271.6630000000005
+      "elapsedMs": 4261.167699999991
     },
     {
       "label": "local settlement demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 5195.892000000051
+      "elapsedMs": 4551.899399999995
     },
     {
       "label": "non-service original request",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 2381.294600000023
+      "elapsedMs": 2873.941200000001
     },
     {
       "label": "non-service holder refresh",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 2344.994900000049
+      "elapsedMs": 2978.5770000000484
     },
     {
       "label": "non-service uncertified future anchor",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 2356.1246999999858
+      "elapsedMs": 2721.329700000002
     },
     {
       "label": "non-service canonical expiring lock",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 4548.12579999998
+      "elapsedMs": 4377.964200000046
     },
     {
       "label": "non-service paid output",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 2804.439799999993
+      "elapsedMs": 2482.235200000112
     },
     {
       "label": "non-service change output",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 2876.973699999973
+      "elapsedMs": 2349.189299999969
     }
   ],
   "sourceSha256Lf": {
-    "scripts/pool/v3/local-replay.mjs": "e52c0d2b0a3d44898d66fd19c3532f3ff2f6fdb2882e0fec95f5acebdfe7b471",
+    "scripts/pool/v3/local-replay.mjs": "c68a1bf716c81535a03aec353b1737f6e355dc81e26140de8fd434bdb1f6a658",
     "scripts/pool/v3/local-worker.mjs": "1f633b2e95ad773daa21b3ee472f8d6a4ae93c58bb6c775b0c633b202834ba14",
-    "scripts/pool/v3/local-check.mjs": "b53b9660078f958115d72ee6942c7bff0dcec169e45e399b1e102d0962f4c8b7",
+    "scripts/pool/v3/local-check.mjs": "26c583a6a578ab0909147f1eb765386fbf56b699dd4aafff11eaa55770d32b1d",
     "scripts/pool/v3/fixture-venue.mjs": "757300134c7f51737fe35c620756e44351c26ad38b981bac27bf5d411d4d6c35",
     "scripts/pool/v3/import-check.mjs": "075bd8f8d51bda8e0fd3a03487f8d945e94ef9f7d262dca0f104d5a0aed2aafc",
     "scripts/pool/v3/ergo-check.mjs": "8dcca199cb94302a62a9501f45f5ce6971f41aeeacf408fa2891aac406227e50",
+    "scripts/pool/v3/scope-replay.mjs": "9ecdfa0721d6fba68498cd15c301037901d404e2ca10cc68d361590c0835458f",
+    "scripts/pool/v3/scope-check.mjs": "7fe641ae5e7fc97dbc23978fdc376bd1e89a8ada9dd9c8fb6e4857aec950b058",
     "scripts/pool/v3/recovery-state.mjs": "90e42f1bb96937914defe0a2361ef9d0c4f1f72d42d5230c6d83d282fcba6732",
     "scripts/pool/v3/recovery-check.mjs": "aab99d46108594fbbc86c4ed3119e21ecd6dd42634428a9542bf8b38f129d379",
     "scripts/pool/v3/receipt-state.mjs": "13ac8d79c138cbc29b610fab684d023dce5a16692bd1182cb9cd8133b8515524",
     "scripts/pool/v3/receipt-check.mjs": "ebd89fd5c924b5ba5da3be80c6510aef6104bed2775e3eed50cf3ca89e7822b9",
     "scripts/pool/v3/non-service.mjs": "9137fd1e351e48a0e68699950bea8ca5ffc501e4876ab9e341c08cc687b5c5fe",
     "scripts/pool/v3/non-service-check.mjs": "a481ee7f5da786b9305761f3f3c58b121b5f32cabb0dac71f9ee222339684d99",
-    "scripts/pool/delivery/evidence-reader.mjs": "3314af42ee0aca526d17910ced47e16e620321b3827664f22d8e5e95ded8ff6e",
+    "scripts/pool/delivery/evidence-reader.mjs": "afb9ff72909c2869d5872a61764d0d3fb8d5896020bfe60498ff118bd2d020f1",
     "scripts/pool/delivery/crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
     "scripts/pool/spent-set/radix.mjs": "a65c10fcca67cd6f486c73f3e66f4eba254f4aa4a6d2be8c12d2debe66af4953",
     "model/pool-v3-records.ts": "fc651fc4bd36bc339d849ea2e8fc2ee01409d02fbbabb69623336fa3a01f1be1",
@@ -430,7 +495,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "bfebda8fbc3e5ef982d261dbf5511e541cd682b8b7ce63f8a150900981656d53",
+      "evidenceHash": "cf9e32893f21fc570bb527e39a54e3434f98c657ec43bff99364ec6ad37d4951",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -482,7 +547,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "bfebda8fbc3e5ef982d261dbf5511e541cd682b8b7ce63f8a150900981656d53",
+      "evidenceHash": "cf9e32893f21fc570bb527e39a54e3434f98c657ec43bff99364ec6ad37d4951",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -612,7 +677,7 @@
       "noteRoot": "20289920090942748033438979157172403900844036366309329327868430363638482059158",
       "spentRoot": "60aed429711fd5c3d866b0b176d16795f8f991e41bb32a33d9531b909fa188a5",
       "historyHash": "1826aca87b0ca270a877273b8be927fb84a547894e99ea1de7ce73aea7d52942",
-      "evidenceHash": "41ca302688dfa3d89a7d1ce0e0702935af75323647b0b8e951e344781570e916",
+      "evidenceHash": "565c206677a6f055f8d89ddbde684a76840231760757ec77f059c4392d0d6b1d",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -670,8 +735,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "9afa740bed296e5483feca468c94d685ded1a46194825514e9d0a40d4b584db1",
-        "historyHash": "e7511b52d4ca24b5516c358496638b886a260a1b8e8821ea76b3f2ffd26a4749",
-        "evidenceHash": "ec0e8c39068b37e6ff55beeccf4480d7b6d0afe979812aa0ad9242412bd91c9f",
+        "historyHash": "acec04f034d31aed40460192b820cdc48bebdc9f37f096c0cae6e495c982ac37",
+        "evidenceHash": "7fd6a15606b437ee0dbf9806f5f9653114adec50f28e0834956d4a4d2bb28d88",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -771,8 +836,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "9afa740bed296e5483feca468c94d685ded1a46194825514e9d0a40d4b584db1",
-        "historyHash": "e7511b52d4ca24b5516c358496638b886a260a1b8e8821ea76b3f2ffd26a4749",
-        "evidenceHash": "ec0e8c39068b37e6ff55beeccf4480d7b6d0afe979812aa0ad9242412bd91c9f",
+        "historyHash": "acec04f034d31aed40460192b820cdc48bebdc9f37f096c0cae6e495c982ac37",
+        "evidenceHash": "7fd6a15606b437ee0dbf9806f5f9653114adec50f28e0834956d4a4d2bb28d88",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -1030,8 +1095,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
-        "historyHash": "c408c6b42999834b469dc934a2cf840a82cca11a5c88d2cc83d2ca9022588aff",
-        "evidenceHash": "41598e8411cfa1d471d0dacd5d6a933a67f55c530b947de44df47f9ddbfa12f1",
+        "historyHash": "3648188d7118346b47fda4b9a8f4e139877febcf0cc8ca1c2f1ccb2c30e2a211",
+        "evidenceHash": "2c976b4f60decef0235f718a704477d794d7122d988a0b35fd6734beef2e46ea",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -1138,8 +1203,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
-        "historyHash": "c408c6b42999834b469dc934a2cf840a82cca11a5c88d2cc83d2ca9022588aff",
-        "evidenceHash": "41598e8411cfa1d471d0dacd5d6a933a67f55c530b947de44df47f9ddbfa12f1",
+        "historyHash": "3648188d7118346b47fda4b9a8f4e139877febcf0cc8ca1c2f1ccb2c30e2a211",
+        "evidenceHash": "2c976b4f60decef0235f718a704477d794d7122d988a0b35fd6734beef2e46ea",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -1383,6 +1448,473 @@
       ]
     }
   },
+  "scopeImports": {
+    "packageBytes": 119512,
+    "audit": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "2",
+        "issued": "10",
+        "burned": "1",
+        "outstanding": "9",
+        "noteRoot": "2960426318616738237503155719159269270382396638459355358174180815488673027651",
+        "spentRoot": "fbbe546ec5d0c5ea7e9483134ad77bcaa727f9cbe5363ae266107309e58a63a1",
+        "historyHash": "dc6cf526e0469d315cb550182e668b96e967d97466971198f06b33b5bc711e33",
+        "evidenceHash": "3aabdc277e2a645c03936e42a42f9561382169eddc0eb1cfba87018b225e37ff",
+        "range": {
+          "judgingIndex": "20",
+          "lag": "2",
+          "checkpointIndex": "15",
+          "revokedAt": null,
+          "heldBefore": 8,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "deb9ebe0ba2d76f80d2dad325685d4894648a1d483c4f252ff0461ef1485a99e"
+            },
+            {
+              "operator": "7be29b98ba0937eadfa1fc1b47931f05dfce49faeee896c0f40c24a78d649fe6",
+              "from": "6",
+              "link": "649fef3bb04399cf781721c366f69e2a445a54289ee10329fb160a00b6ca5287"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "12",
+              "link": "00816198457f0949bec45e46d75fde467f6f7778f2c4b42e61586afd287682e9"
+            }
+          ],
+          "carrying": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "operator": "7be29b98ba0937eadfa1fc1b47931f05dfce49faeee896c0f40c24a78d649fe6",
+              "sequence": "1",
+              "index": "6",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "3",
+              "index": "6",
+              "class": "valid"
+            },
+            {
+              "operator": "7be29b98ba0937eadfa1fc1b47931f05dfce49faeee896c0f40c24a78d649fe6",
+              "sequence": "2",
+              "index": "8",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "4",
+              "index": "9",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "5",
+              "index": "12",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "6",
+              "index": "14",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "7",
+              "index": "15",
+              "class": "valid"
+            }
+          ],
+          "clock": null
+        }
+      },
+      "candidates": []
+    },
+    "receiver": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "2",
+        "issued": "10",
+        "burned": "1",
+        "outstanding": "9",
+        "noteRoot": "2960426318616738237503155719159269270382396638459355358174180815488673027651",
+        "spentRoot": "fbbe546ec5d0c5ea7e9483134ad77bcaa727f9cbe5363ae266107309e58a63a1",
+        "historyHash": "dc6cf526e0469d315cb550182e668b96e967d97466971198f06b33b5bc711e33",
+        "evidenceHash": "3aabdc277e2a645c03936e42a42f9561382169eddc0eb1cfba87018b225e37ff",
+        "range": {
+          "judgingIndex": "20",
+          "lag": "2",
+          "checkpointIndex": "15",
+          "revokedAt": null,
+          "heldBefore": 8,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "deb9ebe0ba2d76f80d2dad325685d4894648a1d483c4f252ff0461ef1485a99e"
+            },
+            {
+              "operator": "7be29b98ba0937eadfa1fc1b47931f05dfce49faeee896c0f40c24a78d649fe6",
+              "from": "6",
+              "link": "649fef3bb04399cf781721c366f69e2a445a54289ee10329fb160a00b6ca5287"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "12",
+              "link": "00816198457f0949bec45e46d75fde467f6f7778f2c4b42e61586afd287682e9"
+            }
+          ],
+          "carrying": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "operator": "7be29b98ba0937eadfa1fc1b47931f05dfce49faeee896c0f40c24a78d649fe6",
+              "sequence": "1",
+              "index": "6",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "3",
+              "index": "6",
+              "class": "valid"
+            },
+            {
+              "operator": "7be29b98ba0937eadfa1fc1b47931f05dfce49faeee896c0f40c24a78d649fe6",
+              "sequence": "2",
+              "index": "8",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "4",
+              "index": "9",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "5",
+              "index": "12",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "6",
+              "index": "14",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "7",
+              "index": "15",
+              "class": "valid"
+            }
+          ],
+          "clock": null
+        }
+      },
+      "candidates": [
+        {
+          "cm": "8372743910817853423711196460304901608678310605021056915215356182845384582922",
+          "nf": "16475546692390408504609796706081960906036398633097915259770209447921815097897",
+          "value": "6",
+          "leaf": "4",
+          "anchor": "2960426318616738237503155719159269270382396638459355358174180815488673027651",
+          "siblings": [
+            "0",
+            "16257989699773466206393016511488115181357775227253857822747532441271299011144",
+            "6995317704183907834014126940180949286797455201947982149560268179207410473811",
+            "1935094829533267935830464563796710052445228582946993128186972021230315590035",
+            "18383913181606838331795460117774658566856597132399717689821053927504534850729",
+            "6650121914657515867260011416921319045587517571339686030450569779952452434446",
+            "845043333535205747680782585765216487309952857158244204638951000115525663969",
+            "1798565372180516634517843282450706694542445499858350052460863933410324420334",
+            "12082351775801795992599119410575771090046502720172243783387647860247227871902",
+            "17392670516229609273138538435194690200647498693429087923197847846467620878366",
+            "18270147803583966115185581568756452890223528135804716937646296736746340714319",
+            "6245281075527541134368495049517243664719812052214528999106154137816504162189",
+            "5771305936450134295237779198955973617491950584355028563949759501589674323328",
+            "8375117846537600003339886617732755020518140880023263272035782507904755134166",
+            "1402956623894417358519384271339285842133055840035948184830517042721409232939",
+            "10518453832655181976446617300434900287841057900980895845234303440776175031342",
+            "15485975685389868597531359628984423612206441834147218371890432861420618086233",
+            "15422680120123365729179431955186502234992765602151752301487612439836632415437",
+            "3956483861973015592013083471667691148363938305872047999848739786219821549630",
+            "1086051623285356080920660076036760901133490110146331619651622591312371431716",
+            "2915904499750125353540875529397177727199377493198348513681582475949711605897",
+            "20164087144993267523342657261822731817585018270367494699207673407082461049973",
+            "6242064092034472953019862381003839448720318820550567656011695795729872763820",
+            "486473096388032301890231500231637785138514345257938344321238940657971574478",
+            "8682912164133426756325886608207438073742770514324345939761663338459940455365",
+            "9032327814826196994352281082085265791527933228092108861697327508420029459713",
+            "11946683638986745115214649685278219707650430060924747485486585022833169300696",
+            "19219361000372015911425077088009647148763037724375627703239846977182347147882",
+            "20250997086726519601015986826877099693245538547315475919513141220642229899021",
+            "14413420282722522993748367414404798853361893034082534437626176948595980240628",
+            "4920301475339101562902404357157229632407380396727250905915335784284364493374",
+            "3490399488954770152131810821200763799606626796619604090245668179171764908058"
+          ],
+          "right": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "pathScope": "replayed-local-tree-only",
+          "spendable": false
+        }
+      ]
+    },
+    "receiverOtherBacking": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "2",
+        "issued": "20",
+        "burned": "0",
+        "outstanding": "20",
+        "noteRoot": "2960426318616738237503155719159269270382396638459355358174180815488673027651",
+        "spentRoot": "fbbe546ec5d0c5ea7e9483134ad77bcaa727f9cbe5363ae266107309e58a63a1",
+        "historyHash": "dc6cf526e0469d315cb550182e668b96e967d97466971198f06b33b5bc711e33",
+        "evidenceHash": "3aabdc277e2a645c03936e42a42f9561382169eddc0eb1cfba87018b225e37ff",
+        "range": {
+          "judgingIndex": "20",
+          "lag": "2",
+          "checkpointIndex": "15",
+          "revokedAt": null,
+          "heldBefore": 8,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "1a0ccd071a94a5b708e4fc79b8c9e931d879d5547a788394adec0a535c28c1ca"
+            }
+          ],
+          "carrying": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "operator": "7be29b98ba0937eadfa1fc1b47931f05dfce49faeee896c0f40c24a78d649fe6",
+              "sequence": "1",
+              "index": "6",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "3",
+              "index": "6",
+              "class": "valid"
+            },
+            {
+              "operator": "7be29b98ba0937eadfa1fc1b47931f05dfce49faeee896c0f40c24a78d649fe6",
+              "sequence": "2",
+              "index": "8",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "4",
+              "index": "9",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "5",
+              "index": "12",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "6",
+              "index": "14",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "7",
+              "index": "15",
+              "class": "valid"
+            }
+          ],
+          "clock": null
+        }
+      },
+      "candidates": [
+        {
+          "cm": "20715827536285711085707773977624532312731633958430711473904347400097795720362",
+          "nf": "19362151766667848404538789057930618936867196793284353604201172468764711433843",
+          "value": "15",
+          "leaf": "1",
+          "anchor": "2960426318616738237503155719159269270382396638459355358174180815488673027651",
+          "siblings": [
+            "14636630721395157081979050314776555776226121727635161510527255468813879724137",
+            "16922015306688870749603241169417505523206142530234093654427791475978911242767",
+            "4074425298632539181411289361203542093987182994117498977465822350604616581868",
+            "1935094829533267935830464563796710052445228582946993128186972021230315590035",
+            "18383913181606838331795460117774658566856597132399717689821053927504534850729",
+            "6650121914657515867260011416921319045587517571339686030450569779952452434446",
+            "845043333535205747680782585765216487309952857158244204638951000115525663969",
+            "1798565372180516634517843282450706694542445499858350052460863933410324420334",
+            "12082351775801795992599119410575771090046502720172243783387647860247227871902",
+            "17392670516229609273138538435194690200647498693429087923197847846467620878366",
+            "18270147803583966115185581568756452890223528135804716937646296736746340714319",
+            "6245281075527541134368495049517243664719812052214528999106154137816504162189",
+            "5771305936450134295237779198955973617491950584355028563949759501589674323328",
+            "8375117846537600003339886617732755020518140880023263272035782507904755134166",
+            "1402956623894417358519384271339285842133055840035948184830517042721409232939",
+            "10518453832655181976446617300434900287841057900980895845234303440776175031342",
+            "15485975685389868597531359628984423612206441834147218371890432861420618086233",
+            "15422680120123365729179431955186502234992765602151752301487612439836632415437",
+            "3956483861973015592013083471667691148363938305872047999848739786219821549630",
+            "1086051623285356080920660076036760901133490110146331619651622591312371431716",
+            "2915904499750125353540875529397177727199377493198348513681582475949711605897",
+            "20164087144993267523342657261822731817585018270367494699207673407082461049973",
+            "6242064092034472953019862381003839448720318820550567656011695795729872763820",
+            "486473096388032301890231500231637785138514345257938344321238940657971574478",
+            "8682912164133426756325886608207438073742770514324345939761663338459940455365",
+            "9032327814826196994352281082085265791527933228092108861697327508420029459713",
+            "11946683638986745115214649685278219707650430060924747485486585022833169300696",
+            "19219361000372015911425077088009647148763037724375627703239846977182347147882",
+            "20250997086726519601015986826877099693245538547315475919513141220642229899021",
+            "14413420282722522993748367414404798853361893034082534437626176948595980240628",
+            "4920301475339101562902404357157229632407380396727250905915335784284364493374",
+            "3490399488954770152131810821200763799606626796619604090245668179171764908058"
+          ],
+          "right": [
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "pathScope": "replayed-local-tree-only",
+          "spendable": false
+        }
+      ]
+    }
+  },
   "recovery": {
     "packageBytes": 128341,
     "audit": {
@@ -1404,8 +1936,8 @@
         "outstanding": "10",
         "noteRoot": "3463256029871825352185896254943772651369867962151265073058451857203234162690",
         "spentRoot": "1719e59ca89fcb9781b1cae7a8fa829fe9e46bc27de8d5e3c9dc79d042f5af61",
-        "historyHash": "8d19169939e8e81875aae58084edb1204eb29c153eaf9138f15345a7558f6a56",
-        "evidenceHash": "84de80f698e6442611f1f687cdac271f4a5852be0f15e3d6b758ae5867a18939",
+        "historyHash": "8db596835ab2d68660e6f7e7c810bbd1a0299d92dd90ad1711af8590cee90739",
+        "evidenceHash": "5e2eb2935e346bb87864bc189f29c8223eaab0773526dde41c50bfa4c8728998",
         "range": {
           "judgingIndex": "13",
           "lag": "2",
@@ -1514,8 +2046,8 @@
         "outstanding": "10",
         "noteRoot": "3463256029871825352185896254943772651369867962151265073058451857203234162690",
         "spentRoot": "1719e59ca89fcb9781b1cae7a8fa829fe9e46bc27de8d5e3c9dc79d042f5af61",
-        "historyHash": "8d19169939e8e81875aae58084edb1204eb29c153eaf9138f15345a7558f6a56",
-        "evidenceHash": "84de80f698e6442611f1f687cdac271f4a5852be0f15e3d6b758ae5867a18939",
+        "historyHash": "8db596835ab2d68660e6f7e7c810bbd1a0299d92dd90ad1711af8590cee90739",
+        "evidenceHash": "5e2eb2935e346bb87864bc189f29c8223eaab0773526dde41c50bfa4c8728998",
         "range": {
           "judgingIndex": "13",
           "lag": "2",
@@ -1702,8 +2234,8 @@
         "outstanding": "10",
         "noteRoot": "3070841617642584389577524301973713583194365702986756472958588442764825674878",
         "spentRoot": "08805e9043ce2af28cac13590505bc15d73800e74eb96c2774a7d3352570dd3c",
-        "historyHash": "bc6a21ac6893d50eeaebc4234b051f56aa0dd800153e37ff22acaac18138c260",
-        "evidenceHash": "137a2a902ea86e539d1b39696e6b66866cc96ff389ad2a97a13d947a8670bde3",
+        "historyHash": "55155834441d0f140aecd04ced4b43e151615ea0b03149ade1b5d14449b6c0b5",
+        "evidenceHash": "04744014701ad52f79c715fdca51a13147a2dce2aedb93bd1edab9da40565048",
         "range": {
           "judgingIndex": "12",
           "lag": "2",
@@ -1887,8 +2419,8 @@
         "outstanding": "10",
         "noteRoot": "3070841617642584389577524301973713583194365702986756472958588442764825674878",
         "spentRoot": "08805e9043ce2af28cac13590505bc15d73800e74eb96c2774a7d3352570dd3c",
-        "historyHash": "980a42d108330cd114ea6ddb5279065062cef99bde37cad231ce9390f2888ead",
-        "evidenceHash": "1c5f1a64c8110680273d0e205a4460f5adcd574bd313df9cc446133c83c564e1",
+        "historyHash": "d8d653244f25bf3d1b16ff35e5a4657eef427e4d99a447f3f772cfdec0b7e865",
+        "evidenceHash": "458c053f292cd08cd4dd04d9419e4188c08708ff2b2f30b33c7354ffa4f49944",
         "range": {
           "judgingIndex": "12",
           "lag": "2",
@@ -2003,8 +2535,8 @@
         "outstanding": "10",
         "noteRoot": "3070841617642584389577524301973713583194365702986756472958588442764825674878",
         "spentRoot": "08805e9043ce2af28cac13590505bc15d73800e74eb96c2774a7d3352570dd3c",
-        "historyHash": "980a42d108330cd114ea6ddb5279065062cef99bde37cad231ce9390f2888ead",
-        "evidenceHash": "1c5f1a64c8110680273d0e205a4460f5adcd574bd313df9cc446133c83c564e1",
+        "historyHash": "d8d653244f25bf3d1b16ff35e5a4657eef427e4d99a447f3f772cfdec0b7e865",
+        "evidenceHash": "458c053f292cd08cd4dd04d9419e4188c08708ff2b2f30b33c7354ffa4f49944",
         "range": {
           "judgingIndex": "12",
           "lag": "2",
@@ -2260,7 +2792,7 @@
         "noteRoot": "9189636338291800427381089286880870459386867064132759881733850358780172207327",
         "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
         "historyHash": "d1d815b6d20f043cbeca771f0704cf52d39c1174101dae70e6e38a57342cb4ad",
-        "evidenceHash": "bbeda97effb13366c490718e34c6cf62b0c82b2a8fdbb25eb1acf719cc3e3a8a",
+        "evidenceHash": "9a8ff164cd7068182b08e1082813559f61cc98bb800bdda812855606c5838465",
         "range": {
           "judgingIndex": "7",
           "lag": "2",
@@ -2341,8 +2873,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
-        "historyHash": "c408c6b42999834b469dc934a2cf840a82cca11a5c88d2cc83d2ca9022588aff",
-        "evidenceHash": "41598e8411cfa1d471d0dacd5d6a933a67f55c530b947de44df47f9ddbfa12f1",
+        "historyHash": "3648188d7118346b47fda4b9a8f4e139877febcf0cc8ca1c2f1ccb2c30e2a211",
+        "evidenceHash": "2c976b4f60decef0235f718a704477d794d7122d988a0b35fd6734beef2e46ea",
         "range": {
           "judgingIndex": "21",
           "lag": "1",
@@ -2449,8 +2981,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
-        "historyHash": "c408c6b42999834b469dc934a2cf840a82cca11a5c88d2cc83d2ca9022588aff",
-        "evidenceHash": "41598e8411cfa1d471d0dacd5d6a933a67f55c530b947de44df47f9ddbfa12f1",
+        "historyHash": "3648188d7118346b47fda4b9a8f4e139877febcf0cc8ca1c2f1ccb2c30e2a211",
+        "evidenceHash": "2c976b4f60decef0235f718a704477d794d7122d988a0b35fd6734beef2e46ea",
         "range": {
           "judgingIndex": "21",
           "lag": "1",
@@ -2696,7 +3228,7 @@
   },
   "limits": [
     "Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
-    "Single-backing imports validate finalized closure through replacement, reappointment and restart, including same-index fresh openings, with publication force, standing locks and exact ordered recovery adoption. Single-receipt queries classify exact inclusion and liability through silence and term boundaries. Non-service counts use signed terms, first request identities and the strictly preceding canonical state. Multi-backing scopes remain unsupported. Import lapse currently requires full trail evidence.",
+    "Normal multi-backing imports validate every scoped predecessor and snapshot, merge shared events once, and retain per-backing totals and original-tree paths through split, rejoin and continuation. Required multi-backing ancestry with recovery/non-service clauses or demand/withdraw/settle records and multi-backing receipt queries remain unsupported. Single-backing imports retain publication force, standing locks, exact recovery adoption, same-index openings, receipts and non-service counts. Import lapse currently requires full trail evidence.",
     "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission.",
     "The candidate Ergo adapter checks exact transaction decoding and roots against independently selected synthetic headers. No proof of work, chain selection, decoder node equivalence/containment, node acceptance or venue-profile adoption is established."
   ]

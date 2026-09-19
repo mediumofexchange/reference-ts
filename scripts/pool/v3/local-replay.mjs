@@ -1,4 +1,4 @@
-// Conditional single-backing experiment, not an adopted v3 runtime.
+// Conditional replay experiment, not an adopted v3 runtime.
 // pool-v3 §§3,5,7,10,12,13; pool-v2 §8 host checks; pool-spent C1.2.8–9.
 import { createHash } from "node:crypto";
 import { compareBytes, copyBytes, EncodingError } from "../../../dist/bytes.js";
@@ -14,13 +14,14 @@ import { EvidenceRefusal, LIMITS, readLocalEvidence } from "../delivery/evidence
 import { recoveryState, effectOf, checkRecovery, applyRecovery } from "./recovery-state.mjs";
 import { receiptWalk } from "./receipt-state.mjs";
 import { countNonService } from "./non-service.mjs";
+import { classifyScopes } from "./scope-replay.mjs";
 
 const same = (a, b) => compareBytes(a, b) === 0;
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const sha256 = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
 export const PACKAGE_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxItems: 1024n });
 export const RANGE_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxEntries: 4096n });
-// Work budgets for the linear single-backing import closure, including failed replays.
+// Work budgets for imported closures, including failed replays and merge work.
 export const IMPORT_LIMITS = Object.freeze({ maxCheckpoints: 128n, maxEvents: 8192n });
 const flags = Object.freeze({ fullV3Replay: false, currentRangeAuthenticated: false,
   candidateConfigurationChecked: false, signedTermsAuthenticated: false,
@@ -30,6 +31,7 @@ const refused = (status, check = null) => ({ status, check, ...flags, audit: nul
 class ReplayRefusal extends Error {
   constructor(check) { super(check); this.check = check; }
 }
+class ScopeRequired extends Error {}
 const requireReplay = (value, check) => { if (!value) throw new ReplayRefusal(check); };
 const INPUT_SHAPES = ["package,selection", "package,seed,selection", "package,selection,venue", "package,seed,selection,venue"];
 
@@ -112,7 +114,7 @@ async function readRecordRanges(selection, terms, header, directories, record, c
     const entry = carries(h);
     if (entry === undefined) continue;
     // A carrying checkpoint is read under the experiment's one-backing scope, as the selection is.
-    if (directories.get(hex(h.commitment.root)).length !== 1) throw new EvidenceRefusal("unsupported-scope");
+    if (directories.get(hex(h.commitment.root)).length !== 1) throw new ScopeRequired();
     carrying.push({ index: h.index, sequence: h.commitment.sequence, digest: entry.digest,
       position: i < at ? "before" : i === at ? "selected" : "after" });
   }
@@ -146,20 +148,32 @@ function decodedTrails(trails, codec) {
  * `lastValid` is the segment's last valid checkpoint before this one: the
  * trail must reach its length and reproduce its evidence and history hashes
  * there (C2.10.12, pool-v3 §7.1), the evidence before any verification. */
-async function replayTrail({ selection, terms, header, verifier, codec, contextReceipt }, snapshot, trail,
-  { index, revokedAt, lastValid, imported, block = [], openingIndex, isOpening = false }) {
-  const issuerKey = terms.obligor, scope = new ScopeTree(header.entries).root();
+async function replayTrail({ selection, terms, scopedTerms, header, verifier, codec, contextReceipt }, snapshot, trail,
+  { index, revokedAt, revocations, lastValid, imported, block = [], openingIndex, isOpening = false }) {
+  const scope = new ScopeTree(header.entries).root();
   const tree = new NoteTree(), spent = new RadixSpentSet(), anchors = new Set(imported?.anchors ?? [EMPTY_NOTE_ROOT]);
   const nullifiers = new Set(imported?.nullifiers), outputsSeen = new Set(imported?.outputsSeen);
   for (const nf of nullifiers) spent.insert(fieldToBytes(nf));
   const statements = new Set(), outputPositions = new Map(imported?.outputPositions), scanOutputs = [...(imported?.scanOutputs ?? [])];
   const recovery = recoveryState(imported), eventIndices = [];
+  const events = new Map(imported?.events), totals = new Map(
+    [...(imported?.totals ?? [])].map(([key, value]) => [key, { ...value }]));
+  const totalFor = backing => {
+    const key = hex(backing);
+    if (!totals.has(key)) totals.set(key, { issued: 0n, burned: 0n });
+    return totals.get(key);
+  };
   if (!isOpening) requireReplay(trail.records.length >= block.length, "ADOPTION");
-  let issued = imported?.issued ?? 0n, burned = imported?.burned ?? 0n, position = 0n, receiptEvent;
+  let position = 0n, receiptEvent;
   let history = codec.genesisHistoryHash(snapshot.segment), evidence = codec.genesisEvidenceHash(snapshot.segment);
   for (const bytes of trail.records) {
     const record = codec.decodeRecord(bytes), p = record.publicInputs, kind = record.kind;
     if (![1, 2, 3, 4, 5, 6].includes(kind)) throw new EvidenceRefusal("unsupported-scope");
+    const backing = kind !== 2 && kind !== 5 ? identifierOf(p[5], p[6]) : selection.backing;
+    const ownTerms = scopedTerms === undefined ? terms : scopedTerms.get(hex(backing));
+    if (kind !== 2 && kind !== 5) requireReplay(ownTerms !== undefined, "BACKING");
+    const issuerKey = ownTerms?.obligor ?? terms.obligor;
+    const total = totalFor(backing);
     const adopted = block[Number(position)];
     // Exact admitted bytes, including proof and authorization, survive adoption.
     if (adopted !== undefined) requireReplay(same(bytes, adopted.bytes), "ADOPTION");
@@ -176,20 +190,21 @@ async function replayTrail({ selection, terms, header, verifier, codec, contextR
     // Issuance witnessed at or after K's revocation is void (C2b.1). A position
     // the last valid checkpoint finalized was witnessed at its index, not here.
     if (kind === 1 && index !== undefined && (lastValid === undefined || position + 1n > lastValid.position)) {
-      requireReplay(revokedAt === undefined || revokedAt > index, "REVOKED");
+      const cutoff = revocations === undefined ? revokedAt : revocations.get(hex(backing));
+      requireReplay(cutoff === undefined || cutoff > index, "REVOKED");
     }
     if (adopted === undefined && kind !== 5) requireReplay(await verifier.verify(kind, [...p], new Uint8Array(record.proof)) === true, "PROOF");
     if (kind !== 2 && kind !== 5) {
-      requireReplay(same(identifierOf(p[5], p[6]), selection.backing), "BACKING");
+      requireReplay(scopedTerms !== undefined || same(backing, selection.backing), "BACKING");
       if (kind === 1) {
         requireReplay(verifySignatureStrict(record.authorization, codec.statementBytes(record), issuerKey), "SIGNATURE");
-        requireReplay(issued + p[7] < VALUE_BOUND, "SUPPLY");
-      } else if (kind === 3) requireReplay(p[7] <= issued - burned, "SUPPLY");
+        requireReplay(total.issued + p[7] < VALUE_BOUND, "SUPPLY");
+      } else if (kind === 3) requireReplay(p[7] <= total.issued - total.burned, "SUPPLY");
     }
     const { nfs, roots, outputs } = effectOf(record);
     if (adopted === undefined) {
       requireReplay(roots.every(root => anchors.has(root)), "ANCHOR");
-      checkRecovery(record, recovery, { codec, check: requireReplay, backing: selection.backing, issuer: issuerKey, at });
+      checkRecovery(record, recovery, { codec, check: requireReplay, backing, issuer: issuerKey, at });
     }
     requireReplay(new Set(nfs).size === nfs.length && nfs.every(nf => nf !== 0n && !spent.has(fieldToBytes(nf))), "SPENT");
     requireReplay(new Set(outputs).size === outputs.length && outputs.every(cm => cm !== 0n && !outputsSeen.has(cm)), "OUTPUT");
@@ -203,9 +218,10 @@ async function replayTrail({ selection, terms, header, verifier, codec, contextR
     });
     nfs.forEach(nf => { spent.insert(fieldToBytes(nf)); nullifiers.add(nf); });
     applyRecovery(record, recovery, codec); eventIndices.push(at);
-    if (kind === 1) issued += p[7];
-    if (kind === 3) burned += p[7];
+    if (kind === 1) total.issued += p[7];
+    if (kind === 3) total.burned += p[7];
     position += 1n;
+    events.set(`${hex(snapshot.segment)}:${position}`, { identity: id, record });
     anchors.add(tree.root()); statements.add(id);
     history = codec.nextHistoryHash(history, identity, tree.root(), spent.root(), position);
     if (contextReceipt?.position === position && same(contextReceipt.segment, snapshot.segment)) {
@@ -214,9 +230,10 @@ async function replayTrail({ selection, terms, header, verifier, codec, contextR
     if (lastValid !== undefined && position === lastValid.position) requireReplay(same(history, lastValid.historyHash), "CONTINUITY");
   }
   requireReplay(lastValid === undefined || position >= lastValid.position, "CONTINUITY");
+  const { issued, burned } = totalFor(snapshot.backing);
   requireReplay(same(history, snapshot.historyHash) && issued === snapshot.issued && burned === snapshot.burned, "SNAPSHOT");
   return { tree, spent, issued, burned, position, history, scanOutputs, outputPositions, anchors, nullifiers, outputsSeen,
-    ...recovery, receiptEvent, eventIndices, adoptionIndex: isOpening ? imported?.adoptionIndex ?? 0n : openingIndex ?? 0n };
+    ...recovery, events, totals, receiptEvent, eventIndices, adoptionIndex: isOpening ? imported?.adoptionIndex ?? 0n : openingIndex ?? 0n };
 }
 
 /** C2.10.11 over the original operator's carrying checkpoints in held order,
@@ -418,14 +435,14 @@ async function classifyImports(context, directories, record, evidence) {
       if (!selected) { if (selectedState === undefined) heldBefore++; else heldAfter++; }
       const entry = carries(held);
       if (entry === undefined) { walk?.checkpoint(held, undefined, undefined, undefined, "other"); continue; }
-      if (directories.get(hex(c.root)).length !== 1) throw new EvidenceRefusal("unsupported-scope");
+      if (directories.get(hex(c.root)).length !== 1) throw new ScopeRequired();
       const bytes = evidence.snapshots.find(x => same(sha256(x), entry.digest));
       if (bytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
       const snapshot = codec.decodeSnapshot(bytes);
       const matching = trails.filter(tr => codec.verifyTrailEvidence({ backing: selection.backing, segment: snapshot.segment, digest: entry.digest }, snapshot, tr, LIMITS));
       if (matching.length !== 1) throw new EvidenceRefusal(matching.length === 0 ? "unresolved-evidence" : "unsupported-scope");
       const trail = matching[0], header = codec.decodeSegmentHeader(trail.header);
-      if (header.entries.length !== 1) throw new EvidenceRefusal("unsupported-scope");
+      if (header.entries.length !== 1) throw new ScopeRequired();
       const scoped = header.entries[0], signed = trail.terms[0];
       if (!same(codec.rootTermsName(signed.terms), selection.backing) || !codec.verifyRootTermsSignature(signed.terms, signed.signature)) {
         throw new EvidenceRefusal("unresolved-evidence");
@@ -544,15 +561,17 @@ export async function replayLocalPackage(input, verifier, codec) {
     requireReplay(codec.verifyConfiguration(supplied?.configuration, verifier.configuration), "CONFIGURATION");
     const domain = codec.configurationHash(codec.decodeConfiguration(supplied.configuration));
     requireReplay(selection?.domain instanceof Uint8Array && same(domain, selection.domain), "CONFIGURATION");
-    const { snapshot, trail, header } = readLocalEvidence(selection, supplied, codec, { allowImports: venue !== undefined });
-    const signed = trail.terms[0], terms = codec.decodeRootTerms(signed.terms);
+    const { snapshot, trail, header } = readLocalEvidence(selection, supplied, codec,
+      { allowImports: venue !== undefined, allowScopes: venue !== undefined });
+    const selectedEntry = header.entries.findIndex(entry => same(entry.backing, selection.backing));
+    const signed = trail.terms[selectedEntry], terms = codec.decodeRootTerms(signed.terms);
     requireReplay(codec.verifyRootTermsSignature(signed.terms, signed.signature), "TERMS_SIGNATURE");
-    requireReplay(same(codec.rootTermsName(signed.terms), header.entries[0].backing), "TERMS_NAME");
+    requireReplay(same(codec.rootTermsName(signed.terms), selection.backing), "TERMS_NAME");
     requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
     // Empty-opening selections retain the original-operator scope. Imports
     // instead require the term-by-term record walk below.
-    const imports = header.entries[0].opening !== undefined;
-    if (!imports) requireReplay(same(terms.operator, header.operator) && same(header.entries[0].link, selection.backing), "TERMS_INITIAL_SCOPE");
+    const imports = header.entries.some(entry => entry.opening !== undefined);
+    if (!imports && header.entries.length === 1) requireReplay(same(terms.operator, header.operator) && same(header.entries[0].link, selection.backing), "TERMS_INITIAL_SCOPE");
     context = { selection, terms, header, verifier, codec, receiptBytes: supplied.receipt };
     if (supplied.receipt !== undefined && (seed !== undefined || venue === undefined)) throw new EvidenceRefusal("unsupported-scope");
     let ranges = null, carrying = null, clock = null, state, rangeEvidence = "none";
@@ -569,15 +588,23 @@ export async function replayLocalPackage(input, verifier, codec) {
       const distinct = list => list.filter((item, i) => list.findIndex(other => same(other, item)) === i);
       const snapshots = distinct([supplied.snapshot, ...byteList(supplied.snapshots, "snapshots")]);
       const trails = distinct([supplied.trail, ...byteList(supplied.trails, "trails")]);
-      if (imports || supplied.receipt !== undefined || terms.nonService !== undefined) {
-        const result = await classifyImports(context, directories, record, { snapshots, trails });
-        if (result.receipt !== undefined) return { ...refused("receipt-status"), receipt: result.receipt, rangeEvidence,
-          candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
-          currentRangeAuthenticated: selection.mode !== "historical-fixture" };
-        ({ carrying, state, clock, ranges } = result);
-      } else {
-        ranges = await readRecordRanges(selection, terms, header, directories, record, codec);
-        ({ carrying, state, clock } = await classifyCarrying(context, ranges, { snapshot, trail, snapshots, trails }));
+      try {
+        if (header.entries.length !== 1) throw new ScopeRequired();
+        if (imports || supplied.receipt !== undefined || terms.nonService !== undefined) {
+          const result = await classifyImports(context, directories, record, { snapshots, trails });
+          if (result.receipt !== undefined) return { ...refused("receipt-status"), receipt: result.receipt, rangeEvidence,
+            candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
+            currentRangeAuthenticated: selection.mode !== "historical-fixture" };
+          ({ carrying, state, clock, ranges } = result);
+        } else {
+          ranges = await readRecordRanges(selection, terms, header, directories, record, codec);
+          ({ carrying, state, clock } = await classifyCarrying(context, ranges, { snapshot, trail, snapshots, trails }));
+        }
+      } catch (error) {
+        if (!(error instanceof ScopeRequired)) throw error;
+        if (supplied.receipt !== undefined) throw new EvidenceRefusal("unsupported-scope");
+        ({ carrying, state, clock, ranges } = await classifyScopes(context, directories, record, { snapshots, trails },
+          { readRecordView, decodedTrails, replayTrail, requireReplay, ReplayRefusal, IMPORT_LIMITS }));
       }
     } else {
       // Both grades need the independently answered record ranges.
@@ -601,7 +628,9 @@ export async function replayLocalPackage(input, verifier, codec) {
           note = { opening, cm: output.cm, nf: nullifierOf(selection.domain, output.cm, secret) };
         }
         if (note === null) continue;
-        requireReplay(same(note.opening.backing, selection.backing), "BACKING");
+        // Shared history can contain notes for other scoped backings owned by
+        // the same seed. This query restores only its independently selected backing.
+        if (!same(note.opening.backing, selection.backing)) continue;
         if (note.opening.value > 0n && !spent.has(fieldToBytes(note.nf))) {
           const location = outputPositions.get(note.cm), { leaf } = location, path = location.tree.path(leaf);
           candidates.push({ cm: note.cm.toString(), nf: note.nf.toString(), value: note.opening.value.toString(),

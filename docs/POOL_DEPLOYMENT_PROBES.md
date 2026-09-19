@@ -310,9 +310,25 @@ same-operator restart, including lower-sequence imports at the same index
 where no silence clause is declared.
 It caps total work at 128 held checkpoints and 8192 event operations,
 counting repeated checkpoint prefixes, publication classification, recovery
-folds and failed replays. This linear single-backing path does not establish
-multi-backing closure merging. The original-segment clock path retains the limits
+folds and failed replays. The original-segment clock path retains the limits
 above, and the separate local-only restoration scanner still refuses imports.
+
+Normal multi-backing histories use a cached whole-checkpoint classifier under
+C2.10.3–7. Every scoped backing contributes signed terms, a record-derived
+canonical predecessor and an authenticated snapshot; every check must pass
+before any audit or wallet candidate is returned. Shared events are identified
+by segment and position and counted once. Distinct events cannot share a
+nullifier or output. Per-backing supply totals remain separate, while accepted
+roots and spent state cover the merged closure. Wallet paths retain their
+original segment trees; a selected backing filters other recovered notes.
+The real-proof fixture splits a shared two-backing prefix, continues each
+branch, rejoins them, spends against distinct imported anchors and burns in a
+later continuation. Fresh public and wallet processes replay the same package.
+The same checkpoint/event budgets bound visited commitments and replay/merge
+operations; existing byte, item and range bounds also apply. Multi-scope range
+audit counts describe classified dependencies, not all non-carrying commitments.
+Required ancestry with silence/non-service clauses or demand/withdraw/settle
+records, and multi-backing receipt queries, remain explicitly unsupported.
 
 With a silence clause, the same walk reads one backing clock across every
 term, freezes its reset index across checkpoints at the same witnessed index,
@@ -387,9 +403,9 @@ that a production reader must establish before returning spendable holdings.
 | Boundary | Experiment evidence | Still required |
 |---|---|---|
 | Construction and key routing | Exact configuration preimage and candidate domain; all six independently pinned source/toolchain/bytecode/key identities and fixed helper/bounds/profile | Approved configuration/artifact identities after full adoption prerequisites; setup provenance and deployment qualification |
-| Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and terms-derived issuance key; header-derived scope root; fixture replacement/reappointment links and revocation checked at each checkpoint | Multi-backing authority; a venue profile and authenticated evidence behind the fixture answers |
-| Local state | Issue/spend/burn and demand/withdraw/settle state checks, locks, compressed spent root, note paths, totals and both chains; exact single-backing transitive imports with fresh local trees | Multi-backing closure deduplication and all scoped snapshots |
-| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; carrying-checkpoint classification, last-valid continuity, replacement/reappointment/restart imports; publication force, exact ordered adoption, single-backing receipt verdicts and non-service counts | A selected venue profile and authenticated chain evidence, multi-backing scope changes |
+| Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and per-backing issuance keys; header-derived scope root; fixture replacement/reappointment links and revocation checked across each complete scope | A venue profile and authenticated evidence behind the fixture answers |
+| Local state | Issue/spend/burn across deduplicated shared ancestry and every scoped snapshot, with per-backing totals, shared spent state and original-tree paths; single-backing demand/withdraw/settle and locks | Multi-backing recovery and runtime integration |
+| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; whole-scope classification, last-valid continuity and split/rejoin imports; single-backing publication force, exact ordered adoption, receipts and non-service counts | A selected venue profile and authenticated chain evidence; multi-backing recovery ordering |
 | Wallet restoration | Seed-only capsule and lit-settlement openings with local or imported-tree paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
 
 The candidate manifest, checkpoint selection and the fixture venue evidence

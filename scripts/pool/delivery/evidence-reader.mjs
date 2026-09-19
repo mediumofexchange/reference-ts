@@ -28,7 +28,7 @@ function requireEvidence(condition, status = "unresolved-evidence") {
 }
 
 /** Authenticate owned local evidence without a wallet seed. No replay verdict. */
-export function readLocalEvidence(selection, supplied, codec, { allowImports = false } = {}) {
+export function readLocalEvidence(selection, supplied, codec, { allowImports = false, allowScopes = false } = {}) {
   for (const key of ["domain", "venue", "backing", "operator", "root"]) {
     requireEvidence(selection?.[key] instanceof Uint8Array && selection[key].length === 32);
   }
@@ -36,20 +36,21 @@ export function readLocalEvidence(selection, supplied, codec, { allowImports = f
   requireEvidence(selection.mode === "current-fixture" || selection.mode === "historical-fixture");
   requireEvidence(supplied?.commitment instanceof Uint8Array && supplied?.snapshot instanceof Uint8Array &&
     supplied?.trail instanceof Uint8Array && Array.isArray(supplied?.directory));
-  requireEvidence(supplied.directory.length === 1, "unsupported-scope");
+  requireEvidence(allowScopes || supplied.directory.length === 1, "unsupported-scope");
   const commitment = decodeCommitment(supplied.commitment);
   requireEvidence(verifyCommitment(commitment));
   requireEvidence(same(commitment.operator, selection.operator) && commitment.sequence === selection.sequence &&
     same(commitment.root, selection.root), "selection-mismatch");
   requireEvidence(same(directoryRoot(supplied.directory), commitment.root));
-  const entry = supplied.directory[0];
-  requireEvidence(same(entry.name, selection.backing));
+  const entry = supplied.directory.find(item => same(item.name, selection.backing));
+  requireEvidence(entry !== undefined);
   const snapshot = codec.decodeSnapshot(supplied.snapshot);
   const trail = codec.decodeTrail(supplied.trail, LIMITS);
   const header = codec.decodeSegmentHeader(trail.header);
   requireEvidence(same(header.domain, selection.domain) && same(header.venue, selection.venue) &&
     same(header.operator, selection.operator) && header.sequence <= selection.sequence);
-  requireEvidence(header.entries.length === 1 && (allowImports || header.entries[0].opening === undefined), "unsupported-scope");
+  requireEvidence((allowScopes || header.entries.length === 1) &&
+    (allowImports || header.entries.every(item => item.opening === undefined)), "unsupported-scope");
   requireEvidence(codec.verifyTrailEvidence({ backing: selection.backing, segment: snapshot.segment,
     digest: entry.digest }, snapshot, trail, LIMITS));
   return { snapshot, trail, header };

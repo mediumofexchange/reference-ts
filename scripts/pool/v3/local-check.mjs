@@ -22,6 +22,7 @@ import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage, replayEvidencePackage, PACKAGE_LIMITS, RANGE_LIMITS } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
 import { checkImports } from "./import-check.mjs";
+import { checkScopes } from "./scope-check.mjs";
 import { checkRecovery } from "./recovery-check.mjs";
 import { checkErgoReplay } from "./ergo-check.mjs";
 import { field } from "../fixtures.mjs";
@@ -789,12 +790,15 @@ try {
     const revokedAtFirst = { extra: [{ kind: 3, subject: issuerKey, index: 3n, record: revocation }] };
     await reject(compose(pair, 1, revokedAtFirst), "REVOKED");
     await reject(compose(pair, 0, revokedAtFirst), "REVOKED");
-    // A carrying checkpoint naming other backings too is outside the experiment's one-backing scope, as a selection is.
+    // An authenticated directory adding a name outside its header fails whole-
+    // scope carriage. Pass that excluded checkpoint, then replay the valid continuation.
     const wideDirectory = [{ name: backing, digest: third.directory[0].digest }, { name: otherName, digest: b(79) }].sort((x, y) => Buffer.compare(x.name, y.name));
     const wide = clone(extended);
     wide.venue.records[2] = { kind: 1, subject: operator, index: 3n, record: encodeCommitment(signCommitment(operatorSecret, 3n, directoryRoot(wideDirectory))) };
     wide.package.directories = [opening.directory, before, wideDirectory];
-    assert.equal((await replayLocalPackage(wide, verifier, codec)).status, "unsupported-scope");
+    const wideResult = await replayLocalPackage(wide, verifier, codec);
+    assert.equal(wideResult.status, "selected-local-replay");
+    assert.equal(wideResult.audit.range.carrying.some(c => c.class === "excluded" && c.check === "SCOPE"), true);
   });
   await test("excluded checkpoints are passed: a stale twin, diverging evidence or a bad suffix never moves the last valid prefix (C2.10.12)", async () => {
     const corrupt = record => { const bad = clone(record); bad.proof[100] ^= 1; return bad; };
@@ -938,6 +942,8 @@ try {
     const failure = new Error("range/proof service unavailable");
     await assert.rejects(replayEvidencePackage(portable(complete), { ...verifier, verify() { throw failure; } }, codec), error => error === failure);
   });
+  const scoped = await checkScopes({ codec, verifier, configurationBytes, domain, venue, prove, test,
+    operatorSecret, issuerSecret, receiverSeed, payerSeed });
   const imported = await checkImports({ codec, verifier, configurationBytes, domain,
     venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove, test,
     operatorSecret, issuerSecret, receiverSeed, payerSeed });
@@ -1013,6 +1019,9 @@ try {
     assert.deepEqual(worker(extended), dependency);
     assert.deepEqual(worker(imported.payload), imported.result);
     assert.deepEqual(worker({ ...imported.payload, seed: receiverSeed }), imported.receiver);
+    assert.deepEqual(worker(scoped.payload), scoped.result);
+    assert.deepEqual(worker({ ...scoped.payload, seed: receiverSeed }), scoped.receiver);
+    assert.deepEqual(worker({ ...scoped.payloadY, seed: receiverSeed }), scoped.receiverY);
     assert.deepEqual(worker(silent.payload), silent.result);
     assert.deepEqual(worker({ ...silent.payload, seed: receiverSeed }), silent.receiver);
     assert.deepEqual(worker(recovery.payload), recovery.result);
@@ -1052,7 +1061,7 @@ try {
     }
   });
   await test("successful replay retains unresolved production authority; ranges are the fixture verifier's only", () => {
-    for (const result of [receiver, audit, dependency, imported.result, imported.receiver, silent.result, silent.receiver, recovery.result, recovery.receiver]) {
+    for (const result of [receiver, audit, dependency, imported.result, imported.receiver, scoped.result, scoped.receiver, scoped.receiverY, silent.result, silent.receiver, recovery.result, recovery.receiver]) {
       assert.equal(result.candidateConfigurationChecked, true); assert.equal(result.signedTermsAuthenticated, true);
       assert.equal(result.currentRangeAuthenticated, true); assert.equal(result.termsAuthorityAuthenticated, true);
       assert.equal(result.rangeEvidence, "fixture-verifier");
@@ -1063,6 +1072,7 @@ try {
   });
   const sources = ["scripts/pool/v3/local-replay.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/local-check.mjs",
     "scripts/pool/v3/fixture-venue.mjs", "scripts/pool/v3/import-check.mjs", "scripts/pool/v3/ergo-check.mjs",
+    "scripts/pool/v3/scope-replay.mjs", "scripts/pool/v3/scope-check.mjs",
     "scripts/pool/v3/recovery-state.mjs", "scripts/pool/v3/recovery-check.mjs",
     "scripts/pool/v3/receipt-state.mjs", "scripts/pool/v3/receipt-check.mjs",
     "scripts/pool/v3/non-service.mjs", "scripts/pool/v3/non-service-check.mjs",
@@ -1077,7 +1087,7 @@ try {
     "experiments/ergo-range/replay-venue.mjs", "experiments/ergo-range/replay-fixture.mjs",
     "experiments/ergo-range/replay-venue-check.mjs", "experiments/ergo-range/package-lock.json");
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-12", specification: "fb7dd07", node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-13", specification: "fb7dd07", node: process.version,
     packageBytes: portable(complete).package.length, dependencyPackageBytes: portable(extended).package.length,
     fixtureVenueRecords: complete.venue.records.length,
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
@@ -1086,6 +1096,8 @@ try {
     audit, receiver, dependency, imports: { packageBytes: portable(imported.payload).package.length,
       audit: imported.result, receiver: imported.receiver },
     silenceImports: { packageBytes: portable(silent.payload).package.length, audit: silent.result, receiver: silent.receiver },
+    scopeImports: { packageBytes: portable(scoped.payload).package.length,
+      audit: scoped.result, receiver: scoped.receiver, receiverOtherBacking: scoped.receiverY },
     recovery: { packageBytes: portable(recovery.payload).package.length, audit: recovery.result,
       receiver: recovery.receiver, issuerRestored: recovery.issuerRestored },
     sameIndexReturns: { packageBytes: portable(recovery.sameIndex.payload).package.length,
@@ -1096,7 +1108,7 @@ try {
     ...(withErgo ? { ergo: { evidence: "synthetic-headers-and-exact-transaction-bytes", rawBytes: ergo.rawBytes,
       blocks: ergo.payload.venue.blocks.length, audit: ergo.result, receiver: ergo.receiver } } : {}),
     limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
-      "Single-backing imports validate finalized closure through replacement, reappointment and restart, including same-index fresh openings, with publication force, standing locks and exact ordered recovery adoption. Single-receipt queries classify exact inclusion and liability through silence and term boundaries. Non-service counts use signed terms, first request identities and the strictly preceding canonical state. Multi-backing scopes remain unsupported. Import lapse currently requires full trail evidence.",
+      "Normal multi-backing imports validate every scoped predecessor and snapshot, merge shared events once, and retain per-backing totals and original-tree paths through split, rejoin and continuation. Required multi-backing ancestry with recovery/non-service clauses or demand/withdraw/settle records and multi-backing receipt queries remain unsupported. Single-backing imports retain publication force, standing locks, exact recovery adoption, same-index openings, receipts and non-service counts. Import lapse currently requires full trail evidence.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };
   if (withErgo) report.limits.push("The candidate Ergo adapter checks exact transaction decoding and roots against independently selected synthetic headers. No proof of work, chain selection, decoder node equivalence/containment, node acceptance or venue-profile adoption is established.");
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");
