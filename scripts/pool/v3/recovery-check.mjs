@@ -248,6 +248,41 @@ export async function checkRecovery({ codec, verifier, configurationBytes, domai
       [originalOpening, originalState, returnOpening, continuation], continuation, atReturnPublications, 12n), verifier, codec);
     assert.equal(answer.status, "selected-local-replay"); assert.equal(answer.audit.records, "4");
   });
+  let sameIndex;
+  await test("repeated same-index returns preserve publication force and the exact block still owed", async () => {
+    const second = segment(4n, reference(returnOpening));
+    const secondOpening = checkpoint(second, 4n, 11n, [], [], 10n);
+    const third = segment(5n, reference(secondOpening));
+    const thirdOpening = checkpoint(third, 5n, 11n, [], [], 10n);
+    const thirdAdoption = checkpoint(third, 6n, 12n, adoptedRecords, adoptedEffects, 10n);
+    // Force at the opening index still reads the original strictly-before
+    // snapshot, despite all three fresh checkpoints at that index.
+    const throughOpening = [...publications.slice(0, 3), publication(11n, 3, released.record)];
+    const openings = [originalOpening, originalState, returnOpening, secondOpening, thirdOpening];
+    const p = compose([...openings, thirdAdoption], thirdAdoption, throughOpening, 12n);
+    const answer = await replayLocalPackage(p, verifier, codec);
+    assert.equal(answer.status, "selected-local-replay");
+    assert.equal(answer.audit.records, "4"); assert.equal(answer.audit.outstanding, "10");
+    assert.equal(answer.audit.spentRoot, hex(adopted.spent.root()));
+    assert.deepEqual(answer.audit.range.publications.map(p => p.force), [true, true, true, true]);
+    const restored = await replayLocalPackage({ ...p, seed: issuerSeed }, verifier, codec);
+    assert.deepEqual(restored.candidates, issuerRestored.candidates);
+    sameIndex = { payload: p, result: answer, restored };
+    const sameIndexContinuation = { ...thirdAdoption, at: 11n };
+    await reject(compose([...openings, sameIndexContinuation], sameIndexContinuation, throughOpening, 11n), null, "lapsed-selection");
+    const old = checkpoint(original, 7n, 12n, [issuance], [{ outputs: [funded.cm], nullifiers: [] }], 10n);
+    const kept = await replayLocalPackage(compose([...openings, thirdAdoption, old], thirdAdoption, throughOpening, 12n), verifier, codec);
+    assert.equal(kept.status, "selected-local-replay");
+    assert.equal(kept.audit.range.carrying.at(-1).class, "lapsed");
+    for (const records of [[], adoptedRecords.slice(0, 3), [...adoptedRecords].reverse()]) {
+      const effects = records.map(record => record.kind === 6 ? adoptedEffects[3] : { outputs: [], nullifiers: [] });
+      const bad = checkpoint(third, 6n, 12n, records, effects, 10n);
+      await reject(compose([...openings, bad], bad, throughOpening, 12n), "ADOPTION");
+    }
+    const altered = structuredClone(released.record); altered.authorization[72] ^= 1;
+    const bad = checkpoint(third, 6n, 12n, [...adoptedRecords.slice(0, 3), altered], adoptedEffects, 10n);
+    await reject(compose([...openings, bad], bad, throughOpening, 12n), "ADOPTION");
+  });
   await test("a second silence before first adoption inherits the old adoption index", async () => {
     const returnedAgain = segment(4n, reference(returnOpening));
     const secondOpening = checkpoint(returnedAgain, 4n, 16n, [], [], 10n);
@@ -316,5 +351,5 @@ export async function checkRecovery({ codec, verifier, configurationBytes, domai
     publication, demand, note, domain, venue, backing, signedTerms, operatorSecret, ruleSecret, payerSeed,
     original, originalOpening, originalState, originalTree, issuance, funded, firstDemand,
     ancestry, publications, finalCheckpoint, paid, change });
-  return { payload, result, receiver, issuerSeed, issuerPayload, issuerRestored, settlement: released.output, receipts, nonService };
+  return { payload, result, receiver, issuerSeed, issuerPayload, issuerRestored, settlement: released.output, receipts, nonService, sameIndex };
 }

@@ -274,12 +274,42 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       assert.equal(answer.audit.range.carrying.at(-3).check, "SNAPSHOT");
       assert.equal(answer.audit.range.clock.snapshotIndex, "14");
     });
-    await test("same-index fresh silence openings refuse before choosing between generic predecessor and strict snapshot", async () => {
-      const returned = { ...c0, at: 16n };
-      for (const source of [returned, b2]) {
-        const again = checkpoint(segment(operatorSecret, toA.link, 4n, reference(source)), 4n, 16n, [], [], { burned: 1n });
-        await refuse(compose([...history, returned, again]), "unsupported-scope");
+    await test("same-index fresh openings extend the exact predecessor in closed and open gaps", async () => {
+      for (const at of [14n, 16n]) {
+        const returned = { ...c0, at };
+        const again = checkpoint(segment(operatorSecret, toA.link, 4n, reference(returned)), 4n, at, [], [], { burned: 1n });
+        const thirdContext = segment(operatorSecret, toA.link, 5n, reference(again));
+        const third = checkpoint(thirdContext, 5n, at, [], [], { burned: 1n });
+        const p = compose([...history, returned, again, third]);
+        const answer = await accepted({ ...p, seed: receiverSeed });
+        assert.deepEqual(classes(answer).slice(-3), ["valid", "valid", "valid"]);
+        assert.deepEqual(answer.candidates, receiver.candidates);
+        assert.equal(answer.audit.outstanding, "9");
+        // The predecessor is the exact commitment, even for identical state.
+        for (const source of [b2, returned]) {
+          const stale = checkpoint(segment(operatorSecret, toA.link, 5n, reference(source)), 5n, at, [], [], { burned: 1n });
+          await reject(compose([...history, returned, again, stale]), "IMPORT");
+        }
+        const continued = checkpoint(thirdContext, 6n, at + 1n, [], [], { burned: 1n });
+        await accepted(compose([...history, returned, again, third, continued]));
+        const unavailable = structuredClone(p);
+        unavailable.package.trails = unavailable.package.trails.filter(bytes => !same(bytes, again.trail));
+        await refuse(unavailable, "unresolved-evidence");
       }
+    });
+    await test("same-index elective opening preserves a nonempty finalized predecessor and passes only proven exclusions", async () => {
+      const context = segment(successorSecret, toB.link, 4n, reference(b2));
+      const opening = checkpoint(context, 4n, 10n, [], [], { burned: 1n });
+      const answer = await accepted({ ...compose([...history, opening], opening, [toB]), seed: receiverSeed });
+      assert.equal(answer.audit.spentRoot, hex(b2.spent.root()));
+      assert.deepEqual(answer.candidates, receiver.candidates);
+      const stale = checkpoint(segment(successorSecret, toB.link, 4n, reference(b1)), 4n, 10n);
+      await reject(compose([...history, stale], stale, [toB]), "IMPORT");
+      const excluded = checkpoint(context, 4n, 10n, [], [], { issued: 11n, burned: 1n });
+      const next = checkpoint(segment(successorSecret, toB.link, 5n, reference(b2)), 5n, 10n, [], [], { burned: 1n });
+      const passed = await accepted(compose([...history, excluded, next], next, [toB]));
+      assert.deepEqual(classes(passed).slice(-2), ["excluded", "valid"]);
+      assert.equal(passed.audit.range.carrying.at(-2).check, "SNAPSHOT");
     });
     await test("reappointment cannot reset the backing clock with a checkpoint from the same key's ended term", async () => {
       const late = checkpoint(a, 3n, 14n, [issuance], [issueEffect]);

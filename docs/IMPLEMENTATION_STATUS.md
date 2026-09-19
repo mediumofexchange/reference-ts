@@ -93,8 +93,11 @@ Demand, withdrawal and release force use the original snapshot and venue order;
 return adopts the exact complete block through its opening index. Standing
 demands and locks persist across imports, and lit settlement outputs restore
 from the seed and public evidence. The clock retains each segment's retirement
-after a fresh opening resets the gap. Same-index fresh silence openings with a
-same-index predecessor remain unsupported. Import lapse still requires full
+after a fresh opening resets the gap. Same-index fresh openings import the
+canonical lower same-operator sequence under
+[C2b.4.1 at fb7dd07](https://github.com/mediumofexchange/money-from-first-principles/blob/fb7dd07/pool-recovery.md#6-return),
+preserving the inherited adoption index and exact block still owed.
+Import lapse still requires full
 trail evidence. Configuration adoption, a selected venue profile, multi-backing
 imports remain open. Signed non-service terms now drive a single-backing
 real-proof count against the strictly preceding canonical state, preserving

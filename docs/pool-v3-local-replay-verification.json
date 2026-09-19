@@ -1,6 +1,6 @@
 {
-  "schema": "moe-v3-local-replay-experiment-11",
-  "specification": "3ed1800",
+  "schema": "moe-v3-local-replay-experiment-12",
+  "specification": "fb7dd07",
   "node": "v24.6.0",
   "packageBytes": 48466,
   "dependencyPackageBytes": 110855,
@@ -61,7 +61,8 @@
     "Silence: return opens in a gap but its same-index continuation lapses; next-index continuation restores imported payments",
     "Silence: a later fresh segment reset cannot revive a segment retired exactly at the return index",
     "Silence: an excluded opening never resets the clock and retains its retirement boundary",
-    "Silence: same-index fresh silence openings refuse before choosing between generic predecessor and strict snapshot",
+    "Silence: same-index fresh openings extend the exact predecessor in closed and open gaps",
+    "Silence: same-index elective opening preserves a nonempty finalized predecessor and passes only proven exclusions",
     "Silence: reappointment cannot reset the backing clock with a checkpoint from the same key's ended term",
     "Silence: publication closure must be answered independently; malformed records have no force at any index",
     "Recovery: forced demand, withdrawal, demand and release adopt in exact venue order before returned service",
@@ -70,6 +71,7 @@
     "Recovery: closed-gap, wrong-time, future-anchor and bad-authorization publications have no force",
     "Recovery: duplicates, including at the return index, do not gain force twice",
     "Recovery: a newly forced withdrawal at the return index is included in the adopted block",
+    "Recovery: repeated same-index returns preserve publication force and the exact block still owed",
     "Recovery: a second silence before first adoption inherits the old adoption index",
     "Recovery: adoption binds the exact proof and both settlement signatures",
     "Recovery: withdrawing an expired demand releases only its own lock",
@@ -146,234 +148,234 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2717.686300000001
+      "elapsedMs": 2406.0005999999994
     },
     {
       "label": "pay 7, change 3",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 7693.781999999999
+      "elapsedMs": 6417.801100000001
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 5964.353400000004
+      "elapsedMs": 7189.950499999999
     },
     {
       "label": "pay 2, change 1",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6659.173600000002
+      "elapsedMs": 6639.2672999999995
     },
     {
       "label": "valid maximum issuance",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2466.760500000004
+      "elapsedMs": 3388.242999999995
     },
     {
       "label": "valid proof, different scope",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1777.027399999999
+      "elapsedMs": 2907.4452999999994
     },
     {
       "label": "valid proof, unaccepted anchor",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6632.7878000000055
+      "elapsedMs": 10610.648199999996
     },
     {
       "label": "valid proof, spent input",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6059.286200000002
+      "elapsedMs": 10229.674499999994
     },
     {
       "label": "valid proof, duplicate output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5572.424899999998
+      "elapsedMs": 8481.217200000014
     },
     {
       "label": "import A issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1752.721900000004
+      "elapsedMs": 1752.6626999999862
     },
     {
       "label": "import B spends A note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5504.760400000014
+      "elapsedMs": 8055.89009999999
     },
     {
       "label": "import B continuation burns 1 with change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 4628.991000000009
+      "elapsedMs": 5933.387799999997
     },
     {
       "label": "import C valid proof for imported spent note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 8170.008899999986
+      "elapsedMs": 5766.15399999998
     },
     {
       "label": "import C valid issuance proof for imported duplicate output",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2243.772100000002
+      "elapsedMs": 1717.447599999985
     },
     {
       "label": "import A issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2146.142600000021
+      "elapsedMs": 1708.4291999999841
     },
     {
       "label": "import B spends A note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 7199.066300000006
+      "elapsedMs": 5000.94769999999
     },
     {
       "label": "import B continuation burns 1 with change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 4616.1877000000095
+      "elapsedMs": 4373.670199999993
     },
     {
       "label": "import C valid proof for imported spent note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 7960.388299999991
+      "elapsedMs": 6712.745500000019
     },
     {
       "label": "import C valid issuance proof for imported duplicate output",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1861.4231999999902
+      "elapsedMs": 2078.6540000000095
     },
     {
       "label": "recovery issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2149.9628000000084
+      "elapsedMs": 1794.5809000000008
     },
     {
       "label": "gap demand then withdrawal",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 4739.742899999983
+      "elapsedMs": 4563.182599999971
     },
     {
       "label": "gap demand then release",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 4453.928199999995
+      "elapsedMs": 7869.012099999993
     },
     {
       "label": "gap settlement pays issuer-owned output",
       "kind": 6,
       "proofBytes": 14656,
-      "elapsedMs": 4508.009099999996
+      "elapsedMs": 7066.458500000008
     },
     {
       "label": "returned segment pays settlement output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 7309.769500000024
+      "elapsedMs": 6184.977500000037
     },
     {
       "label": "closed-gap demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 5168.799900000013
+      "elapsedMs": 5842.669300000009
     },
     {
       "label": "wrong-time gap demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 6271.655199999979
+      "elapsedMs": 4297.811099999992
     },
     {
       "label": "future-anchor gap demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 5460.122700000007
+      "elapsedMs": 4680.173499999975
     },
     {
       "label": "short recovery lock",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 5020.433000000019
+      "elapsedMs": 4592.8045000000275
     },
     {
       "label": "live recovery lock spend",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5575.435200000007
+      "elapsedMs": 6744.752700000012
     },
     {
       "label": "spent imported note demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 4599.757800000021
+      "elapsedMs": 6271.6630000000005
     },
     {
       "label": "local settlement demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 4548.710599999991
+      "elapsedMs": 5195.892000000051
     },
     {
       "label": "non-service original request",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 3065.139900000009
+      "elapsedMs": 2381.294600000023
     },
     {
       "label": "non-service holder refresh",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 3866.184500000032
+      "elapsedMs": 2344.994900000049
     },
     {
       "label": "non-service uncertified future anchor",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 3201.90419999999
+      "elapsedMs": 2356.1246999999858
     },
     {
       "label": "non-service canonical expiring lock",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 4542.922599999991
+      "elapsedMs": 4548.12579999998
     },
     {
       "label": "non-service paid output",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 2526.6452999999747
+      "elapsedMs": 2804.439799999993
     },
     {
       "label": "non-service change output",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 2552.338300000003
+      "elapsedMs": 2876.973699999973
     }
   ],
   "sourceSha256Lf": {
-    "scripts/pool/v3/local-replay.mjs": "354df188d94fb85e9743996e232b3a5e0f62e3382d613137d3e73dc494f5cc22",
+    "scripts/pool/v3/local-replay.mjs": "e52c0d2b0a3d44898d66fd19c3532f3ff2f6fdb2882e0fec95f5acebdfe7b471",
     "scripts/pool/v3/local-worker.mjs": "1f633b2e95ad773daa21b3ee472f8d6a4ae93c58bb6c775b0c633b202834ba14",
-    "scripts/pool/v3/local-check.mjs": "711cb2adf961f056837e4408d2dece096dfa3526df1874dcd9838d394565705f",
+    "scripts/pool/v3/local-check.mjs": "b53b9660078f958115d72ee6942c7bff0dcec169e45e399b1e102d0962f4c8b7",
     "scripts/pool/v3/fixture-venue.mjs": "757300134c7f51737fe35c620756e44351c26ad38b981bac27bf5d411d4d6c35",
-    "scripts/pool/v3/import-check.mjs": "8d8ee5da33c45158c532a189dfae699ea96d382ea08b81c4273a9b2167c11a72",
+    "scripts/pool/v3/import-check.mjs": "075bd8f8d51bda8e0fd3a03487f8d945e94ef9f7d262dca0f104d5a0aed2aafc",
     "scripts/pool/v3/ergo-check.mjs": "8dcca199cb94302a62a9501f45f5ce6971f41aeeacf408fa2891aac406227e50",
     "scripts/pool/v3/recovery-state.mjs": "90e42f1bb96937914defe0a2361ef9d0c4f1f72d42d5230c6d83d282fcba6732",
-    "scripts/pool/v3/recovery-check.mjs": "94e31f90529b6ebb6cd1a77c02427ee8a69b5a8ae0b90d9b42c336bf72e2d0bb",
+    "scripts/pool/v3/recovery-check.mjs": "aab99d46108594fbbc86c4ed3119e21ecd6dd42634428a9542bf8b38f129d379",
     "scripts/pool/v3/receipt-state.mjs": "13ac8d79c138cbc29b610fab684d023dce5a16692bd1182cb9cd8133b8515524",
     "scripts/pool/v3/receipt-check.mjs": "ebd89fd5c924b5ba5da3be80c6510aef6104bed2775e3eed50cf3ca89e7822b9",
     "scripts/pool/v3/non-service.mjs": "9137fd1e351e48a0e68699950bea8ca5ffc501e4876ab9e341c08cc687b5c5fe",
@@ -428,7 +430,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "5a61631478296ba73c13ddff3193b619f0051d3fbfa81653f9694082f8440591",
+      "evidenceHash": "bfebda8fbc3e5ef982d261dbf5511e541cd682b8b7ce63f8a150900981656d53",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -480,7 +482,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "5a61631478296ba73c13ddff3193b619f0051d3fbfa81653f9694082f8440591",
+      "evidenceHash": "bfebda8fbc3e5ef982d261dbf5511e541cd682b8b7ce63f8a150900981656d53",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -610,7 +612,7 @@
       "noteRoot": "20289920090942748033438979157172403900844036366309329327868430363638482059158",
       "spentRoot": "60aed429711fd5c3d866b0b176d16795f8f991e41bb32a33d9531b909fa188a5",
       "historyHash": "1826aca87b0ca270a877273b8be927fb84a547894e99ea1de7ce73aea7d52942",
-      "evidenceHash": "cbac24e996baaa77cc75f509f48281b538dbc205454c461867b387e12acb2fd0",
+      "evidenceHash": "41ca302688dfa3d89a7d1ce0e0702935af75323647b0b8e951e344781570e916",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -668,8 +670,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "9afa740bed296e5483feca468c94d685ded1a46194825514e9d0a40d4b584db1",
-        "historyHash": "bd165ba6f62ad055c0655e7af14a03ec9ddd6cccfe22c8443642c6955ee60a30",
-        "evidenceHash": "dc9f17bd7e99945a4c4f6ae0619e3b699ea7512314432877e07910bf18501aeb",
+        "historyHash": "e7511b52d4ca24b5516c358496638b886a260a1b8e8821ea76b3f2ffd26a4749",
+        "evidenceHash": "ec0e8c39068b37e6ff55beeccf4480d7b6d0afe979812aa0ad9242412bd91c9f",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -769,8 +771,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "9afa740bed296e5483feca468c94d685ded1a46194825514e9d0a40d4b584db1",
-        "historyHash": "bd165ba6f62ad055c0655e7af14a03ec9ddd6cccfe22c8443642c6955ee60a30",
-        "evidenceHash": "dc9f17bd7e99945a4c4f6ae0619e3b699ea7512314432877e07910bf18501aeb",
+        "historyHash": "e7511b52d4ca24b5516c358496638b886a260a1b8e8821ea76b3f2ffd26a4749",
+        "evidenceHash": "ec0e8c39068b37e6ff55beeccf4480d7b6d0afe979812aa0ad9242412bd91c9f",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -1028,8 +1030,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
-        "historyHash": "405dbaa66f18e5b7d849e8b701dcca7bd06ee1f0fd50075218c5ebc291386c5b",
-        "evidenceHash": "71399e0a5aa4ca9a8787b02f6d815ccedd6202d568d00824a9ef48be750905c0",
+        "historyHash": "c408c6b42999834b469dc934a2cf840a82cca11a5c88d2cc83d2ca9022588aff",
+        "evidenceHash": "41598e8411cfa1d471d0dacd5d6a933a67f55c530b947de44df47f9ddbfa12f1",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -1136,8 +1138,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
-        "historyHash": "405dbaa66f18e5b7d849e8b701dcca7bd06ee1f0fd50075218c5ebc291386c5b",
-        "evidenceHash": "71399e0a5aa4ca9a8787b02f6d815ccedd6202d568d00824a9ef48be750905c0",
+        "historyHash": "c408c6b42999834b469dc934a2cf840a82cca11a5c88d2cc83d2ca9022588aff",
+        "evidenceHash": "41598e8411cfa1d471d0dacd5d6a933a67f55c530b947de44df47f9ddbfa12f1",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -1402,8 +1404,8 @@
         "outstanding": "10",
         "noteRoot": "3463256029871825352185896254943772651369867962151265073058451857203234162690",
         "spentRoot": "1719e59ca89fcb9781b1cae7a8fa829fe9e46bc27de8d5e3c9dc79d042f5af61",
-        "historyHash": "1a63f5825fd828870a56877cdd07b0ed056390c9d8e24844eca633ecfb7c74e2",
-        "evidenceHash": "ce8f35e95723e223eb0e2a4d88d65ec6b7fac7c5ea835de3a889716da7538fd9",
+        "historyHash": "8d19169939e8e81875aae58084edb1204eb29c153eaf9138f15345a7558f6a56",
+        "evidenceHash": "84de80f698e6442611f1f687cdac271f4a5852be0f15e3d6b758ae5867a18939",
         "range": {
           "judgingIndex": "13",
           "lag": "2",
@@ -1512,8 +1514,8 @@
         "outstanding": "10",
         "noteRoot": "3463256029871825352185896254943772651369867962151265073058451857203234162690",
         "spentRoot": "1719e59ca89fcb9781b1cae7a8fa829fe9e46bc27de8d5e3c9dc79d042f5af61",
-        "historyHash": "1a63f5825fd828870a56877cdd07b0ed056390c9d8e24844eca633ecfb7c74e2",
-        "evidenceHash": "ce8f35e95723e223eb0e2a4d88d65ec6b7fac7c5ea835de3a889716da7538fd9",
+        "historyHash": "8d19169939e8e81875aae58084edb1204eb29c153eaf9138f15345a7558f6a56",
+        "evidenceHash": "84de80f698e6442611f1f687cdac271f4a5852be0f15e3d6b758ae5867a18939",
         "range": {
           "judgingIndex": "13",
           "lag": "2",
@@ -1700,8 +1702,8 @@
         "outstanding": "10",
         "noteRoot": "3070841617642584389577524301973713583194365702986756472958588442764825674878",
         "spentRoot": "08805e9043ce2af28cac13590505bc15d73800e74eb96c2774a7d3352570dd3c",
-        "historyHash": "6ee5125ddca42797e0be1da436ed3e6e74ff7d85f187641554a4f8142cccdc29",
-        "evidenceHash": "ce4c3968f6e6df282869a40159bc19a0a43cabe867ff7cd463e2408f5c132eb4",
+        "historyHash": "bc6a21ac6893d50eeaebc4234b051f56aa0dd800153e37ff22acaac18138c260",
+        "evidenceHash": "137a2a902ea86e539d1b39696e6b66866cc96ff389ad2a97a13d947a8670bde3",
         "range": {
           "judgingIndex": "12",
           "lag": "2",
@@ -1769,6 +1771,319 @@
             {
               "index": "10",
               "ordinal": "0",
+              "force": true
+            }
+          ],
+          "nonService": {
+            "duration": "2",
+            "threshold": "1",
+            "window": "5",
+            "count": "0",
+            "fires": false,
+            "incumbent": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+            "snapshotIndex": "11"
+          }
+        }
+      },
+      "candidates": [
+        {
+          "cm": "18410887761495705080523939778275032745605368762629390301305455482769723111254",
+          "nf": "15944549147124679908170728468951637169190578772367708467162829028157343103779",
+          "value": "10",
+          "leaf": "0",
+          "anchor": "3070841617642584389577524301973713583194365702986756472958588442764825674878",
+          "siblings": [
+            "0",
+            "16257989699773466206393016511488115181357775227253857822747532441271299011144",
+            "18512210749048123247642993997959185422374521570323643912234746702547156445707",
+            "1935094829533267935830464563796710052445228582946993128186972021230315590035",
+            "18383913181606838331795460117774658566856597132399717689821053927504534850729",
+            "6650121914657515867260011416921319045587517571339686030450569779952452434446",
+            "845043333535205747680782585765216487309952857158244204638951000115525663969",
+            "1798565372180516634517843282450706694542445499858350052460863933410324420334",
+            "12082351775801795992599119410575771090046502720172243783387647860247227871902",
+            "17392670516229609273138538435194690200647498693429087923197847846467620878366",
+            "18270147803583966115185581568756452890223528135804716937646296736746340714319",
+            "6245281075527541134368495049517243664719812052214528999106154137816504162189",
+            "5771305936450134295237779198955973617491950584355028563949759501589674323328",
+            "8375117846537600003339886617732755020518140880023263272035782507904755134166",
+            "1402956623894417358519384271339285842133055840035948184830517042721409232939",
+            "10518453832655181976446617300434900287841057900980895845234303440776175031342",
+            "15485975685389868597531359628984423612206441834147218371890432861420618086233",
+            "15422680120123365729179431955186502234992765602151752301487612439836632415437",
+            "3956483861973015592013083471667691148363938305872047999848739786219821549630",
+            "1086051623285356080920660076036760901133490110146331619651622591312371431716",
+            "2915904499750125353540875529397177727199377493198348513681582475949711605897",
+            "20164087144993267523342657261822731817585018270367494699207673407082461049973",
+            "6242064092034472953019862381003839448720318820550567656011695795729872763820",
+            "486473096388032301890231500231637785138514345257938344321238940657971574478",
+            "8682912164133426756325886608207438073742770514324345939761663338459940455365",
+            "9032327814826196994352281082085265791527933228092108861697327508420029459713",
+            "11946683638986745115214649685278219707650430060924747485486585022833169300696",
+            "19219361000372015911425077088009647148763037724375627703239846977182347147882",
+            "20250997086726519601015986826877099693245538547315475919513141220642229899021",
+            "14413420282722522993748367414404798853361893034082534437626176948595980240628",
+            "4920301475339101562902404357157229632407380396727250905915335784284364493374",
+            "3490399488954770152131810821200763799606626796619604090245668179171764908058"
+          ],
+          "right": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "pathScope": "replayed-local-tree-only",
+          "spendable": false
+        }
+      ]
+    }
+  },
+  "sameIndexReturns": {
+    "packageBytes": 67403,
+    "audit": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "4",
+        "issued": "10",
+        "burned": "0",
+        "outstanding": "10",
+        "noteRoot": "3070841617642584389577524301973713583194365702986756472958588442764825674878",
+        "spentRoot": "08805e9043ce2af28cac13590505bc15d73800e74eb96c2774a7d3352570dd3c",
+        "historyHash": "980a42d108330cd114ea6ddb5279065062cef99bde37cad231ce9390f2888ead",
+        "evidenceHash": "1c5f1a64c8110680273d0e205a4460f5adcd574bd313df9cc446133c83c564e1",
+        "range": {
+          "judgingIndex": "12",
+          "lag": "2",
+          "checkpointIndex": "12",
+          "revokedAt": null,
+          "heldBefore": 5,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "061bdafc1124726a4b3771e020cbdd78fd5a85d0f94ebcef7a568d740edbae27"
+            }
+          ],
+          "carrying": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "3",
+              "index": "11",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "4",
+              "index": "11",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "5",
+              "index": "11",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "6",
+              "index": "12",
+              "class": "valid"
+            }
+          ],
+          "clock": {
+            "duration": "4",
+            "snapshotIndex": "11",
+            "gap": "1",
+            "open": false,
+            "boundary": null,
+            "opening": "11"
+          },
+          "publications": [
+            {
+              "index": "8",
+              "ordinal": "0",
+              "force": true
+            },
+            {
+              "index": "8",
+              "ordinal": "1",
+              "force": true
+            },
+            {
+              "index": "9",
+              "ordinal": "0",
+              "force": true
+            },
+            {
+              "index": "11",
+              "ordinal": "3",
+              "force": true
+            }
+          ],
+          "nonService": {
+            "duration": "2",
+            "threshold": "1",
+            "window": "5",
+            "count": "0",
+            "fires": false,
+            "incumbent": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+            "snapshotIndex": "11"
+          }
+        }
+      },
+      "candidates": []
+    },
+    "issuerRestored": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "4",
+        "issued": "10",
+        "burned": "0",
+        "outstanding": "10",
+        "noteRoot": "3070841617642584389577524301973713583194365702986756472958588442764825674878",
+        "spentRoot": "08805e9043ce2af28cac13590505bc15d73800e74eb96c2774a7d3352570dd3c",
+        "historyHash": "980a42d108330cd114ea6ddb5279065062cef99bde37cad231ce9390f2888ead",
+        "evidenceHash": "1c5f1a64c8110680273d0e205a4460f5adcd574bd313df9cc446133c83c564e1",
+        "range": {
+          "judgingIndex": "12",
+          "lag": "2",
+          "checkpointIndex": "12",
+          "revokedAt": null,
+          "heldBefore": 5,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "061bdafc1124726a4b3771e020cbdd78fd5a85d0f94ebcef7a568d740edbae27"
+            }
+          ],
+          "carrying": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "3",
+              "index": "11",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "4",
+              "index": "11",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "5",
+              "index": "11",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "6",
+              "index": "12",
+              "class": "valid"
+            }
+          ],
+          "clock": {
+            "duration": "4",
+            "snapshotIndex": "11",
+            "gap": "1",
+            "open": false,
+            "boundary": null,
+            "opening": "11"
+          },
+          "publications": [
+            {
+              "index": "8",
+              "ordinal": "0",
+              "force": true
+            },
+            {
+              "index": "8",
+              "ordinal": "1",
+              "force": true
+            },
+            {
+              "index": "9",
+              "ordinal": "0",
+              "force": true
+            },
+            {
+              "index": "11",
+              "ordinal": "3",
               "force": true
             }
           ],
@@ -1945,7 +2260,7 @@
         "noteRoot": "9189636338291800427381089286880870459386867064132759881733850358780172207327",
         "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
         "historyHash": "d1d815b6d20f043cbeca771f0704cf52d39c1174101dae70e6e38a57342cb4ad",
-        "evidenceHash": "c566225a56cf8efcfa0d5749bdc033804f7a9447e53dcf7d58f0470330014c33",
+        "evidenceHash": "bbeda97effb13366c490718e34c6cf62b0c82b2a8fdbb25eb1acf719cc3e3a8a",
         "range": {
           "judgingIndex": "7",
           "lag": "2",
@@ -2026,8 +2341,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
-        "historyHash": "405dbaa66f18e5b7d849e8b701dcca7bd06ee1f0fd50075218c5ebc291386c5b",
-        "evidenceHash": "71399e0a5aa4ca9a8787b02f6d815ccedd6202d568d00824a9ef48be750905c0",
+        "historyHash": "c408c6b42999834b469dc934a2cf840a82cca11a5c88d2cc83d2ca9022588aff",
+        "evidenceHash": "41598e8411cfa1d471d0dacd5d6a933a67f55c530b947de44df47f9ddbfa12f1",
         "range": {
           "judgingIndex": "21",
           "lag": "1",
@@ -2134,8 +2449,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
-        "historyHash": "405dbaa66f18e5b7d849e8b701dcca7bd06ee1f0fd50075218c5ebc291386c5b",
-        "evidenceHash": "71399e0a5aa4ca9a8787b02f6d815ccedd6202d568d00824a9ef48be750905c0",
+        "historyHash": "c408c6b42999834b469dc934a2cf840a82cca11a5c88d2cc83d2ca9022588aff",
+        "evidenceHash": "41598e8411cfa1d471d0dacd5d6a933a67f55c530b947de44df47f9ddbfa12f1",
         "range": {
           "judgingIndex": "21",
           "lag": "1",
@@ -2381,7 +2696,7 @@
   },
   "limits": [
     "Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
-    "Single-backing imports validate finalized closure through replacement, reappointment and restart, with publication force, standing locks and exact ordered recovery adoption. Single-receipt queries classify exact inclusion and liability through silence and term boundaries. Non-service counts use signed terms, first request identities and the strictly preceding canonical state. Same-index fresh silence openings with a same-index predecessor and multi-backing scopes remain unsupported. Import lapse currently requires full trail evidence.",
+    "Single-backing imports validate finalized closure through replacement, reappointment and restart, including same-index fresh openings, with publication force, standing locks and exact ordered recovery adoption. Single-receipt queries classify exact inclusion and liability through silence and term boundaries. Non-service counts use signed terms, first request identities and the strictly preceding canonical state. Multi-backing scopes remain unsupported. Import lapse currently requires full trail evidence.",
     "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission.",
     "The candidate Ergo adapter checks exact transaction decoding and roots against independently selected synthetic headers. No proof of work, chain selection, decoder node equivalence/containment, node acceptance or venue-profile adoption is established."
   ]

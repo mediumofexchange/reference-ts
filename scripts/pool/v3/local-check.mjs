@@ -951,6 +951,7 @@ try {
     venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove,
     test: (name, fn) => test(`Recovery: ${name}`, fn), operatorSecret, issuerSecret, receiverSeed, payerSeed });
   assert.deepEqual(await replayEvidencePackage(portable(recovery.payload), verifier, codec), recovery.result);
+  assert.deepEqual(await replayEvidencePackage(portable(recovery.sameIndex.payload), verifier, codec), recovery.sameIndex.result);
   assert.deepEqual(await replayEvidencePackage(portable(recovery.nonService.payload), verifier, codec), recovery.nonService.result);
   await test("request verification failure remains unavailable evidence rather than a zero count", async () => {
     const failure = new Error("request verification unavailable"), throwing = { ...verifier,
@@ -1015,6 +1016,8 @@ try {
     assert.deepEqual(worker(silent.payload), silent.result);
     assert.deepEqual(worker({ ...silent.payload, seed: receiverSeed }), silent.receiver);
     assert.deepEqual(worker(recovery.payload), recovery.result);
+    assert.deepEqual(worker(recovery.sameIndex.payload), recovery.sameIndex.result);
+    assert.deepEqual(worker({ ...recovery.sameIndex.payload, seed: recovery.issuerSeed }), recovery.sameIndex.restored);
     assert.deepEqual(worker(recovery.nonService.payload), recovery.nonService.result);
     assert.deepEqual(worker({ ...recovery.payload, seed: receiverSeed }), recovery.receiver);
     assert.deepEqual(worker({ ...recovery.issuerPayload, seed: recovery.issuerSeed }), recovery.issuerRestored);
@@ -1074,7 +1077,7 @@ try {
     "experiments/ergo-range/replay-venue.mjs", "experiments/ergo-range/replay-fixture.mjs",
     "experiments/ergo-range/replay-venue-check.mjs", "experiments/ergo-range/package-lock.json");
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-11", specification: "3ed1800", node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-12", specification: "fb7dd07", node: process.version,
     packageBytes: portable(complete).package.length, dependencyPackageBytes: portable(extended).package.length,
     fixtureVenueRecords: complete.venue.records.length,
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
@@ -1085,13 +1088,15 @@ try {
     silenceImports: { packageBytes: portable(silent.payload).package.length, audit: silent.result, receiver: silent.receiver },
     recovery: { packageBytes: portable(recovery.payload).package.length, audit: recovery.result,
       receiver: recovery.receiver, issuerRestored: recovery.issuerRestored },
+    sameIndexReturns: { packageBytes: portable(recovery.sameIndex.payload).package.length,
+      audit: recovery.sameIndex.result, issuerRestored: recovery.sameIndex.restored },
     receipts: { packageBytes: portable(recovery.receipts.payload).package.length, original: recovery.receipts.result,
       adopted: recovery.receipts.adoptedResult },
     nonService: { packageBytes: portable(recovery.nonService.payload).package.length, audit: recovery.nonService.result },
     ...(withErgo ? { ergo: { evidence: "synthetic-headers-and-exact-transaction-bytes", rawBytes: ergo.rawBytes,
       blocks: ergo.payload.venue.blocks.length, audit: ergo.result, receiver: ergo.receiver } } : {}),
     limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
-      "Single-backing imports validate finalized closure through replacement, reappointment and restart, with publication force, standing locks and exact ordered recovery adoption. Single-receipt queries classify exact inclusion and liability through silence and term boundaries. Non-service counts use signed terms, first request identities and the strictly preceding canonical state. Same-index fresh silence openings with a same-index predecessor and multi-backing scopes remain unsupported. Import lapse currently requires full trail evidence.",
+      "Single-backing imports validate finalized closure through replacement, reappointment and restart, including same-index fresh openings, with publication force, standing locks and exact ordered recovery adoption. Single-receipt queries classify exact inclusion and liability through silence and term boundaries. Non-service counts use signed terms, first request identities and the strictly preceding canonical state. Multi-backing scopes remain unsupported. Import lapse currently requires full trail evidence.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };
   if (withErgo) report.limits.push("The candidate Ergo adapter checks exact transaction decoding and roots against independently selected synthetic headers. No proof of work, chain selection, decoder node equivalence/containment, node acceptance or venue-profile adoption is established.");
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");

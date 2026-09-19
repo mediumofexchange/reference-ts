@@ -468,11 +468,10 @@ async function classifyImports(context, directories, record, evidence) {
           // The first checkpoint carries the opening. A later first sighting
           // cannot substitute for an omitted or differently scoped opening.
           requireReplay(c.sequence === header.sequence, "OPENING");
-          // C2b.4.1's return imports the strictly-before snapshot. Generic
-          // same-index elective openings have broader C2.10.4 ranks; this
-          // bounded silence path does not decide that distinction, including
-          // whether a claimed earlier import is a conflict.
-          if (duration !== undefined && canonical?.index === held.index) throw new EvidenceRefusal("unsupported-scope");
+          // C2.10.4–5 / C2b.4.1: every fresh opening imports the canonical
+          // child-relative predecessor, including lower same-index sequences.
+          // Publication force and the gap still use the strictly-before state;
+          // an empty opening inherits the unadopted block via adoptionIndex.
           requireReplay(canonical === undefined ? scoped.opening === undefined : matches(scoped.opening, canonical.commitment), "IMPORT");
           if (canonical !== undefined) {
             requireReplay(canonical.index < held.index || (same(canonical.commitment.operator, c.operator) && canonical.commitment.sequence < c.sequence), "IMPORT_RANK");

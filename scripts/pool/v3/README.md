@@ -45,8 +45,11 @@ and preserve retirement after another segment resets the clock. A returning
 segment adopts the complete block through its opening index in venue order,
 retaining the exact proof and authorization bytes. Standing demands and locks
 survive imports; settlement outputs restore from public fields and the seed.
-Same-index fresh silence openings with a same-index canonical predecessor,
-multi-backing scopes and configuration adoption remain
+Same-index fresh openings import the latest valid lower same-operator sequence
+under [C2b.4.1 at fb7dd07](https://github.com/mediumofexchange/money-from-first-principles/blob/fb7dd07/pool-recovery.md#6-return).
+Their inherited adoption indices preserve publications still owed, while gap
+and publication-force reads stay strictly before the index.
+Multi-backing scopes and configuration adoption remain
 unsupported. Full trails are still
 required for import lapse. The local-only restoration scanner continues to
 refuse imports.

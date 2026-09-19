@@ -338,10 +338,12 @@ withdrawal, preventing a proof variant from recreating a discharged demand.
 Standing demands survive deadline expiry; locks expire individually. Ordinary
 replay checks locks without reapplying door timing conditions. Adopted
 settlement outputs support seed restoration from authenticated public fields.
-New
-silence-bearing openings with a same-index canonical predecessor are also
-unsupported before choosing between C2.10.4's generic predecessor and
-C2b.4.1's strictly-before snapshot. Full trails are still required to classify
+Same-index fresh openings use C2.10.4–5's child-relative canonical predecessor
+under [C2b.4.1 at fb7dd07](https://github.com/mediumofexchange/money-from-first-principles/blob/fb7dd07/pool-recovery.md#6-return).
+The snapshot for gap and publication force stays strictly before the index.
+Repeated empty openings inherit the adoption index and the exact block still
+owed; a later opening cannot omit a valid lower same-operator sequence.
+Full trails are still required to classify
 import lapse; header-only lapse is an availability improvement. These limits
 add no consensus rule, wire format or configuration-adoption claim.
 

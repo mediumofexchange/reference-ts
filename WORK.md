@@ -4,36 +4,36 @@ Updated: 2026-09-19
 
 ## Goal
 
-Completed C2b.5.2 non-service counting on `feat/v3-non-service-count` from
-5aff3a7, for delivery on `main`. Companion specification remains `main` at
-3ed1800; existing signed terms/configuration and request relation suffice.
+Completed same-index fresh silence openings on `feat/v3-same-index-openings`
+from cfa91a5. Companion `spec/same-index-return-predecessor` is delivered on
+specification `main` at fb7dd07, committed before dependent code.
 
-Acceptance: seedless real-proof counts read the last canonical state strictly
-before the judging index; bind the signed grade and candidate configuration;
-preserve first request identity indices and distinct tags across handover;
-exclude spent/locked notes; refuse missing dependencies; agree in fresh processes.
+Acceptance: fresh openings import the latest valid child-relative predecessor,
+including lower same-operator sequences at the same index; stale imports fail.
+Real-proof recovery keeps strict-before publication force, exact ordered adoption,
+inherited adoption indices and old segment retirement; fresh readers agree.
 No live-chain or configuration-adoption claim.
 
 ## Status
 
-- Main 5aff3a7 hosted CI 35455624167 passed; upstream fetched, clean baseline.
-- Implemented the count using existing signed terms, kind-7 proofs and the
-  classified checkpoint/import walk. Identity windows survive handover;
-  canonical spent tags and deadline-sensitive locks determine service.
-- Independent source review and hostile helper probes found no material
-  issues. Final real-proof acceptance passed; delivery target is `main`.
+- Main cfa91a5 hosted CI 35458301811 passed; upstream fetched, clean baseline.
+- Fresh openings reuse C2.10.4–5 while preserving the strict-before snapshot
+  for publication force and clocks. Independent normative and patch reviews
+  found no material blockers. Real-proof acceptance passed; delivery target
+  is implementation `main`.
 
 ## Evidence
 
-- Reuse main 5aff3a7's passing hosted runtime/circuit/dependency baseline;
+- Reuse main cfa91a5's passing hosted runtime/circuit/dependency baseline;
   runtime, circuits, keys and dependencies are unchanged.
-- Final `npm run check:pool:ergo-replay`: 104 groups / 37 real proofs pass,
-  including seedless count agreement through the package in a fresh process.
-  Coverage includes identity/proof variants, both window endpoints, refresh,
-  canonical lock expiry/spend, handover, missing evidence and verifier failure.
+- Final `npm run check:pool:ergo-replay`: 106 groups / 37 real proofs pass,
+  including repeated-return seedless and issuer restoration in fresh processes.
+  New cases
+  cover repeated open/closed-gap openings, nonempty same-index predecessors,
+  stale imports, exclusions, missing trails, exact adoption and retirement.
 - Documentation, syntax and focused diff checks pass. The [retained report](docs/pool-v3-local-replay-verification.json)
-  has all source hashes verified against final files. Final main hosted CI
-  must be checked separately. No protection or required rulesets exist;
+  has all source hashes checked against final files. Final main
+  hosted CI must be checked separately. No protection or required rulesets exist;
   no safeguards changed.
 
 ## Existing local product and custody boundary
@@ -56,12 +56,10 @@ No live-chain or configuration-adoption claim.
 
 ## Next
 
-1. Check final main CI, then close same-index fresh silence openings. Resolve
-   C2.10.4/C2b.4.1's predecessor distinction with independent review before
-   changing dependent code; demonstrate the currently refused case with real
-   proofs while preserving silence retirement and exact adopted publications.
-2. Same-index fresh silence openings with a same-index predecessor and
-   multi-backing closure remain unsupported. Import lapse requires full trails.
+1. Check final main CI. Next product slice: two-backing finalized import
+   closure under C2.10.3–7; prove shared events count once and one stale/missing
+   scoped predecessor prevents whole-checkpoint finality.
+2. Multi-backing closure remains unsupported. Import lapse requires full trails.
    Authenticated venue evidence remains open; counts and receipts retain the same
    conditional fixture boundary as checkpoint replay.
 3. P2 confirms the measured 24-piece transaction on a node; P4 measures
@@ -80,5 +78,5 @@ plausible range **40-60%**. Reusable recovery logic has advanced; selected
 venue/decoder, complete recovery, qualified custody and user operation remain
 the largest blocks. No percentage change is warranted.
 
-A fresh instance is recommended for the next predecessor-boundary slice;
-the completed count is handed off, and that rule needs fresh source review.
+A fresh instance is recommended for the next multi-backing closure slice because it
+expands the replay model beyond this resolved single-backing boundary.
