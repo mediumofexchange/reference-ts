@@ -65,6 +65,7 @@ try {
       { kind: 1, payload: p.configuration }, { kind: 2, payload: p.commitment },
       ...directories.map(entries => ({ kind: 3, payload: codec.encodeEvidenceDirectory(entries, PACKAGE_LIMITS) })),
       ...snapshots.map(payload => ({ kind: 4, payload })), ...trails.map(payload => ({ kind: 6, payload })),
+      ...(p.receipt === undefined ? [] : [{ kind: 10, payload: p.receipt }]),
     ]), PACKAGE_LIMITS) };
   }
   const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
@@ -921,6 +922,36 @@ try {
     venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove,
     test: (name, fn) => test(`Recovery: ${name}`, fn), operatorSecret, issuerSecret, receiverSeed, payerSeed });
   assert.deepEqual(await replayEvidencePackage(portable(recovery.payload), verifier, codec), recovery.result);
+  assert.deepEqual(await replayEvidencePackage(portable(recovery.receipts.payload), verifier, codec), recovery.receipts.result);
+  assert.deepEqual(await replayEvidencePackage(portable(recovery.receipts.adoptedPayload), verifier, codec), recovery.receipts.adoptedResult);
+  await test("receipt package queries are bounded, seedless and own their signed bytes", async () => {
+    const packed = portable(recovery.receipts.payload), items = codec.decodeEvidencePackage(packed.package, PACKAGE_LIMITS);
+    const beforeProof = { ...verifier, verify() { throw new Error("receipt package guard ran too late"); } };
+    const other = new Uint8Array(items.find(item => item.kind === 10).payload); other[other.length - 1] ^= 1;
+    const multiple = codec.encodeEvidencePackage(canonical([...items, { kind: 10, payload: other }]), PACKAGE_LIMITS);
+    for (const [input, expected] of [
+      [{ ...packed, package: multiple }, "unsupported-scope"],
+      [{ ...packed, seed: receiverSeed }, "unsupported-scope"],
+      [{ ...packed, package: codec.encodeEvidencePackage(canonical(items.map(item => item.kind === 10 ?
+        { ...item, payload: new Uint8Array([1]) } : item)), PACKAGE_LIMITS) }, "unresolved-evidence"],
+    ]) {
+      const result = await replayEvidencePackage(input, beforeProof, codec);
+      assert.equal(result.status, expected); assert.equal(result.audit, null); assert.deepEqual(result.candidates, []);
+    }
+    const owned = clone(recovery.receipts.payload); let calls = 0;
+    const mutating = { ...verifier, verify: async (...args) => {
+      if (calls++ === 0) owned.package.receipt.fill(0);
+      return verifier.verify(...args);
+    } };
+    assert.deepEqual(await replayLocalPackage(owned, mutating, codec), recovery.receipts.result);
+    const historical = await replayEvidencePackage({ ...packed, selection: { ...packed.selection, mode: "historical-fixture" } }, verifier, codec);
+    assert.deepEqual(historical.receipt, recovery.receipts.result.receipt);
+    assert.equal(historical.currentRangeAuthenticated, false);
+    for (const result of [recovery.receipts.result, recovery.receipts.adoptedResult]) {
+      assert.equal(result.spendable, false); assert.equal(result.fullV3Replay, false);
+      assert.equal(result.audit, null); assert.deepEqual(result.candidates, []);
+    }
+  });
   let ergo;
   if (withErgo) {
     ergo = await checkErgoReplay({ imported: silent, fixture: ergoFixture, adapter: ergoAdapter, codec, verifier, portable, test });
@@ -951,6 +982,8 @@ try {
     assert.deepEqual(worker(recovery.payload), recovery.result);
     assert.deepEqual(worker({ ...recovery.payload, seed: receiverSeed }), recovery.receiver);
     assert.deepEqual(worker({ ...recovery.issuerPayload, seed: recovery.issuerSeed }), recovery.issuerRestored);
+    assert.deepEqual(worker(recovery.receipts.payload), recovery.receipts.result);
+    assert.deepEqual(worker(recovery.receipts.adoptedPayload), recovery.receipts.adoptedResult);
     for (const seed of [undefined, receiverSeed]) {
       const answer = worker({ ...silent.refusedPayload, ...(seed === undefined ? {} : { seed }) });
       assert.equal(answer.status, "lapsed-selection"); assert.equal(answer.audit, null); assert.deepEqual(answer.candidates, []);
@@ -992,6 +1025,7 @@ try {
   const sources = ["scripts/pool/v3/local-replay.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/local-check.mjs",
     "scripts/pool/v3/fixture-venue.mjs", "scripts/pool/v3/import-check.mjs", "scripts/pool/v3/ergo-check.mjs",
     "scripts/pool/v3/recovery-state.mjs", "scripts/pool/v3/recovery-check.mjs",
+    "scripts/pool/v3/receipt-state.mjs", "scripts/pool/v3/receipt-check.mjs",
     "scripts/pool/delivery/evidence-reader.mjs", "scripts/pool/delivery/crypto.mjs", "scripts/pool/spent-set/radix.mjs",
     "model/pool-v3-records.ts", "model/pool-v3-commitments.ts", "model/pool-v3-trail.ts", "model/pool-v3-headers.ts",
     "model/pool-v3-configuration.ts", "model/pool-v3-terms.ts", "model/pool-v3-package.ts", "model/pool-v3-range.ts",
@@ -1003,7 +1037,7 @@ try {
     "experiments/ergo-range/replay-venue.mjs", "experiments/ergo-range/replay-fixture.mjs",
     "experiments/ergo-range/replay-venue-check.mjs", "experiments/ergo-range/package-lock.json");
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-9", specification: "3ed1800", node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-10", specification: "3ed1800", node: process.version,
     packageBytes: portable(complete).package.length, dependencyPackageBytes: portable(extended).package.length,
     fixtureVenueRecords: complete.venue.records.length,
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
@@ -1014,10 +1048,12 @@ try {
     silenceImports: { packageBytes: portable(silent.payload).package.length, audit: silent.result, receiver: silent.receiver },
     recovery: { packageBytes: portable(recovery.payload).package.length, audit: recovery.result,
       receiver: recovery.receiver, issuerRestored: recovery.issuerRestored },
+    receipts: { packageBytes: portable(recovery.receipts.payload).package.length, original: recovery.receipts.result,
+      adopted: recovery.receipts.adoptedResult },
     ...(withErgo ? { ergo: { evidence: "synthetic-headers-and-exact-transaction-bytes", rawBytes: ergo.rawBytes,
       blocks: ergo.payload.venue.blocks.length, audit: ergo.result, receiver: ergo.receiver } } : {}),
     limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
-      "Single-backing imports validate finalized closure through replacement, reappointment and restart, with publication force, standing locks and exact ordered recovery adoption. Same-index fresh silence openings with a same-index predecessor, multi-backing scopes, non-service counts and receipts remain unsupported. Import lapse currently requires full trail evidence.",
+      "Single-backing imports validate finalized closure through replacement, reappointment and restart, with publication force, standing locks and exact ordered recovery adoption. Single-receipt queries classify exact inclusion and liability through silence and term boundaries. Same-index fresh silence openings with a same-index predecessor, multi-backing scopes and non-service counts remain unsupported. Import lapse currently requires full trail evidence.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };
   if (withErgo) report.limits.push("The candidate Ergo adapter checks exact transaction decoding and roots against independently selected synthetic headers. No proof of work, chain selection, decoder node equivalence/containment, node acceptance or venue-profile adoption is established.");
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");

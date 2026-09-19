@@ -13,6 +13,7 @@ import { LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
+import { checkReceipts } from "./receipt-check.mjs";
 
 const b = n => new Uint8Array(32).fill(n);
 const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
@@ -306,5 +307,8 @@ export async function checkRecovery({ codec, verifier, configurationBytes, domai
       assert.equal(refused.status, "unresolved-evidence"); assert.equal(refused.audit, null); assert.deepEqual(refused.candidates, []);
     }
   });
-  return { payload, result, receiver, issuerSeed, issuerPayload, issuerRestored, settlement: released.output };
+  const receipts = await checkReceipts({ codec, verifier, test, compose, checkpoint, segment, reference, operatorSecret,
+    original, originalOpening, originalState, issuance, funded, returnOpening, returned, adopted, finalCheckpoint,
+    ancestry, publications, payload, adoptedRecords, adoptedEffects, finalRecords, finalEffects });
+  return { payload, result, receiver, issuerSeed, issuerPayload, issuerRestored, settlement: released.output, receipts };
 }

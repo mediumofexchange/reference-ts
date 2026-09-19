@@ -96,7 +96,9 @@ from the seed and public evidence. The clock retains each segment's retirement
 after a fresh opening resets the gap. Same-index fresh silence openings with a
 same-index predecessor remain unsupported. Import lapse still requires full
 trail evidence. Configuration adoption, a selected venue profile, multi-backing
-imports, receipts and non-service counts remain open.
+imports and non-service counts remain open. Single-backing receipt reads reuse
+the verified checkpoint walk: exact original/adopted event inclusion, liability
+precedence, repair and silence/term lapse, with no spendability claim.
 `npm run check:pool:fees` compares the successor
 [transfer shapes and ordinary fees](POOL_DEPLOYMENT_PROBES.md#transfer-shape-and-ordinary-fees)
 with real proofs. These probes do not implement a pool wallet or v3 finality.

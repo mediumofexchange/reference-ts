@@ -345,6 +345,22 @@ C2b.4.1's strictly-before snapshot. Full trails are still required to classify
 import lapse; header-only lapse is an availability improvement. These limits
 add no consensus rule, wire format or configuration-adoption claim.
 
+A single kind-10 receipt in the evidence package selects a seedless receipt
+read over the same verified checkpoint walk. Its signature binds the complete
+single-backing header authority. The reader authenticates a held `after` even
+past the boundary, without inferring signing time. Valid events compare
+position, statement, history, proof and authorization hashes; an adopted
+receipt names the adopting segment but retains source evidence hashes.
+Inclusion is final immediately. Otherwise earlier contradiction and elective
+abandonment precede repair, moved-past, silence or term lapse, then pending.
+Excluded and noncarrying checkpoints occupy sequences without creating repair
+holes. The silence/term boundary is exclusive for inclusion and contradiction.
+Later unavailable evidence cannot erase a returned final inclusion; refusals
+preserve already proven contradictions as `receiptEvidence`. These conditional
+receipt judgments use the fixture venue and expose no audit state, recovered
+candidates or spending authority. One query adds only the existing 355-byte
+receipt plus package framing and reuses the replay's work budgets.
+
 The complete public-package boundary still requires the following inputs and
 checks. This table separates what this experiment establishes from prerequisites
 that a production reader must establish before returning spendable holdings.
@@ -354,7 +370,7 @@ that a production reader must establish before returning spendable holdings.
 | Construction and key routing | Exact configuration preimage and candidate domain; all six independently pinned source/toolchain/bytecode/key identities and fixed helper/bounds/profile | Approved configuration/artifact identities after full adoption prerequisites; setup provenance and deployment qualification |
 | Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and terms-derived issuance key; header-derived scope root; fixture replacement/reappointment links and revocation checked at each checkpoint | Multi-backing authority; a venue profile and authenticated evidence behind the fixture answers |
 | Local state | Issue/spend/burn and demand/withdraw/settle state checks, locks, compressed spent root, note paths, totals and both chains; exact single-backing transitive imports with fresh local trees | Multi-backing closure deduplication and all scoped snapshots |
-| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; carrying-checkpoint classification, last-valid continuity, replacement/reappointment/restart imports; publication force and exact ordered adoption | A selected venue profile and authenticated chain evidence, multi-backing scope changes, receipts and the count |
+| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; carrying-checkpoint classification, last-valid continuity, replacement/reappointment/restart imports; publication force, exact ordered adoption and single-backing receipt verdicts | A selected venue profile and authenticated chain evidence, multi-backing scope changes and the count |
 | Wallet restoration | Seed-only capsule and lit-settlement openings with local or imported-tree paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
 
 The candidate manifest, checkpoint selection and the fixture venue evidence

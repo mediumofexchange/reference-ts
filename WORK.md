@@ -4,50 +4,43 @@ Updated: 2026-09-19
 
 ## Goal
 
-Single-backing recovery-publication force and ordered adoption completed on
-`feat/v3-recovery-publications` from main 6a7d112 for delivery on `main`. Companion specification
-stays `main` at 3ed1800; no normative change.
+Receipt finality across silence/return on `feat/v3-receipt-finality` from
+dfc4dbc, for delivery on `main`. Companion specification stays `main` at
+3ed1800; no normative change.
 
-Acceptance: real-proof demand, withdrawal and settlement during silence;
-exact force at the original prefix, complete adoption on return, then payment
-and restoration in fresh public, receiver and backer processes. Hostile order,
-substituted evidence, lock conflicts, replay and withheld closure refuse
-without partial state. No live chain or configuration-adoption claim.
+Acceptance: real-proof original and adopted receipts retain exact inclusion
+and liability precedence across silence, lapse unfinished tails, distinguish
+repair from abandonment, refuse missing dependencies, and agree in a fresh
+process. No live-chain or configuration-adoption claim.
 
 ## Status
 
-- Implemented: publication groups precede checkpoints at their index; force
-  uses the strictly earlier snapshot plus accumulated effects with its forest
-  fixed. Only demand, withdrawal and release have force; malformed, invalid,
-  misrouted and unauthorized publications have none.
-- Empty openings inherit the predecessor's adoption index. Non-opening
-  checkpoints start with the complete block through the opening index,
-  preserving original proof/signature bytes. Effective statement identities
-  persist after discharge; standing demands and individual locks import.
-- Lit settlement outputs restore from public fields and the seed. Ordinary
-  post-return payments retain the existing capsule restoration path.
-- Independent design and patch reviews closed with no unresolved material
-  finding. Boundary, second-silence, exact-evidence, lock and replay cases
-  received focused readback. Final real-proof execution passed.
-- [Decision](decisions/2026-09.md#2026-09-19--classify-and-adopt-single-backing-recovery-publications).
+- Implemented a seedless single-receipt query using package kind 10 and the
+  existing verified checkpoint/import walk. It authenticates the opening,
+  scope and held reference, comparing all five event fields. Adopted receipts
+  name the new segment and position but retain source proof/signature hashes.
+- Inclusion wins immediately. Contradiction and abandonment survive later
+  silence; unfinished receipts lapse at the earlier silence or term boundary.
+  Excluded/noncarrying checkpoints occupy sequences without making holes.
+- Missing later evidence cannot erase an already returned inclusion. Refusals
+  retain proven contradictions; no receipt result exposes wallet state.
+- Independent source review found one fact-preservation gap on late encoding
+  or resource refusal. All expected refusal branches now retain contradictions;
+  readback resolved the finding. Source and test review closed with no
+  unresolved material findings; final execution passed.
 
 ## Evidence
 
-- Main 6a7d112 hosted CI 35452105469 passed all seven jobs this session.
-  Reuse that unchanged runtime/circuit/dependency baseline: 1,934 tests and
+- Main dfc4dbc hosted CI 35453949661 passed all seven jobs this session.
+  Reuse its unchanged runtime/circuit/dependency baseline: 1,934 tests and
   package/service/wallet/crash/spent plus real v2/v3 proof acceptance.
-- Final `npm run check:pool:ergo-replay`: 74 groups / 31 real proofs pass,
-  including fresh seedless, receiver and backer processes. Earlier fixture
-  refusal expectations were corrected after independent review.
-  The portable recovery package is 128,236 bytes. The unchanged synthetic
-  Ergo import trace uses 21 blocks / 3,684 raw bytes; recovery force uses the
-  fixture venue, with no new node-publication claim.
-- Syntax, docs/index/link checks and focused diff review pass. The
-  [retained report](docs/pool-v3-local-replay-verification.json) has source
-  hashes verified against the final files.
-- Delivery target is `main`; its final hosted CI must be checked separately
-  from the baseline above. No branch protections or required rulesets exist.
-  No safeguards changed.
+- Final `npm run check:pool:ergo-replay`: 91 groups / 31 real proofs pass,
+  including original and adopted receipts in fresh processes. The first run
+  exposed a too-early replacement fixture; corrected under the unchanged rule.
+  Syntax, docs and focused diff checks pass. The [retained report](docs/pool-v3-local-replay-verification.json)
+  has source hashes verified against final files.
+- Delivery target is `main`; final hosted CI must be checked separately.
+  No branch protection or required rulesets exist; no safeguards changed.
 
 ## Existing local product and custody boundary
 
@@ -69,17 +62,20 @@ without partial state. No live chain or configuration-adoption claim.
 
 ## Next
 
-1. Read final main hosted CI, then continue the next complete recovery path:
-   receipt finality across silence/return, followed by the
-   non-service count and its signed terms/configuration dependencies.
+1. Read final main hosted CI, then implement the non-service count and its
+   signed terms/configuration dependencies as the next complete recovery path.
 2. Same-index fresh silence openings with a same-index predecessor and
    multi-backing closure remain unsupported. Import lapse requires full trails.
-   The count, receipts and authenticated venue evidence remain open.
+   Authenticated venue evidence remains open; receipt queries retain the same
+   conditional fixture boundary as checkpoint replay.
 3. P2 confirms the measured 24-piece transaction on a node; P4 measures
    exhaustion from index zero on a real chain. Decoder node equivalence is a
    selection prerequisite; a decoder refusal denies ranges through its height.
 4. Configuration approval stays disabled until adoption prerequisites hold.
    Device qualification and external publication remain separate dependencies.
+5. Workflow opportunity: cache ignored real-proof fixtures by exact source and
+   configuration hashes for replay-only iteration. Repeated fixture corrections
+   currently regenerate unchanged proofs; retain separate generation checks.
 
 ## Open questions
 
@@ -88,5 +84,5 @@ plausible range **40-60%**. Reusable recovery logic has advanced; selected
 venue/decoder, complete recovery, qualified custody and user operation remain
 the largest blocks. No percentage change is warranted.
 
-A fresh instance is recommended for the receipt-finality slice: it crosses
-receipt precedence and recovery boundaries beyond this force/adoption review.
+A fresh instance is recommended for the non-service count: it begins a
+separate terms/configuration slice, with this receipt work fully handed off.

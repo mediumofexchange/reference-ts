@@ -51,6 +51,16 @@ unsupported. Full trails are still
 required for import lapse. The local-only restoration scanner continues to
 refuse imports.
 
+A package containing one kind-10 receipt requests a seedless receipt read.
+The same checkpoint walk authenticates its single-backing opening, scope and
+held `after`, compares all five event fields, and applies receipt precedence
+through the earlier silence or term boundary. It stops at proven inclusion;
+later unavailable evidence cannot erase it. Other refusals retain already
+proven contradictions in `receiptEvidence`. Adopted receipts name the new
+segment and position while retaining original proof and authorization hashes.
+Receipt results expose no wallet candidates or spending authority. Multiple
+receipts per package and receipt reads without venue evidence are unsupported.
+
 For the same import/payment/burn trace through exact synthetic Ergo transaction
 bytes, install the pinned optional experiment dependencies with
 `npm --prefix experiments/ergo-range ci --ignore-scripts --no-audit --no-fund`
