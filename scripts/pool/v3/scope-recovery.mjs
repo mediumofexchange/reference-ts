@@ -35,6 +35,9 @@ export function scopeRecovery({ context, viewFor, latest, check, charge, ReplayR
     const pending = (async () => {
       const force = [], verdicts = [], duration = terms.silence?.noCommitmentDuration;
       if (duration === undefined) return { force, verdicts };
+      // Earlier receipt inclusion must not depend on publication availability
+      // after the first gap. Strict-prefix clock reads descend in index here.
+      if (context.receiptBytes !== undefined && (await clock(backing, terms, 0n, through)).boundary === undefined) return { force, verdicts };
       const view = await viewFor(backing, terms);
       for (const entry of await publications(backing, terms)) {
         if (entry.index > through) break;

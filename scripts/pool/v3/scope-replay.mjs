@@ -6,6 +6,7 @@ import { EMPTY_NOTE_ROOT } from "../../../dist/pool/note-tree.js";
 import { EvidenceRefusal, LIMITS } from "../delivery/evidence-reader.mjs";
 import { effectOf, applyRecovery } from "./recovery-state.mjs";
 import { scopeRecovery, venueOrder } from "./scope-recovery.mjs";
+import { receiptWalk } from "./receipt-state.mjs";
 
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const same = (a, b) => compareBytes(a, b) === 0;
@@ -230,6 +231,55 @@ export async function classifyScopes(context, directories, record, evidence, hel
   const view = await viewFor(selection.backing, context.terms);
   const selectedHeld = (await view.heldBy(selection.operator)).find(held => matches(held.commitment, selection));
   if (selectedHeld === undefined) throw new EvidenceRefusal("selection-mismatch");
+  if (context.receiptBytes !== undefined) {
+    const receipt = codec.decodeReceipt(context.receiptBytes);
+    const original = trails.find(trail => hash(trail.header) === hex(receipt.segment));
+    if (original === undefined) throw new EvidenceRefusal("unresolved-evidence");
+    const header = codec.decodeSegmentHeader(original.header), scopeViews = new Map(), termsByBacking = new Map();
+    for (let i = 0; i < header.entries.length; i++) {
+      const scoped = header.entries[i], signed = original.terms[i];
+      if (signed === undefined || !same(codec.rootTermsName(signed.terms), scoped.backing) ||
+          !codec.verifyRootTermsSignature(signed.terms, signed.signature)) throw new EvidenceRefusal("unresolved-evidence");
+      const terms = codec.decodeRootTerms(signed.terms);
+      if (!same(terms.configuration, selection.domain) || !same(terms.venue, selection.venue)) throw new EvidenceRefusal("invalid-receipt");
+      termsByBacking.set(hex(scoped.backing), terms);
+      scopeViews.set(hex(scoped.backing), await viewFor(scoped.backing, terms));
+    }
+    const walk = await receiptWalk(context.receiptBytes, context, view, trails, evidence.snapshots, scopeViews);
+    // A fallback can already have established contradictions. Keep these facts
+    // if a newly required complete-scope dependency refuses the repeated walk.
+    const prior = context.receiptWalk;
+    context.receiptWalk = { evidence: () => {
+      const facts = [...(prior?.evidence().contradictedAt ?? []), ...walk.evidence().contradictedAt];
+      return { contradictedAt: facts.filter((fact, i) => facts.findIndex(other =>
+        other.operator === fact.operator && other.sequence === fact.sequence) === i) };
+    } };
+    context.contextReceipt = walk.receipt;
+    let openingIndex;
+    const boundary = async at => {
+      if (openingIndex === undefined) return;
+      const through = walk.termBoundary !== undefined && walk.termBoundary < at ? walk.termBoundary : at;
+      let earliest;
+      for (const scoped of header.entries) {
+        const clock = await recovery.clock(scoped.backing, termsByBacking.get(hex(scoped.backing)), openingIndex, through);
+        if (clock?.boundary !== undefined && (earliest === undefined || clock.boundary < earliest)) earliest = clock.boundary;
+      }
+      return walk.boundary(at, { boundary: earliest });
+    };
+    for (const held of await view.heldBy(header.operator)) {
+      if (held.commitment.sequence < header.sequence) continue;
+      inspect(held);
+      const ended = await boundary(held.index);
+      if (ended !== undefined) return { receipt: ended };
+      const scoped = header.entries.find(entry => scopeViews.get(hex(entry.backing)).carries(held) !== undefined);
+      if (scoped === undefined) { walk.checkpoint(held, undefined, undefined, undefined, "other"); continue; }
+      const result = await classify(held, scoped.backing);
+      const verdict = walk.checkpoint(held, result.segment, result.state, result.header, result.class);
+      if (result.class === "valid" && same(result.segment, receipt.segment) && held.commitment.sequence === header.sequence) openingIndex = held.index;
+      if (verdict !== undefined) return { receipt: verdict };
+    }
+    return { receipt: await boundary(view.t) ?? walk.finish() };
+  }
   if (!same(codec.linkInForce(view.chain, selectedHeld.index).operator, selection.operator)) throw new EvidenceRefusal("lapsed-selection");
   const selected = await classify(selectedHeld, selection.backing);
   if (selected.class === "lapsed") throw new EvidenceRefusal("lapsed-selection");

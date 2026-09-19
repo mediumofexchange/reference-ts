@@ -38,6 +38,7 @@ as current instructions.
 
 - `2026-09-19` [Preserve per-backing recovery obligations across scope changes](decisions/2026-09.md#2026-09-19--preserve-per-backing-recovery-obligations-across-scope-changes)
 - `2026-09-19` [Preserve the canonical predecessor across same-index returns](decisions/2026-09.md#2026-09-19--preserve-the-canonical-predecessor-across-same-index-returns)
+- `2026-09-19` [Read receipts against their complete original scope](decisions/2026-09.md#2026-09-19--read-receipts-against-their-complete-original-scope)
 - `2026-09-19` [Read single-backing receipts through silence and return](decisions/2026-09.md#2026-09-19--read-single-backing-receipts-through-silence-and-return)
 - `2026-09-19` [Classify and adopt single-backing recovery publications](decisions/2026-09.md#2026-09-19--classify-and-adopt-single-backing-recovery-publications)
 - `2026-09-19` [Read silence across single-backing imports with empty publication evidence](decisions/2026-09.md#2026-09-19--read-silence-across-single-backing-imports-with-empty-publication-evidence)

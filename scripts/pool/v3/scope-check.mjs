@@ -15,6 +15,7 @@ import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { mergeFinalizedPrefixes } from "./scope-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
+import { checkNormalScopeReceipts } from "./scope-receipt-check.mjs";
 
 const b = n => new Uint8Array(32).fill(n), hex = bytes => Buffer.from(bytes).toString("hex");
 const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
@@ -106,19 +107,19 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
     const snapshots = ctx.entries.map(({ backing }) => codec.snapshotBytes({ backing, segment: ctx.id,
       historyHash: history, evidenceHash: evidence, ...supply.get(hex(backing)) }));
     const directory = ctx.entries.map(({ backing }, i) => ({ name: backing, digest: hash(snapshots[i]) }));
-    return { ctx, at, snapshots, directory, tree, spent,
+    return { ctx, at, records, effects, importedNullifiers: nullifiers, snapshots, directory, tree, spent,
       commitment: signCommitment(ctx.secret, sequence, directoryRoot(directory)),
       trail: codec.encodeTrail({ header: ctx.header, terms: ctx.entries.map(({ backing }) => backings.find(t => same(t.backing, backing)).signed),
         records: records.map(codec.encodeRecord) }, LIMITS) };
   }
-  function compose(checkpoints, chosen = checkpoints.at(-1), backing = x, replacements = [toB, toA]) {
-    const record = new FixtureVenue(venue, 20n, 2n);
+  function compose(checkpoints, chosen = checkpoints.at(-1), backing = x, replacements = [toB, toA], at = 20n) {
+    const record = new FixtureVenue(venue, at, 2n);
     for (const cp of checkpoints) record.witness(1, cp.commitment.operator, cp.at, encodeCommitment(cp.commitment));
     for (const r of replacements) record.witness(r.kind, r.subject, r.index, r.record);
     const snapshot = chosen.snapshots.find(bytes => same(codec.decodeSnapshot(bytes).backing, backing));
     const rest = checkpoints.filter(cp => cp !== chosen);
     return { selection: { domain, venue, backing, operator: chosen.commitment.operator, sequence: chosen.commitment.sequence,
-      root: chosen.commitment.root, judgingIndex: 20n, mode: "current-fixture" },
+      root: chosen.commitment.root, judgingIndex: at, mode: "current-fixture" },
     package: { configuration: configurationBytes, commitment: encodeCommitment(chosen.commitment), directory: chosen.directory,
       directories: distinct([chosen.directory, ...rest.map(cp => cp.directory)], directoryRoot).slice(1),
       snapshot, snapshots: distinct([snapshot, ...checkpoints.flatMap(cp => cp.snapshots)], bytes => bytes).slice(1),
@@ -357,5 +358,7 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
       [parent("left:1", issuanceX), parent("right:1", issuanceX), "OUTPUT"],
     ]) assert.throws(() => mergeFinalizedPrefixes([left, right], { check, chargeEvents: () => {} }), error => error.check === expected);
   });
-  return { payload, payloadY, result, receiver, receiverY };
+  const receipts = await checkNormalScopeReceipts({ codec, verifier, test, operatorSecret, checkpoint, compose, segment, entry,
+    x, y, a0, a1, y1, j0, j1, j2, history, payload, payloadY, toB });
+  return { payload, payloadY, result, receiver, receiverY, receipts };
 }

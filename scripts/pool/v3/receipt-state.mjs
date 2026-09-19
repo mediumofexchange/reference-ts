@@ -1,4 +1,4 @@
-// Conditional single-backing receipt walk: C2.10.9a–c and C2b.4.3.
+// Conditional complete-scope receipt walk: C2.10.9a–c and C2b.4.3.
 // Checkpoint validity and clock boundaries come only from local-replay.
 import { createHash } from "node:crypto";
 import { ScopeTree } from "../../../dist/pool/scope.js";
@@ -9,20 +9,24 @@ const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest()
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const requireReceipt = condition => { if (!condition) throw new EvidenceRefusal("invalid-receipt"); };
 
-export async function receiptWalk(bytes, context, view, trails, snapshots) {
+export async function receiptWalk(bytes, context, view, trails, snapshots, scopeViews) {
   const { codec, selection } = context, receipt = codec.decodeReceipt(bytes);
   const trail = trails.find(tr => same(hash(tr.header), receipt.segment));
   if (trail === undefined) throw new EvidenceRefusal("unresolved-evidence");
   const header = codec.decodeSegmentHeader(trail.header);
-  if (header.entries.length !== 1) throw new EvidenceRefusal("unsupported-scope");
-  const scope = header.entries[0];
+  if (header.entries.length !== 1 && scopeViews === undefined) throw new EvidenceRefusal("unsupported-scope");
   requireReceipt(same(header.domain, selection.domain) && same(header.venue, selection.venue) &&
-    same(scope.backing, selection.backing) && receipt.after >= header.sequence &&
+    header.entries.some(scope => same(scope.backing, selection.backing)) && receipt.after >= header.sequence &&
     codec.verifyReceipt({ domain: selection.domain, segment: hash(trail.header),
       scopeRoot: new ScopeTree(header.entries).root(), operator: header.operator }, receipt));
-  const termIndex = view.chain.findIndex(link => same(link.link, scope.link) && same(link.operator, header.operator));
-  requireReceipt(termIndex >= 0);
-  const termBoundary = view.chain[termIndex + 1]?.from;
+  let termBoundary;
+  for (const scope of header.entries) {
+    const scopedView = scopeViews?.get(hex(scope.backing)) ?? view;
+    const termIndex = scopedView.chain.findIndex(link => same(link.link, scope.link) && same(link.operator, header.operator));
+    requireReceipt(termIndex >= 0);
+    const end = scopedView.chain[termIndex + 1]?.from;
+    if (end !== undefined && (termBoundary === undefined || end < termBoundary)) termBoundary = end;
+  }
   const held = await view.heldBy(header.operator), reference = held.find(h => h.commitment.sequence === receipt.after);
   const movedPast = reference === undefined && held.some(h => h.commitment.sequence > receipt.after);
   // A held reference must belong to this segment, even after the boundary.
@@ -42,7 +46,7 @@ export async function receiptWalk(bytes, context, view, trails, snapshots) {
   const lapse = (kind, at) => finish(contradictedAt.length ? "contradicted" : "lapsed",
     contradictedAt.length ? {} : { lapse: { kind, ...(at === undefined ? {} : { at: at.toString() }) } });
   return {
-    receipt, header,
+    receipt, header, termBoundary,
     evidence: () => ({ contradictedAt: [...contradictedAt] }),
     boundary(at, clock) {
       if (!opened) return;

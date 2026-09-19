@@ -363,6 +363,11 @@ async function classifyImports(context, directories, record, evidence) {
   if (selectedHeld === undefined) throw new EvidenceRefusal("selection-mismatch");
   if (!same(codec.linkInForce(chain, selectedHeld.index).operator, selection.operator)) throw new EvidenceRefusal("lapsed-selection");
   const trails = decodedTrails(evidence.trails, codec), segments = new Map(), clocks = new Map(), carrying = [];
+  if (context.receiptBytes !== undefined) {
+    const receipt = codec.decodeReceipt(context.receiptBytes);
+    const original = trails.find(trail => same(sha256(trail.header), receipt.segment));
+    if (original !== undefined && codec.decodeSegmentHeader(original.header).entries.length !== 1) throw new ScopeRequired();
+  }
   const walk = context.receiptBytes === undefined ? undefined :
     await receiptWalk(context.receiptBytes, context, view, trails, evidence.snapshots);
   context.receiptWalk = walk;
@@ -618,9 +623,12 @@ export async function replayLocalPackage(input, verifier, codec) {
         }
       } catch (error) {
         if (!(error instanceof ScopeRequired)) throw error;
-        if (supplied.receipt !== undefined) throw new EvidenceRefusal("unsupported-scope");
-        ({ carrying, state, clock, ranges } = await classifyScopes(context, directories, record, { snapshots, trails },
-          { readRecordView, decodedTrails, replayTrail, requireReplay, ReplayRefusal, IMPORT_LIMITS }));
+        const result = await classifyScopes(context, directories, record, { snapshots, trails },
+          { readRecordView, decodedTrails, replayTrail, requireReplay, ReplayRefusal, IMPORT_LIMITS });
+        if (result.receipt !== undefined) return { ...refused("receipt-status"), receipt: result.receipt, rangeEvidence,
+          candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
+          currentRangeAuthenticated: selection.mode !== "historical-fixture" };
+        ({ carrying, state, clock, ranges } = result);
       }
     } else {
       // Both grades need the independently answered record ranges.

@@ -15,6 +15,7 @@ import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage, RANGE_LIMITS } from "./local-replay.mjs";
 import { mergeFinalizedPrefixes } from "./scope-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
+import { checkRecoveryScopeReceipts } from "./scope-receipt-check.mjs";
 
 const b = n => new Uint8Array(32).fill(n), hex = bytes => Buffer.from(bytes).toString("hex");
 const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
@@ -125,7 +126,7 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     const snapshots = ctx.entries.map(({ backing }) => codec.snapshotBytes({ backing, segment: ctx.id,
       historyHash: history, evidenceHash: evidence, issued: zeroSupply ? 0n : same(backing, x) ? 10n : 20n, burned: 0n }));
     const directory = ctx.entries.map(({ backing }, i) => ({ name: backing, digest: hash(snapshots[i]) }));
-    return { ctx, at, records, snapshots, directory, tree, spent, commitment: signCommitment(operatorSecret, sequence, directoryRoot(directory)),
+    return { ctx, at, records, effects, importedNullifiers, snapshots, directory, tree, spent, commitment: signCommitment(operatorSecret, sequence, directoryRoot(directory)),
       trail: codec.encodeTrail({ header: ctx.header, terms: ctx.entries.map(({ backing }) => backings.find(t => same(t.backing, backing)).signed),
         records: records.map(codec.encodeRecord) }, LIMITS) };
   }
@@ -379,6 +380,8 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
       assert.equal(merged.effective.size, 4);
     }
   });
+  const receipts = await checkRecoveryScopeReceipts({ codec, verifier, test, operatorSecret, checkpoint, compose,
+    x, y, a0, a1, adopted, final, j0, ancestry, publications, payload, payloadY });
   return { payload, payloadY, result, resultY, receiver, issuerSeed, issuerPayload, issuerPayloadY,
-    issuerRestored, issuerRestoredY, standing, unequal };
+    issuerRestored, issuerRestoredY, standing, unequal, receipts };
 }

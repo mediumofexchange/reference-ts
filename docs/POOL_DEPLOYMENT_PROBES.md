@@ -335,8 +335,8 @@ same-index fresh openings. Shared demand ancestry is applied once; incomparable
 lock, settlement, withdrawal or spend conflicts refuse regardless of parent
 order. A two-backing fixture restores both settlement notes and continues with
 a payment; unequal obligations prove that neither a scalar minimum nor maximum
-can substitute for the per-backing indices. Required ancestry with non-service
-clauses, and multi-backing receipt queries, remain explicitly unsupported.
+can substitute for the per-backing indices. Required multi-backing ancestry
+with non-service clauses remains explicitly unsupported.
 
 With a silence clause, the same walk reads one backing clock across every
 term, freezes its reset index across checkpoints at the same witnessed index,
@@ -372,15 +372,19 @@ import lapse; header-only lapse is an availability improvement. These limits
 add no consensus rule, wire format or configuration-adoption claim.
 
 A single kind-10 receipt in the evidence package selects a seedless receipt
-read over the same verified checkpoint walk. Its signature binds the complete
-single-backing header authority. The reader authenticates a held `after` even
+read over the same verified checkpoint walks. Its signature binds the complete
+original scope's header authority. The reader authenticates a held `after` even
 past the boundary, without inferring signing time. Valid events compare
 position, statement, history, proof and authorization hashes; an adopted
 receipt names the adopting segment but retains source evidence hashes.
 Inclusion is final immediately. Otherwise earlier contradiction and elective
 abandonment precede repair, moved-past, silence or term lapse, then pending.
 Excluded and noncarrying checkpoints occupy sequences without creating repair
-holes. The silence/term boundary is exclusive for inclusion and contradiction.
+holes. A transition carrying any original backing counts, including one that
+drops the selected backing. The earliest silence/term boundary across the
+original scope is exclusive for inclusion and contradiction. Clocks advance
+only through the next candidate or term end; pre-gap inclusion requires no
+publication range.
 Later unavailable evidence cannot erase a returned final inclusion; refusals
 preserve already proven contradictions as `receiptEvidence`. These conditional
 receipt judgments use the fixture venue and expose no audit state, recovered
@@ -413,7 +417,7 @@ that a production reader must establish before returning spendable holdings.
 | Construction and key routing | Exact configuration preimage and candidate domain; all six independently pinned source/toolchain/bytecode/key identities and fixed helper/bounds/profile | Approved configuration/artifact identities after full adoption prerequisites; setup provenance and deployment qualification |
 | Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and per-backing issuance keys; header-derived scope root; fixture replacement/reappointment links and revocation checked across each complete scope | A venue profile and authenticated evidence behind the fixture answers |
 | Local state | Issue/spend/burn across deduplicated shared ancestry and every scoped snapshot, with per-backing totals, shared spent state and original-tree paths; single-backing demand/withdraw/settle and locks | Multi-backing recovery and runtime integration |
-| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; whole-scope classification, last-valid continuity and split/rejoin imports; multi-backing publication force and exact ordered adoption; single-backing receipts and non-service counts | A selected venue profile and authenticated chain evidence; multi-backing receipt/non-service reads |
+| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; whole-scope classification, last-valid continuity and split/rejoin imports; multi-backing publication force and exact ordered adoption; complete-scope receipts and single-backing non-service counts | A selected venue profile and authenticated chain evidence; multi-backing non-service reads |
 | Wallet restoration | Seed-only capsule and lit-settlement openings with local or imported-tree paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
 
 The candidate manifest, checkpoint selection and the fixture venue evidence

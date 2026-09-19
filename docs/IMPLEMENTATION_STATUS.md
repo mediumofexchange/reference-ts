@@ -98,8 +98,7 @@ shared demand ancestry and refuse incomparable lock/settlement/spend conflicts.
 Original-prefix clocks retire the whole scope when any scoped backing is silent;
 scopes with mixed silence durations are invalid. The conditional fixtures cover
 exact adoption, unequal obligations, seedless audit, restored issuer notes and
-later payment. Multi-backing non-service clauses and receipt queries remain
-unsupported; the existing single-backing receipt/count path is separate.
+later payment. Multi-backing non-service clauses remain unsupported.
 Silence-bearing imports read an independently answered publication range.
 Demand, withdrawal and release force use the original snapshot and venue order;
 return adopts the exact complete block through its opening index. Standing
@@ -114,9 +113,12 @@ trail evidence. Configuration adoption, a selected venue profile and runtime
 imports remain open. Signed non-service terms now drive a single-backing
 real-proof count against the strictly preceding canonical state, preserving
 first request indices, distinct tags and spent/lock status across handover.
-Single-backing receipt reads reuse
-the verified checkpoint walk: exact original/adopted event inclusion, liability
-precedence, repair and silence/term lapse, with no spendability claim.
+Receipt reads reuse the verified checkpoint walks across single and multiple
+backings: exact original/adopted event inclusion, liability precedence, repair
+and the complete original scope's earliest silence/term boundary. Transitions
+carrying any original backing count; held noncarrying/excluded sequences cannot
+create repair holes. Earlier finality survives unavailable later dependencies;
+refusals preserve already proven contradictions. There is no spendability claim.
 `npm run check:pool:fees` compares the successor
 [transfer shapes and ordinary fees](POOL_DEPLOYMENT_PROBES.md#transfer-shape-and-ordinary-fees)
 with real proofs. These probes do not implement a pool wallet or v3 finality.

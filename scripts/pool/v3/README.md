@@ -49,15 +49,20 @@ Same-index fresh openings import the latest valid lower same-operator sequence
 under [C2b.4.1 at fb7dd07](https://github.com/mediumofexchange/money-from-first-principles/blob/fb7dd07/pool-recovery.md#6-return).
 Their inherited adoption indices preserve publications still owed, while gap
 and publication-force reads stay strictly before the index.
-Multi-backing scopes and configuration adoption remain
+The scope classifier also handles two-backing split/rejoin histories, shared
+ancestry, per-backing adoption obligations and their exact publication union.
+Multi-backing non-service clauses and configuration adoption remain
 unsupported. Full trails are still
 required for import lapse. The local-only restoration scanner continues to
 refuse imports.
 
 A package containing one kind-10 receipt requests a seedless receipt read.
-The same checkpoint walk authenticates its single-backing opening, scope and
-held `after`, compares all five event fields, and applies receipt precedence
-through the earlier silence or term boundary. It stops at proven inclusion;
+The checkpoint walks authenticate its opening, complete original scope and
+held `after`, compare all five event fields, and apply receipt precedence
+through the earliest scoped silence or term boundary. A transition carrying
+any original backing counts, including one dropping the selected backing.
+Held noncarrying and excluded checkpoints occupy sequences for repair reads.
+The reader stops at proven inclusion;
 later unavailable evidence cannot erase it. Other refusals retain already
 proven contradictions in `receiptEvidence`. Adopted receipts name the new
 segment and position while retaining original proof and authorization hashes.
