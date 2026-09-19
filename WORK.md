@@ -4,9 +4,9 @@ Updated: 2026-09-19
 
 ## Goal
 
-Bind the candidate Ergo profile verifier into the local v3 real-proof replay.
-Branch `feat/v3-ergo-replay-adapter`, base main 5e51cbb; companion specification
-stays `main` at 3ed1800 (no normative change planned).
+Candidate Ergo profile adapter completed in implementation commit 6ce9dc4,
+from `feat/v3-ergo-replay-adapter` for delivery on `main`. Companion specification
+stays `main` at 3ed1800 (no normative change).
 
 Acceptance: the existing replacement/import/payment/burn trace replays from
 exact synthetic Ergo transaction bytes through the profile's checked block
@@ -41,8 +41,11 @@ an explicitly trusted synthetic fixture; no live chain or adoption claim.
   [Retained report](docs/pool-v3-local-replay-verification.json).
   Replay and profile report source hashes match the final files.
 - `npm run check:ergo:range`: 342 block, 14,874 decoder and 247 profile checks
-  pass; typecheck and documentation/link checks pass. Full project check and
-  delivery CI remain pending; Vitest's sandbox loader needs approved escalation.
+  pass. `npm run check` passes all 1,934 tests plus package, service, wallet,
+  crash-recovery and spent-set acceptance; docs/typecheck pass. Vitest required
+  approved escalation after its sandbox loader was denied workspace access.
+- CI now includes the adapter in both v3 proof jobs. Read the final main
+  revision's hosted run before resuming; the baseline run above is separate.
 - No normative change; [decision](decisions/2026-09.md#2026-09-19--bound-raw-ergo-evidence-before-local-proof-replay).
 
 ## Existing local product and custody boundary
@@ -65,8 +68,7 @@ an explicitly trusted synthetic fixture; no live chain or adoption claim.
 
 ## Next
 
-1. Complete final project checks and authorized merge/push, then verify CI.
-   Next product slice: single-backing silence-bearing imports. State the clock,
+1. Next product slice: single-backing silence-bearing imports. State the clock,
    retirement and exact predecessor rules from existing specification, review
    independently, then demonstrate fresh public audit/receiver restoration and
    refusal of stale or withheld closure. Multi-backing remains separate.
