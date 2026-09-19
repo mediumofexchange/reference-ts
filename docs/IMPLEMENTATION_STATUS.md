@@ -84,8 +84,11 @@ carrying checkpoint of the segment from its own trail with
 Under a declared silence clause it reads the no-commitment clock from those
 classified checkpoints (C2b.6.1): the gap at the judging index, the segment's
 silence boundary after its opening checkpoint, and the lapse of any
-continuation witnessed past it (C2b.4.1). Adoption, a selected venue
-profile, imports and recovery remain open.
+continuation witnessed past it (C2b.4.1). A selection with imports and no
+silence clause additionally validates the exact single-backing predecessor
+closure through replacement, reappointment and same-operator restart; it
+retains imported spent state, roots, totals and original-tree wallet paths.
+Adoption, a selected venue profile, multi-backing imports and recovery remain open.
 `npm run check:pool:fees` compares the successor
 [transfer shapes and ordinary fees](POOL_DEPLOYMENT_PROBES.md#transfer-shape-and-ordinary-fees)
 with real proofs. These probes do not implement a pool wallet or v3 finality.
@@ -154,8 +157,9 @@ the cross-backing venue order for publications, and C2.5's walk over admitted
 replacements (lead floor from the venue's lag, supersession, revocation and
 the lesser identity at one index), checked against the runtime walk.
 `scripts/pool/v3/fixture-venue.mjs` is the harness's fixture verifier.
-Venue-source authentication, imports, the silence clock, authority and
-adoption remain open.
+The local replay integrates these answers with the bounded clock and import
+checks described above. Venue-source authentication, complete shared-scope
+authority, recovery and adoption remain open.
 
 ## Runtime pin and recovery models
 

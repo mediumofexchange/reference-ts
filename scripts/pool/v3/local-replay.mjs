@@ -1,4 +1,4 @@
-// Conditional initial-segment experiment, not an adopted v3 runtime.
+// Conditional single-backing experiment, not an adopted v3 runtime.
 // pool-v3 §§3,5,7,10,12,13; pool-v2 §8 host checks; pool-spent C1.2.8–9.
 import { createHash } from "node:crypto";
 import { compareBytes, copyBytes, EncodingError } from "../../../dist/bytes.js";
@@ -16,6 +16,8 @@ const hex = bytes => Buffer.from(bytes).toString("hex");
 const sha256 = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
 export const PACKAGE_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxItems: 1024n });
 export const RANGE_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxEntries: 4096n });
+// Work budgets for the linear single-backing import closure, including failed replays.
+export const IMPORT_LIMITS = Object.freeze({ maxCheckpoints: 128n, maxEvents: 8192n });
 const flags = Object.freeze({ fullV3Replay: false, currentRangeAuthenticated: false,
   candidateConfigurationChecked: false, signedTermsAuthenticated: false,
   termsAuthorityAuthenticated: false, completenessClaim: false, noMatchesMeansZeroBalance: false,
@@ -55,13 +57,10 @@ function byteList(value, name) {
  * venue's lag, the held commitments (C2.3.3) of every party in force within
  * its term (C2.10.13), each passed by its packaged directory (C2.4.2) or
  * listed as carrying the backing, and K's revocation (C2b.1). The clock and
- * lag are the verifier's; a supplied answer is never evidence. The selection
- * must be held by the original operator inside its term, else it is lapsed
- * (C2.10.11); a successor's carrying commitment opens a segment this
- * experiment cannot classify. The segment's opening checkpoint (C2.10.9a)
- * is the carrying checkpoint at the header's opening sequence; its index
- * anchors the silence boundary (C2b.4.1). Nothing here classifies a checkpoint. */
-async function readRecordRanges(selection, terms, header, directories, record, codec) {
+ * lag are the verifier's; a supplied answer is never evidence. This view is
+ * shared by the original-segment clock and the single-backing import walk.
+ * Nothing here classifies a checkpoint. */
+async function readRecordView(selection, terms, directories, record, codec) {
   const t = selection.judgingIndex, now = await record.witnessedIndex(), lag = await record.lag();
   if (typeof now !== "bigint" || typeof lag !== "bigint" || t > now || (selection.mode === "current-fixture" && t !== now)) {
     throw new EvidenceRefusal("unresolved-evidence");
@@ -88,6 +87,13 @@ async function readRecordRanges(selection, terms, header, directories, record, c
     if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
     return directory.find(entry => same(entry.name, selection.backing));
   };
+  return { t, lag, chain, revokedAt, heldBy, termEnd, carries };
+}
+
+/** Original-segment selection: its opening checkpoint anchors the silence
+ * boundary. Successor/import selections use classifyImports instead. */
+async function readRecordRanges(selection, terms, header, directories, record, codec) {
+  const { t, lag, chain, revokedAt, heldBy, termEnd, carries } = await readRecordView(selection, terms, directories, record, codec);
   const held = await heldBy(chain[0].operator);
   const at = held.findIndex(h => h.commitment.sequence === selection.sequence && same(h.commitment.root, selection.root));
   if (at < 0) throw new EvidenceRefusal("selection-mismatch");
@@ -136,11 +142,13 @@ function decodedTrails(trails, codec) {
  * `lastValid` is the segment's last valid checkpoint before this one: the
  * trail must reach its length and reproduce its evidence and history hashes
  * there (C2.10.12, pool-v3 §7.1), the evidence before any verification. */
-async function replayTrail({ selection, terms, header, verifier, codec }, snapshot, trail, { index, revokedAt, lastValid }) {
+async function replayTrail({ selection, terms, header, verifier, codec }, snapshot, trail, { index, revokedAt, lastValid, imported }) {
   const issuerKey = terms.obligor, scope = new ScopeTree(header.entries).root();
-  const tree = new NoteTree(), spent = new RadixSpentSet(), anchors = new Set([EMPTY_NOTE_ROOT]);
-  const statements = new Set(), outputPositions = new Map(), scanOutputs = [];
-  let issued = 0n, burned = 0n, position = 0n;
+  const tree = new NoteTree(), spent = new RadixSpentSet(), anchors = new Set(imported?.anchors ?? [EMPTY_NOTE_ROOT]);
+  const nullifiers = new Set(imported?.nullifiers), outputsSeen = new Set(imported?.outputsSeen);
+  for (const nf of nullifiers) spent.insert(fieldToBytes(nf));
+  const statements = new Set(), outputPositions = new Map(imported?.outputPositions), scanOutputs = [...(imported?.scanOutputs ?? [])];
+  let issued = imported?.issued ?? 0n, burned = imported?.burned ?? 0n, position = 0n;
   let history = codec.genesisHistoryHash(snapshot.segment), evidence = codec.genesisEvidenceHash(snapshot.segment);
   for (const bytes of trail.records) {
     const record = codec.decodeRecord(bytes), p = record.publicInputs, kind = record.kind;
@@ -169,15 +177,15 @@ async function replayTrail({ selection, terms, header, verifier, codec }, snapsh
     const outputs = kind === 1 ? [p[8]] : kind === 2 ? p.slice(9, 13) : [p[12]];
     requireReplay(roots.every(root => anchors.has(root)), "ANCHOR");
     requireReplay(new Set(nfs).size === nfs.length && nfs.every(nf => nf !== 0n && !spent.has(fieldToBytes(nf))), "SPENT");
-    requireReplay(new Set(outputs).size === outputs.length && outputs.every(cm => cm !== 0n && !tree.has(cm)), "OUTPUT");
+    requireReplay(new Set(outputs).size === outputs.length && outputs.every(cm => cm !== 0n && !outputsSeen.has(cm)), "OUTPUT");
     requireReplay(tree.size + BigInt(outputs.length) <= NOTE_TREE_CAPACITY && position + 1n < VALUE_BOUND, "CAPACITY");
     // All guards read the same pre-state. This local state is never returned
     // on failure, including a verifier rejection later in the supplied trail.
     const positions = tree.appendAll(outputs);
     outputs.forEach((cm, i) => {
-      outputPositions.set(cm, positions[i]); scanOutputs.push({ cm, capsule: record.capsules[i] });
+      outputsSeen.add(cm); outputPositions.set(cm, { leaf: positions[i], tree }); scanOutputs.push({ cm, capsule: record.capsules[i] });
     });
-    nfs.forEach(nf => spent.insert(fieldToBytes(nf)));
+    nfs.forEach(nf => { spent.insert(fieldToBytes(nf)); nullifiers.add(nf); });
     if (kind === 1) issued += p[7];
     if (kind === 3) burned += p[7];
     position += 1n;
@@ -187,7 +195,7 @@ async function replayTrail({ selection, terms, header, verifier, codec }, snapsh
   }
   requireReplay(lastValid === undefined || position >= lastValid.position, "CONTINUITY");
   requireReplay(same(history, snapshot.historyHash) && issued === snapshot.issued && burned === snapshot.burned, "SNAPSHOT");
-  return { tree, spent, issued, burned, position, history, scanOutputs, outputPositions };
+  return { tree, spent, issued, burned, position, history, scanOutputs, outputPositions, anchors, nullifiers, outputsSeen };
 }
 
 /** C2.10.11 over the original operator's carrying checkpoints in held order,
@@ -283,6 +291,96 @@ async function classifyCarrying(context, ranges, evidence) {
   return { carrying, state, clock };
 }
 
+/** C2.10.3–7 for a single backing without a silence clause. Its canonical
+ * ancestry is linear: each new segment imports the last valid checkpoint's
+ * closure once. Every checkpoint is classified at its own prefix, and every
+ * continuation replays from its segment's fixed opening base. No union of
+ * raw trails, recursion, or replica-provided finality is involved. */
+async function classifyImports(context, directories, record, evidence) {
+  const { selection, terms, codec } = context;
+  if (terms.silence !== undefined) throw new EvidenceRefusal("unsupported-scope");
+  const view = await readRecordView(selection, terms, directories, record, codec);
+  const { chain, heldBy, termEnd, carries, revokedAt, t, lag } = view;
+  const selectedHeld = (await heldBy(selection.operator)).find(h => h.commitment.sequence === selection.sequence && same(h.commitment.root, selection.root));
+  if (selectedHeld === undefined) throw new EvidenceRefusal("selection-mismatch");
+  if (!same(codec.linkInForce(chain, selectedHeld.index).operator, selection.operator)) throw new EvidenceRefusal("lapsed-selection");
+  const trails = decodedTrails(evidence.trails, codec), segments = new Map(), carrying = [];
+  const matches = (a, b) => a !== undefined && b !== undefined && a.sequence === b.sequence && same(a.operator, b.operator) && same(a.root, b.root);
+  let canonical, selectedState, checkpoints = 0n, events = 0n, heldBefore = 0, heldAfter = 0;
+  for (let termIndex = 0; termIndex < chain.length; termIndex++) {
+    const term = chain[termIndex];
+    for (const held of await heldBy(term.operator)) {
+      if (held.index < term.from || held.index > termEnd(termIndex)) continue;
+      if (++checkpoints > IMPORT_LIMITS.maxCheckpoints) throw new EvidenceRefusal("resource-refusal");
+      const c = held.commitment, selected = matches(c, selection);
+      if (!selected) { if (selectedState === undefined) heldBefore++; else heldAfter++; }
+      const entry = carries(held);
+      if (entry === undefined) continue;
+      if (directories.get(hex(c.root)).length !== 1) throw new EvidenceRefusal("unsupported-scope");
+      const bytes = evidence.snapshots.find(x => same(sha256(x), entry.digest));
+      if (bytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
+      const snapshot = codec.decodeSnapshot(bytes);
+      const matching = trails.filter(tr => codec.verifyTrailEvidence({ backing: selection.backing, segment: snapshot.segment, digest: entry.digest }, snapshot, tr, LIMITS));
+      if (matching.length !== 1) throw new EvidenceRefusal(matching.length === 0 ? "unresolved-evidence" : "unsupported-scope");
+      const trail = matching[0], header = codec.decodeSegmentHeader(trail.header);
+      if (header.entries.length !== 1) throw new EvidenceRefusal("unsupported-scope");
+      const scoped = header.entries[0], signed = trail.terms[0];
+      if (!same(codec.rootTermsName(signed.terms), selection.backing) || !codec.verifyRootTermsSignature(signed.terms, signed.signature)) {
+        throw new EvidenceRefusal("unresolved-evidence");
+      }
+      const item = { operator: hex(c.operator), sequence: c.sequence.toString(), index: held.index.toString() };
+      try {
+        requireReplay(same(header.domain, selection.domain) && same(header.venue, selection.venue) && same(header.operator, c.operator) &&
+          same(scoped.backing, selection.backing) && header.sequence <= c.sequence, "CONTEXT");
+        const ownTerm = chain.find(link => same(link.link, scoped.link));
+        requireReplay(ownTerm !== undefined && same(ownTerm.operator, header.operator), "TERMS_SCOPE");
+        if (!same(ownTerm.link, term.link) && ownTerm.from < term.from) {
+          carrying.push({ ...item, class: "lapsed" });
+          if (selected) throw new EvidenceRefusal("lapsed-selection");
+          continue;
+        }
+        requireReplay(same(ownTerm.link, term.link), "TERMS_SCOPE");
+        const id = hex(snapshot.segment);
+        let segment = segments.get(id);
+        if (segment === undefined) {
+          // Missing opening evidence is not an exclusion certificate. In
+          // particular it cannot let a successor roll back to an older state.
+          const openingHeld = (await heldBy(header.operator)).some(h => h.commitment.sequence === header.sequence);
+          if (!openingHeld) throw new EvidenceRefusal("unresolved-evidence");
+          // The first checkpoint carries the opening. A later first sighting
+          // cannot substitute for an omitted or differently scoped opening.
+          requireReplay(c.sequence === header.sequence, "OPENING");
+          requireReplay(canonical === undefined ? scoped.opening === undefined : matches(scoped.opening, canonical.commitment), "IMPORT");
+          if (canonical !== undefined) {
+            requireReplay(canonical.index < held.index || (same(canonical.commitment.operator, c.operator) && canonical.commitment.sequence < c.sequence), "IMPORT_RANK");
+            if (!same(canonical.commitment.operator, c.operator)) requireReplay(canonical.index < term.from, "IMPORT_RANK");
+          }
+          segment = { imported: canonical?.state, predecessor: canonical?.commitment, lastValid: undefined };
+          segments.set(id, segment);
+        }
+        // Returning to an older segment cannot abandon a valid newer segment.
+        requireReplay(canonical === undefined || same(canonical.segment, snapshot.segment) || matches(segment.predecessor, canonical.commitment), "CONTINUITY");
+        if (c.sequence === header.sequence) requireReplay(trail.records.length === 0, "OPENING");
+        events += BigInt(trail.records.length);
+        if (events > IMPORT_LIMITS.maxEvents) throw new EvidenceRefusal("resource-refusal");
+        const state = await replayTrail({ ...context, header }, snapshot, trail,
+          { index: held.index, revokedAt, lastValid: segment.lastValid, imported: segment.imported });
+        segment.lastValid = { position: state.position, historyHash: snapshot.historyHash, evidenceHash: snapshot.evidenceHash };
+        canonical = { commitment: c, index: held.index, segment: snapshot.segment, state };
+        carrying.push({ ...item, class: "valid" });
+        if (selectedState !== undefined) throw new EvidenceRefusal("superseded-selection");
+        if (selected) selectedState = state;
+      } catch (error) {
+        if (!(error instanceof ReplayRefusal) || selected) throw error;
+        carrying.push({ ...item, class: "excluded", check: error.check });
+      }
+    }
+  }
+  if (selectedState === undefined) throw new EvidenceRefusal("unresolved-evidence");
+  return { state: selectedState, carrying, clock: null,
+    ranges: { judgingIndex: t, lag, checkpointIndex: selectedHeld.index, revokedAt, heldBefore, heldAfter, chain } };
+}
+
 /** verifier.configuration is independently selected and its six keys checked
  * by the harness. Issuer identity comes from signed scoped terms (§11).
  * With a fixture venue and verifier.record, §13 ranges fix the chain, the
@@ -301,14 +399,15 @@ export async function replayLocalPackage(input, verifier, codec) {
     requireReplay(codec.verifyConfiguration(supplied?.configuration, verifier.configuration), "CONFIGURATION");
     const domain = codec.configurationHash(codec.decodeConfiguration(supplied.configuration));
     requireReplay(selection?.domain instanceof Uint8Array && same(domain, selection.domain), "CONFIGURATION");
-    const { snapshot, trail, header } = readLocalEvidence(selection, supplied, codec);
+    const { snapshot, trail, header } = readLocalEvidence(selection, supplied, codec, { allowImports: venue !== undefined });
     const signed = trail.terms[0], terms = codec.decodeRootTerms(signed.terms);
     requireReplay(codec.verifyRootTermsSignature(signed.terms, signed.signature), "TERMS_SIGNATURE");
     requireReplay(same(codec.rootTermsName(signed.terms), header.entries[0].backing), "TERMS_NAME");
     requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
-    // Local fixture is limited to original operator/genesis link. Without
-    // ranges this is no proof of absent replacement, revocation or commitments.
-    requireReplay(same(terms.operator, header.operator) && same(header.entries[0].link, selection.backing), "TERMS_INITIAL_SCOPE");
+    // Empty-opening selections retain the original-operator scope. Imports
+    // instead require the term-by-term record walk below.
+    const imports = header.entries[0].opening !== undefined;
+    if (!imports) requireReplay(same(terms.operator, header.operator) && same(header.entries[0].link, selection.backing), "TERMS_INITIAL_SCOPE");
     const context = { selection, terms, header, verifier, codec };
     let ranges = null, carrying = null, clock = null, state;
     if (venue !== undefined) {
@@ -320,8 +419,12 @@ export async function replayLocalPackage(input, verifier, codec) {
       const distinct = list => list.filter((item, i) => list.findIndex(other => same(other, item)) === i);
       const snapshots = distinct([supplied.snapshot, ...byteList(supplied.snapshots, "snapshots")]);
       const trails = distinct([supplied.trail, ...byteList(supplied.trails, "trails")]);
-      ranges = await readRecordRanges(selection, terms, header, directories, verifier.record(venue), codec);
-      ({ carrying, state, clock } = await classifyCarrying(context, ranges, { snapshot, trail, snapshots, trails }));
+      if (imports) {
+        ({ carrying, state, clock, ranges } = await classifyImports(context, directories, verifier.record(venue), { snapshots, trails }));
+      } else {
+        ranges = await readRecordRanges(selection, terms, header, directories, verifier.record(venue), codec);
+        ({ carrying, state, clock } = await classifyCarrying(context, ranges, { snapshot, trail, snapshots, trails }));
+      }
     } else {
       // A silence clause needs the clock (C2b.6.1), which is read from the record ranges alone.
       if (terms.silence !== undefined) throw new EvidenceRefusal("unsupported-scope");
@@ -337,10 +440,10 @@ export async function replayLocalPackage(input, verifier, codec) {
         if (note === null) continue;
         requireReplay(same(note.opening.backing, selection.backing), "BACKING");
         if (note.opening.value > 0n && !spent.has(fieldToBytes(note.nf))) {
-          const leaf = outputPositions.get(note.cm), path = tree.path(leaf);
+          const location = outputPositions.get(note.cm), { leaf } = location, path = location.tree.path(leaf);
           candidates.push({ cm: note.cm.toString(), nf: note.nf.toString(), value: note.opening.value.toString(),
-            leaf: leaf.toString(), anchor: tree.root().toString(), siblings: path.siblings.map(String), right: [...path.right],
-            pathScope: "replayed-local-tree-only", spendable: false });
+            leaf: leaf.toString(), anchor: location.tree.root().toString(), siblings: path.siblings.map(String), right: [...path.right],
+            pathScope: location.tree === tree ? "replayed-local-tree-only" : "replayed-imported-tree-only", spendable: false });
         }
       }
     }
@@ -372,7 +475,7 @@ export async function replayLocalPackage(input, verifier, codec) {
  * directory names for the backing and its trail the one that authenticates
  * it (§10.1), both by hash, so no first-match lookup can silently discard
  * conflicting evidence. Every other directory, snapshot and trail is a
- * dependency the §13 range read may need; fault/range witnesses, imports and
+ * dependency the §13 range/import read may need; fault/range witnesses and
  * other kinds require a later reader. The same replay engine then
  * authenticates every relationship against selection and, with a fixture
  * venue, against the record ranges. */

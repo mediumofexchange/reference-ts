@@ -296,6 +296,23 @@ now refuse. Changed sources, all six bytecodes and retained keys, including
 unused recovery keys, fail independent pins. Changed terms signatures, names,
 domains, venues and original-operator/genesis-link assumptions refuse as well.
 
+For a selection with a nonempty opening and no silence clause, the same
+proof/state replay also serves a bounded single-backing import walk
+(C2.10.3–7). It classifies each operator term in record order, matching the
+header's link rather than just the key. Every new segment must name the
+exact last valid predecessor; missing evidence blocks, and an excluded tail
+supplies no state. The imported closure retains totals, spent nullifiers,
+all output commitments and accepted roots. Local trees and chains start
+fresh; later checkpoints replay from the same fixed imported base. Candidate
+paths for imported outputs use their original trees and are labeled
+`replayed-imported-tree-only`. The walk supports reappointment and
+same-operator restart, including lower-sequence imports at the same index.
+It caps total work at 128 held checkpoints and 8192 replayed local events,
+counting repeated checkpoint prefixes and failed replays. This linear
+single-backing path does not establish multi-backing closure merging, silence
+recovery or adoption. The original-segment clock path retains the limits
+above, and the separate local-only restoration scanner still refuses imports.
+
 The complete public-package boundary still requires the following inputs and
 checks. This table separates what this experiment establishes from prerequisites
 that a production reader must establish before returning spendable holdings.
@@ -303,10 +320,10 @@ that a production reader must establish before returning spendable holdings.
 | Boundary | Experiment evidence | Still required |
 |---|---|---|
 | Construction and key routing | Exact configuration preimage and candidate domain; all six independently pinned source/toolchain/bytecode/key identities and fixed helper/bounds/profile | Approved configuration/artifact identities after full adoption prerequisites; setup provenance and deployment qualification |
-| Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and terms-derived issuance key; header-derived scope root; against the fixture venue, no admitted replacement (original operator in force) and no revocation at or before the checkpoint | Replacement chains beyond the original operator; a venue profile and authenticated evidence behind the fixture answers |
-| Local state | Issue/spend/burn proof and state checks, compressed spent root, note paths, totals and both chains | Recovery statements, locks, recursively verified imports, deduplicated closure and all scoped snapshots |
-| Witness and continuity | Exact fixture-selected signed checkpoint held in the fixture venue's §13 answers; every other held commitment through the judging index passed by its directory (empty opening, currency); old package mismatch tested | A selected venue profile and authenticated chain evidence, successor and scope-changed segments with imports, publications, receipts and the count |
-| Wallet restoration | Seed-only candidate openings and local paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
+| Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and terms-derived issuance key; header-derived scope root; fixture replacement/reappointment links and revocation checked at each checkpoint | Multi-backing authority; a venue profile and authenticated evidence behind the fixture answers |
+| Local state | Issue/spend/burn proof and state checks, compressed spent root, note paths, totals and both chains; exact single-backing transitive imports with fresh local trees | Recovery statements, locks, multi-backing closure deduplication and all scoped snapshots |
+| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; carrying-checkpoint classification, last-valid continuity, replacement/reappointment/restart imports | A selected venue profile and authenticated chain evidence, multi-backing scope changes, publications, receipts and the count |
+| Wallet restoration | Seed-only candidate openings and local or imported-tree paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
 
 The candidate manifest, checkpoint selection and the fixture venue record
 remain explicit **test fixture assumptions**. Signed terms establish identity,

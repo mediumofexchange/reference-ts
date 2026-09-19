@@ -1,58 +1,49 @@
 # Current work
 
-Updated: 2026-09-15
+Updated: 2026-09-19
 
 ## Goal
 
-The no-commitment clock in the local experiment: under a declared silence
-clause the walk that classifies the original segment's carrying checkpoints
-reads C2b.6.1's clock at the judging index, the segment's silence boundary
-after its opening checkpoint, and the lapse of any continuation witnessed
-past it (C2b.4.1). Delivered to main at b18cc1a (feature d5e6166, review fixes 51b33f8 and e3ec24f).
-No specification change: the rules are pool-fault §5 and pool-recovery
-C2b.6.1/C2b.4.1 as adopted 2026-09-08. No runtime, circuit, key, dependency
-or host-control change.
+Single-backing successor/restarted segments in the local v3 experiment,
+with exact finalized C2.10.5 imports and real-proof spending of an imported
+note. Branch `feat/v3-finalized-imports`; specification remains on `main`
+at 3ed1800 (no normative change). Base main aa21230.
+
+Acceptance: transitive imports preserve totals, spent nullifiers, output
+commitments and accepted roots while starting an empty local output tree;
+missing/stale/unwitnessed imports, imported double spends and duplicate
+outputs refuse. Replacement, reappointment and same-index restart must pass
+through the portable package and fresh seedless/receiver processes.
 
 ## Status
 
-- Expected result: with a clause, `c(i)` is the last valid carrying
-  checkpoint strictly before `i`, the gap is open where `i − c(i)` exceeds
-  the duration, the boundary is the first open index strictly after the
-  opening checkpoint, and a later checkpoint witnessed while the gap is
-  open is `lapsed`: held, its trail neither resolved nor replayed, closing
-  nothing, refusing `lapsed-selection` with the clock record when
-  selected. The empty-opening contradiction and segment identity are
-  settled before the clock. The audit's `clock` reports the duration,
-  `c(t)`, the gap, whether it is open, the boundary and the opening index.
-  The opening checkpoint is the carrying checkpoint at the header's
-  opening sequence (C2b.4.1), exempt from lapse; whenever ranges are read,
-  a held opening carrying nothing for the backing is the contradiction
-  `OPENING` and a missing one is unresolved, so the proof fixtures now open
-  with the backing at sequence 1; without ranges a clause stays
-  unsupported; without a clause the clock is null.
-  [Decision](decisions/2026-09.md#2026-09-15--read-the-no-commitment-clock-from-the-classified-carrying-checkpoints).
-- Earlier today on main: the [candidate Ergo venue profile](docs/ERGO_VENUE_PROFILE.md)
-  (1d8f735, CI 34958350541) and the one-transaction capacity decision (72d54fd, CI 34961693625), both passed.
-- Independent adversarial review of the clock: two blockers (lapse tested
-  before the opening contradiction and segment identity) and four optional
-  findings fixed; the readback's residual (the opening's carriage read only
-  under a clause) fixed by ungating it and rebuilding the proof fixtures;
-  a further readback confirmed no material finding remains.
-- Recorded, not resolved: a decoder-refused transaction denies every range
-  through its height; reads from index zero scan the genesis on a real chain.
+- Implementation and acceptance complete. Each checkpoint
+  replays from its segment's fixed imported base; prior state is never
+  mutated. Wallet candidates retain their original tree paths.
+- Independent adversarial review found one blocker: an unheld opening was
+  excluded, permitting descent to older state. Fixed by preserving it as
+  unresolved; readback found no remaining material issue. Regressions cover
+  missing B opening and a later C attempting rollback to A.
+- Portable-package replay and fresh seedless/receiver processes agree with
+  the in-process result. Authorized delivery remains pending.
+- [Decision](decisions/2026-09.md#2026-09-19--import-the-exact-single-backing-finalized-closure-in-local-replay).
+- No runtime, circuit, key, dependency, device-control or specification change.
+  Silence-bearing imports, multi-backing closure and adoption remain unsupported.
+  Import term-lapse currently requires full trail evidence; header-only lapse
+  is a recorded availability improvement.
 
 ## Evidence
 
-- Baseline main 72d54fd: CI 34961693625 passed. Delivery main b18cc1a:
-  CI 34989288167 passed on all seven jobs; both repositories at parity.
-- `npm run check:pool:local-replay` on the final sources: 32 groups and 9
-  real proofs passed, including the clock group's nineteen cases (gaps
-  closed and open, lapse and refusal, supersession at the last allowed
-  index, same-index twins, excluded and opening checkpoints, historical and
-  zero-duration reads, both review blockers, the portable package).
+- Base main aa21230: CI 34990416105 passed (confirmed remotely).
+- Expanded local replay: 40 groups / 14 real proofs passed, including
+  replacement, imported-note spending, nonzero burn inheritance,
+  reappointment, same-index restart and imported SPENT/OUTPUT refusals.
   [Retained report](docs/pool-v3-local-replay-verification.json).
-- `npm run check:docs` OK. The change touches only `scripts/pool/v3` and
-  docs; the full suite last passed on 6f4e1e7 with no runtime change since.
+- `npm run check:pool:restoration`: all 14 checks passed; local-only scanner
+  retains its default import refusal.
+- `npm run check:docs` passes; the patch has no whitespace errors.
+- GitHub access works with approved network escalation; fetched origin remains
+  aa21230, main unprotected. Delivery has not yet been attempted.
 
 ## Existing local product and custody boundary
 
@@ -74,24 +65,24 @@ or host-control change.
 
 ## Next
 
-1. A successor's or scope-changed segment with its C2.10.5 imports in the
-   local replay, then wire the candidate Ergo profile verifier into it in
-   place of the fixture venue (an adapter binds the budget).
-2. P2 (publication on a node) confirms the measured 24-piece transaction;
+1. Commit and deliver the reviewed import slice, then verify hosted CI and
+   remote parity. No implementation review remains owed.
+2. Wire the candidate Ergo profile verifier into local replay in place of the
+   fixture venue (an adapter binds the budget). Multi-backing and silence
+   recovery imports remain distinct replay dependencies.
+3. P2 (publication on a node) confirms the measured 24-piece transaction;
    P4 measures exhaustion from index zero on a real chain; decoder node
-   equivalence is a selection prerequisite.
-3. Configuration approval stays disabled until all adoption prerequisites
-   hold; device qualification and external publication remain separate
-   dependencies. Do not alter this workstation's controls.
+   equivalence is a selection prerequisite. A decoder-refused transaction
+   currently denies every range through its height.
+4. Configuration approval stays disabled until all adoption prerequisites hold;
+   device qualification and external publication remain separate dependencies.
+   Do not alter this workstation's controls.
 
 ## Open questions
 
-- Reassessed 2026-09-15: unchanged, roughly **50% done / 50% remaining**,
-  plausible range **40-60%**. The clock closes one recovery dependency in
-  the experiment; successor segments, a selected venue profile, a
-  node-equivalent decoder, runtime recovery, qualified custody and user
-  operation remain the largest blocks.
-- Switch to a fresh instance for the successor-segment slice: it reads
-  C2.10.5 imports and pool-v3 §8 headers, not this session's sources, and
-  this context is long. A context-efficiency recommendation, not measured
-  model performance.
+- Reassessed from current evidence: roughly **50% done / 50% remaining**,
+  plausible range **40-60%**. Single-backing imports advance the experiment;
+  selected venue/decoder, complete recovery, qualified custody and user
+  operation remain the largest blocks. No percentage change is warranted.
+- Stay with this instance through verification and delivery: the relevant
+  replay and review context is current. Reassess for the venue-adapter slice.

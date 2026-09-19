@@ -1,5 +1,5 @@
 {
-  "schema": "moe-v3-local-replay-experiment-5",
+  "schema": "moe-v3-local-replay-experiment-6",
   "specification": "3ed1800",
   "node": "v24.6.0",
   "packageBytes": 48466,
@@ -25,7 +25,7 @@
     "a distinct valid spend of a spent input refuses at the spent set",
     "a separately valid spend cannot append a duplicate output",
     "replica substitution stays unresolved rather than becoming invalid local replay",
-    "unsupported recovery records and imported openings do not produce partial audit results",
+    "unsupported recovery and unauthenticated import substitutions produce no partial audit",
     "inputs are owned across asynchronous proof verification and unexpected failures propagate",
     "historical replay and wrong seed never assert current spendability or a complete zero balance",
     "fixture record ranges establish the held checkpoint, empty opening, currency, chain and revocation",
@@ -39,6 +39,14 @@
     "canonical evidence package replays the same audit and receiver through one engine",
     "missing, conflicting, unsupported and resource-limited package evidence returns no partial result",
     "portable bytes and seed are owned before proof awaits; shared input and source failures cannot certify",
+    "successor imports the finalized source prefix into an empty local tree and restores its original path",
+    "real spend of an imported note and continuation preserve totals and append only local outputs",
+    "A to B to A and same-index lower-sequence imports keep one transitive closure and original-tree wallet paths",
+    "every missing imported directory, snapshot or trail refuses with no partial restoration",
+    "stale, unheld and remembered pre-replacement imports cannot replace the required canonical predecessor",
+    "an authenticated excluded source tail is classified and passed rather than imported",
+    "otherwise valid proofs cannot reuse an imported nullifier or output commitment",
+    "the import checkpoint budget counts held non-carrying commitments and returns no partial result",
     "fresh public verifier has no wallet seed; separate receiver restores from public evidence only",
     "fresh verifier refuses a changed artifact against its independently held key pin",
     "successful replay retains unresolved production authority; ranges are the fixture verifier's only"
@@ -74,63 +82,94 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2685.380799999999
+      "elapsedMs": 2075.7926000000007
     },
     {
       "label": "pay 7, change 3",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5963.8584999999985
+      "elapsedMs": 5241.8109
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 4346.6646
+      "elapsedMs": 4503.667099999999
     },
     {
       "label": "pay 2, change 1",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5065.618000000002
+      "elapsedMs": 7656.417800000003
     },
     {
       "label": "valid maximum issuance",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1724.6119999999937
+      "elapsedMs": 2652.466099999998
     },
     {
       "label": "valid proof, different scope",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1732.0725999999995
+      "elapsedMs": 2063.0089000000007
     },
     {
       "label": "valid proof, unaccepted anchor",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5112.0653999999995
+      "elapsedMs": 5968.382599999997
     },
     {
       "label": "valid proof, spent input",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5755.738899999997
+      "elapsedMs": 6059.768400000001
     },
     {
       "label": "valid proof, duplicate output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6435.9836
+      "elapsedMs": 5060.1446
+    },
+    {
+      "label": "import A issue 10",
+      "kind": 1,
+      "proofBytes": 14656,
+      "elapsedMs": 2488.0237999999954
+    },
+    {
+      "label": "import B spends A note",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 5821.626699999993
+    },
+    {
+      "label": "import B continuation burns 1 with change 2",
+      "kind": 3,
+      "proofBytes": 14656,
+      "elapsedMs": 4192.255499999999
+    },
+    {
+      "label": "import C valid proof for imported spent note",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 5035.378900000011
+    },
+    {
+      "label": "import C valid issuance proof for imported duplicate output",
+      "kind": 1,
+      "proofBytes": 14656,
+      "elapsedMs": 2094.2363000000187
     }
   ],
   "sourceSha256Lf": {
-    "scripts/pool/v3/local-replay.mjs": "0519ab653fee65c96e02f7fb35a4e82ce8a032f10582d888de31a5b4862323d5",
+    "scripts/pool/v3/local-replay.mjs": "b41e2e9b64b2f21534a1f1f41dc50ba018650ab0f9b0d165296df9c6c7cc63eb",
     "scripts/pool/v3/local-worker.mjs": "4074fcd80fd6bb858818a5ba24181fa695001cf70882e70942765f3f192d6ccd",
-    "scripts/pool/v3/local-check.mjs": "5a70b350b2d56a10b076261a2767d7b4083e8cccd56c803d2f691fc2a0bf104e",
+    "scripts/pool/v3/local-check.mjs": "c1dad822b0c179e89022ffa7bf95e2ef28ae984a013f2b71278570fada6fc9e7",
     "scripts/pool/v3/fixture-venue.mjs": "757300134c7f51737fe35c620756e44351c26ad38b981bac27bf5d411d4d6c35",
-    "scripts/pool/delivery/evidence-reader.mjs": "65f1a13caf29cadd7db46f10769920ccfd66c879f12d064c091be632a86fdf66",
+    "scripts/pool/v3/import-check.mjs": "00c2e84328eca3030122ea5e69224f39329acae9d4dea33462bf47aac8a78745",
+    "scripts/pool/delivery/evidence-reader.mjs": "3314af42ee0aca526d17910ced47e16e620321b3827664f22d8e5e95ded8ff6e",
     "scripts/pool/delivery/crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
     "scripts/pool/spent-set/radix.mjs": "a65c10fcca67cd6f486c73f3e66f4eba254f4aa4a6d2be8c12d2debe66af4953",
     "model/pool-v3-records.ts": "fc651fc4bd36bc339d849ea2e8fc2ee01409d02fbbabb69623336fa3a01f1be1",
@@ -169,7 +208,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "aff13bdb5146f830d417e658b505d8f8999b35976eeebdf7c64e94b7602072c0",
+      "evidenceHash": "acc10fba27156d8184fd2180f8211800e1d358e8b69a89df015173ca51638e5e",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -221,7 +260,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "aff13bdb5146f830d417e658b505d8f8999b35976eeebdf7c64e94b7602072c0",
+      "evidenceHash": "acc10fba27156d8184fd2180f8211800e1d358e8b69a89df015173ca51638e5e",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -351,7 +390,7 @@
       "noteRoot": "20289920090942748033438979157172403900844036366309329327868430363638482059158",
       "spentRoot": "60aed429711fd5c3d866b0b176d16795f8f991e41bb32a33d9531b909fa188a5",
       "historyHash": "1826aca87b0ca270a877273b8be927fb84a547894e99ea1de7ce73aea7d52942",
-      "evidenceHash": "0e61b43d37b7032c93ee62b60ba6f66b0c61ac25c39720a90e42a3193ee20e10",
+      "evidenceHash": "96995aea5230dc961a723d845254e0cecd9712f1aa3c89b5ab57af6aa31557ce",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -388,9 +427,367 @@
     },
     "candidates": []
   },
+  "imports": {
+    "packageBytes": 68182,
+    "audit": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "0",
+        "issued": "10",
+        "burned": "1",
+        "outstanding": "9",
+        "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
+        "spentRoot": "44710dd1943e9335a1c41f44e6dd97ebd958359f9a4b1b02337cacae2f9243ec",
+        "historyHash": "3480fb5fa78905dca5cfa31b4abaa0403c4302c44c76236d9536babfd3c975e0",
+        "evidenceHash": "8fe01b9eff95748fbc67da8548f3aad368aceeb6959ffff4e9f73d7e1ea1a672",
+        "range": {
+          "judgingIndex": "20",
+          "lag": "2",
+          "checkpointIndex": "15",
+          "revokedAt": null,
+          "heldBefore": 7,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "12b7c56ed69a6995a8a72bffb067911f9388a385ea104e2c2d0d8d2d001e4022"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "from": "6",
+              "link": "650107b961772b3894344c748c25736d3305455bb7814273c5fe7c884192d997"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "12",
+              "link": "c0601b75fbfcb4d316d286df42f965c60c0138a1a799c5f3e08b9f98ca22b27b"
+            }
+          ],
+          "carrying": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "sequence": "1",
+              "index": "6",
+              "class": "valid"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "sequence": "2",
+              "index": "8",
+              "class": "valid"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "sequence": "3",
+              "index": "10",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "3",
+              "index": "14",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "4",
+              "index": "15",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "5",
+              "index": "15",
+              "class": "valid"
+            }
+          ],
+          "clock": null
+        }
+      },
+      "candidates": []
+    },
+    "receiver": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "0",
+        "issued": "10",
+        "burned": "1",
+        "outstanding": "9",
+        "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
+        "spentRoot": "44710dd1943e9335a1c41f44e6dd97ebd958359f9a4b1b02337cacae2f9243ec",
+        "historyHash": "3480fb5fa78905dca5cfa31b4abaa0403c4302c44c76236d9536babfd3c975e0",
+        "evidenceHash": "8fe01b9eff95748fbc67da8548f3aad368aceeb6959ffff4e9f73d7e1ea1a672",
+        "range": {
+          "judgingIndex": "20",
+          "lag": "2",
+          "checkpointIndex": "15",
+          "revokedAt": null,
+          "heldBefore": 7,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "12b7c56ed69a6995a8a72bffb067911f9388a385ea104e2c2d0d8d2d001e4022"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "from": "6",
+              "link": "650107b961772b3894344c748c25736d3305455bb7814273c5fe7c884192d997"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "12",
+              "link": "c0601b75fbfcb4d316d286df42f965c60c0138a1a799c5f3e08b9f98ca22b27b"
+            }
+          ],
+          "carrying": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "sequence": "1",
+              "index": "6",
+              "class": "valid"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "sequence": "2",
+              "index": "8",
+              "class": "valid"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "sequence": "3",
+              "index": "10",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "3",
+              "index": "14",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "4",
+              "index": "15",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "5",
+              "index": "15",
+              "class": "valid"
+            }
+          ],
+          "clock": null
+        }
+      },
+      "candidates": [
+        {
+          "cm": "16618049619262985696842596816722664196715832734046457091186743572062189073999",
+          "nf": "17322331769531072788591760831189438876780191591940043514226293247655553376503",
+          "value": "7",
+          "leaf": "0",
+          "anchor": "14915683588353986423533370873261684171536761292448178544456261979645189698580",
+          "siblings": [
+            "14923781554982195381451545772649122585723280125055689588901637050821254512626",
+            "13389626291609274000829676319019213859867158699846476834432422303224969423652",
+            "12963554731901187589393837689590107194785954907284750136807146633201421817764",
+            "1935094829533267935830464563796710052445228582946993128186972021230315590035",
+            "18383913181606838331795460117774658566856597132399717689821053927504534850729",
+            "6650121914657515867260011416921319045587517571339686030450569779952452434446",
+            "845043333535205747680782585765216487309952857158244204638951000115525663969",
+            "1798565372180516634517843282450706694542445499858350052460863933410324420334",
+            "12082351775801795992599119410575771090046502720172243783387647860247227871902",
+            "17392670516229609273138538435194690200647498693429087923197847846467620878366",
+            "18270147803583966115185581568756452890223528135804716937646296736746340714319",
+            "6245281075527541134368495049517243664719812052214528999106154137816504162189",
+            "5771305936450134295237779198955973617491950584355028563949759501589674323328",
+            "8375117846537600003339886617732755020518140880023263272035782507904755134166",
+            "1402956623894417358519384271339285842133055840035948184830517042721409232939",
+            "10518453832655181976446617300434900287841057900980895845234303440776175031342",
+            "15485975685389868597531359628984423612206441834147218371890432861420618086233",
+            "15422680120123365729179431955186502234992765602151752301487612439836632415437",
+            "3956483861973015592013083471667691148363938305872047999848739786219821549630",
+            "1086051623285356080920660076036760901133490110146331619651622591312371431716",
+            "2915904499750125353540875529397177727199377493198348513681582475949711605897",
+            "20164087144993267523342657261822731817585018270367494699207673407082461049973",
+            "6242064092034472953019862381003839448720318820550567656011695795729872763820",
+            "486473096388032301890231500231637785138514345257938344321238940657971574478",
+            "8682912164133426756325886608207438073742770514324345939761663338459940455365",
+            "9032327814826196994352281082085265791527933228092108861697327508420029459713",
+            "11946683638986745115214649685278219707650430060924747485486585022833169300696",
+            "19219361000372015911425077088009647148763037724375627703239846977182347147882",
+            "20250997086726519601015986826877099693245538547315475919513141220642229899021",
+            "14413420282722522993748367414404798853361893034082534437626176948595980240628",
+            "4920301475339101562902404357157229632407380396727250905915335784284364493374",
+            "3490399488954770152131810821200763799606626796619604090245668179171764908058"
+          ],
+          "right": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "pathScope": "replayed-imported-tree-only",
+          "spendable": false
+        },
+        {
+          "cm": "5025063179297881253367730542462136189799592031007003142650115124321793465997",
+          "nf": "11091158399473368624324169731152395123502736527452095775283627526162765621478",
+          "value": "2",
+          "leaf": "4",
+          "anchor": "14915683588353986423533370873261684171536761292448178544456261979645189698580",
+          "siblings": [
+            "0",
+            "16257989699773466206393016511488115181357775227253857822747532441271299011144",
+            "955773439345235959180697163814764585768074331788777401025935558039775723403",
+            "1935094829533267935830464563796710052445228582946993128186972021230315590035",
+            "18383913181606838331795460117774658566856597132399717689821053927504534850729",
+            "6650121914657515867260011416921319045587517571339686030450569779952452434446",
+            "845043333535205747680782585765216487309952857158244204638951000115525663969",
+            "1798565372180516634517843282450706694542445499858350052460863933410324420334",
+            "12082351775801795992599119410575771090046502720172243783387647860247227871902",
+            "17392670516229609273138538435194690200647498693429087923197847846467620878366",
+            "18270147803583966115185581568756452890223528135804716937646296736746340714319",
+            "6245281075527541134368495049517243664719812052214528999106154137816504162189",
+            "5771305936450134295237779198955973617491950584355028563949759501589674323328",
+            "8375117846537600003339886617732755020518140880023263272035782507904755134166",
+            "1402956623894417358519384271339285842133055840035948184830517042721409232939",
+            "10518453832655181976446617300434900287841057900980895845234303440776175031342",
+            "15485975685389868597531359628984423612206441834147218371890432861420618086233",
+            "15422680120123365729179431955186502234992765602151752301487612439836632415437",
+            "3956483861973015592013083471667691148363938305872047999848739786219821549630",
+            "1086051623285356080920660076036760901133490110146331619651622591312371431716",
+            "2915904499750125353540875529397177727199377493198348513681582475949711605897",
+            "20164087144993267523342657261822731817585018270367494699207673407082461049973",
+            "6242064092034472953019862381003839448720318820550567656011695795729872763820",
+            "486473096388032301890231500231637785138514345257938344321238940657971574478",
+            "8682912164133426756325886608207438073742770514324345939761663338459940455365",
+            "9032327814826196994352281082085265791527933228092108861697327508420029459713",
+            "11946683638986745115214649685278219707650430060924747485486585022833169300696",
+            "19219361000372015911425077088009647148763037724375627703239846977182347147882",
+            "20250997086726519601015986826877099693245538547315475919513141220642229899021",
+            "14413420282722522993748367414404798853361893034082534437626176948595980240628",
+            "4920301475339101562902404357157229632407380396727250905915335784284364493374",
+            "3490399488954770152131810821200763799606626796619604090245668179171764908058"
+          ],
+          "right": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "pathScope": "replayed-imported-tree-only",
+          "spendable": false
+        }
+      ]
+    }
+  },
   "limits": [
     "Candidate configuration and signed constant-root terms checked; no adopted domain. The replacement chain, the selected checkpoint's record prefix, currency, its operator's force and the absent revocation are established against a harness-owned fixture venue record only, not a venue profile or authenticated chain evidence.",
-    "Only issue/spend/burn in one empty-opening segment of the original operator; every carrying checkpoint of that segment is classified from its own trail with last-valid-prefix continuity. No imports, silence clock, successor segments, same-operator scope changes or recovery publications.",
+    "Issue/spend/burn only. Original-segment selections read the no-commitment clock and last-valid-prefix continuity. Selections with imports and no silence clause validate a single-backing finalized closure through replacement, reappointment and restart. Multi-backing scopes, silence-bearing imports and recovery publications remain unsupported; import term-lapse currently needs full trail evidence.",
     "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."
   ]
 }

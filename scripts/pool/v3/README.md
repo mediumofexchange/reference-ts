@@ -32,7 +32,15 @@ establish complete dependencies, authenticated ranges or spendability.
 With a fixture venue, every carrying checkpoint of the original segment is
 classified from its own trail, and under a declared silence clause the
 no-commitment clock, the silence boundary and lapse by silence are read
-from that walk (C2b.6.1, C2b.4.1); a successor's segment is unsupported.
+from that walk (C2b.6.1, C2b.4.1). For a selection with imports and no silence
+clause, a single-backing walk classifies all operator terms and requires each
+segment's exact finalized predecessor. It imports the validated spent set,
+output commitments, accepted roots and totals, then starts an empty local
+output tree. Reappointment and same-operator restart use the same rule.
+Imported wallet paths retain their source trees. Whole-read budgets cap this
+path at 128 held checkpoints and 8192 replayed events, including failed
+replays. Silence-bearing imports, multi-backing scopes and adoption remain
+unsupported. The local-only restoration scanner continues to refuse imports.
 
 The npm command verifies parameter cache/download lengths and SHA-256 hashes
 with `../prepare-crs.mjs` before starting the suite. It checks both upstream

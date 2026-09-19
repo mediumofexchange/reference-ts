@@ -28,7 +28,7 @@ function requireEvidence(condition, status = "unresolved-evidence") {
 }
 
 /** Authenticate owned local evidence without a wallet seed. No replay verdict. */
-export function readLocalEvidence(selection, supplied, codec) {
+export function readLocalEvidence(selection, supplied, codec, { allowImports = false } = {}) {
   for (const key of ["domain", "venue", "backing", "operator", "root"]) {
     requireEvidence(selection?.[key] instanceof Uint8Array && selection[key].length === 32);
   }
@@ -49,7 +49,7 @@ export function readLocalEvidence(selection, supplied, codec) {
   const header = codec.decodeSegmentHeader(trail.header);
   requireEvidence(same(header.domain, selection.domain) && same(header.venue, selection.venue) &&
     same(header.operator, selection.operator) && header.sequence <= selection.sequence);
-  requireEvidence(header.entries.length === 1 && header.entries[0].opening === undefined, "unsupported-scope");
+  requireEvidence(header.entries.length === 1 && (allowImports || header.entries[0].opening === undefined), "unsupported-scope");
   requireEvidence(codec.verifyTrailEvidence({ backing: selection.backing, segment: snapshot.segment,
     digest: entry.digest }, snapshot, trail, LIMITS));
   return { snapshot, trail, header };

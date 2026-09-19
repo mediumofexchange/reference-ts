@@ -21,6 +21,7 @@ import { loadEvidenceCodecs, LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage, replayEvidencePackage, PACKAGE_LIMITS, RANGE_LIMITS } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
+import { checkImports } from "./import-check.mjs";
 import { field } from "../fixtures.mjs";
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration,
   readCandidateKeys, loadConfigurationCodecs } from "./candidate.mjs";
@@ -413,7 +414,7 @@ try {
     const result = await replayLocalPackage(payload, verifier, codec);
     assert.equal(result.status, "unresolved-evidence"); assert.equal(result.audit, null); assert.deepEqual(result.candidates, []);
   });
-  await test("unsupported recovery records and imported openings do not produce partial audit results", async () => {
+  await test("unsupported recovery and unauthenticated import substitutions produce no partial audit", async () => {
     const withdrawal = { domain, kind: 5, publicInputs: [...prefix, ...limbsOf(b(63))],
       proof: new Uint8Array(), authorization: new Uint8Array(64), capsules: [] };
     const recovery = await replayLocalPackage(seal([issue, withdrawal], snapshot), verifier, codec);
@@ -423,7 +424,7 @@ try {
       entries: [{ backing, link, opening: { operator, sequence: 1n, root: b(64) } }] });
     payload.package.trail = codec.encodeTrail(trail, LIMITS);
     const imported = await replayLocalPackage(payload, verifier, codec);
-    assert.equal(imported.status, "unsupported-scope"); assert.equal(imported.audit, null); assert.deepEqual(imported.candidates, []);
+    assert.equal(imported.status, "unresolved-evidence"); assert.equal(imported.audit, null); assert.deepEqual(imported.candidates, []);
   });
   await test("inputs are owned across asynchronous proof verification and unexpected failures propagate", async () => {
     const payload = clone(complete); let calls = 0;
@@ -895,6 +896,9 @@ try {
     const failure = new Error("range/proof service unavailable");
     await assert.rejects(replayEvidencePackage(portable(complete), { ...verifier, verify() { throw failure; } }, codec), error => error === failure);
   });
+  const imported = await checkImports({ codec, verifier, configurationBytes, domain, venue, prove, test,
+    operatorSecret, issuerSecret, receiverSeed, payerSeed });
+  assert.deepEqual(await replayEvidencePackage(portable(imported.payload), verifier, codec), imported.result);
   await api.destroy(); api = undefined;
   function worker(payload) {
     const child = spawnSync(process.execPath, [join(here, "local-worker.mjs"), url], {
@@ -908,6 +912,8 @@ try {
     assert.deepEqual(worker(complete), audit);
     assert.deepEqual(worker({ ...complete, seed: receiverSeed }), receiver);
     assert.deepEqual(worker(extended), dependency);
+    assert.deepEqual(worker(imported.payload), imported.result);
+    assert.deepEqual(worker({ ...imported.payload, seed: receiverSeed }), imported.receiver);
   });
   await test("fresh verifier refuses a changed artifact against its independently held key pin", () => {
     for (const kind of [2, 7]) {
@@ -923,7 +929,7 @@ try {
     }
   });
   await test("successful replay retains unresolved production authority; ranges are the fixture verifier's only", () => {
-    for (const result of [receiver, audit, dependency]) {
+    for (const result of [receiver, audit, dependency, imported.result, imported.receiver]) {
       assert.equal(result.candidateConfigurationChecked, true); assert.equal(result.signedTermsAuthenticated, true);
       assert.equal(result.currentRangeAuthenticated, true); assert.equal(result.termsAuthorityAuthenticated, true);
       assert.equal(result.rangeEvidence, "fixture-verifier");
@@ -933,22 +939,23 @@ try {
     }
   });
   const sources = ["scripts/pool/v3/local-replay.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/local-check.mjs",
-    "scripts/pool/v3/fixture-venue.mjs",
+    "scripts/pool/v3/fixture-venue.mjs", "scripts/pool/v3/import-check.mjs",
     "scripts/pool/delivery/evidence-reader.mjs", "scripts/pool/delivery/crypto.mjs", "scripts/pool/spent-set/radix.mjs",
     "model/pool-v3-records.ts", "model/pool-v3-commitments.ts", "model/pool-v3-trail.ts", "model/pool-v3-headers.ts",
     "model/pool-v3-configuration.ts", "model/pool-v3-terms.ts", "model/pool-v3-package.ts", "model/pool-v3-range.ts",
     "scripts/pool/v3/candidate.mjs", "scripts/pool/v3/candidate-manifest.json",
     "src/pool/note-tree.ts", "src/pool/scope.ts", "scripts/pool/v3/circuits/issue.nr", "scripts/pool/v3/circuits/spend.nr", "scripts/pool/v3/circuits/burn.nr"];
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-5", specification: "3ed1800", node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-6", specification: "3ed1800", node: process.version,
     packageBytes: portable(complete).package.length, dependencyPackageBytes: portable(extended).package.length,
     fixtureVenueRecords: complete.venue.records.length,
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
     platform: process.platform, checks, identities, metrics,
     sourceSha256Lf: Object.fromEntries(sources.map(path => [path, sha(readFileSync(join(root, path), "utf8").replaceAll("\r\n", "\n"))])),
-    audit, receiver, dependency,
+    audit, receiver, dependency, imports: { packageBytes: portable(imported.payload).package.length,
+      audit: imported.result, receiver: imported.receiver },
     limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The replacement chain, the selected checkpoint's record prefix, currency, its operator's force and the absent revocation are established against a harness-owned fixture venue record only, not a venue profile or authenticated chain evidence.",
-      "Only issue/spend/burn in one empty-opening segment of the original operator; every carrying checkpoint of that segment is classified from its own trail with last-valid-prefix continuity. No imports, silence clock, successor segments, same-operator scope changes or recovery publications.",
+      "Issue/spend/burn only. Original-segment selections read the no-commitment clock and last-valid-prefix continuity. Selections with imports and no silence clause validate a single-backing finalized closure through replacement, reappointment and restart. Multi-backing scopes, silence-bearing imports and recovery publications remain unsupported; import term-lapse currently needs full trail evidence.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");
   console.log(`PASS: ${checks.length} local replay groups, ${metrics.length} real proofs; scratch/pool-v3-local-replay-results.json`);

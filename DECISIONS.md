@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-19` [Import the exact single-backing finalized closure in local replay](decisions/2026-09.md#2026-09-19--import-the-exact-single-backing-finalized-closure-in-local-replay)
 - `2026-09-15` [Read the no-commitment clock from the classified carrying checkpoints](decisions/2026-09.md#2026-09-15--read-the-no-commitment-clock-from-the-classified-carrying-checkpoints)
 - `2026-09-15` [A configuration's publications fit one Ergo transaction](decisions/2026-09.md#2026-09-15--a-configurations-publications-fit-one-ergo-transaction)
 - `2026-09-15` [Candidate Ergo venue profile: full-block exhaustion behind §13 answers](decisions/2026-09.md#2026-09-15--candidate-ergo-venue-profile-full-block-exhaustion-behind-13-answers)
