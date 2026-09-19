@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-19` [Classify and adopt single-backing recovery publications](decisions/2026-09.md#2026-09-19--classify-and-adopt-single-backing-recovery-publications)
 - `2026-09-19` [Read silence across single-backing imports with empty publication evidence](decisions/2026-09.md#2026-09-19--read-silence-across-single-backing-imports-with-empty-publication-evidence)
 - `2026-09-19` [Bound raw Ergo evidence before local proof replay](decisions/2026-09.md#2026-09-19--bound-raw-ergo-evidence-before-local-proof-replay)
 - `2026-09-19` [Import the exact single-backing finalized closure in local replay](decisions/2026-09.md#2026-09-19--import-the-exact-single-backing-finalized-closure-in-local-replay)

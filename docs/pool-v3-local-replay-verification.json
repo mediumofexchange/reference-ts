@@ -1,5 +1,5 @@
 {
-  "schema": "moe-v3-local-replay-experiment-8",
+  "schema": "moe-v3-local-replay-experiment-9",
   "specification": "3ed1800",
   "node": "v24.6.0",
   "packageBytes": 48466,
@@ -26,7 +26,7 @@
     "a distinct valid spend of a spent input refuses at the spent set",
     "a separately valid spend cannot append a duplicate output",
     "replica substitution stays unresolved rather than becoming invalid local replay",
-    "unsupported recovery and unauthenticated import substitutions produce no partial audit",
+    "withdrawal without a standing demand and unauthenticated imports produce no partial audit",
     "inputs are owned across asynchronous proof verification and unexpected failures propagate",
     "historical replay and wrong seed never assert current spendability or a complete zero balance",
     "fixture record ranges establish the held checkpoint, empty opening, currency, chain and revocation",
@@ -62,7 +62,18 @@
     "Silence: an excluded opening never resets the clock and retains its retirement boundary",
     "Silence: same-index fresh silence openings refuse before choosing between generic predecessor and strict snapshot",
     "Silence: reappointment cannot reset the backing clock with a checkpoint from the same key's ended term",
-    "Silence: publication closure must be answered independently and empty, including at opening and judging indices",
+    "Silence: publication closure must be answered independently; malformed records have no force at any index",
+    "Recovery: forced demand, withdrawal, demand and release adopt in exact venue order before returned service",
+    "Recovery: the issuer seed restores the public settlement note before its ordinary spend",
+    "Recovery: omitted, reordered and substituted forced records invalidate the continuation atomically",
+    "Recovery: closed-gap, wrong-time, future-anchor and bad-authorization publications have no force",
+    "Recovery: duplicates, including at the return index, do not gain force twice",
+    "Recovery: a newly forced withdrawal at the return index is included in the adopted block",
+    "Recovery: a second silence before first adoption inherits the old adoption index",
+    "Recovery: adoption binds the exact proof and both settlement signatures",
+    "Recovery: withdrawing an expired demand releases only its own lock",
+    "Recovery: ordinary suffixes cannot bypass spent locks, withdrawal authorization or segment context",
+    "Recovery: missing range or ancestry evidence returns no partial state",
     "Ergo range adapter replays the real-proof import closure from exact transaction bytes and checked roots",
     "missing, tampered and undecodable Ergo sections refuse against unchanged trusted headers",
     "reader-selected Ergo profile and header chain cannot be replaced by package claims",
@@ -105,124 +116,198 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2038.0469999999987
+      "elapsedMs": 2860.1744
     },
     {
       "label": "pay 7, change 3",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6274.344000000001
+      "elapsedMs": 5875.639299999999
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 4747.773299999997
+      "elapsedMs": 4406.6348
     },
     {
       "label": "pay 2, change 1",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6023.977599999998
+      "elapsedMs": 4943.443800000001
     },
     {
       "label": "valid maximum issuance",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2186.2428
+      "elapsedMs": 1645.3001999999979
     },
     {
       "label": "valid proof, different scope",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2010.4269000000058
+      "elapsedMs": 1671.0481
     },
     {
       "label": "valid proof, unaccepted anchor",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 7032.3269999999975
+      "elapsedMs": 5917.9447
     },
     {
       "label": "valid proof, spent input",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 5625.648200000003
+      "elapsedMs": 6701.167799999996
     },
     {
       "label": "valid proof, duplicate output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 4909.570700000004
+      "elapsedMs": 7082.15909999999
     },
     {
       "label": "import A issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1696.0722999999998
+      "elapsedMs": 2060.0026999999973
     },
     {
       "label": "import B spends A note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6112.7242000000115
+      "elapsedMs": 7357.373999999996
     },
     {
       "label": "import B continuation burns 1 with change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 4665.225999999995
+      "elapsedMs": 5088.152600000001
     },
     {
       "label": "import C valid proof for imported spent note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 4967.973999999987
+      "elapsedMs": 5130.277299999987
     },
     {
       "label": "import C valid issuance proof for imported duplicate output",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1620.7599000000046
+      "elapsedMs": 1648.4886999999871
     },
     {
       "label": "import A issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2116.093599999993
+      "elapsedMs": 1681.3067999999912
     },
     {
       "label": "import B spends A note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6218.169400000013
+      "elapsedMs": 4893.4100000000035
     },
     {
       "label": "import B continuation burns 1 with change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 6528.676299999992
+      "elapsedMs": 4092.806899999996
     },
     {
       "label": "import C valid proof for imported spent note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 4878.092800000013
+      "elapsedMs": 6465.450200000021
     },
     {
       "label": "import C valid issuance proof for imported duplicate output",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1616.2790000000095
+      "elapsedMs": 2000.979800000001
+    },
+    {
+      "label": "recovery issue 10",
+      "kind": 1,
+      "proofBytes": 14656,
+      "elapsedMs": 1616.2855999999738
+    },
+    {
+      "label": "gap demand then withdrawal",
+      "kind": 4,
+      "proofBytes": 14656,
+      "elapsedMs": 4238.099099999992
+    },
+    {
+      "label": "gap demand then release",
+      "kind": 4,
+      "proofBytes": 14656,
+      "elapsedMs": 4163.882200000022
+    },
+    {
+      "label": "gap settlement pays issuer-owned output",
+      "kind": 6,
+      "proofBytes": 14656,
+      "elapsedMs": 4233.603499999997
+    },
+    {
+      "label": "returned segment pays settlement output",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 5733.732600000018
+    },
+    {
+      "label": "closed-gap demand",
+      "kind": 4,
+      "proofBytes": 14656,
+      "elapsedMs": 5063.442100000015
+    },
+    {
+      "label": "wrong-time gap demand",
+      "kind": 4,
+      "proofBytes": 14656,
+      "elapsedMs": 5013.854800000001
+    },
+    {
+      "label": "future-anchor gap demand",
+      "kind": 4,
+      "proofBytes": 14656,
+      "elapsedMs": 4580.338300000003
+    },
+    {
+      "label": "short recovery lock",
+      "kind": 4,
+      "proofBytes": 14656,
+      "elapsedMs": 4489.88029999999
+    },
+    {
+      "label": "live recovery lock spend",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 5090.762400000007
+    },
+    {
+      "label": "spent imported note demand",
+      "kind": 4,
+      "proofBytes": 14656,
+      "elapsedMs": 4807.304200000013
+    },
+    {
+      "label": "local settlement demand",
+      "kind": 4,
+      "proofBytes": 14656,
+      "elapsedMs": 4329.588500000013
     }
   ],
   "sourceSha256Lf": {
-    "scripts/pool/v3/local-replay.mjs": "1a68ac55e7845bc2156978fcf9e79ecea1f06c3a002cd1ca7e407747a5949be8",
+    "scripts/pool/v3/local-replay.mjs": "f7f3628fb57d9c406fd1489ec69e9305303e904c4be83ede283de58d2c32a4fd",
     "scripts/pool/v3/local-worker.mjs": "1f633b2e95ad773daa21b3ee472f8d6a4ae93c58bb6c775b0c633b202834ba14",
-    "scripts/pool/v3/local-check.mjs": "eb75fa6f14c8de636fdeef59e341999e240cba7f6d26fbeb38e59e7cdbe0d89d",
+    "scripts/pool/v3/local-check.mjs": "adbe00cf7383dd3b0a286337d785aa84392d36887089ce35d56629b509bf283b",
     "scripts/pool/v3/fixture-venue.mjs": "757300134c7f51737fe35c620756e44351c26ad38b981bac27bf5d411d4d6c35",
-    "scripts/pool/v3/import-check.mjs": "293ff307a7fd5bdec3807c2ba15c28fd8f4bc302e9d7022324b7d24b2385b327",
+    "scripts/pool/v3/import-check.mjs": "8d8ee5da33c45158c532a189dfae699ea96d382ea08b81c4273a9b2167c11a72",
     "scripts/pool/v3/ergo-check.mjs": "8dcca199cb94302a62a9501f45f5ce6971f41aeeacf408fa2891aac406227e50",
+    "scripts/pool/v3/recovery-state.mjs": "90e42f1bb96937914defe0a2361ef9d0c4f1f72d42d5230c6d83d282fcba6732",
+    "scripts/pool/v3/recovery-check.mjs": "a802b3ecbef0ddcc3d265f9f99301b0160f5d9f3337e90f1a75bc610d17560ff",
     "scripts/pool/delivery/evidence-reader.mjs": "3314af42ee0aca526d17910ced47e16e620321b3827664f22d8e5e95ded8ff6e",
     "scripts/pool/delivery/crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
     "scripts/pool/spent-set/radix.mjs": "a65c10fcca67cd6f486c73f3e66f4eba254f4aa4a6d2be8c12d2debe66af4953",
@@ -237,10 +322,14 @@
     "scripts/pool/v3/candidate.mjs": "cda541d6d39493e73197890f1c8a93be13627d584eff04e64ca59f2e60758f48",
     "scripts/pool/v3/candidate-manifest.json": "a5f34d76b1ac9cba71d322c5263fee75120a7756d0b5609720682c344e5049ae",
     "src/pool/note-tree.ts": "264c93ecf4af95209374657bc5c56c8841abab71b292ed557940b23540dfd1d4",
+    "src/pool/notes.ts": "c80049cb174043b9a966854f3fc4959c3cdd8b5254e8a91408a15f47f721fdd2",
+    "src/pool/poseidon2.ts": "30b58e9a8f8beeb30364f16a7e5ab75052819e4d0200e670b91bdb21b603bf32",
     "src/pool/scope.ts": "534fde370703af75f2a52c3f282833805d6f1ccd4e949918ad335347a5cd6b47",
     "scripts/pool/v3/circuits/issue.nr": "dfc3a4c8c39e870e942d6c7c512af2a6d07e5a5f5eb01bbccf9fbf03a5c91167",
     "scripts/pool/v3/circuits/spend.nr": "bde18e670aac3c1771419211a5685e5531da8c75fe1297f78e489855e511fdf7",
     "scripts/pool/v3/circuits/burn.nr": "fc701db0ddf076004621ec91dcd25972d46b91bef5f2b00277155ef8a73b8fe5",
+    "scripts/pool/v3/circuits/demand.nr": "c0fe4af4fb64f8494b16a40f49a526b048e9c41b68924c471e99ef898c15c349",
+    "scripts/pool/v3/circuits/settle.nr": "5c7ed9ce647fa4440a11b6e43d62d889bd65f26016d9267b702bbac5393ad92d",
     "model/pool-v3-ergo-profile.ts": "e29de9a4c260f50715fb2786db9a53a10f596e211584853dfaad3e1ce7b91e6e",
     "experiments/ergo-range/decoder.mjs": "44af0e096fabfcdb4cc581d383006d608391e15635760d21895b6660a3757e55",
     "experiments/ergo-range/replay-venue.mjs": "874db0af989b61c873ab70d8212504218a510b1a2ca53d76794a8836d255ba70",
@@ -268,7 +357,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "30deef9a20fa18edf05a5b05993e31114542c07a910854d71473e89144009576",
+      "evidenceHash": "c3b00847fcd3bbe8df25228544da5e744ada22e34e7c9e3711aa77a50165987c",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -320,7 +409,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "30deef9a20fa18edf05a5b05993e31114542c07a910854d71473e89144009576",
+      "evidenceHash": "c3b00847fcd3bbe8df25228544da5e744ada22e34e7c9e3711aa77a50165987c",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -450,7 +539,7 @@
       "noteRoot": "20289920090942748033438979157172403900844036366309329327868430363638482059158",
       "spentRoot": "60aed429711fd5c3d866b0b176d16795f8f991e41bb32a33d9531b909fa188a5",
       "historyHash": "1826aca87b0ca270a877273b8be927fb84a547894e99ea1de7ce73aea7d52942",
-      "evidenceHash": "cfa4e07ac20d7f1d3cb4e0ed80143efecdc18bcb519fa92220e6d04cd7da7f34",
+      "evidenceHash": "f992687f9136a358b3f0f00d7b956d48033acf6c4edfc51333276d26b8be6606",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -508,8 +597,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "9afa740bed296e5483feca468c94d685ded1a46194825514e9d0a40d4b584db1",
-        "historyHash": "a73286a76cdf02005f0535d421fb39ae0340c41ae873b9d89e192707179439ab",
-        "evidenceHash": "79626f783e815ccac187ffdf0455b4c69e380308bc58b378fe36077ceb863076",
+        "historyHash": "4aaf5bebb1d0cceaafcf50c734e788af9fe2c2e2cd7093908f3803e3783f67cc",
+        "evidenceHash": "b5430edaa5ba0a7f8941b9f262931575a34394e52d11ddc99e98f24139f45c0a",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -584,7 +673,8 @@
               "class": "valid"
             }
           ],
-          "clock": null
+          "clock": null,
+          "publications": []
         }
       },
       "candidates": []
@@ -608,8 +698,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "9afa740bed296e5483feca468c94d685ded1a46194825514e9d0a40d4b584db1",
-        "historyHash": "a73286a76cdf02005f0535d421fb39ae0340c41ae873b9d89e192707179439ab",
-        "evidenceHash": "79626f783e815ccac187ffdf0455b4c69e380308bc58b378fe36077ceb863076",
+        "historyHash": "4aaf5bebb1d0cceaafcf50c734e788af9fe2c2e2cd7093908f3803e3783f67cc",
+        "evidenceHash": "b5430edaa5ba0a7f8941b9f262931575a34394e52d11ddc99e98f24139f45c0a",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -684,7 +774,8 @@
               "class": "valid"
             }
           ],
-          "clock": null
+          "clock": null,
+          "publications": []
         }
       },
       "candidates": [
@@ -866,8 +957,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
-        "historyHash": "0110dd914fde15e1623af57c61bf5454d86849484092836eb031cb718cee1915",
-        "evidenceHash": "57ca37a065a81b1087719610de90743827294933bc594a758cee958268ee35eb",
+        "historyHash": "74cd2508424521d490c876a4bb36d8c5d593ed04d8442ddc2b19814ec0ceb2ea",
+        "evidenceHash": "c39a14e1957dd59f24e070831ffe52adad24320524e00d7da41ba586286c0ec0",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -949,7 +1040,8 @@
             "open": false,
             "boundary": null,
             "opening": "16"
-          }
+          },
+          "publications": []
         }
       },
       "candidates": []
@@ -973,8 +1065,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
-        "historyHash": "0110dd914fde15e1623af57c61bf5454d86849484092836eb031cb718cee1915",
-        "evidenceHash": "57ca37a065a81b1087719610de90743827294933bc594a758cee958268ee35eb",
+        "historyHash": "74cd2508424521d490c876a4bb36d8c5d593ed04d8442ddc2b19814ec0ceb2ea",
+        "evidenceHash": "c39a14e1957dd59f24e070831ffe52adad24320524e00d7da41ba586286c0ec0",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -1056,7 +1148,8 @@
             "open": false,
             "boundary": null,
             "opening": "16"
-          }
+          },
+          "publications": []
         }
       },
       "candidates": [
@@ -1217,6 +1310,462 @@
       ]
     }
   },
+  "recovery": {
+    "packageBytes": 128236,
+    "audit": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "5",
+        "issued": "10",
+        "burned": "0",
+        "outstanding": "10",
+        "noteRoot": "12773079428779734222227064748312434371538793206077105084023857435276585535251",
+        "spentRoot": "84c17c02728e42b1571a0175a31208e9e5def3151a3f4b0cb1291565b13ff7b1",
+        "historyHash": "cc49b6d787eb9b8319da6ba4ac88841796248bcc55cf297de390ae4fff781cfe",
+        "evidenceHash": "9b20556d9194ba67663e0fdc0784dda5d10c404465d69977adc9157ed37c4969",
+        "range": {
+          "judgingIndex": "13",
+          "lag": "2",
+          "checkpointIndex": "13",
+          "revokedAt": null,
+          "heldBefore": 4,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "1bc4f5d728d35ee65c3cf7785e6393bf011ee289af781b193ebaae8e4de7dd18"
+            }
+          ],
+          "carrying": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "3",
+              "index": "11",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "4",
+              "index": "12",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "5",
+              "index": "13",
+              "class": "valid"
+            }
+          ],
+          "clock": {
+            "duration": "4",
+            "snapshotIndex": "12",
+            "gap": "1",
+            "open": false,
+            "boundary": null,
+            "opening": "11"
+          },
+          "publications": [
+            {
+              "index": "8",
+              "ordinal": "0",
+              "force": true
+            },
+            {
+              "index": "8",
+              "ordinal": "1",
+              "force": true
+            },
+            {
+              "index": "9",
+              "ordinal": "0",
+              "force": true
+            },
+            {
+              "index": "10",
+              "ordinal": "0",
+              "force": true
+            }
+          ]
+        }
+      },
+      "candidates": []
+    },
+    "receiver": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "5",
+        "issued": "10",
+        "burned": "0",
+        "outstanding": "10",
+        "noteRoot": "12773079428779734222227064748312434371538793206077105084023857435276585535251",
+        "spentRoot": "84c17c02728e42b1571a0175a31208e9e5def3151a3f4b0cb1291565b13ff7b1",
+        "historyHash": "cc49b6d787eb9b8319da6ba4ac88841796248bcc55cf297de390ae4fff781cfe",
+        "evidenceHash": "9b20556d9194ba67663e0fdc0784dda5d10c404465d69977adc9157ed37c4969",
+        "range": {
+          "judgingIndex": "13",
+          "lag": "2",
+          "checkpointIndex": "13",
+          "revokedAt": null,
+          "heldBefore": 4,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "1bc4f5d728d35ee65c3cf7785e6393bf011ee289af781b193ebaae8e4de7dd18"
+            }
+          ],
+          "carrying": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "3",
+              "index": "11",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "4",
+              "index": "12",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "5",
+              "index": "13",
+              "class": "valid"
+            }
+          ],
+          "clock": {
+            "duration": "4",
+            "snapshotIndex": "12",
+            "gap": "1",
+            "open": false,
+            "boundary": null,
+            "opening": "11"
+          },
+          "publications": [
+            {
+              "index": "8",
+              "ordinal": "0",
+              "force": true
+            },
+            {
+              "index": "8",
+              "ordinal": "1",
+              "force": true
+            },
+            {
+              "index": "9",
+              "ordinal": "0",
+              "force": true
+            },
+            {
+              "index": "10",
+              "ordinal": "0",
+              "force": true
+            }
+          ]
+        }
+      },
+      "candidates": [
+        {
+          "cm": "3393751880342179990333090816174260271026276664611322201726689579090280030341",
+          "nf": "13963604233849470511027992634967269985580414986370432126161884743771614154166",
+          "value": "7",
+          "leaf": "1",
+          "anchor": "12773079428779734222227064748312434371538793206077105084023857435276585535251",
+          "siblings": [
+            "18138340792368963638992982405096015534522701826146514117066359444497364649783",
+            "17462332318843843617118671552610677321595646685734400481883407363095287877002",
+            "18522366595965188929907417253262011815869165342165257976739603002830960884287",
+            "1935094829533267935830464563796710052445228582946993128186972021230315590035",
+            "18383913181606838331795460117774658566856597132399717689821053927504534850729",
+            "6650121914657515867260011416921319045587517571339686030450569779952452434446",
+            "845043333535205747680782585765216487309952857158244204638951000115525663969",
+            "1798565372180516634517843282450706694542445499858350052460863933410324420334",
+            "12082351775801795992599119410575771090046502720172243783387647860247227871902",
+            "17392670516229609273138538435194690200647498693429087923197847846467620878366",
+            "18270147803583966115185581568756452890223528135804716937646296736746340714319",
+            "6245281075527541134368495049517243664719812052214528999106154137816504162189",
+            "5771305936450134295237779198955973617491950584355028563949759501589674323328",
+            "8375117846537600003339886617732755020518140880023263272035782507904755134166",
+            "1402956623894417358519384271339285842133055840035948184830517042721409232939",
+            "10518453832655181976446617300434900287841057900980895845234303440776175031342",
+            "15485975685389868597531359628984423612206441834147218371890432861420618086233",
+            "15422680120123365729179431955186502234992765602151752301487612439836632415437",
+            "3956483861973015592013083471667691148363938305872047999848739786219821549630",
+            "1086051623285356080920660076036760901133490110146331619651622591312371431716",
+            "2915904499750125353540875529397177727199377493198348513681582475949711605897",
+            "20164087144993267523342657261822731817585018270367494699207673407082461049973",
+            "6242064092034472953019862381003839448720318820550567656011695795729872763820",
+            "486473096388032301890231500231637785138514345257938344321238940657971574478",
+            "8682912164133426756325886608207438073742770514324345939761663338459940455365",
+            "9032327814826196994352281082085265791527933228092108861697327508420029459713",
+            "11946683638986745115214649685278219707650430060924747485486585022833169300696",
+            "19219361000372015911425077088009647148763037724375627703239846977182347147882",
+            "20250997086726519601015986826877099693245538547315475919513141220642229899021",
+            "14413420282722522993748367414404798853361893034082534437626176948595980240628",
+            "4920301475339101562902404357157229632407380396727250905915335784284364493374",
+            "3490399488954770152131810821200763799606626796619604090245668179171764908058"
+          ],
+          "right": [
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "pathScope": "replayed-local-tree-only",
+          "spendable": false
+        }
+      ]
+    },
+    "issuerRestored": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "4",
+        "issued": "10",
+        "burned": "0",
+        "outstanding": "10",
+        "noteRoot": "15613145183059544181978016761464367100692723135964912424807415434157776350095",
+        "spentRoot": "ef1fcfefbae6be9de30415db2155169069977495c0a9ffa8284a4bbc2fab92a6",
+        "historyHash": "1432e68096b5b567759cdcf88bc6a9ec693d04e2ac84735e940a64b1c518c5a7",
+        "evidenceHash": "055cdbca4e18ff26c0b0bd0285525eb0d593fd152f4c5bda6ac525b0e4132557",
+        "range": {
+          "judgingIndex": "12",
+          "lag": "2",
+          "checkpointIndex": "12",
+          "revokedAt": null,
+          "heldBefore": 3,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "1bc4f5d728d35ee65c3cf7785e6393bf011ee289af781b193ebaae8e4de7dd18"
+            }
+          ],
+          "carrying": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "3",
+              "index": "11",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "4",
+              "index": "12",
+              "class": "valid"
+            }
+          ],
+          "clock": {
+            "duration": "4",
+            "snapshotIndex": "11",
+            "gap": "1",
+            "open": false,
+            "boundary": null,
+            "opening": "11"
+          },
+          "publications": [
+            {
+              "index": "8",
+              "ordinal": "0",
+              "force": true
+            },
+            {
+              "index": "8",
+              "ordinal": "1",
+              "force": true
+            },
+            {
+              "index": "9",
+              "ordinal": "0",
+              "force": true
+            },
+            {
+              "index": "10",
+              "ordinal": "0",
+              "force": true
+            }
+          ]
+        }
+      },
+      "candidates": [
+        {
+          "cm": "18138340792368963638992982405096015534522701826146514117066359444497364649783",
+          "nf": "6562337974748611331048194982348653813741731223984724617467247934579809365793",
+          "value": "10",
+          "leaf": "0",
+          "anchor": "15613145183059544181978016761464367100692723135964912424807415434157776350095",
+          "siblings": [
+            "0",
+            "16257989699773466206393016511488115181357775227253857822747532441271299011144",
+            "18512210749048123247642993997959185422374521570323643912234746702547156445707",
+            "1935094829533267935830464563796710052445228582946993128186972021230315590035",
+            "18383913181606838331795460117774658566856597132399717689821053927504534850729",
+            "6650121914657515867260011416921319045587517571339686030450569779952452434446",
+            "845043333535205747680782585765216487309952857158244204638951000115525663969",
+            "1798565372180516634517843282450706694542445499858350052460863933410324420334",
+            "12082351775801795992599119410575771090046502720172243783387647860247227871902",
+            "17392670516229609273138538435194690200647498693429087923197847846467620878366",
+            "18270147803583966115185581568756452890223528135804716937646296736746340714319",
+            "6245281075527541134368495049517243664719812052214528999106154137816504162189",
+            "5771305936450134295237779198955973617491950584355028563949759501589674323328",
+            "8375117846537600003339886617732755020518140880023263272035782507904755134166",
+            "1402956623894417358519384271339285842133055840035948184830517042721409232939",
+            "10518453832655181976446617300434900287841057900980895845234303440776175031342",
+            "15485975685389868597531359628984423612206441834147218371890432861420618086233",
+            "15422680120123365729179431955186502234992765602151752301487612439836632415437",
+            "3956483861973015592013083471667691148363938305872047999848739786219821549630",
+            "1086051623285356080920660076036760901133490110146331619651622591312371431716",
+            "2915904499750125353540875529397177727199377493198348513681582475949711605897",
+            "20164087144993267523342657261822731817585018270367494699207673407082461049973",
+            "6242064092034472953019862381003839448720318820550567656011695795729872763820",
+            "486473096388032301890231500231637785138514345257938344321238940657971574478",
+            "8682912164133426756325886608207438073742770514324345939761663338459940455365",
+            "9032327814826196994352281082085265791527933228092108861697327508420029459713",
+            "11946683638986745115214649685278219707650430060924747485486585022833169300696",
+            "19219361000372015911425077088009647148763037724375627703239846977182347147882",
+            "20250997086726519601015986826877099693245538547315475919513141220642229899021",
+            "14413420282722522993748367414404798853361893034082534437626176948595980240628",
+            "4920301475339101562902404357157229632407380396727250905915335784284364493374",
+            "3490399488954770152131810821200763799606626796619604090245668179171764908058"
+          ],
+          "right": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "pathScope": "replayed-local-tree-only",
+          "spendable": false
+        }
+      ]
+    }
+  },
   "ergo": {
     "evidence": "synthetic-headers-and-exact-transaction-bytes",
     "rawBytes": 3684,
@@ -1240,8 +1789,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
-        "historyHash": "0110dd914fde15e1623af57c61bf5454d86849484092836eb031cb718cee1915",
-        "evidenceHash": "57ca37a065a81b1087719610de90743827294933bc594a758cee958268ee35eb",
+        "historyHash": "74cd2508424521d490c876a4bb36d8c5d593ed04d8442ddc2b19814ec0ceb2ea",
+        "evidenceHash": "c39a14e1957dd59f24e070831ffe52adad24320524e00d7da41ba586286c0ec0",
         "range": {
           "judgingIndex": "21",
           "lag": "1",
@@ -1323,7 +1872,8 @@
             "open": false,
             "boundary": null,
             "opening": "17"
-          }
+          },
+          "publications": []
         }
       },
       "candidates": []
@@ -1347,8 +1897,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
-        "historyHash": "0110dd914fde15e1623af57c61bf5454d86849484092836eb031cb718cee1915",
-        "evidenceHash": "57ca37a065a81b1087719610de90743827294933bc594a758cee958268ee35eb",
+        "historyHash": "74cd2508424521d490c876a4bb36d8c5d593ed04d8442ddc2b19814ec0ceb2ea",
+        "evidenceHash": "c39a14e1957dd59f24e070831ffe52adad24320524e00d7da41ba586286c0ec0",
         "range": {
           "judgingIndex": "21",
           "lag": "1",
@@ -1430,7 +1980,8 @@
             "open": false,
             "boundary": null,
             "opening": "17"
-          }
+          },
+          "publications": []
         }
       },
       "candidates": [
@@ -1593,7 +2144,7 @@
   },
   "limits": [
     "Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
-    "Issue/spend/burn only. Single-backing imports validate finalized closure through replacement, reappointment and restart, including silence clauses with independently answered empty publication ranges. Same-index fresh silence openings, any attributed publication, multi-backing scopes and recovery adoption remain unsupported. Import lapse currently requires full trail evidence.",
+    "Single-backing imports validate finalized closure through replacement, reappointment and restart, with publication force, standing locks and exact ordered recovery adoption. Same-index fresh silence openings with a same-index predecessor, multi-backing scopes, non-service counts and receipts remain unsupported. Import lapse currently requires full trail evidence.",
     "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission.",
     "The candidate Ergo adapter checks exact transaction decoding and roots against independently selected synthetic headers. No proof of work, chain selection, decoder node equivalence/containment, node acceptance or venue-profile adoption is established."
   ]

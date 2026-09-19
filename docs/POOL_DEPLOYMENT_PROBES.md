@@ -308,10 +308,10 @@ paths for imported outputs use their original trees and are labeled
 `replayed-imported-tree-only`. The walk supports reappointment and
 same-operator restart, including lower-sequence imports at the same index
 where no silence clause is declared.
-It caps total work at 128 held checkpoints and 8192 replayed local events,
-counting repeated checkpoint prefixes and failed replays. This linear
-single-backing path does not establish multi-backing closure merging, silence
-recovery or adoption. The original-segment clock path retains the limits
+It caps total work at 128 held checkpoints and 8192 event operations,
+counting repeated checkpoint prefixes, publication classification, recovery
+folds and failed replays. This linear single-backing path does not establish
+multi-backing closure merging. The original-segment clock path retains the limits
 above, and the separate local-only restoration scanner still refuses imports.
 
 With a silence clause, the same walk reads one backing clock across every
@@ -323,14 +323,27 @@ continuation cannot close the gap for itself. Exact finalized imports retain
 payments, burns, spentness and original-tree restoration paths.
 
 This path requires the independently selected verifier to answer kind 4 for
-the backing over `[0, judgingIndex]` with no attributed entries, establishing
-an empty adopted block (C2b.4.2). Any entry, even malformed or after the opening,
-is conservatively unsupported; a missing answer remains unresolved. New
+the backing over `[0, judgingIndex]`. Demand, withdrawal and release force is
+read at each publication's original index, in venue order, against the
+strictly preceding snapshot and intervening force (C2b.3.2). Recovery effects
+never extend that snapshot's forest. Malformed or invalid publications have
+no force; missing evidence remains unresolved. Acceptance and request have
+no force; dishonour and non-service counts remain separate.
+
+Each return opening remains empty and inherits its predecessor's adoption
+index. Every non-opening checkpoint starts with the full adopted block through
+the opening index inclusively, retaining exact proof and signature bytes at
+new local positions (C2b.4.2). Effective statement identities persist after
+withdrawal, preventing a proof variant from recreating a discharged demand.
+Standing demands survive deadline expiry; locks expire individually. Ordinary
+replay checks locks without reapplying door timing conditions. Adopted
+settlement outputs support seed restoration from authenticated public fields.
+New
 silence-bearing openings with a same-index canonical predecessor are also
 unsupported before choosing between C2.10.4's generic predecessor and
 C2b.4.1's strictly-before snapshot. Full trails are still required to classify
 import lapse; header-only lapse is an availability improvement. These limits
-add no consensus rule, wire format or recovery-adoption claim.
+add no consensus rule, wire format or configuration-adoption claim.
 
 The complete public-package boundary still requires the following inputs and
 checks. This table separates what this experiment establishes from prerequisites
@@ -340,9 +353,9 @@ that a production reader must establish before returning spendable holdings.
 |---|---|---|
 | Construction and key routing | Exact configuration preimage and candidate domain; all six independently pinned source/toolchain/bytecode/key identities and fixed helper/bounds/profile | Approved configuration/artifact identities after full adoption prerequisites; setup provenance and deployment qualification |
 | Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and terms-derived issuance key; header-derived scope root; fixture replacement/reappointment links and revocation checked at each checkpoint | Multi-backing authority; a venue profile and authenticated evidence behind the fixture answers |
-| Local state | Issue/spend/burn proof and state checks, compressed spent root, note paths, totals and both chains; exact single-backing transitive imports with fresh local trees | Recovery statements, locks, multi-backing closure deduplication and all scoped snapshots |
-| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; carrying-checkpoint classification, last-valid continuity, replacement/reappointment/restart imports | A selected venue profile and authenticated chain evidence, multi-backing scope changes, publications, receipts and the count |
-| Wallet restoration | Seed-only candidate openings and local or imported-tree paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
+| Local state | Issue/spend/burn and demand/withdraw/settle state checks, locks, compressed spent root, note paths, totals and both chains; exact single-backing transitive imports with fresh local trees | Multi-backing closure deduplication and all scoped snapshots |
+| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; carrying-checkpoint classification, last-valid continuity, replacement/reappointment/restart imports; publication force and exact ordered adoption | A selected venue profile and authenticated chain evidence, multi-backing scope changes, receipts and the count |
+| Wallet restoration | Seed-only capsule and lit-settlement openings with local or imported-tree paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
 
 The candidate manifest, checkpoint selection and the fixture venue evidence
 remain explicit **test fixture assumptions**. Signed terms establish identity,

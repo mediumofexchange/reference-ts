@@ -7,9 +7,11 @@ import { verifySignatureStrict } from "../../../dist/keys.js";
 import { fieldToBytes, identifierOf, isValue, VALUE_BOUND } from "../../../dist/pool/field.js";
 import { NoteTree, EMPTY_NOTE_ROOT, NOTE_TREE_CAPACITY } from "../../../dist/pool/note-tree.js";
 import { ScopeTree } from "../../../dist/pool/scope.js";
+import { ownerOf, commitmentOf, nullifierOf } from "../../../dist/pool/notes.js";
 import { RadixSpentSet } from "../spent-set/radix.mjs";
-import { createCapsuleScanner, CapsuleAssociationError, CapsuleFormatError } from "../delivery/crypto.mjs";
+import { createCapsuleScanner, deriveSettlementOwnerSecret, CapsuleAssociationError, CapsuleFormatError } from "../delivery/crypto.mjs";
 import { EvidenceRefusal, LIMITS, readLocalEvidence } from "../delivery/evidence-reader.mjs";
+import { recoveryState, effectOf, checkRecovery, applyRecovery } from "./recovery-state.mjs";
 
 const same = (a, b) => compareBytes(a, b) === 0;
 const hex = bytes => Buffer.from(bytes).toString("hex");
@@ -142,19 +144,29 @@ function decodedTrails(trails, codec) {
  * `lastValid` is the segment's last valid checkpoint before this one: the
  * trail must reach its length and reproduce its evidence and history hashes
  * there (C2.10.12, pool-v3 §7.1), the evidence before any verification. */
-async function replayTrail({ selection, terms, header, verifier, codec }, snapshot, trail, { index, revokedAt, lastValid, imported }) {
+async function replayTrail({ selection, terms, header, verifier, codec }, snapshot, trail,
+  { index, revokedAt, lastValid, imported, block = [], openingIndex, isOpening = false }) {
   const issuerKey = terms.obligor, scope = new ScopeTree(header.entries).root();
   const tree = new NoteTree(), spent = new RadixSpentSet(), anchors = new Set(imported?.anchors ?? [EMPTY_NOTE_ROOT]);
   const nullifiers = new Set(imported?.nullifiers), outputsSeen = new Set(imported?.outputsSeen);
   for (const nf of nullifiers) spent.insert(fieldToBytes(nf));
   const statements = new Set(), outputPositions = new Map(imported?.outputPositions), scanOutputs = [...(imported?.scanOutputs ?? [])];
+  const recovery = recoveryState(imported), eventIndices = [];
+  if (!isOpening) requireReplay(trail.records.length >= block.length, "ADOPTION");
   let issued = imported?.issued ?? 0n, burned = imported?.burned ?? 0n, position = 0n;
   let history = codec.genesisHistoryHash(snapshot.segment), evidence = codec.genesisEvidenceHash(snapshot.segment);
   for (const bytes of trail.records) {
     const record = codec.decodeRecord(bytes), p = record.publicInputs, kind = record.kind;
-    if (![1, 2, 3].includes(kind)) throw new EvidenceRefusal("unsupported-scope");
-    requireReplay(same(record.domain, selection.domain) && same(identifierOf(p[2], p[3]), snapshot.segment), "CONTEXT");
-    requireReplay(p[4] === scope, "SCOPE");
+    if (![1, 2, 3, 4, 5, 6].includes(kind)) throw new EvidenceRefusal("unsupported-scope");
+    const adopted = block[Number(position)];
+    // Exact admitted bytes, including proof and authorization, survive adoption.
+    if (adopted !== undefined) requireReplay(same(bytes, adopted.bytes), "ADOPTION");
+    else {
+      requireReplay(same(record.domain, selection.domain) && same(identifierOf(p[2], p[3]), snapshot.segment), "CONTEXT");
+      requireReplay(p[4] === scope, "SCOPE");
+    }
+    const at = adopted?.index ?? lastValid?.eventIndices?.[Number(position)] ?? index;
+    if (kind >= 4 && at === undefined) throw new EvidenceRefusal("unsupported-scope");
     const identity = codec.statementHash(record), id = hex(identity);
     requireReplay(!statements.has(id), "REPEATED_STATEMENT");
     evidence = codec.nextEvidenceHash(evidence, codec.evidenceHashes(record), position + 1n);
@@ -164,18 +176,19 @@ async function replayTrail({ selection, terms, header, verifier, codec }, snapsh
     if (kind === 1 && index !== undefined && (lastValid === undefined || position + 1n > lastValid.position)) {
       requireReplay(revokedAt === undefined || revokedAt > index, "REVOKED");
     }
-    requireReplay(await verifier.verify(kind, [...p], new Uint8Array(record.proof)) === true, "PROOF");
-    if (kind !== 2) {
+    if (adopted === undefined && kind !== 5) requireReplay(await verifier.verify(kind, [...p], new Uint8Array(record.proof)) === true, "PROOF");
+    if (kind !== 2 && kind !== 5) {
       requireReplay(same(identifierOf(p[5], p[6]), selection.backing), "BACKING");
       if (kind === 1) {
         requireReplay(verifySignatureStrict(record.authorization, codec.statementBytes(record), issuerKey), "SIGNATURE");
         requireReplay(issued + p[7] < VALUE_BOUND, "SUPPLY");
-      } else requireReplay(p[7] <= issued - burned, "SUPPLY");
+      } else if (kind === 3) requireReplay(p[7] <= issued - burned, "SUPPLY");
     }
-    const nfs = kind === 1 ? [] : kind === 2 ? p.slice(7, 9) : p.slice(10, 12);
-    const roots = kind === 1 ? [] : kind === 2 ? p.slice(5, 7) : p.slice(8, 10);
-    const outputs = kind === 1 ? [p[8]] : kind === 2 ? p.slice(9, 13) : [p[12]];
-    requireReplay(roots.every(root => anchors.has(root)), "ANCHOR");
+    const { nfs, roots, outputs } = effectOf(record);
+    if (adopted === undefined) {
+      requireReplay(roots.every(root => anchors.has(root)), "ANCHOR");
+      checkRecovery(record, recovery, { codec, check: requireReplay, backing: selection.backing, issuer: issuerKey, at });
+    }
     requireReplay(new Set(nfs).size === nfs.length && nfs.every(nf => nf !== 0n && !spent.has(fieldToBytes(nf))), "SPENT");
     requireReplay(new Set(outputs).size === outputs.length && outputs.every(cm => cm !== 0n && !outputsSeen.has(cm)), "OUTPUT");
     requireReplay(tree.size + BigInt(outputs.length) <= NOTE_TREE_CAPACITY && position + 1n < VALUE_BOUND, "CAPACITY");
@@ -183,9 +196,11 @@ async function replayTrail({ selection, terms, header, verifier, codec }, snapsh
     // on failure, including a verifier rejection later in the supplied trail.
     const positions = tree.appendAll(outputs);
     outputs.forEach((cm, i) => {
-      outputsSeen.add(cm); outputPositions.set(cm, { leaf: positions[i], tree }); scanOutputs.push({ cm, capsule: record.capsules[i] });
+      outputsSeen.add(cm); outputPositions.set(cm, { leaf: positions[i], tree });
+      scanOutputs.push(kind === 6 ? { cm, settlement: record } : { cm, capsule: record.capsules[i] });
     });
     nfs.forEach(nf => { spent.insert(fieldToBytes(nf)); nullifiers.add(nf); });
+    applyRecovery(record, recovery, codec); eventIndices.push(at);
     if (kind === 1) issued += p[7];
     if (kind === 3) burned += p[7];
     position += 1n;
@@ -195,7 +210,8 @@ async function replayTrail({ selection, terms, header, verifier, codec }, snapsh
   }
   requireReplay(lastValid === undefined || position >= lastValid.position, "CONTINUITY");
   requireReplay(same(history, snapshot.historyHash) && issued === snapshot.issued && burned === snapshot.burned, "SNAPSHOT");
-  return { tree, spent, issued, burned, position, history, scanOutputs, outputPositions, anchors, nullifiers, outputsSeen };
+  return { tree, spent, issued, burned, position, history, scanOutputs, outputPositions, anchors, nullifiers, outputsSeen,
+    ...recovery, eventIndices, adoptionIndex: isOpening ? imported?.adoptionIndex ?? 0n : openingIndex ?? 0n };
 }
 
 /** C2.10.11 over the original operator's carrying checkpoints in held order,
@@ -271,7 +287,8 @@ async function classifyCarrying(context, ranges, evidence) {
     let verdict;
     try {
       const replayed = await replayTrail(context, s, tr, { index: c.index, revokedAt: ranges.revokedAt, lastValid });
-      verdict = { class: "valid" }; lastValid = { position: replayed.position, historyHash: s.historyHash, evidenceHash: s.evidenceHash };
+      verdict = { class: "valid" }; lastValid = { position: replayed.position, historyHash: s.historyHash, evidenceHash: s.evidenceHash,
+        eventIndices: replayed.eventIndices };
       latestValid = c.index;
       if (c.position === "selected") state = replayed;
     } catch (error) {
@@ -301,18 +318,59 @@ async function classifyImports(context, directories, record, evidence) {
   const view = await readRecordView(selection, terms, directories, record, codec);
   const { chain, heldBy, termEnd, carries, revokedAt, t, lag } = view;
   const duration = terms.silence?.noCommitmentDuration;
-  // C2b.4.2: this experiment supports only a proven empty adopted block.
-  // Even an invalid or later publication is conservatively unsupported;
-  // classification/adoption of publications belongs to a later slice.
-  if (duration !== undefined && (await view.ask(4, selection.backing)).entries.length !== 0) {
-    throw new EvidenceRefusal("unsupported-scope");
-  }
+  const publications = duration === undefined ? [] : (await view.ask(4, selection.backing)).entries;
   const selectedHeld = (await heldBy(selection.operator)).find(h => h.commitment.sequence === selection.sequence && same(h.commitment.root, selection.root));
   if (selectedHeld === undefined) throw new EvidenceRefusal("selection-mismatch");
   if (!same(codec.linkInForce(chain, selectedHeld.index).operator, selection.operator)) throw new EvidenceRefusal("lapsed-selection");
   const trails = decodedTrails(evidence.trails, codec), segments = new Map(), clocks = new Map(), carrying = [];
   const matches = (a, b) => a !== undefined && b !== undefined && a.sequence === b.sequence && same(a.operator, b.operator) && same(a.root, b.root);
   let canonical, selectedState, selectedClock, checkpoints = 0n, events = 0n, heldBefore = 0, heldAfter = 0;
+  let publicationAt = 0;
+  const force = [], publicationVerdicts = [];
+  const charge = () => { if (++events > IMPORT_LIMITS.maxEvents) throw new EvidenceRefusal("resource-refusal"); };
+  // At one index the whole publication group is read BEFORE any checkpoint.
+  // Effects change recovery state but never extend the snapshot's forest.
+  const publishThrough = async through => {
+    while (publicationAt < publications.length && publications[publicationAt].index <= through) {
+      const entry = publications[publicationAt++], item = { index: entry.index.toString(), ordinal: entry.ordinal.toString(), force: false };
+      publicationVerdicts.push(item); charge();
+      let publication;
+      try { publication = codec.decodePublication(entry.record); }
+      catch (error) {
+        if (error instanceof EncodingError || error instanceof codec.CodecEncodingError) continue;
+        throw error;
+      }
+      if (!same(publication.domain, selection.domain) || !same(publication.backing, selection.backing) ||
+          publication.kind === 2 || publication.kind === 5 || canonical === undefined ||
+          entry.index - canonical.index <= duration) continue;
+      // canonical is strictly before entry.index: the group is processed once
+      // before the first held checkpoint there, including non-carrying ones.
+      if (canonical.index >= entry.index) throw new Error("publication prefix order");
+      const source = canonical.state, state = { ...recoveryState(source), nullifiers: new Set(source.nullifiers), outputsSeen: new Set(source.outputsSeen) };
+      const apply = record => {
+        applyRecovery(record, state, codec);
+        const effect = effectOf(record);
+        effect.nfs.forEach(nf => state.nullifiers.add(nf)); effect.outputs.forEach(cm => state.outputsSeen.add(cm));
+      };
+      for (const prior of force) if (prior.index > source.adoptionIndex) { charge(); apply(prior.record); }
+      const record = publication.record, p = record.publicInputs;
+      try {
+        requireReplay(same(identifierOf(p[2], p[3]), canonical.segment) && p[4] === canonical.scope, "CONTEXT");
+        if (record.kind !== 5) requireReplay(same(identifierOf(p[5], p[6]), selection.backing), "BACKING");
+        if (record.kind !== 5) requireReplay(await context.verifier.verify(record.kind, [...p], new Uint8Array(record.proof)) === true, "PROOF");
+        const { roots, nfs, outputs } = effectOf(record);
+        requireReplay(roots.every(root => source.anchors.has(root)), "ANCHOR");
+        requireReplay(new Set(nfs).size === nfs.length && nfs.every(nf => nf !== 0n && !state.nullifiers.has(nf)), "SPENT");
+        requireReplay(new Set(outputs).size === outputs.length && outputs.every(cm => cm !== 0n && !state.outputsSeen.has(cm)), "OUTPUT");
+        checkRecovery(record, state, { codec, check: requireReplay, backing: selection.backing, issuer: terms.obligor,
+          at: entry.index, lag, publication: true });
+        force.push({ index: entry.index, record, bytes: codec.encodeRecord(record) }); item.force = true;
+      } catch (error) {
+        if (!(error instanceof ReplayRefusal)) throw error;
+        item.check = error.check;
+      }
+    }
+  };
   let latestValid = 0n, closing = 0n, currentIndex = -1n;
   const advanceClock = at => {
     if (at !== currentIndex) { closing = latestValid; currentIndex = at; }
@@ -333,6 +391,7 @@ async function classifyImports(context, directories, record, evidence) {
     const term = chain[termIndex];
     for (const held of await heldBy(term.operator)) {
       if (held.index < term.from || held.index > termEnd(termIndex)) continue;
+      await publishThrough(held.index);
       advanceClock(held.index);
       if (++checkpoints > IMPORT_LIMITS.maxCheckpoints) throw new EvidenceRefusal("resource-refusal");
       const c = held.commitment, selected = matches(c, selection);
@@ -397,7 +456,8 @@ async function classifyImports(context, directories, record, evidence) {
             requireReplay(canonical.index < held.index || (same(canonical.commitment.operator, c.operator) && canonical.commitment.sequence < c.sequence), "IMPORT_RANK");
             if (!same(canonical.commitment.operator, c.operator)) requireReplay(canonical.index < term.from, "IMPORT_RANK");
           }
-          segment = { imported: canonical?.state, predecessor: canonical?.commitment, lastValid: undefined };
+          segment = { imported: canonical?.state, predecessor: canonical?.commitment, lastValid: undefined,
+            openingIndex: held.index, block: force.filter(event => event.index > (canonical?.state.adoptionIndex ?? 0n)) };
           segments.set(id, segment);
         }
         // Returning to an older segment cannot abandon a valid newer segment.
@@ -406,9 +466,10 @@ async function classifyImports(context, directories, record, evidence) {
         events += BigInt(trail.records.length);
         if (events > IMPORT_LIMITS.maxEvents) throw new EvidenceRefusal("resource-refusal");
         const state = await replayTrail({ ...context, header }, snapshot, trail,
-          { index: held.index, revokedAt, lastValid: segment.lastValid, imported: segment.imported });
-        segment.lastValid = { position: state.position, historyHash: snapshot.historyHash, evidenceHash: snapshot.evidenceHash };
-        canonical = { commitment: c, index: held.index, segment: snapshot.segment, state };
+          { index: held.index, revokedAt, lastValid: segment.lastValid, imported: segment.imported,
+            block: c.sequence === header.sequence ? [] : segment.block, openingIndex: segment.openingIndex, isOpening: c.sequence === header.sequence });
+        segment.lastValid = { position: state.position, historyHash: snapshot.historyHash, evidenceHash: snapshot.evidenceHash, eventIndices: state.eventIndices };
+        canonical = { commitment: c, index: held.index, segment: snapshot.segment, scope: new ScopeTree(header.entries).root(), state };
         latestValid = held.index;
         carrying.push({ ...item, class: "valid" });
         if (selectedState !== undefined) throw new EvidenceRefusal("superseded-selection");
@@ -420,10 +481,11 @@ async function classifyImports(context, directories, record, evidence) {
     }
   }
   if (selectedState === undefined) throw new EvidenceRefusal("unresolved-evidence");
+  await publishThrough(t);
   advanceClock(t);
   const clock = duration === undefined ? null : clockRecord(t, selectedClock);
   return { state: selectedState, carrying, clock,
-    ranges: { judgingIndex: t, lag, checkpointIndex: selectedHeld.index, revokedAt, heldBefore, heldAfter, chain } };
+    ranges: { judgingIndex: t, lag, checkpointIndex: selectedHeld.index, revokedAt, heldBefore, heldAfter, chain, publications: publicationVerdicts } };
 }
 
 /** verifier.configuration is independently selected and its six keys checked
@@ -490,7 +552,16 @@ export async function replayLocalPackage(input, verifier, codec) {
     if (seed !== undefined) {
       const scanner = createCapsuleScanner(seed, selection.domain);
       for (const output of scanOutputs) {
-        const note = scanner.tryRecover(output.cm, output.capsule);
+        let note;
+        if (output.settlement === undefined) note = scanner.tryRecover(output.cm, output.capsule);
+        else {
+          const record = output.settlement, p = record.publicInputs, { acceptance } = codec.settlementAuthorization(record);
+          const secret = deriveSettlementOwnerSecret(seed, selection.domain, acceptance.demand, acceptance.deadline).value;
+          if (ownerOf(secret) !== p[8]) continue;
+          const opening = { backing: identifierOf(p[5], p[6]), value: p[7], owner: p[8], rho: p[9] };
+          requireReplay(commitmentOf(selection.domain, opening) === output.cm, "OUTPUT");
+          note = { opening, cm: output.cm, nf: nullifierOf(selection.domain, output.cm, secret) };
+        }
         if (note === null) continue;
         requireReplay(same(note.opening.backing, selection.backing), "BACKING");
         if (note.opening.value > 0n && !spent.has(fieldToBytes(note.nf))) {
@@ -512,7 +583,7 @@ export async function replayLocalPackage(input, verifier, codec) {
           revokedAt: ranges.revokedAt === undefined ? null : ranges.revokedAt.toString(),
           heldBefore: ranges.heldBefore, heldAfter: ranges.heldAfter,
           chain: ranges.chain.map(link => ({ operator: hex(link.operator), from: link.from.toString(), link: hex(link.link) })),
-          carrying, clock } }, candidates };
+          carrying, clock, ...(ranges.publications === undefined ? {} : { publications: ranges.publications }) } }, candidates };
   } catch (error) {
     if (error instanceof ReplayRefusal) return refused("invalid-local-replay", error.check);
     // A lapsed selection carries the clock record proving the lapse (C2b.4.1) beside the refusal.

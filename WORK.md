@@ -4,49 +4,50 @@ Updated: 2026-09-19
 
 ## Goal
 
-Single-backing silence-bearing imports completed on `feat/v3-silence-imports`
-from main 8ef0ef9 for delivery on `main`. Companion specification stays
-`main` at 3ed1800 (no normative change).
+Single-backing recovery-publication force and ordered adoption completed on
+`feat/v3-recovery-publications` from main 6a7d112 for delivery on `main`. Companion specification
+stays `main` at 3ed1800; no normative change.
 
-Acceptance: real-proof replacement/import/payment/burn under a declared silence
-clause, exact predecessor selection, strict-before clock and permanent segment
-retirement; fresh seedless audit and receiver restoration from portable evidence.
-Stale, withheld and retired closure refuses without partial state. Independently
-answered empty publication ranges establish the supported empty adoption block;
-any publication remains unsupported. No live chain or adoption claim.
+Acceptance: real-proof demand, withdrawal and settlement during silence;
+exact force at the original prefix, complete adoption on return, then payment
+and restoration in fresh public, receiver and backer processes. Hostile order,
+substituted evidence, lock conflicts, replay and withheld closure refuse
+without partial state. No live chain or configuration-adoption claim.
 
 ## Status
 
-- Implemented: one strict-before backing clock across replacement terms;
-  each segment retains its first gap after opening even after another resets
-  the clock. Excluded openings close nothing. Retired continuations lapse
-  before state replay; finalized imported spent state and wallet paths persist.
-- Design review identified the strict snapshot versus generic same-index import
-  distinction. New silence openings at a same-index canonical predecessor
-  refuse as unsupported before choosing between those rules.
-- Fresh independent patch review found no material findings. The actual clock
-  block matched an independent oracle in 98,415 exhaustive scenarios with
-  2,340,090 boundary comparisons. Final real-proof execution passed.
-- No runtime, circuit, key, dependency, device-control or specification change.
-  Any attributed publication, same-index fresh silence opening, multi-backing
-  closure and adoption remain unsupported. Import lapse requires full trail
-  evidence; header-only lapse is an availability improvement.
+- Implemented: publication groups precede checkpoints at their index; force
+  uses the strictly earlier snapshot plus accumulated effects with its forest
+  fixed. Only demand, withdrawal and release have force; malformed, invalid,
+  misrouted and unauthorized publications have none.
+- Empty openings inherit the predecessor's adoption index. Non-opening
+  checkpoints start with the complete block through the opening index,
+  preserving original proof/signature bytes. Effective statement identities
+  persist after discharge; standing demands and individual locks import.
+- Lit settlement outputs restore from public fields and the seed. Ordinary
+  post-return payments retain the existing capsule restoration path.
+- Independent design and patch reviews closed with no unresolved material
+  finding. Boundary, second-silence, exact-evidence, lock and replay cases
+  received focused readback. Final real-proof execution passed.
+- [Decision](decisions/2026-09.md#2026-09-19--classify-and-adopt-single-backing-recovery-publications).
 
 ## Evidence
 
-- Main 8ef0ef9 CI 35450519224 passed (confirmed remotely this session).
-  Reuses unchanged runtime/circuit/dependency baseline: all 1,934 tests,
-  package/service/wallet/crash/spent acceptance and seven hosted jobs.
-- Final `npm run check:pool:ergo-replay`: 63 groups / 19 real proofs pass,
-  including the ended-term case, fresh seedless/receiver processes and refusal
-  of retired closure. The silent portable package is 68,301 bytes; candidate
-  Ergo replay uses 21 blocks / 3,684 raw bytes under trusted synthetic headers.
-  [Retained report](docs/pool-v3-local-replay-verification.json); source hashes
-  match the final files. Syntax and docs/link checks pass.
-- The final main revision's hosted CI must be checked separately; the baseline
-  above is not evidence for the changed experiment. No branch protections or
-  required repository rulesets were present when inspected; none was altered.
-- [Decision](decisions/2026-09.md#2026-09-19--read-silence-across-single-backing-imports-with-empty-publication-evidence).
+- Main 6a7d112 hosted CI 35452105469 passed all seven jobs this session.
+  Reuse that unchanged runtime/circuit/dependency baseline: 1,934 tests and
+  package/service/wallet/crash/spent plus real v2/v3 proof acceptance.
+- Final `npm run check:pool:ergo-replay`: 74 groups / 31 real proofs pass,
+  including fresh seedless, receiver and backer processes. Earlier fixture
+  refusal expectations were corrected after independent review.
+  The portable recovery package is 128,236 bytes. The unchanged synthetic
+  Ergo import trace uses 21 blocks / 3,684 raw bytes; recovery force uses the
+  fixture venue, with no new node-publication claim.
+- Syntax, docs/index/link checks and focused diff review pass. The
+  [retained report](docs/pool-v3-local-replay-verification.json) has source
+  hashes verified against the final files.
+- Delivery target is `main`; its final hosted CI must be checked separately
+  from the baseline above. No branch protections or required rulesets exist.
+  No safeguards changed.
 
 ## Existing local product and custody boundary
 
@@ -68,22 +69,24 @@ any publication remains unsupported. No live chain or adoption claim.
 
 ## Next
 
-1. Read the final main revision's hosted CI. Next product slice: force classification and ordered
-   adoption of single-backing recovery publications, with fresh public audit
-   and receiver restoration. Multi-backing remains separate.
-2. P2 (publication on a node) confirms the measured 24-piece transaction;
-   P4 measures exhaustion from index zero on a real chain; decoder node
-   equivalence is a selection prerequisite. A decoder-refused transaction
-   currently denies every range through its height.
-3. Configuration approval stays disabled until all adoption prerequisites hold;
-   device qualification and external publication remain separate dependencies.
-   Do not alter this workstation's controls.
+1. Read final main hosted CI, then continue the next complete recovery path:
+   receipt finality across silence/return, followed by the
+   non-service count and its signed terms/configuration dependencies.
+2. Same-index fresh silence openings with a same-index predecessor and
+   multi-backing closure remain unsupported. Import lapse requires full trails.
+   The count, receipts and authenticated venue evidence remain open.
+3. P2 confirms the measured 24-piece transaction on a node; P4 measures
+   exhaustion from index zero on a real chain. Decoder node equivalence is a
+   selection prerequisite; a decoder refusal denies ranges through its height.
+4. Configuration approval stays disabled until adoption prerequisites hold.
+   Device qualification and external publication remain separate dependencies.
 
 ## Open questions
 
-- Reassessed from current evidence: roughly **50% done / 50% remaining**,
-  plausible range **40-60%**. Single-backing imports advance the experiment;
-  selected venue/decoder, complete recovery, qualified custody and user
-  operation remain the largest blocks. No percentage change is warranted.
-- Switch to a fresh instance for recovery publication adoption, which needs focused review of
-  force and adoption dependencies under the six existing proof relations.
+Reassessed from existing evidence: roughly **50% done / 50% remaining**,
+plausible range **40-60%**. Reusable recovery logic has advanced; selected
+venue/decoder, complete recovery, qualified custody and user operation remain
+the largest blocks. No percentage change is warranted.
+
+A fresh instance is recommended for the receipt-finality slice: it crosses
+receipt precedence and recovery boundaries beyond this force/adoption review.

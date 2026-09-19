@@ -22,6 +22,7 @@ import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage, replayEvidencePackage, PACKAGE_LIMITS, RANGE_LIMITS } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
 import { checkImports } from "./import-check.mjs";
+import { checkRecovery } from "./recovery-check.mjs";
 import { checkErgoReplay } from "./ergo-check.mjs";
 import { field } from "../fixtures.mjs";
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration,
@@ -424,11 +425,12 @@ try {
     const result = await replayLocalPackage(payload, verifier, codec);
     assert.equal(result.status, "unresolved-evidence"); assert.equal(result.audit, null); assert.deepEqual(result.candidates, []);
   });
-  await test("unsupported recovery and unauthenticated import substitutions produce no partial audit", async () => {
+  await test("withdrawal without a standing demand and unauthenticated imports produce no partial audit", async () => {
     const withdrawal = { domain, kind: 5, publicInputs: [...prefix, ...limbsOf(b(63))],
       proof: new Uint8Array(), authorization: new Uint8Array(64), capsules: [] };
     const recovery = await replayLocalPackage(seal([issue, withdrawal], snapshot), verifier, codec);
-    assert.equal(recovery.status, "unsupported-scope"); assert.equal(recovery.audit, null); assert.deepEqual(recovery.candidates, []);
+    assert.equal(recovery.status, "invalid-local-replay"); assert.equal(recovery.check, "DEMAND");
+    assert.equal(recovery.audit, null); assert.deepEqual(recovery.candidates, []);
     const payload = clone(complete), trail = clone(codec.decodeTrail(payload.package.trail, LIMITS));
     trail.header = codec.segmentBytes({ domain, venue, operator, sequence: 2n,
       entries: [{ backing, link, opening: { operator, sequence: 1n, root: b(64) } }] });
@@ -915,6 +917,10 @@ try {
     test: (name, fn) => test(`Silence: ${name}`, fn),
     operatorSecret, issuerSecret, receiverSeed, payerSeed, silence: true });
   assert.deepEqual(await replayEvidencePackage(portable(silent.payload), verifier, codec), silent.result);
+  const recovery = await checkRecovery({ codec, verifier, configurationBytes, domain,
+    venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove,
+    test: (name, fn) => test(`Recovery: ${name}`, fn), operatorSecret, issuerSecret, receiverSeed, payerSeed });
+  assert.deepEqual(await replayEvidencePackage(portable(recovery.payload), verifier, codec), recovery.result);
   let ergo;
   if (withErgo) {
     ergo = await checkErgoReplay({ imported: silent, fixture: ergoFixture, adapter: ergoAdapter, codec, verifier, portable, test });
@@ -942,6 +948,9 @@ try {
     assert.deepEqual(worker({ ...imported.payload, seed: receiverSeed }), imported.receiver);
     assert.deepEqual(worker(silent.payload), silent.result);
     assert.deepEqual(worker({ ...silent.payload, seed: receiverSeed }), silent.receiver);
+    assert.deepEqual(worker(recovery.payload), recovery.result);
+    assert.deepEqual(worker({ ...recovery.payload, seed: receiverSeed }), recovery.receiver);
+    assert.deepEqual(worker({ ...recovery.issuerPayload, seed: recovery.issuerSeed }), recovery.issuerRestored);
     for (const seed of [undefined, receiverSeed]) {
       const answer = worker({ ...silent.refusedPayload, ...(seed === undefined ? {} : { seed }) });
       assert.equal(answer.status, "lapsed-selection"); assert.equal(answer.audit, null); assert.deepEqual(answer.candidates, []);
@@ -971,7 +980,7 @@ try {
     }
   });
   await test("successful replay retains unresolved production authority; ranges are the fixture verifier's only", () => {
-    for (const result of [receiver, audit, dependency, imported.result, imported.receiver, silent.result, silent.receiver]) {
+    for (const result of [receiver, audit, dependency, imported.result, imported.receiver, silent.result, silent.receiver, recovery.result, recovery.receiver]) {
       assert.equal(result.candidateConfigurationChecked, true); assert.equal(result.signedTermsAuthenticated, true);
       assert.equal(result.currentRangeAuthenticated, true); assert.equal(result.termsAuthorityAuthenticated, true);
       assert.equal(result.rangeEvidence, "fixture-verifier");
@@ -982,16 +991,19 @@ try {
   });
   const sources = ["scripts/pool/v3/local-replay.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/local-check.mjs",
     "scripts/pool/v3/fixture-venue.mjs", "scripts/pool/v3/import-check.mjs", "scripts/pool/v3/ergo-check.mjs",
+    "scripts/pool/v3/recovery-state.mjs", "scripts/pool/v3/recovery-check.mjs",
     "scripts/pool/delivery/evidence-reader.mjs", "scripts/pool/delivery/crypto.mjs", "scripts/pool/spent-set/radix.mjs",
     "model/pool-v3-records.ts", "model/pool-v3-commitments.ts", "model/pool-v3-trail.ts", "model/pool-v3-headers.ts",
     "model/pool-v3-configuration.ts", "model/pool-v3-terms.ts", "model/pool-v3-package.ts", "model/pool-v3-range.ts",
     "scripts/pool/v3/candidate.mjs", "scripts/pool/v3/candidate-manifest.json",
-    "src/pool/note-tree.ts", "src/pool/scope.ts", "scripts/pool/v3/circuits/issue.nr", "scripts/pool/v3/circuits/spend.nr", "scripts/pool/v3/circuits/burn.nr"];
+    "src/pool/note-tree.ts", "src/pool/notes.ts", "src/pool/poseidon2.ts", "src/pool/scope.ts",
+    "scripts/pool/v3/circuits/issue.nr", "scripts/pool/v3/circuits/spend.nr", "scripts/pool/v3/circuits/burn.nr",
+    "scripts/pool/v3/circuits/demand.nr", "scripts/pool/v3/circuits/settle.nr"];
   if (withErgo) sources.push("model/pool-v3-ergo-profile.ts", "experiments/ergo-range/decoder.mjs",
     "experiments/ergo-range/replay-venue.mjs", "experiments/ergo-range/replay-fixture.mjs",
     "experiments/ergo-range/replay-venue-check.mjs", "experiments/ergo-range/package-lock.json");
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-8", specification: "3ed1800", node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-9", specification: "3ed1800", node: process.version,
     packageBytes: portable(complete).package.length, dependencyPackageBytes: portable(extended).package.length,
     fixtureVenueRecords: complete.venue.records.length,
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
@@ -1000,10 +1012,12 @@ try {
     audit, receiver, dependency, imports: { packageBytes: portable(imported.payload).package.length,
       audit: imported.result, receiver: imported.receiver },
     silenceImports: { packageBytes: portable(silent.payload).package.length, audit: silent.result, receiver: silent.receiver },
+    recovery: { packageBytes: portable(recovery.payload).package.length, audit: recovery.result,
+      receiver: recovery.receiver, issuerRestored: recovery.issuerRestored },
     ...(withErgo ? { ergo: { evidence: "synthetic-headers-and-exact-transaction-bytes", rawBytes: ergo.rawBytes,
       blocks: ergo.payload.venue.blocks.length, audit: ergo.result, receiver: ergo.receiver } } : {}),
     limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
-      "Issue/spend/burn only. Single-backing imports validate finalized closure through replacement, reappointment and restart, including silence clauses with independently answered empty publication ranges. Same-index fresh silence openings, any attributed publication, multi-backing scopes and recovery adoption remain unsupported. Import lapse currently requires full trail evidence.",
+      "Single-backing imports validate finalized closure through replacement, reappointment and restart, with publication force, standing locks and exact ordered recovery adoption. Same-index fresh silence openings with a same-index predecessor, multi-backing scopes, non-service counts and receipts remain unsupported. Import lapse currently requires full trail evidence.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };
   if (withErgo) report.limits.push("The candidate Ergo adapter checks exact transaction decoding and roots against independently selected synthetic headers. No proof of work, chain selection, decoder node equivalence/containment, node acceptance or venue-profile adoption is established.");
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");

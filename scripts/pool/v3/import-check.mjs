@@ -291,7 +291,7 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       assert.deepEqual(classes(answer).slice(-2), ["lapsed", "valid"]);
       assert.deepEqual(answer.audit.range.clock, { duration: "4", snapshotIndex: "10", gap: "6", open: true, boundary: null, opening: "16" });
     });
-    await test("publication closure must be answered independently and empty, including at opening and judging indices", async () => {
+    await test("publication closure must be answered independently; malformed records have no force at any index", async () => {
       const unavailable = { ...verifier, record(data) {
         const record = verifier.record(data);
         return { ...record, range: request => request.kind === 4 ? undefined : record.range(request) };
@@ -300,7 +300,13 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       for (const at of [0n, 14n, 16n, 20n]) {
         const published = structuredClone(payload);
         published.venue.records.push({ kind: 4, subject: backing, index: at, record: new Uint8Array(92) });
-        await refuse(published, "unsupported-scope");
+        const answer = await replayLocalPackage(published, verifier, codec);
+        assert.equal(answer.status, "selected-local-replay");
+        assert.equal(answer.audit.range.publications.length, 1);
+        assert.equal(answer.audit.range.publications[0].force, false);
+        const { publications, ...range } = answer.audit.range;
+        const { publications: originalPublications, ...originalRange } = result.audit.range;
+        assert.deepEqual(range, originalRange);
       }
       const withheld = structuredClone(payload); withheld.package.trails = [];
       await refuse(withheld, "unresolved-evidence");

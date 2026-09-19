@@ -39,10 +39,15 @@ output commitments, accepted roots and totals, then starts an empty local
 output tree. Reappointment and same-operator restart use the same rule.
 Imported wallet paths retain their source trees. Whole-read budgets cap this
 path at 128 held checkpoints and 8192 replayed events, including failed
-replays. Silence-bearing imports require an independently answered empty
-publication range and preserve retirement after another segment resets the
-clock. Same-index fresh silence openings, any attributed publication,
-multi-backing scopes and adoption remain unsupported. Full trails are still
+replays. Silence-bearing imports read the independently answered publication
+range, classify demand/withdrawal/release force against each original snapshot,
+and preserve retirement after another segment resets the clock. A returning
+segment adopts the complete block through its opening index in venue order,
+retaining the exact proof and authorization bytes. Standing demands and locks
+survive imports; settlement outputs restore from public fields and the seed.
+Same-index fresh silence openings with a same-index canonical predecessor,
+multi-backing scopes, non-service counts and configuration adoption remain
+unsupported. Full trails are still
 required for import lapse. The local-only restoration scanner continues to
 refuse imports.
 
