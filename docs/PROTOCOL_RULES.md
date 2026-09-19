@@ -24,6 +24,20 @@ and is retrievable from git history only.
 Runtime rows follow the pinned v2 specification in the README. Later fault
 rules are model-only refinements; they do not reinterpret v2 commitments.
 
+## Older vocabulary
+
+Use Construction's words in new code and normative text. Earlier material uses:
+
+| Earlier word | Meaning |
+|---|---|
+| seat | operator's current replacement-chain link and the commitment it stands on |
+| book / pin | served state of one backing / commitment it stands on |
+| walk, descent | finding opening state through record commitments (C2.7) |
+| exhibit | directory absence proof; earlier mechanism is retired |
+| door / era | sequencer admission check / commitment named by a receipt (C2b.4) |
+| term / grade | link's in-force interval / non-service or no-commitment condition |
+| opening claim | retired signed claim of an empty book |
+
 ## Binding rules
 
 Pool demand attribution follows [C3.3a at 923ee46](https://github.com/mediumofexchange/money-from-first-principles/blob/923ee46/pool-recovery.md):
