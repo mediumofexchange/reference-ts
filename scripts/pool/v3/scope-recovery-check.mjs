@@ -16,6 +16,7 @@ import { replayLocalPackage, RANGE_LIMITS } from "./local-replay.mjs";
 import { mergeFinalizedPrefixes } from "./scope-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
 import { checkRecoveryScopeReceipts } from "./scope-receipt-check.mjs";
+import { checkRecoveryScopeCounts } from "./scope-count-check.mjs";
 
 const b = n => new Uint8Array(32).fill(n), hex = bytes => Buffer.from(bytes).toString("hex");
 const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
@@ -33,7 +34,8 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     const secret = i === 0 ? issuerSecret : issuerSecretY;
     const terms = codec.encodeRootTerms({ obligor: ed25519.getPublicKey(secret), operator, configuration: domain, venue,
       interval: 10n, payout: { thing, quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(b(185)),
-      silence: { noCommitmentDuration: 4n, challengeWindow: 5n } });
+      silence: { noCommitmentDuration: 4n, challengeWindow: 5n },
+      nonService: i === 0 ? { duration: 2n, count: 1n, window: 20n } : { duration: 3n, count: 2n, window: 12n } });
     return { backing: codec.rootTermsName(terms), secret, signed: { terms,
       signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), secret) } };
   });
@@ -312,7 +314,7 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     }
     unequal = { payload: p, result: answer, restored };
   });
-  let standing;
+  let standing, standingCheckpoints;
   await test("a standing demand survives import and withdrawal while selecting the other backing", async () => {
     const d = await demand(shared, fundedY, 1n, a1.tree, presenterY, 1n, "scope standing ordinary y demand");
     const locked = checkpoint(shared, 3n, 3n, [ix, iy, d], [effect([fundedX]), effect([fundedY]), effect()]);
@@ -324,6 +326,7 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     const rejected = checkpoint(next, 5n, 5n, [invalid], [effect()]);
     await refused(compose([a0, a1, locked, opening, rejected], rejected), "invalid-local-replay", "SIGNATURE");
     standing = { payload: p, result: answer };
+    standingCheckpoints = { locked, opening, continued };
   });
   await test("isolated recovery merges reject incomparable conflicts in either parent order", async () => {
     // Synthetic event ancestry isolates the merger. This is a conflict probe,
@@ -382,6 +385,9 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
   });
   const receipts = await checkRecoveryScopeReceipts({ codec, verifier, test, operatorSecret, checkpoint, compose,
     x, y, a0, a1, adopted, final, j0, ancestry, publications, payload, payloadY });
+  const nonService = await checkRecoveryScopeCounts({ codec, verifier, prove, test, domain, note, operatorSecret,
+    compose, publication, x, y, a0, a1, x0, y0, j0, adopted, final, ancestry, publications,
+    fundedX, fundedY, sx, standingCheckpoints });
   return { payload, payloadY, result, resultY, receiver, issuerSeed, issuerPayload, issuerPayloadY,
-    issuerRestored, issuerRestoredY, standing, unequal, receipts };
+    issuerRestored, issuerRestoredY, standing, unequal, receipts, nonService };
 }

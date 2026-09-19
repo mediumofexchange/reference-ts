@@ -16,6 +16,7 @@ import { replayLocalPackage } from "./local-replay.mjs";
 import { mergeFinalizedPrefixes } from "./scope-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
 import { checkNormalScopeReceipts } from "./scope-receipt-check.mjs";
+import { checkNormalScopeCounts } from "./scope-count-check.mjs";
 
 const b = n => new Uint8Array(32).fill(n), hex = bytes => Buffer.from(bytes).toString("hex");
 const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
@@ -29,7 +30,8 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
   const backings = ["scope fixture x", "scope fixture y"].map((thing, i) => {
     const secret = i === 0 ? issuerSecret : issuerSecretY;
     const terms = codec.encodeRootTerms({ obligor: ed25519.getPublicKey(secret), operator, configuration: domain, venue, interval: 10n,
-      payout: { thing, quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(ruleSecret) });
+      payout: { thing, quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(ruleSecret),
+      ...(i === 0 ? { nonService: { duration: 2n, count: 1n, window: 20n } } : {}) });
     return { backing: codec.rootTermsName(terms), signed: { terms,
       signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), secret) } };
   });
@@ -112,10 +114,11 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
       trail: codec.encodeTrail({ header: ctx.header, terms: ctx.entries.map(({ backing }) => backings.find(t => same(t.backing, backing)).signed),
         records: records.map(codec.encodeRecord) }, LIMITS) };
   }
-  function compose(checkpoints, chosen = checkpoints.at(-1), backing = x, replacements = [toB, toA], at = 20n) {
+  function compose(checkpoints, chosen = checkpoints.at(-1), backing = x, replacements = [toB, toA], at = 20n, publications = []) {
     const record = new FixtureVenue(venue, at, 2n);
     for (const cp of checkpoints) record.witness(1, cp.commitment.operator, cp.at, encodeCommitment(cp.commitment));
     for (const r of replacements) record.witness(r.kind, r.subject, r.index, r.record);
+    for (const p of publications) record.witness(4, p.backing, p.at, p.bytes);
     const snapshot = chosen.snapshots.find(bytes => same(codec.decodeSnapshot(bytes).backing, backing));
     const rest = checkpoints.filter(cp => cp !== chosen);
     return { selection: { domain, venue, backing, operator: chosen.commitment.operator, sequence: chosen.commitment.sequence,
@@ -360,5 +363,8 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
   });
   const receipts = await checkNormalScopeReceipts({ codec, verifier, test, operatorSecret, checkpoint, compose, segment, entry,
     x, y, a0, a1, y1, j0, j1, j2, history, payload, payloadY, toB });
-  return { payload, payloadY, result, receiver, receiverY, receipts };
+  const nonService = await checkNormalScopeCounts({ codec, verifier, prove, test, domain, note, operatorSecret,
+    successorSecret, checkpoint, compose, x, y, a0, a1, x0, y0, x1, y1, j0, j1, history, toB, toA,
+    fundedX, paidX, issuanceX, issuanceY, effect, receipts });
+  return { payload, payloadY, result, receiver, receiverY, receipts, nonService };
 }

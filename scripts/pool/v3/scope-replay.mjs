@@ -7,6 +7,7 @@ import { EvidenceRefusal, LIMITS } from "../delivery/evidence-reader.mjs";
 import { effectOf, applyRecovery } from "./recovery-state.mjs";
 import { scopeRecovery, venueOrder } from "./scope-recovery.mjs";
 import { receiptWalk } from "./receipt-state.mjs";
+import { countNonService } from "./non-service.mjs";
 
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const same = (a, b) => compareBytes(a, b) === 0;
@@ -81,7 +82,6 @@ export async function classifyScopes(context, directories, record, evidence, hel
   };
   const viewFor = async (backing, terms) => {
     const id = hex(backing);
-    if (terms.nonService !== undefined) throw new EvidenceRefusal("unsupported-scope");
     if (!views.has(id)) views.set(id, readRecordView({ ...selection, backing }, terms, directories, record, codec));
     return views.get(id);
   };
@@ -137,7 +137,6 @@ export async function classifyScopes(context, directories, record, evidence, hel
         if (signed === undefined || !same(codec.rootTermsName(signed.terms), scoped.backing) ||
             !codec.verifyRootTermsSignature(signed.terms, signed.signature)) throw new EvidenceRefusal("unresolved-evidence");
         const terms = codec.decodeRootTerms(signed.terms);
-        if (terms.nonService !== undefined) throw new EvidenceRefusal("unsupported-scope");
         scopedTerms.set(hex(scoped.backing), terms);
       }
       const base = { commitment: c, index: held.index, segment: snapshot.segment, header, snapshot };
@@ -299,6 +298,11 @@ export async function classifyScopes(context, directories, record, evidence, hel
   const clock = selectedClock === null ? null : Object.fromEntries(Object.entries(selectedClock).map(([key, value]) =>
     [key, typeof value === "bigint" ? value.toString() : value ?? null]));
   publications.sort((a, b) => venueOrder({ index: BigInt(a.index), ordinal: BigInt(a.ordinal) }, { index: BigInt(b.index), ordinal: BigInt(b.ordinal) }));
+  // The audit may select a checkpoint at t; C2b.5.2 instead reads the whole
+  // canonical scope strictly before t. Unadopted force never mutates it.
+  const nonService = context.terms.nonService === undefined ? undefined : await countNonService(context, view,
+    await latest(selection.backing, context.terms, { index: view.t, strict: true }),
+    await recovery.publications(selection.backing, context.terms), () => chargeEvents(1n));
   const results = await Promise.all(verified.values());
   const carrying = results.sort((a, b) => a.index < b.index ? -1 : a.index > b.index ? 1 :
     a.commitment.sequence < b.commitment.sequence ? -1 : a.commitment.sequence > b.commitment.sequence ? 1 : 0)
@@ -307,5 +311,6 @@ export async function classifyScopes(context, directories, record, evidence, hel
   return { state: selected.state, carrying, clock, ranges: { judgingIndex: view.t, lag: view.lag,
     checkpointIndex: selectedHeld.index, revokedAt: view.revokedAt, chain: view.chain,
     heldBefore: results.filter(item => before(item, selectedHeld)).length,
-    heldAfter: results.filter(item => before(selectedHeld, item)).length, publications } };
+    heldAfter: results.filter(item => before(selectedHeld, item)).length, publications,
+    ...(nonService === undefined ? {} : { nonService }) } };
 }

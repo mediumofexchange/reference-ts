@@ -98,7 +98,7 @@ shared demand ancestry and refuse incomparable lock/settlement/spend conflicts.
 Original-prefix clocks retire the whole scope when any scoped backing is silent;
 scopes with mixed silence durations are invalid. The conditional fixtures cover
 exact adoption, unequal obligations, seedless audit, restored issuer notes and
-later payment. Multi-backing non-service clauses remain unsupported.
+later payment. Non-service clauses remain independent per backing across scopes.
 Silence-bearing imports read an independently answered publication range.
 Demand, withdrawal and release force use the original snapshot and venue order;
 return adopts the exact complete block through its opening index. Standing
@@ -110,9 +110,11 @@ canonical lower same-operator sequence under
 preserving the inherited adoption index and exact block still owed.
 Import lapse still requires full
 trail evidence. Configuration adoption, a selected venue profile and runtime
-imports remain open. Signed non-service terms now drive a single-backing
-real-proof count against the strictly preceding canonical state, preserving
-first request indices, distinct tags and spent/lock status across handover.
+imports remain open. Signed non-service terms drive single and multi-backing
+real-proof counts against each selected backing's strictly preceding canonical
+state, preserving first request indices, distinct tags and spent/lock status
+across scope changes and handover. Unadopted publications and checkpoints at
+judgment do not change that state; a missing clause produces no count.
 Receipt reads reuse the verified checkpoint walks across single and multiple
 backings: exact original/adopted event inclusion, liability precedence, repair
 and the complete original scope's earliest silence/term boundary. Transitions

@@ -335,8 +335,8 @@ same-index fresh openings. Shared demand ancestry is applied once; incomparable
 lock, settlement, withdrawal or spend conflicts refuse regardless of parent
 order. A two-backing fixture restores both settlement notes and continues with
 a payment; unequal obligations prove that neither a scalar minimum nor maximum
-can substitute for the per-backing indices. Required multi-backing ancestry
-with non-service clauses remains explicitly unsupported.
+can substitute for the per-backing indices. Non-service clauses remain
+independent per backing throughout this shared ancestry.
 
 With a silence clause, the same walk reads one backing clock across every
 term, freezes its reset index across checkpoints at the same witnessed index,
@@ -395,7 +395,12 @@ Signed non-service terms enable C2b.5.2 in `audit.range.nonService`, with
 duration, threshold, window, count, firing status, incumbent and snapshot
 index. It uses the last valid carrying checkpoint strictly before judgment,
 passing excluded and lapsed checkpoints and retaining imported roots, spent
-tags and locks. Request publications are read from index zero, strictly before
+tags and locks across complete-scope split/rejoin and recovery. The count names
+only the independently selected backing and uses its own duration, threshold
+and window; sibling clauses need not agree. Unadopted recovery publications
+and checkpoints at the judging index cannot clear its requests. With no
+selected clause there is no count or additional request-range dependency.
+Request publications are read from index zero, strictly before
 judgment: the first statement identity fixes its window even if that copy's
 proof fails; any later valid proof variant in the prefix can establish it.
 Both window endpoints are inclusive. Refresh creates another identity, but
@@ -417,7 +422,7 @@ that a production reader must establish before returning spendable holdings.
 | Construction and key routing | Exact configuration preimage and candidate domain; all six independently pinned source/toolchain/bytecode/key identities and fixed helper/bounds/profile | Approved configuration/artifact identities after full adoption prerequisites; setup provenance and deployment qualification |
 | Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and per-backing issuance keys; header-derived scope root; fixture replacement/reappointment links and revocation checked across each complete scope | A venue profile and authenticated evidence behind the fixture answers |
 | Local state | Issue/spend/burn across deduplicated shared ancestry and every scoped snapshot, with per-backing totals, shared spent state and original-tree paths; single-backing demand/withdraw/settle and locks | Multi-backing recovery and runtime integration |
-| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; whole-scope classification, last-valid continuity and split/rejoin imports; multi-backing publication force and exact ordered adoption; complete-scope receipts and single-backing non-service counts | A selected venue profile and authenticated chain evidence; multi-backing non-service reads |
+| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; whole-scope classification, last-valid continuity and split/rejoin imports; multi-backing publication force and exact ordered adoption; complete-scope receipts and independent backing non-service counts | A selected venue profile and authenticated chain evidence; runtime integration |
 | Wallet restoration | Seed-only capsule and lit-settlement openings with local or imported-tree paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
 
 The candidate manifest, checkpoint selection and the fixture venue evidence

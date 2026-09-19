@@ -102,5 +102,5 @@ export function scopeRecovery({ context, viewFor, latest, check, charge, ReplayR
     }
     return { duration, snapshotIndex: last, gap: through - last, open: through - last > duration, boundary, opening };
   };
-  return { forces, clock };
+  return { forces, clock, publications };
 }

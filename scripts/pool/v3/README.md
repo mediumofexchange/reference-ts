@@ -51,8 +51,7 @@ Their inherited adoption indices preserve publications still owed, while gap
 and publication-force reads stay strictly before the index.
 The scope classifier also handles two-backing split/rejoin histories, shared
 ancestry, per-backing adoption obligations and their exact publication union.
-Multi-backing non-service clauses and configuration adoption remain
-unsupported. Full trails are still
+Configuration adoption remains unsupported. Full trails are still
 required for import lapse. The local-only restoration scanner continues to
 refuse imports.
 
@@ -75,7 +74,11 @@ including imported roots, spent tags and standing locks. It groups request
 publications by statement identity at their first index, verifies any proof
 variant available strictly before judgment, and counts distinct unserved
 tags in the signed window. Handover preserves requests and changes the
-incumbent. A non-service clause needs no silence clause; without the former
+incumbent. Across scope changes the selected backing retains its own clause;
+sibling durations, thresholds and windows need not agree. Shared canonical
+roots, spent tags and locks feed the same counter. Checkpoints at the judging
+index and unadopted recovery publications cannot change its strictly earlier
+state. A non-service clause needs no silence clause; without the former
 there is no count. Missing range or ancestry evidence returns no audit.
 The count shares the import work budget and fixture authority boundary.
 
