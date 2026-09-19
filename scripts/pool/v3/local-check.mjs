@@ -910,14 +910,19 @@ try {
     venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove, test,
     operatorSecret, issuerSecret, receiverSeed, payerSeed });
   assert.deepEqual(await replayEvidencePackage(portable(imported.payload), verifier, codec), imported.result);
+  const silent = await checkImports({ codec, verifier, configurationBytes, domain,
+    venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove,
+    test: (name, fn) => test(`Silence: ${name}`, fn),
+    operatorSecret, issuerSecret, receiverSeed, payerSeed, silence: true });
+  assert.deepEqual(await replayEvidencePackage(portable(silent.payload), verifier, codec), silent.result);
   let ergo;
   if (withErgo) {
-    ergo = await checkErgoReplay({ imported, fixture: ergoFixture, adapter: ergoAdapter, codec, verifier, portable, test });
+    ergo = await checkErgoReplay({ imported: silent, fixture: ergoFixture, adapter: ergoAdapter, codec, verifier, portable, test });
     // Headers are a separate reader trust input, beside the independently held
     // key files; a replica's raw block envelope cannot substitute this source.
     writeFileSync(join(build, "ergo-headers.v8"), serialize(ergo.headers));
     ergo.receiver = await replayEvidencePackage(portable({ ...ergo.payload, seed: receiverSeed }), ergo.verifier, codec);
-    assert.deepEqual(ergo.receiver.candidates, imported.receiver.candidates);
+    assert.deepEqual(ergo.receiver.candidates, silent.receiver.candidates);
     assert.deepEqual(ergo.receiver.audit, ergo.result.audit);
   }
   await api.destroy(); api = undefined;
@@ -935,6 +940,12 @@ try {
     assert.deepEqual(worker(extended), dependency);
     assert.deepEqual(worker(imported.payload), imported.result);
     assert.deepEqual(worker({ ...imported.payload, seed: receiverSeed }), imported.receiver);
+    assert.deepEqual(worker(silent.payload), silent.result);
+    assert.deepEqual(worker({ ...silent.payload, seed: receiverSeed }), silent.receiver);
+    for (const seed of [undefined, receiverSeed]) {
+      const answer = worker({ ...silent.refusedPayload, ...(seed === undefined ? {} : { seed }) });
+      assert.equal(answer.status, "lapsed-selection"); assert.equal(answer.audit, null); assert.deepEqual(answer.candidates, []);
+    }
   });
   if (withErgo) await test("fresh seedless and receiver processes independently replay Ergo blocks and refuse missing or tampered sections", () => {
     assert.deepEqual(worker(ergo.payload, "--ergo"), ergo.result);
@@ -960,7 +971,7 @@ try {
     }
   });
   await test("successful replay retains unresolved production authority; ranges are the fixture verifier's only", () => {
-    for (const result of [receiver, audit, dependency, imported.result, imported.receiver]) {
+    for (const result of [receiver, audit, dependency, imported.result, imported.receiver, silent.result, silent.receiver]) {
       assert.equal(result.candidateConfigurationChecked, true); assert.equal(result.signedTermsAuthenticated, true);
       assert.equal(result.currentRangeAuthenticated, true); assert.equal(result.termsAuthorityAuthenticated, true);
       assert.equal(result.rangeEvidence, "fixture-verifier");
@@ -980,7 +991,7 @@ try {
     "experiments/ergo-range/replay-venue.mjs", "experiments/ergo-range/replay-fixture.mjs",
     "experiments/ergo-range/replay-venue-check.mjs", "experiments/ergo-range/package-lock.json");
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-7", specification: "3ed1800", node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-8", specification: "3ed1800", node: process.version,
     packageBytes: portable(complete).package.length, dependencyPackageBytes: portable(extended).package.length,
     fixtureVenueRecords: complete.venue.records.length,
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
@@ -988,10 +999,11 @@ try {
     sourceSha256Lf: Object.fromEntries(sources.map(path => [path, sha(readFileSync(join(root, path), "utf8").replaceAll("\r\n", "\n"))])),
     audit, receiver, dependency, imports: { packageBytes: portable(imported.payload).package.length,
       audit: imported.result, receiver: imported.receiver },
+    silenceImports: { packageBytes: portable(silent.payload).package.length, audit: silent.result, receiver: silent.receiver },
     ...(withErgo ? { ergo: { evidence: "synthetic-headers-and-exact-transaction-bytes", rawBytes: ergo.rawBytes,
       blocks: ergo.payload.venue.blocks.length, audit: ergo.result, receiver: ergo.receiver } } : {}),
     limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
-      "Issue/spend/burn only. Original-segment selections read the no-commitment clock and last-valid-prefix continuity. Selections with imports and no silence clause validate a single-backing finalized closure through replacement, reappointment and restart. Multi-backing scopes, silence-bearing imports and recovery publications remain unsupported; import term-lapse currently needs full trail evidence.",
+      "Issue/spend/burn only. Single-backing imports validate finalized closure through replacement, reappointment and restart, including silence clauses with independently answered empty publication ranges. Same-index fresh silence openings, any attributed publication, multi-backing scopes and recovery adoption remain unsupported. Import lapse currently requires full trail evidence.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };
   if (withErgo) report.limits.push("The candidate Ergo adapter checks exact transaction decoding and roots against independently selected synthetic headers. No proof of work, chain selection, decoder node equivalence/containment, node acceptance or venue-profile adoption is established.");
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");

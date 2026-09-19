@@ -32,15 +32,19 @@ establish complete dependencies, authenticated ranges or spendability.
 With a fixture venue, every carrying checkpoint of the original segment is
 classified from its own trail, and under a declared silence clause the
 no-commitment clock, the silence boundary and lapse by silence are read
-from that walk (C2b.6.1, C2b.4.1). For a selection with imports and no silence
-clause, a single-backing walk classifies all operator terms and requires each
+from that walk (C2b.6.1, C2b.4.1). For a selection with imports,
+a single-backing walk classifies all operator terms and requires each
 segment's exact finalized predecessor. It imports the validated spent set,
 output commitments, accepted roots and totals, then starts an empty local
 output tree. Reappointment and same-operator restart use the same rule.
 Imported wallet paths retain their source trees. Whole-read budgets cap this
 path at 128 held checkpoints and 8192 replayed events, including failed
-replays. Silence-bearing imports, multi-backing scopes and adoption remain
-unsupported. The local-only restoration scanner continues to refuse imports.
+replays. Silence-bearing imports require an independently answered empty
+publication range and preserve retirement after another segment resets the
+clock. Same-index fresh silence openings, any attributed publication,
+multi-backing scopes and adoption remain unsupported. Full trails are still
+required for import lapse. The local-only restoration scanner continues to
+refuse imports.
 
 For the same import/payment/burn trace through exact synthetic Ergo transaction
 bytes, install the pinned optional experiment dependencies with

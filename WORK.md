@@ -4,49 +4,49 @@ Updated: 2026-09-19
 
 ## Goal
 
-Candidate Ergo profile adapter completed in implementation commit 6ce9dc4,
-from `feat/v3-ergo-replay-adapter` for delivery on `main`. Companion specification
-stays `main` at 3ed1800 (no normative change).
+Single-backing silence-bearing imports completed on `feat/v3-silence-imports`
+from main 8ef0ef9 for delivery on `main`. Companion specification stays
+`main` at 3ed1800 (no normative change).
 
-Acceptance: the existing replacement/import/payment/burn trace replays from
-exact synthetic Ergo transaction bytes through the profile's checked block
-roots and bounded range answers, including portable-package seedless audit
-and receiver restoration in fresh processes. Missing, tampered, undecodable,
-wrong-venue and over-budget evidence returns no partial state. Headers remain
-an explicitly trusted synthetic fixture; no live chain or adoption claim.
+Acceptance: real-proof replacement/import/payment/burn under a declared silence
+clause, exact predecessor selection, strict-before clock and permanent segment
+retirement; fresh seedless audit and receiver restoration from portable evidence.
+Stale, withheld and retired closure refuses without partial state. Independently
+answered empty publication ranges establish the supported empty adoption block;
+any publication remains unsupported. No live chain or adoption claim.
 
 ## Status
 
-- Design review: reuse the existing sigma-rust round-trip decoder and bind
-  the profile and limits independently of package contents. No new parser,
-  venue format, construction decision or protocol rule is needed.
-- Implemented: each intrinsic byte view is charged before its immediate copy;
-  all evidence is owned before decoding and proof awaits. Results explicitly
-  name the candidate Ergo profile with trusted synthetic headers.
-- Independent adversarial review reproduced disguised length/shared-storage
-  and later-getter resize bypasses. Intrinsic checks and immediate copies fix
-  them; regression execution and independent readback closed all findings.
+- Implemented: one strict-before backing clock across replacement terms;
+  each segment retains its first gap after opening even after another resets
+  the clock. Excluded openings close nothing. Retired continuations lapse
+  before state replay; finalized imported spent state and wallet paths persist.
+- Design review identified the strict snapshot versus generic same-index import
+  distinction. New silence openings at a same-index canonical predecessor
+  refuse as unsupported before choosing between those rules.
+- Fresh independent patch review found no material findings. The actual clock
+  block matched an independent oracle in 98,415 exhaustive scenarios with
+  2,340,090 boundary comparisons. Final real-proof execution passed.
 - No runtime, circuit, key, dependency, device-control or specification change.
-  Silence-bearing imports, multi-backing closure and adoption remain unsupported.
-  Import term-lapse currently requires full trail evidence; header-only lapse
-  is a recorded availability improvement.
+  Any attributed publication, same-index fresh silence opening, multi-backing
+  closure and adoption remain unsupported. Import lapse requires full trail
+  evidence; header-only lapse is an availability improvement.
 
 ## Evidence
 
-- Base main 5e51cbb: CI 35438845448 passed all seven jobs (confirmed remotely).
-- Final `npm run check:pool:ergo-replay`: 48 groups / 14 real proofs passed,
-  including fresh seedless/receiver processes, decodable root mismatch,
-  missing/undecodable sections, profile/header substitution and raw budgets.
-  The imported payment/burn trace uses 21 blocks / 3,764 raw transaction bytes.
-  [Retained report](docs/pool-v3-local-replay-verification.json).
-  Replay and profile report source hashes match the final files.
-- `npm run check:ergo:range`: 342 block, 14,874 decoder and 247 profile checks
-  pass. `npm run check` passes all 1,934 tests plus package, service, wallet,
-  crash-recovery and spent-set acceptance; docs/typecheck pass. Vitest required
-  approved escalation after its sandbox loader was denied workspace access.
-- CI now includes the adapter in both v3 proof jobs. Read the final main
-  revision's hosted run before resuming; the baseline run above is separate.
-- No normative change; [decision](decisions/2026-09.md#2026-09-19--bound-raw-ergo-evidence-before-local-proof-replay).
+- Main 8ef0ef9 CI 35450519224 passed (confirmed remotely this session).
+  Reuses unchanged runtime/circuit/dependency baseline: all 1,934 tests,
+  package/service/wallet/crash/spent acceptance and seven hosted jobs.
+- Final `npm run check:pool:ergo-replay`: 63 groups / 19 real proofs pass,
+  including the ended-term case, fresh seedless/receiver processes and refusal
+  of retired closure. The silent portable package is 68,301 bytes; candidate
+  Ergo replay uses 21 blocks / 3,684 raw bytes under trusted synthetic headers.
+  [Retained report](docs/pool-v3-local-replay-verification.json); source hashes
+  match the final files. Syntax and docs/link checks pass.
+- The final main revision's hosted CI must be checked separately; the baseline
+  above is not evidence for the changed experiment. No branch protections or
+  required repository rulesets were present when inspected; none was altered.
+- [Decision](decisions/2026-09.md#2026-09-19--read-silence-across-single-backing-imports-with-empty-publication-evidence).
 
 ## Existing local product and custody boundary
 
@@ -68,10 +68,9 @@ an explicitly trusted synthetic fixture; no live chain or adoption claim.
 
 ## Next
 
-1. Next product slice: single-backing silence-bearing imports. State the clock,
-   retirement and exact predecessor rules from existing specification, review
-   independently, then demonstrate fresh public audit/receiver restoration and
-   refusal of stale or withheld closure. Multi-backing remains separate.
+1. Read the final main revision's hosted CI. Next product slice: force classification and ordered
+   adoption of single-backing recovery publications, with fresh public audit
+   and receiver restoration. Multi-backing remains separate.
 2. P2 (publication on a node) confirms the measured 24-piece transaction;
    P4 measures exhaustion from index zero on a real chain; decoder node
    equivalence is a selection prerequisite. A decoder-refused transaction
@@ -86,6 +85,5 @@ an explicitly trusted synthetic fixture; no live chain or adoption claim.
   plausible range **40-60%**. Single-backing imports advance the experiment;
   selected venue/decoder, complete recovery, qualified custody and user
   operation remain the largest blocks. No percentage change is warranted.
-- Switch to a fresh instance after delivery for silence-bearing imports: the
-  next slice needs a focused review of clock/retirement semantics, while this
-  adapter's evidence and remaining boundaries are captured here.
+- Switch to a fresh instance for recovery publication adoption, which needs focused review of
+  force and adoption dependencies under the six existing proof relations.

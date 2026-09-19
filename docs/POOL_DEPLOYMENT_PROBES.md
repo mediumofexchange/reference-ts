@@ -296,7 +296,7 @@ now refuse. Changed sources, all six bytecodes and retained keys, including
 unused recovery keys, fail independent pins. Changed terms signatures, names,
 domains, venues and original-operator/genesis-link assumptions refuse as well.
 
-For a selection with a nonempty opening and no silence clause, the same
+For a selection with a nonempty opening, the same
 proof/state replay also serves a bounded single-backing import walk
 (C2.10.3–7). It classifies each operator term in record order, matching the
 header's link rather than just the key. Every new segment must name the
@@ -306,12 +306,31 @@ all output commitments and accepted roots. Local trees and chains start
 fresh; later checkpoints replay from the same fixed imported base. Candidate
 paths for imported outputs use their original trees and are labeled
 `replayed-imported-tree-only`. The walk supports reappointment and
-same-operator restart, including lower-sequence imports at the same index.
+same-operator restart, including lower-sequence imports at the same index
+where no silence clause is declared.
 It caps total work at 128 held checkpoints and 8192 replayed local events,
 counting repeated checkpoint prefixes and failed replays. This linear
 single-backing path does not establish multi-backing closure merging, silence
 recovery or adoption. The original-segment clock path retains the limits
 above, and the separate local-only restoration scanner still refuses imports.
+
+With a silence clause, the same walk reads one backing clock across every
+term, freezes its reset index across checkpoints at the same witnessed index,
+and records each segment's first gap strictly after its opening before any
+later opening resets the clock. A retired segment's continuation lapses even
+after that reset. A fresh opening can return during a gap; its same-index
+continuation cannot close the gap for itself. Exact finalized imports retain
+payments, burns, spentness and original-tree restoration paths.
+
+This path requires the independently selected verifier to answer kind 4 for
+the backing over `[0, judgingIndex]` with no attributed entries, establishing
+an empty adopted block (C2b.4.2). Any entry, even malformed or after the opening,
+is conservatively unsupported; a missing answer remains unresolved. New
+silence-bearing openings with a same-index canonical predecessor are also
+unsupported before choosing between C2.10.4's generic predecessor and
+C2b.4.1's strictly-before snapshot. Full trails are still required to classify
+import lapse; header-only lapse is an availability improvement. These limits
+add no consensus rule, wire format or recovery-adoption claim.
 
 The complete public-package boundary still requires the following inputs and
 checks. This table separates what this experiment establishes from prerequisites

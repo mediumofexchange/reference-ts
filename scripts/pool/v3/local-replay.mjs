@@ -87,7 +87,7 @@ async function readRecordView(selection, terms, directories, record, codec) {
     if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
     return directory.find(entry => same(entry.name, selection.backing));
   };
-  return { t, lag, chain, revokedAt, heldBy, termEnd, carries };
+  return { t, lag, chain, revokedAt, heldBy, termEnd, carries, ask };
 }
 
 /** Original-segment selection: its opening checkpoint anchors the silence
@@ -291,26 +291,49 @@ async function classifyCarrying(context, ranges, evidence) {
   return { carrying, state, clock };
 }
 
-/** C2.10.3–7 for a single backing without a silence clause. Its canonical
+/** C2.10.3–7 for a single backing. Its canonical
  * ancestry is linear: each new segment imports the last valid checkpoint's
  * closure once. Every checkpoint is classified at its own prefix, and every
  * continuation replays from its segment's fixed opening base. No union of
  * raw trails, recursion, or replica-provided finality is involved. */
 async function classifyImports(context, directories, record, evidence) {
   const { selection, terms, codec } = context;
-  if (terms.silence !== undefined) throw new EvidenceRefusal("unsupported-scope");
   const view = await readRecordView(selection, terms, directories, record, codec);
   const { chain, heldBy, termEnd, carries, revokedAt, t, lag } = view;
+  const duration = terms.silence?.noCommitmentDuration;
+  // C2b.4.2: this experiment supports only a proven empty adopted block.
+  // Even an invalid or later publication is conservatively unsupported;
+  // classification/adoption of publications belongs to a later slice.
+  if (duration !== undefined && (await view.ask(4, selection.backing)).entries.length !== 0) {
+    throw new EvidenceRefusal("unsupported-scope");
+  }
   const selectedHeld = (await heldBy(selection.operator)).find(h => h.commitment.sequence === selection.sequence && same(h.commitment.root, selection.root));
   if (selectedHeld === undefined) throw new EvidenceRefusal("selection-mismatch");
   if (!same(codec.linkInForce(chain, selectedHeld.index).operator, selection.operator)) throw new EvidenceRefusal("lapsed-selection");
-  const trails = decodedTrails(evidence.trails, codec), segments = new Map(), carrying = [];
+  const trails = decodedTrails(evidence.trails, codec), segments = new Map(), clocks = new Map(), carrying = [];
   const matches = (a, b) => a !== undefined && b !== undefined && a.sequence === b.sequence && same(a.operator, b.operator) && same(a.root, b.root);
-  let canonical, selectedState, checkpoints = 0n, events = 0n, heldBefore = 0, heldAfter = 0;
+  let canonical, selectedState, selectedClock, checkpoints = 0n, events = 0n, heldBefore = 0, heldAfter = 0;
+  let latestValid = 0n, closing = 0n, currentIndex = -1n;
+  const advanceClock = at => {
+    if (at !== currentIndex) { closing = latestValid; currentIndex = at; }
+    if (duration === undefined || at - closing <= duration) return;
+    // Record intervening gaps BEFORE any segment resets the backing's clock.
+    // Every old boundary survives a later return, including excluded openings.
+    for (const clock of clocks.values()) {
+      if (clock.boundary === undefined && at > clock.opening) {
+        const gap = closing + duration + 1n;
+        clock.boundary = gap > clock.opening ? gap : clock.opening + 1n;
+      }
+    }
+  };
+  const clockRecord = (at, clock) => ({ duration: duration.toString(), snapshotIndex: closing.toString(),
+    gap: (at - closing).toString(), open: at - closing > duration,
+    boundary: clock.boundary === undefined ? null : clock.boundary.toString(), opening: clock.opening.toString() });
   for (let termIndex = 0; termIndex < chain.length; termIndex++) {
     const term = chain[termIndex];
     for (const held of await heldBy(term.operator)) {
       if (held.index < term.from || held.index > termEnd(termIndex)) continue;
+      advanceClock(held.index);
       if (++checkpoints > IMPORT_LIMITS.maxCheckpoints) throw new EvidenceRefusal("resource-refusal");
       const c = held.commitment, selected = matches(c, selection);
       if (!selected) { if (selectedState === undefined) heldBefore++; else heldAfter++; }
@@ -341,6 +364,20 @@ async function classifyImports(context, directories, record, evidence) {
         }
         requireReplay(same(ownTerm.link, term.link), "TERMS_SCOPE");
         const id = hex(snapshot.segment);
+        let clock = clocks.get(id);
+        if (clock === undefined) {
+          const openingHeld = (await heldBy(header.operator)).some(h => h.commitment.sequence === header.sequence);
+          if (!openingHeld) throw new EvidenceRefusal("unresolved-evidence");
+          requireReplay(c.sequence === header.sequence, "OPENING");
+          clock = { opening: held.index, boundary: undefined };
+          clocks.set(id, clock);
+        }
+        if (duration !== undefined && c.sequence !== header.sequence &&
+            (held.index - closing > duration || (clock.boundary !== undefined && clock.boundary < held.index))) {
+          carrying.push({ ...item, class: "lapsed" });
+          if (selected) throw Object.assign(new EvidenceRefusal("lapsed-selection"), { clock: clockRecord(held.index, clock) });
+          continue;
+        }
         let segment = segments.get(id);
         if (segment === undefined) {
           // Missing opening evidence is not an exclusion certificate. In
@@ -350,6 +387,11 @@ async function classifyImports(context, directories, record, evidence) {
           // The first checkpoint carries the opening. A later first sighting
           // cannot substitute for an omitted or differently scoped opening.
           requireReplay(c.sequence === header.sequence, "OPENING");
+          // C2b.4.1's return imports the strictly-before snapshot. Generic
+          // same-index elective openings have broader C2.10.4 ranks; this
+          // bounded silence path does not decide that distinction, including
+          // whether a claimed earlier import is a conflict.
+          if (duration !== undefined && canonical?.index === held.index) throw new EvidenceRefusal("unsupported-scope");
           requireReplay(canonical === undefined ? scoped.opening === undefined : matches(scoped.opening, canonical.commitment), "IMPORT");
           if (canonical !== undefined) {
             requireReplay(canonical.index < held.index || (same(canonical.commitment.operator, c.operator) && canonical.commitment.sequence < c.sequence), "IMPORT_RANK");
@@ -367,9 +409,10 @@ async function classifyImports(context, directories, record, evidence) {
           { index: held.index, revokedAt, lastValid: segment.lastValid, imported: segment.imported });
         segment.lastValid = { position: state.position, historyHash: snapshot.historyHash, evidenceHash: snapshot.evidenceHash };
         canonical = { commitment: c, index: held.index, segment: snapshot.segment, state };
+        latestValid = held.index;
         carrying.push({ ...item, class: "valid" });
         if (selectedState !== undefined) throw new EvidenceRefusal("superseded-selection");
-        if (selected) selectedState = state;
+        if (selected) { selectedState = state; selectedClock = clock; }
       } catch (error) {
         if (!(error instanceof ReplayRefusal) || selected) throw error;
         carrying.push({ ...item, class: "excluded", check: error.check });
@@ -377,7 +420,9 @@ async function classifyImports(context, directories, record, evidence) {
     }
   }
   if (selectedState === undefined) throw new EvidenceRefusal("unresolved-evidence");
-  return { state: selectedState, carrying, clock: null,
+  advanceClock(t);
+  const clock = duration === undefined ? null : clockRecord(t, selectedClock);
+  return { state: selectedState, carrying, clock,
     ranges: { judgingIndex: t, lag, checkpointIndex: selectedHeld.index, revokedAt, heldBefore, heldAfter, chain } };
 }
 

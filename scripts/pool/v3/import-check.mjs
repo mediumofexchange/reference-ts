@@ -18,11 +18,12 @@ const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest()
 const same = (a, b) => Buffer.compare(a, b) === 0;
 
 export async function checkImports({ codec, verifier, configurationBytes, domain, venue, prove, test,
-  operatorSecret, issuerSecret, receiverSeed, payerSeed }) {
+  operatorSecret, issuerSecret, receiverSeed, payerSeed, silence = false }) {
   const ruleSecret = b(111), successorSecret = b(112), operator = ed25519.getPublicKey(operatorSecret);
   const issuer = ed25519.getPublicKey(issuerSecret);
   const terms = codec.encodeRootTerms({ obligor: issuer, operator, configuration: domain, venue, interval: 10n,
-    payout: { thing: "import fixture units", quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(ruleSecret) });
+    payout: { thing: "import fixture units", quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(ruleSecret),
+    ...(silence ? { silence: { noCommitmentDuration: 4n, challengeWindow: 5n } } : {}) });
   const backing = codec.rootTermsName(terms);
   const signedTerms = { terms, signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), issuerSecret) };
   function replacement(secret, predecessor, effective, at) {
@@ -124,7 +125,7 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
   const imports = [...paymentEffect.nullifiers, ...paymentEffect2.nullifiers], history = [a0, a1, b0, b1, b2];
   const cs = segment(operatorSecret, toA.link, 3n, reference(b2)), c0 = checkpoint(cs, 3n, 14n, [], [], { burned: 1n });
   const c1 = checkpoint(cs, 4n, 15n, [], [], { burned: 1n });
-  const ds = segment(operatorSecret, toA.link, 5n, reference(c1)), d0 = checkpoint(ds, 5n, 15n, [], [], { burned: 1n });
+  const ds = segment(operatorSecret, toA.link, 5n, reference(c1)), d0 = checkpoint(ds, 5n, silence ? 16n : 15n, [], [], { burned: 1n });
   const payload = compose([...history, c0, c1, d0]);
   let result, receiver;
   await test("successor imports the finalized source prefix into an empty local tree and restores its original path", async () => {
@@ -144,7 +145,7 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
     assert.deepEqual(continuation.candidates.map(x => [x.cm, x.value]), [[paid.cm.toString(), "7"], [paid2.cm.toString(), "2"]]);
     assert.equal(continuation.candidates.every(x => x.pathScope === "replayed-local-tree-only"), true);
   });
-  await test("A to B to A and same-index lower-sequence imports keep one transitive closure and original-tree wallet paths", async () => {
+  await test("A to B to A and restarted imports keep one transitive closure and original-tree wallet paths", async () => {
     result = await replayLocalPackage(payload, verifier, codec);
     receiver = await replayLocalPackage({ ...payload, seed: receiverSeed }, verifier, codec);
     assert.equal(result.status, "selected-local-replay"); assert.deepEqual(result.audit, receiver.audit);
@@ -218,5 +219,92 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
     const answer = await replayLocalPackage(oversized, verifier, codec);
     assert.equal(answer.status, "resource-refusal"); assert.equal(answer.audit, null); assert.deepEqual(answer.candidates, []);
   });
-  return { payload, result, receiver };
+  let refusedPayload;
+  if (silence) {
+    const classes = answer => answer.audit.range.carrying.map(c => c.class);
+    const accepted = async p => {
+      const answer = await replayLocalPackage(p, verifier, codec);
+      assert.equal(answer.status, "selected-local-replay"); return answer;
+    };
+    const refuse = async (p, status, custom = verifier) => {
+      const answer = await replayLocalPackage({ ...p, seed: receiverSeed }, custom, codec);
+      assert.equal(answer.status, status); assert.equal(answer.audit, null);
+      assert.deepEqual(answer.candidates, []); assert.equal(answer.spendable, false); return answer;
+    };
+    await test("duration equality across replacement and reappointment stays closed; the judging-index reset is strict", async () => {
+      assert.deepEqual(result.audit.range.clock, { duration: "4", snapshotIndex: "16", gap: "4", open: false, boundary: null, opening: "16" });
+      const atOpening = structuredClone(payload);
+      atOpening.selection.judgingIndex = 16n; atOpening.selection.mode = "historical-fixture";
+      const answer = await replayLocalPackage(atOpening, verifier, codec);
+      assert.equal(answer.status, "historical-local-replay");
+      assert.deepEqual(answer.audit.range.clock, { duration: "4", snapshotIndex: "15", gap: "1", open: false, boundary: null, opening: "16" });
+    });
+    await test("return opens in a gap but its same-index continuation lapses; next-index continuation restores imported payments", async () => {
+      const returned = { ...c0, at: 16n }, sameIndex = { ...c1, at: 16n }, nextIndex = { ...c1, at: 17n };
+      const atGap = await accepted(compose([...history, returned, sameIndex], returned));
+      assert.deepEqual(classes(atGap).slice(-2), ["valid", "lapsed"]);
+      assert.deepEqual(atGap.audit.range.clock, { duration: "4", snapshotIndex: "16", gap: "4", open: false, boundary: null, opening: "16" });
+      const lapsed = await refuse(compose([...history, returned, sameIndex]), "lapsed-selection");
+      assert.deepEqual(lapsed.clock, { duration: "4", snapshotIndex: "10", gap: "6", open: true, boundary: null, opening: "16" });
+      const resumed = await accepted({ ...compose([...history, returned, nextIndex]), seed: receiverSeed });
+      assert.deepEqual(resumed.candidates, receiver.candidates);
+      assert.equal(resumed.audit.outstanding, "9"); assert.deepEqual(classes(resumed).slice(-2), ["valid", "valid"]);
+      const stale = checkpoint(segment(operatorSecret, toA.link, 3n, reference(b1)), 3n, 16n);
+      await reject(compose([...history, stale]), "IMPORT");
+    });
+    await test("a later fresh segment reset cannot revive a segment retired exactly at the return index", async () => {
+      const returned = checkpoint(segment(operatorSecret, toA.link, 4n, reference(c0)), 4n, 19n, [], [], { burned: 1n });
+      const retired = checkpoint(cs, 5n, 20n, [], [], { burned: 1n });
+      const kept = await accepted(compose([...history, c0, returned, retired], returned));
+      assert.deepEqual(classes(kept).slice(-2), ["valid", "lapsed"]);
+      assert.equal(kept.audit.range.clock.open, false);
+      refusedPayload = compose([...history, c0, returned, retired]);
+      const answer = await refuse(refusedPayload, "lapsed-selection");
+      assert.deepEqual(answer.clock, { duration: "4", snapshotIndex: "19", gap: "1", open: false, boundary: "19", opening: "14" });
+      // At the boundary itself the still-open gap also lapses the old segment.
+      await refuse(compose([...history, c0, { ...retired, at: 19n }]), "lapsed-selection");
+    });
+    await test("an excluded opening never resets the clock and retains its retirement boundary", async () => {
+      const badContext = segment(operatorSecret, toA.link, 4n, reference(c0));
+      const bad = checkpoint(badContext, 4n, 15n, [], [], { issued: 11n, burned: 1n });
+      const later = checkpoint(badContext, 5n, 20n, [], [], { burned: 1n });
+      const returned = checkpoint(segment(operatorSecret, toA.link, 6n, reference(c0)), 6n, 20n, [], [], { burned: 1n });
+      const answer = await accepted(compose([...history, c0, bad, later, returned]));
+      assert.deepEqual(classes(answer).slice(-3), ["excluded", "lapsed", "valid"]);
+      assert.equal(answer.audit.range.carrying.at(-3).check, "SNAPSHOT");
+      assert.equal(answer.audit.range.clock.snapshotIndex, "14");
+    });
+    await test("same-index fresh silence openings refuse before choosing between generic predecessor and strict snapshot", async () => {
+      const returned = { ...c0, at: 16n };
+      for (const source of [returned, b2]) {
+        const again = checkpoint(segment(operatorSecret, toA.link, 4n, reference(source)), 4n, 16n, [], [], { burned: 1n });
+        await refuse(compose([...history, returned, again]), "unsupported-scope");
+      }
+    });
+    await test("reappointment cannot reset the backing clock with a checkpoint from the same key's ended term", async () => {
+      const late = checkpoint(a, 3n, 14n, [issuance], [issueEffect]);
+      const returned = checkpoint(segment(operatorSecret, toA.link, 4n, reference(b2)), 4n, 16n, [], [], { burned: 1n });
+      const p = compose([...history, late, returned]);
+      p.selection.judgingIndex = 16n; p.selection.mode = "historical-fixture";
+      const answer = await replayLocalPackage(p, verifier, codec);
+      assert.equal(answer.status, "historical-local-replay");
+      assert.deepEqual(classes(answer).slice(-2), ["lapsed", "valid"]);
+      assert.deepEqual(answer.audit.range.clock, { duration: "4", snapshotIndex: "10", gap: "6", open: true, boundary: null, opening: "16" });
+    });
+    await test("publication closure must be answered independently and empty, including at opening and judging indices", async () => {
+      const unavailable = { ...verifier, record(data) {
+        const record = verifier.record(data);
+        return { ...record, range: request => request.kind === 4 ? undefined : record.range(request) };
+      } };
+      await refuse(payload, "unresolved-evidence", unavailable);
+      for (const at of [0n, 14n, 16n, 20n]) {
+        const published = structuredClone(payload);
+        published.venue.records.push({ kind: 4, subject: backing, index: at, record: new Uint8Array(92) });
+        await refuse(published, "unsupported-scope");
+      }
+      const withheld = structuredClone(payload); withheld.package.trails = [];
+      await refuse(withheld, "unresolved-evidence");
+    });
+  }
+  return { payload, result, receiver, ...(refusedPayload === undefined ? {} : { refusedPayload }) };
 }

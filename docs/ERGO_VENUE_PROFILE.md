@@ -173,7 +173,8 @@ the profile, evidence and request, and every refusal without an Ergo library.
 ## Local replay adapter
 
 `npm run check:pool:ergo-replay` connects this candidate to the real-proof
-single-backing import, payment and burn trace. The optional dependencies and
+single-backing silence-bearing import, payment and burn trace, including the
+empty publication-range check. The optional dependencies and
 commands are in the [harness guide](../scripts/pool/v3/README.md). The
 [retained replay report](pool-v3-local-replay-verification.json) includes
 fresh seedless audit and receiver restoration, missing sections, decodable

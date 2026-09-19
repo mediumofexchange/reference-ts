@@ -1,5 +1,5 @@
 {
-  "schema": "moe-v3-local-replay-experiment-7",
+  "schema": "moe-v3-local-replay-experiment-8",
   "specification": "3ed1800",
   "node": "v24.6.0",
   "packageBytes": 48466,
@@ -42,12 +42,27 @@
     "portable bytes and seed are owned before proof awaits; shared input and source failures cannot certify",
     "successor imports the finalized source prefix into an empty local tree and restores its original path",
     "real spend of an imported note and continuation preserve totals and append only local outputs",
-    "A to B to A and same-index lower-sequence imports keep one transitive closure and original-tree wallet paths",
+    "A to B to A and restarted imports keep one transitive closure and original-tree wallet paths",
     "every missing imported directory, snapshot or trail refuses with no partial restoration",
     "stale, unheld and remembered pre-replacement imports cannot replace the required canonical predecessor",
     "an authenticated excluded source tail is classified and passed rather than imported",
     "otherwise valid proofs cannot reuse an imported nullifier or output commitment",
     "the import checkpoint budget counts held non-carrying commitments and returns no partial result",
+    "Silence: successor imports the finalized source prefix into an empty local tree and restores its original path",
+    "Silence: real spend of an imported note and continuation preserve totals and append only local outputs",
+    "Silence: A to B to A and restarted imports keep one transitive closure and original-tree wallet paths",
+    "Silence: every missing imported directory, snapshot or trail refuses with no partial restoration",
+    "Silence: stale, unheld and remembered pre-replacement imports cannot replace the required canonical predecessor",
+    "Silence: an authenticated excluded source tail is classified and passed rather than imported",
+    "Silence: otherwise valid proofs cannot reuse an imported nullifier or output commitment",
+    "Silence: the import checkpoint budget counts held non-carrying commitments and returns no partial result",
+    "Silence: duration equality across replacement and reappointment stays closed; the judging-index reset is strict",
+    "Silence: return opens in a gap but its same-index continuation lapses; next-index continuation restores imported payments",
+    "Silence: a later fresh segment reset cannot revive a segment retired exactly at the return index",
+    "Silence: an excluded opening never resets the clock and retains its retirement boundary",
+    "Silence: same-index fresh silence openings refuse before choosing between generic predecessor and strict snapshot",
+    "Silence: reappointment cannot reset the backing clock with a checkpoint from the same key's ended term",
+    "Silence: publication closure must be answered independently and empty, including at opening and judging indices",
     "Ergo range adapter replays the real-proof import closure from exact transaction bytes and checked roots",
     "missing, tampered and undecodable Ergo sections refuse against unchanged trusted headers",
     "reader-selected Ergo profile and header chain cannot be replaced by package claims",
@@ -90,93 +105,123 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 2314.6358999999975
+      "elapsedMs": 2038.0469999999987
     },
     {
       "label": "pay 7, change 3",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6692.7372
+      "elapsedMs": 6274.344000000001
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 5293.3341
+      "elapsedMs": 4747.773299999997
     },
     {
       "label": "pay 2, change 1",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 6124.750400000004
+      "elapsedMs": 6023.977599999998
     },
     {
       "label": "valid maximum issuance",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1919.4767999999967
+      "elapsedMs": 2186.2428
     },
     {
       "label": "valid proof, different scope",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 3016.157500000001
+      "elapsedMs": 2010.4269000000058
     },
     {
       "label": "valid proof, unaccepted anchor",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 8590.233999999997
+      "elapsedMs": 7032.3269999999975
     },
     {
       "label": "valid proof, spent input",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 8699.412099999994
+      "elapsedMs": 5625.648200000003
     },
     {
       "label": "valid proof, duplicate output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 10193.411099999998
+      "elapsedMs": 4909.570700000004
     },
     {
       "label": "import A issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1690.2926999999909
+      "elapsedMs": 1696.0722999999998
     },
     {
       "label": "import B spends A note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 4971.419600000008
+      "elapsedMs": 6112.7242000000115
     },
     {
       "label": "import B continuation burns 1 with change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 4755.005499999999
+      "elapsedMs": 4665.225999999995
     },
     {
       "label": "import C valid proof for imported spent note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 9208.80660000001
+      "elapsedMs": 4967.973999999987
     },
     {
       "label": "import C valid issuance proof for imported duplicate output",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 3545.6016000000236
+      "elapsedMs": 1620.7599000000046
+    },
+    {
+      "label": "import A issue 10",
+      "kind": 1,
+      "proofBytes": 14656,
+      "elapsedMs": 2116.093599999993
+    },
+    {
+      "label": "import B spends A note",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 6218.169400000013
+    },
+    {
+      "label": "import B continuation burns 1 with change 2",
+      "kind": 3,
+      "proofBytes": 14656,
+      "elapsedMs": 6528.676299999992
+    },
+    {
+      "label": "import C valid proof for imported spent note",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 4878.092800000013
+    },
+    {
+      "label": "import C valid issuance proof for imported duplicate output",
+      "kind": 1,
+      "proofBytes": 14656,
+      "elapsedMs": 1616.2790000000095
     }
   ],
   "sourceSha256Lf": {
-    "scripts/pool/v3/local-replay.mjs": "5503eb8a1042033aae6c364660ebb6a0c0ced1c9b0e0fab9ecead8923b9a2647",
+    "scripts/pool/v3/local-replay.mjs": "1a68ac55e7845bc2156978fcf9e79ecea1f06c3a002cd1ca7e407747a5949be8",
     "scripts/pool/v3/local-worker.mjs": "1f633b2e95ad773daa21b3ee472f8d6a4ae93c58bb6c775b0c633b202834ba14",
-    "scripts/pool/v3/local-check.mjs": "ac755ace7af30abd65934a68519d2f6b80f18ce6b2ad18a3b1affe98633b84bc",
+    "scripts/pool/v3/local-check.mjs": "eb75fa6f14c8de636fdeef59e341999e240cba7f6d26fbeb38e59e7cdbe0d89d",
     "scripts/pool/v3/fixture-venue.mjs": "757300134c7f51737fe35c620756e44351c26ad38b981bac27bf5d411d4d6c35",
-    "scripts/pool/v3/import-check.mjs": "00c2e84328eca3030122ea5e69224f39329acae9d4dea33462bf47aac8a78745",
+    "scripts/pool/v3/import-check.mjs": "293ff307a7fd5bdec3807c2ba15c28fd8f4bc302e9d7022324b7d24b2385b327",
     "scripts/pool/v3/ergo-check.mjs": "8dcca199cb94302a62a9501f45f5ce6971f41aeeacf408fa2891aac406227e50",
     "scripts/pool/delivery/evidence-reader.mjs": "3314af42ee0aca526d17910ced47e16e620321b3827664f22d8e5e95ded8ff6e",
     "scripts/pool/delivery/crypto.mjs": "d223a29a05ed0d7b6c8ece9ad6e5b39d58c634073897726262a4ca404caa42e6",
@@ -223,7 +268,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "93c6686c5cb3cbd23a7483bdad2f55893e1580ac6f43a7b4ee43c2c0ceea6169",
+      "evidenceHash": "30deef9a20fa18edf05a5b05993e31114542c07a910854d71473e89144009576",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -275,7 +320,7 @@
       "noteRoot": "10125462772649430383642803842364990167010435047515824877741731810404279402930",
       "spentRoot": "a85194b3ed59a6c89f693be5da387e16738fcbf45cb28a78fffcbc49e0706e7d",
       "historyHash": "e445acf7ae412a41a5cdc65bc7b1685a669ecbb94aea1d8191556b9f8a22da52",
-      "evidenceHash": "93c6686c5cb3cbd23a7483bdad2f55893e1580ac6f43a7b4ee43c2c0ceea6169",
+      "evidenceHash": "30deef9a20fa18edf05a5b05993e31114542c07a910854d71473e89144009576",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -405,7 +450,7 @@
       "noteRoot": "20289920090942748033438979157172403900844036366309329327868430363638482059158",
       "spentRoot": "60aed429711fd5c3d866b0b176d16795f8f991e41bb32a33d9531b909fa188a5",
       "historyHash": "1826aca87b0ca270a877273b8be927fb84a547894e99ea1de7ce73aea7d52942",
-      "evidenceHash": "46690dfe5c60aa9599ba76a34345ddb7ca85cde62a8280595f21295c8a7dd487",
+      "evidenceHash": "cfa4e07ac20d7f1d3cb4e0ed80143efecdc18bcb519fa92220e6d04cd7da7f34",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -463,8 +508,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "9afa740bed296e5483feca468c94d685ded1a46194825514e9d0a40d4b584db1",
-        "historyHash": "6f325c4139cefebf62851a489e246ba8c6dedaeab180a3d8362da8f3d2222a74",
-        "evidenceHash": "a87aca22c7dcd7b09bab0e1cb37c636723d433871373fcbe636630e2be654b26",
+        "historyHash": "a73286a76cdf02005f0535d421fb39ae0340c41ae873b9d89e192707179439ab",
+        "evidenceHash": "79626f783e815ccac187ffdf0455b4c69e380308bc58b378fe36077ceb863076",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -563,8 +608,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "9afa740bed296e5483feca468c94d685ded1a46194825514e9d0a40d4b584db1",
-        "historyHash": "6f325c4139cefebf62851a489e246ba8c6dedaeab180a3d8362da8f3d2222a74",
-        "evidenceHash": "a87aca22c7dcd7b09bab0e1cb37c636723d433871373fcbe636630e2be654b26",
+        "historyHash": "a73286a76cdf02005f0535d421fb39ae0340c41ae873b9d89e192707179439ab",
+        "evidenceHash": "79626f783e815ccac187ffdf0455b4c69e380308bc58b378fe36077ceb863076",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -730,6 +775,378 @@
             "0",
             "16257989699773466206393016511488115181357775227253857822747532441271299011144",
             "10871933160691116769643081602815294730043339314434250247624451609119159436310",
+            "1935094829533267935830464563796710052445228582946993128186972021230315590035",
+            "18383913181606838331795460117774658566856597132399717689821053927504534850729",
+            "6650121914657515867260011416921319045587517571339686030450569779952452434446",
+            "845043333535205747680782585765216487309952857158244204638951000115525663969",
+            "1798565372180516634517843282450706694542445499858350052460863933410324420334",
+            "12082351775801795992599119410575771090046502720172243783387647860247227871902",
+            "17392670516229609273138538435194690200647498693429087923197847846467620878366",
+            "18270147803583966115185581568756452890223528135804716937646296736746340714319",
+            "6245281075527541134368495049517243664719812052214528999106154137816504162189",
+            "5771305936450134295237779198955973617491950584355028563949759501589674323328",
+            "8375117846537600003339886617732755020518140880023263272035782507904755134166",
+            "1402956623894417358519384271339285842133055840035948184830517042721409232939",
+            "10518453832655181976446617300434900287841057900980895845234303440776175031342",
+            "15485975685389868597531359628984423612206441834147218371890432861420618086233",
+            "15422680120123365729179431955186502234992765602151752301487612439836632415437",
+            "3956483861973015592013083471667691148363938305872047999848739786219821549630",
+            "1086051623285356080920660076036760901133490110146331619651622591312371431716",
+            "2915904499750125353540875529397177727199377493198348513681582475949711605897",
+            "20164087144993267523342657261822731817585018270367494699207673407082461049973",
+            "6242064092034472953019862381003839448720318820550567656011695795729872763820",
+            "486473096388032301890231500231637785138514345257938344321238940657971574478",
+            "8682912164133426756325886608207438073742770514324345939761663338459940455365",
+            "9032327814826196994352281082085265791527933228092108861697327508420029459713",
+            "11946683638986745115214649685278219707650430060924747485486585022833169300696",
+            "19219361000372015911425077088009647148763037724375627703239846977182347147882",
+            "20250997086726519601015986826877099693245538547315475919513141220642229899021",
+            "14413420282722522993748367414404798853361893034082534437626176948595980240628",
+            "4920301475339101562902404357157229632407380396727250905915335784284364493374",
+            "3490399488954770152131810821200763799606626796619604090245668179171764908058"
+          ],
+          "right": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "pathScope": "replayed-imported-tree-only",
+          "spendable": false
+        }
+      ]
+    }
+  },
+  "silenceImports": {
+    "packageBytes": 68301,
+    "audit": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "0",
+        "issued": "10",
+        "burned": "1",
+        "outstanding": "9",
+        "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
+        "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
+        "historyHash": "0110dd914fde15e1623af57c61bf5454d86849484092836eb031cb718cee1915",
+        "evidenceHash": "57ca37a065a81b1087719610de90743827294933bc594a758cee958268ee35eb",
+        "range": {
+          "judgingIndex": "20",
+          "lag": "2",
+          "checkpointIndex": "16",
+          "revokedAt": null,
+          "heldBefore": 7,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "e266f7ace79ff1aac2d74310639b84572aefe58c8aa0b81e011a0effedd88dba"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "from": "6",
+              "link": "d1cdde2d41e129944726c13fb6caa4c654ce6977eb6d141e0d532acd035cf9bc"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "12",
+              "link": "90b0e6998c09e793f338ef8f1d29ba21f08627f3a4a331584b5c9756da38d24b"
+            }
+          ],
+          "carrying": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "sequence": "1",
+              "index": "6",
+              "class": "valid"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "sequence": "2",
+              "index": "8",
+              "class": "valid"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "sequence": "3",
+              "index": "10",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "3",
+              "index": "14",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "4",
+              "index": "15",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "5",
+              "index": "16",
+              "class": "valid"
+            }
+          ],
+          "clock": {
+            "duration": "4",
+            "snapshotIndex": "16",
+            "gap": "4",
+            "open": false,
+            "boundary": null,
+            "opening": "16"
+          }
+        }
+      },
+      "candidates": []
+    },
+    "receiver": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "0",
+        "issued": "10",
+        "burned": "1",
+        "outstanding": "9",
+        "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
+        "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
+        "historyHash": "0110dd914fde15e1623af57c61bf5454d86849484092836eb031cb718cee1915",
+        "evidenceHash": "57ca37a065a81b1087719610de90743827294933bc594a758cee958268ee35eb",
+        "range": {
+          "judgingIndex": "20",
+          "lag": "2",
+          "checkpointIndex": "16",
+          "revokedAt": null,
+          "heldBefore": 7,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "e266f7ace79ff1aac2d74310639b84572aefe58c8aa0b81e011a0effedd88dba"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "from": "6",
+              "link": "d1cdde2d41e129944726c13fb6caa4c654ce6977eb6d141e0d532acd035cf9bc"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "12",
+              "link": "90b0e6998c09e793f338ef8f1d29ba21f08627f3a4a331584b5c9756da38d24b"
+            }
+          ],
+          "carrying": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "sequence": "1",
+              "index": "6",
+              "class": "valid"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "sequence": "2",
+              "index": "8",
+              "class": "valid"
+            },
+            {
+              "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
+              "sequence": "3",
+              "index": "10",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "3",
+              "index": "14",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "4",
+              "index": "15",
+              "class": "valid"
+            },
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "sequence": "5",
+              "index": "16",
+              "class": "valid"
+            }
+          ],
+          "clock": {
+            "duration": "4",
+            "snapshotIndex": "16",
+            "gap": "4",
+            "open": false,
+            "boundary": null,
+            "opening": "16"
+          }
+        }
+      },
+      "candidates": [
+        {
+          "cm": "2298732065143708022437421298311697706250971434118699310425077983782185128227",
+          "nf": "15983545209205822879939850634198566674687979199796917834546726754372615513911",
+          "value": "7",
+          "leaf": "0",
+          "anchor": "16164414486860893274334367618004397414498479406546231536725502707789984820595",
+          "siblings": [
+            "18278695866228581684211238290734757504673520241425278619796791357232193031386",
+            "11775220294640447078975531640050032254658396432440211722223662972210567526557",
+            "11267266245839310592211749373302099626986223017387337299490949449783979818298",
+            "1935094829533267935830464563796710052445228582946993128186972021230315590035",
+            "18383913181606838331795460117774658566856597132399717689821053927504534850729",
+            "6650121914657515867260011416921319045587517571339686030450569779952452434446",
+            "845043333535205747680782585765216487309952857158244204638951000115525663969",
+            "1798565372180516634517843282450706694542445499858350052460863933410324420334",
+            "12082351775801795992599119410575771090046502720172243783387647860247227871902",
+            "17392670516229609273138538435194690200647498693429087923197847846467620878366",
+            "18270147803583966115185581568756452890223528135804716937646296736746340714319",
+            "6245281075527541134368495049517243664719812052214528999106154137816504162189",
+            "5771305936450134295237779198955973617491950584355028563949759501589674323328",
+            "8375117846537600003339886617732755020518140880023263272035782507904755134166",
+            "1402956623894417358519384271339285842133055840035948184830517042721409232939",
+            "10518453832655181976446617300434900287841057900980895845234303440776175031342",
+            "15485975685389868597531359628984423612206441834147218371890432861420618086233",
+            "15422680120123365729179431955186502234992765602151752301487612439836632415437",
+            "3956483861973015592013083471667691148363938305872047999848739786219821549630",
+            "1086051623285356080920660076036760901133490110146331619651622591312371431716",
+            "2915904499750125353540875529397177727199377493198348513681582475949711605897",
+            "20164087144993267523342657261822731817585018270367494699207673407082461049973",
+            "6242064092034472953019862381003839448720318820550567656011695795729872763820",
+            "486473096388032301890231500231637785138514345257938344321238940657971574478",
+            "8682912164133426756325886608207438073742770514324345939761663338459940455365",
+            "9032327814826196994352281082085265791527933228092108861697327508420029459713",
+            "11946683638986745115214649685278219707650430060924747485486585022833169300696",
+            "19219361000372015911425077088009647148763037724375627703239846977182347147882",
+            "20250997086726519601015986826877099693245538547315475919513141220642229899021",
+            "14413420282722522993748367414404798853361893034082534437626176948595980240628",
+            "4920301475339101562902404357157229632407380396727250905915335784284364493374",
+            "3490399488954770152131810821200763799606626796619604090245668179171764908058"
+          ],
+          "right": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "pathScope": "replayed-imported-tree-only",
+          "spendable": false
+        },
+        {
+          "cm": "9860839453099721104248424593606368567375916825083796668232480295917219916486",
+          "nf": "19885308449956538632397247669606898178974471337582669670441295178003534199883",
+          "value": "2",
+          "leaf": "4",
+          "anchor": "16164414486860893274334367618004397414498479406546231536725502707789984820595",
+          "siblings": [
+            "0",
+            "16257989699773466206393016511488115181357775227253857822747532441271299011144",
+            "18313815685435299057180794550915081300834584339867961590925254564060401586254",
             "1935094829533267935830464563796710052445228582946993128186972021230315590035",
             "18383913181606838331795460117774658566856597132399717689821053927504534850729",
             "6650121914657515867260011416921319045587517571339686030450569779952452434446",
@@ -802,7 +1219,7 @@
   },
   "ergo": {
     "evidence": "synthetic-headers-and-exact-transaction-bytes",
-    "rawBytes": 3764,
+    "rawBytes": 3684,
     "blocks": 21,
     "audit": {
       "status": "selected-local-replay",
@@ -822,13 +1239,13 @@
         "burned": "1",
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
-        "spentRoot": "9afa740bed296e5483feca468c94d685ded1a46194825514e9d0a40d4b584db1",
-        "historyHash": "6f325c4139cefebf62851a489e246ba8c6dedaeab180a3d8362da8f3d2222a74",
-        "evidenceHash": "a87aca22c7dcd7b09bab0e1cb37c636723d433871373fcbe636630e2be654b26",
+        "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
+        "historyHash": "0110dd914fde15e1623af57c61bf5454d86849484092836eb031cb718cee1915",
+        "evidenceHash": "57ca37a065a81b1087719610de90743827294933bc594a758cee958268ee35eb",
         "range": {
           "judgingIndex": "21",
           "lag": "1",
-          "checkpointIndex": "16",
+          "checkpointIndex": "17",
           "revokedAt": null,
           "heldBefore": 7,
           "heldAfter": 0,
@@ -836,17 +1253,17 @@
             {
               "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
               "from": "0",
-              "link": "6d7bbae0b49e0427d71aaaea6d85485b3b25901ae506e3481b8a256505aed6ca"
+              "link": "e266f7ace79ff1aac2d74310639b84572aefe58c8aa0b81e011a0effedd88dba"
             },
             {
               "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
               "from": "6",
-              "link": "d3ef4d62d4dedac6957751c72686b413d357e2810422d78ee7a1c237337daf5e"
+              "link": "d1cdde2d41e129944726c13fb6caa4c654ce6977eb6d141e0d532acd035cf9bc"
             },
             {
               "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
               "from": "12",
-              "link": "93f5170b3c76a57bb35eb9a1c817b297bb49c01ed3da44c8b987e0e9e265181d"
+              "link": "90b0e6998c09e793f338ef8f1d29ba21f08627f3a4a331584b5c9756da38d24b"
             }
           ],
           "carrying": [
@@ -895,11 +1312,18 @@
             {
               "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
               "sequence": "5",
-              "index": "16",
+              "index": "17",
               "class": "valid"
             }
           ],
-          "clock": null
+          "clock": {
+            "duration": "4",
+            "snapshotIndex": "17",
+            "gap": "4",
+            "open": false,
+            "boundary": null,
+            "opening": "17"
+          }
         }
       },
       "candidates": []
@@ -922,13 +1346,13 @@
         "burned": "1",
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
-        "spentRoot": "9afa740bed296e5483feca468c94d685ded1a46194825514e9d0a40d4b584db1",
-        "historyHash": "6f325c4139cefebf62851a489e246ba8c6dedaeab180a3d8362da8f3d2222a74",
-        "evidenceHash": "a87aca22c7dcd7b09bab0e1cb37c636723d433871373fcbe636630e2be654b26",
+        "spentRoot": "c92f6a50d84c6efd68a0d2c8cbdfd1c20bf421edb0938a18c8cf6a947c8462e8",
+        "historyHash": "0110dd914fde15e1623af57c61bf5454d86849484092836eb031cb718cee1915",
+        "evidenceHash": "57ca37a065a81b1087719610de90743827294933bc594a758cee958268ee35eb",
         "range": {
           "judgingIndex": "21",
           "lag": "1",
-          "checkpointIndex": "16",
+          "checkpointIndex": "17",
           "revokedAt": null,
           "heldBefore": 7,
           "heldAfter": 0,
@@ -936,17 +1360,17 @@
             {
               "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
               "from": "0",
-              "link": "6d7bbae0b49e0427d71aaaea6d85485b3b25901ae506e3481b8a256505aed6ca"
+              "link": "e266f7ace79ff1aac2d74310639b84572aefe58c8aa0b81e011a0effedd88dba"
             },
             {
               "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
               "from": "6",
-              "link": "d3ef4d62d4dedac6957751c72686b413d357e2810422d78ee7a1c237337daf5e"
+              "link": "d1cdde2d41e129944726c13fb6caa4c654ce6977eb6d141e0d532acd035cf9bc"
             },
             {
               "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
               "from": "12",
-              "link": "93f5170b3c76a57bb35eb9a1c817b297bb49c01ed3da44c8b987e0e9e265181d"
+              "link": "90b0e6998c09e793f338ef8f1d29ba21f08627f3a4a331584b5c9756da38d24b"
             }
           ],
           "carrying": [
@@ -995,24 +1419,31 @@
             {
               "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
               "sequence": "5",
-              "index": "16",
+              "index": "17",
               "class": "valid"
             }
           ],
-          "clock": null
+          "clock": {
+            "duration": "4",
+            "snapshotIndex": "17",
+            "gap": "4",
+            "open": false,
+            "boundary": null,
+            "opening": "17"
+          }
         }
       },
       "candidates": [
         {
-          "cm": "20223157291484935206660297379547334828413407963392323896995458007682710600734",
-          "nf": "20294413173519975772831618562573598595091534521384594911661355314335784068084",
+          "cm": "2298732065143708022437421298311697706250971434118699310425077983782185128227",
+          "nf": "15983545209205822879939850634198566674687979199796917834546726754372615513911",
           "value": "7",
           "leaf": "0",
-          "anchor": "9456501406782429130955258485910785266514301290031276676298998603496478829896",
+          "anchor": "16164414486860893274334367618004397414498479406546231536725502707789984820595",
           "siblings": [
-            "5015061413864541444236550867454165225299730897220585636483526660490938789200",
-            "221352258043608171652119767586467206617556596245126545467039597655888998659",
-            "2375496283616260195074875479560568885495430154970996905242337881574050858037",
+            "18278695866228581684211238290734757504673520241425278619796791357232193031386",
+            "11775220294640447078975531640050032254658396432440211722223662972210567526557",
+            "11267266245839310592211749373302099626986223017387337299490949449783979818298",
             "1935094829533267935830464563796710052445228582946993128186972021230315590035",
             "18383913181606838331795460117774658566856597132399717689821053927504534850729",
             "6650121914657515867260011416921319045587517571339686030450569779952452434446",
@@ -1081,15 +1512,15 @@
           "spendable": false
         },
         {
-          "cm": "4571953759852325441295911239200709104905806516372841818691644035963369627408",
-          "nf": "19576096563706773746326917191454114252479955575260159705699945302073968919150",
+          "cm": "9860839453099721104248424593606368567375916825083796668232480295917219916486",
+          "nf": "19885308449956538632397247669606898178974471337582669670441295178003534199883",
           "value": "2",
           "leaf": "4",
-          "anchor": "9456501406782429130955258485910785266514301290031276676298998603496478829896",
+          "anchor": "16164414486860893274334367618004397414498479406546231536725502707789984820595",
           "siblings": [
             "0",
             "16257989699773466206393016511488115181357775227253857822747532441271299011144",
-            "10871933160691116769643081602815294730043339314434250247624451609119159436310",
+            "18313815685435299057180794550915081300834584339867961590925254564060401586254",
             "1935094829533267935830464563796710052445228582946993128186972021230315590035",
             "18383913181606838331795460117774658566856597132399717689821053927504534850729",
             "6650121914657515867260011416921319045587517571339686030450569779952452434446",
@@ -1162,7 +1593,7 @@
   },
   "limits": [
     "Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
-    "Issue/spend/burn only. Original-segment selections read the no-commitment clock and last-valid-prefix continuity. Selections with imports and no silence clause validate a single-backing finalized closure through replacement, reappointment and restart. Multi-backing scopes, silence-bearing imports and recovery publications remain unsupported; import term-lapse currently needs full trail evidence.",
+    "Issue/spend/burn only. Single-backing imports validate finalized closure through replacement, reappointment and restart, including silence clauses with independently answered empty publication ranges. Same-index fresh silence openings, any attributed publication, multi-backing scopes and recovery adoption remain unsupported. Import lapse currently requires full trail evidence.",
     "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission.",
     "The candidate Ergo adapter checks exact transaction decoding and roots against independently selected synthetic headers. No proof of work, chain selection, decoder node equivalence/containment, node acceptance or venue-profile adoption is established."
   ]
