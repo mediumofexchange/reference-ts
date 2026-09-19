@@ -109,7 +109,11 @@ shape, run reassembly, transaction-then-output ordinals and a §13 verifier
 by exhaustion over root-checked blocks behind a linked header chain; the
 [profile experiment](POOL_DEPLOYMENT_PROBES.md#ergo-venue-profile-candidate-and-full-block-range-verifier)
 reproduces the three fixture roots and answers synthetic ranges through
-Fleet and sigma-rust. No specification selects it; header authentication,
+Fleet and sigma-rust. The [local adapter](ERGO_VENUE_PROFILE.md#local-replay-adapter)
+also replays the real-proof import/payment/burn trace from exact transaction
+bytes, with independently selected synthetic headers and bounded ownership
+before decoding. Fresh seedless and receiver readers retain this provenance.
+No specification selects it; header authentication,
 decoder containment and real-chain cost remain open.
 
 ## Successor record conformance
@@ -156,7 +160,8 @@ reader-established priors, replacement identities, first-entry revocations
 the cross-backing venue order for publications, and C2.5's walk over admitted
 replacements (lead floor from the venue's lag, supersession, revocation and
 the lesser identity at one index), checked against the runtime walk.
-`scripts/pool/v3/fixture-venue.mjs` is the harness's fixture verifier.
+`scripts/pool/v3/fixture-venue.mjs` is the harness's default fixture verifier;
+`experiments/ergo-range/replay-venue.mjs` is its optional candidate Ergo adapter.
 The local replay integrates these answers with the bounded clock and import
 checks described above. Venue-source authentication, complete shared-scope
 authority, recovery and adoption remain open.

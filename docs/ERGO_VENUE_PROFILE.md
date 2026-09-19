@@ -106,8 +106,7 @@ to all ids followed by all witness ids, over scrypto's tree with leaf prefix
 0, internal prefix 1, an absent right sibling contributing no bytes and a
 lone leaf keeping its parent). A block that is not a well-formed section
 view, belongs to another chain, duplicates an established height or fails
-its root is passed over, so no supplier of venue evidence can deny every
-read by adding a block; a height without a section leaves only the ranges
+its root is passed over at the model boundary; a height without a section leaves only the ranges
 through it unresolved. A request is answered by scanning every output of
 every transaction of every block in its range, so an empty answer is proven
 by exhaustion (§13.2). There is no answer where `toIndex` is above the tip
@@ -170,6 +169,40 @@ decoder. The [retained report](ergo-range-profile-verification.json) records
 the sizes. `test/pool-v3-ergo-profile.test.ts` covers the identity, register
 decoding, the tree, attribution and reassembly cases, ordering, ownership of
 the profile, evidence and request, and every refusal without an Ergo library.
+
+## Local replay adapter
+
+`npm run check:pool:ergo-replay` connects this candidate to the real-proof
+single-backing import, payment and burn trace. The optional dependencies and
+commands are in the [harness guide](../scripts/pool/v3/README.md). The
+[retained replay report](pool-v3-local-replay-verification.json) includes
+fresh seedless audit and receiver restoration, missing sections, decodable
+root mismatches, decoder refusals, wrong profile/headers and resource refusal.
+The fixture serializer constructs exact transaction bytes and expected roots
+independently of the sigma-rust decoder and profile verifier. Synthetic headers
+are selected separately by the reader; they have never been accepted by a node.
+
+`experiments/ergo-range/replay-venue.mjs` binds a reader-selected profile,
+header source and answer budget to the existing range interface. The supplier
+provides raw block sections, not transaction ids, decoded outputs, clocks or
+answers. The synchronous factory owns all evidence before returning or awaiting
+proof work. Each byte view is charged before its immediate copy, using intrinsic
+typed-array length and storage checks; shadowed properties cannot hide shared
+storage or an oversized view, and later getters cannot resize or detach an
+already owned view. Detached, out-of-bounds and shared views refuse. The adapter
+caps source bytes at 8 MiB, headers and supplied blocks at 256 each, and total
+transactions at 1024, before invoking the decoder. These are local experiment
+limits, not consensus bounds or WASM allocation limits. Budget or storage refusal
+rejects the whole read, even if the offending block would otherwise be ignored.
+The worker's separate V8 IPC envelope remains capped at 2 MiB.
+
+The adapter reuses the strict round-trip decoder in `decoder.mjs`; an
+undecodable transaction withholds its entire block. The model then checks roots
+and range completeness. Successful replay reports
+`rangeEvidence: "candidate-ergo-profile-synthetic-headers"`; currency and
+authority flags describe only checks under that explicit trusted fixture.
+Full replay, complete-certificate and spendability flags remain false. This
+integration introduces no production path, profile selection or normative rule.
 
 ## Before selection
 

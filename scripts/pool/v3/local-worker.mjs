@@ -2,6 +2,8 @@
 // in the independently held candidate manifest,
 // never read from the supplied record package. No witness or original journal.
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { deserialize } from "node:v8";
 import { Barretenberg, BackendType, UltraHonkVerifierBackend } from "@aztec/bb.js";
 import { loadEvidenceCodecs } from "../delivery/evidence-reader.mjs";
@@ -13,9 +15,12 @@ import { loadCandidateManifest, checkCandidateSources, candidateConfiguration, r
 
 let api;
 try {
+  if (process.argv.length > 4 || (process.argv[3] !== undefined && process.argv[3] !== "--ergo")) throw new Error("unknown reader mode");
+  const withErgo = process.argv[3] === "--ergo";
   const codec = { ...await loadEvidenceCodecs(process.argv[2]), ...await loadConfigurationCodecs(process.argv[2]),
     ...await import(new URL("model/pool-v3-package.js", process.argv[2])),
-    ...await import(new URL("model/pool-v3-range.js", process.argv[2])) };
+    ...await import(new URL("model/pool-v3-range.js", process.argv[2])),
+    ...(withErgo ? await import(new URL("model/pool-v3-ergo-profile.js", process.argv[2])) : {}) };
   const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
   const configuration = candidateConfiguration(manifest, codec);
   const keys = readCandidateKeys(fileURLToPath(process.argv[2]), manifest);
@@ -39,8 +44,14 @@ try {
     proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
   }, { verifierTarget: "noir-recursive" }), record: data => {
     const witnessed = FixtureVenue.from(data);
-    return { range: request => witnessed.answer(request, codec, RANGE_LIMITS), witnessedIndex: () => witnessed.witnessedIndex, lag: () => witnessed.lag };
+    return { evidenceKind: "fixture-verifier", range: request => witnessed.answer(request, codec, RANGE_LIMITS), witnessedIndex: () => witnessed.witnessedIndex, lag: () => witnessed.lag };
   } };
+  if (withErgo) {
+    const { profile } = await import("../../../experiments/ergo-range/replay-fixture.mjs");
+    const { ergoReplayVenue } = await import("../../../experiments/ergo-range/replay-venue.mjs");
+    const headers = deserialize(readFileSync(join(fileURLToPath(process.argv[2]), "ergo-headers.v8")));
+    verifier.record = data => ergoReplayVenue(profile, { headers, blocks: data.blocks }, codec, RANGE_LIMITS);
+  }
   process.stdout.write(JSON.stringify(await replayEvidencePackage(input, verifier, codec)));
 } catch {
   process.stderr.write("local replay fixture failed\n");

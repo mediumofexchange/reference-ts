@@ -42,6 +42,19 @@ path at 128 held checkpoints and 8192 replayed events, including failed
 replays. Silence-bearing imports, multi-backing scopes and adoption remain
 unsupported. The local-only restoration scanner continues to refuse imports.
 
+For the same import/payment/burn trace through exact synthetic Ergo transaction
+bytes, install the pinned optional experiment dependencies with
+`npm --prefix experiments/ergo-range ci --ignore-scripts --no-audit --no-fund`
+and run `npm run check:pool:ergo-replay` (Node 24). CI uses
+`npm run check:pool:v3 -- --ergo` to include both relation conformance and this
+adapter. The reader fixes the profile, limits and a separate trusted synthetic
+header file; the package supplies only raw block sections. The adapter charges
+each intrinsic byte view before copying it and owns all bytes before decoding.
+Missing, undecodable or root-mismatched sections leave the range unresolved.
+Successful results carry `candidate-ergo-profile-synthetic-headers` provenance;
+they establish no real-chain authentication, decoder containment or spendability.
+See the [adapter contract](../../../docs/ERGO_VENUE_PROFILE.md#local-replay-adapter).
+
 The npm command verifies parameter cache/download lengths and SHA-256 hashes
 with `../prepare-crs.mjs` before starting the suite. It checks both upstream
 hosts on download failure; an empty or corrupt successful HTTP response is

@@ -325,14 +325,19 @@ that a production reader must establish before returning spendable holdings.
 | Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; carrying-checkpoint classification, last-valid continuity, replacement/reappointment/restart imports | A selected venue profile and authenticated chain evidence, multi-backing scope changes, publications, receipts and the count |
 | Wallet restoration | Seed-only candidate openings and local or imported-tree paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
 
-The candidate manifest, checkpoint selection and the fixture venue record
+The candidate manifest, checkpoint selection and the fixture venue evidence
 remain explicit **test fixture assumptions**. Signed terms establish identity,
 and configuration checks bind the candidate keys; neither establishes adoption
 or the force of those terms. `candidateConfigurationChecked` and
 `signedTermsAuthenticated` report only those narrower successful checks.
 `currentRangeAuthenticated` and `termsAuthorityAuthenticated` are true only
-with `rangeEvidence: "fixture-verifier"`, meaning the §13 reads passed against
-the harness's fixture record; a historical read leaves currency false.
+under the selected verifier: `rangeEvidence: "fixture-verifier"` names the
+harness's fixture record, while `"candidate-ergo-profile-synthetic-headers"`
+names exact transaction decoding and checked roots against independently chosen
+synthetic headers. Neither authenticates a real chain; a historical read leaves
+currency false. `npm run check:pool:ergo-replay` runs the optional
+[Ergo adapter](ERGO_VENUE_PROFILE.md#local-replay-adapter) through the same
+import/payment/burn trace, including fresh readers and hostile evidence.
 `fullV3Replay`, completeness and spendability remain false; coverage remains
 unresolved. A local path is not a certified anchor. The required full-package
 checks derive from pool-delivery C4.6, pool-v3 §§1/7/10/11/13 and the

@@ -14,7 +14,8 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b";
 import { serializeTransaction } from "@fleet-sdk/serializer";
-import { Address, Constant, ErgoTree, Transaction } from "ergo-lib-wasm-nodejs";
+import { Address, Constant, ErgoTree } from "ergo-lib-wasm-nodejs";
+import { decodeTransaction } from "./decoder.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../..");
 const sha256 = bytes => createHash("sha256").update(bytes).digest();
@@ -64,19 +65,6 @@ try {
     equal(script.length, 36, "pay-to-public-key tree");
   }
 
-  // The reader's own decoder: strict round trip, then fields from the parsed bytes only.
-  const decodeTransaction = bytes => {
-    let tx;
-    try { tx = Transaction.sigma_parse_bytes(bytes); } catch { return undefined; }
-    try {
-      if (hex(tx.sigma_serialize_bytes()) !== hex(bytes)) return undefined;
-      const js = tx.to_js_eip12();
-      const proofs = js.inputs.map(input => Buffer.from(input.spendingProof.proofBytes, "hex"));
-      return { id: Buffer.from(js.id, "hex"), witnessId: blake2b(Buffer.concat(proofs), { dkLen: 32 }).subarray(1),
-        outputs: js.outputs.map(output => ({ ergoTree: Buffer.from(output.ergoTree, "hex"),
-          registers: Object.fromEntries(Object.entries(output.additionalRegisters).map(([name, value]) => [name, Buffer.from(value, "hex")])) })) };
-    } finally { tx.free(); }
-  };
   // Independent oracle from check.mjs: Fleet's unsigned bytes and the node's root algorithm.
   const unsignedBytes = tx => serializeTransaction({ ...tx, inputs: tx.inputs.map(input => ({ boxId: input.boxId, extension: input.spendingProof.extension })) }).toBytes();
   const fleetId = tx => blake2b(unsignedBytes(tx), { dkLen: 32 });
@@ -295,7 +283,7 @@ try {
     profile: { context: profile.ERGO_PROFILE_CONTEXT, identity: hex(identity), depth: depth.toString(), lag: verifier.lag().toString(),
       locations: Object.fromEntries(Object.entries(scripts).map(([kind, script]) => [kind, hex(script)])) },
     sources: manifest.sources, inputManifestSha256: hex(sha256(readFileSync(join(here, "fixtures/manifest.json")))),
-    files: Object.fromEntries(["experiments/ergo-range/profile-check.mjs", "experiments/ergo-range/package.json", "experiments/ergo-range/package-lock.json",
+    files: Object.fromEntries(["experiments/ergo-range/profile-check.mjs", "experiments/ergo-range/decoder.mjs", "experiments/ergo-range/package.json", "experiments/ergo-range/package-lock.json",
       "model/pool-v3-ergo-profile.ts", "model/pool-v3-range.ts"].map(file => [file, fileHash(file)])),
     genesis: { height: genesis.height.toString(), version: genesis.version.toString(), id: genesis.id, parentIdZero: true,
       headerWireBytes: genesis.size.toString(), emptyAnswerBytesAtIndexZero: 102 },

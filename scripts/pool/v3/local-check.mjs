@@ -22,11 +22,16 @@ import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage, replayEvidencePackage, PACKAGE_LIMITS, RANGE_LIMITS } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
 import { checkImports } from "./import-check.mjs";
+import { checkErgoReplay } from "./ergo-check.mjs";
 import { field } from "../fixtures.mjs";
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration,
   readCandidateKeys, loadConfigurationCodecs } from "./candidate.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../../..");
+assert(process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--ergo"), "unknown local-check option");
+const withErgo = process.argv[2] === "--ergo";
+const ergoFixture = withErgo ? await import("../../../experiments/ergo-range/replay-fixture.mjs") : undefined;
+const ergoAdapter = withErgo ? await import("../../../experiments/ergo-range/replay-venue.mjs") : undefined;
 mkdirSync(join(root, "scratch"), { recursive: true });
 const scratch = realpathSync(join(root, "scratch"));
 const build = realpathSync(mkdtempSync(join(scratch, "pool-v3-local-replay-")));
@@ -40,12 +45,17 @@ try {
   const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
   if (config.error) throw new Error("TypeScript configuration unreadable");
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const program = ts.createProgram(["trail", "configuration", "terms", "package", "range"].map(name => join(root, `model/pool-v3-${name}.ts`)), {
+  const program = ts.createProgram(["trail", "configuration", "terms", "package", "range", ...(withErgo ? ["ergo-profile"] : [])].map(name => join(root, `model/pool-v3-${name}.ts`)), {
     ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false,
   });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0); assert.equal(program.emit().emitSkipped, false);
   const codec = { ...await loadEvidenceCodecs(url), ...await loadConfigurationCodecs(url),
-    ...await import(new URL("model/pool-v3-package.js", url)), ...await import(new URL("model/pool-v3-range.js", url)) };
+    ...await import(new URL("model/pool-v3-package.js", url)), ...await import(new URL("model/pool-v3-range.js", url)),
+    ...(withErgo ? await import(new URL("model/pool-v3-ergo-profile.js", url)) : {}) };
+  if (withErgo) {
+    const { checkErgoOwnership } = await import("../../../experiments/ergo-range/replay-venue-check.mjs");
+    await test("Ergo ownership bounds intrinsic byte views before getters can hide, grow or detach storage", () => checkErgoOwnership(codec));
+  }
   const canonical = items => items.sort((a, b) => a.kind - b.kind || Buffer.compare(Buffer.from(sha(a.payload), "hex"), Buffer.from(sha(b.payload), "hex")));
   function portable(input) {
     const p = input.package, directories = [p.directory, ...(p.directories ?? [])];
@@ -78,7 +88,7 @@ try {
     proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
   }, options), record: data => {
     const witnessed = FixtureVenue.from(data);
-    return { range: request => witnessed.answer(request, codec, RANGE_LIMITS), witnessedIndex: () => witnessed.witnessedIndex, lag: () => witnessed.lag };
+    return { evidenceKind: "fixture-verifier", range: request => witnessed.answer(request, codec, RANGE_LIMITS), witnessedIndex: () => witnessed.witnessedIndex, lag: () => witnessed.lag };
   } };
   const domain = codec.configurationHash(configuration), venue = b(12), issuerSecret = b(15), operatorSecret = b(16);
   const payerSeed = b(21), receiverSeed = b(22), issuerKey = ed25519.getPublicKey(issuerSecret);
@@ -896,12 +906,23 @@ try {
     const failure = new Error("range/proof service unavailable");
     await assert.rejects(replayEvidencePackage(portable(complete), { ...verifier, verify() { throw failure; } }, codec), error => error === failure);
   });
-  const imported = await checkImports({ codec, verifier, configurationBytes, domain, venue, prove, test,
+  const imported = await checkImports({ codec, verifier, configurationBytes, domain,
+    venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove, test,
     operatorSecret, issuerSecret, receiverSeed, payerSeed });
   assert.deepEqual(await replayEvidencePackage(portable(imported.payload), verifier, codec), imported.result);
+  let ergo;
+  if (withErgo) {
+    ergo = await checkErgoReplay({ imported, fixture: ergoFixture, adapter: ergoAdapter, codec, verifier, portable, test });
+    // Headers are a separate reader trust input, beside the independently held
+    // key files; a replica's raw block envelope cannot substitute this source.
+    writeFileSync(join(build, "ergo-headers.v8"), serialize(ergo.headers));
+    ergo.receiver = await replayEvidencePackage(portable({ ...ergo.payload, seed: receiverSeed }), ergo.verifier, codec);
+    assert.deepEqual(ergo.receiver.candidates, imported.receiver.candidates);
+    assert.deepEqual(ergo.receiver.audit, ergo.result.audit);
+  }
   await api.destroy(); api = undefined;
-  function worker(payload) {
-    const child = spawnSync(process.execPath, [join(here, "local-worker.mjs"), url], {
+  function worker(payload, mode) {
+    const child = spawnSync(process.execPath, [join(here, "local-worker.mjs"), url, ...(mode === undefined ? [] : [mode])], {
       input: serialize(portable(payload)), timeout: 60_000, cwd: build, windowsHide: true, maxBuffer: 1_048_576,
     });
     assert.equal(child.error, undefined); assert.equal(child.status, 0, child.stderr.toString());
@@ -914,6 +935,16 @@ try {
     assert.deepEqual(worker(extended), dependency);
     assert.deepEqual(worker(imported.payload), imported.result);
     assert.deepEqual(worker({ ...imported.payload, seed: receiverSeed }), imported.receiver);
+  });
+  if (withErgo) await test("fresh seedless and receiver processes independently replay Ergo blocks and refuse missing or tampered sections", () => {
+    assert.deepEqual(worker(ergo.payload, "--ergo"), ergo.result);
+    assert.deepEqual(worker({ ...ergo.payload, seed: receiverSeed }, "--ergo"), ergo.receiver);
+    for (const payload of [ergo.missing, ergo.tampered]) {
+      for (const seed of [undefined, receiverSeed]) {
+        const result = worker({ ...payload, ...(seed === undefined ? {} : { seed }) }, "--ergo");
+        assert.equal(result.status, "unresolved-evidence"); assert.equal(result.audit, null); assert.deepEqual(result.candidates, []);
+      }
+    }
   });
   await test("fresh verifier refuses a changed artifact against its independently held key pin", () => {
     for (const kind of [2, 7]) {
@@ -939,14 +970,17 @@ try {
     }
   });
   const sources = ["scripts/pool/v3/local-replay.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/local-check.mjs",
-    "scripts/pool/v3/fixture-venue.mjs", "scripts/pool/v3/import-check.mjs",
+    "scripts/pool/v3/fixture-venue.mjs", "scripts/pool/v3/import-check.mjs", "scripts/pool/v3/ergo-check.mjs",
     "scripts/pool/delivery/evidence-reader.mjs", "scripts/pool/delivery/crypto.mjs", "scripts/pool/spent-set/radix.mjs",
     "model/pool-v3-records.ts", "model/pool-v3-commitments.ts", "model/pool-v3-trail.ts", "model/pool-v3-headers.ts",
     "model/pool-v3-configuration.ts", "model/pool-v3-terms.ts", "model/pool-v3-package.ts", "model/pool-v3-range.ts",
     "scripts/pool/v3/candidate.mjs", "scripts/pool/v3/candidate-manifest.json",
     "src/pool/note-tree.ts", "src/pool/scope.ts", "scripts/pool/v3/circuits/issue.nr", "scripts/pool/v3/circuits/spend.nr", "scripts/pool/v3/circuits/burn.nr"];
+  if (withErgo) sources.push("model/pool-v3-ergo-profile.ts", "experiments/ergo-range/decoder.mjs",
+    "experiments/ergo-range/replay-venue.mjs", "experiments/ergo-range/replay-fixture.mjs",
+    "experiments/ergo-range/replay-venue-check.mjs", "experiments/ergo-range/package-lock.json");
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-6", specification: "3ed1800", node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-7", specification: "3ed1800", node: process.version,
     packageBytes: portable(complete).package.length, dependencyPackageBytes: portable(extended).package.length,
     fixtureVenueRecords: complete.venue.records.length,
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
@@ -954,9 +988,12 @@ try {
     sourceSha256Lf: Object.fromEntries(sources.map(path => [path, sha(readFileSync(join(root, path), "utf8").replaceAll("\r\n", "\n"))])),
     audit, receiver, dependency, imports: { packageBytes: portable(imported.payload).package.length,
       audit: imported.result, receiver: imported.receiver },
-    limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The replacement chain, the selected checkpoint's record prefix, currency, its operator's force and the absent revocation are established against a harness-owned fixture venue record only, not a venue profile or authenticated chain evidence.",
+    ...(withErgo ? { ergo: { evidence: "synthetic-headers-and-exact-transaction-bytes", rawBytes: ergo.rawBytes,
+      blocks: ergo.payload.venue.blocks.length, audit: ergo.result, receiver: ergo.receiver } } : {}),
+    limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
       "Issue/spend/burn only. Original-segment selections read the no-commitment clock and last-valid-prefix continuity. Selections with imports and no silence clause validate a single-backing finalized closure through replacement, reappointment and restart. Multi-backing scopes, silence-bearing imports and recovery publications remain unsupported; import term-lapse currently needs full trail evidence.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };
+  if (withErgo) report.limits.push("The candidate Ergo adapter checks exact transaction decoding and roots against independently selected synthetic headers. No proof of work, chain selection, decoder node equivalence/containment, node acceptance or venue-profile adoption is established.");
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");
   console.log(`PASS: ${checks.length} local replay groups, ${metrics.length} real proofs; scratch/pool-v3-local-replay-results.json`);
 } finally {

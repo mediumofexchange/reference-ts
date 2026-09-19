@@ -390,12 +390,17 @@ async function classifyImports(context, directories, record, evidence) {
  * Nothing is exposed until every record and terminal assertion passes. */
 export async function replayLocalPackage(input, verifier, codec) {
   try {
-    // Own selection, seed, venue and supplied bytes before any asynchronous verifier.
-    const owned = ownInputs(input);
-    if (owned === null || typeof owned !== "object") throw new EncodingError("invalid replay input");
-    const { selection, package: supplied, seed, venue } = owned;
+    if (input === null || typeof input !== "object") throw new EncodingError("invalid replay input");
+    const fields = Object.keys(input).sort().join(",");
+    // The chosen synchronous record factory must own venue evidence before
+    // returning, under its own byte/work
+    // limits before any await. Cloning it here would allocate unbounded raw
+    // blocks (or unused backing buffers) before the adapter can check them.
+    const { venue, ...source } = input;
+    const owned = ownInputs(source);
+    const { selection, package: supplied, seed } = owned;
     // Do not silently keep the retired issuer override as an alternate input.
-    requireReplay(INPUT_SHAPES.includes(Object.keys(owned).sort().join(",")), "INPUT_FIELDS");
+    requireReplay(INPUT_SHAPES.includes(fields), "INPUT_FIELDS");
     requireReplay(codec.verifyConfiguration(supplied?.configuration, verifier.configuration), "CONFIGURATION");
     const domain = codec.configurationHash(codec.decodeConfiguration(supplied.configuration));
     requireReplay(selection?.domain instanceof Uint8Array && same(domain, selection.domain), "CONFIGURATION");
@@ -409,9 +414,13 @@ export async function replayLocalPackage(input, verifier, codec) {
     const imports = header.entries[0].opening !== undefined;
     if (!imports) requireReplay(same(terms.operator, header.operator) && same(header.entries[0].link, selection.backing), "TERMS_INITIAL_SCOPE");
     const context = { selection, terms, header, verifier, codec };
-    let ranges = null, carrying = null, clock = null, state;
+    let ranges = null, carrying = null, clock = null, state, rangeEvidence = "none";
     if (venue !== undefined) {
       if (typeof verifier.record !== "function") throw new EvidenceRefusal("unresolved-evidence");
+      const record = verifier.record(venue);
+      if (record === undefined) throw new EvidenceRefusal("unresolved-evidence");
+      // Metadata belongs to the reader's selected verifier, never the package.
+      rangeEvidence = record.evidenceKind ?? "reader-selected-verifier";
       const others = supplied.directories === undefined ? [] : supplied.directories;
       if (!Array.isArray(others)) throw new EncodingError("invalid directories");
       const directories = new Map([supplied.directory, ...others].map(entries => [hex(directoryRoot(entries)), entries]));
@@ -420,9 +429,9 @@ export async function replayLocalPackage(input, verifier, codec) {
       const snapshots = distinct([supplied.snapshot, ...byteList(supplied.snapshots, "snapshots")]);
       const trails = distinct([supplied.trail, ...byteList(supplied.trails, "trails")]);
       if (imports) {
-        ({ carrying, state, clock, ranges } = await classifyImports(context, directories, verifier.record(venue), { snapshots, trails }));
+        ({ carrying, state, clock, ranges } = await classifyImports(context, directories, record, { snapshots, trails }));
       } else {
-        ranges = await readRecordRanges(selection, terms, header, directories, verifier.record(venue), codec);
+        ranges = await readRecordRanges(selection, terms, header, directories, record, codec);
         ({ carrying, state, clock } = await classifyCarrying(context, ranges, { snapshot, trail, snapshots, trails }));
       }
     } else {
@@ -450,7 +459,7 @@ export async function replayLocalPackage(input, verifier, codec) {
     const historical = selection.mode === "historical-fixture";
     return { status: historical ? "historical-local-replay" : "selected-local-replay",
       ...flags, candidateConfigurationChecked: true, signedTermsAuthenticated: true,
-      ...(ranges === null ? {} : { currentRangeAuthenticated: !historical, termsAuthorityAuthenticated: true, rangeEvidence: "fixture-verifier" }),
+      ...(ranges === null ? {} : { currentRangeAuthenticated: !historical, termsAuthorityAuthenticated: true, rangeEvidence }),
       audit: { records: position.toString(), issued: issued.toString(), burned: burned.toString(),
         outstanding: (issued - burned).toString(), noteRoot: tree.root().toString(), spentRoot: hex(spent.root()),
         historyHash: hex(history), evidenceHash: hex(snapshot.evidenceHash),

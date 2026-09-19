@@ -4,29 +4,28 @@ Updated: 2026-09-19
 
 ## Goal
 
-Single-backing successor/restarted segments in the local v3 experiment,
-with exact finalized C2.10.5 imports and real-proof spending of an imported
-note. Delivered on `main` at a4da219 from `feat/v3-finalized-imports`;
-specification remains on `main` at 3ed1800 (no normative change).
+Bind the candidate Ergo profile verifier into the local v3 real-proof replay.
+Branch `feat/v3-ergo-replay-adapter`, base main 5e51cbb; companion specification
+stays `main` at 3ed1800 (no normative change planned).
 
-Acceptance: transitive imports preserve totals, spent nullifiers, output
-commitments and accepted roots while starting an empty local output tree;
-missing/stale/unwitnessed imports, imported double spends and duplicate
-outputs refuse. Replacement, reappointment and same-index restart must pass
-through the portable package and fresh seedless/receiver processes.
+Acceptance: the existing replacement/import/payment/burn trace replays from
+exact synthetic Ergo transaction bytes through the profile's checked block
+roots and bounded range answers, including portable-package seedless audit
+and receiver restoration in fresh processes. Missing, tampered, undecodable,
+wrong-venue and over-budget evidence returns no partial state. Headers remain
+an explicitly trusted synthetic fixture; no live chain or adoption claim.
 
 ## Status
 
-- Implementation and acceptance complete. Each checkpoint
-  replays from its segment's fixed imported base; prior state is never
-  mutated. Wallet candidates retain their original tree paths.
-- Independent adversarial review found one blocker: an unheld opening was
-  excluded, permitting descent to older state. Fixed by preserving it as
-  unresolved; readback found no remaining material issue. Regressions cover
-  missing B opening and a later C attempting rollback to A.
-- Portable-package replay and fresh seedless/receiver processes agree with
-  the in-process result. Reviewed implementation merged and pushed.
-- [Decision](decisions/2026-09.md#2026-09-19--import-the-exact-single-backing-finalized-closure-in-local-replay).
+- Design review: reuse the existing sigma-rust round-trip decoder and bind
+  the profile and limits independently of package contents. No new parser,
+  venue format, construction decision or protocol rule is needed.
+- Implemented: each intrinsic byte view is charged before its immediate copy;
+  all evidence is owned before decoding and proof awaits. Results explicitly
+  name the candidate Ergo profile with trusted synthetic headers.
+- Independent adversarial review reproduced disguised length/shared-storage
+  and later-getter resize bypasses. Intrinsic checks and immediate copies fix
+  them; regression execution and independent readback closed all findings.
 - No runtime, circuit, key, dependency, device-control or specification change.
   Silence-bearing imports, multi-backing closure and adoption remain unsupported.
   Import term-lapse currently requires full trail evidence; header-only lapse
@@ -34,19 +33,17 @@ through the portable package and fresh seedless/receiver processes.
 
 ## Evidence
 
-- Base main aa21230: CI 34990416105 passed (confirmed remotely).
-- Expanded local replay: 40 groups / 14 real proofs passed, including
-  replacement, imported-note spending, nonzero burn inheritance,
-  reappointment, same-index restart and imported SPENT/OUTPUT refusals.
+- Base main 5e51cbb: CI 35438845448 passed all seven jobs (confirmed remotely).
+- Final `npm run check:pool:ergo-replay`: 48 groups / 14 real proofs passed,
+  including fresh seedless/receiver processes, decodable root mismatch,
+  missing/undecodable sections, profile/header substitution and raw budgets.
+  The imported payment/burn trace uses 21 blocks / 3,764 raw transaction bytes.
   [Retained report](docs/pool-v3-local-replay-verification.json).
-  All 23 retained source hashes match the final tested files. Final rerun
-  includes the correctly signed bad-proof hostile fixture.
-- `npm run check:pool:restoration`: all 14 checks passed; local-only scanner
-  retains its default import refusal.
-- `npm run check:docs` passes; the patch has no whitespace errors.
-- GitHub access works with approved network escalation. Feature a4da219
-  reached remote main; read GitHub Actions for the current main CI result.
-  This handoff records local evidence without presuming a hosted result.
+  Replay and profile report source hashes match the final files.
+- `npm run check:ergo:range`: 342 block, 14,874 decoder and 247 profile checks
+  pass; typecheck and documentation/link checks pass. Full project check and
+  delivery CI remain pending; Vitest's sandbox loader needs approved escalation.
+- No normative change; [decision](decisions/2026-09.md#2026-09-19--bound-raw-ergo-evidence-before-local-proof-replay).
 
 ## Existing local product and custody boundary
 
@@ -68,9 +65,11 @@ through the portable package and fresh seedless/receiver processes.
 
 ## Next
 
-1. Wire the candidate Ergo profile verifier into local replay in place of the
-   fixture venue (an adapter binds the budget). Multi-backing and silence
-   recovery imports remain distinct replay dependencies.
+1. Complete final project checks and authorized merge/push, then verify CI.
+   Next product slice: single-backing silence-bearing imports. State the clock,
+   retirement and exact predecessor rules from existing specification, review
+   independently, then demonstrate fresh public audit/receiver restoration and
+   refusal of stale or withheld closure. Multi-backing remains separate.
 2. P2 (publication on a node) confirms the measured 24-piece transaction;
    P4 measures exhaustion from index zero on a real chain; decoder node
    equivalence is a selection prerequisite. A decoder-refused transaction
@@ -85,6 +84,6 @@ through the portable package and fresh seedless/receiver processes.
   plausible range **40-60%**. Single-backing imports advance the experiment;
   selected venue/decoder, complete recovery, qualified custody and user
   operation remain the largest blocks. No percentage change is warranted.
-- Stay with this instance for the venue-adapter slice: the replay boundary
-  and evidence contracts are fresh; the adapter is the next bounded dependency.
-  This is a context-efficiency recommendation, not a model benchmark.
+- Switch to a fresh instance after delivery for silence-bearing imports: the
+  next slice needs a focused review of clock/retirement semantics, while this
+  adapter's evidence and remaining boundaries are captured here.

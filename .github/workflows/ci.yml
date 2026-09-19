@@ -32,8 +32,10 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Install pinned candidate Ergo decoder for replay
+        run: npm --prefix experiments/ergo-range ci --ignore-scripts --no-audit --no-fund
       - name: Six successor proof relations, uninstantiated construction
-        run: npm run check:pool:v3
+        run: npm run check:pool:v3 -- --ergo
       - name: Diagnose proving parameter integrity on failure
         if: failure()
         shell: bash

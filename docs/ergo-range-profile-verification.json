@@ -22,7 +22,8 @@
   },
   "inputManifestSha256": "2ee407f63c1297ca3262762a1534f5526694f4ef273658cf1060ef1d51c85c07",
   "files": {
-    "experiments/ergo-range/profile-check.mjs": "a5cc3c2ce74718117f293cd798fc870df2f2185484f35ee4c25c10a3346eb600",
+    "experiments/ergo-range/profile-check.mjs": "ec1543bd0a2dbb1bd368f42bb364f4ea2054f4d91d9b7e60b3e3f831bc915632",
+    "experiments/ergo-range/decoder.mjs": "44af0e096fabfcdb4cc581d383006d608391e15635760d21895b6660a3757e55",
     "experiments/ergo-range/package.json": "04c62481ee551c2cf2dd088d2af2afe68b1ba74c0cbc40f41b92b8e85139de89",
     "experiments/ergo-range/package-lock.json": "3c2055dc1a71712fb19a99eb895794c392d9e2c169e5a1d6a0d697ce03b9f79e",
     "model/pool-v3-ergo-profile.ts": "e29de9a4c260f50715fb2786db9a53a10f596e211584853dfaad3e1ce7b91e6e",
