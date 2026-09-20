@@ -127,6 +127,9 @@ K; the exact named demand statement preimage identifies its presenter, without
 establishing demand standing or requiring its enclosing opening to authenticate.
 Missing presenter evidence cannot hide an independently failed K signature.
 Proof and signature checks remain separate; neither yields an exclusion verdict.
+The [compact exclusion dependency investigation](../decisions/2026-09.md#2026-09-20--keep-compact-exclusion-behind-an-explicit-dependency-rule)
+retains that boundary: omitting the target event trail needs an explicit normative
+amendment, while ancestor state, lapse and complete range obligations remain.
 Local limits bound compact bytes, items and suffix
 work, and verifier exceptions remain visible. Runtime adoption remains open.
 Configuration adoption, a selected venue profile and runtime
