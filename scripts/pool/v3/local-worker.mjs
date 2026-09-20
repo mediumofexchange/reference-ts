@@ -3,7 +3,7 @@
 // never read from the supplied record package. No witness or original journal.
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { deserialize } from "node:v8";
 import { Barretenberg, BackendType, UltraHonkVerifierBackend } from "@aztec/bb.js";
 import { loadEvidenceCodecs } from "../delivery/evidence-reader.mjs";
@@ -37,7 +37,10 @@ try {
   if (!["package,selection", "package,seed,selection", "package,selection,venue", "package,seed,selection,venue"].includes(fields)) {
     throw new Error("unexpected fixture input");
   }
-  api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1 });
+  // Share the harness's prepared parameters instead of using a separate
+  // environment-selected or user cache during fresh-process replay.
+  api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1,
+    crsPath: resolve(import.meta.dirname, "../../../scratch/private-payment-crs") });
   const backend = new UltraHonkVerifierBackend(api);
   // The fixture venue record is this process's own range verifier (§13.2),
   // rebuilt from the fixture IPC beside the selection; the package cannot supply it.
