@@ -116,7 +116,13 @@ clock dependencies. One carried snapshot binds the entire header even when the
 directory selectively omits a sibling; complete carriage and sibling-snapshot
 agreement remain finalization conditions after lapse. Live validity and exclusion
 still need full committed event evidence, and selected state retains its complete
-selection envelope.
+selection envelope. Compact §9 proof openings carried as §12 kind-7 items now
+report authenticated committed bad proofs beside import results, including
+unresolved reads and lapsed shared scopes. The reader binds every scoped term to
+the candidate configuration and checks the target against its independently
+selected key. Reports establish no exclusion verdict, admission or state; missing
+history still blocks descent. Local limits bound compact bytes, items and suffix
+work, and verifier exceptions remain visible. Runtime adoption remains open.
 Configuration adoption, a selected venue profile and runtime
 imports remain open. Signed non-service terms drive single and multi-backing
 real-proof counts against each selected backing's strictly preceding canonical

@@ -18,6 +18,7 @@ try {
   if (process.argv.length > 4 || (process.argv[3] !== undefined && process.argv[3] !== "--ergo")) throw new Error("unknown reader mode");
   const withErgo = process.argv[3] === "--ergo";
   const codec = { ...await loadEvidenceCodecs(process.argv[2]), ...await loadConfigurationCodecs(process.argv[2]),
+    ...await import(new URL("model/pool-v3-fault-evidence.js", process.argv[2])),
     ...await import(new URL("model/pool-v3-package.js", process.argv[2])),
     ...await import(new URL("model/pool-v3-range.js", process.argv[2])),
     ...(withErgo ? await import(new URL("model/pool-v3-ergo-profile.js", process.argv[2])) : {}) };

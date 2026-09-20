@@ -51,9 +51,23 @@ Their inherited adoption indices preserve publications still owed, while gap
 and publication-force reads stay strictly before the index.
 The scope classifier also handles two-backing split/rejoin histories, shared
 ancestry, per-backing adoption obligations and their exact publication union.
-Configuration adoption remains unsupported. Full trails are still
-required for import lapse. The local-only restoration scanner continues to
-refuse imports.
+Configuration adoption remains unsupported. Import lapse authenticates scope
+and terms independently of event history; live validity and exclusion retain
+their complete evidence requirements. The local-only restoration scanner
+continues to refuse imports.
+
+Kind-7 package items carry existing §9 compact fault openings. When a checkpoint
+is reached, the reader can authenticate its committed target proof without
+unrelated event preimages and retain a `PROOF` fact in `faultEvidence`, including
+on later refusal or lapse. Exact commitment, position and byte hashes identify
+the observation. Every scoped term must match the reader's candidate configuration
+and venue. Only a supported proof verifier's strict rejection produces a fact;
+exceptions propagate. Facts never decide classification, state, clocks or receipt
+status. Missing complete history still prevents exclusion and import descent.
+Malformed targets, authorization faults, capsules and admission failures remain
+outside this reporter. Per-read local limits are 32 compact items, 1 MiB of backing
+allocations and 1024 suffix entries per item; proof results are cached by exact
+evidence identity. These limits do not change protocol bounds or grant finality.
 
 A package containing one kind-10 receipt requests a seedless receipt read.
 The checkpoint walks authenticate its opening, complete original scope and

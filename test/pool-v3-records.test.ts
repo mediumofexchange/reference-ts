@@ -74,6 +74,20 @@ function publication(kind: codec.Publication["kind"]): codec.Publication {
 function changedInput(s: codec.Record, index: number, value: bigint): codec.Record {
   const p = [...s.publicInputs]; p[index] = value; return { ...s, publicInputs: p };
 }
+
+describe("standalone v3 statement decoding", () => {
+  it.each(kinds)("reads exact kind %s frames without requiring other record fields", kind => {
+    const record = fixture(kind), raw = rawStatement(record);
+    const decoded = codec.decodeStatement(raw);
+    expect(values(decoded)).toEqual(values({ domain: record.domain, kind, publicInputs: record.publicInputs }));
+    expect(() => codec.decodeStatement(rawRecord(record))).toThrow(EncodingError);
+    expect(() => codec.decodeStatement(raw.subarray(0, raw.length - 1))).toThrow(EncodingError);
+    raw.fill(0);
+    expect(values(decoded.domain)).toEqual(values(record.domain));
+    const wrong = fixture(kind); const inputs = [...wrong.publicInputs]; inputs[0] = FIELD_MODULUS;
+    expect(() => codec.decodeStatement(rawStatement({ ...wrong, publicInputs: inputs }))).toThrow(EncodingError);
+  });
+});
 function mutate32(b: Uint8Array, offset: number, n: number): Buffer {
   const copy = Buffer.from(b); copy.set(u32(n), offset); return copy;
 }

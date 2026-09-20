@@ -48,11 +48,12 @@ try {
   const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
   if (config.error) throw new Error("TypeScript configuration unreadable");
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const program = ts.createProgram(["trail", "configuration", "terms", "package", "range", ...(withErgo ? ["ergo-profile"] : [])].map(name => join(root, `model/pool-v3-${name}.ts`)), {
+  const program = ts.createProgram(["trail", "configuration", "terms", "package", "range", "fault-evidence", ...(withErgo ? ["ergo-profile"] : [])].map(name => join(root, `model/pool-v3-${name}.ts`)), {
     ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false,
   });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0); assert.equal(program.emit().emitSkipped, false);
   const codec = { ...await loadEvidenceCodecs(url), ...await loadConfigurationCodecs(url),
+    ...await import(new URL("model/pool-v3-fault-evidence.js", url)),
     ...await import(new URL("model/pool-v3-package.js", url)), ...await import(new URL("model/pool-v3-range.js", url)),
     ...(withErgo ? await import(new URL("model/pool-v3-ergo-profile.js", url)) : {}) };
   if (withErgo) {
@@ -67,6 +68,7 @@ try {
       { kind: 1, payload: p.configuration }, { kind: 2, payload: p.commitment },
       ...directories.map(entries => ({ kind: 3, payload: codec.encodeEvidenceDirectory(entries, PACKAGE_LIMITS) })),
       ...snapshots.map(payload => ({ kind: 4, payload })), ...trails.map(payload => ({ kind: 6, payload })),
+      ...(p.faults ?? []).map(payload => ({ kind: 7, payload })),
       ...(p.receipt === undefined ? [] : [{ kind: 10, payload: p.receipt }]),
     ]), PACKAGE_LIMITS) };
   }
@@ -967,6 +969,11 @@ try {
     venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove, test,
     operatorSecret, issuerSecret, receiverSeed, payerSeed });
   assert.deepEqual(await replayEvidencePackage(portable(imported.payload), verifier, codec), imported.result);
+  await test("compact import refusal and shared-scope lapse survive portable transport", async () => {
+    for (const item of [imported.compact, imported.originalCompact, scoped.compact]) {
+      assert.deepEqual(await replayEvidencePackage(portable(item.payload), verifier, codec), item.result);
+    }
+  });
   const silent = await checkImports({ codec, verifier, configurationBytes, domain,
     venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove,
     test: (name, fn) => test(`Silence: ${name}`, fn),
@@ -1041,6 +1048,9 @@ try {
     assert.deepEqual(worker({ ...complete, seed: receiverSeed }), receiver);
     assert.deepEqual(worker(extended), dependency);
     assert.deepEqual(worker(imported.payload), imported.result);
+    assert.deepEqual(worker(imported.compact.payload), imported.compact.result);
+    assert.deepEqual(worker(imported.originalCompact.payload), imported.originalCompact.result);
+    assert.deepEqual(worker(scoped.compact.payload), scoped.compact.result);
     assert.deepEqual(worker({ ...imported.payload, seed: receiverSeed }), imported.receiver);
     assert.deepEqual(worker(scoped.payload), scoped.result);
     assert.deepEqual(worker({ ...scoped.payload, seed: receiverSeed }), scoped.receiver);
@@ -1107,6 +1117,7 @@ try {
     "scripts/pool/v3/fixture-venue.mjs", "scripts/pool/v3/import-check.mjs", "scripts/pool/v3/ergo-check.mjs",
     "scripts/pool/v3/scope-replay.mjs", "scripts/pool/v3/scope-check.mjs", "scripts/pool/v3/scope-evidence.mjs",
     "scripts/pool/v3/scope-recovery.mjs", "scripts/pool/v3/scope-recovery-check.mjs",
+    "scripts/pool/v3/fault-evidence.mjs", "scripts/pool/v3/fault-check.mjs", "model/pool-v3-fault-evidence.ts",
     "scripts/pool/v3/recovery-state.mjs", "scripts/pool/v3/recovery-check.mjs",
     "scripts/pool/v3/receipt-state.mjs", "scripts/pool/v3/receipt-check.mjs", "scripts/pool/v3/scope-receipt-check.mjs",
     "scripts/pool/v3/non-service.mjs", "scripts/pool/v3/non-service-check.mjs", "scripts/pool/v3/scope-count-check.mjs",
@@ -1121,7 +1132,11 @@ try {
     "experiments/ergo-range/replay-venue.mjs", "experiments/ergo-range/replay-fixture.mjs",
     "experiments/ergo-range/replay-venue-check.mjs", "experiments/ergo-range/package-lock.json");
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-17", specification: "fb7dd07", node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-18", specification: "fb7dd07", node: process.version,
+    compactFaults: { faultRecordBytes: imported.compact.faultBytes,
+      partialPackageBytes: portable(imported.compact.payload).package.length,
+      completePackageBytes: portable(imported.compact.complete).package.length,
+      unresolvedImport: imported.compact.result, lapsedScope: scoped.compact.result },
     packageBytes: portable(complete).package.length, dependencyPackageBytes: portable(extended).package.length,
     fixtureVenueRecords: complete.venue.records.length,
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
@@ -1155,6 +1170,7 @@ try {
       blocks: ergo.payload.venue.blocks.length, audit: ergo.result, receiver: ergo.receiver } } : {}),
     limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
       "Multi-backing imports validate every scoped predecessor and snapshot, merge shared events once with causal recovery conflict checks, and retain per-backing totals, adoption indices and original-tree paths through split, rejoin, exact recovery adoption and continuation. Receipt queries authenticate the complete original scope and exact original/adopted inclusion, retaining liability and the earliest silence/term boundary. Non-service counts use each selected backing's own clause and canonical state strictly before judgment, preserving request ages, imported roots and spent/lock state across scopes and recovery. Import lapse uses snapshot-bound scope and signed terms without its event history; silence still requires the opening and canonical clock dependencies. Live validity and exclusion require full committed event evidence. Selected state retains its complete selection envelope. Checkpoint/event work remains bounded; large histories can refuse resources.",
+      "Compact proof openings authenticate committed target bytes and retain proof-rejection facts through import refusal or scope lapse. They never supply a complete exclusion certificate, missing history, authorization/admission validity or a state transition. Local compact inventory and suffix limits can refuse resources; verifier failures are not proof rejection.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };
   if (withErgo) report.limits.push("The candidate Ergo adapter checks exact transaction decoding and roots against independently selected synthetic headers. No proof of work, chain selection, decoder node equivalence/containment, node acceptance or venue-profile adoption is established.");
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");

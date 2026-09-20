@@ -143,14 +143,26 @@ export function encodeRecord(s: Record): Uint8Array {
   return w.finish();
 }
 
-/** Strict canonical inverse; returned arrays never alias input bytes, including Buffer. */
-export function decodeRecord(bytes: Uint8Array): Record {
-  const r = new ByteReader(bytes); readContext(r, STATEMENT);
+function readStatement(r: ByteReader): Statement {
+  readContext(r, STATEMENT);
   const domain = r.raw(32), kind = r.u8(); requireKind(kind);
   const count = r.u32();
   if (count !== COUNTS[kind]) throw new EncodingError("wrong public-input count");
   const publicInputs = Array.from({ length: count }, () => bytesToField(r.raw(32)));
   requireStatement({ domain, kind, publicInputs });
+  return Object.freeze({ domain, kind, publicInputs: Object.freeze(publicInputs) });
+}
+
+/** Exact statement frame only; proves neither evidence nor admission validity. */
+export function decodeStatement(bytes: Uint8Array): Statement {
+  const r = new ByteReader(bytes), statement = readStatement(r);
+  r.expectEnd();
+  return statement;
+}
+
+/** Strict canonical inverse; returned arrays never alias input bytes, including Buffer. */
+export function decodeRecord(bytes: Uint8Array): Record {
+  const r = new ByteReader(bytes), { domain, kind, publicInputs } = readStatement(r);
   const proof = r.lengthPrefixed(kind === 5 ? 0 : MAX_PROOF);
   const authorization = r.lengthPrefixed(AUTH_LENGTHS[kind]);
   const capsuleCount = r.u32();

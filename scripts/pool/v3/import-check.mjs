@@ -12,6 +12,7 @@ import { inspectRestorationEvidence, LIMITS } from "../delivery/evidence-reader.
 import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
+import { compactFault, checkCompactFault } from "./fault-check.mjs";
 
 const b = n => new Uint8Array(32).fill(n), hex = bytes => Buffer.from(bytes).toString("hex");
 const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
@@ -127,7 +128,32 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
   const c1 = checkpoint(cs, 4n, 15n, [], [], { burned: 1n });
   const ds = segment(operatorSecret, toA.link, 5n, reference(c1)), d0 = checkpoint(ds, 5n, silence ? 16n : 15n, [], [], { burned: 1n });
   const payload = compose([...history, c0, c1, d0]);
-  let result, receiver, lapse;
+  let result, receiver, lapse, compact, originalCompact;
+  if (!silence) {
+    const bad = structuredClone(issuance); bad.proof[100] ^= 1;
+    const records = [bad, payment];
+    const broken = checkpoint(a, 3n, 4n, records, [issueEffect, paymentEffect]);
+    const complete = compose([a0, a1, broken, b0], b0, [toB]);
+    const partial = structuredClone(complete);
+    partial.package.trails = partial.package.trails.filter(bytes => !same(bytes, broken.trail));
+    compact = await checkCompactFault({ payload: partial, complete,
+      fault: compactFault(broken.snapshot, records, 1n, codec), codec, verifier, test, operatorSecret });
+    await test("a compact valid proof records no fault and cannot fill the missing source trail", async () => {
+      const valid = { ...partial, package: { ...partial.package, faults: [compactFault(a1.snapshot, [issuance], 1n, codec)] } };
+      assert.deepEqual(await replayLocalPackage(valid, verifier, codec), await replayLocalPackage(partial, verifier, codec));
+    });
+    await test("original-segment reads retain a later compact fault without passing its withheld trail", async () => {
+      const original = compose([a0, a1, broken], a1, []);
+      original.package.trails = original.package.trails.filter(bytes => !same(bytes, broken.trail));
+      const baseline = await replayLocalPackage(original, verifier, codec);
+      original.package.faults = compact.payload.package.faults;
+      const observed = await replayLocalPackage(original, verifier, codec);
+      assert.equal(observed.status, "unresolved-evidence");
+      const { faultEvidence, ...unchanged } = observed;
+      assert.deepEqual(unchanged, baseline); assert.deepEqual(faultEvidence, compact.result.faultEvidence);
+      originalCompact = { payload: original, result: observed };
+    });
+  }
   await test("successor imports the finalized source prefix into an empty local tree and restores its original path", async () => {
     const restored = await replayLocalPackage({ ...compose([a0, a1, b0], b0, [toB]), seed: payerSeed }, verifier, codec);
     assert.equal(restored.status, "selected-local-replay"); assert.equal(restored.audit.records, "0");
@@ -361,5 +387,5 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       await refuse(withheld, "unresolved-evidence");
     });
   }
-  return { payload, result, receiver, lapse, ...(refusedPayload === undefined ? {} : { refusedPayload }) };
+  return { payload, result, receiver, lapse, compact, originalCompact, ...(refusedPayload === undefined ? {} : { refusedPayload }) };
 }

@@ -16,6 +16,7 @@ import { receiptWalk } from "./receipt-state.mjs";
 import { countNonService } from "./non-service.mjs";
 import { classifyScopes } from "./scope-replay.mjs";
 import { checkpointScope } from "./scope-evidence.mjs";
+import { boundFaultInputs, faultObserver } from "./fault-evidence.mjs";
 
 const same = (a, b) => compareBytes(a, b) === 0;
 const hex = bytes => Buffer.from(bytes).toString("hex");
@@ -116,7 +117,7 @@ async function readRecordRanges(selection, terms, header, directories, record, c
     if (entry === undefined) continue;
     // A carrying checkpoint is read under the experiment's one-backing scope, as the selection is.
     if (directories.get(hex(h.commitment.root)).length !== 1) throw new ScopeRequired();
-    carrying.push({ index: h.index, sequence: h.commitment.sequence, digest: entry.digest,
+    carrying.push({ commitment: h.commitment, index: h.index, sequence: h.commitment.sequence, digest: entry.digest,
       position: i < at ? "before" : i === at ? "selected" : "after" });
   }
   for (let i = 1; i < chain.length; i++) {
@@ -288,6 +289,7 @@ async function classifyCarrying(context, ranges, evidence) {
     opening: opening.toString() });
   let lastValid, state, latestValid = 0n, closing = 0n, currentIndex = -1n, boundary;
   for (const c of ranges.carrying) {
+    await context.faults.inspect(c, [{ name: selection.backing, digest: c.digest }], { header, terms: trail.terms });
     // c(i) reads only checkpoints strictly before i: two at one index do not close each other's gap.
     if (c.index !== currentIndex) { closing = latestValid; currentIndex = c.index; }
     let s = snapshot, tr = trail;
@@ -463,6 +465,7 @@ async function classifyImports(context, directories, record, evidence) {
       const snapshot = codec.decodeSnapshot(bytes);
       const scope = checkpointScope(trails, selection.backing, entry.digest, snapshot, codec), { header } = scope;
       if (header.entries.length !== 1) throw new ScopeRequired();
+      await context.faults.inspect(held, directories.get(hex(c.root)), scope);
       const scoped = header.entries[0], signed = scope.terms[0];
       if (!same(codec.rootTermsName(signed.terms), selection.backing) || !codec.verifyRootTermsSignature(signed.terms, signed.signature)) {
         throw new EvidenceRefusal("unresolved-evidence");
@@ -568,6 +571,7 @@ async function classifyImports(context, directories, record, evidence) {
 export async function replayLocalPackage(input, verifier, codec) {
   let context;
   const failure = (status, check = null) => ({ ...refused(status, check),
+    ...context?.faults.result(),
     ...(context?.receiptWalk === undefined ? {} : { receiptEvidence: context.receiptWalk.evidence() }) });
   try {
     if (input === null || typeof input !== "object") throw new EncodingError("invalid replay input");
@@ -577,7 +581,10 @@ export async function replayLocalPackage(input, verifier, codec) {
     // limits before any await. Cloning it here would allocate unbounded raw
     // blocks (or unused backing buffers) before the adapter can check them.
     const { venue, ...source } = input;
-    const owned = ownInputs(source);
+    const { faults, ...basePackage } = source.package ?? {};
+    const ownedFaults = boundFaultInputs(faults);
+    const owned = ownInputs({ ...source, package: basePackage });
+    owned.package.faults = ownedFaults;
     const { selection, package: supplied, seed } = owned;
     // Do not silently keep the retired issuer override as an alternate input.
     requireReplay(INPUT_SHAPES.includes(fields), "INPUT_FIELDS");
@@ -595,7 +602,9 @@ export async function replayLocalPackage(input, verifier, codec) {
     // instead require the term-by-term record walk below.
     const imports = header.entries.some(entry => entry.opening !== undefined);
     if (!imports && header.entries.length === 1) requireReplay(same(terms.operator, header.operator) && same(header.entries[0].link, selection.backing), "TERMS_INITIAL_SCOPE");
-    context = { selection, terms, header, verifier, codec, receiptBytes: supplied.receipt };
+    if (supplied.faults?.length && venue === undefined) throw new EvidenceRefusal("unsupported-scope");
+    context = { selection, terms, header, verifier, codec, receiptBytes: supplied.receipt,
+      faults: faultObserver(supplied.faults, selection, verifier, codec) };
     if (supplied.receipt !== undefined && (seed !== undefined || venue === undefined)) throw new EvidenceRefusal("unsupported-scope");
     let ranges = null, carrying = null, clock = null, state, rangeEvidence = "none";
     if (venue !== undefined) {
@@ -615,7 +624,7 @@ export async function replayLocalPackage(input, verifier, codec) {
         if (header.entries.length !== 1) throw new ScopeRequired();
         if (imports || supplied.receipt !== undefined || terms.nonService !== undefined) {
           const result = await classifyImports(context, directories, record, { snapshots, trails });
-          if (result.receipt !== undefined) return { ...refused("receipt-status"), receipt: result.receipt, rangeEvidence,
+          if (result.receipt !== undefined) return { ...refused("receipt-status"), ...context.faults.result(), receipt: result.receipt, rangeEvidence,
             candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
             currentRangeAuthenticated: selection.mode !== "historical-fixture" };
           ({ carrying, state, clock, ranges } = result);
@@ -627,7 +636,7 @@ export async function replayLocalPackage(input, verifier, codec) {
         if (!(error instanceof ScopeRequired)) throw error;
         const result = await classifyScopes(context, directories, record, { snapshots, trails },
           { readRecordView, decodedTrails, replayTrail, requireReplay, ReplayRefusal, IMPORT_LIMITS });
-        if (result.receipt !== undefined) return { ...refused("receipt-status"), receipt: result.receipt, rangeEvidence,
+        if (result.receipt !== undefined) return { ...refused("receipt-status"), ...context.faults.result(), receipt: result.receipt, rangeEvidence,
           candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
           currentRangeAuthenticated: selection.mode !== "historical-fixture" };
         ({ carrying, state, clock, ranges } = result);
@@ -667,6 +676,7 @@ export async function replayLocalPackage(input, verifier, codec) {
     }
     const historical = selection.mode === "historical-fixture";
     return { status: historical ? "historical-local-replay" : "selected-local-replay",
+      ...context.faults.result(),
       ...flags, candidateConfigurationChecked: true, signedTermsAuthenticated: true,
       ...(ranges === null ? {} : { currentRangeAuthenticated: !historical, termsAuthorityAuthenticated: true, rangeEvidence }),
       audit: { records: position.toString(), issued: issued.toString(), burned: burned.toString(),
@@ -695,7 +705,7 @@ export async function replayLocalPackage(input, verifier, codec) {
  * it (§10.1), both by hash, so no first-match lookup can silently discard
  * conflicting evidence. Every other directory, snapshot and trail is a
  * dependency the §13 range/import read may need. One kind-10 receipt selects
- * a receipt query; fault/range witnesses and other kinds require a later reader.
+ * a receipt query; kind-7 faults add observations only. Other kinds require a later reader.
  * The same replay engine then
  * authenticates every relationship against selection and, with a fixture
  * venue, against the record ranges. */
@@ -723,7 +733,7 @@ export async function replayEvidencePackage(input, verifier, codec) {
     const owned = { selection, ...(input.seed === undefined ? {} : { seed: copyBytes(input.seed) }),
       ...(input.venue === undefined ? {} : { venue: input.venue }) };
     const kinds = [1, 2, 3, 4, 6];
-    if (items.some(item => ![...kinds, 10].includes(item.kind)) || [1, 2, 10].some(kind => items.filter(item => item.kind === kind).length > 1)) {
+    if (items.some(item => ![...kinds, 7, 10].includes(item.kind)) || [1, 2, 10].some(kind => items.filter(item => item.kind === kind).length > 1)) {
       return refused("unsupported-scope");
     }
     if (kinds.some(kind => !items.some(item => item.kind === kind))) return refused("unresolved-evidence");
@@ -743,7 +753,7 @@ export async function replayEvidencePackage(input, verifier, codec) {
     const snapshots = payloads(4).filter(payload => payload !== snapshotBytes), trails = payloads(6).filter(payload => payload !== trailBytes[0]);
     if (others.length + snapshots.length + trails.length > 0 && input.venue === undefined) return refused("unsupported-scope");
     return await replayLocalPackage({ ...owned, package: { configuration: payloads(1)[0], commitment: payloads(2)[0],
-      directory, directories: others, snapshot: snapshotBytes, snapshots, trail: trailBytes[0], trails,
+      directory, directories: others, snapshot: snapshotBytes, snapshots, trail: trailBytes[0], trails, faults: payloads(7),
       ...(payloads(10).length === 0 ? {} : { receipt: payloads(10)[0] }) } }, verifier, codec);
   } catch (error) {
     if (error instanceof ReplayRefusal) return refused("invalid-local-replay", error.check);

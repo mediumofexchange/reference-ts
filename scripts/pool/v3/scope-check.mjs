@@ -15,6 +15,7 @@ import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { mergeFinalizedPrefixes } from "./scope-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
+import { compactFault } from "./fault-check.mjs";
 import { checkNormalScopeReceipts } from "./scope-receipt-check.mjs";
 import { checkNormalScopeCounts } from "./scope-count-check.mjs";
 
@@ -261,7 +262,7 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
       assert.equal(answer.audit.noteRoot, receiver.audit.noteRoot); assert.equal(answer.audit.spentRoot, receiver.audit.spentRoot);
     }
   });
-  let lapse;
+  let lapse, compact;
   await test("one ended operator term lapses the whole shared scope without its event history", async () => {
     const bad = structuredClone(issuanceY); bad.proof[100] ^= 1;
     const late = checkpoint(shared, 3n, 7n, [issuanceX, bad], [effect([fundedX]), effect([fundedY])]);
@@ -276,6 +277,14 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
     const result = await accepted(withheld);
     assert.deepEqual(result, await accepted(compose([a0, a1, x0, late, resumed], resumed, y, [toB])));
     lapse = { payload: withheld, result };
+    // The compact opening is for sibling x although this read selects y.
+    const fault = compactFault(late.snapshots.find(s => same(codec.decodeSnapshot(s).backing, x)), [issuanceX, bad], 2n, codec);
+    const reported = { ...withheld, package: { ...withheld.package, faults: [fault] } };
+    const observation = await accepted(reported);
+    assert.equal(observation.faultEvidence.length, 1);
+    assert.equal(observation.faultEvidence[0].backing, hex(x));
+    const { faultEvidence, ...unchanged } = observation; assert.deepEqual(unchanged, result);
+    compact = { payload: reported, result: observation };
     const partialDirectory = { ...late, directory: late.directory.filter(e => same(e.name, y)) };
     partialDirectory.commitment = signCommitment(operatorSecret, 3n, directoryRoot(partialDirectory.directory));
     const incomplete = compose([a0, a1, x0, partialDirectory, resumed], resumed, y, [toB]);
@@ -428,5 +437,5 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
   const nonService = await checkNormalScopeCounts({ codec, verifier, prove, test, domain, note, operatorSecret,
     successorSecret, checkpoint, compose, x, y, a0, a1, x0, y0, x1, y1, j0, j1, history, toB, toA,
     fundedX, paidX, issuanceX, issuanceY, effect, receipts });
-  return { payload, payloadY, result, receiver, receiverY, receipts, nonService, lapse };
+  return { payload, payloadY, result, receiver, receiverY, receipts, nonService, lapse, compact };
 }

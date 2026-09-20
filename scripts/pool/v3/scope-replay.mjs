@@ -129,6 +129,7 @@ export async function classifyScopes(context, directories, record, evidence, hel
       if (entry === undefined) throw new EvidenceRefusal("unresolved-evidence");
       const snapshot = snapshotFor(entry.digest);
       const scope = checkpointScope(trails, backing, entry.digest, snapshot, codec), { header } = scope;
+      await context.faults.inspect(held, directory, scope);
       const scopedTerms = new Map(), scopeViews = new Map();
       // Required scope is discovered only after its header is authenticated.
       for (let i = 0; i < header.entries.length; i++) {
