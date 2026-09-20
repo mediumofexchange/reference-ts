@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-20` [Authenticate import lapse independently of event history](decisions/2026-09.md#2026-09-20--authenticate-import-lapse-independently-of-event-history)
 - `2026-09-19` [Preserve per-backing recovery obligations across scope changes](decisions/2026-09.md#2026-09-19--preserve-per-backing-recovery-obligations-across-scope-changes)
 - `2026-09-19` [Preserve the canonical predecessor across same-index returns](decisions/2026-09.md#2026-09-19--preserve-the-canonical-predecessor-across-same-index-returns)
 - `2026-09-19` [Count each backing's requests against shared canonical history](decisions/2026-09.md#2026-09-19--count-each-backings-requests-against-shared-canonical-history)

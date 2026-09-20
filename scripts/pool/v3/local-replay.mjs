@@ -15,6 +15,7 @@ import { recoveryState, effectOf, checkRecovery, applyRecovery, tagOf } from "./
 import { receiptWalk } from "./receipt-state.mjs";
 import { countNonService } from "./non-service.mjs";
 import { classifyScopes } from "./scope-replay.mjs";
+import { checkpointScope } from "./scope-evidence.mjs";
 
 const same = (a, b) => compareBytes(a, b) === 0;
 const hex = bytes => Buffer.from(bytes).toString("hex");
@@ -460,11 +461,9 @@ async function classifyImports(context, directories, record, evidence) {
       const bytes = evidence.snapshots.find(x => same(sha256(x), entry.digest));
       if (bytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
       const snapshot = codec.decodeSnapshot(bytes);
-      const matching = trails.filter(tr => codec.verifyTrailEvidence({ backing: selection.backing, segment: snapshot.segment, digest: entry.digest }, snapshot, tr, LIMITS));
-      if (matching.length !== 1) throw new EvidenceRefusal(matching.length === 0 ? "unresolved-evidence" : "unsupported-scope");
-      const trail = matching[0], header = codec.decodeSegmentHeader(trail.header);
+      const scope = checkpointScope(trails, selection.backing, entry.digest, snapshot, codec), { header } = scope;
       if (header.entries.length !== 1) throw new ScopeRequired();
-      const scoped = header.entries[0], signed = trail.terms[0];
+      const scoped = header.entries[0], signed = scope.terms[0];
       if (!same(codec.rootTermsName(signed.terms), selection.backing) || !codec.verifyRootTermsSignature(signed.terms, signed.signature)) {
         throw new EvidenceRefusal("unresolved-evidence");
       }
@@ -497,6 +496,7 @@ async function classifyImports(context, directories, record, evidence) {
           if (selected && !walk) throw Object.assign(new EvidenceRefusal("lapsed-selection"), { clock: clockRecord(held.index, clock) });
           continue;
         }
+        const trail = scope.fullTrail();
         let segment = segments.get(id);
         if (segment === undefined) {
           // Missing opening evidence is not an exclusion certificate. In
@@ -537,7 +537,9 @@ async function classifyImports(context, directories, record, evidence) {
         if (selectedState !== undefined && !walk) throw new EvidenceRefusal("superseded-selection");
         if (selected) { selectedState = state; selectedClock = clock; }
       } catch (error) {
-        if (!(error instanceof ReplayRefusal) || (selected && !walk)) throw error;
+        if (!(error instanceof ReplayRefusal)) throw error;
+        scope.fullTrail(); // Missing events never certify a deterministic fault.
+        if (selected && !walk) throw error;
         carrying.push({ ...item, class: "excluded", check: error.check });
         walk?.checkpoint(held, snapshot.segment, undefined, header, "excluded");
       }

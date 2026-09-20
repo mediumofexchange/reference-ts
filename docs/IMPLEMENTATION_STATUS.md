@@ -108,8 +108,16 @@ after a fresh opening resets the gap. Same-index fresh openings import the
 canonical lower same-operator sequence under
 [C2b.4.1 at fb7dd07](https://github.com/mediumofexchange/money-from-first-principles/blob/fb7dd07/pool-recovery.md#6-return),
 preserving the inherited adoption index and exact block still owed.
-Import lapse still requires full
-trail evidence. Configuration adoption, a selected venue profile and runtime
+Import lapse authenticates the exact backing snapshot, header and scoped signed
+terms independently of event history. Existing bounded trail containers can
+carry that public evidence with records omitted. Term lapse reads the witnessed
+replacement chains; silence lapse retains the original opening and canonical
+clock dependencies. One carried snapshot binds the entire header even when the
+directory selectively omits a sibling; complete carriage and sibling-snapshot
+agreement remain finalization conditions after lapse. Live validity and exclusion
+still need full committed event evidence, and selected state retains its complete
+selection envelope.
+Configuration adoption, a selected venue profile and runtime
 imports remain open. Signed non-service terms drive single and multi-backing
 real-proof counts against each selected backing's strictly preceding canonical
 state, preserving first request indices, distinct tags and spent/lock status

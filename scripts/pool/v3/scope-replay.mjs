@@ -3,11 +3,12 @@ import { createHash } from "node:crypto";
 import { compareBytes } from "../../../dist/bytes.js";
 import { identifierOf, VALUE_BOUND } from "../../../dist/pool/field.js";
 import { EMPTY_NOTE_ROOT } from "../../../dist/pool/note-tree.js";
-import { EvidenceRefusal, LIMITS } from "../delivery/evidence-reader.mjs";
+import { EvidenceRefusal } from "../delivery/evidence-reader.mjs";
 import { effectOf, applyRecovery } from "./recovery-state.mjs";
 import { scopeRecovery, venueOrder } from "./scope-recovery.mjs";
 import { receiptWalk } from "./receipt-state.mjs";
 import { countNonService } from "./non-service.mjs";
+import { authenticatedScope, checkpointScope } from "./scope-evidence.mjs";
 
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const same = (a, b) => compareBytes(a, b) === 0;
@@ -127,13 +128,11 @@ export async function classifyScopes(context, directories, record, evidence, hel
       const entry = directory.find(item => same(item.name, backing));
       if (entry === undefined) throw new EvidenceRefusal("unresolved-evidence");
       const snapshot = snapshotFor(entry.digest);
-      const matching = trails.filter(trail => codec.verifyTrailEvidence({ backing, segment: snapshot.segment,
-        digest: entry.digest }, snapshot, trail, LIMITS));
-      if (matching.length !== 1) throw new EvidenceRefusal(matching.length === 0 ? "unresolved-evidence" : "unsupported-scope");
-      const trail = matching[0], header = codec.decodeSegmentHeader(trail.header), scopedTerms = new Map(), scopeViews = new Map();
+      const scope = checkpointScope(trails, backing, entry.digest, snapshot, codec), { header } = scope;
+      const scopedTerms = new Map(), scopeViews = new Map();
       // Required scope is discovered only after its header is authenticated.
       for (let i = 0; i < header.entries.length; i++) {
-        const scoped = header.entries[i], signed = trail.terms[i];
+        const scoped = header.entries[i], signed = scope.terms[i];
         if (signed === undefined || !same(codec.rootTermsName(signed.terms), scoped.backing) ||
             !codec.verifyRootTermsSignature(signed.terms, signed.signature)) throw new EvidenceRefusal("unresolved-evidence");
         const terms = codec.decodeRootTerms(signed.terms);
@@ -143,34 +142,26 @@ export async function classifyScopes(context, directories, record, evidence, hel
       try {
         check(same(header.domain, selection.domain) && same(header.venue, selection.venue) &&
           same(header.operator, c.operator) && header.sequence <= c.sequence, "CONTEXT");
-        check(directory.length === header.entries.length && header.entries.every(scoped =>
-          directory.some(item => same(item.name, scoped.backing))), "SCOPE");
-        const durations = [...scopedTerms.values()].map(terms => terms.silence?.noCommitmentDuration);
-        check(durations.every(duration => duration === durations[0]), "SILENCE_SCOPE");
-        let lapsed = false;
+        let lapsed = false, termsInForce = true;
         for (const scoped of header.entries) {
           const terms = scopedTerms.get(hex(scoped.backing));
           check(same(terms.configuration, selection.domain) && same(terms.venue, selection.venue), "TERMS_CONTEXT");
           const view = await viewFor(scoped.backing, terms); scopeViews.set(hex(scoped.backing), view);
           const own = view.chain.find(term => same(term.link, scoped.link));
-          check(own !== undefined && same(own.operator, c.operator), "TERMS_SCOPE");
           const current = codec.linkInForce(view.chain, held.index);
-          if (own.from < current.from) lapsed = true;
-          else check(same(own.link, current.link), "TERMS_SCOPE");
+          if (own !== undefined && same(own.operator, c.operator) && own.from < current.from) lapsed = true;
+          if (own === undefined || !same(own.operator, c.operator) || !same(own.link, current.link)) termsInForce = false;
         }
         if (lapsed) return { ...base, class: "lapsed" };
-        const scopedSnapshots = header.entries.map(scoped => {
-          const s = snapshotFor(directory.find(item => same(item.name, scoped.backing)).digest);
-          check(same(s.backing, scoped.backing) && same(s.segment, snapshot.segment) &&
-            same(s.historyHash, snapshot.historyHash) && same(s.evidenceHash, snapshot.evidenceHash), "SNAPSHOT");
-          return s;
-        });
+        check(termsInForce, "TERMS_SCOPE");
+        const durations = [...scopedTerms.values()].map(terms => terms.silence?.noCommitmentDuration);
+        check(durations.every(duration => duration === durations[0]), "SILENCE_SCOPE");
         const parents = [];
         for (const scoped of header.entries) parents.push(await latest(scoped.backing, scopedTerms.get(hex(scoped.backing)), held));
         let imported, lastValid, block = [], openingIndex;
         const opening = c.sequence === header.sequence;
         if (opening) {
-          check(trail.records.length === 0, "OPENING");
+          check(scope.fullTrail().records.length === 0, "OPENING");
           for (let i = 0; i < header.entries.length; i++) {
             const scoped = header.entries[i], parent = parents[i];
             check(parent === undefined ? scoped.opening === undefined : matches(scoped.opening, parent.commitment), "IMPORT");
@@ -209,6 +200,18 @@ export async function classifyScopes(context, directories, record, evidence, hel
           lastValid = { position: previous.state.position, historyHash: previous.snapshot.historyHash,
             evidenceHash: previous.snapshot.evidenceHash, eventIndices: previous.state.eventIndices };
         }
+        // One carried snapshot authenticates the full scope for lapse even
+        // when this directory omits a sibling. Complete carriage and matching
+        // sibling snapshots are finalization conditions, checked after lapse.
+        check(directory.length === header.entries.length && header.entries.every(scoped =>
+          directory.some(item => same(item.name, scoped.backing))), "SCOPE");
+        const scopedSnapshots = header.entries.map(scoped => {
+          const s = snapshotFor(directory.find(item => same(item.name, scoped.backing)).digest);
+          check(same(s.backing, scoped.backing) && same(s.segment, snapshot.segment) &&
+            same(s.historyHash, snapshot.historyHash) && same(s.evidenceHash, snapshot.evidenceHash), "SNAPSHOT");
+          return s;
+        });
+        const trail = scope.fullTrail();
         chargeEvents(BigInt(trail.records.length));
         const selectedTerms = scopedTerms.get(hex(backing)), revocations = new Map([...scopeViews].map(([name, view]) => [name, view.revokedAt]));
         const state = await replayTrail({ ...context, selection: { ...selection, backing }, terms: selectedTerms, header, scopedTerms },
@@ -221,6 +224,7 @@ export async function classifyScopes(context, directories, record, evidence, hel
         return { ...base, state, block, scopedTerms, openingIndex, class: "valid" };
       } catch (error) {
         if (!(error instanceof ReplayRefusal)) throw error;
+        scope.fullTrail(); // Header-only faults are not exclusion certificates.
         return { ...base, class: "excluded", check: error.check };
       }
     })();
@@ -232,9 +236,8 @@ export async function classifyScopes(context, directories, record, evidence, hel
   if (selectedHeld === undefined) throw new EvidenceRefusal("selection-mismatch");
   if (context.receiptBytes !== undefined) {
     const receipt = codec.decodeReceipt(context.receiptBytes);
-    const original = trails.find(trail => hash(trail.header) === hex(receipt.segment));
-    if (original === undefined) throw new EvidenceRefusal("unresolved-evidence");
-    const header = codec.decodeSegmentHeader(original.header), scopeViews = new Map(), termsByBacking = new Map();
+    const original = authenticatedScope(trails, receipt.segment, codec);
+    const { header } = original, scopeViews = new Map(), termsByBacking = new Map();
     for (let i = 0; i < header.entries.length; i++) {
       const scoped = header.entries[i], signed = original.terms[i];
       if (signed === undefined || !same(codec.rootTermsName(signed.terms), scoped.backing) ||

@@ -1,62 +1,61 @@
 # Current work
 
-Updated: 2026-09-19
+Updated: 2026-09-20
 
 ## Goal
 
-Completed slice: multi-backing non-service counts through scope changes and recovery
-at the conditional v3 layer. Count the independently selected backing's requests
-against its canonical state strictly before judgment, preserving first identity
-indices, imported anchors, spent tags and live locks. Unadopted publications do
-not change the counting state; missing required evidence refuses the complete read.
+Completed slice: import-lapse classification without complete history trails at
+the conditional v3 layer. Authenticate the exact backing snapshot, header and
+scoped signed terms independently of event history. Missing live evidence remains
+unresolved; validity and exclusion require the full committed trail.
 
-Acceptance: independent selected-backing counts through split/rejoin/handover and
-recovery, strict-index/refresh/lock/spent adversarial cases, seedless portable and
-fresh-process agreement, reviewed design/patch, real-proof replay and delivery.
-Stop after this complete counting capability; runtime adoption remains separate.
+Acceptance demonstrated: single/shared-scope term and silence lapse with withheld
+history; hostile snapshot/header/term/range and live-history cases; original-prefix
+clocks; portable and fresh-process agreement; independent design/patch review and
+real-proof replay. Runtime adoption and new normative formats remain outside scope.
 
 ## Status
 
-- Delivery branch: `feat/multi-backing-non-service`, based on main `9edf6dd`.
-  Fetched main/remote parity confirmed. Baseline hosted CI 35467656025 passed
-  all seven jobs. No branch protection or applicable ruleset gates at last read.
-- The existing counter now reads shared canonical history strictly before
-  judgment. Each selected backing retains its own duration, threshold and window;
-  a missing clause adds no count or request-range dependency. Recovery effects
-  enter the count only once adopted into a prior canonical checkpoint.
-- [Decision](decisions/2026-09.md#2026-09-19--count-each-backings-requests-against-shared-canonical-history)
-  applies existing C2b.5.1–2 and C2.10.3–7. No normative amendment. Companion
-  specification stays on main `e41cac8`; normative pin remains `fb7dd07`.
+- Delivery branch: `feat/import-lapse-evidence`, based on main `31b2ae6`.
+  Upstream fetched and baseline parity verified; no branch protection or applicable
+  ruleset gates. Prior main CI 35469049390 passed. Inspect delivery CI from Git.
+- [Decision](decisions/2026-09.md#2026-09-20--authenticate-import-lapse-independently-of-event-history)
+  applies existing C2.10.4 and C2.10.11–12. No normative amendment; companion
+  specification remains main `e41cac8`, normative pin `fb7dd07`.
+- Reuse bounded trail containers with omitted records as public scope evidence.
+  An ended scoped term takes precedence over an unknown sibling link. One carried
+  snapshot binds the entire header even if its directory omits a sibling.
+  Directory/sibling-snapshot finalization checks follow term and silence lapse.
+  Invalid term copies cannot shadow authentic scope evidence, including receipts.
 
 ## Evidence
 
-- Independent design and integrated adversarial reviews found no remaining
-  material blockers. Final readback covered initial-index and publication-index
-  bounds, absence/receipt isolation, cached ranges and portable/fresh-process wiring.
-- Final proof-oracle probe passed all 60 groups, including the last boundary
-  assertions. Six new request proofs reuse existing note/history traces.
-- Final `npm run check:pool:ergo-replay` passed 168 groups and 63 real proofs,
-  including portable packages, fresh count readers and the synthetic Ergo
-  adapter. The [retained report](docs/pool-v3-local-replay-verification.json)
-  binds 47 checked source hashes. Circuits/keys/configuration are unchanged.
-- Syntax and documentation checks passed. Baseline full-check/real-proof CI is
-  reusable for unchanged runtime, relations and package inputs; this slice passed
-  its required experiment acceptance and documentation checks.
-- Import lapse still needs full trails. No runtime, authenticated live-chain,
-  configuration-adoption or production spendability claim.
+- Independent design and integrated adversarial reviews completed. Critical
+  readback confirmed the directory/snapshot ordering fix; malformed-term discovery
+  was independently reproduced with actual codecs. No remaining review blocker.
+- Focused proof-oracle scope/recovery probe passed all 60 groups. Final
+  `npm run check:pool:ergo-replay` passed 170 groups and 63 real proofs, including
+  seedless portable packages, fresh readers and the synthetic Ergo adapter.
+  The [retained report](docs/pool-v3-local-replay-verification.json) binds 48
+  checked source hashes. Circuits, keys, configuration and runtime are unchanged.
+- Syntax and documentation checks passed. Baseline broad runtime/proof CI remains
+  reusable for unchanged inputs; the changed experiment passed its full acceptance.
+- Selected state still requires its complete selection envelope. Compact fault
+  certificates, runtime integration and authenticated live-chain evidence remain
+  open. No configuration-adoption or production spendability claim.
 
 ## Next
 
-1. Inspect hosted CI for the delivery commit from Git; local acceptance is
-   complete. Delivery/parity is recorded in Git, not self-hashed in this handoff.
-2. Next capability: import-lapse classification without complete history trails.
-   Start with C2.10.4 and C2.10.12's authenticated scope/term lapse evidence,
-   exact snapshot/header binding and package dependency rules. Probe withholding
-   a lapsed checkpoint's history while preserving all required public evidence;
-   preserve unresolved-versus-excluded distinctions and original-prefix clocks.
-   Review this evidence boundary before implementation; no runtime adoption.
+1. Inspect hosted CI for the delivery commit from Git; local acceptance is complete.
+   Verify delivery/parity from Git rather than adding a self-hash to this handoff.
+2. Next capability: compact authenticated fault evidence through import descent.
+   Start with C2.10.11–12, pool-v3 §§9–10 and `model/pool-v3-fault-evidence.ts`.
+   Probe one committed invalid proof with an authenticated evidence-chain opening
+   while withholding unrelated events. Distinguish fault authentication from a
+   complete exclusion verdict, preserving lapse priority and original-prefix
+   dependencies. Review the evidence boundary before dependent implementation.
 3. A future proof-fixture cache must bind exact sources, artifacts and configuration
-   and retain independent generation checks. Do not interrupt the active slice.
+   and retain independent generation checks; do not interrupt the active slice.
 
 ## Retained boundaries and local state
 
@@ -80,10 +79,10 @@ Stop after this complete counting capability; runtime adoption remains separate.
 ## Open questions
 
 Roughly **50% done / 50% remaining**, plausible range **40–60%**. Shared recovery,
-receipt and count evidence is reusable progress; runtime integration, selected
-venue/decoder, qualified custody and user operation dominate remaining effort.
-No rounded estimate change.
+receipt, count and history-free lapse evidence are reusable progress; runtime
+integration, selected venue/decoder, qualified custody and user operation dominate
+remaining effort. No rounded estimate change.
 
-Switch to a fresh instance for the next import-lapse evidence slice: it changes
-the evidence-availability boundary and benefits from focused context. This
-handoff retains the verified shared-replay work and the next decisive probe.
+Switch to a fresh instance for compact fault evidence: it changes the exclusion
+evidence boundary and benefits from focused context. This handoff retains the
+verified import-lapse result and next decisive probe.

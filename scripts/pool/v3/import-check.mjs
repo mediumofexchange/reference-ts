@@ -127,7 +127,7 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
   const c1 = checkpoint(cs, 4n, 15n, [], [], { burned: 1n });
   const ds = segment(operatorSecret, toA.link, 5n, reference(c1)), d0 = checkpoint(ds, 5n, silence ? 16n : 15n, [], [], { burned: 1n });
   const payload = compose([...history, c0, c1, d0]);
-  let result, receiver;
+  let result, receiver, lapse;
   await test("successor imports the finalized source prefix into an empty local tree and restores its original path", async () => {
     const restored = await replayLocalPackage({ ...compose([a0, a1, b0], b0, [toB]), seed: payerSeed }, verifier, codec);
     assert.equal(restored.status, "selected-local-replay"); assert.equal(restored.audit.records, "0");
@@ -312,7 +312,8 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       assert.equal(passed.audit.range.carrying.at(-2).check, "SNAPSHOT");
     });
     await test("reappointment cannot reset the backing clock with a checkpoint from the same key's ended term", async () => {
-      const late = checkpoint(a, 3n, 14n, [issuance], [issueEffect]);
+      const bad = structuredClone(issuance); bad.proof[100] ^= 1;
+      const late = checkpoint(a, 3n, 14n, [bad], [issueEffect]);
       const returned = checkpoint(segment(operatorSecret, toA.link, 4n, reference(b2)), 4n, 16n, [], [], { burned: 1n });
       const p = compose([...history, late, returned]);
       p.selection.judgingIndex = 16n; p.selection.mode = "historical-fixture";
@@ -320,6 +321,24 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       assert.equal(answer.status, "historical-local-replay");
       assert.deepEqual(classes(answer).slice(-2), ["lapsed", "valid"]);
       assert.deepEqual(answer.audit.range.clock, { duration: "4", snapshotIndex: "10", gap: "6", open: true, boundary: null, opening: "16" });
+      p.package.trails = p.package.trails.filter(bytes => !same(bytes, late.trail));
+      assert.deepEqual(await replayLocalPackage(p, verifier, codec), answer);
+      lapse = { payload: p, result: answer };
+    });
+    await test("single-backing silence lapse passes withheld events but preserves earlier clock dependencies", async () => {
+      const bad = structuredClone(payment); bad.proof[100] ^= 1;
+      const late = checkpoint(bs, 4n, 15n, [bad], [paymentEffect]);
+      // Move the reappointment past the lapsed continuation so the old term is
+      // still in force: this isolates silence from the independent term lapse.
+      const delayed = replacement(operatorSecret, toB.link, 16n, 7n);
+      const returned = checkpoint(segment(operatorSecret, delayed.link, 3n, reference(b2)), 3n, 16n, [], [], { burned: 1n });
+      const full = compose([...history, late, returned], returned, [toB, delayed]);
+      const answer = await accepted(full);
+      full.package.trails = full.package.trails.filter(bytes => !same(bytes, late.trail));
+      assert.deepEqual(await accepted(full), answer);
+      const prior = structuredClone(full);
+      prior.package.trails = prior.package.trails.filter(bytes => !same(bytes, b2.trail));
+      await refuse(prior, "unresolved-evidence");
     });
     await test("publication closure must be answered independently; malformed records have no force at any index", async () => {
       const unavailable = { ...verifier, record(data) {
@@ -342,5 +361,5 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       await refuse(withheld, "unresolved-evidence");
     });
   }
-  return { payload, result, receiver, ...(refusedPayload === undefined ? {} : { refusedPayload }) };
+  return { payload, result, receiver, lapse, ...(refusedPayload === undefined ? {} : { refusedPayload }) };
 }

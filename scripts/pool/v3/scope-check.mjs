@@ -261,14 +261,76 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
       assert.equal(answer.audit.noteRoot, receiver.audit.noteRoot); assert.equal(answer.audit.spentRoot, receiver.audit.spentRoot);
     }
   });
-  await test("one ended operator term lapses the whole shared scope while a new smaller scope passes it", async () => {
-    const late = checkpoint(shared, 3n, 7n, [issuanceX, issuanceY], [effect([fundedX]), effect([fundedY])]);
+  let lapse;
+  await test("one ended operator term lapses the whole shared scope without its event history", async () => {
+    const bad = structuredClone(issuanceY); bad.proof[100] ^= 1;
+    const late = checkpoint(shared, 3n, 7n, [issuanceX, bad], [effect([fundedX]), effect([fundedY])]);
     await refused(compose([a0, a1, x0, late], late, y, [toB]), "lapsed-selection");
     const smaller = segment(operatorSecret, 4n, [entry(y, y, a1)]), resumed = checkpoint(smaller, 4n, 8n);
     const answer = await accepted({ ...compose([a0, a1, x0, late, resumed], resumed, y, [toB]), seed: payerSeed });
     assert.equal(answer.audit.issued, "20"); assert.equal(answer.audit.records, "0");
     assert.deepEqual(answer.candidates.map(c => c.cm), [fundedY.cm.toString()]); assertPaths(answer);
     assert.equal(answer.audit.range.carrying.some(c => c.class === "lapsed"), true);
+    const withheld = compose([a0, a1, x0, late, resumed], resumed, y, [toB]);
+    withheld.package.trails = withheld.package.trails.filter(bytes => !same(bytes, late.trail));
+    const result = await accepted(withheld);
+    assert.deepEqual(result, await accepted(compose([a0, a1, x0, late, resumed], resumed, y, [toB])));
+    lapse = { payload: withheld, result };
+    const partialDirectory = { ...late, directory: late.directory.filter(e => same(e.name, y)) };
+    partialDirectory.commitment = signCommitment(operatorSecret, 3n, directoryRoot(partialDirectory.directory));
+    const incomplete = compose([a0, a1, x0, partialDirectory, resumed], resumed, y, [toB]);
+    incomplete.package.trails = incomplete.package.trails.filter(bytes => !same(bytes, late.trail));
+    assert.equal((await accepted(incomplete)).audit.range.carrying.some(c => c.class === "lapsed"), true);
+    const partialLive = compose([a0, a1, { ...partialDirectory, at: 4n }, x0, resumed], resumed, y, [toB]);
+    partialLive.package.trails = partialLive.package.trails.filter(bytes => !same(bytes, late.trail));
+    await refused(partialLive, "unresolved-evidence");
+    // A later replacement cannot excuse a checkpoint that was live at its
+    // original prefix, and withholding the earlier canonical prefix still blocks.
+    await refused({ ...withheld, venue: { ...withheld.venue, records: withheld.venue.records.map(r =>
+      r.kind === 1 && same(r.record, encodeCommitment(late.commitment)) ? { ...r, index: 4n } : r) } }, "unresolved-evidence");
+    const missingPrior = structuredClone(withheld);
+    missingPrior.package.trails = missingPrior.package.trails.filter(bytes => !same(bytes, a1.trail));
+    await refused(missingPrior, "unresolved-evidence");
+    const missingRange = { ...verifier, record(data) { const v = verifier.record(data); return { ...v,
+      range: r => r.kind === 2 && same(r.subject, x) ? undefined : v.range(r) }; } };
+    await refused(withheld, "unresolved-evidence", undefined, missingRange);
+    // An ended sibling term takes precedence over an unknown sibling link.
+    const malformed = segment(operatorSecret, 3n, [entry(x), entry(y, b(211))]);
+    const malformedLate = checkpoint(malformed, 3n, 7n, [issuanceX, bad], [effect([fundedX]), effect([fundedY])]);
+    const metadata = codec.encodeTrail({ ...codec.decodeTrail(malformedLate.trail, LIMITS), records: [] }, LIMITS);
+    const partial = compose([a0, a1, x0, { ...malformedLate, trail: metadata }, resumed], resumed, y, [toB]);
+    assert.equal((await accepted(partial)).audit.range.carrying.some(c => c.class === "lapsed"), true);
+    // Invalid signed-term copies must not shadow the available authentic scope.
+    const invalidTerms = codec.decodeTrail(metadata, LIMITS), altered = structuredClone(invalidTerms);
+    altered.terms[0].signature[0] ^= 1;
+    const invalidMetadata = codec.encodeTrail(altered, LIMITS);
+    const malformedTerms = structuredClone(invalidTerms); malformedTerms.terms[0].terms[0] ^= 1;
+    for (const invalidCopy of [invalidMetadata, codec.encodeTrail(malformedTerms, LIMITS)]) {
+      for (const trails of [[invalidCopy, ...partial.package.trails], [...partial.package.trails, invalidCopy]]) {
+        assert.deepEqual(await accepted({ ...partial, package: { ...partial.package, trails } }), await accepted(partial));
+      }
+    }
+    const unavailableScope = structuredClone(partial);
+    unavailableScope.package.trails = unavailableScope.package.trails.filter(bytes => !same(bytes, metadata));
+    unavailableScope.package.trails.push(invalidMetadata);
+    await refused(unavailableScope, "unresolved-evidence");
+    const forged = structuredClone(partial), wrongHeader = structuredClone(invalidTerms);
+    wrongHeader.header[25] ^= 1;
+    forged.package.trails = forged.package.trails.filter(bytes => !same(bytes, metadata));
+    forged.package.trails.push(codec.encodeTrail(wrongHeader, LIMITS));
+    await refused(forged, "unresolved-evidence");
+    const alien = segment(successorSecret, 3n, [entry(x), entry(y)]);
+    const alienCp = checkpoint(alien, 3n, 7n, [issuanceX, bad], [effect([fundedX]), effect([fundedY])]);
+    alienCp.commitment = signCommitment(operatorSecret, 3n, directoryRoot(alienCp.directory));
+    const alienPartial = { ...alienCp, trail: codec.encodeTrail({ ...codec.decodeTrail(alienCp.trail, LIMITS), records: [] }, LIMITS) };
+    // Even a provable header-context fault cannot exclude missing event evidence.
+    await refused(compose([a0, a1, x0, alienPartial, resumed], resumed, y, [toB]), "unresolved-evidence");
+    // Exact snapshot backing is checked even when the signed directory binds it.
+    const wrong = { ...late, snapshots: late.snapshots.map(bytes => same(codec.decodeSnapshot(bytes).backing, y)
+      ? codec.snapshotBytes({ ...codec.decodeSnapshot(bytes), backing: x }) : bytes) };
+    wrong.directory = late.directory.map(e => same(e.name, y) ? { ...e, digest: hash(wrong.snapshots[late.directory.findIndex(e => same(e.name, y))]) } : e);
+    wrong.commitment = signCommitment(operatorSecret, 3n, directoryRoot(wrong.directory));
+    await refused(compose([a0, a1, x0, wrong, resumed], resumed, y, [toB]), "unresolved-evidence");
   });
   await test("same-index lower held sequences qualify as exact predecessors and stale references fail", async () => {
     const again = segment(operatorSecret, 6n, [entry(x, toA.link, j0), entry(y, y, j0)]);
@@ -366,5 +428,5 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
   const nonService = await checkNormalScopeCounts({ codec, verifier, prove, test, domain, note, operatorSecret,
     successorSecret, checkpoint, compose, x, y, a0, a1, x0, y0, x1, y1, j0, j1, history, toB, toA,
     fundedX, paidX, issuanceX, issuanceY, effect, receipts });
-  return { payload, payloadY, result, receiver, receiverY, receipts, nonService };
+  return { payload, payloadY, result, receiver, receiverY, receipts, nonService, lapse };
 }

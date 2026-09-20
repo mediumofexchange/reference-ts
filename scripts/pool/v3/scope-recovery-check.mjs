@@ -251,6 +251,7 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     missing.package.snapshots = missing.package.snapshots.filter(bytes => !ry.snapshots.some(s => same(s, bytes)));
     await refused(missing, "unresolved-evidence");
   });
+  let lapse;
   await test("one silent backing lapses an old shared scope even while selecting the other backing", async () => {
     // At8 x's last valid checkpoint3 is silent, while y's checkpoint4
     // remains inside its duration. Either backing lapses the whole scope.
@@ -260,6 +261,21 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     // The valid fresh returns/adoption reset both current clocks. They cannot
     // erase the historical gap which already retired the old shared segment.
     await refused(compose([...ancestry, adopted, final, historical], historical, publications, y), "lapsed-selection");
+    const bad = structuredClone(iy); bad.proof[100] ^= 1;
+    const withheldTail = checkpoint(shared, 10n, 15n, [ix, bad], [effect([fundedX]), effect([fundedY])]);
+    const full = compose([...ancestry, adopted, final, withheldTail], final, publications, y, 15n);
+    const answer = await accepted(full);
+    full.package.trails = full.package.trails.filter(bytes => !same(bytes, withheldTail.trail));
+    assert.deepEqual(await accepted(full), answer);
+    lapse = { payload: full, result: answer };
+    const partial = { ...withheldTail, directory: withheldTail.directory.filter(e => same(e.name, y)) };
+    partial.commitment = signCommitment(operatorSecret, 10n, directoryRoot(partial.directory));
+    const incomplete = compose([...ancestry, adopted, final, partial], final, publications, y, 15n);
+    incomplete.package.trails = incomplete.package.trails.filter(bytes => !same(bytes, withheldTail.trail));
+    assert.deepEqual(await accepted(incomplete), answer);
+    const missing = structuredClone(full);
+    missing.package.trails = missing.package.trails.filter(bytes => !same(bytes, a1.trail));
+    await refused(missing, "unresolved-evidence");
   });
   await test("independent scoped range answers cannot assign one venue position to two publications", async () => {
     const contradictory = { ...verifier, record(data) { const record = verifier.record(data); return { ...record,
@@ -389,5 +405,5 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     compose, publication, x, y, a0, a1, x0, y0, j0, adopted, final, ancestry, publications,
     fundedX, fundedY, sx, standingCheckpoints });
   return { payload, payloadY, result, resultY, receiver, issuerSeed, issuerPayload, issuerPayloadY,
-    issuerRestored, issuerRestoredY, standing, unequal, receipts, nonService };
+    issuerRestored, issuerRestoredY, standing, unequal, receipts, nonService, lapse };
 }
