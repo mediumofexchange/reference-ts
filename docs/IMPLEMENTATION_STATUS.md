@@ -114,22 +114,29 @@ carry that public evidence with records omitted. Term lapse reads the witnessed
 replacement chains; silence lapse retains the original opening and canonical
 clock dependencies. One carried snapshot binds the entire header even when the
 directory selectively omits a sibling; complete carriage and sibling-snapshot
-agreement remain finalization conditions after lapse. Live validity and exclusion
-still need full committed event evidence, and selected state retains its complete
-selection envelope. Compact §9 proof openings carried as §12 kind-7 items now
+agreement remain finalization conditions after lapse. Live validity still needs
+full committed event evidence, and selected state retains its complete selection
+envelope. Compact §9 proof openings carried as §12 kind-7 items
 report authenticated committed bad proofs beside import results, including
 unresolved reads and lapsed shared scopes. The reader binds every scoped term to
 the candidate configuration and checks the target against its independently
-selected key. Reports establish no exclusion verdict, admission or state; missing
-history still blocks descent. Signature observations additionally cover issuance,
+selected key. Individual reports establish no admission or state. Signature
+observations additionally cover issuance,
 withdrawal and both settlement roles. The target backing's scoped terms identify
 K; the exact named demand statement preimage identifies its presenter, without
 establishing demand standing or requiring its enclosing opening to authenticate.
 Missing presenter evidence cannot hide an independently failed K signature.
-Proof and signature checks remain separate; neither yields an exclusion verdict.
-The [compact exclusion dependency investigation](../decisions/2026-09.md#2026-09-20--keep-compact-exclusion-behind-an-explicit-dependency-rule)
-retains that boundary: omitting the target event trail needs an explicit normative
-amendment, while ancestor state, lapse and complete range obligations remain.
+Proof and signature checks remain separate. The conditional classifier now applies
+[§9.1 at 183c09f](https://github.com/mediumofexchange/money-from-first-principles/blob/183c09f/pool-v3.md#91-compact-intrinsic-exclusion)
+to strict proof rejection or issue-K rejection for a single-backing non-silence
+continuation after resolving its valid opening, exact last valid state and complete
+record dependencies. Only its target event trail may be replaced; selected state
+and ancestor evidence remain complete. Full target evidence takes priority.
+Missing predecessors still refuse, held sequences remain consumed, and repairs
+extend the actual last valid prefix. Opening, shared-scope, silence and adopted-block
+contexts, other signature roles and admission/capsule faults retain their ordinary
+evidence or refuse. The original classifier now explicitly excludes nonempty
+opening checkpoints before establishing the compact path's valid-opening condition.
 Local limits bound compact bytes, items and suffix
 work, and verifier exceptions remain visible. Runtime adoption remains open.
 Configuration adoption, a selected venue profile and runtime

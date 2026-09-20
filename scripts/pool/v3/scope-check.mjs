@@ -318,7 +318,7 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
     await refused(partialLive, "unresolved-evidence");
     // A later replacement cannot excuse a checkpoint that was live at its
     // original prefix, and withholding the earlier canonical prefix still blocks.
-    await refused({ ...withheld, venue: { ...withheld.venue, records: withheld.venue.records.map(r =>
+    for (const p of [withheld, reported]) await refused({ ...p, venue: { ...p.venue, records: p.venue.records.map(r =>
       r.kind === 1 && same(r.record, encodeCommitment(late.commitment)) ? { ...r, index: 4n } : r) } }, "unresolved-evidence");
     const missingPrior = structuredClone(withheld);
     missingPrior.package.trails = missingPrior.package.trails.filter(bytes => !same(bytes, a1.trail));

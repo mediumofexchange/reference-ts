@@ -12,7 +12,7 @@ import { inspectRestorationEvidence, LIMITS } from "../delivery/evidence-reader.
 import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
-import { compactFault, checkCompactFault } from "./fault-check.mjs";
+import { compactFault, checkCompactFault, withoutFaultReasons } from "./fault-check.mjs";
 import { checkAuthorizationCase } from "./authorization-check.mjs";
 
 const b = n => new Uint8Array(32).fill(n), hex = bytes => Buffer.from(bytes).toString("hex");
@@ -130,7 +130,23 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
   const ds = segment(operatorSecret, toA.link, 5n, reference(c1)), d0 = checkpoint(ds, 5n, silence ? 16n : 15n, [], [], { burned: 1n });
   const payload = compose([...history, c0, c1, d0]);
   let result, receiver, lapse, compact, originalCompact, authorization;
+  const intrinsicCases = [];
   if (!silence) {
+    await test("a nonempty original opening is excluded and cannot establish a compact-exclusion prerequisite", async () => {
+      const nonempty = checkpoint(a, 1n, 1n, [issuance], [issueEffect]);
+      await reject(compose([nonempty], nonempty, []), "OPENING");
+      const continued = await replayLocalPackage(compose([nonempty, a1], a1, []), verifier, codec);
+      assert.equal(continued.status, "selected-local-replay");
+      assert.equal(continued.audit.range.carrying[0].class, "excluded");
+      const wrong = structuredClone(issuance); wrong.proof[100] ^= 1;
+      const target = checkpoint(a, 3n, 4n, [wrong], [issueEffect]);
+      const p = compose([nonempty, a1, target], a1, []);
+      p.package.trails = p.package.trails.filter(bytes => !same(bytes, target.trail));
+      p.package.faults = [compactFault(target.snapshot, [wrong], 1n, codec)];
+      const answer = await replayLocalPackage(p, verifier, codec);
+      assert.equal(answer.status, "unresolved-evidence"); assert.equal(answer.audit, null);
+      assert.deepEqual(answer.candidates, []);
+    });
     const bad = structuredClone(issuance); bad.proof[100] ^= 1;
     const records = [bad, payment];
     const broken = checkpoint(a, 3n, 4n, records, [issueEffect, paymentEffect]);
@@ -143,15 +159,17 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       const valid = { ...partial, package: { ...partial.package, faults: [compactFault(a1.snapshot, [issuance], 1n, codec)] } };
       assert.deepEqual(await replayLocalPackage(valid, verifier, codec), await replayLocalPackage(partial, verifier, codec));
     });
-    await test("original-segment reads retain a later compact fault without passing its withheld trail", async () => {
+    await test("original-segment reads pass a compact intrinsic fault and retain the exact last valid state", async () => {
       const original = compose([a0, a1, broken], a1, []);
+      const full = await replayLocalPackage(original, verifier, codec);
       original.package.trails = original.package.trails.filter(bytes => !same(bytes, broken.trail));
       const baseline = await replayLocalPackage(original, verifier, codec);
+      assert.equal(baseline.status, "unresolved-evidence");
       original.package.faults = compact.payload.package.faults;
       const observed = await replayLocalPackage(original, verifier, codec);
-      assert.equal(observed.status, "unresolved-evidence");
+      assert.equal(observed.status, "selected-local-replay");
       const { faultEvidence, ...unchanged } = observed;
-      assert.deepEqual(unchanged, baseline); assert.deepEqual(faultEvidence, compact.result.faultEvidence);
+      assert.deepEqual(withoutFaultReasons(unchanged), withoutFaultReasons(full)); assert.deepEqual(faultEvidence, compact.result.faultEvidence);
       originalCompact = { payload: original, result: observed };
     });
     const unauthorized = { ...issuance, authorization: ed25519.sign(codec.statementBytes(issuance), b(199)) };
@@ -162,7 +180,78 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
     partialAuth.package.faults = [compactFault(invalid.snapshot, [unauthorized], 1n, codec)];
     authorization = await checkAuthorizationCase({ label: "issue K", payload: partialAuth, complete: full,
       validAuthorization: issuance.authorization, expectedRole: "issue", expectedSigner: issuer,
-      codec, verifier, test, operatorSecret });
+      codec, verifier, test, operatorSecret, intrinsic: true });
+    const withhold = (p, target, records, position) => {
+      const copy = structuredClone(p);
+      copy.package.trails = copy.package.trails.filter(bytes => !same(bytes, target.trail));
+      copy.package.faults = [compactFault(target.snapshot, records, position, codec)];
+      return copy;
+    };
+    const unresolved = async p => {
+      const answer = await replayLocalPackage(p, verifier, codec);
+      assert.equal(answer.status, "unresolved-evidence"); assert.equal(answer.audit, null);
+      assert.deepEqual(answer.candidates, []); assert.equal(answer.spendable, false);
+      return answer;
+    };
+    await test("compact target exclusion cannot replace its opening, predecessor, directory, snapshot or range", async () => {
+      for (const cp of [a0, a1]) for (const key of ["trails", "snapshots", "directories"]) {
+        const missing = structuredClone(compact.payload);
+        missing.package[key] = missing.package[key].filter(item => key === "trails" ? !same(item, cp.trail) :
+          key === "snapshots" ? !same(item, cp.snapshot) : !same(directoryRoot(item), directoryRoot(cp.directory)));
+        await unresolved(missing);
+      }
+      const unavailable = { ...verifier, record(data) {
+        const record = verifier.record(data);
+        return { ...record, range: request => request.kind === 1 ? undefined : record.range(request) };
+      } };
+      const answer = await replayLocalPackage(compact.payload, unavailable, codec);
+      assert.equal(answer.status, "unresolved-evidence"); assert.equal(answer.audit, null);
+    });
+    await test("compact fault after a spent predecessor cannot restore an older unspent state", async () => {
+      const badBurn = structuredClone(payment2); badBurn.proof[100] ^= 1;
+      const badRecords = [payment, badBurn];
+      const target = checkpoint(bs, 4n, 11n, badRecords, [paymentEffect, paymentEffect2], { burned: 1n });
+      const completeSpent = { ...compose([...history, target, c0], c0), seed: payerSeed };
+      const partialSpent = withhold(completeSpent, target, badRecords, 2n);
+      const answer = await replayLocalPackage(partialSpent, verifier, codec);
+      assert.equal(answer.status, "selected-local-replay"); assert.deepEqual(answer.candidates, []);
+      assert.equal(answer.audit.outstanding, "9");
+      const { faultEvidence, ...state } = answer;
+      assert.deepEqual(withoutFaultReasons(state), withoutFaultReasons(await replayLocalPackage(completeSpent, verifier, codec)));
+      const stale = checkpoint(segment(operatorSecret, toA.link, 3n, reference(a1)), 3n, 14n);
+      await reject(withhold(compose([...history, target, stale], stale), target, badRecords, 2n), "IMPORT");
+      const missing = structuredClone(partialSpent);
+      missing.package.trails = missing.package.trails.filter(bytes => !same(bytes, b2.trail));
+      const missingResult = await unresolved(missing);
+      intrinsicCases.push({ payload: partialSpent, result: answer }, { payload: missing, result: missingResult });
+    });
+    await test("same-index compact exclusion preserves its held sequence and the repaired last-valid prefix", async () => {
+      const target = { ...broken, at: 2n }, repaired = checkpoint(a, 4n, 2n, [issuance], [issueEffect]);
+      const completed = compose([a0, a1, target, repaired], repaired, []);
+      const partialRepair = withhold(completed, target, records, 1n);
+      const answer = await replayLocalPackage(partialRepair, verifier, codec);
+      assert.equal(answer.status, "selected-local-replay"); assert.equal(answer.audit.issued, "10");
+      assert.deepEqual(answer.audit.range.carrying.map(c => [c.sequence, c.class]),
+        [["1", "valid"], ["2", "valid"], ["3", "excluded"], ["4", "valid"]]);
+      const { faultEvidence, ...state } = answer;
+      assert.deepEqual(withoutFaultReasons(state), withoutFaultReasons(await replayLocalPackage(completed, verifier, codec)));
+      intrinsicCases.push({ payload: partialRepair, result: answer });
+    });
+    await test("valid proof or capsule absence is no compact exclusion and selected envelopes stay complete", async () => {
+      const extra = output(payerSeed, 150, 1n), validIssue = await issue(a, extra, "valid compact proof cannot replace absent capsule history");
+      const validRecords = [issuance, validIssue];
+      const validTail = checkpoint(a, 3n, 4n, validRecords, [issueEffect, { outputs: [extra.cm], nullifiers: [] }], { issued: 11n });
+      const missing = withhold(compose([a0, a1, validTail, b0], b0, [toB]), validTail, validRecords, 2n);
+      await unresolved(missing);
+      const selected = withhold(compose([a0, a1, broken], broken, []), broken, records, 1n);
+      selected.package.trail = a0.trail;
+      await unresolved(selected);
+    });
+    await test("an intrinsic observation cannot compact-exclude an opening checkpoint", async () => {
+      const invalidOpening = checkpoint(a, 1n, 1n, [bad], [issueEffect]);
+      const p = withhold(compose([invalidOpening, a1, b0], b0, [toB]), invalidOpening, [bad], 1n);
+      await unresolved(p);
+    });
   }
   await test("successor imports the finalized source prefix into an empty local tree and restores its original path", async () => {
     const restored = await replayLocalPackage({ ...compose([a0, a1, b0], b0, [toB]), seed: payerSeed }, verifier, codec);
@@ -267,6 +356,19 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       assert.equal(answer.status, status); assert.equal(answer.audit, null);
       assert.deepEqual(answer.candidates, []); assert.equal(answer.spendable, false); return answer;
     };
+    await test("compact live silence-context faults remain unresolved without their target trail", async () => {
+      const badBurn = structuredClone(payment2); badBurn.proof[100] ^= 1;
+      const records = [payment, badBurn];
+      const target = checkpoint(bs, 4n, 11n, records, [paymentEffect, paymentEffect2], { burned: 1n });
+      const p = compose([...history, target, c0], c0);
+      await accepted(p);
+      p.package.trails = p.package.trails.filter(bytes => !same(bytes, target.trail));
+      p.package.faults = [compactFault(target.snapshot, records, 2n, codec)];
+      const answer = await replayLocalPackage(p, verifier, codec);
+      assert.equal(answer.status, "unresolved-evidence"); assert.equal(answer.audit, null);
+      assert.equal(answer.faultEvidence.some(f => f.check === "PROOF"), true);
+      intrinsicCases.push({ payload: p, result: answer });
+    });
     await test("duration equality across replacement and reappointment stays closed; the judging-index reset is strict", async () => {
       assert.deepEqual(result.audit.range.clock, { duration: "4", snapshotIndex: "16", gap: "4", open: false, boundary: null, opening: "16" });
       const atOpening = structuredClone(payload);
@@ -397,5 +499,5 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       await refuse(withheld, "unresolved-evidence");
     });
   }
-  return { payload, result, receiver, lapse, compact, originalCompact, authorization, ...(refusedPayload === undefined ? {} : { refusedPayload }) };
+  return { payload, result, receiver, lapse, compact, originalCompact, authorization, intrinsicCases, ...(refusedPayload === undefined ? {} : { refusedPayload }) };
 }

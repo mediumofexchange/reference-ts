@@ -5,6 +5,7 @@ import { decodeCommitment, directoryRoot, encodeCommitment, signCommitment } fro
 import { replayLocalPackage } from "./local-replay.mjs";
 import { FAULT_LIMITS } from "./fault-evidence.mjs";
 import { limbsOf } from "../../../dist/pool/field.js";
+import { withoutFaultReasons } from "./fault-check.mjs";
 
 const same = (a, b) => Buffer.compare(a, b) === 0;
 const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
@@ -35,24 +36,26 @@ function recommit(input, change, codec, operatorSecret) {
 }
 
 export async function checkAuthorizationCase({ label, payload, complete, validAuthorization, expectedRole, expectedSigner,
-  codec, verifier, test, operatorSecret, demandEvidence, extraRoles = [] }) {
+  codec, verifier, test, operatorSecret, demandEvidence, extraRoles = [], intrinsic = false }) {
   const input = structuredClone(payload);
   if (demandEvidence !== undefined) input.package.faults.push(demandEvidence);
   let result;
-  await test(`compact ${label} failure survives withheld history without an exclusion verdict`, async () => {
+  await test(`compact ${label} failure ${intrinsic ? "excludes only its withheld target with complete dependencies" : "survives withheld history without an exclusion verdict"}`, async () => {
     const baseline = structuredClone(input); delete baseline.package.faults;
     const absent = await replayLocalPackage(baseline, verifier, codec);
     result = await replayLocalPackage(input, verifier, codec);
-    assert.equal(result.status, "unresolved-evidence");
+    assert.equal(result.status, intrinsic ? "selected-local-replay" : "unresolved-evidence");
     assert.deepEqual(signatures(result).map(f => f.authorizationRole), [expectedRole, ...extraRoles]);
     assert.equal(signatures(result)[0].signer, Buffer.from(expectedSigner).toString("hex"));
     assert.equal(result.faultEvidence.every(f => f.classification === "not-established"), true);
-    const { faultEvidence, ...unchanged } = result; assert.deepEqual(unchanged, absent);
+    const { faultEvidence, ...unchanged } = result;
+    if (!intrinsic) assert.deepEqual(unchanged, absent);
     if (complete !== undefined) {
       const answer = await replayLocalPackage({ ...complete, package: { ...complete.package, faults: input.package.faults } }, verifier, codec);
       assert.equal(answer.status, "selected-local-replay");
       assert(answer.audit.range.carrying.some(c => c.class === "excluded" && c.check === "SIGNATURE"));
       assert.deepEqual(signatures(answer), signatures(result));
+      if (intrinsic) assert.deepEqual(withoutFaultReasons(result), withoutFaultReasons(answer));
     }
   });
   await test(`compact ${label} valid controls, byte substitution and proof independence`, async () => {

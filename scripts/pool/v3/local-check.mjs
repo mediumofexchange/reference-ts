@@ -969,7 +969,7 @@ try {
     venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove, test,
     operatorSecret, issuerSecret, receiverSeed, payerSeed });
   assert.deepEqual(await replayEvidencePackage(portable(imported.payload), verifier, codec), imported.result);
-  await test("compact import refusal and shared-scope lapse survive portable transport", async () => {
+  await test("compact intrinsic exclusion and shared-scope lapse survive portable transport", async () => {
     for (const item of [imported.compact, imported.originalCompact, scoped.compact]) {
       assert.deepEqual(await replayEvidencePackage(portable(item.payload), verifier, codec), item.result);
     }
@@ -979,6 +979,10 @@ try {
     test: (name, fn) => test(`Silence: ${name}`, fn),
     operatorSecret, issuerSecret, receiverSeed, payerSeed, silence: true });
   assert.deepEqual(await replayEvidencePackage(portable(silent.payload), verifier, codec), silent.result);
+  const intrinsicPairs = [...imported.intrinsicCases, ...silent.intrinsicCases];
+  await test("compact predecessor refusal, repair and unsupported contexts agree in portable packages", async () => {
+    for (const item of intrinsicPairs) assert.deepEqual(await replayEvidencePackage(portable(item.payload), verifier, codec), item.result);
+  });
   const lapsePairs = [scoped.lapse, scopeRecovery.lapse, silent.lapse];
   await test("history-free term and silence lapse agree in portable packages", async () => {
     for (const { payload, result } of lapsePairs) assert.deepEqual(await replayEvidencePackage(portable(payload), verifier, codec), result);
@@ -1054,6 +1058,7 @@ try {
     assert.deepEqual(worker(imported.payload), imported.result);
     assert.deepEqual(worker(imported.compact.payload), imported.compact.result);
     assert.deepEqual(worker(imported.originalCompact.payload), imported.originalCompact.result);
+    for (const item of intrinsicPairs) assert.deepEqual(worker(item.payload), item.result);
     for (const item of authorizationPairs) assert.deepEqual(worker(item.payload), item.result);
     assert.deepEqual(worker(scoped.compact.payload), scoped.compact.result);
     assert.deepEqual(worker({ ...imported.payload, seed: receiverSeed }), imported.receiver);
@@ -1139,12 +1144,13 @@ try {
     "experiments/ergo-range/replay-venue.mjs", "experiments/ergo-range/replay-fixture.mjs",
     "experiments/ergo-range/replay-venue-check.mjs", "experiments/ergo-range/package-lock.json");
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-19", specification: "fb7dd07", node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-20", specification: "183c09f", node: process.version,
+    compactIntrinsic: intrinsicPairs.map(item => ({ packageBytes: portable(item.payload).package.length, result: item.result })),
     compactAuthorizations: authorizationPairs.map(item => ({ packageBytes: portable(item.payload).package.length, result: item.result })),
     compactFaults: { faultRecordBytes: imported.compact.faultBytes,
       partialPackageBytes: portable(imported.compact.payload).package.length,
       completePackageBytes: portable(imported.compact.complete).package.length,
-      unresolvedImport: imported.compact.result, lapsedScope: scoped.compact.result },
+      excludedImport: imported.compact.result, lapsedScope: scoped.compact.result },
     packageBytes: portable(complete).package.length, dependencyPackageBytes: portable(extended).package.length,
     fixtureVenueRecords: complete.venue.records.length,
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
@@ -1177,8 +1183,8 @@ try {
     ...(withErgo ? { ergo: { evidence: "synthetic-headers-and-exact-transaction-bytes", rawBytes: ergo.rawBytes,
       blocks: ergo.payload.venue.blocks.length, audit: ergo.result, receiver: ergo.receiver } } : {}),
     limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
-      "Multi-backing imports validate every scoped predecessor and snapshot, merge shared events once with causal recovery conflict checks, and retain per-backing totals, adoption indices and original-tree paths through split, rejoin, exact recovery adoption and continuation. Receipt queries authenticate the complete original scope and exact original/adopted inclusion, retaining liability and the earliest silence/term boundary. Non-service counts use each selected backing's own clause and canonical state strictly before judgment, preserving request ages, imported roots and spent/lock state across scopes and recovery. Import lapse uses snapshot-bound scope and signed terms without its event history; silence still requires the opening and canonical clock dependencies. Live validity and exclusion require full committed event evidence. Selected state retains its complete selection envelope. Checkpoint/event work remains bounded; large histories can refuse resources.",
-      "Compact openings authenticate committed target bytes and retain proof/signature-rejection facts through import refusal or scope lapse. Issue and acceptance read the exact scoped obligor; withdrawal and release resolve the named demand's canonical statement preimage. A matching preimage establishes no demand admission/standing and its enclosing opening need not authenticate. Signature facts do not require a valid proof; unsupported authorization widths and zero-owner acceptance messages are not classified. These facts never supply a complete exclusion certificate, missing history or a state transition. Local budgets can refuse resources; verifier failures are not rejection.",
+      "Multi-backing imports validate every scoped predecessor and snapshot, merge shared events once with causal recovery conflict checks, and retain per-backing totals, adoption indices and original-tree paths through split, rejoin, exact recovery adoption and continuation. Receipt queries authenticate the complete original scope and exact original/adopted inclusion, retaining liability and the earliest silence/term boundary. Non-service counts use each selected backing's own clause and canonical state strictly before judgment, preserving request ages, imported roots and spent/lock state across scopes and recovery. Import lapse uses snapshot-bound scope and signed terms without its event history; silence still requires the opening and canonical clock dependencies. Live validity requires full committed event evidence; single-backing non-silence continuations may replace only an intrinsically faulty target trail under section 9.1 after complete opening/predecessor resolution. Selected state retains its complete selection envelope. Checkpoint/event work remains bounded; large histories can refuse resources.",
+      "Compact openings authenticate committed target bytes and retain proof/signature-rejection facts through import refusal or scope lapse. Issue and acceptance read the exact scoped obligor; withdrawal and release resolve the named demand's canonical statement preimage. A matching preimage establishes no demand admission/standing and its enclosing opening need not authenticate. Signature facts do not require a valid proof; unsupported authorization widths and zero-owner acceptance messages are not classified. The classifier may consume exact proof/issue-K rejection to exclude only a supported single-backing non-silence continuation with a valid opening and known last-valid state. Other facts remain observational; missing ancestors, ranges or unsupported contexts still refuse. No target fact supplies state or permits rollback. Local budgets can refuse resources; verifier failures are not rejection.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };
   if (withErgo) report.limits.push("The candidate Ergo adapter checks exact transaction decoding and roots against independently selected synthetic headers. No proof of work, chain selection, decoder node equivalence/containment, node acceptance or venue-profile adoption is established.");
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");

@@ -264,7 +264,8 @@ async function replayTrail({ selection, terms, scopedTerms, header, verifier, co
  * gap is open or after the boundary is lapsed for its whole scope: held,
  * its snapshot resolved to establish the segment but its trail neither
  * resolved nor replayed, closing nothing. Otherwise each is valid, excluded
- * or unresolved from its own snapshot and trail, and the segment continues
+ * or unresolved from its own snapshot and evidence, with §9.1's bounded
+ * intrinsic replacement after a valid opening, and the segment continues
  * from its last valid checkpoint (C2.10.12). A carrying checkpoint of
  * another segment contradicts the header's empty opening before the
  * selection (C2.7.3) and is an unsupported segment after it, whatever the
@@ -287,7 +288,7 @@ async function classifyCarrying(context, ranges, evidence) {
   const clockRecord = (at, snapshotIndex, boundaryAt) => ({ duration: duration.toString(), snapshotIndex: snapshotIndex.toString(),
     gap: (at - snapshotIndex).toString(), open: at - snapshotIndex > duration, boundary: boundaryAt === undefined ? null : boundaryAt.toString(),
     opening: opening.toString() });
-  let lastValid, state, latestValid = 0n, closing = 0n, currentIndex = -1n, boundary;
+  let lastValid, state, openingValid = false, latestValid = 0n, closing = 0n, currentIndex = -1n, boundary;
   for (const c of ranges.carrying) {
     await context.faults.inspect(c, [{ name: selection.backing, digest: c.digest }], { header, terms: trail.terms });
     // c(i) reads only checkpoints strictly before i: two at one index do not close each other's gap.
@@ -318,6 +319,13 @@ async function classifyCarrying(context, ranges, evidence) {
       // Its trail is the one that authenticates its committed evidence (§10.1); two distinct ones cannot.
       const expected = { backing: selection.backing, segment: s.segment, digest: c.digest };
       const matching = trails.filter(x => codec.verifyTrailEvidence(expected, s, x, LIMITS));
+      if (matching.length === 0 && openingValid && lastValid !== undefined && duration === undefined) {
+        const intrinsic = context.faults.intrinsicFailure(c, { header, terms: trail.terms });
+        if (intrinsic !== undefined) {
+          carrying.push({ sequence: c.sequence.toString(), index: c.index.toString(), class: "excluded", check: intrinsic });
+          continue;
+        }
+      }
       if (matching.length !== 1) throw new EvidenceRefusal(matching.length === 0 ? "unresolved-evidence" : "unsupported-scope");
       tr = matching[0];
       const own = tr.terms[0];
@@ -327,10 +335,12 @@ async function classifyCarrying(context, ranges, evidence) {
     }
     let verdict;
     try {
+      requireReplay(c.sequence !== header.sequence || tr.records.length === 0, "OPENING");
       const replayed = await replayTrail(context, s, tr, { index: c.index, revokedAt: ranges.revokedAt, lastValid });
       verdict = { class: "valid" }; lastValid = { position: replayed.position, historyHash: s.historyHash, evidenceHash: s.evidenceHash,
         eventIndices: replayed.eventIndices };
       latestValid = c.index;
+      if (c.sequence === header.sequence) openingValid = true;
       if (c.position === "selected") state = replayed;
     } catch (error) {
       if (!(error instanceof ReplayRefusal) || c.position === "selected") throw error;
@@ -499,7 +509,6 @@ async function classifyImports(context, directories, record, evidence) {
           if (selected && !walk) throw Object.assign(new EvidenceRefusal("lapsed-selection"), { clock: clockRecord(held.index, clock) });
           continue;
         }
-        const trail = scope.fullTrail();
         let segment = segments.get(id);
         if (segment === undefined) {
           // Missing opening evidence is not an exclusion certificate. In
@@ -524,6 +533,15 @@ async function classifyImports(context, directories, record, evidence) {
         }
         // Returning to an older segment cannot abandon a valid newer segment.
         requireReplay(canonical === undefined || same(canonical.segment, snapshot.segment) || matches(segment.predecessor, canonical.commitment), "CONTINUITY");
+        const intrinsic = segment.openingValid && segment.lastValid !== undefined && segment.block.length === 0 ?
+          context.faults.intrinsicFailure(held, scope) : undefined;
+        const evidence = scope.classificationEvidence(intrinsic);
+        if (evidence.intrinsic !== undefined) {
+          carrying.push({ ...item, class: "excluded", check: evidence.intrinsic });
+          walk?.checkpoint(held, snapshot.segment, undefined, header, "excluded");
+          continue;
+        }
+        const { trail } = evidence;
         if (c.sequence === header.sequence) requireReplay(trail.records.length === 0, "OPENING");
         events += BigInt(trail.records.length);
         if (events > IMPORT_LIMITS.maxEvents) throw new EvidenceRefusal("resource-refusal");
@@ -531,6 +549,7 @@ async function classifyImports(context, directories, record, evidence) {
           { index: held.index, revokedAt, lastValid: segment.lastValid, imported: segment.imported,
             block: c.sequence === header.sequence ? [] : segment.block, openingIndex: segment.openingIndex, isOpening: c.sequence === header.sequence });
         segment.lastValid = { position: state.position, historyHash: snapshot.historyHash, evidenceHash: snapshot.evidenceHash, eventIndices: state.eventIndices };
+        if (c.sequence === header.sequence) segment.openingValid = true;
         canonical = { commitment: c, index: held.index, segment: snapshot.segment, scope: new ScopeTree(header.entries).root(), state };
         if (held.index < t) countSnapshot = canonical;
         latestValid = held.index;
@@ -541,7 +560,7 @@ async function classifyImports(context, directories, record, evidence) {
         if (selected) { selectedState = state; selectedClock = clock; }
       } catch (error) {
         if (!(error instanceof ReplayRefusal)) throw error;
-        scope.fullTrail(); // Missing events never certify a deterministic fault.
+        scope.fullTrail(); // Other failures still require the complete event evidence.
         if (selected && !walk) throw error;
         carrying.push({ ...item, class: "excluded", check: error.check });
         walk?.checkpoint(held, snapshot.segment, undefined, header, "excluded");
@@ -563,7 +582,7 @@ async function classifyImports(context, directories, record, evidence) {
  * by the harness. Issuer identity comes from signed scoped terms (§11).
  * With a fixture venue and verifier.record, §13 ranges fix the chain, the
  * checkpoint's record prefix and currency against that fixture only, and
- * every carrying checkpoint of the segment is classified from its own trail.
+ * every carrying checkpoint is classified from its own committed evidence.
  * No approved configuration or authenticated-chain finality verdict.
  * State reads expose nothing until every terminal assertion passes. A single
  * receipt instead returns its conditional verdict at the deciding checkpoint
@@ -705,7 +724,8 @@ export async function replayLocalPackage(input, verifier, codec) {
  * it (§10.1), both by hash, so no first-match lookup can silently discard
  * conflicting evidence. Every other directory, snapshot and trail is a
  * dependency the §13 range/import read may need. One kind-10 receipt selects
- * a receipt query; kind-7 faults add observations only. Other kinds require a later reader.
+ * a receipt query; kind-7 facts may also support the bounded §9.1 exclusion path
+ * after all its dependencies resolve. Other kinds require a later reader.
  * The same replay engine then
  * authenticates every relationship against selection and, with a fixture
  * venue, against the record ranges. */

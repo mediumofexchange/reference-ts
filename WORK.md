@@ -4,66 +4,64 @@ Updated: 2026-09-20
 
 ## Goal
 
-Completed slice: investigate the compact exclusion-certificate dependency boundary
-under C2.10.11–13 and pool-v3 §§9/10/12 before implementation. Resolve the inherited
-Windows fresh-process CI failure as far as reproducible evidence permits.
+Completed slice: compact intrinsic exclusion for non-opening, single-backing
+checkpoints without silence, retaining complete ancestor/state dependencies.
+The normative amendment was reviewed and committed before dependent code.
 
-Acceptance: map classification dependencies to rules/code, exercise withheld
-history and precedence controls, independently review the conclusion, and deliver
-a bounded next proposal. Verify the fixture worker's prepared-parameter startup
-and complete real replay after its cache-path correction.
-The investigation and fixture fix are reviewed and verified for delivery.
-No classification change, normative amendment or runtime adoption in this slice.
+Acceptance: proof/issue-K rejection permits original and successor descent with
+only target events withheld; full/compact evidence agrees on classification and
+selected state. Missing predecessors, wrong bindings, unknown verifiers and
+unsupported contexts refuse; repairs preserve last valid state and held sequences.
+Portable/fresh-process real-proof acceptance and adversarial review passed.
+No v2 runtime, configuration adoption or live-chain claim.
 
 ## Status
 
-- Delivery branch: `docs/compact-exclusion-boundary`, based on main `0e4838b`,
-  for fast-forward delivery to main. Verify final parity and hosted CI from Git.
-  No main branch protection or applicable ruleset gates were configured.
-- [Dependency investigation](decisions/2026-09.md#2026-09-20--keep-compact-exclusion-behind-an-explicit-dependency-rule):
-  current compact proof/authorization observations cannot replace missing target
-  history for exclusion. A smaller intrinsic-fault certificate needs a reviewed
-  amendment; missing predecessor, clock and range evidence remains unresolved.
-- Existing exclusion authenticates complete event evidence and fails fast on a
-  deterministic replay error. It does not finish reproducing semantic state after
-  that failure. The next normative proposal must make that distinction explicit.
-- The fixture worker now uses the parent's prepared `scratch/private-payment-crs`
-  path instead of a separate environment/user cache. Verifier keys, circuits,
-  configuration, classification and v2 runtime are unchanged.
-- Companion specification remains clean main `e41cac8`; normative pin `fb7dd07`.
-  No companion branch or normative edit in this slice.
+- Delivery pair: the implementation commit containing this handoff and companion
+  `183c09f`, now on specification `main`. Branches
+  `feat/compact-intrinsic-exclusion` and `spec/compact-intrinsic-exclusion` retain
+  the pair. No main protection or applicable ruleset gates were configured.
+- [Decision](decisions/2026-09.md#2026-09-20--permit-intrinsic-exclusion-with-complete-checkpoint-dependencies)
+  and companion commit `183c09f` define §9.1 and clarify authentication versus
+  failed state replay. Fresh normative review completed before specification commit
+  and dependent code; no remaining design finding. Specification remote parity is verified.
+- Three conditional classifier paths now allow a compact intrinsic failure only
+  after resolving a valid opening and last valid state, for single-backing
+  non-silence continuations with no adopted block. Complete evidence takes priority;
+  other failures still require their full event evidence. Individual fault facts
+  remain observational; checkpoint classification consumes an internal bound fact.
+- Verifier keys, circuits, candidate configuration and v2 runtime are unchanged.
+  Integrated adversarial review is complete after correcting and independently
+  reproducing the original path's nonempty-opening prerequisite. No blockers remain.
+  Final oracle fixtures passed 153 groups; full and real-proof acceptance passed.
 
 ## Evidence
 
-- Prior delivery CI `35494161661` initially failed only the Windows v3 job at
-  its first fresh worker; the worker's generic error does not establish cause.
-  All six other jobs passed; the single failed-job retry also passed. Baseline
-  hosted CI is green, while the original exception's cause remains unproven.
-- Offline startup probe: prepared parameters succeed with zero fetches; empty
-  scratch cache attempts two fetches and fails with injected network rejection.
-  This proves an unintended startup dependency, not the original CI root cause.
-- Focused `checkImports` execution passed 34 groups across both silence modes
-  with ideal proof-membership oracle, real hashes/Ed25519 and synthetic venue.
-  Independent normative/source and exact-proposal reviews completed; no blockers
-  remain after held-sequence and independent-fault wording corrections.
-- Final `check:pool:ergo-replay` passed 194 groups and 63 real proofs, including
-  portable/fresh-process agreement. The [report](docs/pool-v3-local-replay-verification.json)
-  binds 54 checked source hashes. Worker syntax, docs/links and whitespace pass.
-  Broad runtime checks reuse the unchanged baseline's passing hosted CI.
+- Baseline `e015d31` hosted CI `35495694827` passed. Inspect hosted CI for the
+  implementation delivery commit after push; local final gates below passed.
+- Companion links, syntax and whitespace checks pass. Final oracle run passed
+  153 groups with ideal proof membership, real hashes/signatures and synthetic
+  complete venue; reviewer separately checked the opening substitution correction.
+- `npm run check` passed: 110 files / 1,941 tests plus packaging, local profile,
+  pilot, store/service/wallet, crash and spent-set checks. The initial sandbox
+  launch failed in esbuild startup; the authorized unrestricted rerun passed.
+- `check:pool:ergo-replay` passed 202 groups / 64 real proofs, including portable
+  and fresh-process checks. The retained report binds 54 verified source hashes.
+  The measured compact package is 34,103 versus 50,020 bytes (about 32% smaller);
+  this is one fixture shape, not a general compression guarantee.
 - No complete-certificate, adopted configuration, live-chain authentication or
-  production spendability claim. Reported faults cannot fill missing history.
+  production spendability claim. Compact exclusion cannot fill missing ancestors.
 
 ## Next
 
-1. Inspect final hosted CI and remote parity for the delivery; local verification
-   and review are complete. No unresolved review findings.
-2. Next capability: review an explicit intrinsic exclusion rule before code.
-   Resolve failed-replay wording and dependencies in the normative specification;
-   then commit that specification before conditional proof/issue-K exclusion
-   through original non-silence ancestry, successor descent and portable replay.
-   Missing predecessors must refuse; later repairs extend the last valid prefix.
-3. Keep silence, shared scope, adoption and other fault classes behind explicit
-   conformance boundaries. Do not reinterpret current observational reports.
+1. Verify implementation delivery remote parity and inspect exact-head hosted CI.
+2. Next capability: probe compact exclusion for a live single-backing checkpoint
+   with silence, using complete canonical clock dependencies and lapse priority.
+   First falsify clock reset/rollback after exclusion and missing-clock acceptance;
+   if feasible, carry the slice through real-proof/portable/fresh-process checks,
+   independent review and delivery. Review any normative gap before dependent code.
+3. Keep shared scope, adoption and other fault classes behind their explicit
+   conformance boundaries; individual fault observations still supply no state.
 
 ## Retained boundaries and local state
 
@@ -87,9 +85,10 @@ No classification change, normative amendment or runtime adoption in this slice.
 ## Open questions
 
 Roughly **50% done / 50% remaining**, plausible range **40–60%**, reassessed
-2026-09-20. This investigation and fixture correction add no product capability.
+2026-09-20. Compact intrinsic exclusion reduces target-history availability needs;
+this remains conditional evidence, with no runtime or release gate closed.
 Runtime integration, selected venue/decoder, qualified custody and continuous
 wallet operation dominate remaining effort. No rounded estimate change.
 
-Stay with this instance for the next normative proposal: its dependency and
-failed-replay context is fresh, and the implementation boundary is now explicit.
+Switch to a fresh instance for the next capability: this cross-repository slice
+is complete, and the clock/dependency probe has a bounded handoff above.

@@ -28,10 +28,19 @@ export function checkpointScope(trails, backing, digest, snapshot, codec) {
   const scope = authenticatedScope(trails, snapshot.segment, codec);
   if (!scope.header.entries.some(entry => same(entry.backing, backing))) throw new EvidenceRefusal("unresolved-evidence");
   let full;
-  return { ...scope, fullTrail() {
+  const result = { ...scope, fullTrail() {
     if (full !== undefined) return full;
     const matching = trails.filter(trail => codec.verifyTrailEvidence({ backing, segment: snapshot.segment, digest }, snapshot, trail, LIMITS));
     if (matching.length !== 1) throw new EvidenceRefusal(matching.length === 0 ? "unresolved-evidence" : "unsupported-scope");
     full = matching[0]; return full;
+  } };
+  // A compact certificate can replace absent/inconclusive event evidence only.
+  // Resource failures and conflicting complete trails must remain refusals.
+  return { ...result, classificationEvidence(intrinsic) {
+    try { return { trail: result.fullTrail() }; }
+    catch (error) {
+      if (!(error instanceof EvidenceRefusal) || error.status !== "unresolved-evidence" || intrinsic === undefined) throw error;
+      return { intrinsic };
+    }
   } };
 }

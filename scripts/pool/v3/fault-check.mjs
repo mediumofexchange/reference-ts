@@ -17,23 +17,33 @@ export function compactFault(snapshotBytes, records, position, codec) {
     suffix: records.slice(at + 1).map(codec.evidenceHashes) }, FAULT_LIMITS.maxSuffixEntries);
 }
 
+// Different sufficient failures can explain the same excluded checkpoint.
+// Compare all state/classification evidence while leaving diagnostic precedence free.
+export function withoutFaultReasons(result) {
+  const copy = structuredClone(result);
+  if (copy.audit?.range?.carrying) copy.audit.range.carrying = copy.audit.range.carrying.map(({ check, ...item }) => item);
+  return copy;
+}
+
 // Same checks run against the real proof verifier and the bounded oracle probe.
 export async function checkCompactFault({ payload, complete, fault, codec, verifier, test, operatorSecret }) {
   const withFault = p => ({ ...p, package: { ...p.package, faults: [fault] } });
   let result;
-  await test("compact bad proof survives withheld import history without granting exclusion", async () => {
+  await test("compact intrinsic proof excludes a withheld target after complete predecessor resolution", async () => {
     const absent = await replayLocalPackage(payload, verifier, codec);
     assert.equal(absent.status, "unresolved-evidence");
     result = await replayLocalPackage(withFault(payload), verifier, codec);
     assert.equal(result.faultEvidence.length, 1);
     assert.equal(result.faultEvidence[0].check, "PROOF");
     assert.equal(result.faultEvidence[0].classification, "not-established");
-    const { faultEvidence, ...rest } = result; assert.deepEqual(rest, absent);
-    assert.equal(result.audit, null); assert.deepEqual(result.candidates, []); assert.equal(result.spendable, false);
+    const { faultEvidence } = result;
+    assert.equal(result.status, "selected-local-replay"); assert.equal(result.spendable, false);
+    assert.equal(result.audit.range.carrying.find(c => c.sequence === faultEvidence[0].sequence).check, "PROOF");
     const full = await replayLocalPackage(withFault(complete), verifier, codec);
     assert.equal(full.status, "selected-local-replay");
     assert.equal(full.audit.range.carrying.find(c => c.sequence === faultEvidence[0].sequence).class, "excluded");
     assert.deepEqual(full.faultEvidence, faultEvidence);
+    assert.deepEqual(withoutFaultReasons(result), withoutFaultReasons(full));
     const { faultEvidence: ignored, ...without } = full;
     assert.deepEqual(without, await replayLocalPackage(complete, verifier, codec));
   });

@@ -212,7 +212,10 @@ export async function classifyScopes(context, directories, record, evidence, hel
             same(s.historyHash, snapshot.historyHash) && same(s.evidenceHash, snapshot.evidenceHash), "SNAPSHOT");
           return s;
         });
-        const trail = scope.fullTrail();
+        const intrinsic = !opening && lastValid !== undefined && block.length === 0 ? context.faults.intrinsicFailure(held, scope) : undefined;
+        const evidence = scope.classificationEvidence(intrinsic);
+        if (evidence.intrinsic !== undefined) return { ...base, class: "excluded", check: evidence.intrinsic };
+        const { trail } = evidence;
         chargeEvents(BigInt(trail.records.length));
         const selectedTerms = scopedTerms.get(hex(backing)), revocations = new Map([...scopeViews].map(([name, view]) => [name, view.revokedAt]));
         const state = await replayTrail({ ...context, selection: { ...selection, backing }, terms: selectedTerms, header, scopedTerms },

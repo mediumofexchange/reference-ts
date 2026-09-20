@@ -1,4 +1,4 @@
-// Observational §9 proof/signature faults. Never a classification input.
+// §9 facts, with §9.1 intrinsic failures available only to dependency-resolved reads.
 import { createHash } from "node:crypto";
 import { compareBytes, EncodingError } from "../../../dist/bytes.js";
 import { EvidenceRefusal } from "../delivery/evidence-reader.mjs";
@@ -7,6 +7,7 @@ import { authorizationFaults } from "./authorization-evidence.mjs";
 const same = (a, b) => compareBytes(a, b) === 0;
 const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
 const hex = bytes => Buffer.from(bytes).toString("hex");
+const heldKey = held => `${hex(held.commitment.operator)}:${held.commitment.sequence}:${hex(held.commitment.root)}:${held.index}`;
 export const FAULT_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxItems: 32n, maxSuffixEntries: 1024n });
 
 // Called before replay's ownership copy. Inspect intrinsic byte widths rather
@@ -39,7 +40,7 @@ export function boundFaultInputs(faults = []) {
 }
 
 export function faultObserver(payloads = [], selection, verifier, codec) {
-  const evidence = [], checked = new Map(), facts = new Map(), demands = new Map();
+  const evidence = [], checked = new Map(), facts = new Map(), demands = new Map(), intrinsic = new Map();
   for (const payload of payloads) {
     try {
       const value = codec.decodeFaultEvidence(payload, FAULT_LIMITS.maxSuffixEntries);
@@ -55,6 +56,14 @@ export function faultObserver(payloads = [], selection, verifier, codec) {
   }
   return {
     result() { return facts.size === 0 ? {} : { faultEvidence: [...facts.values()] }; },
+    // This supplies only the intrinsic failure. Callers must first resolve the
+    // valid opening, last-valid state, original record prefix and adoption context.
+    // The initial implementation supports single-backing non-silence continuations.
+    intrinsicFailure(held, scope) {
+      if (scope.header.entries.length !== 1 || held.commitment.sequence <= scope.header.sequence ||
+          codec.decodeRootTerms(scope.terms[0].terms).silence !== undefined) return undefined;
+      return intrinsic.get(`${heldKey(held)}:${hex(hash(codec.segmentBytes(scope.header)))}`);
+    },
     async inspect(held, directory, scope) {
       if (evidence.length === 0) return;
       const { header, terms } = scope, c = held.commitment;
@@ -90,6 +99,15 @@ export function faultObserver(payloads = [], selection, verifier, codec) {
         // an absent signer is never cached as validity or rejection.
         if (statement !== undefined && same(statement.domain, selection.domain)) {
           observations.push(...authorizationFaults(statement, e, scopedTerms, demands, codec));
+        }
+        for (const observation of observations) {
+          if (observation.check === "PROOF" || observation.authorizationRole === "issue") {
+            // The §9 codec already bounds the proof field at §5's maximum;
+            // strict-false proof verification above also requires its length shape.
+            // Prefer PROOF if both independent intrinsic failures are available.
+            const key = `${heldKey(held)}:${hex(e.snapshot.segment)}`, prior = intrinsic.get(key);
+            if (prior === undefined || observation.check === "PROOF") intrinsic.set(key, observation.check);
+          }
         }
         const key = `${hex(c.operator)}:${c.sequence}:${hex(c.root)}:${id}`;
         for (const observation of observations) facts.set(`${key}:${observation.check}:${observation.authorizationRole ?? ""}`, {
