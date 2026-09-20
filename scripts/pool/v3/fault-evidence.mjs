@@ -1,7 +1,8 @@
-// Observational §9 proof faults. Never a checkpoint classification input.
+// Observational §9 proof/signature faults. Never a classification input.
 import { createHash } from "node:crypto";
 import { compareBytes, EncodingError } from "../../../dist/bytes.js";
 import { EvidenceRefusal } from "../delivery/evidence-reader.mjs";
+import { authorizationFaults } from "./authorization-evidence.mjs";
 
 const same = (a, b) => compareBytes(a, b) === 0;
 const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
@@ -38,10 +39,15 @@ export function boundFaultInputs(faults = []) {
 }
 
 export function faultObserver(payloads = [], selection, verifier, codec) {
-  const evidence = [], checked = new Map(), facts = new Map();
+  const evidence = [], checked = new Map(), facts = new Map(), demands = new Map();
   for (const payload of payloads) {
     try {
-      evidence.push({ id: hex(hash(payload)), value: codec.decodeFaultEvidence(payload, FAULT_LIMITS.maxSuffixEntries) });
+      const value = codec.decodeFaultEvidence(payload, FAULT_LIMITS.maxSuffixEntries);
+      let statement;
+      try { statement = codec.decodeStatement(value.statement); }
+      catch (error) { if (!(error instanceof codec.CodecEncodingError)) throw error; }
+      evidence.push({ id: hex(hash(payload)), value, statement });
+      if (statement?.kind === 4 && same(statement.domain, selection.domain)) demands.set(hex(hash(value.statement)), statement);
     } catch (error) {
       if (error instanceof codec.FaultEvidenceLimitError) throw new EvidenceRefusal("resource-refusal");
       if (!(error instanceof codec.CodecEncodingError)) throw error;
@@ -55,21 +61,19 @@ export function faultObserver(payloads = [], selection, verifier, codec) {
       if (!same(header.domain, selection.domain) || !same(header.venue, selection.venue) ||
           !same(header.operator, c.operator) || header.sequence > c.sequence) return;
       // checkpointScope already authenticated the header and every signed term.
-      for (const signed of terms) {
+      const scopedTerms = new Map();
+      for (let i = 0; i < terms.length; i++) {
+        const signed = terms[i];
         const term = codec.decodeRootTerms(signed.terms);
         if (!same(term.configuration, selection.domain) || !same(term.venue, selection.venue)) return;
+        scopedTerms.set(hex(header.entries[i].backing), term);
       }
-      for (const { id, value: e } of evidence) {
+      for (const { id, value: e, statement } of evidence) {
         const entry = directory.find(item => same(item.name, e.snapshot.backing));
         if (entry === undefined || !header.entries.some(item => same(item.backing, entry.name)) ||
             !same(hash(codec.segmentBytes(header)), e.snapshot.segment) ||
             !codec.verifyFaultEvidence({ backing: entry.name, segment: e.snapshot.segment, digest: entry.digest }, e, FAULT_LIMITS.maxSuffixEntries)) continue;
         if (!checked.has(id)) {
-          let statement;
-          try { statement = codec.decodeStatement(e.statement); }
-          catch (error) {
-            if (!(error instanceof codec.CodecEncodingError)) throw error;
-          }
           let rejected = false;
           if (statement !== undefined && [1, 2, 3, 4, 6].includes(statement.kind) &&
               same(statement.domain, selection.domain) && e.proof.length > 0 && e.proof.length % 32 === 0) {
@@ -81,11 +85,17 @@ export function faultObserver(payloads = [], selection, verifier, codec) {
           }
           checked.set(id, rejected);
         }
-        if (!checked.get(id)) continue;
+        const observations = checked.get(id) ? [{ check: "PROOF" }] : [];
+        // Scope-derived signer dependencies are resolved for each mapping;
+        // an absent signer is never cached as validity or rejection.
+        if (statement !== undefined && same(statement.domain, selection.domain)) {
+          observations.push(...authorizationFaults(statement, e, scopedTerms, demands, codec));
+        }
         const key = `${hex(c.operator)}:${c.sequence}:${hex(c.root)}:${id}`;
-        facts.set(key, { operator: hex(c.operator), sequence: c.sequence.toString(), root: hex(c.root), index: held.index.toString(),
+        for (const observation of observations) facts.set(`${key}:${observation.check}:${observation.authorizationRole ?? ""}`, {
+          operator: hex(c.operator), sequence: c.sequence.toString(), root: hex(c.root), index: held.index.toString(),
           backing: hex(entry.name), segment: hex(e.snapshot.segment), position: e.position.toString(), length: e.length.toString(),
-          evidence: id, configuration: hex(selection.domain), check: "PROOF", classification: "not-established",
+          evidence: id, configuration: hex(selection.domain), ...observation, classification: "not-established",
           ...Object.fromEntries(Object.entries(codec.hashEvidenceFields(hash(e.statement), e.proof, e.authorization)).map(([k, v]) => [k, hex(v)])) });
       }
     },

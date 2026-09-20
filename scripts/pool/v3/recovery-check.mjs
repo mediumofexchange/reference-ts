@@ -13,6 +13,8 @@ import { LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
+import { compactFault } from "./fault-check.mjs";
+import { checkAuthorizationCase } from "./authorization-check.mjs";
 import { checkReceipts } from "./receipt-check.mjs";
 import { checkNonService } from "./non-service-check.mjs";
 
@@ -175,6 +177,30 @@ export async function checkRecovery({ codec, verifier, configurationBytes, domai
   const finalCheckpoint = checkpoint(returned, 5n, 13n, finalRecords, finalEffects, 10n);
   const ancestry = [originalOpening, originalState, returnOpening, adopted, finalCheckpoint];
   const payload = compose(ancestry, finalCheckpoint, publications, 13n);
+  const authorizations = [];
+  for (const variant of ["withdrawal", "acceptance", "release", "both"]) {
+    const withdrawing = variant === "withdrawal", demandRecord = withdrawing ? firstDemand : secondDemand;
+    const good = withdrawing ? firstWithdrawal : released.record, bad = structuredClone(good);
+    if (withdrawing) bad.authorization = ed25519.sign(codec.withdrawalBytes(good), b(199));
+    else {
+      const messages = codec.settlementAuthorization(good);
+      if (variant !== "release") bad.authorization.set(ed25519.sign(messages.acceptanceMessage, b(199)), 8);
+      if (variant !== "acceptance") bad.authorization.set(ed25519.sign(messages.releaseMessage, b(199)), 72);
+    }
+    const records = [issuance, demandRecord, bad], effects = [{ outputs: [funded.cm], nullifiers: [] }, { outputs: [], nullifiers: [] },
+      withdrawing ? { outputs: [], nullifiers: [] } : { outputs: [released.output.cm], nullifiers: [funded.nf, pad.nf] }];
+    const invalid = checkpoint(original, 3n, 5n, records, effects, 10n);
+    const complete = compose([originalOpening, originalState, invalid], originalState, [], 5n), partial = structuredClone(complete);
+    partial.package.trails = partial.package.trails.filter(bytes => !same(bytes, invalid.trail));
+    partial.package.faults = [compactFault(invalid.snapshot, records, 3n, codec)];
+    const preimage = codec.decodeFaultEvidence(compactFault(invalid.snapshot, records, 2n, codec), 1024n);
+    preimage.previous[0] ^= 1; // No authenticated demand opening is required for the named preimage.
+    const expectedRole = variant === "both" ? "acceptance" : variant;
+    authorizations.push(await checkAuthorizationCase({ label: variant, payload: partial, complete,
+      validAuthorization: good.authorization, expectedRole, extraRoles: variant === "both" ? ["release"] : [],
+      expectedSigner: ed25519.getPublicKey(expectedRole === "acceptance" ? issuerSecret : withdrawing ? presenterOneSecret : presenterTwoSecret),
+      demandEvidence: codec.encodeFaultEvidence(preimage, 1024n), codec, verifier, test, operatorSecret }));
+  }
   let result, receiver, issuerRestored, issuerPayload;
   await test("forced demand, withdrawal, demand and release adopt in exact venue order before returned service", async () => {
     result = await replayLocalPackage(payload, verifier, codec);
@@ -351,5 +377,5 @@ export async function checkRecovery({ codec, verifier, configurationBytes, domai
     publication, demand, note, domain, venue, backing, signedTerms, operatorSecret, ruleSecret, payerSeed,
     original, originalOpening, originalState, originalTree, issuance, funded, firstDemand,
     ancestry, publications, finalCheckpoint, paid, change });
-  return { payload, result, receiver, issuerSeed, issuerPayload, issuerRestored, settlement: released.output, receipts, nonService, sameIndex };
+  return { payload, result, receiver, issuerSeed, issuerPayload, issuerRestored, settlement: released.output, receipts, nonService, sameIndex, authorizations };
 }

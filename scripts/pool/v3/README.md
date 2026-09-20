@@ -64,8 +64,18 @@ the observation. Every scoped term must match the reader's candidate configurati
 and venue. Only a supported proof verifier's strict rejection produces a fact;
 exceptions propagate. Facts never decide classification, state, clocks or receipt
 status. Missing complete history still prevents exclusion and import descent.
-Malformed targets, authorization faults, capsules and admission failures remain
-outside this reporter. Per-read local limits are 32 compact items, 1 MiB of backing
+The same inventory also reports strict signature failures for issue K, settlement
+acceptance K, withdrawal presenter and settlement release presenter. K comes from
+the target backing's signed scoped terms. A presenter's key comes from the exact
+canonical demand statement whose hash the target names, carried in another compact
+item. The dependency item's opening need not authenticate: its statement preimage
+establishes identity, never demand admission or standing. Missing/mismatched demand
+preimages suppress presenter observations while independent K failures remain.
+Facts name the expected signer and role and attribute the committed bytes to the
+operator. Signature checks do not require a valid or well-shaped proof. Unsupported
+authorization widths, malformed targets, zero-owner acceptance messages, capsules
+and admission failures remain outside this reporter.
+Per-read local limits are 32 compact items, 1 MiB of backing
 allocations and 1024 suffix entries per item; proof results are cached by exact
 evidence identity. These limits do not change protocol bounds or grant finality.
 

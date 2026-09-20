@@ -16,6 +16,7 @@ import { replayLocalPackage } from "./local-replay.mjs";
 import { mergeFinalizedPrefixes } from "./scope-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
 import { compactFault } from "./fault-check.mjs";
+import { faultObserver } from "./fault-evidence.mjs";
 import { checkNormalScopeReceipts } from "./scope-receipt-check.mjs";
 import { checkNormalScopeCounts } from "./scope-count-check.mjs";
 
@@ -262,7 +263,7 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
       assert.equal(answer.audit.noteRoot, receiver.audit.noteRoot); assert.equal(answer.audit.spentRoot, receiver.audit.spentRoot);
     }
   });
-  let lapse, compact;
+  let lapse, compact, authorization;
   await test("one ended operator term lapses the whole shared scope without its event history", async () => {
     const bad = structuredClone(issuanceY); bad.proof[100] ^= 1;
     const late = checkpoint(shared, 3n, 7n, [issuanceX, bad], [effect([fundedX]), effect([fundedY])]);
@@ -285,6 +286,28 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
     assert.equal(observation.faultEvidence[0].backing, hex(x));
     const { faultEvidence, ...unchanged } = observation; assert.deepEqual(unchanged, result);
     compact = { payload: reported, result: observation };
+    const wrongKey = { ...issuanceY, authorization: ed25519.sign(codec.statementBytes(issuanceY), issuerSecret) };
+    const unauthorized = checkpoint(shared, 3n, 7n, [issuanceX, wrongKey], [effect([fundedX]), effect([fundedY])]);
+    const sigPayload = compose([a0, a1, x0, unauthorized, resumed], resumed, y, [toB]);
+    sigPayload.package.trails = sigPayload.package.trails.filter(bytes => !same(bytes, unauthorized.trail));
+    sigPayload.package.faults = [compactFault(unauthorized.snapshots.find(s => same(codec.decodeSnapshot(s).backing, x)), [issuanceX, wrongKey], 2n, codec)];
+    const signatureResult = await accepted(sigPayload);
+    assert.equal(signatureResult.faultEvidence.length, 1);
+    assert.equal(signatureResult.faultEvidence[0].authorizationRole, "issue");
+    assert.equal(signatureResult.faultEvidence[0].authorizationBacking, hex(y));
+    assert.equal(signatureResult.faultEvidence[0].signer, hex(ed25519.getPublicKey(issuerSecretY)));
+    const { faultEvidence: sigFacts, ...sigUnchanged } = signatureResult;
+    assert.deepEqual(sigUnchanged, result); authorization = { payload: sigPayload, result: signatureResult };
+    // The expected issuer follows the target backing even when selection names x.
+    const observer = faultObserver(sigPayload.package.faults, { ...sigPayload.selection, backing: x }, verifier, codec);
+    const decoded = codec.decodeTrail(unauthorized.trail, LIMITS);
+    await observer.inspect({ commitment: unauthorized.commitment, index: unauthorized.at }, unauthorized.directory,
+      { header: codec.decodeSegmentHeader(decoded.header), terms: decoded.terms });
+    assert.deepEqual(observer.result().faultEvidence, sigFacts);
+    const validSibling = faultObserver(reported.package.faults, { ...reported.selection, backing: x }, verifier, codec);
+    await validSibling.inspect({ commitment: late.commitment, index: late.at }, late.directory,
+      { header: codec.decodeSegmentHeader(decoded.header), terms: decoded.terms });
+    assert.deepEqual(validSibling.result().faultEvidence, observation.faultEvidence);
     const partialDirectory = { ...late, directory: late.directory.filter(e => same(e.name, y)) };
     partialDirectory.commitment = signCommitment(operatorSecret, 3n, directoryRoot(partialDirectory.directory));
     const incomplete = compose([a0, a1, x0, partialDirectory, resumed], resumed, y, [toB]);
@@ -437,5 +460,5 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
   const nonService = await checkNormalScopeCounts({ codec, verifier, prove, test, domain, note, operatorSecret,
     successorSecret, checkpoint, compose, x, y, a0, a1, x0, y0, x1, y1, j0, j1, history, toB, toA,
     fundedX, paidX, issuanceX, issuanceY, effect, receipts });
-  return { payload, payloadY, result, receiver, receiverY, receipts, nonService, lapse, compact };
+  return { payload, payloadY, result, receiver, receiverY, receipts, nonService, lapse, compact, authorization };
 }

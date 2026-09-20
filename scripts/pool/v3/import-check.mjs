@@ -13,6 +13,7 @@ import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
 import { compactFault, checkCompactFault } from "./fault-check.mjs";
+import { checkAuthorizationCase } from "./authorization-check.mjs";
 
 const b = n => new Uint8Array(32).fill(n), hex = bytes => Buffer.from(bytes).toString("hex");
 const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
@@ -128,7 +129,7 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
   const c1 = checkpoint(cs, 4n, 15n, [], [], { burned: 1n });
   const ds = segment(operatorSecret, toA.link, 5n, reference(c1)), d0 = checkpoint(ds, 5n, silence ? 16n : 15n, [], [], { burned: 1n });
   const payload = compose([...history, c0, c1, d0]);
-  let result, receiver, lapse, compact, originalCompact;
+  let result, receiver, lapse, compact, originalCompact, authorization;
   if (!silence) {
     const bad = structuredClone(issuance); bad.proof[100] ^= 1;
     const records = [bad, payment];
@@ -153,6 +154,15 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       assert.deepEqual(unchanged, baseline); assert.deepEqual(faultEvidence, compact.result.faultEvidence);
       originalCompact = { payload: original, result: observed };
     });
+    const unauthorized = { ...issuance, authorization: ed25519.sign(codec.statementBytes(issuance), b(199)) };
+    const invalid = checkpoint(a, 2n, 2n, [unauthorized], [issueEffect]);
+    const successor = checkpoint(segment(successorSecret, toB.link, 1n, reference(a0)), 1n, 6n, [], [], { issued: 0n });
+    const full = compose([a0, invalid, successor], successor, [toB]), partialAuth = structuredClone(full);
+    partialAuth.package.trails = partialAuth.package.trails.filter(bytes => !same(bytes, invalid.trail));
+    partialAuth.package.faults = [compactFault(invalid.snapshot, [unauthorized], 1n, codec)];
+    authorization = await checkAuthorizationCase({ label: "issue K", payload: partialAuth, complete: full,
+      validAuthorization: issuance.authorization, expectedRole: "issue", expectedSigner: issuer,
+      codec, verifier, test, operatorSecret });
   }
   await test("successor imports the finalized source prefix into an empty local tree and restores its original path", async () => {
     const restored = await replayLocalPackage({ ...compose([a0, a1, b0], b0, [toB]), seed: payerSeed }, verifier, codec);
@@ -387,5 +397,5 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       await refuse(withheld, "unresolved-evidence");
     });
   }
-  return { payload, result, receiver, lapse, compact, originalCompact, ...(refusedPayload === undefined ? {} : { refusedPayload }) };
+  return { payload, result, receiver, lapse, compact, originalCompact, authorization, ...(refusedPayload === undefined ? {} : { refusedPayload }) };
 }

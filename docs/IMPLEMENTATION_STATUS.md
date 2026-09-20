@@ -121,7 +121,13 @@ report authenticated committed bad proofs beside import results, including
 unresolved reads and lapsed shared scopes. The reader binds every scoped term to
 the candidate configuration and checks the target against its independently
 selected key. Reports establish no exclusion verdict, admission or state; missing
-history still blocks descent. Local limits bound compact bytes, items and suffix
+history still blocks descent. Signature observations additionally cover issuance,
+withdrawal and both settlement roles. The target backing's scoped terms identify
+K; the exact named demand statement preimage identifies its presenter, without
+establishing demand standing or requiring its enclosing opening to authenticate.
+Missing presenter evidence cannot hide an independently failed K signature.
+Proof and signature checks remain separate; neither yields an exclusion verdict.
+Local limits bound compact bytes, items and suffix
 work, and verifier exceptions remain visible. Runtime adoption remains open.
 Configuration adoption, a selected venue profile and runtime
 imports remain open. Signed non-service terms drive single and multi-backing
