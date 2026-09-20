@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-20` [Preserve silence clocks through compact intrinsic exclusion](decisions/2026-09.md#2026-09-20--preserve-silence-clocks-through-compact-intrinsic-exclusion)
 - `2026-09-20` [Permit intrinsic exclusion with complete checkpoint dependencies](decisions/2026-09.md#2026-09-20--permit-intrinsic-exclusion-with-complete-checkpoint-dependencies)
 - `2026-09-20` [Keep compact exclusion behind an explicit dependency rule](decisions/2026-09.md#2026-09-20--keep-compact-exclusion-behind-an-explicit-dependency-rule)
 - `2026-09-20` [Resolve compact authorization faults from committed identities](decisions/2026-09.md#2026-09-20--resolve-compact-authorization-faults-from-committed-identities)

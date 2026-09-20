@@ -4,64 +4,61 @@ Updated: 2026-09-20
 
 ## Goal
 
-Completed slice: compact intrinsic exclusion for non-opening, single-backing
-checkpoints without silence, retaining complete ancestor/state dependencies.
-The normative amendment was reviewed and committed before dependent code.
+Completed slice: compact intrinsic exclusion for live non-opening, single-backing
+checkpoints with silence, retaining complete ancestor/state/clock dependencies.
+Clock reset, rollback and withheld-dependency probes passed before final acceptance.
 
 Acceptance: proof/issue-K rejection permits original and successor descent with
-only target events withheld; full/compact evidence agrees on classification and
-selected state. Missing predecessors, wrong bindings, unknown verifiers and
-unsupported contexts refuse; repairs preserve last valid state and held sequences.
-Portable/fresh-process real-proof acceptance and adversarial review passed.
-No v2 runtime, configuration adoption or live-chain claim.
+only target events withheld; full/compact evidence agrees on classification,
+selected state and silence clocks. Lapse keeps priority; missing clocks/predecessors
+refuse; repairs preserve held sequences and last valid state. Real-proof,
+portable/fresh-process acceptance and independent review passed.
+Stop boundary: conditional v3 replay only; no shared/adopted-block expansion,
+v2 runtime, configuration adoption or live-chain claim. Specification §9.1 at
+183c09f already permits silence with complete dependencies; its application was reviewed.
 
 ## Status
 
-- Delivery pair: the implementation commit containing this handoff and companion
-  `183c09f`, now on specification `main`. Branches
-  `feat/compact-intrinsic-exclusion` and `spec/compact-intrinsic-exclusion` retain
-  the pair. No main protection or applicable ruleset gates were configured.
-- [Decision](decisions/2026-09.md#2026-09-20--permit-intrinsic-exclusion-with-complete-checkpoint-dependencies)
-  and companion commit `183c09f` define §9.1 and clarify authentication versus
-  failed state replay. Fresh normative review completed before specification commit
-  and dependent code; no remaining design finding. Specification remote parity is verified.
-- Three conditional classifier paths now allow a compact intrinsic failure only
-  after resolving a valid opening and last valid state, for single-backing
-  non-silence continuations with no adopted block. Complete evidence takes priority;
-  other failures still require their full event evidence. Individual fault facts
-  remain observational; checkpoint classification consumes an internal bound fact.
-- Verifier keys, circuits, candidate configuration and v2 runtime are unchanged.
-  Integrated adversarial review is complete after correcting and independently
-  reproducing the original path's nonempty-opening prerequisite. No blockers remain.
-  Final oracle fixtures passed 153 groups; full and real-proof acceptance passed.
+- Delivery: the implementation commit containing this handoff, retained on
+  `feat/compact-silence-exclusion`, based on delivered `9bb963b`.
+  Companion `main` and `spec/compact-intrinsic-exclusion` remain at `183c09f`;
+  no specification edit needed. Both baseline remotes match. No main protection
+  or applicable ruleset gates were configured when checked before delivery.
+- [Decision](decisions/2026-09.md#2026-09-20--preserve-silence-clocks-through-compact-intrinsic-exclusion)
+  records reuse of §9.1 and the original path's structurally empty adopted block.
+  Fresh design review found no normative gap before implementation.
+- Original/import/scope classifiers permit single-backing silence continuations
+  with complete dependencies and no adopted block. Lapse and full target evidence
+  keep priority; intrinsic exclusion does not advance state or clocks.
+- Integrated independent adversarial review found no blocker. Four separate
+  probe groups checked invalid/missing openings, withheld original dependencies,
+  full-trail precedence and same-index repair. Verifier keys, circuits, candidate
+  configuration and v2 runtime remain unchanged.
 
 ## Evidence
 
-- Baseline `e015d31` hosted CI `35495694827` passed. Inspect hosted CI for the
-  implementation delivery commit after push; local final gates below passed.
-- Companion links, syntax and whitespace checks pass. Final oracle run passed
-  153 groups with ideal proof membership, real hashes/signatures and synthetic
-  complete venue; reviewer separately checked the opening substitution correction.
-- `npm run check` passed: 110 files / 1,941 tests plus packaging, local profile,
-  pilot, store/service/wallet, crash and spent-set checks. The initial sandbox
-  launch failed in esbuild startup; the authorized unrestricted rerun passed.
-- `check:pool:ergo-replay` passed 202 groups / 64 real proofs, including portable
-  and fresh-process checks. The retained report binds 54 verified source hashes.
-  The measured compact package is 34,103 versus 50,020 bytes (about 32% smaller);
-  this is one fixture shape, not a general compression guarantee.
+- Baseline `9bb963b` hosted CI `35498168247` passed. Its full runtime/package
+  checks are reused: only isolated v3 replay scripts/tests and documentation change.
+- Oracle probes passed 104 import/scope groups, 53 recovery groups and the final
+  21 silence groups. These use ideal proof membership, real hashes/signatures and
+  synthetic complete venue evidence; they do not establish proof relations.
+- Final `check:pool:ergo-replay` passed 207 groups / 64 real proofs, including
+  portable and fresh-process checks for 31 compact intrinsic acceptance/refusal
+  cases. The retained [report](docs/pool-v3-local-replay-verification.json) binds
+  54 verified source hashes; log: `scratch/compact-silence-real.log`.
+  Syntax, documentation, companion-link and whitespace checks pass.
 - No complete-certificate, adopted configuration, live-chain authentication or
   production spendability claim. Compact exclusion cannot fill missing ancestors.
 
 ## Next
 
-1. Verify implementation delivery remote parity and inspect exact-head hosted CI.
-2. Next capability: probe compact exclusion for a live single-backing checkpoint
-   with silence, using complete canonical clock dependencies and lapse priority.
-   First falsify clock reset/rollback after exclusion and missing-clock acceptance;
-   if feasible, carry the slice through real-proof/portable/fresh-process checks,
-   independent review and delivery. Review any normative gap before dependent code.
-3. Keep shared scope, adoption and other fault classes behind their explicit
-   conformance boundaries; individual fault observations still supply no state.
+1. Delivery includes final remote-parity and exact-head CI inspection. Recheck
+   hosted CI for the delivery commit if it was still pending when pushed.
+2. Next capability: probe §9.1 shared-scope exclusion with complete sibling
+   snapshots, canonical predecessor/clock dependencies and no adopted block.
+   First falsify unknown sibling lapse and rollback through split/rejoin ancestry;
+   review the design before dependent code and keep unsupported cases unresolved.
+3. Nonempty adoption and other fault classes retain explicit conformance boundaries.
 
 ## Retained boundaries and local state
 
@@ -90,5 +87,5 @@ this remains conditional evidence, with no runtime or release gate closed.
 Runtime integration, selected venue/decoder, qualified custody and continuous
 wallet operation dominate remaining effort. No rounded estimate change.
 
-Switch to a fresh instance for the next capability: this cross-repository slice
-is complete, and the clock/dependency probe has a bounded handoff above.
+Stay with this instance for the next dependency probe: the relevant
+classifier and specification context is fresh; no broader restart is needed.

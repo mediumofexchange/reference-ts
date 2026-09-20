@@ -319,7 +319,10 @@ async function classifyCarrying(context, ranges, evidence) {
       // Its trail is the one that authenticates its committed evidence (§10.1); two distinct ones cannot.
       const expected = { backing: selection.backing, segment: s.segment, digest: c.digest };
       const matching = trails.filter(x => codec.verifyTrailEvidence(expected, s, x, LIMITS));
-      if (matching.length === 0 && openingValid && lastValid !== undefined && duration === undefined) {
+      // This original-only path proves a valid empty opening with no earlier
+      // carrying checkpoint. No pre-opening snapshot can give a publication
+      // force (C2b.3.2), so its adopted block is empty even with silence.
+      if (matching.length === 0 && openingValid && lastValid !== undefined) {
         const intrinsic = context.faults.intrinsicFailure(c, { header, terms: trail.terms });
         if (intrinsic !== undefined) {
           carrying.push({ sequence: c.sequence.toString(), index: c.index.toString(), class: "excluded", check: intrinsic });

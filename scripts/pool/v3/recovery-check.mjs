@@ -177,7 +177,24 @@ export async function checkRecovery({ codec, verifier, configurationBytes, domai
   const finalCheckpoint = checkpoint(returned, 5n, 13n, finalRecords, finalEffects, 10n);
   const ancestry = [originalOpening, originalState, returnOpening, adopted, finalCheckpoint];
   const payload = compose(ancestry, finalCheckpoint, publications, 13n);
-  const authorizations = [];
+  const authorizations = [], intrinsicCases = [];
+  await test("compact proof faults cannot replace a target trail with a nonempty adopted block", async () => {
+    for (const position of [4n, 5n]) {
+      const records = structuredClone(finalRecords);
+      records[Number(position - 1n)].proof[100] ^= 1;
+      const target = checkpoint(returned, 5n, 13n, records, finalEffects, 10n);
+      const complete = compose([...ancestry.slice(0, 4), target], adopted, publications, 13n);
+      assert.equal((await replayLocalPackage(complete, verifier, codec)).status, "selected-local-replay");
+      const partial = structuredClone(complete);
+      partial.package.trails = partial.package.trails.filter(bytes => !same(bytes, target.trail));
+      partial.package.faults = [compactFault(target.snapshot, records, position, codec)];
+      const result = await replayLocalPackage(partial, verifier, codec);
+      assert.equal(result.status, "unresolved-evidence"); assert.equal(result.audit, null);
+      assert.deepEqual(result.candidates, []); assert.equal(result.spendable, false);
+      assert.equal(result.faultEvidence.some(f => f.check === "PROOF"), true);
+      intrinsicCases.push({ payload: partial, result });
+    }
+  });
   for (const variant of ["withdrawal", "acceptance", "release", "both"]) {
     const withdrawing = variant === "withdrawal", demandRecord = withdrawing ? firstDemand : secondDemand;
     const good = withdrawing ? firstWithdrawal : released.record, bad = structuredClone(good);
@@ -199,7 +216,7 @@ export async function checkRecovery({ codec, verifier, configurationBytes, domai
     authorizations.push(await checkAuthorizationCase({ label: variant, payload: partial, complete,
       validAuthorization: good.authorization, expectedRole, extraRoles: variant === "both" ? ["release"] : [],
       expectedSigner: ed25519.getPublicKey(expectedRole === "acceptance" ? issuerSecret : withdrawing ? presenterOneSecret : presenterTwoSecret),
-      demandEvidence: codec.encodeFaultEvidence(preimage, 1024n), codec, verifier, test, operatorSecret }));
+      demandEvidence: codec.encodeFaultEvidence(preimage, 1024n), codec, verifier, test, operatorSecret, intrinsicProof: true }));
   }
   let result, receiver, issuerRestored, issuerPayload;
   await test("forced demand, withdrawal, demand and release adopt in exact venue order before returned service", async () => {
@@ -377,5 +394,5 @@ export async function checkRecovery({ codec, verifier, configurationBytes, domai
     publication, demand, note, domain, venue, backing, signedTerms, operatorSecret, ruleSecret, payerSeed,
     original, originalOpening, originalState, originalTree, issuance, funded, firstDemand,
     ancestry, publications, finalCheckpoint, paid, change });
-  return { payload, result, receiver, issuerSeed, issuerPayload, issuerRestored, settlement: released.output, receipts, nonService, sameIndex, authorizations };
+  return { payload, result, receiver, issuerSeed, issuerPayload, issuerRestored, settlement: released.output, receipts, nonService, sameIndex, authorizations, intrinsicCases };
 }

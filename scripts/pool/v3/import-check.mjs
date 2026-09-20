@@ -356,18 +356,113 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       assert.equal(answer.status, status); assert.equal(answer.audit, null);
       assert.deepEqual(answer.candidates, []); assert.equal(answer.spendable, false); return answer;
     };
-    await test("compact live silence-context faults remain unresolved without their target trail", async () => {
+    const withhold = (p, target, records, position) => {
+      const copy = structuredClone(p);
+      copy.package.trails = copy.package.trails.filter(bytes => !same(bytes, target.trail));
+      copy.package.faults = [compactFault(target.snapshot, records, position, codec)];
+      return copy;
+    };
+    const equivalent = async (complete, partial) => {
+      const answer = await replayLocalPackage(partial, verifier, codec);
+      const { faultEvidence, ...state } = answer;
+      assert.equal(faultEvidence.some(f => f.check === "PROOF" || f.authorizationRole === "issue"), true);
+      assert.deepEqual(withoutFaultReasons(state), withoutFaultReasons(await replayLocalPackage(complete, verifier, codec)));
+      intrinsicCases.push({ payload: partial, result: answer });
+      return answer;
+    };
+    await test("compact live silence faults preserve imported spent state and refuse missing clock or publication dependencies", async () => {
       const badBurn = structuredClone(payment2); badBurn.proof[100] ^= 1;
       const records = [payment, badBurn];
       const target = checkpoint(bs, 4n, 11n, records, [paymentEffect, paymentEffect2], { burned: 1n });
-      const p = compose([...history, target, c0], c0);
-      await accepted(p);
-      p.package.trails = p.package.trails.filter(bytes => !same(bytes, target.trail));
-      p.package.faults = [compactFault(target.snapshot, records, 2n, codec)];
-      const answer = await replayLocalPackage(p, verifier, codec);
-      assert.equal(answer.status, "unresolved-evidence"); assert.equal(answer.audit, null);
-      assert.equal(answer.faultEvidence.some(f => f.check === "PROOF"), true);
-      intrinsicCases.push({ payload: p, result: answer });
+      const complete = { ...compose([...history, target, c0], c0), seed: payerSeed };
+      const partial = withhold(complete, target, records, 2n), answer = await equivalent(complete, partial);
+      assert.equal(answer.status, "selected-local-replay"); assert.deepEqual(answer.candidates, []);
+      assert.equal(answer.audit.outstanding, "9");
+      assert.equal(answer.audit.range.carrying.find(c => c.index === "11").class, "excluded");
+      assert.deepEqual(answer.audit.range.clock, { duration: "4", snapshotIndex: "14", gap: "6", open: true, boundary: "19", opening: "14" });
+      for (const cp of [a0, a1, b0, b1, b2]) for (const key of ["trails", "snapshots", "directories"]) {
+        const missing = structuredClone(partial);
+        missing.package[key] = missing.package[key].filter(item => key === "trails" ? !same(item, cp.trail) :
+          key === "snapshots" ? !same(item, cp.snapshot) : !same(directoryRoot(item), directoryRoot(cp.directory)));
+        const result = await refuse(missing, "unresolved-evidence");
+        intrinsicCases.push({ payload: { ...missing, seed: receiverSeed }, result });
+      }
+      for (const kind of [1, 4]) {
+        const unavailable = { ...verifier, record(data) {
+          const record = verifier.record(data);
+          return { ...record, range: request => request.kind === kind ? undefined : record.range(request) };
+        } };
+        await refuse(partial, "unresolved-evidence", unavailable);
+      }
+      const stale = checkpoint(segment(operatorSecret, toA.link, 3n, reference(a1)), 3n, 14n);
+      await reject(withhold(compose([...history, target, stale], stale), target, records, 2n), "IMPORT");
+    });
+    await test("compact proof and issue-K faults cannot reset original silence or rescue a late repair", async () => {
+      for (const failure of ["proof", "authorization"]) {
+        const bad = structuredClone(issuance); bad[failure][failure === "proof" ? 100 : 0] ^= 1;
+        const target = checkpoint(a, 3n, 4n, [bad], [issueEffect]);
+        const late = checkpoint(a, 4n, 7n, [issuance], [issueEffect]);
+        const complete = compose([a0, a1, target, late], a1, []);
+        const partial = withhold(complete, target, [bad], 1n);
+        const answer = await equivalent(complete, partial);
+        assert.equal(answer.status, "selected-local-replay");
+        assert.deepEqual(classes(answer), ["valid", "valid", "excluded", "lapsed"]);
+        assert.deepEqual(answer.audit.range.clock, { duration: "4", snapshotIndex: "2", gap: "18", open: true, boundary: "7", opening: "1" });
+        const repaired = { ...late, at: 4n }, completeRepair = compose([a0, a1, target, repaired], repaired, []);
+        const repair = await equivalent(completeRepair, withhold(completeRepair, target, [bad], 1n));
+        assert.deepEqual(repair.audit.range.carrying.map(c => [c.sequence, c.class]),
+          [["1", "valid"], ["2", "valid"], ["3", "excluded"], ["4", "valid"]]);
+        assert.equal(repair.audit.range.clock.snapshotIndex, "4"); assert.equal(repair.audit.range.clock.boundary, "9");
+        // A lapsed multi-entry directory dispatches to the scope reader while
+        // preserving the live target's single-backing scope and original clock.
+        const directory = [...late.directory, { name: b(240), digest: b(241) }].sort((x, y) => Buffer.compare(x.name, y.name));
+        const scopedLate = { ...late, directory, commitment: signCommitment(operatorSecret, 4n, directoryRoot(directory)) };
+        const completeScope = compose([a0, a1, target, scopedLate], a1, []);
+        const scoped = await equivalent(completeScope, withhold(completeScope, target, [bad], 1n));
+        assert.equal(scoped.status, "selected-local-replay");
+        assert.equal(scoped.audit.range.carrying.find(c => c.sequence === "3").class, "excluded");
+        assert.equal(scoped.audit.range.clock.boundary, "7"); assert.equal(scoped.audit.range.clock.snapshotIndex, "2");
+      }
+    });
+    await test("compact silence lapse retains priority at the gap and after a same-index return", async () => {
+      const bad = structuredClone(issuance); bad.proof[100] ^= 1;
+      const target = checkpoint(a, 3n, 7n, [bad], [issueEffect]);
+      const complete = compose([a0, a1, target], a1, []);
+      const answer = await equivalent(complete, withhold(complete, target, [bad], 1n));
+      assert.deepEqual(classes(answer), ["valid", "valid", "lapsed"]);
+      // A fresh opening closes future gaps, never the strictly-before gap at
+      // its own index; an intrinsic fact cannot change that target's lapse.
+      const returned = { ...c0, at: 16n }, wrong = structuredClone(issuance); wrong.proof[100] ^= 1;
+      const sameIndex = checkpoint(cs, 4n, 16n, [wrong], [issueEffect], { burned: 1n });
+      const all = compose([...history, returned, sameIndex], returned);
+      const result = await equivalent(all, withhold(all, sameIndex, [wrong], 1n));
+      assert.equal(result.status, "selected-local-replay"); assert.equal(classes(result).at(-1), "lapsed");
+      assert.equal(result.audit.range.clock.snapshotIndex, "16");
+    });
+    await test("compact exclusion after a late original opening cannot give pre-opening publications force", async () => {
+      const opened = { ...a0, at: 8n }, valid = { ...a1, at: 9n };
+      const bad = structuredClone(issuance); bad.authorization[0] ^= 1;
+      const target = checkpoint(a, 3n, 10n, [bad], [issueEffect]);
+      const complete = compose([opened, valid, target], valid, []);
+      // Canonically framed demand bytes bind this segment, but no strictly
+      // preceding snapshot can give either publication force before its opening.
+      const demand = { domain, kind: 4, publicInputs: [...a.prefix, ...limbsOf(backing), 10n,
+        a1.tree.root(), a1.tree.root(), 1n, 2n, ...limbsOf(operator), 20n, 25n],
+      proof: new Uint8Array(32), authorization: new Uint8Array(), capsules: [] };
+      for (const index of [7n, 8n]) complete.venue.records.push({ kind: 4, subject: backing, index,
+        record: codec.encodePublication({ domain, backing, kind: 1, record: demand }) });
+      const answer = await equivalent(complete, withhold(complete, target, [bad], 1n));
+      assert.equal(answer.status, "selected-local-replay");
+      assert.equal(answer.audit.range.clock.snapshotIndex, "9"); assert.equal(answer.audit.range.clock.boundary, "14");
+      const late = checkpoint(a, 4n, 14n, [issuance], [issueEffect]);
+      const directory = [...late.directory, { name: b(240), digest: b(241) }].sort((x, y) => Buffer.compare(x.name, y.name));
+      const scopedLate = { ...late, directory, commitment: signCommitment(operatorSecret, 4n, directoryRoot(directory)) };
+      const scoped = compose([opened, valid, target, scopedLate], valid, []);
+      scoped.venue.records.push(...complete.venue.records.filter(r => r.kind === 4));
+      const scopedAnswer = await equivalent(scoped, withhold(scoped, target, [bad], 1n));
+      assert.equal(scopedAnswer.status, "selected-local-replay");
+      assert.deepEqual(scopedAnswer.audit.range.clock, answer.audit.range.clock);
+      assert.equal(scopedAnswer.audit.range.publications.every(p => !p.force), true);
     });
     await test("duration equality across replacement and reappointment stays closed; the judging-index reset is strict", async () => {
       assert.deepEqual(result.audit.range.clock, { duration: "4", snapshotIndex: "16", gap: "4", open: false, boundary: null, opening: "16" });

@@ -36,7 +36,7 @@ function recommit(input, change, codec, operatorSecret) {
 }
 
 export async function checkAuthorizationCase({ label, payload, complete, validAuthorization, expectedRole, expectedSigner,
-  codec, verifier, test, operatorSecret, demandEvidence, extraRoles = [], intrinsic = false }) {
+  codec, verifier, test, operatorSecret, demandEvidence, extraRoles = [], intrinsic = false, intrinsicProof = intrinsic }) {
   const input = structuredClone(payload);
   if (demandEvidence !== undefined) input.package.faults.push(demandEvidence);
   let result;
@@ -121,7 +121,10 @@ export async function checkAuthorizationCase({ label, payload, complete, validAu
       }, codec, operatorSecret);
       changed.package.faults[1] = codec.encodeFaultEvidence(candidate, FAULT_LIMITS.maxSuffixEntries);
       const observed = await replayLocalPackage(changed, verifier, codec);
-      assert.equal(observed.status, "unresolved-evidence");
+      // Rebinding the statement also invalidates its proof. A supported
+      // intrinsic proof failure can exclude it independently of signer lookup.
+      assert.equal(observed.status, intrinsicProof ? "selected-local-replay" : "unresolved-evidence");
+      if (intrinsicProof) assert(observed.audit.range.carrying.some(c => c.class === "excluded" && c.check === "PROOF"));
       assert.deepEqual(signatures(observed).map(f => f.authorizationRole), variant === "source-segment" ? ["acceptance", "release"] : ["acceptance"]);
     }
   });
