@@ -20,9 +20,9 @@ fault class, runtime or adoption expansion.
 
 ## Status
 
-- Delivered in this slice's commit on `main`, based on `b308eae` (exact-head CI
-  `35622782838` passed). Companion `main` stays at `183c09f`: §9.1 already states
-  the block derivation and position condition, so no specification edit.
+- Delivered as `234a13e` on `main` (exact-head CI `35631572287` passed; remote
+  parity verified), based on `b308eae`. Companion `main` stays at `183c09f`: §9.1
+  already states the block derivation and position condition, so no spec edit.
 - [Decision](decisions/2026-09.md#2026-09-21--bound-compact-exclusion-by-the-record-derived-adopted-block)
   records the position bound, the per-position fault cache, the rejected
   alternatives and the review probes.
@@ -56,11 +56,10 @@ fault class, runtime or adoption expansion.
 
 ## Next
 
-1. Push, then verify remote parity and exact-head CI.
-2. §9.1's supported compact contexts are implemented (non-opening targets after
+1. §9.1's supported compact contexts are implemented (non-opening targets after
    any adopted block; proof and issue-K). Widening to other fault classes or
    inside-block positions needs a specification decision first.
-3. Candidate next capability: the Ergo venue evidence path — the full-block
+2. Candidate next capability: the Ergo venue evidence path — the full-block
    verifier as the local replay's §13.2 verifier for kind-1/4 ranges (P2 node
    publication and P4 real-chain exhaustion remain open). First falsify that its
    kind-4 answers preserve per-index venue order and ordinals across backing
