@@ -55,13 +55,28 @@ export function faultObserver(payloads = [], selection, verifier, codec) {
     }
   }
   return {
-    result() { return facts.size === 0 ? {} : { faultEvidence: [...facts.values()] }; },
+    // Facts are ordered by checkpoint, position and record identity, so a
+    // canonically re-ordered package reports the same list as its source;
+    // observations of one record keep their order.
+    result() {
+      if (facts.size === 0) return {};
+      const order = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+      const ordered = [...facts.values()].map((fact, i) => ({ fact, i })).sort((a, b) =>
+        order(BigInt(a.fact.index), BigInt(b.fact.index)) || order(BigInt(a.fact.sequence), BigInt(b.fact.sequence)) ||
+        order(BigInt(a.fact.position), BigInt(b.fact.position)) || order(a.fact.evidence, b.fact.evidence) || a.i - b.i);
+      return { faultEvidence: ordered.map(item => item.fact) };
+    },
     // This supplies only the intrinsic failure. Callers must first resolve the
     // valid opening, last-valid state, original record prefix and adoption context.
     // Callers resolve the complete scope, including sibling clocks, before this fact.
-    intrinsicFailure(held, scope) {
+    // §9.1 item 4: only a target position after the segment's required adopted
+    // block, whose length the caller derived from complete publication evidence.
+    intrinsicFailure(held, scope, blockLength) {
+      if (typeof blockLength !== "bigint") throw new Error("adopted block length required");
       if (held.commitment.sequence <= scope.header.sequence) return undefined;
-      return intrinsic.get(`${heldKey(held)}:${hex(hash(codec.segmentBytes(scope.header)))}`);
+      const eligible = (intrinsic.get(`${heldKey(held)}:${hex(hash(codec.segmentBytes(scope.header)))}`) ?? [])
+        .filter(fact => fact.position > blockLength);
+      return (eligible.find(fact => fact.check === "PROOF") ?? eligible[0])?.check;
     },
     async inspect(held, directory, scope) {
       if (evidence.length === 0) return;
@@ -103,9 +118,13 @@ export function faultObserver(payloads = [], selection, verifier, codec) {
           if (observation.check === "PROOF" || observation.authorizationRole === "issue") {
             // The §9 codec already bounds the proof field at §5's maximum;
             // strict-false proof verification above also requires its length shape.
-            // Prefer PROOF if both independent intrinsic failures are available.
-            const key = `${heldKey(held)}:${hex(e.snapshot.segment)}`, prior = intrinsic.get(key);
-            if (prior === undefined || observation.check === "PROOF") intrinsic.set(key, observation.check);
+            // Prefer PROOF if both independent intrinsic failures are available at
+            // one position; distinct positions are retained for the block test.
+            const key = `${heldKey(held)}:${hex(e.snapshot.segment)}`, positions = intrinsic.get(key) ?? [];
+            const prior = positions.find(fact => fact.position === e.position);
+            if (prior === undefined) positions.push({ position: e.position, check: observation.check });
+            else if (observation.check === "PROOF") prior.check = "PROOF";
+            intrinsic.set(key, positions);
           }
         }
         const key = `${hex(c.operator)}:${c.sequence}:${hex(c.root)}:${id}`;

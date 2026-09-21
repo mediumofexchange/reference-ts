@@ -212,7 +212,8 @@ export async function classifyScopes(context, directories, record, evidence, hel
             same(s.historyHash, snapshot.historyHash) && same(s.evidenceHash, snapshot.evidenceHash), "SNAPSHOT");
           return s;
         });
-        const intrinsic = !opening && lastValid !== undefined && block.length === 0 ? context.faults.intrinsicFailure(held, scope) : undefined;
+        // §9.1: the opening's record-derived block bounds compact exclusion to later positions.
+        const intrinsic = !opening && lastValid !== undefined ? context.faults.intrinsicFailure(held, scope, BigInt(block.length)) : undefined;
         const evidence = scope.classificationEvidence(intrinsic);
         if (evidence.intrinsic !== undefined) return { ...base, class: "excluded", check: evidence.intrinsic };
         const { trail } = evidence;

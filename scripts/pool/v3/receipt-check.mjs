@@ -8,6 +8,7 @@ import { signCommitment, directoryRoot } from "../../../dist/commitment.js";
 import { encodeReplacement, replacementMessage, ROLE_OPERATOR } from "../../../dist/replacement.js";
 import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage } from "./local-replay.mjs";
+import { compactFault } from "./fault-check.mjs";
 
 const same = (a, b) => Buffer.compare(a, b) === 0;
 const b = n => new Uint8Array(32).fill(n);
@@ -255,6 +256,27 @@ export async function checkReceipts({ codec, verifier, test, compose, checkpoint
     } };
     receiptStatus(await replayLocalPackage(originalPayload, unavailable, codec), "final");
     refusal(await replayLocalPackage(adoptedPayload, unavailable, codec), "unresolved-evidence");
+  });
+
+  await test("a receipt walk derives the adopted block from its lazily read range before consuming a compact fault", async () => {
+    // The walk reads the kind-4 range only once a gap is open (§9.1 item 3, C2b.4.2);
+    // the block it derives still bounds the compact path to positions after 4.
+    const receipt = signedReceipt(finalCheckpoint, 5n, { after: adopted.sequence });
+    for (const [position, status] of [[5n, "receipt-status"], [4n, "unresolved-evidence"]]) {
+      const records = structuredClone(finalRecords); records[Number(position - 1n)].proof[100] ^= 1;
+      const target = checkpoint(returned, 5n, 13n, records, finalEffects, 10n);
+      const complete = withReceipt(compose([...ancestry.slice(0, 4), target], adopted, publications, 13n), receipt.bytes);
+      const partial = structuredClone(complete);
+      partial.package.trails = removeBytes(partial.package.trails, target.trail);
+      partial.package.faults = [compactFault(target.snapshot, records, position, codec)];
+      const answer = await replayLocalPackage(partial, verifier, codec);
+      assert.equal(answer.status, status, JSON.stringify(answer));
+      if (position === 5n) {
+        assert.equal(answer.receipt.status, "pending");
+        const { faultEvidence, ...rest } = answer;
+        assert.deepEqual(rest, await replayLocalPackage(complete, verifier, codec));
+      } else partialFree(answer);
+    }
   });
 
   return { payload: originalPayload, result, adoptedPayload, adoptedResult };

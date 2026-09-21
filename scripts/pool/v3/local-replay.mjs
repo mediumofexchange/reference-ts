@@ -323,7 +323,7 @@ async function classifyCarrying(context, ranges, evidence) {
       // carrying checkpoint. No pre-opening snapshot can give a publication
       // force (C2b.3.2), so its adopted block is empty even with silence.
       if (matching.length === 0 && openingValid && lastValid !== undefined) {
-        const intrinsic = context.faults.intrinsicFailure(c, { header, terms: trail.terms });
+        const intrinsic = context.faults.intrinsicFailure(c, { header, terms: trail.terms }, 0n);
         if (intrinsic !== undefined) {
           carrying.push({ sequence: c.sequence.toString(), index: c.index.toString(), class: "excluded", check: intrinsic });
           continue;
@@ -536,8 +536,11 @@ async function classifyImports(context, directories, record, evidence) {
         }
         // Returning to an older segment cannot abandon a valid newer segment.
         requireReplay(canonical === undefined || same(canonical.segment, snapshot.segment) || matches(segment.predecessor, canonical.commitment), "CONTINUITY");
-        const intrinsic = segment.openingValid && segment.lastValid !== undefined && segment.block.length === 0 ?
-          context.faults.intrinsicFailure(held, scope) : undefined;
+        // §9.1: the valid opening derived this segment's adopted block from the
+        // complete publication range. A compact fault excludes only a target
+        // position after that block; positions inside it keep ordinary evidence.
+        const intrinsic = segment.openingValid && segment.lastValid !== undefined ?
+          context.faults.intrinsicFailure(held, scope, BigInt(segment.block.length)) : undefined;
         const evidence = scope.classificationEvidence(intrinsic);
         if (evidence.intrinsic !== undefined) {
           carrying.push({ ...item, class: "excluded", check: evidence.intrinsic });

@@ -142,10 +142,14 @@ snapshot, terms, canonical predecessor and clock; its snapshots must agree on th
 segment and shared history/evidence hashes. A fault opened through one sibling's
 snapshot can exclude the shared checkpoint, but issue K still comes from the
 statement's backing. Split/rejoin ancestry and spent state remain complete.
-Opening and adopted-block
-contexts, other signature roles and admission/capsule faults retain their ordinary
-evidence or refuse. The original classifier now explicitly excludes nonempty
-opening checkpoints before establishing the compact path's valid-opening condition.
+A returned segment's compact target must lie after the adopted block its valid
+opening derived from the complete publication range (C2b.4.2); the fault cache
+retains each authenticated position for that test, and the original single-segment
+path keeps its empty block. Inside-block positions, opening checkpoints, other
+signature roles and admission/capsule faults retain their ordinary evidence or
+refuse; an inside-block record is ignored, never consumed, beside an after-block
+one. The original classifier now explicitly excludes nonempty opening checkpoints
+before establishing the compact path's valid-opening condition.
 Local limits bound compact bytes, items and suffix
 work, and verifier exceptions remain visible. Runtime adoption remains open.
 Configuration adoption, a selected venue profile and runtime

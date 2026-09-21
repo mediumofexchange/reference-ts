@@ -13,7 +13,7 @@ import { LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
-import { compactFault } from "./fault-check.mjs";
+import { compactFault, withoutFaultReasons } from "./fault-check.mjs";
 import { checkAuthorizationCase } from "./authorization-check.mjs";
 import { checkReceipts } from "./receipt-check.mjs";
 import { checkNonService } from "./non-service-check.mjs";
@@ -178,21 +178,93 @@ export async function checkRecovery({ codec, verifier, configurationBytes, domai
   const ancestry = [originalOpening, originalState, returnOpening, adopted, finalCheckpoint];
   const payload = compose(ancestry, finalCheckpoint, publications, 13n);
   const authorizations = [], intrinsicCases = [];
-  await test("compact proof faults cannot replace a target trail with a nonempty adopted block", async () => {
-    for (const position of [4n, 5n]) {
-      const records = structuredClone(finalRecords);
-      records[Number(position - 1n)].proof[100] ^= 1;
-      const target = checkpoint(returned, 5n, 13n, records, finalEffects, 10n);
-      const complete = compose([...ancestry.slice(0, 4), target], adopted, publications, 13n);
-      assert.equal((await replayLocalPackage(complete, verifier, codec)).status, "selected-local-replay");
-      const partial = structuredClone(complete);
-      partial.package.trails = partial.package.trails.filter(bytes => !same(bytes, target.trail));
-      partial.package.faults = [compactFault(target.snapshot, records, position, codec)];
+  // The returned segment's adopted block occupies positions 1–4 (C2b.4.2).
+  const withheld = (checkpoints, chosen, target, records, position, at) => {
+    const complete = compose([...checkpoints, target], chosen, publications, at);
+    const partial = structuredClone(complete);
+    partial.package.trails = partial.package.trails.filter(bytes => !same(bytes, target.trail));
+    partial.package.faults = [compactFault(target.snapshot, records, position, codec)];
+    return { complete, partial };
+  };
+  const equivalent = async (complete, partial, classes) => {
+    const result = await replayLocalPackage(partial, verifier, codec);
+    assert.equal(result.status, "selected-local-replay", JSON.stringify(result)); assert.equal(result.spendable, false);
+    assert.deepEqual(result.audit.range.carrying.map(c => c.class), classes);
+    assert.equal(result.audit.range.carrying.at(-1).check, "PROOF");
+    const { faultEvidence, ...state } = result;
+    assert.equal(faultEvidence.some(f => f.check === "PROOF" && f.position === "5"), true);
+    const full = await replayLocalPackage(complete, verifier, codec);
+    assert.equal(full.audit.range.carrying.at(-1).class, "excluded");
+    assert.deepEqual(withoutFaultReasons(state), withoutFaultReasons(full));
+    return result;
+  };
+  await test("compact proof faults exclude a target after the adopted block and agree with its complete trail", async () => {
+    const records = structuredClone(finalRecords); records[4].proof[100] ^= 1;
+    const target = checkpoint(returned, 5n, 13n, records, finalEffects, 10n);
+    const { complete, partial } = withheld(ancestry.slice(0, 4), adopted, target, records, 5n, 13n);
+    const result = await equivalent(complete, partial, ["valid", "valid", "valid", "valid", "excluded"]);
+    assert.equal(result.audit.records, "4");
+    intrinsicCases.push({ payload: partial, result });
+    // A compact record cannot stand in for the kind-4 range every silence-bearing
+    // read requires; the receipt walk's lazily read range is checked in receipt-check.
+    const unavailable = { ...verifier, record(data) { const record = verifier.record(data); return { ...record,
+      range: request => request.kind === 4 ? undefined : record.range(request) }; } };
+    const refused = await replayLocalPackage(partial, unavailable, codec);
+    assert.equal(refused.status, "unresolved-evidence"); assert.equal(refused.audit, null);
+  });
+  await test("the first continuation after a return excludes a compact fault after its block from the opening alone", async () => {
+    const records = structuredClone(finalRecords); records[4].proof[100] ^= 1;
+    const target = checkpoint(returned, 4n, 12n, records, finalEffects, 10n);
+    const { complete, partial } = withheld(ancestry.slice(0, 3), returnOpening, target, records, 5n, 12n);
+    const result = await equivalent(complete, partial, ["valid", "valid", "valid", "excluded"]);
+    assert.equal(result.audit.records, "0");
+    intrinsicCases.push({ payload: partial, result });
+  });
+  await test("compact faults inside the adopted block are unsupported and refuse without ordinary evidence", async () => {
+    const wrongIssue = structuredClone(issuance);
+    wrongIssue.authorization = ed25519.sign(codec.statementBytes(wrongIssue), b(199));
+    for (const [position, substitute, check] of [[4n, undefined, "PROOF"], [1n, wrongIssue, "SIGNATURE"]]) {
+      const records = structuredClone(finalRecords), effects = structuredClone(finalEffects);
+      if (substitute === undefined) records[Number(position - 1n)].proof[100] ^= 1;
+      else { records[Number(position - 1n)] = substitute; effects[Number(position - 1n)] = { outputs: [funded.cm], nullifiers: [] }; }
+      const target = checkpoint(returned, 5n, 13n, records, effects, 10n);
+      const { complete, partial } = withheld(ancestry.slice(0, 4), adopted, target, records, position, 13n);
+      const full = await replayLocalPackage(complete, verifier, codec);
+      assert.equal(full.status, "selected-local-replay");
+      assert.equal(full.audit.range.carrying.at(-1).check, "ADOPTION");
       const result = await replayLocalPackage(partial, verifier, codec);
       assert.equal(result.status, "unresolved-evidence"); assert.equal(result.audit, null);
       assert.deepEqual(result.candidates, []); assert.equal(result.spendable, false);
-      assert.equal(result.faultEvidence.some(f => f.check === "PROOF"), true);
+      assert.equal(result.faultEvidence.some(f => f.check === check && f.position === position.toString()), true);
       intrinsicCases.push({ payload: partial, result });
+    }
+  });
+  await test("an after-block fault record excludes beside an ignored inside-block record and never crosses checkpoints", async () => {
+    const records = structuredClone(finalRecords); records[3].proof[100] ^= 1; records[4].proof[100] ^= 1;
+    const target = checkpoint(returned, 5n, 13n, records, finalEffects, 10n);
+    const { complete, partial } = withheld(ancestry.slice(0, 4), adopted, target, records, 5n, 13n);
+    const faults = [compactFault(target.snapshot, records, 4n, codec), partial.package.faults[0]];
+    for (const order of [faults, [...faults].reverse()]) {
+      const supplied = { ...partial, package: { ...partial.package, faults: order } };
+      const result = await equivalent(complete, supplied, ["valid", "valid", "valid", "valid", "excluded"]);
+      assert.deepEqual(result.faultEvidence.map(f => f.position).sort(), ["4", "5"]);
+      intrinsicCases.push({ payload: supplied, result });
+    }
+    // Two withheld continuations: the inside-block one stays unresolved whichever
+    // sequence carries it, so the other's after-block fact rescues nothing.
+    const inside = structuredClone(finalRecords); inside[3].proof[100] ^= 1;
+    const after = structuredClone(finalRecords); after[4].proof[100] ^= 1;
+    for (const [firstRecords, firstPosition, secondRecords, secondPosition] of
+      [[inside, 4n, after, 5n], [after, 5n, inside, 4n]]) {
+      const first = checkpoint(returned, 5n, 13n, firstRecords, finalEffects, 10n);
+      const second = checkpoint(returned, 6n, 14n, secondRecords, finalEffects, 10n);
+      const crossed = compose([...ancestry.slice(0, 4), first, second], adopted, publications, 14n);
+      crossed.package.trails = crossed.package.trails.filter(bytes => !same(bytes, first.trail) && !same(bytes, second.trail));
+      crossed.package.faults = [compactFault(first.snapshot, firstRecords, firstPosition, codec),
+        compactFault(second.snapshot, secondRecords, secondPosition, codec)];
+      const result = await replayLocalPackage(crossed, verifier, codec);
+      assert.equal(result.status, "unresolved-evidence"); assert.equal(result.audit, null); assert.deepEqual(result.candidates, []);
+      intrinsicCases.push({ payload: crossed, result });
     }
   });
   for (const variant of ["withdrawal", "acceptance", "release", "both"]) {

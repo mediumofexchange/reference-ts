@@ -228,16 +228,29 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
   const ancestry = [a0, a1, x0, y0, rx, ry, j0];
   const payload = compose([...ancestry, adopted, final], final, publications);
   const payloadY = compose([...ancestry, adopted, final], final, publications, y);
-  await test("shared compact faults cannot skip a nonempty adopted block", async () => {
+  // The joined segment's adopted block occupies positions 1–8 (C2b.4.2).
+  await test("shared compact faults exclude a target after the adopted block and refuse targets inside it", async () => {
     const bad = structuredClone(payment.record); bad.proof[100] ^= 1;
-    const records = [...adoptedRecords, bad];
-    const target = checkpoint(joined, 9n, 14n, records, [...adoptedEffects, effect(outputs, payment.inputs)]);
-    const complete = compose([...ancestry, adopted, target], adopted, publications, y, 14n);
-    await accepted(complete);
-    const partial = withholdSharedTarget(complete, target, records, 9n, x, codec);
+    const records = [...adoptedRecords, bad], effects = [...adoptedEffects, effect(outputs, payment.inputs)];
+    const target = checkpoint(joined, 9n, 14n, records, effects);
+    const complete = { ...compose([...ancestry, adopted, target], adopted, publications, y, 14n), seed: issuerSeed };
+    for (const anchor of [x, y]) {
+      const partial = withholdSharedTarget(complete, target, records, 9n, anchor, codec);
+      const result = await sharedEquivalent(complete, partial, verifier, codec);
+      assert.equal(result.audit.range.carrying.find(c => c.sequence === "9").class, "excluded");
+      assert.equal(result.audit.records, "8"); assert.deepEqual(result.candidates.map(c => c.cm), [sy.output.cm.toString()]);
+      intrinsicCases.push({ payload: partial, result });
+    }
+    const inside = structuredClone(sy.record); inside.proof[100] ^= 1;
+    const insideRecords = [...adoptedRecords.slice(0, 7), inside, payment.record];
+    const insideTarget = checkpoint(joined, 9n, 14n, insideRecords, effects);
+    const insideComplete = compose([...ancestry, adopted, insideTarget], adopted, publications, y, 14n);
+    const full = await accepted(insideComplete);
+    assert.equal(full.audit.range.carrying.find(c => c.sequence === "9").check, "ADOPTION");
+    const partial = withholdSharedTarget(insideComplete, insideTarget, insideRecords, 8n, x, codec);
     const input = { ...partial, seed: issuerSeed };
     const result = await refused(input, "unresolved-evidence");
-    assert.equal(result.faultEvidence.some(f => f.check === "PROOF"), true);
+    assert.equal(result.faultEvidence.some(f => f.check === "PROOF" && f.position === "8"), true);
     intrinsicCases.push({ payload: input, result });
   });
   const issuerPayload = compose([...ancestry, adopted], adopted, publications);

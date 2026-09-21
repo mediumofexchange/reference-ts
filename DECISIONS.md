@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-21` [Bound compact exclusion by the record-derived adopted block](decisions/2026-09.md#2026-09-21--bound-compact-exclusion-by-the-record-derived-adopted-block)
 - `2026-09-20` [Resolve the complete shared scope before intrinsic exclusion](decisions/2026-09.md#2026-09-20--resolve-the-complete-shared-scope-before-intrinsic-exclusion)
 - `2026-09-20` [Preserve silence clocks through compact intrinsic exclusion](decisions/2026-09.md#2026-09-20--preserve-silence-clocks-through-compact-intrinsic-exclusion)
 - `2026-09-20` [Permit intrinsic exclusion with complete checkpoint dependencies](decisions/2026-09.md#2026-09-20--permit-intrinsic-exclusion-with-complete-checkpoint-dependencies)
