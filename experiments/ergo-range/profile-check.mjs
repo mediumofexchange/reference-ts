@@ -80,8 +80,9 @@ try {
   };
   const oracleRoot = (version, txs) => merkle(version === 1n ? txs.map(fleetId) : [...txs.map(fleetId), ...txs.map(fleetWitness)]);
 
-  // The real genesis header, pinned: the chain's first header is at height 1 with a zero parent id,
-  // which is what the profile's genesis anchor and its "index 0 is below the genesis" rule rest on.
+  // The real genesis header, pinned, as an anchor: the chain's first header is at height 1 with a zero
+  // parent id, and a profile anchored at it indexes the chain from height 2, its child. The anchor alone
+  // reaches no index; a chain through the child witnesses index 0 at depth 0, and index 0 needs its section.
   const [genesisPin] = manifest.headers;
   const genesisRaw = readFileSync(join(here, genesisPin.file));
   equal(hex(sha256(genesisRaw)), genesisPin.sha256, "genesis header pin before parsing");
@@ -90,14 +91,22 @@ try {
     "the pinned genesis header is at height 1 with a zero parent id");
   const genesisView = { id: Buffer.from(genesis.id, "hex"), parentId: Buffer.from(genesis.parentId, "hex"), height: genesis.height,
     version: genesis.version, transactionsRoot: Buffer.from(genesis.transactionsRoot, "hex") };
-  const anchored = { genesis: genesisView.id, depth: 0n, scripts }, anchoredId = profile.ergoProfileIdentity(anchored);
-  const atGenesis = profile.ergoRangeVerifier(anchored, { headers: [genesisView], blocks: [] });
-  ok(atGenesis !== undefined, "the real genesis header anchors a chain");
-  equal(atGenesis.witnessedIndex(), 1n, "height 1 is witnessed at depth 0");
-  equal(atGenesis.range({ venue: anchoredId, kind: 2, subject: b(17), fromIndex: 0n, toIndex: 0n }, wide).length, 102,
-    "index 0 is below the genesis: an empty answer from the header alone");
-  equal(atGenesis.range({ venue: anchoredId, kind: 2, subject: b(17), fromIndex: 0n, toIndex: 1n }, wide), undefined, "height 1 needs its section");
-  equal(profile.ergoRangeVerifier({ ...anchored, genesis: b(1) }, { headers: [genesisView], blocks: [] }), undefined, "another genesis refuses the real header");
+  const anchored = { anchor: genesisView.id, depth: 0n, scripts }, anchoredId = profile.ergoProfileIdentity(anchored);
+  equal(profile.ergoRangeVerifier(anchored, { headers: [genesisView], blocks: [] }), undefined, "the anchor alone reaches no index");
+  // A synthetic child of the real genesis: one plain transaction, its root computed as the node would.
+  const childTx = { inputs: [{ boxId: hex(sha256("child-of-genesis")), spendingProof: { proofBytes: "", extension: {} } }], dataInputs: [],
+    outputs: [{ value: 1000000n, ergoTree: hex(p2pk(5)), creationHeight: 2, assets: [], additionalRegisters: {} }] };
+  const childRoot = oracleRoot(3n, [childTx]);
+  const childView = { id: sha256(Buffer.concat([Buffer.from("2"), childRoot, genesisView.id])), parentId: genesisView.id, height: 2n, version: 3n, transactionsRoot: childRoot };
+  const atOrigin = profile.ergoRangeVerifier(anchored, { headers: [genesisView, childView], blocks: [] });
+  ok(atOrigin !== undefined, "the real genesis header anchors a chain through its child");
+  equal(atOrigin.witnessedIndex(), 0n, "the child, height 2, is index 0 and is witnessed at depth 0");
+  equal(atOrigin.range({ venue: anchoredId, kind: 2, subject: b(17), fromIndex: 0n, toIndex: 0n }, wide), undefined, "index 0 needs its section");
+  const withOrigin = profile.ergoRangeVerifier(anchored, { headers: [genesisView, childView],
+    blocks: [{ headerId: childView.id, transactions: [decodeTransaction(serializeTransaction(childTx).toBytes())] }] });
+  equal(withOrigin.range({ venue: anchoredId, kind: 2, subject: b(17), fromIndex: 0n, toIndex: 0n }, wide).length, 102,
+    "index 0 answers empty from its section by exhaustion");
+  equal(profile.ergoRangeVerifier({ ...anchored, anchor: b(1) }, { headers: [genesisView, childView], blocks: [] }), undefined, "another anchor refuses the real header");
 
   // Synthetic contiguous chain with real signed records in register constants.
   const vlq = n => { const out = []; do { let byte = n & 0x7f; n = Math.floor(n / 128); if (n > 0) byte |= 0x80; out.push(byte); } while (n > 0); return Buffer.from(out); };
@@ -155,11 +164,12 @@ try {
     serializedBytes += bytes.reduce((n, x) => n + x.length, 0); transactions += txs.length;
     parentId = id;
   }
-  const candidate = { genesis: chain.headers[0].id, depth, scripts };
+  // The chain's first header is the anchor, so height h is index h - 2.
+  const candidate = { anchor: chain.headers[0].id, depth, scripts };
   const identity = profile.ergoProfileIdentity(candidate);
   const verifier = profile.ergoRangeVerifier(candidate, chain);
   ok(verifier !== undefined, "model root agrees with the independent oracle on every synthetic block");
-  equal(verifier.witnessedIndex(), heights - depth, "witnessed index is the tip less the depth");
+  equal(verifier.witnessedIndex(), heights - depth - 2n, "witnessed index is the tip less the depth less the origin");
   equal(verifier.lag(), depth + 1n, "lag is the depth plus one");
   const t = verifier.witnessedIndex();
   const ask = (kind, subject, fromIndex = 0n, toIndex = t, from = verifier) => {
@@ -168,30 +178,30 @@ try {
   };
   const answers = {};
   const commitments = ask(1, operator);
-  equal(commitments.answer.entries.map(e => e.index), [2n, 3n, 4n, 4n, 8n, 10n], "every object at the location is carried, junk included");
+  equal(commitments.answer.entries.map(e => e.index), [0n, 1n, 2n, 2n, 6n, 8n], "every object at the location is carried, junk included");
   const held = range.heldCommitments(commitments.answer);
-  equal(held.held.map(h => [h.index, h.commitment.sequence]), [[2n, 1n], [4n, 2n], [4n, 3n], [8n, 4n], [10n, 5n]], "held by sequence, junk disregarded");
+  equal(held.held.map(h => [h.index, h.commitment.sequence]), [[0n, 1n], [2n, 2n], [2n, 3n], [6n, 4n], [8n, 5n]], "held by sequence, junk disregarded");
   answers.commitments = commitments.bytes.length;
   const replacements = ask(2, backing);
   const admitted = range.admittedReplacements(replacements.answer, rule);
-  equal(admitted.map(a => a.index), [3n], "one admitted replacement");
+  equal(admitted.map(a => a.index), [1n], "one admitted replacement");
   const walk = range.replacementChain(admitted, { backing, original: operator, lag: verifier.lag(), now: t });
   equal([walk.chain.length, walk.pending?.from], [1, 40n], "lead floor met; the successor is pending at the reading index");
   answers.replacements = replacements.bytes.length;
   const revocations = ask(3, obligor);
-  equal([range.revocationIndex(revocations.answer), revocations.answer.entries.length], [6n, 2], "revoked at the first witnessing; the copy is carried");
-  equal(range.revocationIndex(ask(3, obligor, 0n, 5n).answer), undefined, "not revoked through 5");
+  equal([range.revocationIndex(revocations.answer), revocations.answer.entries.length], [4n, 2], "revoked at the first witnessing; the copy is carried");
+  equal(range.revocationIndex(ask(3, obligor, 0n, 3n).answer), undefined, "not revoked through 3");
   answers.revocations = revocations.bytes.length;
   const publicationsX = ask(4, backing), publicationsY = ask(4, backingY);
   const merged = range.mergeVenueOrder([publicationsX.answer, publicationsY.answer]);
   equal(merged.map(e => [e.index, e.ordinal.toString(16), e.record.length]),
-    [[4n, "100000000", 40], [5n, "100000000", 120], [5n, "100000004", 40], [7n, "0", 7800]], "venue order by transaction then output; runs reassembled");
+    [[2n, "100000000", 40], [3n, "100000000", 120], [3n, "100000004", 40], [5n, "0", 7800]], "venue order by transaction then output; runs reassembled");
   equal(hex(merged[1].record), hex(Buffer.concat([piece(2), piece(3), piece(4)])), "pieces in output order");
   equal(hex(merged[3].record), hex(Buffer.concat([piece(6, 3900), piece(7, 3900)])), "two 3900-byte pieces");
   answers.publications = publicationsX.bytes.length + publicationsY.bytes.length;
-  const empty = ask(1, other, 0n, 5n);
+  const empty = ask(1, other, 0n, 3n);
   equal(empty.bytes.length, 102, "authenticated empty answer");
-  equal(range.heldCommitments(ask(1, other, 6n, 6n).answer, { fromIndex: 6n, highest: 0n }).held.map(h => h.commitment.sequence), [7n], "the other operator at 6");
+  equal(range.heldCommitments(ask(1, other, 4n, 4n).answer, { fromIndex: 4n, highest: 0n }).held.map(h => h.commitment.sequence), [7n], "the other operator at 4");
   equal(ask(1, operator, 0n, t + 1n), undefined, "no answer above the witnessed index");
   equal(verifier.range({ venue: b(12), kind: 1, subject: operator, fromIndex: 0n, toIndex: t }, wide), undefined, "no answer for another venue");
   assert.throws(() => verifier.range({ venue: identity, kind: 1, subject: operator, fromIndex: 0n, toIndex: t }, { maxBytes: 300n, maxEntries: 8n }), range.RangeLimitError); checks++;
@@ -205,8 +215,8 @@ try {
   ok(reread !== undefined && hex(reread.id) !== hex(chain.blocks[3].transactions[0].id), "a flipped record byte is another transaction");
   const twin = { ...chain.blocks[3], transactions: [reread, chain.blocks[3].transactions[1]] };
   const damaged = profile.ergoRangeVerifier(candidate, { headers: chain.headers, blocks: chain.blocks.map((block, i) => (i === 3 ? twin : block)) });
-  equal(ask(1, operator, 0n, t, damaged), undefined, "the flipped section fails its root, so ranges through height 4 are unresolved");
-  ok(ask(1, operator, 5n, t, damaged) !== undefined, "ranges past the damaged height answer");
+  equal(ask(1, operator, 0n, t, damaged), undefined, "the flipped section fails its root, so ranges through index 2 (height 4) are unresolved");
+  ok(ask(1, operator, 3n, t, damaged) !== undefined, "ranges past the damaged index answer");
   equal(decodeTransaction(original.subarray(0, original.length - 1)), undefined, "a truncated transaction does not decode");
   const noisy = profile.ergoRangeVerifier(candidate, { headers: chain.headers,
     blocks: [twin, { headerId: b(9), transactions: chain.blocks[0].transactions }, { headerId: chain.headers[2].id, transactions: [{ id: b(1), witnessId: b(1), outputs: [] }] },
@@ -216,12 +226,16 @@ try {
   equal(profile.ergoRangeVerifier(candidate, unlinked), undefined, "an unlinked header is no chain");
   const partial = profile.ergoRangeVerifier(candidate, { headers: chain.headers, blocks: chain.blocks.filter((_block, i) => i !== 6) });
   equal(ask(4, backing, 0n, t, partial), undefined, "a missing block leaves the range unresolved");
-  ok(ask(4, backing, 8n, t, partial) !== undefined, "ranges without the gap answer");
-  equal(profile.ergoRangeVerifier({ ...candidate, genesis: b(1) }, chain), undefined, "another genesis is another venue");
+  ok(ask(4, backing, 6n, t, partial) !== undefined, "ranges without the gap answer");
+  equal(profile.ergoRangeVerifier({ ...candidate, anchor: b(1) }, chain), undefined, "another anchor is another venue");
+  equal(profile.ergoRangeVerifier(candidate, { headers: chain.headers.slice(2), blocks: chain.blocks }), undefined, "a chain without the anchor's child gives no verifier");
+  equal(hex(ask(1, operator, 0n, t, profile.ergoRangeVerifier(candidate, { headers: chain.headers.slice(1), blocks: chain.blocks })).bytes), hex(commitments.bytes),
+    "a chain from the anchor's child answers the same; the genesis block below it is not read");
 
-  // Real fixtures: one-block ranges at depth 0. The model's root reproduces the node's header roots for block
-  // versions 1 and 3 from decoder-derived ids; every real register constant is decoded beside sigma-rust's own
-  // constant decoder; exhaustion over every output attributes nothing at four throwaway locations.
+  // Real fixtures: one-block ranges at depth 0, each block index 0 under its own parent as the anchor. The model's
+  // root reproduces the node's header roots for block versions 1 and 3 from decoder-derived ids; every real
+  // register constant is decoded beside sigma-rust's own constant decoder; exhaustion over every output
+  // attributes nothing at four throwaway locations.
   const sdkIndex = value => { assert(value >= 0n && value <= 0x7fffffffn); return Number(value); };
   const fixtures = [], registers = { total: 0, collByte: 0, other: 0 };
   for (const fixture of manifest.fixtures) {
@@ -244,11 +258,11 @@ try {
     }
     const view = { id: Buffer.from(header.id, "hex"), parentId: Buffer.from(header.parentId, "hex"), height: header.height, version: header.version,
       transactionsRoot: Buffer.from(header.transactionsRoot, "hex") };
-    const fixtureProfile = { genesis: b(0), depth: 0n, scripts };
+    const fixtureProfile = { anchor: view.parentId, depth: 0n, scripts };
     const single = profile.ergoRangeVerifier(fixtureProfile, { headers: [view], blocks: [{ headerId: view.id, transactions: decoded }] });
-    const request = { venue: profile.ergoProfileIdentity(fixtureProfile), kind: 1, subject: b(0), fromIndex: header.height, toIndex: header.height };
-    ok(single !== undefined && single.range(request, wide) !== undefined, "the model reproduces the real transaction root, so the height has its section");
-    equal(single.witnessedIndex(), header.height, "witnessed at depth 0");
+    const request = { venue: profile.ergoProfileIdentity(fixtureProfile), kind: 1, subject: b(0), fromIndex: 0n, toIndex: 0n };
+    ok(single !== undefined && single.range(request, wide) !== undefined, "the model reproduces the real transaction root, so the index has its section");
+    equal(single.witnessedIndex(), 0n, "the block after the anchor is index 0, witnessed at depth 0");
     equal(single.range(request, wide).length, 102, "exhaustion over the real block answers empty at four throwaway locations");
     const outputs = decoded.reduce((n, d) => n + d.outputs.length, 0);
     equal(String(outputs), String(txs.reduce((n, t) => n + t.outputs.length, 0)), "every output scanned");
@@ -285,8 +299,8 @@ try {
     sources: manifest.sources, inputManifestSha256: hex(sha256(readFileSync(join(here, "fixtures/manifest.json")))),
     files: Object.fromEntries(["experiments/ergo-range/profile-check.mjs", "experiments/ergo-range/decoder.mjs", "experiments/ergo-range/package.json", "experiments/ergo-range/package-lock.json",
       "model/pool-v3-ergo-profile.ts", "model/pool-v3-range.ts"].map(file => [file, fileHash(file)])),
-    genesis: { height: genesis.height.toString(), version: genesis.version.toString(), id: genesis.id, parentIdZero: true,
-      headerWireBytes: genesis.size.toString(), emptyAnswerBytesAtIndexZero: 102 },
+    genesisAnchor: { height: genesis.height.toString(), version: genesis.version.toString(), id: genesis.id, parentIdZero: true,
+      headerWireBytes: genesis.size.toString(), indexZeroHeight: "2", emptyAnswerBytesAtIndexZero: 102 },
     synthetic: { heights: heights.toString(), witnessedIndex: t.toString(), transactions: String(transactions), serializedTransactionBytes: String(serializedBytes),
       headers: String(chain.headers.length), answerBytes: answers, heldCommitments: held.held.length, mergedPublications: merged.length },
     fixtures, registerConstants: registers,
@@ -296,11 +310,11 @@ try {
       largestProofThatFits, frameCeiling: range.MAX_RANGE_RECORD_BYTES[4],
       note: "a kind-4 object is one transaction's run of outputs; a configuration is publishable here only where its largest publication fits one transaction" },
     limitations: [
-      "Headers are the reader's own source: linkage, contiguity and the genesis anchor are checked; proof of work, chain selection and finality are not.",
+      "Headers are the reader's own source: linkage, contiguity and the anchor's child are checked; proof of work, chain selection and finality are not.",
       "A transaction the reader's decoder refuses is unsupported evidence: its height has no section and every range through it stays unresolved until the decoder is repaired, a denial one node-valid transaction can trigger.",
       "Synthetic blocks are serialized by Fleet from local objects and were never accepted by a node; the fixtures are three non-contiguous real blocks and the real genesis header.",
       "sigma-rust's strict round trip is the decoder boundary; it has no hard memory limit and no node-equivalence proof (see the decoder probe).",
-      "No range from index zero was read on a real chain; the cost of exhaustion over real block bytes is not measured here.",
+      "No range from index zero was read on a real chain from a real anchor; the cost of exhaustion over real block bytes is not measured here.",
       "Capacity is measured by serialization against the box limit and the pinned mempool policy; no transaction was relayed or accepted by a node.",
       "No runtime path, spec selection, publication, chunking on a node or C2.10.13 completeness claim for any real venue follows.",
     ] });

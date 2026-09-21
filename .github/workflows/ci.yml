@@ -20,7 +20,8 @@ concurrency:
 jobs:
   pool-v3:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    # The --ergo pass replays every local group a second time; the budget leaves headroom over the ~13-minute baseline.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

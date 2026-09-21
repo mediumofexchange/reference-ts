@@ -9,9 +9,11 @@
 // transaction root, so absence is proven by exhaustion (§13.2). It applies no
 // signature, sequence, kind or content rule; the reader's §13.3 rules do.
 // The header chain is the reader's own authenticated header source, checked
-// here only for contiguity, linkage and the genesis anchor. No specification
-// selects this profile and no runtime path reads it; `src/ergo.ts` remains
-// the v2 materialized view with its own identity.
+// here only for contiguity, linkage and the anchor: the venue's index space
+// begins at the block after the profile's pinned anchor header, so index 0 is
+// that block and a read from index zero is bounded by the anchor. No
+// specification selects this profile and no runtime path reads it;
+// `src/ergo.ts` remains the v2 materialized view with its own identity.
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
@@ -20,18 +22,21 @@ import { utf8Encoder } from "../src/contexts.js";
 import { copyRequest, encodeRangeAnswer, MAX_RANGE_RECORD_BYTES, PUBLICATION_RANGE,
   type RangeEntry, type RangeLimits, type RangeRequest, type RecordKind } from "./pool-v3-range.js";
 
-export const ERGO_PROFILE_CONTEXT = "moe/venue/ergo/v2";
+export const ERGO_PROFILE_CONTEXT = "moe/venue/ergo/v3";
 export const RECORD_KINDS: readonly RecordKind[] = Object.freeze([1, 2, 3, 4]);
-const MAX_U64 = (1n << 64n) - 1n, MAX_U32 = 0xffff_ffffn, COLL_BYTE_TYPE = 0x0e, GENESIS_HEIGHT = 1n;
+const MAX_U64 = (1n << 64n) - 1n, MAX_U32 = 0xffff_ffffn, COLL_BYTE_TYPE = 0x0e;
 const ZERO32 = new Uint8Array(32);
 const u64 = (v: unknown): v is bigint => typeof v === "bigint" && v >= 0n && v <= MAX_U64;
 const isBytes = (v: unknown, width?: number): v is Uint8Array =>
   v instanceof Uint8Array && !(v.buffer instanceof SharedArrayBuffer) && (width === undefined || v.length === width);
 
-/** What the venue identity names: the chain by its genesis header, the
- * finality depth, and one location (an exact ErgoTree) per record kind. */
+/** What the venue identity names: the chain by its anchor header (the last
+ * block before the venue's index space, so index `i` is the block `i + 1`
+ * heights above it), the finality depth, and one location (an exact
+ * ErgoTree) per record kind. A header id commits to its whole ancestry, so
+ * the anchor names the chain; the all-zero id names no header. */
 export interface ErgoProfile {
-  readonly genesis: Uint8Array;
+  readonly anchor: Uint8Array;
   readonly depth: bigint;
   readonly scripts: Readonly<Record<RecordKind, Uint8Array>>;
 }
@@ -39,8 +44,9 @@ export interface ErgoProfile {
  * output attributed by, the same bytes (§13.1: two attribution rules are two venues). */
 function ownProfile(profile: ErgoProfile): ErgoProfile {
   if (profile === null || typeof profile !== "object") throw new EncodingError("invalid Ergo profile");
-  const { genesis, depth, scripts } = profile;
-  if (!isBytes(genesis, 32) || !u64(depth) || depth === MAX_U64 || scripts === null || typeof scripts !== "object") {
+  const { anchor, depth, scripts } = profile;
+  if (!isBytes(anchor, 32) || compareBytes(anchor, ZERO32) === 0 || !u64(depth) || depth === MAX_U64 ||
+      scripts === null || typeof scripts !== "object") {
     throw new EncodingError("invalid Ergo profile");
   }
   const owned: Partial<Record<RecordKind, Uint8Array>> = {};
@@ -55,13 +61,13 @@ function ownProfile(profile: ErgoProfile): ErgoProfile {
       if (other < kind && compareBytes(owned[other]!, owned[kind]!) === 0) throw new EncodingError("two kinds at one location");
     }
   }
-  return Object.freeze({ genesis: copyBytes(genesis), depth, scripts: Object.freeze(owned as Record<RecordKind, Uint8Array>) });
+  return Object.freeze({ anchor: copyBytes(anchor), depth, scripts: Object.freeze(owned as Record<RecordKind, Uint8Array>) });
 }
-/** Naming the venue is agreeing the chain, the depth and the attribution rule (C2.3.2, §13.1). */
+/** Naming the venue is agreeing the chain from its anchor, the depth and the attribution rule (C2.3.2, §13.1). */
 export function ergoProfileIdentity(profile: ErgoProfile): Uint8Array {
   const owned = ownProfile(profile), w = new ByteWriter();
   w.lengthPrefixed(utf8Encoder.encode(ERGO_PROFILE_CONTEXT));
-  w.key32(owned.genesis, "genesis header id");
+  w.key32(owned.anchor, "anchor header id");
   w.u64(owned.depth);
   for (const kind of RECORD_KINDS) w.lengthPrefixed(owned.scripts[kind]);
   return sha256(w.finish());
@@ -263,20 +269,21 @@ export interface ErgoRangeVerifier {
 /** §13.2 over the reader's retained evidence. The headers are the reader's
  * own chain: each is read once into an owned copy, a malformed one is a
  * programming failure, and headers that are not one contiguous linked
- * chain, or a chain starting at height 1 that does not start at the
- * profile's genesis, give no verifier. Blocks may come from any supplier:
- * a block supplies the section of a height only where it is a well-formed
- * view, belongs to a header of the chain and reproduces that header's
- * transaction root; any other block is passed over, so no supplier can deny
- * every read by adding a block, and a height whose section is missing
- * leaves only the ranges through it unresolved. There is no answer for a
- * range not yet witnessed under the depth, for a height without its
- * section, or for heights below the first header unless the chain is
- * anchored at the genesis, below which nothing exists. Every field of the
- * profile, of each header, block, transaction and output, and of each
- * request is read once into an owned copy before it is judged; only the two
- * evidence arrays are read as containers, and every element of the array
- * that is iterated is owned. */
+ * chain containing the block after the profile's anchor (the header whose
+ * parent is the anchor, which is index 0) give no verifier; so do headers
+ * that do not yet reach index 0 under the depth. Headers at or below the
+ * anchor are linkage only and hold no index. Blocks may come from any
+ * supplier: a block supplies the section of an index only where it is a
+ * well-formed view, belongs to an indexed header of the chain and
+ * reproduces that header's transaction root; any other block is passed
+ * over, so no supplier can deny every read by adding a block, and an index
+ * whose section is missing leaves only the ranges through it unresolved.
+ * There is no answer for a range not yet witnessed under the depth or for
+ * an index without its section. Every field of the profile, of each
+ * header, block, transaction and output, and of each request is read once
+ * into an owned copy before it is judged; only the two evidence arrays are
+ * read as containers, and every element of the array that is iterated is
+ * owned. */
 export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvidence): ErgoRangeVerifier | undefined {
   const owned = ownProfile(profile);
   if (evidence === null || typeof evidence !== "object" || !Array.isArray(evidence.headers) || !Array.isArray(evidence.blocks)) {
@@ -285,31 +292,41 @@ export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvide
   const headers = evidence.headers.map(ownHeader);
   if (headers.some(header => header === undefined)) throw new EncodingError("invalid Ergo header view");
   const identity = ergoProfileIdentity(owned), depth = owned.depth;
-  const first = headers[0];
-  if (first === undefined || first.height < GENESIS_HEIGHT) return undefined;
-  if (first.height === GENESIS_HEIGHT && (compareBytes(first.parentId, ZERO32) !== 0 || compareBytes(first.id, owned.genesis) !== 0)) return undefined;
   const byId = new Map<string, ErgoHeaderView>();
+  let origin: bigint | undefined;
   for (let i = 0; i < headers.length; i++) {
     const header = headers[i]!, previous = headers[i - 1];
     if (header.version < 1n || header.version > 255n || byId.has(bytesToHex(header.id))) return undefined;
     if (previous !== undefined && (header.height !== previous.height + 1n || compareBytes(header.parentId, previous.id) !== 0)) return undefined;
+    // The anchor's child is index 0. A linked chain names that parent once unless
+    // it also carries the anchor's id at some height, which no authenticated source
+    // does; two candidates for index 0 give no verifier rather than the later one.
+    if (compareBytes(header.parentId, owned.anchor) === 0) {
+      if (origin !== undefined) return undefined;
+      origin = header.height;
+    }
     byId.set(bytesToHex(header.id), header);
   }
+  if (origin === undefined) return undefined;
+  const tip = (headers[headers.length - 1] as ErgoHeaderView).height;
+  if (tip < origin + depth) return undefined;
   const sectionAt = new Map<bigint, readonly AttributedObject[]>();
   for (const supplied of evidence.blocks) {
     const block = ownBlock(supplied);
     if (block === undefined) continue;
     const header = byId.get(bytesToHex(block.headerId));
-    if (header === undefined || sectionAt.has(header.height) || block.transactions.length === 0 ||
+    // Sections at or below the anchor hold no index and are not read.
+    if (header === undefined || header.height < origin || sectionAt.has(header.height - origin) || block.transactions.length === 0 ||
         compareBytes(transactionsRoot(header.version, block.transactions), header.transactionsRoot) !== 0) continue;
     try {
-      sectionAt.set(header.height, attributeOwned(owned, block.transactions));
+      sectionAt.set(header.height - origin, attributeOwned(owned, block.transactions));
     } catch (error) {
       if (error instanceof EncodingError) continue;
       throw error;
     }
   }
-  const firstHeight = first.height, tip = (headers[headers.length - 1] as ErgoHeaderView).height, witnessed = tip > depth ? tip - depth : 0n;
+  // Index `i` is height `origin + i`; index `i` is witnessed once the tip is at `origin + i + depth`.
+  const witnessed = tip - depth - origin;
   return Object.freeze({
     get identity() { return copyBytes(identity); },
     lag: () => depth + 1n,
@@ -322,15 +339,13 @@ export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvide
         throw error;
       }
       if (compareBytes(own.venue, identity) !== 0 || own.toIndex > witnessed) return undefined;
-      const low = own.fromIndex < GENESIS_HEIGHT ? GENESIS_HEIGHT : own.fromIndex;
-      if (low < firstHeight) return undefined;
       const entries: RangeEntry[] = [];
-      for (let height = low; height <= own.toIndex; height++) {
-        const objects = sectionAt.get(height);
+      for (let index = own.fromIndex; index <= own.toIndex; index++) {
+        const objects = sectionAt.get(index);
         if (objects === undefined) return undefined;
         const matching = objects
           .filter(object => object.kind === own.kind && compareBytes(object.subject, own.subject) === 0)
-          .map(object => ({ index: height, ordinal: own.kind === PUBLICATION_RANGE ? object.ordinal : 0n, record: copyBytes(object.record) }));
+          .map(object => ({ index, ordinal: own.kind === PUBLICATION_RANGE ? object.ordinal : 0n, record: copyBytes(object.record) }));
         if (own.kind !== PUBLICATION_RANGE) matching.sort((a, b) => compareBytes(a.record, b.record));
         for (const entry of matching) entries.push(entry);
       }

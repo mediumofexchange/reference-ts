@@ -1,10 +1,10 @@
 {
   "status": "offline-profile-candidate-only",
   "node": "v24.6.0",
-  "checks": 247,
+  "checks": 250,
   "profile": {
-    "context": "moe/venue/ergo/v2",
-    "identity": "cabee4f5548ee624a8010c9f5bb17a9f78025914e0daf14d68fcd95b240aeb4c",
+    "context": "moe/venue/ergo/v3",
+    "identity": "ced67a67c9729c75394d74e59226d008a7ed2732b3696c0d9b9030a5e525d18d",
     "depth": "2",
     "lag": "3",
     "locations": {
@@ -22,24 +22,25 @@
   },
   "inputManifestSha256": "2ee407f63c1297ca3262762a1534f5526694f4ef273658cf1060ef1d51c85c07",
   "files": {
-    "experiments/ergo-range/profile-check.mjs": "ec1543bd0a2dbb1bd368f42bb364f4ea2054f4d91d9b7e60b3e3f831bc915632",
+    "experiments/ergo-range/profile-check.mjs": "0d0153c36caa72c3becc658a50ee3a3c71e3bad122065e658c9170b980969df3",
     "experiments/ergo-range/decoder.mjs": "44af0e096fabfcdb4cc581d383006d608391e15635760d21895b6660a3757e55",
     "experiments/ergo-range/package.json": "04c62481ee551c2cf2dd088d2af2afe68b1ba74c0cbc40f41b92b8e85139de89",
     "experiments/ergo-range/package-lock.json": "3c2055dc1a71712fb19a99eb895794c392d9e2c169e5a1d6a0d697ce03b9f79e",
-    "model/pool-v3-ergo-profile.ts": "e29de9a4c260f50715fb2786db9a53a10f596e211584853dfaad3e1ce7b91e6e",
+    "model/pool-v3-ergo-profile.ts": "19a68c82f6410d551e589e34f69731e1cc8b73995a7cabe5cc75ff8b2e75128d",
     "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f"
   },
-  "genesis": {
+  "genesisAnchor": {
     "height": "1",
     "version": "1",
     "id": "b0244dfc267baca974a4caee06120321562784303a8a688976ae56170e4d175b",
     "parentIdZero": true,
     "headerWireBytes": "279",
+    "indexZeroHeight": "2",
     "emptyAnswerBytesAtIndexZero": 102
   },
   "synthetic": {
     "heights": "12",
-    "witnessedIndex": "10",
+    "witnessedIndex": "8",
     "transactions": "15",
     "serializedTransactionBytes": "11896",
     "headers": "12",
@@ -103,11 +104,11 @@
     "note": "a kind-4 object is one transaction's run of outputs; a configuration is publishable here only where its largest publication fits one transaction"
   },
   "limitations": [
-    "Headers are the reader's own source: linkage, contiguity and the genesis anchor are checked; proof of work, chain selection and finality are not.",
+    "Headers are the reader's own source: linkage, contiguity and the anchor's child are checked; proof of work, chain selection and finality are not.",
     "A transaction the reader's decoder refuses is unsupported evidence: its height has no section and every range through it stays unresolved until the decoder is repaired, a denial one node-valid transaction can trigger.",
     "Synthetic blocks are serialized by Fleet from local objects and were never accepted by a node; the fixtures are three non-contiguous real blocks and the real genesis header.",
     "sigma-rust's strict round trip is the decoder boundary; it has no hard memory limit and no node-equivalence proof (see the decoder probe).",
-    "No range from index zero was read on a real chain; the cost of exhaustion over real block bytes is not measured here.",
+    "No range from index zero was read on a real chain from a real anchor; the cost of exhaustion over real block bytes is not measured here.",
     "Capacity is measured by serialization against the box limit and the pinned mempool policy; no transaction was relayed or accepted by a node.",
     "No runtime path, spec selection, publication, chunking on a node or C2.10.13 completeness claim for any real venue follows."
   ]

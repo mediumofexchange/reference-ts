@@ -4,67 +4,65 @@ Updated: 2026-09-21
 
 ## Goal
 
-Completed slice: compact intrinsic exclusion at target positions after a returned
-segment's adopted block (§9.1 items 3–4) in the single-backing import walk, the
-receipt walk and the shared-scope walk. Inside-block targets stay unsupported.
+Completed slice: the candidate Ergo full-block verifier as the local replay's
+§13.2 verifier for every replay group (single-backing imports and silence,
+two-backing scopes and scope recovery, receipts, non-service counts, compact
+faults and returning segments), from exact transaction bytes and checked roots.
 
-Acceptance: a compact proof/issue-K fault after the record-derived block excludes
-the continuation and agrees with the complete trail on state, classification,
-clocks, receipts and candidates; an inside-block fault returns unresolved evidence
-with no audit, also beside an after-block record for another checkpoint; the block
-comes from the valid opening's publication range, including the receipt walk's
-lazily read range; exclusion never advances state or resets a clock. Real-proof
-portable/fresh-process checks and independent adversarial review passed. Stop
-boundary: conditional v3 replay only; no opening/inside-block coverage, other
-fault class, runtime or adoption expansion.
+Acceptance: every fixture-verifier replay group's result is reproduced through
+the Ergo adapter with kind-4 ordinals as transaction positions (fixture ordinal
+`<< 32`) and `rangeEvidence` naming the candidate; each subject's kind-4 answer
+and the cross-backing union (C2b.4.2) agree entry by entry; fresh seedless and
+receiver processes reproduce a two-backing result; missing, tampered and
+undecodable sections still refuse; unit, profile-experiment and real-proof
+checks pass; independent review of the anchor rule and the integrated patch.
+Evidence limits: reader-selected synthetic headers, no node acceptance, no
+decoder equivalence, no real-chain read (P2/P4 open). Stop boundary: no profile
+selection, specification change, runtime adoption or node publication.
 
 ## Status
 
-- Delivered as `234a13e` on `main` (exact-head CI `35631572287` passed; remote
-  parity verified), based on `b308eae`. Companion `main` stays at `183c09f`: §9.1
-  already states the block derivation and position condition, so no spec edit.
-- [Decision](decisions/2026-09.md#2026-09-21--bound-compact-exclusion-by-the-record-derived-adopted-block)
-  records the position bound, the per-position fault cache, the rejected
-  alternatives and the review probes.
-- The fault cache retains `{position, check}` per authenticated §9 record and
-  requires an explicit block length; the import and scope classifiers pass the
-  opening's block length, the original single-segment path passes zero. Lapse,
-  opening, sibling, continuity and range dependencies are unchanged.
-- Independent adversarial review found no blocker; its four notes (required
-  block-length argument, a discriminating receipt-walk case, tracked
-  two-record/cross-checkpoint groups, status wording) are applied.
+- The slice forced a candidate-profile change: the venue is indexed from a
+  pinned **anchor header** (index 0 is the anchor's child) instead of index =
+  height with the genesis at 1. Every fixture witnesses at indices 0 and 1
+  (`scratch/ergo-index-survey.mjs`), and any index shift changes the meaning
+  of absolute indices inside signed records (replacement effect, deadlines);
+  the anchor also bounds reads from index zero to the deployment's age.
+  [Decision](decisions/2026-09.md#2026-09-21--index-the-ergo-venue-from-a-pinned-anchor-header).
+  No specification change: §13 is source-neutral; companion `main` stays at
+  `183c09f`.
+- Delivered: model (`anchor`, context `moe/venue/ergo/v3`, duplicate-anchor
+  refusal), fixture converter (index `i` = height `i + 2`, depth = lag − 1,
+  one transaction per record), adapter, `ergo-check.mjs` over every builder
+  pair (`replayPairs`, `underErgo`), local-check/worker, unit tests, profile
+  experiment, docs; CI's pool-v3 job budget raised from 20 to 30 minutes for
+  the second pass (baseline job ~13 min; local final run 18 min).
+- Independent review (one opus lane): no design blocker; applied its fixes
+  (duplicate-anchor refusal with a unit case, `restored` issuer reads in the
+  pair walker, stale rule/architecture rows and reports, anchor-depth and
+  header-retention consequences recorded).
 
 ## Evidence
 
-- Oracle probes (ideal proof membership, real hashes/signatures):
-  `scratch/adopted-recovery-oracle.log` (55 groups),
-  `scratch/adopted-scope-recovery-oracle.log` (32), full regression after the
-  review fixes `scratch/adopted-full-oracle.log` (172), portable agreement with
-  deterministic fact order `scratch/adopted-portable-probe.log`. Review probes:
-  `scratch/review-adopted-*` (30 groups incl. lazy-range receipt walk, same-index
-  returns, clock retention, suppressed sibling ranges).
-- Final `check:pool:ergo-replay` passed 222 replay groups / 65 real
-  proofs, including portable and fresh-process checks
-  (`scratch/adopted-block-real.log`). The
-  [report](docs/pool-v3-local-replay-verification.json) binds 55 source hashes
-  and matches the delivered files. Docs/link checks pass. Baseline `b308eae`
-  hosted CI covers the unchanged runtime/package checks; only isolated v3 replay
-  scripts and documentation change.
+- Ideal-proof probe `scratch/ergo-scope-probe.log` (107 groups agree), dry
+  run `scratch/ergo-check-dry.log` (109 groups). Real-proof
+  `check:pool:ergo-replay` on the final tree (`scratch/ergo-anchor-real.log`):
+  223 replay groups / 65 real proofs; the Ergo pass replays 112 groups with 50
+  kind-4 subjects, 193 union positions, 192 kind-1..3 ranges, 3 fresh
+  processes. The [replay report](docs/pool-v3-local-replay-verification.json)
+  binds the sources; the [profile report](docs/ergo-range-profile-verification.json)
+  records 250 checks. `npm test` 1941 tests, typecheck and docs/link checks pass.
 - No complete-certificate, adopted configuration, live-chain authentication or
-  production spendability claim. Compact exclusion cannot fill missing ancestors,
-  ranges or inside-block positions.
+  production spendability claim. The converter never places two records in one
+  transaction; adjacency is covered by unit tests and the profile experiment.
 
 ## Next
 
-1. §9.1's supported compact contexts are implemented (non-opening targets after
-   any adopted block; proof and issue-K). Widening to other fault classes or
-   inside-block positions needs a specification decision first.
-2. Candidate next capability: the Ergo venue evidence path — the full-block
-   verifier as the local replay's §13.2 verifier for kind-1/4 ranges (P2 node
-   publication and P4 real-chain exhaustion remain open). First falsify that its
-   kind-4 answers preserve per-index venue order and ordinals across backing
-   subjects, which C2b.4.2's block union depends on. Alternatively continue the
-   wallet/custody boundaries below. Review protocol choices before dependent code.
+1. P4: exhaustion cost on a real chain from a real anchor (header retention
+   and block bytes per read), then P2 node publication and reassembly; both
+   need the stopped node or a public node and are separate from this slice.
+2. Alternatively the wallet/custody boundaries below. Review protocol choices
+   before dependent code.
 
 ## Retained boundaries and local state
 
@@ -88,11 +86,12 @@ fault class, runtime or adoption expansion.
 ## Open questions
 
 Roughly **50% done / 50% remaining**, plausible range **40–60%**, reassessed
-2026-09-21. This slice completes §9.1's conditional compact coverage; it remains
-conditional evidence with no runtime or release gate closed. Runtime integration,
-selected venue/decoder, qualified custody and continuous wallet operation
-dominate remaining effort. No rounded estimate change.
+2026-09-21. The venue-evidence path is now exercised end to end on synthetic
+chains; selection still needs P2/P4, an authenticated header source and a
+contained node-equivalent decoder. Runtime integration, selected
+venue/decoder, qualified custody and continuous wallet operation dominate
+remaining effort. No rounded estimate change.
 
-Switch to a fresh instance for the next capability: the compact-exclusion series
-is closed with a bounded handoff, and the venue-evidence or wallet work centers
-on different sources than this context holds.
+Switch to a fresh instance for the next capability: P2/P4 center on node and
+network evidence this context does not hold, and the wallet work on different
+sources.

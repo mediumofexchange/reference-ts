@@ -180,16 +180,21 @@ round-trip rejection controls. Hard memory containment, supported node
 equivalence and authenticated complete-range reads remain unimplemented.
 The [candidate Ergo venue profile](ERGO_VENUE_PROFILE.md) and
 `model/pool-v3-ergo-profile.ts` fix attribution by exact tree and `R4`/`R5`
-shape, run reassembly, transaction-then-output ordinals and a §13 verifier
-by exhaustion over root-checked blocks behind a linked header chain; the
+shape, run reassembly, transaction-then-output ordinals, an index space
+anchored at a pinned header (index 0 is the anchor's child, so reads from
+index zero are bounded by the deployment's age) and a §13 verifier by
+exhaustion over root-checked blocks behind a linked header chain; the
 [profile experiment](POOL_DEPLOYMENT_PROBES.md#ergo-venue-profile-candidate-and-full-block-range-verifier)
 reproduces the three fixture roots and answers synthetic ranges through
 Fleet and sigma-rust. The [local adapter](ERGO_VENUE_PROFILE.md#local-replay-adapter)
-also replays the real-proof import/payment/burn trace from exact transaction
-bytes, with independently selected synthetic headers and bounded ownership
-before decoding. Fresh seedless and receiver readers retain this provenance.
-No specification selects it; header authentication,
-decoder containment and real-chain cost remain open.
+replays every real-proof local replay group (single-backing imports and
+silence, two-backing scopes and recovery, receipts, non-service counts,
+compact faults, returning segments) from exact transaction bytes under
+independently selected synthetic headers with bounded ownership before
+decoding, reproducing the fixture verifier's results with kind-4 ordinals as
+transaction positions. Fresh seedless and receiver readers retain this
+provenance. No specification selects it; header authentication, decoder
+containment and real-chain cost remain open.
 
 ## Successor record conformance
 

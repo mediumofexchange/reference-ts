@@ -43,8 +43,17 @@ const header = (height, parentId, transactions) => {
 };
 const genesisTx = tx(1n, 0n, [box(plainTree)]);
 const genesis = header(1n, new Uint8Array(32), [genesisTx]);
-export const profile = Object.freeze({ genesis: new Uint8Array(genesis.id), depth: 0n,
-  scripts: Object.freeze(Object.fromEntries(Object.entries(scripts).map(([kind, script]) => [kind, new Uint8Array(script)]))) });
+/** The reader's candidate profile at one finality depth: the fixed genesis
+ * as the anchor (so fixture index `i` is height `i + 2`), the depth and the
+ * four throwaway locations. The depth is part of the identity, so a fixture
+ * venue of lag `l` is read under depth `l - 1`. */
+export function profileFor(depth) {
+  if (typeof depth !== "bigint" || depth < 0n || depth >= 256n) throw new TypeError("fixture depth out of local scope");
+  return Object.freeze({ anchor: new Uint8Array(genesis.id), depth,
+    scripts: Object.freeze(Object.fromEntries(Object.entries(scripts).map(([kind, script]) => [kind, new Uint8Array(script)]))) });
+}
+/** The harness fixtures declare lag 2, so the reader selects depth 1. */
+export const profile = profileFor(1n);
 const coll = bytes => {
   let n = bytes.length;
   const length = [];
@@ -60,24 +69,31 @@ const recordOutputs = ({ kind, subject, record }) => {
   return outputs;
 };
 
-/** Convert a TEST FixtureVenue export. Its records must start at index 1:
- * every record moves by +1, leaving a fixed, record-independent genesis.
- * The resulting tip/witnessed index is fixture.witnessedIndex + 1, lag 1.
- * Each record gets a separate transaction, preserving within-height order
- * and preventing adjacent publication runs from merging. */
+/** Convert a TEST FixtureVenue export to raw block sections under the same
+ * indices: the fixed, record-independent genesis at height 1 is the anchor,
+ * so fixture index `i` is height `i + 2` and records carrying absolute
+ * indices (replacement effect, demand deadlines) keep their meaning. The
+ * fixture's lag `l` is the profile's depth `l - 1`: the chain runs `l - 1`
+ * headers past the fixture's witnessed index, so the verifier's witnessed
+ * index is the fixture's. Each record gets a separate transaction in the
+ * fixture's insertion order, preserving within-index order across every
+ * kind and subject and preventing adjacent publication runs from merging:
+ * a kind-4 ordinal here is the fixture's ordinal as a transaction position,
+ * `fixtureOrdinal << 32`. */
 export function fixtureEvidence(fixture) {
-  const { witnessedIndex, records } = fixture;
-  if (typeof witnessedIndex !== "bigint" || witnessedIndex < 0n || witnessedIndex >= 256n || !Array.isArray(records) || records.length > 1024) throw new TypeError("fixture exceeds local Ergo evidence scope");
+  const { witnessedIndex, lag, records } = fixture;
+  if (typeof witnessedIndex !== "bigint" || witnessedIndex < 0n || typeof lag !== "bigint" || lag < 1n || witnessedIndex + lag > 254n ||
+      !Array.isArray(records) || records.length > 1024) throw new TypeError("fixture exceeds local Ergo evidence scope");
   const at = new Map();
   for (const record of records) {
-    if (typeof record.index !== "bigint" || record.index < 1n || record.index > witnessedIndex) throw new TypeError("fixture record must follow the fixed genesis");
-    const height = record.index + 1n, transactions = at.get(height) ?? [];
+    if (typeof record.index !== "bigint" || record.index < 0n || record.index > witnessedIndex) throw new TypeError("fixture record outside the witnessed range");
+    const height = record.index + 2n, transactions = at.get(height) ?? [];
     transactions.push(tx(height, BigInt(transactions.length), recordOutputs(record)));
     at.set(height, transactions);
   }
   const headers = [], blocks = [];
   let parentId = new Uint8Array(32);
-  for (let height = 1n; height <= witnessedIndex + 1n; height++) {
+  for (let height = 1n; height <= witnessedIndex + lag + 1n; height++) {
     const transactions = height === 1n ? [genesisTx] : at.get(height) ?? [tx(height, 0n, [box(plainTree)])];
     const current = header(height, parentId, transactions);
     headers.push(current);

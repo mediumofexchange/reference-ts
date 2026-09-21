@@ -106,17 +106,23 @@ state. A non-service clause needs no silence clause; without the former
 there is no count. Missing range or ancestry evidence returns no audit.
 The count shares the import work budget and fixture authority boundary.
 
-For the same import/payment/burn trace through exact synthetic Ergo transaction
-bytes, install the pinned optional experiment dependencies with
+To replay every group above a second time through exact synthetic Ergo
+transaction bytes, install the pinned optional experiment dependencies with
 `npm --prefix experiments/ergo-range ci --ignore-scripts --no-audit --no-fund`
 and run `npm run check:pool:ergo-replay` (Node 24). CI uses
 `npm run check:pool:v3 -- --ergo` to include both relation conformance and this
-adapter. The reader fixes the profile, limits and a separate trusted synthetic
-header file; the package supplies only raw block sections. The adapter charges
-each intrinsic byte view before copying it and owns all bytes before decoding.
-Missing, undecodable or root-mismatched sections leave the range unresolved.
-Successful results carry `candidate-ergo-profile-synthetic-headers` provenance;
-they establish no real-chain authentication, decoder containment or spendability.
+adapter. Under `--ergo` every fixture names the candidate profile's identity;
+each fixture venue export is converted to raw sections under the reader's own
+synthetic headers (the fixed genesis is the anchor, fixture index `i` is height
+`i + 2`, lag 2 is depth 1, one transaction per record in insertion order), and
+the Ergo result must equal the fixture verifier's with kind-4 ordinals as
+transaction positions. The reader fixes the profile, limits and a separate
+trusted header file per chain; the package supplies only raw block sections.
+The adapter charges each intrinsic byte view before copying it and owns all
+bytes before decoding. Missing, undecodable or root-mismatched sections leave
+the range unresolved. Successful results carry
+`candidate-ergo-profile-synthetic-headers` provenance; they establish no
+real-chain authentication, decoder containment or spendability.
 See the [adapter contract](../../../docs/ERGO_VENUE_PROFILE.md#local-replay-adapter).
 
 The npm command verifies parameter cache/download lengths and SHA-256 hashes

@@ -758,28 +758,32 @@ No runtime API, venue profile or protocol rule changes in this experiment.
 ## Ergo venue-profile candidate and full-block range verifier
 
 The [candidate Ergo venue profile](ERGO_VENUE_PROFILE.md) fixes what pool-v3
-§13 leaves to a profile: an identity over the genesis header, the finality
-depth and one exact ErgoTree per record kind; attribution by that tree with
-`R4` a 32-byte subject and `R5` the bytes; kinds 1–3 at exact length and
-kind 4 as one transaction's maximal run of adjacent same-subject outputs;
-the inclusion height as index; and the ordinal as transaction position then
-output index. `model/pool-v3-ergo-profile.ts` answers a request by
-recomputing every block's transaction root from decoder-derived ids and
-scanning every output in the range, so an empty answer is proven by
-exhaustion; unwitnessed, gapped or unlinked evidence gives no answer, and a
-block that is malformed, of another chain, a duplicate or one failing its
-root is passed over so that no supplied block can deny a read for a height
-whose section is present. The profile, every header, block and output, and
-each request are read once into owned copies before they are judged.
+§13 leaves to a profile: an identity over a pinned anchor header, the
+finality depth and one exact ErgoTree per record kind; attribution by that
+tree with `R4` a 32-byte subject and `R5` the bytes; kinds 1–3 at exact
+length and kind 4 as one transaction's maximal run of adjacent same-subject
+outputs; the index as the number of blocks above the anchor's child, so a
+read from index zero begins at the deployment's anchor rather than the
+chain's genesis; and the ordinal as transaction position then output index.
+`model/pool-v3-ergo-profile.ts` answers a request by recomputing every
+block's transaction root from decoder-derived ids and scanning every output
+in the range, so an empty answer is proven by exhaustion; unwitnessed,
+gapped or unlinked evidence and headers without the anchor's child give no
+answer, and a block that is malformed, of another chain, a duplicate or one
+failing its root is passed over so that no supplied block can deny a read
+for an index whose section is present. The profile, every header, block and
+output, and each request are read once into owned copies before they are
+judged.
 
 `experiments/ergo-range/profile-check.mjs` compiles the model and drives it
 through the pinned Fleet serializer and sigma-rust decoder. The
-[retained report](ergo-range-profile-verification.json) has 247 passing
+[retained report](ergo-range-profile-verification.json) has 250 passing
 checks. The mainnet genesis header, pinned as a fixture (height 1, version
-1, a zero parent id, 279 wire bytes), anchors a chain from which index 0
-answers empty in 102 bytes while height 1 needs its section. A
-twelve-height synthetic chain at depth 2 (witnessed index 10) with
-15 transactions and 11,896 serialized bytes carries real signed commitments,
+1, a zero parent id, 279 wire bytes), is read as an anchor: alone it reaches
+no index, a synthetic child at height 2 is index 0 and needs its section,
+and with that section index 0 answers empty in 102 bytes. A twelve-height
+synthetic chain anchored at its first header, at depth 2 (witnessed index
+8) with 15 transactions and 11,896 serialized bytes, carries real signed commitments,
 a replacement, two revocation witnessings, single-piece publications for two
 backings, a three-piece run and a two-piece run of 3,900-byte pieces; every
 decoder id equals Fleet's unsigned-bytes hash, every block root equals an
@@ -792,10 +796,11 @@ transaction and fails its block's root, leaving that height without a
 section while later ranges answer; a truncated transaction fails the strict
 decode; a root-failing twin, a stray block, a malformed block and a
 duplicate beside the true sections change no answer byte; a missing block,
-an unlinked header, another
-genesis, a range above the witnessed index and an exceeded budget give no
-answer. The three mainnet fixtures pass through the same verifier as
-one-block ranges at depth 0: the model reproduces the real transaction roots
+an unlinked header, another anchor, headers without the anchor's child, a
+range above the witnessed index and an exceeded budget give no answer, and a
+chain beginning at the anchor's child answers the same bytes. The three
+mainnet fixtures pass through the same verifier as one-block ranges at depth
+0, each index 0 under its own parent as the anchor: the model reproduces the real transaction roots
 of block versions 1 and 3 from decoder-derived ids, scans all 65 outputs,
 decodes all 57 real register constants beside sigma-rust's constant decoder
 (42 `Coll[Byte]` equal byte for byte, 15 of other types refused), attributes
@@ -804,8 +809,8 @@ nothing at four throwaway locations and answers empty in 102 bytes.
 Not established: header authentication (proof of work, chain selection and
 finality are the reader's header source), decoder containment and node
 equivalence, acceptance of the synthetic transactions by a node, reassembly
-on a node after boxes are spent, and the cost of exhaustion from index zero
-on a real chain. One limit is concrete: a transaction the reader's decoder
+on a node after boxes are spent, and the cost of exhaustion from a real
+anchor on a real chain. One limit is concrete: a transaction the reader's decoder
 refuses leaves its height without a section, so one node-valid transaction
 the decoder cannot read denies every range through it until the decoder is
 repaired. One is measured: a kind-4 run is one transaction's outputs, and

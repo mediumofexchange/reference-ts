@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-21` [Index the Ergo venue from a pinned anchor header](decisions/2026-09.md#2026-09-21--index-the-ergo-venue-from-a-pinned-anchor-header)
 - `2026-09-21` [Bound compact exclusion by the record-derived adopted block](decisions/2026-09.md#2026-09-21--bound-compact-exclusion-by-the-record-derived-adopted-block)
 - `2026-09-20` [Resolve the complete shared scope before intrinsic exclusion](decisions/2026-09.md#2026-09-20--resolve-the-complete-shared-scope-before-intrinsic-exclusion)
 - `2026-09-20` [Preserve silence clocks through compact intrinsic exclusion](decisions/2026-09.md#2026-09-20--preserve-silence-clocks-through-compact-intrinsic-exclusion)

@@ -43,8 +43,8 @@ export function ergoReplayVenue(profile, evidence, codec, rangeLimits, rawLimits
     return new Uint8Array(value);
   };
   // Small reader-owned inputs are copied before reading supplier containers.
-  const { genesis, depth, scripts } = profile;
-  const ownedProfile = { genesis: own(genesis), depth, scripts: Object.fromEntries([1, 2, 3, 4].map(kind => [kind, own(scripts[kind])])) };
+  const { anchor, depth, scripts } = profile;
+  const ownedProfile = { anchor: own(anchor), depth, scripts: Object.fromEntries([1, 2, 3, 4].map(kind => [kind, own(scripts[kind])])) };
   const ownedHeaders = [];
   for (let i = 0; i < headerCount; i++) {
     const { id, parentId, height, version, transactionsRoot } = headers[i];

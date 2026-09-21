@@ -25,7 +25,7 @@ import { checkImports } from "./import-check.mjs";
 import { checkScopes } from "./scope-check.mjs";
 import { checkScopeRecovery } from "./scope-recovery-check.mjs";
 import { checkRecovery } from "./recovery-check.mjs";
-import { checkErgoReplay } from "./ergo-check.mjs";
+import { checkErgoReplay, replayPairs, underErgo } from "./ergo-check.mjs";
 import { field } from "../fixtures.mjs";
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration,
   readCandidateKeys, loadConfigurationCodecs } from "./candidate.mjs";
@@ -96,7 +96,9 @@ try {
     const witnessed = FixtureVenue.from(data);
     return { evidenceKind: "fixture-verifier", range: request => witnessed.answer(request, codec, RANGE_LIMITS), witnessedIndex: () => witnessed.witnessedIndex, lag: () => witnessed.lag };
   } };
-  const domain = codec.configurationHash(configuration), venue = b(12), issuerSecret = b(15), operatorSecret = b(16);
+  // Under --ergo every fixture names the candidate profile's identity, so any group can be replayed through the adapter.
+  const domain = codec.configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16);
+  const venue = withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : b(12);
   const payerSeed = b(21), receiverSeed = b(22), issuerKey = ed25519.getPublicKey(issuerSecret);
   const operator = ed25519.getPublicKey(operatorSecret);
   const termsFields = { obligor: issuerKey, payout: { thing: "test units", quantumExponent: 0, perUnit: 1n },
@@ -965,8 +967,7 @@ try {
   await test("independent backing counts agree in portable shared-history and recovery packages", async () => {
     for (const [payload, result] of scopeCountPairs) assert.deepEqual(await replayEvidencePackage(portable(payload), verifier, codec), result);
   });
-  const imported = await checkImports({ codec, verifier, configurationBytes, domain,
-    venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove, test,
+  const imported = await checkImports({ codec, verifier, configurationBytes, domain, venue, prove, test,
     operatorSecret, issuerSecret, receiverSeed, payerSeed });
   assert.deepEqual(await replayEvidencePackage(portable(imported.payload), verifier, codec), imported.result);
   await test("compact intrinsic exclusion and shared-scope lapse survive portable transport", async () => {
@@ -974,8 +975,7 @@ try {
       assert.deepEqual(await replayEvidencePackage(portable(item.payload), verifier, codec), item.result);
     }
   });
-  const silent = await checkImports({ codec, verifier, configurationBytes, domain,
-    venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove,
+  const silent = await checkImports({ codec, verifier, configurationBytes, domain, venue, prove,
     test: (name, fn) => test(`Silence: ${name}`, fn),
     operatorSecret, issuerSecret, receiverSeed, payerSeed, silence: true });
   assert.deepEqual(await replayEvidencePackage(portable(silent.payload), verifier, codec), silent.result);
@@ -987,8 +987,7 @@ try {
   await test("history-free term and silence lapse agree in portable packages", async () => {
     for (const { payload, result } of lapsePairs) assert.deepEqual(await replayEvidencePackage(portable(payload), verifier, codec), result);
   });
-  const recovery = await checkRecovery({ codec, verifier, configurationBytes, domain,
-    venue: withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : venue, prove,
+  const recovery = await checkRecovery({ codec, verifier, configurationBytes, domain, venue, prove,
     test: (name, fn) => test(`Recovery: ${name}`, fn), operatorSecret, issuerSecret, receiverSeed, payerSeed });
   intrinsicPairs.push(...recovery.intrinsicCases);
   await test("compact adopted-block exclusions and refusals agree in portable packages", async () => {
@@ -1038,13 +1037,18 @@ try {
   });
   let ergo;
   if (withErgo) {
-    ergo = await checkErgoReplay({ imported: silent, fixture: ergoFixture, adapter: ergoAdapter, codec, verifier, portable, test });
-    // Headers are a separate reader trust input, beside the independently held
-    // key files; a replica's raw block envelope cannot substitute this source.
-    writeFileSync(join(build, "ergo-headers.v8"), serialize(ergo.headers));
-    ergo.receiver = await replayEvidencePackage(portable({ ...ergo.payload, seed: receiverSeed }), ergo.verifier, codec);
-    assert.deepEqual(ergo.receiver.candidates, silent.receiver.candidates);
-    assert.deepEqual(ergo.receiver.audit, ergo.result.audit);
+    // Every group above, replayed again through the candidate Ergo verifier from raw sections.
+    const groups = [
+      { label: "original", payload: complete, result: audit }, { label: "original.receiver", payload: { ...complete, seed: receiverSeed }, result: receiver },
+      { label: "dependency", payload: extended, result: dependency },
+      ...replayPairs({ imported, silent, scoped, scopeRecovery, recovery }, { receiverSeed }),
+    ];
+    ergo = await checkErgoReplay({ groups, primary: { payload: silent.payload, result: silent.result },
+      fixture: ergoFixture, adapter: ergoAdapter, codec, verifier, portable, test });
+    // Fresh processes: the primary seedless and receiver reads and a two-backing recovery read.
+    const fresh = (payload, result) => ({ ...ergo.convert(payload), expected: underErgo(result) });
+    ergo.processes = [fresh(silent.payload, silent.result), fresh({ ...silent.payload, seed: receiverSeed }, silent.receiver),
+      fresh(scopeRecovery.payload, scopeRecovery.result)];
   }
   await api.destroy(); api = undefined;
   function worker(payload, mode) {
@@ -1095,8 +1099,12 @@ try {
     }
   });
   if (withErgo) await test("fresh seedless and receiver processes independently replay Ergo blocks and refuse missing or tampered sections", () => {
-    assert.deepEqual(worker(ergo.payload, "--ergo"), ergo.result);
-    assert.deepEqual(worker({ ...ergo.payload, seed: receiverSeed }, "--ergo"), ergo.receiver);
+    // Headers are a separate reader trust input, written per chain beside the independently held key files.
+    for (const { input, headers, expected } of ergo.processes) {
+      writeFileSync(join(build, "ergo-headers.v8"), serialize(headers));
+      assert.deepEqual(worker(input, "--ergo"), expected);
+    }
+    writeFileSync(join(build, "ergo-headers.v8"), serialize(ergo.primary.headers));
     for (const payload of [ergo.missing, ergo.tampered]) {
       for (const seed of [undefined, receiverSeed]) {
         const result = worker({ ...payload, ...(seed === undefined ? {} : { seed }) }, "--ergo");
@@ -1184,8 +1192,8 @@ try {
       absentClause: scoped.nonService.resultY.audit.range.nonService ?? null,
       recovery: scopeRecovery.nonService.result.audit.range.nonService,
       recoveryOtherBacking: scopeRecovery.nonService.resultY.audit.range.nonService },
-    ...(withErgo ? { ergo: { evidence: "synthetic-headers-and-exact-transaction-bytes", rawBytes: ergo.rawBytes,
-      blocks: ergo.payload.venue.blocks.length, audit: ergo.result, receiver: ergo.receiver } } : {}),
+    ...(withErgo ? { ergo: { evidence: "synthetic-headers-and-exact-transaction-bytes", profile: hex(codec.ergoProfileIdentity(ergoFixture.profile)),
+      ...ergo.counts, freshProcesses: ergo.processes.length, audit: ergo.primary.result } } : {}),
     limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
       "Multi-backing imports validate every scoped predecessor and snapshot, merge shared events once with causal recovery conflict checks, and retain per-backing totals, adoption indices and original-tree paths through split, rejoin, exact recovery adoption and continuation. Receipt queries authenticate the complete original scope and exact original/adopted inclusion, retaining liability and the earliest silence/term boundary. Non-service counts use each selected backing's own clause and canonical state strictly before judgment, preserving request ages, imported roots and spent/lock state across scopes and recovery. Import lapse uses snapshot-bound scope and signed terms without its event history; silence still requires the opening and canonical clock dependencies. Live validity requires full committed event evidence; single-backing or shared-scope continuations with complete sibling state and silence-clock dependencies may replace only an intrinsically faulty target trail under section 9.1 after complete opening/predecessor resolution, at a target position after the record-derived adopted block. Selected state retains its complete selection envelope. Checkpoint/event work remains bounded; large histories can refuse resources.",
       "Compact openings authenticate committed target bytes and retain proof/signature-rejection facts through import refusal or scope lapse. Issue and acceptance read the exact scoped obligor; withdrawal and release resolve the named demand's canonical statement preimage. A matching preimage establishes no demand admission/standing and its enclosing opening need not authenticate. Signature facts do not require a valid proof; unsupported authorization widths and zero-owner acceptance messages are not classified. The classifier may consume exact proof/issue-K rejection to exclude only a supported continuation with complete scoped snapshots and terms, a valid opening, known last-valid state, every resolved sibling clock and a target position after its record-derived adopted block; positions inside the block keep ordinary evidence. Other facts remain observational; missing ancestors, ranges or unsupported contexts still refuse. No target fact supplies state or permits rollback. Local budgets can refuse resources; verifier failures are not rejection.",
