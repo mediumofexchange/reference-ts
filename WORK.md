@@ -55,7 +55,8 @@ Specification §9.1 at 183c09f covers complete scopes; application was reviewed.
 1. Push `b14618f` and `8df5654`, then verify remote parity/exact-head CI when the
    account gate clears.
    The push was rejected by automatic approval review for the account usage limit;
-   no workaround was attempted. Local `main` is ahead of `origin/main` by two.
+   no workaround was attempted. Local `main` is ahead of `origin/main` by three
+   (including this final review-record commit).
 2. Next capability: probe §9.1 intrinsic faults outside a nonempty adopted block.
    First falsify confusing an adopted position with a local target and skipping
    exact publication/dependency evidence. The intrinsic cache currently retains
