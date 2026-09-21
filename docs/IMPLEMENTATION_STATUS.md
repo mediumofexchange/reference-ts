@@ -128,7 +128,7 @@ establishing demand standing or requiring its enclosing opening to authenticate.
 Missing presenter evidence cannot hide an independently failed K signature.
 Proof and signature checks remain separate. The conditional classifier now applies
 [§9.1 at 183c09f](https://github.com/mediumofexchange/money-from-first-principles/blob/183c09f/pool-v3.md#91-compact-intrinsic-exclusion)
-to strict proof rejection or issue-K rejection for a single-backing
+to strict proof rejection or issue-K rejection for a single-backing or shared-scope
 continuation after resolving its valid opening, exact last valid state and complete
 record dependencies. Only its target event trail may be replaced; selected state
 and ancestor evidence remain complete. Full target evidence takes priority.
@@ -137,7 +137,12 @@ extend the actual last valid prefix. Silence-bearing continuations retain comple
 canonical clock dependencies and lapse priority; compact exclusion never resets
 the clock. Missing publication evidence still blocks imported/returning segments.
 The original path proves an empty adopted block from its valid empty opening and
-absence of earlier carrying state. Opening, shared-scope and adopted-block
+absence of earlier carrying state. Shared-scope exclusion requires every sibling's
+snapshot, terms, canonical predecessor and clock; its snapshots must agree on the
+segment and shared history/evidence hashes. A fault opened through one sibling's
+snapshot can exclude the shared checkpoint, but issue K still comes from the
+statement's backing. Split/rejoin ancestry and spent state remain complete.
+Opening and adopted-block
 contexts, other signature roles and admission/capsule faults retain their ordinary
 evidence or refuse. The original classifier now explicitly excludes nonempty
 opening checkpoints before establishing the compact path's valid-opening condition.

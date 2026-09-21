@@ -58,9 +58,9 @@ export function faultObserver(payloads = [], selection, verifier, codec) {
     result() { return facts.size === 0 ? {} : { faultEvidence: [...facts.values()] }; },
     // This supplies only the intrinsic failure. Callers must first resolve the
     // valid opening, last-valid state, original record prefix and adoption context.
-    // Single-backing continuations only; callers resolve silence before this fact.
+    // Callers resolve the complete scope, including sibling clocks, before this fact.
     intrinsicFailure(held, scope) {
-      if (scope.header.entries.length !== 1 || held.commitment.sequence <= scope.header.sequence) return undefined;
+      if (held.commitment.sequence <= scope.header.sequence) return undefined;
       return intrinsic.get(`${heldKey(held)}:${hex(hash(codec.segmentBytes(scope.header)))}`);
     },
     async inspect(held, directory, scope) {

@@ -17,6 +17,7 @@ import { mergeFinalizedPrefixes } from "./scope-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
 import { checkRecoveryScopeReceipts } from "./scope-receipt-check.mjs";
 import { checkRecoveryScopeCounts } from "./scope-count-check.mjs";
+import { checkSharedIntrinsic, withholdSharedTarget, sharedEquivalent } from "./scope-intrinsic-check.mjs";
 
 const b = n => new Uint8Array(32).fill(n), hex = bytes => Buffer.from(bytes).toString("hex");
 const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
@@ -157,6 +158,7 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     assert.equal(answer.status, status, JSON.stringify(answer));
     if (check !== undefined) assert.equal(answer.check, check);
     assert.equal(answer.audit, null); assert.deepEqual(answer.candidates, []); assert.equal(answer.spendable, false);
+    return answer;
   };
   const assertPaths = answer => {
     for (const c of answer.candidates) assert.equal(notePathProves(BigInt(c.anchor), BigInt(c.cm),
@@ -168,8 +170,40 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
   const ix = await issue(shared, fundedX, "recovery scope issue x"), iy = await issue(shared, fundedY, "recovery scope issue y");
   const a0 = checkpoint(shared, 1n, 1n, [], [], true);
   const a1 = checkpoint(shared, 2n, 2n, [ix, iy], [effect([fundedX]), effect([fundedY])]);
+  const intrinsicCases = await checkSharedIntrinsic({ codec, verifier, test, operatorSecret, issuerSecret, issuerSecretY,
+    payerSeed, x, y, shared, a0, a1, issuanceX: ix, issuanceY: iy, effects: [effect([fundedX]), effect([fundedY])], checkpoint,
+    compose: (checkpoints, chosen, backing, at) => compose(checkpoints, chosen, [], backing, at), silence: true });
   const splitX = segment(3n, [entry(x, a1)]), splitY = segment(4n, [entry(y, a1)]);
   const x0 = checkpoint(splitX, 3n, 3n), y0 = checkpoint(splitY, 4n, 4n);
+  await test("compact shared rejoin retains independent silence predecessors and spent holdings", async () => {
+    const reunited = segment(5n, [entry(x, x0), entry(y, y0)]), opened = checkpoint(reunited, 5n, 6n);
+    const outputs = [output(x, receiverSeed, 201, 6n), output(x, payerSeed, 202, 4n),
+      output(x, payerSeed, 203, 0n), output(x, payerSeed, 204, 0n)];
+    const payment = await spend(reunited, fundedX, 0n, a1.tree, outputs, "shared compact silence rejoin payment");
+    const effects = [effect(outputs, payment.inputs)];
+    const valid = checkpoint(reunited, 6n, 7n, [payment.record], effects);
+    const bad = structuredClone(payment.record); bad.proof[100] ^= 1;
+    const target = checkpoint(reunited, 7n, 8n, [bad], effects);
+    const repaired = checkpoint(reunited, 8n, 8n, [payment.record], effects);
+    const ancestry = [a0, a1, x0, y0, opened, valid, target, repaired];
+    for (const selected of [x, y]) {
+      const complete = { ...compose(ancestry, repaired, [], selected, 9n), seed: payerSeed };
+      const partial = withholdSharedTarget(complete, target, [bad], 1n, x, codec);
+      const result = await sharedEquivalent(complete, partial, verifier, codec);
+      assert.deepEqual(result.candidates.map(c => c.cm), [same(selected, x) ? outputs[1].cm.toString() : fundedY.cm.toString()]);
+      assert.equal(result.audit.range.clock.snapshotIndex, "8"); assert.equal(result.audit.range.clock.boundary, null);
+      intrinsicCases.push({ payload: partial, result });
+      // valid and repaired deliberately share complete bytes; the selected
+      // envelope itself still supplies valid, so it cannot be withheld here.
+      for (const cp of [x0, y0, opened]) {
+        const missing = structuredClone(partial);
+        missing.package.trails = missing.package.trails.filter(bytes => !same(bytes, cp.trail));
+        const unavailable = { ...missing, seed: issuerSeed };
+        const result = await refused(unavailable, "unresolved-evidence");
+        if (cp === y0 && same(selected, x)) intrinsicCases.push({ payload: unavailable, result });
+      }
+    }
+  });
   const dx1 = await demand(splitX, fundedX, 0n, a1.tree, presenterX, 6n, "scope x first gap demand");
   const dy1 = await demand(splitY, fundedY, 1n, a1.tree, presenterY, 6n, "scope y first gap demand");
   const wx = withdrawal(splitX, dx1, presenterX), wy = withdrawal(splitY, dy1, presenterY);
@@ -194,6 +228,18 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
   const ancestry = [a0, a1, x0, y0, rx, ry, j0];
   const payload = compose([...ancestry, adopted, final], final, publications);
   const payloadY = compose([...ancestry, adopted, final], final, publications, y);
+  await test("shared compact faults cannot skip a nonempty adopted block", async () => {
+    const bad = structuredClone(payment.record); bad.proof[100] ^= 1;
+    const records = [...adoptedRecords, bad];
+    const target = checkpoint(joined, 9n, 14n, records, [...adoptedEffects, effect(outputs, payment.inputs)]);
+    const complete = compose([...ancestry, adopted, target], adopted, publications, y, 14n);
+    await accepted(complete);
+    const partial = withholdSharedTarget(complete, target, records, 9n, x, codec);
+    const input = { ...partial, seed: issuerSeed };
+    const result = await refused(input, "unresolved-evidence");
+    assert.equal(result.faultEvidence.some(f => f.check === "PROOF"), true);
+    intrinsicCases.push({ payload: input, result });
+  });
   const issuerPayload = compose([...ancestry, adopted], adopted, publications);
   const issuerPayloadY = compose([...ancestry, adopted], adopted, publications, y);
   let result, resultY, receiver, issuerRestored, issuerRestoredY;
@@ -257,6 +303,16 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     // remains inside its duration. Either backing lapses the whole scope.
     const stale = checkpoint(shared, 10n, 8n, [ix, iy], [effect([fundedX]), effect([fundedY])]);
     await refused(compose([a0, a1, x0, y0, stale], stale, [], y), "lapsed-selection");
+    const badProof = structuredClone(iy); badProof.proof[100] ^= 1;
+    const faulty = checkpoint(shared, 10n, 8n, [ix, badProof], [effect([fundedX]), effect([fundedY])]);
+    const before = compose([a0, a1, x0, y0, faulty], y0, [], y, 8n);
+    const partialFault = withholdSharedTarget(before, faulty, [ix, badProof], 2n, y, codec);
+    const lapsed = await sharedEquivalent(before, partialFault, verifier, codec);
+    assert.equal(lapsed.audit.range.carrying.find(c => c.sequence === "10").class, "lapsed");
+    intrinsicCases.push({ payload: partialFault, result: lapsed });
+    const missingX = structuredClone(partialFault);
+    missingX.package.trails = missingX.package.trails.filter(bytes => !same(bytes, x0.trail));
+    await refused(missingX, "unresolved-evidence");
     const historical = checkpoint(shared, 10n, 15n, [ix, iy], [effect([fundedX]), effect([fundedY])]);
     // The valid fresh returns/adoption reset both current clocks. They cannot
     // erase the historical gap which already retired the old shared segment.
@@ -405,5 +461,5 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     compose, publication, x, y, a0, a1, x0, y0, j0, adopted, final, ancestry, publications,
     fundedX, fundedY, sx, standingCheckpoints });
   return { payload, payloadY, result, resultY, receiver, issuerSeed, issuerPayload, issuerPayloadY,
-    issuerRestored, issuerRestoredY, standing, unequal, receipts, nonService, lapse };
+    issuerRestored, issuerRestoredY, standing, unequal, receipts, nonService, lapse, intrinsicCases };
 }

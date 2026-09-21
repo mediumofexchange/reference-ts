@@ -17,6 +17,7 @@ import { mergeFinalizedPrefixes } from "./scope-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
 import { compactFault } from "./fault-check.mjs";
 import { faultObserver } from "./fault-evidence.mjs";
+import { checkSharedIntrinsic, withholdSharedTarget, sharedEquivalent } from "./scope-intrinsic-check.mjs";
 import { checkNormalScopeReceipts } from "./scope-receipt-check.mjs";
 import { checkNormalScopeCounts } from "./scope-count-check.mjs";
 
@@ -150,6 +151,9 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
   const issuanceX = await issue(shared, fundedX, "scope shared issue x 10"), issuanceY = await issue(shared, fundedY, "scope shared issue y 20");
   const a0 = checkpoint(shared, 1n, 1n, [], [], { supply: totals(0n, 0n, 0n) });
   const a1 = checkpoint(shared, 2n, 2n, [issuanceX, issuanceY], [effect([fundedX]), effect([fundedY])]);
+  const intrinsicCases = await checkSharedIntrinsic({ codec, verifier, test, operatorSecret, issuerSecret, issuerSecretY,
+    payerSeed, x, y, shared, a0, a1, issuanceX, issuanceY, effects: [effect([fundedX]), effect([fundedY])], checkpoint,
+    compose: (checkpoints, chosen, backing, at) => compose(checkpoints, chosen, backing, [], at) });
   const splitX = segment(successorSecret, 1n, [entry(x, toB.link, a1)]);
   const splitY = segment(operatorSecret, 3n, [entry(y, y, a1)]);
   const x0 = checkpoint(splitX, 1n, 6n), y0 = checkpoint(splitY, 3n, 6n);
@@ -176,6 +180,35 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
   const j2 = checkpoint(joined, 7n, 15n, [mixed, burned], [mixedEffect, effect([finalX], [mixedX, burnPad])],
     { nullifiers: imports, supply: totals(10n, 1n) });
   const payload = compose([...history, j0, j1, j2]), payloadY = compose([...history, j0, j1, j2], j2, y);
+  await test("shared compact rejoin faults preserve both split predecessors and the repaired spent state", async () => {
+    const bad = structuredClone(burned); bad.proof[100] ^= 1;
+    const records = [mixed, bad];
+    const target = checkpoint(joined, 7n, 15n, records, [mixedEffect, effect([finalX], [mixedX, burnPad])],
+      { nullifiers: imports, supply: totals(10n, 1n) });
+    const repaired = { ...j2, commitment: signCommitment(operatorSecret, 8n, directoryRoot(j2.directory)) };
+    for (const selected of [x, y]) {
+      const all = { ...compose([...history, j0, j1, target, repaired], repaired, selected), seed: receiverSeed };
+      const partial = withholdSharedTarget(all, target, records, 2n, x, codec);
+      const result = await sharedEquivalent(all, partial, verifier, codec);
+      assert.deepEqual(result.candidates.map(c => c.cm), [same(selected, x) ? finalX.cm.toString() : mixedY.cm.toString()]);
+      assert.equal(result.audit.range.carrying.find(c => c.sequence === "7").class, "excluded");
+      intrinsicCases.push({ payload: partial, result });
+      for (const cp of [x1, y1, j0, j1]) {
+        const missing = structuredClone(partial);
+        missing.package.trails = missing.package.trails.filter(bytes => !same(bytes, cp.trail));
+        const result = await refused(missing, "unresolved-evidence");
+        if (cp === y1 && same(selected, x)) intrinsicCases.push({ payload: missing, result });
+      }
+    }
+    const stale = checkpoint(joined, 8n, 15n, [], [], { nullifiers: imports });
+    await refused(withholdSharedTarget(compose([...history, j0, j1, target, stale], stale), target, records, 2n, x, codec),
+      "invalid-local-replay", "CONTINUITY");
+    const smaller = segment(operatorSecret, 8n, [entry(y, y, j2)]), shrink = checkpoint(smaller, 8n, 16n, [], [],
+      { nullifiers: [...imports, ...mixedEffect.nullifiers, mixedX.nf, burnPad.nf], supply: totals(10n, 1n) });
+    const old = { ...target, at: 17n, commitment: signCommitment(operatorSecret, 9n, directoryRoot(target.directory)) };
+    const switched = withholdSharedTarget(compose([...history, j0, j1, j2, shrink, old], shrink, y), old, records, 2n, x, codec);
+    await refused(switched, "unresolved-evidence");
+  });
   let result, receiver, receiverY;
   await test("shared two-backing prefix restores only the independently selected backing", async () => {
     for (const [backing, funded, quantity] of [[x, fundedX, "10"], [y, fundedY, "20"]]) {
@@ -318,8 +351,16 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
     await refused(partialLive, "unresolved-evidence");
     // A later replacement cannot excuse a checkpoint that was live at its
     // original prefix, and withholding the earlier canonical prefix still blocks.
-    for (const p of [withheld, reported]) await refused({ ...p, venue: { ...p.venue, records: p.venue.records.map(r =>
-      r.kind === 1 && same(r.record, encodeCommitment(late.commitment)) ? { ...r, index: 4n } : r) } }, "unresolved-evidence");
+    for (const p of [withheld, reported]) {
+      const live = { ...p, venue: { ...p.venue, records: p.venue.records.map(r =>
+        r.kind === 1 && same(r.record, encodeCommitment(late.commitment)) ? { ...r, index: 4n } : r) } };
+      if (p === withheld) await refused(live, "unresolved-evidence");
+      else {
+        const answer = await accepted(live);
+        assert.equal(answer.audit.range.carrying.find(c => c.sequence === "3").class, "excluded");
+        intrinsicCases.push({ payload: live, result: answer });
+      }
+    }
     const missingPrior = structuredClone(withheld);
     missingPrior.package.trails = missingPrior.package.trails.filter(bytes => !same(bytes, a1.trail));
     await refused(missingPrior, "unresolved-evidence");
@@ -460,5 +501,5 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
   const nonService = await checkNormalScopeCounts({ codec, verifier, prove, test, domain, note, operatorSecret,
     successorSecret, checkpoint, compose, x, y, a0, a1, x0, y0, x1, y1, j0, j1, history, toB, toA,
     fundedX, paidX, issuanceX, issuanceY, effect, receipts });
-  return { payload, payloadY, result, receiver, receiverY, receipts, nonService, lapse, compact, authorization };
+  return { payload, payloadY, result, receiver, receiverY, receipts, nonService, lapse, compact, authorization, intrinsicCases };
 }
