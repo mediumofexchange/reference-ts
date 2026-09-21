@@ -1,10 +1,10 @@
 # Current work
 
-Updated: 2026-09-20
+Updated: 2026-09-21
 
 ## Goal
 
-Active slice: compact intrinsic exclusion for live non-opening shared-scope
+Completed slice: compact intrinsic exclusion for live non-opening shared-scope
 checkpoints, with complete sibling snapshots and ancestor/state/clock dependencies.
 Unknown sibling lapse and split/rejoin rollback probes passed before final acceptance.
 
@@ -14,11 +14,11 @@ classification and clocks. Unknown sibling state/lapse refuses; faults never res
 clocks or restore spent holdings. Portable/fresh-process real-proof checks and
 independent design/integrated review passed. Stop boundary: conditional v3
 replay only, with no adopted-block, other fault class, runtime or adoption expansion.
-Specification §9.1 at 183c09f covers complete scopes; review its application first.
+Specification §9.1 at 183c09f covers complete scopes; application was reviewed.
 
 ## Status
 
-- Branch `feat/compact-shared-exclusion` starts at delivered `dc7a848`.
+- Commit `b14618f` is merged locally into `main`, based on delivered `dc7a848`.
   Companion `main` and `spec/compact-intrinsic-exclusion` remain at `183c09f`;
   no specification edit needed. Both baseline remotes match. No main protection
   or applicable ruleset gates were configured when checked before delivery.
@@ -51,7 +51,9 @@ Specification §9.1 at 183c09f covers complete scopes; review its application fi
 
 ## Next
 
-1. Commit and push this reviewed slice, then verify remote parity and exact-head CI.
+1. Push `b14618f` and verify remote parity/exact-head CI when the account gate clears.
+   The push was rejected by automatic approval review for the account usage limit;
+   no workaround was attempted. Local `main` is ahead of `origin/main` by one.
 2. Next capability: probe §9.1 intrinsic faults outside a nonempty adopted block.
    First falsify confusing an adopted position with a local target and skipping
    exact publication/dependency evidence. The intrinsic cache currently retains
