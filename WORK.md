@@ -18,7 +18,8 @@ Specification §9.1 at 183c09f covers complete scopes; application was reviewed.
 
 ## Status
 
-- Commit `b14618f` is merged locally into `main`, based on delivered `dc7a848`.
+- Commits `b14618f` (implementation) and `8df5654` (acceptance record) are
+  merged locally into `main`, based on delivered `dc7a848`.
   Companion `main` and `spec/compact-intrinsic-exclusion` remain at `183c09f`;
   no specification edit needed. Both baseline remotes match. No main protection
   or applicable ruleset gates were configured when checked before delivery.
@@ -51,9 +52,10 @@ Specification §9.1 at 183c09f covers complete scopes; application was reviewed.
 
 ## Next
 
-1. Push `b14618f` and verify remote parity/exact-head CI when the account gate clears.
+1. Push `b14618f` and `8df5654`, then verify remote parity/exact-head CI when the
+   account gate clears.
    The push was rejected by automatic approval review for the account usage limit;
-   no workaround was attempted. Local `main` is ahead of `origin/main` by one.
+   no workaround was attempted. Local `main` is ahead of `origin/main` by two.
 2. Next capability: probe §9.1 intrinsic faults outside a nonempty adopted block.
    First falsify confusing an adopted position with a local target and skipping
    exact publication/dependency evidence. The intrinsic cache currently retains
