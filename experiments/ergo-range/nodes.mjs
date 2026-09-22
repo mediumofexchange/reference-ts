@@ -17,10 +17,10 @@
 // Both APIs and P2P listeners are bound to 127.0.0.1 (outbound peers only, no inbound firewall rule). v6.0.6 answers
 // every request with Access-Control-Allow-Origin "*" whatever corsAllowedOrigin says (CorsHandler and ErgoHttpService
 // hardcode it), so a page in a local browser can read the API and use its key-free routes (reads, submitting a
-// transaction); key-protected routes need the key. Mining is off and
-// no wallet is initialized; the API key is random and kept in scratch/.
+// transaction); key-protected routes need the key. Mining is off and no wallet is initialized; the API
+// key is random and kept in scratch/.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, openSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -81,6 +81,15 @@ async function api(name, path, options = {}) {
 }
 const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
 const pidOf = name => { const file = join(base, name, "pid"); return existsSync(file) ? Number(readFileSync(file, "utf8")) : undefined; };
+// The node process's working set, private bytes and CPU seconds, read from Windows' process table.
+const usage = pid => {
+  try {
+    const out = execFileSync("powershell.exe", ["-NoProfile", "-Command",
+      `$p = Get-Process -Id ${Number(pid)}; "$($p.WorkingSet64) $($p.PrivateMemorySize64) $([math]::Round($p.CPU))"`], { encoding: "utf8", windowsHide: true });
+    const [workingSet, privateBytes, cpuSeconds] = out.trim().split(" ").map(Number);
+    return { workingSet, privateBytes, cpuSeconds };
+  } catch { return null; }
+};
 const bytesUnder = dir => !existsSync(dir) ? 0 : readdirSync(dir, { withFileTypes: true })
   .reduce((n, e) => n + (e.isDirectory() ? bytesUnder(join(dir, e.name)) : statSync(join(dir, e.name)).size), 0);
 
@@ -111,6 +120,7 @@ async function stop(name) {
 async function status(name, print = true) {
   const pid = pidOf(name), dir = join(base, name);
   const row = { network: name, pid: pid ?? null, running: pid !== undefined && alive(pid), dataBytes: bytesUnder(join(dir, "data")) };
+  if (row.running) row.process = usage(pid);
   try {
     const info = await api(name, "/info");
     Object.assign(row, { appVersion: info.appVersion, headersHeight: info.headersHeight, fullHeight: info.fullHeight,
@@ -120,7 +130,8 @@ async function status(name, print = true) {
   return row;
 }
 
-// Sync evidence: one line per sample with both nodes' heights, peers and data bytes; stops when both are gone.
+// Sync evidence: one line per sample with both nodes' heights, peers, data bytes and process usage; stops when both
+// are gone.
 async function watch() {
   const minutes = Number(only ?? "10"), log = join(base, "status.jsonl");
   assert(minutes > 0, "watch [minutes]");
