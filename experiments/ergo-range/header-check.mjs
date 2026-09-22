@@ -52,15 +52,21 @@ assert(info.headersHeight >= chainCost.tipHeight, `the own node's headers (${inf
 // The node's configuration as run, without the API key hash.
 const confFile = join(root, "scratch/ergo-nodes/mainnet/ergo.conf");
 const configuration = existsSync(confFile) ? readFileSync(confFile, "utf8").replace(/apiKeyHash = "[0-9a-f]+"/, 'apiKeyHash = "<omitted>"') : null;
-assert(configuration === null || /nipopowBootstrap = false/.test(configuration), "the node synced the header chain from genesis, not from a NiPoPoW proof");
+// The configuration is the file as written at check time (nodes.mjs rewrites it on each start); the node's log of its
+// first processes, which shows it processing the genesis header itself, is cited in the milestones below.
+assert(configuration !== null && /nipopowBootstrap = false/.test(configuration), "the node is configured to sync the header chain from genesis, not from a NiPoPoW proof");
 
 // 1. The pinned fixtures' headers are on the own node's best chain.
 const manifest = JSON.parse(readFileSync(join(here, "fixtures/manifest.json"), "utf8"));
-const pinned = [...manifest.headers, ...manifest.fixtures].map(f => ({ file: f.file, height: Number(f.height), id: f.headerId }));
+// Each fixture's header is compared field by field, not only by id: the fixture file's own header, read as pinned.
+const pinned = [...manifest.headers, ...manifest.fixtures].map(f => {
+  const json = JSON.parse(readFileSync(join(here, f.file), "utf8"));
+  return { file: f.file, height: Number(f.height), id: f.headerId, header: json.header ?? json };
+});
 const fixtures = [];
 for (const f of pinned) {
   const [own] = await bestChain(nodeUrl, f.height - 1, f.height);
-  fixtures.push({ ...f, onOwnBestChain: own.id === f.id });
+  fixtures.push({ file: f.file, height: f.height, id: f.id, onOwnBestChain: own.id === f.id && f.header.id === f.id && FIELDS.every(k => own[k] === f.header[k]) });
 }
 
 // 2. The chain-cost window, anchor through tip, header by header against the cached public-node headers.
@@ -107,13 +113,16 @@ try {
 // The first run's header-sync milestone, extracted from its INFO log (the nodes log at WARN since).
 const milestonesFile = join(root, "scratch/ergo-nodes/milestones.json");
 const milestones = existsSync(milestonesFile) ? JSON.parse(readFileSync(milestonesFile, "utf8")) : null;
+// From the first process's start: the first process was stopped after about 20k headers and the second continued
+// on the same data directory ten seconds later.
 const headersSyncSeconds = milestones === null ? null
-  : (Date.parse(milestones.headersSynced.mainnet.at) - Date.parse(milestones.processStart.mainnet)) / 1000;
+  : (Date.parse(milestones.headersSynced.mainnet.at) - Date.parse(milestones.runs.mainnet[0].start)) / 1000;
 const sync = { milestones, headersSyncSeconds, currentProcessStart: processStart, samples: samples.length, firstSample: samples[0] ?? null,
   windowTipReached: reached ?? null, latest: samples.at(-1) ?? null };
 
+// Every named source of the chain-cost report must cover and agree on every header after the anchor.
 const passed = fixtures.every(f => f.onOwnBestChain) && window.anchorMatches && window.tipMatches && linked === own.length - 1
-  && Object.values(window.byCachedSource).every(s => s.agree === s.compared) && Object.keys(window.byCachedSource).length > 0;
+  && [...sourceHosts].every(host => window.byCachedSource[host]?.compared === own.length - 1 && window.byCachedSource[host].agree === own.length - 1);
 const report = {
   status: passed ? "retained-evidence-on-own-validated-headers" : "mismatch",
   node: process.version, ownNode: { url: nodeUrl, appVersion: info.appVersion, name: info.name, headersHeight: info.headersHeight, fullHeight: info.fullHeight,

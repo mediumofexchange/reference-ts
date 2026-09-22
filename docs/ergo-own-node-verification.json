@@ -5,11 +5,11 @@
     "url": "http://127.0.0.1:9053",
     "appVersion": "6.0.6",
     "name": "ergo-mainnet-6.0.6",
-    "headersHeight": 1878965,
-    "fullHeight": null,
-    "bestHeaderId": "bfeeffaabf44c82eaf59b7efa6a9cb8baca3c3815674515c81e3309721521af0",
-    "headersScore": 2.750228436128595e+21,
-    "peers": 24,
+    "headersHeight": 1878981,
+    "fullHeight": 1833794,
+    "bestHeaderId": "4c2402fb879f1f9562794914366cef270ecc9a91b02a8d7b79c2993c56d4385f",
+    "headersScore": 2.7502294086643467e+21,
+    "peers": 30,
     "stateType": "utxo"
   },
   "configuration": "ergo {\n  directory = \"C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/ergo-nodes/mainnet/data\"\n  node {\n    mining = false\n    stateType = \"utxo\"\n    blocksToKeep = 50000\n    utxo { utxoBootstrap = true }\n    nipopow { nipopowBootstrap = false }\n    extraIndex = false\n  }\n}\nscorex {\n  logDir = \"C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/ergo-nodes/mainnet/log\"\n  logging {\n    level = \"WARN\"\n  }\n  restApi {\n    bindAddress = \"127.0.0.1:9053\"\n    apiKeyHash = \"<omitted>\"\n  }\n  network {\n    bindAddress = \"127.0.0.1:9030\"\n  }\n}\n",
@@ -67,40 +67,59 @@
     }
   },
   "current": {
-    "height": 1878945,
-    "ownId": "8141c67119eb9e49a9f461fb7f9d809ac7a7288713ed8d4750f6513371728b38",
+    "height": 1878961,
+    "ownId": "2d68700ffbdf6718e89b744c63ab82201111a9b7d194eded58e1ec76f362c9ac",
     "nodes": [
       {
         "node": "https://node.ergo.watch",
-        "id": "8141c67119eb9e49a9f461fb7f9d809ac7a7288713ed8d4750f6513371728b38",
+        "id": "2d68700ffbdf6718e89b744c63ab82201111a9b7d194eded58e1ec76f362c9ac",
         "agrees": true
       },
       {
         "node": "http://213.239.193.208:9053",
-        "id": "8141c67119eb9e49a9f461fb7f9d809ac7a7288713ed8d4750f6513371728b38",
+        "id": "2d68700ffbdf6718e89b744c63ab82201111a9b7d194eded58e1ec76f362c9ac",
         "agrees": true
       }
     ]
   },
   "sync": {
     "milestones": {
-      "note": "Extracted by hand from the nodes' INFO-level stdout logs of their first run (scratch/ergo-nodes/<network>/stdout.old.log, local time UTC+2 on 2026-09-22); the nodes log at WARN since, which omits this line.",
-      "processStart": {
-        "mainnet": "2026-09-22T19:30:36.798Z",
-        "testnet": "2026-09-22T19:30:37Z"
+      "note": "Extracted by hand from the nodes' INFO-level stdout logs of their first two processes, kept as scratch/ergo-nodes/<network>/stdout.first-run.log (local time UTC+2 on 2026-09-22). Process 1 (19:29:45Z-19:30:29Z) processed genesis and the first ~20k headers and was stopped for a configuration change; process 2 started 19:30:39Z on the same data directory. The nodes log at WARN since, which omits these lines.",
+      "runs": {
+        "mainnet": [
+          {
+            "start": "2026-09-22T19:29:45.784Z",
+            "stop": "2026-09-22T19:30:29.825Z",
+            "genesisLine": 65
+          },
+          {
+            "start": "2026-09-22T19:30:39.259Z"
+          }
+        ],
+        "testnet": [
+          {
+            "start": "2026-09-22T19:29:46.463Z",
+            "genesisLine": 51
+          },
+          {
+            "start": "2026-09-22T19:30:37Z"
+          }
+        ]
       },
       "headersSynced": {
         "mainnet": {
           "at": "2026-09-22T21:24:09.167Z",
           "height": 1878853,
           "header": "31cc3be4894ecd912d4b2845b93919abbfb6f0ea16f26bb5229eeaf1bdfe9b55",
-          "logLine": 3937333
+          "logLine": 3937333,
+          "text": "23:24:09.167 INFO  [ref-critical-dispatcher-6] o.e.n.h.ErgoHistory$$anon$1 - Headers chain is likely synced after header 31cc3be4894ecd912d4b2845b93919abbfb6f0ea16f26bb5229eeaf1bdfe9b55 at height 1878853"
         },
         "testnet": {
           "at": "2026-09-22T20:31:11.681Z",
           "height": 557758,
           "header": "6644c780184510afca60cc3172212019a0408821a937a52f4c3f796771091ab8",
-          "logLine": 1149306
+          "logLine": 1149306,
+          "text": "22:31:11.681 INFO  [ref-critical-dispatcher-6] o.e.n.h.ErgoHistory$$anon$1 - Headers chain is likely synced after header 6644c780184510afca60cc3172212019a0408821a937a52f4c3f796771091ab8 at height 557758"
         }
       },
       "statusAtHeadersSynced": {
@@ -126,9 +145,9 @@
         }
       }
     },
-    "headersSyncSeconds": 6812.369,
+    "headersSyncSeconds": 6863.383,
     "currentProcessStart": "2026-09-22T21:38:54.8059637Z",
-    "samples": 11,
+    "samples": 13,
     "firstSample": {
       "at": "2026-09-22T19:32:49.911Z",
       "network": "mainnet",
@@ -163,29 +182,29 @@
       "lastSeenMessageTime": 1790113305730
     },
     "latest": {
-      "at": "2026-09-22T21:42:11.618Z",
+      "at": "2026-09-22T22:02:56.982Z",
       "network": "mainnet",
       "pid": 19736,
       "running": true,
-      "dataBytes": 1236145668,
+      "dataBytes": 3530721881,
       "process": {
-        "workingSet": 357617664,
-        "privateBytes": 305885184,
-        "cpuSeconds": 70
+        "workingSet": 2846322688,
+        "privateBytes": 1107451904,
+        "cpuSeconds": 727
       },
       "appVersion": "6.0.6",
-      "headersHeight": 1878964,
-      "fullHeight": null,
-      "peers": 18,
+      "headersHeight": 1878975,
+      "fullHeight": 1830373,
+      "peers": 30,
       "unconfirmed": 0,
       "stateType": "utxo",
-      "lastSeenMessageTime": 1790113305730
+      "lastSeenMessageTime": 1790114564960
     }
   },
   "requests": 60,
   "files": {
-    "experiments/ergo-range/header-check.mjs": "399fda43dd16f15411d4bd37432ac83f146249affb62a77844c8123a39fffb12",
-    "experiments/ergo-range/nodes.mjs": "bc80a30e7d035e206d6cf375f7b5bdff86a96b9b77abe27dbeb13fe0486ee276",
+    "experiments/ergo-range/header-check.mjs": "55cd4c79161f6ac4463ea57d362fa5ef8bf8200c38382cb2506b5d586b96a65b",
+    "experiments/ergo-range/nodes.mjs": "2cc3ca2b2c886edfe871919257e247066a625619acde4cfffc176c6267882b44",
     "experiments/ergo-range/fixtures/manifest.json": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
     "docs/ergo-chain-cost-verification.json": "6a8f90a5a872faa1d02646371887e8cbacd251fc10bbffe7584ed57c93d7cd0b"
   },

@@ -210,8 +210,11 @@ verifier from block sections, as the profile states; inclusion latency has
 two correlated observations, not a distribution. The reader's own mainnet
 node validated the header chain from genesis, and the fixtures and the
 measured week stand on its best chain
-([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)). No
-specification selects the profile; decoder containment and node equivalence
+([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)): header authentication
+is shown for the retained evidence, from one run of the reference client,
+while the verifier still leaves proof of work to its source and no runtime
+path reads the node. No specification selects the profile; header
+authentication for a reader, decoder containment and node equivalence
 beyond the fixtures and one week remain open.
 
 ## Successor record conformance

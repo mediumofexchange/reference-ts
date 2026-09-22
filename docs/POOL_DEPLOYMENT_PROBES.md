@@ -1035,7 +1035,8 @@ retained evidence stands on that chain
 ([retained report](ergo-own-node-verification.json)):
 
 - the five pinned fixture headers (genesis, 100,000, 1,000,000, 1,500,000 and
-  1,876,512) are on the node's best chain;
+  1,876,512) are on the node's best chain, equal in id, parent, height,
+  version and transaction root;
 - the chain-cost window from its anchor at 1,873,360 to its tip at 1,878,410
   links on the node's best chain, its anchor and tip ids are the report's,
   and all 5,050 headers after the anchor equal the cached headers of both
@@ -1045,12 +1046,15 @@ retained evidence stands on that chain
 A header id commits to its transaction root and, through its parent, to its
 ancestry, so the chain-cost probe's 5,040 sections, each of which reproduced
 its header's root, are now bound to headers this reader validated; they were
-not re-read from the node. The header chain of 1.88 million headers synced
-in 6,812 s (1 h 53 min) over one home connection with up to 30 outbound
-peers; at that point the node held 850 MB of data with a 1.2 GB working set
-and 7,231 CPU-seconds, read by hand with `nodes.mjs status` 34 s after the
-node logged the milestone. The testnet node (a full archive with the extra
-index) synced its 557,758 headers in about one hour.
+not re-read from the node. The node's log shows it processing the genesis
+header itself. The header chain of 1.88 million headers synced in 6,863 s
+(1 h 54 min, from the first process, which was stopped for a configuration
+change after about 20,000 headers and resumed ten seconds later on the same
+data) over one home connection with 20–30 outbound peers in the samples; at
+that point the node held 850 MB of data with a 1.2 GB working set and 7,231
+CPU-seconds, read by hand with `nodes.mjs status` 34 s after the node
+logged the milestone. The testnet node (a full archive with the extra index)
+synced its 557,758 headers in 3,685 s.
 
 Not established: an independent check of proof of work or chain selection
 (the node is the reference client most of the network runs), resistance to

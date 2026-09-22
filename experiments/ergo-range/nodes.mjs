@@ -82,7 +82,16 @@ async function api(name, path, options = {}) {
   if (!response.ok) throw new Error(`HTTP ${response.status} ${path}`);
   return response.headers.get("content-type")?.includes("json") ? response.json() : response.text();
 }
-const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
+// A pid file outlives a reboot, and Windows reuses pids: a pid is this node only while its executable is the bundle's
+// own java.exe, so stop never signals an unrelated process and start never mistakes one for a running node.
+const JAVA = join(bundle, "jre/bin/java.exe");
+const alive = pid => {
+  try { process.kill(pid, 0); } catch { return false; }
+  try {
+    const path = execFileSync("powershell.exe", ["-NoProfile", "-Command", `(Get-Process -Id ${Number(pid)}).Path`], { encoding: "utf8", windowsHide: true }).trim();
+    return resolve(path).toLowerCase() === resolve(JAVA).toLowerCase();
+  } catch { return false; }
+};
 const pidOf = name => { const file = join(base, name, "pid"); return existsSync(file) ? Number(readFileSync(file, "utf8")) : undefined; };
 // The node process's working set, private bytes and CPU seconds, read from Windows' process table.
 const usage = pid => {
@@ -112,7 +121,7 @@ async function start(name) {
   const { dir } = prepare(name), net = NETWORKS[name];
   rotate(dir);
   const out = openSync(join(dir, "stdout.log"), "a");
-  const child = spawn(join(bundle, "jre/bin/java.exe"), [`-Xmx${net.heap}`, "-jar", join(bundle, JAR), net.flag, "-c", join(dir, "ergo.conf")],
+  const child = spawn(JAVA, [`-Xmx${net.heap}`, "-jar", join(bundle, JAR), net.flag, "-c", join(dir, "ergo.conf")],
     { cwd: dir, detached: true, windowsHide: true, stdio: ["ignore", out, out] });
   writeFileSync(join(dir, "pid"), String(child.pid));
   child.unref();

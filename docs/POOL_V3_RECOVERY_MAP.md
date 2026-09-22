@@ -638,10 +638,14 @@ Each names the rule, the candidate, the alternative, and what closes it.
   The header source's authenticity, the decoder's containment and its node
   equivalence beyond the fixtures and one week remain the trust assumptions
   before selection. **Own node 2026-09-22:** a node the reader runs
-  validated the header chain from genesis in 1 h 53 min, and the fixtures
+  validated the header chain from genesis in 1 h 54 min, and the fixtures
   and the measured week stand on its best chain, so the header source can be
   the reader's own reference client rather than a public node
-  ([probe](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)); decoder containment and node equivalence remain.
+  ([probe](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)). That is shown for the retained evidence from one run:
+  the verifier still leaves proof of work and chain selection to the source,
+  no runtime path reads the node, and an independent check of the reference
+  client and eclipse resistance are not established; decoder containment and
+  node equivalence remain.
 - **A9 Same-index order.** Decided 2026-09-14 in pool-v3 §13: an operator's
   commitments at one index are read in ascending sequence from the records
   alone, so no intra-index order is needed for kinds 1–3; `extending()`'s
