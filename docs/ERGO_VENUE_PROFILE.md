@@ -204,10 +204,12 @@ its retained evidence and can be reproduced from it.
   them in a few milliseconds; building it, where every output is scanned,
   took 1.3 s, and decoding the week's transactions 253 s under the pinned
   alpha (39 s under the 0.28.0 control), on one desktop.
-- The header source and the decoder are trust boundaries of the reader:
-  the header chain's authenticity and the decoder's containment are not
-  established here. Objects at the locations before the anchor are not in
-  the record.
+- The header source and the decoder are trust boundaries of the reader.
+  A node the reader runs can be the header source: the reader's own
+  mainnet node validated the header chain from genesis in under two hours,
+  and the fixtures and the measured week stand on its best chain
+  ([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)). The decoder's containment is not established
+  here. Objects at the locations before the anchor are not in the record.
 
 ## Evidence
 
@@ -279,7 +281,9 @@ integration introduces no production path, profile selection or normative rule.
 ## Before selection
 
 A specification decision selects a venue profile and pins its identity;
-before that: an authenticated header source a reader can run, a contained
+before that: an authenticated header source a reader can run (a node the
+reader runs is demonstrated, [own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source); whether the profile
+requires one or names a lighter source is the selection's choice), a contained
 decoder with node-equivalence evidence beyond the fixtures and one week (the
 pinned alpha reads the chain's current script versions and keeps unknown
 sized trees as bytes; its containment is not established), an exact-byte

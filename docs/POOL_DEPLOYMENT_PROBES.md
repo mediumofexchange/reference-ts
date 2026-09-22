@@ -1021,6 +1021,46 @@ headers, which came from the one node the transactions were submitted to.
 The publications' content is synthetic (frames exact, proof and signature
 bytes not), which the venue does not read.
 
+## Own node as the header source
+
+The profile leaves proof of work and chain selection to the reader's header
+source, and until now that source was two public nodes. On 2026-09-22 the
+reader ran its own mainnet node (`experiments/ergo-range/nodes.mjs`, the
+official v6.0.6 Windows release, JAR checked against the release digest),
+configured to bootstrap state from a UTXO-set snapshot but to download the
+header chain from genesis rather than accept a NiPoPoW proof, so the node
+itself checked every header's proof of work and difficulty and chose the
+best chain. `experiments/ergo-range/header-check.mjs` then asked whether the
+retained evidence stands on that chain
+([retained report](ergo-own-node-verification.json)):
+
+- the five pinned fixture headers (genesis, 100,000, 1,000,000, 1,500,000 and
+  1,876,512) are on the node's best chain;
+- the chain-cost window from its anchor at 1,873,360 to its tip at 1,878,410
+  links on the node's best chain, its anchor and tip ids are the report's,
+  and all 5,050 headers after the anchor equal the cached headers of both
+  public nodes in id, parent, height, version and transaction root;
+- at a recent height the node and both public nodes name the same header.
+
+A header id commits to its transaction root and, through its parent, to its
+ancestry, so the chain-cost probe's 5,040 sections, each of which reproduced
+its header's root, are now bound to headers this reader validated; they were
+not re-read from the node. The header chain of 1.88 million headers synced
+in 6,812 s (1 h 53 min) over one home connection with up to 30 outbound
+peers; at that point the node held 850 MB of data with a 1.2 GB working set
+and 7,231 CPU-seconds, read by hand with `nodes.mjs status` 34 s after the
+node logged the milestone. The testnet node (a full archive with the extra
+index) synced its 557,758 headers in about one hour.
+
+Not established: an independent check of proof of work or chain selection
+(the node is the reference client most of the network runs), resistance to
+an eclipse during sync beyond the agreement at one recent height, and the
+cost of full-block validation from genesis (state came from a snapshot).
+The node's INFO log grew by about 400 MB an hour during sync, so the nodes
+now log at WARN. v6.0.6 answers every API request with
+`Access-Control-Allow-Origin: *` whatever `corsAllowedOrigin` says, so a
+local browser page can read the node's key-free routes.
+
 ## Windows process containment feasibility
 
 The private `experiments/ergo-range/contained-check.ps1` probe compares fixed

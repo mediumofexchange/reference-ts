@@ -1,0 +1,200 @@
+{
+  "status": "retained-evidence-on-own-validated-headers",
+  "node": "v24.6.0",
+  "ownNode": {
+    "url": "http://127.0.0.1:9053",
+    "appVersion": "6.0.6",
+    "name": "ergo-mainnet-6.0.6",
+    "headersHeight": 1878965,
+    "fullHeight": null,
+    "bestHeaderId": "bfeeffaabf44c82eaf59b7efa6a9cb8baca3c3815674515c81e3309721521af0",
+    "headersScore": 2.750228436128595e+21,
+    "peers": 24,
+    "stateType": "utxo"
+  },
+  "configuration": "ergo {\n  directory = \"C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/ergo-nodes/mainnet/data\"\n  node {\n    mining = false\n    stateType = \"utxo\"\n    blocksToKeep = 50000\n    utxo { utxoBootstrap = true }\n    nipopow { nipopowBootstrap = false }\n    extraIndex = false\n  }\n}\nscorex {\n  logDir = \"C:/Users/Bob/Documents/medium-of-exchange-protocol/reference-ts/scratch/ergo-nodes/mainnet/log\"\n  logging {\n    level = \"WARN\"\n  }\n  restApi {\n    bindAddress = \"127.0.0.1:9053\"\n    apiKeyHash = \"<omitted>\"\n  }\n  network {\n    bindAddress = \"127.0.0.1:9030\"\n  }\n}\n",
+  "fixtures": [
+    {
+      "file": "fixtures/mainnet-genesis-header.json",
+      "height": 1,
+      "id": "b0244dfc267baca974a4caee06120321562784303a8a688976ae56170e4d175b",
+      "onOwnBestChain": true
+    },
+    {
+      "file": "fixtures/mainnet-100000.json",
+      "height": 100000,
+      "id": "9b61e8564436969ff3beeb7afbfcfea9794116cffc28f0cfd04dbaccae2df0d7",
+      "onOwnBestChain": true
+    },
+    {
+      "file": "fixtures/mainnet-1000000.json",
+      "height": 1000000,
+      "id": "f04085962f306d8e4ee9f1a415abb82c32ac6a183d4d286e995569c978a7c5cb",
+      "onOwnBestChain": true
+    },
+    {
+      "file": "fixtures/mainnet-1500000.json",
+      "height": 1500000,
+      "id": "f5f148ba4e16fb0ede5d026536f2a29c62b695055762659d6d5ab18126aae6bc",
+      "onOwnBestChain": true
+    },
+    {
+      "file": "fixtures/mainnet-1876512.json",
+      "height": 1876512,
+      "id": "6aea60c8a456639155a7b71c1e62429cc218b34d47940da3906bf7f103c79d51",
+      "onOwnBestChain": true
+    }
+  ],
+  "window": {
+    "anchorHeight": 1873360,
+    "tipHeight": 1878410,
+    "headers": 5051,
+    "linked": 5050,
+    "linkedExpected": 5050,
+    "anchorId": "7f68159616d36daac172816fc02a57a6991bf9acf132a8d1840fe1e32a2dde98",
+    "anchorMatches": true,
+    "tipId": "e7178f75477cceb8de6846315c81666c3a43a33cbf6bd89fd0ac68ffba53be8f",
+    "tipMatches": true,
+    "byCachedSource": {
+      "213.239.193.208-9053": {
+        "compared": 5050,
+        "agree": 5050
+      },
+      "node.ergo.watch": {
+        "compared": 5050,
+        "agree": 5050
+      }
+    }
+  },
+  "current": {
+    "height": 1878945,
+    "ownId": "8141c67119eb9e49a9f461fb7f9d809ac7a7288713ed8d4750f6513371728b38",
+    "nodes": [
+      {
+        "node": "https://node.ergo.watch",
+        "id": "8141c67119eb9e49a9f461fb7f9d809ac7a7288713ed8d4750f6513371728b38",
+        "agrees": true
+      },
+      {
+        "node": "http://213.239.193.208:9053",
+        "id": "8141c67119eb9e49a9f461fb7f9d809ac7a7288713ed8d4750f6513371728b38",
+        "agrees": true
+      }
+    ]
+  },
+  "sync": {
+    "milestones": {
+      "note": "Extracted by hand from the nodes' INFO-level stdout logs of their first run (scratch/ergo-nodes/<network>/stdout.old.log, local time UTC+2 on 2026-09-22); the nodes log at WARN since, which omits this line.",
+      "processStart": {
+        "mainnet": "2026-09-22T19:30:36.798Z",
+        "testnet": "2026-09-22T19:30:37Z"
+      },
+      "headersSynced": {
+        "mainnet": {
+          "at": "2026-09-22T21:24:09.167Z",
+          "height": 1878853,
+          "header": "31cc3be4894ecd912d4b2845b93919abbfb6f0ea16f26bb5229eeaf1bdfe9b55",
+          "logLine": 3937333
+        },
+        "testnet": {
+          "at": "2026-09-22T20:31:11.681Z",
+          "height": 557758,
+          "header": "6644c780184510afca60cc3172212019a0408821a937a52f4c3f796771091ab8",
+          "logLine": 1149306
+        }
+      },
+      "statusAtHeadersSynced": {
+        "note": "nodes.mjs status read by hand 34 s after the mainnet milestone",
+        "at": "2026-09-22T21:24:43Z",
+        "mainnet": {
+          "headersHeight": 1878951,
+          "fullHeight": null,
+          "dataBytes": 850104728,
+          "workingSet": 1222152192,
+          "privateBytes": 751271936,
+          "cpuSeconds": 7231,
+          "peers": 29
+        },
+        "testnet": {
+          "headersHeight": 558563,
+          "fullHeight": 125954,
+          "dataBytes": 4228484002,
+          "workingSet": 1290444800,
+          "privateBytes": 883040256,
+          "cpuSeconds": 8120,
+          "peers": 3
+        }
+      }
+    },
+    "headersSyncSeconds": 6812.369,
+    "currentProcessStart": "2026-09-22T21:38:54.8059637Z",
+    "samples": 11,
+    "firstSample": {
+      "at": "2026-09-22T19:32:49.911Z",
+      "network": "mainnet",
+      "pid": 29644,
+      "running": true,
+      "dataBytes": 5271054,
+      "appVersion": "6.0.6",
+      "headersHeight": 9369,
+      "fullHeight": null,
+      "peers": 2,
+      "unconfirmed": 0,
+      "stateType": "utxo",
+      "lastSeenMessageTime": 1790105550092
+    },
+    "windowTipReached": {
+      "at": "2026-09-22T21:42:11.618Z",
+      "network": "mainnet",
+      "pid": 19736,
+      "running": true,
+      "dataBytes": 1236145668,
+      "process": {
+        "workingSet": 357617664,
+        "privateBytes": 305885184,
+        "cpuSeconds": 70
+      },
+      "appVersion": "6.0.6",
+      "headersHeight": 1878964,
+      "fullHeight": null,
+      "peers": 18,
+      "unconfirmed": 0,
+      "stateType": "utxo",
+      "lastSeenMessageTime": 1790113305730
+    },
+    "latest": {
+      "at": "2026-09-22T21:42:11.618Z",
+      "network": "mainnet",
+      "pid": 19736,
+      "running": true,
+      "dataBytes": 1236145668,
+      "process": {
+        "workingSet": 357617664,
+        "privateBytes": 305885184,
+        "cpuSeconds": 70
+      },
+      "appVersion": "6.0.6",
+      "headersHeight": 1878964,
+      "fullHeight": null,
+      "peers": 18,
+      "unconfirmed": 0,
+      "stateType": "utxo",
+      "lastSeenMessageTime": 1790113305730
+    }
+  },
+  "requests": 60,
+  "files": {
+    "experiments/ergo-range/header-check.mjs": "399fda43dd16f15411d4bd37432ac83f146249affb62a77844c8123a39fffb12",
+    "experiments/ergo-range/nodes.mjs": "bc80a30e7d035e206d6cf375f7b5bdff86a96b9b77abe27dbeb13fe0486ee276",
+    "experiments/ergo-range/fixtures/manifest.json": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
+    "docs/ergo-chain-cost-verification.json": "6a8f90a5a872faa1d02646371887e8cbacd251fc10bbffe7584ed57c93d7cd0b"
+  },
+  "limitations": [
+    "The own node is Ergo's reference client v6.0.6, the implementation most of the network runs; it checks proof of work, difficulty and chain selection as that client does, and no independent implementation re-checks them here.",
+    "The node connected out to peers it discovered; an eclipse during sync could present a chain of less work but cannot forge proof of work. Agreement with two public nodes at one recent height is recorded; a shared upstream is not excluded.",
+    "Header identity binds each header's transaction root, so the chain-cost probe's section evidence is bound to these headers through equal ids; the sections themselves were not re-read from this node.",
+    "The profile's verifier still checks linkage, contiguity and the anchor only; proof of work and chain selection remain the header source's, which is now a node the reader runs rather than a public one.",
+    "Sync time and resources are one run on one desktop over one home connection, with a UTXO-set snapshot for state; full-block validation from genesis was not measured.",
+    "No runtime path, profile selection or specification change follows from this check."
+  ]
+}

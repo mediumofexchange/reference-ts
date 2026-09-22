@@ -66,9 +66,12 @@ for (const f of pinned) {
 // 2. The chain-cost window, anchor through tip, header by header against the cached public-node headers.
 const own = await bestChain(nodeUrl, chainCost.anchorHeight - 1, chainCost.tipHeight);
 const linked = own.slice(1).filter((h, i) => h.parentId === own[i].id).length;
+// Only the chain-cost report's named sources; the cache also holds headers under other labels from earlier probes.
+const sourceHosts = new Set(JSON.parse(readFileSync(join(root, "docs/ergo-chain-cost-verification.json"), "utf8")).sources.map(s => new URL(s.url).host.replace(":", "-")));
 const cachedByHost = {};
 for (const name of readdirSync(cache).filter(n => /^headers-.+-\d+-\d+\.json$/.test(n))) {
   const host = name.replace(/^headers-/, "").replace(/-\d+-\d+\.json$/, "");
+  if (!sourceHosts.has(host)) continue;
   for (const header of JSON.parse(readFileSync(join(cache, name), "utf8"))) {
     const known = (cachedByHost[host] ??= new Map()).get(header.height);
     assert(known === undefined || FIELDS.every(k => known[k] === header[k]), `one header per height in the ${host} cache`);
@@ -101,7 +104,13 @@ try {
   const pid = Number(readFileSync(join(root, "scratch/ergo-nodes/mainnet/pid"), "utf8"));
   processStart = execFileSync("powershell.exe", ["-NoProfile", "-Command", `(Get-Process -Id ${pid}).StartTime.ToUniversalTime().ToString('o')`], { encoding: "utf8", windowsHide: true }).trim();
 } catch { /* the node is not running */ }
-const sync = { processStart, samples: samples.length, firstSample: samples[0] ?? null, windowTipReached: reached ?? null, latest: samples.at(-1) ?? null };
+// The first run's header-sync milestone, extracted from its INFO log (the nodes log at WARN since).
+const milestonesFile = join(root, "scratch/ergo-nodes/milestones.json");
+const milestones = existsSync(milestonesFile) ? JSON.parse(readFileSync(milestonesFile, "utf8")) : null;
+const headersSyncSeconds = milestones === null ? null
+  : (Date.parse(milestones.headersSynced.mainnet.at) - Date.parse(milestones.processStart.mainnet)) / 1000;
+const sync = { milestones, headersSyncSeconds, currentProcessStart: processStart, samples: samples.length, firstSample: samples[0] ?? null,
+  windowTipReached: reached ?? null, latest: samples.at(-1) ?? null };
 
 const passed = fixtures.every(f => f.onOwnBestChain) && window.anchorMatches && window.tipMatches && linked === own.length - 1
   && Object.values(window.byCachedSource).every(s => s.agree === s.compared) && Object.keys(window.byCachedSource).length > 0;

@@ -207,9 +207,12 @@ published the profile's four-piece release and its duplicate, reordered,
 partial, merged and separated cases on the public testnet at the node's
 minimum values, spent every piece box and read the cases back through the
 verifier from block sections, as the profile states; inclusion latency has
-two correlated observations, not a distribution. No specification selects the profile; header
-authentication, decoder containment and node equivalence beyond the fixtures
-and one week remain open.
+two correlated observations, not a distribution. The reader's own mainnet
+node validated the header chain from genesis, and the fixtures and the
+measured week stand on its best chain
+([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)). No
+specification selects the profile; decoder containment and node equivalence
+beyond the fixtures and one week remain open.
 
 ## Successor record conformance
 

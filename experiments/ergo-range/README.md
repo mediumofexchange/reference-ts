@@ -146,6 +146,16 @@ local browser can read the API and use its key-free routes. These are
 practical sources for the experiments, not the contained or qualified
 deployment the controls below examine.
 
+Once the mainnet headers pass the chain-cost window, `header-check.mjs` checks
+that the pinned fixtures and that window stand on the node's best chain and
+that the node agrees with two public nodes near the tip; the
+[retained report](../../docs/ergo-own-node-verification.json) also records
+the sync cost:
+
+```powershell
+node experiments/ergo-range/header-check.mjs --out docs/ergo-own-node-verification.json
+```
+
 ## Stable stock storage control
 
 The current candidate is the complete stable v6.0.5 Windows x64 package.

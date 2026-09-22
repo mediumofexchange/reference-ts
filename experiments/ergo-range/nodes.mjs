@@ -22,7 +22,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, openSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { blake2b } from "@noble/hashes/blake2b";
 
@@ -62,6 +62,9 @@ function prepare(name) {
 }
 scorex {
   logDir = ${hocon(join(dir, "log"))}
+  logging {
+    level = "WARN"
+  }
   restApi {
     bindAddress = "127.0.0.1:${net.api}"
     apiKeyHash = "${keyHash}"
@@ -90,8 +93,16 @@ const usage = pid => {
     return { workingSet, privateBytes, cpuSeconds };
   } catch { return null; }
 };
-const bytesUnder = dir => !existsSync(dir) ? 0 : readdirSync(dir, { withFileTypes: true })
-  .reduce((n, e) => n + (e.isDirectory() ? bytesUnder(join(dir, e.name)) : statSync(join(dir, e.name)).size), 0);
+// A database compacts while it is measured, so a file listed can be gone when read.
+const sizeOf = file => { try { return statSync(file).size; } catch (error) { if (error.code === "ENOENT") return 0; throw error; } };
+const bytesUnder = dir => { let entries; try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return 0; }
+  return entries.reduce((n, e) => n + (e.isDirectory() ? bytesUnder(join(dir, e.name)) : sizeOf(join(dir, e.name))), 0); };
+
+// A large stdout log is kept once as stdout.old.log before a start, so the log stays bounded across restarts.
+function rotate(dir) {
+  const log = join(dir, "stdout.log");
+  if (existsSync(log) && statSync(log).size >= 64 * 2 ** 20) renameSync(log, join(dir, "stdout.old.log"));
+}
 
 async function start(name) {
   const pid = pidOf(name);
@@ -99,6 +110,7 @@ async function start(name) {
   const jarHash = createHash("sha256").update(readFileSync(join(bundle, JAR))).digest("hex");
   assert.equal(jarHash, JAR_SHA256, "the node JAR is the v6.0.6 release");
   const { dir } = prepare(name), net = NETWORKS[name];
+  rotate(dir);
   const out = openSync(join(dir, "stdout.log"), "a");
   const child = spawn(join(bundle, "jre/bin/java.exe"), [`-Xmx${net.heap}`, "-jar", join(bundle, JAR), net.flag, "-c", join(dir, "ergo.conf")],
     { cwd: dir, detached: true, windowsHide: true, stdio: ["ignore", out, out] });

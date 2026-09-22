@@ -38,7 +38,8 @@ specification or runtime change, no mainnet submission or real funds.
   testnet (archive + extra index) nodes from `scratch/ergo-nodes/`, APIs
   127.0.0.1:9053/9052; started 19:31 UTC, `watch 10` samples sync into
   `scratch/ergo-nodes/status.jsonl`. After a reboot run `nodes.mjs start`
-  (and `watch`). Upstream hardcodes CORS `*` (setting ignored).
+  (and `watch`). Upstream hardcodes CORS `*` (setting ignored). Logs at
+  WARN since the INFO log grew ~400 MB/h; testnet archive ~4 GB at 126k.
 - Previous slice P2 delivered on main 2e71db3 (CI green): testnet
   publication accepted and read back, A11 closed.
 - Throwaway testnet wallet: key in ignored `scratch/ergo-testnet/wallet.json`
@@ -57,11 +58,10 @@ specification or runtime change, no mainnet submission or real funds.
 
 1. When the run ends: read the report, update A10/probes/profile/guide,
    retain the report as `docs/ergo-latency-verification.json`, review, merge.
-2. Header source (same branch): when mainnet headers pass 1,878,410, run
-   `node experiments/ergo-range/header-check.mjs --out docs/ergo-own-node-verification.json`
-   (fixtures and the P4 window on the own node best chain, public-node
-   agreement at the tip, sync cost from status.jsonl); then update the
-   profile "Before selection", A8, probes and guide; review with A10.
+2. Header source done on the branch (54a87f7 onward): own node validated
+   headers from genesis in 1 h 53 min; fixtures and the P4 window stand on its
+   best chain (`docs/ergo-own-node-verification.json`); profile, A8,
+   probes, status and guide updated. Review it together with A10.
 3. Then decoder containment or the wallet/custody boundaries below.
 
 ## Retained boundaries and local state
