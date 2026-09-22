@@ -180,7 +180,7 @@ async function observe(state) {
         state.lastHeight = now.height;
       }
       const pool = await get(nodeUrl, "/transactions/unconfirmed/transactionIds"), poolReadAt = Date.now();
-      const admitting = poolReadAt <= state.admitUntil, gap = state.lastPoolReadAt !== undefined && poolReadAt - state.lastPoolReadAt > 3 * pollSeconds * 1000;
+      const admitting = poolReadAt <= state.admitUntil, last = state.lastPoolReadAt ?? state.lastRoundAt, gap = last !== undefined && poolReadAt - last > 3 * pollSeconds * 1000;
       for (const id of pool) {
         if (state.seen[id] !== undefined || !admitting) continue;
         state.seen[id] = { firstSeen: poolReadAt, tip: now.height, previousTip: state.previousTip ?? now.height, presentAtStart: state.rounds === 0,
