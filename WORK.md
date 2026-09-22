@@ -57,9 +57,12 @@ specification or runtime change, no mainnet submission or real funds.
 
 1. When the run ends: read the report, update A10/probes/profile/guide,
    retain the report as `docs/ergo-latency-verification.json`, review, merge.
-2. When the nodes are synced: record sync time and disk, then use them for
-   header checks (the profile header source) and testnet timing; then
-   decoder containment or the wallet/custody boundaries below.
+2. Header source (same branch): when mainnet headers pass 1,878,410, run
+   `node experiments/ergo-range/header-check.mjs --out docs/ergo-own-node-verification.json`
+   (fixtures and the P4 window on the own node best chain, public-node
+   agreement at the tip, sync cost from status.jsonl); then update the
+   profile "Before selection", A8, probes and guide; review with A10.
+3. Then decoder containment or the wallet/custody boundaries below.
 
 ## Retained boundaries and local state
 
