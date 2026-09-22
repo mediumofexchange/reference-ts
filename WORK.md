@@ -33,6 +33,12 @@ specification or runtime change, no mainnet submission or real funds.
   checks the chain. A pre-review run was stopped after 5 minutes
   (`scratch/ergo-latency/aborted-prereview.*`). Also on the branch: the P2
   text corrected to the window bound `k <= depth + 2`.
+- Own nodes (approved 2026-09-22; same branch): `experiments/ergo-range/nodes.mjs`
+  runs official v6.0.6 mainnet (UTXO-snapshot bootstrap, full headers) and
+  testnet (archive + extra index) nodes from `scratch/ergo-nodes/`, APIs
+  127.0.0.1:9053/9052; started 19:31 UTC, `watch 10` samples sync into
+  `scratch/ergo-nodes/status.jsonl`. After a reboot run `nodes.mjs start`
+  (and `watch`). Upstream hardcodes CORS `*` (setting ignored).
 - Previous slice P2 delivered on main 2e71db3 (CI green): testnet
   publication accepted and read back, A11 closed.
 - Throwaway testnet wallet: key in ignored `scratch/ergo-testnet/wallet.json`
@@ -51,9 +57,9 @@ specification or runtime change, no mainnet submission or real funds.
 
 1. When the run ends: read the report, update A10/probes/profile/guide,
    retain the report as `docs/ergo-latency-verification.json`, review, merge.
-2. Candidates after: an own Ergo node (own pool view, validated headers;
-   needs host resources and a decision on the retained 20 GiB image);
-   decoder containment; the wallet/custody boundaries below.
+2. When the nodes are synced: record sync time and disk, then use them for
+   header checks (the profile header source) and testnet timing; then
+   decoder containment or the wallet/custody boundaries below.
 
 ## Retained boundaries and local state
 

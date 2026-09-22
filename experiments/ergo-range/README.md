@@ -97,6 +97,55 @@ re-submitting only what the node does not already hold; `--poll`,
 is the 2026-09-22 testnet run: the node's acceptance, sizes, values, each
 transaction's inclusion latency, the UTXO check and the read-back.
 
+## Inclusion latency on the mainnet
+
+`latency.mjs` measures recovery-map A10 passively: it polls a public mainnet
+node's pool ids and blocks (GET only, no key, nothing submitted) and times
+each first sighting as `k`, the inclusion height less the node's height at
+that sighting, bracketed above by the height one round earlier. Under C3.3 a
+demand authorized at the tip with the instant at the latest witnessed index
+has force for `1 <= k <= depth + 2`; the report gives that fraction for
+depths 0–20, with dropped sightings as misses and unfinished ones censored.
+
+```powershell
+node experiments/ergo-range/latency.mjs --hours 24 --tail-minutes 60 --out scratch/ergo-latency/report.json
+node experiments/ergo-range/latency.mjs --report-only --out <report>
+```
+
+The state (`scratch/ergo-latency/run.json`) keeps the collector's script
+hash and arguments; `--resume` continues an interrupted run and flags the
+gap, and `--report-only` recomputes the report and checks the window's
+chain against the node (parent links to its reported tip, recorded ids) and
+a second node (`--offline` skips both).
+
+## Own nodes
+
+`nodes.mjs` runs our own mainnet and testnet nodes from the official
+`ergo-node-v6.0.6-windows-x64.zip` (108,925,914 bytes, SHA-256
+`311c0b1b9a451b50badc2c3d998a2d919a2efa9fd517682927015169a04a82c5`, from
+the v6.0.6 release) extracted to `scratch/ergo-nodes/v6.0.6/`; `start`
+checks the JAR against the release digest, writes each node's
+configuration and a random API key under `scratch/ergo-nodes/<network>/`
+and launches the bundled Java detached. The host may be turned off: `start`
+again resumes from the data directory.
+
+```powershell
+node experiments/ergo-range/nodes.mjs start      # or: stop, status; [mainnet|testnet]
+node experiments/ergo-range/nodes.mjs watch 10   # appends status to scratch/ergo-nodes/status.jsonl
+```
+
+Mainnet bootstraps from a UTXO-set snapshot but downloads the full header
+chain from genesis (no NiPoPoW proof), so this node checks every header's
+proof of work; it keeps the last 50,000 full blocks, API `127.0.0.1:9053`.
+Testnet is a full archive with the extra index, API `127.0.0.1:9052`. P2P
+listeners are bound to 127.0.0.1 (outbound peers only), mining is off and
+no wallet is initialized. v6.0.6 answers every request with
+`Access-Control-Allow-Origin: *` whatever `corsAllowedOrigin` says
+(upstream `CorsHandler` and `ErgoHttpService` hardcode it), so a page in a
+local browser can read the API and use its key-free routes. These are
+practical sources for the experiments, not the contained or qualified
+deployment the controls below examine.
+
 ## Stable stock storage control
 
 The current candidate is the complete stable v6.0.5 Windows x64 package.
