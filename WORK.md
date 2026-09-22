@@ -52,8 +52,7 @@ experiment.
   decoder and block reports byte for byte. `npm ci` from the lockfile
   reproduces the three experiment reports.
 - Delivered: `main` d913edd, CI run 35727316803 green; pool-v3 took 13.5
-  minutes on both runners under the pinned alpha, the prior baseline, so the
-  18.5-minute local figure was contention and the 45-minute budget is slack.
+  minutes on both runners, the prior baseline (the 45-minute budget is slack).
 
 ## Evidence
 
