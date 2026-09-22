@@ -61,10 +61,9 @@ runtime path, no dependency change.
   the profile says. The report binds the node's `/info` (ergo-testnet-6.0.3),
   parameters, library pin and model sources.
 - Node rules checked against upstream `v6.0.3` or the node: dust over full
-  box bytes, monotonic creation height, `chainSlice` is `(from, to]`, the
-  indexed transaction route serves confirmed only, the mempool chains.
-- Prior slice (`main` d913edd): the alpha reads all 5,040 P4 sections; no
-  containment evidence binds the pinned build.
+  box bytes, monotonic creation height, `chainSlice` is `(from, to]`, indexed
+  transactions are confirmed only, the mempool chains. Prior slice d913edd:
+  the alpha reads all 5,040 P4 sections; no containment evidence binds it.
 
 ## Next
 
