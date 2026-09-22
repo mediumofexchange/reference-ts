@@ -94,8 +94,8 @@ and asks the kind-4 range under the subject. `--state` (default
 pinned creation height, and `--resume` continues an interrupted run,
 re-submitting only what the node does not already hold; `--poll`,
 `--max-wait` and `--delay` pace it. The [retained report](../../docs/ergo-publication-verification.json)
-records the sizes, values and the read-back and, once run live, the node's
-acceptance and each transaction's inclusion latency.
+is the 2026-09-22 testnet run: the node's acceptance, sizes, values, each
+transaction's inclusion latency, the UTXO check and the read-back.
 
 ## Stable stock storage control
 

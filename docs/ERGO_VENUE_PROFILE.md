@@ -180,13 +180,13 @@ its retained evidence and can be reproduced from it.
   94,702 bytes; that is an adoption condition of the profile, not a change
   to the frame ([decision](../decisions/2026-09.md#2026-09-15--a-configurations-publications-fit-one-ergo-transaction)).
   Signed under this layout with the pinned build, a full piece box is 4,095
-  bytes and a four-piece release transaction 16,075 bytes; under the node's
+  bytes and a four-piece release transaction about 16,077 bytes; under the node's
   dust rule (its votable `minValuePerByte` over the full box bytes, 360 on
   the testnet) a full piece box needs 1,474,200 nanoERG and a release
   5,743,440 plus the fee, which sigma-rust's candidate-only estimate
-  understates by 33 bytes a box
-  ([P2 dry run](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node));
-  node acceptance is not yet measured.
+  understates by 33 bytes a box. The public testnet node accepted a release,
+  its reassembly cases and their sweep at exactly those values
+  ([P2](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)).
 - Exhaustion costs the range's block bytes. The replacement chain and a
   revocation are read from index zero (§13.3), which is the anchor's child:
   the cost is bounded by the deployment's age rather than the chain's
@@ -285,9 +285,9 @@ pinned alpha reads the chain's current script versions and keeps unknown
 sized trees as bytes; its containment is not established), an exact-byte
 block source or the JSON-text discipline above, publication and reassembly
 on a node (P2: the [experiment](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)
-exists and its dry run reproduces every reassembly case through this
-verifier; its testnet run awaits funds), the adoption condition above checked
+accepted every case on the public testnet and the verifier read each back
+from block sections after the boxes were spent), the adoption condition above checked
 against the selected configuration, and the runtime's adoption in place of
-the v2 materialized view. P4's cost measurement is done; P2's testnet run
-records each transaction's inclusion latency, and a distribution needs
-repeated independent submissions beyond it.
+the v2 materialized view. P4's cost measurement and P2's testnet run are
+done; inclusion latency has two correlated testnet observations, and a
+distribution needs repeated independent submissions.

@@ -1,19 +1,18 @@
 {
-  "status": "dry-run-no-submission",
+  "status": "testnet-published-and-read-back",
   "node": "v24.6.0",
   "library": {
     "version": "0.29.0-alpha-2f840d3",
     "wasmSha256": "65143062c54766fbc79b721ed77c43d199604c31bef535b99dca3b8842e1ea16"
   },
-  "network": "GET only: /info and the signing context, now cached",
   "nodeUrl": "http://213.239.193.208:9052",
   "nodeInfo": {
     "name": "ergo-testnet-6.0.3",
     "appVersion": "6.0.3",
     "network": "testnet",
-    "fullHeight": 558222,
-    "headersHeight": 558222,
-    "bestFullHeaderId": "b7dcb8a2cfcb6cbe7edf91db765e05cb02a462ba2a2caa8b25b38d08ce504a1d",
+    "fullHeight": 558327,
+    "headersHeight": 558327,
+    "bestFullHeaderId": "ee6dafc376b7aaafd88cfa07891e8f8fb09485567f84f4ea91eab9bf2c506298",
     "parameters": {
       "outputCost": 100,
       "tokenAccessCost": 100,
@@ -28,14 +27,8 @@
       "minValuePerByte": 360
     }
   },
-  "requests": 2,
-  "cacheDigest": "3167c5c2fb2b93c31c6b6332e0a99cfa8767385af7e96eefef61ab9d801299fb",
-  "signingContext": {
-    "heights": "558213-558222",
-    "headerVersions": [
-      4
-    ]
-  },
+  "requests": 93,
+  "cacheDigest": "195ad4a5a57a9a6f6c21b5c0dbc3492ec1c7029966d04bba3ac4bf93d1ca64b8",
   "wallet": {
     "address": "3WzLhpY2Dbd8WSbvZTbHS5cbCiJFsfbLFrfoWWEt3GkQJJr6oxi9",
     "tree": "0008cd03eb9432b2aaf72b39f474ea8daec054a85f1b34ed2423aa0731221117f62af749",
@@ -45,6 +38,14 @@
       "2": "0008cd03388c76064d8c90d36107d612e13a805427d4f90d53872bd9de2999cecebf8ab5",
       "3": "0008cd03a1a558c6f73851fed68491ad6867658a4c35ab32bb82ad2371140f5c17db4eaa",
       "4": "0008cd026ccbe7aa5bff7619ef42f5d8dde8b352646b5416b490da9bcf0fd711afef1258"
+    },
+    "funding": {
+      "boxes": 1,
+      "balance": "20000000000000",
+      "boxIds": [
+        "ff5df8b9d5efd9c38391834050d73ab248e5a06146e06a21d9bec4501cf2803d"
+      ],
+      "runCost": "41145880"
     }
   },
   "publications": {
@@ -82,23 +83,23 @@
       "separated": "8046480"
     },
     "minChange": "28440",
-    "creationHeight": 558222
+    "creationHeight": 558327
   },
   "transactions": {
     "release": {
       "name": "release",
-      "id": "5fde6cc1d8946d2c441f58ec52ada1d860bbb3697dc94944f524f220d31d04ca",
-      "bytes": 16075,
-      "jsonBytes": 34468,
-      "signMs": 339,
+      "id": "649c9af52315b6c292069a4f977cca2c262d872c21603dbfb09ba9dd7f92d9a2",
+      "bytes": 16077,
+      "jsonBytes": 34473,
+      "signMs": 380,
       "inputs": [
-        "84858538130979e73ea13a5cc595fa9d211deb0db104f6628a64df0955da2dde"
+        "ff5df8b9d5efd9c38391834050d73ab248e5a06146e06a21d9bec4501cf2803d"
       ],
       "outputs": [
         {
           "index": 0,
           "role": "piece",
-          "boxId": "31cf5d0eb25d677ca9a6b6c3d0d6e39d1dd82ad66e4666e6f22991a2004fd5d7",
+          "boxId": "c7642356f832f197b94d4bff8c5adeffb888bfd4de3ef785c0947964a1c4bbf0",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -108,7 +109,7 @@
         {
           "index": 1,
           "role": "piece",
-          "boxId": "17eece1f9c6a5b06456a7104e7fa647cc6e1dc1437372416e6b8b034b3ec37e4",
+          "boxId": "ccadb450eb0fb178a1100a9c2170d7d4699e8d67809483f164d3aa6ba8f2f5cd",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -118,7 +119,7 @@
         {
           "index": 2,
           "role": "piece",
-          "boxId": "82cd82d6e03e3f55bae782fa4419f515600ae6f5ad968b981be1896aaf42af94",
+          "boxId": "750221f6343ef28f700cab5521c15a3da917dd76576d24336c2c0293a3eb4af9",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -128,7 +129,7 @@
         {
           "index": 3,
           "role": "piece",
-          "boxId": "dc6bd281d218e40c90a777268f8604f23a82fb118570e9ec4544dc1fdf0658c2",
+          "boxId": "3bde8ff68d6b6c3615c18a1073e2352cb1f25f113636951891cdea981722e3e1",
           "value": "1320840",
           "boxBytes": 3669,
           "pieceBytes": 3555,
@@ -138,35 +139,48 @@
         {
           "index": 4,
           "role": "change",
-          "boxId": "a3460bd4fa77768518f6ab49c8bbcc6e4aa16cc9d8e5d63051e2a8f1476f1fe8",
-          "value": "993156560",
-          "boxBytes": 79
+          "boxId": "597c1dcd38f88b6fcbf7f74b8aa1a4881388bc3257491729f2220751c8637d11",
+          "value": "19999993156560",
+          "boxBytes": 81
         },
         {
           "index": 5,
           "role": "fee",
-          "boxId": "e0cf938dbc65732c313b8c28db76443157e53c6ced7f5e4cd571221b1ac6a781",
+          "boxId": "f13fa0bf465218b84029afaf3a9492aa855bfc30bc670a609bc1e4dfee868dfb",
           "value": "1100000",
           "boxBytes": 146
         }
       ],
       "pieceValue": "5743440",
-      "fee": "1100000"
+      "fee": "1100000",
+      "submission": {
+        "accepted": true,
+        "submittedAt": "2026-09-22T18:45:28.873Z",
+        "tipAtSubmit": 558327,
+        "tipIdAtSubmit": "ee6dafc376b7aaafd88cfa07891e8f8fb09485567f84f4ea91eab9bf2c506298"
+      },
+      "inclusion": {
+        "inclusionHeight": 558329,
+        "blockId": "4283ebbea41cfba4f1859121e6197b3c7a5d7cc641f2a53e4487fdd41a7c27c2",
+        "blockTimestamp": 1790102746018,
+        "index": 1,
+        "numConfirmations": 0
+      }
     },
     "duplicate": {
       "name": "duplicate",
-      "id": "764ef9a9b61e6bcad97e0f65272f45fa318e8d0b52286ff3b16d9c2a18a754f0",
-      "bytes": 16075,
-      "jsonBytes": 34468,
-      "signMs": 110,
+      "id": "96c9be77f5aeca633501b7483e903f725286b776d018d6ab08b7f5273c8ef7ac",
+      "bytes": 16077,
+      "jsonBytes": 34473,
+      "signMs": 70,
       "inputs": [
-        "a3460bd4fa77768518f6ab49c8bbcc6e4aa16cc9d8e5d63051e2a8f1476f1fe8"
+        "597c1dcd38f88b6fcbf7f74b8aa1a4881388bc3257491729f2220751c8637d11"
       ],
       "outputs": [
         {
           "index": 0,
           "role": "piece",
-          "boxId": "3b7e6e4d7f8ee7a340ff5bfc52ffd975231324c992109321cb30c820811dc793",
+          "boxId": "7e5e12d2fe47ab458162682d3d3eb5af0aede61e968bc15e2ef206352a70bf61",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -176,7 +190,7 @@
         {
           "index": 1,
           "role": "piece",
-          "boxId": "9821ed9cc60314fd153b1522b2e1ad5b76c30d0f4e9e78df037f24343e806b24",
+          "boxId": "30c14d0ba8dedd0297b381d499c3c94b5bb2ce0fae04d18201a26656750a59e3",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -186,7 +200,7 @@
         {
           "index": 2,
           "role": "piece",
-          "boxId": "ed3e89bd1f7341408cc945fadf38536d1c206a3dfd01065bb47ab733a6e3e4a6",
+          "boxId": "d1ea06c4d85b4a741519aabc33bd36ccaedec8623d8164c738b42489e9134f07",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -196,7 +210,7 @@
         {
           "index": 3,
           "role": "piece",
-          "boxId": "7acf6cad55b2b0fc026b24bf0d0999f946f6244e08fe5d1803330412b9381201",
+          "boxId": "78c25f33b3b0de48ec76c811d40c1b451ebd9eefda6e9c561fe25264974257c8",
           "value": "1320840",
           "boxBytes": 3669,
           "pieceBytes": 3555,
@@ -206,35 +220,48 @@
         {
           "index": 4,
           "role": "change",
-          "boxId": "5122d5e9f30faf033315edf4264a46117aeed6dfaabe44b29f08a42175a79208",
-          "value": "986313120",
-          "boxBytes": 79
+          "boxId": "9262b027c874ab4cec5601b7468ebdfe65c65fa4baf5301c3f1ce1bb16d08f90",
+          "value": "19999986313120",
+          "boxBytes": 81
         },
         {
           "index": 5,
           "role": "fee",
-          "boxId": "60b68f9e4f9a43723c8cd45155ae0db7c47566cfbe8e5deabb2949ace904849e",
+          "boxId": "071aa460978e93d21a57ba09a6997b738ca76561df8490b54d43d263fd9eded8",
           "value": "1100000",
           "boxBytes": 146
         }
       ],
       "pieceValue": "5743440",
-      "fee": "1100000"
+      "fee": "1100000",
+      "submission": {
+        "accepted": true,
+        "submittedAt": "2026-09-22T18:45:30.702Z",
+        "tipAtSubmit": 558327,
+        "tipIdAtSubmit": "ee6dafc376b7aaafd88cfa07891e8f8fb09485567f84f4ea91eab9bf2c506298"
+      },
+      "inclusion": {
+        "inclusionHeight": 558329,
+        "blockId": "4283ebbea41cfba4f1859121e6197b3c7a5d7cc641f2a53e4487fdd41a7c27c2",
+        "blockTimestamp": 1790102746018,
+        "index": 2,
+        "numConfirmations": 0
+      }
     },
     "reordered": {
       "name": "reordered",
-      "id": "ed0ca199cbc067e129d4376356aa619f995f1a49f5dc3a18a6279f288d277b7d",
-      "bytes": 16075,
-      "jsonBytes": 34468,
-      "signMs": 118,
+      "id": "2f16e451ca7ecfe41d62c4ffa3218292726f36ad07fdb73ddf03b7f8da76a209",
+      "bytes": 16077,
+      "jsonBytes": 34473,
+      "signMs": 103,
       "inputs": [
-        "5122d5e9f30faf033315edf4264a46117aeed6dfaabe44b29f08a42175a79208"
+        "9262b027c874ab4cec5601b7468ebdfe65c65fa4baf5301c3f1ce1bb16d08f90"
       ],
       "outputs": [
         {
           "index": 0,
           "role": "piece",
-          "boxId": "961c9eb1c4a7ad9df1fb83980c8756c73b15055ff5d922a8947e8e405cc3aea1",
+          "boxId": "b17254fd42551d2f97bbbcf55bb3375b0e29c471af32098ad34a0cbdb1bd72b0",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -244,7 +271,7 @@
         {
           "index": 1,
           "role": "piece",
-          "boxId": "449763ec76055dd3ad0dbdbd114ba96fe862948971abaa1491b1ac24aac48bfd",
+          "boxId": "7725a5d6378420ca973ee8be990dcb1c9e6a42f422bcfa1c005663354a8e2ecd",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -254,7 +281,7 @@
         {
           "index": 2,
           "role": "piece",
-          "boxId": "f28ac8e618394ef62b0a0112d32920082d51dd48583bab0a14ab07e383fdf0f1",
+          "boxId": "65e35d8756cdd096a89cb4eb5a0a486ee9641c94c68606d31551c0939d59604d",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -264,7 +291,7 @@
         {
           "index": 3,
           "role": "piece",
-          "boxId": "372eb72554a666bab11724ab4be079862ee4e0220480942279ca96ba40866c8f",
+          "boxId": "532fb018cca2e6a002d4bf8425d0c7b27aecdaba08b79bab6d6f34d83e92fcd1",
           "value": "1320840",
           "boxBytes": 3669,
           "pieceBytes": 3555,
@@ -274,35 +301,48 @@
         {
           "index": 4,
           "role": "change",
-          "boxId": "faf69f26095ed2e74c420ec7d134aaa91642b5449f7a07f46133976c36b83a90",
-          "value": "979469680",
-          "boxBytes": 79
+          "boxId": "c1e30e2f4cc28b79bf16dc979bf741ba31c7fc33e995e6492eab7c1428522919",
+          "value": "19999979469680",
+          "boxBytes": 81
         },
         {
           "index": 5,
           "role": "fee",
-          "boxId": "971b1ccc64221452a5d32c52f1add1fe39a7660dce447bb1b230e684ffcb4340",
+          "boxId": "bd5d9ced46a72bbdfb869babff5c476136146270e8159d03ed4c79ede76ee5cf",
           "value": "1100000",
           "boxBytes": 146
         }
       ],
       "pieceValue": "5743440",
-      "fee": "1100000"
+      "fee": "1100000",
+      "submission": {
+        "accepted": true,
+        "submittedAt": "2026-09-22T18:45:31.696Z",
+        "tipAtSubmit": 558327,
+        "tipIdAtSubmit": "ee6dafc376b7aaafd88cfa07891e8f8fb09485567f84f4ea91eab9bf2c506298"
+      },
+      "inclusion": {
+        "inclusionHeight": 558329,
+        "blockId": "4283ebbea41cfba4f1859121e6197b3c7a5d7cc641f2a53e4487fdd41a7c27c2",
+        "blockTimestamp": 1790102746018,
+        "index": 3,
+        "numConfirmations": 0
+      }
     },
     "partial": {
       "name": "partial",
-      "id": "7666198a3994012e093c500ba8f5f215c6d92ddb4aeaf3a789f98b718bbd0bbc",
-      "bytes": 12439,
-      "jsonBytes": 26835,
-      "signMs": 86,
+      "id": "d6a770fb646bba251c76747233332a3b6774fae6521bb3bfac5617aa8f343786",
+      "bytes": 12441,
+      "jsonBytes": 26840,
+      "signMs": 131,
       "inputs": [
-        "faf69f26095ed2e74c420ec7d134aaa91642b5449f7a07f46133976c36b83a90"
+        "c1e30e2f4cc28b79bf16dc979bf741ba31c7fc33e995e6492eab7c1428522919"
       ],
       "outputs": [
         {
           "index": 0,
           "role": "piece",
-          "boxId": "05415cb065ab064b2405acb701462685a775c166fdc8dd9ce22948e6b010856a",
+          "boxId": "de938949bebcf97f39080481f19da84df1c9b73685385ecd539600cc303e19f6",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -312,7 +352,7 @@
         {
           "index": 1,
           "role": "piece",
-          "boxId": "8895774405769529177d0075036e7882256f2baa1e154ef35b3c662b13593ca0",
+          "boxId": "dd2a0ffd04c66c05113d73d6e7205b10e3c5b82f6278335e7921b2ad20a88a43",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -322,7 +362,7 @@
         {
           "index": 2,
           "role": "piece",
-          "boxId": "4fdcf4a89c7830ea4d363aa4c1f0612631c8627d0271574d338d3b56fd897989",
+          "boxId": "981ea0cd27d89c46f2238e40d272c05012c8f8a4654151a92d58ed9b3ff4d90a",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -332,35 +372,48 @@
         {
           "index": 3,
           "role": "change",
-          "boxId": "2bbe22fd18abdecde7a5e23a1f47e9971d6bebc65d8c64e637bbb9ba75da95eb",
-          "value": "973947080",
-          "boxBytes": 79
+          "boxId": "f30b023e913f2c5db90b9736de34aa892aa964e410f6bafe97b7a3fc76d71337",
+          "value": "19999973947080",
+          "boxBytes": 81
         },
         {
           "index": 4,
           "role": "fee",
-          "boxId": "c397984c302c2b0848b87656121bb8971887e026618c0be899f53374f8f61604",
+          "boxId": "8179f1e23acdafe16424d677bbd815d0f9daf295f4ce93ba125e8f67e87b3fae",
           "value": "1100000",
           "boxBytes": 146
         }
       ],
       "pieceValue": "4422600",
-      "fee": "1100000"
+      "fee": "1100000",
+      "submission": {
+        "accepted": true,
+        "submittedAt": "2026-09-22T18:45:32.673Z",
+        "tipAtSubmit": 558327,
+        "tipIdAtSubmit": "ee6dafc376b7aaafd88cfa07891e8f8fb09485567f84f4ea91eab9bf2c506298"
+      },
+      "inclusion": {
+        "inclusionHeight": 558329,
+        "blockId": "4283ebbea41cfba4f1859121e6197b3c7a5d7cc641f2a53e4487fdd41a7c27c2",
+        "blockTimestamp": 1790102746018,
+        "index": 4,
+        "numConfirmations": 0
+      }
     },
     "merged": {
       "name": "merged",
-      "id": "6d68c300abac8e6cbe64eed5f5e6681666267a4fe41a29ac58b0809a3616fda5",
-      "bytes": 16606,
-      "jsonBytes": 35890,
-      "signMs": 76,
+      "id": "c2239ef7928629ac82013b391701ab575f57b7ee59867a8bf54c6f20c0521c9c",
+      "bytes": 16608,
+      "jsonBytes": 35895,
+      "signMs": 112,
       "inputs": [
-        "2bbe22fd18abdecde7a5e23a1f47e9971d6bebc65d8c64e637bbb9ba75da95eb"
+        "f30b023e913f2c5db90b9736de34aa892aa964e410f6bafe97b7a3fc76d71337"
       ],
       "outputs": [
         {
           "index": 0,
           "role": "piece",
-          "boxId": "5d526af50f00855e1951715a2db120e55d51ab1cb234ebde3e6d6a0666c40090",
+          "boxId": "98736f32c7e69ef5e4c1ddf620735171cddfb14cf2b4c860fbcf73db30fb4be1",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -370,7 +423,7 @@
         {
           "index": 1,
           "role": "piece",
-          "boxId": "efebe64caddfd5a9df8204385419d546b0df4a8649124035061437b2ba937b6f",
+          "boxId": "790bbed40e801fe790d54a443fd4564ef95a1977adfebc9444ea1e69eab0cc95",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -380,7 +433,7 @@
         {
           "index": 2,
           "role": "piece",
-          "boxId": "d28009c7fa751e561b04634bf993a8abe7916f90f365528ee59ca3fde9159c01",
+          "boxId": "293fc5ef898186fc9571ae8bf552f92445f2e856dd87f42a8e300418a811dc72",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -390,7 +443,7 @@
         {
           "index": 3,
           "role": "piece",
-          "boxId": "dd5d42f2e53e489d3454b22ef5f25ca38f32f04b4a4e6b47a8e983138e66e69f",
+          "boxId": "4496e5f21a82e99bfaad1737681c5474c35a2de1c617d8f563fb6b66cf53de7e",
           "value": "1320840",
           "boxBytes": 3669,
           "pieceBytes": 3555,
@@ -400,7 +453,7 @@
         {
           "index": 4,
           "role": "piece",
-          "boxId": "b9200fea51dce1c1a13ae82e27f8013ddeb7a2887810eea445e86acf336acac1",
+          "boxId": "843dabf31214003190248edcbede07049e347c1ee73dd65ad0f16c38b4b6c653",
           "value": "203040",
           "boxBytes": 564,
           "pieceBytes": 450,
@@ -410,35 +463,48 @@
         {
           "index": 5,
           "role": "change",
-          "boxId": "85a490b53223883c8cb04704a93835db1e4977c8c01bbe28886384f8442422e0",
-          "value": "966900600",
-          "boxBytes": 79
+          "boxId": "7b7e8e308ddaf1b1593a39be18aec6bfbe8f4e83b24b89ff49cd1edcd77f2361",
+          "value": "19999966900600",
+          "boxBytes": 81
         },
         {
           "index": 6,
           "role": "fee",
-          "boxId": "62ddfaf1cb16448fbadda71d08603d0b9f005ce0ce542a6d16ae05e5f3b052d2",
+          "boxId": "3bcdb4dd51f9c812e801ed36b181ff467929a00b8c7e9f41ca00964b6f0df9e4",
           "value": "1100000",
           "boxBytes": 146
         }
       ],
       "pieceValue": "5946480",
-      "fee": "1100000"
+      "fee": "1100000",
+      "submission": {
+        "accepted": true,
+        "submittedAt": "2026-09-22T18:45:33.820Z",
+        "tipAtSubmit": 558327,
+        "tipIdAtSubmit": "ee6dafc376b7aaafd88cfa07891e8f8fb09485567f84f4ea91eab9bf2c506298"
+      },
+      "inclusion": {
+        "inclusionHeight": 558329,
+        "blockId": "4283ebbea41cfba4f1859121e6197b3c7a5d7cc641f2a53e4487fdd41a7c27c2",
+        "blockTimestamp": 1790102746018,
+        "index": 5,
+        "numConfirmations": 0
+      }
     },
     "separated": {
       "name": "separated",
-      "id": "f5ac5f16657215d6cae8114a65e4c9b3475e6b858827fed1d1bc43464a96ebd4",
-      "bytes": 16650,
-      "jsonBytes": 36297,
-      "signMs": 96,
+      "id": "0eae17bc3ceccf716f3ffcb89cb91d78b8a09ddf079a9dc713a5ecf38996294b",
+      "bytes": 16652,
+      "jsonBytes": 36302,
+      "signMs": 98,
       "inputs": [
-        "85a490b53223883c8cb04704a93835db1e4977c8c01bbe28886384f8442422e0"
+        "7b7e8e308ddaf1b1593a39be18aec6bfbe8f4e83b24b89ff49cd1edcd77f2361"
       ],
       "outputs": [
         {
           "index": 0,
           "role": "piece",
-          "boxId": "68bc67159221bb33edcddb2fcc9547d0ef29ba4c54c2b4099a7b29694ccffc40",
+          "boxId": "a4a56c848db872e5cd4fb294240cee207881022fecd7ae770c5e29b953adc3d0",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -448,7 +514,7 @@
         {
           "index": 1,
           "role": "piece",
-          "boxId": "1385a3e3adedf1ab3fd35c12c7835eb2346cef1d298df8b7ed8a5e4a6042cd66",
+          "boxId": "0f72bdc4e4e628e3041b2396ff70e0cab88de1531d89186c35041b78611f81cc",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -458,7 +524,7 @@
         {
           "index": 2,
           "role": "piece",
-          "boxId": "79f9cbd57e6841b4596f120cb3852934b21cf086a216149bdd2841d6dfdcc6e4",
+          "boxId": "9b9b107193465872a999ce7912bbb1c296ac0325ebbab9ec7b174d1c4e0ae6d9",
           "value": "1474200",
           "boxBytes": 4095,
           "pieceBytes": 3981,
@@ -468,7 +534,7 @@
         {
           "index": 3,
           "role": "piece",
-          "boxId": "a82cbaafc551e1c36b5409aaba4e47c163dffc53973fd0f09d08e42128d88972",
+          "boxId": "b8c698244678a4801d0acdc56f8b196f01c1f7ac85fa0b1514618f3f7b08ac4f",
           "value": "1320840",
           "boxBytes": 3669,
           "pieceBytes": 3555,
@@ -478,14 +544,14 @@
         {
           "index": 4,
           "role": "separator",
-          "boxId": "b775b34847ea34a1b608b8c42f0712c792a45fc361c73e4b73756c585a550ffd",
+          "boxId": "507380c1ff3bb3cab02f45bdbd2a9aab2ecc7775e407c7b01a4dc0135dd18085",
           "value": "1000000",
           "boxBytes": 77
         },
         {
           "index": 5,
           "role": "piece",
-          "boxId": "607117f1c4e728654ca2047ba851b79783e3b99f1963f47da72ba9ca3eca22d6",
+          "boxId": "6d36840719df4065de50efffc5357b880fb1ae92f185d895119ad585f914e611",
           "value": "203040",
           "boxBytes": 564,
           "pieceBytes": 450,
@@ -495,102 +561,274 @@
         {
           "index": 6,
           "role": "change",
-          "boxId": "9551334b53d7d6afef3c581618f5474399ee980a6e5c9dec1d95205727cdea96",
-          "value": "958854120",
-          "boxBytes": 79
+          "boxId": "6ea7848e92b13a561e85a4f74a519edceb426ce5b492500cbbf52fd9735d26c7",
+          "value": "19999958854120",
+          "boxBytes": 81
         },
         {
           "index": 7,
           "role": "fee",
-          "boxId": "666ce4cf1edbc4976c1327344a3039c1e0414a0586cb77534285eebee3941743",
+          "boxId": "476c712a51b128c9a397c3c01e5fa09e2257658f1104870a9e223c622e09452c",
           "value": "1100000",
           "boxBytes": 146
         }
       ],
       "pieceValue": "5946480",
-      "fee": "1100000"
+      "fee": "1100000",
+      "submission": {
+        "accepted": true,
+        "submittedAt": "2026-09-22T18:45:34.822Z",
+        "tipAtSubmit": 558327,
+        "tipIdAtSubmit": "ee6dafc376b7aaafd88cfa07891e8f8fb09485567f84f4ea91eab9bf2c506298"
+      },
+      "inclusion": {
+        "inclusionHeight": 558329,
+        "blockId": "4283ebbea41cfba4f1859121e6197b3c7a5d7cc641f2a53e4487fdd41a7c27c2",
+        "blockTimestamp": 1790102746018,
+        "index": 7,
+        "numConfirmations": 0
+      }
     },
     "spend": {
       "name": "spend",
-      "id": "988ceb8d7dc3187afa80dc815e4ef4b399c74e7d1f3e4150fdb3cfdeb0123717",
+      "id": "9a4b0d7a423ebcfeeb3478bc9efda297bd169abcd2323e47dc8766ae176ec433",
       "bytes": 2412,
       "jsonBytes": 8363,
-      "signMs": 1509,
+      "signMs": 867,
       "inputs": [
-        "607117f1c4e728654ca2047ba851b79783e3b99f1963f47da72ba9ca3eca22d6",
-        "a82cbaafc551e1c36b5409aaba4e47c163dffc53973fd0f09d08e42128d88972",
-        "79f9cbd57e6841b4596f120cb3852934b21cf086a216149bdd2841d6dfdcc6e4",
-        "1385a3e3adedf1ab3fd35c12c7835eb2346cef1d298df8b7ed8a5e4a6042cd66",
-        "68bc67159221bb33edcddb2fcc9547d0ef29ba4c54c2b4099a7b29694ccffc40",
-        "b9200fea51dce1c1a13ae82e27f8013ddeb7a2887810eea445e86acf336acac1",
-        "dd5d42f2e53e489d3454b22ef5f25ca38f32f04b4a4e6b47a8e983138e66e69f",
-        "d28009c7fa751e561b04634bf993a8abe7916f90f365528ee59ca3fde9159c01",
-        "efebe64caddfd5a9df8204385419d546b0df4a8649124035061437b2ba937b6f",
-        "5d526af50f00855e1951715a2db120e55d51ab1cb234ebde3e6d6a0666c40090",
-        "4fdcf4a89c7830ea4d363aa4c1f0612631c8627d0271574d338d3b56fd897989",
-        "8895774405769529177d0075036e7882256f2baa1e154ef35b3c662b13593ca0",
-        "05415cb065ab064b2405acb701462685a775c166fdc8dd9ce22948e6b010856a",
-        "372eb72554a666bab11724ab4be079862ee4e0220480942279ca96ba40866c8f",
-        "f28ac8e618394ef62b0a0112d32920082d51dd48583bab0a14ab07e383fdf0f1",
-        "449763ec76055dd3ad0dbdbd114ba96fe862948971abaa1491b1ac24aac48bfd",
-        "961c9eb1c4a7ad9df1fb83980c8756c73b15055ff5d922a8947e8e405cc3aea1",
-        "7acf6cad55b2b0fc026b24bf0d0999f946f6244e08fe5d1803330412b9381201",
-        "ed3e89bd1f7341408cc945fadf38536d1c206a3dfd01065bb47ab733a6e3e4a6",
-        "9821ed9cc60314fd153b1522b2e1ad5b76c30d0f4e9e78df037f24343e806b24",
-        "3b7e6e4d7f8ee7a340ff5bfc52ffd975231324c992109321cb30c820811dc793",
-        "dc6bd281d218e40c90a777268f8604f23a82fb118570e9ec4544dc1fdf0658c2",
-        "82cd82d6e03e3f55bae782fa4419f515600ae6f5ad968b981be1896aaf42af94",
-        "17eece1f9c6a5b06456a7104e7fa647cc6e1dc1437372416e6b8b034b3ec37e4",
-        "31cf5d0eb25d677ca9a6b6c3d0d6e39d1dd82ad66e4666e6f22991a2004fd5d7"
+        "6d36840719df4065de50efffc5357b880fb1ae92f185d895119ad585f914e611",
+        "b8c698244678a4801d0acdc56f8b196f01c1f7ac85fa0b1514618f3f7b08ac4f",
+        "9b9b107193465872a999ce7912bbb1c296ac0325ebbab9ec7b174d1c4e0ae6d9",
+        "0f72bdc4e4e628e3041b2396ff70e0cab88de1531d89186c35041b78611f81cc",
+        "a4a56c848db872e5cd4fb294240cee207881022fecd7ae770c5e29b953adc3d0",
+        "843dabf31214003190248edcbede07049e347c1ee73dd65ad0f16c38b4b6c653",
+        "4496e5f21a82e99bfaad1737681c5474c35a2de1c617d8f563fb6b66cf53de7e",
+        "293fc5ef898186fc9571ae8bf552f92445f2e856dd87f42a8e300418a811dc72",
+        "790bbed40e801fe790d54a443fd4564ef95a1977adfebc9444ea1e69eab0cc95",
+        "98736f32c7e69ef5e4c1ddf620735171cddfb14cf2b4c860fbcf73db30fb4be1",
+        "981ea0cd27d89c46f2238e40d272c05012c8f8a4654151a92d58ed9b3ff4d90a",
+        "dd2a0ffd04c66c05113d73d6e7205b10e3c5b82f6278335e7921b2ad20a88a43",
+        "de938949bebcf97f39080481f19da84df1c9b73685385ecd539600cc303e19f6",
+        "532fb018cca2e6a002d4bf8425d0c7b27aecdaba08b79bab6d6f34d83e92fcd1",
+        "65e35d8756cdd096a89cb4eb5a0a486ee9641c94c68606d31551c0939d59604d",
+        "7725a5d6378420ca973ee8be990dcb1c9e6a42f422bcfa1c005663354a8e2ecd",
+        "b17254fd42551d2f97bbbcf55bb3375b0e29c471af32098ad34a0cbdb1bd72b0",
+        "78c25f33b3b0de48ec76c811d40c1b451ebd9eefda6e9c561fe25264974257c8",
+        "d1ea06c4d85b4a741519aabc33bd36ccaedec8623d8164c738b42489e9134f07",
+        "30c14d0ba8dedd0297b381d499c3c94b5bb2ce0fae04d18201a26656750a59e3",
+        "7e5e12d2fe47ab458162682d3d3eb5af0aede61e968bc15e2ef206352a70bf61",
+        "3bde8ff68d6b6c3615c18a1073e2352cb1f25f113636951891cdea981722e3e1",
+        "750221f6343ef28f700cab5521c15a3da917dd76576d24336c2c0293a3eb4af9",
+        "ccadb450eb0fb178a1100a9c2170d7d4699e8d67809483f164d3aa6ba8f2f5cd",
+        "c7642356f832f197b94d4bff8c5adeffb888bfd4de3ef785c0947964a1c4bbf0"
       ],
       "outputs": [
         {
           "index": 0,
           "role": "return",
-          "boxId": "15dd7e1a4c4c4089648af6b0d066ce6582c8baaaa3b2196ba9d98efee363bb74",
+          "boxId": "66c23f82de69d215f979d1acc00f2e22277b2939b028f52332e65c5dd9d700be",
           "value": "32445880",
           "boxBytes": 78
         },
         {
           "index": 1,
           "role": "fee",
-          "boxId": "2178ce1153d04b66a8da210505734b3b8215a2021c4cf6c8639e7110b535e4b2",
+          "boxId": "80d77d4a098726a410c2db7cc68ca609dec4b900088d7801d7c6cbfd7fa73813",
           "value": "1100000",
           "boxBytes": 146
         }
       ],
       "pieceValue": "0",
-      "fee": "1100000"
+      "fee": "1100000",
+      "submission": {
+        "accepted": true,
+        "submittedAt": "2026-09-22T18:47:20.776Z",
+        "tipAtSubmit": 558331,
+        "tipIdAtSubmit": "60d64a8f271e31c9fd1924f15a89ce577f956322f828dcfa0afd12d03de43ccf"
+      },
+      "inclusion": {
+        "inclusionHeight": 558333,
+        "blockId": "fe88f9dc7628d4e8ac9f35632e0152250c911d6cd8413887d9fb24c2e2e3cb34",
+        "blockTimestamp": 1790102850375,
+        "index": 4,
+        "numConfirmations": 0
+      }
     }
   },
-  "syntheticBlock": {
-    "anchor": {
-      "height": 558222,
-      "id": "b7dcb8a2cfcb6cbe7edf91db765e05cb02a462ba2a2caa8b25b38d08ce504a1d",
-      "real": true
+  "latency": {
+    "perTransaction": [
+      {
+        "name": "release",
+        "id": "649c9af52315b6c292069a4f977cca2c262d872c21603dbfb09ba9dd7f92d9a2",
+        "bytes": 16077,
+        "submittedAt": "2026-09-22T18:45:28.873Z",
+        "tipAtSubmit": 558327,
+        "inclusionHeight": 558329,
+        "blockTimestamp": 1790102746018,
+        "blocksToInclusion": 2,
+        "secondsToInclusion": 17,
+        "positionInBlock": 1,
+        "alreadyHeld": false,
+        "firstAttemptRejected": null
+      },
+      {
+        "name": "duplicate",
+        "id": "96c9be77f5aeca633501b7483e903f725286b776d018d6ab08b7f5273c8ef7ac",
+        "bytes": 16077,
+        "submittedAt": "2026-09-22T18:45:30.702Z",
+        "tipAtSubmit": 558327,
+        "inclusionHeight": 558329,
+        "blockTimestamp": 1790102746018,
+        "blocksToInclusion": 2,
+        "secondsToInclusion": 15,
+        "positionInBlock": 2,
+        "alreadyHeld": false,
+        "firstAttemptRejected": null
+      },
+      {
+        "name": "reordered",
+        "id": "2f16e451ca7ecfe41d62c4ffa3218292726f36ad07fdb73ddf03b7f8da76a209",
+        "bytes": 16077,
+        "submittedAt": "2026-09-22T18:45:31.696Z",
+        "tipAtSubmit": 558327,
+        "inclusionHeight": 558329,
+        "blockTimestamp": 1790102746018,
+        "blocksToInclusion": 2,
+        "secondsToInclusion": 14,
+        "positionInBlock": 3,
+        "alreadyHeld": false,
+        "firstAttemptRejected": null
+      },
+      {
+        "name": "partial",
+        "id": "d6a770fb646bba251c76747233332a3b6774fae6521bb3bfac5617aa8f343786",
+        "bytes": 12441,
+        "submittedAt": "2026-09-22T18:45:32.673Z",
+        "tipAtSubmit": 558327,
+        "inclusionHeight": 558329,
+        "blockTimestamp": 1790102746018,
+        "blocksToInclusion": 2,
+        "secondsToInclusion": 13,
+        "positionInBlock": 4,
+        "alreadyHeld": false,
+        "firstAttemptRejected": null
+      },
+      {
+        "name": "merged",
+        "id": "c2239ef7928629ac82013b391701ab575f57b7ee59867a8bf54c6f20c0521c9c",
+        "bytes": 16608,
+        "submittedAt": "2026-09-22T18:45:33.820Z",
+        "tipAtSubmit": 558327,
+        "inclusionHeight": 558329,
+        "blockTimestamp": 1790102746018,
+        "blocksToInclusion": 2,
+        "secondsToInclusion": 12,
+        "positionInBlock": 5,
+        "alreadyHeld": false,
+        "firstAttemptRejected": null
+      },
+      {
+        "name": "separated",
+        "id": "0eae17bc3ceccf716f3ffcb89cb91d78b8a09ddf079a9dc713a5ecf38996294b",
+        "bytes": 16652,
+        "submittedAt": "2026-09-22T18:45:34.822Z",
+        "tipAtSubmit": 558327,
+        "inclusionHeight": 558329,
+        "blockTimestamp": 1790102746018,
+        "blocksToInclusion": 2,
+        "secondsToInclusion": 11,
+        "positionInBlock": 7,
+        "alreadyHeld": false,
+        "firstAttemptRejected": null
+      },
+      {
+        "name": "spend",
+        "id": "9a4b0d7a423ebcfeeb3478bc9efda297bd169abcd2323e47dc8766ae176ec433",
+        "bytes": 2412,
+        "submittedAt": "2026-09-22T18:47:20.776Z",
+        "tipAtSubmit": 558331,
+        "inclusionHeight": 558333,
+        "blockTimestamp": 1790102850375,
+        "blocksToInclusion": 2,
+        "secondsToInclusion": 10,
+        "positionInBlock": 4,
+        "alreadyHeld": false,
+        "firstAttemptRejected": null
+      }
+    ],
+    "blocksToInclusion": {
+      "min": 2,
+      "median": 2,
+      "max": 2,
+      "samples": 7
     },
-    "height": "558223",
-    "transactions": 6,
-    "root": "b3b6501b2bf294854498588e3596f494735ea7a374a4c46d998bd2f92603de93",
+    "independentSubmissionTimes": 2,
+    "lag": 3,
+    "note": "blocksToInclusion is the inclusion height less the node's full height at submission; the cases are chained and submitted together, so their latencies are one correlated observation, and the sweep another; the profile's lag is depth + 1 and a publication submitted at clock c must land in (c, c + lag] to have force at c + lag"
+  },
+  "window": {
+    "anchorHeight": 558328,
+    "anchorId": "2fdd50bb3df7aa868a20a62a5c550687c74a6818e5fad203103333f4bdd40aa7",
+    "firstHeight": 558329,
+    "lastHeight": 558333,
+    "tipHeight": 558335,
     "depth": 2,
-    "note": "the root varies between runs with the randomized proofs; the transaction ids do not"
+    "headers": 7,
+    "blocks": [
+      {
+        "height": "558329",
+        "transactions": 10,
+        "sectionBytes": 143865,
+        "refused": []
+      },
+      {
+        "height": "558330",
+        "transactions": 7,
+        "sectionBytes": 64869,
+        "refused": []
+      },
+      {
+        "height": "558331",
+        "transactions": 2,
+        "sectionBytes": 1074,
+        "refused": []
+      },
+      {
+        "height": "558332",
+        "transactions": 4,
+        "sectionBytes": 12822,
+        "refused": []
+      },
+      {
+        "height": "558333",
+        "transactions": 7,
+        "sectionBytes": 41967,
+        "refused": []
+      }
+    ]
+  },
+  "utxoAfterSpend": {
+    "checked": 25,
+    "absent": 25,
+    "spentBy": 25,
+    "unspentAtPublicationLocation": 0
   },
   "readBack": {
-    "identity": "2ecb387f491eba39413f03264bf061a0711cf427b4b2eb8caa887a4525520adc",
-    "origin": "558223",
-    "witnessedIndex": "0",
-    "toIndex": "0",
-    "constructMs": 4,
-    "answerMs": 2.07,
+    "identity": "a600fc852494cfbbb3c872219198429b9eedd2af0b11e9b78545f6c433b10ba1",
+    "origin": "558329",
+    "witnessedIndex": "4",
+    "toIndex": "4",
+    "constructMs": 11,
+    "answerMs": 1.78,
     "answerBytes": 90575,
     "entries": [
       {
         "index": "0",
-        "height": "558223",
-        "ordinal": "0",
-        "transactionPosition": 0,
+        "height": "558329",
+        "ordinal": "4294967296",
+        "transactionPosition": 1,
         "firstOutput": 0,
-        "transactionId": "5fde6cc1d8946d2c441f58ec52ada1d860bbb3697dc94944f524f220d31d04ca",
+        "transactionId": "649c9af52315b6c292069a4f977cca2c262d872c21603dbfb09ba9dd7f92d9a2",
         "case": "release",
         "recordBytes": 15498,
         "record": "release",
@@ -598,11 +836,11 @@
       },
       {
         "index": "0",
-        "height": "558223",
-        "ordinal": "4294967296",
-        "transactionPosition": 1,
+        "height": "558329",
+        "ordinal": "8589934592",
+        "transactionPosition": 2,
         "firstOutput": 0,
-        "transactionId": "764ef9a9b61e6bcad97e0f65272f45fa318e8d0b52286ff3b16d9c2a18a754f0",
+        "transactionId": "96c9be77f5aeca633501b7483e903f725286b776d018d6ab08b7f5273c8ef7ac",
         "case": "duplicate",
         "recordBytes": 15498,
         "record": "release",
@@ -610,11 +848,11 @@
       },
       {
         "index": "0",
-        "height": "558223",
-        "ordinal": "8589934592",
-        "transactionPosition": 2,
+        "height": "558329",
+        "ordinal": "12884901888",
+        "transactionPosition": 3,
         "firstOutput": 0,
-        "transactionId": "ed0ca199cbc067e129d4376356aa619f995f1a49f5dc3a18a6279f288d277b7d",
+        "transactionId": "2f16e451ca7ecfe41d62c4ffa3218292726f36ad07fdb73ddf03b7f8da76a209",
         "case": "reordered",
         "recordBytes": 15498,
         "record": "reordered",
@@ -622,11 +860,11 @@
       },
       {
         "index": "0",
-        "height": "558223",
-        "ordinal": "12884901888",
-        "transactionPosition": 3,
+        "height": "558329",
+        "ordinal": "17179869184",
+        "transactionPosition": 4,
         "firstOutput": 0,
-        "transactionId": "7666198a3994012e093c500ba8f5f215c6d92ddb4aeaf3a789f98b718bbd0bbc",
+        "transactionId": "d6a770fb646bba251c76747233332a3b6774fae6521bb3bfac5617aa8f343786",
         "case": "partial",
         "recordBytes": 11943,
         "record": "partial",
@@ -634,11 +872,11 @@
       },
       {
         "index": "0",
-        "height": "558223",
-        "ordinal": "17179869184",
-        "transactionPosition": 4,
+        "height": "558329",
+        "ordinal": "21474836480",
+        "transactionPosition": 5,
         "firstOutput": 0,
-        "transactionId": "6d68c300abac8e6cbe64eed5f5e6681666267a4fe41a29ac58b0809a3616fda5",
+        "transactionId": "c2239ef7928629ac82013b391701ab575f57b7ee59867a8bf54c6f20c0521c9c",
         "case": "merged",
         "recordBytes": 15948,
         "record": "merged",
@@ -646,11 +884,11 @@
       },
       {
         "index": "0",
-        "height": "558223",
-        "ordinal": "21474836480",
-        "transactionPosition": 5,
+        "height": "558329",
+        "ordinal": "30064771072",
+        "transactionPosition": 7,
         "firstOutput": 0,
-        "transactionId": "f5ac5f16657215d6cae8114a65e4c9b3475e6b858827fed1d1bc43464a96ebd4",
+        "transactionId": "0eae17bc3ceccf716f3ffcb89cb91d78b8a09ddf079a9dc713a5ecf38996294b",
         "case": "separated",
         "recordBytes": 15498,
         "record": "release",
@@ -658,11 +896,11 @@
       },
       {
         "index": "0",
-        "height": "558223",
-        "ordinal": "21474836485",
-        "transactionPosition": 5,
+        "height": "558329",
+        "ordinal": "30064771077",
+        "transactionPosition": 7,
         "firstOutput": 5,
-        "transactionId": "f5ac5f16657215d6cae8114a65e4c9b3475e6b858827fed1d1bc43464a96ebd4",
+        "transactionId": "0eae17bc3ceccf716f3ffcb89cb91d78b8a09ddf079a9dc713a5ecf38996294b",
         "case": "separated",
         "recordBytes": 450,
         "record": "withdrawal",
@@ -670,14 +908,14 @@
       }
     ],
     "sameIndexOrder": {
-      "558223": [
-        "release@0.0",
-        "duplicate@1.0",
-        "reordered@2.0",
-        "partial@3.0",
-        "merged@4.0",
-        "separated@5.0",
-        "separated@5.5"
+      "558329": [
+        "release@1.0",
+        "duplicate@2.0",
+        "reordered@3.0",
+        "partial@4.0",
+        "merged@5.0",
+        "separated@7.0",
+        "separated@7.5"
       ]
     },
     "kinds123Empty": [
@@ -699,7 +937,6 @@
     "src/pool/field.ts": "abd55bd8bd2a51fb954c9dc05fb3380bf4c2df6dd3c145c2eff0f29b1e36710a"
   },
   "limitations": [
-    "Dry run: nothing was submitted or accepted by a node; the input is synthetic, the block and its headers after the real anchor are synthetic, and node acceptance, fees, the dust rule's enforcement and inclusion latency are not measured.",
     "The venue is the public Ergo testnet through one public node; acceptance, fees, minimum values and inclusion latency are the testnet's under its reported parameters and current miners, not mainnet's.",
     "The publications' frames and lengths are exact under pool-v3 §6; the proof, authorization and signature bytes are synthetic, since the venue applies no content rule and no real settle proof is retained outside the proving harness. Nothing here is a valid statement, a demand or a settlement.",
     "Headers come from the one node the transactions were submitted to; linkage, contiguity and the anchor's child are checked by the model, proof of work and chain selection are not.",

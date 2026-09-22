@@ -4,71 +4,59 @@ Updated: 2026-09-22
 
 ## Goal
 
-Active slice: recovery-map P2, publication and reassembly on a node. Publish
-a complete release publication (15,498 bytes, four pieces) through the public
-Ergo **testnet** node under the candidate profile's layout, spend its boxes,
-and read it back as block-section evidence through the model verifier; record
-each submitted transaction's inclusion latency (A10; a distribution needs
-repeated independent submissions beyond this slice).
-Acceptance: an explicit network experiment (`experiments/ergo-range/publish.mjs`,
-never run by `check` or CI) that refuses any node not reporting `testnet`,
-builds and signs with the pinned sigma-rust from a throwaway key kept in
-ignored `scratch/ergo-testnet/`, and records in a retained report: node
-acceptance of a four-piece release and the measured box/transaction bytes,
-minimum values and fee (§7 sizes); the reassembled kind-4 answer equal to
-the publication bytes with its ordinal as transaction position then output
-index (a stated same-index order); an exact duplicate read as two
-witnessings; reordered, partial and merged-adjacent runs failing to decode
-under §6 while separated publications both decode (A11); retrieval from
-block sections after the boxes are spent while the UTXO view no longer
-serves them; per-transaction submission height, inclusion height and
-timestamps. An `--offline` dry run over a synthetic input proves the same
-cases without a node. Docs (probes, profile, recovery map P2/A10/A11/§7,
-implementation status, experiment guide) agree; one independent review of
-the patch and report; merged and pushed with CI green. Evidence limits:
-testnet acceptance and latency, not mainnet; the publication's proof bytes
-are synthetic where no real settle proof is retained; headers come from one
-public node. Stop boundary: no mainnet or real funds, no profile selection,
-no specification change unless node acceptance contradicts the profile, no
-runtime path, no dependency change.
+Last slice (delivered): recovery-map P2, publication and
+reassembly on a node. Publish a complete release (15,498 bytes, four pieces)
+through the public Ergo **testnet** node under the candidate profile layout,
+spend its boxes and read it back as block-section evidence through the model
+verifier. Acceptance: an explicit testnet-only experiment (never run by
+`check` or CI) whose retained report records node acceptance, measured
+box/transaction bytes, minimum values and fee (§7); the reassembled kind-4
+answer in a stated same-index order; a duplicate read as two witnessings;
+reordered, partial and merged runs not decoding while separated ones do
+(A11); retrieval after the boxes are spent; per-transaction submission and
+inclusion heights (A10). Docs agree; one independent review; merged and
+pushed with CI green. Stop boundary: no mainnet or real funds, no profile
+selection, no specification, runtime or dependency change.
 
 ## Status
 
-- Built and reviewed: `experiments/ergo-range/publish.mjs` (testnet-only;
-  dry-run and live modes; state file, pinned creation height and `--resume`).
-  The dry run passes and repeats offline from its cache; its report is
-  retained as `docs/ergo-publication-verification.json`; probes, profile,
-  recovery map (P2, A10, A11, §7), experiment guide and status updated. One
-  opus review lane: two live-path blockers (resume after a partial run;
-  funding selection for the chain) and six material findings, all applied;
-  its readback found two more (rebuild at a new creation height; a live
-  `/info` read making the dry run irreproducible), both applied.
-- Blocked: the live run needs about 0.05 testnet ERG at the throwaway address
-  `3WzLhpY2Dbd8WSbvZTbHS5cbCiJFsfbLFrfoWWEt3GkQJJr6oxi9` (key in ignored
-  `scratch/ergo-testnet/wallet.json`); every public faucet was down on
-  2026-09-22. Once funded, run
-  `node experiments/ergo-range/publish.mjs --out docs/ergo-publication-verification.json`
-  and refresh the numbers in probes, profile, recovery map and status.
+- Delivered: `experiments/ergo-range/publish.mjs` (testnet-only; dry-run
+  and live modes; state file, pinned creation height and `--resume`),
+  reviewed by one opus lane before the run (two blockers, eight material
+  findings, all applied). Live run 2026-09-22 on the public testnet node;
+  its report is retained as `docs/ergo-publication-verification.json`
+  (the dry-run report is in Git history). Probes, profile, recovery map
+  (§7, A10, A11, P2), status and experiment guide carry the live numbers.
+- Reviewed: one independent check of the live report against every changed
+  claim and the code paths behind them found no discrepancy.
+- Throwaway wallet: key in ignored `scratch/ergo-testnet/wallet.json`
+  (address `3WzLhpY2Dbd8WSbvZTbHS5cbCiJFsfbLFrfoWWEt3GkQJJr6oxi9`, about
+  19,999.99 tERG after the run); a byte-identical copy is kept outside the
+  repository. Faucets are unreliable, so sweep experiment boxes back and
+  spend only fees. Testnet transactions need no further approval.
 
 ## Evidence
 
-- Dry run (retained report): release transaction 16,075 bytes, piece boxes
-  4,095/4,095/4,095/3,669 bytes; under the node's dust rule (its reported
-  `minValuePerByte` 360 over full box bytes) 1,474,200 nanoERG a full piece
-  box, 5,743,440 a release, plus the 1,100,000 fee; sigma-rust's
-  candidate-only estimate understates by 33 bytes a box; seven objects read
-  back at one index in transaction-then-output order, decodable exactly where
-  the profile says. The report binds the node's `/info` (ergo-testnet-6.0.3),
-  parameters, library pin and model sources.
-- Node rules checked against upstream `v6.0.3` or the node: dust over full
-  box bytes, monotonic creation height, `chainSlice` is `(from, to]`, indexed
-  transactions are confirmed only, the mempool chains. Prior slice d913edd:
-  the alpha reads all 5,040 P4 sections; no containment evidence binds it.
+- Testnet run: all seven transactions accepted on first submission at
+  exactly the node dust minimum (`minValuePerByte` 360 over full box
+  bytes): full piece box 4,095 bytes at 1,474,200 nanoERG, release
+  transaction 16,077 bytes (dry run 16,075: the change value VLQ), fee
+  1,100,000. The six cases landed in block 558,329, the 25-input sweep in
+  558,333, each two blocks above the tip at submission (lag 3 at depth 2).
+  After the sweep no piece box was served unspent and the indexed view
+  named the sweep for each; the verifier over the window 558,328–558,333
+  answered seven objects at one index in transaction-then-output order,
+  decodable exactly where the profile says. The run cost 7,700,000 nanoERG.
+- Limits: testnet, one public node for submission and headers; latency is
+  two correlated observations, not a distribution; the refusal side of the
+  dust rule was not exercised; publication content is synthetic.
 
 ## Next
 
-1. This slice; then the wallet/custody boundaries below, or an
-   authenticated header source for the profile.
+1. Choose the next slice. Candidates: an A10 latency distribution from repeated independent
+   testnet submissions (cheap now that the wallet is funded); an
+   authenticated header source for the profile; decoder containment; the
+   wallet/custody boundaries below.
 
 ## Retained boundaries and local state
 
@@ -93,7 +81,7 @@ runtime path, no dependency change.
 ## Open questions
 
 Roughly **50% done / 50% remaining**, plausible range **40–60%**, reassessed
-2026-09-22: the venue cost is measured and small; selection still needs P2,
-an authenticated header source and decoder containment. Runtime integration,
-selected venue/decoder, qualified custody and continuous wallet operation
-dominate remaining effort.
+2026-09-22: the venue cost is measured and small and P2 is done on the
+testnet; selection still needs an authenticated header source and decoder
+containment. Runtime integration, selected venue/decoder, qualified custody
+and continuous wallet operation dominate remaining effort.

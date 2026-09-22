@@ -553,9 +553,9 @@ secrets; every reader keeps evidence rather than verdicts (C2.10.13).
 | Evidence chain | 32 bytes in the digest; 96 bytes of inputs per later event in a certificate | fixed by the form |
 | Non-membership proof, not published (A20) | median `32·(log₂N + 1)` bytes: 352, 480 and 576 bytes at 10³, 10⁴ and 10⁵ random nullifiers, at most three siblings more; the two the release no longer carries are 1,192 bytes at 10⁵ | measured (P3) |
 | Spent-set build, reference trie | about 1.4 ms per insert, from 2.1–2.7 ms, once each frame was built once rather than per hash call; a proof 3–5 ms | measured (P3, re-measured after the frame fix); what remains is the accumulator's price, not the code's — about 430 node hashes per insert, and a bare SHA-256 over the 86-byte node frame costs 2.85 µs on this machine against node:crypto's 2.42 µs, so the hash implementation is not the lever (A22) |
-| Release publication | 15,498 bytes in four pieces of 3,981/3,981/3,981/3,555; a signed four-piece transaction is 16,075 bytes, its piece boxes 4,095/4,095/4,095/3,669 bytes needing 5,743,440 nanoERG under the node's dust rule at the testnet's reported 360 nanoERG a full box byte, plus the 1,100,000 suggested fee, about 0.0068 ERG. Two non-membership proofs would have added ≈ 1.2 KB and a fifth piece (A20) | sizes measured by signing under the pinned build, values computed by the node's rule ([P2 dry run](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)); node acceptance owed |
+| Release publication | 15,498 bytes in four pieces of 3,981/3,981/3,981/3,555; a signed four-piece transaction is 16,075–16,077 bytes (the change value's VLQ), its piece boxes 4,095/4,095/4,095/3,669 bytes needing 5,743,440 nanoERG under the node's dust rule at the testnet's reported 360 nanoERG a full box byte, plus the 1,100,000 suggested fee, about 0.0068 ERG. Two non-membership proofs would have added ≈ 1.2 KB and a fifth piece (A20) | sizes measured by signing under the pinned build and accepted by the public testnet node at exactly the node's minimum values ([P2 testnet run](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)) |
 | Demand or request publication | 15,330 and 15,042 bytes under a 14,656-byte proof, four pieces each | exact framing; not signed |
-| Acceptance, withdrawal | one box each; a 450-byte withdrawal piece box is 564 bytes at 203,040 nanoERG | withdrawal signed, value computed (P2 dry run) |
+| Acceptance, withdrawal | one box each; a 450-byte withdrawal piece box is 564 bytes at 203,040 nanoERG | withdrawal accepted on the testnet at that value (P2) |
 | Replayed state per standing demand | about 184 bytes; 32 bytes per spent tag | fixed by the form |
 | Redemption reader | full replay of the snapshot's closure | fixed by C2b.3.3; cost unmeasured |
 | Range read | the node's word today | see §6 |
@@ -654,18 +654,21 @@ Each names the rule, the candidate, the alternative, and what closes it.
   2·lag]` or has no force. With Ergo's lag `d + 1` the holder's margin is
   `d + 1` blocks. Closed by an inclusion-latency measurement and the
   venue's declared depth; P4's 2026-09-22 run took no such distribution,
-  which needs submitted transactions and so belongs with P2. **P2
-  experiment 2026-09-22:** the publication experiment records the node's
-  height at submission and the inclusion height and block timestamp of
-  every transaction; its testnet run awaits funds, so no distribution yet.
+  which needs submitted transactions and so belongs with P2. **P2 testnet
+  run 2026-09-22:** all seven transactions landed two blocks above the
+  node's full height at submission (10–17 s), inside the holder's margin
+  of `d + 1` = 3 blocks at depth 2 with one block to spare; these are two correlated observations
+  on the testnet, not a distribution, so A10 stays open for repeated
+  independent submissions, ideally on mainnet.
 - **A11 Chunked publication identity.** One publication across several
   outputs of one transaction: canonical reassembly, duplicates, partial
   publication, retrieval after the boxes are spent. Closed by P2 on a node.
-  **Dry run 2026-09-22:** the experiment's cases (duplicate, reordered,
-  partial, merged-adjacent, separated, and the sweep of every piece box)
-  read back through the model verifier exactly as the profile states
-  ([probe](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node));
-  the node run is owed.
+  **Closed on the testnet 2026-09-22:** the node accepted the release and
+  its duplicate, reordered, partial, merged-adjacent and separated cases;
+  after the sweep of every piece box reached depth, the UTXO view served
+  none and the verifier, reading the window's block sections, answered
+  seven objects at one index in transaction-then-output order, decodable
+  exactly where the profile says ([probe](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)).
 - **A12 Freeze together.** v3 pins all six circuits in one configuration,
   so the fee-capable shape (design review F4) and note delivery and
   restoration (F3) must be decided before `pool-v3.md`; this map depends on
@@ -841,8 +844,10 @@ None changes `src/`, the pinned v2 identities or the specification.
   over full box bytes, which the library's estimate understates) and
   reproduces every case through the
   verifier ([probe](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)),
-  superseding the scratch chunking probe's estimates in §7. The node run
-  awaits testnet ERG; the public faucets were down on 2026-09-22.
+  superseding the scratch chunking probe's estimates in §7. **Run on the
+  public testnet 2026-09-22**: every transaction accepted at those values,
+  A11 closed, and A10 has two correlated observations (above). Mainnet
+  acceptance and a latency distribution are not established.
 - **P3 Replay and retention, offline.** Replay a synthetic closure at
   `10^3`, `10^4` and `10^5` statements with `src/pool` and measure time,
   memory, trail bytes and non-membership proof bytes. Acceptance: A13
