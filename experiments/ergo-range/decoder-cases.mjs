@@ -43,10 +43,20 @@ const fields = (o) => ({ boxId: o.boxId, value: BigInt(o.value), ergoTree: o.erg
   assets: o.assets.map((a) => ({ tokenId: a.tokenId, amount: BigInt(a.amount) })),
   additionalRegisters: o.additionalRegisters, creationHeight: BigInt(o.creationHeight),
   transactionId: o.transactionId, index: BigInt(o.index) });
+// The fields a tree rewrite leaves untouched: ids embed the transaction's bytes, so they move.
+const committed = (o) => { const { boxId: _b, transactionId: _t, ...rest } = fields(o); return rest; };
+const vlqLength = (bytes, at) => { let n = 1; while (bytes[at + n - 1] & 0x80) n++; return n; };
+const pinnedVersion = "0.29.0-alpha-2f840d3";
+const pinnedWasmSha256 = "65143062c54766fbc79b721ed77c43d199604c31bef535b99dca3b8842e1ea16";
+equal(JSON.parse(readFileSync(new URL("node_modules/ergo-lib-wasm-nodejs/package.json", base))).version,
+  pinnedVersion, "the corpus runs on the experiment's pinned build");
+const wasmSha256 = sha256(readFileSync(new URL("node_modules/ergo-lib-wasm-nodejs/ergo_lib_wasm_bg.wasm", base)));
+equal(wasmSha256, pinnedWasmSha256, "the installed WASM is the pinned artifact");
 
 const blocks = [];
 let prefixes = 0, aliases = 0, trailingAccepted = 0, overlongAccepted = 0;
-let largestTransactionBytes = 0;
+let largestTransactionBytes = 0, sizedTrees = 0, ambiguousTrees = 0, versionRewrites = 0, unparsedBodies = 0;
+const treeVersionsRead = {};
 rejects(() => decode(new Uint8Array()), "empty input");
 rejects(() => decode(new Uint8Array(maxTransactionBytes + 1)), "oversized input before WASM");
 // Finite malformed count headers; no unbounded fuzzing in this experiment.
@@ -115,26 +125,72 @@ for (const fixture of manifest.fixtures) {
     forged.id = "00".repeat(32);
     for (const o of forged.outputs) { o.boxId = "00".repeat(32); o.transactionId = forged.id; }
     equal(decode(signedBytes(forged)), decoded, "claimed IDs are ignored and recomputed from bytes");
+
+    // A sized tree is exact bytes whatever its header version or body: for every output whose
+    // tree carries the size flag, rewrite the version bits to each of 0..7, with the real body and
+    // with the body zeroed under the same size. The strict wrapper must read each as the exact
+    // slice, every other committed field unchanged, and never refuse. A tree of version 1 or above
+    // without the size flag is not node-valid (sigma's CheckHeaderSizeBit), so no case covers it.
+    for (let i = 0; i < tx.outputs.length; i++) {
+      const tree = Buffer.from(tx.outputs[i].ergoTree, "hex");
+      const version = tree[0] & 7;
+      treeVersionsRead[version] = (treeVersionsRead[version] ?? 0) + 1;
+      if (!(tree[0] & 8)) continue;
+      // Outputs to one address share a tree, so the slice is located as the n-th occurrence among
+      // the outputs carrying it; a tree whose bytes also occur elsewhere is left alone as ambiguous.
+      const sharing = tx.outputs.filter((o) => o.ergoTree === tx.outputs[i].ergoTree).length;
+      const signed = Buffer.from(bytes), positions = [];
+      for (let p = signed.indexOf(tree); p >= 0; p = signed.indexOf(tree, p + 1)) positions.push(p);
+      if (positions.length !== sharing) { ambiguousTrees++; continue; }
+      sizedTrees++;
+      const at = positions[tx.outputs.slice(0, i).filter((o) => o.ergoTree === tx.outputs[i].ergoTree).length];
+      const bodyAt = at + 1 + vlqLength(tree, 1), end = at + tree.length;
+      const expectSlice = (mutated, label) => {
+        const read = decode(mutated).outputs;
+        equal(read[i].ergoTree, hex(mutated.subarray(at, end)), `${label}: the tree is the exact slice`);
+        equal(read.map((o, j) => j === i ? { ...committed(o), ergoTree: null } : committed(o)),
+          decoded.outputs.map((o, j) => j === i ? { ...committed(o), ergoTree: null } : committed(o)),
+          `${label}: every other committed field is unchanged`);
+      };
+      for (let v = 0; v < 8; v++) {
+        const rewritten = Buffer.from(bytes);
+        rewritten[at] = (tree[0] & 0xf8) | v;
+        expectSlice(rewritten, `sized tree rewritten to header version ${v}`);
+        versionRewrites++;
+        const zeroed = Buffer.from(rewritten);
+        zeroed.fill(0, bodyAt, end);
+        expectSlice(zeroed, `sized tree of header version ${v} with an unparseable body`);
+        unparsedBodies++;
+      }
+    }
   }
-  blocks.push({ height: fixture.height, transactions: String(transactions.length), outputs: String(outputs) });
+  blocks.push({ height: fixture.height, version: fixture.version, transactions: String(transactions.length), outputs: String(outputs) });
 }
+// The corpus's sized-tree coverage is pinned, so a fixture or search regression cannot pass silently.
+equal({ treeVersionsRead, sizedTrees, ambiguousTrees, versionRewrites, unparsedBodies },
+  { treeVersionsRead: { 0: 72, 1: 3, 3: 2 }, sizedTrees: 5, ambiguousTrees: 0, versionRewrites: 40, unparsedBodies: 40 },
+  "the corpus reads real Ergo 6.0 trees (header version 3) and every sized tree is located");
 console.log(JSON.stringify({ status: "offline-decoder-feasibility-only", node: process.version, checks,
-  decoder: { package: "ergo-lib-wasm-nodejs", version: "0.28.0",
-    source: "https://github.com/ergoplatform/sigma-rust/tree/635bbaca55a27d6dd6b2c0ee2479b6ed60117780",
-    provenance: "npm gitHead metadata; package integrity pinned, build not independently reproduced",
-    wasmSha256: sha256(readFileSync(new URL("node_modules/ergo-lib-wasm-nodejs/ergo_lib_wasm_bg.wasm", base))) },
+  decoder: { package: "ergo-lib-wasm-nodejs", version: pinnedVersion,
+    source: "https://github.com/ergoplatform/sigma-rust/tree/2f840d3872367d6181d66d4a168194dbefad77f1",
+    provenance: "npm gitHead metadata of a pre-release; package integrity pinned, build not independently reproduced",
+    wasmSha256 },
   inputManifestSha256: sha256(manifestBytes),
   files: Object.fromEntries(["decoder-check.mjs", "decoder-cases.mjs", "package.json", "package-lock.json"]
     .map((file) => [file, sha256(readFileSync(new URL(file, base)))])),
   blocks, properPrefixesRejected: prefixes, fieldBoundaryAliasesRecovered: aliases,
   rawParserTrailingBytesAccepted: trailingAccepted, rawParserOverlongCountsAccepted: overlongAccepted,
   strictWrapperRejectedBothForEveryTransaction: true,
+  treeVersionsRead, sizedTrees, sizedTreesLeftAsAmbiguousSlices: ambiguousTrees,
+  sizedTreeVersionRewritesReadAsExactSlices: versionRewrites,
+  sizedTreeUnparseableBodiesReadAsExactSlices: unparsedBodies,
   budgets: { fixtureBytes: 262144, transactionBytes: maxTransactionBytes, largestTransactionBytes,
-    corpusTimeoutMs: 30000, childOutputBytes: 1048576, hardProcessMemoryLimit: null },
+    corpusTimeoutMs: 120000, childOutputBytes: 1048576, hardProcessMemoryLimit: null },
   limitations: ["Finite fixtures and mutations do not prove full node equivalence or parser safety.",
     "No hard process/WASM memory limit; input size and a process deadline alone do not bound allocation.",
     "No hostile depth/allocation exhaustion test or supported production resource policy.",
     "Canonical round trips reject observed aliases but may refuse node-valid noncanonical encodings.",
+    "A sized tree the library cannot parse is kept as its exact bytes; an unsized tree (header version 0 without the size flag) or a register constant the library cannot parse still refuses the whole transaction.",
     "Headers, consensus, finality and contiguous-range completeness remain unauthenticated.",
     "Raw outputs acquire no held-commitment status or publication force.",
     "No runtime API, production decoder selection or current-node version compatibility claim."] }, null, 2));

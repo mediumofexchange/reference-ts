@@ -4,65 +4,69 @@ Updated: 2026-09-22
 
 ## Goal
 
-Completed slice: P4, the cost of the candidate Ergo profile's exhaustion on
-the real chain from a real anchor, measured against public nodes (the
-retained node image stays stopped). Acceptance: for the last day and seven
-days of recent mainnet blocks, exact transaction sections obtained from
-public node JSON reproduce every header's transaction root; two independent
-public nodes agree on every header of the window and the anchor; the pinned
-reader decoder's coverage is counted with each refusal's cause; the model
-verifier from the real anchor answers or names the unresolved indices;
-header and section bytes per block/day/week and the times are in a retained
-report; docs and the recovery map record the numbers and limits; independent
-review of the method with its findings resolved. Evidence limits: public
-nodes are a trust input (no proof-of-work or chain-selection check), no
-node acceptance of our transactions (P2), no decoder equivalence, no
-inclusion-latency distribution. Stop boundary: no profile selection, no
-dependency pin change, no specification change, no runtime path.
+Active slice: the decoder dependency decision the P4 measurement made a
+prerequisite of venue selection. Choose and pin, for `experiments/ergo-range`,
+a sigma-rust build that reads the chain's current script versions and keeps
+any sized tree it cannot parse as exact bytes, and record the decision with
+its alternatives and the gate any later pin move must pass. Acceptance: the
+experiment pins the chosen build by lockfile integrity and public commit;
+`npm run check:ergo:range` passes with the decoder corpus extended by a real
+Ergo 6.0 block (header version 4, ErgoTree header version 3 outputs) and by
+synthetic sized trees of every header version with unparseable bodies, each
+read as its exact slice after an exact round trip; the profile check
+reproduces the new fixture's root beside the three existing ones; the P4
+window is re-read offline from the cache under the new pin with zero
+refusals and every root reproduced, with the old build as the control; the
+`--ergo` local replay report is regenerated under the new lock; the decision,
+profile doc, probes, recovery map and implementation status agree; one
+independent adversarial review of the decision and the patch, findings
+resolved; merged and pushed with CI green. Evidence limits: containment is
+unchanged (no hard memory bound); node equivalence is still shown only over
+the fixtures and one mainnet week, not proved; the chosen build is a
+pre-release with no maintenance promise. Stop boundary: no profile
+selection, no specification change, no runtime decoder path, no header-source
+authentication, no P2 publication, no dependency change outside the
+experiment.
 
 ## Status
 
-- Delivered: `experiments/ergo-range/chain-cost.mjs` (explicit network
-  probe, not in `check` or CI), the [retained report](docs/ergo-chain-cost-verification.json),
-  the [probe record](docs/POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor),
-  profile-doc costs/limits, recovery map P4/A8/A10 and implementation status.
-- Findings that bind later choices: the pinned sigma-rust 0.28.0 refuses
-  every transaction with an Ergo 6.0 script (ErgoTree header version 3):
-  125 transactions in 58 of 5,040 blocks, so those indices have no section
-  and no day- or week-long range answers under it; the npm alpha
-  `0.29.0-alpha-2f840d3` (2025-08-13, measured from `scratch/sigma-alpha/`,
-  not pinned) reads all of them with exact round trips, about 7× slower.
-  The node's JSON yields exact bytes only as written: a parsed-and-re-emitted
-  object sorts a spending-proof extension's keys and mis-serializes 12 of
-  the week's transactions. Header roots bind unsigned bytes and concatenated
-  proofs, not the proofs' split among inputs.
-- Review (one opus lane) found eight material defects in the first draft
-  (overwritten provenance, non-equivalent alternate decoder, alternate
-  package leaking into the pinned measurement, aggregates over unauthenticated
-  blocks, mislabelled timings, NTFS stream cache names); all fixed and
-  re-measured, with the decoder copy checked against `decoder.mjs` on every
-  transaction (28,196 equal) and the two builds' outputs compared (28,071
-  equal).
+- Decided and recorded: [the decision](decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes)
+  pins `ergo-lib-wasm-nodejs@0.29.0-alpha-2f840d3` (npm alpha, sigma-rust
+  2f840d3) in `experiments/ergo-range`; `decoder.mjs` is unchanged. 0.28.0
+  refuses an Ergo 6.0 tree at its header before reading the size; the alpha
+  accepts header versions 0–7 and keeps a sized tree it cannot parse as the
+  exact slice. No 0.29.0 stable exists; upstream `develop`'s extension
+  re-ordering (19255a6) is a round-trip refusal risk any later pin move must
+  pass three gates against (corpus, offline window re-read, `--ergo` replay).
+- Delivered in the working tree: pin and lockfile; fixture block 1876512
+  (header v4, two v3 trees) agreeing with the two-node P4 cache; corpus cases
+  rewriting each sized tree to every header version with real and zeroed
+  bodies, coverage counts and WASM hash pinned; child budget 30 s → 120 s;
+  reports regenerated (block probe 414, corpus 20,050, profile 277,
+  chain-cost offline re-read, replay 223 groups / 65 real proofs / 112
+  through the Ergo adapter); docs, recovery map A8, implementation status,
+  README, CI budget (45 min) and index updated; `check:docs` passes.
+- Review (one opus lane): two blockers (replay report not yet regenerated
+  when the entry claimed it; a wrong statement about 0.28.0's `Unparsed`
+  fallback) and six material findings, all applied; the lane reproduced the
+  decoder and block reports byte for byte. `npm ci` from the lockfile
+  reproduces the three experiment reports. Remaining: commit, push, CI.
 
 ## Evidence
 
-- Report window: anchor 1873360, indices 0..5039 at heights
-  1873361..1878400, depth 10, both nodes agree on 5,050 headers; 26.6 MB of
-  sections (mean 5,286 bytes a block, median 424, max 193,531), 220–221-byte
-  wire headers, 715.5 blocks/day over 169 hours; verifier built in 1.8 s.
-- Review re-check after the fixes: every quoted figure matches the report
-  and the cache; its remaining wording items are applied in the follow-up.
-- Prior slice (Ergo adapter over every replay group): `main` 55d2ab5, CI run
-  35652746308; its replay/profile reports are unchanged and still bound
-  (`decoder.mjs` untouched).
+- Chain-cost re-read (retained report): the alpha reads all 5,040 sections,
+  every root reproduced, 28,071 views equal to the 0.28.0 control (which
+  refuses 125 transactions in 58 blocks); every index resolved, so the day's
+  and week's requests answer empty; decode 253 s (alpha) against 39 s
+  (control), verifier built in 1.3 s; replay 18.5 min locally under load.
+- No containment evidence binds the pinned build: the containment and
+  metering probes cannot run against it as documented.
+- Prior slice: `main` 83dbeb1 (P4 delivered), CI green.
 
 ## Next
 
-1. Decoder selection before profile selection: a contained, node-equivalent
-   decoder that reads Ergo 6.0 scripts (an upgrade past 0.28.0, or keeping
-   unparsed sized trees as exact bytes); a reviewed dependency decision.
-2. P2 node publication and reassembly, which also gives A10's inclusion
-   latency; or the wallet/custody boundaries below.
+1. Finish this slice (above), then P2 node publication and reassembly, which
+   also gives A10's inclusion latency; or the wallet/custody boundaries below.
 
 ## Retained boundaries and local state
 
@@ -78,8 +82,8 @@ dependency pin change, no specification change, no runtime path.
   parameter/tool caches. Do not delete the image or allocate another.
   [Sync handoff](docs/ergo-node-sync-resume-verification.json): headers 97,923;
   full heights null/unresolved. The week's cached node responses
-  (`scratch/ergo-chain/`, digest in the report) and `scratch/sigma-alpha/`
-  can be regenerated; keep them while the decoder decision is open.
+  (`scratch/ergo-chain/`, digest in the report), `scratch/sigma-alpha/` and
+  the `scratch/sigma-0.28.0/` control can be regenerated; keep the cache.
 - Legacy Temp/moeclean worktree points at a different Claude_local checkout;
   preserve it. Configuration approval stays disabled. Device qualification and
   external publication remain separate dependencies.
@@ -87,9 +91,7 @@ dependency pin change, no specification change, no runtime path.
 ## Open questions
 
 Roughly **50% done / 50% remaining**, plausible range **40–60%**, reassessed
-2026-09-22: the venue cost is now measured on the real chain and is small,
-but selection gained a concrete prerequisite (a decoder for Ergo 6.0
-scripts) and still needs P2, an authenticated header source and decoder
-containment. Runtime integration, selected venue/decoder, qualified custody
-and continuous wallet operation dominate remaining effort. No rounded
-estimate change.
+2026-09-22: the venue cost is measured and small; selection still needs P2,
+an authenticated header source and decoder containment. Runtime integration,
+selected venue/decoder, qualified custody and continuous wallet operation
+dominate remaining effort.

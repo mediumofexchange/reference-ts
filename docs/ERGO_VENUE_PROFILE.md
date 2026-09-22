@@ -143,19 +143,22 @@ its retained evidence and can be reproduced from it.
   the decoder is repaired. This is the cost of exhaustion, and it is a
   denial one node-valid transaction can trigger for the price of publishing
   it: the decoder's node equivalence, not only its containment, is a
-  prerequisite of selection. Fleet's decoder fails 13 of the 24 real fixture
+  prerequisite of selection. Fleet's decoder fails 16 of the 29 real fixture
   transactions ([the block probe](POOL_DEPLOYMENT_PROBES.md#full-block-commitment-feasibility));
-  sigma-rust decodes all 24 but carries no equivalence proof ([the decoder
+  sigma-rust decodes all 29 but carries no equivalence proof ([the decoder
   probe](POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility)). On
-  mainnet the denial is already live: the pinned sigma-rust 0.28.0 refuses
-  every transaction carrying an ErgoTree of header version 3, the Ergo 6.0
-  script version, and 125 such transactions in 58 of seven days'
-  5,040 blocks left those indices without a section
+  mainnet the denial was live under the previous pin: sigma-rust 0.28.0
+  refuses every transaction carrying an ErgoTree of header version 3, the
+  Ergo 6.0 script version, at the header byte, and 125 such transactions in
+  58 of seven days' 5,040 blocks left those indices without a section
   ([P4](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor)).
-  The npm alpha `0.29.0-alpha-2f840d3` read all of them after exact round
-  trips, about seven times slower per transaction. A decoder that reads
-  the selected chain's script versions, or that keeps a sized tree it cannot
-  parse as exact bytes, is a selection prerequisite; no pin changes here.
+  The experiment now pins `0.29.0-alpha-2f840d3`
+  ([decided 2026-09-22](../decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes)),
+  which reads all of them after exact round trips, about six times slower
+  per transaction, and keeps any sized tree it cannot parse, of any header
+  version, as its exact bytes, so an unknown script version or opcode cannot
+  refuse a transaction; an unsized version-0 tree or a register constant it
+  cannot parse still can. No specification pins a decoder.
 - The public node API serves transactions as JSON. sigma-rust's serializer
   reproduced every header root of the measured week from the node's exact
   text, but only because that text keeps the spending-proof extension's key
@@ -191,7 +194,8 @@ its retained evidence and can be reproduced from it.
   of headers is about 58 MB and a year of sections about 1.4 GB at that
   rate. Built from a week's sections the verifier answers a range over all of
   them in a few milliseconds; building it, where every output is scanned,
-  took 1.8 s, and decoding the week's transactions 32.5 s, on one desktop.
+  took 1.3 s, and decoding the week's transactions 253 s under the pinned
+  alpha (39 s under the 0.28.0 control), on one desktop.
 - The header source and the decoder are trust boundaries of the reader:
   the header chain's authenticity and the decoder's containment are not
   established here. Objects at the locations before the anchor are not in
@@ -208,9 +212,9 @@ commitments, a replacement, revocations and single- and multi-piece
 publications in register constants, and checks the answers, the reader's
 rules over them, refusals for unwitnessed, gapped, unlinked, substituted and
 truncated evidence, tolerance of stray, duplicate and root-failing blocks,
-and the three mainnet fixture blocks through the same verifier as index 0
+and the four mainnet fixture blocks through the same verifier as index 0
 under their parents as anchors, whose roots it reproduces for block versions
-1 and 3 and whose 57 real register constants it decodes beside sigma-rust's
+1, 3 and 4 and whose 65 real register constants it decodes beside sigma-rust's
 own constant decoder. The [retained report](ergo-range-profile-verification.json)
 records the sizes. `test/pool-v3-ergo-profile.test.ts` covers the identity,
 register decoding, the tree, attribution and reassembly cases, ordering, the
@@ -267,9 +271,10 @@ integration introduces no production path, profile selection or normative rule.
 ## Before selection
 
 A specification decision selects a venue profile and pins its identity;
-before that: an authenticated header source a reader can run, a
-node-equivalent contained decoder that reads the chain's current script
-versions (the pinned 0.28.0 does not read Ergo 6.0 trees), an exact-byte
+before that: an authenticated header source a reader can run, a contained
+decoder with node-equivalence evidence beyond the fixtures and one week (the
+pinned alpha reads the chain's current script versions and keeps unknown
+sized trees as bytes; its containment is not established), an exact-byte
 block source or the JSON-text discipline above, publication and reassembly
 on a node (P2) confirming the measured capacity, the adoption condition
 above checked against the selected configuration, and the runtime's

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const result = spawnSync(process.execPath,
   [fileURLToPath(new URL("decoder-cases.mjs", import.meta.url))], {
-    timeout: 30_000, maxBuffer: 1024 * 1024, encoding: "utf8",
+    timeout: 120_000, maxBuffer: 1024 * 1024, encoding: "utf8",
     windowsHide: true,
   });
 if (result.error || result.status !== 0) {

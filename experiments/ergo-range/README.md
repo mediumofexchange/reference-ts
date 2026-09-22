@@ -26,7 +26,7 @@ mainnet from a real anchor. It is run explicitly, never by `check` or CI,
 because it reads public nodes (GET only; nothing is submitted):
 
 ```powershell
-node experiments/ergo-range/chain-cost.mjs --from 1873361 --count 5040 --depth 10 --alternate scratch/sigma-alpha --out scratch/chain-cost.json
+node experiments/ergo-range/chain-cost.mjs --from 1873361 --count 5040 --depth 10 --alternate scratch/sigma-0.28.0 --out scratch/chain-cost.json
 ```
 
 The anchor is the block below `--from`; indices `0..count-1` are the next
@@ -47,7 +47,13 @@ directory holding another `ergo-lib-wasm-nodejs` install that reads the
 same bytes through the script's verbatim copy of that round trip, checked
 against `decoder.mjs` on the pinned build for every transaction, with the
 two builds' outputs compared (the alternate's version and WASM hash are
-recorded; nothing is pinned by it).
+recorded; nothing is pinned by it). The pinned build is the
+[decided](../../decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes)
+`0.29.0-alpha-2f840d3`; the previous pin 0.28.0, installed under
+`scratch/sigma-0.28.0` (`npm install ergo-lib-wasm-nodejs@0.28.0 --ignore-scripts`),
+is the control that shows the refusals it left. Moving the pin again means
+rerunning this window offline from the cache with zero refusals, every root
+reproduced and no differing view against the build being replaced.
 The model verifier is built from the real headers and the read sections
 with four throwaway locations, so every answer is empty by exhaustion; its
 construction is where every output is scanned, and its single-index probes,
@@ -526,7 +532,7 @@ answers by exhaustion over root-checked blocks, the reader's rules over them,
 refusals for unwitnessed, gapped, unlinked, substituted or truncated
 evidence, tolerance of stray and duplicate blocks, the pinned mainnet
 genesis header (`fixtures/mainnet-genesis-header.json`, listed under the
-manifest's `headers`) as the chain's anchor, and the three fixture blocks
+manifest's `headers`) as the chain's anchor, and the four fixture blocks
 through the same verifier with every real register constant decoded beside
 sigma-rust's. Its [retained report](../../docs/ergo-range-profile-verification.json)
 is an offline observation; nothing connects to a node or selects the profile.
@@ -587,8 +593,10 @@ rejects missing scratch installs and checks the loaded package/DLL paths.
 No production or default-check dependency is added. The scratch install can
 be removed after the report is captured and reproduced using the same command.
 
-Exit **2** preserves a report with unresolved fuel refusals (currently one of
-24 transactions). Exit 0 means controls and all fixed fixture comparisons
+Exit **2** preserves a report with unresolved fuel refusals (one of the 24
+transactions of the 2026-09-09 corpus it pins; the probe pins that corpus and
+the 0.28.0 WASM hash, so it is not runnable against the current pin). Exit 0
+means controls and all fixed fixture comparisons
 completed; neither status establishes hostile-parser safety or production
 acceptance. Fuel and linear-memory caps leave host overhead and total process
 resources open. No limit is raised automatically, no fuel is refilled, and no

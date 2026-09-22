@@ -474,12 +474,12 @@ the requested upper height, so the upper-ID check is mandatory. The current
 metadata reader does not allow chain slices; a bounded ancestry-read extension
 and its byte/time envelope remain owed, not silently bypassed with another client.
 
-After membership, compare all 24 transaction IDs, the fields/IDs of all 65
-outputs, their order and the three version-dependent transaction roots using
+After membership, compare all 29 transaction IDs, the fields/IDs of all 77
+outputs, their order and the four version-dependent transaction roots using
 the existing experiment. Do not compare JSON whitespace or infer original wire
 bytes from parsing. Version 1 transaction roots do not bind spending-proof
 bytes. Recheck the applied view/ancestry after reading; changed views, budget
-exhaustion or missing data leave evidence unresolved. Three noncontiguous
+exhaustion or missing data leave evidence unresolved. Four noncontiguous
 fixtures do not establish contiguous ranges, publication order, recovery,
 production resource sufficiency or a completed product gate.
 

@@ -1,48 +1,66 @@
 {
   "status": "offline-decoder-feasibility-only",
   "node": "v24.6.0",
-  "checks": 14874,
+  "checks": 20050,
   "decoder": {
     "package": "ergo-lib-wasm-nodejs",
-    "version": "0.28.0",
-    "source": "https://github.com/ergoplatform/sigma-rust/tree/635bbaca55a27d6dd6b2c0ee2479b6ed60117780",
-    "provenance": "npm gitHead metadata; package integrity pinned, build not independently reproduced",
-    "wasmSha256": "5c39a0933a07031492efbe956fb4f957da745e295a94c06efddb475d9d1db4e5"
+    "version": "0.29.0-alpha-2f840d3",
+    "source": "https://github.com/ergoplatform/sigma-rust/tree/2f840d3872367d6181d66d4a168194dbefad77f1",
+    "provenance": "npm gitHead metadata of a pre-release; package integrity pinned, build not independently reproduced",
+    "wasmSha256": "65143062c54766fbc79b721ed77c43d199604c31bef535b99dca3b8842e1ea16"
   },
-  "inputManifestSha256": "2ee407f63c1297ca3262762a1534f5526694f4ef273658cf1060ef1d51c85c07",
+  "inputManifestSha256": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
   "files": {
-    "decoder-check.mjs": "4429cd582eee5d639bc0a485e49f6caa3a407f98b6f3ffa39ff7dc221331202b",
-    "decoder-cases.mjs": "d71d5f65edce30502665d4df5c3adb68b694b2f12ee33b56532aa07531ca6f9e",
-    "package.json": "04c62481ee551c2cf2dd088d2af2afe68b1ba74c0cbc40f41b92b8e85139de89",
-    "package-lock.json": "3c2055dc1a71712fb19a99eb895794c392d9e2c169e5a1d6a0d697ce03b9f79e"
+    "decoder-check.mjs": "6cc6a05640c808d6cd223610365e1f3cf4294a077148a77f273e1b3a3235bef8",
+    "decoder-cases.mjs": "6cb5f26c5df103f76bb186cf7fd6ff4aafd1107fbd8a5928962ba27894ed618a",
+    "package.json": "0b70863d77be0db3e944e4594bfd126a705ec0953053af0e1ce9198f7a436610",
+    "package-lock.json": "9133136e72d45c7bf8427d0cef6360454d2f12775a91dd6b1031ff6f8fbd6a70"
   },
   "blocks": [
     {
       "height": "100000",
+      "version": "1",
       "transactions": "1",
       "outputs": "2"
     },
     {
       "height": "1000000",
+      "version": "3",
       "transactions": "17",
       "outputs": "46"
     },
     {
       "height": "1500000",
+      "version": "3",
       "transactions": "6",
       "outputs": "17"
+    },
+    {
+      "height": "1876512",
+      "version": "4",
+      "transactions": "5",
+      "outputs": "12"
     }
   ],
-  "properPrefixesRejected": 14450,
-  "fieldBoundaryAliasesRecovered": 65,
-  "rawParserTrailingBytesAccepted": 24,
-  "rawParserOverlongCountsAccepted": 24,
+  "properPrefixesRejected": 19380,
+  "fieldBoundaryAliasesRecovered": 77,
+  "rawParserTrailingBytesAccepted": 29,
+  "rawParserOverlongCountsAccepted": 29,
   "strictWrapperRejectedBothForEveryTransaction": true,
+  "treeVersionsRead": {
+    "0": 72,
+    "1": 3,
+    "3": 2
+  },
+  "sizedTrees": 5,
+  "sizedTreesLeftAsAmbiguousSlices": 0,
+  "sizedTreeVersionRewritesReadAsExactSlices": 40,
+  "sizedTreeUnparseableBodiesReadAsExactSlices": 40,
   "budgets": {
     "fixtureBytes": 262144,
     "transactionBytes": 65536,
-    "largestTransactionBytes": 2163,
-    "corpusTimeoutMs": 30000,
+    "largestTransactionBytes": 2576,
+    "corpusTimeoutMs": 120000,
     "childOutputBytes": 1048576,
     "hardProcessMemoryLimit": null
   },
@@ -51,6 +69,7 @@
     "No hard process/WASM memory limit; input size and a process deadline alone do not bound allocation.",
     "No hostile depth/allocation exhaustion test or supported production resource policy.",
     "Canonical round trips reject observed aliases but may refuse node-valid noncanonical encodings.",
+    "A sized tree the library cannot parse is kept as its exact bytes; an unsized tree (header version 0 without the size flag) or a register constant the library cannot parse still refuses the whole transaction.",
     "Headers, consensus, finality and contiguous-range completeness remain unauthenticated.",
     "Raw outputs acquire no held-commitment status or publication force.",
     "No runtime API, production decoder selection or current-node version compatibility claim."

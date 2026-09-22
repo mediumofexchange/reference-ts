@@ -233,7 +233,7 @@ try {
     "a chain from the anchor's child answers the same; the genesis block below it is not read");
 
   // Real fixtures: one-block ranges at depth 0, each block index 0 under its own parent as the anchor. The model's
-  // root reproduces the node's header roots for block versions 1 and 3 from decoder-derived ids; every real
+  // root reproduces the node's header roots for block versions 1, 3 and 4 from decoder-derived ids; every real
   // register constant is decoded beside sigma-rust's own constant decoder; exhaustion over every output
   // attributes nothing at four throwaway locations.
   const sdkIndex = value => { assert(value >= 0n && value <= 0x7fffffffn); return Number(value); };
@@ -312,7 +312,7 @@ try {
     limitations: [
       "Headers are the reader's own source: linkage, contiguity and the anchor's child are checked; proof of work, chain selection and finality are not.",
       "A transaction the reader's decoder refuses is unsupported evidence: its height has no section and every range through it stays unresolved until the decoder is repaired, a denial one node-valid transaction can trigger.",
-      "Synthetic blocks are serialized by Fleet from local objects and were never accepted by a node; the fixtures are three non-contiguous real blocks and the real genesis header.",
+      "Synthetic blocks are serialized by Fleet from local objects and were never accepted by a node; the fixtures are four non-contiguous real blocks and the real genesis header.",
       "sigma-rust's strict round trip is the decoder boundary; it has no hard memory limit and no node-equivalence proof (see the decoder probe).",
       "No range from index zero was read on a real chain from a real anchor; the cost of exhaustion over real block bytes is not measured here.",
       "Capacity is measured by serialization against the box limit and the pinned mempool policy; no transaction was relayed or accepted by a node.",

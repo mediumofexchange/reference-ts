@@ -652,24 +652,26 @@ still has an internal parent. The
 fix those details. Secondary discovery material described a conflicting
 paired-leaf construction; the probe follows the pinned source instead.
 
-The retained [result](ergo-range-verification.json) has 342 passing assertions:
-three public mainnet block fixtures at heights 100000, 1000000 and 1500000,
-versions 1/3/3, 24 transactions and 65 outputs. Their raw JSON totals 138,228
-bytes; reconstructed signed transactions total 14,450 bytes, excluding block
-section framing. The fixture manifest records source URLs and SHA-256 pins.
-These blocks are separated in height and were acquired from a public node;
-their headers have not been independently authenticated. No network request
-is needed to repeat the checks.
+The retained [result](ergo-range-verification.json) has 414 passing assertions:
+four public mainnet block fixtures at heights 100000, 1000000, 1500000 and
+1876512, versions 1/3/3/4, 29 transactions and 77 outputs. Their raw JSON
+totals 191,382 bytes; reconstructed signed transactions total 19,380 bytes,
+excluding block section framing. The fixture manifest records source URLs and
+SHA-256 pins. These blocks are separated in height and were acquired from a
+public node; their headers have not been independently authenticated (the
+version-4 block, added 2026-09-22, agrees on every header field with the two
+nodes of [the P4 cache](#real-chain-exhaustion-cost-from-a-real-anchor)). No
+network request is needed to repeat the checks.
 
-All 24 computed transaction IDs and all three roots match the fixtures.
+All 29 computed transaction IDs and all four roots match the fixtures.
 Controls remove and duplicate every transaction, swap adjacent transactions,
 mutate every output value and input-proof evidence, and check competing root
 algorithms. Version 1 explicitly retains the same root after proof mutation.
 Node 24's JSON source-text reviver retains amounts above JavaScript's exact
 integer range without rounding.
 
-**Parser result:** only 11 of 24 transactions round-trip through Fleet's
-decoder. The other 13 fail on valid fixture scripts without a size flag;
+**Parser result:** only 13 of 29 transactions round-trip through Fleet's
+decoder. The other 16 fail on valid fixture scripts without a size flag;
 every sampled block contains at least one such transaction. Expected failure
 positions and messages are pinned so new failures cannot count as success.
 A small counterexample moves one creation-height byte into a claimed raw
@@ -696,55 +698,77 @@ sequence and authority checks before acquiring protocol force.
 
 ## Full binary decoder feasibility
 
-The same private experiment now evaluates `ergo-lib-wasm-nodejs` **0.28.0**,
-the npm stable version observed on 2026-09-09. npm associates it with
-sigma-rust [`635bbaca55a27d6dd6b2c0ee2479b6ed60117780`](https://github.com/ergoplatform/sigma-rust/tree/635bbaca55a27d6dd6b2c0ee2479b6ed60117780).
+The same private experiment now evaluates `ergo-lib-wasm-nodejs`
+**0.29.0-alpha-2f840d3**, the npm alpha published 2025-08-13 and pinned on
+2026-09-22 in place of 0.28.0 (the npm stable of 2026-09-09) after 0.28.0
+refused every Ergo 6.0 script on mainnet
+([the decision](../decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes);
+[P4](#real-chain-exhaustion-cost-from-a-real-anchor)). npm associates it with
+sigma-rust [`2f840d3872367d6181d66d4a168194dbefad77f1`](https://github.com/ergoplatform/sigma-rust/tree/2f840d3872367d6181d66d4a168194dbefad77f1).
 The lockfile pins package integrity; the [retained report](ergo-decoder-verification.json)
-also hashes the installed WASM and corpus sources. This is package metadata
-provenance, not an independently reproduced build or a maintenance guarantee.
+also hashes the installed WASM and corpus sources and checks the installed
+version. This is package metadata provenance of a pre-release, not an
+independently reproduced build or a maintenance guarantee.
 
 Fleet serializes only the existing hash-pinned fixtures. Sigma-rust parses
 those signed binary transactions, reserializes them, and exposes fields only
-after exact byte equality. It recovers all **24 transaction IDs and 65 output
+after exact byte equality. It recovers all **29 transaction IDs and 77 output
 IDs**, values, scripts, token order/amounts, registers, creation heights,
 transaction references and indices; input proofs/extensions and data inputs
-also match. This includes the 13 transactions Fleet cannot decode. Numeric
-fixture ingestion remains lossless above `2^53`; comparisons use `bigint`.
+also match. This includes the 16 transactions Fleet cannot decode and the
+two carrying Ergo 6.0 trees (header version 3), which 0.28.0 refuses at the
+header byte. Numeric fixture ingestion remains lossless above `2^53`;
+comparisons use `bigint`.
 
-The report retains **14,874 assertions**, including rejection of all **14,450
+The report retains **20,050 assertions**, including rejection of all **19,380
 proper prefixes**. For each transaction, the raw parser accepts a trailing
 zero byte and an overlong input-count VLQ; the exact byte round trip rejects
 both. For each output position, moving a creation-height byte into the claimed
 JSON script produces identical signed bytes, but binary extraction recovers
 the original committed fields. Forged claimed transaction/output IDs are
-ignored and recomputed. These controls establish observed behavior, not a
-proof of parser equivalence with the node over every valid transaction.
+ignored and recomputed. For each of the five outputs whose tree carries the
+size flag, the header's version bits are rewritten to each of 0–7, with the
+real body and with the body zeroed under the same size: all 80 are read as
+the exact slice with every other committed field unchanged, so a script
+version or opcode the library does not know cannot refuse a transaction (the
+previous pin refused every version above 1 before reading the size). An
+unsized version-0 tree or a register constant the library cannot parse still
+refuses the whole transaction. These controls establish observed behavior,
+not a proof of parser equivalence with the node over every valid transaction.
 In particular, the pinned
-[ErgoTree parser](https://github.com/ergoplatform/sigma-rust/blob/635bbaca55a27d6dd6b2c0ee2479b6ed60117780/ergotree-ir/src/ergo_tree.rs)
-can preserve a failed sized-tree parse as opaque `Unparsed` bytes that round-trip.
+[ErgoTree parser](https://github.com/ergoplatform/sigma-rust/blob/2f840d3872367d6181d66d4a168194dbefad77f1/ergotree-ir/src/ergo_tree.rs)
+preserves a failed sized-tree parse as opaque `Unparsed` bytes that round-trip.
 Exact reserialization is therefore not evidence that every embedded script
 was structurally validated or that the transaction satisfies consensus.
 
-The fixed corpus runs in a separate process with a **30-second deadline** and
-**1 MiB output cap**. It refuses fixture files above **256 KiB** before reading
-and transaction buffers above **64 KiB** before entering WASM; the largest
-fixture transaction is **2,163 bytes**. These are experiment budgets, not
-network consensus limits. A failed, timed-out or oversized run yields
-unresolved evidence, never a successful absence verdict. **There is no hard
-process/WASM memory limit** and no adversarial depth/allocation exhaustion
+The fixed corpus runs in a separate process with a **120-second deadline**
+(raised from 30 s with the slower build; the corpus takes about 14 s on one
+desktop) and **1 MiB output cap**. It refuses fixture files above **256 KiB**
+before reading and transaction buffers above **64 KiB** before entering WASM;
+the largest fixture transaction is **2,576 bytes**. These are experiment
+budgets, not network consensus limits. A failed, timed-out or oversized run
+yields unresolved evidence, never a successful absence verdict. **There is no
+hard process/WASM memory limit** and no adversarial depth/allocation exhaustion
 test. Input size, reserialization and a process deadline do not establish
 bounded memory use; this slice does not pass that part of the source gate.
 
-The pinned [generic parser](https://github.com/ergoplatform/sigma-rust/blob/635bbaca55a27d6dd6b2c0ee2479b6ed60117780/ergotree-ir/src/serialization/serializable.rs)
+The pinned [generic parser](https://github.com/ergoplatform/sigma-rust/blob/2f840d3872367d6181d66d4a168194dbefad77f1/ergotree-ir/src/serialization/serializable.rs)
 returns after `sigma_parse` without checking cursor exhaustion, explaining
 the accepted suffix. More consequentially, the
-[sized ErgoTree parser](https://github.com/ergoplatform/sigma-rust/blob/635bbaca55a27d6dd6b2c0ee2479b6ed60117780/ergotree-ir/src/ergo_tree.rs)
+[sized ErgoTree parser](https://github.com/ergoplatform/sigma-rust/blob/2f840d3872367d6181d66d4a168194dbefad77f1/ergotree-ir/src/ergo_tree.rs)
 allocates `vec![0u8; tree_size_bytes as usize]` from a decoded `u32` before
 reading that many bytes, without a local pre-allocation cap. A small input
 budget therefore does not bound this allocation. Per-field count bounds in
-the [transaction parser](https://github.com/ergoplatform/sigma-rust/blob/635bbaca55a27d6dd6b2c0ee2479b6ed60117780/ergo-lib/src/chain/transaction.rs)
+the [transaction parser](https://github.com/ergoplatform/sigma-rust/blob/2f840d3872367d6181d66d4a168194dbefad77f1/ergo-lib/src/chain/transaction.rs)
 do not supply a parser-wide resource budget. The exhaustion case is source
 evidence only; the finite corpus deliberately does not execute that allocation.
+The [containment](#windows-process-containment-feasibility) and
+[metering](#metered-decoder-feasibility) evidence below was taken on the
+0.28.0 WASM and is not runnable as documented against the alpha: the
+containment probe's corpus case has a 10 s user-CPU quota that the slower
+build's larger corpus (about 13 s of CPU) exceeds, and the metering probe
+pins the 0.28.0 WASM hash and the 2026-09-09 manifest hash (stale since the
+2026-09-15 manifest). No containment evidence binds the pinned build.
 
 Next, compare an OS-contained decoder with a local validating-node boundary,
 including hard memory/CPU limits, hostile depth/counts, refusal semantics and
@@ -777,7 +801,7 @@ judged.
 
 `experiments/ergo-range/profile-check.mjs` compiles the model and drives it
 through the pinned Fleet serializer and sigma-rust decoder. The
-[retained report](ergo-range-profile-verification.json) has 250 passing
+[retained report](ergo-range-profile-verification.json) has 277 passing
 checks. The mainnet genesis header, pinned as a fixture (height 1, version
 1, a zero parent id, 279 wire bytes), is read as an anchor: alone it reaches
 no index, a synthetic child at height 2 is index 0 and needs its section,
@@ -798,12 +822,12 @@ decode; a root-failing twin, a stray block, a malformed block and a
 duplicate beside the true sections change no answer byte; a missing block,
 an unlinked header, another anchor, headers without the anchor's child, a
 range above the witnessed index and an exceeded budget give no answer, and a
-chain beginning at the anchor's child answers the same bytes. The three
+chain beginning at the anchor's child answers the same bytes. The four
 mainnet fixtures pass through the same verifier as one-block ranges at depth
 0, each index 0 under its own parent as the anchor: the model reproduces the real transaction roots
-of block versions 1 and 3 from decoder-derived ids, scans all 65 outputs,
-decodes all 57 real register constants beside sigma-rust's constant decoder
-(42 `Coll[Byte]` equal byte for byte, 15 of other types refused), attributes
+of block versions 1, 3 and 4 from decoder-derived ids, scans all 77 outputs,
+decodes all 65 real register constants beside sigma-rust's constant decoder
+(43 `Coll[Byte]` equal byte for byte, 22 of other types refused), attributes
 nothing at four throwaway locations and answers empty in 102 bytes.
 
 Not established: header authentication (proof of work, chain selection and
@@ -861,28 +885,35 @@ difference, but the byte counts are authenticated only that far.
 | Largest transaction, bytes | 32,742 | 88,284 |
 | Headers retained (one per block), wire / verifier view, bytes | 159,022 / 75,600 | 1,113,468 / 529,200 |
 | JSON fetched, bytes | 21,501,423 | 133,335,507 |
-| Indices without a section: sigma-rust 0.28.0 / alpha | 5 / 0 | 58 / 0 |
+| Indices without a section: sigma-rust 0.28.0 (the pin until 2026-09-22) / `0.29.0-alpha-2f840d3` (pinned since) | 5 / 0 | 58 / 0 |
 
-Decoding the week's 28,196 transactions took 32.5 s under the
-pinned 0.28.0 and 227.4 s under `0.29.0-alpha-2f840d3`; serializing
-them from text 32.4 s; building the verifier from the read sections
-1.8 s, and that construction is where every output is scanned and
+Decoding the week's 28,196 transactions took 253 s under the pinned
+`0.29.0-alpha-2f840d3` and 39 s under the 0.28.0 control (the retained run
+is the offline re-read of 2026-09-22 under the new pin; the first run, with
+the roles reversed, measured 32.5 s and 227.4 s); serializing them from
+text 254 s under the alpha; building the verifier from the read sections
+1.3 s, and that construction is where every output is scanned and
 attributed and every root rechecked from the decoder's ids; 5,040
-single-index probes afterwards took 49 ms and a day's or the week's
+single-index probes afterwards took 38 ms and a day's or the week's
 range answers in a few milliseconds (the least of five repetitions),
-walking per-index lists. The week's
+walking per-index lists. Under the new pin every index has its section, so
+the last-day and whole-window requests answer (empty, 102 bytes each)
+where the first run left 58 indices and every range through them
+unresolved. The week's
 sections were fetched by a scratch probe whose log is not retained: about
 six minutes of response time, roughly 80 ms a response at 250 ms pacing
 from one host, and the 6.0.6 node refusing new connections after about 600
 unpaced requests. The retained run reads the cache (two live reads, the
 nodes' state), and reads are paced and rotate between nodes with backoff.
 
-Three findings bind later choices. The pinned 0.28.0 refuses every
+Three findings bind later choices. The then-pinned 0.28.0 refuses every
 transaction carrying an ErgoTree of header version 3, the Ergo 6.0 script
 version: 125 transactions in 58 blocks of the week, each leaving
 its index without a section and every range through it unanswered, the
 longest resolvable run being 2,683 indices; the alpha reads all of them
-after exact round trips. Second, the node's JSON keeps a spending-proof
+after exact round trips and is the experiment's pin since 2026-09-22
+([the decision](../decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes)),
+with 0.28.0 as the control build. Second, the node's JSON keeps a spending-proof
 extension's keys in its map's order, which a JSON object model sorts:
 re-serializing parsed objects gives 12 of the week's transactions a
 different id, so a reader on JSON must serialize the node's text as written,
@@ -1186,8 +1217,8 @@ history or client response limits cannot establish omission.
 
 The smallest independent node probe is a dedicated keyless instance with an
 artifact hash and explicit validation/history/bootstrap configuration, then
-bounded GET reads of the three pinned fixtures. Compare all 24 transactions,
-65 outputs and their order/roots, and record best fully validated chain state.
+bounded GET reads of the four pinned fixtures. Compare all 29 transactions,
+77 outputs and their order/roots, and record best fully validated chain state.
 No fixture match closes contiguous-range authentication. Per-response byte
 and time budgets, node-wide OS memory/CPU bounds, disk/sync costs and behavior
 on malformed block sections still need measurement. This source comparison

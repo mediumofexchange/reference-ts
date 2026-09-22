@@ -57,14 +57,14 @@
   },
   "decoders": {
     "pinned": {
-      "version": "0.28.0",
-      "wasmSha256": "5c39a0933a07031492efbe956fb4f957da745e295a94c06efddb475d9d1db4e5",
+      "version": "0.29.0-alpha-2f840d3",
+      "wasmSha256": "65143062c54766fbc79b721ed77c43d199604c31bef535b99dca3b8842e1ea16",
       "path": "experiments/ergo-range"
     },
     "alternate": {
-      "version": "0.29.0-alpha-2f840d3",
-      "wasmSha256": "65143062c54766fbc79b721ed77c43d199604c31bef535b99dca3b8842e1ea16",
-      "path": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\sigma-alpha"
+      "version": "0.28.0",
+      "wasmSha256": "5c39a0933a07031492efbe956fb4f957da745e295a94c06efddb475d9d1db4e5",
+      "path": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\sigma-0.28.0"
     }
   },
   "decoderEquivalence": {
@@ -116,8 +116,8 @@
     "spanHours": 169.03,
     "blocksPerDay": 715.5,
     "read": {
-      "pinned": 4982,
-      "alternate": 5040
+      "pinned": 5040,
+      "alternate": 4982
     }
   },
   "days": [
@@ -241,8 +241,8 @@
       "spanHours": 23.53,
       "blocksPerDay": 733.4,
       "read": {
-        "pinned": 697,
-        "alternate": 720
+        "pinned": 720,
+        "alternate": 697
       }
     },
     {
@@ -272,8 +272,8 @@
       "spanHours": 25.33,
       "blocksPerDay": 681.1,
       "read": {
-        "pinned": 702,
-        "alternate": 720
+        "pinned": 720,
+        "alternate": 702
       }
     },
     {
@@ -303,8 +303,8 @@
       "spanHours": 23.91,
       "blocksPerDay": 721.6,
       "read": {
-        "pinned": 708,
-        "alternate": 720
+        "pinned": 720,
+        "alternate": 708
       }
     },
     {
@@ -334,8 +334,8 @@
       "spanHours": 24,
       "blocksPerDay": 718.9,
       "read": {
-        "pinned": 715,
-        "alternate": 720
+        "pinned": 720,
+        "alternate": 715
       }
     }
   ],
@@ -474,20 +474,93 @@
     }
   },
   "timing": {
-    "serializeMs": 32410,
-    "reemitMs": 26732,
-    "rootCheckMs": 1414,
+    "serializeMs": 253960,
+    "reemitMs": 213865,
+    "rootCheckMs": 1576,
     "decodeMs": {
-      "pinned": 32549,
-      "alternate": 227449
+      "pinned": 252694,
+      "alternate": 39350
     },
-    "equivalenceMs": 35018,
+    "equivalenceMs": 254000,
     "note": "serializeMs is the pinned library's text-to-bytes work including its own id; reemitMs the re-emitted-object control; rootCheckMs the script's root over the library's ids; decodeMs each decoder's strict round trip and field extraction over the same bytes; equivalenceMs the verbatim copy's second pinned round trip; the verifier's constructMs is where every section's root is rechecked from the decoder's ids and every output is scanned, and a request afterwards walks per-index lists. JSON parsing, text splitting, witness ids and the alternate comparison are outside every timer."
   },
   "verifier": {
     "pinned": {
+      "blocksSupplied": 5040,
+      "constructMs": 1314,
+      "witnessedIndex": 5039,
+      "resolvedIndices": 5040,
+      "unresolvedIndices": 0,
+      "longestResolvedRun": 5040,
+      "firstUnresolvedIndices": [],
+      "singleIndexProbeMs": 38,
+      "requestMsIs": "the least of 5 repetitions",
+      "requests": {
+        "lastDay": {
+          "fromIndex": 4320,
+          "toIndex": 5039,
+          "kinds": {
+            "1": {
+              "answered": true,
+              "bytes": 102,
+              "ms": 0.17,
+              "samples": 5
+            },
+            "2": {
+              "answered": true,
+              "bytes": 102,
+              "ms": 0.17,
+              "samples": 5
+            },
+            "3": {
+              "answered": true,
+              "bytes": 102,
+              "ms": 0.17,
+              "samples": 5
+            },
+            "4": {
+              "answered": true,
+              "bytes": 102,
+              "ms": 0.16,
+              "samples": 5
+            }
+          }
+        },
+        "wholeWindow": {
+          "fromIndex": 0,
+          "toIndex": 5039,
+          "kinds": {
+            "1": {
+              "answered": true,
+              "bytes": 102,
+              "ms": 1.69,
+              "samples": 5
+            },
+            "2": {
+              "answered": true,
+              "bytes": 102,
+              "ms": 1.77,
+              "samples": 5
+            },
+            "3": {
+              "answered": true,
+              "bytes": 102,
+              "ms": 1.53,
+              "samples": 5
+            },
+            "4": {
+              "answered": true,
+              "bytes": 102,
+              "ms": 1.49,
+              "samples": 5
+            }
+          }
+        }
+      }
+    },
+    "alternate": {
       "blocksSupplied": 4982,
-      "constructMs": 1765,
+      "constructMs": 1233,
       "witnessedIndex": 5039,
       "resolvedIndices": 4982,
       "unresolvedIndices": 58,
@@ -514,7 +587,7 @@
         2810,
         2826
       ],
-      "singleIndexProbeMs": 49,
+      "singleIndexProbeMs": 39,
       "requestMsIs": "the least of 5 repetitions",
       "requests": {
         "lastDay": {
@@ -524,25 +597,25 @@
             "1": {
               "answered": false,
               "bytes": null,
-              "ms": 0.17,
+              "ms": 0.07,
               "samples": 5
             },
             "2": {
               "answered": false,
               "bytes": null,
-              "ms": 0.16,
+              "ms": 0.06,
               "samples": 5
             },
             "3": {
               "answered": false,
               "bytes": null,
-              "ms": 0.16,
+              "ms": 0.06,
               "samples": 5
             },
             "4": {
               "answered": false,
               "bytes": null,
-              "ms": 0.15,
+              "ms": 0.05,
               "samples": 5
             }
           }
@@ -554,98 +627,25 @@
             "1": {
               "answered": false,
               "bytes": null,
-              "ms": 1.57,
+              "ms": 0.71,
               "samples": 5
             },
             "2": {
               "answered": false,
               "bytes": null,
-              "ms": 1.57,
+              "ms": 0.58,
               "samples": 5
             },
             "3": {
               "answered": false,
               "bytes": null,
-              "ms": 1.1,
+              "ms": 0.66,
               "samples": 5
             },
             "4": {
               "answered": false,
               "bytes": null,
-              "ms": 1.49,
-              "samples": 5
-            }
-          }
-        }
-      }
-    },
-    "alternate": {
-      "blocksSupplied": 5040,
-      "constructMs": 1941,
-      "witnessedIndex": 5039,
-      "resolvedIndices": 5040,
-      "unresolvedIndices": 0,
-      "longestResolvedRun": 5040,
-      "firstUnresolvedIndices": [],
-      "singleIndexProbeMs": 34,
-      "requestMsIs": "the least of 5 repetitions",
-      "requests": {
-        "lastDay": {
-          "fromIndex": 4320,
-          "toIndex": 5039,
-          "kinds": {
-            "1": {
-              "answered": true,
-              "bytes": 102,
-              "ms": 0.18,
-              "samples": 5
-            },
-            "2": {
-              "answered": true,
-              "bytes": 102,
-              "ms": 0.18,
-              "samples": 5
-            },
-            "3": {
-              "answered": true,
-              "bytes": 102,
-              "ms": 0.18,
-              "samples": 5
-            },
-            "4": {
-              "answered": true,
-              "bytes": 102,
-              "ms": 0.37,
-              "samples": 5
-            }
-          }
-        },
-        "wholeWindow": {
-          "fromIndex": 0,
-          "toIndex": 5039,
-          "kinds": {
-            "1": {
-              "answered": true,
-              "bytes": 102,
-              "ms": 3.37,
-              "samples": 5
-            },
-            "2": {
-              "answered": true,
-              "bytes": 102,
-              "ms": 1.43,
-              "samples": 5
-            },
-            "3": {
-              "answered": true,
-              "bytes": 102,
-              "ms": 1.28,
-              "samples": 5
-            },
-            "4": {
-              "answered": true,
-              "bytes": 102,
-              "ms": 1.17,
+              "ms": 0.62,
               "samples": 5
             }
           }
@@ -655,6 +655,12 @@
   },
   "refusals": {
     "pinned": {
+      "transactions": 0,
+      "blocks": 0,
+      "byOutputTreeVersions": {},
+      "sample": []
+    },
+    "alternate": {
       "transactions": 125,
       "blocks": 58,
       "byOutputTreeVersions": {
@@ -1088,12 +1094,6 @@
           ]
         }
       ]
-    },
-    "alternate": {
-      "transactions": 0,
-      "blocks": 0,
-      "byOutputTreeVersions": {},
-      "sample": []
     }
   },
   "pins": {
@@ -1104,9 +1104,9 @@
   "files": {
     "experiments/ergo-range/chain-cost.mjs": "4a4a66c9473608f72895726f0923a93762c9bb87f9746ea150eba4176610546d",
     "experiments/ergo-range/decoder.mjs": "44af0e096fabfcdb4cc581d383006d608391e15635760d21895b6660a3757e55",
-    "experiments/ergo-range/package.json": "04c62481ee551c2cf2dd088d2af2afe68b1ba74c0cbc40f41b92b8e85139de89",
-    "experiments/ergo-range/package-lock.json": "3c2055dc1a71712fb19a99eb895794c392d9e2c169e5a1d6a0d697ce03b9f79e",
-    "experiments/ergo-range/fixtures/manifest.json": "2ee407f63c1297ca3262762a1534f5526694f4ef273658cf1060ef1d51c85c07",
+    "experiments/ergo-range/package.json": "0b70863d77be0db3e944e4594bfd126a705ec0953053af0e1ce9198f7a436610",
+    "experiments/ergo-range/package-lock.json": "9133136e72d45c7bf8427d0cef6360454d2f12775a91dd6b1031ff6f8fbd6a70",
+    "experiments/ergo-range/fixtures/manifest.json": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
     "model/pool-v3-ergo-profile.ts": "19a68c82f6410d551e589e34f69731e1cc8b73995a7cabe5cc75ff8b2e75128d",
     "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f"
   },

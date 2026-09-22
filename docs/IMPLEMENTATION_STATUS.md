@@ -175,9 +175,13 @@ compares per-insert replay cost with pinned v2. It is outside the runtime.
 The [Ergo full-block probe](POOL_DEPLOYMENT_PROBES.md#full-block-commitment-feasibility)
 reproduces real transaction roots and retains serializer counterexamples.
 The [binary decoder corpus](POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility)
-recovers all 65 fixture outputs and exposes permissive parsing, with strict
-round-trip rejection controls. Hard memory containment, supported node
-equivalence and authenticated complete-range reads remain unimplemented.
+recovers all 77 fixture outputs, reads every sized tree as its exact bytes
+whatever its header version or body, and exposes permissive parsing, with
+strict round-trip rejection controls; the experiment pins
+`ergo-lib-wasm-nodejs@0.29.0-alpha-2f840d3`
+([decided 2026-09-22](../decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes)).
+Hard memory containment, supported node equivalence and authenticated
+complete-range reads remain unimplemented.
 The [candidate Ergo venue profile](ERGO_VENUE_PROFILE.md) and
 `model/pool-v3-ergo-profile.ts` fix attribution by exact tree and `R4`/`R5`
 shape, run reassembly, transaction-then-output ordinals, an index space
@@ -185,7 +189,7 @@ anchored at a pinned header (index 0 is the anchor's child, so reads from
 index zero are bounded by the deployment's age) and a §13 verifier by
 exhaustion over root-checked blocks behind a linked header chain; the
 [profile experiment](POOL_DEPLOYMENT_PROBES.md#ergo-venue-profile-candidate-and-full-block-range-verifier)
-reproduces the three fixture roots and answers synthetic ranges through
+reproduces the four fixture roots and answers synthetic ranges through
 Fleet and sigma-rust. The [local adapter](ERGO_VENUE_PROFILE.md#local-replay-adapter)
 replays every real-proof local replay group (single-backing imports and
 silence, two-backing scopes and recovery, receipts, non-service counts,
@@ -196,10 +200,10 @@ transaction positions. Fresh seedless and receiver readers retain this
 provenance. The [real-chain cost](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor)
 is measured over seven mainnet days from a real anchor against two agreeing
 public nodes: exact sections from the nodes' text reproduce every header
-root, while the pinned decoder leaves every index carrying an Ergo 6.0
-script without a section. No specification selects it; header
-authentication, decoder containment and a decoder that reads the chain's
-script versions remain open.
+root; the previous decoder pin left every index carrying an Ergo 6.0 script
+without a section, and the pinned alpha reads them all. No specification
+selects it; header authentication, decoder containment and node equivalence
+beyond the fixtures and one week remain open.
 
 ## Successor record conformance
 
