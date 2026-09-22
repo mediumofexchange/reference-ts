@@ -1007,8 +1007,11 @@ objects of 15,498, 11,943 and 15,948 bytes that do not decode and so have no
 force; the separated case yields the release at output 0 and the withdrawal
 at output 5, both decoding; kinds 1–3 are empty. Every transaction was
 included two blocks above the node's full height at submission, 10–17 s by
-the block timestamps, inside the holder's margin of `depth + 1` = 3
-blocks with one block to spare.
+the block timestamps. Under C3.3's window a publication authorized at the
+tip with the instant at the latest witnessed index has force when included
+at most `depth + 2` blocks above that tip (A10), so these landed two
+blocks inside the bound at depth 2; the report's latency note states the
+bound one block stricter.
 
 **Not established:** an inclusion-latency distribution (A10: the six cases
 are one correlated observation and the sweep a second, on the testnet's fast

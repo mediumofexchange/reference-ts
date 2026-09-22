@@ -652,14 +652,16 @@ Each names the rule, the candidate, the alternative, and what closes it.
 - **A10 The instant window against real inclusion.** The window is one lag
   wide (C3.3); a venue publication must land in `[instant + lag, instant +
   2·lag]` or has no force. With Ergo's lag `d + 1` the holder's margin is
-  `d + 1` blocks. Closed by an inclusion-latency measurement and the
-  venue's declared depth; P4's 2026-09-22 run took no such distribution,
-  which needs submitted transactions and so belongs with P2. **P2 testnet
-  run 2026-09-22:** all seven transactions landed two blocks above the
-  node's full height at submission (10–17 s), inside the holder's margin
-  of `d + 1` = 3 blocks at depth 2 with one block to spare; these are two correlated observations
-  on the testnet, not a distribution, so A10 stays open for repeated
-  independent submissions, ideally on mainnet.
+  `d + 1` blocks: authorized at tip `T` with the instant at the latest
+  witnessed index, a publication lands at index `instant + d + k` when
+  included at height `T + k`, so it has force for `1 ≤ k ≤ d + 2`, and
+  time spent between authorization and submission (proving) uses the same
+  margin. Closed by an inclusion-latency measurement and the venue's
+  declared depth; P4's 2026-09-22 run took no such distribution. **P2
+  testnet run 2026-09-22:** all seven transactions landed at `k = 2`
+  (10–17 s), two blocks inside the bound of 4 at depth 2 (the report's own
+  note states the bound one block stricter); these are two correlated
+  observations on the testnet, not a distribution.
 - **A11 Chunked publication identity.** One publication across several
   outputs of one transaction: canonical reassembly, duplicates, partial
   publication, retrieval after the boxes are spent. Closed by P2 on a node.
