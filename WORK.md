@@ -4,71 +4,72 @@ Updated: 2026-09-22
 
 ## Goal
 
-Active slice: the decoder dependency decision the P4 measurement made a
-prerequisite of venue selection. Choose and pin, for `experiments/ergo-range`,
-a sigma-rust build that reads the chain's current script versions and keeps
-any sized tree it cannot parse as exact bytes, and record the decision with
-its alternatives and the gate any later pin move must pass. Acceptance: the
-experiment pins the chosen build by lockfile integrity and public commit;
-`npm run check:ergo:range` passes with the decoder corpus extended by a real
-Ergo 6.0 block (header version 4, ErgoTree header version 3 outputs) and by
-synthetic sized trees of every header version with unparseable bodies, each
-read as its exact slice after an exact round trip; the profile check
-reproduces the new fixture's root beside the three existing ones; the P4
-window is re-read offline from the cache under the new pin with zero
-refusals and every root reproduced, with the old build as the control; the
-`--ergo` local replay report is regenerated under the new lock; the decision,
-profile doc, probes, recovery map and implementation status agree; one
-independent adversarial review of the decision and the patch, findings
-resolved; merged and pushed with CI green. Evidence limits: containment is
-unchanged (no hard memory bound); node equivalence is still shown only over
-the fixtures and one mainnet week, not proved; the chosen build is a
-pre-release with no maintenance promise. Stop boundary: no profile
-selection, no specification change, no runtime decoder path, no header-source
-authentication, no P2 publication, no dependency change outside the
-experiment.
+Active slice: recovery-map P2, publication and reassembly on a node. Publish
+a complete release publication (15,498 bytes, four pieces) through the public
+Ergo **testnet** node under the candidate profile's layout, spend its boxes,
+and read it back as block-section evidence through the model verifier; record
+each submitted transaction's inclusion latency (A10; a distribution needs
+repeated independent submissions beyond this slice).
+Acceptance: an explicit network experiment (`experiments/ergo-range/publish.mjs`,
+never run by `check` or CI) that refuses any node not reporting `testnet`,
+builds and signs with the pinned sigma-rust from a throwaway key kept in
+ignored `scratch/ergo-testnet/`, and records in a retained report: node
+acceptance of a four-piece release and the measured box/transaction bytes,
+minimum values and fee (§7 sizes); the reassembled kind-4 answer equal to
+the publication bytes with its ordinal as transaction position then output
+index (a stated same-index order); an exact duplicate read as two
+witnessings; reordered, partial and merged-adjacent runs failing to decode
+under §6 while separated publications both decode (A11); retrieval from
+block sections after the boxes are spent while the UTXO view no longer
+serves them; per-transaction submission height, inclusion height and
+timestamps. An `--offline` dry run over a synthetic input proves the same
+cases without a node. Docs (probes, profile, recovery map P2/A10/A11/§7,
+implementation status, experiment guide) agree; one independent review of
+the patch and report; merged and pushed with CI green. Evidence limits:
+testnet acceptance and latency, not mainnet; the publication's proof bytes
+are synthetic where no real settle proof is retained; headers come from one
+public node. Stop boundary: no mainnet or real funds, no profile selection,
+no specification change unless node acceptance contradicts the profile, no
+runtime path, no dependency change.
 
 ## Status
 
-- Decided and recorded: [the decision](decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes)
-  pins `ergo-lib-wasm-nodejs@0.29.0-alpha-2f840d3` (npm alpha, sigma-rust
-  2f840d3) in `experiments/ergo-range`; `decoder.mjs` is unchanged. 0.28.0
-  refuses an Ergo 6.0 tree at its header before reading the size; the alpha
-  accepts header versions 0–7 and keeps a sized tree it cannot parse as the
-  exact slice. No 0.29.0 stable exists; upstream `develop`'s extension
-  re-ordering (19255a6) is a round-trip refusal risk any later pin move must
-  pass three gates against (corpus, offline window re-read, `--ergo` replay).
-- Delivered in the working tree: pin and lockfile; fixture block 1876512
-  (header v4, two v3 trees) agreeing with the two-node P4 cache; corpus cases
-  rewriting each sized tree to every header version with real and zeroed
-  bodies, coverage counts and WASM hash pinned; child budget 30 s → 120 s;
-  reports regenerated (block probe 414, corpus 20,050, profile 277,
-  chain-cost offline re-read, replay 223 groups / 65 real proofs / 112
-  through the Ergo adapter); docs, recovery map A8, implementation status,
-  README, CI budget (45 min) and index updated.
-- Review (one opus lane): two blockers (replay report not yet regenerated
-  when the entry claimed it; a wrong statement about 0.28.0's `Unparsed`
-  fallback) and six material findings, all applied; the lane reproduced the
-  decoder and block reports byte for byte. `npm ci` from the lockfile
-  reproduces the three experiment reports.
-- Delivered: `main` d913edd, CI run 35727316803 green; pool-v3 took 13.5
-  minutes on both runners, the prior baseline (the 45-minute budget is slack).
+- Built and reviewed: `experiments/ergo-range/publish.mjs` (testnet-only;
+  dry-run and live modes; state file, pinned creation height and `--resume`).
+  The dry run passes and repeats offline from its cache; its report is
+  retained as `docs/ergo-publication-verification.json`; probes, profile,
+  recovery map (P2, A10, A11, §7), experiment guide and status updated. One
+  opus review lane: two live-path blockers (resume after a partial run;
+  funding selection for the chain) and six material findings, all applied;
+  its readback found two more (rebuild at a new creation height; a live
+  `/info` read making the dry run irreproducible), both applied.
+- Blocked: the live run needs about 0.05 testnet ERG at the throwaway address
+  `3WzLhpY2Dbd8WSbvZTbHS5cbCiJFsfbLFrfoWWEt3GkQJJr6oxi9` (key in ignored
+  `scratch/ergo-testnet/wallet.json`); every public faucet was down on
+  2026-09-22. Once funded, run
+  `node experiments/ergo-range/publish.mjs --out docs/ergo-publication-verification.json`
+  and refresh the numbers in probes, profile, recovery map and status.
 
 ## Evidence
 
-- Chain-cost re-read (retained report): the alpha reads all 5,040 sections,
-  every root reproduced, 28,071 views equal to the 0.28.0 control (which
-  refuses 125 transactions in 58 blocks); every index resolved, so the day's
-  and week's requests answer empty; decode 253 s (alpha) against 39 s
-  (control), verifier built in 1.3 s; replay 18.5 min locally under load,
-  13.5 min on CI.
-- No containment evidence binds the pinned build (the containment and
-  metering probes cannot run against it as documented). Prior slice: 83dbeb1.
+- Dry run (retained report): release transaction 16,075 bytes, piece boxes
+  4,095/4,095/4,095/3,669 bytes; under the node's dust rule (its reported
+  `minValuePerByte` 360 over full box bytes) 1,474,200 nanoERG a full piece
+  box, 5,743,440 a release, plus the 1,100,000 fee; sigma-rust's
+  candidate-only estimate understates by 33 bytes a box; seven objects read
+  back at one index in transaction-then-output order, decodable exactly where
+  the profile says. The report binds the node's `/info` (ergo-testnet-6.0.3),
+  parameters, library pin and model sources.
+- Node rules checked against upstream `v6.0.3` or the node: dust over full
+  box bytes, monotonic creation height, `chainSlice` is `(from, to]`, the
+  indexed transaction route serves confirmed only, the mempool chains.
+- Prior slice (`main` d913edd): the alpha reads all 5,040 P4 sections; no
+  containment evidence binds the pinned build.
 
 ## Next
 
-1. Finish this slice (above), then P2 node publication and reassembly, which
-   also gives A10's inclusion latency; or the wallet/custody boundaries below.
+1. This slice; then the wallet/custody boundaries below, or an
+   authenticated header source for the profile.
 
 ## Retained boundaries and local state
 

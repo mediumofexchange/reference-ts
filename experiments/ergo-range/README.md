@@ -63,6 +63,40 @@ records the window and anchor, the nodes' agreement, a digest of every
 cached response the run read, sizes, times and the refusals by output tree
 version.
 
+## Publication and reassembly on a node
+
+`publish.mjs` is the recovery map's P2: it publishes the candidate profile's
+kind-4 layout on the public Ergo **testnet** and reads it back through the
+model verifier. It is run explicitly, never by `check` or CI, because it
+submits transactions to and reads blocks from a public node. It refuses any
+node whose `/info` does not report the testnet and signs only with a
+throwaway key read from ignored `scratch/ergo-testnet/wallet.json`
+(`{ "network": "testnet", "secretHex": "...", "address": "..." }`; make one
+with the pinned library's `SecretKey.random_dlog()` and never copy it into
+the repository). Fund the address with testnet ERG from a public faucet
+(about 0.05 tERG covers a run), then:
+
+```powershell
+node experiments/ergo-range/publish.mjs --dry-run --out scratch/ergo-testnet/dry-run.json
+node experiments/ergo-range/publish.mjs --node http://213.239.193.208:9052 --depth 2 --out scratch/ergo-testnet/live.json
+```
+
+The dry run builds and signs every case over a synthetic funded input and
+reads them back from one synthetic block under the real latest header; it
+reads only `/info` and the signing context, caches both together on the first
+run and is offline afterwards, and submits nothing. The live run chains six cases (the release, its duplicate, its pieces reordered,
+three of four pieces, the release and a withdrawal adjacent, and the two
+separated by a plain output), waits for inclusion and the depth, sweeps every
+piece box back to the wallet, waits again, checks the UTXO and indexed views,
+then reads every block from the header below the first inclusion to the tip
+and asks the kind-4 range under the subject. `--state` (default
+`scratch/ergo-testnet/run.json`) records every step, including the run's
+pinned creation height, and `--resume` continues an interrupted run,
+re-submitting only what the node does not already hold; `--poll`,
+`--max-wait` and `--delay` pace it. The [retained report](../../docs/ergo-publication-verification.json)
+records the sizes, values and the read-back and, once run live, the node's
+acceptance and each transaction's inclusion latency.
+
 ## Stable stock storage control
 
 The current candidate is the complete stable v6.0.5 Windows x64 package.

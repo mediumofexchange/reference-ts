@@ -614,11 +614,13 @@ a demand together (35,000 bytes) need 9 outputs and 35,980 bytes. The
 non-membership proofs left the release on 2026-09-09 (C3.6), so a release is
 now about 15.5 KB in four chunks; the chunking arithmetic above is unchanged
 and still bounds the larger case. Every case is
-well under the mempool limit. Not established: node acceptance, a real
+well under the mempool limit. Not established here: node acceptance, a real
 signature, fee policy, the votable parameter's current value, reassembly and
 authentication of chunks against forged or reordered boxes, and retrieval
 after the boxes are spent. The probe's script, notes and JSON stay in
-`scratch/` and are reproducible with `npm install` there.
+`scratch/` and are reproducible with `npm install` there. The signed sizes
+under the candidate profile's layout and the reassembly cases are now in the
+[publication experiment](#venue-publication-and-reassembly-on-a-node).
 
 ## Full-block commitment feasibility
 
@@ -929,6 +931,76 @@ distribution (A10; it needs submitted transactions, which is P2), and any
 bound on future blocks: the counts are for these package versions and this
 window. No profile, decoder or dependency pin is selected by this probe.
 
+## Venue publication and reassembly on a node
+
+The recovery map's P2. `experiments/ergo-range/publish.mjs` is run explicitly,
+never by `check` or CI, because it submits transactions to a public Ergo
+**testnet** node and reads blocks back from it; the
+[experiment guide](../experiments/ergo-range/README.md#publication-and-reassembly-on-a-node)
+has the commands. It refuses a node whose `/info` does not report the
+testnet, signs with the pinned sigma-rust from a throwaway key in ignored
+`scratch/ergo-testnet/`, and never touches mainnet or real funds. Under the
+[candidate profile](ERGO_VENUE_PROFILE.md)'s layout it builds two publications
+of one backing with exact pool-v3 §6 frames and synthetic proof and signature
+bytes (a 15,498-byte release in four pieces and a 450-byte withdrawal in one),
+places each piece in a box at the kind-4 location with `R4` the subject and
+`R5` the piece, and submits six chained cases as separate transactions: the
+release; the same release again; its pieces reordered; three of its four
+pieces; the release and the withdrawal adjacent in one run; and the two
+separated by a plain output. After they are witnessed under the depth it
+spends every piece box back to the wallet, waits for the depth again, checks
+that the node's UTXO view serves no piece box and its indexed view names the
+spend for each, reads the headers from the header below the first inclusion to
+the tip and every block through the last inclusion through the JSON-text
+discipline of the chain-cost probe, builds the model verifier from that anchor
+and asks the kind-4 range under the subject, mapping each answered object to
+its transaction by index and ordinal. Every submission records the node's full
+height at submission and the inclusion height and block timestamp (A10); the
+cases are chained on one change box and submitted together, so their
+latencies are one correlated observation, not a distribution. `--dry-run`
+runs the same construction, signing and read over a synthetic funded input
+and one synthetic block whose parent is the real latest testnet header,
+reading `/info` and the signing context from the node once, caching both
+together and submitting nothing.
+
+**Dry run, 2026-09-22** ([retained report](ergo-publication-verification.json)):
+every case signs and round-trips exactly with the pinned build
+(`0.29.0-alpha-2f840d3`, WASM hash in the report). The release transaction
+is 16,075 bytes (34,468 bytes of node JSON) with six outputs; the partial case
+12,439, the merged 16,606, the separated 16,650, and the sweep of all 25
+piece boxes 2,412 bytes with one return output. A 3,981-byte piece box is
+4,095 full bytes, within the 4,096-byte limit, the 3,555-byte last piece
+3,669, and the withdrawal's single piece box 564. The node's dust rule is its
+votable `minValuePerByte` over the full box bytes (upstream
+`BoxUtils.minimalErgoAmount`, applied in `ErgoTransaction.verifyOutput`); at
+the 360 nanoERG the testnet node reports in `/info`, a full piece box needs
+1,474,200 nanoERG and a release 5,743,440 nanoERG in minimum values plus the
+library's suggested 1,100,000 fee, about 0.0068 ERG. sigma-rust's
+`calc_min_box_value` covers the candidate only (4,062 bytes, 1,462,320
+nanoERG), 11,880 nanoERG short of the node's rule for a full piece box, so the
+experiment computes the values itself; the rule's enforcement is measured only
+when the node accepts. Read back through the verifier, the six cases give
+seven objects at one index in transaction-then-output order: the release and
+its duplicate are two witnessings of the same 15,498 bytes, both decoding
+under §6; the reordered, partial and merged runs are single objects of
+15,498, 11,943 and 15,948 bytes that do not decode and so have no force; the
+separated case yields the release at output 0 and the withdrawal at output 5,
+both decoding. The report binds the node's reported parameters, the library
+and the models' sources; its synthetic block root varies between runs with
+the randomized proofs, the transaction ids and every answer do not.
+
+**Not established** until the live run: node acceptance, the dust rule's and
+fee policy's enforcement, inclusion latency (A10, and even then a few
+correlated samples, not a distribution) and retrieval after the boxes are
+spent on a real chain. The live run needs testnet ERG at the wallet's
+address; on 2026-09-22 the three public faucets were unreachable
+(`testnet.ergofaucet.org` 502, `tn-faucet.ergohost.io` 530,
+`faucet.ergopool.io` unresolvable), so the node step is owed. The dry run's
+block and the headers after its real anchor are synthetic; the publications'
+content is synthetic (frames exact, proof and signature bytes not), which the
+venue does not read; testnet acceptance, once measured, is not mainnet
+acceptance.
+
 ## Windows process containment feasibility
 
 The private `experiments/ergo-range/contained-check.ps1` probe compares fixed
@@ -1226,10 +1298,11 @@ selects no production node version or runtime trust boundary.
 
 ## Venue and restoration work still required
 
-A separate venue publication experiment must publish a complete recovery publication through
-a pinned node, including chunk framing, canonical reassembly, duplicates,
-incomplete publication and retrieval after boxes are spent. No transaction
-acceptance result is claimed yet.
+The [publication experiment](#venue-publication-and-reassembly-on-a-node)
+covers piece framing, canonical reassembly, duplicates, reordered, partial
+and merged runs and retrieval after boxes are spent, so far in its dry run
+only; its testnet run, and with it node acceptance and inclusion latency,
+awaits testnet funds. No transaction acceptance result is claimed yet.
 
 The restoration experiment must specify receiver-only spending authority,
 authenticated encrypted openings, deterministic retry, seed-based discovery

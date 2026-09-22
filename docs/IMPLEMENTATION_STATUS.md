@@ -201,9 +201,15 @@ provenance. The [real-chain cost](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustio
 is measured over seven mainnet days from a real anchor against two agreeing
 public nodes: exact sections from the nodes' text reproduce every header
 root; the previous decoder pin left every index carrying an Ergo 6.0 script
-without a section, and the pinned alpha reads them all. No specification
-selects it; header authentication, decoder containment and node equivalence
-beyond the fixtures and one week remain open.
+without a section, and the pinned alpha reads them all. The
+[publication experiment](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)
+signs the profile's four-piece release and its duplicate, reordered, partial,
+merged and separated cases for the public testnet and reads them back through
+the verifier in its dry run, measuring the signed sizes under the node's
+dust rule; its testnet run, node acceptance and inclusion latency await
+testnet funds. No specification selects the profile; header
+authentication, decoder containment and node equivalence beyond the fixtures
+and one week remain open.
 
 ## Successor record conformance
 

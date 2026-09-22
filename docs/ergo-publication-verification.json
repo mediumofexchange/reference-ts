@@ -1,0 +1,712 @@
+{
+  "status": "dry-run-no-submission",
+  "node": "v24.6.0",
+  "library": {
+    "version": "0.29.0-alpha-2f840d3",
+    "wasmSha256": "65143062c54766fbc79b721ed77c43d199604c31bef535b99dca3b8842e1ea16"
+  },
+  "network": "GET only: /info and the signing context, now cached",
+  "nodeUrl": "http://213.239.193.208:9052",
+  "nodeInfo": {
+    "name": "ergo-testnet-6.0.3",
+    "appVersion": "6.0.3",
+    "network": "testnet",
+    "fullHeight": 558222,
+    "headersHeight": 558222,
+    "bestFullHeaderId": "b7dcb8a2cfcb6cbe7edf91db765e05cb02a462ba2a2caa8b25b38d08ce504a1d",
+    "parameters": {
+      "outputCost": 100,
+      "tokenAccessCost": 100,
+      "maxBlockCost": 1000000,
+      "height": 558208,
+      "maxBlockSize": 524288,
+      "dataInputCost": 100,
+      "blockVersion": 4,
+      "inputCost": 2000,
+      "storageFeeFactor": 1250000,
+      "subblocksPerBlock": 30,
+      "minValuePerByte": 360
+    }
+  },
+  "requests": 2,
+  "cacheDigest": "3167c5c2fb2b93c31c6b6332e0a99cfa8767385af7e96eefef61ab9d801299fb",
+  "signingContext": {
+    "heights": "558213-558222",
+    "headerVersions": [
+      4
+    ]
+  },
+  "wallet": {
+    "address": "3WzLhpY2Dbd8WSbvZTbHS5cbCiJFsfbLFrfoWWEt3GkQJJr6oxi9",
+    "tree": "0008cd03eb9432b2aaf72b39f474ea8daec054a85f1b34ed2423aa0731221117f62af749",
+    "publicationAddress": "3WwS8A7GkuK2oxUvE8jGNJ1EnqJ7uRfwhv2K145RcnJuPKPZGngh",
+    "locations": {
+      "1": "0008cd02baddc1f1857bae346df0ec7cab5f6cef03af1f3afe898f6112acf44312661b03",
+      "2": "0008cd03388c76064d8c90d36107d612e13a805427d4f90d53872bd9de2999cecebf8ab5",
+      "3": "0008cd03a1a558c6f73851fed68491ad6867658a4c35ab32bb82ad2371140f5c17db4eaa",
+      "4": "0008cd026ccbe7aa5bff7619ef42f5d8dde8b352646b5416b490da9bcf0fd711afef1258"
+    }
+  },
+  "publications": {
+    "release": {
+      "bytes": 15498,
+      "pieces": [
+        3981,
+        3981,
+        3981,
+        3555
+      ],
+      "publicationId": "b5bc79e6b582873c4a2e477221cafef4e47f12002094f3faf0ffe98a8a50eeb2"
+    },
+    "withdrawal": {
+      "bytes": 450,
+      "pieces": [
+        450
+      ],
+      "publicationId": "36390de5624b3e538558914d8e8c46b82bb66c99f6fe21f3b4388492e3250dfd"
+    }
+  },
+  "layout": {
+    "pieceBytes": 3981,
+    "maxBoxBytes": 4096,
+    "minValuePerByte": 360,
+    "mempoolMaxTransactionBytes": 98304,
+    "fullBoxBytesRule": "the node's txDust rule is its minValuePerByte times the full ErgoBox bytes (BoxUtils.minimalErgoAmount): the candidate bytes plus the 32-byte transaction id and the output index's VLQ; the library's calc_min_box_value covers the candidate only",
+    "runCost": "41145880",
+    "caseCosts": {
+      "release": "6843440",
+      "duplicate": "6843440",
+      "reordered": "6843440",
+      "partial": "5522600",
+      "merged": "7046480",
+      "separated": "8046480"
+    },
+    "minChange": "28440",
+    "creationHeight": 558222
+  },
+  "transactions": {
+    "release": {
+      "name": "release",
+      "id": "5fde6cc1d8946d2c441f58ec52ada1d860bbb3697dc94944f524f220d31d04ca",
+      "bytes": 16075,
+      "jsonBytes": 34468,
+      "signMs": 339,
+      "inputs": [
+        "84858538130979e73ea13a5cc595fa9d211deb0db104f6628a64df0955da2dde"
+      ],
+      "outputs": [
+        {
+          "index": 0,
+          "role": "piece",
+          "boxId": "31cf5d0eb25d677ca9a6b6c3d0d6e39d1dd82ad66e4666e6f22991a2004fd5d7",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 1,
+          "role": "piece",
+          "boxId": "17eece1f9c6a5b06456a7104e7fa647cc6e1dc1437372416e6b8b034b3ec37e4",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 2,
+          "role": "piece",
+          "boxId": "82cd82d6e03e3f55bae782fa4419f515600ae6f5ad968b981be1896aaf42af94",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 3,
+          "role": "piece",
+          "boxId": "dc6bd281d218e40c90a777268f8604f23a82fb118570e9ec4544dc1fdf0658c2",
+          "value": "1320840",
+          "boxBytes": 3669,
+          "pieceBytes": 3555,
+          "nodeMinimum": "1320840",
+          "libraryMinimum": "1308960"
+        },
+        {
+          "index": 4,
+          "role": "change",
+          "boxId": "a3460bd4fa77768518f6ab49c8bbcc6e4aa16cc9d8e5d63051e2a8f1476f1fe8",
+          "value": "993156560",
+          "boxBytes": 79
+        },
+        {
+          "index": 5,
+          "role": "fee",
+          "boxId": "e0cf938dbc65732c313b8c28db76443157e53c6ced7f5e4cd571221b1ac6a781",
+          "value": "1100000",
+          "boxBytes": 146
+        }
+      ],
+      "pieceValue": "5743440",
+      "fee": "1100000"
+    },
+    "duplicate": {
+      "name": "duplicate",
+      "id": "764ef9a9b61e6bcad97e0f65272f45fa318e8d0b52286ff3b16d9c2a18a754f0",
+      "bytes": 16075,
+      "jsonBytes": 34468,
+      "signMs": 110,
+      "inputs": [
+        "a3460bd4fa77768518f6ab49c8bbcc6e4aa16cc9d8e5d63051e2a8f1476f1fe8"
+      ],
+      "outputs": [
+        {
+          "index": 0,
+          "role": "piece",
+          "boxId": "3b7e6e4d7f8ee7a340ff5bfc52ffd975231324c992109321cb30c820811dc793",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 1,
+          "role": "piece",
+          "boxId": "9821ed9cc60314fd153b1522b2e1ad5b76c30d0f4e9e78df037f24343e806b24",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 2,
+          "role": "piece",
+          "boxId": "ed3e89bd1f7341408cc945fadf38536d1c206a3dfd01065bb47ab733a6e3e4a6",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 3,
+          "role": "piece",
+          "boxId": "7acf6cad55b2b0fc026b24bf0d0999f946f6244e08fe5d1803330412b9381201",
+          "value": "1320840",
+          "boxBytes": 3669,
+          "pieceBytes": 3555,
+          "nodeMinimum": "1320840",
+          "libraryMinimum": "1308960"
+        },
+        {
+          "index": 4,
+          "role": "change",
+          "boxId": "5122d5e9f30faf033315edf4264a46117aeed6dfaabe44b29f08a42175a79208",
+          "value": "986313120",
+          "boxBytes": 79
+        },
+        {
+          "index": 5,
+          "role": "fee",
+          "boxId": "60b68f9e4f9a43723c8cd45155ae0db7c47566cfbe8e5deabb2949ace904849e",
+          "value": "1100000",
+          "boxBytes": 146
+        }
+      ],
+      "pieceValue": "5743440",
+      "fee": "1100000"
+    },
+    "reordered": {
+      "name": "reordered",
+      "id": "ed0ca199cbc067e129d4376356aa619f995f1a49f5dc3a18a6279f288d277b7d",
+      "bytes": 16075,
+      "jsonBytes": 34468,
+      "signMs": 118,
+      "inputs": [
+        "5122d5e9f30faf033315edf4264a46117aeed6dfaabe44b29f08a42175a79208"
+      ],
+      "outputs": [
+        {
+          "index": 0,
+          "role": "piece",
+          "boxId": "961c9eb1c4a7ad9df1fb83980c8756c73b15055ff5d922a8947e8e405cc3aea1",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 1,
+          "role": "piece",
+          "boxId": "449763ec76055dd3ad0dbdbd114ba96fe862948971abaa1491b1ac24aac48bfd",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 2,
+          "role": "piece",
+          "boxId": "f28ac8e618394ef62b0a0112d32920082d51dd48583bab0a14ab07e383fdf0f1",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 3,
+          "role": "piece",
+          "boxId": "372eb72554a666bab11724ab4be079862ee4e0220480942279ca96ba40866c8f",
+          "value": "1320840",
+          "boxBytes": 3669,
+          "pieceBytes": 3555,
+          "nodeMinimum": "1320840",
+          "libraryMinimum": "1308960"
+        },
+        {
+          "index": 4,
+          "role": "change",
+          "boxId": "faf69f26095ed2e74c420ec7d134aaa91642b5449f7a07f46133976c36b83a90",
+          "value": "979469680",
+          "boxBytes": 79
+        },
+        {
+          "index": 5,
+          "role": "fee",
+          "boxId": "971b1ccc64221452a5d32c52f1add1fe39a7660dce447bb1b230e684ffcb4340",
+          "value": "1100000",
+          "boxBytes": 146
+        }
+      ],
+      "pieceValue": "5743440",
+      "fee": "1100000"
+    },
+    "partial": {
+      "name": "partial",
+      "id": "7666198a3994012e093c500ba8f5f215c6d92ddb4aeaf3a789f98b718bbd0bbc",
+      "bytes": 12439,
+      "jsonBytes": 26835,
+      "signMs": 86,
+      "inputs": [
+        "faf69f26095ed2e74c420ec7d134aaa91642b5449f7a07f46133976c36b83a90"
+      ],
+      "outputs": [
+        {
+          "index": 0,
+          "role": "piece",
+          "boxId": "05415cb065ab064b2405acb701462685a775c166fdc8dd9ce22948e6b010856a",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 1,
+          "role": "piece",
+          "boxId": "8895774405769529177d0075036e7882256f2baa1e154ef35b3c662b13593ca0",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 2,
+          "role": "piece",
+          "boxId": "4fdcf4a89c7830ea4d363aa4c1f0612631c8627d0271574d338d3b56fd897989",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 3,
+          "role": "change",
+          "boxId": "2bbe22fd18abdecde7a5e23a1f47e9971d6bebc65d8c64e637bbb9ba75da95eb",
+          "value": "973947080",
+          "boxBytes": 79
+        },
+        {
+          "index": 4,
+          "role": "fee",
+          "boxId": "c397984c302c2b0848b87656121bb8971887e026618c0be899f53374f8f61604",
+          "value": "1100000",
+          "boxBytes": 146
+        }
+      ],
+      "pieceValue": "4422600",
+      "fee": "1100000"
+    },
+    "merged": {
+      "name": "merged",
+      "id": "6d68c300abac8e6cbe64eed5f5e6681666267a4fe41a29ac58b0809a3616fda5",
+      "bytes": 16606,
+      "jsonBytes": 35890,
+      "signMs": 76,
+      "inputs": [
+        "2bbe22fd18abdecde7a5e23a1f47e9971d6bebc65d8c64e637bbb9ba75da95eb"
+      ],
+      "outputs": [
+        {
+          "index": 0,
+          "role": "piece",
+          "boxId": "5d526af50f00855e1951715a2db120e55d51ab1cb234ebde3e6d6a0666c40090",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 1,
+          "role": "piece",
+          "boxId": "efebe64caddfd5a9df8204385419d546b0df4a8649124035061437b2ba937b6f",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 2,
+          "role": "piece",
+          "boxId": "d28009c7fa751e561b04634bf993a8abe7916f90f365528ee59ca3fde9159c01",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 3,
+          "role": "piece",
+          "boxId": "dd5d42f2e53e489d3454b22ef5f25ca38f32f04b4a4e6b47a8e983138e66e69f",
+          "value": "1320840",
+          "boxBytes": 3669,
+          "pieceBytes": 3555,
+          "nodeMinimum": "1320840",
+          "libraryMinimum": "1308960"
+        },
+        {
+          "index": 4,
+          "role": "piece",
+          "boxId": "b9200fea51dce1c1a13ae82e27f8013ddeb7a2887810eea445e86acf336acac1",
+          "value": "203040",
+          "boxBytes": 564,
+          "pieceBytes": 450,
+          "nodeMinimum": "203040",
+          "libraryMinimum": "191160"
+        },
+        {
+          "index": 5,
+          "role": "change",
+          "boxId": "85a490b53223883c8cb04704a93835db1e4977c8c01bbe28886384f8442422e0",
+          "value": "966900600",
+          "boxBytes": 79
+        },
+        {
+          "index": 6,
+          "role": "fee",
+          "boxId": "62ddfaf1cb16448fbadda71d08603d0b9f005ce0ce542a6d16ae05e5f3b052d2",
+          "value": "1100000",
+          "boxBytes": 146
+        }
+      ],
+      "pieceValue": "5946480",
+      "fee": "1100000"
+    },
+    "separated": {
+      "name": "separated",
+      "id": "f5ac5f16657215d6cae8114a65e4c9b3475e6b858827fed1d1bc43464a96ebd4",
+      "bytes": 16650,
+      "jsonBytes": 36297,
+      "signMs": 96,
+      "inputs": [
+        "85a490b53223883c8cb04704a93835db1e4977c8c01bbe28886384f8442422e0"
+      ],
+      "outputs": [
+        {
+          "index": 0,
+          "role": "piece",
+          "boxId": "68bc67159221bb33edcddb2fcc9547d0ef29ba4c54c2b4099a7b29694ccffc40",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 1,
+          "role": "piece",
+          "boxId": "1385a3e3adedf1ab3fd35c12c7835eb2346cef1d298df8b7ed8a5e4a6042cd66",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 2,
+          "role": "piece",
+          "boxId": "79f9cbd57e6841b4596f120cb3852934b21cf086a216149bdd2841d6dfdcc6e4",
+          "value": "1474200",
+          "boxBytes": 4095,
+          "pieceBytes": 3981,
+          "nodeMinimum": "1474200",
+          "libraryMinimum": "1462320"
+        },
+        {
+          "index": 3,
+          "role": "piece",
+          "boxId": "a82cbaafc551e1c36b5409aaba4e47c163dffc53973fd0f09d08e42128d88972",
+          "value": "1320840",
+          "boxBytes": 3669,
+          "pieceBytes": 3555,
+          "nodeMinimum": "1320840",
+          "libraryMinimum": "1308960"
+        },
+        {
+          "index": 4,
+          "role": "separator",
+          "boxId": "b775b34847ea34a1b608b8c42f0712c792a45fc361c73e4b73756c585a550ffd",
+          "value": "1000000",
+          "boxBytes": 77
+        },
+        {
+          "index": 5,
+          "role": "piece",
+          "boxId": "607117f1c4e728654ca2047ba851b79783e3b99f1963f47da72ba9ca3eca22d6",
+          "value": "203040",
+          "boxBytes": 564,
+          "pieceBytes": 450,
+          "nodeMinimum": "203040",
+          "libraryMinimum": "191160"
+        },
+        {
+          "index": 6,
+          "role": "change",
+          "boxId": "9551334b53d7d6afef3c581618f5474399ee980a6e5c9dec1d95205727cdea96",
+          "value": "958854120",
+          "boxBytes": 79
+        },
+        {
+          "index": 7,
+          "role": "fee",
+          "boxId": "666ce4cf1edbc4976c1327344a3039c1e0414a0586cb77534285eebee3941743",
+          "value": "1100000",
+          "boxBytes": 146
+        }
+      ],
+      "pieceValue": "5946480",
+      "fee": "1100000"
+    },
+    "spend": {
+      "name": "spend",
+      "id": "988ceb8d7dc3187afa80dc815e4ef4b399c74e7d1f3e4150fdb3cfdeb0123717",
+      "bytes": 2412,
+      "jsonBytes": 8363,
+      "signMs": 1509,
+      "inputs": [
+        "607117f1c4e728654ca2047ba851b79783e3b99f1963f47da72ba9ca3eca22d6",
+        "a82cbaafc551e1c36b5409aaba4e47c163dffc53973fd0f09d08e42128d88972",
+        "79f9cbd57e6841b4596f120cb3852934b21cf086a216149bdd2841d6dfdcc6e4",
+        "1385a3e3adedf1ab3fd35c12c7835eb2346cef1d298df8b7ed8a5e4a6042cd66",
+        "68bc67159221bb33edcddb2fcc9547d0ef29ba4c54c2b4099a7b29694ccffc40",
+        "b9200fea51dce1c1a13ae82e27f8013ddeb7a2887810eea445e86acf336acac1",
+        "dd5d42f2e53e489d3454b22ef5f25ca38f32f04b4a4e6b47a8e983138e66e69f",
+        "d28009c7fa751e561b04634bf993a8abe7916f90f365528ee59ca3fde9159c01",
+        "efebe64caddfd5a9df8204385419d546b0df4a8649124035061437b2ba937b6f",
+        "5d526af50f00855e1951715a2db120e55d51ab1cb234ebde3e6d6a0666c40090",
+        "4fdcf4a89c7830ea4d363aa4c1f0612631c8627d0271574d338d3b56fd897989",
+        "8895774405769529177d0075036e7882256f2baa1e154ef35b3c662b13593ca0",
+        "05415cb065ab064b2405acb701462685a775c166fdc8dd9ce22948e6b010856a",
+        "372eb72554a666bab11724ab4be079862ee4e0220480942279ca96ba40866c8f",
+        "f28ac8e618394ef62b0a0112d32920082d51dd48583bab0a14ab07e383fdf0f1",
+        "449763ec76055dd3ad0dbdbd114ba96fe862948971abaa1491b1ac24aac48bfd",
+        "961c9eb1c4a7ad9df1fb83980c8756c73b15055ff5d922a8947e8e405cc3aea1",
+        "7acf6cad55b2b0fc026b24bf0d0999f946f6244e08fe5d1803330412b9381201",
+        "ed3e89bd1f7341408cc945fadf38536d1c206a3dfd01065bb47ab733a6e3e4a6",
+        "9821ed9cc60314fd153b1522b2e1ad5b76c30d0f4e9e78df037f24343e806b24",
+        "3b7e6e4d7f8ee7a340ff5bfc52ffd975231324c992109321cb30c820811dc793",
+        "dc6bd281d218e40c90a777268f8604f23a82fb118570e9ec4544dc1fdf0658c2",
+        "82cd82d6e03e3f55bae782fa4419f515600ae6f5ad968b981be1896aaf42af94",
+        "17eece1f9c6a5b06456a7104e7fa647cc6e1dc1437372416e6b8b034b3ec37e4",
+        "31cf5d0eb25d677ca9a6b6c3d0d6e39d1dd82ad66e4666e6f22991a2004fd5d7"
+      ],
+      "outputs": [
+        {
+          "index": 0,
+          "role": "return",
+          "boxId": "15dd7e1a4c4c4089648af6b0d066ce6582c8baaaa3b2196ba9d98efee363bb74",
+          "value": "32445880",
+          "boxBytes": 78
+        },
+        {
+          "index": 1,
+          "role": "fee",
+          "boxId": "2178ce1153d04b66a8da210505734b3b8215a2021c4cf6c8639e7110b535e4b2",
+          "value": "1100000",
+          "boxBytes": 146
+        }
+      ],
+      "pieceValue": "0",
+      "fee": "1100000"
+    }
+  },
+  "syntheticBlock": {
+    "anchor": {
+      "height": 558222,
+      "id": "b7dcb8a2cfcb6cbe7edf91db765e05cb02a462ba2a2caa8b25b38d08ce504a1d",
+      "real": true
+    },
+    "height": "558223",
+    "transactions": 6,
+    "root": "b3b6501b2bf294854498588e3596f494735ea7a374a4c46d998bd2f92603de93",
+    "depth": 2,
+    "note": "the root varies between runs with the randomized proofs; the transaction ids do not"
+  },
+  "readBack": {
+    "identity": "2ecb387f491eba39413f03264bf061a0711cf427b4b2eb8caa887a4525520adc",
+    "origin": "558223",
+    "witnessedIndex": "0",
+    "toIndex": "0",
+    "constructMs": 4,
+    "answerMs": 2.07,
+    "answerBytes": 90575,
+    "entries": [
+      {
+        "index": "0",
+        "height": "558223",
+        "ordinal": "0",
+        "transactionPosition": 0,
+        "firstOutput": 0,
+        "transactionId": "5fde6cc1d8946d2c441f58ec52ada1d860bbb3697dc94944f524f220d31d04ca",
+        "case": "release",
+        "recordBytes": 15498,
+        "record": "release",
+        "decodesUnder6": true
+      },
+      {
+        "index": "0",
+        "height": "558223",
+        "ordinal": "4294967296",
+        "transactionPosition": 1,
+        "firstOutput": 0,
+        "transactionId": "764ef9a9b61e6bcad97e0f65272f45fa318e8d0b52286ff3b16d9c2a18a754f0",
+        "case": "duplicate",
+        "recordBytes": 15498,
+        "record": "release",
+        "decodesUnder6": true
+      },
+      {
+        "index": "0",
+        "height": "558223",
+        "ordinal": "8589934592",
+        "transactionPosition": 2,
+        "firstOutput": 0,
+        "transactionId": "ed0ca199cbc067e129d4376356aa619f995f1a49f5dc3a18a6279f288d277b7d",
+        "case": "reordered",
+        "recordBytes": 15498,
+        "record": "reordered",
+        "decodesUnder6": false
+      },
+      {
+        "index": "0",
+        "height": "558223",
+        "ordinal": "12884901888",
+        "transactionPosition": 3,
+        "firstOutput": 0,
+        "transactionId": "7666198a3994012e093c500ba8f5f215c6d92ddb4aeaf3a789f98b718bbd0bbc",
+        "case": "partial",
+        "recordBytes": 11943,
+        "record": "partial",
+        "decodesUnder6": false
+      },
+      {
+        "index": "0",
+        "height": "558223",
+        "ordinal": "17179869184",
+        "transactionPosition": 4,
+        "firstOutput": 0,
+        "transactionId": "6d68c300abac8e6cbe64eed5f5e6681666267a4fe41a29ac58b0809a3616fda5",
+        "case": "merged",
+        "recordBytes": 15948,
+        "record": "merged",
+        "decodesUnder6": false
+      },
+      {
+        "index": "0",
+        "height": "558223",
+        "ordinal": "21474836480",
+        "transactionPosition": 5,
+        "firstOutput": 0,
+        "transactionId": "f5ac5f16657215d6cae8114a65e4c9b3475e6b858827fed1d1bc43464a96ebd4",
+        "case": "separated",
+        "recordBytes": 15498,
+        "record": "release",
+        "decodesUnder6": true
+      },
+      {
+        "index": "0",
+        "height": "558223",
+        "ordinal": "21474836485",
+        "transactionPosition": 5,
+        "firstOutput": 5,
+        "transactionId": "f5ac5f16657215d6cae8114a65e4c9b3475e6b858827fed1d1bc43464a96ebd4",
+        "case": "separated",
+        "recordBytes": 450,
+        "record": "withdrawal",
+        "decodesUnder6": true
+      }
+    ],
+    "sameIndexOrder": {
+      "558223": [
+        "release@0.0",
+        "duplicate@1.0",
+        "reordered@2.0",
+        "partial@3.0",
+        "merged@4.0",
+        "separated@5.0",
+        "separated@5.5"
+      ]
+    },
+    "kinds123Empty": [
+      true,
+      true,
+      true
+    ]
+  },
+  "files": {
+    "experiments/ergo-range/publish.mjs": "808ada2727ea74562c9fa135411e7e21617d6cbf7531e1b61a84f9b41867c751",
+    "experiments/ergo-range/decoder.mjs": "44af0e096fabfcdb4cc581d383006d608391e15635760d21895b6660a3757e55",
+    "experiments/ergo-range/package.json": "0b70863d77be0db3e944e4594bfd126a705ec0953053af0e1ce9198f7a436610",
+    "experiments/ergo-range/package-lock.json": "9133136e72d45c7bf8427d0cef6360454d2f12775a91dd6b1031ff6f8fbd6a70",
+    "model/pool-v3-ergo-profile.ts": "19a68c82f6410d551e589e34f69731e1cc8b73995a7cabe5cc75ff8b2e75128d",
+    "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f",
+    "model/pool-v3-records.ts": "193e68179cf5c66d46f51f02562bb287d8c17a9aeb9952d223cf28dbfecd161f",
+    "src/bytes.ts": "f2ef62ba9c02329bb63a89c0f7aeb9ce8a713dafa054afb9a4e2fb143b0172f0",
+    "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
+    "src/pool/field.ts": "abd55bd8bd2a51fb954c9dc05fb3380bf4c2df6dd3c145c2eff0f29b1e36710a"
+  },
+  "limitations": [
+    "Dry run: nothing was submitted or accepted by a node; the input is synthetic, the block and its headers after the real anchor are synthetic, and node acceptance, fees, the dust rule's enforcement and inclusion latency are not measured.",
+    "The venue is the public Ergo testnet through one public node; acceptance, fees, minimum values and inclusion latency are the testnet's under its reported parameters and current miners, not mainnet's.",
+    "The publications' frames and lengths are exact under pool-v3 §6; the proof, authorization and signature bytes are synthetic, since the venue applies no content rule and no real settle proof is retained outside the proving harness. Nothing here is a valid statement, a demand or a settlement.",
+    "Headers come from the one node the transactions were submitted to; linkage, contiguity and the anchor's child are checked by the model, proof of work and chain selection are not.",
+    "The four locations are pay-to-public-key trees of throwaway keys derived from the funded testnet key; no deployment, backing or specification names them.",
+    "Transaction bytes are the pinned library's serialization of the node's exact JSON text and count only where they reproduce the header's transaction root; the strict decoder has no containment or node-equivalence proof beyond the fixtures and one mainnet week.",
+    "The cases are chained on one change box and submitted together, so their inclusion latencies are correlated observations, not a distribution; only the sweep is submitted at a separate time.",
+    "The signed transactions' witness ids, and so a block root over them, vary between runs (Schnorr proofs are randomized); transaction ids, box ids, sizes and every answer are deterministic.",
+    "No runtime path, profile selection, specification change or dependency change follows from this measurement."
+  ]
+}
