@@ -45,12 +45,15 @@ experiment.
   reports regenerated (block probe 414, corpus 20,050, profile 277,
   chain-cost offline re-read, replay 223 groups / 65 real proofs / 112
   through the Ergo adapter); docs, recovery map A8, implementation status,
-  README, CI budget (45 min) and index updated; `check:docs` passes.
+  README, CI budget (45 min) and index updated.
 - Review (one opus lane): two blockers (replay report not yet regenerated
   when the entry claimed it; a wrong statement about 0.28.0's `Unparsed`
   fallback) and six material findings, all applied; the lane reproduced the
   decoder and block reports byte for byte. `npm ci` from the lockfile
-  reproduces the three experiment reports. Remaining: commit, push, CI.
+  reproduces the three experiment reports.
+- Delivered: `main` d913edd, CI run 35727316803 green; pool-v3 took 13.5
+  minutes on both runners under the pinned alpha, the prior baseline, so the
+  18.5-minute local figure was contention and the 45-minute budget is slack.
 
 ## Evidence
 
@@ -58,10 +61,10 @@ experiment.
   every root reproduced, 28,071 views equal to the 0.28.0 control (which
   refuses 125 transactions in 58 blocks); every index resolved, so the day's
   and week's requests answer empty; decode 253 s (alpha) against 39 s
-  (control), verifier built in 1.3 s; replay 18.5 min locally under load.
-- No containment evidence binds the pinned build: the containment and
-  metering probes cannot run against it as documented.
-- Prior slice: `main` 83dbeb1 (P4 delivered), CI green.
+  (control), verifier built in 1.3 s; replay 18.5 min locally under load,
+  13.5 min on CI.
+- No containment evidence binds the pinned build (the containment and
+  metering probes cannot run against it as documented). Prior slice: 83dbeb1.
 
 ## Next
 
