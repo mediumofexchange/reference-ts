@@ -22,14 +22,17 @@ specification or runtime change, no mainnet submission or real funds.
 
 ## Status
 
-- Branch `feat/a10-mainnet-latency`: `latency.mjs` written; 6-minute
-  smoke run passed (state and report in `scratch/ergo-latency/smoke*`).
-  24-hour run started 2026-09-22 19:17 UTC with
-  `--hours 24 --tail-minutes 60 --out scratch/ergo-latency/report.json`,
-  state `scratch/ergo-latency/run.json` (resume with `--resume`;
-  `--report-only` recomputes offline). Also on the branch: the P2 text
-  corrected to the window bound `k <= depth + 2` (the P2 report note is one
-  block stricter). Review owed after the run, with the report.
+- Branch `feat/a10-mainnet-latency`: `latency.mjs` written, 6-minute smoke
+  run passed, method reviewed (opus lane: no restart-level finding; window
+  lower bound, pessimistic naming, censoring, reorg re-read, chain check,
+  provenance and save retry fixed in 9e01858/a4021a4; readback running).
+  24-hour run from a4021a4 started 2026-09-22 19:22 UTC as a detached
+  process (`--hours 24 --tail-minutes 60 --out scratch/ergo-latency/report.json`),
+  state `scratch/ergo-latency/run.json` with the collector hash inside;
+  `--resume` continues it, `--report-only` recomputes the report and
+  checks the chain. A pre-review run was stopped after 5 minutes
+  (`scratch/ergo-latency/aborted-prereview.*`). Also on the branch: the P2
+  text corrected to the window bound `k <= depth + 2`.
 - Previous slice P2 delivered on main 2e71db3 (CI green): testnet
   publication accepted and read back, A11 closed.
 - Throwaway testnet wallet: key in ignored `scratch/ergo-testnet/wallet.json`

@@ -119,7 +119,11 @@ export function summarize(state) {
   const firstHeight = blocks[0]?.height, lastHeight = blocks.at(-1)?.height, observedIds = new Set(seen.map(tx => tx.id));
   // Transactions in blocks after the first round that the pool never showed: included before a round could see them,
   // or never broadcast to this node (a miner's own). Coinbase-style transactions are among them.
-  const unseen = blocks.filter(b => b.height > firstHeight).flatMap(b => b.transactions.filter(id => !observedIds.has(id)));
+  const firstTip = Math.min(...seen.filter(tx => tx.presentAtStart).map(tx => tx.tip), ...seen.map(tx => tx.tip));
+  const unseen = blocks.filter(b => b.height > firstTip).flatMap(b => b.transactions.filter(id => !observedIds.has(id)));
+  // Offline linkage of the recorded blocks where their parent ids were recorded.
+  const linked = blocks.slice(1).filter((b, i) => b.parentId !== undefined && b.height === blocks[i].height + 1);
+  const recordedLinkage = { pairs: linked.length, broken: linked.filter((b, i) => b.parentId !== state.blocks[b.height - 1].id).map(b => b.height) };
   const intervals = blocks.slice(1).map((b, i) => (b.timestamp - blocks[i].timestamp) / 1000);
   const strata = (key, bucket) => Object.fromEntries([...new Set(rows.filter(r => r[key] !== null).map(r => bucket(r[key])))].sort().map(name => {
     const group = rows.filter(r => r[key] !== null && bucket(r[key]) === name);
@@ -137,12 +141,12 @@ export function summarize(state) {
       timed: rows.length, timedAfterGap: rows.filter(r => r.afterGap).length, included: included.length, dropped: rows.filter(r => r.outcome === "dropped").length, pending: rows.filter(r => r.outcome === "pending").length,
       detailMissing: seen.filter(tx => tx.size === null).length, detailMissingIncluded: included.filter(r => r.size === null).length,
       belowWindow: included.filter(r => r.k < 1).length },
-    includedUnseen: unseen.length,
+    includedUnseen: unseen.length, recordedLinkage,
     k: { low: quantiles(included.map(r => r.k)), high: quantiles(included.map(r => r.kHigh)), histogram: histogram(included.map(r => r.k)) },
     secondsToBlockTimestamp: quantiles(included.map(r => r.seconds)),
     withinWindowByDepth: withinWindow(rows, lastHeight),
     bySize: strata("size", sizeBucket), byFeePerByte: strata("rate", rateBucket),
-    note: "k is the inclusion height less the node's full height read at the start of the round whose pool read first held the transaction; kHigh uses the previous round's height and bounds k from above for a submission to this node, while the true k can be one below k when a block arrived within the round. Under C3.3 a demand authorized at the tip has force for 1 <= k <= depth + 2. 'all' counts dropped sightings as misses and pending ones as misses once depth + 2 blocks were observed after the sighting (censored before; 'counted' is the denominator); 'included' conditions on inclusion; 'Pessimistic' fractions use kHigh. Quantiles are nearest-rank at floor(p*n). Fee per byte is nanoERG per serialized byte; a sighting whose detail was gone (usually just included) has no size and is left out of the strata.",
+    note: "k is the inclusion height less the node's full height read at the start of the round whose pool read first held the transaction; kHigh uses the previous round's height and bounds k from above for a submission to this node, while the true k can be one below k when a block arrived within the round. Under C3.3 a demand authorized at the tip has force for 1 <= k <= depth + 2. 'all' counts dropped sightings as misses and pending ones as misses once depth + 2 blocks were observed after the sighting (censored before; 'counted' is the denominator); 'included' conditions on inclusion; 'Pessimistic' fractions use kHigh. Sightings after a gap in the rounds (timedAfterGap) are included; across a gap k is only a lower bound. Quantiles are nearest-rank at floor(p*n). Fee per byte is nanoERG per serialized byte; a sighting whose detail was gone (usually just included) has no size and is left out of the strata.",
   };
 }
 
@@ -199,36 +203,40 @@ async function observe(state) {
     await sleep(Math.max(0, pollSeconds * 1000 - (Date.now() - started)));
   }
   state.endedAt = Date.now();
-  // Reconcile the whole window against the node's final best chain, up to its current tip, then compare its headers
-  // with a second node. A failure here leaves the state resumable: --resume goes straight back to this step.
+  // Reconcile the whole window against the node's final best chain, up to its current tip. A failure here leaves the
+  // state resumable: --resume goes straight back to this step.
   const heights = Object.keys(state.blocks).map(Number);
   try { await readBlocks(Math.min(...heights) - 1, Math.max(Math.max(...heights), (await tip()).height)); }
   catch (error) { saveRetrying(state); throw error; }
-  const agreement = { node: compareUrl, heights: 0, agree: 0, disagree: [] };
-  try {
-    for (let a = Math.min(...heights) - 1; a < Math.max(...heights); a += 50) {
-      const headers = await get(compareUrl, `/blocks/chainSlice?fromHeight=${a}&toHeight=${Math.min(a + 50, Math.max(...heights))}`);
-      for (const header of headers) {
-        if (state.blocks[header.height] === undefined) continue;
-        agreement.heights++;
-        if (state.blocks[header.height].id === header.id) agreement.agree++; else agreement.disagree.push(header.height);
-      }
-    }
-  } catch (error) { agreement.error = String(error.message ?? error).slice(0, 200); }
-  state.agreement = agreement;
   saveRetrying(state);
 }
 
-// The report's chain check: the node's best chain over the window links by parent id, holds exactly the recorded block
-// ids, and serves the top header by id (a chainSlice upper bound can fall back to another header; ERGO_NODE_PREFLIGHT).
-async function checkChain(state) {
-  const heights = Object.keys(state.blocks).map(Number), low = Math.min(...heights), high = Math.max(...heights);
+// The report's chain check: the observing node's best chain from below the window to its current tip links by parent id,
+// ends at the tip it reports (a chainSlice upper bound can fall back to another header; ERGO_NODE_PREFLIGHT), and holds
+// exactly the recorded block ids; then a second node's header ids are compared over the window.
+async function slice(base, low, high) {
   const headers = [];
-  for (let a = low - 1; a < high; a += 50) headers.push(...await get(nodeUrl, `/blocks/chainSlice?fromHeight=${a}&toHeight=${Math.min(a + 50, high)}`));
-  const mismatched = headers.filter(h => state.blocks[h.height]?.id !== h.id).map(h => h.height);
+  for (let a = low; a < high; a += 50) headers.push(...await get(base, `/blocks/chainSlice?fromHeight=${a}&toHeight=${Math.min(a + 50, high)}`));
+  return headers;
+}
+async function checkChain(state) {
+  const heights = Object.keys(state.blocks).map(Number), low = Math.min(...heights), high = Math.max(...heights), base = state.nodeUrl;
+  const info = await get(base, "/info");
+  const headers = await slice(base, low - 1, info.fullHeight);
   const unlinked = headers.slice(1).filter((h, i) => h.parentId !== headers[i].id || h.height !== headers[i].height + 1).map(h => h.height);
-  const top = await get(nodeUrl, `/blocks/${state.blocks[high].id}/header`);
-  return { node: nodeUrl, heights: headers.length, expected: high - low + 1, mismatched, unlinked, topServed: top.id === state.blocks[high].id && top.height === high };
+  const window = headers.filter(h => h.height <= high);
+  const mismatched = window.filter(h => state.blocks[h.height]?.id !== h.id).map(h => h.height);
+  const check = { node: base, heights: window.length, expected: high - low + 1, mismatched, unlinked,
+    toTip: { height: info.fullHeight, endsAtReportedTip: headers.at(-1)?.id === info.bestFullHeaderId } };
+  const compared = { node: compareUrl, heights: 0, agree: 0, disagree: [] };
+  try {
+    for (const header of await slice(compareUrl, low - 1, high)) {
+      if (state.blocks[header.height] === undefined) continue;
+      compared.heights++;
+      if (state.blocks[header.height].id === header.id) compared.agree++; else compared.disagree.push(header.height);
+    }
+  } catch (error) { compared.error = String(error.message ?? error).slice(0, 200); }
+  return { ...check, compared };
 }
 
 let state;
@@ -242,7 +250,7 @@ else {
 if (!reportOnly) await observe(state);
 const chain = offline ? null : await checkChain(state);
 
-const report = { status: "mainnet-observed-passively", node: process.version, nodeUrl: state.nodeUrl, nodeInfo: state.node, compared: state.agreement ?? null,
+const report = { status: "mainnet-observed-passively", node: process.version, nodeUrl: state.nodeUrl, nodeInfo: state.node,
   chain, requests, failedRequests: failures, stateSha256: sha256(readFileSync(stateFile)), collector: state.collector ?? null, reportedBy: files,
   settings: reportOnly ? null : { hours, tailMinutes, pollSeconds, delayMs, reorgWindow: REORG_WINDOW }, ...summarize(state),
   limitations: [
