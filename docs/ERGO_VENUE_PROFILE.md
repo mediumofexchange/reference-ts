@@ -120,7 +120,9 @@ header of the chain and reproduces that header's transaction root, recomputed
 from the decoder's ids (block version 1 commits to the ids alone; later
 versions to all ids followed by all witness ids, over scrypto's tree with
 leaf prefix 0, internal prefix 1, an absent right sibling contributing no
-bytes and a lone leaf keeping its parent). A block that is not a well-formed
+bytes and a lone leaf keeping its parent). The root binds every unsigned
+byte and the concatenated proofs, not the proofs' split among inputs;
+attribution reads outputs only, so that gap reaches no answer. A block that is not a well-formed
 section view, belongs to another chain or a height at or below the anchor,
 duplicates an established index or fails its root is passed over at the
 model boundary; an index without a section leaves only the ranges through it
@@ -144,7 +146,22 @@ its retained evidence and can be reproduced from it.
   prerequisite of selection. Fleet's decoder fails 13 of the 24 real fixture
   transactions ([the block probe](POOL_DEPLOYMENT_PROBES.md#full-block-commitment-feasibility));
   sigma-rust decodes all 24 but carries no equivalence proof ([the decoder
-  probe](POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility)).
+  probe](POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility)). On
+  mainnet the denial is already live: the pinned sigma-rust 0.28.0 refuses
+  every transaction carrying an ErgoTree of header version 3, the Ergo 6.0
+  script version, and 125 such transactions in 58 of seven days'
+  5,040 blocks left those indices without a section
+  ([P4](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor)).
+  The npm alpha `0.29.0-alpha-2f840d3` read all of them after exact round
+  trips, about 7.1 times slower per transaction. A decoder that reads
+  the selected chain's script versions, or that keeps a sized tree it cannot
+  parse as exact bytes, is a selection prerequisite; no pin changes here.
+- The public node API serves transactions as JSON. sigma-rust's serializer
+  reproduced every header root of the measured week from the node's exact
+  text, but only because that text keeps the spending-proof extension's key
+  order, which a JSON object model sorts: re-serializing parsed objects gives
+  12 of the week's transactions a different id, and their blocks no
+  section. The header root authenticates the bytes, never the serializer.
 - A kind-4 object is one transaction's run, so a publication must fit one
   transaction. Under this layout a box carries a 3,981-byte piece within
   Ergo's 4,096-byte box limit, and one transaction under the pinned node's
@@ -164,8 +181,16 @@ its retained evidence and can be reproduced from it.
   ([decision](../decisions/2026-09.md#2026-09-21--index-the-ergo-venue-from-a-pinned-anchor-header)),
   and the reader may keep its own answers while the finality rule stands, so
   it is paid once per venue and then per new block. The reader retains every
-  header from the anchor's child onward. Measuring the cost on a real chain
-  is P4 in [the recovery map](POOL_V3_RECOVERY_MAP.md#9-probe-plan).
+  header from the anchor's child onward. Measured on mainnet
+  ([P4](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor)):
+  seven days from a real anchor are 5,040 blocks at 716 a day carrying
+  28,196 transactions in 26.6 MB of sections, a mean of 5,286 bytes
+  a block with a median of 424 and a largest of 193,531; each header is
+  221 wire bytes, 105 in the verifier's view, so a year of headers is about
+  58 MB and a year of sections about 1.4 GB at that
+  rate. Built from a week's sections the verifier answers a range over all of
+  them in about a millisecond; building it took 1.3 s, and decoding the
+  week's transactions 32.4 s, on one desktop.
 - The header source and the decoder are trust boundaries of the reader:
   the header chain's authenticity and the decoder's containment are not
   established here. Objects at the locations before the anchor are not in
@@ -241,9 +266,11 @@ integration introduces no production path, profile selection or normative rule.
 ## Before selection
 
 A specification decision selects a venue profile and pins its identity;
-before that: P4's measurements against a real chain from an anchor, an
-authenticated header source a reader can run, a node-equivalent contained
-decoder, publication and reassembly on a node (P2) confirming the measured
-capacity, the adoption condition above checked against the selected
-configuration, and the runtime's adoption in place of the v2 materialized
-view.
+before that: an authenticated header source a reader can run, a
+node-equivalent contained decoder that reads the chain's current script
+versions (the pinned 0.28.0 does not read Ergo 6.0 trees), an exact-byte
+block source or the JSON-text discipline above, publication and reassembly
+on a node (P2) confirming the measured capacity, the adoption condition
+above checked against the selected configuration, and the runtime's
+adoption in place of the v2 materialized view. P4's cost measurement is
+done; its inclusion-latency distribution is not.

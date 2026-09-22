@@ -627,6 +627,12 @@ Each names the rule, the candidate, the alternative, and what closes it.
   trust assumptions. A publication must fit one transaction: 95,544 bytes
   in 24 pieces under the pinned mempool policy, against a 15,498-byte
   release under the observed proofs; the frame's ceiling is a parser bound.
+  **Measured 2026-09-22:** the cost is a mean of 5,286 section bytes a
+  block, 26.6 MB a week, and 221 wire bytes a header; the denial is
+  live, since the pinned decoder refuses Ergo 6.0 scripts and left
+  58 of the week's 5,040 indices without a section. The header
+  source's authenticity and a decoder that reads the chain's script versions
+  remain the trust assumptions before selection.
 - **A9 Same-index order.** Decided 2026-09-14 in pool-v3 §13: an operator's
   commitments at one index are read in ascending sequence from the records
   alone, so no intra-index order is needed for kinds 1–3; `extending()`'s
@@ -641,8 +647,9 @@ Each names the rule, the candidate, the alternative, and what closes it.
 - **A10 The instant window against real inclusion.** The window is one lag
   wide (C3.3); a venue publication must land in `[instant + lag, instant +
   2·lag]` or has no force. With Ergo's lag `d + 1` the holder's margin is
-  `d + 1` blocks. Closed by P4's inclusion-latency measurement and the
-  venue's declared depth.
+  `d + 1` blocks. Closed by an inclusion-latency measurement and the
+  venue's declared depth; P4's 2026-09-22 run took no such distribution,
+  which needs submitted transactions and so belongs with P2.
 - **A11 Chunked publication identity.** One publication across several
   outputs of one transaction: canonical reassembly, duplicates, partial
   publication, retrieval after the boxes are spent. Closed by P2 on a node.
@@ -824,7 +831,14 @@ None changes `src/`, the pinned v2 identities or the specification.
   indexed read with a header-verified scan over one day and seven days of
   blocks: bytes, time, and the inclusion-latency distribution of recent
   transactions. Acceptance: A8–A10 have numbers and one candidate is
-  recommended.
+  recommended. **Measured 2026-09-22** for the scan only, since the
+  candidate profile of 2026-09-15 is the header-verified scan and an indexed
+  node read cannot establish completeness (A8): seven mainnet days from a
+  real anchor through the model verifier, with two public nodes' headers
+  compared, exact sections from the nodes' text, and the pinned decoder's
+  coverage counted, in [the deployment probes](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor).
+  The inclusion-latency distribution needs submitted transactions and moves
+  to P2.
 - **P5 Device.** Extend `bench:pool:browser` to the demand and settle
   circuits and run it on the target phone. Acceptance: A14 against a
   declared budget.

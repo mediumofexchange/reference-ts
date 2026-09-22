@@ -808,9 +808,10 @@ nothing at four throwaway locations and answers empty in 102 bytes.
 
 Not established: header authentication (proof of work, chain selection and
 finality are the reader's header source), decoder containment and node
-equivalence, acceptance of the synthetic transactions by a node, reassembly
-on a node after boxes are spent, and the cost of exhaustion from a real
-anchor on a real chain. One limit is concrete: a transaction the reader's decoder
+equivalence, acceptance of the synthetic transactions by a node, and
+reassembly on a node after boxes are spent; the cost of exhaustion from a
+real anchor on a real chain is [measured below](#real-chain-exhaustion-cost-from-a-real-anchor).
+One limit is concrete: a transaction the reader's decoder
 refuses leaves its height without a section, so one node-valid transaction
 the decoder cannot read denies every range through it until the decoder is
 repaired. One is measured: a kind-4 run is one transaction's outputs, and
@@ -822,6 +823,79 @@ frame's 131,914-byte ceiling is a parser bound no configuration-conformant
 publication approaches. A configuration is publishable here only where its
 largest publication fits one transaction. No specification selects the
 profile.
+
+## Real-chain exhaustion cost from a real anchor
+
+The recovery map's P4. `experiments/ergo-range/chain-cost.mjs` is run
+explicitly, never by `check` or CI, because it reads public mainnet nodes
+(GET only; nothing is submitted); the [experiment guide](../experiments/ergo-range/README.md#real-chain-exhaustion-cost)
+has the command. It reads the headers of a window from every named node and
+the anchor's id at its height, compares them field by field, obtains each
+block's transaction section by serializing the node's exact JSON text with
+the pinned sigma-rust, counts a section only where the bytes reproduce the
+header's transaction root through the model's root, reads the sections with
+the experiment's strict decoder and, beside it, with another named
+`ergo-lib-wasm-nodejs` install, then builds the model verifier from the real
+headers and the read sections under four throwaway locations, so every
+answer is empty by exhaustion. The [retained report](ergo-chain-cost-verification.json)
+records the window, the nodes' agreement, a digest of the cached responses,
+sizes, times and refusals.
+
+The window is anchored at height 1873360, so indices 0–5039 are heights
+1873361–1878400, with headers to 1878410 for depth 10. `node.ergo.watch`
+(5.0.21) and `213.239.193.208:9053` (6.0.6) agree on all 5,050 headers
+and the anchor; the headers are version 4 of 221 wire bytes each and link
+without a gap; the window spans 169.0 hours, 716 blocks a day. Every
+one of the 5,040 sections reproduced its header root from the node's
+text, so the JSON route yields exact bytes when the text is fed as written.
+That root binds each transaction's unsigned bytes and the concatenation of
+its proofs, not the proofs' split among inputs (and a version-1 root binds
+no proofs); attribution reads outputs only, so no answer depends on the
+difference, but the byte counts are authenticated only that far.
+
+| Measure | Last day (720 blocks) | Seven days (5,040 blocks) |
+|---|---|---|
+| Transactions / outputs | 4,706 / 16,711 | 28,196 / 103,789 |
+| Section bytes: total / mean / median | 4,131,042 / 5,738 / 424 | 26,639,110 / 5,286 / 424 |
+| Section bytes: p90 / p99 / max | 18,340 / 52,503 / 86,421 | 15,701 / 56,015 / 193,531 |
+| Largest transaction, bytes | 32,742 | 88,284 |
+| Headers retained (one per block), wire / verifier view, bytes | 159,022 / 75,600 | 1,113,468 / 529,200 |
+| JSON fetched, bytes | 21,501,423 | 133,335,507 |
+| Indices without a section: sigma-rust 0.28.0 / alpha | 5 / 0 | 58 / 0 |
+
+Decoding the week's 28,196 transactions took 32.4 s under the
+pinned 0.28.0 and 228.4 s under `0.29.0-alpha-2f840d3`; serializing
+them from text 32.1 s; building the verifier from the read sections
+1.3 s, and that construction is where every output is scanned and
+attributed and every root rechecked from the decoder's ids; 5,040
+single-index probes afterwards took 43 ms and a day's or the week's
+range answers in a few milliseconds, walking per-index lists. The week's
+sections were fetched by the paced scratch probe in about six minutes of
+response time, roughly 80 ms a response at 250 ms pacing from one host; the
+retained run reads its cache. The 6.0.6 node refused new connections after
+about 600 unpaced requests, so reads are paced and rotate between nodes with
+backoff.
+
+Three findings bind later choices. The pinned 0.28.0 refuses every
+transaction carrying an ErgoTree of header version 3, the Ergo 6.0 script
+version: 125 transactions in 58 blocks of the week, each leaving
+its index without a section and every range through it unanswered, the
+longest resolvable run being 2,683 indices; the alpha reads all of them
+after exact round trips. Second, the node's JSON keeps a spending-proof
+extension's keys in its map's order, which a JSON object model sorts:
+re-serializing parsed objects gives 12 of the week's transactions a
+different id, so a reader on JSON must serialize the node's text as written,
+and the header root, not the serializer, authenticates the result. Third,
+the node's header `size` (221 bytes) is twice the verifier's view (105), so
+header retention is the deployment's age at about 58 MB a year
+of wire headers at this rate.
+
+Not established: the nodes' authenticity (two public nodes agreeing is not
+proof of work, chain selection or finality, and a shared upstream is not
+excluded), decoder containment and node equivalence, the inclusion-latency
+distribution (A10; it needs submitted transactions, which is P2), and any
+bound on future blocks: the counts are for these package versions and this
+window. No profile, decoder or dependency pin is selected by this probe.
 
 ## Windows process containment feasibility
 

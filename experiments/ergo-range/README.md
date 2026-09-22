@@ -1,7 +1,8 @@
 # Ergo range-source feasibility
 
-Private offline probe; no runtime exports, node connection or transaction submission.
-Use Node 24, then from the repository root:
+Private probe; no runtime exports and no transaction submission. The checked
+command connects to nothing; only the explicit [chain-cost probe](#real-chain-exhaustion-cost)
+below reads public nodes. Use Node 24, then from the repository root:
 
 ```powershell
 npm --prefix experiments/ergo-range ci --ignore-scripts --no-audit --no-fund
@@ -16,6 +17,45 @@ Do not expose this probe as an arbitrary-file or network verification API.
 
 The separate [dedicated-node preflight](../../docs/ERGO_NODE_PREFLIGHT.md)
 pins a Windows distribution and records the separate finite node-startup probe.
+
+## Real-chain exhaustion cost
+
+`chain-cost.mjs` is the recovery map's P4: it measures what the
+[candidate profile's](../../docs/ERGO_VENUE_PROFILE.md) exhaustion costs on
+mainnet from a real anchor. It is run explicitly, never by `check` or CI,
+because it reads public nodes (GET only; nothing is submitted):
+
+```powershell
+node experiments/ergo-range/chain-cost.mjs --from 1873361 --count 5040 --depth 10 --alternate scratch/sigma-alpha --out scratch/chain-cost.json
+```
+
+The anchor is the block below `--from`; indices `0..count-1` are the next
+`count` heights, and headers are read up to `count - 1 + depth` above the
+anchor so the last index is witnessed. Every response is cached by name under
+`--cache` (default `scratch/ergo-chain`); `--offline` reuses the cache,
+refuses anything missing and records no live node state, and only the same
+window's header slices replay; `--delay` paces live reads, which rotate over
+`--sources` with backoff when a node throttles. Each source's headers are
+compared field by field, and the anchor's id is read from each; a
+disagreement gives an unresolved report and exit 2. Transaction bytes come
+from each transaction's exact text in the node's JSON (its spending-proof
+extension's key order is part of the bytes, and a parsed object would sort
+it) through the pinned sigma-rust serializer, and a block's section counts
+only where its bytes reproduce the header's transaction root through the
+model's root; `decoder.mjs` then reads them, and `--alternate` names a
+directory holding another `ergo-lib-wasm-nodejs` install that reads the
+same bytes through the script's verbatim copy of that round trip, checked
+against `decoder.mjs` on the pinned build for every transaction, with the
+two builds' outputs compared (the alternate's version and WASM hash are
+recorded; nothing is pinned by it).
+The model verifier is built from the real headers and the read sections
+with four throwaway locations, so every answer is empty by exhaustion; its
+construction is where every output is scanned, and its single-index probes,
+the last-day and whole-window requests and the unresolved indices are
+reported. The [retained report](../../docs/ergo-chain-cost-verification.json)
+records the window and anchor, the nodes' agreement, a digest of every
+cached response the run read, sizes, times and the refusals by output tree
+version.
 
 ## Stable stock storage control
 

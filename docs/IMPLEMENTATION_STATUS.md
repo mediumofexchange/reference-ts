@@ -193,8 +193,13 @@ compact faults, returning segments) from exact transaction bytes under
 independently selected synthetic headers with bounded ownership before
 decoding, reproducing the fixture verifier's results with kind-4 ordinals as
 transaction positions. Fresh seedless and receiver readers retain this
-provenance. No specification selects it; header authentication, decoder
-containment and real-chain cost remain open.
+provenance. The [real-chain cost](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor)
+is measured over seven mainnet days from a real anchor against two agreeing
+public nodes: exact sections from the nodes' text reproduce every header
+root, while the pinned decoder leaves every index carrying an Ergo 6.0
+script without a section. No specification selects it; header
+authentication, decoder containment and a decoder that reads the chain's
+script versions remain open.
 
 ## Successor record conformance
 
