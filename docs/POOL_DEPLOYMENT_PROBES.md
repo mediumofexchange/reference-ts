@@ -1049,8 +1049,8 @@ its header's root, are now bound to headers this reader validated; they were
 not re-read from the node. The node's log shows it processing the genesis
 header itself. The header chain of 1.88 million headers synced in 6,863 s
 (1 h 54 min, from the first process, which was stopped for a configuration
-change after about 20,000 headers and resumed ten seconds later on the same
-data) over one home connection with 20–30 outbound peers in the samples; at
+change at height 2,492 and resumed ten seconds later on the same data) over
+one home connection with up to 30 outbound peers (2 at the first sample); at
 that point the node held 850 MB of data with a 1.2 GB working set and 7,231
 CPU-seconds, read by hand with `nodes.mjs status` 34 s after the node
 logged the milestone. The testnet node (a full archive with the extra index)

@@ -82,14 +82,17 @@ async function api(name, path, options = {}) {
   if (!response.ok) throw new Error(`HTTP ${response.status} ${path}`);
   return response.headers.get("content-type")?.includes("json") ? response.json() : response.text();
 }
-// A pid file outlives a reboot, and Windows reuses pids: a pid is this node only while its executable is the bundle's
-// own java.exe, so stop never signals an unrelated process and start never mistakes one for a running node.
+// A pid file outlives a reboot, and Windows reuses pids: a pid is this network's node only while its executable is the
+// bundle's java.exe and its command line names this network's configuration (both nodes share the executable), so stop
+// never signals another process and start never mistakes one for a running node.
 const JAVA = join(bundle, "jre/bin/java.exe");
-const alive = pid => {
+const alive = (pid, name) => {
   try { process.kill(pid, 0); } catch { return false; }
   try {
-    const path = execFileSync("powershell.exe", ["-NoProfile", "-Command", `(Get-Process -Id ${Number(pid)}).Path`], { encoding: "utf8", windowsHide: true }).trim();
-    return resolve(path).toLowerCase() === resolve(JAVA).toLowerCase();
+    const out = execFileSync("powershell.exe", ["-NoProfile", "-Command",
+      `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}"; $p.ExecutablePath; $p.CommandLine`], { encoding: "utf8", windowsHide: true });
+    const [path = "", commandLine = ""] = out.split(/\r?\n/);
+    return resolve(path.trim()).toLowerCase() === resolve(JAVA).toLowerCase() && commandLine.toLowerCase().includes(join(base, name, "ergo.conf").toLowerCase());
   } catch { return false; }
 };
 const pidOf = name => { const file = join(base, name, "pid"); return existsSync(file) ? Number(readFileSync(file, "utf8")) : undefined; };
@@ -115,7 +118,7 @@ function rotate(dir) {
 
 async function start(name) {
   const pid = pidOf(name);
-  if (pid !== undefined && alive(pid)) return console.log(`${name}: already running (pid ${pid})`);
+  if (pid !== undefined && alive(pid, name)) return console.log(`${name}: already running (pid ${pid})`);
   const jarHash = createHash("sha256").update(readFileSync(join(bundle, JAR))).digest("hex");
   assert.equal(jarHash, JAR_SHA256, "the node JAR is the v6.0.6 release");
   const { dir } = prepare(name), net = NETWORKS[name];
@@ -130,17 +133,17 @@ async function start(name) {
 
 async function stop(name) {
   const pid = pidOf(name);
-  if (pid === undefined || !alive(pid)) return console.log(`${name}: not running`);
+  if (pid === undefined || !alive(pid, name)) return console.log(`${name}: not running`);
   const { key } = prepare(name);
   // The node's own shutdown closes its databases cleanly; the process is killed only if it does not exit.
   try { await api(name, "/node/shutdown", { method: "POST", headers: { api_key: key } }); } catch (error) { console.log(`${name}: shutdown request failed (${error.message})`); }
-  for (let i = 0; i < 60 && alive(pid); i++) await sleep(1000);
-  if (alive(pid)) { process.kill(pid); console.log(`${name}: killed after 60 s`); } else console.log(`${name}: stopped`);
+  for (let i = 0; i < 60 && alive(pid, name); i++) await sleep(1000);
+  if (alive(pid, name)) { process.kill(pid); console.log(`${name}: killed after 60 s`); } else console.log(`${name}: stopped`);
 }
 
 async function status(name, print = true) {
   const pid = pidOf(name), dir = join(base, name);
-  const row = { network: name, pid: pid ?? null, running: pid !== undefined && alive(pid), dataBytes: bytesUnder(join(dir, "data")) };
+  const row = { network: name, pid: pid ?? null, running: pid !== undefined && alive(pid, name), dataBytes: bytesUnder(join(dir, "data")) };
   if (row.running) row.process = usage(pid);
   try {
     const info = await api(name, "/info");

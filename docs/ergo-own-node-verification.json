@@ -5,10 +5,10 @@
     "url": "http://127.0.0.1:9053",
     "appVersion": "6.0.6",
     "name": "ergo-mainnet-6.0.6",
-    "headersHeight": 1878981,
-    "fullHeight": 1833794,
-    "bestHeaderId": "4c2402fb879f1f9562794914366cef270ecc9a91b02a8d7b79c2993c56d4385f",
-    "headersScore": 2.7502294086643467e+21,
+    "headersHeight": 1878984,
+    "fullHeight": 1838117,
+    "bestHeaderId": "721c578f8a57f8eda7944ac1546090c2104456122541bf798132d202b524f31e",
+    "headersScore": 2.7502295910148e+21,
     "peers": 30,
     "stateType": "utxo"
   },
@@ -67,30 +67,31 @@
     }
   },
   "current": {
-    "height": 1878961,
-    "ownId": "2d68700ffbdf6718e89b744c63ab82201111a9b7d194eded58e1ec76f362c9ac",
+    "height": 1878964,
+    "ownId": "452d6585aebffafc9c7f5ee5c6106cb054c9573f384c2c90a34eac2609b31310",
     "nodes": [
       {
         "node": "https://node.ergo.watch",
-        "id": "2d68700ffbdf6718e89b744c63ab82201111a9b7d194eded58e1ec76f362c9ac",
+        "id": "452d6585aebffafc9c7f5ee5c6106cb054c9573f384c2c90a34eac2609b31310",
         "agrees": true
       },
       {
         "node": "http://213.239.193.208:9053",
-        "id": "2d68700ffbdf6718e89b744c63ab82201111a9b7d194eded58e1ec76f362c9ac",
+        "id": "452d6585aebffafc9c7f5ee5c6106cb054c9573f384c2c90a34eac2609b31310",
         "agrees": true
       }
     ]
   },
   "sync": {
     "milestones": {
-      "note": "Extracted by hand from the nodes' INFO-level stdout logs of their first two processes, kept as scratch/ergo-nodes/<network>/stdout.first-run.log (local time UTC+2 on 2026-09-22). Process 1 (19:29:45Z-19:30:29Z) processed genesis and the first ~20k headers and was stopped for a configuration change; process 2 started 19:30:39Z on the same data directory. The nodes log at WARN since, which omits these lines.",
+      "note": "Extracted by hand from the nodes' INFO-level stdout logs of their first two processes, kept as scratch/ergo-nodes/<network>/stdout.first-run.log (local time UTC+2 on 2026-09-22). Process 1 (19:29:45Z-19:30:29Z) processed genesis and headers to height 2,492 (testnet 799) and was stopped for a configuration change; process 2 started 19:30:39Z (testnet 19:30:40Z) on the same data directory. The nodes log at WARN since, which omits these lines.",
       "runs": {
         "mainnet": [
           {
             "start": "2026-09-22T19:29:45.784Z",
             "stop": "2026-09-22T19:30:29.825Z",
-            "genesisLine": 65
+            "genesisLine": 65,
+            "lastHeight": 2492
           },
           {
             "start": "2026-09-22T19:30:39.259Z"
@@ -99,10 +100,11 @@
         "testnet": [
           {
             "start": "2026-09-22T19:29:46.463Z",
-            "genesisLine": 51
+            "genesisLine": 51,
+            "lastHeight": 799
           },
           {
-            "start": "2026-09-22T19:30:37Z"
+            "start": "2026-09-22T19:30:40.833Z"
           }
         ]
       },
@@ -147,7 +149,7 @@
     },
     "headersSyncSeconds": 6863.383,
     "currentProcessStart": "2026-09-22T21:38:54.8059637Z",
-    "samples": 13,
+    "samples": 14,
     "firstSample": {
       "at": "2026-09-22T19:32:49.911Z",
       "network": "mainnet",
@@ -182,29 +184,29 @@
       "lastSeenMessageTime": 1790113305730
     },
     "latest": {
-      "at": "2026-09-22T22:02:56.982Z",
+      "at": "2026-09-22T22:13:10.908Z",
       "network": "mainnet",
       "pid": 19736,
       "running": true,
-      "dataBytes": 3530721881,
+      "dataBytes": 3753072307,
       "process": {
-        "workingSet": 2846322688,
-        "privateBytes": 1107451904,
-        "cpuSeconds": 727
+        "workingSet": 3271032832,
+        "privateBytes": 1407590400,
+        "cpuSeconds": 1207
       },
       "appVersion": "6.0.6",
-      "headersHeight": 1878975,
-      "fullHeight": 1830373,
+      "headersHeight": 1878982,
+      "fullHeight": 1834608,
       "peers": 30,
       "unconfirmed": 0,
       "stateType": "utxo",
-      "lastSeenMessageTime": 1790114564960
+      "lastSeenMessageTime": 1790115165630
     }
   },
   "requests": 60,
   "files": {
-    "experiments/ergo-range/header-check.mjs": "55cd4c79161f6ac4463ea57d362fa5ef8bf8200c38382cb2506b5d586b96a65b",
-    "experiments/ergo-range/nodes.mjs": "2cc3ca2b2c886edfe871919257e247066a625619acde4cfffc176c6267882b44",
+    "experiments/ergo-range/header-check.mjs": "ef14d9c29df020f3fe6e65bc8941cc2ce080ccd51ffe242862531840a6f420ca",
+    "experiments/ergo-range/nodes.mjs": "338314d718ec843044094365b1b34a97adbae1e207cb33fbe99d21de75a2e526",
     "experiments/ergo-range/fixtures/manifest.json": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
     "docs/ergo-chain-cost-verification.json": "6a8f90a5a872faa1d02646371887e8cbacd251fc10bbffe7584ed57c93d7cd0b"
   },
@@ -214,6 +216,9 @@
     "Header identity binds each header's transaction root, so the chain-cost probe's section evidence is bound to these headers through equal ids; the sections themselves were not re-read from this node.",
     "The profile's verifier still checks linkage, contiguity and the anchor only; proof of work and chain selection remain the header source's, which is now a node the reader runs rather than a public one.",
     "Sync time and resources are one run on one desktop over one home connection, with a UTXO-set snapshot for state; full-block validation from genesis was not measured.",
+    "The recorded configuration is the node's file as written at check time (nodes.mjs rewrites it on each start); the first processes' logs, which show the node processing the genesis header itself and no NiPoPoW proof, are cited in the milestones.",
+    "The public nodes' headers are compared as cached under scratch/ by the chain-cost probe; the cache files are not re-checked against that report's response digest here.",
+    "The release bundle's JAR is checked against the release digest on every start; its bundled Java runtime is covered only by the release archive's digest checked once at download.",
     "No runtime path, profile selection or specification change follows from this check."
   ]
 }

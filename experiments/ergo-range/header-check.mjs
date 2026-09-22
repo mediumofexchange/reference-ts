@@ -49,7 +49,7 @@ assert.equal(info.network, "mainnet", "the own node reports the mainnet");
 const chainCost = JSON.parse(readFileSync(join(root, "docs/ergo-chain-cost-verification.json"), "utf8")).window;
 assert(info.headersHeight >= chainCost.tipHeight, `the own node's headers (${info.headersHeight}) reach the window's tip ${chainCost.tipHeight}`);
 
-// The node's configuration as run, without the API key hash.
+// The node's configuration file, without the API key hash.
 const confFile = join(root, "scratch/ergo-nodes/mainnet/ergo.conf");
 const configuration = existsSync(confFile) ? readFileSync(confFile, "utf8").replace(/apiKeyHash = "[0-9a-f]+"/, 'apiKeyHash = "<omitted>"') : null;
 // The configuration is the file as written at check time (nodes.mjs rewrites it on each start); the node's log of its
@@ -113,7 +113,7 @@ try {
 // The first run's header-sync milestone, extracted from its INFO log (the nodes log at WARN since).
 const milestonesFile = join(root, "scratch/ergo-nodes/milestones.json");
 const milestones = existsSync(milestonesFile) ? JSON.parse(readFileSync(milestonesFile, "utf8")) : null;
-// From the first process's start: the first process was stopped after about 20k headers and the second continued
+// From the first process's start: the first process was stopped at height 2,492 and the second continued
 // on the same data directory ten seconds later.
 const headersSyncSeconds = milestones === null ? null
   : (Date.parse(milestones.headersSynced.mainnet.at) - Date.parse(milestones.runs.mainnet[0].start)) / 1000;
@@ -134,6 +134,9 @@ const report = {
     "Header identity binds each header's transaction root, so the chain-cost probe's section evidence is bound to these headers through equal ids; the sections themselves were not re-read from this node.",
     "The profile's verifier still checks linkage, contiguity and the anchor only; proof of work and chain selection remain the header source's, which is now a node the reader runs rather than a public one.",
     "Sync time and resources are one run on one desktop over one home connection, with a UTXO-set snapshot for state; full-block validation from genesis was not measured.",
+    "The recorded configuration is the node's file as written at check time (nodes.mjs rewrites it on each start); the first processes' logs, which show the node processing the genesis header itself and no NiPoPoW proof, are cited in the milestones.",
+    "The public nodes' headers are compared as cached under scratch/ by the chain-cost probe; the cache files are not re-checked against that report's response digest here.",
+    "The release bundle's JAR is checked against the release digest on every start; its bundled Java runtime is covered only by the release archive's digest checked once at download.",
     "No runtime path, profile selection or specification change follows from this check.",
   ],
 };
