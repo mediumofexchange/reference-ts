@@ -153,15 +153,16 @@ its retained evidence and can be reproduced from it.
   5,040 blocks left those indices without a section
   ([P4](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor)).
   The npm alpha `0.29.0-alpha-2f840d3` read all of them after exact round
-  trips, about 7.1 times slower per transaction. A decoder that reads
+  trips, about seven times slower per transaction. A decoder that reads
   the selected chain's script versions, or that keeps a sized tree it cannot
   parse as exact bytes, is a selection prerequisite; no pin changes here.
 - The public node API serves transactions as JSON. sigma-rust's serializer
   reproduced every header root of the measured week from the node's exact
   text, but only because that text keeps the spending-proof extension's key
   order, which a JSON object model sorts: re-serializing parsed objects gives
-  12 of the week's transactions a different id, and their blocks no
-  section. The header root authenticates the bytes, never the serializer.
+  12 of the week's transactions a different id and would leave their blocks
+  without a section. The header root, not the serializer, authenticates the
+  bytes, within the limit above: unsigned bytes and concatenated proofs.
 - A kind-4 object is one transaction's run, so a publication must fit one
   transaction. Under this layout a box carries a 3,981-byte piece within
   Ergo's 4,096-byte box limit, and one transaction under the pinned node's
@@ -186,11 +187,11 @@ its retained evidence and can be reproduced from it.
   seven days from a real anchor are 5,040 blocks at 716 a day carrying
   28,196 transactions in 26.6 MB of sections, a mean of 5,286 bytes
   a block with a median of 424 and a largest of 193,531; each header is
-  221 wire bytes, 105 in the verifier's view, so a year of headers is about
-  58 MB and a year of sections about 1.4 GB at that
+  220 or 221 wire bytes (mean 220.9), 105 in the verifier's view, so a year
+  of headers is about 58 MB and a year of sections about 1.4 GB at that
   rate. Built from a week's sections the verifier answers a range over all of
-  them in about a millisecond; building it took 1.3 s, and decoding the
-  week's transactions 32.4 s, on one desktop.
+  them in a few milliseconds; building it, where every output is scanned,
+  took 1.8 s, and decoding the week's transactions 32.5 s, on one desktop.
 - The header source and the decoder are trust boundaries of the reader:
   the header chain's authenticity and the decoder's containment are not
   established here. Objects at the locations before the anchor are not in

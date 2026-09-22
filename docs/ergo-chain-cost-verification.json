@@ -22,23 +22,11 @@
   "sources": [
     {
       "url": "https://node.ergo.watch",
-      "info": {
-        "name": "ergo.watch",
-        "appVersion": "5.0.21-0-1a417f44-20240401-1043-SNAPSHOT",
-        "fullHeight": 1878483,
-        "headersHeight": 1878483,
-        "bestFullHeaderId": "9ff5a33163d4b6f78970f2c6e8551fb0137f2e4968528d997667c843a636b3c3"
-      }
+      "info": null
     },
     {
       "url": "http://213.239.193.208:9053",
-      "info": {
-        "name": "ergo-mainnet-6.0.6",
-        "appVersion": "6.0.5-46-78153a1e-SNAPSHOT",
-        "fullHeight": 1878483,
-        "headersHeight": 1878483,
-        "bestFullHeaderId": "9ff5a33163d4b6f78970f2c6e8551fb0137f2e4968528d997667c843a636b3c3"
-      }
+      "info": null
     }
   ],
   "headerAgreement": {
@@ -63,8 +51,8 @@
     "directory": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\ergo-chain",
     "digest": "ff281fcdae4adc392629a590ef9735e68768b59ea1cbde69ba74156078f8f2fa",
     "covers": "every cached response read by this run, by name: the header slices and anchor read of each source and the window's block sections",
-    "liveFetches": 2,
-    "liveFetchMs": 426,
+    "liveFetches": 0,
+    "liveFetchMs": 0,
     "delayMs": 250
   },
   "decoders": {
@@ -116,6 +104,8 @@
     "maxSectionBytes": 193531,
     "maxTransactionBytes": 88284,
     "headerWireBytes": 1113468,
+    "headerWireBytesMin": 220,
+    "headerWireBytesMax": 221,
     "headerViewBytesPerBlock": 105,
     "headerViewBytes": 529200,
     "jsonBytes": 133335507,
@@ -146,6 +136,8 @@
       "maxSectionBytes": 134982,
       "maxTransactionBytes": 88284,
       "headerWireBytes": 159109,
+      "headerWireBytesMin": 220,
+      "headerWireBytesMax": 221,
       "headerViewBytesPerBlock": 105,
       "headerViewBytes": 75600,
       "jsonBytes": 21816862,
@@ -175,6 +167,8 @@
       "maxSectionBytes": 116606,
       "maxTransactionBytes": 39721,
       "headerWireBytes": 158871,
+      "headerWireBytesMin": 220,
+      "headerWireBytesMax": 221,
       "headerViewBytesPerBlock": 105,
       "headerViewBytes": 75600,
       "jsonBytes": 16548286,
@@ -204,6 +198,8 @@
       "maxSectionBytes": 58515,
       "maxTransactionBytes": 18334,
       "headerWireBytes": 159107,
+      "headerWireBytesMin": 220,
+      "headerWireBytesMax": 221,
       "headerViewBytesPerBlock": 105,
       "headerViewBytes": 75600,
       "jsonBytes": 15854828,
@@ -233,6 +229,8 @@
       "maxSectionBytes": 193531,
       "maxTransactionBytes": 37906,
       "headerWireBytes": 159120,
+      "headerWireBytesMin": 221,
+      "headerWireBytesMax": 221,
       "headerViewBytesPerBlock": 105,
       "headerViewBytes": 75600,
       "jsonBytes": 23407799,
@@ -262,6 +260,8 @@
       "maxSectionBytes": 78824,
       "maxTransactionBytes": 33943,
       "headerWireBytes": 159120,
+      "headerWireBytesMin": 221,
+      "headerWireBytesMax": 221,
       "headerViewBytesPerBlock": 105,
       "headerViewBytes": 75600,
       "jsonBytes": 17735390,
@@ -291,6 +291,8 @@
       "maxSectionBytes": 88725,
       "maxTransactionBytes": 23905,
       "headerWireBytes": 159119,
+      "headerWireBytesMin": 220,
+      "headerWireBytesMax": 221,
       "headerViewBytesPerBlock": 105,
       "headerViewBytes": 75600,
       "jsonBytes": 16470919,
@@ -320,6 +322,8 @@
       "maxSectionBytes": 86421,
       "maxTransactionBytes": 32742,
       "headerWireBytes": 159022,
+      "headerWireBytesMin": 220,
+      "headerWireBytesMax": 221,
       "headerViewBytesPerBlock": 105,
       "headerViewBytes": 75600,
       "jsonBytes": 21501423,
@@ -470,18 +474,20 @@
     }
   },
   "timing": {
-    "serializeMs": 32093,
-    "rootCheckMs": 1357,
+    "serializeMs": 32410,
+    "reemitMs": 26732,
+    "rootCheckMs": 1414,
     "decodeMs": {
-      "pinned": 32375,
-      "alternate": 228398
+      "pinned": 32549,
+      "alternate": 227449
     },
-    "note": "serializeMs is the pinned library's text-to-bytes work including its own id; rootCheckMs the script's root over those ids; decodeMs each decoder's strict round trip and field extraction over the same bytes; the verifier's constructMs is where every section's root is rechecked from the decoder's ids and every output is scanned, and a request afterwards walks per-index lists"
+    "equivalenceMs": 35018,
+    "note": "serializeMs is the pinned library's text-to-bytes work including its own id; reemitMs the re-emitted-object control; rootCheckMs the script's root over the library's ids; decodeMs each decoder's strict round trip and field extraction over the same bytes; equivalenceMs the verbatim copy's second pinned round trip; the verifier's constructMs is where every section's root is rechecked from the decoder's ids and every output is scanned, and a request afterwards walks per-index lists. JSON parsing, text splitting, witness ids and the alternate comparison are outside every timer."
   },
   "verifier": {
     "pinned": {
       "blocksSupplied": 4982,
-      "constructMs": 1309,
+      "constructMs": 1765,
       "witnessedIndex": 5039,
       "resolvedIndices": 4982,
       "unresolvedIndices": 58,
@@ -508,7 +514,8 @@
         2810,
         2826
       ],
-      "singleIndexProbeMs": 43,
+      "singleIndexProbeMs": 49,
+      "requestMsIs": "the least of 5 repetitions",
       "requests": {
         "lastDay": {
           "fromIndex": 4320,
@@ -517,22 +524,26 @@
             "1": {
               "answered": false,
               "bytes": null,
-              "ms": 0.13
+              "ms": 0.17,
+              "samples": 5
             },
             "2": {
               "answered": false,
               "bytes": null,
-              "ms": 0.18
+              "ms": 0.16,
+              "samples": 5
             },
             "3": {
               "answered": false,
               "bytes": null,
-              "ms": 0.13
+              "ms": 0.16,
+              "samples": 5
             },
             "4": {
               "answered": false,
               "bytes": null,
-              "ms": 0.09
+              "ms": 0.15,
+              "samples": 5
             }
           }
         },
@@ -543,22 +554,26 @@
             "1": {
               "answered": false,
               "bytes": null,
-              "ms": 1.11
+              "ms": 1.57,
+              "samples": 5
             },
             "2": {
               "answered": false,
               "bytes": null,
-              "ms": 1
+              "ms": 1.57,
+              "samples": 5
             },
             "3": {
               "answered": false,
               "bytes": null,
-              "ms": 0.94
+              "ms": 1.1,
+              "samples": 5
             },
             "4": {
               "answered": false,
               "bytes": null,
-              "ms": 0.89
+              "ms": 1.49,
+              "samples": 5
             }
           }
         }
@@ -566,13 +581,14 @@
     },
     "alternate": {
       "blocksSupplied": 5040,
-      "constructMs": 1345,
+      "constructMs": 1941,
       "witnessedIndex": 5039,
       "resolvedIndices": 5040,
       "unresolvedIndices": 0,
       "longestResolvedRun": 5040,
       "firstUnresolvedIndices": [],
-      "singleIndexProbeMs": 39,
+      "singleIndexProbeMs": 34,
+      "requestMsIs": "the least of 5 repetitions",
       "requests": {
         "lastDay": {
           "fromIndex": 4320,
@@ -581,22 +597,26 @@
             "1": {
               "answered": true,
               "bytes": 102,
-              "ms": 0.25
+              "ms": 0.18,
+              "samples": 5
             },
             "2": {
               "answered": true,
               "bytes": 102,
-              "ms": 0.19
+              "ms": 0.18,
+              "samples": 5
             },
             "3": {
               "answered": true,
               "bytes": 102,
-              "ms": 0.18
+              "ms": 0.18,
+              "samples": 5
             },
             "4": {
               "answered": true,
               "bytes": 102,
-              "ms": 0.17
+              "ms": 0.37,
+              "samples": 5
             }
           }
         },
@@ -607,22 +627,26 @@
             "1": {
               "answered": true,
               "bytes": 102,
-              "ms": 1.61
+              "ms": 3.37,
+              "samples": 5
             },
             "2": {
               "answered": true,
               "bytes": 102,
-              "ms": 1.7
+              "ms": 1.43,
+              "samples": 5
             },
             "3": {
               "answered": true,
               "bytes": 102,
-              "ms": 3.3
+              "ms": 1.28,
+              "samples": 5
             },
             "4": {
               "answered": true,
               "bytes": 102,
-              "ms": 2.77
+              "ms": 1.17,
+              "samples": 5
             }
           }
         }
@@ -1078,7 +1102,7 @@
     "scrypto": "https://github.com/ergoplatform/scrypto/tree/70b36102b2ed8f7a443cfc92f9f135665d777a37"
   },
   "files": {
-    "experiments/ergo-range/chain-cost.mjs": "fd94f8954462385c5baf0e43e81ae9999525d448f0a5116c7c9091d9aea6038b",
+    "experiments/ergo-range/chain-cost.mjs": "4a4a66c9473608f72895726f0923a93762c9bb87f9746ea150eba4176610546d",
     "experiments/ergo-range/decoder.mjs": "44af0e096fabfcdb4cc581d383006d608391e15635760d21895b6660a3757e55",
     "experiments/ergo-range/package.json": "04c62481ee551c2cf2dd088d2af2afe68b1ba74c0cbc40f41b92b8e85139de89",
     "experiments/ergo-range/package-lock.json": "3c2055dc1a71712fb19a99eb895794c392d9e2c169e5a1d6a0d697ce03b9f79e",

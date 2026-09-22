@@ -48,8 +48,10 @@ dependency pin change, no specification change, no runtime path.
 
 - Report window: anchor 1873360, indices 0..5039 at heights
   1873361..1878400, depth 10, both nodes agree on 5,050 headers; 26.6 MB of
-  sections (mean 5,286 bytes a block, median 424, max 193,531), 221-byte
-  wire headers, 715.5 blocks/day over 169 hours; verifier built in 1.3 s.
+  sections (mean 5,286 bytes a block, median 424, max 193,531), 220–221-byte
+  wire headers, 715.5 blocks/day over 169 hours; verifier built in 1.8 s.
+- Review re-check after the fixes: every quoted figure matches the report
+  and the cache; its remaining wording items are applied in the follow-up.
 - Prior slice (Ergo adapter over every replay group): `main` 55d2ab5, CI run
   35652746308; its replay/profile reports are unchanged and still bound
   (`decoder.mjs` untouched).

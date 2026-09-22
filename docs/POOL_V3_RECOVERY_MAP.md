@@ -628,7 +628,7 @@ Each names the rule, the candidate, the alternative, and what closes it.
   in 24 pieces under the pinned mempool policy, against a 15,498-byte
   release under the observed proofs; the frame's ceiling is a parser bound.
   **Measured 2026-09-22:** the cost is a mean of 5,286 section bytes a
-  block, 26.6 MB a week, and 221 wire bytes a header; the denial is
+  block, 26.6 MB a week, and 220–221 wire bytes a header; the denial is
   live, since the pinned decoder refuses Ergo 6.0 scripts and left
   58 of the week's 5,040 indices without a section. The header
   source's authenticity and a decoder that reads the chain's script versions

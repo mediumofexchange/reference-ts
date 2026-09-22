@@ -37,6 +37,10 @@ mkdirSync(cache, { recursive: true });
 const sha256 = bytes => createHash("sha256").update(bytes).digest();
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const fileHash = file => hex(sha256(readFileSync(join(root, file))));
+// The sources are hashed now, before any work, so the report names the files that produced it.
+const files = Object.fromEntries(["experiments/ergo-range/chain-cost.mjs", "experiments/ergo-range/decoder.mjs", "experiments/ergo-range/package.json",
+  "experiments/ergo-range/package-lock.json", "experiments/ergo-range/fixtures/manifest.json", "model/pool-v3-ergo-profile.ts", "model/pool-v3-range.ts"].map(file => [file, fileHash(file)]));
+const REQUEST_SAMPLES = 5;
 // A cache name must not carry ":", which NTFS reads as an alternate data stream.
 const hostOf = url => new URL(url).host.replace(/:/g, "-");
 // Node 24's source text keeps the nodes' large integers exact; rawJSON re-emits them unchanged.
@@ -201,7 +205,7 @@ try {
     const decodeMs = Object.fromEntries(Object.keys(decoders).map(name => [name, 0]));
     const views = Object.fromEntries(Object.keys(decoders).map(name => [name, []]));
     const agreement = { compared: 0, differing: 0 }, equivalence = { transactions: 0, differing: 0 };
-    let serializeMs = 0, rootCheckMs = 0;
+    let serializeMs = 0, reemitMs = 0, equivalenceMs = 0, rootCheckMs = 0;
     for (let i = 0; i < count; i++) {
       const header = chain[i];
       assert.equal(header.height, from + i);
@@ -229,7 +233,9 @@ try {
         if (bytes === undefined) continue;
         // The same transaction through a parsed-and-re-emitted object: integer-like keys come out sorted, so a
         // spending-proof extension of several entries can serialize to bytes with another id, which the library refuses.
+        const t3 = performance.now();
         try { const again = Transaction.from_json(JSON.stringify(tx)); again.free(); } catch { reordered.push({ height: header.height, position, id: tx.id, extensionKeys: tx.inputs.map(input => Object.keys(input.spendingProof.extension).length) }); }
+        reemitMs += performance.now() - t3;
         serialized++;
         sectionBytes += bytes.length;
         maxTx = Math.max(maxTx, bytes.length);
@@ -244,7 +250,9 @@ try {
           else decoded[name].push(view);
         }
         // The verbatim copy must refuse and read exactly as decoder.mjs does, or the alternate's counts are not comparable.
+        const t4 = performance.now();
         const copy = pinnedCopy(bytes);
+        equivalenceMs += performance.now() - t4;
         equivalence.transactions++;
         if ((copy === undefined) !== (viewsOf.pinned === undefined) || (copy !== undefined && !sameView(copy, viewsOf.pinned))) equivalence.differing++;
         if (alternate && viewsOf.pinned !== undefined && viewsOf.alternate !== undefined) { agreement.compared++; if (!sameView(viewsOf.pinned, viewsOf.alternate)) agreement.differing++; }
@@ -257,21 +265,23 @@ try {
         read[name] = rootOk && decoded[name].length === txs.length;
         if (read[name]) views[name].push({ headerId: Buffer.from(header.id, "hex"), transactions: decoded[name] });
       }
-      rows.push({ height: header.height, version: header.version, timestamp: Number(header.timestamp), headerSize: header.size, transactions: txs.length, outputs,
+      rows.push({ height: header.height, version: header.version, timestamp: Number(header.timestamp), headerSize: header.size, transactions: txs.length, serialized, outputs,
         jsonBytes: Buffer.byteLength(text), sectionBytes, maxTx, treeV3Outputs, rootOk, read });
     }
 
-    // Sizes are summed over the blocks whose root held; a block that did not is counted, not measured.
+    // Section sizes and contents are summed over the blocks whose root held; a block that did not is counted, and its
+    // header and fetched JSON are still charged, but its contents are not measured.
     const aggregate = slice => {
-      const held = slice.filter(row => row.rootOk), sum = key => held.reduce((total, row) => total + row[key], 0);
+      const held = slice.filter(row => row.rootOk), sum = key => held.reduce((total, row) => total + row[key], 0), all = key => slice.reduce((total, row) => total + row[key], 0);
       const sections = held.map(row => row.sectionBytes).sort((a, b) => a - b);
       const first = slice[0].timestamp, last = slice.at(-1).timestamp, spanHours = (last - first) / 3.6e6;
       const result = { fromHeight: slice[0].height, toHeight: slice.at(-1).height, blocks: slice.length, rootOk: held.length, transactions: sum("transactions"), outputs: sum("outputs"),
         sectionBytes: sum("sectionBytes"), meanSectionBytes: held.length === 0 ? 0 : Math.round(sum("sectionBytes") / held.length), medianSectionBytes: percentile(sections, 0.5),
         p90SectionBytes: percentile(sections, 0.9), p99SectionBytes: percentile(sections, 0.99), maxSectionBytes: sections.at(-1) ?? 0,
         maxTransactionBytes: held.length === 0 ? 0 : Math.max(...held.map(row => row.maxTx)),
-        headerWireBytes: slice.reduce((total, row) => total + row.headerSize, 0), headerViewBytesPerBlock: HEADER_VIEW_BYTES, headerViewBytes: slice.length * HEADER_VIEW_BYTES,
-        jsonBytes: sum("jsonBytes"), treeV3Outputs: sum("treeV3Outputs"), blocksWithTreeV3: held.filter(row => row.treeV3Outputs > 0).length,
+        headerWireBytes: all("headerSize"), headerWireBytesMin: Math.min(...slice.map(row => row.headerSize)), headerWireBytesMax: Math.max(...slice.map(row => row.headerSize)),
+        headerViewBytesPerBlock: HEADER_VIEW_BYTES, headerViewBytes: slice.length * HEADER_VIEW_BYTES,
+        jsonBytes: all("jsonBytes"), treeV3Outputs: sum("treeV3Outputs"), blocksWithTreeV3: held.filter(row => row.treeV3Outputs > 0).length,
         firstTimestamp: first, lastTimestamp: last, spanHours: Number(spanHours.toFixed(2)),
         blocksPerDay: slice.length > 1 && spanHours > 0 ? Number(((slice.length - 1) / (spanHours / 24)).toFixed(1)) : null, read: {} };
       for (const name of Object.keys(decoders)) result.read[name] = slice.filter(row => row.read[name]).length;
@@ -297,13 +307,18 @@ try {
       const constructMs = Math.round(performance.now() - t0);
       assert(verifier !== undefined, "the real headers anchor a chain through the anchor's child");
       assert.equal(verifier.witnessedIndex(), BigInt(count - 1), "the tip witnesses the last index under the depth");
-      const ask = (kind, fromIndex, toIndex) => {
-        const t1 = performance.now();
-        const bytes = verifier.range({ venue: identity, kind, subject, fromIndex: BigInt(fromIndex), toIndex: BigInt(toIndex) }, wide);
-        return { answered: bytes !== undefined, bytes: bytes?.length ?? null, ms: Number((performance.now() - t1).toFixed(2)) };
+      // A request's time is the least of a few repetitions; one sample varies by an order of magnitude on this host.
+      const ask = (kind, fromIndex, toIndex, samples = REQUEST_SAMPLES) => {
+        let bytes, least = Infinity;
+        for (let i = 0; i < samples; i++) {
+          const t1 = performance.now();
+          bytes = verifier.range({ venue: identity, kind, subject, fromIndex: BigInt(fromIndex), toIndex: BigInt(toIndex) }, wide);
+          least = Math.min(least, performance.now() - t1);
+        }
+        return { answered: bytes !== undefined, bytes: bytes?.length ?? null, ms: Number(least.toFixed(2)), samples };
       };
       const t2 = performance.now();
-      const present = Array.from({ length: count }, (_, i) => ask(1, i, i).answered);
+      const present = Array.from({ length: count }, (_, i) => ask(1, i, i, 1).answered);
       const singleIndexMs = Math.round(performance.now() - t2);
       const resolved = present.filter(Boolean).length;
       assert.equal(resolved, totals.read[name], "an index has a section exactly where the decoder read its block and the root held");
@@ -321,7 +336,8 @@ try {
         }
       }
       verifierResults[name] = { blocksSupplied: views[name].length, constructMs, witnessedIndex: count - 1, resolvedIndices: resolved, unresolvedIndices: count - resolved,
-        longestResolvedRun: longest, firstUnresolvedIndices: unresolvedIndices.slice(0, 20), singleIndexProbeMs: singleIndexMs, requests };
+        longestResolvedRun: longest, firstUnresolvedIndices: unresolvedIndices.slice(0, 20), singleIndexProbeMs: singleIndexMs,
+        requestMsIs: `the least of ${REQUEST_SAMPLES} repetitions`, requests };
     }
 
     const byTreeVersions = list => {
@@ -346,16 +362,16 @@ try {
       decoderAgreement: alternate ? { ...agreement, compares: "id, witness id, ErgoTree bytes and every register constant of every output, where both decoders read one transaction" } : null,
       profile: { context: profile.ERGO_PROFILE_CONTEXT, identity: hex(identity), depth: String(depth), lag: String(depth + 1), locations: Object.fromEntries(Object.entries(scripts).map(([kind, script]) => [kind, hex(script)])) },
       totals, days,
-      bytes: { serialized: totals.transactions, unavailable: { transactions: bytesUnavailable.length, blocks: new Set(bytesUnavailable.map(r => r.height)).size,
+      bytes: { serialized: rows.reduce((total, row) => total + row.serialized, 0), unavailable: { transactions: bytesUnavailable.length, blocks: new Set(bytesUnavailable.map(r => r.height)).size,
         byOutputTreeVersions: byTreeVersions(bytesUnavailable), sample: bytesUnavailable.slice(0, 40) },
         refusedWhenReemitted: { transactions: reordered.length, blocks: new Set(reordered.map(r => r.height)).size, sample: reordered.slice(0, 40),
           means: "the same transactions parsed into objects and re-emitted, which sorts integer-like keys, serialize to bytes whose id the library rejects" } },
-      timing: { serializeMs: Math.round(serializeMs), rootCheckMs: Math.round(rootCheckMs), decodeMs: Object.fromEntries(Object.entries(decodeMs).map(([name, ms]) => [name, Math.round(ms)])),
-        note: "serializeMs is the pinned library's text-to-bytes work including its own id; rootCheckMs the script's root over those ids; decodeMs each decoder's strict round trip and field extraction over the same bytes; the verifier's constructMs is where every section's root is rechecked from the decoder's ids and every output is scanned, and a request afterwards walks per-index lists" },
+      timing: { serializeMs: Math.round(serializeMs), reemitMs: Math.round(reemitMs), rootCheckMs: Math.round(rootCheckMs), decodeMs: Object.fromEntries(Object.entries(decodeMs).map(([name, ms]) => [name, Math.round(ms)])),
+        equivalenceMs: Math.round(equivalenceMs),
+        note: "serializeMs is the pinned library's text-to-bytes work including its own id; reemitMs the re-emitted-object control; rootCheckMs the script's root over the library's ids; decodeMs each decoder's strict round trip and field extraction over the same bytes; equivalenceMs the verbatim copy's second pinned round trip; the verifier's constructMs is where every section's root is rechecked from the decoder's ids and every output is scanned, and a request afterwards walks per-index lists. JSON parsing, text splitting, witness ids and the alternate comparison are outside every timer." },
       verifier: verifierResults, refusals: refusalSummary,
       pins: { ergoNode, sigmaInterpreter, scrypto },
-      files: Object.fromEntries(["experiments/ergo-range/chain-cost.mjs", "experiments/ergo-range/decoder.mjs", "experiments/ergo-range/package.json",
-        "experiments/ergo-range/package-lock.json", "experiments/ergo-range/fixtures/manifest.json", "model/pool-v3-ergo-profile.ts", "model/pool-v3-range.ts"].map(file => [file, fileHash(file)])),
+      files,
       limitations: [
         "Public nodes are the header source: their agreement with each other on id, parent, height, version and transaction root, linkage and the anchor's child are checked; proof of work, chain selection and finality are not, and a colluding or shared upstream is not excluded.",
         "Transaction bytes are obtained by serializing the nodes' exact JSON text with the pinned library; a block counts only where the bytes reproduce its header's transaction root. For block versions above 1 the root binds each transaction's unsigned bytes and the concatenation of its proofs, not the proofs' split among inputs; a version-1 root binds no proof bytes. Attribution reads outputs only, so neither gap reaches an answer, but the byte counts are authenticated only that far.",

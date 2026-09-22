@@ -844,8 +844,8 @@ sizes, times and refusals.
 The window is anchored at height 1873360, so indices 0–5039 are heights
 1873361–1878400, with headers to 1878410 for depth 10. `node.ergo.watch`
 (5.0.21) and `213.239.193.208:9053` (6.0.6) agree on all 5,050 headers
-and the anchor; the headers are version 4 of 221 wire bytes each and link
-without a gap; the window spans 169.0 hours, 716 blocks a day. Every
+and the anchor; the headers are version 4 of 220 or 221 wire bytes (mean
+220.9) and link without a gap; the window spans 169.0 hours, 716 blocks a day. Every
 one of the 5,040 sections reproduced its header root from the node's
 text, so the JSON route yields exact bytes when the text is fed as written.
 That root binds each transaction's unsigned bytes and the concatenation of
@@ -863,18 +863,19 @@ difference, but the byte counts are authenticated only that far.
 | JSON fetched, bytes | 21,501,423 | 133,335,507 |
 | Indices without a section: sigma-rust 0.28.0 / alpha | 5 / 0 | 58 / 0 |
 
-Decoding the week's 28,196 transactions took 32.4 s under the
-pinned 0.28.0 and 228.4 s under `0.29.0-alpha-2f840d3`; serializing
-them from text 32.1 s; building the verifier from the read sections
-1.3 s, and that construction is where every output is scanned and
+Decoding the week's 28,196 transactions took 32.5 s under the
+pinned 0.28.0 and 227.4 s under `0.29.0-alpha-2f840d3`; serializing
+them from text 32.4 s; building the verifier from the read sections
+1.8 s, and that construction is where every output is scanned and
 attributed and every root rechecked from the decoder's ids; 5,040
-single-index probes afterwards took 43 ms and a day's or the week's
-range answers in a few milliseconds, walking per-index lists. The week's
-sections were fetched by the paced scratch probe in about six minutes of
-response time, roughly 80 ms a response at 250 ms pacing from one host; the
-retained run reads its cache. The 6.0.6 node refused new connections after
-about 600 unpaced requests, so reads are paced and rotate between nodes with
-backoff.
+single-index probes afterwards took 49 ms and a day's or the week's
+range answers in a few milliseconds (the least of five repetitions),
+walking per-index lists. The week's
+sections were fetched by a scratch probe whose log is not retained: about
+six minutes of response time, roughly 80 ms a response at 250 ms pacing
+from one host, and the 6.0.6 node refusing new connections after about 600
+unpaced requests. The retained run reads the cache (two live reads, the
+nodes' state), and reads are paced and rotate between nodes with backoff.
 
 Three findings bind later choices. The pinned 0.28.0 refuses every
 transaction carrying an ErgoTree of header version 3, the Ergo 6.0 script
@@ -886,7 +887,7 @@ extension's keys in its map's order, which a JSON object model sorts:
 re-serializing parsed objects gives 12 of the week's transactions a
 different id, so a reader on JSON must serialize the node's text as written,
 and the header root, not the serializer, authenticates the result. Third,
-the node's header `size` (221 bytes) is twice the verifier's view (105), so
+the node's header `size` (220–221 bytes) is twice the verifier's view (105), so
 header retention is the deployment's age at about 58 MB a year
 of wire headers at this rate.
 
