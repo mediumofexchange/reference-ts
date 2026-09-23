@@ -217,7 +217,6 @@ export async function classifyScopes(context, directories, record, evidence, hel
         const evidence = scope.classificationEvidence(intrinsic);
         if (evidence.intrinsic !== undefined) return { ...base, class: "excluded", check: evidence.intrinsic };
         const { trail } = evidence;
-        chargeEvents(BigInt(trail.records.length));
         const selectedTerms = scopedTerms.get(hex(backing)), revocations = new Map([...scopeViews].map(([name, view]) => [name, view.revokedAt]));
         const state = await replayTrail({ ...context, selection: { ...selection, backing }, terms: selectedTerms, header, scopedTerms },
           snapshot, trail, { index: held.index, revocations, lastValid, imported, isOpening: opening,

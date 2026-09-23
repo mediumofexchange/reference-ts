@@ -346,6 +346,26 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
     const answer = await replayLocalPackage(oversized, verifier, codec);
     assert.equal(answer.status, "resource-refusal"); assert.equal(answer.audit, null); assert.deepEqual(answer.candidates, []);
   });
+  await test("the import event budget charges each replayed position once: an extending checkpoint adds nothing", async () => {
+    // The smallest event budget, selected by the reader on its verifier, under which the read completes.
+    const smallest = async input => {
+      const status = async maxEvents => (await replayLocalPackage(input, { ...verifier, importLimits: { maxCheckpoints: 128n, maxEvents } }, codec)).status;
+      let low = 0n, high = 64n;
+      assert.equal(await status(high), "selected-local-replay");
+      while (low < high) { const mid = (low + high) / 2n; if (await status(mid) === "selected-local-replay") high = mid; else low = mid + 1n; }
+      const below = await replayLocalPackage(input, { ...verifier, importLimits: { maxCheckpoints: 128n, maxEvents: low - 1n } }, codec);
+      assert.equal(below.status, "resource-refusal"); assert.equal(below.audit, null); assert.deepEqual(below.candidates, []);
+      return low;
+    };
+    // b2 extends b1, which extends b0: without b1 the same positions are replayed once each.
+    const total = await smallest(payload);
+    assert.equal(total, await smallest(compose([a0, a1, b0, b2, c0, c1, d0])));
+    // a1, b1 and b2 each add one new position; openings and c1 add none.
+    if (!silence) assert.equal(total, 3n);
+    for (const importLimits of [null, { maxCheckpoints: 128n }, { maxCheckpoints: -1n, maxEvents: 1n }, { maxCheckpoints: 1, maxEvents: 1n }]) {
+      assert.equal((await replayLocalPackage(payload, { ...verifier, importLimits }, codec)).status, "unresolved-evidence");
+    }
+  });
   let refusedPayload;
   if (silence) {
     const classes = answer => answer.audit.range.carrying.map(c => c.class);

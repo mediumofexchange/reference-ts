@@ -27,6 +27,8 @@ specification or runtime change, no mainnet submission or real funds.
   `docs/pool-replay-cost-verification.json`. Served-trail prefixes (spec
   786f962, decision 2026-09-23, merged): one trail per chain of prefixes;
   terms resolved per backing name, none verifying is unresolved. Reviewed.
+  The import budget charges each replayed position once; a reader may pass
+  its own local `importLimits` on the verifier (reviewed, merged).
 - Branch `feat/a10-mainnet-latency` (merged to main through e370581, CI
   green): `latency.mjs` reviewed and read back; 24-hour run from a4021a4
   since 2026-09-22 19:22 UTC, detached, state `scratch/ergo-latency/run.json`

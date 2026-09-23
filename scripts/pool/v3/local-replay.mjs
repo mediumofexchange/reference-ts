@@ -24,7 +24,21 @@ const sha256 = bytes => new Uint8Array(createHash("sha256").update(bytes).digest
 export const PACKAGE_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxItems: 1024n });
 export const RANGE_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxEntries: 4096n });
 // Work budgets for imported closures, including failed replays and merge work.
+// Events are the records a replay actually processes: a resumed checkpoint
+// charges only its positions after the last valid one. Copying the resumed
+// state is not charged; it hashes and verifies nothing and is bounded by the
+// checkpoint and event budgets together. A reader may select other local
+// budgets on its verifier; they are never protocol bounds.
 export const IMPORT_LIMITS = Object.freeze({ maxCheckpoints: 128n, maxEvents: 8192n });
+function importLimitsOf(verifier) {
+  const limits = verifier?.importLimits;
+  if (limits === undefined) return IMPORT_LIMITS;
+  if (limits === null || typeof limits !== "object") throw new EncodingError("invalid import limits");
+  // Each field is read once, so a getter cannot pass validation and then change.
+  const { maxCheckpoints, maxEvents } = limits;
+  if (!isValue(maxCheckpoints) || !isValue(maxEvents)) throw new EncodingError("invalid import limits");
+  return Object.freeze({ maxCheckpoints, maxEvents });
+}
 const flags = Object.freeze({ fullV3Replay: false, currentRangeAuthenticated: false,
   candidateConfigurationChecked: false, signedTermsAuthenticated: false,
   termsAuthorityAuthenticated: false, completenessClaim: false, noMatchesMeansZeroBalance: false,
@@ -151,7 +165,7 @@ function decodedTrails(trails, codec) {
  * trail must reach its length and reproduce its evidence and history hashes
  * there (C2.10.12, pool-v3 §7.1), the evidence before any verification. */
 async function replayTrail({ selection, terms, scopedTerms, header, verifier, codec, contextReceipt }, snapshot, trail,
-  { index, revokedAt, revocations, lastValid, imported, block = [], openingIndex, isOpening = false, chargeEvents = () => {} }) {
+  { index, revokedAt, revocations, lastValid, imported, block = [], openingIndex, isOpening = false, chargeEvents = () => {}, chargeRecords = chargeEvents }) {
   const scope = new ScopeTree(header.entries).root();
   const resumeKey = resumeKeyOf({ selection, terms, scopedTerms, verifier, contextReceipt }, snapshot, { imported, block, openingIndex });
   const base = isOpening ? undefined : resumable(codec, snapshot.segment, trail, lastValid, resumeKey), from = base ?? imported;
@@ -180,6 +194,7 @@ async function replayTrail({ selection, terms, scopedTerms, header, verifier, co
     return totals.get(key);
   };
   if (!isOpening) requireReplay(trail.records.length >= block.length, "ADOPTION");
+  chargeRecords(BigInt(trail.records.length) - (base?.position ?? 0n));
   let position = base?.position ?? 0n, receiptEvent = base?.receiptEvent;
   let history = base?.history ?? codec.genesisHistoryHash(snapshot.segment);
   let evidence = base === undefined ? codec.genesisEvidenceHash(snapshot.segment) : lastValid.evidenceHash;
@@ -425,7 +440,8 @@ async function classifyImports(context, directories, record, evidence) {
   let canonical, countSnapshot, selectedState, selectedClock, checkpoints = 0n, events = 0n, heldBefore = 0, heldAfter = 0;
   let publicationAt = 0;
   const force = [], publicationVerdicts = [];
-  const charge = () => { if (++events > IMPORT_LIMITS.maxEvents) throw new EvidenceRefusal("resource-refusal"); };
+  const limits = context.importLimits;
+  const charge = (amount = 1n) => { events += amount; if (events > limits.maxEvents) throw new EvidenceRefusal("resource-refusal"); };
   // At one index the whole publication group is read BEFORE any checkpoint.
   // Effects change recovery state but never extend the snapshot's forest.
   const publishThrough = async through => {
@@ -500,7 +516,7 @@ async function classifyImports(context, directories, record, evidence) {
       const boundary = walk?.boundary(held.index, clocks.get(hex(walk.receipt.segment)));
       if (boundary !== undefined) return { receipt: boundary };
       await publishThrough(held.index);
-      if (++checkpoints > IMPORT_LIMITS.maxCheckpoints) throw new EvidenceRefusal("resource-refusal");
+      if (++checkpoints > limits.maxCheckpoints) throw new EvidenceRefusal("resource-refusal");
       const c = held.commitment, selected = matches(c, selection);
       if (!selected) { if (selectedState === undefined) heldBefore++; else heldAfter++; }
       const entry = carries(held);
@@ -582,11 +598,10 @@ async function classifyImports(context, directories, record, evidence) {
         }
         const { trail } = evidence;
         if (c.sequence === header.sequence) requireReplay(trail.records.length === 0, "OPENING");
-        events += BigInt(trail.records.length);
-        if (events > IMPORT_LIMITS.maxEvents) throw new EvidenceRefusal("resource-refusal");
         const state = await replayTrail({ ...context, header }, snapshot, trail,
           { index: held.index, revokedAt, lastValid: segment.lastValid, imported: segment.imported,
-            block: c.sequence === header.sequence ? [] : segment.block, openingIndex: segment.openingIndex, isOpening: c.sequence === header.sequence });
+            block: c.sequence === header.sequence ? [] : segment.block, openingIndex: segment.openingIndex, isOpening: c.sequence === header.sequence,
+            chargeRecords: charge });
         segment.lastValid = { position: state.position, historyHash: snapshot.historyHash, evidenceHash: snapshot.evidenceHash, eventIndices: state.eventIndices, state };
         if (c.sequence === header.sequence) segment.openingValid = true;
         canonical = { commitment: c, index: held.index, segment: snapshot.segment, scope: new ScopeTree(header.entries).root(), state };
@@ -646,6 +661,8 @@ export async function replayLocalPackage(input, verifier, codec) {
     const { selection, package: supplied, seed } = owned;
     // Do not silently keep the retired issuer override as an alternate input.
     requireReplay(INPUT_SHAPES.includes(fields), "INPUT_FIELDS");
+    // The reader's own budget selection is checked before any evidence.
+    const importLimits = importLimitsOf(verifier);
     requireReplay(codec.verifyConfiguration(supplied?.configuration, verifier.configuration), "CONFIGURATION");
     const domain = codec.configurationHash(codec.decodeConfiguration(supplied.configuration));
     requireReplay(selection?.domain instanceof Uint8Array && same(domain, selection.domain), "CONFIGURATION");
@@ -667,7 +684,7 @@ export async function replayLocalPackage(input, verifier, codec) {
     const imports = header.entries.some(entry => entry.opening !== undefined);
     if (!imports && header.entries.length === 1) requireReplay(same(terms.operator, header.operator) && same(header.entries[0].link, selection.backing), "TERMS_INITIAL_SCOPE");
     if (supplied.faults?.length && venue === undefined) throw new EvidenceRefusal("unsupported-scope");
-    context = { selection, terms, signedTerms, header, verifier, codec, receiptBytes: supplied.receipt,
+    context = { selection, terms, signedTerms, header, verifier, codec, importLimits, receiptBytes: supplied.receipt,
       faults: faultObserver(supplied.faults, selection, verifier, codec) };
     if (supplied.receipt !== undefined && (seed !== undefined || venue === undefined)) throw new EvidenceRefusal("unsupported-scope");
     let ranges = null, carrying = null, clock = null, state, rangeEvidence = "none";
@@ -699,7 +716,7 @@ export async function replayLocalPackage(input, verifier, codec) {
       } catch (error) {
         if (!(error instanceof ScopeRequired)) throw error;
         const result = await classifyScopes(context, directories, record, { snapshots, trails },
-          { readRecordView, decodedTrails, replayTrail, requireReplay, ReplayRefusal, IMPORT_LIMITS });
+          { readRecordView, decodedTrails, replayTrail, requireReplay, ReplayRefusal, IMPORT_LIMITS: context.importLimits });
         if (result.receipt !== undefined) return { ...refused("receipt-status"), ...context.faults.result(), receipt: result.receipt, rangeEvidence,
           candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
           currentRangeAuthenticated: selection.mode !== "historical-fixture" };
