@@ -23,10 +23,10 @@ specification or runtime change, no mainnet submission or real funds.
 ## Status
 
 - A13 replay cost (merged 2026-09-23): local replay resumes an extending
-  checkpoint from the last valid state (one verification per event, was the
-  sum of prefixes), reviewed; cost in `docs/pool-replay-cost-verification.json`.
-  Next candidate: cut-derived dependency trails (packages grow as N²/2K
-  records; changes §12.1 resolution, needs a reviewed spec choice).
+  checkpoint from the last valid state; cost in
+  `docs/pool-replay-cost-verification.json`. Served-trail prefixes (spec
+  786f962, decision 2026-09-23, merged): one trail per chain of prefixes;
+  terms resolved per backing name, none verifying is unresolved. Reviewed.
 - Branch `feat/a10-mainnet-latency` (merged to main through e370581, CI
   green): `latency.mjs` reviewed and read back; 24-hour run from a4021a4
   since 2026-09-22 19:22 UTC, detached, state `scratch/ergo-latency/run.json`
