@@ -352,7 +352,7 @@ async function classifyCarrying(context, ranges, evidence) {
       }
     }
     if (c.position !== "selected") {
-      // Its trail is the one that authenticates its committed evidence (§10.1); two distinct ones cannot.
+      // Its served trail authenticates its committed evidence (§10.1), from any supplied trail's prefix (§12.1).
       const expected = { backing: selection.backing, segment: s.segment, digest: c.digest };
       // pool-v3 §12.1: the served trail may be the prefix of a longer supplied one.
       tr = servedTrail(codec, expected, s, trails);
@@ -366,9 +366,8 @@ async function classifyCarrying(context, ranges, evidence) {
           continue;
         }
       }
+      // Same segment and scope as the selection, whose terms are already resolved (§12.1).
       if (tr === undefined) throw new EvidenceRefusal("unresolved-evidence");
-      // Terms are resolved by name from any strictly verifying field (§12.1).
-      if (resolveTerms(codec, trails, s.segment, { backing: selection.backing }, 0) === undefined) throw new EvidenceRefusal("unresolved-evidence");
     }
     let verdict;
     try {
@@ -653,11 +652,13 @@ export async function replayLocalPackage(input, verifier, codec) {
     const { snapshot, trail, header } = readLocalEvidence(selection, supplied, codec,
       { allowImports: venue !== undefined, allowScopes: venue !== undefined });
     const selectedEntry = header.entries.findIndex(entry => same(entry.backing, selection.backing));
-    // pool-v3 §12.1: a failing field is ignored when another supplied field of the segment verifies.
+    // pool-v3 §12.1: each scoped field is resolved by name from any strictly
+    // verifying supplied field; a failing one is ignored, and without any the
+    // terms are missing evidence, so the read is unresolved.
     const suppliedTrails = [trail, ...decodedTrails(byteList(supplied.trails, "trails"), codec)];
-    const signed = resolveTerms(codec, suppliedTrails, sha256(trail.header), header.entries[selectedEntry], selectedEntry) ?? trail.terms[selectedEntry];
-    const signedTerms = header.entries.map((entry, i) => resolveTerms(codec, suppliedTrails, sha256(trail.header), entry, i) ?? trail.terms[i]);
-    const terms = codec.decodeRootTerms(signed.terms);
+    const signedTerms = header.entries.map((entry, i) => resolveTerms(codec, suppliedTrails, sha256(trail.header), entry, i));
+    if (signedTerms.some(field => field === undefined)) throw new EvidenceRefusal("unresolved-evidence");
+    const signed = signedTerms[selectedEntry], terms = codec.decodeRootTerms(signed.terms);
     requireReplay(codec.verifyRootTermsSignature(signed.terms, signed.signature), "TERMS_SIGNATURE");
     requireReplay(same(codec.rootTermsName(signed.terms), selection.backing), "TERMS_NAME");
     requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
@@ -764,9 +765,10 @@ export async function replayLocalPackage(input, verifier, codec) {
 
 /** Portable §12 boundary for the bounded local experiment. Select exactly one
  * configuration and commitment; the selection's snapshot is the one its
- * directory names for the backing and its trail the one that authenticates
- * it (§10.1), both by hash, so no first-match lookup can silently discard
- * conflicting evidence. Every other directory, snapshot and trail is a
+ * directory names for the backing, by hash, and its trail the prefix of a
+ * packaged trail that authenticates it (§10.1, §12.1); matching prefixes are
+ * one dependency. The direct replayLocalPackage input instead takes the
+ * selection's exact served trail. Every other directory, snapshot and trail is a
  * dependency the §13 range/import read may need. One kind-10 receipt selects
  * a receipt query; kind-7 facts may also support the bounded §9.1 exclusion path
  * after all its dependencies resolve. Other kinds require a later reader.
@@ -814,7 +816,7 @@ export async function replayEvidencePackage(input, verifier, codec) {
     // pool-v3 §12.1: the selection's served trail may be the prefix of a longer packaged trail.
     const served = servedTrail(codec, expected, snapshot, decodedTrails(payloads(6), codec));
     if (served === undefined) return refused("unresolved-evidence");
-    const trailBytes = [payloads(6).find(payload => same(payload, codec.encodeTrail(served, LIMITS))) ?? codec.encodeTrail(served, LIMITS)];
+    const encoded = codec.encodeTrail(served, LIMITS), trailBytes = [payloads(6).find(payload => same(payload, encoded)) ?? encoded];
     const others = directories.filter(entries => entries !== directory);
     const snapshots = payloads(4).filter(payload => payload !== snapshotBytes), trails = payloads(6).filter(payload => payload !== trailBytes[0]);
     if (others.length + snapshots.length + trails.length > 0 && input.venue === undefined) return refused("unsupported-scope");

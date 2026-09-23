@@ -53,16 +53,19 @@ function prefixOf(codec, trail, n) {
  * trail of its segment whose decodable first n records reproduce the
  * snapshot's evidence hash (at n = 0, the seed); later records are not its
  * evidence. Matching prefixes share header and records, so the first one is
- * the dependency, and it still passes the full §10.1 check. Terms are
- * resolved separately by backing name (resolveTerms). */
+ * the dependency. §10.1's recurrence is the cached chain, computed once per
+ * trail decoded under the local budget; the remaining §10.1 checks bind the
+ * snapshot to the expected digest and the header scope to the backing.
+ * Terms are resolved separately by backing name (resolveTerms). */
 export function servedTrail(codec, expected, snapshot, trails) {
+  if (!same(snapshot.backing, expected.backing) || !same(snapshot.segment, expected.segment) ||
+      !same(codec.snapshotDigest(snapshot), expected.digest)) return undefined;
   for (const trail of trails) {
     // Another segment's trail fails §10.1 before any record is decoded.
     if (!same(hash(trail.header), expected.segment)) continue;
+    if (!codec.decodeSegmentHeader(trail.header).entries.some(entry => same(entry.backing, expected.backing))) continue;
     const n = positionOf(codec, trail, snapshot.evidenceHash);
-    if (n === undefined) continue;
-    const prefix = prefixOf(codec, trail, n);
-    if (codec.verifyTrailEvidence(expected, snapshot, prefix, LIMITS)) return prefix;
+    if (n !== undefined) return prefixOf(codec, trail, n);
   }
   return undefined;
 }
@@ -70,14 +73,22 @@ export function servedTrail(codec, expected, snapshot, trails) {
 /** pool-v3 §12.1: each scoped signed-terms field is resolved by its backing
  * name from any supplied trail of the segment whose field reproduces the name
  * and verifies strictly; a failing field is ignored, never conflicting. */
+// One resolution per supplied trail list, segment, position and name, so a
+// read verifies each field at most once however many checkpoints ask.
+const resolved = new WeakMap();
 export function resolveTerms(codec, trails, segment, entry, index) {
+  if (!resolved.has(trails)) resolved.set(trails, new Map());
+  const memo = resolved.get(trails), key = `${hex(segment)}:${index}:${hex(entry.backing)}`;
+  if (memo.has(key)) return memo.get(key);
+  let found;
   for (const trail of trails) {
     if (!same(hash(trail.header), segment)) continue;
     const signed = trail.terms[index];
     if (signed !== undefined && codec.verifyRootTermsSignature(signed.terms, signed.signature) &&
-        same(codec.rootTermsName(signed.terms), entry.backing)) return signed;
+        same(codec.rootTermsName(signed.terms), entry.backing)) { found = signed; break; }
   }
-  return undefined;
+  memo.set(key, found);
+  return found;
 }
 
 export function authenticatedScope(trails, segment, codec) {

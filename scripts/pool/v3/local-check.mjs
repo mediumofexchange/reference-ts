@@ -350,15 +350,24 @@ try {
       const payload = clone(complete), swap = bytes => codec.encodeTrail({ ...codec.decodeTrail(bytes, LIMITS), terms: [signed] }, LIMITS);
       payload.package.trail = swap(payload.package.trail); payload.package.trails = payload.package.trails.map(swap); return payload;
     };
+    // With no strictly verifying field of the backing's name, its terms are missing evidence (pool-v3 §12.1).
+    const missingTerms = async payload => {
+      const result = await replayLocalPackage(payload, verifier, codec);
+      assert.equal(result.status, "unresolved-evidence"); assert.equal(result.audit, null); assert.deepEqual(result.candidates, []);
+    };
     const bad = clone(signedTerms); bad.signature[0] ^= 1;
-    await reject(replaceTerms(bad), "TERMS_SIGNATURE");
+    await missingTerms(replaceTerms(bad));
     for (const fields of [{ ...termsFields, payout: { ...termsFields.payout, perUnit: 2n } },
       { ...termsFields, obligor: ed25519.getPublicKey(b(91)) }]) {
       const terms = codec.encodeRootTerms(fields);
-      await reject(replaceTerms({ terms, signature: signedTerms.signature }), "TERMS_SIGNATURE");
+      await missingTerms(replaceTerms({ terms, signature: signedTerms.signature }));
       const secret = fields.obligor === issuerKey ? issuerSecret : b(91);
-      await reject(replaceTerms({ terms, signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), secret) }), "TERMS_NAME");
+      await missingTerms(replaceTerms({ terms, signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), secret) }));
     }
+    // The selected trail's own failing field is ignored where another supplied field verifies.
+    const ownBad = clone(complete), selectedTrail = codec.decodeTrail(ownBad.package.trail, LIMITS);
+    ownBad.package.trail = codec.encodeTrail({ ...selectedTrail, terms: [bad] }, LIMITS);
+    assert.deepEqual(await replayLocalPackage(ownBad, verifier, codec), await replayLocalPackage(complete, verifier, codec));
   });
   await test("otherwise valid empty evidence cannot borrow wrong terms domain, venue or original scope", async () => {
     const empty = emptyPackage;
@@ -908,7 +917,7 @@ try {
     // With no strictly verifying field for the backing anywhere, terms are unresolved.
     const onlyBad = clone(extended), fourthDecoded = codec.decodeTrail(fourth.trail, LIMITS);
     onlyBad.package.trail = codec.encodeTrail({ ...fourthDecoded, terms: [badTerms] }, LIMITS); onlyBad.package.trails = [other];
-    assert.equal((await replayLocalPackage(onlyBad, verifier, codec)).status, "invalid-local-replay");
+    assert.equal((await replayLocalPackage(onlyBad, verifier, codec)).status, "unresolved-evidence");
     // A trail that does not decode is no evidence for any checkpoint and does not block the read, in either form.
     const junk = clone(extended); junk.package.trails.push(new Uint8Array(40).fill(3));
     assert.deepEqual(await replayLocalPackage(junk, verifier, codec), dependency);

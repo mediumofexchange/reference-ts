@@ -130,7 +130,7 @@ export async function checkNonService({ codec, verifier, prove, test, compose, c
       return Buffer.compare(trail.header, original.header) === 0 ? codec.encodeTrail({ ...trail, terms: [{ terms: signedTerms.terms, signature }] }, LIMITS) : bytes;
     });
     for (const [p, v, status] of [[payload, unavailable, "unresolved-evidence"], [missing, verifier, "unresolved-evidence"],
-      [tampered, verifier, "invalid-local-replay"]]) {
+      [tampered, verifier, "unresolved-evidence"]]) {
       const answer = await replayLocalPackage(p, v, codec);
       assert.equal(answer.status, status); assert.equal(answer.audit, null);
       assert.deepEqual(answer.candidates, []); assert.equal(answer.spendable, false);
