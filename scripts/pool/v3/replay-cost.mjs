@@ -120,9 +120,16 @@ try {
     // Linear in events: each position is verified once however many checkpoints extend it.
     assert.equal(calls, n);
     const prefixSum = positions.reduce((a, p) => a + p, 0);
+    // pool-v3 §12.1: the selected trail alone serves every earlier checkpoint as a prefix.
+    calls = 0;
+    const longestStart = performance.now();
+    const longest = await replayLocalPackage({ ...input, package: { ...input.package, trails: [] } }, verifier, codec);
+    const longestMs = performance.now() - longestStart;
+    assert.deepEqual(longest, result); assert.equal(calls, n);
     return { events: n, checkpointEvery: every, carryingCheckpoints: checkpoints.length + 1, proofBytes,
-      verifyCalls: calls, verifyCallsIfEachPrefixReplayed: prefixSum, replayMs: Math.round(ms), replayMsPerEvent: +(ms / n).toFixed(2),
+      verifyCalls: n, verifyCallsIfEachPrefixReplayed: prefixSum, replayMs: Math.round(ms), replayMsPerEvent: +(ms / n).toFixed(2),
       selectedTrailBytes: chosen.trail.length, packageTrailBytes: [opening, ...checkpoints].reduce((a, x) => a + x.trail.length, 0),
+      longestTrailOnlyReplayMsPerEvent: +(longestMs / n).toFixed(2),
       uniqueRecordBytes: encoded.reduce((a, x) => a + x.length, 0) };
   }
 

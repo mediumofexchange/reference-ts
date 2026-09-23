@@ -595,30 +595,34 @@ and the first failing check are unchanged. Each trail's evidence chain is
 computed once per read, and the full §10.1 check runs only on trails whose
 terminal hash matches. Every case now verifies exactly one proof per event.
 
-| Events, checkpoint every | Replay per event (stub verifier) | Package trail bytes | Unique record bytes |
-|---|---:|---:|---:|
-| 60 / 60, 14,656-byte proofs | 64.7 ms | 934,727 | 933,389 |
-| 60 / 10, 14,656-byte proofs | 92.5 ms | 3,270,717 | 933,389 |
-| 1,024 / 1,024, 32-byte stand-ins | 73.1 ms | 965,375 | 960,181 |
-| 1,024 / 64, 32-byte stand-ins | 88.9 ms | 8,203,205 | 960,181 |
+| Events, checkpoint every | Replay per event (stub verifier) | Same, selected trail only | Package trail bytes | Unique record bytes |
+|---|---:|---:|---:|---:|
+| 60 / 60, 14,656-byte proofs | 82.6 ms | 91.6 ms | 934,727 | 933,389 |
+| 60 / 10, 14,656-byte proofs | 90.4 ms | 87.2 ms | 3,270,717 | 933,389 |
+| 1,024 / 1,024, 32-byte stand-ins | 71.8 ms | 78.4 ms | 965,375 | 960,181 |
+| 1,024 / 64, 32-byte stand-ins | 66.3 ms | 77.8 ms | 8,203,205 | 960,181 |
 
-Host replay is dominated by the note tree. A four-output append costs 60 ms,
-about 34 Poseidon2 hashes at 1.9 ms each in the JavaScript implementation.
-Barretenberg's wasm computes the same permutation in 0.15 ms against 0.92 ms,
+Timings from one loaded desktop vary by about 20% between runs.
+
+Host replay is dominated by the note tree. A four-output append costs about 64 ms,
+about 34 Poseidon2 hashes at about 2 ms each in the JavaScript implementation.
+Barretenberg's wasm computes the same permutation in 0.15 ms against 1.01 ms,
 an untaken lever. The spent set costs 0.4 ms per two nullifiers, and a state
-copy 0.9 ms per 1,000 leaves. By extrapolation, one core replays 10⁵ spends in
+copy 0.7 ms per 1,000 leaves. By extrapolation, one core replays 10⁵ spends in
 about 1.8 h of verification plus 1.7 h of note-tree hashing. The proofs are
 independent, so verification parallelizes. Records are 15,231 bytes for an
 issue and 15,562 for a spend at the observed 14,656-byte proof. The operator
 therefore retains about 1.56 GB per 10⁵ statements.
 
-Evidence packages carry each carrying checkpoint's full trail (§10, §12). Their
-bytes grow as the sum of prefix lengths, about N²/2K records, which is 8.5×
-unique records at 1,024 events every 64. Decoding those repeated trails is the
-residual multi-checkpoint overhead above. A reader could instead authenticate a
-passed checkpoint's trail as the §10.1 cut of a longer supplied trail. That
-changes which evidence resolves a dependency (§12.1), so it is a specification
-candidate, not taken here. The local budgets remain far below such closures:
+Packages that carry each carrying checkpoint's full trail grow as the sum of
+prefix lengths, about N²/2K records, which is 8.5× unique records at 1,024
+events every 64. [Pool-v3 §12.1 at 786f962](https://github.com/mediumofexchange/money-from-first-principles/blob/786f962/pool-v3.md#121-a-package-is-not-a-complete-certificate)
+now resolves a checkpoint's served trail from the prefix of any supplied trail
+of its segment whose decodable records reproduce its evidence hash
+([decision](../decisions/2026-09.md#2026-09-23--resolve-a-served-trail-from-the-prefix-of-a-longer-supplied-trail)).
+The measurement replays every case again from the selected trail alone. That
+package carries the unique records once, gives the identical result and still
+verifies each proof once. The local budgets remain far below such closures:
 trails of 1 MiB and 1,024 events hold about 64 real-size events, and the
 import walk still charges each checkpoint's full trail length. Limits: one
 synthetic shape with empty-root anchors and no imports, scopes, demands or

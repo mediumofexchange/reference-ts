@@ -43,7 +43,11 @@ replays; the charge still counts each checkpoint's full trail. A checkpoint
 whose trail reproduces the last valid checkpoint's evidence hash at its length
 resumes from a copy of that replayed state under the same replay context,
 verifying only its new positions (C2.10.12, pool-v3 §7.1). Any other trail
-replays in full with unchanged checks. `node scripts/pool/v3/replay-cost.mjs`
+replays in full with unchanged checks. A checkpoint's served trail may be the
+prefix of any longer supplied trail of its segment whose decodable first n
+records reproduce its evidence hash, and signed terms are resolved by backing
+name from any strictly verifying field ([pool-v3 §12.1 at 786f962](https://github.com/mediumofexchange/money-from-first-principles/blob/786f962/pool-v3.md#121-a-package-is-not-a-complete-certificate)),
+so a package needs one trail per chain of prefixes. `node scripts/pool/v3/replay-cost.mjs`
 measures this path's time and bytes ([evidence](../../../docs/POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost)).
 Silence-bearing imports read the independently answered publication
 range, classify demand/withdrawal/release force against each original snapshot,

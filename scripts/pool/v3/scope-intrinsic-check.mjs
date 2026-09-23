@@ -91,7 +91,9 @@ export async function checkSharedIntrinsic({ codec, verifier, test, operatorSecr
     }
     const noOpening = structuredClone(partial);
     noOpening.package.trails = noOpening.package.trails.filter(bytes => !same(bytes, a0.trail));
-    remember(noOpening, await refuse(noOpening));
+    // pool-v3 §12.1: the opening's served trail is also the selected trail's empty prefix.
+    const served = remember(noOpening, await replayLocalPackage(noOpening, verifier, codec));
+    assert.deepEqual(served, await replayLocalPackage(partial, verifier, codec));
     const invalidTerms = structuredClone(partial);
     const corrupt = bytes => {
       const trail = codec.decodeTrail(bytes, LIMITS), header = codec.decodeSegmentHeader(trail.header);
