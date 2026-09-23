@@ -298,7 +298,6 @@ export type StatementKind = 1 | 2 | 3;
 export const ISSUE = 1 as const;
 export const SPEND = 2 as const;
 export const BURN = 3 as const;
-export const STATEMENT_KINDS: readonly StatementKind[] = Object.freeze([ISSUE, SPEND, BURN]);
 
 /** Exactly nine, eleven and thirteen public fields (§7, §13). */
 export const PUBLIC_INPUT_COUNT: Readonly<Record<StatementKind, number>> = Object.freeze({ 1: 9, 2: 11, 3: 13 });
