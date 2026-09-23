@@ -7,7 +7,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { encodeBacking, makeBacking, type Backing } from "../backing.js";
-import { ByteWriter, compareBytes, copyBytes } from "../bytes.js";
+import { ByteWriter, compareBytes, copyBytes, EncodingError } from "../bytes.js";
 import { decodeCommitment, directoryRoot, encodeCommitment, signCommitment, verifyCommitment, type Commitment } from "../commitment.js";
 import { revokedAt } from "../revocation.js";
 import { VenueError, type Venue } from "../venue.js";
@@ -126,6 +126,8 @@ export class PoolStore {
   private observedIndex: bigint;
   private engine: Engine | undefined;
   private busy = false;
+  /** Set once an action changes memory or writes the journal; see run(). */
+  private diverging = false;
   private closed = false;
   private readonly requiredSegment: Uint8Array | undefined;
   private readonly signedEvidence = new WeakMap<Signed, PoolCheckpointEvidence>();
@@ -223,14 +225,16 @@ export class PoolStore {
     requireThat(!this.closed, "STORAGE", "store is closed");
     requireThat(!this.busy, "BUSY", "a journal operation is in progress");
     this.busy = true;
+    this.diverging = false;
     try { await this.load(); return await action(this.engine!); }
     catch (error) {
-      // Memory changes only after a durable commit; the one earlier change,
-      // Segment.admit's transition, is followed directly by transaction(),
-      // which reloads on any failure. A refusal (Pool/Store/Venue error)
-      // before that leaves memory as the journal has it, and Segment refusals
-      // change nothing, so only an unexpected failure forces a full replay.
-      if (!(error instanceof PoolError || error instanceof PoolStoreError || error instanceof VenueError)) this.engine = undefined;
+      // Discard memory only when it may differ from the journal: after an
+      // in-memory transition or a durable write this action has not finished
+      // reflecting, or on an unexpected failure. A refusal before either
+      // (Pool/Store/Venue/Encoding error) leaves memory as the journal has
+      // it, and Segment refusals change nothing, so it forces no replay.
+      if (this.diverging || !(error instanceof PoolError || error instanceof PoolStoreError ||
+        error instanceof VenueError || error instanceof EncodingError)) this.engine = undefined;
       throw error;
     }
     finally { this.busy = false; }
@@ -325,7 +329,7 @@ export class PoolStore {
     return `command:${id}`;
   }
   private append(engine: Engine, id: string, request: string, command: Command, response: string, stable: () => void): void {
-    this.checkpoint?.("applied"); stable();
+    this.diverging = true; this.checkpoint?.("applied"); stable();
     requireThat(engine.revision < SQLITE_LIMIT, "STORAGE", "journal is full");
     this.db.prepare("INSERT INTO events VALUES(?,?,?,?,?)").run(engine.revision + 1n, id, request, commandText(command), response);
     this.db.prepare("UPDATE identity SET tip=?,observed=? WHERE id=1").run(engine.revision + 1n, this.observedIndex.toString());
@@ -531,6 +535,7 @@ export class PoolStore {
       const segment = engine.segment!, now = this.clock(), observed = encoded(this.latest());
       this.unrevoked(own, segment);
       const accepted = await segment.admit(own);
+      this.diverging = true; // the segment now holds a statement the journal does not
       const result = this.transaction(() => {
         const stable = () => {
           this.stable(now, observed); this.ready(engine, "admit"); this.unrevoked(own, segment); this.stable(now, observed);

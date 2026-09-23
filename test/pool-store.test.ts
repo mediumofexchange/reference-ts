@@ -2,6 +2,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { makeBacking, signBacking } from "../src/backing.js";
+import { EncodingError } from "../src/bytes.js";
 import { directoryRoot, signCommitment, type Commitment } from "../src/commitment.js";
 import { poolReceiptAttestsEvidence, poolReceiptInHistory } from "../src/pool/receipt.js";
 import type { PoolCheckpointEvidence } from "../src/pool/checkpoint.js";
@@ -594,6 +595,9 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     const reused = f.oracle.accept(issueStatement(authority, f.x.backing.name, 11n, 101n, SECRETS.backer));
     await expect(f.s.submit(reused)).rejects.toMatchObject({ code: "OUTPUT" });
     await expect(f.s.commit("opening")).rejects.toMatchObject({ code: "CONFLICT" });
+    const wide = issueStatement(authority, f.x.backing.name, 10n, 105n, SECRETS.backer);
+    await expect(f.s.submit({ ...wide, publicInputs: wide.publicInputs.map((v, i) => (i === 5 ? 1n << 128n : v)) }))
+      .rejects.toThrow(EncodingError);
     expect((await f.s.submit(f.issue(104n))).position).toBe(3n);
     expect(f.oracle.calls).toBe(before + 3); // the two refused proofs and the new one
   });
