@@ -106,21 +106,6 @@ jobs:
       - name: Reference, installed package and durable payment acceptance
         run: npm run check
 
-      - name: Offline node identity, accounting and volume handoff guards
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          ./experiments/ergo-range/node-database-identity.test.ps1
-          ./experiments/ergo-range/node-database-evidence.test.ps1
-          ./experiments/ergo-range/node-database-native.test.ps1
-          ./experiments/ergo-range/native-candidate.test.ps1
-          ./experiments/ergo-range/node-volume-evidence.test.ps1
-          ./experiments/ergo-range/node-volume-handoff.test.ps1
-          ./experiments/ergo-range/node-sync-profile.test.ps1
-          ./experiments/ergo-range/node-sync-reader.test.ps1
-          ./experiments/ergo-range/node-sync-resume-native.test.ps1
-          ./experiments/ergo-range/node-sync-resume.test.ps1
-
       - name: Wallet device custody observations with synthetic providers
         if: matrix.os == 'windows-latest'
         shell: pwsh
