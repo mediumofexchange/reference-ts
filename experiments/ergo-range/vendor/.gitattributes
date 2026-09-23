@@ -1,0 +1,2 @@
+# Vendored build outputs are compared byte for byte with SHA256SUMS: never convert line endings.
+* -text
