@@ -679,7 +679,15 @@ Each names the rule, the candidate, the alternative, and what closes it.
   testnet run 2026-09-22:** all seven transactions landed at `k = 2`
   (10–17 s), two blocks inside the bound of 4 at depth 2 (the report's own
   note states the bound one block stricter); these are two correlated
-  observations on the testnet, not a distribution.
+  observations on the testnet, not a distribution. **Mainnet distribution
+  2026-09-23** ([latency](POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet)):
+  over one day, included transactions had `k` median 3, p99 12 and maximum
+  19. The share inside the window was 76% at depth 2, 94% at depth 6 and
+  99.8% at depth 10. A second observation from the own node is close at
+  depths 2–6 and lower at depth 10 (73%, 94%, 99.3%). 410 of 784 blocks
+  carried only the coinbase. The declared depth remains open: this gives the
+  miss fraction per depth for this population, not for a kind-4
+  publication's size and fee, and no target miss rate is chosen.
 - **A11 Chunked publication identity.** One publication across several
   outputs of one transaction: canonical reassembly, duplicates, partial
   publication, retrieval after the boxes are spent. Closed by P2 on a node.

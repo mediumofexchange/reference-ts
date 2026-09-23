@@ -158,6 +158,11 @@ gap, and `--report-only` recomputes the report and checks the window's
 chain against the node (parent links to its reported tip, recorded ids) and
 a second node (`--offline` skips both).
 
+The day from 2026-09-22 19:22 UTC is retained as
+[the latency report](../../docs/ergo-latency-verification.json), paired with
+the own node's observation (`--pair`); the result and its limits are in
+[deployment probes](../../docs/POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet).
+
 ## Own nodes
 
 `nodes.mjs` runs our own mainnet and testnet nodes from the official
