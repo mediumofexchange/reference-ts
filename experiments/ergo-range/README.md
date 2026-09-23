@@ -26,7 +26,7 @@ mainnet from a real anchor. It is run explicitly, never by `check` or CI,
 because it reads public nodes (GET only; nothing is submitted):
 
 ```powershell
-node experiments/ergo-range/chain-cost.mjs --from 1873361 --count 5040 --depth 10 --alternate scratch/sigma-0.28.0 --out scratch/chain-cost.json
+node --stack-size=4000 experiments/ergo-range/chain-cost.mjs --from 1873361 --count 5040 --depth 10 --alternate scratch/sigma-0.28.0 --out scratch/chain-cost.json
 ```
 
 The anchor is the block below `--from`; indices `0..count-1` are the next
@@ -77,8 +77,8 @@ the repository). Fund the address with testnet ERG from a public faucet
 (about 0.05 tERG covers a run), then:
 
 ```powershell
-node experiments/ergo-range/publish.mjs --dry-run --out scratch/ergo-testnet/dry-run.json
-node experiments/ergo-range/publish.mjs --node http://213.239.193.208:9052 --depth 2 --out scratch/ergo-testnet/live.json
+node --stack-size=4000 experiments/ergo-range/publish.mjs --dry-run --out scratch/ergo-testnet/dry-run.json
+node --stack-size=4000 experiments/ergo-range/publish.mjs --node http://213.239.193.208:9052 --depth 2 --out scratch/ergo-testnet/live.json
 ```
 
 The dry run builds and signs every case over a synthetic funded input and
@@ -96,6 +96,21 @@ re-submitting only what the node does not already hold; `--poll`,
 `--max-wait` and `--delay` pace it. The [retained report](../../docs/ergo-publication-verification.json)
 is the 2026-09-22 testnet run: the node's acceptance, sizes, values, each
 transaction's inclusion latency, the UTXO check and the read-back.
+
+## Decoder stack budget
+
+Every process that loads `decoder.mjs` (the probes above, the profile check
+and the `--ergo` replay) runs with `node --stack-size=4000`; the decoder
+refuses to load without it, and the package scripts pass it. The pinned
+sigma-rust build is a debug build whose parser overflows Node's default
+stack on some node-valid transactions and poisons its instance; a trap is
+fatal, and the process must start again. `stack-check.mjs` measures the
+budget, each trial in a fresh process, against an optional control build
+([retained report](../../docs/ergo-decoder-stack-verification.json)):
+
+```powershell
+node --stack-size=4000 experiments/ergo-range/stack-check.mjs --control scratch/sigma-0.28.0 --out docs/ergo-decoder-stack-verification.json
+```
 
 ## Inclusion latency on the mainnet
 

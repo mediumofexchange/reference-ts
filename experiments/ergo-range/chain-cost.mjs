@@ -74,17 +74,24 @@ const sameView = (a, b) => hex(a.id) === hex(b.id) && hex(a.witnessId) === hex(b
 });
 // decoder.mjs's strict round trip, verbatim, over whichever build of the library's `Transaction` class
 // is handed in; the run checks it against decoder.mjs itself on the pinned build for every transaction.
-const strictDecoder = TransactionClass => bytes => {
-  let tx;
-  try { tx = TransactionClass.sigma_parse_bytes(bytes); } catch { return undefined; }
-  try {
-    if (hex(tx.sigma_serialize_bytes()) !== hex(bytes)) return undefined;
-    const js = tx.to_js_eip12();
-    const proofs = js.inputs.map(input => Buffer.from(input.spendingProof.proofBytes, "hex"));
-    return { id: Buffer.from(js.id, "hex"), witnessId: blake2b(Buffer.concat(proofs), { dkLen: 32 }).subarray(1),
-      outputs: js.outputs.map(output => ({ ergoTree: Buffer.from(output.ergoTree, "hex"),
-        registers: Object.fromEntries(Object.entries(output.additionalRegisters).map(([name, value]) => [name, Buffer.from(value, "hex")])) })) };
-  } finally { tx.free(); }
+// A stack overflow or trap in a build leaves its one instance unusable: fatal, never a refusal (decoder.mjs).
+const fatal = error => error instanceof RangeError || error instanceof WebAssembly.RuntimeError;
+const strictDecoder = TransactionClass => {
+  let poisoned;
+  return bytes => {
+    if (poisoned !== undefined) throw new Error("the decoder trapped earlier; its instance cannot be used", { cause: poisoned });
+    let tx;
+    try { tx = TransactionClass.sigma_parse_bytes(bytes); } catch (error) { if (fatal(error)) { poisoned = error; throw error; } return undefined; }
+    try {
+      if (hex(tx.sigma_serialize_bytes()) !== hex(bytes)) return undefined;
+      const js = tx.to_js_eip12();
+      const proofs = js.inputs.map(input => Buffer.from(input.spendingProof.proofBytes, "hex"));
+      return { id: Buffer.from(js.id, "hex"), witnessId: blake2b(Buffer.concat(proofs), { dkLen: 32 }).subarray(1),
+        outputs: js.outputs.map(output => ({ ergoTree: Buffer.from(output.ergoTree, "hex"),
+          registers: Object.fromEntries(Object.entries(output.additionalRegisters).map(([name, value]) => [name, Buffer.from(value, "hex")])) })) };
+    } catch (error) { if (fatal(error)) poisoned = error; throw error; }
+    finally { if (poisoned === undefined) tx.free(); }
+  };
 };
 
 const packageOf = dir => {
@@ -228,13 +235,13 @@ try {
         try {
           const wasm = Transaction.from_json(texts[position]);
           try { const serialization = wasm.sigma_serialize_bytes(), own = Buffer.from(wasm.id().to_str(), "hex"); bytes = serialization; id = own; } finally { wasm.free(); }
-        } catch (error) { bytesUnavailable.push({ height: header.height, position, id: tx.id, treeVersions, error: String(error).slice(0, 120) }); }
+        } catch (error) { if (fatal(error)) throw error; bytesUnavailable.push({ height: header.height, position, id: tx.id, treeVersions, error: String(error).slice(0, 120) }); }
         serializeMs += performance.now() - t0;
         if (bytes === undefined) continue;
         // The same transaction through a parsed-and-re-emitted object: integer-like keys come out sorted, so a
         // spending-proof extension of several entries can serialize to bytes with another id, which the library refuses.
         const t3 = performance.now();
-        try { const again = Transaction.from_json(JSON.stringify(tx)); again.free(); } catch { reordered.push({ height: header.height, position, id: tx.id, extensionKeys: tx.inputs.map(input => Object.keys(input.spendingProof.extension).length) }); }
+        try { const again = Transaction.from_json(JSON.stringify(tx)); again.free(); } catch (error) { if (fatal(error)) throw error; reordered.push({ height: header.height, position, id: tx.id, extensionKeys: tx.inputs.map(input => Object.keys(input.spendingProof.extension).length) }); }
         reemitMs += performance.now() - t3;
         serialized++;
         sectionBytes += bytes.length;

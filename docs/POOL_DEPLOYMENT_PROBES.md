@@ -1065,6 +1065,52 @@ now log at WARN. v6.0.6 answers every API request with
 `Access-Control-Allow-Origin: *` whatever `corsAllowedOrigin` says, so a
 local browser page can read the node's key-free routes.
 
+## Decoder stack budget
+
+Reading the own node's retained mainnet blocks through the chain-cost probe,
+the pinned `ergo-lib-wasm-nodejs@0.29.0-alpha-2f840d3` overflowed Node's
+default stack inside `Transaction.sigma_parse_bytes` on a node-valid
+7,131-byte transaction (block 1,827,841, index 1, now the fixture
+`mainnet-1827841.json` from the own node), and every later call into the same
+WASM instance trapped; the probe crashed some seconds later in unrelated
+calls. Whether it overflowed depended on the stack already in use, so two of
+five offline reruns over the same 100 blocks crashed. The decoder caught the
+overflow as an ordinary refusal, so every transaction after it would have
+read as unsupported evidence. The npm alpha is a debug build (16.7 MB of
+WASM against 2.4 MB for 0.28.0, with wasm-bindgen's debug assertions in its
+glue), which also explains its six-fold slowdown.
+
+`experiments/ergo-range/stack-check.mjs` measures the budget, each trial in a
+fresh process, as the least V8 `--stack-size`
+([retained report](ergo-decoder-stack-verification.json)):
+
+| Input | Pinned alpha | 0.28.0 control |
+|---|---|---|
+| Fixture transaction | 1,173 KB | 71 KB |
+| An ordinary transaction of the block | 418 KB | 71 KB |
+| `Coll^d[Byte]` constant, d = 25 / 50 / 75 | 335 / 637 / 925 KB | 71 KB |
+| d = 110 (the node's cap) / 150 | 1,339 / 1,808 KB | 71 KB |
+
+The pinned build takes about 11.8 KB a nesting level, so a register constant
+at the node's own nesting cap (sigmastate `MaxTreeDepth`, 110) overflows the
+default 984 KB: anyone can publish a transaction that poisons it. At the
+default stack the fixture transaction overflows and the next ordinary
+transaction traps. The experiment therefore runs every process that loads
+the decoder with `node --stack-size=4000`, which covers the fixture 3.4 times
+and the measured path to about 330 levels within Node's 8 MB main-thread
+stack on this host; `decoder.mjs` refuses to load below that, and a
+`RangeError` or `WebAssembly.RuntimeError` from the library is fatal: the
+decoder rethrows it, marks its instance poisoned and throws on every later
+call ([decision](../decisions/2026-09.md#2026-09-23--run-the-pinned-decoder-with-an-explicit-stack-and-treat-a-trap-as-fatal)).
+The probe confirms the guard (load refused at 3,000 KB), normal decoding at
+4,000 KB, and the fatal path when JavaScript frames leave too little stack.
+
+Not established: ErgoTree expression nesting (only collection nesting was
+constructed); bytes nested beyond the node's cap, which only a dishonest
+source can present and which then fail closed as a trap; the decoder's
+memory and CPU containment. A release build of the same source would
+restore 0.28.0's frame sizes but needs a toolchain and a reproducible build.
+
 ## Windows process containment feasibility
 
 The private `experiments/ergo-range/contained-check.ps1` probe compares fixed

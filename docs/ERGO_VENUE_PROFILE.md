@@ -158,7 +158,14 @@ its retained evidence and can be reproduced from it.
   per transaction, and keeps any sized tree it cannot parse, of any header
   version, as its exact bytes, so an unknown script version or opcode cannot
   refuse a transaction; an unsized version-0 tree or a register constant it
-  cannot parse still can. No specification pins a decoder.
+  cannot parse still can. The pinned build is a debug build whose parser
+  needs about 12 KB of stack a nesting level: a node-valid mainnet
+  transaction and a constant at the node's nesting cap overflow Node's
+  default stack, and an overflow leaves the module's instance unusable, so
+  the experiment runs it with an explicit 4,000 KB stack and treats a trap
+  as fatal rather than as a refusal
+  ([probe](POOL_DEPLOYMENT_PROBES.md#decoder-stack-budget), [decided 2026-09-23](../decisions/2026-09.md#2026-09-23--run-the-pinned-decoder-with-an-explicit-stack-and-treat-a-trap-as-fatal)).
+  No specification pins a decoder.
 - The public node API serves transactions as JSON. sigma-rust's serializer
   reproduced every header root of the measured week from the node's exact
   text, but only because that text keeps the spending-proof extension's key

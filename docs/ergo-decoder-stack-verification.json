@@ -1,0 +1,88 @@
+{
+  "status": "pinned-decoder-needs-an-explicit-stack",
+  "node": "v24.6.0",
+  "platform": "win32 x64",
+  "fixture": {
+    "file": "experiments/ergo-range/fixtures/mainnet-1827841.json",
+    "sha256": "b5cccd71438a62a1af7e97ba8688ab7d641420cd0a24d4c61b4e41ca630f47d0",
+    "height": 1827841,
+    "headerId": "ba319cb0c729a5d5c5d3aa2aacb89017121578ddc93a08424caab1f6bc51558a",
+    "source": "the reader's own mainnet node (v6.0.6), /blocks/{id}",
+    "transaction": {
+      "index": 1,
+      "id": "b2ba556af308269521091d58986ab0355c7484bf1d1c1300642f4834f3c05d22",
+      "bytes": 7131,
+      "outputs": 9,
+      "largestTreeBytes": 2777
+    }
+  },
+  "nodeNestingCap": {
+    "depth": 110,
+    "source": "sigmastate-interpreter SigmaConstants.MaxTreeDepth, enforced by CoreByteReader for nested value deserialization"
+  },
+  "builds": {
+    "pinned": {
+      "library": {
+        "version": "0.29.0-alpha-2f840d3",
+        "wasmSha256": "65143062c54766fbc79b721ed77c43d199604c31bef535b99dca3b8842e1ea16",
+        "wasmBytes": 16680230
+      },
+      "deepTransactionKb": 1173,
+      "ordinaryTransactionKb": 418,
+      "nestedConstantKb": {
+        "25": 335,
+        "50": 637,
+        "75": 925,
+        "110": 1339,
+        "150": 1808
+      },
+      "atDefaultStack": {
+        "deepTransaction": "overflow",
+        "nodeCapConstant": "overflow"
+      }
+    },
+    "control": {
+      "library": {
+        "version": "0.28.0",
+        "wasmSha256": "5c39a0933a07031492efbe956fb4f957da745e295a94c06efddb475d9d1db4e5",
+        "wasmBytes": 2386564
+      },
+      "deepTransactionKb": 71,
+      "ordinaryTransactionKb": 71,
+      "nestedConstantKb": {
+        "25": 71,
+        "50": 71,
+        "75": 71,
+        "110": 71,
+        "150": 71
+      },
+      "atDefaultStack": {
+        "deepTransaction": "ok",
+        "nodeCapConstant": "ok"
+      }
+    }
+  },
+  "pinnedPerLevelKb": 11.8,
+  "poisoning": {
+    "atDefaultStack": "overflow,trap",
+    "note": "deep transaction then an ordinary one in one process"
+  },
+  "decoderMjs": {
+    "belowBudget": "load-refused:true",
+    "atBudget": "loaded,decoded,decoded",
+    "overflowInside": "loaded,overflow,poisoned"
+  },
+  "decoderBudgetKb": 4000,
+  "mainThreadMaxKb": 7800,
+  "files": {
+    "experiments/ergo-range/stack-check.mjs": "112f8d0217b6ac77f419d0b3a309a224f7edcee370275d2918f738637bf23381",
+    "experiments/ergo-range/decoder.mjs": "100066d3803dd049b3f4fc701685e9b3c2cb3859bf39e15b8f78ced936853d6d",
+    "experiments/ergo-range/package-lock.json": "9133136e72d45c7bf8427d0cef6360454d2f12775a91dd6b1031ff6f8fbd6a70"
+  },
+  "limitations": [
+    "Stack sizes are V8 --stack-size values on one Windows desktop with Node's 8 MB main-thread stack; they bound this build's recursion on these inputs, not every path through the parser.",
+    "The nested-constant sweep exercises one recursion path (collection types and values); nesting of expressions in an ErgoTree was not constructed, and the real transaction exercises whatever paths it contains.",
+    "The node's cap of 110 bounds what a node accepts; a source can present bytes nested deeper, which the budget does not cover and which then fail closed as a trap.",
+    "No runtime path, decoder selection or profile selection follows from this probe."
+  ]
+}
