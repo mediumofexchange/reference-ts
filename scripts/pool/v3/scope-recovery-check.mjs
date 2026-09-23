@@ -195,12 +195,18 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
       intrinsicCases.push({ payload: partial, result });
       // valid and repaired deliberately share complete bytes; the selected
       // envelope itself still supplies valid, so it cannot be withheld here.
+      const segmentOf = bytes => createHash("sha256").update(codec.decodeTrail(bytes, LIMITS).header).digest();
       for (const cp of [x0, y0, opened]) {
         const missing = structuredClone(partial);
         missing.package.trails = missing.package.trails.filter(bytes => !same(bytes, cp.trail));
         const unavailable = { ...missing, seed: issuerSeed };
-        const result = await refused(unavailable, "unresolved-evidence");
-        if (cp === y0 && same(selected, x)) intrinsicCases.push({ payload: unavailable, result });
+        // pool-v3 §12.1: the selected trail's prefixes serve its own segment's earlier checkpoints.
+        if (same(segmentOf(cp.trail), segmentOf(partial.package.trail))) {
+          assert.deepEqual(await replayLocalPackage(unavailable, verifier, codec), await replayLocalPackage({ ...partial, seed: issuerSeed }, verifier, codec));
+          continue;
+        }
+        const refusal = await refused(unavailable, "unresolved-evidence");
+        if (cp === y0 && same(selected, x)) intrinsicCases.push({ payload: unavailable, result: refusal });
       }
     }
   });

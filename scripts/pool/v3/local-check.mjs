@@ -345,9 +345,10 @@ try {
     assert.equal((await replayLocalPackage(emptyPackage(termsFields), verifier, codec)).audit.range.nonService, undefined);
   });
   await test("signed scoped terms refuse changed signature, payout, key and name independently", async () => {
+    // Terms are resolved by name from any supplied field (pool-v3 §12.1), so every copy is replaced.
     const replaceTerms = signed => {
-      const payload = clone(complete), trail = codec.decodeTrail(payload.package.trail, LIMITS);
-      payload.package.trail = codec.encodeTrail({ ...trail, terms: [signed] }, LIMITS); return payload;
+      const payload = clone(complete), swap = bytes => codec.encodeTrail({ ...codec.decodeTrail(bytes, LIMITS), terms: [signed] }, LIMITS);
+      payload.package.trail = swap(payload.package.trail); payload.package.trails = payload.package.trails.map(swap); return payload;
     };
     const bad = clone(signedTerms); bad.signature[0] ^= 1;
     await reject(replaceTerms(bad), "TERMS_SIGNATURE");
@@ -834,6 +835,27 @@ try {
     assert.equal((await replayLocalPackage(compose(three, 0), verifier, codec)).status, "superseded-selection");
     assert.equal((await replayLocalPackage(compose(three, 1), verifier, codec)).status, "invalid-local-replay");
   });
+  await test("a served trail is the prefix of a longer supplied trail; records after it neither block nor count (pool-v3 §12.1)", async () => {
+    let calls = 0;
+    const counting = { ...verifier, verify: (...args) => { calls++; return verifier.verify(...args); } };
+    const lone = clone(extended); lone.package.trails = [];
+    assert.deepEqual(await replayLocalPackage(lone, counting, codec), dependency);
+    assert.equal(calls, 4);
+    // A longer carrier whose fifth record does not decode still serves the opening and the third checkpoint.
+    const decoded = codec.decodeTrail(fourth.trail, LIMITS);
+    const carrier = codec.encodeTrail({ ...decoded, records: [...decoded.records, new Uint8Array([7, 7, 7])] }, LIMITS);
+    const tailed = clone(extended); tailed.package.trails = [carrier];
+    assert.deepEqual(await replayLocalPackage(tailed, verifier, codec), dependency);
+    // A historical read of the third checkpoint from a package holding only the later trail.
+    const historical = compose([{ checkpoint: third, at: 3n }, { checkpoint: fourth, at: 7n }], 0);
+    historical.selection.mode = "historical-fixture"; historical.selection.judgingIndex = 5n;
+    const own = await replayLocalPackage(historical, verifier, codec);
+    assert.equal(own.status, "historical-local-replay");
+    const onlyLater = portable(historical), later = codec.decodeEvidencePackage(onlyLater.package, PACKAGE_LIMITS);
+    const kept = later.filter(item => item.kind !== 6 || Buffer.compare(item.payload, fourth.trail) === 0);
+    assert.equal(kept.filter(item => item.kind === 6).length, 1);
+    assert.deepEqual(await replayEvidencePackage({ ...onlyLater, package: codec.encodeEvidencePackage(kept, PACKAGE_LIMITS) }, verifier, codec), own);
+  });
   await test("an extending checkpoint resumes from a copy of the last valid state: each new position is verified once (C2.10.12, pool-v3 §7.1)", async () => {
     let calls = 0;
     const counting = { ...verifier, verify: (...args) => { calls++; return verifier.verify(...args); } };
@@ -862,19 +884,31 @@ try {
     const prefixOutput = full.candidates.find(x => x.cm === burnChange.cm.toString());
     assert.equal(prefixOutput.anchor, full.audit.noteRoot); assert.equal(prefixOutput.pathScope, "replayed-local-tree-only");
   });
-  await test("dependency evidence must be complete and authenticated: missing, substituted or ambiguous snapshots and trails leave the read unresolved", async () => {
+  await test("dependency evidence must be complete and authenticated: missing or substituted snapshots and trails no supplied trail serves leave the read unresolved", async () => {
     const without = key => { const p = clone(extended); p.package[key] = []; return p; };
     assert.equal((await replayLocalPackage(without("snapshots"), verifier, codec)).status, "unresolved-evidence");
-    assert.equal((await replayLocalPackage(without("trails"), verifier, codec)).status, "unresolved-evidence");
+    // pool-v3 §12.1: the opening's and the third checkpoint's served trails are prefixes of the selected one.
+    assert.deepEqual(await replayLocalPackage(without("trails"), verifier, codec), dependency);
     const substituted = clone(extended); substituted.package.trails[1][substituted.package.trails[1].length - 1] ^= 1;
-    assert.equal((await replayLocalPackage(substituted, verifier, codec)).status, "unresolved-evidence");
-    // Two trails authenticate one snapshot's evidence, since the terms signature is outside the chain: ambiguous, so unsupported.
+    assert.deepEqual(await replayLocalPackage(substituted, verifier, codec), dependency);
+    // A checkpoint whose records no supplied trail carries as a prefix stays unresolved without its own trail.
+    const corrupt = record => { const bad = clone(record); bad.proof[100] ^= 1; return bad; };
+    const diverging = checkpointOf([issue, payment, corrupt(burn)], effects, 4n);
+    const withDiverging = compose([{ checkpoint: third, at: 3n }, { checkpoint: diverging, at: 7n }, { checkpoint: checkpointOf(records4, effects4, 5n), at: 12n }], 2);
+    assert.equal((await replayLocalPackage(withDiverging, verifier, codec)).status, "selected-local-replay");
+    withDiverging.package.trails = withDiverging.package.trails.filter(bytes => Buffer.compare(bytes, diverging.trail) !== 0);
+    assert.equal((await replayLocalPackage(withDiverging, verifier, codec)).status, "unresolved-evidence");
+    // Terms outside the evidence chain are resolved by name: a copy with a failing signature is ignored, not conflicting.
     const decoded = codec.decodeTrail(third.trail, LIMITS), badTerms = clone(signedTerms); badTerms.signature[0] ^= 1;
     const other = codec.encodeTrail({ ...decoded, terms: [badTerms] }, LIMITS);
-    const ambiguous = clone(extended); ambiguous.package.trails = [opening.trail, third.trail, other];
-    assert.equal((await replayLocalPackage(ambiguous, verifier, codec)).status, "unsupported-scope");
+    const copied = clone(extended); copied.package.trails = [opening.trail, third.trail, other];
+    assert.deepEqual(await replayLocalPackage(copied, verifier, codec), dependency);
     const unsigned = clone(extended); unsigned.package.trails = [opening.trail, other];
-    assert.equal((await replayLocalPackage(unsigned, verifier, codec)).status, "unresolved-evidence");
+    assert.deepEqual(await replayLocalPackage(unsigned, verifier, codec), dependency);
+    // With no strictly verifying field for the backing anywhere, terms are unresolved.
+    const onlyBad = clone(extended), fourthDecoded = codec.decodeTrail(fourth.trail, LIMITS);
+    onlyBad.package.trail = codec.encodeTrail({ ...fourthDecoded, terms: [badTerms] }, LIMITS); onlyBad.package.trails = [other];
+    assert.equal((await replayLocalPackage(onlyBad, verifier, codec)).status, "invalid-local-replay");
     // A trail that does not decode is no evidence for any checkpoint and does not block the read, in either form.
     const junk = clone(extended); junk.package.trails.push(new Uint8Array(40).fill(3));
     assert.deepEqual(await replayLocalPackage(junk, verifier, codec), dependency);
@@ -890,10 +924,14 @@ try {
       await replayLocalPackage({ ...extended, seed: receiverSeed }, verifier, codec));
     const packed = portable(extended), items = codec.decodeEvidencePackage(packed.package, PACKAGE_LIMITS);
     assert.equal(items.filter(i => i.kind === 4).length, 3); assert.equal(items.filter(i => i.kind === 6).length, 3);
-    for (const [kind, payload] of [[4, third.snapshot], [6, third.trail]]) {
-      const dropped = items.filter(item => !(item.kind === kind && Buffer.compare(item.payload, payload) === 0));
-      assert.equal((await replayEvidencePackage({ ...packed, package: codec.encodeEvidencePackage(dropped, PACKAGE_LIMITS) }, verifier, codec)).status, "unresolved-evidence");
-    }
+    const dropping = (kind, payload) => ({ ...packed, package: codec.encodeEvidencePackage(
+      items.filter(item => !(item.kind === kind && Buffer.compare(item.payload, payload) === 0)), PACKAGE_LIMITS) });
+    assert.equal((await replayEvidencePackage(dropping(4, third.snapshot), verifier, codec)).status, "unresolved-evidence");
+    // One trail per chain of prefixes suffices (pool-v3 §12.1).
+    assert.deepEqual(await replayEvidencePackage(dropping(6, third.trail), verifier, codec), dependency);
+    const longest = { ...packed, package: codec.encodeEvidencePackage(items.filter(item => item.kind !== 6 ||
+      Buffer.compare(item.payload, fourth.trail) === 0), PACKAGE_LIMITS) };
+    assert.deepEqual(await replayEvidencePackage(longest, verifier, codec), dependency);
     const { venue: omitted, ...withoutVenue } = extended;
     assert.equal(omitted.records.length, 4);
     assert.equal((await replayEvidencePackage(portable(withoutVenue), verifier, codec)).status, "unsupported-scope");
@@ -913,7 +951,10 @@ try {
       assert.equal(result.spendable, false); assert.equal(result.currentRangeAuthenticated, false);
     }
     for (let i = 0; i < items.length; i++) {
-      await refuse({ ...packed, package: codec.encodeEvidencePackage(items.filter((_, j) => i !== j), PACKAGE_LIMITS) }, "unresolved-evidence");
+      const p = { ...packed, package: codec.encodeEvidencePackage(items.filter((_, j) => i !== j), PACKAGE_LIMITS) };
+      // The opening's served trail is also the selected trail's empty prefix (pool-v3 §12.1).
+      if (items[i].kind === 6 && Buffer.compare(items[i].payload, opening.trail) === 0) assert.deepEqual(await replayEvidencePackage(p, verifier, codec), audit);
+      else await refuse(p, "unresolved-evidence");
     }
     const order = entries => entries.sort((a, b) => a.kind - b.kind || Buffer.compare(Buffer.from(sha(a.payload), "hex"), Buffer.from(sha(b.payload), "hex")));
     const other = { kind: 2, payload: encodeCommitment(signCommitment(operatorSecret, 4n, b(94))) };
@@ -933,7 +974,9 @@ try {
     await refuse({ ...packed, complete: true }, "invalid-local-replay");
     for (const tag of [2, 3, 4, 6]) {
       const changed = items.map(item => ({ ...item, payload: new Uint8Array(item.payload) }));
-      const entry = changed.find(item => item.kind === tag); entry.payload[entry.payload.length - 1] ^= 1;
+      // For trails, corrupt the selected one: the opening's is also its empty prefix (pool-v3 §12.1).
+      const entry = changed.find(item => item.kind === tag && (tag !== 6 || Buffer.compare(item.payload, complete.package.trail) === 0));
+      entry.payload[entry.payload.length - 1] ^= 1;
       await refuse({ ...packed, package: codec.encodeEvidencePackage(canonical(changed), PACKAGE_LIMITS) }, "unresolved-evidence");
     }
     await refuse({ ...packed, selection: { ...packed.selection, root: b(93) } }, "selection-mismatch");

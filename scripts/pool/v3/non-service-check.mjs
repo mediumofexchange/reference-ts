@@ -124,6 +124,11 @@ export async function checkNonService({ codec, verifier, prove, test, compose, c
     const tampered = structuredClone(payload), signature = new Uint8Array(signedTerms.signature); signature[0] ^= 1;
     tampered.package.trail = codec.encodeTrail({ header: original.header,
       terms: [{ terms: signedTerms.terms, signature }], records: [codec.encodeRecord(issuance)] }, LIMITS);
+    // Terms are resolved by name from any supplied field (pool-v3 §12.1): tamper every copy of the segment's field.
+    tampered.package.trails = tampered.package.trails.map(bytes => {
+      const trail = codec.decodeTrail(bytes, LIMITS);
+      return Buffer.compare(trail.header, original.header) === 0 ? codec.encodeTrail({ ...trail, terms: [{ terms: signedTerms.terms, signature }] }, LIMITS) : bytes;
+    });
     for (const [p, v, status] of [[payload, unavailable, "unresolved-evidence"], [missing, verifier, "unresolved-evidence"],
       [tampered, verifier, "invalid-local-replay"]]) {
       const answer = await replayLocalPackage(p, v, codec);

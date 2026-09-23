@@ -193,11 +193,17 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
       assert.deepEqual(result.candidates.map(c => c.cm), [same(selected, x) ? finalX.cm.toString() : mixedY.cm.toString()]);
       assert.equal(result.audit.range.carrying.find(c => c.sequence === "7").class, "excluded");
       intrinsicCases.push({ payload: partial, result });
+      const segmentOf = bytes => createHash("sha256").update(codec.decodeTrail(bytes, LIMITS).header).digest();
       for (const cp of [x1, y1, j0, j1]) {
         const missing = structuredClone(partial);
         missing.package.trails = missing.package.trails.filter(bytes => !same(bytes, cp.trail));
-        const result = await refused(missing, "unresolved-evidence");
-        if (cp === y1 && same(selected, x)) intrinsicCases.push({ payload: missing, result });
+        // pool-v3 §12.1: the selected trail's prefixes serve its own segment's earlier checkpoints.
+        if (same(segmentOf(cp.trail), segmentOf(partial.package.trail))) {
+          assert.deepEqual(await replayLocalPackage(missing, verifier, codec), await replayLocalPackage(partial, verifier, codec));
+          continue;
+        }
+        const refusal = await refused(missing, "unresolved-evidence");
+        if (cp === y1 && same(selected, x)) intrinsicCases.push({ payload: missing, result: refusal });
       }
     }
     const stale = checkpoint(joined, 8n, 15n, [], [], { nullifiers: imports });

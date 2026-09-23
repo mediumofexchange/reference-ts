@@ -194,9 +194,11 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       return answer;
     };
     await test("compact target exclusion cannot replace its opening, predecessor, directory, snapshot or range", async () => {
+      const segmentOf = bytes => createHash("sha256").update(codec.decodeTrail(bytes, LIMITS).header).digest();
       for (const cp of [a0, a1]) for (const key of ["trails", "snapshots", "directories"]) {
         const missing = structuredClone(compact.payload);
-        missing.package[key] = missing.package[key].filter(item => key === "trails" ? !same(item, cp.trail) :
+        // pool-v3 §12.1: a later trail of the segment would serve cp as a prefix, so withhold the segment's trails.
+        missing.package[key] = missing.package[key].filter(item => key === "trails" ? !same(segmentOf(item), segmentOf(cp.trail)) :
           key === "snapshots" ? !same(item, cp.snapshot) : !same(directoryRoot(item), directoryRoot(cp.directory)));
         await unresolved(missing);
       }
@@ -380,9 +382,11 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       assert.equal(answer.audit.outstanding, "9");
       assert.equal(answer.audit.range.carrying.find(c => c.index === "11").class, "excluded");
       assert.deepEqual(answer.audit.range.clock, { duration: "4", snapshotIndex: "14", gap: "6", open: true, boundary: "19", opening: "14" });
+      const segmentOf = bytes => createHash("sha256").update(codec.decodeTrail(bytes, LIMITS).header).digest();
       for (const cp of [a0, a1, b0, b1, b2]) for (const key of ["trails", "snapshots", "directories"]) {
         const missing = structuredClone(partial);
-        missing.package[key] = missing.package[key].filter(item => key === "trails" ? !same(item, cp.trail) :
+        // pool-v3 §12.1: a later trail of the segment would serve cp as a prefix, so withhold the segment's trails.
+        missing.package[key] = missing.package[key].filter(item => key === "trails" ? !same(segmentOf(item), segmentOf(cp.trail)) :
           key === "snapshots" ? !same(item, cp.snapshot) : !same(directoryRoot(item), directoryRoot(cp.directory)));
         const result = await refuse(missing, "unresolved-evidence");
         intrinsicCases.push({ payload: { ...missing, seed: receiverSeed }, result });
