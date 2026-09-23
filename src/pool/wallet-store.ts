@@ -60,6 +60,8 @@ function readNote(text: string): NoteOpening {
   return copyNoteOpening({ backing: hexToBytes(n[0]!), value: BigInt(n[1]!), owner: BigInt(n[2]!), rho: BigInt(n[3]!) });
 }
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
+/** The exact form walletChangeRequestId produces. */
+const CHANGE_REQUEST_ID = /^change_[0-9a-f]{64}$/;
 
 // Fixed table/column names, never SQL supplied by the backup. The custody row
 // is deliberately not transferable: the old source remains frozen forever.
@@ -281,6 +283,10 @@ export class PoolWalletStore {
     const name = bytesToHex(backing);
     return this.transaction(() => {
       if (change) this.unusedChange(requestId);
+      // The internal change-ID form is never a public invoice, even for an
+      // existing row: replaying one would hand out a change owner. Other
+      // historical `change_` IDs keep exact replay (below).
+      requireThat(change || !CHANGE_REQUEST_ID.test(requestId), "INVALID", "change request namespace is reserved");
       const old = this.db.prepare("SELECT * FROM wallet_requests WHERE id=?").get(requestId);
       if (old) {
         requireThat(old["backing"] === name && old["value"] === value.toString(), "CONFLICT", "request id reused with changed terms");

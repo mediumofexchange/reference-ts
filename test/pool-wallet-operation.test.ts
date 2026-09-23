@@ -220,4 +220,11 @@ describe.skipIf(Number(process.versions.node.split(".")[0]) < 24)("ordinary loca
     expect(() => f.payer.request("change_legacy", original.backing, 3n)).toThrow(/changed terms/);
     expect(() => f.payer.request("change_new", original.backing, 2n)).toThrow(/namespace/);
   });
+  it("never replays an internal change request as a public invoice", async () => {
+    const f = await setup();
+    const change = f.payer.changeRequest("shop", f.request.backing, 3n);
+    expect(change.id).toBe(walletChangeRequestId("shop", 3n));
+    expect(() => f.payer.request(change.id, change.backing, change.value)).toThrow(/namespace/);
+    expect(f.payer.changeRequest("shop", f.request.backing, 3n)).toEqual(change);
+  });
 });

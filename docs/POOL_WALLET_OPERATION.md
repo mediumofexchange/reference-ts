@@ -39,8 +39,9 @@ and canonically framed change amount. New ordinary invoices cannot use its reser
 that ID or another prepared output to its owner refuses reuse, including in
 historical wallets. The final reservation transaction rechecks the same guards
 and exact change request after proof creation.
-Existing historical request IDs in that namespace still support exact API
-replay and reject changed terms; the new command interface reserves the prefix.
+Existing historical request IDs in that namespace, other than the exact internal
+change-ID form, still support exact API replay and reject changed terms; the new
+command interface reserves the prefix.
 Its positive amount and secret persist before proving. A proof failure may leave
 an unused request; it never reserves inputs. Retry reuses that exact request;
 changed selection with different change uses a distinct internal request under
