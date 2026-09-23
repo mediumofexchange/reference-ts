@@ -13,7 +13,9 @@ const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest()
 // authentication would return false in any case.
 const chains = new WeakMap();
 export function trailEvidenceChain(codec, trail) {
-  if (chains.has(trail)) return chains.get(trail);
+  if (!chains.has(codec)) chains.set(codec, new WeakMap());
+  const cached = chains.get(codec);
+  if (cached.has(trail)) return cached.get(trail);
   let chain = [codec.genesisEvidenceHash(hash(trail.header))];
   try {
     trail.records.forEach((bytes, i) => chain.push(codec.nextEvidenceHash(chain[i], codec.evidenceHashes(codec.decodeRecord(bytes)), BigInt(i) + 1n)));
@@ -21,12 +23,14 @@ export function trailEvidenceChain(codec, trail) {
     if (!(error instanceof EncodingError || error instanceof codec.CodecEncodingError)) throw error;
     chain = null;
   }
-  chains.set(trail, chain);
+  cached.set(trail, chain);
   return chain;
 }
 /** §10.1 for one checkpoint. The cached terminal hash only skips trails that
  * cannot authenticate; every candidate still passes the full check. */
 export function trailAuthenticates(codec, expected, snapshot, trail) {
+  // Another segment's trail fails §10.1 before any record is decoded.
+  if (!same(hash(trail.header), expected.segment)) return false;
   const chain = trailEvidenceChain(codec, trail);
   return chain !== null && same(chain.at(-1), snapshot.evidenceHash) && codec.verifyTrailEvidence(expected, snapshot, trail, LIMITS);
 }

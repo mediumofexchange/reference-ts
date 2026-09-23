@@ -850,8 +850,17 @@ try {
       [["valid", null], ["valid", null], ["excluded", "REPEATED_STATEMENT"], ["valid", null]]);
     assert.deepEqual({ ...last.audit, range: null }, { ...dependency.audit, range: null });
     assert.equal(calls, 5);
-    const receiver = await replayLocalPackage({ ...compose(three, 2), seed: receiverSeed }, verifier, codec);
-    assert.deepEqual(receiver.candidates, (await replayLocalPackage({ ...extended, seed: receiverSeed }, verifier, codec)).candidates);
+    // A lone fourth checkpoint cannot resume: its full replay is the independent reference
+    // for the resumed ones, including the prefix outputs' paths against the final tree.
+    const alone = compose([{ checkpoint: fourth, at: 7n }], 0);
+    const full = await replayLocalPackage({ ...alone, seed: receiverSeed }, verifier, codec);
+    assert.equal(full.status, "selected-local-replay");
+    for (const resumed of [extended, compose(three, 2)]) {
+      const receiver = await replayLocalPackage({ ...resumed, seed: receiverSeed }, verifier, codec);
+      assert.deepEqual(receiver.candidates, full.candidates); assert.deepEqual({ ...receiver.audit, range: null }, { ...full.audit, range: null });
+    }
+    const prefixOutput = full.candidates.find(x => x.cm === burnChange.cm.toString());
+    assert.equal(prefixOutput.anchor, full.audit.noteRoot); assert.equal(prefixOutput.pathScope, "replayed-local-tree-only");
   });
   await test("dependency evidence must be complete and authenticated: missing, substituted or ambiguous snapshots and trails leave the read unresolved", async () => {
     const without = key => { const p = clone(extended); p.package[key] = []; return p; };
