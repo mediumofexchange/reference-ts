@@ -9,7 +9,7 @@ import { readPoolReceiptCheckpoint, readPoolReceiptRecord } from "../src/pool/re
 import { readPoolReceiptRepair } from "../src/pool/receipt-repair.js";
 import { readPoolReceiptStatus } from "../src/pool/receipt-status.js";
 import { Segment } from "../src/pool/segment.js";
-import { segmentAuthority } from "../src/pool/statement.js";
+import { segmentAuthority, statementHash, type Statement } from "../src/pool/statement.js";
 import { decodeStoredOpening, encodeStoredOpening, encodeStoredReceipt } from "../src/pool/store-codec.js";
 import type { PoolStore as Store, PoolStoreCheckpoint } from "../src/pool/store.js";
 import { LocalVenue } from "../src/venue.js";
@@ -583,6 +583,25 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     expect((await f.s.view()).latest).toEqual(f.opening);
     f.s.close();
     expect(await store(f.file, f.venue, f.oracle).submit(original)).toEqual(saved);
+  });
+
+  it("names a journal row by the statement it stores, however often a getter answers differently", async () => {
+    const f = await fixture(); await f.s.publish();
+    const first = f.issue(101n), later = f.issue(102n);
+    // Each field answers `first` on its first read and `later`, a complete
+    // valid statement too, on every later one.
+    const reads = { publicInputs: 0, proof: 0, obligorSignature: 0 };
+    const shifting = { kind: first.kind,
+      get publicInputs() { return reads.publicInputs++ === 0 ? first.publicInputs : later.publicInputs; },
+      get proof() { return reads.proof++ === 0 ? first.proof : later.proof; },
+      get obligorSignature() { return reads.obligorSignature++ === 0 ? first.obligorSignature : later.obligorSignature; } } as Statement;
+    const receipt = await f.s.submit(shifting);
+    expect(reads).toEqual({ publicInputs: 1, proof: 1, obligorSignature: 1 });
+    expect(receipt.statementHash).toEqual(statementHash(segmentAuthority(f.trail.header).domain, first.kind, first.publicInputs));
+    f.s.close();
+    const resumed = store(f.file, f.venue, f.oracle);
+    expect(await resumed.submit(first)).toEqual(receipt);
+    expect((await resumed.submit(later)).position).toBe(2n);
   });
 
   it.each(["DELETE FROM events WHERE seq=1", "UPDATE identity SET tip=0", "UPDATE events SET request='other' WHERE seq=1"])("refuses journal corruption: %s", async sql => {

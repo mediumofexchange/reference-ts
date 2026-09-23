@@ -15,9 +15,9 @@ import { readPoolCheckpoint, readPoolCheckpoints, type PoolCheckpointEvidence } 
 import { mergePoolEvidence, replayedPoolEvidence } from "./evidence.js";
 import { preparePoolOpening } from "./opening.js";
 import { poolReceiptInHistory, poolReceiptAttestsEvidence, signPoolReceipt, type PoolReceipt } from "./receipt.js";
-import { Segment, type ImportEvidence, type SegmentTrail, type SignedBacking, type StatementVerifier } from "./segment.js";
-import { configurationHash, copyConfiguration, copySegmentHeader, decodeStatement, encodeStatement, ISSUE,
-  parsePublicInputs, segmentBytes, statementHash, type OpeningCheckpoint, type PoolConfiguration, type SegmentHeader, type Statement } from "./statement.js";
+import { PoolError, Segment, type ImportEvidence, type SegmentTrail, type SignedBacking, type StatementVerifier } from "./segment.js";
+import { allFields, configurationHash, copyConfiguration, copySegmentHeader, decodeStatement, encodeStatement, ISSUE, isStatementKind,
+  parsePublicInputs, PUBLIC_INPUT_COUNT, readStatementFields, segmentBytes, statementHash, type OpeningCheckpoint, type PoolConfiguration, type SegmentHeader, type Statement } from "./statement.js";
 import { copyPoolCheckpointEvidence, decodeStoredOpening, decodeStoredReceipt, encodeStoredOpening, encodeStoredReceipt } from "./store-codec.js";
 
 const PROFILE = "pool-store/v2";
@@ -498,12 +498,16 @@ export class PoolStore {
 
   /** Verify/admit, then atomically retain the statement and original receipt. */
   async submit(statement: Statement): Promise<PoolReceipt> {
-    const hash = bytesToHex(statementHash(this.domain, statement.kind, statement.publicInputs));
-    // Identity ignores new proof bytes on retries; only a new identity needs
-    // complete evidence. Copy before run() reaches its first await.
-    const own = { ...statement, publicInputs: [...statement.publicInputs],
-      ...(statement.proof instanceof Uint8Array ? { proof: copyBytes(statement.proof) } : {}),
-      ...(statement.obligorSignature instanceof Uint8Array ? { obligorSignature: copyBytes(statement.obligorSignature) } : {}) };
+    // One read of the caller's object before run() reaches its first await:
+    // the identity, the journal row and admission all derive from `own`, so
+    // a row's id always names the statement it stores. Identity ignores new
+    // proof bytes on retries; only a new identity needs complete evidence.
+    const fields = readStatementFields(statement);
+    if (fields === undefined || !isStatementKind(fields.kind) || !allFields(fields.publicInputs, PUBLIC_INPUT_COUNT[fields.kind])) {
+      throw new PoolError("MALFORMED", "public inputs do not match the kind");
+    }
+    const own = fields as Statement;
+    const hash = bytesToHex(statementHash(this.domain, own.kind, own.publicInputs));
     return this.run(async engine => {
       const prior = engine.receipts.get(hash);
       if (prior !== undefined) return decodeStoredReceipt(encodeStoredReceipt(prior));
