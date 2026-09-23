@@ -1081,15 +1081,15 @@ WASM against 2.4 MB for 0.28.0, with wasm-bindgen's debug assertions in its
 glue), which also explains its six-fold slowdown.
 
 `experiments/ergo-range/stack-check.mjs` measures the budget, each trial in a
-fresh process, as the least V8 `--stack-size`
-([retained report](ergo-decoder-stack-verification.json)):
+fresh process, as the least V8 `--stack-size`, found to 8 KB and varying by
+that step between runs ([retained report](ergo-decoder-stack-verification.json)):
 
 | Input | Pinned alpha | 0.28.0 control |
 |---|---|---|
 | Fixture transaction | 1,173 KB | 71 KB |
-| An ordinary transaction of the block | 418 KB | 71 KB |
-| `Coll^d[Byte]` constant, d = 25 / 50 / 75 | 335 / 637 / 925 KB | 71 KB |
-| d = 110 (the node's cap) / 150 | 1,339 / 1,816 KB | 71 KB |
+| An ordinary transaction of the block | 426 KB | 71 KB |
+| `Coll^d[Byte]` constant, d = 25 / 50 / 75 | 335 / 629 / 925 KB | 71 KB |
+| d = 110 (the node's cap) / 150 | 1,339 / 1,808 KB | 71 KB |
 | Deepest `LogicalNot` expression nesting at 7,800 KB | 49 (traps at 50 and at 110) | 256 or more |
 
 The pinned build takes about 11.8 KB a nesting level, so a register constant
@@ -1110,8 +1110,9 @@ The stack does not close the denial. ErgoTree expression nesting
 (`BoolToSigmaProp` over `LogicalNot` nested d levels) parses on the pinned
 build only to depth 49 and traps at 50 at any V8 stack, 7,800 KB included,
 consistent with exhausting the module's own linear-memory stack; 0.28.0
-reads 256 levels and more, and the node's cap of 110 applies to expressions
-too. An output the node accepts can therefore make the pinned decoder trap
+reads 256 levels and more, and by the node's source (sigmastate
+`CoreByteReader`) its cap of 110 applies to expressions too. An output the
+node accepts can therefore make the pinned decoder trap
 on its block every time; with the fatal handling that is an explicit
 failure rather than a false refusal, but it is a denial all the same, so
 the [decoder choice is reopened](../decisions/2026-09.md#2026-09-23--run-the-pinned-decoder-with-an-explicit-stack-and-treat-a-trap-as-fatal).

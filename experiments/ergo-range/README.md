@@ -104,8 +104,12 @@ and the `--ergo` replay) runs with `node --stack-size=4000`; the decoder
 refuses to load without it, and the package scripts pass it. The pinned
 sigma-rust build is a debug build whose parser overflows Node's default
 stack on some node-valid transactions and poisons its instance; a trap is
-fatal, and the process must start again. `stack-check.mjs` measures the
-budget, each trial in a fresh process, against an optional control build
+fatal, and the process must start again. The budget does not close the
+denial: ErgoTree expression nesting of 50 levels traps the pinned build at
+any stack, so the decoder choice is
+[reopened](../../decisions/2026-09.md#2026-09-23--run-the-pinned-decoder-with-an-explicit-stack-and-treat-a-trap-as-fatal).
+`stack-check.mjs` measures both, each trial in a fresh process, against an
+optional control build
 ([retained report](../../docs/ergo-decoder-stack-verification.json)):
 
 ```powershell

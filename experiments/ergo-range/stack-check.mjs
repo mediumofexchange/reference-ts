@@ -95,6 +95,7 @@ try {
     nestedConstantKb: Object.fromEntries(DEPTHS.map(d => [d, least(["--child", "depth", dir, String(d)])])),
     // The deepest expression nesting that parses at the largest stack the main thread holds, found by bisection.
     expressionNestingMaxDepth: (() => { let lo = 1, hi = 256; if (run(MAX_KB, ["--child", "expr", dir, String(hi)]) === "ok") return `>=${hi}`;
+      if (run(MAX_KB, ["--child", "expr", dir, "1"]) !== "ok") return 0;
       while (hi - lo > 1) { const m = (lo + hi) >> 1; if (run(MAX_KB, ["--child", "expr", dir, String(m)]) === "ok") lo = m; else hi = m; } return lo; })(),
     expressionAtNodeCap: run(MAX_KB, ["--child", "expr", dir, String(NODE_CAP)]),
     atDefaultStack: { deepTransaction: run(984, ["--child", "parse", dir, deepFile]), nodeCapConstant: run(984, ["--child", "depth", dir, String(NODE_CAP)]) },
@@ -123,7 +124,7 @@ try {
       "Stack sizes are V8 --stack-size values on one Windows desktop with Node's 8 MB main-thread stack; they bound this build's recursion on these inputs, not every path through the parser.",
       "Two recursion paths were constructed: collection nesting in a constant, whose need grows with the V8 stack, and LogicalNot nesting in an ErgoTree, which the pinned build fails at a fixed depth whatever the V8 stack (consistent with exhausting the module's own linear-memory stack; not proven). Other expression forms were not swept.",
       "No transaction carrying such a tree was submitted to a node; that the node accepts expression nesting to 110 rests on its source (CoreByteReader's depth check).",
-      "The node's cap of 110 bounds what a node accepts; a source can present bytes nested deeper, which the budget does not cover and which then fail closed as a trap.",
+      "The budget does not bound expression nesting: node-valid expression trees trap the pinned build from depth 50 at any V8 stack, and bytes nested beyond the node's cap of 110 likewise fail closed as a trap.",
       "No runtime path, decoder selection or profile selection follows from this probe.",
     ],
   };
