@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EncodingError } from "../src/bytes.js";
 import { utf8Encoder } from "../src/contexts.js";
 import { bytesToField, fieldToBytes, fieldToHex, FIELD_MODULUS, hexToField, identifierOf, limbsOf } from "../src/pool/field.js";
+import { copyNoteOpening } from "../src/pool/notes.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import {
   BURN,
@@ -215,6 +216,23 @@ describe("pool-v2 §7: statements and their identity", () => {
     expect(copy).toEqual(issue);
     copy.proof[0] = (copy.proof[0] as number) ^ 1;
     expect(issue.proof[0]).not.toBe(copy.proof[0]);
+  });
+
+  it("copies a statement or note opening from one read of each field, and refuses byte look-alikes", () => {
+    const issue = issueStatement(AUTH, X.name, 5n, 77n, SECRETS.backer);
+    const spend = spendStatement(AUTH, [1n, 1n], [2n, 3n], [4n, 5n]);
+    // A kind that answers issue first and spend later: the copy is the issue it was checked as.
+    let kindReads = 0;
+    const shifting = { ...issue, get kind() { return kindReads++ === 0 ? ISSUE : spend.kind; } } as Statement;
+    expect(copyStatement(shifting)).toEqual(issue);
+    expect(kindReads).toBe(1);
+    const lookAlike = new Proxy(issue.proof, {});
+    expect(lookAlike instanceof Uint8Array).toBe(true);
+    expect(() => copyStatement({ ...issue, proof: lookAlike })).toThrow(EncodingError);
+    let valueReads = 0;
+    const opening = { backing: X.name, owner: 3n, rho: 4n, get value() { return valueReads++ === 0 ? 5n : 1n << 64n; } };
+    expect(copyNoteOpening(opening)).toEqual({ backing: X.name, value: 5n, owner: 3n, rho: 4n });
+    expect(valueReads).toBe(1);
   });
 
   it("reads the public inputs by position: domain, segment and scope root first, then the kind's fields", () => {

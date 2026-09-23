@@ -402,10 +402,13 @@ export class PoolWalletStore {
   }
   /** Keep the final pairing guard and nullifier reservation in one transaction. */
   preparePayment(alias: string, statement: Statement, opening: NoteOpening, change: NoteOpening): void {
-    this.savePending(alias, statement, opening, change, () => {
+    requireThat(opening !== undefined && change !== undefined, "INVALID", "payment needs its delivery and change openings");
+    this.savePending(alias, statement, opening, change, own => {
+      // Only the owned copies savePending stores, never the caller's objects again.
+      const { opening, change } = own as { opening: NoteOpening; change: NoteOpening };
       this.assertNewPayment(alias);
       const pair = decodeWalletPairing(this.pairing(alias));
-      requireThat(statement.kind === 2 && bytesToHex(opening.backing) === pair.request.backing &&
+      requireThat(own.statement.kind === 2 && bytesToHex(opening.backing) === pair.request.backing &&
         opening.value.toString() === pair.request.value && opening.owner.toString() === pair.request.owner,
         "CONFLICT", "payment differs from paired invoice");
       if (change.value > 0n) {
@@ -459,19 +462,24 @@ export class PoolWalletStore {
   prepare(commandId: string, statement: Statement, opening?: NoteOpening, change?: NoteOpening): void {
     this.savePending(commandId, statement, opening, change);
   }
-  private savePending(commandId: string, statement: Statement, opening?: NoteOpening, change?: NoteOpening, guard?: () => void): void {
+  private savePending(commandId: string, statement: Statement, opening?: NoteOpening, change?: NoteOpening,
+    guard?: (own: { statement: Statement; opening?: NoteOpening; change?: NoteOpening }) => void): void {
     id(commandId);
+    // One read of each caller object: the stored frame and notes, every check
+    // and the guard all use these copies.
     const frame = bytesToHex(encodeStatement(this.authority.domain, statement));
     const own = decodeStatement(hexToBytes(frame)).statement, inputs = parsePublicInputs(own.kind, own.publicInputs);
     requireThat(same(inputs.domain, this.authority.domain) && same(inputs.segment, this.authority.segment) && inputs.scopeRoot === this.authority.scopeRoot, "INVALID", "statement authority differs");
-    const note = opening === undefined ? null : noteText(opening);
-    const changeNote = change === undefined ? null : noteText(change);
-    if (opening !== undefined) requireThat(inputs.outputs.includes(commitmentOf(this.authority.domain, opening)), "INVALID", "delivery is not an output");
-    if (change !== undefined) requireThat(inputs.outputs.includes(commitmentOf(this.authority.domain, change)), "INVALID", "change is not an output");
+    const ownOpening = opening === undefined ? undefined : copyNoteOpening(opening);
+    const ownChange = change === undefined ? undefined : copyNoteOpening(change);
+    const note = ownOpening === undefined ? null : noteText(ownOpening);
+    const changeNote = ownChange === undefined ? null : noteText(ownChange);
+    if (ownOpening !== undefined) requireThat(inputs.outputs.includes(commitmentOf(this.authority.domain, ownOpening)), "INVALID", "delivery is not an output");
+    if (ownChange !== undefined) requireThat(inputs.outputs.includes(commitmentOf(this.authority.domain, ownChange)), "INVALID", "change is not an output");
     this.transaction(() => {
       const old = this.db.prepare("SELECT frame, opening, change_opening FROM wallet_pending WHERE id=?").get(commandId);
       if (old) { requireThat(old["frame"] === frame && old["opening"] === note && old["change_opening"] === changeNote, "CONFLICT", "pending command changed"); return; }
-      guard?.();
+      guard?.({ statement: own, ...(ownOpening === undefined ? {} : { opening: ownOpening }), ...(ownChange === undefined ? {} : { change: ownChange }) });
       for (const nf of inputs.nullifiers) requireThat(this.db.prepare("SELECT 1 FROM wallet_reservations WHERE nullifier=?").get(nf.toString()) === undefined, "CONFLICT", "input already reserved");
       this.db.prepare("INSERT INTO wallet_pending VALUES (?, ?, ?, ?, NULL)").run(commandId, frame, note, changeNote);
       for (const nf of inputs.nullifiers) this.db.prepare("INSERT INTO wallet_reservations VALUES (?, ?)").run(nf.toString(), commandId);
