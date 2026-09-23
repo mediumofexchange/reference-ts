@@ -3,9 +3,11 @@
 // instance unusable, and every later call traps. This probe measures, each trial in a fresh process: the least
 // --stack-size (KB) at which the pinned build (and optionally a control build) parses a real mainnet transaction that
 // overflows Node's default stack (block 1,827,841, fixture from the reader's own node), and a constant nested to depth d
-// (Coll^d[Byte]) for depths around the node's nesting cap of 110 (sigmastate MaxTreeDepth); that an overflow poisons
-// the instance; that decoder.mjs refuses to load below its budget; and that under its budget an overflow inside it is
-// fatal and poisons it rather than reading as a refusal. Offline; no runtime path reads this.
+// (Coll^d[Byte]) for depths around the node's nesting cap of 110 (sigmastate MaxTreeDepth); the deepest ErgoTree
+// expression nesting each build parses at the largest stack the main thread holds (the pinned build fails at a fixed
+// depth below the cap whatever the V8 stack); that an overflow poisons the instance; that decoder.mjs refuses to load
+// below its budget; and that under its budget an overflow inside it is fatal and poisons it rather than reading as a
+// refusal. Offline and synthetic apart from the fixture; nothing is submitted; no runtime path reads this.
 //
 // Usage, from the repository root on Node 24 after the experiment's pinned install:
 //   node --stack-size=4000 experiments/ergo-range/stack-check.mjs [--control <dir with another ergo-lib-wasm-nodejs>] [--out <report>]
@@ -33,6 +35,8 @@ if (args[0] === "--child") {
   const outcome = f => { try { f(); return "ok"; } catch (e) { return e instanceof RangeError ? "overflow" : e instanceof WebAssembly.RuntimeError ? "trap" : "error"; } };
   const parse = file => () => { const tx = lib.Transaction.sigma_parse_bytes(readFileSync(file)); tx.to_js_eip12(); tx.free(); };
   if (task === "parse") console.log(outcome(parse(rest[0])));
+  // A v0 ErgoTree without constant segregation: BoolToSigmaProp (d1) over d nested LogicalNot (ef) over true (01 01).
+  else if (task === "expr") console.log(outcome(() => lib.ErgoTree.from_base16_bytes("00d1" + "ef".repeat(Number(rest[0])) + "0101").free()));
   else if (task === "depth") console.log(outcome(() => lib.Constant.decode_from_base16("0c".repeat(Number(rest[0]) - 1) + "0e" + "01".repeat(Number(rest[0]) - 1) + "00").free()));
   else if (task === "poison") console.log(`${outcome(parse(rest[0]))},${outcome(parse(rest[1]))}`);
   process.exit(0);
@@ -89,6 +93,10 @@ try {
     deepTransactionKb: least(["--child", "parse", dir, deepFile]),
     ordinaryTransactionKb: least(["--child", "parse", dir, plainFile]),
     nestedConstantKb: Object.fromEntries(DEPTHS.map(d => [d, least(["--child", "depth", dir, String(d)])])),
+    // The deepest expression nesting that parses at the largest stack the main thread holds, found by bisection.
+    expressionNestingMaxDepth: (() => { let lo = 1, hi = 256; if (run(MAX_KB, ["--child", "expr", dir, String(hi)]) === "ok") return `>=${hi}`;
+      while (hi - lo > 1) { const m = (lo + hi) >> 1; if (run(MAX_KB, ["--child", "expr", dir, String(m)]) === "ok") lo = m; else hi = m; } return lo; })(),
+    expressionAtNodeCap: run(MAX_KB, ["--child", "expr", dir, String(NODE_CAP)]),
     atDefaultStack: { deepTransaction: run(984, ["--child", "parse", dir, deepFile]), nodeCapConstant: run(984, ["--child", "depth", dir, String(NODE_CAP)]) },
   }]));
   const p = measured.pinned.nestedConstantKb, perLevelKb = +((p[150] - p[25]) / 125).toFixed(1);
@@ -100,10 +108,11 @@ try {
     overflowInside: run(4000, ["--decoder", "30000", deepFile, plainFile]),
   };
   const passed = measured.pinned.atDefaultStack.deepTransaction === "overflow" && poisoning.atDefaultStack === "overflow,trap"
+    && measured.pinned.expressionAtNodeCap === "trap"
     && decoderMjs.belowBudget === "load-refused:true" && decoderMjs.atBudget === "loaded,decoded,decoded"
     && decoderMjs.overflowInside === "loaded,overflow,poisoned" && measured.pinned.nestedConstantKb[NODE_CAP] < 4000;
   const report = {
-    status: passed ? "pinned-decoder-needs-an-explicit-stack" : "unexpected",
+    status: passed ? "pinned-decoder-traps-below-the-node-nesting-cap" : "unexpected",
     node: process.version, platform: `${process.platform} ${process.arch}`,
     fixture: { file: FIXTURE, sha256: FIXTURE_SHA256, height: block.header.height, headerId: block.header.id, source: "the reader's own mainnet node (v6.0.6), /blocks/{id}",
       transaction: { index: DEEP, id: deep.id, bytes: readFileSync(deepFile).length, outputs: deep.outputs.length, largestTreeBytes: Math.max(...deep.outputs.map(o => o.ergoTree.length / 2)) } },
@@ -112,7 +121,8 @@ try {
     files: Object.fromEntries(["experiments/ergo-range/stack-check.mjs", "experiments/ergo-range/decoder.mjs", "experiments/ergo-range/package-lock.json"].map(f => [f, sha256(readFileSync(join(root, f)))])),
     limitations: [
       "Stack sizes are V8 --stack-size values on one Windows desktop with Node's 8 MB main-thread stack; they bound this build's recursion on these inputs, not every path through the parser.",
-      "The nested-constant sweep exercises one recursion path (collection types and values); nesting of expressions in an ErgoTree was not constructed, and the real transaction exercises whatever paths it contains.",
+      "Two recursion paths were constructed: collection nesting in a constant, whose need grows with the V8 stack, and LogicalNot nesting in an ErgoTree, which the pinned build fails at a fixed depth whatever the V8 stack (consistent with exhausting the module's own linear-memory stack; not proven). Other expression forms were not swept.",
+      "No transaction carrying such a tree was submitted to a node; that the node accepts expression nesting to 110 rests on its source (CoreByteReader's depth check).",
       "The node's cap of 110 bounds what a node accepts; a source can present bytes nested deeper, which the budget does not cover and which then fail closed as a trap.",
       "No runtime path, decoder selection or profile selection follows from this probe.",
     ],

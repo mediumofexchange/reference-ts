@@ -1089,7 +1089,8 @@ fresh process, as the least V8 `--stack-size`
 | Fixture transaction | 1,173 KB | 71 KB |
 | An ordinary transaction of the block | 418 KB | 71 KB |
 | `Coll^d[Byte]` constant, d = 25 / 50 / 75 | 335 / 637 / 925 KB | 71 KB |
-| d = 110 (the node's cap) / 150 | 1,339 / 1,808 KB | 71 KB |
+| d = 110 (the node's cap) / 150 | 1,339 / 1,816 KB | 71 KB |
+| Deepest `LogicalNot` expression nesting at 7,800 KB | 49 (traps at 50 and at 110) | 256 or more |
 
 The pinned build takes about 11.8 KB a nesting level, so a register constant
 at the node's own nesting cap (sigmastate `MaxTreeDepth`, 110) overflows the
@@ -1097,7 +1098,7 @@ default 984 KB: anyone can publish a transaction that poisons it. At the
 default stack the fixture transaction overflows and the next ordinary
 transaction traps. The experiment therefore runs every process that loads
 the decoder with `node --stack-size=4000`, which covers the fixture 3.4 times
-and the measured path to about 330 levels within Node's 8 MB main-thread
+and collection nesting to about 330 levels within Node's 8 MB main-thread
 stack on this host; `decoder.mjs` refuses to load below that, and a
 `RangeError` or `WebAssembly.RuntimeError` from the library is fatal: the
 decoder rethrows it, marks its instance poisoned and throws on every later
@@ -1105,11 +1106,22 @@ call ([decision](../decisions/2026-09.md#2026-09-23--run-the-pinned-decoder-with
 The probe confirms the guard (load refused at 3,000 KB), normal decoding at
 4,000 KB, and the fatal path when JavaScript frames leave too little stack.
 
-Not established: ErgoTree expression nesting (only collection nesting was
-constructed); bytes nested beyond the node's cap, which only a dishonest
-source can present and which then fail closed as a trap; the decoder's
-memory and CPU containment. A release build of the same source would
-restore 0.28.0's frame sizes but needs a toolchain and a reproducible build.
+The stack does not close the denial. ErgoTree expression nesting
+(`BoolToSigmaProp` over `LogicalNot` nested d levels) parses on the pinned
+build only to depth 49 and traps at 50 at any V8 stack, 7,800 KB included,
+consistent with exhausting the module's own linear-memory stack; 0.28.0
+reads 256 levels and more, and the node's cap of 110 applies to expressions
+too. An output the node accepts can therefore make the pinned decoder trap
+on its block every time; with the fatal handling that is an explicit
+failure rather than a false refusal, but it is a denial all the same, so
+the [decoder choice is reopened](../decisions/2026-09.md#2026-09-23--run-the-pinned-decoder-with-an-explicit-stack-and-treat-a-trap-as-fatal).
+No such transaction was submitted to any node.
+
+Not established: recursion paths other than collection nesting and these
+expression forms; whether a release build of the same source removes the
+limit (the likely cause is the debug build's frame size, to be measured;
+it needs a toolchain and a reproducible build); the decoder's memory and CPU
+containment.
 
 ## Windows process containment feasibility
 

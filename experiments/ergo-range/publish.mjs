@@ -364,7 +364,11 @@ try {
       ids.push(tx.id);
       let bytes;
       try { const wasm = sigma.Transaction.from_json(texts[position]); try { bytes = wasm.sigma_serialize_bytes(); } finally { wasm.free(); } }
-      catch (error) { refused.push({ position, id: tx.id, step: "serialize", error: String(error).slice(0, 120) }); continue; }
+      catch (error) {
+        // An overflow or trap leaves the library's instance unusable: fatal, never a refusal (decoder.mjs).
+        if (error instanceof RangeError || error instanceof WebAssembly.RuntimeError) throw error;
+        refused.push({ position, id: tx.id, step: "serialize", error: String(error).slice(0, 120) }); continue;
+      }
       const view = decodeTransaction(bytes);
       if (view === undefined) { refused.push({ position, id: tx.id, step: "decode" }); continue; }
       views.push(view); sectionBytes += bytes.length;

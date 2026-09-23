@@ -13,16 +13,19 @@ import { blake2b } from "@noble/hashes/blake2b";
 import { Transaction } from "ergo-lib-wasm-nodejs";
 
 export const STACK_KB = 4000;
+// V8 trusts --stack-size; above the thread's real stack (8 MB for Node's main thread on Windows and Linux defaults) an
+// overflow kills the process without an error. A worker's stack is its resourceLimits.stackSizeMb, not this flag.
+const MAX_STACK_KB = 7800;
 const stackKb = () => {
   const flags = process.execArgv;
   for (let i = flags.length - 1; i >= 0; i--) {
     const joined = /^--stack[-_]size=(\d+)$/.exec(flags[i]);
     if (joined !== null) return Number(joined[1]);
-    if (/^--stack[-_]size$/.test(flags[i]) && /^\d+$/.test(flags[i + 1] ?? "")) return Number(flags[i + 1]);
   }
   return undefined;
 };
-if (!(stackKb() >= STACK_KB)) throw new Error(`decoder.mjs needs node --stack-size=${STACK_KB} or more: the pinned build overflows the default stack on node-valid transactions`);
+const stack = stackKb();
+if (!(stack >= STACK_KB && stack <= MAX_STACK_KB)) throw new Error(`decoder.mjs needs node --stack-size between ${STACK_KB} and ${MAX_STACK_KB}: the pinned build overflows the default stack on node-valid transactions`);
 
 // A stack overflow surfaces as RangeError and a trap as WebAssembly.RuntimeError; either leaves the instance's memory
 // in an unknown state.

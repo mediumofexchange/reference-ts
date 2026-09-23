@@ -1051,8 +1051,11 @@ try {
       fresh(scopeRecovery.payload, scopeRecovery.result)];
   }
   await api.destroy(); api = undefined;
+  // A worker that loads the pinned decoder needs this process's --stack-size (decoder.mjs); spawned children do not
+  // inherit execArgv.
+  const stackFlags = process.execArgv.filter(flag => /^--stack[-_]size=/.test(flag));
   function worker(payload, mode) {
-    const child = spawnSync(process.execPath, [join(here, "local-worker.mjs"), url, ...(mode === undefined ? [] : [mode])], {
+    const child = spawnSync(process.execPath, [...stackFlags, join(here, "local-worker.mjs"), url, ...(mode === undefined ? [] : [mode])], {
       input: serialize(portable(payload)), timeout: 60_000, cwd: build, windowsHide: true, maxBuffer: 1_048_576,
     });
     assert.equal(child.error, undefined); assert.equal(child.status, 0, child.stderr.toString());
@@ -1117,7 +1120,7 @@ try {
       const keyPath = join(build, `${kind}.vk`), key = readFileSync(keyPath);
       try {
         writeFileSync(keyPath, readFileSync(join(build, "3.vk")));
-        const child = spawnSync(process.execPath, [join(here, "local-worker.mjs"), url], {
+        const child = spawnSync(process.execPath, [...stackFlags, join(here, "local-worker.mjs"), url], {
           input: serialize(portable(complete)), timeout: 60_000, cwd: build, windowsHide: true, maxBuffer: 1_048_576,
         });
         assert.equal(child.error, undefined); assert.equal(child.status, 1); assert.equal(child.stdout.length, 0);

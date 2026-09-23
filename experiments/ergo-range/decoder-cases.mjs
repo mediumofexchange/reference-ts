@@ -15,7 +15,10 @@ const manifest = JSON.parse(manifestBytes);
 const maxTransactionBytes = 64 * 1024;
 let checks = 0;
 const equal = (a, b, message) => { assert.deepEqual(a, b, message); checks++; };
-const rejects = (f, message) => { assert.throws(f, undefined, message); checks++; };
+// A rejection is an ordinary error: an overflow or trap would leave the instance unusable and must fail the case.
+const rejects = (f, message) => {
+  assert.throws(f, error => !(error instanceof RangeError || error instanceof WebAssembly.RuntimeError), message); checks++;
+};
 const parseLossless = (raw) => JSON.parse(raw, (_key, value, context) => {
   if (typeof value !== "number") return value;
   assert.match(context.source, /^-?\d+$/);

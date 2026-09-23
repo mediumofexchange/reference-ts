@@ -163,7 +163,10 @@ its retained evidence and can be reproduced from it.
   transaction and a constant at the node's nesting cap overflow Node's
   default stack, and an overflow leaves the module's instance unusable, so
   the experiment runs it with an explicit 4,000 KB stack and treats a trap
-  as fatal rather than as a refusal
+  as fatal rather than as a refusal. That is not enough: expression nesting
+  of 50 levels, within the node's cap, traps it at any stack, so a
+  node-valid output can deny every range through its block and the decoder
+  choice is open again
   ([probe](POOL_DEPLOYMENT_PROBES.md#decoder-stack-budget), [decided 2026-09-23](../decisions/2026-09.md#2026-09-23--run-the-pinned-decoder-with-an-explicit-stack-and-treat-a-trap-as-fatal)).
   No specification pins a decoder.
 - The public node API serves transactions as JSON. sigma-rust's serializer

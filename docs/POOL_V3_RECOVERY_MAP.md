@@ -638,7 +638,9 @@ Each names the rule, the candidate, the alternative, and what closes it.
   **Stack 2026-09-23:** the pinned build is a debug build that overflows
   Node's default stack on a node-valid mainnet transaction and at the node's
   nesting cap, poisoning its instance; it now runs with an explicit stack,
-  and a trap is fatal rather than a refusal ([probe](POOL_DEPLOYMENT_PROBES.md#decoder-stack-budget)).
+  and a trap is fatal rather than a refusal, but expression nesting of 50
+  levels traps it at any stack, so the decoder choice is open again
+  ([probe](POOL_DEPLOYMENT_PROBES.md#decoder-stack-budget)).
   The header source's authenticity, the decoder's containment and its node
   equivalence beyond the fixtures and one week remain the trust assumptions
   before selection. **Own node 2026-09-22:** a node the reader runs

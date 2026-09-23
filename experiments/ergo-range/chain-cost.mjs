@@ -234,7 +234,10 @@ try {
         const t0 = performance.now();
         try {
           const wasm = Transaction.from_json(texts[position]);
-          try { const serialization = wasm.sigma_serialize_bytes(), own = Buffer.from(wasm.id().to_str(), "hex"); bytes = serialization; id = own; } finally { wasm.free(); }
+          let trapped = false;
+          try { const serialization = wasm.sigma_serialize_bytes(), own = Buffer.from(wasm.id().to_str(), "hex"); bytes = serialization; id = own; }
+          catch (error) { trapped = fatal(error); throw error; }
+          finally { if (!trapped) wasm.free(); }
         } catch (error) { if (fatal(error)) throw error; bytesUnavailable.push({ height: header.height, position, id: tx.id, treeVersions, error: String(error).slice(0, 120) }); }
         serializeMs += performance.now() - t0;
         if (bytes === undefined) continue;

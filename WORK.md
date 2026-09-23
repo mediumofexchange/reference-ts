@@ -32,12 +32,15 @@ specification or runtime change, no mainnet submission or real funds.
   127.0.0.1:9052) from `scratch/ergo-nodes/`, both synced (5.4 / 17.5 GB);
   after a reboot run `nodes.mjs start` and `watch 10`. Header source
   reviewed and merged: `docs/ergo-own-node-verification.json`.
-- Decoder stack (2026-09-23, on the branch, review owed): the pinned alpha is
-  a debug build; a node-valid tx (block 1,827,841 #1) and depth-110
-  constants overflow the default stack and poison the WASM instance.
-  `decoder.mjs` now needs `--stack-size=4000` and treats traps as fatal;
-  `stack-check.mjs`, `docs/ergo-decoder-stack-verification.json`, decision
-  2026-09-23. Equivalence over the own node's 51k blocks
+- Decoder stack (2026-09-23, on the branch; opus review found two blockers,
+  both handled): the pinned alpha is a debug build; a node-valid tx (block
+  1,827,841 #1) and depth-110 constants overflow the default stack and poison
+  the WASM instance, so `decoder.mjs` needs `--stack-size=4000` (cap 7800)
+  and treats traps as fatal; replay workers now get the flag. But ErgoTree
+  expression nesting of 50 (node cap 110) traps the alpha at any stack: a
+  node-valid output denies its block. The 2026-09-22 pin is reopened
+  (decision 2026-09-23); evidence `stack-check.mjs`,
+  `docs/ergo-decoder-stack-verification.json`. Nothing was submitted. Equivalence over the own node's 51k blocks
   (`scratch/equivalence-driver.mjs`, then `equivalence-summary.mjs`) is
   paused so the node stays idle during the latency runs.
 - Testnet wallet: key in ignored `scratch/ergo-testnet/wallet.json` (about
@@ -58,7 +61,11 @@ specification or runtime change, no mainnet submission or real funds.
    probes, profile and guide.
 2. Resume the equivalence driver, summarize into
    `docs/ergo-decoder-equivalence-verification.json`.
-3. One review of stack + equivalence + A10; merge and push with CI green.
+3. Read back the stack fixes with the reviewer; one review of A10 and the
+   equivalence summary; merge and push with CI green.
+4. Decoder choice (needs maintainer approval of a Rust + wasm-pack toolchain
+   install): measure a release build of sigma-rust `2f840d3` against the
+   stack probe; alternatives in decision 2026-09-23.
 
 ## Retained boundaries and local state
 

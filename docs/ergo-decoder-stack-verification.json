@@ -1,5 +1,5 @@
 {
-  "status": "pinned-decoder-needs-an-explicit-stack",
+  "status": "pinned-decoder-traps-below-the-node-nesting-cap",
   "node": "v24.6.0",
   "platform": "win32 x64",
   "fixture": {
@@ -28,14 +28,16 @@
         "wasmBytes": 16680230
       },
       "deepTransactionKb": 1173,
-      "ordinaryTransactionKb": 418,
+      "ordinaryTransactionKb": 426,
       "nestedConstantKb": {
         "25": 335,
         "50": 637,
         "75": 925,
         "110": 1339,
-        "150": 1808
+        "150": 1816
       },
+      "expressionNestingMaxDepth": 49,
+      "expressionAtNodeCap": "trap",
       "atDefaultStack": {
         "deepTransaction": "overflow",
         "nodeCapConstant": "overflow"
@@ -56,6 +58,8 @@
         "110": 71,
         "150": 71
       },
+      "expressionNestingMaxDepth": ">=256",
+      "expressionAtNodeCap": "ok",
       "atDefaultStack": {
         "deepTransaction": "ok",
         "nodeCapConstant": "ok"
@@ -75,13 +79,14 @@
   "decoderBudgetKb": 4000,
   "mainThreadMaxKb": 7800,
   "files": {
-    "experiments/ergo-range/stack-check.mjs": "112f8d0217b6ac77f419d0b3a309a224f7edcee370275d2918f738637bf23381",
-    "experiments/ergo-range/decoder.mjs": "100066d3803dd049b3f4fc701685e9b3c2cb3859bf39e15b8f78ced936853d6d",
+    "experiments/ergo-range/stack-check.mjs": "94cafd0a88031a7309eda131f1c5dd5867f4ffb942b91a308b2e9754c63bcf36",
+    "experiments/ergo-range/decoder.mjs": "977d244441aec9858d7f56bf04cf9b36a5af3a369d102ffd53871fa498ba3277",
     "experiments/ergo-range/package-lock.json": "9133136e72d45c7bf8427d0cef6360454d2f12775a91dd6b1031ff6f8fbd6a70"
   },
   "limitations": [
     "Stack sizes are V8 --stack-size values on one Windows desktop with Node's 8 MB main-thread stack; they bound this build's recursion on these inputs, not every path through the parser.",
-    "The nested-constant sweep exercises one recursion path (collection types and values); nesting of expressions in an ErgoTree was not constructed, and the real transaction exercises whatever paths it contains.",
+    "Two recursion paths were constructed: collection nesting in a constant, whose need grows with the V8 stack, and LogicalNot nesting in an ErgoTree, which the pinned build fails at a fixed depth whatever the V8 stack (consistent with exhausting the module's own linear-memory stack; not proven). Other expression forms were not swept.",
+    "No transaction carrying such a tree was submitted to a node; that the node accepts expression nesting to 110 rests on its source (CoreByteReader's depth check).",
     "The node's cap of 110 bounds what a node accepts; a source can present bytes nested deeper, which the budget does not cover and which then fail closed as a trap.",
     "No runtime path, decoder selection or profile selection follows from this probe."
   ]
