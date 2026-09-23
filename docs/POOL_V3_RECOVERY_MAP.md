@@ -1,6 +1,6 @@
 # Pool v3 recovery map
 
-Design map, updated 2026-09-09. This lays out what a construction `moe/pool/v3`
+Design map. This lays out what a construction `moe/pool/v3`
 must carry to instantiate the
 [presentation and recovery contract](https://github.com/mediumofexchange/money-from-first-principles/blob/main/pool-recovery.md)
 (C3.1–8, C2b.3.1–3, C2b.4.1–3, C2b.5.1–2, C2b.6.1) and the

@@ -1,6 +1,6 @@
 # Shielded-pool implementation map
 
-Current component boundaries, 2026-09-19. The normative source is the
+Current component boundaries. The normative source is the
 companion specification pinned in [README](../README.md). Build in this
 order: specification, adversarial model, claim layer, sequencing/recovery,
 wallet, external witness write adapter. [WORK](../WORK.md) owns the next task;
