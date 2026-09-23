@@ -25,7 +25,8 @@ export const PACKAGE_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxItems: 10
 export const RANGE_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxEntries: 4096n });
 // Work budgets for imported closures, including failed replays and merge work.
 // Events are the records a replay actually processes: a resumed checkpoint
-// charges only its positions after the last valid one. Copying the resumed
+// charges only its positions after the last valid one, and a replay charges
+// imported events only when it builds their ancestry. Copying the resumed
 // state is not charged; it hashes and verifies nothing and is bounded by the
 // checkpoint and event budgets together. A reader may select other local
 // budgets on its verifier; they are never protocol bounds.
@@ -183,10 +184,11 @@ async function replayTrail({ selection, terms, scopedTerms, header, verifier, co
     [...(from?.totals ?? [])].map(([key, value]) => [key, { ...value }]));
   // One immutable imported frontier per local segment replay, shared by its
   // events. Local positions order themselves without quadratic ancestor sets.
+  // Building it reads each imported event once; a resumed replay reuses it.
   const ancestry = base?.ancestry ?? new Map();
-  for (const event of new Map(imported?.events).values()) {
+  if (base === undefined) for (const event of new Map(imported?.events).values()) {
     chargeEvents(1n);
-    if (base === undefined && event.segment !== undefined && (ancestry.get(event.segment) ?? 0n) < event.position) ancestry.set(event.segment, event.position);
+    if (event.segment !== undefined && (ancestry.get(event.segment) ?? 0n) < event.position) ancestry.set(event.segment, event.position);
   }
   const totalFor = backing => {
     const key = hex(backing);

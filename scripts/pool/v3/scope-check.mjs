@@ -180,6 +180,23 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
   const j2 = checkpoint(joined, 7n, 15n, [mixed, burned], [mixedEffect, effect([finalX], [mixedX, burnPad])],
     { nullifiers: imports, supply: totals(10n, 1n) });
   const payload = compose([...history, j0, j1, j2]), payloadY = compose([...history, j0, j1, j2], j2, y);
+  await test("the scope event budget reads a merged closure once per built ancestry: an extending checkpoint adds its new position", async () => {
+    // The smallest reader-selected event budget under which the read completes.
+    const smallest = async input => {
+      const status = async maxEvents => (await replayLocalPackage(input, { ...verifier, importLimits: { maxCheckpoints: 128n, maxEvents } }, codec)).status;
+      let low = 0n, high = 512n;
+      assert.equal(await status(high), "selected-local-replay");
+      while (low < high) { const mid = (low + high) / 2n; if (await status(mid) === "selected-local-replay") high = mid; else low = mid + 1n; }
+      assert.equal(await status(low - 1n), "resource-refusal");
+      return low;
+    };
+    // j2 extends j1 and resumes from it; without j1, j2 replays both positions
+    // over the same four-event imported closure. Either way the total agrees.
+    // A replay resumes under its own backing's key: the selection names the
+    // scope's first backing, under which the parent descent classifies j1.
+    const first = joined.entries[0].backing;
+    assert.equal(await smallest(compose([...history, j0, j1, j2], j2, first)), await smallest(compose([...history, j0, j2], j2, first)));
+  });
   await test("shared compact rejoin faults preserve both split predecessors and the repaired spent state", async () => {
     const bad = structuredClone(burned); bad.proof[100] ^= 1;
     const records = [mixed, bad];
