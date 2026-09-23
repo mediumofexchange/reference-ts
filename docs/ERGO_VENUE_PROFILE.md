@@ -114,6 +114,9 @@ The reader supplies, from its own retained evidence:
   reserialization, giving each transaction's id, its 31-byte witness id
   (Blake2b-256 of the concatenated input proofs, first byte dropped) and each
   output's ErgoTree and register constants.
+  The node's own JSON split of those fields cannot stand in: the root
+  binds a transaction's concatenated bytes, not where one field ends
+  ([probe](POOL_DEPLOYMENT_PROBES.md#metered-release-decoder-over-the-week)).
 
 A block supplies the section of an index only where it belongs to an indexed
 header of the chain and reproduces that header's transaction root, recomputed

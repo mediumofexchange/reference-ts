@@ -651,7 +651,11 @@ Each names the rule, the candidate, the alternative, and what closes it.
   the verifier still leaves proof of work and chain selection to the source,
   no runtime path reads the node, and an independent check of the reference
   client and eclipse resistance are not established; decoder containment and
-  node equivalence remain.
+  node equivalence remain. **Metered 2026-09-23:** the release build decodes
+  the whole P4 window under fuel metering at no more than 22,450 fuel a
+  byte and 11.1 MB of guest memory, and the node's JSON cannot replace the decoder, since the
+  transaction root binds bytes, not the node's field split
+  ([probe](POOL_DEPLOYMENT_PROBES.md#metered-release-decoder-over-the-week)); adversarial resource bounds remain.
 - **A9 Same-index order.** Decided 2026-09-14 in pool-v3 §13: an operator's
   commitments at one index are read in ascending sequence from the records
   alone, so no intra-index order is needed for kinds 1–3; `extending()`'s

@@ -126,6 +126,17 @@ trial in a fresh process, with earlier builds as controls
 node experiments/ergo-range/stack-check.mjs --control scratch/sigma-alpha,scratch/sigma-0.28.0 --out docs/ergo-decoder-stack-verification.json
 ```
 
+`metered-check.mjs` meters the pinned release build under the metering
+probe's Wasmtime install (below) over the corpus and, with `--week`, the P4
+window reserialized from the `scratch/ergo-chain` cache (about 17 minutes); it
+also shows that the node's JSON field split is not bound by the transaction id
+([retained report](../../docs/ergo-metered-release-verification.json),
+[probe](../../docs/POOL_DEPLOYMENT_PROBES.md#metered-release-decoder-over-the-week)):
+
+```powershell
+node experiments/ergo-range/metered-check.mjs $probePython --week > docs/ergo-metered-release-verification.json
+```
+
 ## Inclusion latency on the mainnet
 
 `latency.mjs` measures recovery-map A10 passively: it polls a public mainnet

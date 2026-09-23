@@ -1,0 +1,82 @@
+{
+  "status": "offline-metered-release-probe",
+  "python": "3.12.3",
+  "os": "Windows-10-10.0.19045-SP0",
+  "engine": "wasmtime 48.0.0",
+  "nativeEngineSha256": "91671331a752287c92ada8cd84cae7b572521f5a854dcc8d69cd9b3556b3c832",
+  "wasmSha256": "0d20038513c72a9daf859e3ea278735caef43305cde6bc7fb2764e8d933aa28a",
+  "hostImports": 52,
+  "hostImportPolicy": "all trap; no guest-memory reads or JS bridge",
+  "ceilings": {
+    "fuelPerTransaction": 1000000000000,
+    "linearMemoryBytes": 4294967296,
+    "tableElements": 4096,
+    "tables": 2,
+    "inputBytes": 131072,
+    "jsonBytes": 1048576,
+    "meaning": "observation ceilings, not a proposed budget; memory is wasm32's whole address space"
+  },
+  "limitations": [
+    "Valid retained transactions only; no hostile inputs, so no bound for adversarial bytes follows.",
+    "Fuel bounds guest metered work, not CPU seconds or host compilation/callback costs.",
+    "Linear-memory/table limits are not a total process memory or RSS ceiling.",
+    "The split check shows the node's field split is not bound by the transaction id; it does not test a reader."
+  ],
+  "corpus": {
+    "transactions": 29,
+    "decoded": 29,
+    "notDecoded": 0,
+    "fuelMax": 27513843,
+    "fuelMedian": 3592183,
+    "fuelPerByteMax": 10928,
+    "fuelPerByteMedian": 8101,
+    "memoryBytesMax": 2490368,
+    "inputBytesMax": 2576
+  },
+  "week": {
+    "fromHeight": 1873361,
+    "toHeight": 1878400,
+    "blocks": 5040,
+    "transactions": 28196,
+    "frameSha256": "0f5c80cbdf01c759e55cc038985fc009f88bb9e751fe14dda7546589cbd0342c",
+    "decoded": 28196,
+    "notDecoded": 0,
+    "fuelMax": 276525210,
+    "fuelMedian": 6100718,
+    "fuelPerByteMax": 22450,
+    "fuelPerByteMedian": 8101,
+    "memoryBytesMax": 11141120,
+    "inputBytesMax": 88284,
+    "seconds": 1351
+  },
+  "split": {
+    "fixture": "fixtures/mainnet-1000000.json",
+    "transaction": "4987fc234bc5ad277650e8998840697d12ec42a1d3164b0ee084a2a99f1693cb",
+    "output": 0,
+    "node": {
+      "R4": "0e10546865204d696c6c696f6e7468202331",
+      "R5": "0e174d696e74656420696e20626c6f636b2031303030303030"
+    },
+    "resliced": {
+      "R4": "0e10546865204d696c6c696f6e74682023310e",
+      "R5": "174d696e74656420696e20626c6f636b2031303030303030"
+    },
+    "sameBytes": true,
+    "sameId": true
+  },
+  "files": {
+    "metered-check.py": "f5b79e04fead353398b5c71b22f02f6fce7c53aaa082ba5b501edd4af003bf15",
+    "metered-check.mjs": "69ec3bce17f99b701817543da227813b685b73c574bf0183c9279ea592fed507",
+    "metered-cases.mjs": "259440651c961fde04623a4f1d6464310b4ee7b555d111b5102408653e55dc4c",
+    "metering-check.py": "12c9170f45990bd672e925080a2d65b38e56825d9329d698efc59afb7577f2b5",
+    "metering-requirements.txt": "b13fe5bfccb174ab232c99d8828d255714dabe99d08f9ce629982fd5a0dd9b96",
+    "package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
+    "fixtures/manifest.json": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
+    "vendor/ergo-lib-wasm-nodejs/SHA256SUMS": "8404d891c6f2ee14f8671c89f8f96682d8d4193b262631251963247db9b88272"
+  },
+  "node": "v24.6.0",
+  "runner": {
+    "processTreeContainment": false,
+    "week": true
+  }
+}

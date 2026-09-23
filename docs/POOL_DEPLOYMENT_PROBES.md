@@ -1373,6 +1373,45 @@ keyless validating node, whose consensus/configuration/sync evidence is needed
 independently of binary parsing. Hostile alternate-parser cases remain gated
 on containment; they need not precede testing that independent node boundary.
 
+## Metered release decoder over the week
+
+`experiments/ergo-range/metered-check.mjs` runs the vendored release build of
+sigma-rust 2f840d3 (WASM SHA-256 `0d200385…aa28a`) under the
+[baseline](#metered-decoder-feasibility)'s pinned Wasmtime 48 engine and
+import policy: a fresh Store per transaction, one fuel budget across parse,
+exact reserialization and JSON extraction, every import trapping. The
+release build needs a second table; the ceilings are an effectively
+unbounded fuel and wasm32's whole 4 GiB, for observation rather than as a
+budget. `--week` reserializes the cached node text of the P4 window with the
+pinned serializer and meters every transaction, checking each decoded id
+([report](ergo-metered-release-verification.json)).
+
+| Input | Transactions | Decoded | Fuel per byte, median / max | Guest memory max |
+|---|---|---|---|---|
+| Corpus fixtures | 29 | 29 | 8,101 / 10,928 | 2.5 MB |
+| P4 window, heights 1,873,361–1,878,400 | 28,196 | 28,196 | 8,101 / 22,450 | 11.1 MB |
+
+The largest window transaction is 88,284 bytes; the costliest took 2.8 × 10⁸
+fuel. These are valid retained transactions, so no bound for adversarial bytes
+follows, and fuel is not CPU time; host memory is unmeasured here.
+
+The same probe checks whether the node's JSON could stand in for the parse.
+Rebuilding a transaction's bytes by copying the node's hex fields in order
+reproduces its id, but the id hashes only the concatenation: moving one byte
+from R5 to the end of R4 in fixture transaction `4987fc23…` (mainnet
+1,000,000) rebuilds the same bytes and id while both registers change. The
+root therefore authenticates the bytes, not the node's split of them into
+ErgoTree and registers. Checking a split is a parse: in the week, 102,292 of
+103,791 outputs (98.5%) carry version-0 trees without the size flag
+(45,293 of them P2PK), whose length only a parse of the whole expression
+gives; the other 56,999 use 160 distinct trees, one register holds a whole box, and
+34,063 context-extension values, like registers, are constants without a
+length prefix (a scratch count over the same cache). At the node's pinned
+sigmastate v6.0.6, 102 expression serializers apply and a method call's
+layout depends on the versioned method registry. The reader keeps its own
+decoder ([decision](../decisions/2026-09.md#2026-09-23--keep-the-readers-own-decoder-the-transaction-root-does-not-authenticate-the-nodes-field-split));
+resource bounds for adversarial inputs and a budget remain open.
+
 ## Comparison with a local validating node
 
 The comparison retains the fixture manifest's Ergo node source pin

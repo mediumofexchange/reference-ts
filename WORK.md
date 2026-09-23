@@ -45,6 +45,10 @@ specification or runtime change, no mainnet submission or real funds.
   back. Merged to main with this handoff. Equivalence over the own node's 51k blocks
   (`scratch/equivalence-driver.mjs`, then `equivalence-summary.mjs`) is
   paused so the node stays idle during the latency runs.
+- Metered decoder: `metered-check.mjs --week` decodes the P4 window (<= 22,450
+  fuel/byte, 11.1 MB); the root does not bind the node's JSON split, so the own
+  decoder stays (decision 2026-09-23). Adversarial resource bounds and a
+  budget remain open.
 - Testnet wallet: key in ignored `scratch/ergo-testnet/wallet.json` (about
   19,999.99 tERG), a copy kept outside the repository; testnet transactions
   need no further approval; sweep boxes back and spend only fees.
@@ -52,8 +56,7 @@ specification or runtime change, no mainnet submission or real funds.
 ## Evidence
 
 - Own node: 1.88 M headers from genesis in 6,863 s; fixtures and the P4
-  week on its best chain. Stack probe: pinned build 1,173 KB for the fixture
-  tx, 11.8 KB a nesting level (1,339 KB at the node cap 110); 0.28.0 71 KB.
+  week on its best chain. Stack: see `ergo-decoder-stack-verification.json`.
 - P2 testnet: seven transactions at k = 2 (two correlated observations).
 
 ## Next
@@ -65,8 +68,7 @@ specification or runtime change, no mainnet submission or real funds.
    `docs/ergo-decoder-equivalence-verification.json`.
 3. One review of A10 and the equivalence summary; merge and push with CI
    green. The equivalence driver needs no stack flag any more.
-4. Later: a cross-host (Linux) reproducible build, or build in CI, if the
-   decoder pin is to be checkable off Windows.
+4. Later: a Linux or CI reproducible build of the decoder pin.
 
 ## Retained boundaries and local state
 
