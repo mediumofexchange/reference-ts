@@ -144,4 +144,21 @@ describe("pool-v2 §4: the note tree", () => {
     leaves.push(2n);
     expect(tree.leaves()).toEqual([1n]);
   });
+
+  it("clones to the same root and paths, and later appends to either leave the other unchanged", () => {
+    const tree = new NoteTree();
+    tree.appendAll([5n, 6n, 7n]);
+    const copy = tree.clone(), root = tree.root();
+    expect(copy.root()).toBe(root);
+    expect(copy.path(1n)).toEqual(tree.path(1n));
+    copy.append(8n);
+    expect(tree.root()).toBe(root);
+    expect(tree.size).toBe(3n);
+    expect(tree.has(8n)).toBe(false);
+    expect(copy.root()).toBe(slowRoot([5n, 6n, 7n, 8n]));
+    tree.append(9n);
+    expect(copy.has(9n)).toBe(false);
+    expect(tree.root()).toBe(slowRoot([5n, 6n, 7n, 9n]));
+    expect(() => copy.append(5n)).toThrow(EncodingError);
+  });
 });

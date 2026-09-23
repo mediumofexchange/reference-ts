@@ -834,6 +834,25 @@ try {
     assert.equal((await replayLocalPackage(compose(three, 0), verifier, codec)).status, "superseded-selection");
     assert.equal((await replayLocalPackage(compose(three, 1), verifier, codec)).status, "invalid-local-replay");
   });
+  await test("an extending checkpoint resumes from a copy of the last valid state: each new position is verified once (C2.10.12, pool-v3 §7.1)", async () => {
+    let calls = 0;
+    const counting = { ...verifier, verify: (...args) => { calls++; return verifier.verify(...args); } };
+    assert.deepEqual(await replayLocalPackage(extended, counting, codec), dependency);
+    assert.equal(calls, 4); // three for the third checkpoint, one for the fourth's new position
+    // Failing after its own new position was applied, the middle checkpoint
+    // must leave the last valid state as it was for the one after it.
+    calls = 0;
+    const failsLate = checkpointOf([...records4, payment2], [...effects4, { outputs: [], nullifiers: [] }], 4n);
+    const three = [{ checkpoint: third, at: 3n }, { checkpoint: failsLate, at: 7n }, { checkpoint: checkpointOf(records4, effects4, 5n), at: 12n }];
+    const last = await replayLocalPackage(compose(three, 2), counting, codec);
+    assert.equal(last.status, "selected-local-replay");
+    assert.deepEqual(last.audit.range.carrying.map(c => [c.class, c.check ?? null]),
+      [["valid", null], ["valid", null], ["excluded", "REPEATED_STATEMENT"], ["valid", null]]);
+    assert.deepEqual({ ...last.audit, range: null }, { ...dependency.audit, range: null });
+    assert.equal(calls, 5);
+    const receiver = await replayLocalPackage({ ...compose(three, 2), seed: receiverSeed }, verifier, codec);
+    assert.deepEqual(receiver.candidates, (await replayLocalPackage({ ...extended, seed: receiverSeed }, verifier, codec)).candidates);
+  });
   await test("dependency evidence must be complete and authenticated: missing, substituted or ambiguous snapshots and trails leave the read unresolved", async () => {
     const without = key => { const p = clone(extended); p.package[key] = []; return p; };
     assert.equal((await replayLocalPackage(without("snapshots"), verifier, codec)).status, "unresolved-evidence");

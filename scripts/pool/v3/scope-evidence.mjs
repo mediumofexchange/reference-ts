@@ -1,11 +1,35 @@
 // Public scope authentication is independent of the committed event chain.
 // A partial trail is only a bounded carrier for existing header/term bytes.
 import { createHash } from "node:crypto";
-import { compareBytes } from "../../../dist/bytes.js";
+import { compareBytes, EncodingError } from "../../../dist/bytes.js";
 import { EvidenceRefusal, LIMITS } from "../delivery/evidence-reader.mjs";
 
 const same = (a, b) => compareBytes(a, b) === 0;
 const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
+
+// A decoded trail's evidence chain depends only on its own header and records
+// (pool-v3 §7), so one read computes it once per trail object: position i
+// holds evidenceHash_i. null where §5 cannot decode a record, where §10.1
+// authentication would return false in any case.
+const chains = new WeakMap();
+export function trailEvidenceChain(codec, trail) {
+  if (chains.has(trail)) return chains.get(trail);
+  let chain = [codec.genesisEvidenceHash(hash(trail.header))];
+  try {
+    trail.records.forEach((bytes, i) => chain.push(codec.nextEvidenceHash(chain[i], codec.evidenceHashes(codec.decodeRecord(bytes)), BigInt(i) + 1n)));
+  } catch (error) {
+    if (!(error instanceof EncodingError || error instanceof codec.CodecEncodingError)) throw error;
+    chain = null;
+  }
+  chains.set(trail, chain);
+  return chain;
+}
+/** §10.1 for one checkpoint. The cached terminal hash only skips trails that
+ * cannot authenticate; every candidate still passes the full check. */
+export function trailAuthenticates(codec, expected, snapshot, trail) {
+  const chain = trailEvidenceChain(codec, trail);
+  return chain !== null && same(chain.at(-1), snapshot.evidenceHash) && codec.verifyTrailEvidence(expected, snapshot, trail, LIMITS);
+}
 
 export function authenticatedScope(trails, segment, codec) {
   for (const trail of trails) {
@@ -30,7 +54,7 @@ export function checkpointScope(trails, backing, digest, snapshot, codec) {
   let full;
   const result = { ...scope, fullTrail() {
     if (full !== undefined) return full;
-    const matching = trails.filter(trail => codec.verifyTrailEvidence({ backing, segment: snapshot.segment, digest }, snapshot, trail, LIMITS));
+    const matching = trails.filter(trail => trailAuthenticates(codec, { backing, segment: snapshot.segment, digest }, snapshot, trail));
     if (matching.length !== 1) throw new EvidenceRefusal(matching.length === 0 ? "unresolved-evidence" : "unsupported-scope");
     full = matching[0]; return full;
   } };
