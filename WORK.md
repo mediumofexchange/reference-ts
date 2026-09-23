@@ -22,6 +22,11 @@ specification or runtime change, no mainnet submission or real funds.
 
 ## Status
 
+- A13 replay cost (merged 2026-09-23): local replay resumes an extending
+  checkpoint from the last valid state (one verification per event, was the
+  sum of prefixes), reviewed; cost in `docs/pool-replay-cost-verification.json`.
+  Next candidate: cut-derived dependency trails (packages grow as N²/2K
+  records; changes §12.1 resolution, needs a reviewed spec choice).
 - Branch `feat/a10-mainnet-latency` (merged to main through e370581, CI
   green): `latency.mjs` reviewed and read back; 24-hour run from a4021a4
   since 2026-09-22 19:22 UTC, detached, state `scratch/ergo-latency/run.json`
@@ -32,19 +37,12 @@ specification or runtime change, no mainnet submission or real funds.
   127.0.0.1:9052) from `scratch/ergo-nodes/`, both synced (5.4 / 17.5 GB);
   after a reboot run `nodes.mjs start` and `watch 10`. Header source
   reviewed and merged: `docs/ergo-own-node-verification.json`.
-- Decoder (2026-09-23, on the branch): the npm alpha is a debug build
-  (`wasm-pack --dev`); it overflowed on a node-valid tx and traps on
-  expression nesting of 50 (node cap 110). Reviewed stack decision, then a
-  new pin: vendored reproducible release build of sigma-rust 2f840d3
-  (`experiments/ergo-range/vendor/`, `sigma-release-build.sh`, decision
-  2026-09-23); traps stay fatal, stack flag dropped. Rust 1.87 + wasm-bindgen
-  0.2.128 installed with approval (`~/.cargo`, `scratch/rust-toolchain`).
-  Gates all passed: corpus, P4 week against the alpha (0 differing of
-  28,196; `docs/ergo-decoder-pin-verification.json`), `--ergo` replay (223
-  groups). Opus review: no blockers; three material findings fixed and read
-  back. Merged to main with this handoff. Equivalence over the own node's 51k blocks
-  (`scratch/equivalence-driver.mjs`, then `equivalence-summary.mjs`) is
-  paused so the node stays idle during the latency runs.
+- Decoder pin: vendored reproducible release build of sigma-rust 2f840d3
+  (`experiments/ergo-range/vendor/`, decision 2026-09-23), merged; the npm
+  alpha was a debug build. Rust 1.87 + wasm-bindgen 0.2.128 installed
+  (`~/.cargo`, `scratch/rust-toolchain`). Equivalence over the own node's 51k
+  blocks (`scratch/equivalence-driver.mjs`, then `equivalence-summary.mjs`)
+  is paused while the latency runs use the node.
 - Metered decoder: `metered-check.mjs --week` decodes the P4 window (<= 22,450
   fuel/byte, 11.1 MB); the root does not bind the node's JSON split, so the own
   decoder stays (decision 2026-09-23). Adversarial resource bounds and a
@@ -55,9 +53,7 @@ specification or runtime change, no mainnet submission or real funds.
 
 ## Evidence
 
-- Own node: 1.88 M headers from genesis in 6,863 s; fixtures and the P4
-  week on its best chain. Stack: see `ergo-decoder-stack-verification.json`.
-- P2 testnet: seven transactions at k = 2 (two correlated observations).
+- Own node headers, P2 testnet and replay cost: see the linked reports.
 
 ## Next
 
