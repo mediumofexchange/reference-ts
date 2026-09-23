@@ -21,11 +21,11 @@ boundary: no decoder or profile selection, no spec or runtime change.
   terms resolved per backing name, none verifying is unresolved. Reviewed.
   The import budget charges each replayed position once; a reader may pass
   its own local `importLimits` on the verifier (reviewed, merged).
-- A10 (branch `docs/a10-mainnet-latency`): mainnet day 2026-09-22 19:22 to
+- A10 (merged 2026-09-23, reviewed): mainnet day 2026-09-22 19:22 to
   09-23 20:22 UTC retained as `docs/ergo-latency-verification.json`, paired
   with the own node's run; included k median 3, p99 12, max 19; within the
   window 76% at depth 2, 94% at 6, 99.8% at 10; 410/784 coinbase-only
-  blocks. Depth not selected. Owed: review, merge.
+  blocks; misses 0.2–0.7% at depth 10 across the two nodes. Depth not selected.
 - Own nodes (approved): `nodes.mjs` runs official v6.0.6 mainnet (snapshot
   bootstrap, full headers, 127.0.0.1:9053) and testnet (archive + index,
   127.0.0.1:9052) from `scratch/ergo-nodes/`, both synced (5.4 / 17.5 GB);
@@ -51,9 +51,9 @@ boundary: no decoder or profile selection, no spec or runtime change.
 
 ## Next
 
-1. Review and merge A10 (docs only, report retained).
-2. Decoder equivalence (Goal).
-3. Later: a Linux or CI reproducible build of the decoder pin; the note
+1. Decoder equivalence (Goal): the driver runs detached since 2026-09-23
+   20:5x UTC (`scratch/equivalence/driver.log`; rerun resumes by chunk).
+2. Later: a Linux or CI reproducible build of the decoder pin; the note
    tree's Poseidon2 on Barretenberg wasm (about 6x); a reader budget.
 
 ## Retained boundaries and local state
