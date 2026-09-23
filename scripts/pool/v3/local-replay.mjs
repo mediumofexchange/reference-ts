@@ -33,10 +33,10 @@ export const IMPORT_LIMITS = Object.freeze({ maxCheckpoints: 128n, maxEvents: 81
 function importLimitsOf(verifier) {
   const limits = verifier?.importLimits;
   if (limits === undefined) return IMPORT_LIMITS;
-  if (limits === null || typeof limits !== "object") throw new EncodingError("invalid import limits");
+  if (limits === null || typeof limits !== "object") throw new TypeError("invalid import limits");
   // Each field is read once, so a getter cannot pass validation and then change.
   const { maxCheckpoints, maxEvents } = limits;
-  if (!isValue(maxCheckpoints) || !isValue(maxEvents)) throw new EncodingError("invalid import limits");
+  if (!isValue(maxCheckpoints) || !isValue(maxEvents)) throw new TypeError("invalid import limits");
   return Object.freeze({ maxCheckpoints, maxEvents });
 }
 const flags = Object.freeze({ fullV3Replay: false, currentRangeAuthenticated: false,
