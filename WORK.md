@@ -52,7 +52,10 @@ boundary: no decoder or profile selection, no spec or runtime change.
 ## Next
 
 1. Decoder equivalence (Goal): the driver runs detached since 2026-09-23
-   20:5x UTC (`scratch/equivalence/driver.log`; rerun resumes by chunk).
+   20:41 UTC from height 1,830,001 (the node prunes to its last 50,000 full
+   blocks; the first start at 1,827,841 hit a pruned block). Log
+   `scratch/equivalence/driver.log`; rerunning resumes by chunk; then
+   `equivalence-summary.mjs --out docs/ergo-decoder-equivalence-verification.json`.
 2. Later: a Linux or CI reproducible build of the decoder pin; the note
    tree's Poseidon2 on Barretenberg wasm (about 6x); a reader budget.
 
