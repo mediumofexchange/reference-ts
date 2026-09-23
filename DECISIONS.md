@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-23` [Pin a reproducible release build of sigma-rust 2f840d3](decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3)
 - `2026-09-23` [Run the pinned decoder with an explicit stack and treat a trap as fatal](decisions/2026-09.md#2026-09-23--run-the-pinned-decoder-with-an-explicit-stack-and-treat-a-trap-as-fatal)
 - `2026-09-22` [Pin a sigma-rust build that keeps every sized tree as exact bytes](decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes)
 - `2026-09-21` [Index the Ergo venue from a pinned anchor header](decisions/2026-09.md#2026-09-21--index-the-ergo-venue-from-a-pinned-anchor-header)

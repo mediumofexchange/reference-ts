@@ -177,9 +177,10 @@ reproduces real transaction roots and retains serializer counterexamples.
 The [binary decoder corpus](POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility)
 recovers all 77 fixture outputs, reads every sized tree as its exact bytes
 whatever its header version or body, and exposes permissive parsing, with
-strict round-trip rejection controls; the experiment pins
-`ergo-lib-wasm-nodejs@0.29.0-alpha-2f840d3`
-([decided 2026-09-22](../decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes)).
+strict round-trip rejection controls; the experiment pins a vendored,
+reproducible release build of sigma-rust `2f840d3`
+([decided 2026-09-23](../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3)) in place of the debug npm alpha, whose
+parser a node-valid output nested 50 deep could trap.
 Hard memory containment, supported node equivalence and authenticated
 complete-range reads remain unimplemented.
 The [candidate Ergo venue profile](ERGO_VENUE_PROFILE.md) and

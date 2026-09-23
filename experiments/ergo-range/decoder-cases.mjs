@@ -49,8 +49,9 @@ const fields = (o) => ({ boxId: o.boxId, value: BigInt(o.value), ergoTree: o.erg
 // The fields a tree rewrite leaves untouched: ids embed the transaction's bytes, so they move.
 const committed = (o) => { const { boxId: _b, transactionId: _t, ...rest } = fields(o); return rest; };
 const vlqLength = (bytes, at) => { let n = 1; while (bytes[at + n - 1] & 0x80) n++; return n; };
-const pinnedVersion = "0.29.0-alpha-2f840d3";
-const pinnedWasmSha256 = "65143062c54766fbc79b721ed77c43d199604c31bef535b99dca3b8842e1ea16";
+// The vendored release build of sigma-rust 2f840d3 (vendor/ergo-lib-wasm-nodejs, reproduced by sigma-release-build.sh).
+const pinnedVersion = "0.28.0-2f840d3.release";
+const pinnedWasmSha256 = "0d20038513c72a9daf859e3ea278735caef43305cde6bc7fb2764e8d933aa28a";
 equal(JSON.parse(readFileSync(new URL("node_modules/ergo-lib-wasm-nodejs/package.json", base))).version,
   pinnedVersion, "the corpus runs on the experiment's pinned build");
 const wasmSha256 = sha256(readFileSync(new URL("node_modules/ergo-lib-wasm-nodejs/ergo_lib_wasm_bg.wasm", base)));

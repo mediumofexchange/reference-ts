@@ -1051,7 +1051,7 @@ try {
       fresh(scopeRecovery.payload, scopeRecovery.result)];
   }
   await api.destroy(); api = undefined;
-  // A worker that loads the pinned decoder needs this process's --stack-size (decoder.mjs); spawned children do not
+  // Workers get this process's --stack-size, if it has one; spawned children do not
   // inherit execArgv.
   const stackFlags = process.execArgv.filter(flag => /^--stack[-_]size=/.test(flag));
   function worker(payload, mode) {

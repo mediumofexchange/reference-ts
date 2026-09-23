@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Reproduce the vendored decoder package, vendor/ergo-lib-wasm-nodejs: a release build of sigma-rust 2f840d3's
+# ergo-lib-wasm for Node. Upstream's npm alphas are built with `wasm-pack build --dev` (its build-nodejs-alpha script);
+# this is the same source with the release profile. It fetches the source at the pinned commit into an ignored
+# directory, builds with the vendored lockfile (upstream commits none; core2 0.4.0 is yanked, so a fresh resolution
+# fails) and paths remapped, generates the Node glue with wasm-bindgen 0.2.128 and compares every file with
+# vendor/ergo-lib-wasm-nodejs/SHA256SUMS. Checked reproducible on Windows 10 (x86_64-pc-windows-gnu host) from two
+# directories on 2026-09-23; other hosts are not yet checked.
+#
+# Requires git, rustup with toolchain 1.87 and target wasm32-unknown-unknown (cargo on PATH), and the wasm-bindgen
+# CLI 0.2.128 release binary (GitHub asset digests: windows-msvc 8fd8e216…83ec0); pass its path as WASM_BINDGEN.
+# Usage, from the repository root:
+#   WASM_BINDGEN=<path to wasm-bindgen 0.2.128> bash experiments/ergo-range/sigma-release-build.sh [build dir]
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+build="${1:-$here/../../scratch/sigma-release-build}"
+commit=2f840d3872367d6181d66d4a168194dbefad77f1
+vendor="$here/vendor/ergo-lib-wasm-nodejs"
+: "${WASM_BINDGEN:?set WASM_BINDGEN to the wasm-bindgen 0.2.128 CLI}"
+"$WASM_BINDGEN" --version | grep -qx 'wasm-bindgen 0.2.128' || { echo "wasm-bindgen must be 0.2.128" >&2; exit 1; }
+[ "$(rustc +1.87 --version | cut -d' ' -f2)" = 1.87.0 ] || { echo "rustc 1.87.0 required" >&2; exit 1; }
+
+rm -rf "$build"; mkdir -p "$build/src"; build="$(cd "$build" && pwd)"
+git -C "$build/src" init -q
+git -C "$build/src" fetch -q --depth 1 https://github.com/ergoplatform/sigma-rust.git "$commit"
+git -C "$build/src" checkout -q FETCH_HEAD
+cp "$here/vendor/sigma-rust-2f840d3.Cargo.lock" "$build/src/Cargo.lock"
+
+native() { if command -v cygpath >/dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
+cargo_home="${CARGO_HOME:-$HOME/.cargo}" rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
+export RUSTFLAGS="--remap-path-prefix=$(native "$build/src")=/sigma-rust --remap-path-prefix=$(native "$cargo_home")=/cargo --remap-path-prefix=$(native "$rustup_home")=/rustup"
+(cd "$build/src" && cargo +1.87 build -p ergo-lib-wasm --lib --release --target wasm32-unknown-unknown --locked)
+"$WASM_BINDGEN" --target nodejs --weak-refs --out-dir "$build/pkg" "$build/src/target/wasm32-unknown-unknown/release/ergo_lib_wasm.wasm"
+(cd "$build/pkg" && sha256sum -c "$vendor/SHA256SUMS") && echo "reproduced: every vendored file matches"

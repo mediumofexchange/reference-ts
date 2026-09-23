@@ -2,30 +2,14 @@
 // Exact existing sigma-rust round trip; neither node equivalence nor hard
 // memory containment is established by it.
 //
-// The pinned build is a debug build: its parser uses about 12 KB of stack a
-// nesting level, so a node-valid transaction at the node's nesting cap (110)
-// overflows Node's default stack, and a real mainnet transaction needs about
-// 1.2 MB. A stack overflow or trap inside the module leaves its one instance
-// unusable, so it is fatal here, never a refusal: every later call throws and
-// the process must start again. The process must run with --stack-size of at
-// least STACK_KB (see the decoder stack probe in the deployment probes).
+// The pinned build is the vendored release build of sigma-rust 2f840d3
+// (vendor/ergo-lib-wasm-nodejs). A stack overflow or trap inside the module
+// leaves its one instance unusable, so it is fatal here, never a refusal:
+// every later call throws and the process must start again. The debug npm
+// alpha of the same commit overflowed on node-valid transactions and trapped
+// at expression depth 50; see the decoder stack probe.
 import { blake2b } from "@noble/hashes/blake2b";
 import { Transaction } from "ergo-lib-wasm-nodejs";
-
-export const STACK_KB = 4000;
-// V8 trusts --stack-size; above the thread's real stack (8 MB for Node's main thread on Windows and Linux defaults) an
-// overflow kills the process without an error. A worker's stack is its resourceLimits.stackSizeMb, not this flag.
-const MAX_STACK_KB = 7800;
-const stackKb = () => {
-  const flags = process.execArgv;
-  for (let i = flags.length - 1; i >= 0; i--) {
-    const joined = /^--stack[-_]size=(\d+)$/.exec(flags[i]);
-    if (joined !== null) return Number(joined[1]);
-  }
-  return undefined;
-};
-const stack = stackKb();
-if (!(stack >= STACK_KB && stack <= MAX_STACK_KB)) throw new Error(`decoder.mjs needs node --stack-size between ${STACK_KB} and ${MAX_STACK_KB}: the pinned build overflows the default stack on node-valid transactions`);
 
 // A stack overflow surfaces as RangeError and a trap as WebAssembly.RuntimeError; either leaves the instance's memory
 // in an unknown state.

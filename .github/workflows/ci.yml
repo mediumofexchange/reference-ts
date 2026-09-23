@@ -20,8 +20,9 @@ concurrency:
 jobs:
   pool-v3:
     runs-on: ${{ matrix.os }}
-    # The --ergo pass replays every local group a second time through the pinned decoder (about 6× slower since
-    # 2026-09-22); the budget leaves headroom over the ~13-minute baseline (13.5 minutes measured at d913edd on both runners).
+    # The --ergo pass replays every local group a second time through the pinned decoder (the vendored release build
+    # since 2026-09-23, about six times faster than the debug alpha it replaced); the budget leaves headroom over the
+    # ~13-minute baseline measured under the alpha (13.5 minutes at d913edd on both runners).
     timeout-minutes: 45
     strategy:
       fail-fast: false

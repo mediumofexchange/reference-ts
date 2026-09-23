@@ -26,7 +26,7 @@ mainnet from a real anchor. It is run explicitly, never by `check` or CI,
 because it reads public nodes (GET only; nothing is submitted):
 
 ```powershell
-node --stack-size=4000 experiments/ergo-range/chain-cost.mjs --from 1873361 --count 5040 --depth 10 --alternate scratch/sigma-0.28.0 --out scratch/chain-cost.json
+node experiments/ergo-range/chain-cost.mjs --from 1873361 --count 5040 --depth 10 --alternate scratch/sigma-0.28.0 --out scratch/chain-cost.json
 ```
 
 The anchor is the block below `--from`; indices `0..count-1` are the next
@@ -47,11 +47,12 @@ directory holding another `ergo-lib-wasm-nodejs` install that reads the
 same bytes through the script's verbatim copy of that round trip, checked
 against `decoder.mjs` on the pinned build for every transaction, with the
 two builds' outputs compared (the alternate's version and WASM hash are
-recorded; nothing is pinned by it). The pinned build is the
-[decided](../../decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes)
-`0.29.0-alpha-2f840d3`; the previous pin 0.28.0, installed under
-`scratch/sigma-0.28.0` (`npm install ergo-lib-wasm-nodejs@0.28.0 --ignore-scripts`),
-is the control that shows the refusals it left. Moving the pin again means
+recorded; nothing is pinned by it). The pinned build is the vendored
+[release build](#decoder-build) of sigma-rust `2f840d3`; earlier pins are
+useful controls: 0.28.0 under `scratch/sigma-0.28.0`
+(`npm install ergo-lib-wasm-nodejs@0.28.0 --ignore-scripts`) shows the Ergo 6.0
+refusals, and the debug npm alpha `0.29.0-alpha-2f840d3` under
+`scratch/sigma-alpha` the same commit's reading. Moving the pin again means
 rerunning this window offline from the cache with zero refusals, every root
 reproduced and no differing view against the build being replaced.
 The model verifier is built from the real headers and the read sections
@@ -77,8 +78,8 @@ the repository). Fund the address with testnet ERG from a public faucet
 (about 0.05 tERG covers a run), then:
 
 ```powershell
-node --stack-size=4000 experiments/ergo-range/publish.mjs --dry-run --out scratch/ergo-testnet/dry-run.json
-node --stack-size=4000 experiments/ergo-range/publish.mjs --node http://213.239.193.208:9052 --depth 2 --out scratch/ergo-testnet/live.json
+node experiments/ergo-range/publish.mjs --dry-run --out scratch/ergo-testnet/dry-run.json
+node experiments/ergo-range/publish.mjs --node http://213.239.193.208:9052 --depth 2 --out scratch/ergo-testnet/live.json
 ```
 
 The dry run builds and signs every case over a synthetic funded input and
@@ -97,23 +98,29 @@ re-submitting only what the node does not already hold; `--poll`,
 is the 2026-09-22 testnet run: the node's acceptance, sizes, values, each
 transaction's inclusion latency, the UTXO check and the read-back.
 
-## Decoder stack budget
+## Decoder build
 
-Every process that loads `decoder.mjs` (the probes above, the profile check
-and the `--ergo` replay) runs with `node --stack-size=4000`; the decoder
-refuses to load without it, and the package scripts pass it. The pinned
-sigma-rust build is a debug build whose parser overflows Node's default
-stack on some node-valid transactions and poisons its instance; a trap is
-fatal, and the process must start again. The budget does not close the
-denial: ErgoTree expression nesting of 50 levels traps the pinned build at
-any stack, so the decoder choice is
-[reopened](../../decisions/2026-09.md#2026-09-23--run-the-pinned-decoder-with-an-explicit-stack-and-treat-a-trap-as-fatal).
-`stack-check.mjs` measures both, each trial in a fresh process, against an
-optional control build
+The decoder is `vendor/ergo-lib-wasm-nodejs`, a release build of sigma-rust
+`2f840d3` installed as a `file:` dependency
+([decision](../../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3)).
+Upstream's npm alphas of that commit are debug builds (`wasm-pack build --dev`)
+that overflow Node's default stack and trap on expression nesting of 50.
+`sigma-release-build.sh` rebuilds the package from a fresh checkout with
+the vendored lockfile, Rust 1.87 (`wasm32-unknown-unknown`) and the
+wasm-bindgen 0.2.128 CLI, and checks every file against `SHA256SUMS`:
+
+```bash
+WASM_BINDGEN=<path to wasm-bindgen 0.2.128> bash experiments/ergo-range/sigma-release-build.sh
+```
+
+An overflow or trap inside the module leaves its one instance unusable, so
+`decoder.mjs` treats it as fatal, never as a refusal. `stack-check.mjs`
+measures the stack each build needs and the deepest nesting it parses, each
+trial in a fresh process, with earlier builds as controls
 ([retained report](../../docs/ergo-decoder-stack-verification.json)):
 
 ```powershell
-node --stack-size=4000 experiments/ergo-range/stack-check.mjs --control scratch/sigma-0.28.0 --out docs/ergo-decoder-stack-verification.json
+node experiments/ergo-range/stack-check.mjs --control scratch/sigma-alpha,scratch/sigma-0.28.0 --out docs/ergo-decoder-stack-verification.json
 ```
 
 ## Inclusion latency on the mainnet

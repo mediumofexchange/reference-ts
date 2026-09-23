@@ -1,5 +1,5 @@
 {
-  "status": "pinned-decoder-traps-below-the-node-nesting-cap",
+  "status": "pinned-release-build-reads-past-the-node-nesting-cap",
   "node": "v24.6.0",
   "platform": "win32 x64",
   "fixture": {
@@ -23,18 +23,40 @@
   "builds": {
     "pinned": {
       "library": {
+        "version": "0.28.0-2f840d3.release",
+        "wasmSha256": "0d20038513c72a9daf859e3ea278735caef43305cde6bc7fb2764e8d933aa28a",
+        "wasmBytes": 4364091
+      },
+      "deepTransactionKb": 71,
+      "ordinaryTransactionKb": 71,
+      "nestedConstantKb": {
+        "25": 71,
+        "50": 71,
+        "75": 71,
+        "110": 79,
+        "150": 101
+      },
+      "expressionNestingMaxDepth": 2513,
+      "expressionAtNodeCap": "ok",
+      "atDefaultStack": {
+        "deepTransaction": "ok",
+        "nodeCapConstant": "ok"
+      }
+    },
+    "control 0.29.0-alpha-2f840d3": {
+      "library": {
         "version": "0.29.0-alpha-2f840d3",
         "wasmSha256": "65143062c54766fbc79b721ed77c43d199604c31bef535b99dca3b8842e1ea16",
         "wasmBytes": 16680230
       },
       "deepTransactionKb": 1173,
-      "ordinaryTransactionKb": 426,
+      "ordinaryTransactionKb": 418,
       "nestedConstantKb": {
         "25": 335,
         "50": 629,
         "75": 925,
         "110": 1339,
-        "150": 1808
+        "150": 1816
       },
       "expressionNestingMaxDepth": 49,
       "expressionAtNodeCap": "trap",
@@ -43,7 +65,7 @@
         "nodeCapConstant": "overflow"
       }
     },
-    "control": {
+    "control 0.28.0": {
       "library": {
         "version": "0.28.0",
         "wasmSha256": "5c39a0933a07031492efbe956fb4f957da745e295a94c06efddb475d9d1db4e5",
@@ -58,7 +80,7 @@
         "110": 71,
         "150": 71
       },
-      "expressionNestingMaxDepth": ">=256",
+      "expressionNestingMaxDepth": 2842,
       "expressionAtNodeCap": "ok",
       "atDefaultStack": {
         "deepTransaction": "ok",
@@ -66,28 +88,34 @@
       }
     }
   },
-  "pinnedPerLevelKb": 11.8,
+  "perLevelKb": {
+    "pinned": 0.2,
+    "control 0.29.0-alpha-2f840d3": 11.8,
+    "control 0.28.0": 0
+  },
   "poisoning": {
+    "build": "control 0.29.0-alpha-2f840d3",
     "atDefaultStack": "overflow,trap",
-    "note": "deep transaction then an ordinary one in one process"
+    "note": "fixture then an ordinary transaction in one process"
   },
   "decoderMjs": {
-    "belowBudget": "load-refused:true",
-    "atBudget": "loaded,decoded,decoded",
-    "overflowInside": "loaded,overflow,poisoned"
+    "atDefaultStack": "loaded,decoded,decoded",
+    "hostile": {
+      "depth": 100000,
+      "result": "loaded,trap,poisoned"
+    }
   },
-  "decoderBudgetKb": 4000,
+  "defaultStackKb": 984,
   "mainThreadMaxKb": 7800,
   "files": {
-    "experiments/ergo-range/stack-check.mjs": "80226f2008e2276ad4830722aae0ad1494a8e10d907732fbd8cbb4f36b1814ab",
-    "experiments/ergo-range/decoder.mjs": "977d244441aec9858d7f56bf04cf9b36a5af3a369d102ffd53871fa498ba3277",
-    "experiments/ergo-range/package-lock.json": "9133136e72d45c7bf8427d0cef6360454d2f12775a91dd6b1031ff6f8fbd6a70"
+    "experiments/ergo-range/stack-check.mjs": "4f15f933b839f6ecd5545b39ae92cf18c603df3dc74e24271fc137e5f20599b2",
+    "experiments/ergo-range/decoder.mjs": "f2ab6943b8ab15ee236fefea12731a8e601e382c2da9b211b100bf239e288b26",
+    "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e"
   },
   "limitations": [
     "Stack sizes are V8 --stack-size values on one Windows desktop with Node's 8 MB main-thread stack; they bound this build's recursion on these inputs, not every path through the parser.",
-    "Two recursion paths were constructed: collection nesting in a constant, whose need grows with the V8 stack, and LogicalNot nesting in an ErgoTree, which the pinned build fails at a fixed depth whatever the V8 stack (consistent with exhausting the module's own linear-memory stack; not proven). Other expression forms were not swept.",
-    "No transaction carrying such a tree was submitted to a node; that the node accepts expression nesting to 110 rests on its source (CoreByteReader's depth check).",
-    "The budget does not bound expression nesting: node-valid expression trees trap the pinned build from depth 50 at any V8 stack, and bytes nested beyond the node's cap of 110 likewise fail closed as a trap.",
+    "Two recursion paths were constructed: collection nesting in a constant, and LogicalNot nesting in an ErgoTree, which the debug alpha fails at a fixed depth whatever the V8 stack (consistent with exhausting the module's own linear-memory stack; not proven). Other expression forms were not swept.",
+    "No transaction carrying such a tree was submitted to a node; that the node accepts expression nesting to 110 rests on its source (CoreByteReader's depth check). Bytes nested far beyond the cap, which only a dishonest source can present, can still exhaust any build's stack and then fail closed.",
     "No runtime path, decoder selection or profile selection follows from this probe."
   ]
 }

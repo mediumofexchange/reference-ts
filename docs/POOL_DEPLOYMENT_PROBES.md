@@ -887,7 +887,7 @@ difference, but the byte counts are authenticated only that far.
 | Largest transaction, bytes | 32,742 | 88,284 |
 | Headers retained (one per block), wire / verifier view, bytes | 159,022 / 75,600 | 1,113,468 / 529,200 |
 | JSON fetched, bytes | 21,501,423 | 133,335,507 |
-| Indices without a section: sigma-rust 0.28.0 (the pin until 2026-09-22) / `0.29.0-alpha-2f840d3` (pinned since) | 5 / 0 | 58 / 0 |
+| Indices without a section: sigma-rust 0.28.0 (the pin until 2026-09-22) / `0.29.0-alpha-2f840d3` (pinned 2026-09-22 to 09-23) | 5 / 0 | 58 / 0 |
 
 Decoding the week's 28,196 transactions took 253 s under the pinned
 `0.29.0-alpha-2f840d3` and 39 s under the 0.28.0 control (the retained run
@@ -1068,61 +1068,54 @@ local browser page can read the node's key-free routes.
 ## Decoder stack budget
 
 Reading the own node's retained mainnet blocks through the chain-cost probe,
-the pinned `ergo-lib-wasm-nodejs@0.29.0-alpha-2f840d3` overflowed Node's
-default stack inside `Transaction.sigma_parse_bytes` on a node-valid
-7,131-byte transaction (block 1,827,841, index 1, now the fixture
-`mainnet-1827841.json` from the own node), and every later call into the same
-WASM instance trapped; the probe crashed some seconds later in unrelated
-calls. Whether it overflowed depended on the stack already in use, so two of
-five offline reruns over the same 100 blocks crashed. The decoder caught the
-overflow as an ordinary refusal, so every transaction after it would have
-read as unsupported evidence. The npm alpha is a debug build (16.7 MB of
-WASM against 2.4 MB for 0.28.0, with wasm-bindgen's debug assertions in its
-glue), which also explains its six-fold slowdown.
+the npm alpha `ergo-lib-wasm-nodejs@0.29.0-alpha-2f840d3`, then pinned,
+overflowed Node's default stack inside `Transaction.sigma_parse_bytes` on a
+node-valid 7,131-byte transaction (block 1,827,841, index 1, now the fixture
+`mainnet-1827841.json` from the own node), and every later call into the
+same WASM instance trapped; the probe crashed seconds later in unrelated
+calls, and whether it overflowed depended on the stack already in use. The
+decoder caught the overflow as an ordinary refusal, so every transaction
+after it would have read as unsupported evidence. Upstream builds its npm
+alphas with `wasm-pack build --dev` (the `build-nodejs-alpha` script): the
+alpha is a debug build, 16.7 MB of WASM with wasm-bindgen's debug assertions
+in its glue, which also explains its six-fold slowdown. Its WASM records
+rustc 1.87.0 and wasm-bindgen 0.2.100.
 
-`experiments/ergo-range/stack-check.mjs` measures the budget, each trial in a
-fresh process, as the least V8 `--stack-size`, found to 8 KB and varying by
-that step between runs ([retained report](ergo-decoder-stack-verification.json)):
+Independent review then found that ErgoTree expression nesting
+(`BoolToSigmaProp` over `LogicalNot` nested d levels) traps the alpha from
+depth 50 at any V8 stack, consistent with exhausting the module's own
+linear-memory stack. The node's cap (sigmastate `MaxTreeDepth`, 110) covers
+expressions too by its source, so an output the node accepts could deny every
+range through its block. No such transaction was submitted to any node.
 
-| Input | Pinned alpha | 0.28.0 control |
-|---|---|---|
-| Fixture transaction | 1,173 KB | 71 KB |
-| An ordinary transaction of the block | 426 KB | 71 KB |
-| `Coll^d[Byte]` constant, d = 25 / 50 / 75 | 335 / 629 / 925 KB | 71 KB |
-| d = 110 (the node's cap) / 150 | 1,339 / 1,808 KB | 71 KB |
-| Deepest `LogicalNot` expression nesting at 7,800 KB | 49 (traps at 50 and at 110) | 256 or more |
+The experiment now pins a release build of the same commit, vendored and
+reproducible ([decision](../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3);
+[guide](../experiments/ergo-range/README.md#decoder-build)).
+`experiments/ergo-range/stack-check.mjs` measures, each trial in a fresh
+process, the least V8 `--stack-size` a build needs (found to 8 KB; 71 KB is
+the least Node runs with at all) and the deepest expression nesting it
+parses at the largest stack Node's 8 MB main thread holds
+([retained report](ergo-decoder-stack-verification.json)):
 
-The pinned build takes about 11.8 KB a nesting level, so a register constant
-at the node's own nesting cap (sigmastate `MaxTreeDepth`, 110) overflows the
-default 984 KB: anyone can publish a transaction that poisons it. At the
-default stack the fixture transaction overflows and the next ordinary
-transaction traps. The experiment therefore runs every process that loads
-the decoder with `node --stack-size=4000`, which covers the fixture 3.4 times
-and collection nesting to about 330 levels within Node's 8 MB main-thread
-stack on this host; `decoder.mjs` refuses to load below that, and a
-`RangeError` or `WebAssembly.RuntimeError` from the library is fatal: the
-decoder rethrows it, marks its instance poisoned and throws on every later
-call ([decision](../decisions/2026-09.md#2026-09-23--run-the-pinned-decoder-with-an-explicit-stack-and-treat-a-trap-as-fatal)).
-The probe confirms the guard (load refused at 3,000 KB), normal decoding at
-4,000 KB, and the fatal path when JavaScript frames leave too little stack.
+| Input | Pinned release build | Debug alpha | 0.28.0 |
+|---|---|---|---|
+| Fixture transaction | 71 KB | 1,173 KB | 71 KB |
+| An ordinary transaction of the block | 71 KB | 418 KB | 71 KB |
+| `Coll^d[Byte]` constant, d = 110 (the node's cap) / 150 | 79 / 101 KB | 1,339 / 1,816 KB | 71 / 71 KB |
+| Deepest `LogicalNot` expression nesting | 2,513 | 49 | 2,842 |
 
-The stack does not close the denial. ErgoTree expression nesting
-(`BoolToSigmaProp` over `LogicalNot` nested d levels) parses on the pinned
-build only to depth 49 and traps at 50 at any V8 stack, 7,800 KB included,
-consistent with exhausting the module's own linear-memory stack; 0.28.0
-reads 256 levels and more, and by the node's source (sigmastate
-`CoreByteReader`) its cap of 110 applies to expressions too. An output the
-node accepts can therefore make the pinned decoder trap
-on its block every time; with the fatal handling that is an explicit
-failure rather than a false refusal, but it is a denial all the same, so
-the [decoder choice is reopened](../decisions/2026-09.md#2026-09-23--run-the-pinned-decoder-with-an-explicit-stack-and-treat-a-trap-as-fatal).
-No such transaction was submitted to any node.
+At the default stack the fixture overflows the alpha and the next ordinary
+transaction traps. `decoder.mjs` treats a `RangeError` or
+`WebAssembly.RuntimeError` from the library as fatal: it rethrows it, marks
+its instance poisoned and throws on every later call. On the default stack
+it decodes the fixture; on a synthetic transaction whose output tree nests
+100,000 levels, which only a dishonest source could present, it traps and
+reports its instance poisoned, failing closed. The release build reads the
+P4 week exactly as the alpha did (see the chain-cost section).
 
-Not established: recursion paths other than collection nesting and these
-expression forms; whether a release build of the same source removes the
-limit (the likely cause is the debug build's frame size, to be measured;
-it needs a toolchain and a reproducible build); the decoder's memory and CPU
-containment.
+Not established: recursion paths other than collection nesting and
+`LogicalNot` expressions; reproducibility of the release build on another
+host; the decoder's memory and CPU containment.
 
 ## Windows process containment feasibility
 

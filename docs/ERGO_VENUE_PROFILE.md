@@ -152,24 +152,19 @@ its retained evidence and can be reproduced from it.
   Ergo 6.0 script version, at the header byte, and 125 such transactions in
   58 of seven days' 5,040 blocks left those indices without a section
   ([P4](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor)).
-  The experiment now pins `0.29.0-alpha-2f840d3`
-  ([decided 2026-09-22](../decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes)),
-  which reads all of them after exact round trips, about six times slower
-  per transaction, and keeps any sized tree it cannot parse, of any header
-  version, as its exact bytes, so an unknown script version or opcode cannot
-  refuse a transaction; an unsized version-0 tree or a register constant it
-  cannot parse still can. The pinned build is a debug build whose parser
-  needs about 12 KB of stack a nesting level: a node-valid mainnet
-  transaction and a constant at the node's nesting cap overflow Node's
-  default stack, and an overflow leaves the module's instance unusable, so
-  the experiment runs it with an explicit 4,000 KB stack and treats a trap
-  as fatal rather than as a refusal. That is not enough: expression nesting
-  of 50 levels traps it at any stack, and by the node's source (none was
-  submitted) such an output is within the node's cap of 110, so a node-valid
-  output can deny every range through its block and the decoder choice is
-  open again
-  ([probe](POOL_DEPLOYMENT_PROBES.md#decoder-stack-budget), [decided 2026-09-23](../decisions/2026-09.md#2026-09-23--run-the-pinned-decoder-with-an-explicit-stack-and-treat-a-trap-as-fatal)).
-  No specification pins a decoder.
+  The experiment pins a release build of sigma-rust `2f840d3`, vendored and
+  reproducible from source ([decided 2026-09-23](../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3)), which reads
+  all of them after exact round trips and keeps any sized tree it cannot
+  parse, of any header version, as its exact bytes, so an unknown script
+  version or opcode cannot refuse a transaction; an unsized version-0 tree or
+  a register constant it cannot parse still can. The npm alpha of the same
+  commit, pinned the day before, is a debug build that overflows Node's
+  default stack on a node-valid mainnet transaction and traps on expression
+  nesting of 50, within the node's cap of 110 by the node's source, so a
+  node-valid output could have denied every range through its block; the
+  release build parses expression nesting to 2,513 levels on the default
+  stack ([probe](POOL_DEPLOYMENT_PROBES.md#decoder-stack-budget)). An overflow or trap is fatal to the decoder,
+  never a refusal. No specification pins a decoder.
 - The public node API serves transactions as JSON. sigma-rust's serializer
   reproduced every header root of the measured week from the node's exact
   text, but only because that text keeps the spending-proof extension's key

@@ -635,12 +635,12 @@ Each names the rule, the candidate, the alternative, and what closes it.
   every one of the week's transactions and keeps any sized tree it cannot
   parse as exact bytes, so an unknown script version cannot refuse a
   transaction ([decision](../decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes)).
-  **Stack 2026-09-23:** the pinned build is a debug build that overflows
-  Node's default stack on a node-valid mainnet transaction and at the node's
-  nesting cap, poisoning its instance; it now runs with an explicit stack,
-  and a trap is fatal rather than a refusal, but expression nesting of 50
-  levels traps it at any stack, so the decoder choice is open again
-  ([probe](POOL_DEPLOYMENT_PROBES.md#decoder-stack-budget)).
+  **Release build 2026-09-23:** that alpha is a debug build that overflows
+  Node's default stack on a node-valid mainnet transaction and traps on
+  expression nesting of 50, within the node's cap; the experiment now pins a
+  reproducible release build of the same commit, which reads the week
+  identically and parses expression nesting to 2,513 levels
+  ([probe](POOL_DEPLOYMENT_PROBES.md#decoder-stack-budget), [decision](../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3)).
   The header source's authenticity, the decoder's containment and its node
   equivalence beyond the fixtures and one week remain the trust assumptions
   before selection. **Own node 2026-09-22:** a node the reader runs
