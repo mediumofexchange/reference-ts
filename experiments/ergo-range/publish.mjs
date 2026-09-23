@@ -39,6 +39,13 @@ const cache = resolve(root, option("--cache", "scratch/ergo-testnet/cache"));
 const depth = Number(option("--depth", "2")), pollSeconds = Number(option("--poll", "20")), maxWaitMinutes = Number(option("--max-wait", "120"));
 const delayMs = Number(option("--delay", "250")), out = option("--out");
 assert(Number.isInteger(depth) && depth >= 0 && depth < 64 && pollSeconds > 0 && maxWaitMinutes > 0, "usage: [--depth d] [--poll s] [--max-wait min]");
+// Before any request: a live run never overwrites another run's state, and a
+// resumed run continues against the node its state was recorded on.
+if (!dryRun && !resume) assert(!existsSync(stateFile), `a state file exists at ${stateFile}; pass --resume or choose another --state`);
+if (!dryRun && resume && existsSync(stateFile)) {
+  const recorded = JSON.parse(readFileSync(stateFile, "utf8")).node;
+  assert.equal(recorded, nodeUrl, `the state at ${stateFile} was recorded against ${recorded}; pass --node ${recorded}`);
+}
 mkdirSync(cache, { recursive: true });
 
 // Venue constants checked against upstream source by the earlier offline probe and the profile check. The node
