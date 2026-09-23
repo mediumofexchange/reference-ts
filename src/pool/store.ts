@@ -4,9 +4,10 @@
 // handles of that journal; it cannot fence another database or a copied key.
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { encodeBacking, makeBacking, type Backing } from "../backing.js";
-import { compareBytes, copyBytes } from "../bytes.js";
+import { ByteWriter, compareBytes, copyBytes } from "../bytes.js";
 import { decodeCommitment, directoryRoot, encodeCommitment, signCommitment, verifyCommitment, type Commitment } from "../commitment.js";
 import { revokedAt } from "../revocation.js";
 import { VenueError, type Venue } from "../venue.js";
@@ -17,7 +18,7 @@ import { preparePoolOpening } from "./opening.js";
 import { poolReceiptInHistory, poolReceiptAttestsEvidence, signPoolReceipt, type PoolReceipt } from "./receipt.js";
 import { PoolError, Segment, type ImportEvidence, type SegmentTrail, type SignedBacking, type StatementVerifier } from "./segment.js";
 import { allFields, configurationHash, copyConfiguration, copySegmentHeader, decodeStatement, encodeStatement, ISSUE, isStatementKind,
-  parsePublicInputs, PUBLIC_INPUT_COUNT, readStatementFields, segmentBytes, statementHash, type OpeningCheckpoint, type PoolConfiguration, type SegmentHeader, type Statement } from "./statement.js";
+  parsePublicInputs, PUBLIC_INPUT_COUNT, readStatementFields, segmentBytes, statementBytes, statementHash, type OpeningCheckpoint, type PoolConfiguration, type SegmentHeader, type Statement } from "./statement.js";
 import { copyPoolCheckpointEvidence, decodeStoredOpening, decodeStoredReceipt, encodeStoredOpening, encodeStoredReceipt } from "./store-codec.js";
 
 const PROFILE = "pool-store/v2";
@@ -127,6 +128,8 @@ export class PoolStore {
   private busy = false;
   private closed = false;
   private readonly requiredSegment: Uint8Array | undefined;
+  private readonly signedEvidence = new WeakMap<Signed, PoolCheckpointEvidence>();
+  private readonly proven = new Set<string>();
 
   constructor(path: string, configuration: PoolConfiguration, secret: Uint8Array,
     private readonly venue: Venue, private readonly verifier: StatementVerifier,
@@ -427,7 +430,7 @@ export class PoolStore {
     }
     if (targets.length !== 0) {
       const checked = await readPoolCheckpoints({ configuration: this.config, venue: this.venue,
-        checkpoints: targets, evidence: available, verifier: this.verifier });
+        checkpoints: targets, evidence: available, verifier: this.retainedVerifier() });
       requireThat(checked.kind === "final", "UNAVAILABLE", "retained opening evidence is unavailable or invalid");
       this.checkImportSupport(historyImports(checked.evidence));
     }
@@ -587,8 +590,37 @@ export class PoolStore {
     });
   }
 
+  /** A signed entry's commitment, segment prefix and length never change
+   * (segments only append, and their terms are fixed at opening), so its
+   * evidence is derived once per entry. A reload builds new entries.
+   * Consumers copy what they own and never mutate retained evidence. */
   private localEvidence(engine: Engine): PoolCheckpointEvidence[] {
-    return engine.signed.map(s => this.checkpointEvidence(s));
+    return engine.signed.map(s => {
+      let evidence = this.signedEvidence.get(s);
+      if (evidence === undefined) { evidence = this.checkpointEvidence(s); this.signedEvidence.set(s, evidence); }
+      return evidence;
+    });
+  }
+  /** This store's one verifier, remembering its `true` answers for the
+   * retained evidence validateOpening re-reads before every request. The key
+   * is SHA-256 of the exact statement bytes under this store's configuration
+   * and the exact proof; a verifier holding fixed keys answers those the
+   * same way every time. False answers and failures are never remembered,
+   * and every record, revocation and descent check still runs. */
+  private retainedVerifier(): StatementVerifier {
+    const backend = this.verifier, proven = this.proven, domain = this.domain;
+    return {
+      ...(backend.identities === undefined ? {} : { identities: backend.identities }),
+      async verify(kind, publicInputs, proof) {
+        const w = new ByteWriter();
+        w.context(statementBytes(domain, kind, publicInputs)); w.lengthPrefixed(proof);
+        const key = bytesToHex(sha256(w.finish()));
+        if (proven.has(key)) return true;
+        const result = await backend.verify(kind, publicInputs, proof);
+        if (result === true) proven.add(key);
+        return result;
+      },
+    };
   }
   private async importedEvidence(engine: Engine): Promise<PoolCheckpointEvidence[]> {
     const evidence: PoolCheckpointEvidence[] = [];

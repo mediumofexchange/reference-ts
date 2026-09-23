@@ -598,6 +598,28 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     expect(f.oracle.calls).toBe(before + 3); // the two refused proofs and the new one
   });
 
+  it("re-validates retained ancestry before each request without re-verifying its proofs", async () => {
+    const venue = new LocalVenue(VENUE), oracle = new Oracle(), x = terms("EUR"), y = terms("USD");
+    const ancestor = openSegment(venue, [x, y], oracle);
+    await ancestor.admit(oracle.accept(issueStatement(ancestor.authority(), x.backing.name, 10n, 101n, SECRETS.backer)));
+    const base = evidence(ancestor); venue.publish(base.commitment);
+    replace(venue, x, SECRETS.carol, 2n); venue.advance(2n);
+    const s = store(path(), venue, oracle, undefined, SECRETS.carol);
+    await s.activate("inherit", [x], [base]); await s.publish();
+    const authority = segmentAuthority((await s.view()).trail!.header), root = ancestor.noteRoot();
+    const spend = (n: bigint) => oracle.accept(spendStatement(authority, [root, root], [200n + n, 210n + n], [300n + n, 310n + n]));
+    const before = oracle.calls;
+    expect((await s.submit(spend(1n))).position).toBe(1n);
+    expect(oracle.calls).toBe(before + 2); // the imported issuance once, then the spend
+    expect((await s.submit(spend(2n))).position).toBe(2n);
+    expect(oracle.calls).toBe(before + 3);
+    // A proof the verifier refused is asked again, never remembered.
+    const unproven = spendStatement(authority, [root, root], [221n, 222n], [321n, 322n]);
+    await expect(s.submit(unproven)).rejects.toMatchObject({ code: "PROOF" });
+    await expect(s.submit(unproven)).rejects.toMatchObject({ code: "PROOF" });
+    expect(oracle.calls).toBe(before + 5);
+  });
+
   it("names a journal row by the statement it stores, however often a getter answers differently", async () => {
     const f = await fixture(); await f.s.publish();
     const first = f.issue(101n), later = f.issue(102n);
