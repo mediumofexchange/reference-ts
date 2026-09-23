@@ -585,6 +585,19 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     expect(await store(f.file, f.venue, f.oracle).submit(original)).toEqual(saved);
   });
 
+  it("keeps the loaded journal through refusals: no replay re-verifies its proofs", async () => {
+    const f = await fixture(); await f.s.publish();
+    await f.s.submit(f.issue(101n)); await f.s.submit(f.issue(102n));
+    const authority = segmentAuthority(f.trail.header), before = f.oracle.calls;
+    const unproven = issueStatement(authority, f.x.backing.name, 10n, 103n, SECRETS.backer);
+    await expect(f.s.submit(unproven)).rejects.toMatchObject({ code: "PROOF" });
+    const reused = f.oracle.accept(issueStatement(authority, f.x.backing.name, 11n, 101n, SECRETS.backer));
+    await expect(f.s.submit(reused)).rejects.toMatchObject({ code: "OUTPUT" });
+    await expect(f.s.commit("opening")).rejects.toMatchObject({ code: "CONFLICT" });
+    expect((await f.s.submit(f.issue(104n))).position).toBe(3n);
+    expect(f.oracle.calls).toBe(before + 3); // the two refused proofs and the new one
+  });
+
   it("names a journal row by the statement it stores, however often a getter answers differently", async () => {
     const f = await fixture(); await f.s.publish();
     const first = f.issue(101n), later = f.issue(102n);

@@ -221,7 +221,15 @@ export class PoolStore {
     requireThat(!this.busy, "BUSY", "a journal operation is in progress");
     this.busy = true;
     try { await this.load(); return await action(this.engine!); }
-    catch (error) { this.engine = undefined; throw error; }
+    catch (error) {
+      // Memory changes only after a durable commit; the one earlier change,
+      // Segment.admit's transition, is followed directly by transaction(),
+      // which reloads on any failure. A refusal (Pool/Store/Venue error)
+      // before that leaves memory as the journal has it, and Segment refusals
+      // change nothing, so only an unexpected failure forces a full replay.
+      if (!(error instanceof PoolError || error instanceof PoolStoreError || error instanceof VenueError)) this.engine = undefined;
+      throw error;
+    }
     finally { this.busy = false; }
   }
 
@@ -298,8 +306,13 @@ export class PoolStore {
     } else throw new PoolStoreError("STORAGE", "unknown journal command");
   }
 
+  /** Fenced lookup. A conflicting identifier is refused after the read-only
+   * transaction ends, so that refusal does not discard the loaded engine. */
   private prior(id: string, request: string): string | undefined {
-    const row = this.db.prepare("SELECT request,response FROM events WHERE id=?").get(id);
+    const row = this.transaction(() => {
+      const found = this.db.prepare("SELECT request,response FROM events WHERE id=?").get(id);
+      return found === undefined ? undefined : { request: found.request, response: found.response };
+    });
     if (row === undefined) return undefined;
     requireThat(row.request === request && typeof row.response === "string", "CONFLICT", "command identifier names different content");
     return row.response;
@@ -439,7 +452,7 @@ export class PoolStore {
       ...(e.history === undefined ? {} : { history: { trail: decodeStoredOpening(encodeStoredOpening(e.history.trail, []), this.config).trail,
         length: e.history.length } }) }));
     return this.run(async engine => {
-      const prior = this.transaction(() => this.prior(commandId, request));
+      const prior = this.prior(commandId, request);
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
       for (const b of own) requireThat(b.backing.evidence.silence === undefined, "UNSUPPORTED", "pool silence recovery is not implemented");
       const now = this.clock(), observed = encoded(this.latest());
@@ -534,7 +547,7 @@ export class PoolStore {
   async commit(id: string): Promise<Commitment> {
     const commandId = this.commandId(id);
     return this.run(async engine => {
-      const prior = this.transaction(() => this.prior(commandId, "commit"));
+      const prior = this.prior(commandId, "commit");
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
       if (engine.segment !== undefined) await this.validateOpening(engine, engine.segment);
       this.ready(engine, "commit");
