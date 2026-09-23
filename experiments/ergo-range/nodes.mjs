@@ -46,11 +46,14 @@ assert(["start", "stop", "status", "watch"].includes(command) && (only === undef
 const selected = only === undefined || command === "watch" ? Object.keys(NETWORKS) : [only];
 const hocon = path => JSON.stringify(path.replaceAll("\\", "/"));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Windows process-table reads through PowerShell; a hung shell cannot stall start, stop or watch.
+const LOOKUP_TIMEOUT_MS = 60_000;
+const keyFileOf = name => join(base, name, "api-key");
 
 function prepare(name) {
   const net = NETWORKS[name], dir = join(base, name);
   mkdirSync(join(dir, "data"), { recursive: true });
-  const keyFile = join(dir, "api-key");
+  const keyFile = keyFileOf(name);
   if (!existsSync(keyFile)) writeFileSync(keyFile, randomBytes(24).toString("hex"));
   const key = readFileSync(keyFile, "utf8").trim();
   const keyHash = Buffer.from(blake2b(Buffer.from(key, "utf8"), { dkLen: 32 })).toString("hex");
@@ -84,23 +87,38 @@ async function api(name, path, options = {}) {
 }
 // A pid file outlives a reboot, and Windows reuses pids: a pid is this network's node only while its executable is the
 // bundle's java.exe and its command line names this network's configuration (both nodes share the executable), so stop
-// never signals another process and start never mistakes one for a running node.
+// never signals another process and start never mistakes one for a running node. No such process, or another
+// program, is false; a lookup that cannot answer throws, so neither start nor stop acts on a guess.
 const JAVA = join(bundle, "jre/bin/java.exe");
 const alive = (pid, name) => {
-  try { process.kill(pid, 0); } catch { return false; }
+  try { process.kill(pid, 0); } catch (error) {
+    // ESRCH: no such process. EPERM: another account's process, never this node, which runs as this user.
+    if (error.code === "ESRCH" || error.code === "EPERM") return false;
+    throw error;
+  }
+  let out;
   try {
-    const out = execFileSync("powershell.exe", ["-NoProfile", "-Command",
-      `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}"; $p.ExecutablePath; $p.CommandLine`], { encoding: "utf8", windowsHide: true });
-    const [path = "", commandLine = ""] = out.split(/\r?\n/);
-    return resolve(path.trim()).toLowerCase() === resolve(JAVA).toLowerCase() && commandLine.toLowerCase().includes(join(base, name, "ergo.conf").toLowerCase());
-  } catch { return false; }
+    out = execFileSync("powershell.exe", ["-NoProfile", "-Command",
+      `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}"; $p.ExecutablePath; $p.CommandLine`],
+      { encoding: "utf8", windowsHide: true, timeout: LOOKUP_TIMEOUT_MS });
+  } catch (error) { throw new Error(`${name}: cannot identify pid ${pid} (${error.message})`); }
+  // A process that exited since the signal check has no row: an empty path, not this node.
+  const [path = "", commandLine = ""] = out.split(/\r?\n/);
+  return resolve(path.trim()).toLowerCase() === resolve(JAVA).toLowerCase() && commandLine.toLowerCase().includes(join(base, name, "ergo.conf").toLowerCase());
 };
-const pidOf = name => { const file = join(base, name, "pid"); return existsSync(file) ? Number(readFileSync(file, "utf8")) : undefined; };
+const pidOf = name => {
+  const file = join(base, name, "pid");
+  if (!existsSync(file)) return undefined;
+  const pid = Number(readFileSync(file, "utf8"));
+  assert(Number.isSafeInteger(pid) && pid > 0, `${file} does not hold a process id`);
+  return pid;
+};
 // The node process's working set, private bytes and CPU seconds, read from Windows' process table.
 const usage = pid => {
   try {
     const out = execFileSync("powershell.exe", ["-NoProfile", "-Command",
-      `$p = Get-Process -Id ${Number(pid)}; "$($p.WorkingSet64) $($p.PrivateMemorySize64) $([math]::Round($p.CPU))"`], { encoding: "utf8", windowsHide: true });
+      `$p = Get-Process -Id ${Number(pid)}; "$($p.WorkingSet64) $($p.PrivateMemorySize64) $([math]::Round($p.CPU))"`],
+      { encoding: "utf8", windowsHide: true, timeout: LOOKUP_TIMEOUT_MS });
     const [workingSet, privateBytes, cpuSeconds] = out.trim().split(" ").map(Number);
     return { workingSet, privateBytes, cpuSeconds };
   } catch { return null; }
@@ -126,6 +144,9 @@ async function start(name) {
   const out = openSync(join(dir, "stdout.log"), "a");
   const child = spawn(JAVA, [`-Xmx${net.heap}`, "-jar", join(bundle, JAR), net.flag, "-c", join(dir, "ergo.conf")],
     { cwd: dir, detached: true, windowsHide: true, stdio: ["ignore", out, out] });
+  // The pid is recorded only for a process that exists; a failed launch leaves the previous pid file alone.
+  await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
+  child.on("error", error => console.error(`${name}: node process error (${error.message})`));
   writeFileSync(join(dir, "pid"), String(child.pid));
   child.unref();
   console.log(`${name}: started (pid ${child.pid}), API http://127.0.0.1:${net.api}`);
@@ -134,16 +155,20 @@ async function start(name) {
 async function stop(name) {
   const pid = pidOf(name);
   if (pid === undefined || !alive(pid, name)) return console.log(`${name}: not running`);
-  const { key } = prepare(name);
+  // The running node's own key; stop never rewrites the key or configuration it was started with.
+  const key = existsSync(keyFileOf(name)) ? readFileSync(keyFileOf(name), "utf8").trim() : undefined;
   // The node's own shutdown closes its databases cleanly; the process is killed only if it does not exit.
-  try { await api(name, "/node/shutdown", { method: "POST", headers: { api_key: key } }); } catch (error) { console.log(`${name}: shutdown request failed (${error.message})`); }
+  if (key === undefined) console.log(`${name}: no API key file, so no shutdown request`);
+  else try { await api(name, "/node/shutdown", { method: "POST", headers: { api_key: key } }); } catch (error) { console.log(`${name}: shutdown request failed (${error.message})`); }
   for (let i = 0; i < 60 && alive(pid, name); i++) await sleep(1000);
   if (alive(pid, name)) { process.kill(pid); console.log(`${name}: killed after 60 s`); } else console.log(`${name}: stopped`);
 }
 
 async function status(name, print = true) {
   const pid = pidOf(name), dir = join(base, name);
-  const row = { network: name, pid: pid ?? null, running: pid !== undefined && alive(pid, name), dataBytes: bytesUnder(join(dir, "data")) };
+  const row = { network: name, pid: pid ?? null, running: false, dataBytes: bytesUnder(join(dir, "data")) };
+  // An unanswered lookup is recorded as unknown rather than as a stopped node.
+  try { row.running = pid !== undefined && alive(pid, name); } catch (error) { row.running = null; row.lookup = String(error.message).slice(0, 160); }
   if (row.running) row.process = usage(pid);
   try {
     const info = await api(name, "/info");
@@ -155,14 +180,14 @@ async function status(name, print = true) {
 }
 
 // Sync evidence: one line per sample with both nodes' heights, peers, data bytes and process usage; stops when both
-// are gone.
+// are known to be gone.
 async function watch() {
   const minutes = Number(only ?? "10"), log = join(base, "status.jsonl");
   assert(minutes > 0, "watch [minutes]");
   for (;;) {
     const rows = []; for (const name of selected) rows.push(await status(name, false));
     writeFileSync(log, JSON.stringify({ at: new Date().toISOString(), nodes: rows }) + "\n", { flag: "a" });
-    if (rows.every(r => !r.running)) return;
+    if (rows.every(r => r.running === false)) return;
     await sleep(minutes * 60000);
   }
 }
