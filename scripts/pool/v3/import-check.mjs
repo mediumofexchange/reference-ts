@@ -358,7 +358,10 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       return low;
     };
     // b2 extends b1, which extends b0: without b1 the same positions are replayed once each.
-    assert.equal(await smallest(payload), await smallest(compose([a0, a1, b0, b2, c0, c1, d0])));
+    const total = await smallest(payload);
+    assert.equal(total, await smallest(compose([a0, a1, b0, b2, c0, c1, d0])));
+    // a1, b1 and b2 each add one new position; openings and c1 add none.
+    if (!silence) assert.equal(total, 3n);
     for (const importLimits of [null, { maxCheckpoints: 128n }, { maxCheckpoints: -1n, maxEvents: 1n }, { maxCheckpoints: 1, maxEvents: 1n }]) {
       assert.equal((await replayLocalPackage(payload, { ...verifier, importLimits }, codec)).status, "unresolved-evidence");
     }
