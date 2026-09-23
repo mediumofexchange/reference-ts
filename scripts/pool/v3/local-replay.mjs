@@ -15,7 +15,7 @@ import { recoveryState, effectOf, checkRecovery, applyRecovery, tagOf } from "./
 import { receiptWalk } from "./receipt-state.mjs";
 import { countNonService } from "./non-service.mjs";
 import { classifyScopes } from "./scope-replay.mjs";
-import { checkpointScope, resolveTerms, servedTrail, trailEvidenceChain } from "./scope-evidence.mjs";
+import { checkpointScope, resolveTerms, rootTermsOf, servedTrail, trailEvidenceChain } from "./scope-evidence.mjs";
 import { boundFaultInputs, faultObserver } from "./fault-evidence.mjs";
 
 const same = (a, b) => compareBytes(a, b) === 0;
@@ -533,10 +533,8 @@ async function classifyImports(context, directories, record, evidence) {
       const scope = checkpointScope(trails, selection.backing, entry.digest, snapshot, codec), { header } = scope;
       if (header.entries.length !== 1) throw new ScopeRequired();
       await context.faults.inspect(held, directories.get(hex(c.root)), scope);
-      const scoped = header.entries[0], signed = scope.terms[0];
-      if (!same(codec.rootTermsName(signed.terms), selection.backing) || !codec.verifyRootTermsSignature(signed.terms, signed.signature)) {
-        throw new EvidenceRefusal("unresolved-evidence");
-      }
+      // checkpointScope resolved this one-entry scope's terms for the selected backing.
+      const scoped = header.entries[0];
       const item = { operator: hex(c.operator), sequence: c.sequence.toString(), index: held.index.toString() };
       try {
         requireReplay(same(header.domain, selection.domain) && same(header.venue, selection.venue) && same(header.operator, c.operator) &&
@@ -680,9 +678,9 @@ export async function replayLocalPackage(input, verifier, codec) {
     const suppliedTrails = [trail, ...decodedTrails(byteList(supplied.trails, "trails"), codec)];
     const signedTerms = header.entries.map((entry, i) => resolveTerms(codec, suppliedTrails, sha256(trail.header), entry, i));
     if (signedTerms.some(field => field === undefined)) throw new EvidenceRefusal("unresolved-evidence");
-    const signed = signedTerms[selectedEntry], terms = codec.decodeRootTerms(signed.terms);
-    requireReplay(codec.verifyRootTermsSignature(signed.terms, signed.signature), "TERMS_SIGNATURE");
-    requireReplay(same(codec.rootTermsName(signed.terms), selection.backing), "TERMS_NAME");
+    // Resolution verified the selected field's signature and its name as the
+    // selected backing (readLocalEvidence binds the backing to the header).
+    const terms = rootTermsOf(codec, signedTerms[selectedEntry]);
     requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
     // Empty-opening selections retain the original-operator scope. Imports
     // instead require the term-by-term record walk below.
