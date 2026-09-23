@@ -526,4 +526,35 @@ describe("pool-v2 §8: what leaves the segment aliases nothing, and what it trus
     trusting.register(ctx.a, signBacking(SECRETS.backer, ctx.a));
     await refused(trusting.admit(issue), "PROOF");
   });
+
+  it("reads a statement's fields once: a getter or Proxy cannot have one set of public inputs proven and another applied", async () => {
+    const ctx = setup();
+    const alice = walletNote(ctx.a.name, 10n, 40n);
+    // The honest issuance of 10 is proven and signed; the same issuance of
+    // 2^63 is neither, and would pass every other check.
+    const honest = ctx.oracle.accept(issueStatement(ctx.auth, ctx.a.name, 10n, alice.cm, SECRETS.backer));
+    const unproven = honest.publicInputs.map((v, i) => (i === 7 ? 1n << 63n : v));
+    const shifting = (first: readonly bigint[], later: readonly bigint[]) => {
+      let reads = 0;
+      const statement = { ...honest, get publicInputs() { return reads++ === 0 ? first : later; } } as Statement;
+      return { statement, reads: () => reads };
+    };
+    const firstUnproven = shifting(unproven, honest.publicInputs);
+    await refused(ctx.segment.admit(firstUnproven.statement), "PROOF");
+    expect(firstUnproven.reads()).toBe(1);
+    let elementReads = 0;
+    const elements = new Proxy([...honest.publicInputs], {
+      get: (target, key, receiver) => (key === "7" && elementReads++ === 0 ? 1n << 63n : Reflect.get(target, key, receiver)),
+    });
+    await refused(ctx.segment.admit({ ...honest, publicInputs: elements }), "PROOF");
+    expect(elementReads).toBe(1);
+    expect(ctx.segment.length).toBe(0n);
+    expect(ctx.segment.issued(ctx.a.name)).toBe(0n);
+    const firstHonest = shifting(honest.publicInputs, unproven);
+    const accepted = await ctx.segment.admit(firstHonest.statement);
+    expect(firstHonest.reads()).toBe(1);
+    expect(accepted.statementHash).toEqual(statementHash(DOMAIN, ISSUE, honest.publicInputs));
+    expect(ctx.segment.issued(ctx.a.name)).toBe(10n);
+    expect(ctx.segment.trail().statements[0]?.publicInputs).toEqual(honest.publicInputs);
+  });
 });

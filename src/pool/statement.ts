@@ -347,14 +347,80 @@ export function isWellFormedStatement(statement: unknown): statement is Statemen
   return signature === undefined;
 }
 
-export function copyStatement(statement: Statement): Statement {
-  if (!isWellFormedStatement(statement)) throw new EncodingError("malformed statement");
+/**
+ * A statement's four fields as read once from a caller's object, not yet
+ * validated. Every check, hash, proof and transition reads this record, never
+ * the caller's object again: a getter or Proxy answering differently on a
+ * later read could otherwise have one answer checked or proven and another
+ * applied.
+ */
+export interface StatementFields {
+  readonly kind: unknown;
+  readonly publicInputs: unknown;
+  readonly proof: unknown;
+  readonly obligorSignature: unknown;
+}
+
+const MAX_PUBLIC_INPUTS = Math.max(...Object.values(PUBLIC_INPUT_COUNT));
+
+/**
+ * One read of each field and of each list element, into owned plain values;
+ * undefined for a non-object. A value of the wrong shape becomes null, which
+ * every validator refuses, so none of them reads a caller object again. An
+ * absent signature stays undefined.
+ */
+export function readStatementFields(statement: unknown): StatementFields | undefined {
+  if (typeof statement !== "object" || statement === null) return undefined;
+  const s = statement as Record<string, unknown>;
+  const kind = s["kind"], inputs = s["publicInputs"], proof = s["proof"], signature = s["obligorSignature"];
   return Object.freeze({
-    kind: statement.kind,
-    publicInputs: Object.freeze([...statement.publicInputs]),
-    proof: copyBytes(statement.proof),
-    ...(statement.obligorSignature === undefined ? {} : { obligorSignature: copyBytes(statement.obligorSignature) }),
+    kind: isStatementKind(kind) ? kind : null,
+    publicInputs: ownList(inputs),
+    proof: ownBytes(proof),
+    obligorSignature: signature === undefined ? undefined : ownBytes(signature),
   });
+}
+
+function ownList(values: unknown): readonly unknown[] | null {
+  if (!Array.isArray(values)) return null;
+  const length: unknown = values.length;
+  if (typeof length !== "number" || length > MAX_PUBLIC_INPUTS) return null;
+  const own: unknown[] = [];
+  for (let i = 0; i < length; i++) own.push(values[i]);
+  return Object.freeze(own);
+}
+
+/**
+ * A plain copy of a genuine Uint8Array's bytes. The constructor reads the
+ * view's own buffer and length, not a subclass's getters or species; a Proxy
+ * or a non-view carrying the prototype is refused.
+ */
+function ownBytes(value: unknown): Uint8Array | null {
+  if (!(value instanceof Uint8Array) || !ArrayBuffer.isView(value)) return null;
+  try {
+    return new Uint8Array(value);
+  } catch {
+    return null;
+  }
+}
+
+/** The owned statement, or undefined if the fields read are not well formed. */
+export function statementFromFields(fields: StatementFields): Statement | undefined {
+  if (!isWellFormedStatement(fields)) return undefined;
+  return Object.freeze({
+    kind: fields.kind,
+    publicInputs: fields.publicInputs,
+    proof: fields.proof,
+    ...(fields.obligorSignature === undefined ? {} : { obligorSignature: fields.obligorSignature }),
+  });
+}
+
+/** An owned, frozen copy read once from `statement`; EncodingError if it is not well formed. */
+export function copyStatement(statement: Statement): Statement {
+  const fields = readStatementFields(statement);
+  const own = fields === undefined ? undefined : statementFromFields(fields);
+  if (own === undefined) throw new EncodingError("malformed statement");
+  return own;
 }
 
 /**
@@ -385,11 +451,11 @@ export function statementHash(domain: Uint8Array, kind: StatementKind, publicInp
  * so a trail served for one construction cannot be read as another's.
  */
 export function encodeStatement(domain: Uint8Array, statement: Statement): Uint8Array {
-  if (!isWellFormedStatement(statement)) throw new EncodingError("malformed statement");
+  const own = copyStatement(statement);
   const w = new ByteWriter();
-  w.context(statementBytes(domain, statement.kind, statement.publicInputs));
-  w.lengthPrefixed(statement.proof);
-  w.lengthPrefixed(statement.obligorSignature ?? new Uint8Array(0));
+  w.context(statementBytes(domain, own.kind, own.publicInputs));
+  w.lengthPrefixed(own.proof);
+  w.lengthPrefixed(own.obligorSignature ?? new Uint8Array(0));
   return w.finish();
 }
 
