@@ -9,18 +9,28 @@ export function checkErgoOwnership(codec) {
   const fixture = () => fixtureEvidence({ witnessedIndex: 2n, lag: 2n, records: [] });
   const request = { venue: codec.ergoProfileIdentity(profile), kind: 2, subject: new Uint8Array(32), fromIndex: 0n, toIndex: 2n };
   const refusal = error => error?.status === "unresolved-evidence";
-  const oversized = fixture(), large = new Uint8Array(2000);
-  Object.defineProperty(large, "length", { value: 0 });
-  oversized.blocks[0].transactions[0] = large;
-  assert.throws(() => ergoReplayVenue(profile, oversized, codec, bounds, { ...RAW_EVIDENCE_LIMITS, maxBytes: 1000n }), codec.RangeLimitError);
-  const hidden = fixture(), shared = new Uint8Array(new SharedArrayBuffer(100));
-  Object.defineProperty(shared, "buffer", { value: new ArrayBuffer(0) });
-  hidden.blocks[0].transactions[0] = shared;
-  assert.throws(() => ergoReplayVenue(profile, hidden, codec, bounds), refusal);
   // Exactly what the adapter charges: the anchor and scripts, 96 bytes per header, 32 per block id and every transaction.
   const charged = evidence => 32 + Object.values(profile.scripts).reduce((n, s) => n + s.length, 0) + 96 * evidence.headers.length
     + evidence.blocks.reduce((n, block) => n + 32 + block.transactions.reduce((m, tx) => m + tx.length, 0), 0);
   const total = BigInt(charged(fixture()));
+  // The budget leaves 1000 bytes beyond the fixture, so only the 2000-byte
+  // view's intrinsic length can exceed it; its shadowed length of 0 would fit.
+  const oversized = fixture(), large = new Uint8Array(2000), replaced = oversized.blocks[0].transactions[0].length;
+  assert.ok(replaced < 1000, "the replaced transaction leaves the fake length inside the budget");
+  Object.defineProperty(large, "length", { value: 0 });
+  oversized.blocks[0].transactions[0] = large;
+  assert.throws(() => ergoReplayVenue(profile, oversized, codec, bounds, { ...RAW_EVIDENCE_LIMITS, maxBytes: total + 1000n }), codec.RangeLimitError);
+  const honest = fixture(); honest.blocks[0].transactions[0] = new Uint8Array(1000 + replaced);
+  assert.notEqual(ergoReplayVenue(profile, honest, codec, bounds, { ...RAW_EVIDENCE_LIMITS, maxBytes: total + 1000n }), undefined);
+  const hidden = fixture(), shared = new Uint8Array(new SharedArrayBuffer(100));
+  Object.defineProperty(shared, "buffer", { value: new ArrayBuffer(0) });
+  hidden.blocks[0].transactions[0] = shared;
+  assert.throws(() => ergoReplayVenue(profile, hidden, codec, bounds), refusal);
+  // A header that is not an object is refused evidence, not a TypeError.
+  for (const header of [null, undefined, 7, "header"]) {
+    const evidence = fixture(); evidence.headers[1] = header;
+    assert.throws(() => ergoReplayVenue(profile, evidence, codec, bounds), refusal);
+  }
   for (const operation of ["grow", "detach"]) {
     // The index-0 section (height 2) is the resizable view; a getter on the next block mutates it after ownership.
     const evidence = fixture(), bytes = evidence.blocks[1].transactions[0];

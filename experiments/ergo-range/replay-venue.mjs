@@ -47,7 +47,9 @@ export function ergoReplayVenue(profile, evidence, codec, rangeLimits, rawLimits
   const ownedProfile = { anchor: own(anchor), depth, scripts: Object.fromEntries([1, 2, 3, 4].map(kind => [kind, own(scripts[kind])])) };
   const ownedHeaders = [];
   for (let i = 0; i < headerCount; i++) {
-    const { id, parentId, height, version, transactionsRoot } = headers[i];
+    const header = headers[i];
+    if (header === null || typeof header !== "object") throw new EvidenceRefusal("unresolved-evidence");
+    const { id, parentId, height, version, transactionsRoot } = header;
     ownedHeaders.push({ id: own(id), parentId: own(parentId), height, version, transactionsRoot: own(transactionsRoot) });
   }
   // Charge each intrinsic view before copying, and finish owning all input
