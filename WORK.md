@@ -39,8 +39,10 @@ specification or runtime change, no mainnet submission or real funds.
   (`experiments/ergo-range/vendor/`, `sigma-release-build.sh`, decision
   2026-09-23); traps stay fatal, stack flag dropped. Rust 1.87 + wasm-bindgen
   0.2.128 installed with approval (`~/.cargo`, `scratch/rust-toolchain`).
-  Gates: corpus passed; P4 week and `--ergo` replay running; then retain
-  reports (chain-cost, replay, profile, own-node) and one adversarial review. Equivalence over the own node's 51k blocks
+  Gates all passed: corpus, P4 week against the alpha (0 differing of
+  28,196; `docs/ergo-decoder-pin-verification.json`), `--ergo` replay (223
+  groups). Opus review: no blockers; three material findings fixed and read
+  back. Merged to main with this handoff. Equivalence over the own node's 51k blocks
   (`scratch/equivalence-driver.mjs`, then `equivalence-summary.mjs`) is
   paused so the node stays idle during the latency runs.
 - Testnet wallet: key in ignored `scratch/ergo-testnet/wallet.json` (about
@@ -61,9 +63,10 @@ specification or runtime change, no mainnet submission or real funds.
    probes, profile and guide.
 2. Resume the equivalence driver, summarize into
    `docs/ergo-decoder-equivalence-verification.json`.
-3. Read back the stack fixes with the reviewer; one review of A10 and the
-   equivalence summary; merge and push with CI green.
-4. Release-build pin: finish gates, retain reports, adversarial review.
+3. One review of A10 and the equivalence summary; merge and push with CI
+   green. The equivalence driver needs no stack flag any more.
+4. Later: a cross-host (Linux) reproducible build, or build in CI, if the
+   decoder pin is to be checkable off Windows.
 
 ## Retained boundaries and local state
 
