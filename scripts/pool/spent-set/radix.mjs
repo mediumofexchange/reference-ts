@@ -38,6 +38,13 @@ export class RadixSpentSet {
   get hashes() { return this.#hashes; }
   root() { return new Uint8Array(this.#tree?.hash ?? EMPTY); }
 
+  /** Insertion replaces paths functionally, so a copy may share every node. */
+  fork() {
+    const copy = new RadixSpentSet();
+    copy.#tree = this.#tree; copy.#size = this.#size; copy.#hashes = this.#hashes;
+    return copy;
+  }
+
   has(input) {
     const { key } = keyOf(input);
     let node = this.#tree;

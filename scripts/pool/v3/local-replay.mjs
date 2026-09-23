@@ -15,7 +15,7 @@ import { recoveryState, effectOf, checkRecovery, applyRecovery, tagOf } from "./
 import { receiptWalk } from "./receipt-state.mjs";
 import { countNonService } from "./non-service.mjs";
 import { classifyScopes } from "./scope-replay.mjs";
-import { checkpointScope } from "./scope-evidence.mjs";
+import { checkpointScope, trailAuthenticates, trailEvidenceChain } from "./scope-evidence.mjs";
 import { boundFaultInputs, faultObserver } from "./fault-evidence.mjs";
 
 const same = (a, b) => compareBytes(a, b) === 0;
@@ -153,19 +153,26 @@ function decodedTrails(trails, codec) {
 async function replayTrail({ selection, terms, scopedTerms, header, verifier, codec, contextReceipt }, snapshot, trail,
   { index, revokedAt, revocations, lastValid, imported, block = [], openingIndex, isOpening = false, chargeEvents = () => {} }) {
   const scope = new ScopeTree(header.entries).root();
-  const tree = new NoteTree(), spent = new RadixSpentSet(), anchors = new Set(imported?.anchors ?? [EMPTY_NOTE_ROOT]);
-  const nullifiers = new Set(imported?.nullifiers), outputsSeen = new Set(imported?.outputsSeen);
-  for (const nf of nullifiers) spent.insert(fieldToBytes(nf));
-  const statements = new Set(), outputPositions = new Map(imported?.outputPositions), scanOutputs = [...(imported?.scanOutputs ?? [])];
-  const recovery = recoveryState(imported), eventIndices = [];
-  const events = new Map(imported?.events), totals = new Map(
-    [...(imported?.totals ?? [])].map(([key, value]) => [key, { ...value }]));
+  const resumeKey = resumeKeyOf({ selection, terms, scopedTerms, verifier, contextReceipt }, snapshot, { imported, block, openingIndex });
+  const base = isOpening ? undefined : resumable(codec, snapshot.segment, trail, lastValid, resumeKey), from = base ?? imported;
+  const tree = base?.tree.clone() ?? new NoteTree(), spent = base?.spent.fork() ?? new RadixSpentSet();
+  const anchors = new Set(from?.anchors ?? [EMPTY_NOTE_ROOT]);
+  const nullifiers = new Set(from?.nullifiers), outputsSeen = new Set(from?.outputsSeen);
+  if (base === undefined) for (const nf of nullifiers) spent.insert(fieldToBytes(nf));
+  const statements = new Set(base?.statements), outputPositions = new Map(from?.outputPositions), scanOutputs = [...(from?.scanOutputs ?? [])];
+  // The resumed prefix's local outputs belong to this replay's own tree copy.
+  if (base !== undefined) {
+    for (const [cm, location] of outputPositions) if (location.tree === base.tree) outputPositions.set(cm, { leaf: location.leaf, tree });
+  }
+  const recovery = recoveryState(from), eventIndices = [...(base?.eventIndices ?? [])];
+  const events = new Map(from?.events), totals = new Map(
+    [...(from?.totals ?? [])].map(([key, value]) => [key, { ...value }]));
   // One immutable imported frontier per local segment replay, shared by its
   // events. Local positions order themselves without quadratic ancestor sets.
-  const ancestry = new Map();
-  for (const event of events.values()) {
+  const ancestry = base?.ancestry ?? new Map();
+  for (const event of new Map(imported?.events).values()) {
     chargeEvents(1n);
-    if (event.segment !== undefined && (ancestry.get(event.segment) ?? 0n) < event.position) ancestry.set(event.segment, event.position);
+    if (base === undefined && event.segment !== undefined && (ancestry.get(event.segment) ?? 0n) < event.position) ancestry.set(event.segment, event.position);
   }
   const totalFor = backing => {
     const key = hex(backing);
@@ -173,9 +180,10 @@ async function replayTrail({ selection, terms, scopedTerms, header, verifier, co
     return totals.get(key);
   };
   if (!isOpening) requireReplay(trail.records.length >= block.length, "ADOPTION");
-  let position = 0n, receiptEvent;
-  let history = codec.genesisHistoryHash(snapshot.segment), evidence = codec.genesisEvidenceHash(snapshot.segment);
-  for (const bytes of trail.records) {
+  let position = base?.position ?? 0n, receiptEvent = base?.receiptEvent;
+  let history = base?.history ?? codec.genesisHistoryHash(snapshot.segment);
+  let evidence = base === undefined ? codec.genesisEvidenceHash(snapshot.segment) : lastValid.evidenceHash;
+  for (const bytes of base === undefined ? trail.records : trail.records.slice(Number(base.position))) {
     const record = codec.decodeRecord(bytes), p = record.publicInputs, kind = record.kind;
     if (![1, 2, 3, 4, 5, 6].includes(kind)) throw new EvidenceRefusal("unsupported-scope");
     const demandId = kind === 5 || kind === 6 ? hex(identifierOf(p[kind === 5 ? 5 : 15], p[kind === 5 ? 6 : 16])) : undefined;
@@ -251,7 +259,34 @@ async function replayTrail({ selection, terms, scopedTerms, header, verifier, co
   for (const entry of header.entries) adoptionIndices.set(hex(entry.backing), isOpening ?
     imported?.adoptionIndices?.get(hex(entry.backing)) ?? 0n : openingIndex ?? 0n);
   return { tree, spent, issued, burned, position, history, scanOutputs, outputPositions, anchors, nullifiers, outputsSeen, adoptionIndices,
-    ...recovery, events, totals, receiptEvent, eventIndices, adoptionIndex: isOpening ? imported?.adoptionIndex ?? 0n : openingIndex ?? 0n };
+    ...recovery, events, totals, receiptEvent, eventIndices, adoptionIndex: isOpening ? imported?.adoptionIndex ?? 0n : openingIndex ?? 0n,
+    statements, ancestry, resumeKey };
+}
+
+/** Everything a replayed prefix's state depends on besides its records and
+ * their indices. Revocation and the checkpoint's own index bear only on
+ * positions after the last valid checkpoint, so they are not part of it. */
+function resumeKeyOf({ selection, terms, scopedTerms, verifier, contextReceipt }, snapshot, { imported, block, openingIndex }) {
+  const obligors = scopedTerms === undefined ? `selected:${hex(terms.obligor)}` :
+    [...scopedTerms].map(([name, t]) => `${name}:${t === undefined ? "" : hex(t.obligor)}`).sort().join(",");
+  return { text: [hex(selection.domain), hex(selection.backing), hex(snapshot.segment), obligors, String(openingIndex)].join("|"),
+    verifier, contextReceipt, imported, block };
+}
+const sameResumeKey = (a, b) => a.text === b.text && a.verifier === b.verifier && a.contextReceipt === b.contextReceipt &&
+  a.imported === b.imported && (a.block === b.block || (a.block.length === 0 && b.block.length === 0));
+
+/** C2.10.12, pool-v3 §7.1: a trail whose first n records reproduce the last
+ * valid checkpoint's evidence hash carries that checkpoint's exact statement,
+ * proof and authorization bytes. Under the same replay context their replayed
+ * state is that checkpoint's, so the replay resumes from a copy of it instead
+ * of verifying the prefix again. Anything else replays in full, keeping the
+ * first failing check and its order. */
+function resumable(codec, segment, trail, lastValid, key) {
+  const base = lastValid?.state;
+  if (base?.resumeKey === undefined || !sameResumeKey(base.resumeKey, key) || base.position !== lastValid.position ||
+      BigInt(trail.records.length) < base.position || !same(sha256(trail.header), segment)) return undefined;
+  const chain = trailEvidenceChain(codec, trail);
+  return chain !== null && same(chain[Number(base.position)], lastValid.evidenceHash) && same(base.history, lastValid.historyHash) ? base : undefined;
 }
 
 /** C2.10.11 over the original operator's carrying checkpoints in held order,
@@ -318,7 +353,7 @@ async function classifyCarrying(context, ranges, evidence) {
     if (c.position !== "selected") {
       // Its trail is the one that authenticates its committed evidence (§10.1); two distinct ones cannot.
       const expected = { backing: selection.backing, segment: s.segment, digest: c.digest };
-      const matching = trails.filter(x => codec.verifyTrailEvidence(expected, s, x, LIMITS));
+      const matching = trails.filter(x => trailAuthenticates(codec, expected, s, x));
       // This original-only path proves a valid empty opening with no earlier
       // carrying checkpoint. No pre-opening snapshot can give a publication
       // force (C2b.3.2), so its adopted block is empty even with silence.
@@ -341,7 +376,7 @@ async function classifyCarrying(context, ranges, evidence) {
       requireReplay(c.sequence !== header.sequence || tr.records.length === 0, "OPENING");
       const replayed = await replayTrail(context, s, tr, { index: c.index, revokedAt: ranges.revokedAt, lastValid });
       verdict = { class: "valid" }; lastValid = { position: replayed.position, historyHash: s.historyHash, evidenceHash: s.evidenceHash,
-        eventIndices: replayed.eventIndices };
+        eventIndices: replayed.eventIndices, state: replayed };
       latestValid = c.index;
       if (c.sequence === header.sequence) openingValid = true;
       if (c.position === "selected") state = replayed;
@@ -554,7 +589,7 @@ async function classifyImports(context, directories, record, evidence) {
         const state = await replayTrail({ ...context, header }, snapshot, trail,
           { index: held.index, revokedAt, lastValid: segment.lastValid, imported: segment.imported,
             block: c.sequence === header.sequence ? [] : segment.block, openingIndex: segment.openingIndex, isOpening: c.sequence === header.sequence });
-        segment.lastValid = { position: state.position, historyHash: snapshot.historyHash, evidenceHash: snapshot.evidenceHash, eventIndices: state.eventIndices };
+        segment.lastValid = { position: state.position, historyHash: snapshot.historyHash, evidenceHash: snapshot.evidenceHash, eventIndices: state.eventIndices, state };
         if (c.sequence === header.sequence) segment.openingValid = true;
         canonical = { commitment: c, index: held.index, segment: snapshot.segment, scope: new ScopeTree(header.entries).root(), state };
         if (held.index < t) countSnapshot = canonical;

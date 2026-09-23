@@ -199,7 +199,7 @@ export async function classifyScopes(context, directories, record, evidence, hel
           block = opened.block; openingIndex = opened.index;
           const previous = parents[0];
           lastValid = { position: previous.state.position, historyHash: previous.snapshot.historyHash,
-            evidenceHash: previous.snapshot.evidenceHash, eventIndices: previous.state.eventIndices };
+            evidenceHash: previous.snapshot.evidenceHash, eventIndices: previous.state.eventIndices, state: previous.state };
         }
         // One carried snapshot authenticates the full scope for lapse even
         // when this directory omits a sibling. Complete carriage and matching

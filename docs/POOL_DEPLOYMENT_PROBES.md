@@ -569,6 +569,62 @@ hashes even for hostile keys, while uniform-key path lengths are approximately
 logarithmic. The selected representation stores N leaves and N−1 branches
 for N > 0. This closes the A22 shape decision, not v3 runtime integration.
 
+## Replay and retention cost
+
+Recovery map A13 asks what the redemption reader's full replay (C2b.3.3) and
+the operator's exact-byte retention cost. `node scripts/pool/v3/replay-cost.mjs
+--out docs/pool-replay-cost-verification.json` replays synthetic single-backing
+segments (one issue, then spends with fresh nullifiers and four outputs) through
+the conditional local replay, with a checkpoint every K events and the last one
+selected. A counting stub stands in for proof verification; the
+[conformance report](pool-v3-conformance-verification.json) supplies real
+single-thread verification times, 60–115 ms per proof. The
+[recorded report](pool-replay-cost-verification.json) binds LF-normalized source
+hashes, environment and every case.
+
+The first run found the local replay classifying each carrying checkpoint by
+replaying its whole trail from position 1: 60 events with a checkpoint every
+10 verified 210 proofs (17.3 s with the stub), and 1,024 events every 64 would
+verify 8,704. Pool-v3 §7.1 already makes this unnecessary. A trail that
+reproduces the last valid checkpoint's evidence hash at its length carries that
+checkpoint's exact statement, proof and authorization bytes. The replay now
+resumes from a copy of that checkpoint's replayed state when the replay context
+is the same: domain, backing, segment, issuers, imports, adopted block, opening
+index, verifier and receipt context. Otherwise it replays in full, so verdicts
+and the first failing check are unchanged. Each trail's evidence chain is
+computed once per read, and the full §10.1 check runs only on trails whose
+terminal hash matches. Every case now verifies exactly one proof per event.
+
+| Events, checkpoint every | Replay per event (stub verifier) | Package trail bytes | Unique record bytes |
+|---|---:|---:|---:|
+| 60 / 60, 14,656-byte proofs | 64.7 ms | 934,727 | 933,389 |
+| 60 / 10, 14,656-byte proofs | 92.5 ms | 3,270,717 | 933,389 |
+| 1,024 / 1,024, 32-byte stand-ins | 73.1 ms | 965,375 | 960,181 |
+| 1,024 / 64, 32-byte stand-ins | 88.9 ms | 8,203,205 | 960,181 |
+
+Host replay is dominated by the note tree. A four-output append costs 60 ms,
+about 34 Poseidon2 hashes at 1.9 ms each in the JavaScript implementation.
+Barretenberg's wasm computes the same permutation in 0.15 ms against 0.92 ms,
+an untaken lever. The spent set costs 0.4 ms per two nullifiers, and a state
+copy 0.9 ms per 1,000 leaves. By extrapolation, one core replays 10⁵ spends in
+about 1.8 h of verification plus 1.7 h of note-tree hashing. The proofs are
+independent, so verification parallelizes. Records are 15,231 bytes for an
+issue and 15,562 for a spend at the observed 14,656-byte proof. The operator
+therefore retains about 1.56 GB per 10⁵ statements.
+
+Evidence packages carry each carrying checkpoint's full trail (§10, §12). Their
+bytes grow as the sum of prefix lengths, about N²/2K records, which is 8.5×
+unique records at 1,024 events every 64. Decoding those repeated trails is the
+residual multi-checkpoint overhead above. A reader could instead authenticate a
+passed checkpoint's trail as the §10.1 cut of a longer supplied trail. That
+changes which evidence resolves a dependency (§12.1), so it is a specification
+candidate, not taken here. The local budgets remain far below such closures:
+trails of 1 MiB and 1,024 events hold about 64 real-size events, and the
+import walk still charges each checkpoint's full trail length. Limits: one
+synthetic shape with empty-root anchors and no imports, scopes, demands or
+publications; stub verification; one desktop, one run per case; no device
+budget.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` contains nine cases using the existing

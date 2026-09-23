@@ -174,6 +174,15 @@ export class NoteTree {
     return commitments.map((_, i) => BigInt(first + i));
   }
 
+  /** An independent copy of the same leaves and nodes, with no hashing; later appends to either leave the other unchanged. */
+  clone(): NoteTree {
+    const copy = new NoteTree();
+    for (const leaf of this.leafList) copy.leafList.push(leaf);
+    for (const leaf of this.present) copy.present.add(leaf);
+    for (const [key, node] of this.nodes) copy.nodes.set(key, node);
+    return copy;
+  }
+
   /** The path for a used leaf, against the current root. */
   path(position: bigint): NotePath {
     if (typeof position !== "bigint" || position < 0n || position >= this.size) {

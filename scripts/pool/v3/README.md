@@ -39,7 +39,13 @@ output commitments, accepted roots and totals, then starts an empty local
 output tree. Reappointment and same-operator restart use the same rule.
 Imported wallet paths retain their source trees. Whole-read budgets cap this
 path at 128 held checkpoints and 8192 replayed events, including failed
-replays. Silence-bearing imports read the independently answered publication
+replays; the charge still counts each checkpoint's full trail. A checkpoint
+whose trail reproduces the last valid checkpoint's evidence hash at its length
+resumes from a copy of that replayed state under the same replay context,
+verifying only its new positions (C2.10.12, pool-v3 §7.1). Any other trail
+replays in full with unchanged checks. `node scripts/pool/v3/replay-cost.mjs`
+measures this path's time and bytes ([evidence](../../../docs/POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost)).
+Silence-bearing imports read the independently answered publication
 range, classify demand/withdrawal/release force against each original snapshot,
 and preserve retirement after another segment resets the clock. A returning
 segment adopts the complete block through its opening index in venue order,
