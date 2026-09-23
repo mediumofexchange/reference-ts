@@ -9,6 +9,7 @@ import { Noir } from '@noir-lang/noir_js';
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from '@aztec/bb.js';
 import { fixtures, field, U64_MAX } from '../fixtures.mjs';
 import { deliveryHash, requireDeliveryVector } from '../delivery/crypto.mjs';
+import { V3_SPECIFICATION } from './provenance.mjs';
 
 const here = import.meta.dirname, root = resolve(here, '../../..');
 mkdirSync(join(root, 'scratch'), { recursive: true });
@@ -329,7 +330,7 @@ try {
     assert.throws(()=>requireDeliveryVector(domain,bad,digest));
     checks.push(kind+': exact synthetic capsule vector hash, missing/tampered vector rejected');
   }
-  const report={candidate:'combined six successor relations', referenceBase:'5ba6099', companionSpec:'d57ddb05237d2a4cbbc18536e6758a0aa63b1bf8',
+  const report={candidate:'combined six successor relations', referenceBase:execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8',windowsHide:true,timeout:30_000}).trim(), companionSpec:V3_SPECIFICATION,
     environment:{node:process.version,platform:process.platform,arch:process.arch,toolchain:manifest.toolchain,verifierTarget:options.verifierTarget,threads:1},
     counts,identities,sharedSources:Object.fromEntries(['notes.nr','poseidon2.nr'].map(n=>[n,sha(readFileSync(n === 'poseidon2.nr' ? join(root,'src/pool/circuits/vendor/poseidon2.nr') : join(here,'circuits',n)))])),
     publicInputs:Object.fromEntries(kinds.map(k=>[k,publicInputsOf(k,bases[k])])), checks,metrics,
