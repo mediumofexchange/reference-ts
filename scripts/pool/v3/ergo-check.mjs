@@ -107,10 +107,13 @@ export async function checkErgoReplay({ groups, primary, fixture, adapter, codec
     return outcome;
   };
   await test("the Ergo replay names its provenance and closes no finality, completeness or spendability flag", async () => {
-    assert.equal(result.status, "selected-local-replay"); assert.equal(result.rangeEvidence, ERGO_EVIDENCE_KIND);
-    assert.equal(result.audit.range.lag, "2"); assert.equal(result.audit.range.judgingIndex, t.toString());
-    for (const flag of ["fullV3Replay", "completenessClaim", "noMatchesMeansZeroBalance", "spendable"]) assert.equal(result[flag], false);
-    assert.equal(result.unresolvedCoverage, true);
+    // The adapter's own answer, not the harness's conversion of the fixture result.
+    const actual = await run(payload, headers);
+    assert.equal(actual.status, "selected-local-replay"); assert.equal(actual.rangeEvidence, ERGO_EVIDENCE_KIND);
+    assert.equal(actual.audit.range.lag, "2"); assert.equal(actual.audit.range.judgingIndex, t.toString());
+    for (const flag of ["fullV3Replay", "completenessClaim", "noMatchesMeansZeroBalance", "spendable"]) assert.equal(actual[flag], false);
+    assert.equal(actual.unresolvedCoverage, true);
+    assert.deepEqual(actual, result);
   });
   const missing = structuredClone(payload); missing.venue.blocks.splice(3, 1);
   const tampered = structuredClone(payload); tampered.venue.blocks[3].transactions[0][1] ^= 1;
