@@ -1,11 +1,15 @@
 // Finite offline experiment only. Never accepts network bytes or file arguments.
 // Fleet constructs bytes only from hash-pinned fixtures. Output fields come
 // solely from sigma-rust's binary parser, after an exact canonical round trip.
+// Every case runs through this file's reference wrapper and through the
+// decodeTransaction boundary that the profile probe and local replay use.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
+import { blake2b } from "@noble/hashes/blake2b";
 import { serializeTransaction, SigmaByteWriter } from "@fleet-sdk/serializer";
 import { Transaction } from "ergo-lib-wasm-nodejs";
+import { decodeTransaction } from "./decoder.mjs";
 
 const base = new URL("./", import.meta.url);
 const sha256 = (b) => createHash("sha256").update(b).digest("hex");
@@ -19,6 +23,17 @@ const equal = (a, b, message) => { assert.deepEqual(a, b, message); checks++; };
 const rejects = (f, message) => {
   assert.throws(f, error => !(error instanceof RangeError || error instanceof WebAssembly.RuntimeError), message); checks++;
 };
+// decoder.mjs refuses with undefined; an overflow or trap would throw and fail the corpus.
+let boundaryRefusals = 0;
+const refuses = (bytes, message) => { equal(decodeTransaction(bytes), undefined, `decoder.mjs: ${message}`); boundaryRefusals++; };
+// The boundary's fields against the node's own JSON: the binary-derived id, the witness id over the
+// inputs' proof bytes (blake2b256, first byte dropped), and each output's tree and registers.
+const boundaryFields = decoded => ({ id: hex(decoded.id), witnessId: hex(decoded.witnessId),
+  outputs: decoded.outputs.map(o => ({ ergoTree: hex(o.ergoTree),
+    registers: Object.fromEntries(Object.entries(o.registers).map(([name, value]) => [name, hex(value)])) })) });
+const nodeFields = tx => ({ id: tx.id,
+  witnessId: hex(blake2b(Buffer.concat(tx.inputs.map(i => Buffer.from(i.spendingProof.proofBytes, "hex"))), { dkLen: 32 }).subarray(1)),
+  outputs: tx.outputs.map(o => ({ ergoTree: o.ergoTree, registers: o.additionalRegisters })) });
 const parseLossless = (raw) => JSON.parse(raw, (_key, value, context) => {
   if (typeof value !== "number") return value;
   assert.match(context.source, /^-?\d+$/);
@@ -69,10 +84,13 @@ let prefixes = 0, aliases = 0, trailingAccepted = 0, overlongAccepted = 0;
 let largestTransactionBytes = 0, sizedTrees = 0, ambiguousTrees = 0, versionRewrites = 0, unparsedBodies = 0;
 const treeVersionsRead = {};
 rejects(() => decode(new Uint8Array()), "empty input");
+refuses(new Uint8Array(), "empty input");
 rejects(() => decode(new Uint8Array(maxTransactionBytes + 1)), "oversized input before WASM");
 // Finite malformed count headers; no unbounded fuzzing in this experiment.
-for (const b of ["ff", "ffff03", "ffffffffffffffffff02", "00", "0100"])
+for (const b of ["ff", "ffff03", "ffffffffffffffffff02", "00", "0100"]) {
   rejects(() => decode(Buffer.from(b, "hex")), "malformed/truncated count or input");
+  refuses(Buffer.from(b, "hex"), "malformed/truncated count or input");
+}
 
 for (const fixture of manifest.fixtures) {
   const path = new URL(fixture.file, base);
@@ -91,12 +109,16 @@ for (const fixture of manifest.fixtures) {
     equal(decoded.inputs, tx.inputs, "input IDs, proof bytes and extensions");
     equal(decoded.dataInputs, tx.dataInputs, "data input order and identity");
     equal(decoded.outputs.map(fields), tx.outputs.map(fields), "every output field and ID");
+    const boundary = decodeTransaction(bytes);
+    assert.notEqual(boundary, undefined, "decoder.mjs decodes every fixture transaction");
+    equal(boundaryFields(boundary), nodeFields(tx), "decoder.mjs: id, witness id, trees and registers");
     outputs += decoded.outputs.length;
 
     // All proper prefixes, not just EOF at the last field. An accepted prefix
     // cannot silently become a shorter transaction under the strict wrapper.
     for (let end = 0; end < bytes.length; end++) {
       rejects(() => decode(bytes.subarray(0, end)), "proper prefix cannot yield outputs");
+      refuses(bytes.subarray(0, end), "proper prefix");
       prefixes++;
     }
     const trailing = Buffer.concat([bytes, Buffer.from([0])]);
@@ -106,6 +128,7 @@ for (const fixture of manifest.fixtures) {
       trailingAccepted++;
     } finally { permissive.free(); }
     rejects(() => decode(trailing), "strict wrapper rejects trailing byte");
+    refuses(trailing, "trailing byte");
 
     // Every fixture starts with a one-byte input count. Encode that same count
     // with an extra zero group, preserving all subsequent bytes.
@@ -117,6 +140,7 @@ for (const fixture of manifest.fixtures) {
       overlongAccepted++;
     } finally { nonminimal.free(); }
     rejects(() => decode(overlong), "strict wrapper rejects nonminimal count");
+    refuses(overlong, "nonminimal count");
 
     for (let i = 0; i < tx.outputs.length; i++) {
       const alias = structuredClone(tx);
@@ -136,6 +160,7 @@ for (const fixture of manifest.fixtures) {
     forged.id = "00".repeat(32);
     for (const o of forged.outputs) { o.boxId = "00".repeat(32); o.transactionId = forged.id; }
     equal(decode(signedBytes(forged)), decoded, "claimed IDs are ignored and recomputed from bytes");
+    equal(boundaryFields(decodeTransaction(signedBytes(forged))), boundaryFields(boundary), "decoder.mjs: claimed IDs are ignored");
 
     // A sized tree is exact bytes whatever its header version or body: for every output whose
     // tree carries the size flag, rewrite the version bits to each of 0..7, with the real body and
@@ -159,6 +184,7 @@ for (const fixture of manifest.fixtures) {
       const expectSlice = (mutated, label) => {
         const read = decode(mutated).outputs;
         equal(read[i].ergoTree, hex(mutated.subarray(at, end)), `${label}: the tree is the exact slice`);
+        equal(hex(decodeTransaction(mutated).outputs[i].ergoTree), hex(mutated.subarray(at, end)), `decoder.mjs ${label}: the tree is the exact slice`);
         equal(read.map((o, j) => j === i ? { ...committed(o), ergoTree: null } : committed(o)),
           decoded.outputs.map((o, j) => j === i ? { ...committed(o), ergoTree: null } : committed(o)),
           `${label}: every other committed field is unchanged`);
@@ -184,14 +210,15 @@ equal({ treeVersionsRead, sizedTrees, ambiguousTrees, versionRewrites, unparsedB
 console.log(JSON.stringify({ status: "offline-decoder-feasibility-only", node: process.version, checks,
   decoder: { package: "ergo-lib-wasm-nodejs", version: pinnedVersion,
     source: "https://github.com/ergoplatform/sigma-rust/tree/2f840d3872367d6181d66d4a168194dbefad77f1",
-    provenance: "npm gitHead metadata of a pre-release; package integrity pinned, build not independently reproduced",
+    provenance: "vendored release build of that commit (vendor/ergo-lib-wasm-nodejs), reproduced from source by sigma-release-build.sh on a Windows host; every installed file checked against the pinned vendor SHA256SUMS",
     wasmSha256 },
   inputManifestSha256: sha256(manifestBytes),
-  files: Object.fromEntries(["decoder-check.mjs", "decoder-cases.mjs", "package.json", "package-lock.json"]
+  files: Object.fromEntries(["decoder-check.mjs", "decoder-cases.mjs", "decoder.mjs", "package.json", "package-lock.json"]
     .map((file) => [file, sha256(readFileSync(new URL(file, base)))])),
   blocks, properPrefixesRejected: prefixes, fieldBoundaryAliasesRecovered: aliases,
   rawParserTrailingBytesAccepted: trailingAccepted, rawParserOverlongCountsAccepted: overlongAccepted,
   strictWrapperRejectedBothForEveryTransaction: true,
+  decoderMjsRefusals: boundaryRefusals, decoderMjsMatchedNodeFieldsForEveryTransaction: true,
   treeVersionsRead, sizedTrees, sizedTreesLeftAsAmbiguousSlices: ambiguousTrees,
   sizedTreeVersionRewritesReadAsExactSlices: versionRewrites,
   sizedTreeUnparseableBodiesReadAsExactSlices: unparsedBodies,
