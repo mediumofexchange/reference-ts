@@ -557,7 +557,7 @@ secrets; every reader keeps evidence rather than verdicts (C2.10.13).
 | Demand or request publication | 15,330 and 15,042 bytes under a 14,656-byte proof, four pieces each | exact framing; not signed |
 | Acceptance, withdrawal | one box each; a 450-byte withdrawal piece box is 564 bytes at 203,040 nanoERG | withdrawal accepted on the testnet at that value (P2) |
 | Replayed state per standing demand | about 184 bytes; 32 bytes per spent tag | fixed by the form |
-| Redemption reader | full replay of the snapshot's closure | fixed by C2b.3.3; cost unmeasured |
+| Redemption reader | full replay of the snapshot's closure: one proof verification (60–115 ms) and a 60 ms JavaScript note-tree append per spend, about 3.5 h per 10⁵ spends on one core; the operator retains about 15.6 KB per statement | measured (P3, [replay cost](POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost)); packages carrying every checkpoint's full trail grow quadratically |
 | Range read | the node's word today | see §6 |
 
 ## 8. Unresolved assumptions and choices
@@ -719,8 +719,16 @@ Each names the rule, the candidate, the alternative, and what closes it.
   closure; the operator retains exact bytes; the holder keeps leaves and
   the spent set. P3's first run: the reference spent set costs about 2.7 ms
   per insert, so a closure of 10⁵ nullifiers takes over four minutes to
-  rebuild before any proof is verified. Replay time and trail bytes remain
-  unmeasured. Closed by P3.
+  rebuild before any proof is verified. **Measured 2026-09-23**
+  ([replay cost](POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost)): the
+  local replay verified every checkpoint's whole prefix again and now resumes
+  from the last valid state under C2.10.12, one verification per event.
+  Replay costs about 65–90 ms per spend in host work plus its verification.
+  The operator keeps about 1.56 GB per 10⁵ statements. Open: packages carry
+  each checkpoint's full trail, about N²/2K records; the candidate is to read a
+  passed checkpoint's trail as the authenticated cut of a longer one (§12.1).
+  Also open are the budget a reader profile accepts and the note tree's
+  Poseidon2 cost (wasm is about 6× faster).
 - **A14 Device budgets.** No phone measurement of any circuit. Closed by P5
   against a named device and budget.
 - **A15 Runtime pins.** `POOL_CONSTRUCTION` is v2-only; `PoolStore` refuses
@@ -873,7 +881,10 @@ None changes `src/`, the pinned v2 identities or the specification.
   memory, trail bytes and non-membership proof bytes. Acceptance: A13
   measured; a first retention budget. **Started 2026-09-08**:
   `node scratch/pool-v3/nm-size.mjs` measured proof bytes and the spent-set
-  build cost in §7; replay of statements and trail bytes remain.
+  build cost in §7. **Replay measured 2026-09-23** by
+  `scripts/pool/v3/replay-cost.mjs` ([evidence](POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost)):
+  time, trail and package bytes up to 1,024 events. Real verification, imports
+  and demands are outside it, and no retention budget is selected.
 - **P4 Range reads, network.** Against a public Ergo node, compare the
   indexed read with a header-verified scan over one day and seven days of
   blocks: bytes, time, and the inclusion-latency distribution of recent
