@@ -17,6 +17,7 @@
 //     [--delay 250] [--state scratch/ergo-latency/run.json] [--resume] [--offline] [--out <report>]
 //   node experiments/ergo-range/latency.mjs --report-only [--state ...] [--offline] [--out <report>]
 //     recomputes the report from a recorded state; only the chain check reads the node, and --offline skips it.
+//     --pair <other state> adds, for transactions both observations timed, how much earlier or later this node saw them.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -31,6 +32,7 @@ const hours = Number(option("--hours", "24")), tailMinutes = Number(option("--ta
 const pollSeconds = Number(option("--poll", "10")), delayMs = Number(option("--delay", "250"));
 const stateFile = resolve(root, option("--state", "scratch/ergo-latency/run.json")), out = option("--out");
 const resume = args.includes("--resume"), reportOnly = args.includes("--report-only"), offline = args.includes("--offline");
+const pairFile = option("--pair") === undefined ? undefined : resolve(root, option("--pair"));
 assert(hours > 0 && tailMinutes >= 0 && pollSeconds > 0 && delayMs >= 0, "usage: [--hours h] [--tail-minutes m] [--poll s] [--delay ms]");
 
 // The miner-fee proposition (the same tree on every network); a transaction's fee is the sum of its outputs to it.
@@ -250,8 +252,22 @@ else {
 if (!reportOnly) await observe(state);
 const chain = offline ? null : await checkChain(state);
 
+// Two observations over one period from two nodes: for each transaction both timed (neither present at its start), the
+// difference in first sighting (this less the other, seconds, including each node's poll phase) and in k. A positive
+// difference means the other node saw it first; the spread bounds how much a single node's sighting lags submission.
+function pairWith(other) {
+  const mine = Object.entries(state.seen).filter(([, t]) => !t.presentAtStart), theirs = other.seen;
+  const both = mine.filter(([id]) => theirs[id] !== undefined && !theirs[id].presentAtStart);
+  const seconds = both.map(([id, t]) => (t.firstSeen - theirs[id].firstSeen) / 1000);
+  const tips = both.map(([id, t]) => t.tip - theirs[id].tip);
+  return { other: { nodeUrl: other.nodeUrl, collector: other.collector ?? null }, timedHere: mine.length, timedThere: Object.values(theirs).filter(t => !t.presentAtStart).length,
+    both: both.length, firstSeenDifferenceSeconds: quantiles(seconds), seenFirstHere: seconds.filter(x => x < 0).length,
+    tipDifferenceAtSighting: histogram(tips), note: "differences are this observation less the other; each includes the two pollers' phase within one poll interval" };
+}
+const pair = pairFile === undefined ? null : { stateSha256: sha256(readFileSync(pairFile)), ...pairWith(JSON.parse(readFileSync(pairFile, "utf8"))) };
+
 const report = { status: "mainnet-observed-passively", node: process.version, nodeUrl: state.nodeUrl, nodeInfo: state.node,
-  chain, requests, failedRequests: failures, stateSha256: sha256(readFileSync(stateFile)), collector: state.collector ?? null, reportedBy: files,
+  chain, pair, requests, failedRequests: failures, stateSha256: sha256(readFileSync(stateFile)), collector: state.collector ?? null, reportedBy: files,
   settings: reportOnly ? null : { hours, tailMinutes, pollSeconds, delayMs, reorgWindow: REORG_WINDOW }, ...summarize(state),
   limitations: [
     "One public node's pool and chain: a transaction is timed from this node's first sighting, which follows its submission elsewhere by the propagation delay and up to one poll interval; kHigh bounds k from above only for a submission to this node, and k can be one too high when a block arrived within the sighting round. The node's own lag behind the network adds error of unknown sign.",
