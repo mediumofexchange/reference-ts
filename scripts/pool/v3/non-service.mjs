@@ -9,13 +9,14 @@ const hex = bytes => Buffer.from(bytes).toString("hex");
  * First identity indices include invalid proof variants; any verifying variant
  * in that prefix can establish the request, without moving its window. The
  * snapshot alone supplies spent tags and locks: unadopted publications do not
- * alter C2b.5.2's canonical state. No supplied index, terms or key is trusted. */
+ * alter C2b.5.2's canonical state. No supplied index, terms or key is trusted.
+ * The caller charged each publication when it read the answer; this charges
+ * only the request proofs it verifies. */
 export async function countNonService(context, view, canonical, publications, charge) {
   const { selection, terms, codec, verifier } = context, { t, chain } = view;
   const { duration, count: threshold, window } = terms.nonService;
   const identities = new Map(), tags = new Set();
   for (const entry of publications) {
-    charge();
     if (entry.index >= t) continue;
     let publication;
     try { publication = codec.decodePublication(entry.record); }

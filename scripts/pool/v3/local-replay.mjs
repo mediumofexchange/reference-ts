@@ -444,6 +444,8 @@ async function classifyImports(context, directories, record, evidence) {
   const force = [], publicationVerdicts = [];
   const limits = context.importLimits;
   const charge = (amount = 1n) => { events += amount; if (events > limits.maxEvents) throw new EvidenceRefusal("resource-refusal"); };
+  // Each publication is charged once, for its answer; later passes do not charge it again.
+  if (publications !== undefined) charge(BigInt(publications.length));
   // At one index the whole publication group is read BEFORE any checkpoint.
   // Effects change recovery state but never extend the snapshot's forest.
   const publishThrough = async through => {
@@ -453,10 +455,11 @@ async function classifyImports(context, directories, record, evidence) {
     if (publications === undefined) {
       if (canonical === undefined || through - canonical.index <= duration) return;
       publications = (await view.ask(4, selection.backing)).entries;
+      charge(BigInt(publications.length));
     }
     while (publicationAt < publications.length && publications[publicationAt].index <= through) {
       const entry = publications[publicationAt++], item = { index: entry.index.toString(), ordinal: entry.ordinal.toString(), force: false };
-      publicationVerdicts.push(item); charge();
+      publicationVerdicts.push(item);
       let publication;
       try { publication = codec.decodePublication(entry.record); }
       catch (error) {
