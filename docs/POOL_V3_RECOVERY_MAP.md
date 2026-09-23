@@ -557,7 +557,7 @@ secrets; every reader keeps evidence rather than verdicts (C2.10.13).
 | Demand or request publication | 15,330 and 15,042 bytes under a 14,656-byte proof, four pieces each | exact framing; not signed |
 | Acceptance, withdrawal | one box each; a 450-byte withdrawal piece box is 564 bytes at 203,040 nanoERG | withdrawal accepted on the testnet at that value (P2) |
 | Replayed state per standing demand | about 184 bytes; 32 bytes per spent tag | fixed by the form |
-| Redemption reader | full replay of the snapshot's closure: one proof verification (60–115 ms) and a 60 ms JavaScript note-tree append per spend, about 3.5 h per 10⁵ spends on one core; the operator retains about 15.6 KB per statement | measured (P3, [replay cost](POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost)); packages carrying every checkpoint's full trail grow quadratically |
+| Redemption reader | full replay of the snapshot's closure: one proof verification (60–115 ms) and a 60 ms JavaScript note-tree append per spend, about 3.5 h per 10⁵ spends on one core; the operator retains about 15.6 KB per statement | measured (P3, [replay cost](POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost)); one trail per chain of prefixes suffices (pool-v3 §12.1) |
 | Range read | the node's word today | see §6 |
 
 ## 8. Unresolved assumptions and choices
@@ -724,11 +724,11 @@ Each names the rule, the candidate, the alternative, and what closes it.
   local replay verified every checkpoint's whole prefix again and now resumes
   from the last valid state under C2.10.12, one verification per event.
   Replay costs about 65–90 ms per spend in host work plus its verification.
-  The operator keeps about 1.56 GB per 10⁵ statements. Open: packages carry
-  each checkpoint's full trail, about N²/2K records; the candidate is to read a
-  passed checkpoint's trail as the authenticated cut of a longer one (§12.1).
-  Also open are the budget a reader profile accepts and the note tree's
-  Poseidon2 cost (wasm is about 6× faster).
+  The operator keeps about 1.56 GB per 10⁵ statements. Packages no longer need
+  every checkpoint's full trail (about N²/2K records): pool-v3 §12.1 at 786f962
+  serves a checkpoint from the prefix of a longer supplied trail. Open: the
+  budget a reader profile accepts and the note tree's Poseidon2 cost (wasm is
+  about 6× faster).
 - **A14 Device budgets.** No phone measurement of any circuit. Closed by P5
   against a named device and budget.
 - **A15 Runtime pins.** `POOL_CONSTRUCTION` is v2-only; `PoolStore` refuses

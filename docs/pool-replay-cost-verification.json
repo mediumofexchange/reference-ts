@@ -7,8 +7,8 @@
   "cpu": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz",
   "sourceHashEncoding": "SHA-256 of UTF-8 source with CRLF normalized to LF",
   "sources": {
-    "scripts/pool/v3/replay-cost.mjs": "b983638f3a37e464dd9a2c8c25538c570f0ae7036ceeac0ad20c713de84d2488",
-    "scripts/pool/v3/local-replay.mjs": "dc6869efc915b7d776fabde738fdada4b679d93c540284e72e15fc2cee1ddf66",
+    "scripts/pool/v3/replay-cost.mjs": "8e531aa2e3bf2118a82b48fa79946867b618a8604c70ac36ed519dca14aedd58",
+    "scripts/pool/v3/local-replay.mjs": "02123cdfbeb620cec7922b892bf005e3e8e18be775103cc399731bd8b3128749",
     "scripts/pool/v3/scope-replay.mjs": "c2d71cf3821706f5b7b6c2988ef30b07d251938ac73b91d5ec96eb6c6b232f77",
     "scripts/pool/spent-set/radix.mjs": "721d0063e6fb2bd73c12a90c1aaac34dd8454302c128edfa4f54d5c5ce40e1ba",
     "src/pool/note-tree.ts": "2188f3210d2fd8552f1cd5a463c75bd80e91d0d1c742e766a32edb88d4a91d7d",
@@ -48,12 +48,12 @@
     }
   },
   "components": {
-    "poseidon2HashMs": 1.933,
-    "noteTreeFourLeafAppendMs": 60.44,
-    "spentSetTwoInsertMs": 0.425,
-    "noteTreeCloneMsPer1000Leaves": 0.897,
-    "poseidon2PermutationMs": 0.918,
-    "barretenbergWasmPermutationMs": 0.147,
+    "poseidon2HashMs": 2.161,
+    "noteTreeFourLeafAppendMs": 63.45,
+    "spentSetTwoInsertMs": 0.399,
+    "noteTreeCloneMsPer1000Leaves": 0.823,
+    "poseidon2PermutationMs": 0.982,
+    "barretenbergWasmPermutationMs": 0.15,
     "recordBytesAt14656ByteProof": {
       "issue": 15231,
       "spend": 15562
@@ -67,10 +67,11 @@
       "proofBytes": 14656,
       "verifyCalls": 60,
       "verifyCallsIfEachPrefixReplayed": 210,
-      "replayMs": 5547,
-      "replayMsPerEvent": 92.45,
+      "replayMs": 5703,
+      "replayMsPerEvent": 95.05,
       "selectedTrailBytes": 934178,
       "packageTrailBytes": 3270717,
+      "longestTrailOnlyReplayMsPerEvent": 89.97,
       "uniqueRecordBytes": 933389
     },
     {
@@ -80,10 +81,11 @@
       "proofBytes": 14656,
       "verifyCalls": 60,
       "verifyCallsIfEachPrefixReplayed": 60,
-      "replayMs": 3883,
-      "replayMsPerEvent": 64.72,
+      "replayMs": 4867,
+      "replayMsPerEvent": 81.12,
       "selectedTrailBytes": 934178,
       "packageTrailBytes": 934727,
+      "longestTrailOnlyReplayMsPerEvent": 84.9,
       "uniqueRecordBytes": 933389
     },
     {
@@ -93,10 +95,11 @@
       "proofBytes": 32,
       "verifyCalls": 256,
       "verifyCallsIfEachPrefixReplayed": 256,
-      "replayMs": 13894,
-      "replayMsPerEvent": 54.27,
+      "replayMs": 17603,
+      "replayMsPerEvent": 68.76,
       "selectedTrailBytes": 241370,
       "packageTrailBytes": 241919,
+      "longestTrailOnlyReplayMsPerEvent": 54.79,
       "uniqueRecordBytes": 239797
     },
     {
@@ -106,10 +109,11 @@
       "proofBytes": 32,
       "verifyCalls": 256,
       "verifyCallsIfEachPrefixReplayed": 2176,
-      "replayMs": 23138,
-      "replayMsPerEvent": 90.38,
+      "replayMs": 22158,
+      "replayMsPerEvent": 86.55,
       "selectedTrailBytes": 241370,
       "packageTrailBytes": 2053829,
+      "longestTrailOnlyReplayMsPerEvent": 83.9,
       "uniqueRecordBytes": 239797
     },
     {
@@ -119,10 +123,11 @@
       "proofBytes": 32,
       "verifyCalls": 1024,
       "verifyCallsIfEachPrefixReplayed": 1024,
-      "replayMs": 74859,
-      "replayMsPerEvent": 73.1,
+      "replayMs": 71885,
+      "replayMsPerEvent": 70.2,
       "selectedTrailBytes": 964826,
       "packageTrailBytes": 965375,
+      "longestTrailOnlyReplayMsPerEvent": 79.38,
       "uniqueRecordBytes": 960181
     },
     {
@@ -132,14 +137,15 @@
       "proofBytes": 32,
       "verifyCalls": 1024,
       "verifyCallsIfEachPrefixReplayed": 8704,
-      "replayMs": 91003,
-      "replayMsPerEvent": 88.87,
+      "replayMs": 77876,
+      "replayMsPerEvent": 76.05,
       "selectedTrailBytes": 964826,
       "packageTrailBytes": 8203205,
+      "longestTrailOnlyReplayMsPerEvent": 91.14,
       "uniqueRecordBytes": 960181
     }
   ],
-  "maxRssMiB": 440,
+  "maxRssMiB": 466,
   "limits": [
     "one synthetic single-backing segment of spends with empty-root anchors; no imports, scopes, publications or demands",
     "real proof verification is not run here; its cost is the conformance report's single-thread desktop measurement",

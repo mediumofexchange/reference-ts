@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-23` [Resolve a served trail from the prefix of a longer supplied trail](decisions/2026-09.md#2026-09-23--resolve-a-served-trail-from-the-prefix-of-a-longer-supplied-trail)
 - `2026-09-23` [Keep the reader's own decoder: the transaction root does not authenticate the node's field split](decisions/2026-09.md#2026-09-23--keep-the-readers-own-decoder-the-transaction-root-does-not-authenticate-the-nodes-field-split)
 - `2026-09-23` [Pin a reproducible release build of sigma-rust 2f840d3](decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3)
 - `2026-09-23` [Run the pinned decoder with an explicit stack and treat a trap as fatal](decisions/2026-09.md#2026-09-23--run-the-pinned-decoder-with-an-explicit-stack-and-treat-a-trap-as-fatal)
