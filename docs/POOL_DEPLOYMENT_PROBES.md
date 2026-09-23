@@ -623,8 +623,9 @@ of its segment whose decodable records reproduce its evidence hash
 The measurement replays every case again from the selected trail alone. That
 package carries the unique records once, gives the identical result and still
 verifies each proof once. The local budgets remain far below such closures:
-trails of 1 MiB and 1,024 events hold about 64 real-size events, and the
-import walk still charges each checkpoint's full trail length. Limits: one
+trails of 1 MiB and 1,024 events hold about 64 real-size events. The import
+walk's event budget now charges each replayed position once, so a resumed
+checkpoint costs only its new positions. Limits: one
 synthetic shape with empty-root anchors and no imports, scopes, demands or
 publications; stub verification; one desktop, one run per case; no device
 budget.

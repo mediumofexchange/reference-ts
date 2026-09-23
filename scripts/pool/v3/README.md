@@ -39,7 +39,8 @@ output commitments, accepted roots and totals, then starts an empty local
 output tree. Reappointment and same-operator restart use the same rule.
 Imported wallet paths retain their source trees. Whole-read budgets cap this
 path at 128 held checkpoints and 8192 replayed events, including failed
-replays; the charge still counts each checkpoint's full trail. A checkpoint
+replays; a resumed checkpoint charges only its new positions, and a reader may
+select other local budgets on its verifier (`importLimits`). A checkpoint
 whose trail reproduces the last valid checkpoint's evidence hash at its length
 resumes from a copy of that replayed state under the same replay context,
 verifying only its new positions (C2.10.12, pool-v3 §7.1). Any other trail
