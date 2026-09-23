@@ -1051,8 +1051,8 @@ try {
       fresh(scopeRecovery.payload, scopeRecovery.result)];
   }
   await api.destroy(); api = undefined;
-  // Workers get this process's --stack-size, if it has one; spawned children do not
-  // inherit execArgv.
+  // Spawned worker processes get this process's --stack-size, if it has one; a
+  // child process does not inherit execArgv.
   const stackFlags = process.execArgv.filter(flag => /^--stack[-_]size=/.test(flag));
   function worker(payload, mode) {
     const child = spawnSync(process.execPath, [...stackFlags, join(here, "local-worker.mjs"), url, ...(mode === undefined ? [] : [mode])], {

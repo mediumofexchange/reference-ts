@@ -107,7 +107,10 @@ Upstream's npm alphas of that commit are debug builds (`wasm-pack build --dev`)
 that overflow Node's default stack and trap on expression nesting of 50.
 `sigma-release-build.sh` rebuilds the package from a fresh checkout with
 the vendored lockfile, Rust 1.87 (`wasm32-unknown-unknown`) and the
-wasm-bindgen 0.2.128 CLI, and checks every file against `SHA256SUMS`:
+wasm-bindgen 0.2.128 CLI, and checks the committed and the built files against
+`SHA256SUMS`; the bytes reproduce on a Windows host (panic locations keep the
+host's path separators), and the corpus checks every installed file against
+the same list:
 
 ```bash
 WASM_BINDGEN=<path to wasm-bindgen 0.2.128> bash experiments/ergo-range/sigma-release-build.sh

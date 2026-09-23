@@ -100,6 +100,10 @@ try {
     expressionNestingMaxDepth: (() => { let lo = 1, hi = EXPR_MAX; if (run(MAX_KB, ["--child", "expr", dir, String(hi)]) === "ok") return `>=${hi}`;
       if (run(MAX_KB, ["--child", "expr", dir, "1"]) !== "ok") return 0;
       while (hi - lo > 1) { const m = (lo + hi) >> 1; if (run(MAX_KB, ["--child", "expr", dir, String(m)]) === "ok") lo = m; else hi = m; } return lo; })(),
+    // The same on the default stack, where the reader runs.
+    expressionNestingMaxDepthAtDefault: (() => { let lo = 1, hi = EXPR_MAX; if (run(984, ["--child", "expr", dir, String(hi)]) === "ok") return `>=${hi}`;
+      if (run(984, ["--child", "expr", dir, "1"]) !== "ok") return 0;
+      while (hi - lo > 1) { const m = (lo + hi) >> 1; if (run(984, ["--child", "expr", dir, String(m)]) === "ok") lo = m; else hi = m; } return lo; })(),
     expressionAtNodeCap: run(MAX_KB, ["--child", "expr", dir, String(NODE_CAP)]),
     atDefaultStack: { deepTransaction: run(984, ["--child", "parse", dir, deepFile]), nodeCapConstant: run(984, ["--child", "depth", dir, String(NODE_CAP)]) },
   }]));
@@ -117,6 +121,7 @@ try {
   const shortHex = Buffer.from(serializeTransaction({ inputs: [{ boxId: "11".repeat(32), spendingProof: { proofBytes: "", extension: {} } }], dataInputs: [],
     outputs: [{ value: 1000000n, ergoTree: tree(3), creationHeight: 1, assets: [], additionalRegisters: {} }] }).toBytes()).toString("hex");
   assert.equal(shortHex.split(tree(3)).length, 2, "the short tree occurs once in its transaction");
+  assert.equal(shortHex.indexOf(tree(3)) % 2, 0, "the short tree starts on a byte boundary");
   writeFileSync(hostileFile, Buffer.from(shortHex.replace(tree(3), tree(HOSTILE_DEPTH)), "hex"));
   const decoderMjs = { atDefaultStack: run(984, ["--decoder", deepFile, plainFile]),
     hostile: { depth: HOSTILE_DEPTH, result: run(984, ["--decoder", hostileFile, plainFile]) } };
@@ -124,8 +129,8 @@ try {
   const passed = pinned.atDefaultStack.deepTransaction === "ok" && pinned.atDefaultStack.nodeCapConstant === "ok"
     && pinned.expressionAtNodeCap === "ok" && (typeof pinned.expressionNestingMaxDepth === "string" || pinned.expressionNestingMaxDepth >= 256)
     && decoderMjs.atDefaultStack === "loaded,decoded,decoded" && /^loaded,(overflow|trap),poisoned$/.test(decoderMjs.hostile.result)
-    && (debug === undefined || (debug[1].atDefaultStack.deepTransaction === "overflow" && debug[1].expressionAtNodeCap === "trap"
-      && poisoning.atDefaultStack === "overflow,trap"));
+    && debug !== undefined && debug[1].atDefaultStack.deepTransaction === "overflow" && debug[1].expressionAtNodeCap === "trap"
+    && poisoning.atDefaultStack === "overflow,trap";
   const report = {
     status: passed ? "pinned-release-build-reads-past-the-node-nesting-cap" : "unexpected",
     node: process.version, platform: `${process.platform} ${process.arch}`,

@@ -56,6 +56,13 @@ equal(JSON.parse(readFileSync(new URL("node_modules/ergo-lib-wasm-nodejs/package
   pinnedVersion, "the corpus runs on the experiment's pinned build");
 const wasmSha256 = sha256(readFileSync(new URL("node_modules/ergo-lib-wasm-nodejs/ergo_lib_wasm_bg.wasm", base)));
 equal(wasmSha256, pinnedWasmSha256, "the installed WASM is the pinned artifact");
+// Every installed file of the package, the JS glue included, against the vendored SHA256SUMS, itself pinned here.
+const sums = readFileSync(new URL("vendor/ergo-lib-wasm-nodejs/SHA256SUMS", base));
+equal(sha256(sums), "8404d891c6f2ee14f8671c89f8f96682d8d4193b262631251963247db9b88272", "the vendored SHA256SUMS is the pinned list");
+for (const line of sums.toString().trim().split("\n")) {
+  const [digest, name] = line.split(/\s+/);
+  equal(sha256(readFileSync(new URL(`node_modules/ergo-lib-wasm-nodejs/${name}`, base))), digest, `the installed ${name} is the vendored file`);
+}
 
 const blocks = [];
 let prefixes = 0, aliases = 0, trailingAccepted = 0, overlongAccepted = 0;

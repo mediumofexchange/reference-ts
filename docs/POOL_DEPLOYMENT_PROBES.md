@@ -1102,7 +1102,7 @@ parses at the largest stack Node's 8 MB main thread holds
 | Fixture transaction | 71 KB | 1,173 KB | 71 KB |
 | An ordinary transaction of the block | 71 KB | 418 KB | 71 KB |
 | `Coll^d[Byte]` constant, d = 110 (the node's cap) / 150 | 79 / 101 KB | 1,339 / 1,816 KB | 71 / 71 KB |
-| Deepest `LogicalNot` expression nesting | 2,513 | 49 | 2,842 |
+| Deepest `LogicalNot` expression nesting, default stack / 7,800 KB | 2,513 / 2,513 | 37 / 49 | 2,842 / 2,842 |
 
 At the default stack the fixture overflows the alpha and the next ordinary
 transaction traps. `decoder.mjs` treats a `RangeError` or
@@ -1110,12 +1110,17 @@ transaction traps. `decoder.mjs` treats a `RangeError` or
 its instance poisoned and throws on every later call. On the default stack
 it decodes the fixture; on a synthetic transaction whose output tree nests
 100,000 levels, which only a dishonest source could present, it traps and
-reports its instance poisoned, failing closed. The release build reads the
-P4 week exactly as the alpha did (see the chain-cost section).
+reports its instance poisoned, failing closed. Re-reading the P4 week
+offline from the cache with the release build pinned and the alpha as the
+alternate ([retained report](ergo-decoder-pin-verification.json)), both
+builds answer all 28,196 transactions with an equal id, witness id, ErgoTree
+and register constants, neither refuses one, all 5,040 roots reproduce and
+no index is unresolved, with decoding about six times faster.
 
 Not established: recursion paths other than collection nesting and
-`LogicalNot` expressions; reproducibility of the release build on another
-host; the decoder's memory and CPU containment.
+`LogicalNot` expressions; reproduction of the bytes on a host other than
+Windows (panic locations keep the host's path separators); the decoder's
+memory and CPU containment.
 
 ## Windows process containment feasibility
 

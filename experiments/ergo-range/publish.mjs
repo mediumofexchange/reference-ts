@@ -56,7 +56,7 @@ const files = Object.fromEntries(["experiments/ergo-range/publish.mjs", "experim
   "src/bytes.ts", "src/contexts.ts", "src/pool/field.ts"].map(file => [file, fileHash(file)]));
 const require = createRequire(join(here, "package.json"));
 const library = { version: require("ergo-lib-wasm-nodejs/package.json").version, wasmSha256: hex(sha256(readFileSync(require.resolve("ergo-lib-wasm-nodejs/ergo_lib_wasm_bg.wasm")))) };
-assert.equal(library.version, JSON.parse(readFileSync(join(here, "vendor/ergo-lib-wasm-nodejs/package.json"), "utf8")).version, "the installed library is the vendored one");
+assert.equal(library.wasmSha256, "0d20038513c72a9daf859e3ea278735caef43305cde6bc7fb2764e8d933aa28a", "the installed WASM is the vendored release build");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const vlqLength = n => { let bytes = 1; while (n >= 128) { n = Math.floor(n / 128); bytes++; } return bytes; };
 const value = n => sigma.BoxValue.from_i64(sigma.I64.from_str(String(n)));

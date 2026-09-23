@@ -37,6 +37,7 @@
         "150": 101
       },
       "expressionNestingMaxDepth": 2513,
+      "expressionNestingMaxDepthAtDefault": 2513,
       "expressionAtNodeCap": "ok",
       "atDefaultStack": {
         "deepTransaction": "ok",
@@ -52,13 +53,14 @@
       "deepTransactionKb": 1173,
       "ordinaryTransactionKb": 418,
       "nestedConstantKb": {
-        "25": 335,
-        "50": 629,
+        "25": 342,
+        "50": 637,
         "75": 925,
         "110": 1339,
         "150": 1816
       },
       "expressionNestingMaxDepth": 49,
+      "expressionNestingMaxDepthAtDefault": 37,
       "expressionAtNodeCap": "trap",
       "atDefaultStack": {
         "deepTransaction": "overflow",
@@ -81,6 +83,7 @@
         "150": 71
       },
       "expressionNestingMaxDepth": 2842,
+      "expressionNestingMaxDepthAtDefault": 2842,
       "expressionAtNodeCap": "ok",
       "atDefaultStack": {
         "deepTransaction": "ok",
@@ -108,7 +111,7 @@
   "defaultStackKb": 984,
   "mainThreadMaxKb": 7800,
   "files": {
-    "experiments/ergo-range/stack-check.mjs": "4f15f933b839f6ecd5545b39ae92cf18c603df3dc74e24271fc137e5f20599b2",
+    "experiments/ergo-range/stack-check.mjs": "b3c850f58f9452d45aab243b0c5a59a9c237b28eba6cdea8118c79315fba7436",
     "experiments/ergo-range/decoder.mjs": "f2ab6943b8ab15ee236fefea12731a8e601e382c2da9b211b100bf239e288b26",
     "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e"
   },
