@@ -4,21 +4,13 @@ Updated: 2026-09-23
 
 ## Goal
 
-Active slice: recovery-map A10, inclusion latency against C3.3 window.
-Authorized at tip `T` with the instant at the latest witnessed index, a
-publication has force when included at `T + k` with `1 <= k <= depth + 2`.
-Measure k on the **mainnet** passively: `experiments/ergo-range/latency.mjs`
-polls a public node pool (ids only) and blocks, GET only, no key and no
-submission, never run by `check` or CI. Acceptance: a retained report of
-one 24-hour window with k bracketed per sighting (node height at the
-sighting and at the round before), dropped/pending counted as misses, the
-fraction within the window for depths 0-20, strata by size and fee per
-byte, block intervals and empty blocks, and a second node header
-agreement; recovery map A10, probes, profile and guide state the result and
-what it implies for the declared depth. One independent review; merged and
-pushed with CI green. Evidence limits: one node pool, the population is not
-a kind-4 publication, one day. Stop boundary: no depth selection, no
-specification or runtime change, no mainnet submission or real funds.
+Next slice: decoder equivalence over the own mainnet node's blocks. Resume
+`scratch/equivalence-driver.mjs` (no stack flag), summarize with
+`equivalence-summary.mjs` into `docs/ergo-decoder-equivalence-verification.json`:
+every retained block's transactions decoded by the pinned release build and
+compared with the node's own view, differences listed. Acceptance: report,
+probes/decoder decision updated, one review, merged with CI green. Stop
+boundary: no decoder or profile selection, no spec or runtime change.
 
 ## Status
 
@@ -29,11 +21,11 @@ specification or runtime change, no mainnet submission or real funds.
   terms resolved per backing name, none verifying is unresolved. Reviewed.
   The import budget charges each replayed position once; a reader may pass
   its own local `importLimits` on the verifier (reviewed, merged).
-- Branch `feat/a10-mainnet-latency` (merged to main through e370581, CI
-  green): `latency.mjs` reviewed and read back; 24-hour run from a4021a4
-  since 2026-09-22 19:22 UTC, detached, state `scratch/ergo-latency/run.json`
-  (`--resume`; `--report-only` recomputes and checks the chain). A second
-  run against the own node (`own-run.json`) ends at the same time.
+- A10 (branch `docs/a10-mainnet-latency`): mainnet day 2026-09-22 19:22 to
+  09-23 20:22 UTC retained as `docs/ergo-latency-verification.json`, paired
+  with the own node's run; included k median 3, p99 12, max 19; within the
+  window 76% at depth 2, 94% at 6, 99.8% at 10; 410/784 coinbase-only
+  blocks. Depth not selected. Owed: review, merge.
 - Own nodes (approved): `nodes.mjs` runs official v6.0.6 mainnet (snapshot
   bootstrap, full headers, 127.0.0.1:9053) and testnet (archive + index,
   127.0.0.1:9052) from `scratch/ergo-nodes/`, both synced (5.4 / 17.5 GB);
@@ -59,14 +51,10 @@ specification or runtime change, no mainnet submission or real funds.
 
 ## Next
 
-1. After ~20:25 UTC: reports for both latency runs (`--pair` the two
-   states), retain `docs/ergo-latency-verification.json`, update A10,
-   probes, profile and guide.
-2. Resume the equivalence driver, summarize into
-   `docs/ergo-decoder-equivalence-verification.json`.
-3. One review of A10 and the equivalence summary; merge and push with CI
-   green. The equivalence driver needs no stack flag any more.
-4. Later: a Linux or CI reproducible build of the decoder pin.
+1. Review and merge A10 (docs only, report retained).
+2. Decoder equivalence (Goal).
+3. Later: a Linux or CI reproducible build of the decoder pin; the note
+   tree's Poseidon2 on Barretenberg wasm (about 6x); a reader budget.
 
 ## Retained boundaries and local state
 

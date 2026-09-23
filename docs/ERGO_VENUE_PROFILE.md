@@ -54,6 +54,12 @@ witnessed until the tip reaches the origin plus the depth. The lag is
 `depth + 1` (C2.3.5): a transaction submitted at clock `c` is included at
 index `c + depth + 1` at the earliest. The depth and lag rules are the v2
 adapter's; the index is relative to the anchor rather than to the chain.
+The depth is also the holder's margin: a publication authorized at the tip
+has force when included at most `depth + 2` blocks above it (C3.3). Over one
+mainnet day that held for 76% of included transactions at depth 2, 94% at
+depth 6 and 99.8% at depth 10
+([latency](POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet)).
+The depth is not selected here.
 
 ## Attribution and reassembly
 

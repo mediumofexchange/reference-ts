@@ -1082,6 +1082,59 @@ headers, which came from the one node the transactions were submitted to.
 The publications' content is synthetic (frames exact, proof and signature
 bytes not), which the venue does not read.
 
+## Inclusion latency on the mainnet
+
+Recovery map A10 asks how many blocks a publication takes to land against
+C3.3's window. Authorized at tip `T` with the instant at the latest
+witnessed index, it has force when included at `T + k` with
+`1 <= k <= depth + 2`. `experiments/ergo-range/latency.mjs` watched the mainnet
+passively from 2026-09-22 19:22 to 2026-09-23 20:22 UTC. It read a public
+node's pool ids and blocks every 10 s (GET only; nothing submitted, no key).
+Each transaction's first sighting was timed as `k`, bracketed above by the
+height one round earlier. The [recorded report](ergo-latency-verification.json)
+binds both states and the collector hash. It checks the window's 784 block
+headers: each links to its parent, they end at the node's tip, and all 784
+ids agree with a second public node. The own node ran a second observation
+for the last 17.5 hours.
+
+Of 7,520 timed sightings, 3,281 were included and 4,239 were dropped. None
+was pending at the end. The drops are mostly high-fee chained traffic: 3,890
+sightings paid at least 4,000 nanoERG per byte and 359 of them landed.
+Included transactions had `k` median 3, p90 7, p99 12 and maximum 19; the
+pessimistic bracket gives maximum 21.
+
+| Declared depth | Window `k <= depth + 2` | Included within | Pessimistic |
+|---:|---:|---:|---:|
+| 0 | 2 | 42.4% | 25.8% |
+| 2 | 4 | 76.4% | 71.1% |
+| 4 | 6 | 88.9% | 86.6% |
+| 6 | 8 | 94.1% | 92.6% |
+| 8 | 10 | 97.5% | 96.9% |
+| 10 | 12 | 99.8% | 99.5% |
+| 12 | 14 | 99.9% | 99.9% |
+
+The 30 sightings of 16 KiB or more, a four-piece publication's size, were
+29 included with `k` at most 12. Blocks came every 84 s at the median and
+262 s at p90 (max 538 s), and 410 of the 784 blocks carried only the
+coinbase: a waiting transaction is not included merely because a block
+arrives. Fourteen heights were reorganized during the window.
+
+The own node's run (545 blocks, headers agreeing with the public node's)
+gives 72.7%, 94.3% and 99.3% for included sightings at depths 2, 6 and 10,
+with a maximum `k` of 28. Of the 2,940 transactions both observations timed,
+the public node's first sighting was a median 2.7 s later. Its pool view
+reached the own node's 0–5 blocks late (2,079 at the same tip).
+
+This one day implies that a depth below about 10 would miss a few percent of
+included mainnet transactions, and at depth 10 the window still loses about
+one in five hundred. Each depth block adds a block interval to finality and to
+the holder's wait. **Not established:** the population is the mainnet's, not
+a kind-4 publication with its size and fee; there is one venue, one day and
+no congestion episode. Drops here are other parties' replaced or conflicting
+transactions, not a publication's; proof of work and chain selection were not
+checked. No depth is selected, and no profile, runtime or specification
+changes.
+
 ## Own node as the header source
 
 The profile leaves proof of work and chain selection to the reader's header

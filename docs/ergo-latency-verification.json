@@ -1,0 +1,600 @@
+{
+  "status": "mainnet-observed-passively",
+  "node": "v24.6.0",
+  "nodeUrl": "http://213.239.193.208:9053",
+  "nodeInfo": {
+    "name": "ergo-mainnet-6.0.6",
+    "appVersion": "6.0.5-46-78153a1e-SNAPSHOT",
+    "network": "mainnet",
+    "parameters": {
+      "outputCost": 298,
+      "tokenAccessCost": 100,
+      "maxBlockCost": 8001091,
+      "height": 1878016,
+      "maxBlockSize": 1271009,
+      "dataInputCost": 100,
+      "blockVersion": 4,
+      "inputCost": 2407,
+      "storageFeeFactor": 1250000,
+      "subblocksPerBlock": 30,
+      "minValuePerByte": 360
+    }
+  },
+  "chain": {
+    "node": "http://213.239.193.208:9053",
+    "heights": 784,
+    "expected": 784,
+    "mismatched": [],
+    "unlinked": [],
+    "toTip": {
+      "height": 1879665,
+      "endsAtReportedTip": true
+    },
+    "compared": {
+      "node": "https://node.ergo.watch",
+      "heights": 784,
+      "agree": 784,
+      "disagree": []
+    }
+  },
+  "pair": {
+    "stateSha256": "f5da824c42f0c8ba0b11f04306ae587fedc740db18d2586cec808ab0872b3d02",
+    "other": {
+      "nodeUrl": "http://127.0.0.1:9053",
+      "collector": {
+        "files": {
+          "experiments/ergo-range/latency.mjs": "d519775fcd38088804f38b0f3b4d00e7cf2d2d96b4fa1adcbe60653a7054dc60"
+        },
+        "argv": [
+          "--node",
+          "http://127.0.0.1:9053",
+          "--compare",
+          "http://213.239.193.208:9053",
+          "--hours",
+          "16.514",
+          "--tail-minutes",
+          "60",
+          "--state",
+          "scratch/ergo-latency/own-run.json",
+          "--out",
+          "scratch/ergo-latency/own-report.json"
+        ]
+      }
+    },
+    "timedHere": 7520,
+    "timedThere": 5444,
+    "both": 2940,
+    "firstSeenDifferenceSeconds": {
+      "n": 2940,
+      "min": -488.855,
+      "p50": 2.681,
+      "p90": 190.549,
+      "p99": 518.753,
+      "max": 3355.198
+    },
+    "seenFirstHere": 1080,
+    "tipDifferenceAtSighting": {
+      "0": 2079,
+      "1": 519,
+      "2": 128,
+      "3": 69,
+      "4": 37,
+      "5": 30,
+      "6": 3,
+      "7": 2,
+      "8": 4,
+      "22": 2,
+      "-1": 66,
+      "-2": 1
+    },
+    "note": "differences are this observation less the other; each includes the two pollers' phase within one poll interval"
+  },
+  "requests": 33,
+  "failedRequests": 0,
+  "stateSha256": "f1d6d6cc0c874910f7b73da5d133e08c7a703b2eb3f776a88effa3a102a926df",
+  "collector": {
+    "files": {
+      "experiments/ergo-range/latency.mjs": "f3037fdf4eacc01b0e7cc299b1aa8422445c6f5e6d1e5613b9d3f35f82d72fd7"
+    },
+    "argv": [
+      "--hours",
+      "24",
+      "--tail-minutes",
+      "60",
+      "--out",
+      "scratch/ergo-latency/report.json"
+    ]
+  },
+  "reportedBy": {
+    "experiments/ergo-range/latency.mjs": "b94ed9ba2e5675110bd1c8dd491ac98930a309dec56da92e36e1784adbb64ec7"
+  },
+  "settings": null,
+  "rounds": 8938,
+  "failedRounds": 35,
+  "maxRoundGapSeconds": 70.075,
+  "window": {
+    "firstHeight": 1878882,
+    "lastHeight": 1879665,
+    "blocks": 784,
+    "startedAt": "2026-09-22T19:22:41.472Z",
+    "admitUntil": "2026-09-23T19:22:41.472Z",
+    "endedAt": "2026-09-23T20:22:49.120Z",
+    "reorganizedHeights": [
+      1879033,
+      1879043,
+      1879110,
+      1879119,
+      1879161,
+      1879232,
+      1879265,
+      1879368,
+      1879437,
+      1879446,
+      1879460,
+      1879496,
+      1879567,
+      1879579
+    ]
+  },
+  "blockIntervalSeconds": {
+    "n": 783,
+    "min": 1.411,
+    "p50": 84.084,
+    "p90": 262.221,
+    "p99": 453.382,
+    "max": 538.066
+  },
+  "transactionsPerBlock": {
+    "n": 784,
+    "min": 1,
+    "p50": 1,
+    "p90": 20,
+    "p99": 43,
+    "max": 61
+  },
+  "blocksWithOnlyOneTransaction": 410,
+  "pool": {
+    "sizePerRound": {
+      "n": 8938,
+      "min": 0,
+      "p50": 21,
+      "p90": 35,
+      "p99": 47,
+      "max": 93
+    }
+  },
+  "sightings": {
+    "total": 7544,
+    "presentAtStart": 24,
+    "afterGap": 104,
+    "timed": 7520,
+    "timedAfterGap": 104,
+    "included": 3281,
+    "dropped": 4239,
+    "pending": 0,
+    "detailMissing": 165,
+    "detailMissingIncluded": 10,
+    "belowWindow": 0
+  },
+  "includedUnseen": 1664,
+  "recordedLinkage": {
+    "pairs": 783,
+    "broken": []
+  },
+  "k": {
+    "low": {
+      "n": 3281,
+      "min": 1,
+      "p50": 3,
+      "p90": 7,
+      "p99": 12,
+      "max": 19
+    },
+    "high": {
+      "n": 3281,
+      "min": 1,
+      "p50": 3,
+      "p90": 8,
+      "p99": 12,
+      "max": 21
+    },
+    "histogram": {
+      "1": 446,
+      "2": 944,
+      "3": 653,
+      "4": 464,
+      "5": 250,
+      "6": 160,
+      "7": 71,
+      "8": 98,
+      "9": 56,
+      "10": 56,
+      "11": 49,
+      "12": 28,
+      "14": 2,
+      "18": 3,
+      "19": 1
+    }
+  },
+  "secondsToBlockTimestamp": {
+    "n": 3281,
+    "min": -17.131,
+    "p50": 256.49,
+    "p90": 737.628,
+    "p99": 1172.112,
+    "max": 1829.19
+  },
+  "withinWindowByDepth": {
+    "0": {
+      "all": 0.1848,
+      "allPessimistic": 0.1124,
+      "included": 0.4237,
+      "includedPessimistic": 0.2575,
+      "counted": 7520
+    },
+    "1": {
+      "all": 0.2717,
+      "allPessimistic": 0.24,
+      "included": 0.6227,
+      "includedPessimistic": 0.5501,
+      "counted": 7520
+    },
+    "2": {
+      "all": 0.3334,
+      "allPessimistic": 0.3104,
+      "included": 0.7641,
+      "includedPessimistic": 0.7114,
+      "counted": 7520
+    },
+    "3": {
+      "all": 0.3666,
+      "allPessimistic": 0.3517,
+      "included": 0.8403,
+      "includedPessimistic": 0.8062,
+      "counted": 7520
+    },
+    "4": {
+      "all": 0.3879,
+      "allPessimistic": 0.3779,
+      "included": 0.8891,
+      "includedPessimistic": 0.8662,
+      "counted": 7520
+    },
+    "5": {
+      "all": 0.3973,
+      "allPessimistic": 0.3908,
+      "included": 0.9107,
+      "includedPessimistic": 0.8958,
+      "counted": 7520
+    },
+    "6": {
+      "all": 0.4104,
+      "allPessimistic": 0.4041,
+      "included": 0.9406,
+      "includedPessimistic": 0.9262,
+      "counted": 7520
+    },
+    "7": {
+      "all": 0.4178,
+      "allPessimistic": 0.4133,
+      "included": 0.9576,
+      "includedPessimistic": 0.9473,
+      "counted": 7520
+    },
+    "8": {
+      "all": 0.4253,
+      "allPessimistic": 0.4227,
+      "included": 0.9747,
+      "includedPessimistic": 0.9689,
+      "counted": 7520
+    },
+    "9": {
+      "all": 0.4318,
+      "allPessimistic": 0.4294,
+      "included": 0.9896,
+      "includedPessimistic": 0.9842,
+      "counted": 7520
+    },
+    "10": {
+      "all": 0.4355,
+      "allPessimistic": 0.4343,
+      "included": 0.9982,
+      "includedPessimistic": 0.9954,
+      "counted": 7520
+    },
+    "11": {
+      "all": 0.4355,
+      "allPessimistic": 0.4355,
+      "included": 0.9982,
+      "includedPessimistic": 0.9982,
+      "counted": 7520
+    },
+    "12": {
+      "all": 0.4358,
+      "allPessimistic": 0.4356,
+      "included": 0.9988,
+      "includedPessimistic": 0.9985,
+      "counted": 7520
+    },
+    "13": {
+      "all": 0.4358,
+      "allPessimistic": 0.4358,
+      "included": 0.9988,
+      "includedPessimistic": 0.9988,
+      "counted": 7520
+    },
+    "14": {
+      "all": 0.4358,
+      "allPessimistic": 0.4358,
+      "included": 0.9988,
+      "includedPessimistic": 0.9988,
+      "counted": 7520
+    },
+    "15": {
+      "all": 0.4358,
+      "allPessimistic": 0.4358,
+      "included": 0.9988,
+      "includedPessimistic": 0.9988,
+      "counted": 7520
+    },
+    "16": {
+      "all": 0.4362,
+      "allPessimistic": 0.4362,
+      "included": 0.9997,
+      "includedPessimistic": 0.9997,
+      "counted": 7520
+    },
+    "17": {
+      "all": 0.4363,
+      "allPessimistic": 0.4362,
+      "included": 1,
+      "includedPessimistic": 0.9997,
+      "counted": 7520
+    },
+    "18": {
+      "all": 0.4363,
+      "allPessimistic": 0.4362,
+      "included": 1,
+      "includedPessimistic": 0.9997,
+      "counted": 7520
+    },
+    "19": {
+      "all": 0.4363,
+      "allPessimistic": 0.4363,
+      "included": 1,
+      "includedPessimistic": 1,
+      "counted": 7520
+    },
+    "20": {
+      "all": 0.4363,
+      "allPessimistic": 0.4363,
+      "included": 1,
+      "includedPessimistic": 1,
+      "counted": 7520
+    }
+  },
+  "bySize": {
+    "1-4KiB": {
+      "sightings": 1657,
+      "included": 514,
+      "k": {
+        "n": 514,
+        "min": 1,
+        "p50": 2,
+        "p90": 6,
+        "p99": 11,
+        "max": 18
+      },
+      "withinDepth2": {
+        "all": 0.2535,
+        "allPessimistic": 0.2468,
+        "included": 0.8171,
+        "includedPessimistic": 0.7957,
+        "counted": 1657
+      },
+      "withinDepth10": {
+        "all": 0.3084,
+        "allPessimistic": 0.3084,
+        "included": 0.9942,
+        "includedPessimistic": 0.9942,
+        "counted": 1657
+      }
+    },
+    "4-16KiB": {
+      "sightings": 224,
+      "included": 109,
+      "k": {
+        "n": 109,
+        "min": 1,
+        "p50": 2,
+        "p90": 4,
+        "p99": 9,
+        "max": 11
+      },
+      "withinDepth2": {
+        "all": 0.4509,
+        "allPessimistic": 0.4375,
+        "included": 0.9266,
+        "includedPessimistic": 0.8991,
+        "counted": 224
+      },
+      "withinDepth10": {
+        "all": 0.4866,
+        "allPessimistic": 0.4866,
+        "included": 1,
+        "includedPessimistic": 1,
+        "counted": 224
+      }
+    },
+    "<1KiB": {
+      "sightings": 5444,
+      "included": 2619,
+      "k": {
+        "n": 2619,
+        "min": 1,
+        "p50": 3,
+        "p90": 7,
+        "p99": 12,
+        "max": 19
+      },
+      "withinDepth2": {
+        "all": 0.3591,
+        "allPessimistic": 0.3314,
+        "included": 0.7465,
+        "includedPessimistic": 0.6888,
+        "counted": 5444
+      },
+      "withinDepth10": {
+        "all": 0.4805,
+        "allPessimistic": 0.4791,
+        "included": 0.9989,
+        "includedPessimistic": 0.9958,
+        "counted": 5444
+      }
+    },
+    ">=16KiB": {
+      "sightings": 30,
+      "included": 29,
+      "k": {
+        "n": 29,
+        "min": 1,
+        "p50": 3,
+        "p90": 10,
+        "p99": 12,
+        "max": 12
+      },
+      "withinDepth2": {
+        "all": 0.7667,
+        "allPessimistic": 0.5333,
+        "included": 0.7931,
+        "includedPessimistic": 0.5517,
+        "counted": 30
+      },
+      "withinDepth10": {
+        "all": 0.9667,
+        "allPessimistic": 0.9333,
+        "included": 1,
+        "includedPessimistic": 0.9655,
+        "counted": 30
+      }
+    }
+  },
+  "byFeePerByte": {
+    "0": {
+      "sightings": 7,
+      "included": 0,
+      "k": {
+        "n": 0,
+        "min": null,
+        "p50": null,
+        "p90": null,
+        "p99": null,
+        "max": null
+      },
+      "withinDepth2": {
+        "all": 0,
+        "allPessimistic": 0,
+        "included": null,
+        "includedPessimistic": null,
+        "counted": 7
+      },
+      "withinDepth10": {
+        "all": 0,
+        "allPessimistic": 0,
+        "included": null,
+        "includedPessimistic": null,
+        "counted": 7
+      }
+    },
+    "1-999": {
+      "sightings": 611,
+      "included": 459,
+      "k": {
+        "n": 459,
+        "min": 1,
+        "p50": 2,
+        "p90": 5,
+        "p99": 11,
+        "max": 12
+      },
+      "withinDepth2": {
+        "all": 0.6318,
+        "allPessimistic": 0.6007,
+        "included": 0.841,
+        "includedPessimistic": 0.7996,
+        "counted": 611
+      },
+      "withinDepth10": {
+        "all": 0.7512,
+        "allPessimistic": 0.7496,
+        "included": 1,
+        "includedPessimistic": 0.9978,
+        "counted": 611
+      }
+    },
+    "1000-3999": {
+      "sightings": 2847,
+      "included": 2453,
+      "k": {
+        "n": 2453,
+        "min": 1,
+        "p50": 3,
+        "p90": 8,
+        "p99": 12,
+        "max": 18
+      },
+      "withinDepth2": {
+        "all": 0.6368,
+        "allPessimistic": 0.5852,
+        "included": 0.7391,
+        "includedPessimistic": 0.6792,
+        "counted": 2847
+      },
+      "withinDepth10": {
+        "all": 0.8602,
+        "allPessimistic": 0.8574,
+        "included": 0.9984,
+        "includedPessimistic": 0.9951,
+        "counted": 2847
+      }
+    },
+    ">=4000": {
+      "sightings": 3890,
+      "included": 359,
+      "k": {
+        "n": 359,
+        "min": 1,
+        "p50": 2,
+        "p90": 6,
+        "p99": 10,
+        "max": 19
+      },
+      "withinDepth2": {
+        "all": 0.0771,
+        "allPessimistic": 0.0756,
+        "included": 0.8357,
+        "includedPessimistic": 0.8189,
+        "counted": 3890
+      },
+      "withinDepth10": {
+        "all": 0.0918,
+        "allPessimistic": 0.0918,
+        "included": 0.9944,
+        "includedPessimistic": 0.9944,
+        "counted": 3890
+      }
+    }
+  },
+  "note": "k is the inclusion height less the node's full height read at the start of the round whose pool read first held the transaction; kHigh uses the previous round's height and bounds k from above for a submission to this node, while the true k can be one below k when a block arrived within the round. Under C3.3 a demand authorized at the tip has force for 1 <= k <= depth + 2. 'all' counts dropped sightings as misses and pending ones as misses once depth + 2 blocks were observed after the sighting (censored before; 'counted' is the denominator); 'included' conditions on inclusion; 'Pessimistic' fractions use kHigh. Sightings after a gap in the rounds (timedAfterGap) are included; across a gap k is only a lower bound. Quantiles are nearest-rank at floor(p*n). Fee per byte is nanoERG per serialized byte; a sighting whose detail was gone (usually just included) has no size and is left out of the strata.",
+  "limitations": [
+    "One public node's pool and chain: a transaction is timed from this node's first sighting, which follows its submission elsewhere by the propagation delay and up to one poll interval; kHigh bounds k from above only for a submission to this node, and k can be one too high when a block arrived within the sighting round. The node's own lag behind the network adds error of unknown sign.",
+    "Transactions included before any round saw them (includedUnseen) are never timed, and a sighting whose detail was already gone has no size or fee: both remove fast inclusions, so the fractions lean pessimistic on that account.",
+    "k counts from the observing node's sighting, not from a holder's authorization: the time a holder spends proving and propagating after fixing the instant uses the same margin and is not measured, so the fractions are optimistic on that account.",
+    "Block timestamps are set by miners; seconds are indicative only.",
+    "The population is mainnet transactions of every shape and fee over this window, not a kind-4 publication; a holder's own node, submission path and proving time are not measured.",
+    "Dropped means the node's pool stopped holding a transaction that no block in the window included (a double spend, an invalid chain or eviction) and counts as a miss in 'all'; a pending transaction was still held when the tail ended and is censored at depths whose window had not passed.",
+    "Headers come from the observing node; the chain check covers parent linkage and the recorded ids, and one second node's header ids are compared; proof of work and chain selection are not checked.",
+    "One day of one venue's traffic, dominated by automated and chained transactions; no weekly pattern or congestion episode is covered.",
+    "No runtime path, profile selection, depth choice or specification change follows from this measurement."
+  ]
+}
