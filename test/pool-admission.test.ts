@@ -116,6 +116,10 @@ describe("pool-v2 §8: admission changes state as one transition, or not at all"
     expect(events[2]?.lit).toEqual({ kind: BURN, backing: a.name, quantity: 30n });
     expect(events[1]?.nullifiers).toEqual([h.alice.nf, h.padding.nf]);
     expect(events[1]?.outputs).toEqual([h.bob.cm, h.change.cm]);
+    expect(segment.localEvents()).toEqual(events);
+    expect(segment.localEvents(2n)).toEqual([events[2]]);
+    expect(segment.localEvents(3n)).toEqual([]);
+    expect(() => segment.localEvents(-1n)).toThrow(PoolError);
   });
 
   it("answers an exact resubmission with the prior record, whatever its proof bytes, and changes nothing", async () => {

@@ -677,6 +677,12 @@ export class Segment {
     return [...this.imported, ...this.local].map(copyEvent);
   }
 
+  /** This segment's own events after position `after`, in order, as copies. */
+  localEvents(after = 0n): PoolEvent[] {
+    if (typeof after !== "bigint" || after < 0n) throw new PoolError("MALFORMED", "no local events after that position");
+    return after >= this.length ? [] : this.local.slice(Number(after)).map(copyEvent);
+  }
+
   /** The served trail: header, every held backing's signed terms, and every local statement in order with its evidence. */
   trail(): SegmentTrail {
     return {

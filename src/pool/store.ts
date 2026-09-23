@@ -374,7 +374,6 @@ export class PoolStore {
   }
   private checkRevocations(engine: Engine): void {
     const segment = engine.segment!;
-    const statements = segment.trail().statements;
     for (const { backing } of this.terms(segment)) {
       const revoked = revokedAt(this.venue, backing); if (revoked === undefined) continue;
       let finalized = 0n;
@@ -382,10 +381,10 @@ export class PoolStore {
         const at = this.venue.witnessedAtSequence(this.operator, signed.commitment.sequence);
         if (at !== undefined && at < revoked && signed.length > finalized) finalized = signed.length;
       }
-      requireThat(!statements.slice(Number(finalized)).some(statement => {
-        const inputs = parsePublicInputs(statement.kind, statement.publicInputs);
-        return inputs.kind === ISSUE && same(inputs.backing, backing.name);
-      }), "UNSUPPORTED", "active history contains issuance without pre-revocation finality; recovery is required");
+      // Only for a revoked obligor: the local issuance events past the
+      // pre-revocation finalized length, from events rather than proofs.
+      requireThat(!segment.localEvents(finalized).some(event => event.lit?.kind === ISSUE && same(event.lit.backing, backing.name)),
+        "UNSUPPORTED", "active history contains issuance without pre-revocation finality; recovery is required");
     }
     engine.recheckImports();
   }
