@@ -1098,8 +1098,9 @@ ids agree with a second public node. The own node ran a second observation
 for the last 17.5 hours.
 
 Of 7,520 timed sightings, 3,281 were included and 4,239 were dropped. None
-was pending at the end. The drops are mostly high-fee chained traffic: 3,890
-sightings paid at least 4,000 nanoERG per byte and 359 of them landed.
+was pending at the end. Most drops paid a high fee per byte: 3,531 of the
+4,239 paid at least 4,000 nanoERG per byte, a stratum in which 359 of 3,890
+sightings landed.
 Included transactions had `k` median 3, p90 7, p99 12 and maximum 19; the
 pessimistic bracket gives maximum 21.
 
@@ -1111,7 +1112,7 @@ pessimistic bracket gives maximum 21.
 | 6 | 8 | 94.1% | 92.6% |
 | 8 | 10 | 97.5% | 96.9% |
 | 10 | 12 | 99.8% | 99.5% |
-| 12 | 14 | 99.9% | 99.9% |
+| 12 | 14 | 99.9% | 99.8% |
 
 The 30 sightings of 16 KiB or more, a four-piece publication's size, were
 29 included with `k` at most 12. Blocks came every 84 s at the median and
@@ -1122,18 +1123,28 @@ arrives. Fourteen heights were reorganized during the window.
 The own node's run (545 blocks, headers agreeing with the public node's)
 gives 72.7%, 94.3% and 99.3% for included sightings at depths 2, 6 and 10,
 with a maximum `k` of 28. Of the 2,940 transactions both observations timed,
-the public node's first sighting was a median 2.7 s later. Its pool view
-reached the own node's 0–5 blocks late (2,079 at the same tip).
+the public node's first sighting was a median 2.7 s later. It came at the same
+tip for 2,079, 1–5 blocks later for 783, 6–22 blocks later for 11 and 1–2
+blocks earlier for 67, and the public node saw 1,080 first. A later sighting
+shortens `k`, so the public node's fractions lean optimistic.
 
-This one day implies that a depth below about 10 would miss a few percent of
-included mainnet transactions, and at depth 10 the window still loses about
-one in five hundred. Each depth block adds a block interval to finality and to
-the holder's wait. **Not established:** the population is the mainnet's, not
-a kind-4 publication with its size and fee; there is one venue, one day and
-no congestion episode. Drops here are other parties' replaced or conflicting
-transactions, not a publication's; proof of work and chain selection were not
-checked. No depth is selected, and no profile, runtime or specification
-changes.
+This one day implies that among included mainnet transactions the window
+misses about a quarter at depth 2, 6% at depth 6 and 1% at depth 9. At depth
+10 it still misses 0.2% on the public node (0.5% pessimistic) and 0.7% on the
+own node. Each depth block adds a block interval to finality and to the
+holder's wait. Drops are not classified: the report does not separate double
+spends, invalid chains and eviction. In the 1–999 nanoERG-per-byte stratum,
+where a four-piece publication at the suggested fee falls, 152 of 611
+sightings were dropped and the 459 included had `k` at most 12. Counting
+drops as misses, 33% of all sightings had force at depth 2 and 44% at depth
+10. **Not established:** the population is the mainnet's, not a kind-4
+publication with its size and fee; there is one venue, one day and no
+congestion episode. `k` counts from the node's sighting, not from a holder's
+authorization, so proving and propagation are unmeasured (optimistic). 1,664
+included transactions were never seen in the pool, and for 104 sightings
+after a round gap `k` is only a lower bound. Proof of work and chain selection
+were not checked. No depth or target miss rate is selected, and no profile,
+runtime or specification changes.
 
 ## Own node as the header source
 
