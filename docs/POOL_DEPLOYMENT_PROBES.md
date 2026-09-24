@@ -1043,7 +1043,7 @@ sweep of all 25 piece boxes 2,412 bytes with one return output; read back
 from one synthetic block under the real latest header, the cases give the
 same seven objects as the testnet run below.
 
-**Testnet run, 2026-09-22** ([retained report](ergo-publication-verification.json)):
+**Testnet run, 2026-09-22** ([report](https://github.com/mediumofexchange/reference-ts/blob/d8f2b7b/docs/ergo-publication-verification.json)):
 the public node (`ergo-testnet-6.0.3`, `minValuePerByte` 360) accepted all
 seven transactions on first submission. The six cases, submitted together
 at full height 558,327 from one 20,000-tERG box, were all included in block
@@ -1083,6 +1083,17 @@ tip with the instant at the latest witnessed index has force when included
 at most `depth + 2` blocks above that tip (A10), so these landed two
 blocks inside the bound at depth 2; the report's latency note states the
 bound one block stricter.
+
+**Testnet run, 2026-09-24** ([retained report](ergo-publication-verification.json)),
+through the reader that decodes nothing: the own testnet node (v6.0.6)
+accepted the same seven transactions, the six cases in block 561,774
+(positions 1–6) and the sweep in 561,779, each two blocks above the full
+height at submission. Every block's unsigned bytes and witness ids, derived
+by `supply.mjs`, reproduced its header root, and the framer read each case
+built by sigma-rust's transaction builder (plain inputs, piece outputs, a
+pay-to-public-key change and the fee output): the kind-4 range answered the
+same seven objects in the same order, kinds 1–3 empty, after all 25 piece
+boxes were spent.
 
 **Not established:** an inclusion-latency distribution (A10: the six cases
 are one correlated observation and the sweep a second, on the testnet's fast
