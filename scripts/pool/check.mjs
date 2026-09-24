@@ -10,7 +10,7 @@ import { performance } from 'node:perf_hooks';
 import { Noir } from '@noir-lang/noir_js';
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from '@aztec/bb.js';
 import { fixtures, field, FIELD, U64_MAX } from './fixtures.mjs';
-import { asFields, bypass, inputRanges, refusal, withoutInputRanges } from './constraints.mjs';
+import { asFields, bypass, FRAME, inputRanges, names, refusal, withoutRange } from './constraints.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const source = join(root, 'src/pool/circuits'), scratchPath = join(root, 'scratch');
@@ -50,8 +50,7 @@ try {
     // Hostile witnesses run on the same bytecode through a field-typed ABI, so
     // the constraints refuse them rather than noir_js's encoder.
     const widened = bypass(program);
-    circuits[kind] = { program, backend, vk, noir: new Noir(program), widened, hostile: new Noir(widened),
-      unranged: new Noir(withoutInputRanges(program)) };
+    circuits[kind] = { program, backend, vk, noir: new Noir(program), widened, hostile: new Noir(widened) };
     pins.circuits[kind] = { bytecode: sha(Buffer.from(program.bytecode, 'base64')), vk: sha(vk) };
   }
   if (!writePins) assert.deepEqual(pins, json(join(source, 'manifest.json')), 'circuit identities changed; review before repinning');
@@ -85,7 +84,8 @@ try {
     checks.push(label);
   }
   // Each hostile witness names the constraint it must fail: `range <input>` for an
-  // input's range check, otherwise the source assertion's text (a prefix of it).
+  // input's range check, otherwise the call chain from main to the failing assertion,
+  // each frame given by a prefix of its source text.
   const refused = [];
   async function rejects(label, kind, base, mutate, expected) {
     const input = structuredClone(base);
@@ -96,19 +96,34 @@ try {
     checks.push(label);
     return input;
   }
-  // A witness outside the declared types that satisfies every other constraint:
-  // refused only by the input range check, and solved once those checks are removed.
+  // A witness outside one input's declared type that satisfies every other constraint:
+  // refused by that input's range check, solved once only that check is removed, and,
+  // proven from that solution with the real program and key, refused by the verifier.
   async function beyondTypes(label, kind, base, mutate, expected) {
     assert(expected.startsWith('range '));
     const input = await rejects(label, kind, base, mutate, expected);
-    await circuits[kind].unranged.execute(asFields(input));
-    checks.push(`${label}: solves without the input range checks`);
+    const { witness } = await new Noir(withoutRange(circuits[kind].program, expected.slice('range '.length))).execute(asFields(input));
+    checks.push(`${label}: solves without that range check`);
+    const proof = await circuits[kind].backend.generateProof(witness, options);
+    assert.deepEqual(proof.publicInputs.map(field), publicInputsOf(kind, input).map(field), label);
+    assert.equal(await verifier.verifyProof({ ...proof, verificationKey: circuits[kind].vk }, options), false, label);
+    checks.push(`${label}: its proof does not verify`);
   }
-  const R = {
+  const chain = (...frames) => frames.join(FRAME);
+  const N = {
     owner: 'notes.nr assert(note.owner == owner(secret))', secret: 'notes.nr assert(secret != 0)',
     ownerZero: 'notes.nr assert(note.owner != 0)', rho: 'notes.nr assert(note.rho != 0)',
     nullifier: 'notes.nr assert(nf == nullifier(domain, cm, secret))',
-    anchor: 'notes.nr assert((note.value == 0) | (node == anchor))', scope: 'notes.nr assert(node == root)',
+    anchor: 'notes.nr assert((note.value == 0) | (node == anchor))', root: 'notes.nr assert(node == root)',
+  };
+  const AUTHENTICATE = 'main.nr notes::authenticate(', SCOPED = 'main.nr notes::scoped(scope, backing,';
+  const R = {
+    owner: chain(AUTHENTICATE, N.owner), secret: chain(AUTHENTICATE, 'notes.nr owner(secret)', N.secret),
+    inputRho: chain(AUTHENTICATE, 'notes.nr commitment(domain, note)', N.rho),
+    nullifier: chain(AUTHENTICATE, N.nullifier), anchor: chain(AUTHENTICATE, N.anchor),
+    inputScope: chain('main.nr notes::scoped(scope, inputs[i].backing,', N.root), scope: chain(SCOPED, N.root),
+    outputOwner: chain('main.nr notes::commitment(domain, output_notes[i])', N.ownerZero),
+    outputRho: chain('main.nr notes::commitment(domain, output_notes[i])', N.rho),
   };
   const proofs = {};
   proofs.issue = await accepts('authorized-relation issuance in scope', 'issue', f.issue, true);
@@ -120,14 +135,14 @@ try {
   proofs.burn = await accepts('partial burn with padding', 'burn', f.burn, true);
 
   const refreshIssue = async v => { v.cm = await f.cm({ backing: v.backing, value: v.quantity, owner: v.owner, rho: v.rho }, v.domain); };
-  const issueCommitment = 'main.nr assert(cm == notes::commitment(';
+  const issueCommitment = 'main.nr assert(cm == notes::commitment(', ISSUED = 'main.nr notes::commitment(domain, notes::Note';
   for (const [label, mutate, expected] of [
     ['issue zero quantity', async v => { v.quantity = '0'; await refreshIssue(v); }, 'main.nr assert(quantity > 0)'],
     ['issue quantity overflow', v => { v.quantity = (1n << 64n).toString(); }, 'range quantity'],
     ['issue wrong commitment', v => { v.cm = field(1); }, issueCommitment],
     ['issue zero commitment', v => { v.cm = field(0); }, issueCommitment],
-    ['issue zero owner', async v => { v.owner = field(0); await refreshIssue(v); }, R.ownerZero],
-    ['issue zero rho', async v => { v.rho = field(0); await refreshIssue(v); }, R.rho],
+    ['issue zero owner', async v => { v.owner = field(0); await refreshIssue(v); }, chain(ISSUED, N.ownerZero)],
+    ['issue zero rho', async v => { v.rho = field(0); await refreshIssue(v); }, chain(ISSUED, N.rho)],
     ['issue changed backing', v => { v.backing = f.b; }, issueCommitment],
     ['issue domain limb overflow', v => { v.domain[0] = (1n << 128n).toString(); }, 'range domain[0]'],
     ['issue segment limb overflow', v => { v.segment[1] = (1n << 128n).toString(); }, 'range segment[1]'],
@@ -158,20 +173,20 @@ try {
           v.anchors = [t.root, t.root]; v.siblings[0] = path.siblings; v.right[0] = path.right;
         }
       }, R.secret],
-      ['zero input rho', async v => { v.inputs[i].rho = field(0); await f.refresh(v); }, R.rho],
+      ['zero input rho', async v => { v.inputs[i].rho = field(0); await f.refresh(v); }, R.inputRho],
       ['input value overflow', v => { v.inputs[i].value = (1n << 64n).toString(); }, `range inputs[${i}].value`],
       ['input limb overflow', v => { v.inputs[i].backing[0] = (1n << 128n).toString(); }, `range inputs[${i}].backing[0]`],
       ['wrong nullifier', v => { v.nullifiers[i] = field(1); }, R.nullifier],
       ['zero nullifier', v => { v.nullifiers[i] = field(0); }, R.nullifier],
       ['wrong output', v => { v.outputs[i] = field(1); }, S.output],
       ['zero output', v => { v.outputs[i] = field(0); }, S.output],
-      ['zero output owner', async v => { v.output_notes[i].owner = field(0); await f.refresh(v); }, R.ownerZero],
-      ['zero output rho', async v => { v.output_notes[i].rho = field(0); await f.refresh(v); }, R.rho],
+      ['zero output owner', async v => { v.output_notes[i].owner = field(0); await f.refresh(v); }, R.outputOwner],
+      ['zero output rho', async v => { v.output_notes[i].rho = field(0); await f.refresh(v); }, R.outputRho],
       ['output value overflow', v => { v.output_notes[i].value = (1n << 64n).toString(); }, `range output_notes[${i}].value`],
       ['foreign output backing', async v => { v.output_notes[i].backing = f.foreign; await f.refresh(v); }, S.outputBacking],
-      ['input wrong link', v => { v.links[i] = f.linkB; }, R.scope],
-      ['input wrong scope sibling', v => { v.scope_siblings[i][15] = field(1); }, R.scope],
-      ['input wrong scope direction', v => { v.scope_right[i][0] = !v.scope_right[i][0]; }, R.scope],
+      ['input wrong link', v => { v.links[i] = f.linkB; }, R.inputScope],
+      ['input wrong scope sibling', v => { v.scope_siblings[i][15] = field(1); }, R.inputScope],
+      ['input wrong scope direction', v => { v.scope_right[i][0] = !v.scope_right[i][0]; }, R.inputScope],
       ['input link limb overflow', v => { v.links[i][1] = (1n << 128n).toString(); }, `range links[${i}][1]`],
     ]) await rejects(`${label} slot ${i}`, 'spend', f.padded, mutate, expected);
   }
@@ -185,7 +200,7 @@ try {
       const t = await f.tree([[5n, await f.cm(v.inputs[0])]]), path = t.path(5n);
       v.siblings[0] = path.siblings; v.right[0] = path.right; v.anchors[1] = t.root;
     }, R.anchor],
-    ['wrong scope root', v => { v.scope = field(1); }, R.scope],
+    ['wrong scope root', v => { v.scope = field(1); }, R.inputScope],
     // The other scoped backing, with its own valid link and scope path: only the padding rule refuses it.
     ['padding from another scoped backing', async v => {
       const p = f.scope.path(1n);
@@ -196,7 +211,7 @@ try {
       v.inputs.forEach(n => { n.backing = [...f.foreign]; }); v.output_notes.forEach(n => { n.backing = [...f.foreign]; }); await f.refresh(v);
       const t = await f.tree([[0n, await f.cm(v.inputs[0])]]), path = t.path(0n);
       v.anchors = [t.root, t.root]; v.siblings[0] = path.siblings; v.right[0] = path.right;
-    }, R.scope],
+    }, R.inputScope],
     ['inflation with correct output hashes', async v => { v.output_notes[0].value = '41'; await f.refresh(v); }, S.conserve],
     ['both padding', async v => { v.inputs[0].value = '0'; v.output_notes.forEach(n => { n.value = '0'; }); await f.refresh(v); }, S.positive],
     ['duplicate nullifiers with conserved value', async v => {
@@ -240,6 +255,7 @@ try {
   assert.deepEqual(otherSegmentProof.publicInputs.slice(7), proofs.spend.publicInputs.slice(7));
   assert.notDeepEqual(otherSegmentProof.publicInputs.slice(2, 4), proofs.spend.publicInputs.slice(2, 4));
 
+  const CHANGE = 'main.nr notes::commitment(domain, change)';
   const B = {
     inputBacking: 'main.nr assert(inputs[i].backing == backing)', changeBacking: 'main.nr assert(change.backing == backing)',
     conserve: 'main.nr assert(inputs[0].value as u128 + inputs[1].value as u128 == quantity as u128 + change.value as u128)',
@@ -261,8 +277,8 @@ try {
     ['burn wrong scope root', v => { v.scope = field(1); }, R.scope],
     ['burn foreign change', async v => { v.change.backing = f.b; await f.refresh(v); }, B.changeBacking],
     ['burn foreign padding', async v => { v.inputs[1].backing = f.b; await f.refresh(v); }, B.inputBacking],
-    ['burn zero change rho', async v => { v.change.rho = field(0); await f.refresh(v); }, R.rho],
-    ['burn zero change owner', async v => { v.change.owner = field(0); await f.refresh(v); }, R.ownerZero],
+    ['burn zero change rho', async v => { v.change.rho = field(0); await f.refresh(v); }, chain(CHANGE, N.rho)],
+    ['burn zero change owner', async v => { v.change.owner = field(0); await f.refresh(v); }, chain(CHANGE, N.ownerZero)],
     ['burn duplicate nullifiers with conserved value', async v => {
       v.inputs[1] = v.inputs[0]; v.secrets[1] = v.secrets[0]; v.siblings[1] = v.siblings[0]; v.right[1] = v.right[0];
       v.quantity = '100'; v.change.value = '100'; await f.refresh(v);
@@ -281,8 +297,7 @@ try {
   // prover that skips noir_js's encoder can build. Only the input range checks refuse them.
   for (const [kind, base] of [['issue', f.issue], ['spend', f.padded], ['burn', f.burn]]) {
     await circuits[kind].hostile.execute(asFields(base));
-    await circuits[kind].unranged.execute(asFields(base));
-    checks.push(`${kind}: the field-typed ABI and the range-stripped control solve the valid witness`);
+    checks.push(`${kind}: the field-typed ABI solves the valid witness`);
   }
   const mod = x => ((x % FIELD) + FIELD) % FIELD;
   const inverse = x => { let r = 1n, b = mod(x); for (let e = FIELD - 2n; e > 0n; e >>= 1n, b = b * b % FIELD) if (e & 1n) r = r * b % FIELD; return r; };
@@ -348,8 +363,7 @@ try {
   await beyondTypes('burn: a change of p - 50 wraps 100 = 150 + change', 'burn', f.burn, async v => {
     v.quantity = '150'; v.change.value = (FIELD - 50n).toString(); await f.refresh(v);
   }, 'range change.value');
-  const named = ({ expected, actual }) => expected.startsWith('range ') ? actual === expected : actual.startsWith(expected);
-  assert.deepEqual(refused.filter(r => !named(r)), [], 'each hostile witness fails the constraint it names');
+  assert.deepEqual(refused.filter(r => !names(r.expected, r.actual)), [], 'each hostile witness fails the constraint it names');
   assert.equal(new Set(refused.map(r => r.label)).size, refused.length, 'hostile witness labels are distinct');
 
   for (const kind of ['issue', 'spend', 'burn']) {

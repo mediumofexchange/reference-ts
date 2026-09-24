@@ -8,11 +8,12 @@
 // opcode of its declared width. `bypass` retypes the same program's ABI inputs
 // as fields (the bytecode is unchanged), so a hostile witness reaches the
 // constraints, and `refusal` names the one it fails: the input whose range
-// check failed, or the source assertion at the failing opcode.
+// check failed, or the call chain from main to the failing source assertion.
 //
-// `withoutInputRanges` is the mutation control: the same program with those
-// input RANGE opcodes removed, under which a hostile witness that otherwise
-// satisfies the relation solves. It is a test artifact, never proven with.
+// `withoutRange` is the mutation control: the same program without one
+// input's RANGE opcode, under which a hostile witness that breaks only that
+// bound solves. It is a test artifact; a witness solved on it is proven with
+// the real program's key only to show the verifier refuses the proof.
 import assert from 'node:assert/strict';
 import { gunzipSync, gzipSync, inflateRawSync } from 'node:zlib';
 import { pack, unpack } from 'msgpackr';
@@ -99,12 +100,13 @@ export function bypass(program) {
   return copy;
 }
 
-/** `bypass`'s program with every RANGE opcode on an ABI input removed. */
-export function withoutInputRanges(program) {
-  const inputs = inputsOf(program.abi).length, decoded = unpacked(program), fn = decoded[0][0];
-  const before = fn[1].length;
-  fn[1] = fn[1].filter(opcode => !(rangeOf(opcode)?.witness < inputs));
-  assert(fn[1].length < before, 'input RANGE opcodes removed');
+/** `bypass`'s program without the RANGE opcode on the one ABI input at `path`. */
+export function withoutRange(program, path) {
+  const witness = inputsOf(program.abi).findIndex(leaf => leaf.path === path);
+  assert(witness >= 0, `${path} is an input`);
+  const decoded = unpacked(program), fn = decoded[0][0], before = fn[1].length;
+  fn[1] = fn[1].filter(opcode => rangeOf(opcode)?.witness !== witness);
+  assert.equal(fn[1].length, before - 1, `one RANGE opcode on ${path} removed`);
   return { ...bypass(program), bytecode: gzipSync(Buffer.concat([Buffer.from([FORMAT]), pack(decoded)])).toString('base64') };
 }
 
@@ -136,9 +138,26 @@ export function refusal(program, error) {
   const debug = infos[cause.acirFunctionId ?? 0];
   const id = debug.acir_locations[at];
   assert.notEqual(id, undefined, `opcode ${at} has a source location`);
-  const node = debug.location_tree.locations[id];
-  assert.notEqual(node.parent, null, `opcode ${at} has a source location`);
-  const { file, span } = node.value, { path, source } = program.file_map[file];
-  const text = Buffer.from(source, 'utf8').subarray(span.start, span.end).toString('utf8').replace(/\s+/g, ' ');
-  return `${path.split(/[\\/]/).pop()} ${text}`;
+  // The call chain from main's call site to the failing assertion, outermost first.
+  const frames = [];
+  for (let node = debug.location_tree.locations[id]; node.parent !== null; node = debug.location_tree.locations[node.parent]) {
+    const { file, span } = node.value, { path, source } = program.file_map[file];
+    const text = Buffer.from(source, 'utf8').subarray(span.start, span.end).toString('utf8').replace(/\s+/g, ' ');
+    frames.unshift(`${path.split(/[\\/]/).pop()} ${text}`);
+  }
+  assert.notEqual(frames.length, 0, `opcode ${at} has a source location`);
+  return frames.join(FRAME);
+}
+
+/** Between the frames of a refusal's call chain; source text holds `>` but not this. */
+export const FRAME = ' → ';
+
+/**
+ * Whether a refusal is the expected one: an input's range check exactly, or a
+ * call chain of the same depth whose every frame starts with the expected one.
+ */
+export function names(expected, actual) {
+  if (expected.startsWith('range ')) return actual === expected;
+  const want = expected.split(FRAME), got = actual.split(FRAME);
+  return want.length === got.length && want.every((frame, i) => got[i].startsWith(frame));
 }
