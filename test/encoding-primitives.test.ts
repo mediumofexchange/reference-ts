@@ -1,6 +1,6 @@
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { describe, expect, it } from "vitest";
-import { bigintToMinimalBytes, ByteWriter, EncodingError } from "../src/bytes.js";
+import { bigintToMinimalBytes, ByteWriter, copyBytes, EncodingError } from "../src/bytes.js";
 import { contextsArePrefixFree } from "../src/contexts.js";
 
 // The byte primitives, pinned against literal expected output.
@@ -95,5 +95,25 @@ describe("domain-separation tags are prefix-free", () => {
     const enc = new TextEncoder();
     expect(contextsArePrefixFree([enc.encode("moe/burn/v1"), enc.encode("moe/burn/v11")])).toBe(false);
     expect(contextsArePrefixFree([enc.encode("moe/a/v1"), enc.encode("moe/b/v1")])).toBe(true);
+  });
+});
+
+describe("copyBytes owns what it returns", () => {
+  it("copies a subclass without its species, and refuses look-alikes", () => {
+    const shared = new Uint8Array(4);
+    class Aliasing extends Uint8Array {
+      static get [Symbol.species]() { return function () { return shared; } as unknown as Uint8ArrayConstructor; }
+    }
+    const copy = copyBytes(new Aliasing([1, 2, 3, 4]));
+    expect(copy).toEqual(new Uint8Array([1, 2, 3, 4]));
+    expect(Object.getPrototypeOf(copy)).toBe(Uint8Array.prototype);
+    copy.fill(9);
+    expect(shared).toEqual(new Uint8Array(4));
+    expect(copyBytes(Buffer.from([5, 6]))).toEqual(new Uint8Array([5, 6]));
+    const view = new DataView(new ArrayBuffer(4));
+    Object.setPrototypeOf(view, Uint8Array.prototype);
+    for (const fake of [new Proxy(new Uint8Array(4), {}), view, [1, 2], "ab"]) {
+      expect(() => copyBytes(fake as Uint8Array)).toThrow(EncodingError);
+    }
   });
 });
