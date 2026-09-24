@@ -16,7 +16,7 @@ import { readPoolCheckpoint, readPoolCheckpoints, type PoolCheckpointEvidence } 
 import { mergePoolEvidence, replayedPoolEvidence } from "./evidence.js";
 import { preparePoolOpening } from "./opening.js";
 import { poolReceiptInHistory, poolReceiptAttestsEvidence, signPoolReceipt, type PoolReceipt } from "./receipt.js";
-import { PoolError, Segment, type ImportEvidence, type SegmentTrail, type SignedBacking, type StatementVerifier } from "./segment.js";
+import { PoolError, Segment, type AcceptedStatement, type ImportEvidence, type SegmentTrail, type SignedBacking, type StatementVerifier } from "./segment.js";
 import { allFields, configurationHash, copyConfiguration, copySegmentHeader, decodeStatement, encodeStatement, ISSUE, isStatementKind,
   parsePublicInputs, PUBLIC_INPUT_COUNT, readStatementFields, segmentBytes, statementBytes, statementHash, type OpeningCheckpoint, type PoolConfiguration, type SegmentHeader, type Statement } from "./statement.js";
 import { copyPoolCheckpointEvidence, decodeStoredOpening, decodeStoredReceipt, encodeStoredOpening, encodeStoredReceipt } from "./store-codec.js";
@@ -374,7 +374,9 @@ export class PoolStore {
   }
   private unrevoked(statement: Statement, segment: Segment): void {
     if (statement.kind !== ISSUE) return;
-    const inputs = parsePublicInputs(statement.kind, statement.publicInputs);
+    let inputs: ReturnType<typeof parsePublicInputs>;
+    try { inputs = parsePublicInputs(statement.kind, statement.publicInputs); }
+    catch (cause) { if (cause instanceof EncodingError) throw new PoolError("MALFORMED", cause.message); throw cause; } // as admission answers
     if (inputs.kind !== ISSUE) throw new PoolStoreError("STORAGE", "issuance parse mismatch");
     const backing = segment.backing(inputs.backing)?.backing;
     requireThat(backing !== undefined && revokedAt(this.venue, backing) === undefined, "UNSUPPORTED", "revoked issuance cannot be admitted or newly committed");
@@ -534,8 +536,12 @@ export class PoolStore {
       this.ready(engine, "admit");
       const segment = engine.segment!, now = this.clock(), observed = encoded(this.latest());
       this.unrevoked(own, segment);
-      const accepted = await segment.admit(own);
-      this.diverging = true; // the segment now holds a statement the journal does not
+      const before = segment.length;
+      let accepted: AcceptedStatement;
+      // Once the segment holds a statement the journal does not, any failure
+      // reloads, including a refusal thrown after a change it should not have made.
+      try { accepted = await segment.admit(own); }
+      finally { if (segment.length !== before) this.diverging = true; }
       const result = this.transaction(() => {
         const stable = () => {
           this.stable(now, observed); this.ready(engine, "admit"); this.unrevoked(own, segment); this.stable(now, observed);

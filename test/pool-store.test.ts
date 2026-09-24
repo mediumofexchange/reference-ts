@@ -2,14 +2,13 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { makeBacking, signBacking } from "../src/backing.js";
-import { EncodingError } from "../src/bytes.js";
 import { directoryRoot, signCommitment, type Commitment } from "../src/commitment.js";
 import { poolReceiptAttestsEvidence, poolReceiptInHistory } from "../src/pool/receipt.js";
 import type { PoolCheckpointEvidence } from "../src/pool/checkpoint.js";
 import { readPoolReceiptCheckpoint, readPoolReceiptRecord } from "../src/pool/receipt-record.js";
 import { readPoolReceiptRepair } from "../src/pool/receipt-repair.js";
 import { readPoolReceiptStatus } from "../src/pool/receipt-status.js";
-import { Segment } from "../src/pool/segment.js";
+import { PoolError, Segment } from "../src/pool/segment.js";
 import { segmentAuthority, statementHash, type Statement } from "../src/pool/statement.js";
 import { decodeStoredOpening, encodeStoredOpening, encodeStoredReceipt } from "../src/pool/store-codec.js";
 import type { PoolStore as Store, PoolStoreCheckpoint } from "../src/pool/store.js";
@@ -597,9 +596,19 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     await expect(f.s.commit("opening")).rejects.toMatchObject({ code: "CONFLICT" });
     const wide = issueStatement(authority, f.x.backing.name, 10n, 105n, SECRETS.backer);
     await expect(f.s.submit({ ...wide, publicInputs: wide.publicInputs.map((v, i) => (i === 5 ? 1n << 128n : v)) }))
-      .rejects.toThrow(EncodingError);
+      .rejects.toMatchObject({ name: "PoolError", code: "MALFORMED" }); // as admission would answer
     expect((await f.s.submit(f.issue(104n))).position).toBe(3n);
     expect(f.oracle.calls).toBe(before + 3); // the two refused proofs and the new one
+  });
+
+  it("reloads after an admission that changed the segment and then refused", async () => {
+    const f = await fixture(); await f.s.publish();
+    // Stand-in for a refusal thrown after a transition: the one path the
+    // store cannot see from the error class alone.
+    const segment = (f.s as unknown as { engine: { segment: Segment } }).engine.segment, admit = segment.admit.bind(segment);
+    segment.admit = async statement => { await admit(statement); throw new PoolError("OUTPUT", "refused after a transition"); };
+    await expect(f.s.submit(f.issue(101n))).rejects.toMatchObject({ code: "OUTPUT" });
+    expect((await f.s.submit(f.issue(101n))).position).toBe(1n); // replayed from the journal, which never held it
   });
 
   it("re-validates retained ancestry before each request without re-verifying its proofs", async () => {
