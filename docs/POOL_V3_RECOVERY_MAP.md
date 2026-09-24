@@ -731,8 +731,8 @@ Each names the rule, the candidate, the alternative, and what closes it.
   ([replay cost](POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost)): the
   local replay verified every checkpoint's whole prefix again and now resumes
   from the last valid state under C2.10.12, one verification per event.
-  Replay costs about 65–90 ms per spend in host work plus its verification.
-  The operator keeps about 1.56 GB per 10⁵ statements. Packages no longer need
+  Host work per spend and the operator's retention (about 1.56 GB per 10⁵
+  statements) are measured there. Packages no longer need
   every checkpoint's full trail (about N²/2K records): pool-v3 §12.1 at 786f962
   serves a checkpoint from the prefix of a longer supplied trail. Open: the
   budget a reader profile accepts and the note tree's Poseidon2 cost (wasm is

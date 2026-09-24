@@ -578,7 +578,7 @@ segments (one issue, then spends with fresh nullifiers and four outputs) through
 the conditional local replay, with a checkpoint every K events and the last one
 selected. A counting stub stands in for proof verification; the
 [conformance report](pool-v3-conformance-verification.json) supplies real
-single-thread verification times, 60–115 ms per proof. The
+single-thread verification times. The
 [recorded report](pool-replay-cost-verification.json) binds LF-normalized source
 hashes, environment and every case.
 
@@ -597,19 +597,23 @@ terminal hash matches. Every case now verifies exactly one proof per event.
 
 | Events, checkpoint every | Replay per event (stub verifier) | Same, selected trail only | Package trail bytes | Unique record bytes |
 |---|---:|---:|---:|---:|
-| 60 / 60, 14,656-byte proofs | 82.6 ms | 91.6 ms | 934,727 | 933,389 |
-| 60 / 10, 14,656-byte proofs | 90.4 ms | 87.2 ms | 3,270,717 | 933,389 |
-| 1,024 / 1,024, 32-byte stand-ins | 71.8 ms | 78.4 ms | 965,375 | 960,181 |
-| 1,024 / 64, 32-byte stand-ins | 66.3 ms | 77.8 ms | 8,203,205 | 960,181 |
+| 60 / 60, 14,656-byte proofs | 43.7 ms | 44.1 ms | 934,727 | 933,389 |
+| 60 / 10, 14,656-byte proofs | 37.3 ms | 36.2 ms | 3,270,717 | 933,389 |
+| 1,024 / 1,024, 32-byte stand-ins | 43.3 ms | 72.4 ms | 965,375 | 960,181 |
+| 1,024 / 64, 32-byte stand-ins | 46.8 ms | 47.2 ms | 8,203,205 | 960,181 |
 
-Timings from one loaded desktop vary by about 20% between runs.
+Recorded 2026-09-24 at the review merge. The 2026-09-23 run on the same
+desktop, then also running two nodes and a chain driver, measured 66–91 ms per
+event; host load moves these timings by up to 2×, so budgets need a quiet or
+declared host.
 
-Host replay is dominated by the note tree. A four-output append costs about 64 ms,
-about 34 Poseidon2 hashes at about 2 ms each in the JavaScript implementation.
-Barretenberg's wasm computes the same permutation in 0.15 ms against 1.01 ms,
-an untaken lever. The spent set costs 0.4 ms per two nullifiers, and a state
-copy 0.7 ms per 1,000 leaves. By extrapolation, one core replays 10⁵ spends in
-about 1.8 h of verification plus 1.7 h of note-tree hashing. The proofs are
+Host replay is dominated by the note tree. A four-output append costs about
+26 ms, about 34 Poseidon2 hashes at about 0.85 ms each in the JavaScript
+implementation. Barretenberg's wasm computes the same permutation in 0.065 ms
+against 0.43 ms, an untaken lever. The spent set costs 0.16 ms per two
+nullifiers, and a state copy 0.34 ms per 1,000 leaves. By extrapolation, one
+core replays 10⁵ spends in about 2.3 h of verification (75–129 ms per proof in
+this run's conformance report) plus 0.7 h of note-tree hashing. The proofs are
 independent, so verification parallelizes. Records are 15,231 bytes for an
 issue and 15,562 for a spend at the observed 14,656-byte proof. The operator
 therefore retains about 1.56 GB per 10⁵ statements.

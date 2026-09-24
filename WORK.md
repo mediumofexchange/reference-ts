@@ -1,31 +1,37 @@
 # Current work
 
-Updated: 2026-09-23
+Updated: 2026-09-24
 
 ## Goal
 
-Next slice: decoder equivalence over the own mainnet node's blocks. Resume
-`scratch/equivalence-driver.mjs` (no stack flag), summarize with
-`equivalence-summary.mjs` into `docs/ergo-decoder-equivalence-verification.json`:
-every retained block's transactions decoded by the pinned release build and
-compared with the node's own view, differences listed. Acceptance: report,
-probes/decoder decision updated, one review, merged with CI green. Stop
-boundary: no decoder or profile selection, no spec or runtime change.
+Next slice: decoder equivalence over the own mainnet node's blocks. The driver
+finished 2026-09-24 00:07 (five chunks, heights 1,830,001–1,879,100, all exit
+0; `scratch/equivalence/`, cache `scratch/ergo-chain-own/`). A review found that
+chain-cost only rebuilds bytes, checks roots and checks non-refusal; it never
+compares the decoder's id, output trees and registers with the node JSON. Add
+that comparison as an offline post-pass over the cached transactions, count and
+sample differences, and make `passed` require none. Bind the post-pass and the
+driver's exact command in the summary, and link chunks by header id rather
+than height. Then write `docs/ergo-decoder-equivalence-verification.json`.
+Acceptance: report, probes/decoder decision updated, one review, merged with
+CI green. Stop boundary: no decoder or profile selection, no spec or runtime
+change.
 
 ## Status
 
-- A13 replay cost (merged 2026-09-23): local replay resumes an extending
-  checkpoint from the last valid state; cost in
-  `docs/pool-replay-cost-verification.json`. Served-trail prefixes (spec
-  786f962, decision 2026-09-23, merged): one trail per chain of prefixes;
-  terms resolved per backing name, none verifying is unresolved. Reviewed.
-  The import budget charges each replayed position once; a reader may pass
-  its own local `importLimits` on the verifier (reviewed, merged).
-- A10 (merged 2026-09-23, reviewed): mainnet day 2026-09-22 19:22 to
-  09-23 20:22 UTC retained as `docs/ergo-latency-verification.json`, paired
-  with the own node's run; included k median 3, p99 12, max 19; within the
-  window 76% at depth 2, 94% at 6, 99.8% at 10; 410/784 coinbase-only
-  blocks; misses 0.2–0.7% at depth 10 across the two nodes. Depth not selected.
+- Review pass (merged 2026-09-24, each branch independently reviewed): v2
+  ingestion reads caller objects once (admission, journal rows, wallet
+  checkpoints/notes, species-safe `copyBytes`); refusals keep the loaded
+  journal; retained evidence and true proof answers are reused; internal
+  change IDs get no public request, token or invitation. v3 replay charges
+  imports, clocks and publications once; report sources come from the import
+  graph and lockfiles, spec pin in `scripts/pool/v3/provenance.mjs`. Ergo
+  tooling fixes: decoder corpus, publish, nodes.mjs, latency. The
+  contained-node harness is retired to Git history (permalinks at c85af7b).
+- A13 replay cost, served-trail prefixes (spec 786f962) and A10 inclusion
+  latency are merged and reviewed; numbers live in
+  [probes](docs/POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet)
+  and the retained reports. No depth is selected.
 - Own nodes (approved): `nodes.mjs` runs official v6.0.6 mainnet (snapshot
   bootstrap, full headers, 127.0.0.1:9053) and testnet (archive + index,
   127.0.0.1:9052) from `scratch/ergo-nodes/`, both synced (5.4 / 17.5 GB);
@@ -34,13 +40,9 @@ boundary: no decoder or profile selection, no spec or runtime change.
 - Decoder pin: vendored reproducible release build of sigma-rust 2f840d3
   (`experiments/ergo-range/vendor/`, decision 2026-09-23), merged; the npm
   alpha was a debug build. Rust 1.87 + wasm-bindgen 0.2.128 installed
-  (`~/.cargo`, `scratch/rust-toolchain`). Equivalence over the own node's 51k
-  blocks (`scratch/equivalence-driver.mjs`, then `equivalence-summary.mjs`)
-  is paused while the latency runs use the node.
-- Metered decoder: `metered-check.mjs --week` decodes the P4 window (<= 22,450
-  fuel/byte, 11.1 MB); the root does not bind the node's JSON split, so the own
-  decoder stays (decision 2026-09-23). Adversarial resource bounds and a
-  budget remain open.
+  (`~/.cargo`, `scratch/rust-toolchain`, source cache `scratch/sigma-rust-src`).
+- Metered decoder: `metered-check.mjs --week` decodes the P4 window; the own
+  decoder stays (decision 2026-09-23); adversarial bounds and a budget are open.
 - Testnet wallet: key in ignored `scratch/ergo-testnet/wallet.json` (about
   19,999.99 tERG), a copy kept outside the repository; testnet transactions
   need no further approval; sweep boxes back and spend only fees.
@@ -51,12 +53,18 @@ boundary: no decoder or profile selection, no spec or runtime change.
 
 ## Next
 
-1. Decoder equivalence (Goal): the driver runs detached since 2026-09-23
-   20:41 UTC from height 1,830,001 (the node prunes to its last 50,000 full
-   blocks; the first start at 1,827,841 hit a pruned block). Log
-   `scratch/equivalence/driver.log`; rerunning resumes by chunk; then
-   `equivalence-summary.mjs --out docs/ergo-decoder-equivalence-verification.json`.
-2. Later: a Linux or CI reproducible build of the decoder pin; the note
+1. Decoder equivalence (Goal): add the tree/register comparison post-pass,
+   then `equivalence-summary.mjs --out docs/ergo-decoder-equivalence-verification.json`.
+   The node prunes to its last 50,000 full blocks; chunks start at 1,830,001.
+   Chain-cost and equivalence-summary still duplicate helpers other Ergo
+   scripts have (parse, fetch/retry, model compile); share them only when a
+   report is re-recorded anyway, since each move changes bound hashes.
+2. Deferred review items: classify bb.js verifier throws (truncated,
+   past-modulus, off-curve proof, destroyed backend) before narrowing
+   `barretenberg.ts`'s catch-all; retire the v1 store-codec path if no v1
+   journal must load; shared v3 fixture/byte helpers across the check
+   scripts; scope replay resumes only under the same selected backing.
+3. Later: a Linux or CI reproducible build of the decoder pin; the note
    tree's Poseidon2 on Barretenberg wasm (about 6x); a reader budget.
 
 ## Retained boundaries and local state
@@ -75,6 +83,8 @@ boundary: no decoder or profile selection, no spec or runtime change.
   full heights null/unresolved. The week's cached node responses
   (`scratch/ergo-chain/`, digest in the report), `scratch/sigma-alpha/` and
   the `scratch/sigma-0.28.0/` control can be regenerated; keep the cache.
+  Keep `scratch/equivalence/` and `scratch/ergo-chain-own/` until the
+  equivalence report is retained.
 - Legacy Temp/moeclean worktree points at a different Claude_local checkout;
   preserve it. Configuration approval stays disabled. Device qualification and
   external publication remain separate dependencies.

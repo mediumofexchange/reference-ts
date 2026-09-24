@@ -41,11 +41,13 @@ for (const report of reports) {
   const changed = [];
   let matched = 0;
   for (const [key, digest] of pairs) {
-    const file = bases.map((base) => join(base, key)).find((path) => existsSync(path) && statSync(path).isFile());
-    if (file === undefined) continue;
-    const bytes = readFileSync(file);
-    if (sha256(bytes) === digest || sha256(lf(bytes)) === digest) matched += 1;
-    else changed.push(file.replace(/\\/g, "/"));
+    // A bare name such as package.json can exist under several bases; it
+    // matches if any candidate still has the recorded bytes.
+    const files = bases.map((base) => join(base, key)).filter((path) => existsSync(path) && statSync(path).isFile());
+    if (files.length === 0) continue;
+    const same = (path) => { const bytes = readFileSync(path); return sha256(bytes) === digest || sha256(lf(bytes)) === digest; };
+    if (files.some(same)) matched += 1;
+    else changed.push(files[0].replace(/\\/g, "/"));
   }
   if (changed.length === 0) {
     if (all && matched > 0) console.log(`current  ${report}: ${matched} bound sources match`);
