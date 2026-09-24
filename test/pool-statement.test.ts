@@ -107,6 +107,9 @@ describe("pool-v2 §6: the segment header and its identity", () => {
     expect(segmentIdentity(HEADER)).toEqual(sha256(expected));
     expect(decodeSegmentHeader(segmentBytes(HEADER))).toEqual(copySegmentHeader(HEADER));
     expect(segmentBytes(decodeSegmentHeader(segmentBytes(HEADER)))).toEqual(segmentBytes(HEADER));
+    // The entries framed are the ones checked, by index, whatever the list's iterator yields.
+    const iterating = { ...HEADER, entries: Object.assign([...HEADER.entries], { *[Symbol.iterator]() { yield* [...HEADER.entries, ...HEADER.entries]; } }) };
+    expect(segmentBytes(iterating)).toEqual(new Uint8Array(expected));
     // Another sequence, link, opening or scope is another segment.
     for (const other of [
       { ...HEADER, sequence: 8n },
@@ -226,6 +229,12 @@ describe("pool-v2 §7: statements and their identity", () => {
     // The fields framed are the n the count names, read by index, whatever the list's iterator yields.
     const iterating = Object.assign([...inputs], { *[Symbol.iterator]() { yield* [...inputs, 10n]; } });
     expect(statementBytes(DOMAIN, ISSUE, iterating)).toEqual(new Uint8Array(expected));
+    // parsePublicInputs reads each position once: the quantity checked is the quantity returned.
+    let reads = 0;
+    const shifting = [...inputs];
+    Object.defineProperty(shifting, 7, { get: () => (reads++ === 0 ? 8n : 1n << 64n) });
+    expect(parsePublicInputs(ISSUE, shifting)).toMatchObject({ quantity: 8n });
+    expect(reads).toBe(1);
   });
 
   it("recognizes a well-formed statement by kind, count, field canonicity, proof shape and signature presence", () => {

@@ -210,8 +210,9 @@ export function copySegmentHeader(header: SegmentHeader): SegmentHeader {
  * ‖ u32 n ‖ entries), each entry backing ‖ link ‖ u64 openingSequence ‖ openingOperator ‖ openingRoot,
  * with sequence 0 and sixty-four zero bytes for the empty book.
  */
-export function segmentBytes(header: SegmentHeader): Uint8Array {
-  if (!isWellFormedHeader(header)) throw new EncodingError("malformed segment header");
+export function segmentBytes(input: SegmentHeader): Uint8Array {
+  // Framed from one validated copy, so the count and the entries written are the ones checked.
+  const header = copySegmentHeader(input);
   const w = new ByteWriter();
   w.context(POOL_SEGMENT_CONTEXT);
   w.key32(header.domain, "configuration hash");
@@ -546,7 +547,9 @@ export type ParsedInputs = IssueInputs | SpendInputs | BurnInputs;
  * so this refuses what no valid proof could carry, with the reason named,
  * before the proof is looked at.
  */
-export function parsePublicInputs(kind: StatementKind, inputs: readonly bigint[]): ParsedInputs {
+export function parsePublicInputs(kind: StatementKind, list: readonly bigint[]): ParsedInputs {
+  // One read of each position, into the copy that is checked and parsed.
+  const inputs = isStatementKind(kind) ? ownList(list) : null;
   if (!isStatementKind(kind) || !allFields(inputs, PUBLIC_INPUT_COUNT[kind])) {
     throw new EncodingError("public inputs do not match the kind");
   }
