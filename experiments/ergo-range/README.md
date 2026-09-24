@@ -326,7 +326,8 @@ id, and where the profile's framer reads them its outputs must be the node's
 unsigned bytes (`supply.mjs`), so the mutations fall on the framer's own
 input. The first command writes the [retained report](../../docs/ergo-decoder-hostile-equivalence-verification.json)
 and keeps its cases and the node's answers in `scratch/hostile-equivalence/`;
-the second writes the [framer report](../../docs/ergo-framer-hostile-equivalence-verification.json).
+the second writes the framer report `docs/ergo-framer-hostile-equivalence-verification.json`
+(not yet recorded: its first run was stopped under memory pressure).
 
 ## Metered decoder feasibility
 

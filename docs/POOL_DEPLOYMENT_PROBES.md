@@ -1621,8 +1621,21 @@ for the price of a transaction. The rewrites add a second denial: the header
 commits to the ids of the node's rewrite, so a supplier serving a miner's
 original bytes is refused (392 cases read under other ids).
 
+These refusals no longer reach the reader, which since 2026-09-24 takes each
+transaction's unsigned bytes and frames them itself
+([decision](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)).
+The 2026-09-24 rerun has the node also state its own unsigned bytes
+(`messageToSign`) for every transaction it reads: 56,953 readings (whole
+cases, prefixes and the 2,845 stable rewrites). Every one hashes to the
+node's id; the framer reads 18,382 of them, each with exactly the node's
+output count, trees, register names and constants, and leaves 38,571
+outside its grammar, which carry no record. The decoder's counts above are
+unchanged by the rerun. A second run whose seeds are the corpus's unsigned
+bytes, so that the mutations fall on the framer's own input, was stopped
+under memory pressure and is still owed.
+
 Not established: validity against state or proofs; version contexts other
-than a version-4 block's (the profile accepts every header version); which
+than a version-4 block's (the profile reads block versions 1–4); which
 bytes peers and node APIs serve for a rewritten transaction; inputs beyond
 single-byte mutations and splices of these 29 transactions. The stateless
 verdict uses the node's initial validation settings.

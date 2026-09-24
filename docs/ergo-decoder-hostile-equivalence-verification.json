@@ -1,16 +1,19 @@
 {
   "status": "no-same-id-disagreement-on-these-cases",
   "sameIdsDiffer": 0,
+  "framerDiffers": 0,
   "uncompared": 0,
   "resourceCasesCountedNotSampled": 0,
+  "seedsAre": "signed bytes",
   "limits": [
     "parse level: no state, proofs or full validity; the stateless verdict uses the node's initial validation settings, not mainnet's voted ones",
-    "one version context, a version-4 block's (activated 3, tree 3): blocks of earlier versions are read by the node under other contexts, and the profile does not yet refuse them",
+    "one version context, a version-4 block's (activated 3, tree 3): blocks of earlier versions are read by the node under other contexts; the profile reads sections of block versions 1-4 only",
     "mutations of the 29 corpus transactions only: single-byte replacements, deletions and insertions, prefixes and seeded splices",
     "fields no mutation both sides read alike changed: outputCount, registerNames",
     "the node's resource refusals depend on its runtime's heap and stack; the harness runs its main thread with -Xmx4G",
     "for a transaction the node rewrites, the header commits to the rewrite's ids; which bytes peers and node APIs serve for it (the miner's or the rewrite), and whether the node's section serializer (writing under version context 4, 4) gives the rewrite read here (3, 3), are not measured"
   ],
+  "framer": "for every transaction the node reads (whole cases, prefixes and stable rewrites), the node's own unsigned bytes (messageToSign) hashed against its id and read by the profile's framer (model/pool-v3-ergo-profile.ts frameTransaction); a framed reading is compared with the node's output count, ErgoTree bytes, register names and constants (counts.framer)",
   "compares": "per case, the node's reading (the pinned v6.0.6 JAR's BlockTransactionsSerializer.parse of a one-transaction version-4 section, then the node's id, witness id, parsed ErgoTree bytes and register constants stated in that transaction's version context) against contained-decoder.mjs's: id, witness id, output count, and each output's ErgoTree bytes, register names and register constants; where the node reads a proper prefix, the decoder's reading of the whole case and of that prefix; where the node's serializer writes what it read as other bytes, the decoder's reading of those bytes",
   "verdicts": {
     "equal": "every compared field equal",
@@ -88,6 +91,11 @@
     "nodeStateless": {
       "ok": 53963,
       "failed": 145
+    },
+    "framer": {
+      "idFromUnsigned": 56953,
+      "unframed": 38571,
+      "framedEqual": 18382
     },
     "nodeReads": {
       "equal": 49613,
@@ -1725,23 +1733,40 @@
     ]
   },
   "timing": {
-    "nodeMs": 53406,
-    "decodeMs": 719486,
-    "maxDecodeMs": 1452
+    "nodeMs": 91899,
+    "decodeMs": 2019216,
+    "maxDecodeMs": 1504
   },
   "host": {
     "node": "v24.6.0",
     "platform": "win32"
   },
   "files": {
-    "experiments/ergo-range/hostile-equivalence.mjs": "e0544ace8533e639d76277ada08e3325bf9d874dae8f80f0a0f7379687c8c857",
-    "experiments/ergo-range/node-read/NodeRead.java": "e8ee2405a13e3c7fa94d7bd57081987e566f68816d9fd3104fd0264acb6532e5",
+    "experiments/ergo-range/hostile-equivalence.mjs": "99a2b61b427fb9d38f3f1091ebe658b8fcd984ad88f19163b7bb4a2fe977341b",
+    "experiments/ergo-range/node-read/NodeRead.java": "11dbe51dc1767374b84075c8683f956fee6f64530cbd21d0af1dac5c9d5d913d",
     "experiments/ergo-range/contained-decoder.mjs": "935de261b840a03ed653202b74c739e37066146bbe45a58082847dfe8c86ca21",
     "experiments/ergo-range/wasm-meter.mjs": "e9fad35867dc741a966d4e231264aa1e5e4846970ec20cb6b7e9638ad7cd1c49",
+    "experiments/ergo-range/supply.mjs": "93ac469000e788f25912a2c0adea38f2b4e06e547c1f3fe1032c5e788d7c6a5c",
+    "experiments/ergo-range/decoder.mjs": "f2ab6943b8ab15ee236fefea12731a8e601e382c2da9b211b100bf239e288b26",
+    "tsconfig.json": "5d7b9d7a9ad1947fa0139a3649914b3ce14e3315fe266ae5d4d88273426c1922",
     "experiments/ergo-range/fixtures/manifest.json": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
     "experiments/ergo-range/package.json": "0eb7a7f6a08c6b80a601dc36787620c36f8a5ad643b3c2730eac30ef3c0f8c3a",
     "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
     "experiments/ergo-range/vendor/ergo-lib-wasm-nodejs/ergo_lib_wasm.js": "5ff04811204c6cbbdaeb1555c7bd7749ab106719b6f41202a3a22426600b6d9c",
-    "experiments/ergo-range/vendor/ergo-lib-wasm-nodejs/SHA256SUMS": "8404d891c6f2ee14f8671c89f8f96682d8d4193b262631251963247db9b88272"
+    "experiments/ergo-range/vendor/ergo-lib-wasm-nodejs/SHA256SUMS": "8404d891c6f2ee14f8671c89f8f96682d8d4193b262631251963247db9b88272",
+    "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
+    "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
+    "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
+    "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
+    "src/presentation.ts": "adcd73c862129f4ccd4d02b14df16c0f701127f3d8d504f0bb91e91734b46bb3",
+    "src/messages.ts": "8a941254bf24650f9146d3875add1f20993a08b17b40ddac1ed060e225191718",
+    "src/oplog.ts": "d1f2ad4b71a109948f3f39a869f25ae8faf63b3fcd0206b7f9015117e31a714a",
+    "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
+    "src/revocation.ts": "1b23bc3de5017738c1a056f013a83ce776caa099826c48c4091900f12c9474ea",
+    "src/venue.ts": "17d3bb0f968ff51aac423eb1f22aaef692d9b3023dc811f6820d67a2ce0042c4",
+    "src/replacement.ts": "9f65220ebebc4c1cec42b9b28c7667beec6b08e56159a701bbfa6c34755083c1",
+    "src/commitment.ts": "158070f78a3f76511381a598a2a91d79dcdfeb9b02442a22450cf556f88b9adf",
+    "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f",
+    "model/pool-v3-ergo-profile.ts": "f3cc55986e9d3dbcf790242df1b3794ae4f65eb93b4c09cb60c9b0fc3def9813"
   }
 }

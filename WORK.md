@@ -4,32 +4,19 @@ Updated: 2026-09-24
 
 ## Goal
 
-Open slice (branch `feat/profile-framer`, from Next 1): no decoder refusal can
-deny a range. The candidate profile reads each transaction as its unsigned
-bytes (id = their Blake2b-256) plus its 31-byte witness id, and the model
-frames outputs itself under a small fixed grammar (sized trees by length,
-exact P2PK and miner-fee trees, `Coll[Byte]` registers and extension values);
-a transaction it cannot frame carries no record. Sections exist only for
-block versions 1–4. Acceptance: decision + profile text; model, tests and
-adapters (profile check, replay adapter/fixture, v3 ergo check, chain-cost,
-publish) without the decoder on the reader's path; framer against the node's
-own reading on the hostile corpus and real transactions; independent review;
-merge. Stop: re-recording real-proof v3 reports stays Next 2.
+No slice is open. Pick the next from Next below and state its acceptance
+here before starting.
 
 ## Status
 
-- Code review pass (2026-09-24, merged): the verifier failures, contained
-  decoder, pool runtime review fixes and the three decoder reports were
-  reviewed again. Fixed: array-species aliasing in `PoolStore.activate`,
-  `Segment.replay` and `copySegmentHeader` (a journal left unloadable, a
-  segment identity changing after the copy), receipt checks of a second read
-  (a receipt verifying under another segment), verifier options and contract.
-- Merged and reviewed before it: hostile-input node equivalence (JDK in
-  `scratch/jdk/`), [verifier failures](decisions/2026-09.md#2026-09-24--answer-false-only-for-malformed-proofs-and-never-verify-on-an-instance-that-threw),
-  the [contained decoder](docs/POOL_DEPLOYMENT_PROBES.md#contained-decoder)
-  (`decoder.mjs` stays the unmetered reference older reports bind), field
-  equivalence over 314,028 retained transactions, A13 replay cost,
-  served-trail prefixes (spec 786f962) and A10 latency; no depth selected.
+- Profile framer (2026-09-24, branch `feat/profile-framer`, merged): the
+  candidate Ergo reader takes each transaction as its unsigned bytes and
+  witness id and frames outputs itself; a transaction outside the grammar
+  carries no record and its block keeps its section, so no decoder refusal
+  denies a range; sections only for block versions 1–4
+  ([decision](decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)).
+  `supply.mjs` derives the bytes supplier-side. One independent review, no
+  blockers; v3 Ergo replay passed in CI only (local run: memory pressure).
 - Own nodes (approved): `nodes.mjs` runs official v6.0.6 mainnet (snapshot
   bootstrap, full headers, 127.0.0.1:9053) and testnet (archive + index,
   127.0.0.1:9052) from `scratch/ergo-nodes/`, both synced (5.4 / 17.5 GB);
@@ -39,40 +26,45 @@ merge. Stop: re-recording real-proof v3 reports stays Next 2.
 - Decoder pin: vendored reproducible release build of sigma-rust 2f840d3
   (`experiments/ergo-range/vendor/`); Rust 1.87 + wasm-bindgen 0.2.128 in
   `~/.cargo`, `scratch/rust-toolchain`, source cache `scratch/sigma-rust-src`.
-- Testnet wallet: key in ignored `scratch/ergo-testnet/wallet.json` (~19,999.99
-  tERG, copy outside the repository); testnet transactions need no further
-  approval; sweep boxes back and spend only fees.
+- Testnet wallet: key in ignored `scratch/ergo-testnet/wallet.json` (~19,999.98
+  tERG, copy outside the repo); testnet transactions need no approval.
 
 ## Evidence
 
-- [Hostile-input probe](docs/POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence): 159,397 cases, no same-id disagreement.
+- Re-recorded 09-24: profile check; [P4](docs/ergo-chain-cost-verification.json)
+  (5,040 roots, 4,707 framed txs equal to the node, 24.2 MB supplied);
+  [hostile](docs/ergo-decoder-hostile-equivalence-verification.json) (18,382
+  framed node readings, 0 differing); [P2 live](docs/ergo-publication-verification.json).
 
 ## Next
 
-1. Reader denial by decoder strictness: sigma-rust refuses bytes the node
-   reads (tree type checks, opcodes, value bounds, its own rewrites), so one
-   such transaction, if block-valid (untested), denies the reader its
-   block. Decide: a lenient framer for ids with full decoding only where
-   the profile reads outputs, or a recorded denial limit. Also: the profile
-   accepts every header version, equivalence is measured at block 4 only.
-2. Evidence binding, at chain-cost's next re-record: move it to
-   `contained-decoder.mjs`, fix `decoder.mjs`'s header comment, share helpers
-   with the equivalence scripts. `check:evidence` checks only file-named keys,
-   so no report binds `ergo_lib_wasm_bg.wasm` (the contained decoder pins its
-   hash at load; `decoder.mjs`, used by the equivalence report, does not). That
-   report (drifting on package.json) omits `model/pool-v3-*.ts`'s `src/`
-   imports and `tsconfig.json`; `contained-range.mjs` binds no inputs. v3
-   local-replay and replay-cost reports drift (`bytes.ts`, `scope.ts`): re-record.
-3. Deferred review items: the contained reader decodes every block before
-   header-id/height filtering (`replay-venue.mjs`), sets no per-read fuel or
-   host-memory total, and its instantiation sits outside the refusal try;
-   `inspectNotes`, replay's `statements.slice` and `activate`'s snapshots and
-   history still read caller data twice (copies owned); a verifier throw in
-   `submit` reloads the whole journal (a non-diverging refusal would not);
-   retire the v1 store-codec path; shared v3 fixture/byte helpers; v3 harness
-   verifiers reuse one instance.
-4. Later: a Linux or CI reproducible build of the decoder pin; the note
-   tree's Poseidon2 on Barretenberg wasm (about 6x); a warmed spare verifier
+1. Owed by the framer slice, each run alone (the host ran out of memory with
+   four jobs): the hostile run on unsigned seeds (`hostile-equivalence.mjs
+   --jdk scratch/jdk/jdk-21.0.12.1+1 --unsigned --work scratch/hostile-unsigned
+   --out docs/ergo-framer-hostile-equivalence-verification.json`, ~45 min,
+   then cite it in the probe section and decision), and a local
+   `npm run check:pool:ergo-replay` copying `scratch/pool-v3-local-replay-results.json`
+   to `docs/pool-v3-local-replay-verification.json` (also clears that
+   report's `bytes.ts`/`scope.ts` drift).
+2. Fewer mechanisms: no reader path uses `contained-decoder.mjs`,
+   `wasm-meter.mjs` or `contained-check.mjs` now; decide whether to retire
+   them (reports bind them; keep history by permalink) or keep them as the
+   supplier's decoder. The model frames every supplied block before its root
+   check (frame after the root matches); `supply.mjs` throws on a
+   derivation mismatch instead of counting it unsupplied.
+3. Evidence binding: `check:evidence` checks only file-named keys, so no
+   report binds `ergo_lib_wasm_bg.wasm`; the equivalence report (drifting on
+   package.json) omits `model/pool-v3-*.ts`'s `src/` imports and
+   `tsconfig.json`; `contained-range.mjs` binds no inputs; replay-cost report
+   drifts (`bytes.ts`, `scope.ts`): re-record.
+4. Deferred review items: `inspectNotes`, replay's `statements.slice` and
+   `activate`'s snapshots and history still read caller data twice (copies
+   owned); a verifier throw in `submit` reloads the whole journal; retire the
+   v1 store-codec path; shared v3 fixture/byte helpers; v3 harness verifiers
+   reuse one instance.
+5. Later: an authenticated header source a reader can run without a full
+   node; a Linux or CI reproducible build of the decoder pin; the note tree's
+   Poseidon2 on Barretenberg wasm (about 6x); a warmed spare verifier
    instance if admission's ~1.1 s per malformed proof matters.
 
 ## Retained boundaries and local state
@@ -101,8 +93,7 @@ merge. Stop: re-recording real-proof v3 reports stays Next 2.
 ## Open questions
 
 Roughly **50% done / 50% remaining**, plausible range **40–60%**, reassessed
-2026-09-24: venue cost measured and small, P2 done on the testnet, the
-decoder contained and parse-equivalent to the node on mutated inputs;
-selection still needs an authenticated header source and an answer to
-decoder-strictness denial. Runtime integration, selected venue/decoder,
-qualified custody and continuous wallet operation dominate.
+2026-09-24: venue cost measured and small, P2 done on the testnet, and no
+decoder refusal can deny a range; selection still needs an authenticated
+header source. Runtime integration, selected venue, qualified custody and
+continuous wallet operation dominate.
