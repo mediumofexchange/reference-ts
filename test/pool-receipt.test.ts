@@ -93,6 +93,18 @@ describe("pool receipt frame and signature (pool-v2 §9)", () => {
     expect(verifyPoolReceipt({ ...AUTH, scopeRoot: AUTH.scopeRoot + 1n }, receipt)).toBe(false);
   });
 
+  it("checks one read of the receipt: a field that changes between reads cannot move it to another segment", () => {
+    const other = segmentAuthority({ ...HEADER, sequence: 2n });
+    const underOther = signPoolReceipt(SECRETS.operator, other, accepted, 0n);
+    // The first read is the signed segment; every later read names AUTH's.
+    const shifting = (): PoolReceipt => {
+      let reads = 0;
+      return Object.defineProperty({ ...underOther }, "segment", { get: () => (reads++ === 0 ? other.segment : AUTH.segment) });
+    };
+    expect(verifyPoolReceipt(AUTH, shifting())).toBe(false);
+    expect(verifyPoolReceipt(other, shifting())).toBe(true);
+  });
+
   it("refuses signatures over the transparent domain, missing domain and appended bytes", () => {
     const receipt = signed();
     const bytes = poolReceiptBytes(receipt);

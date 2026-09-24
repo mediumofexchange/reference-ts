@@ -1,6 +1,6 @@
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { describe, expect, it } from "vitest";
-import { bigintToMinimalBytes, ByteWriter, copyBytes, EncodingError } from "../src/bytes.js";
+import { bigintToMinimalBytes, ByteWriter, copyArray, copyBytes, EncodingError } from "../src/bytes.js";
 import { contextsArePrefixFree } from "../src/contexts.js";
 
 // The byte primitives, pinned against literal expected output.
@@ -114,6 +114,32 @@ describe("copyBytes owns what it returns", () => {
     Object.setPrototypeOf(view, Uint8Array.prototype);
     for (const fake of [new Proxy(new Uint8Array(4), {}), view, [1, 2], "ab"]) {
       expect(() => copyBytes(fake as Uint8Array)).toThrow(EncodingError);
+    }
+  });
+});
+
+describe("copyArray owns what it returns", () => {
+  it("reads by index once, consulting neither the argument's species nor its iterator, up to its limit", () => {
+    const held: number[] = [];
+    const values = [1, 2, 3];
+    Object.defineProperty(values, "constructor", { value: { [Symbol.species]: function () { return held; } } });
+    Object.defineProperty(values, Symbol.iterator, { value: function* () { for (;;) yield 0; } });
+    const copy = copyArray(values, v => v * 10);
+    expect(copy).toEqual([10, 20, 30]);
+    expect(Object.getPrototypeOf(copy)).toBe(Array.prototype);
+    expect(held).toEqual([]);
+    let reads = 0;
+    const counted = new Proxy([7, 8], { get: (target, key, receiver) => { if (key === "length") reads++; return Reflect.get(target, key, receiver); } });
+    expect(copyArray(counted, v => v)).toEqual([7, 8]);
+    expect(reads).toBe(1);
+    expect(copyArray([1, 2], v => v, 2)).toEqual([1, 2]);
+    expect(() => copyArray([1, 2, 3], v => v, 2)).toThrow(EncodingError);
+    for (const length of [1.5, -1, NaN]) {
+      const lying = new Proxy([1, 2], { get: (target, key, receiver) => (key === "length" ? length : Reflect.get(target, key, receiver)) });
+      expect(() => copyArray(lying, v => v), String(length)).toThrow("not an array");
+    }
+    for (const fake of [{ length: 1, 0: 1 }, "ab", new Uint8Array(2)]) {
+      expect(() => copyArray(fake as unknown as number[], v => v)).toThrow(EncodingError);
     }
   });
 });

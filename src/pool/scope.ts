@@ -20,7 +20,7 @@
 // the used leaves are a prefix, so it is computed level by level over that
 // prefix and empty subtrees stand in for the rest.
 
-import { compareBytes, copyBytes, EncodingError } from "../bytes.js";
+import { compareBytes, copyArray, copyBytes, EncodingError } from "../bytes.js";
 import { isField, limbsOf, requireField } from "./field.js";
 import { T_SCOPE_LEAF, T_SCOPE_NODE } from "./notes.js";
 import { poseidon2Hash } from "./poseidon2.js";
@@ -43,9 +43,16 @@ export function isScopeEntry(entry: unknown): entry is ScopeEntry {
     e["link"] instanceof Uint8Array && e["link"].length === 32;
 }
 
+/** One read of each field; the copy is what is validated. */
 export function copyScopeEntry(entry: ScopeEntry): ScopeEntry {
-  if (!isScopeEntry(entry)) throw new EncodingError("malformed scope entry");
-  return Object.freeze({ backing: copyBytes(entry.backing), link: copyBytes(entry.link) });
+  let own: ScopeEntry;
+  try {
+    own = Object.freeze({ backing: copyBytes(entry.backing), link: copyBytes(entry.link) });
+  } catch {
+    throw new EncodingError("malformed scope entry");
+  }
+  if (!isScopeEntry(own)) throw new EncodingError("malformed scope entry");
+  return own;
 }
 
 /**
@@ -62,12 +69,20 @@ export function isCanonicalScope(entries: unknown): entries is readonly ScopeEnt
   return true;
 }
 
-/** A canonical scope as fresh, frozen copies; throws EncodingError on anything else. */
+/**
+ * A canonical scope as fresh, frozen copies, read once by index and validated
+ * as copied; throws EncodingError on anything else.
+ */
 export function requireScope(entries: readonly ScopeEntry[]): readonly ScopeEntry[] {
-  if (!isCanonicalScope(entries)) {
-    throw new EncodingError("a scope is 1 to 65536 entries, strictly ascending by backing name");
+  const refused = "a scope is 1 to 65536 entries, strictly ascending by backing name";
+  let own: ScopeEntry[];
+  try {
+    own = copyArray(entries, copyScopeEntry, SCOPE_CAPACITY);
+  } catch {
+    throw new EncodingError(refused);
   }
-  return Object.freeze(entries.map(copyScopeEntry));
+  if (!isCanonicalScope(own)) throw new EncodingError(refused);
+  return Object.freeze(own);
 }
 
 /** leaf(backing, link) = H(T_SCOPE_LEAF, backingHi, backingLo, linkHi, linkLo), nonzero. */

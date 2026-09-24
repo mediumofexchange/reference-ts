@@ -42,7 +42,7 @@
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { makeBacking, verifyBackingSignature, type Backing } from "../backing.js";
-import { compareBytes, copyBytes } from "../bytes.js";
+import { compareBytes, copyArray, copyBytes } from "../bytes.js";
 import { decodeCommitment, encodeCommitment, directoryRoot, verifyCommitment, type Commitment, type SnapshotDigest } from "../commitment.js";
 import { verifySignatureStrict } from "../keys.js";
 import { fieldToBytes, isField, isValue, VALUE_BOUND } from "./field.js";
@@ -84,7 +84,9 @@ import {
  * Verifies a proof against the configuration's verification key for its
  * kind and these public inputs, and against nothing else (§8 check 2).
  * Resolves to exactly `true` for a proof that verifies; anything else, and
- * never a throw, for one that does not.
+ * never a throw, for one that does not. It rejects only when it cannot give
+ * a verdict (its backend failed, or it is closed), and a rejection is never
+ * a verdict on the proof.
  */
 export interface StatementVerifier {
   verify(kind: StatementKind, publicInputs: readonly bigint[], proof: Uint8Array): Promise<boolean>;
@@ -875,7 +877,14 @@ export class Segment {
       }
       let own: ImportEvidence;
       try {
-        if (!isDirectory(item.checkpoint.directory)) throw new Error("malformed checkpoint directory");
+        // One read of the directory into a plain array, validated after the copy.
+        let ownDirectory: SnapshotDigest[];
+        try {
+          ownDirectory = copyArray(item.checkpoint.directory, e => ({ name: copyBytes(e.name), digest: copyBytes(e.digest) }));
+        } catch {
+          throw new Error("malformed checkpoint directory");
+        }
+        if (!isDirectory(ownDirectory)) throw new Error("malformed checkpoint directory");
         if (!Array.isArray(item.trail?.statements) || typeof item.length !== "bigint" ||
             item.length < 0n || item.length > BigInt(item.trail.statements.length)) {
           throw new Error("an opening's checkpointed length exceeds its trail");
@@ -883,7 +892,7 @@ export class Segment {
         own = {
           checkpoint: {
             commitment: decodeCommitment(encodeCommitment(item.checkpoint.commitment)),
-            directory: item.checkpoint.directory.map(e => ({ name: copyBytes(e.name), digest: copyBytes(e.digest) })),
+            directory: ownDirectory,
           },
           // Evidence outside the checkpointed prefix is not imported or verified.
           trail: copyReplayTrail({ ...item.trail, statements: item.trail.statements.slice(0, Number(item.length)) }),
@@ -908,8 +917,8 @@ function copyReplayTrail(trail: SegmentTrail): SegmentTrail {
     return {
       configuration: copyConfiguration(trail.configuration),
       header: copySegmentHeader(trail.header),
-      backings: Array.from(trail.backings, b => ({ backing: makeBacking(b.backing), signature: copyBytes(b.signature) })),
-      statements: Array.from(trail.statements, copyStatement),
+      backings: copyArray(trail.backings, b => ({ backing: makeBacking(b.backing), signature: copyBytes(b.signature) })),
+      statements: copyArray(trail.statements, copyStatement),
     };
   } catch (cause) {
     throw new PoolError("MALFORMED", malformed(cause, "malformed trail"));

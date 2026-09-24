@@ -19,7 +19,7 @@
 
 import { sha256 } from "@noble/hashes/sha2.js";
 import { POOL_CONSTRUCTION } from "../backing.js";
-import { ByteReader, ByteWriter, compareBytes, copyBytes, EncodingError } from "../bytes.js";
+import { ByteReader, ByteWriter, compareBytes, copyArray, copyBytes, EncodingError } from "../bytes.js";
 import {
   POOL_CONFIG_CONTEXT,
   POOL_GENESIS_CONTEXT,
@@ -164,26 +164,38 @@ export function isWellFormedHeader(header: unknown): header is SegmentHeader {
   return true;
 }
 
-/** A header as fresh, frozen copies; throws EncodingError on anything else. */
+/**
+ * A header as fresh, frozen copies; throws EncodingError on anything else.
+ * Each field is read once and the copy is what is validated. The entries are
+ * copied by index into a plain array: a caller's array species could otherwise
+ * supply one whose prototype, and so whose iteration, it still controls.
+ */
 export function copySegmentHeader(header: SegmentHeader): SegmentHeader {
-  if (!isWellFormedHeader(header)) throw new EncodingError("malformed segment header");
-  return Object.freeze({
-    domain: copyBytes(header.domain),
-    venue: copyBytes(header.venue),
-    operator: copyBytes(header.operator),
-    sequence: header.sequence,
-    entries: Object.freeze(header.entries.map((entry) => Object.freeze({
-      backing: copyBytes(entry.backing),
-      link: copyBytes(entry.link),
-      ...(entry.opening === undefined ? {} : {
-        opening: Object.freeze({
-          operator: copyBytes(entry.opening.operator),
-          sequence: entry.opening.sequence,
-          root: copyBytes(entry.opening.root),
-        }),
-      }),
-    }))),
-  });
+  if (typeof header !== "object" || header === null) throw new EncodingError("malformed segment header");
+  let copy: SegmentHeader;
+  try {
+    const entries = header.entries;
+    copy = Object.freeze({
+      domain: copyBytes(header.domain),
+      venue: copyBytes(header.venue),
+      operator: copyBytes(header.operator),
+      sequence: header.sequence,
+      entries: Object.freeze(copyArray(entries, (entry) => {
+        const opening = entry.opening;
+        return Object.freeze({
+          backing: copyBytes(entry.backing),
+          link: copyBytes(entry.link),
+          ...(opening === undefined ? {} : {
+            opening: Object.freeze({ operator: copyBytes(opening.operator), sequence: opening.sequence, root: copyBytes(opening.root) }),
+          }),
+        });
+      }, SCOPE_CAPACITY)),
+    });
+  } catch {
+    throw new EncodingError("malformed segment header");
+  }
+  if (!isWellFormedHeader(copy)) throw new EncodingError("malformed segment header");
+  return copy;
 }
 
 /**
@@ -279,13 +291,13 @@ export function segmentAuthority(header: SegmentHeader): SegmentAuthority {
 }
 
 export function copySegmentAuthority(authority: SegmentAuthority): SegmentAuthority {
-  if (typeof authority !== "object" || authority === null || !isField(authority.scopeRoot)) {
-    throw new EncodingError("malformed segment authority");
-  }
+  if (typeof authority !== "object" || authority === null) throw new EncodingError("malformed segment authority");
+  const scopeRoot: unknown = authority.scopeRoot;
+  if (!isField(scopeRoot)) throw new EncodingError("malformed segment authority");
   return Object.freeze({
     domain: copyBytes(authority.domain),
     segment: copyBytes(authority.segment),
-    scopeRoot: authority.scopeRoot,
+    scopeRoot,
     operator: copyBytes(authority.operator),
   });
 }

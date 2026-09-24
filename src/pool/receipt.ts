@@ -12,7 +12,10 @@ import { POOL_RECEIPT_CONTEXT } from "../contexts.js";
 import { verifySignatureStrict } from "../keys.js";
 import { fieldToBytes } from "./field.js";
 import type { AcceptedStatement, Segment } from "./segment.js";
-import { copySegmentAuthority, ISSUE, statementHash, type SegmentAuthority, type Statement } from "./statement.js";
+import {
+  copySegmentAuthority, ISSUE, readStatementFields, statementHash,
+  type SegmentAuthority, type Statement, type StatementFields, type StatementKind,
+} from "./statement.js";
 
 /** Exactly the fields covered by receiptBytes, in specification order. */
 export interface PoolReceiptFields {
@@ -114,21 +117,30 @@ export function signPoolReceipt(
  * Strict signature and framing, pinned to the CALLER's segment authority:
  * its domain, segment identity, scope root and operator. A self-asserted
  * operator, segment or scope is not authority. Malformed external data
- * answers false, including in the predicates below.
+ * answers false, including in the predicates below. Each predicate reads the
+ * caller's receipt and statement once, into owned copies, and checks only
+ * those: a getter answering differently on a later read could otherwise have
+ * one receipt's signature checked and another's fields compared.
  */
 export function verifyPoolReceipt(authority: SegmentAuthority, receipt: PoolReceipt): boolean {
   try {
-    const own = copySegmentAuthority(authority);
-    const message = poolReceiptBytes(receipt);
-    return receipt.operator instanceof Uint8Array &&
-      compareBytes(receipt.operator, own.operator) === 0 &&
-      compareBytes(receipt.domain, own.domain) === 0 &&
-      compareBytes(receipt.segment, own.segment) === 0 &&
-      receipt.scopeRoot === own.scopeRoot &&
-      verifySignatureStrict(receipt.signature, message, receipt.operator);
+    return verifiesOwned(copySegmentAuthority(authority), copyPoolReceipt(receipt));
   } catch {
     return false;
   }
+}
+
+function verifiesOwned(authority: SegmentAuthority, receipt: PoolReceipt): boolean {
+  return compareBytes(receipt.operator, authority.operator) === 0 &&
+    compareBytes(receipt.domain, authority.domain) === 0 &&
+    compareBytes(receipt.segment, authority.segment) === 0 &&
+    receipt.scopeRoot === authority.scopeRoot &&
+    verifySignatureStrict(receipt.signature, poolReceiptBytes(receipt), receipt.operator);
+}
+
+function coversOwned(authority: SegmentAuthority, statement: StatementFields, receipt: PoolReceipt): boolean {
+  return verifiesOwned(authority, receipt) && compareBytes(statementHash(receipt.domain,
+    statement.kind as StatementKind, statement.publicInputs as readonly bigint[]), receipt.statementHash) === 0;
 }
 
 /**
@@ -138,8 +150,8 @@ export function verifyPoolReceipt(authority: SegmentAuthority, receipt: PoolRece
  */
 export function poolReceiptCovers(authority: SegmentAuthority, statement: Statement, receipt: PoolReceipt): boolean {
   try {
-    return verifyPoolReceipt(authority, receipt) &&
-      compareBytes(statementHash(receipt.domain, statement.kind, statement.publicInputs), receipt.statementHash) === 0;
+    const fields = readStatementFields(statement);
+    return fields !== undefined && coversOwned(copySegmentAuthority(authority), fields, copyPoolReceipt(receipt));
   } catch {
     return false;
   }
@@ -154,14 +166,16 @@ export function poolReceiptCovers(authority: SegmentAuthority, statement: Statem
  */
 export function poolReceiptAttestsEvidence(authority: SegmentAuthority, statement: Statement, receipt: PoolReceipt): boolean {
   try {
-    if (!poolReceiptCovers(authority, statement, receipt) || !(statement.proof instanceof Uint8Array)) return false;
-    if (compareBytes(sha256(statement.proof), receipt.proofHash) !== 0) return false;
-    if (statement.kind === ISSUE) {
-      return statement.obligorSignature instanceof Uint8Array &&
-        compareBytes(sha256(statement.obligorSignature), receipt.signatureHash) === 0;
+    const fields = readStatementFields(statement);
+    const own = copyPoolReceipt(receipt);
+    if (fields === undefined || !coversOwned(copySegmentAuthority(authority), fields, own)) return false;
+    if (!(fields.proof instanceof Uint8Array) || compareBytes(sha256(fields.proof), own.proofHash) !== 0) return false;
+    if (fields.kind === ISSUE) {
+      return fields.obligorSignature instanceof Uint8Array &&
+        compareBytes(sha256(fields.obligorSignature), own.signatureHash) === 0;
     }
-    return statement.obligorSignature === undefined &&
-      compareBytes(new Uint8Array(32), receipt.signatureHash) === 0;
+    return fields.obligorSignature === undefined &&
+      compareBytes(new Uint8Array(32), own.signatureHash) === 0;
   } catch {
     return false;
   }
@@ -177,10 +191,11 @@ export function poolReceiptAttestsEvidence(authority: SegmentAuthority, statemen
  */
 export function poolReceiptInHistory(segment: Segment, receipt: PoolReceipt): boolean {
   try {
-    if (!verifyPoolReceipt(segment.authority(), receipt)) return false;
-    const accepted = segment.acceptedStatement(receipt.statementHash);
-    return accepted !== undefined && accepted.position === receipt.position &&
-      compareBytes(accepted.historyHash, receipt.historyHash) === 0;
+    const own = copyPoolReceipt(receipt);
+    if (!verifiesOwned(copySegmentAuthority(segment.authority()), own)) return false;
+    const accepted = segment.acceptedStatement(own.statementHash);
+    return accepted !== undefined && accepted.position === own.position &&
+      compareBytes(accepted.historyHash, own.historyHash) === 0;
   } catch {
     return false;
   }

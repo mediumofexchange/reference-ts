@@ -127,6 +127,19 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     expect((await resumed.view()).highestSignedSequence).toBe(2n);
   });
 
+  it("owns an opening's backings even when the caller's array names a species it still holds", async () => {
+    const venue = new LocalVenue(VENUE), oracle = new Oracle(), x = terms("EUR"), y = terms("USD"), file = path();
+    const held: unknown[] = [], backings = [x, y];
+    Object.defineProperty(backings, "constructor", { value: { [Symbol.species]: function () { return held; } } });
+    // Emptying what the species handed back must not empty the opening the store journals.
+    const s = store(file, venue, oracle), opening = s.activate("opening", backings);
+    held.length = 0;
+    expect((await opening).sequence).toBe(1n);
+    s.close();
+    const resumed = store(file, venue, oracle);
+    expect((await resumed.view()).trail!.header.entries).toHaveLength(2);
+  });
+
   it("keeps one operator-wide commitment in flight and refuses an expired unpublished state until repair", async () => {
     const venue = new Delayed(), f = await fixture(venue);
     await f.s.publish();

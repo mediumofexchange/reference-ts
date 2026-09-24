@@ -1514,9 +1514,15 @@ and 2.98 times the linear memory any of them took; the costliest, a
 16.7 MB of memory, and none took more than 394,944 fuel per byte. The node's JSON fields are compared as in the
 [equivalence pass](#decoder-node-equivalence-over-the-retained-blocks), with a
 mutation control per set, so `decoder.mjs` and the contained decoder agree
-there transitively. On one desktop the derived module runs about 3.4 × 10¹⁰
-fuel a second, so a 98,304-byte transaction's budget is about six seconds
-and a 2 MiB input's about two minutes; a fresh instance costs 2.6–5 ms.
+there transitively. On one desktop the derived module ran these transactions
+at about 3.4 × 10¹⁰ fuel a second, because a region's charge also covers
+code its branches skip; where every charged instruction runs, as in the
+control module's counted loop, it runs 2–9 × 10⁹ a second (the lower rate
+before the engine optimizes the loop). So the worst case for a 98,304-byte
+transaction's budget is about 23–100 seconds, and for a 2 MiB input's
+about 8–37 minutes. A read's transactions each get their own budget and the
+reader sets no total, so a read's worst case is their sum. A fresh
+instance costs 2.6–5 ms.
 
 `contained-check.mjs` counts by hand what each construct must cost on an
 assembled module and finds it exactly: straight code, a counted loop and
@@ -1591,8 +1597,8 @@ stateless checks:
 - 87 are bytes sigma-rust writes back differently.
 
 Of the node's own rewrites it refuses 1,633, of which 1,488 fail
-sigma-rust's type check. These come from every corpus era, including 148 from block 1,876,512's
-transactions. If such a transaction is also valid against state, which this
+sigma-rust's type check. Both come from every corpus era, including 148 and
+307 respectively from block 1,876,512's transactions. If such a transaction is also valid against state, which this
 does not test, one placed in a block denies the reader that block's ranges
 for the price of a transaction. The rewrites add a second denial: the header
 commits to the ids of the node's rewrite, so a supplier serving a miner's
