@@ -35,8 +35,9 @@ change.
 - Own nodes (approved): `nodes.mjs` runs official v6.0.6 mainnet (snapshot
   bootstrap, full headers, 127.0.0.1:9053) and testnet (archive + index,
   127.0.0.1:9052) from `scratch/ergo-nodes/`, both synced (5.4 / 17.5 GB);
-  after a reboot run `nodes.mjs start` and `watch 10`. Header source
-  reviewed and merged: `docs/ergo-own-node-verification.json`.
+  after a reboot or a stop run `nodes.mjs start` and `watch 10`, launched
+  through WMI `Win32_Process.Create`: nodes started from an app's terminal
+  died with it on 2026-09-24. Header source: `docs/ergo-own-node-verification.json`.
 - Decoder pin: vendored reproducible release build of sigma-rust 2f840d3
   (`experiments/ergo-range/vendor/`, decision 2026-09-23), merged; the npm
   alpha was a debug build. Rust 1.87 + wasm-bindgen 0.2.128 installed
