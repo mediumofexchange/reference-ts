@@ -134,6 +134,10 @@ describe("copyArray owns what it returns", () => {
     expect(reads).toBe(1);
     expect(copyArray([1, 2], v => v, 2)).toEqual([1, 2]);
     expect(() => copyArray([1, 2, 3], v => v, 2)).toThrow(EncodingError);
+    for (const length of [1.5, -1, NaN]) {
+      const lying = new Proxy([1, 2], { get: (target, key, receiver) => (key === "length" ? length : Reflect.get(target, key, receiver)) });
+      expect(() => copyArray(lying, v => v), String(length)).toThrow("not an array");
+    }
     for (const fake of [{ length: 1, 0: 1 }, "ab", new Uint8Array(2)]) {
       expect(() => copyArray(fake as unknown as number[], v => v)).toThrow(EncodingError);
     }

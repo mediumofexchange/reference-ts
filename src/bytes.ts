@@ -65,8 +65,11 @@ export function copyBytes(bytes: Uint8Array): Uint8Array {
  */
 export function copyArray<T, U>(values: readonly T[], copy: (value: T) => U, limit = Number.MAX_SAFE_INTEGER): U[] {
   if (!Array.isArray(values)) throw new EncodingError("not an array");
-  const length: unknown = values.length;
-  if (typeof length !== "number" || length > limit) throw new EncodingError("array longer than its limit");
+  const read: unknown = values.length;
+  // Only a Proxy can answer a length that is not an array index count.
+  if (typeof read !== "number" || !Number.isSafeInteger(read) || read < 0) throw new EncodingError("not an array");
+  const length = read;
+  if (length > limit) throw new EncodingError("array longer than its limit");
   const own: U[] = [];
   for (let i = 0; i < length; i++) own.push(copy(values[i] as T));
   return own;

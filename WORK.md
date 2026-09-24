@@ -14,8 +14,7 @@ here before starting.
   reviewed again. Fixed: array-species aliasing in `PoolStore.activate`,
   `Segment.replay` and `copySegmentHeader` (a journal left unloadable, a
   segment identity changing after the copy), receipt checks of a second read
-  (a receipt verifying under another segment; the wallet storing another),
-  verifier options copy and contract, probe/decision rate and bucket text.
+  (a receipt verifying under another segment), verifier options and contract.
 - Merged and reviewed before it: hostile-input node equivalence (JDK in
   `scratch/jdk/`), [verifier failures](decisions/2026-09.md#2026-09-24--answer-false-only-for-malformed-proofs-and-never-verify-on-an-instance-that-threw),
   the [contained decoder](docs/POOL_DEPLOYMENT_PROBES.md#contained-decoder)
@@ -25,9 +24,9 @@ here before starting.
 - Own nodes (approved): `nodes.mjs` runs official v6.0.6 mainnet (snapshot
   bootstrap, full headers, 127.0.0.1:9053) and testnet (archive + index,
   127.0.0.1:9052) from `scratch/ergo-nodes/`, both synced (5.4 / 17.5 GB);
-  after a reboot or a stop run `nodes.mjs start` and `watch 10`, launched
-  through WMI `Win32_Process.Create`: nodes started from an app's terminal
-  died with it on 2026-09-24. Header source: `docs/ergo-own-node-verification.json`.
+  after a reboot or stop run `nodes.mjs start` and `watch 10` via WMI
+  `Win32_Process.Create` (nodes started from an app's terminal die with it).
+  Header source: `docs/ergo-own-node-verification.json`.
 - Decoder pin: vendored reproducible release build of sigma-rust 2f840d3
   (`experiments/ergo-range/vendor/`); Rust 1.87 + wasm-bindgen 0.2.128 in
   `~/.cargo`, `scratch/rust-toolchain`, source cache `scratch/sigma-rust-src`.
@@ -37,8 +36,7 @@ here before starting.
 
 ## Evidence
 
-- [Hostile-input probe](docs/POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence):
-  159,397 cases, no same-id disagreement, cheap denial classes.
+- [Hostile-input probe](docs/POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence): 159,397 cases, no same-id disagreement.
 
 ## Next
 
@@ -53,15 +51,17 @@ here before starting.
    with the equivalence scripts. `check:evidence` checks only file-named keys,
    so no report binds `ergo_lib_wasm_bg.wasm` (the contained decoder pins its
    hash at load; `decoder.mjs`, used by the equivalence report, does not). That
-   report (already drifting on package.json) also omits `model/pool-v3-*.ts`'s
-   `src/` imports and `tsconfig.json`; `contained-range.mjs` binds no inputs.
+   report (drifting on package.json) omits `model/pool-v3-*.ts`'s `src/`
+   imports and `tsconfig.json`; `contained-range.mjs` binds no inputs. v3
+   local-replay and replay-cost reports drift (`bytes.ts`, `scope.ts`): re-record.
 3. Deferred review items: the contained reader decodes every block before
    header-id/height filtering (`replay-venue.mjs`), sets no per-read fuel or
    host-memory total, and its instantiation sits outside the refusal try;
-   `inspectNotes` spreads caller args; a verifier throw during `submit`
-   reloads the whole journal (optionally a non-diverging refusal); retire
-   the v1 store-codec path if no v1 journal must load; shared v3
-   fixture/byte helpers; v3 harness verifiers reuse one instance.
+   `inspectNotes`, replay's `statements.slice` and `activate`'s snapshots and
+   history still read caller data twice (copies owned); a verifier throw in
+   `submit` reloads the whole journal (a non-diverging refusal would not);
+   retire the v1 store-codec path; shared v3 fixture/byte helpers; v3 harness
+   verifiers reuse one instance.
 4. Later: a Linux or CI reproducible build of the decoder pin; the note
    tree's Poseidon2 on Barretenberg wasm (about 6x); a warmed spare verifier
    instance if admission's ~1.1 s per malformed proof matters.
