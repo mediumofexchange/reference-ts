@@ -68,10 +68,45 @@ equals `script_k` exactly, its own register `R4` is a `Coll[Byte]` constant
 of exactly 32 bytes, the subject, and its own `R5` is a `Coll[Byte]`
 constant, the bytes. A register constant is the type code `0x0e`, a minimal
 unsigned VLQ length and the bytes, ending exactly, as sigma-rust's constant
-decoder reads the fixtures' 42 real `Coll[Byte]` constants; any other
+decoder reads the fixtures' real `Coll[Byte]` constants; any other
 register value is not the shape. Registers other than `R4` and `R5` are not
 read. An output at no location, or at a location without that shape, is not
-an object here.
+an object here. Outputs are those the framer reads (below); a transaction
+outside its grammar has none here.
+
+## Reading a transaction
+
+A transaction is what its block commits to: its unsigned bytes (the node's
+serialization with every input's proof empty, whose Blake2b-256 is the
+transaction id) and its 31-byte witness id (Blake2b-256 of the concatenated
+input proofs, first byte dropped). The profile's framer reads the outputs
+from the unsigned bytes under a fixed grammar, the pinned node's layout
+restricted to what a publisher needs:
+
+- inputs as a box id, an empty proof and a context extension of at most 127
+  entries, each a key byte and a `Coll[Byte]` constant; data inputs and
+  token ids as 32-byte ids;
+- outputs as a value, a tree, a creation height, token entries and at most
+  six registers, each a `Coll[Byte]` constant (`0x0e`, a VLQ length of at
+  most 65,535, the bytes);
+- a tree as either a sized tree (size flag set, header bits 5–7 clear: the
+  header, a VLQ size and that many bytes, as the node writes a tree it
+  parsed and keeps one it could not) or exactly pay-to-public-key (`0008cd`
+  and a 33-byte point) or Ergo's miner-fee tree, both complete expressions;
+- minimal VLQs within their field widths, and nothing after the last output.
+
+A transaction outside the grammar carries no record, yet its id enters the
+root like any other, so its block keeps its section: no transaction can
+deny a range by being unreadable. Every reader frames the same committed
+bytes alike, so the reading is deterministic whatever the grammar admits; a
+transaction outside it is one its author could have written inside it. A
+publisher therefore spends plain boxes, pays change to pay-to-public-key
+and the fee to the fee tree, and writes registers as `Coll[Byte]`; each
+location must itself be one tree the framer reads. Where the framer reads a
+transaction the node reads, its outputs are the node's: measured on the
+real corpus and week and on hostile mutations
+([probe](POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence),
+[decision](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)).
 
 - Kinds 1–3: the object is one output; its record is `R5`'s bytes, and it is
   omitted unless its length is the kind's exact length (136, 233, 96).
@@ -115,23 +150,24 @@ The reader supplies, from its own retained evidence:
   presents the chain from the anchor's child, not a suffix: the header
   retention cost is the venue's age in headers, the price of a bounded
   index space and of an identity every read is linked to.
-- **Blocks**: for every index in the range, the block's transaction section
-  as exact bytes, decoded by the reader's own decoder after an exact
-  reserialization, giving each transaction's id, its 31-byte witness id
-  (Blake2b-256 of the concatenated input proofs, first byte dropped) and each
-  output's ErgoTree and register constants.
-  The node's own JSON split of those fields cannot stand in: the root
-  binds a transaction's concatenated bytes, not where one field ends
+- **Blocks**: for every index in the range, the block's transactions in
+  section order, each as its unsigned bytes and witness id, which the
+  reader hashes and frames itself. The node's own JSON split of output
+  fields cannot stand in: the root binds a transaction's concatenated
+  bytes, not where one field ends
   ([probe](POOL_DEPLOYMENT_PROBES.md#metered-release-decoder-over-the-week)).
 
-A block supplies the section of an index only where it belongs to an indexed
-header of the chain and reproduces that header's transaction root, recomputed
-from the decoder's ids (block version 1 commits to the ids alone; later
+A block supplies the section of an index only where its header's version is
+1–4, it belongs to an indexed header of the chain and it reproduces that
+header's transaction root, recomputed from the hashes of the unsigned bytes
+(block version 1 commits to the ids alone; later
 versions to all ids followed by all witness ids, over scrypto's tree with
 leaf prefix 0, internal prefix 1, an absent right sibling contributing no
-bytes and a lone leaf keeping its parent). The root binds every unsigned
-byte and the concatenated proofs, not the proofs' split among inputs;
-attribution reads outputs only, so that gap reaches no answer. A block that is not a well-formed
+bytes and a lone leaf keeping its parent). A later block version supplies
+no section until the profile names it, so a hard fork leaves the ranges
+through it unresolved rather than misread. The root binds every unsigned
+byte and the witness id, not the proofs' split among inputs; attribution
+reads outputs only, so that gap reaches no answer. A block that is not a well-formed
 section view, belongs to another chain or a height at or below the anchor,
 duplicates an established index or fails its root is passed over at the
 model boundary; an index without a section leaves only the ranges through it
@@ -147,46 +183,25 @@ its retained evidence and can be reproduced from it.
 
 ## Costs and limits
 
-- A transaction the reader's decoder refuses is unsupported evidence: its
-  index has no section and every range through it stays unresolved until
-  the decoder is repaired. This is the cost of exhaustion, and it is a
-  denial one node-valid transaction can trigger for the price of publishing
-  it: the decoder's node equivalence, not only its containment, is a
-  prerequisite of selection. Fleet's decoder fails 16 of the 29 real fixture
-  transactions ([the block probe](POOL_DEPLOYMENT_PROBES.md#full-block-commitment-feasibility));
-  sigma-rust decodes all 29 but carries no equivalence proof ([the decoder
-  probe](POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility)). On
-  mainnet the denial was live under the previous pin: sigma-rust 0.28.0
-  refuses every transaction carrying an ErgoTree of header version 3, the
-  Ergo 6.0 script version, at the header byte, and 125 such transactions in
-  58 of seven days' 5,040 blocks left those indices without a section
-  ([P4](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor)).
-  The experiment pins a release build of sigma-rust `2f840d3`, vendored and
-  reproducible from source ([decided 2026-09-23](../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3)), which reads
-  all of them after exact round trips and keeps any sized tree it cannot
-  parse, of any header version, as its exact bytes, so an unknown script
-  version or opcode cannot refuse a transaction; an unsized version-0 tree or
-  a register constant it cannot parse still can. The npm alpha of the same
-  commit, pinned the day before, is a debug build that overflows Node's
-  default stack on a node-valid mainnet transaction and traps on expression
-  nesting of 50, within the node's cap of 110 by the node's source, so a
-  node-valid output could have denied every range through its block; the
-  release build parses expression nesting to 2,513 levels on the default
-  stack ([probe](POOL_DEPLOYMENT_PROBES.md#decoder-stack-budget)). The reader runs that build
-  [contained](POOL_DEPLOYMENT_PROBES.md#contained-decoder): each transaction in a fresh
-  instance of a metered derivation, under a fuel and memory budget linear in
-  its length, so a trap, an overflow or an exhausted budget refuses that
-  transaction alone. The budget is the reader's, calibrated on valid
-  transactions with margin: the node's rules do not bound a decoder's work
-  per byte, so a node-valid transaction above it is refused like any other
-  and denies the ranges through its block. No specification pins a decoder.
-- The public node API serves transactions as JSON. sigma-rust's serializer
-  reproduced every header root of the measured week from the node's exact
-  text, but only because that text keeps the spending-proof extension's key
-  order, which a JSON object model sorts: re-serializing parsed objects gives
-  12 of the week's transactions a different id and would leave their blocks
-  without a section. The header root, not the serializer, authenticates the
-  bytes, within the limit above: unsigned bytes and concatenated proofs.
+- The reader runs no decoder, so no decoder's refusal denies a range. Until
+  2026-09-24 it decoded with sigma-rust, first unpinned and then as a
+  [contained](POOL_DEPLOYMENT_PROBES.md#contained-decoder) release build, and
+  every transaction the library refused left its block without a section: 125
+  mainnet transactions in 58 blocks of one week under the 0.28.0 control,
+  and on hostile bytes the node reads, refusals by type checks, opcodes and
+  value bounds the node does not apply
+  ([decision](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)).
+  The framer's price is the grammar: a record outside it is not read.
+- A supplier derives the unsigned bytes. The public node API serves
+  transactions as JSON; sigma-rust's serializer reproduces the signed bytes
+  from the node's exact text, but only because that text keeps the
+  spending-proof extension's key order, which a JSON object model sorts
+  (re-serializing parsed objects gives 12 of the measured week's
+  transactions another id), and `supply.mjs` removes the proofs from them.
+  It supplies only what that library reads; the node's own serializer
+  (`messageToSign`, stated by the node harness) supplies every transaction
+  the node reads. The header root, not the supplier, authenticates the
+  unsigned bytes and the witness id.
 - A kind-4 object is one transaction's run, so a publication must fit one
   transaction. Under this layout a box carries a 3,981-byte piece within
   Ergo's 4,096-byte box limit, and one transaction under the pinned node's
@@ -222,16 +237,16 @@ its retained evidence and can be reproduced from it.
   220 or 221 wire bytes (mean 220.9), 105 in the verifier's view, so a year
   of headers is about 58 MB and a year of sections about 1.4 GB at that
   rate. Built from a week's sections the verifier answers a range over all of
-  them in a few milliseconds; building it, where every output is scanned,
-  took 1.3 s, and decoding the week's transactions 253 s under the pinned
-  alpha (39 s under the 0.28.0 control), on one desktop.
-- The header source and the decoder are trust boundaries of the reader.
-  A node the reader runs can be the header source: the reader's own
+  them in a few milliseconds; building it, where every transaction is hashed
+  and framed and every framed output scanned, is the reader's whole work
+  over the bytes, measured in [P4](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor).
+  The framer is one pass linear in the bytes and allocates nothing a count
+  claims.
+- The header source is the reader's trust boundary. A node the reader runs
+  can be the header source: the reader's own
   mainnet node validated the header chain from genesis in under two hours,
   and the fixtures and the measured week stand on its best chain
-  ([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)). The decoder's budget bounds the
-  reader's guest work and linear memory per transaction; the host's own
-  memory beyond it is measured, not bounded. Objects at the locations before
+  ([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)). Objects at the locations before
   the anchor are not in the record.
 
 ## Evidence
@@ -239,20 +254,24 @@ its retained evidence and can be reproduced from it.
 `npm run check:ergo:range` runs `experiments/ergo-range/profile-check.mjs`
 after the block-root and decoder experiments. It compiles the model, reads
 the pinned real mainnet genesis header as an anchor, builds a twelve-height
-synthetic chain anchored at its first header whose transactions Fleet
-serializes and sigma-rust decodes after an exact round trip, with real signed
+synthetic chain anchored at its first header whose unsigned bytes Fleet
+writes and whose outputs the framer reads exactly as written, with real signed
 commitments, a replacement, revocations and single- and multi-piece
 publications in register constants, and checks the answers, the reader's
-rules over them, refusals for unwitnessed, gapped, unlinked, substituted and
-truncated evidence, tolerance of stray, duplicate and root-failing blocks,
-and the four mainnet fixture blocks through the same verifier as index 0
-under their parents as anchors, whose roots it reproduces for block versions
-1, 3 and 4 and whose 65 real register constants it decodes beside sigma-rust's
-own constant decoder. The [retained report](ergo-range-profile-verification.json)
-records the sizes. `test/pool-v3-ergo-profile.test.ts` covers the identity,
-register decoding, the tree, attribution and reassembly cases, ordering, the
-anchor and origin rules, ownership of the profile, evidence and request, and
-every refusal without an Ergo library.
+rules over them, refusals for unwitnessed, gapped, unlinked and substituted
+evidence, tolerance of stray, duplicate and root-failing blocks, a
+transaction outside the grammar that keeps its block's section, and the four
+mainnet fixture blocks through the same verifier as index 0 under their
+parents as anchors: Fleet's unsigned bytes hash to the node's ids, the roots
+reproduce for block versions 1, 3 and 4, the framed real transactions read
+the node's outputs, the later blocks' fee outputs use the framer's fee tree,
+and the real register constants read beside sigma-rust's constant decoder.
+The [retained report](ergo-range-profile-verification.json) records the
+sizes. `test/pool-v3-ergo-profile.test.ts` covers the identity, the framer's
+grammar and refusals, register reading, the tree, attribution and reassembly
+cases, ordering, the anchor and origin rules, the block versions, ownership
+of the profile, evidence and request, and every refusal without an Ergo
+library.
 
 ## Local replay adapter
 
@@ -266,10 +285,10 @@ optional dependencies and commands are in the
 [retained replay report](pool-v3-local-replay-verification.json) records the
 groups, the kind-4 subjects and the cross-backing union positions that agree,
 and the refusals: fresh seedless audit and receiver restoration, missing
-sections, decodable root mismatches, decoder refusals, wrong profile/headers
-and resource refusal. The fixture converter constructs exact transaction
-bytes and expected roots independently of the sigma-rust decoder and profile
-verifier: the fixed synthetic genesis is the anchor, fixture index `i` is
+sections, framable root mismatches, malformed transactions, wrong profile/headers
+and resource refusal. The fixture converter constructs exact unsigned
+transaction bytes, witness ids and expected roots with Fleet, independently
+of the profile verifier: the fixed synthetic genesis is the anchor, fixture index `i` is
 height `i + 2`, a fixture venue of lag `l` is read under depth `l − 1`, and
 each fixture record is a separate transaction in the fixture's insertion
 order, so a kind-4 ordinal is the fixture's ordinal shifted by 32 bits and
@@ -281,22 +300,24 @@ reader; they have never been accepted by a node.
 
 `experiments/ergo-range/replay-venue.mjs` binds a reader-selected profile,
 header source and answer budget to the existing range interface. The supplier
-provides raw block sections, not transaction ids, decoded outputs, clocks or
-answers. The synchronous factory owns all evidence before returning or awaiting
+provides block sections, each transaction as one byte string (its 31-byte
+witness id, then its unsigned bytes), not transaction ids, decoded outputs,
+clocks or answers. The synchronous factory owns all evidence before returning or awaiting
 proof work. Each byte view is charged before its immediate copy, using intrinsic
 typed-array length and storage checks; shadowed properties cannot hide shared
 storage or an oversized view, and later getters cannot resize or detach an
 already owned view. Detached, out-of-bounds and shared views refuse. The adapter
 caps source bytes at 8 MiB, headers and supplied blocks at 256 each, and total
-transactions at 1024, before invoking the decoder. These are local experiment
-limits, not consensus bounds; since each transaction is decoded under the
-contained decoder's budget for its length, they also bound a read's decoder
-work. Budget or storage refusal
+transactions at 1024, before the model reads any of it. These are local
+experiment limits, not consensus bounds; since the model hashes and frames
+each transaction once in time linear in its length, they also bound a
+read's work. Budget or storage refusal
 rejects the whole read, even if the offending block would otherwise be ignored.
 The worker's separate V8 IPC envelope remains capped at 2 MiB.
 
-The adapter reads through the contained decoder (`contained-decoder.mjs`); an
-undecodable or over-budget transaction withholds its entire block. The model then checks roots
+A transaction too short to hold a witness id and a transaction makes its
+block malformed, passed over like any other; a transaction outside the
+framer's grammar carries no record. The model then checks roots
 and range completeness. Successful replay reports
 `rangeEvidence: "candidate-ergo-profile-synthetic-headers"`; currency and
 authority flags describe only checks under that explicit trusted fixture.
@@ -308,14 +329,11 @@ integration introduces no production path, profile selection or normative rule.
 A specification decision selects a venue profile and pins its identity;
 before that: an authenticated header source a reader can run (a node the
 reader runs is demonstrated, [own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source); whether the profile
-requires one or names a lighter source is the selection's choice), a contained
-decoder with node-equivalence evidence beyond the valid transactions the
-reader's own node retains (the pinned release build reads each of them with
-the node's fields, [compared](POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks),
-keeps unknown sized trees as bytes, and reads them all
-[contained](POOL_DEPLOYMENT_PROBES.md#contained-decoder) under the reader's budget; the budget's
-denial of a costlier node-valid transaction is the selection's to weigh), an exact-byte
-block source or the JSON-text discipline above, publication and reassembly
+requires one or names a lighter source is the selection's choice), a
+supplier of unsigned bytes for every transaction the node reads (the node's
+own serializer, or `supply.mjs` within what the pinned library reads), the
+framer's grammar checked against the selected deployment's publishing
+transactions, publication and reassembly
 on a node (P2: the [experiment](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)
 accepted every case on the public testnet and the verifier read each back
 from block sections after the boxes were spent), the adoption condition above checked
