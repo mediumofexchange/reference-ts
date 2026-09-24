@@ -99,15 +99,20 @@ try {
   // A witness outside one input's declared type that satisfies every other constraint:
   // refused by that input's range check, solved once only that check is removed, and,
   // proven from that solution with the real program and key, refused by the verifier.
+  // The control: the valid witness, solved and proven the same way, verifies.
   async function beyondTypes(label, kind, base, mutate, expected) {
     assert(expected.startsWith('range '));
     const input = await rejects(label, kind, base, mutate, expected);
-    const { witness } = await new Noir(withoutRange(circuits[kind].program, expected.slice('range '.length))).execute(asFields(input));
-    checks.push(`${label}: solves without that range check`);
-    const proof = await circuits[kind].backend.generateProof(witness, options);
-    assert.deepEqual(proof.publicInputs.map(field), publicInputsOf(kind, input).map(field), label);
-    assert.equal(await verifier.verifyProof({ ...proof, verificationKey: circuits[kind].vk }, options), false, label);
-    checks.push(`${label}: its proof does not verify`);
+    const unranged = new Noir(withoutRange(circuits[kind].program, expected.slice('range '.length)));
+    const proven = async value => {
+      const { witness } = await unranged.execute(asFields(value));
+      const proof = await circuits[kind].backend.generateProof(witness, options);
+      assert.deepEqual(proof.publicInputs.map(field), publicInputsOf(kind, value).map(field), label);
+      return verifier.verifyProof({ ...proof, verificationKey: circuits[kind].vk }, options);
+    };
+    assert.equal(await proven(base), true, `${label}: control`);
+    assert.equal(await proven(input), false, label);
+    checks.push(`${label}: solves without that range check, and its proof does not verify where the valid one does`);
   }
   const chain = (...frames) => frames.join(FRAME);
   const N = {

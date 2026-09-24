@@ -159,5 +159,6 @@ export const FRAME = ' → ';
 export function names(expected, actual) {
   if (expected.startsWith('range ')) return actual === expected;
   const want = expected.split(FRAME), got = actual.split(FRAME);
+  assert(want.every(frame => /^\S+\.nr \S/.test(frame)), `every expected frame names a file and a source prefix: ${expected}`);
   return want.length === got.length && want.every((frame, i) => got[i].startsWith(frame));
 }

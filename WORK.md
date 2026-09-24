@@ -34,7 +34,7 @@ here before starting.
 
 - [Header verification](docs/ergo-header-verification.json) (09-24, offline
   from `scratch/ergo-headers/`; [probe](docs/POOL_DEPLOYMENT_PROBES.md#reader-verified-headers)).
-- [v2 circuits](docs/pool-v2-verification.json) (09-25): 187 checks, 89 named refusals, 7 refused hostile proofs.
+- [v2 circuits](docs/pool-v2-verification.json) (09-25): 180 checks, 89 named refusals, 7 hostile proofs refused beside valid controls.
 - Current: [P4](docs/ergo-chain-cost-verification.json), [hostile framer probe](docs/ergo-framer-hostile-equivalence-verification.json),
   [P2 read-back](docs/ergo-publication-verification.json), [local v3 replay](docs/pool-v3-local-replay-verification.json).
 
@@ -62,10 +62,10 @@ here before starting.
    pin a real fixture with a multi-entry context extension; probe
    node/framer agreement under block-version 1–3 contexts.
 5. Audit follow-ups: v3, fees and delivery circuit checks accept any refusal
-   (`scripts/pool/v3/check.mjs:121`, `fees/check.mjs:158`,
-   `delivery/binding/check.mjs:89`): use `constraints.mjs`. `ByteReader`
-   trusts a Uint8Array subclass's `length` (`src/bytes.ts`): copy on entry.
-   v2 `bytecode(k)` hashes gzip output (§2); v3 should hash canonical ACIR.
+   (`v3/check.mjs:121`, `fees/check.mjs:158`, `delivery/binding/check.mjs:89`):
+   use `constraints.mjs`. `ByteReader` trusts a subclass's `length`
+   (`src/bytes.ts`); readers re-read `args.configuration`/`verifier` after
+   the entry check. v2 `bytecode(k)` hashes gzip output; v3: canonical ACIR.
 6. Later: note tree Poseidon2 on Barretenberg wasm (~6x); a warmed spare
    verifier if ~1.1 s per malformed proof matters.
 
