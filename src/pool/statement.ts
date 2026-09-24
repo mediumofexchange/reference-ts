@@ -448,13 +448,15 @@ export function copyStatement(statement: Statement): Statement {
  */
 export function statementBytes(domain: Uint8Array, kind: StatementKind, publicInputs: readonly bigint[]): Uint8Array {
   if (!isStatementKind(kind)) throw new EncodingError("unknown statement kind");
-  if (publicInputs.length !== PUBLIC_INPUT_COUNT[kind]) throw new EncodingError("public-input count does not match the kind");
+  // By index to the count written, so a caller's iterator cannot frame other fields than n says.
+  const count = PUBLIC_INPUT_COUNT[kind];
+  if (publicInputs.length !== count) throw new EncodingError("public-input count does not match the kind");
   const w = new ByteWriter();
   w.context(POOL_STATEMENT_CONTEXT);
   w.key32(domain, "configuration hash");
   w.u8(kind);
-  w.u32(publicInputs.length);
-  for (const input of publicInputs) w.key32(fieldToBytes(input), "public input");
+  w.u32(count);
+  for (let i = 0; i < count; i++) w.key32(fieldToBytes(publicInputs[i] as bigint), "public input");
   return w.finish();
 }
 

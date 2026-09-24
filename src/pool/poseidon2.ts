@@ -472,12 +472,19 @@ function internalLayer(s: bigint[]): void {
   }
 }
 
+/** Whether `values` holds `count` canonical field elements; by index, since `every` skips a sparse array's holes. */
+function fields(values: readonly bigint[], count: number): boolean {
+  if (!Array.isArray(values) || values.length !== count) return false;
+  for (let i = 0; i < count; i++) if (!isField(values[i])) return false;
+  return true;
+}
+
 /** The permutation over four canonical field elements. */
 export function poseidon2Permutation(input: readonly bigint[]): PermutationState {
-  if (input.length !== WIDTH || !input.every(isField)) {
+  if (!fields(input, WIDTH)) {
     throw new EncodingError("permutation input must be four canonical field elements");
   }
-  const s = [...input];
+  const s = [input[0] as bigint, input[1] as bigint, input[2] as bigint, input[3] as bigint];
   externalLayer(s);
   let round = 0;
   for (; round < FULL_ROUNDS / 2; round++) {
@@ -506,7 +513,7 @@ export function poseidon2Permutation(input: readonly bigint[]): PermutationState
  * sponge would permute once over the empty state).
  */
 export function poseidon2Hash(inputs: readonly bigint[]): bigint {
-  if (inputs.length === 0 || !inputs.every(isField)) {
+  if (!Array.isArray(inputs) || inputs.length === 0 || !fields(inputs, inputs.length)) {
     throw new EncodingError("hash input must be one or more canonical field elements");
   }
   let state: PermutationState = [0n, 0n, 0n, (BigInt(inputs.length) * TWO_POW_64) % p];

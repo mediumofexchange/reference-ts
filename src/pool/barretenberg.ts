@@ -117,14 +117,15 @@ export async function barretenbergPool(api: Barretenberg, circuits: CompiledCirc
   const keys = new Map<StatementKind, Uint8Array>();
   const identities: Record<string, CircuitIdentity> = {};
   for (const kind of [1, 2, 3] as const) {
-    const program = circuits[NAMES[kind]];
     // bytecode(k) hashes the bytes the artifact's field decodes to (§2). The
     // key is derived by the backend from its own decoding of the same string,
-    // so the string must have one decoding: canonical base64, or the hash
-    // could name bytes other than those the key came from.
-    const bytecode = Buffer.from(program.bytecode, "base64");
-    if (bytecode.toString("base64") !== program.bytecode) throw new EncodingError(`${NAMES[kind]} bytecode is not canonical base64`);
-    const backend = new UltraHonkBackend(program.bytecode, api);
+    // read once here, so the string must have one decoding: canonical base64,
+    // or the hash could name bytes other than those the key came from.
+    const text: unknown = circuits[NAMES[kind]].bytecode;
+    if (typeof text !== "string") throw new EncodingError(`${NAMES[kind]} bytecode is not canonical base64`);
+    const bytecode = Buffer.from(text, "base64");
+    if (bytecode.toString("base64") !== text) throw new EncodingError(`${NAMES[kind]} bytecode is not canonical base64`);
+    const backend = new UltraHonkBackend(text, api);
     const vk = await backend.getVerificationKey(PROOF_OPTIONS);
     keys.set(kind, vk);
     identities[NAMES[kind]] = Object.freeze({ bytecode: sha256(bytecode), vk: sha256(vk) });

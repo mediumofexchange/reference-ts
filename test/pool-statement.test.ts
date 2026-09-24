@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EncodingError } from "../src/bytes.js";
 import { utf8Encoder } from "../src/contexts.js";
 import { bytesToField, fieldToBytes, fieldToHex, FIELD_MODULUS, hexToField, identifierOf, limbsOf } from "../src/pool/field.js";
-import { copyNoteOpening } from "../src/pool/notes.js";
+import { commitmentOf, copyNoteOpening } from "../src/pool/notes.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import {
   BURN,
@@ -223,6 +223,9 @@ describe("pool-v2 §7: statements and their identity", () => {
     expect(() => statementBytes(DOMAIN, ISSUE, [...inputs.slice(0, 8), FIELD_MODULUS])).toThrow(EncodingError);
     expect(() => statementBytes(DOMAIN, 4 as never, inputs)).toThrow(EncodingError);
     expect(PUBLIC_INPUT_COUNT).toEqual({ 1: 9, 2: 11, 3: 13 });
+    // The fields framed are the n the count names, read by index, whatever the list's iterator yields.
+    const iterating = Object.assign([...inputs], { *[Symbol.iterator]() { yield* [...inputs, 10n]; } });
+    expect(statementBytes(DOMAIN, ISSUE, iterating)).toEqual(new Uint8Array(expected));
   });
 
   it("recognizes a well-formed statement by kind, count, field canonicity, proof shape and signature presence", () => {
@@ -264,6 +267,10 @@ describe("pool-v2 §7: statements and their identity", () => {
     let valueReads = 0;
     const opening = { backing: X.name, owner: 3n, rho: 4n, get value() { return valueReads++ === 0 ? 5n : 1n << 64n; } };
     expect(copyNoteOpening(opening)).toEqual({ backing: X.name, value: 5n, owner: 3n, rho: 4n });
+    expect(valueReads).toBe(1);
+    // A commitment hashes the value it checked: one read, into the copy.
+    valueReads = 0;
+    expect(commitmentOf(DOMAIN, opening)).toBe(commitmentOf(DOMAIN, { backing: X.name, value: 5n, owner: 3n, rho: 4n }));
     expect(valueReads).toBe(1);
   });
 
