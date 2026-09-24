@@ -472,12 +472,29 @@ function internalLayer(s: bigint[]): void {
   }
 }
 
+/**
+ * An owned copy of `values` read once by index, or undefined unless it holds
+ * canonical field elements, `count` of them where a count is given. By index,
+ * since `every` skips a sparse array's holes; one read, so the value checked
+ * is the value hashed.
+ */
+function fields(values: readonly bigint[], count?: number): bigint[] | undefined {
+  if (!Array.isArray(values)) return undefined;
+  const length = values.length;
+  if (count !== undefined && length !== count) return undefined;
+  const own: bigint[] = [];
+  for (let i = 0; i < length; i++) {
+    const value: unknown = values[i];
+    if (!isField(value)) return undefined;
+    own.push(value);
+  }
+  return own;
+}
+
 /** The permutation over four canonical field elements. */
 export function poseidon2Permutation(input: readonly bigint[]): PermutationState {
-  if (input.length !== WIDTH || !input.every(isField)) {
-    throw new EncodingError("permutation input must be four canonical field elements");
-  }
-  const s = [...input];
+  const s = fields(input, WIDTH);
+  if (s === undefined) throw new EncodingError("permutation input must be four canonical field elements");
   externalLayer(s);
   let round = 0;
   for (; round < FULL_ROUNDS / 2; round++) {
@@ -505,8 +522,9 @@ export function poseidon2Permutation(input: readonly bigint[]): PermutationState
  * this construction hashes zero inputs, and the host refuses to (the Noir
  * sponge would permute once over the empty state).
  */
-export function poseidon2Hash(inputs: readonly bigint[]): bigint {
-  if (inputs.length === 0 || !inputs.every(isField)) {
+export function poseidon2Hash(input: readonly bigint[]): bigint {
+  const inputs = fields(input);
+  if (inputs === undefined || inputs.length === 0) {
     throw new EncodingError("hash input must be one or more canonical field elements");
   }
   let state: PermutationState = [0n, 0n, 0n, (BigInt(inputs.length) * TWO_POW_64) % p];

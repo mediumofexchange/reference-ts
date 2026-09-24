@@ -9,7 +9,7 @@ import { revokedAt } from "../revocation.js";
 import { PoolAuthorityView } from "./authority.js";
 import { mergePoolEvidence, replayedPoolEvidence } from "./evidence.js";
 import { readPoolPredecessor, type PoolSnapshotEvidence } from "./descent.js";
-import { PoolError, Segment, type AcceptedStatement, type Checkpoint, type FinalizedPrefix, type SegmentTrail, type StatementVerifier } from "./segment.js";
+import { PoolError, requireReaderConfiguration, Segment, type AcceptedStatement, type Checkpoint, type FinalizedPrefix, type SegmentTrail, type StatementVerifier } from "./segment.js";
 import { configurationHash, copyConfiguration, copySegmentHeader, copyStatement, ISSUE, parsePublicInputs, segmentIdentity,
   type OpeningCheckpoint, type PoolConfiguration } from "./statement.js";
 
@@ -113,6 +113,8 @@ export async function readPoolCheckpoint(args: CheckpointReadArguments & { reado
  * prefixes, with derived snapshots. It can be retained and supplied on a later
  * read; it is evidence to revalidate, not a substitute for the venue record. */
 export async function readPoolCheckpoints(args: CheckpointReadArguments & { readonly checkpoints: readonly Commitment[] }): Promise<PoolCheckpointsResult> {
+  // The caller's own configuration and verifier: a mismatch throws, never classifies evidence.
+  requireReaderConfiguration(args);
   let stable = (): void => {};
   try {
     const configuration = copyConfiguration(args.configuration), domain = configurationHash(configuration);
@@ -121,7 +123,7 @@ export async function readPoolCheckpoints(args: CheckpointReadArguments & { read
     requireThat(targets.length !== 0 && requested.size === targets.length, "checkpoint requests must be nonempty and distinct");
     const backend = args.verifier;
     const verifier: StatementVerifier = {
-      ...(backend.identities === undefined ? {} : { identities: backend.identities }),
+      identities: backend.identities,
       verify: async (kind, inputs, proof) => {
         try { return await backend.verify(kind, inputs, proof); }
         catch (cause) { throw new CallbackFailure(cause); }

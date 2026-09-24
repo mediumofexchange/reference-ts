@@ -5,7 +5,7 @@ import { readPoolCurrent, readPoolPredecessor } from "../src/pool/descent.js";
 import { preparePoolOpening } from "../src/pool/opening.js";
 import { PoolError, type SignedBacking, type StatementVerifier } from "../src/pool/segment.js";
 import { LocalVenue, VenueError } from "../src/venue.js";
-import { CONFIG, Oracle, spendStatement, VENUE } from "./pool-support.js";
+import { CONFIG, IDENTITIES, Oracle, spendStatement, VENUE } from "./pool-support.js";
 import { evidence, fixture, issue, open, read, replace, terms } from "./pool-record-support.js";
 import { KEYS, SECRETS } from "./support.js";
 
@@ -162,7 +162,7 @@ describe("C2.7/C2.10: canonical openings before a child commitment exists", () =
     const cx = evidence(sx), cy = evidence(sy); venue.publish(cx.commitment); venue.publish(cy.commitment);
     const backings = [x, y], supplied = [cx, cy], configuration = structuredClone(CONFIG);
     let attacked = false;
-    const verifier: StatementVerifier = { verify: async (...args) => {
+    const verifier: StatementVerifier = { identities: IDENTITIES, verify: async (...args) => {
       if (!attacked) {
         attacked = true;
         for (const item of supplied) {
@@ -182,7 +182,7 @@ describe("C2.7/C2.10: canonical openings before a child commitment exists", () =
   it.each(["clock", "same-index publication"])("refuses %s while proofs yield", async change => {
     const f = await fixture();
     let changed = false;
-    const verifier: StatementVerifier = { verify: async (...args) => {
+    const verifier: StatementVerifier = { identities: IDENTITIES, verify: async (...args) => {
       if (!changed) { changed = true; if (change === "clock") f.venue.advance(); else f.venue.publish(evidence(f.segment, 2n).commitment); }
       return f.oracle.verify(...args);
     } };
@@ -192,7 +192,7 @@ describe("C2.7/C2.10: canonical openings before a child commitment exists", () =
   it("refuses unsettled venue reads and preserves backend exception identity", async () => {
     const f = await fixture();
     for (const error of [new Error("backend"), new TypeError("backend"), new RangeError("backend"), new PoolError("PROOF", "backend")]) {
-      await expect(prepare(f.venue, [f.x], 1n, [f.base], { verify: async () => { throw error; } })).rejects.toBe(error);
+      await expect(prepare(f.venue, [f.x], 1n, [f.base], { identities: IDENTITIES, verify: async () => { throw error; } })).rejects.toBe(error);
     }
     vi.spyOn(f.venue, "previousFor").mockImplementation(() => { throw new VenueError("refresh incomplete"); });
     await expect(prepare(f.venue, [f.x], 1n, [f.base], f.oracle)).rejects.toThrow("refresh incomplete");

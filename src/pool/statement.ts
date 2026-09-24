@@ -37,6 +37,13 @@ export { POOL_CONSTRUCTION };
 /** The bounds this version fixes inside the configuration hash (§2). */
 export const POOL_BOUNDS = Object.freeze({ noteTreeDepth: 32, scopeDepth: 16, inputs: 2, outputs: 2 });
 
+/**
+ * SHA-256 of the Poseidon2 helper source §1 pins, whose sponge poseidon2.ts
+ * implements. A configuration naming another helper is not this construction,
+ * whatever circuits it names (§12).
+ */
+export const POOL_HELPER_SHA256 = "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8";
+
 /** SHA-256 of a circuit's compiled bytecode and of its verification key (§2). */
 export interface CircuitIdentity {
   readonly bytecode: Uint8Array;
@@ -203,8 +210,9 @@ export function copySegmentHeader(header: SegmentHeader): SegmentHeader {
  * ‖ u32 n ‖ entries), each entry backing ‖ link ‖ u64 openingSequence ‖ openingOperator ‖ openingRoot,
  * with sequence 0 and sixty-four zero bytes for the empty book.
  */
-export function segmentBytes(header: SegmentHeader): Uint8Array {
-  if (!isWellFormedHeader(header)) throw new EncodingError("malformed segment header");
+export function segmentBytes(input: SegmentHeader): Uint8Array {
+  // Framed from one validated copy, so the count and the entries written are the ones checked.
+  const header = copySegmentHeader(input);
   const w = new ByteWriter();
   w.context(POOL_SEGMENT_CONTEXT);
   w.key32(header.domain, "configuration hash");
@@ -441,13 +449,15 @@ export function copyStatement(statement: Statement): Statement {
  */
 export function statementBytes(domain: Uint8Array, kind: StatementKind, publicInputs: readonly bigint[]): Uint8Array {
   if (!isStatementKind(kind)) throw new EncodingError("unknown statement kind");
-  if (publicInputs.length !== PUBLIC_INPUT_COUNT[kind]) throw new EncodingError("public-input count does not match the kind");
+  // By index to the count written, so a caller's iterator cannot frame other fields than n says.
+  const count = PUBLIC_INPUT_COUNT[kind];
+  if (publicInputs.length !== count) throw new EncodingError("public-input count does not match the kind");
   const w = new ByteWriter();
   w.context(POOL_STATEMENT_CONTEXT);
   w.key32(domain, "configuration hash");
   w.u8(kind);
-  w.u32(publicInputs.length);
-  for (const input of publicInputs) w.key32(fieldToBytes(input), "public input");
+  w.u32(count);
+  for (let i = 0; i < count; i++) w.key32(fieldToBytes(publicInputs[i] as bigint), "public input");
   return w.finish();
 }
 
@@ -537,7 +547,9 @@ export type ParsedInputs = IssueInputs | SpendInputs | BurnInputs;
  * so this refuses what no valid proof could carry, with the reason named,
  * before the proof is looked at.
  */
-export function parsePublicInputs(kind: StatementKind, inputs: readonly bigint[]): ParsedInputs {
+export function parsePublicInputs(kind: StatementKind, list: readonly bigint[]): ParsedInputs {
+  // One read of each position, into the copy that is checked and parsed.
+  const inputs = isStatementKind(kind) ? ownList(list) : null;
   if (!isStatementKind(kind) || !allFields(inputs, PUBLIC_INPUT_COUNT[kind])) {
     throw new EncodingError("public inputs do not match the kind");
   }

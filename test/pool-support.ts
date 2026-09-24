@@ -1,6 +1,6 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex } from "@noble/hashes/utils.js";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { compareBytes } from "../src/bytes.js";
 import { directoryRoot, signCommitment } from "../src/commitment.js";
@@ -11,9 +11,11 @@ import {
   BURN,
   configurationHash,
   ISSUE,
+  POOL_HELPER_SHA256,
   segmentAuthority,
   SPEND,
   statementBytes,
+  type CircuitIdentities,
   type OpeningCheckpoint,
   type PoolConfiguration,
   type SegmentAuthority,
@@ -25,19 +27,20 @@ import {
 import { KEYS, pub, SECRETS } from "./support.js";
 
 // Fixtures for the claim-layer tests. The configuration's circuit identities
-// are placeholders: these tests exercise admission, import and replay over
-// the frames, and the circuit relation itself is exercised with real proofs
-// by `npm run check:pool`, which drives the same Segment class through
-// `scripts/pool/admission.mjs`.
+// are placeholders, which the Oracle below names as its own: these tests
+// exercise admission, import and replay over the frames, and the circuit
+// relation itself is exercised with real proofs by `npm run check:pool`,
+// which drives the same Segment class through `scripts/pool/admission.mjs`.
+// The helper is §1's, the only one a segment accepts.
 
 const fill = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
 
-export const CONFIG: PoolConfiguration = Object.freeze({
+export const IDENTITIES: CircuitIdentities = Object.freeze({
   issue: { bytecode: fill(0x11), vk: fill(0x12) },
   spend: { bytecode: fill(0x13), vk: fill(0x14) },
   burn: { bytecode: fill(0x15), vk: fill(0x16) },
-  helper: fill(0x17),
 });
+export const CONFIG: PoolConfiguration = Object.freeze({ ...IDENTITIES, helper: hexToBytes(POOL_HELPER_SHA256) });
 /** configHash: the construction domain. */
 export const DOMAIN = configurationHash(CONFIG);
 /** The one venue every scoped backing declares in these tests (C2.10.2). */
@@ -95,6 +98,7 @@ function keyOf(kind: StatementKind, publicInputs: readonly bigint[], proof: Uint
  * which `check:pool` shows with Barretenberg.
  */
 export class Oracle implements StatementVerifier {
+  readonly identities = IDENTITIES;
   private readonly valid = new Set<string>();
   calls = 0;
 

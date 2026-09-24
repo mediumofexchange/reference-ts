@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EncodingError } from "../src/bytes.js";
 import { utf8Encoder } from "../src/contexts.js";
 import { bytesToField, fieldToBytes, fieldToHex, FIELD_MODULUS, hexToField, identifierOf, limbsOf } from "../src/pool/field.js";
-import { copyNoteOpening } from "../src/pool/notes.js";
+import { commitmentOf, copyNoteOpening } from "../src/pool/notes.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import {
   BURN,
@@ -107,6 +107,9 @@ describe("pool-v2 §6: the segment header and its identity", () => {
     expect(segmentIdentity(HEADER)).toEqual(sha256(expected));
     expect(decodeSegmentHeader(segmentBytes(HEADER))).toEqual(copySegmentHeader(HEADER));
     expect(segmentBytes(decodeSegmentHeader(segmentBytes(HEADER)))).toEqual(segmentBytes(HEADER));
+    // The entries framed are the ones checked, by index, whatever the list's iterator yields.
+    const iterating = { ...HEADER, entries: Object.assign([...HEADER.entries], { *[Symbol.iterator]() { yield* [...HEADER.entries, ...HEADER.entries]; } }) };
+    expect(segmentBytes(iterating)).toEqual(new Uint8Array(expected));
     // Another sequence, link, opening or scope is another segment.
     for (const other of [
       { ...HEADER, sequence: 8n },
@@ -223,6 +226,15 @@ describe("pool-v2 §7: statements and their identity", () => {
     expect(() => statementBytes(DOMAIN, ISSUE, [...inputs.slice(0, 8), FIELD_MODULUS])).toThrow(EncodingError);
     expect(() => statementBytes(DOMAIN, 4 as never, inputs)).toThrow(EncodingError);
     expect(PUBLIC_INPUT_COUNT).toEqual({ 1: 9, 2: 11, 3: 13 });
+    // The fields framed are the n the count names, read by index, whatever the list's iterator yields.
+    const iterating = Object.assign([...inputs], { *[Symbol.iterator]() { yield* [...inputs, 10n]; } });
+    expect(statementBytes(DOMAIN, ISSUE, iterating)).toEqual(new Uint8Array(expected));
+    // parsePublicInputs reads each position once: the quantity checked is the quantity returned.
+    let reads = 0;
+    const shifting = [...inputs];
+    Object.defineProperty(shifting, 7, { get: () => (reads++ === 0 ? 8n : 1n << 64n) });
+    expect(parsePublicInputs(ISSUE, shifting)).toMatchObject({ quantity: 8n });
+    expect(reads).toBe(1);
   });
 
   it("recognizes a well-formed statement by kind, count, field canonicity, proof shape and signature presence", () => {
@@ -264,6 +276,10 @@ describe("pool-v2 §7: statements and their identity", () => {
     let valueReads = 0;
     const opening = { backing: X.name, owner: 3n, rho: 4n, get value() { return valueReads++ === 0 ? 5n : 1n << 64n; } };
     expect(copyNoteOpening(opening)).toEqual({ backing: X.name, value: 5n, owner: 3n, rho: 4n });
+    expect(valueReads).toBe(1);
+    // A commitment hashes the value it checked: one read, into the copy.
+    valueReads = 0;
+    expect(commitmentOf(DOMAIN, opening)).toBe(commitmentOf(DOMAIN, { backing: X.name, value: 5n, owner: 3n, rho: 4n }));
     expect(valueReads).toBe(1);
   });
 

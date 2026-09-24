@@ -16,7 +16,7 @@ import { readPoolCheckpoint, readPoolCheckpoints, type PoolCheckpointEvidence } 
 import { mergePoolEvidence, replayedPoolEvidence } from "./evidence.js";
 import { preparePoolOpening } from "./opening.js";
 import { poolReceiptInHistory, poolReceiptAttestsEvidence, signPoolReceipt, type PoolReceipt } from "./receipt.js";
-import { PoolError, Segment, type AcceptedStatement, type ImportEvidence, type SegmentTrail, type SignedBacking, type StatementVerifier } from "./segment.js";
+import { PoolError, requireConfiguration, Segment, type AcceptedStatement, type ImportEvidence, type SegmentTrail, type SignedBacking, type StatementVerifier } from "./segment.js";
 import { allFields, configurationHash, copyConfiguration, copySegmentHeader, decodeStatement, encodeStatement, ISSUE, isStatementKind,
   parsePublicInputs, PUBLIC_INPUT_COUNT, readStatementFields, segmentBytes, statementBytes, statementHash, type OpeningCheckpoint, type PoolConfiguration, type SegmentHeader, type Statement } from "./statement.js";
 import { copyPoolCheckpointEvidence, decodeStoredOpening, decodeStoredReceipt, encodeStoredOpening, encodeStoredReceipt } from "./store-codec.js";
@@ -138,7 +138,7 @@ export class PoolStore {
     private readonly checkpoint?: (phase: PoolStoreCheckpoint) => void,
     requiredSegment?: SegmentHeader) {
     requireThat(typeof path === "string" && path.trim() !== "" && path !== ":memory:" && !path.startsWith("file:"), "STORAGE", "a persistent filesystem path is required");
-    this.config = copyConfiguration(configuration); this.domain = configurationHash(this.config);
+    this.config = requireConfiguration(configuration, verifier); this.domain = configurationHash(this.config);
     // Optional local operating constraint, never a replacement for authority,
     // replay or finality. Own the bytes before invoking the venue adapter.
     this.requiredSegment = requiredSegment === undefined ? undefined : segmentBytes(requiredSegment);
@@ -622,7 +622,7 @@ export class PoolStore {
   private retainedVerifier(): StatementVerifier {
     const backend = this.verifier, proven = this.proven, domain = this.domain;
     return {
-      ...(backend.identities === undefined ? {} : { identities: backend.identities }),
+      identities: backend.identities,
       async verify(kind, publicInputs, proof) {
         const w = new ByteWriter();
         w.context(statementBytes(domain, kind, publicInputs)); w.lengthPrefixed(proof);

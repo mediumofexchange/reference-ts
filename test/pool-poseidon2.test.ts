@@ -49,6 +49,17 @@ describe("pool-v2 §1: the in-circuit hash on the host", () => {
     expect(() => poseidon2Hash([1 as unknown as bigint])).toThrow(EncodingError);
     expect(() => poseidon2Permutation([1n, 2n, 3n])).toThrow(EncodingError);
     expect(() => poseidon2Permutation([1n, 2n, 3n, p])).toThrow(EncodingError);
+    // A sparse array's hole is not a field element, though `every` would skip it.
+    const holed = [1n, 2n, 3n, 4n];
+    delete holed[1];
+    expect(() => poseidon2Hash(holed)).toThrow(EncodingError);
+    expect(() => poseidon2Permutation(holed)).toThrow(EncodingError);
+    // Each element is read once, so the element checked is the element hashed.
+    let reads = 0;
+    const shifting = [1n, 2n, 3n, 4n];
+    Object.defineProperty(shifting, 1, { get: () => (reads++ === 0 ? 2n : 2n + p) });
+    expect(poseidon2Hash(shifting)).toBe(poseidon2Hash([1n, 2n, 3n, 4n]));
+    expect(reads).toBe(1);
   });
 
   it("derives owner, commitment and nullifier with the tags in the pinned order", () => {

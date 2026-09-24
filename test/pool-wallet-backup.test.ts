@@ -14,7 +14,7 @@ import {
   walletBackupDigest,
 } from "../src/pool/wallet-backup.js";
 import { LocalVenue } from "../src/venue.js";
-import { CONFIG, DOMAIN, issueStatement, Oracle, spendStatement, VENUE } from "./pool-support.js";
+import { CONFIG, DOMAIN, IDENTITIES, issueStatement, Oracle, spendStatement, VENUE } from "./pool-support.js";
 import { evidence, open, terms } from "./pool-record-support.js";
 import { SECRETS } from "./support.js";
 
@@ -262,7 +262,7 @@ describe.skipIf(!nodeHasSqlite)("offline pool wallet export and recovery", () =>
     const gate = new Promise<void>(resolve => { release = resolve; });
     const started = new Promise<void>(resolve => { entered = resolve; });
     let first = true;
-    const verifier = { verify: async (...args: Parameters<Oracle["verify"]>) => {
+    const verifier = { identities: IDENTITIES, verify: async (...args: Parameters<Oracle["verify"]>) => {
       if (first) { first = false; entered(); await gate; }
       return f.oracle.verify(...args);
     } };
@@ -294,7 +294,7 @@ describe.skipIf(!nodeHasSqlite)("offline pool wallet export and recovery", () =>
     let submitted = false, verified = false;
     await expect(reader.submit("payment", { submit: async () => { submitted = true; return f.spendReceipt; } })).rejects.toThrow(/read-only/);
     await expect(reader.fulfill("invoice", f.delivery, { ...f.checkpointArgs,
-      verifier: { verify: async () => { verified = true; return true; } } })).rejects.toThrow(/read-only/);
+      verifier: { identities: IDENTITIES, verify: async () => { verified = true; return true; } } })).rejects.toThrow(/read-only/);
     expect({ submitted, verified }).toEqual({ submitted: false, verified: false });
 
     close(reader); close(f.wallet);

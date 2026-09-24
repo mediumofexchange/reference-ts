@@ -63,13 +63,16 @@ export function isNoteOpening(note: unknown): note is NoteOpening {
   );
 }
 
-/** cm = H(T_NOTE, domainHi, domainLo, backingHi, backingLo, value, owner, rho), nonzero. */
+/**
+ * cm = H(T_NOTE, domainHi, domainLo, backingHi, backingLo, value, owner, rho), nonzero.
+ * The opening is read once, into the copy that is checked and hashed.
+ */
 export function commitmentOf(domain: Uint8Array, note: NoteOpening): bigint {
-  if (!isNoteOpening(note)) throw new EncodingError("malformed note opening");
+  const own = copyNoteOpening(note);
   const [domainHi, domainLo] = limbsOf(domain);
-  const [backingHi, backingLo] = limbsOf(note.backing);
+  const [backingHi, backingLo] = limbsOf(own.backing);
   return nonzero(
-    poseidon2Hash([T_NOTE, domainHi, domainLo, backingHi, backingLo, note.value, note.owner, note.rho]),
+    poseidon2Hash([T_NOTE, domainHi, domainLo, backingHi, backingLo, own.value, own.owner, own.rho]),
     "commitment",
   );
 }

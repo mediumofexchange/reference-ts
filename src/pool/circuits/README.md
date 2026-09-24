@@ -23,7 +23,20 @@ source/bytecode/key SHA-256s to `manifest.json`, and exercises real proofs,
 every public input's binding — the segment identity's limbs included, which
 no constraint reads — and hostile witnesses: wrong or foreign scope entries,
 wrong links, wrong scope paths, inputs against the wrong slot's anchor, and
-the v1 cases for ownership, membership, conservation and overflow. The
+the v1 cases for ownership, membership, conservation and overflow. Limbs,
+values and direction bits are bounded by the circuits themselves, not by
+noir_js's input encoder, which a prover can skip: the check reads each
+compiled program and requires a range constraint of the declared width on
+every integer and boolean input, runs every hostile witness on the same
+bytecode through a field-typed ABI (`scripts/pool/constraints.mjs`), and
+requires each to fail the constraint it names: an input's range check, or
+the call chain from `main` to the failing assertion (debug locations cannot
+tell a loop's two slots apart). Witnesses that satisfy everything but one
+type bound — conservation wrapped modulo p, a non-boolean direction that
+places an unminted note under a real anchor or a foreign backing in the
+scope — are refused by that range check, solve on a copy of the program
+without it, and their proofs under the real key do not verify where the
+valid witness's, made the same way, does. The
 eleven-field spend permits two backings, two inputs including padding, each
 against its own anchor, and two outputs; burn has thirteen fields and one
 change output; issue has nine. It then runs `scripts/pool/admission.mjs`:

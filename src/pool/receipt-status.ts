@@ -9,7 +9,7 @@ import { readPoolReceiptRecord, type PoolReceiptRecordResult, type PoolReceiptSe
 import type { PoolReceiptCheckpointFact } from "./receipt-repair.js";
 import { indexEvidence, relateHeld, type HeldRelation } from "./receipt-walk.js";
 import { copyPoolReceipt, type PoolReceipt } from "./receipt.js";
-import { PoolError, type SignedBacking, type StatementVerifier } from "./segment.js";
+import { PoolError, requireReaderConfiguration, type SignedBacking, type StatementVerifier } from "./segment.js";
 import { copyConfiguration, copySegmentHeader, segmentIdentity, type PoolConfiguration, type SegmentHeader } from "./statement.js";
 
 export type PoolReceiptStatus = "final" | "contradicted" | "abandoned" | "lapsed" | "pending";
@@ -73,6 +73,8 @@ function malformed(cause: unknown): cause is Error {
  * verifier programming failures propagate.
  */
 export async function readPoolReceiptStatus(args: Arguments): Promise<PoolReceiptStatusResult> {
+  // The caller's own configuration and verifier: a mismatch throws, never classifies evidence.
+  requireReaderConfiguration(args);
   let stable = (): void => {};
   let owned: Omit<Arguments, "venue" | "verifier">, venue: Venue, verifier: StatementVerifier;
   let record: Extract<PoolReceiptRecordResult, { kind: "record" }>, boundary: bigint | undefined;
