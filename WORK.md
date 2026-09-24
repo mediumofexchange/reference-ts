@@ -71,7 +71,7 @@ boundary: no decoder or profile selection, no spec or runtime change.
 - The contained-sync node of 2026-09-12 is stopped. Retain the detached 20 GiB image
   `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd` and verified
   parameter/tool caches. Do not delete the image or allocate another.
-  [Sync handoff](docs/ergo-node-sync-resume-verification.json): headers 97,923;
+  [Sync handoff](https://github.com/mediumofexchange/reference-ts/blob/c85af7b/docs/ergo-node-sync-resume-verification.json): headers 97,923;
   full heights null/unresolved. The week's cached node responses
   (`scratch/ergo-chain/`, digest in the report), `scratch/sigma-alpha/` and
   the `scratch/sigma-0.28.0/` control can be regenerated; keep the cache.

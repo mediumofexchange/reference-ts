@@ -1249,101 +1249,13 @@ memory and CPU containment.
 
 ## Windows process containment feasibility
 
-The private `experiments/ergo-range/contained-check.ps1` probe compares fixed
-workers under Windows Job Objects, separately from the default CI corpus.
-The [no-window report](ergo-containment-verification.json) and
-[detached report](ergo-detached-containment-verification.json) record Node
-24.6.0, Windows build 19045, PowerShell, launch flags and the same six source
-hashes. Both exit **2**, meaning **unresolved containment evidence**.
-These are one sequential pair of runs after repository checks, not statistical
-bounds or samples selected for passing. The default remains `no-window`.
-
-The supervisor creates each worker suspended with a
-[creation-time job list](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812),
-checks membership and reads back limits before resuming. Only NUL input and
-the shared stdout/stderr pipe are inherited. Both modes retain 256 MiB
-process/job committed memory, one active process, a default two-second user-CPU
-threshold, 64 KiB output and an eight-second wall deadline. The CPU control
-gets one second user CPU; the wall control gets one second wall time. The
-finite corpus gets 10 seconds user CPU and 30 seconds wall time. These are
-experimental budgets. The
-[memory fields](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_extended_limit_information)
-describe committed virtual memory, not an RSS ceiling.
-
-The only launch difference is `CREATE_NO_WINDOW` versus `DETACHED_PROCESS`,
-combined respectively into flags `0x08080004` and `0x0008000c` with
-`CREATE_SUSPENDED` and `EXTENDED_STARTUPINFO_PRESENT`.
-[Microsoft documents](https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags)
-that detached console processes do not inherit the parent's console and may
-allocate one later. This comparison does not prevent later console allocation
-or isolate untrusted programs. Both modes keep identical job assignment,
-handle inheritance, budget checks and cleanup.
-
-| Observation | No window | Detached |
-|---|---|---|
-| Images observed in all eight cases | Node and `C:\Windows\System32\conhost.exe` | Node only |
-| Maximum sampled associated IDs per case | 2 | 1 |
-| Growing-memory job peak, bytes | 273,985,536 (above 268,435,456 cap) | 267,730,944 (below cap) |
-| Growing-memory process and independent private-commit peaks, bytes | 267,403,264 | 267,730,944 |
-| Single 256 MiB growth | Refused; retains 65,536 WASM bytes | Refused; retains 65,536 WASM bytes |
-| One-second CPU control, target / final job user seconds | 1.1875 / 1.203125 | 5.859375 / 5.859375 |
-| Whole-job cleanup readback | All eight empty | All eight empty |
-| Finite corpus job peak, bytes | 61,480,960 | 54,521,856 |
-| Report resource issues | Extra associated IDs, memory and CPU overages | CPU overage |
-
-Detached job/process memory peaks agree in every case and no helper is observed.
-This supports the console-helper explanation for the no-window accounting
-mismatch on this host; it does not prove why the OS admitted the helper under
-the configured one-process limit. **Do not subtract an empirical allowance.**
-[Job accounting](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information)
-records one lifetime process in each detached case and two in each no-window
-case. Failed associations can also increment this count, so it cannot by itself
-prove successful execution. The descendant control fails in both modes;
-that alone does not attribute the failure to the process-count limit.
-
-Independent
-[private-commit measurements](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-process_memory_counters_ex)
-and process-ID/image queries are bounded samples, may race exit and do not
-prove a complete lifetime inventory. Inventory storage is capped at 16 IDs.
-Cleanup terminates the job, waits for the target with a direct termination
-fallback, and reads back zero active job entries within five seconds. Some
-no-window accounting snapshots retain entries after target exit; detached
-snapshots report zero. Final job CPU includes the cleanup interval.
-
-Both CPU controls exit with native `STATUS_QUOTA_EXCEEDED` (`0xc0000044`,
-mapping to Win32 1816). The
-[status identity](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/596a1078-e883-4972-9bbc-49e60bebca55)
-does not prove its cause or an exact bound. Windows checks
-[user-CPU thresholds periodically](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_limit_information)
-without a documented maximum overshoot; kernel CPU is separate. Detached
-launch does not change this contract. Observed target or final job CPU above
-the threshold remains a failure even on a quota exit. Wall/output controls
-still terminate with their named supervisor outcomes and no accepted output.
-
-Eight worker-free `-EvidenceOnly` regressions retain checks for CPU overshoot,
-exact boundaries, job CPU, independent/job memory, associated IDs and both
-accounting snapshots. `-StartupOnly` remains diagnostic and returns exit 2 for
-unresolved observations. Independent adversarial review and final report/hash,
-resource-predicate and numeric-claim readback found no material defect.
-Both full runs recover the unchanged corpus: **14,874 assertions, 24
-transactions and 65 outputs**. Its embedded report describes the old runner;
-the outer reports name the effective limits.
-
-Earlier failed evidence remains at immutable revisions:
-[`8938c77`](https://github.com/mediumofexchange/reference-ts/blob/8938c77/docs/ergo-containment-verification.json)
-records a 274,014,208-byte job memory peak and 6.59375 seconds CPU, and
-[`8f29a4a`](https://github.com/mediumofexchange/reference-ts/blob/8f29a4a/docs/ergo-containment-verification.json)
-records a 273,514,496-byte peak and a CPU case reaching the wall deadline after
-3.796875 user seconds during concurrent repository checks. New samples do not
-erase those failures. No hostile depth/count/declared-size parser cases ran;
-there is no filesystem/network isolation or selected runtime boundary.
-Unsupported decoding and resource refusal remain unresolved, never omission.
-
-Hard containment remains **failed**. The
-[metered probe](#metered-decoder-feasibility) below evaluates a different guest
-resource contract; it does not clear these OS failures or raise their budgets.
-Header/range authentication, parser compatibility and publication status remain
-separate gates.
+Hard Windows process containment of the standalone decoder was never
+established, and the planned comparison against a locally built/run Ergo
+node is superseded: the project now runs its own official v6.0.6 nodes
+through `experiments/ergo-range/nodes.mjs` (decision 2026-09-10, own-node
+evidence 2026-09-22). The retired measurements and node comparison are at
+the immutable
+[`c85af7b` revision](https://github.com/mediumofexchange/reference-ts/blob/c85af7b/docs/POOL_DEPLOYMENT_PROBES.md#windows-process-containment-feasibility).
 
 ## Metered decoder feasibility
 
@@ -1536,50 +1448,6 @@ sigmastate v6.0.6, 102 expression serializers apply and a method call's
 layout depends on the versioned method registry. The reader keeps its own
 decoder ([decision](../decisions/2026-09.md#2026-09-23--keep-the-readers-own-decoder-the-transaction-root-does-not-authenticate-the-nodes-field-split));
 resource bounds for adversarial inputs and a budget remain open.
-
-## Comparison with a local validating node
-
-The comparison retains the fixture manifest's Ergo node source pin
-[`c364664`](https://github.com/ergoplatform/ergo/tree/c36466405abc9a2ddda37e890635f00d593041f5)
-and sigma-interpreter pin `ab0b15c`; no node artifact was installed or executed.
-The [dedicated-node preflight](ERGO_NODE_PREFLIGHT.md) now records the verified
-Windows archive/JAR hashes, runtime/source requirements and a finite offline
-startup. The stock node runs with no spending key, an uninitialized wallet,
-loopback listeners and a strict reader allowlist; wallet routes and hardcoded
-CORS remain. Startup and whole-job cleanup are demonstrated under the reported
-resource controls. Sync, hard disk/network containment and fully validated
-chain membership remain open.
-At this node revision, the
-[block API](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/src/main/scala/org/ergoplatform/http/api/BlocksApiRoute.scala)
-looks up a stored header and full block. The
-[transaction section](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/ergo-core/src/main/scala/org/ergoplatform/modifiers/history/BlockTransactions.scala)
-emits its transaction sequence in order and parses transactions with the
-applicable version context. The endpoint alone does not prove best-chain
-membership or completed transaction validation. Those require configuration,
-sync and chain-selection evidence; fetching a block by ID is insufficient.
-
-| Boundary | What it can establish | Cost and remaining evidence |
-|---|---|---|
-| Disposable binary-decoder process | Fields derived from input bytes; per-attempt failures can remain local | Alternate parser compatibility and resource bounds must be demonstrated; this Windows probe leaves memory and CPU evidence unresolved |
-| Local validating node | Selected-chain transaction semantics using that node's consensus implementation, conditional on verified configuration and sync | A long-lived JVM, chain state/storage and node maintenance become dependencies; parser/service exhaustion affects that node's availability |
-
-Node consensus validation and resource containment answer different questions.
-The pinned
-[generic node parser](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/avldb/src/main/scala/org/ergoplatform/serialization/ErgoSerializer.scala)
-also returns after parsing without checking cursor exhaustion; using the node
-does not establish unique accepted wire encodings. A client should compare
-node-derived objects, identities and authenticated block roots without
-claiming byte canonicality from successful parsing. Failed decoding, missing
-history or client response limits cannot establish omission.
-
-The smallest independent node probe is a dedicated keyless instance with an
-artifact hash and explicit validation/history/bootstrap configuration, then
-bounded GET reads of the four pinned fixtures. Compare all 29 transactions,
-77 outputs and their order/roots, and record best fully validated chain state.
-No fixture match closes contiguous-range authentication. Per-response byte
-and time budgets, node-wide OS memory/CPU bounds, disk/sync costs and behavior
-on malformed block sections still need measurement. This source comparison
-selects no production node version or runtime trust boundary.
 
 ## Venue and restoration work still required
 
