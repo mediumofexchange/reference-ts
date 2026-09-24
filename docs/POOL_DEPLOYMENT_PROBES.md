@@ -954,19 +954,24 @@ difference, but the byte counts are authenticated only that far.
 | JSON fetched, bytes | 21,501,423 | 133,335,507 |
 | Indices without a section: sigma-rust 0.28.0 (the pin until 2026-09-22) / `0.29.0-alpha-2f840d3` (pinned 2026-09-22 to 09-23) | 5 / 0 | 58 / 0 |
 
-Decoding the week's 28,196 transactions took 253 s under the pinned
-`0.29.0-alpha-2f840d3` and 39 s under the 0.28.0 control (the retained run
-is the offline re-read of 2026-09-22 under the new pin; the first run, with
-the roles reversed, measured 32.5 s and 227.4 s); serializing them from
-text 254 s under the alpha; building the verifier from the read sections
-1.3 s, and that construction is where every output is scanned and
-attributed and every root rechecked from the decoder's ids; 5,040
-single-index probes afterwards took 38 ms and a day's or the week's
-range answers in a few milliseconds (the least of five repetitions),
-walking per-index lists. Under the new pin every index has its section, so
-the last-day and whole-window requests answer (empty, 102 bytes each)
-where the first run left 58 indices and every range through them
-unresolved. The week's
+Since 2026-09-24 the reader decodes nothing
+([decision](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)):
+the retained run, an offline re-read of the same cache (same digest), derives
+each transaction's unsigned bytes and witness id with `supply.mjs` and builds
+the verifier from those. The reader takes 24,165,521 bytes for the week
+against 26,639,110 section bytes; every root reproduces from the hashes of
+the unsigned bytes, all 5,040 indices have their sections, and the framer
+reads 4,707 of the 28,196 transactions, each with exactly the outputs the
+node's JSON states (the rest carry no record). Building the verifier, where
+every transaction is hashed and framed and every root rechecked, took 21 s
+on a desktop loaded by other jobs (13 s in an unloaded rerun); decoding the
+same transactions with the vendored release build took 154 s in the same
+run, and sigma-rust's serialization and the supplier's derivation are a
+supplier's cost. 5,040 single-index probes afterwards took 0.3 s and a day's
+or the week's range answers in a few milliseconds (the least of five
+repetitions), walking per-index lists; every request answers (empty, 102
+bytes each). Under the 2026-09-22 decoder reader the first run, on 0.28.0,
+left 58 indices and every range through them unresolved. The week's
 sections were fetched by a scratch probe whose log is not retained: about
 six minutes of response time, roughly 80 ms a response at 250 ms pacing
 from one host, and the 6.0.6 node refusing new connections after about 600
@@ -991,7 +996,8 @@ of wire headers at this rate.
 
 Not established: the nodes' authenticity (two public nodes agreeing is not
 proof of work, chain selection or finality, and a shared upstream is not
-excluded), decoder containment and node equivalence, the inclusion-latency
+excluded), a supplier for transactions the pinned library cannot read (none
+in this window), the inclusion-latency
 distribution (A10; it needs submitted transactions, which is P2), and any
 bound on future blocks: the counts are for these package versions and this
 window. No profile, decoder or dependency pin is selected by this probe.

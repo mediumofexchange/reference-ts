@@ -102,8 +102,11 @@ bytes alike, so the reading is deterministic whatever the grammar admits; a
 transaction outside it is one its author could have written inside it. A
 publisher therefore spends plain boxes, pays change to pay-to-public-key
 and the fee to the fee tree, and writes registers as `Coll[Byte]`; each
-location must itself be one tree the framer reads. Where the framer reads a
-transaction the node reads, its outputs are the node's: measured on the
+location must itself be one tree the framer reads and the node's canonical
+writing of it (the node re-writes a sized tree it parses from the parse, so
+a location written otherwise could never be carried; pay-to-public-key is
+canonical). Where the framer reads the unsigned bytes of a transaction the
+node reads, its outputs are the node's: measured on the
 real corpus and week and on hostile mutations
 ([probe](POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence),
 [decision](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)).

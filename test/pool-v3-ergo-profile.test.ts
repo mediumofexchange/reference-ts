@@ -21,6 +21,8 @@ const b = (n: number, width = 32): Buffer => Buffer.alloc(width, n);
 const tree = (kind: number): Buffer => Buffer.from(`0008cd02${"ab".repeat(31)}0${kind}`, "hex");
 const scripts = { 1: tree(1), 2: tree(2), 3: tree(3), 4: tree(4) } as const;
 const MINER_FEE = Buffer.from(profile.MINER_FEE_TREE_HEX, "hex");
+// SHA-256 of the fee tree as mainnet block 1,876,512's fee output carries it (experiments/ergo-range/fixtures).
+const MINER_FEE_SHA256 = "744c727d6a1478912d1e7052957c2ba466bf9a5a89e9347309a58e2032473278";
 const wide = { maxBytes: 1n << 40n, maxEntries: 1n << 20n };
 const vlq = (n: number): Buffer => {
   const out: number[] = [];
@@ -245,6 +247,14 @@ describe("Ergo venue-profile candidate", () => {
     expect(profile.frameTransaction(at((1n << 64n) - 1n))).toHaveLength(1);
     expect(profile.frameTransaction(at(1n << 64n))).toBeUndefined();
     for (const garbage of ["x", null, new Uint16Array(4)]) expect(profile.frameTransaction(garbage as unknown as Uint8Array)).toBeUndefined();
+    // Unsigned-short widths: a register of 65,535 bytes frames, one of 65,536 does not; so for 65,536 outputs claimed.
+    const register = (n: number): Buffer => cat(Uint8Array.of(0x0e), vlq(n), Buffer.alloc(n, 1));
+    const withRegister = (n: number): Buffer => cat(vlq(0), vlq(0), vlq(0), vlq(1), bigVlq(1n), plain.ergoTree, vlq(1), Uint8Array.of(0, 1), register(n));
+    expect(profile.frameTransaction(withRegister(0xffff))).toHaveLength(1);
+    expect(profile.frameTransaction(withRegister(0x10000))).toBeUndefined();
+    expect(profile.frameTransaction(cat(vlq(0), vlq(0), vlq(0), vlq(0x10000)))).toBeUndefined();
+    // The fee tree is Ergo's miner-fee proposition at minerRewardDelay 720, pinned here by its hash.
+    expect(createHash("sha256").update(MINER_FEE).digest("hex")).toBe(MINER_FEE_SHA256);
   });
 
   it("gives a transaction outside the framer's grammar no record but keeps its block's section", () => {
@@ -258,6 +268,12 @@ describe("Ergo venue-profile candidate", () => {
     const v5 = profile.ergoRangeVerifier(profileOf(later), later)!;
     expect(v5.witnessedIndex()).toBe(1n);
     expect(v5.range(request(v5.identity, 1, operator, 0n, 0n), wide)).toBeUndefined();
+    // Version 1 commits to the ids alone: any witness id leaves its sections and answers as they were.
+    const v1 = evidence({ 3: [[record(1, operator, commitment(1n))]] }, 1n, 5n, 1n), v1Profile = profileOf(v1);
+    const v1Answer = Buffer.from(profile.ergoRangeVerifier(v1Profile, v1)!.range(request(profile.ergoProfileIdentity(v1Profile), 1, operator, 0n, 1n), wide)!);
+    const rewitnessed = { ...v1, blocks: v1.blocks.map(block => ({ ...block, transactions: block.transactions.map(t => ({ ...t, witnessId: b(9, 31) })) })) };
+    expect(Buffer.from(profile.ergoRangeVerifier(v1Profile, rewitnessed)!.range(request(profile.ergoProfileIdentity(v1Profile), 1, operator, 0n, 1n), wide)!)).toEqual(v1Answer);
+    expect(v1Answer.length).toBe(102 + 20 + 136);
     const v4 = evidence({}, 1n, 5n, profile.MAX_SECTION_VERSION);
     expect(profile.ergoRangeVerifier(profileOf(v4), v4)!.range(request(profile.ergoProfileIdentity(profileOf(v4)), 1, operator, 0n, 1n), wide)).toHaveLength(102);
   });
@@ -413,10 +429,12 @@ describe("Ergo venue-profile candidate", () => {
     const decoded = range.decodeRangeAnswer(drifted, request(verifier.identity, 1, operator, 0n, 4n), wide);
     expect(decoded.entries.map(e => e.index)).toEqual([2n, 3n, 4n, 4n]);
     // Evidence whose fields drift after their single read: a header's height and a transaction's unsigned bytes.
-    let heightReads = 0, bytesReads = 0;
+    let heightReads = 0, bytesReads = 0, witnessReads = 0;
     const drifted2 = chain.headers[1]!, driftedHeader = { ...drifted2, get height() { return heightReads++ === 0 ? drifted2.height : 4n; } };
     const trueBytes = chain.blocks[3]!.transactions[0]!.unsigned, otherBytes = unsignedBytes([record(1, operator, commitment(8n))], "other");
-    const driftedTransaction = { ...chain.blocks[3]!.transactions[0]!, get unsigned() { return bytesReads++ === 0 ? trueBytes : otherBytes; } };
+    const trueWitness = chain.blocks[3]!.transactions[0]!.witnessId;
+    const driftedTransaction = { get unsigned() { return bytesReads++ === 0 ? trueBytes : otherBytes; },
+      get witnessId() { return witnessReads++ === 0 ? trueWitness : b(7, 31); } };
     const driftingEvidence = { headers: chain.headers.map((h, i) => (i === 1 ? driftedHeader : h)),
       blocks: chain.blocks.map((block, i) => (i === 3 ? { ...block, transactions: [driftedTransaction, ...block.transactions.slice(1)] } : block)) };
     const stable = profile.ergoRangeVerifier(base, driftingEvidence)!;
