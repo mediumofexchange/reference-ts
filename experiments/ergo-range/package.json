@@ -6,7 +6,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "check": "node check.mjs && node decoder-check.mjs && node contained-check.mjs && node profile-check.mjs"
+    "check": "node check.mjs && node supply-check.mjs && node profile-check.mjs"
   },
   "dependencies": {
     "@fleet-sdk/serializer": "0.11.0",
