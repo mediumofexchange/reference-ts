@@ -34,7 +34,8 @@ hash to the stated id is unsupplied, never misread
 ([decision](../../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)).
 `supply-check.mjs`, part of `check:ergo:range`, supplies every fixture
 transaction, reproduces the four fixture roots from the copies and checks
-each refusal.
+each refusal; it also copies every fixture header of versions 2–4 through
+`supply-header.mjs`, the header store's supplier, to its id.
 
 ## Real-chain exhaustion cost
 
@@ -183,6 +184,25 @@ the sync cost:
 
 ```powershell
 node experiments/ergo-range/header-check.mjs --out docs/ergo-own-node-verification.json
+```
+
+## Reader-verified headers
+
+`header-verify.mjs` runs the reader's own header store
+(`model/pool-v3-ergo-headers.ts`) on real mainnet headers. Each header's
+bytes are copied from a node's JSON by `supply-header.mjs` (unsupplied
+unless the copy hashes to the stated id); the store builds from the 1,024
+headers below the pinned anchor by linkage, then verifies every header above
+it from each source in turn (own node, then two public nodes), and its best
+chain must be every source's chain and feed the range verifier. It also
+checks nine real-data mutations for their refusal reasons and, with
+`--recalculations`, the model's EIP-37 difficulty and proof of work at every
+recalculation since activation against the first source's accepted headers.
+Responses are cached under `scratch/ergo-headers/`
+([retained report](../../docs/ergo-header-verification.json)):
+
+```powershell
+node experiments/ergo-range/header-verify.mjs --anchor 1873360 --to 1880300 --recalculations --out docs/ergo-header-verification.json
 ```
 
 ## Venue-profile checks

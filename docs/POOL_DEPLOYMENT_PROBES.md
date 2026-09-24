@@ -1215,14 +1215,73 @@ CPU-seconds, read by hand with `nodes.mjs status` 34 s after the node
 logged the milestone. The testnet node (a full archive with the extra index)
 synced its 557,758 headers in 3,685 s.
 
-Not established: an independent check of proof of work or chain selection
-(the node is the reference client most of the network runs), resistance to
+Not established here: an independent check of proof of work or chain
+selection (the node is the reference client most of the network runs; the
+reader's own check followed, [below](#reader-verified-headers)), resistance to
 an eclipse during sync beyond the agreement at one recent height, and the
 cost of full-block validation from genesis (state came from a snapshot).
 The node's INFO log grew by about 400 MB an hour during sync, so the nodes
 now log at WARN. v6.0.6 answers every API request with
 `Access-Control-Allow-Origin: *` whatever `corsAllowedOrigin` says, so a
 local browser page can read the node's key-free routes.
+
+## Reader-verified headers
+
+The reader need not run a node to authenticate headers: the profile's
+[header store](ERGO_VENUE_PROFILE.md#header-source)
+(`model/pool-v3-ergo-headers.ts`) verifies header bytes itself from the
+pinned anchor. `experiments/ergo-range/header-verify.mjs` ran it on real
+mainnet headers on 2026-09-24
+([retained report](ergo-header-verification.json), recorded offline from
+the run's cached responses):
+
+- **Window.** From the P4 anchor at 1,873,360, the store was built from the
+  1,024 headers below it by linkage alone; each of three nodes (the own
+  v6.0.6 node, `node.ergo.watch` on 5.0.21 and a public 6.0.5 node) served a
+  context that links to the pinned anchor id. It then verified all 6,940
+  headers up to 1,880,300 from the own node's bytes, and both public nodes'
+  copies of the same heights were already known: no header was unsupplied
+  or refused, and the best chain is every source's chain height by height.
+  P4's anchor and tip ids are on it, so P4's 5,040 root-checked sections
+  now stand on headers the reader verified. Its views build the unchanged
+  range verifier (witnessed index 6,929 at depth 10).
+- **Every EIP-37 recalculation.** At each of the 8,091 difficulty
+  recalculations from activation at 844,673 to 1,880,300, the model's
+  EIP-37 value over the nine headers it reads equals the difficulty of the
+  own node's accepted header, and each boundary header links to the header
+  before it; all 16,198 headers read (at heights ≡ 0 and 1 mod 128) pass
+  the model's Autolykos v2 check, across 21 table sizes `N`. These are the
+  node's accepted headers read sparsely, not a chain the store verified.
+- **Refusals on real bytes.** Nine mutations of an accepted header are each
+  refused for their own reason: a flipped nonce (`pow`), `nBits`
+  (`difficulty`), a timestamp equal to the parent's (`timestamp`), an
+  unknown or below-anchor parent, a changed height, a non-minimal VLQ
+  timestamp, a trailing byte and a nonzero new-fields length (`malformed`).
+- **Cost.** Accepting a header (parse, rules and the work check) took a
+  median of 21 ms (mean 21, p99 35) on this host in pure JavaScript, 147 s
+  for the window; the work check alone has a median of 21 ms, almost all of
+  it Blake2b over about 34 Autolykos elements of 8 KiB. A year of headers
+  (262,800) is therefore about an hour and a half once, then 21 ms a block. A header
+  is 220 wire bytes, kept beside the verifier's 105-byte view, and the
+  anchor's context is 225,500 bytes once per venue.
+
+The headers' bytes are copied from each node's JSON by
+`experiments/ergo-range/supply-header.mjs` and are unsupplied unless the
+copy hashes to the stated id (nodes before 6.0 omit `unparsedBytes`).
+Unit tests (`test/pool-v3-ergo-headers.test.ts`) pin one real
+recalculation, canonical parsing, compact normalization, the context rule
+and each refusal, the boundary rule and fork choice on synthetic chains.
+One independent review found no divergence from the pinned node's rules
+beyond the documented omissions.
+
+Not established: no real fork was offered, so chain choice rests on the
+unit cases; three sources that agree say nothing about an eclipse; the
+node's local-clock rule is not applied, so a supplier can lower a side
+branch's required difficulty after about 256 blocks of work at the starting
+difficulty and then feed cheap headers the store keeps (the chain choice is
+unaffected; the bound belongs to the runtime's supplier policy); testnet
+rules and header versions other than 2–4 are not implemented; the checks
+run in pure JavaScript on one host.
 
 ## Decoder stack budget
 

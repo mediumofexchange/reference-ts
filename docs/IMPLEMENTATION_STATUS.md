@@ -220,12 +220,16 @@ verifier from block sections, as the profile states; inclusion latency has
 two correlated observations, not a distribution. The reader's own mainnet
 node validated the header chain from genesis, and the fixtures and the
 measured week stand on its best chain
-([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)): header authentication
-is shown for the retained evidence, from one run of the reference client,
-while the verifier still leaves proof of work to its source and no runtime
-path reads the node. No specification selects the profile; header
-authentication for a reader remains open, and a record must be published
-inside the framer's grammar to be read.
+([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)). The reader no longer
+needs a node for that: `model/pool-v3-ergo-headers.ts` verifies header bytes
+from any supplier from the pinned anchor (canonical parse and id, EIP-37
+difficulty, Autolykos v2 work, heaviest chain) and feeds the verifier its
+best chain, checked on real mainnet headers from three nodes and every
+EIP-37 recalculation
+([reader-verified headers](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers));
+it rests on the work, so withholding a heavier chain remains a supplier's
+power. No specification selects the profile, no runtime path reads it, and
+a record must be published inside the framer's grammar to be read.
 
 ## Successor record conformance
 

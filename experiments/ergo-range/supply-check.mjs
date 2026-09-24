@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { blake2b } from "@noble/hashes/blake2b";
 import { copyTransaction, parseNodeJson, supplyBlock, supplyTransaction } from "./supply.mjs";
+import { supplyHeader } from "./supply-header.mjs";
 
 const here = import.meta.dirname;
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -108,4 +109,27 @@ for (const bad of ['{"a":1,"a":2}', '{"a":1.5}', '{"a":"\\u0041"}', '{"a":1} x',
 assert.throws(() => supplyBlock('{"headerId":"00"}'), /not a block's transactions/);
 checks++;
 
-console.log(JSON.stringify({ status: "ok", checks, fixtures: manifest.fixtures.length, transactions, multiEntryExtensions, withRegisters }));
+// Headers: every fixture header of version 2–4 is copied to bytes hashing to its id; version 1 and every shape the
+// copy cannot reproduce are unsupplied.
+const fixtureHeaders = manifest.fixtures.map(fixture => parseNodeJson(readFileSync(`${here}/${fixture.file}`, "utf8")).get("header"));
+fixtureHeaders.push(parseNodeJson(readFileSync(`${here}/fixtures/mainnet-genesis-header.json`, "utf8")));
+let headersSupplied = 0;
+for (const header of fixtureHeaders) {
+  const supplied = supplyHeader(header);
+  equal(supplied === undefined, header.get("version") < 2n, `header ${header.get("height")} is supplied exactly when its version is 2–4`);
+  if (supplied !== undefined) { equal(hex(supplied.id), header.get("id"), "a supplied header hashes to its stated id"); headersSupplied++; }
+}
+assert(headersSupplied >= 3, "several fixture headers of versions 2–4");
+const headerV4 = fixtureHeaders.find(header => header.get("version") === 4n);
+const editedHeader = edit => { const copy = structuredClone(headerV4); edit(copy); return supplyHeader(copy); };
+equal(editedHeader(header => header.set("unparsedBytes", "")) !== undefined, true, "an empty unparsedBytes is the node's zero length");
+for (const [name, edit] of Object.entries({
+  wrongId: header => header.set("id", "00".repeat(32)),
+  unparsedBytes: header => header.set("unparsedBytes", "00"),
+  version5: header => header.set("version", 5n),
+  missingNonce: header => header.get("powSolutions").delete("n"),
+  shortStateRoot: header => header.set("stateRoot", header.get("stateRoot").slice(2)),
+  nBitsAboveU32: header => header.set("nBits", 1n << 32n),
+})) equal(editedHeader(edit), undefined, `header ${name} is unsupplied`);
+
+console.log(JSON.stringify({ status: "ok", checks, fixtures: manifest.fixtures.length, transactions, multiEntryExtensions, withRegisters, headersSupplied }));
