@@ -289,6 +289,31 @@ node experiments/ergo-range/contained-check.mjs --report docs/ergo-decoder-conta
 The week reads `scratch/ergo-chain` and the retained set
 `scratch/ergo-chain-own` ([Real-chain exhaustion cost](#real-chain-exhaustion-cost)).
 
+## Hostile-input node equivalence
+
+`hostile-equivalence.mjs` mutates the 29 hash-pinned corpus transactions
+deterministically (every byte replaced by four values, deleted, and preceded
+by 0x00 and 0x80; every proper prefix; seeded splices from other seeds) and
+reads each case twice: through `node-read/NodeRead.java`, which frames it as
+a one-transaction version-4 block section, reads it offline with the pinned
+v6.0.6 node JAR's own `BlockTransactionsSerializer` and states the node's
+ids, parsed ErgoTree bytes and register constants in that transaction's
+version context, and through `contained-decoder.mjs`. Where the node writes
+what it read as other bytes, the node and the decoder also read that
+rewrite. Every pair is classified by whether the decoder reads the node's
+ids and fields, other ids (which the header's transactions root refuses), the
+node's ids with other fields (the disagreement the root would not catch), or
+refuses. The node's runtime has
+no compiler, so a JDK compiles the harness; the own node's bundle
+([Own nodes](#own-nodes)) supplies the JAR and runtime:
+
+```powershell
+node experiments/ergo-range/hostile-equivalence.mjs --jdk <jdk-21 dir>
+```
+
+It writes the [retained report](../../docs/ergo-decoder-hostile-equivalence-verification.json)
+and keeps its cases and the node's answers in `scratch/hostile-equivalence/`.
+
 ## Metered decoder feasibility
 
 `metered-check.mjs` ([Decoder build](#decoder-build) above) needs a pinned

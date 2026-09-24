@@ -1,0 +1,1747 @@
+{
+  "status": "no-same-id-disagreement-on-these-cases",
+  "sameIdsDiffer": 0,
+  "uncompared": 0,
+  "resourceCasesCountedNotSampled": 0,
+  "limits": [
+    "parse level: no state, proofs or full validity; the stateless verdict uses the node's initial validation settings, not mainnet's voted ones",
+    "one version context, a version-4 block's (activated 3, tree 3): blocks of earlier versions are read by the node under other contexts, and the profile does not yet refuse them",
+    "mutations of the 29 corpus transactions only: single-byte replacements, deletions and insertions, prefixes and seeded splices",
+    "fields no mutation both sides read alike changed: outputCount, registerNames",
+    "the node's resource refusals depend on its runtime's heap and stack; the harness runs its main thread with -Xmx4G",
+    "for a transaction the node rewrites, the header commits to the rewrite's ids; which bytes peers and node APIs serve for it (the miner's or the rewrite), and whether the node's section serializer (writing under version context 4, 4) gives the rewrite read here (3, 3), are not measured"
+  ],
+  "compares": "per case, the node's reading (the pinned v6.0.6 JAR's BlockTransactionsSerializer.parse of a one-transaction version-4 section, then the node's id, witness id, parsed ErgoTree bytes and register constants stated in that transaction's version context) against contained-decoder.mjs's: id, witness id, output count, and each output's ErgoTree bytes, register names and register constants; where the node reads a proper prefix, the decoder's reading of the whole case and of that prefix; where the node's serializer writes what it read as other bytes, the decoder's reading of those bytes",
+  "verdicts": {
+    "equal": "every compared field equal",
+    "otherIds": "the id or witness id differs, so the header's transactions root refuses the decoder's reading",
+    "sameIdsDiffer": "equal ids, other output fields: the root would not catch it",
+    "decoderRefuses": "a denial: the reader leaves the ranges through such a block unresolved",
+    "nodeReadsAndRewrites": "the node's ids are of its rewrite, so the reader reads such a transaction only from a supplier that serves the node's rewrite (rewrittenBytes), and is denied it from one serving the raw section bytes"
+  },
+  "rereads": {
+    "rewrites": 2845,
+    "stable": 2845,
+    "unstable": {}
+  },
+  "node": {
+    "jarSha256": "21b9023933b19b98b7eb4d50cb78bcb6c827a0fe65711a00ceaf1b83f8f3a323",
+    "runtimeReleaseSha256": "7f4b5af3fa7055b00bc76e6c9fa88bae4f1187b075293f58458d5849e41426a8",
+    "runtime": "openjdk version \"21.0.1\" 2023-10-17 LTS",
+    "compiler": "javac 21.0.12.1",
+    "heap": "-Xmx4G, as ergo-node.ps1 runs it"
+  },
+  "versionContext": {
+    "activated": 3,
+    "ergoTree": 3
+  },
+  "decoder": {
+    "vendoredWasmSha256": "0d20038513c72a9daf859e3ea278735caef43305cde6bc7fb2764e8d933aa28a",
+    "derivedWasmSha256": "bd7cfbb5459aa577488ae304f2b5057996b576a285886f6d78b36fe3e91bbec5"
+  },
+  "seeds": {
+    "transactions": 29,
+    "limited": false,
+    "bytes": 19380,
+    "ids": [
+      "9c20f008f0935ea363ad003f17801fcf39365d7922747e3188e093eb37e7154a",
+      "81943a9cf0fb1f3d513cd3de5bad9f5e3738e116ee0cb2135b7aed6c5fe26255",
+      "347f569a907db1dac0c56756b96965aa43b01735004c2c37154f98604a55fba2",
+      "5e4170782ddd01df1687ded474c8de27c17535a2fea57bdad433d0f585b2b62d",
+      "4987fc234bc5ad277650e8998840697d12ec42a1d3164b0ee084a2a99f1693cb",
+      "8d1a31234d61b94606456d766cf1ec2a5ce1da8cac7d8b9afb11698f1da059e0",
+      "53aa38f983245cb9bbf3603e87dd82bf72c16f2bdd639bb6cbde3c78578d3002",
+      "31f7731f220b4c2216898711db2e3e87d71645dbad90fb26fddcc2a9ac11c4b0",
+      "f2755bcc747e4a10ca8be470e795ab1428c88203796e28b9dc57e7ca2874bada",
+      "6eadee2a9aa59461c6e634abff2b85b362e02122ecfeb068835d3d8e569b872a",
+      "bced74d05110c97e0c80348c3bbe882dc939298c5666aff8f31201c37a274039",
+      "e656678fc40c49587af45e7eaadece8011e8bb9494776053d45d5e60164ae0b2",
+      "34fc5ac973e9e468804569104e1252ce3ce433120fae06eabfbf0c0b105f6de7",
+      "a079c69b17d2ceb76c024c2d5bf1b509d8099304e0dea002750161582b224ef0",
+      "ca1486635584d37ff862e995a8da7536d787896d7e9a7f45cefb4af63a38649f",
+      "1a45c3a107199d92a35c29803a329e1280074d0277524458667b7c0f313066b9",
+      "8e5628c3f713472e9f050d9b30454511727a8eb05fc456c93181dc4c349afe10",
+      "864f7491fe8d20c6dff6c37a818fa37c8f3ffc8f9695e64bcd613dbfc5768aaf",
+      "dec7c13ebeb7a357b11d56acbf45e64b0538c4dc3539e3b3c41e7b88ceacd366",
+      "3f75664a18d8c3f4714b2e7ff65f371c7a691aaffd2a358b4044ea10ee422ad3",
+      "745e19978f4bb6d1c0ebe4f083408f3e8474b4010a88ada07f3d1fbb7ee9ac1c",
+      "4f8db5d175f2ff59d2fdcfb7d3bff05c5a681ff77acd821da1274590c1610963",
+      "feb2ca826c7a96bb94b27f69e4f9c2affe32cbadb4be1aeff1897420f1a75dc5",
+      "16bd2ca6ac56b2e18f529fb8d838751aaf034f2b0d4fab80071d2757604041f5",
+      "3b5ac3b366ee627382d524c57c4b188bda1bbc1543c70661fcc5ffd3d0761a8d",
+      "c15df1fcf78450cb7cbe6441ddd32ef2543346127e504e3cffb620b067e733bc",
+      "c504d70fca4c017ddfc813a1047cfca51061758d7fc410ae671507eca787f9ef",
+      "bc14ad7dc7e049c396700930ba3183928defaabc9ccd86329d1a62875abfaac0",
+      "ca9ed40c5db638b1ffe4c7bf01b369caf4e00fe90893293660f3be2332a12385"
+    ]
+  },
+  "mutations": {
+    "replacements": "each byte b as b^0x01, b^0x80, 0x00, 0xff",
+    "deletions": "each byte",
+    "insertions": "0x00 and 0x80 before each byte and at the end",
+    "prefixes": "each proper nonempty prefix",
+    "splices": "256 per seed, sfc32 seeded 6d6f652d 686f7374 696c652d 65717569, runs of 0-64 bytes",
+    "distinctCases": 159397,
+    "duplicatesDropped": 2262
+  },
+  "counts": {
+    "nodeStateless": {
+      "ok": 53963,
+      "failed": 145
+    },
+    "nodeReads": {
+      "equal": 49613,
+      "decoderRefuses": 1141
+    },
+    "outcomes": {
+      "nodeReads": 50754,
+      "bothRefuse": 95118,
+      "nodeReadsPrefix": 227,
+      "nodeReadsAndRewrites": 3127,
+      "decoderReadsNodeRefuses": 10171
+    },
+    "byKind": {
+      "seed": {
+        "nodeReads": 29
+      },
+      "replace": {
+        "bothRefuse": 20608,
+        "nodeReads": 46433,
+        "nodeReadsPrefix": 51,
+        "nodeReadsAndRewrites": 675,
+        "decoderReadsNodeRefuses": 8017
+      },
+      "delete": {
+        "bothRefuse": 12354,
+        "nodeReads": 2669,
+        "nodeReadsAndRewrites": 1790,
+        "decoderReadsNodeRefuses": 2139,
+        "nodeReadsPrefix": 57
+      },
+      "prefix": {
+        "bothRefuse": 19299
+      },
+      "insert": {
+        "nodeReadsPrefix": 94,
+        "bothRefuse": 35541,
+        "nodeReadsAndRewrites": 655,
+        "nodeReads": 1571,
+        "decoderReadsNodeRefuses": 6
+      },
+      "splice": {
+        "bothRefuse": 7316,
+        "nodeReads": 52,
+        "nodeReadsPrefix": 25,
+        "decoderReadsNodeRefuses": 9,
+        "nodeReadsAndRewrites": 7
+      }
+    },
+    "nodeRefusals": {
+      "java.lang.IllegalArgumentException": 14950,
+      "java.lang.ArrayIndexOutOfBoundsException": 7154,
+      "sigma.serialization.SerializerException": 37180,
+      "java.nio.BufferUnderflowException": 6489,
+      "sigma.serialization.InvalidTypePrefix": 12991,
+      "sigma.validation.ValidationException": 4916,
+      "java.lang.RuntimeException": 5069,
+      "java.lang.AssertionError": 2343,
+      "sigma.exceptions.ConstraintFailed": 3609,
+      "java.lang.ClassCastException": 3551,
+      "java.util.NoSuchElementException": 5389,
+      "scala.MatchError": 1392,
+      "java.lang.NegativeArraySizeException": 234,
+      "java.lang.NumberFormatException": 5,
+      "java.lang.IndexOutOfBoundsException": 13,
+      "java.lang.ArithmeticException": 4
+    },
+    "nodeReadsPrefix": {
+      "decoderRefuses": 227
+    },
+    "nodeReadsPrefixRefusals": {
+      "statelessFailed": {
+        "sigma-rust error: no inputs or no outputs": 138
+      },
+      "statelessOk": {
+        "noncanonical": 86,
+        "sigma-rust error: an opcode or method sigma-rust does not implement": 3
+      }
+    },
+    "nodeReadsPrefixRefusalsBySeedHeight": {
+      "100000": 5,
+      "1000000": 98,
+      "1500000": 40,
+      "1876512": 84
+    },
+    "prefixOnly": {
+      "decoderRefuses": 150,
+      "equal": 77
+    },
+    "prefixOnlyRefusals": {
+      "statelessFailed": {
+        "sigma-rust error: no inputs or no outputs": 138
+      },
+      "statelessOk": {
+        "sigma-rust error: an opcode or method sigma-rust does not implement": 3,
+        "noncanonical": 9
+      }
+    },
+    "prefixOnlyRefusalsBySeedHeight": {
+      "100000": 3,
+      "1000000": 52,
+      "1500000": 21,
+      "1876512": 74
+    },
+    "nodeReadsAndRewrites": {
+      "decoderRefuses": 2735,
+      "otherIds": 392
+    },
+    "nodeReadsAndRewritesRefusals": {
+      "statelessOk": {
+        "noncanonical": 835,
+        "sigma-rust error: an expression sigma-rust's type check refuses": 1483,
+        "sigma-rust error: an opcode or method sigma-rust does not implement": 19,
+        "sigma-rust error: a token index past the transaction's token list": 300,
+        "sigma-rust error: sigma-rust's reader runs out of bytes or of range": 22,
+        "sigma-rust error: a box value or token amount outside sigma-rust's bounds": 75,
+        "sigma-rust error: other: Invalid argument: InvalidArgumentError(\"ByIndex: expected default type to be SBo": 1
+      }
+    },
+    "nodeReadsAndRewritesRefusalsBySeedHeight": {
+      "100000": 85,
+      "1000000": 1439,
+      "1500000": 486,
+      "1876512": 725
+    },
+    "decoderReadsNodeRefusesBy": {
+      "sigma.validation.ValidationException": 74,
+      "sigma.serialization.SerializerException": 1677,
+      "java.lang.AssertionError": 217,
+      "sigma.exceptions.ConstraintFailed": 1355,
+      "sigma.serialization.InvalidTypePrefix": 2619,
+      "java.nio.BufferUnderflowException": 167,
+      "java.lang.ClassCastException": 994,
+      "java.util.NoSuchElementException": 2064,
+      "java.lang.ArrayIndexOutOfBoundsException": 653,
+      "scala.MatchError": 234,
+      "java.lang.RuntimeException": 19,
+      "java.lang.NegativeArraySizeException": 95,
+      "java.lang.ArithmeticException": 3
+    },
+    "nodeReadsRefusals": {
+      "statelessOk": {
+        "noncanonical": 87,
+        "sigma-rust error: an expression sigma-rust's type check refuses": 618,
+        "sigma-rust error: an opcode or method sigma-rust does not implement": 71,
+        "sigma-rust error: a box value or token amount outside sigma-rust's bounds": 352,
+        "sigma-rust error: other: Invalid argument: InvalidArgumentError(\"Slice: expected from type to be SInt, go": 2,
+        "sigma-rust error: other: Invalid argument: InvalidArgumentError(\"expected OptionIsDefined::input type to ": 1,
+        "sigma-rust error: other: Invalid argument: InvalidArgumentError(\"Slice: expected until type to be SInt, g": 3
+      },
+      "statelessFailed": {
+        "sigma-rust error: a box value or token amount outside sigma-rust's bounds": 7
+      }
+    },
+    "nodeReadsRefusalsBySeedHeight": {
+      "100000": 27,
+      "1000000": 607,
+      "1500000": 359,
+      "1876512": 148
+    },
+    "rewrittenBytes": {
+      "equal": 1212,
+      "decoderRefuses": 1633
+    },
+    "rewrittenBytesRefusals": {
+      "statelessOk": {
+        "sigma-rust error: an expression sigma-rust's type check refuses": 1486,
+        "sigma-rust error: a box value or token amount outside sigma-rust's bounds": 62,
+        "noncanonical": 2,
+        "sigma-rust error: other: Invalid argument: InvalidArgumentError(\"ByIndex: expected default type to be SBo": 2
+      },
+      "statelessFailed": {
+        "sigma-rust error: no inputs or no outputs": 81
+      }
+    },
+    "rewrittenBytesRefusalsBySeedHeight": {
+      "100000": 58,
+      "1000000": 953,
+      "1500000": 315,
+      "1876512": 307
+    }
+  },
+  "reached": {
+    "id": 41555,
+    "ergoTree": 18868,
+    "witnessId": 8096,
+    "register": 5938
+  },
+  "controls": {
+    "seed": 4,
+    "detected": {
+      "id": true,
+      "witnessId": true,
+      "outputCount": true,
+      "ergoTree": true,
+      "register": true,
+      "registerNames": true
+    },
+    "verdicts": {
+      "equal": true,
+      "sameIdsDiffer": true,
+      "otherIds": true
+    }
+  },
+  "samples": {
+    "nodeReadsPrefix:decoderRefuses": [
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 37,
+        "value": 0,
+        "length": 345,
+        "read": 38,
+        "stateless": false,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 0,
+        "kind": "insert",
+        "at": 0,
+        "value": 0,
+        "length": 346,
+        "read": 36,
+        "stateless": false,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 0,
+        "kind": "insert",
+        "at": 33,
+        "value": 0,
+        "length": 346,
+        "read": 38,
+        "stateless": false,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 0,
+        "kind": "insert",
+        "at": 343,
+        "value": 0,
+        "length": 346,
+        "read": 345,
+        "stateless": true,
+        "decoder": "noncanonical"
+      },
+      {
+        "seed": 0,
+        "kind": "insert",
+        "at": 345,
+        "value": 128,
+        "length": 346,
+        "read": 345,
+        "stateless": true,
+        "decoder": "noncanonical"
+      },
+      {
+        "seed": 1,
+        "kind": "replace",
+        "at": 101,
+        "value": 0,
+        "length": 425,
+        "read": 102,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 1,
+        "kind": "replace",
+        "at": 417,
+        "value": 0,
+        "length": 425,
+        "read": 420,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an opcode or method sigma-rust does not implement"
+      },
+      {
+        "seed": 1,
+        "kind": "insert",
+        "at": 0,
+        "value": 0,
+        "length": 426,
+        "read": 36,
+        "stateless": false,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 1,
+        "kind": "insert",
+        "at": 101,
+        "value": 0,
+        "length": 426,
+        "read": 102,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 1,
+        "kind": "insert",
+        "at": 417,
+        "value": 0,
+        "length": 426,
+        "read": 421,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "noncanonical"
+      },
+      {
+        "seed": 1,
+        "kind": "insert",
+        "at": 424,
+        "value": 0,
+        "length": 426,
+        "read": 425,
+        "stateless": true,
+        "decoder": "noncanonical"
+      },
+      {
+        "seed": 1,
+        "kind": "insert",
+        "at": 425,
+        "value": 128,
+        "length": 426,
+        "read": 425,
+        "stateless": true,
+        "decoder": "noncanonical"
+      },
+      {
+        "seed": 1,
+        "kind": "splice",
+        "at": 71,
+        "to": 91,
+        "donor": {
+          "seed": 3,
+          "start": 262,
+          "length": 63
+        },
+        "length": 468,
+        "read": 102,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 1,
+        "kind": "splice",
+        "at": 419,
+        "to": 425,
+        "donor": {
+          "seed": 1,
+          "start": 168,
+          "length": 55
+        },
+        "length": 474,
+        "read": 424,
+        "stateless": true,
+        "decoder": "noncanonical"
+      },
+      {
+        "seed": 2,
+        "kind": "replace",
+        "at": 183,
+        "value": 0,
+        "length": 433,
+        "read": 184,
+        "stateless": false,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 2,
+        "kind": "insert",
+        "at": 180,
+        "value": 0,
+        "length": 434,
+        "read": 184,
+        "stateless": false,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 2,
+        "kind": "insert",
+        "at": 431,
+        "value": 0,
+        "length": 434,
+        "read": 433,
+        "stateless": true,
+        "decoder": "noncanonical"
+      },
+      {
+        "seed": 2,
+        "kind": "insert",
+        "at": 433,
+        "value": 128,
+        "length": 434,
+        "read": 433,
+        "stateless": true,
+        "decoder": "noncanonical"
+      },
+      {
+        "seed": 3,
+        "kind": "replace",
+        "at": 103,
+        "value": 0,
+        "length": 497,
+        "read": 104,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 3,
+        "kind": "insert",
+        "at": 103,
+        "value": 0,
+        "length": 498,
+        "read": 104,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      }
+    ],
+    "prefixOnly:decoderRefuses": [
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 37,
+        "value": 0,
+        "length": 345,
+        "read": 38,
+        "stateless": false,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 0,
+        "kind": "insert",
+        "at": 0,
+        "value": 0,
+        "length": 346,
+        "read": 36,
+        "stateless": false,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 0,
+        "kind": "insert",
+        "at": 33,
+        "value": 0,
+        "length": 346,
+        "read": 38,
+        "stateless": false,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 1,
+        "kind": "replace",
+        "at": 101,
+        "value": 0,
+        "length": 425,
+        "read": 102,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 1,
+        "kind": "replace",
+        "at": 417,
+        "value": 0,
+        "length": 425,
+        "read": 420,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an opcode or method sigma-rust does not implement"
+      },
+      {
+        "seed": 1,
+        "kind": "insert",
+        "at": 0,
+        "value": 0,
+        "length": 426,
+        "read": 36,
+        "stateless": false,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 1,
+        "kind": "insert",
+        "at": 101,
+        "value": 0,
+        "length": 426,
+        "read": 102,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 1,
+        "kind": "insert",
+        "at": 417,
+        "value": 0,
+        "length": 426,
+        "read": 421,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "noncanonical"
+      },
+      {
+        "seed": 1,
+        "kind": "splice",
+        "at": 71,
+        "to": 91,
+        "donor": {
+          "seed": 3,
+          "start": 262,
+          "length": 63
+        },
+        "length": 468,
+        "read": 102,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 2,
+        "kind": "replace",
+        "at": 183,
+        "value": 0,
+        "length": 433,
+        "read": 184,
+        "stateless": false,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 2,
+        "kind": "insert",
+        "at": 180,
+        "value": 0,
+        "length": 434,
+        "read": 184,
+        "stateless": false,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 3,
+        "kind": "replace",
+        "at": 103,
+        "value": 0,
+        "length": 497,
+        "read": 104,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 3,
+        "kind": "insert",
+        "at": 103,
+        "value": 0,
+        "length": 498,
+        "read": 104,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 3,
+        "kind": "splice",
+        "at": 92,
+        "to": 107,
+        "donor": {
+          "seed": 14,
+          "start": 199,
+          "length": 55
+        },
+        "length": 537,
+        "read": 104,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 4,
+        "kind": "replace",
+        "at": 125,
+        "value": 0,
+        "length": 509,
+        "read": 126,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 4,
+        "kind": "insert",
+        "at": 125,
+        "value": 0,
+        "length": 510,
+        "read": 126,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 5,
+        "kind": "replace",
+        "at": 125,
+        "value": 0,
+        "length": 509,
+        "read": 126,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 5,
+        "kind": "insert",
+        "at": 125,
+        "value": 0,
+        "length": 510,
+        "read": 126,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 5,
+        "kind": "splice",
+        "at": 97,
+        "to": 129,
+        "donor": {
+          "seed": 28,
+          "start": 40,
+          "length": 34
+        },
+        "length": 511,
+        "read": 126,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      },
+      {
+        "seed": 6,
+        "kind": "replace",
+        "at": 103,
+        "value": 0,
+        "length": 497,
+        "read": 104,
+        "stateless": false,
+        "rewritten": true,
+        "decoder": "sigma-rust error: no inputs or no outputs"
+      }
+    ],
+    "nodeReadsAndRewrites:decoderRefuses": [
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 46,
+        "value": 0,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "noncanonical"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 52,
+        "value": 55,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 53,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 54,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 55,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 56,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 57,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 58,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 59,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 60,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 61,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 62,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 63,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 64,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 65,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 66,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 67,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 68,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 69,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 70,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      }
+    ],
+    "decoderReadsNodeRefuses": [
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 47,
+        "value": 17,
+        "length": 345,
+        "node": "sigma.validation.ValidationException",
+        "message": "Validation failed on ValidationRule(1012,For version greater then 0, size bit should be set.) with args WrappedArray(17)"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 160,
+        "value": 255,
+        "length": 345,
+        "node": "sigma.serialization.SerializerException",
+        "message": "Cannot handle ValidationException, ErgoTree serialized without size bit."
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 160,
+        "length": 344,
+        "node": "sigma.serialization.SerializerException",
+        "message": "Cannot handle ValidationException, ErgoTree serialized without size bit."
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 171,
+        "length": 344,
+        "node": "java.lang.AssertionError",
+        "message": "assertion failed: Invalid type of collection value in [Lsigma.ast.Value;@"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 175,
+        "value": 146,
+        "length": 345,
+        "node": "sigma.exceptions.ConstraintFailed",
+        "message": "Failed constraint sigma.ast.Constraints$OnlyNumeric2$@ for binary operation parameters (ExtractScriptBytes(ByIndex(Outputs$(165),ConstantPlaceholder(0,SInt$),None))(tpe: Coll[SByte$]), SubstCon"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 176,
+        "value": 255,
+        "length": 345,
+        "node": "sigma.exceptions.ConstraintFailed",
+        "message": "Failed constraint sigma.ast.Constraints$SameType2$@ for binary operation parameters (XorOf(ByIndex(Outputs$(165),ConstantPlaceholder(0,SInt$),None))(tpe: SBoolean), SubstConstants(ConstantPlac"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 176,
+        "length": 344,
+        "node": "sigma.exceptions.ConstraintFailed",
+        "message": "Failed constraint sigma.ast.Constraints$SameType2$@ for binary operation parameters (ByIndex(Outputs$(165),ConstantPlaceholder(0,SInt$),None)(tpe: SBox), SubstConstants(ConstantPlaceholder(1,C"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 190,
+        "value": 255,
+        "length": 345,
+        "node": "java.lang.AssertionError",
+        "message": "assertion failed: Invalid type of collection value in [Lsigma.ast.Value;@"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 190,
+        "length": 344,
+        "node": "java.lang.AssertionError",
+        "message": "assertion failed: Invalid type of collection value in [Lsigma.ast.Value;@"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 203,
+        "length": 344,
+        "node": "java.lang.AssertionError",
+        "message": "assertion failed: Invalid type of collection value in [Lsigma.ast.Value;@"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 207,
+        "length": 344,
+        "node": "java.lang.AssertionError",
+        "message": "assertion failed: Invalid type of collection value in [Lsigma.ast.Value;@"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 212,
+        "value": 255,
+        "length": 345,
+        "node": "sigma.exceptions.ConstraintFailed",
+        "message": "Failed constraint sigma.ast.Constraints$SameType2$@ for binary operation parameters (XorOf(Outputs$(165))(tpe: SBoolean), ConstantPlaceholder(4,SInt$)(tpe: SInt$))"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 212,
+        "length": 344,
+        "node": "sigma.exceptions.ConstraintFailed",
+        "message": "Failed constraint sigma.ast.Constraints$SameType2$@ for binary operation parameters (Outputs$(165)(tpe: Coll[SBox]), ConstantPlaceholder(4,SInt$)(tpe: SInt$))"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 216,
+        "value": 146,
+        "length": 345,
+        "node": "sigma.exceptions.ConstraintFailed",
+        "message": "Failed constraint sigma.ast.Constraints$OnlyNumeric2$@ for binary operation parameters (ExtractScriptBytes(Self$(167))(tpe: Coll[SByte$]), ExtractScriptBytes(ByIndex(Outputs$(165),ConstantPlace"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 217,
+        "value": 255,
+        "length": 345,
+        "node": "sigma.exceptions.ConstraintFailed",
+        "message": "Failed constraint sigma.ast.Constraints$SameType2$@ for binary operation parameters (XorOf(Self$(167))(tpe: SBoolean), ExtractScriptBytes(ByIndex(Outputs$(165),ConstantPlaceholder(5,SInt$),Non"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 217,
+        "length": 344,
+        "node": "sigma.exceptions.ConstraintFailed",
+        "message": "Failed constraint sigma.ast.Constraints$SameType2$@ for binary operation parameters (Self$(167)(tpe: SBox), ExtractScriptBytes(ByIndex(Outputs$(165),ConstantPlaceholder(5,SInt$),None))(tpe: Co"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 219,
+        "value": 255,
+        "length": 345,
+        "node": "sigma.exceptions.ConstraintFailed",
+        "message": "Failed constraint sigma.ast.Constraints$SameType2$@ for binary operation parameters (ExtractScriptBytes(Self$(167))(tpe: Coll[SByte$]), XorOf(ByIndex(Outputs$(165),ConstantPlaceholder(5,SInt$)"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 219,
+        "length": 344,
+        "node": "sigma.exceptions.ConstraintFailed",
+        "message": "Failed constraint sigma.ast.Constraints$SameType2$@ for binary operation parameters (ExtractScriptBytes(Self$(167))(tpe: Coll[SByte$]), ByIndex(Outputs$(165),ConstantPlaceholder(5,SInt$),None)"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 252,
+        "value": 255,
+        "length": 345,
+        "node": "sigma.exceptions.ConstraintFailed",
+        "message": "Failed constraint sigma.ast.Constraints$SameType2$@ for binary operation parameters (If(LT(Height$(163),ConstantPlaceholder(6,SInt$)),ConstantPlaceholder(7,SLong$),Minus(ConstantPlaceholder(8,"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 252,
+        "length": 344,
+        "node": "sigma.exceptions.ConstraintFailed",
+        "message": "Failed constraint sigma.ast.Constraints$SameType2$@ for binary operation parameters (If(LT(Height$(163),ConstantPlaceholder(6,SInt$)),ConstantPlaceholder(7,SLong$),Minus(ConstantPlaceholder(8,"
+      }
+    ],
+    "nodeReads:decoderRefuses": [
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 47,
+        "value": 144,
+        "length": 345,
+        "stateless": true,
+        "decoder": "noncanonical"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 107,
+        "value": 17,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 169,
+        "value": 166,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an opcode or method sigma-rust does not implement"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 184,
+        "value": 0,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 186,
+        "value": 3,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 186,
+        "value": 0,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 191,
+        "value": 239,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 191,
+        "value": 255,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 191,
+        "length": 344,
+        "stateless": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 218,
+        "value": 166,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an opcode or method sigma-rust does not implement"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 233,
+        "value": 152,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 244,
+        "value": 152,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 253,
+        "value": 166,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an opcode or method sigma-rust does not implement"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 272,
+        "value": 166,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an opcode or method sigma-rust does not implement"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 286,
+        "value": 144,
+        "length": 345,
+        "stateless": true,
+        "decoder": "noncanonical"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 328,
+        "value": 208,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 328,
+        "value": 255,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 328,
+        "length": 344,
+        "stateless": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 334,
+        "value": 166,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an opcode or method sigma-rust does not implement"
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 339,
+        "value": 0,
+        "length": 345,
+        "stateless": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      }
+    ],
+    "nodeReadsAndRewrites:otherIds": [
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 112,
+        "value": 5,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 116,
+        "value": 5,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 140,
+        "value": 5,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 142,
+        "value": 5,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 146,
+        "value": 5,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 230,
+        "value": 7,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 232,
+        "value": 6,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 232,
+        "value": 0,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 235,
+        "value": 0,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 238,
+        "value": 0,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 250,
+        "value": 4,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 274,
+        "value": 14,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 274,
+        "value": 0,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 288,
+        "value": 5,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 1,
+        "kind": "replace",
+        "at": 175,
+        "value": 5,
+        "length": 425,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 1,
+        "kind": "replace",
+        "at": 179,
+        "value": 5,
+        "length": 425,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 1,
+        "kind": "replace",
+        "at": 203,
+        "value": 5,
+        "length": 425,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 1,
+        "kind": "replace",
+        "at": 205,
+        "value": 5,
+        "length": 425,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 1,
+        "kind": "replace",
+        "at": 209,
+        "value": 5,
+        "length": 425,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      },
+      {
+        "seed": 1,
+        "kind": "replace",
+        "at": 293,
+        "value": 7,
+        "length": 425,
+        "stateless": true,
+        "rewritten": true,
+        "fields": [
+          "id",
+          "ergoTree"
+        ]
+      }
+    ],
+    "rewrittenBytes:decoderRefuses": [
+      {
+        "seed": 0,
+        "kind": "replace",
+        "at": 52,
+        "value": 55,
+        "length": 345,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 53,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 54,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 55,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 56,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 57,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 58,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 59,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 60,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 61,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 62,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 63,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 64,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 65,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 66,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 67,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 68,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 69,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 70,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      },
+      {
+        "seed": 0,
+        "kind": "delete",
+        "at": 71,
+        "length": 344,
+        "stateless": true,
+        "rewritten": true,
+        "decoder": "sigma-rust error: an expression sigma-rust's type check refuses"
+      }
+    ]
+  },
+  "timing": {
+    "nodeMs": 53406,
+    "decodeMs": 719486,
+    "maxDecodeMs": 1452
+  },
+  "host": {
+    "node": "v24.6.0",
+    "platform": "win32"
+  },
+  "files": {
+    "experiments/ergo-range/hostile-equivalence.mjs": "e0544ace8533e639d76277ada08e3325bf9d874dae8f80f0a0f7379687c8c857",
+    "experiments/ergo-range/node-read/NodeRead.java": "e8ee2405a13e3c7fa94d7bd57081987e566f68816d9fd3104fd0264acb6532e5",
+    "experiments/ergo-range/contained-decoder.mjs": "935de261b840a03ed653202b74c739e37066146bbe45a58082847dfe8c86ca21",
+    "experiments/ergo-range/wasm-meter.mjs": "e9fad35867dc741a966d4e231264aa1e5e4846970ec20cb6b7e9638ad7cd1c49",
+    "experiments/ergo-range/fixtures/manifest.json": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
+    "experiments/ergo-range/package.json": "0eb7a7f6a08c6b80a601dc36787620c36f8a5ad643b3c2730eac30ef3c0f8c3a",
+    "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
+    "experiments/ergo-range/vendor/ergo-lib-wasm-nodejs/ergo_lib_wasm.js": "5ff04811204c6cbbdaeb1555c7bd7749ab106719b6f41202a3a22426600b6d9c",
+    "experiments/ergo-range/vendor/ergo-lib-wasm-nodejs/SHA256SUMS": "8404d891c6f2ee14f8671c89f8f96682d8d4193b262631251963247db9b88272"
+  }
+}
