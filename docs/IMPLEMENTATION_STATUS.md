@@ -180,8 +180,11 @@ whatever its header version or body, and exposes permissive parsing, with
 strict round-trip rejection controls; the experiment pins a vendored,
 reproducible release build of sigma-rust `2f840d3`
 ([decided 2026-09-23](../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3)) in place of the debug npm alpha, whose
-parser a node-valid output nested 50 deep could trap.
-Hard memory containment, supported node equivalence and authenticated
+parser a node-valid output nested 50 deep could trap. The reader decodes
+through a [contained](POOL_DEPLOYMENT_PROBES.md#contained-decoder) metered
+derivation of that build: a fresh instance per transaction under a fuel and
+memory budget linear in its length, where exhaustion refuses that
+transaction only. Node equivalence for hostile inputs and authenticated
 complete-range reads remain unimplemented.
 The [candidate Ergo venue profile](ERGO_VENUE_PROFILE.md) and
 `model/pool-v3-ergo-profile.ts` fix attribution by exact tree and `R4`/`R5`
@@ -215,9 +218,10 @@ measured week stand on its best chain
 is shown for the retained evidence, from one run of the reference client,
 while the verifier still leaves proof of work to its source and no runtime
 path reads the node. No specification selects the profile; header
-authentication for a reader, decoder containment and node equivalence
-beyond the own node's retained blocks ([compared field by field](POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks))
-remain open.
+authentication for a reader and node equivalence beyond the own node's
+retained blocks ([compared field by field](POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks))
+remain open, and the decoder's budget is the reader's own, so a node-valid
+transaction above it would deny the ranges through its block.
 
 ## Successor record conformance
 

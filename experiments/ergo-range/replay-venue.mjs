@@ -1,9 +1,10 @@
 // Reader-selected candidate Ergo evidence adapter, outside the source-neutral
 // package. Headers are a reader trust input: authentication remains unproven.
 import { EvidenceRefusal } from "../../scripts/pool/delivery/evidence-reader.mjs";
-import { decodeTransaction } from "./decoder.mjs";
+import { decodeTransaction } from "./contained-decoder.mjs";
 
-// Local experiment budgets, not Ergo consensus or decoder memory limits.
+// Local experiment budgets, not Ergo consensus. Each transaction is decoded under the contained decoder's own budget
+// for its length, so these also bound a read's decoder work.
 export const RAW_EVIDENCE_LIMITS = Object.freeze({ maxBytes: 8_388_608n, maxBlocks: 256n, maxTransactions: 1024n });
 const typed = Object.getPrototypeOf(Uint8Array.prototype);
 const brandOf = Object.getOwnPropertyDescriptor(typed, Symbol.toStringTag).get;
@@ -74,9 +75,15 @@ export function ergoReplayVenue(profile, evidence, codec, rangeLimits, rawLimits
     if (valid) ownedBlocks.push({ headerId: ownedId, transactions: raw });
   }
   const decodedBlocks = [];
+  // A block stops at its first refused transaction: it is withheld whole, so the rest need no decoding.
   for (const block of ownedBlocks) {
-    const transactions = block.transactions.map(decodeTransaction);
-    if (transactions.every(transaction => transaction !== undefined)) decodedBlocks.push({ headerId: block.headerId, transactions });
+    const transactions = [];
+    for (const raw of block.transactions) {
+      const transaction = decodeTransaction(raw);
+      if (transaction === undefined) break;
+      transactions.push(transaction);
+    }
+    if (transactions.length === block.transactions.length) decodedBlocks.push({ headerId: block.headerId, transactions });
   }
   // Root failures and unavailable sections are resolved only by the model.
   const verifier = codec.ergoRangeVerifier(ownedProfile, { headers: ownedHeaders, blocks: decodedBlocks });

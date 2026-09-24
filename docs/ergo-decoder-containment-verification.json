@@ -1,0 +1,427 @@
+{
+  "status": "passed",
+  "equivalence": "Over the week and the retained blocks the contained decoder's fields equal the node's; the retained blocks' earlier report shows decoder.mjs's equal the node's there, so the two decoders agree transitively. The id comparison binds the rebuilt bytes to the node's statement; the witness id passes through the shared serializer, so its comparison is weaker.",
+  "node": "v24.6.0",
+  "vendoredWasmSha256": "0d20038513c72a9daf859e3ea278735caef43305cde6bc7fb2764e8d933aa28a",
+  "derivedWasmSha256": "bd7cfbb5459aa577488ae304f2b5057996b576a285886f6d78b36fe3e91bbec5",
+  "limits": {
+    "inputBytes": 2097152,
+    "jsonBytes": 67108864
+  },
+  "controls": {
+    "straightLine": {
+      "perCall": "14"
+    },
+    "loops": {
+      "count": "14 + 19(n + 1)",
+      "nest": "14 + 21(n + 1) + 23 * 3n",
+      "checked": {
+        "count": [
+          0,
+          1,
+          1000
+        ],
+        "nest": [
+          0,
+          1,
+          7
+        ]
+      }
+    },
+    "infiniteLoop": {
+      "stopsAt": [
+        0,
+        1,
+        11,
+        12,
+        13,
+        1000,
+        1000000
+      ],
+      "perIteration": "12"
+    },
+    "memoryGrowth": {
+      "call": 52,
+      "perPage": 8192,
+      "refusedFlag": 1
+    },
+    "bulk": {
+      "call": 43,
+      "perEightBytes": 1
+    },
+    "tables": {
+      "grow": 54,
+      "fill": 43,
+      "perElement": 1,
+      "refusedFlag": 2
+    },
+    "recursion": {
+      "perFrame": 33,
+      "perIndirectFrame": 34,
+      "depthCeilings": [
+        0,
+        1,
+        100,
+        4096
+      ],
+      "afterReturns": 0,
+      "shortOfFuel": "fuel",
+      "noCeiling": "engine stack"
+    },
+    "refusedInputs": [
+      "return_call",
+      "SIMD",
+      "memory.init",
+      "start section"
+    ]
+  },
+  "decoder": {
+    "corpus": {
+      "transactions": 29,
+      "equalToDecoderMjs": 29,
+      "repeatable": 29,
+      "maxFuel": "418436058",
+      "maxMemoryBytes": 2490368,
+      "maxDepth": "86"
+    },
+    "cases": {
+      "fuel of 1,000": {
+        "bytes": 2163,
+        "outcome": "fuel",
+        "fuel": "2124",
+        "memoryBytes": 1507328,
+        "depth": "4"
+      },
+      "no memory growth": {
+        "bytes": 2163,
+        "outcome": "memory",
+        "fuel": "2247",
+        "memoryBytes": 1507328,
+        "depth": "5"
+      },
+      "one fuel short of the ordinary transaction's need": {
+        "bytes": 2163,
+        "outcome": "fuel",
+        "fuel": "195876697",
+        "memoryBytes": 2031616,
+        "depth": "77"
+      },
+      "exactly the ordinary transaction's need": {
+        "bytes": 2163,
+        "outcome": "decoded",
+        "fuel": "195876697",
+        "memoryBytes": 2031616,
+        "depth": "77"
+      },
+      "expression nesting 110 (the node's cap)": {
+        "bytes": 158,
+        "outcome": "decoded",
+        "fuel": "18874665",
+        "memoryBytes": 1638400,
+        "depth": "361"
+      },
+      "expression nesting 2,000": {
+        "bytes": 2048,
+        "outcome": "depth",
+        "fuel": "12416717",
+        "memoryBytes": 1572864,
+        "depth": "4097"
+      },
+      "expression nesting 100,000": {
+        "bytes": 100048,
+        "outcome": "depth",
+        "fuel": "12424909",
+        "memoryBytes": 1638400,
+        "depth": "4097"
+      },
+      "expression nesting 1,000,000": {
+        "bytes": 1000048,
+        "outcome": "depth",
+        "fuel": "12539597",
+        "memoryBytes": 2555904,
+        "depth": "4097"
+      },
+      "truncated ordinary transaction": {
+        "bytes": 2162,
+        "outcome": "import",
+        "fuel": "16813764",
+        "memoryBytes": 1638400,
+        "depth": "74"
+      },
+      "ordinary transaction with a trailing byte": {
+        "bytes": 2164,
+        "outcome": "noncanonical",
+        "fuel": "138376714",
+        "memoryBytes": 2031616,
+        "depth": "77"
+      },
+      "65,536 pseudorandom bytes": {
+        "bytes": 65536,
+        "outcome": "import",
+        "fuel": "53447",
+        "memoryBytes": 1638400,
+        "depth": "21"
+      },
+      "input over the byte limit": {
+        "bytes": 2097153,
+        "outcome": "input",
+        "fuel": "0",
+        "memoryBytes": 0,
+        "depth": "0"
+      }
+    },
+    "depthCeiling": {
+      "frames": "4096",
+      "leastStackKb": 437,
+      "defaultStackKb": 984,
+      "nodeCapFrames": "361",
+      "meaning": "measured on unary-expression (LogicalNot) nesting: a caller leaving at least this much of V8's stack gets a depth refusal that depends on the bytes alone; other recursion paths may need more"
+    }
+  },
+  "files": {
+    "experiments/ergo-range/contained-check.mjs": "47234a81e50aae21a615ef31c917707781e719ed129f01900a5ef1716abbee95",
+    "experiments/ergo-range/contained-decoder.mjs": "935de261b840a03ed653202b74c739e37066146bbe45a58082847dfe8c86ca21",
+    "experiments/ergo-range/contained-range.mjs": "a540c50f633cca76b4212d9af326b903acce8bf656ca4079c2a36dc6196c340f",
+    "experiments/ergo-range/wasm-meter.mjs": "e9fad35867dc741a966d4e231264aa1e5e4846970ec20cb6b7e9638ad7cd1c49",
+    "experiments/ergo-range/decoder.mjs": "f2ab6943b8ab15ee236fefea12731a8e601e382c2da9b211b100bf239e288b26",
+    "experiments/ergo-range/package.json": "0eb7a7f6a08c6b80a601dc36787620c36f8a5ad643b3c2730eac30ef3c0f8c3a",
+    "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
+    "experiments/ergo-range/fixtures/manifest.json": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
+    "experiments/ergo-range/vendor/ergo-lib-wasm-nodejs/SHA256SUMS": "8404d891c6f2ee14f8671c89f8f96682d8d4193b262631251963247db9b88272",
+    "experiments/ergo-range/vendor/ergo-lib-wasm-nodejs/ergo_lib_wasm.js": "5ff04811204c6cbbdaeb1555c7bd7749ab106719b6f41202a3a22426600b6d9c"
+  },
+  "ranges": [
+    {
+      "status": "every-transaction-decoded-with-the-nodes-fields",
+      "set": "corpus",
+      "budget": "reader",
+      "node": "v24.6.0",
+      "vendoredWasmSha256": "0d20038513c72a9daf859e3ea278735caef43305cde6bc7fb2764e8d933aa28a",
+      "derivedWasmSha256": "bd7cfbb5459aa577488ae304f2b5057996b576a285886f6d78b36fe3e91bbec5",
+      "counts": {
+        "blocks": 4,
+        "transactions": 29,
+        "outputs": 77,
+        "refused": 0,
+        "differing": 0
+      },
+      "refusedBy": {},
+      "differingBy": {},
+      "samples": [],
+      "control": {
+        "block": "fixtures/mainnet-1000000.json",
+        "position": 3,
+        "id": "4987fc234bc5ad277650e8998840697d12ec42a1d3164b0ee084a2a99f1693cb",
+        "detected": {
+          "id": true,
+          "witnessId": true,
+          "outputCount": true,
+          "ergoTree": true,
+          "register": true,
+          "registerNames": true
+        }
+      },
+      "observed": {
+        "largestTransactionBytes": 2576,
+        "maxFuel": "418436058",
+        "maxMemoryBytes": 2490368,
+        "maxFuelPerByte": 162436,
+        "maxMemoryPerByte": 9307,
+        "leastBudgetMargin": 4.45
+      },
+      "seconds": 1,
+      "rowsSha256": "b2d1c89c7ca93ccfadaaac35f5e55b642a392050d7fd398d7110b580d780a550"
+    },
+    {
+      "status": "every-transaction-decoded-with-the-nodes-fields",
+      "set": "week",
+      "budget": "reader",
+      "node": "v24.6.0",
+      "vendoredWasmSha256": "0d20038513c72a9daf859e3ea278735caef43305cde6bc7fb2764e8d933aa28a",
+      "derivedWasmSha256": "bd7cfbb5459aa577488ae304f2b5057996b576a285886f6d78b36fe3e91bbec5",
+      "heights": {},
+      "counts": {
+        "blocks": 5040,
+        "transactions": 28196,
+        "outputs": 103789,
+        "refused": 0,
+        "differing": 0
+      },
+      "refusedBy": {},
+      "differingBy": {},
+      "samples": [],
+      "control": {
+        "block": 1873362,
+        "position": 3,
+        "id": "eb9b8b2874383651ffcfdf420d4ba9521bce4329406fd2560864d47fa28d95df",
+        "detected": {
+          "id": true,
+          "witnessId": true,
+          "outputCount": true,
+          "ergoTree": true,
+          "register": true,
+          "registerNames": true
+        }
+      },
+      "observed": {
+        "largestTransactionBytes": 88284,
+        "maxFuel": "3591969274",
+        "maxMemoryBytes": 11141120,
+        "maxFuelPerByte": 287971,
+        "maxMemoryPerByte": 18289,
+        "leastBudgetMargin": 3.69
+      },
+      "seconds": 486,
+      "rowsSha256": "a40c2ce4cdfb80e7e12028fa98f0abb37e5fb2d1c45a861ec2996f4fd87b239b"
+    },
+    {
+      "status": "every-transaction-decoded-with-the-nodes-fields",
+      "set": "retained",
+      "budget": "reader",
+      "node": "v24.6.0",
+      "vendoredWasmSha256": "0d20038513c72a9daf859e3ea278735caef43305cde6bc7fb2764e8d933aa28a",
+      "derivedWasmSha256": "bd7cfbb5459aa577488ae304f2b5057996b576a285886f6d78b36fe3e91bbec5",
+      "heights": {
+        "from": 1830001,
+        "to": 1846367
+      },
+      "counts": {
+        "blocks": 16367,
+        "transactions": 107591,
+        "outputs": 390897,
+        "refused": 0,
+        "differing": 0
+      },
+      "refusedBy": {},
+      "differingBy": {},
+      "samples": [],
+      "control": {
+        "block": 1830001,
+        "position": 1,
+        "id": "b59402296978b5a5c8956f8dfee0fc94a14a98ef236971e415e12da8152b683c",
+        "detected": {
+          "id": true,
+          "witnessId": true,
+          "outputCount": true,
+          "ergoTree": true,
+          "register": true,
+          "registerNames": true
+        }
+      },
+      "observed": {
+        "largestTransactionBytes": 84991,
+        "maxFuel": "8076035191",
+        "maxMemoryBytes": 12648448,
+        "maxFuelPerByte": 394944,
+        "maxMemoryPerByte": 15729,
+        "leastBudgetMargin": 3
+      },
+      "seconds": 1619,
+      "rowsSha256": "bfa2fa3397a6e6a828f79fc10ef4066d00599708e20aacd1780c7abf0fcc510f"
+    },
+    {
+      "status": "every-transaction-decoded-with-the-nodes-fields",
+      "set": "retained",
+      "budget": "reader",
+      "node": "v24.6.0",
+      "vendoredWasmSha256": "0d20038513c72a9daf859e3ea278735caef43305cde6bc7fb2764e8d933aa28a",
+      "derivedWasmSha256": "bd7cfbb5459aa577488ae304f2b5057996b576a285886f6d78b36fe3e91bbec5",
+      "heights": {
+        "from": 1846368,
+        "to": 1862734
+      },
+      "counts": {
+        "blocks": 16367,
+        "transactions": 108879,
+        "outputs": 484030,
+        "refused": 0,
+        "differing": 0
+      },
+      "refusedBy": {},
+      "differingBy": {},
+      "samples": [],
+      "control": {
+        "block": 1846368,
+        "position": 1,
+        "id": "f5bd14b050b1192aa9e4f3bd8847cf26418f986fba184f71965e3d3c76ed45b2",
+        "detected": {
+          "id": true,
+          "witnessId": true,
+          "outputCount": true,
+          "ergoTree": true,
+          "register": true,
+          "registerNames": true
+        }
+      },
+      "observed": {
+        "largestTransactionBytes": 73671,
+        "maxFuel": "8648875971",
+        "maxMemoryBytes": 11796480,
+        "maxFuelPerByte": 352884,
+        "maxMemoryPerByte": 15729,
+        "leastBudgetMargin": 2.98
+      },
+      "seconds": 1992,
+      "rowsSha256": "f98dde50d9e87c6157e93ed3d10984b3eed4784d6eab64e010db52d4d090d9b5"
+    },
+    {
+      "status": "every-transaction-decoded-with-the-nodes-fields",
+      "set": "retained",
+      "budget": "reader",
+      "node": "v24.6.0",
+      "vendoredWasmSha256": "0d20038513c72a9daf859e3ea278735caef43305cde6bc7fb2764e8d933aa28a",
+      "derivedWasmSha256": "bd7cfbb5459aa577488ae304f2b5057996b576a285886f6d78b36fe3e91bbec5",
+      "heights": {
+        "from": 1862735,
+        "to": 1879100
+      },
+      "counts": {
+        "blocks": 16366,
+        "transactions": 97558,
+        "outputs": 361600,
+        "refused": 0,
+        "differing": 0
+      },
+      "refusedBy": {},
+      "differingBy": {},
+      "samples": [],
+      "control": {
+        "block": 1862735,
+        "position": 1,
+        "id": "637235c304a75b7ad6fa1cc678444354a7bf8a22eae9f8017c5dc0788e54dabf",
+        "detected": {
+          "id": true,
+          "witnessId": true,
+          "outputCount": true,
+          "ergoTree": true,
+          "register": true,
+          "registerNames": true
+        }
+      },
+      "observed": {
+        "largestTransactionBytes": 91842,
+        "maxFuel": "18372503505",
+        "maxMemoryBytes": 16711680,
+        "maxFuelPerByte": 353114,
+        "maxMemoryPerByte": 18504,
+        "leastBudgetMargin": 3.03
+      },
+      "seconds": 1503,
+      "rowsSha256": "2a28fcc99327f813895ef18a997a7d704b2b429b1dc4776269bcd7cdf0befa2a"
+    }
+  ],
+  "totals": {
+    "transactions": 342253,
+    "outputs": 1340393,
+    "refused": 0,
+    "differing": 0,
+    "leastBudgetMargin": 2.98
+  },
+  "limitations": [
+    "The budget is calibrated on valid transactions with margin; nothing shows that no node-valid transaction exceeds it, and one that does is refused, denying the ranges through its block.",
+    "Fuel bounds guest instructions, not CPU seconds; instantiation, copies and JSON parsing are host work outside it.",
+    "Linear-memory and table ceilings bound each instance, not the process: a dropped instance's memory stays until V8 collects it.",
+    "A depth refusal depends on the bytes alone only where the caller leaves the measured V8 stack; below that an engine overflow refuses as stack.",
+    "Valid transactions and synthetic hostile inputs only; node equivalence for hostile inputs is not established, and no decoder, budget or profile is selected."
+  ]
+}

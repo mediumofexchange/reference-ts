@@ -15,7 +15,7 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b";
 import { serializeTransaction } from "@fleet-sdk/serializer";
 import { Address, Constant, ErgoTree } from "ergo-lib-wasm-nodejs";
-import { decodeTransaction } from "./decoder.mjs";
+import { decodeTransaction } from "./contained-decoder.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../..");
 const sha256 = bytes => createHash("sha256").update(bytes).digest();
@@ -297,7 +297,7 @@ try {
     profile: { context: profile.ERGO_PROFILE_CONTEXT, identity: hex(identity), depth: depth.toString(), lag: verifier.lag().toString(),
       locations: Object.fromEntries(Object.entries(scripts).map(([kind, script]) => [kind, hex(script)])) },
     sources: manifest.sources, inputManifestSha256: hex(sha256(readFileSync(join(here, "fixtures/manifest.json")))),
-    files: Object.fromEntries(["experiments/ergo-range/profile-check.mjs", "experiments/ergo-range/decoder.mjs", "experiments/ergo-range/package.json", "experiments/ergo-range/package-lock.json",
+    files: Object.fromEntries(["experiments/ergo-range/profile-check.mjs", "experiments/ergo-range/contained-decoder.mjs", "experiments/ergo-range/wasm-meter.mjs", "experiments/ergo-range/package.json", "experiments/ergo-range/package-lock.json",
       "model/pool-v3-ergo-profile.ts", "model/pool-v3-range.ts"].map(file => [file, fileHash(file)])),
     genesisAnchor: { height: genesis.height.toString(), version: genesis.version.toString(), id: genesis.id, parentIdZero: true,
       headerWireBytes: genesis.size.toString(), indexZeroHeight: "2", emptyAnswerBytesAtIndexZero: 102 },
@@ -313,7 +313,7 @@ try {
       "Headers are the reader's own source: linkage, contiguity and the anchor's child are checked; proof of work, chain selection and finality are not.",
       "A transaction the reader's decoder refuses is unsupported evidence: its height has no section and every range through it stays unresolved until the decoder is repaired, a denial one node-valid transaction can trigger.",
       "Synthetic blocks are serialized by Fleet from local objects and were never accepted by a node; the fixtures are four non-contiguous real blocks and the real genesis header.",
-      "sigma-rust's strict round trip is the decoder boundary; it has no hard memory limit and no node-equivalence proof (see the decoder probe).",
+      "sigma-rust's strict round trip, run per transaction in a fresh metered instance under the reader's fuel and memory budget, is the decoder boundary; node equivalence for hostile inputs is not established (see the decoder probes).",
       "No range from index zero was read on a real chain from a real anchor; the cost of exhaustion over real block bytes is not measured here.",
       "Capacity is measured by serialization against the box limit and the pinned mempool policy; no transaction was relayed or accepted by a node.",
       "No runtime path, spec selection, publication, chunking on a node or C2.10.13 completeness claim for any real venue follows.",

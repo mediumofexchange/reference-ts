@@ -172,8 +172,14 @@ its retained evidence and can be reproduced from it.
   nesting of 50, within the node's cap of 110 by the node's source, so a
   node-valid output could have denied every range through its block; the
   release build parses expression nesting to 2,513 levels on the default
-  stack ([probe](POOL_DEPLOYMENT_PROBES.md#decoder-stack-budget)). An overflow or trap is fatal to the decoder,
-  never a refusal. No specification pins a decoder.
+  stack ([probe](POOL_DEPLOYMENT_PROBES.md#decoder-stack-budget)). The reader runs that build
+  [contained](POOL_DEPLOYMENT_PROBES.md#contained-decoder): each transaction in a fresh
+  instance of a metered derivation, under a fuel and memory budget linear in
+  its length, so a trap, an overflow or an exhausted budget refuses that
+  transaction alone. The budget is the reader's, calibrated on valid
+  transactions with margin: the node's rules do not bound a decoder's work
+  per byte, so a node-valid transaction above it is refused like any other
+  and denies the ranges through its block. No specification pins a decoder.
 - The public node API serves transactions as JSON. sigma-rust's serializer
   reproduced every header root of the measured week from the node's exact
   text, but only because that text keeps the spending-proof extension's key
@@ -223,8 +229,10 @@ its retained evidence and can be reproduced from it.
   A node the reader runs can be the header source: the reader's own
   mainnet node validated the header chain from genesis in under two hours,
   and the fixtures and the measured week stand on its best chain
-  ([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)). The decoder's containment is not established
-  here. Objects at the locations before the anchor are not in the record.
+  ([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)). The decoder's budget bounds the
+  reader's guest work and linear memory per transaction; the host's own
+  memory beyond it is measured, not bounded. Objects at the locations before
+  the anchor are not in the record.
 
 ## Evidence
 
@@ -281,12 +289,14 @@ storage or an oversized view, and later getters cannot resize or detach an
 already owned view. Detached, out-of-bounds and shared views refuse. The adapter
 caps source bytes at 8 MiB, headers and supplied blocks at 256 each, and total
 transactions at 1024, before invoking the decoder. These are local experiment
-limits, not consensus bounds or WASM allocation limits. Budget or storage refusal
+limits, not consensus bounds; since each transaction is decoded under the
+contained decoder's budget for its length, they also bound a read's decoder
+work. Budget or storage refusal
 rejects the whole read, even if the offending block would otherwise be ignored.
 The worker's separate V8 IPC envelope remains capped at 2 MiB.
 
-The adapter reuses the strict round-trip decoder in `decoder.mjs`; an
-undecodable transaction withholds its entire block. The model then checks roots
+The adapter reads through the contained decoder (`contained-decoder.mjs`); an
+undecodable or over-budget transaction withholds its entire block. The model then checks roots
 and range completeness. Successful replay reports
 `rangeEvidence: "candidate-ergo-profile-synthetic-headers"`; currency and
 authority flags describe only checks under that explicit trusted fixture.
@@ -302,7 +312,9 @@ requires one or names a lighter source is the selection's choice), a contained
 decoder with node-equivalence evidence beyond the valid transactions the
 reader's own node retains (the pinned release build reads each of them with
 the node's fields, [compared](POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks),
-and keeps unknown sized trees as bytes; its containment is not established), an exact-byte
+keeps unknown sized trees as bytes, and reads them all
+[contained](POOL_DEPLOYMENT_PROBES.md#contained-decoder) under the reader's budget; the budget's
+denial of a costlier node-valid transaction is the selection's to weigh), an exact-byte
 block source or the JSON-text discipline above, publication and reassembly
 on a node (P2: the [experiment](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)
 accepted every case on the public testnet and the verifier read each back

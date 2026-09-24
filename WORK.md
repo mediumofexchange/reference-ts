@@ -9,20 +9,21 @@ here before starting.
 
 ## Status
 
+- Contained decoder (merged 2026-09-24, reviewed): the reader's replay
+  adapter, v3 Ergo check and profile check decode through
+  `contained-decoder.mjs`, a fresh instance per transaction of a metered
+  derivation (`wasm-meter.mjs`: fuel, memory/table caps, call-depth ceiling)
+  under a budget linear in its length; all 342,253 corpus, week and retained
+  transactions decode with the node's fields
+  ([probe](docs/POOL_DEPLOYMENT_PROBES.md#contained-decoder)). `decoder.mjs`
+  stays the unmetered reference the older reports bind.
 - Decoder node equivalence (merged 2026-09-24, reviewed): over the own
   node's 49,100 retained blocks the release decoder reads all 314,028
   transactions with the node's id, witness id, trees and registers
   ([probe](docs/POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks));
   `equivalence-driver.mjs` → `equivalence-fields.mjs` → `equivalence-summary.mjs`.
-- Review pass (merged 2026-09-24, each branch independently reviewed): v2
-  ingestion reads caller objects once (admission, journal rows, wallet
-  checkpoints/notes, species-safe `copyBytes`); refusals keep the loaded
-  journal; retained evidence and true proof answers are reused; internal
-  change IDs get no public request, token or invitation. v3 replay charges
-  imports, clocks and publications once; report sources come from the import
-  graph and lockfiles, spec pin in `scripts/pool/v3/provenance.mjs`. Ergo
-  tooling fixes: decoder corpus, publish, nodes.mjs, latency. The
-  contained-node harness is retired to Git history (permalinks at c85af7b).
+- Review pass (merged 2026-09-24, reviewed): v2 ingestion, v3 replay
+  charging and Ergo tooling fixes; contained-node harness retired (c85af7b).
 - A13 replay cost, served-trail prefixes (spec 786f962) and A10 inclusion
   latency are merged and reviewed; numbers live in
   [probes](docs/POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet)
@@ -37,8 +38,6 @@ here before starting.
   (`experiments/ergo-range/vendor/`, decision 2026-09-23), merged; the npm
   alpha was a debug build. Rust 1.87 + wasm-bindgen 0.2.128 installed
   (`~/.cargo`, `scratch/rust-toolchain`, source cache `scratch/sigma-rust-src`).
-- Metered decoder: `metered-check.mjs --week` decodes the P4 window; the own
-  decoder stays (decision 2026-09-23); adversarial bounds and a budget are open.
 - Testnet wallet: key in ignored `scratch/ergo-testnet/wallet.json` (about
   19,999.99 tERG), a copy kept outside the repository; testnet transactions
   need no further approval; sweep boxes back and spend only fees.
@@ -49,9 +48,10 @@ here before starting.
 
 ## Next
 
-1. Decoder containment: adversarial resource bounds and a reader budget
-   (metered decoder above); node equivalence for hostile inputs is open.
-   When chain-cost's report is next re-recorded: bind the vendored JS glue
+1. Node equivalence for hostile inputs (the contained decoder bounds cost,
+   not agreement with the node on bytes it refuses or reads differently).
+   When chain-cost's report is next re-recorded: move its decoder to
+   `contained-decoder.mjs`, fix `decoder.mjs`'s header comment, bind the vendored JS glue
    (`vendor/.../ergo_lib_wasm.js`, as `equivalence-fields.mjs` does) and share
    its helpers (exact-text split, fetch/retry, model compile) with the
    equivalence scripts; each move changes bound hashes.
@@ -61,7 +61,8 @@ here before starting.
    journal must load; shared v3 fixture/byte helpers across the check
    scripts; scope replay resumes only under the same selected backing.
 3. Later: a Linux or CI reproducible build of the decoder pin; the note
-   tree's Poseidon2 on Barretenberg wasm (about 6x); a reader budget.
+   tree's Poseidon2 on Barretenberg wasm (about 6x); a per-read host-memory
+   budget for the contained decoder.
 
 ## Retained boundaries and local state
 
@@ -89,7 +90,7 @@ here before starting.
 ## Open questions
 
 Roughly **50% done / 50% remaining**, plausible range **40–60%**, reassessed
-2026-09-22: the venue cost is measured and small and P2 is done on the
-testnet; selection still needs an authenticated header source and decoder
-containment. Runtime integration, selected venue/decoder, qualified custody
+2026-09-24: the venue cost is measured and small, P2 is done on the testnet
+and the reader's decoder is contained under a budget; selection still needs
+an authenticated header source and hostile-input node equivalence. Runtime integration, selected venue/decoder, qualified custody
 and continuous wallet operation dominate remaining effort.
