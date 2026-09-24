@@ -216,7 +216,8 @@ is shown for the retained evidence, from one run of the reference client,
 while the verifier still leaves proof of work to its source and no runtime
 path reads the node. No specification selects the profile; header
 authentication for a reader, decoder containment and node equivalence
-beyond the fixtures and one week remain open.
+beyond the own node's retained blocks ([compared field by field](POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks))
+remain open.
 
 ## Successor record conformance
 

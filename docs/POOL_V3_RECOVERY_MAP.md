@@ -656,6 +656,10 @@ Each names the rule, the candidate, the alternative, and what closes it.
   byte and 11.1 MB of guest memory, and the node's JSON cannot replace the decoder, since the
   transaction root binds bytes, not the node's field split
   ([probe](POOL_DEPLOYMENT_PROBES.md#metered-release-decoder-over-the-week)); adversarial resource bounds remain.
+  **Compared 2026-09-24:** over the own node's retained blocks the decoder
+  reads every transaction with the node's id, witness id, trees and
+  registers ([probe](POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks));
+  inputs the chain does not contain remain untested.
 - **A9 Same-index order.** Decided 2026-09-14 in pool-v3 §13: an operator's
   commitments at one index are read in ascending sequence from the records
   alone, so no intra-index order is needed for kinds 1–3; `extending()`'s
