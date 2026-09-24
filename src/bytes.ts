@@ -55,6 +55,23 @@ export function copyBytes(bytes: Uint8Array): Uint8Array {
   }
 }
 
+/**
+ * A plain array of `copy` applied to each index of a genuine array, reading its
+ * length once and each element once. Neither the argument's species (which
+ * `map`, `slice` and `filter` honour) nor its iterator (which `Array.from` and
+ * spreading walk) is consulted, so a caller can neither hand back an array it
+ * still holds nor copy more than `limit` elements. EncodingError for a
+ * non-array or a longer one; `copy`'s own failures propagate.
+ */
+export function copyArray<T, U>(values: readonly T[], copy: (value: T) => U, limit = Number.MAX_SAFE_INTEGER): U[] {
+  if (!Array.isArray(values)) throw new EncodingError("not an array");
+  const length: unknown = values.length;
+  if (typeof length !== "number" || length > limit) throw new EncodingError("array longer than its limit");
+  const own: U[] = [];
+  for (let i = 0; i < length; i++) own.push(copy(values[i] as T));
+  return own;
+}
+
 /** Unsigned big-endian, minimal length: no leading zero byte, 0n -> empty. */
 export function bigintToMinimalBytes(n: bigint): Uint8Array {
   if (n < 0n) throw new EncodingError("negative quantity");

@@ -138,6 +138,12 @@ describe("pool-v2 §6: the segment header and its identity", () => {
     expect(identity).toEqual(segmentIdentity(HEADER));
   });
 
+  it("copies a header's entries by index up to its length, not as the caller's iterator yields them", () => {
+    const entries = [HEADER.entries[0]!];
+    Object.defineProperty(entries, Symbol.iterator, { value: function* () { yield* HEADER.entries; } });
+    expect(copySegmentHeader({ ...HEADER, entries }).entries).toHaveLength(1);
+  });
+
   it("validates the header it copied, not a second read of the caller's", () => {
     let reads = 0;
     const shifting = Object.defineProperty({ ...HEADER }, "domain", { get: () => (reads++ === 0 ? DOMAIN : new Uint8Array(5)) });

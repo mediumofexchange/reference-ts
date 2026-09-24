@@ -19,7 +19,7 @@
 
 import { sha256 } from "@noble/hashes/sha2.js";
 import { POOL_CONSTRUCTION } from "../backing.js";
-import { ByteReader, ByteWriter, compareBytes, copyBytes, EncodingError } from "../bytes.js";
+import { ByteReader, ByteWriter, compareBytes, copyArray, copyBytes, EncodingError } from "../bytes.js";
 import {
   POOL_CONFIG_CONTEXT,
   POOL_GENESIS_CONTEXT,
@@ -167,21 +167,20 @@ export function isWellFormedHeader(header: unknown): header is SegmentHeader {
 /**
  * A header as fresh, frozen copies; throws EncodingError on anything else.
  * Each field is read once and the copy is what is validated. The entries are
- * copied into a plain array: a caller's array species could otherwise supply
- * one whose prototype, and so whose iteration, it still controls.
+ * copied by index into a plain array: a caller's array species could otherwise
+ * supply one whose prototype, and so whose iteration, it still controls.
  */
 export function copySegmentHeader(header: SegmentHeader): SegmentHeader {
   if (typeof header !== "object" || header === null) throw new EncodingError("malformed segment header");
   let copy: SegmentHeader;
   try {
-    const entries: unknown = header.entries;
-    if (!Array.isArray(entries) || entries.length > SCOPE_CAPACITY) throw new EncodingError("malformed segment header");
+    const entries = header.entries;
     copy = Object.freeze({
       domain: copyBytes(header.domain),
       venue: copyBytes(header.venue),
       operator: copyBytes(header.operator),
       sequence: header.sequence,
-      entries: Object.freeze(Array.from(entries as readonly SegmentEntry[], (entry) => {
+      entries: Object.freeze(copyArray(entries, (entry) => {
         const opening = entry.opening;
         return Object.freeze({
           backing: copyBytes(entry.backing),
@@ -190,7 +189,7 @@ export function copySegmentHeader(header: SegmentHeader): SegmentHeader {
             opening: Object.freeze({ operator: copyBytes(opening.operator), sequence: opening.sequence, root: copyBytes(opening.root) }),
           }),
         });
-      })),
+      }, SCOPE_CAPACITY)),
     });
   } catch {
     throw new EncodingError("malformed segment header");

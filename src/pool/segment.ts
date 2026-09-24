@@ -42,7 +42,7 @@
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { makeBacking, verifyBackingSignature, type Backing } from "../backing.js";
-import { compareBytes, copyBytes } from "../bytes.js";
+import { compareBytes, copyArray, copyBytes } from "../bytes.js";
 import { decodeCommitment, encodeCommitment, directoryRoot, verifyCommitment, type Commitment, type SnapshotDigest } from "../commitment.js";
 import { verifySignatureStrict } from "../keys.js";
 import { fieldToBytes, isField, isValue, VALUE_BOUND } from "./field.js";
@@ -878,11 +878,9 @@ export class Segment {
       let own: ImportEvidence;
       try {
         // One read of the directory into a plain array, validated after the copy.
-        const directory: unknown = item.checkpoint.directory;
-        if (!Array.isArray(directory)) throw new Error("malformed checkpoint directory");
         let ownDirectory: SnapshotDigest[];
         try {
-          ownDirectory = Array.from(directory as readonly SnapshotDigest[], e => ({ name: copyBytes(e.name), digest: copyBytes(e.digest) }));
+          ownDirectory = copyArray(item.checkpoint.directory, e => ({ name: copyBytes(e.name), digest: copyBytes(e.digest) }));
         } catch {
           throw new Error("malformed checkpoint directory");
         }
@@ -919,8 +917,8 @@ function copyReplayTrail(trail: SegmentTrail): SegmentTrail {
     return {
       configuration: copyConfiguration(trail.configuration),
       header: copySegmentHeader(trail.header),
-      backings: Array.from(trail.backings, b => ({ backing: makeBacking(b.backing), signature: copyBytes(b.signature) })),
-      statements: Array.from(trail.statements, copyStatement),
+      backings: copyArray(trail.backings, b => ({ backing: makeBacking(b.backing), signature: copyBytes(b.signature) })),
+      statements: copyArray(trail.statements, copyStatement),
     };
   } catch (cause) {
     throw new PoolError("MALFORMED", malformed(cause, "malformed trail"));
