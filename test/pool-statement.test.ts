@@ -119,6 +119,32 @@ describe("pool-v2 §6: the segment header and its identity", () => {
     ]) expect(segmentIdentity(other)).not.toEqual(segmentIdentity(HEADER));
   });
 
+  it("copies a header's entries into a plain array, so a caller's species cannot keep steering their iteration", () => {
+    // The caller's species hands back an array on a prototype it owns, whose iteration it can later reverse.
+    let reversed = false;
+    const steered = Object.create(Array.prototype);
+    steered[Symbol.iterator] = function* (this: unknown[]) {
+      const order = [...Array(this.length).keys()];
+      for (const i of reversed ? order.reverse() : order) yield this[i];
+    };
+    const species = { [Symbol.species]: function () { return Object.setPrototypeOf([], steered); } };
+    steered.constructor = species;
+    const entries = Object.defineProperty([...HEADER.entries], "constructor", { value: species });
+    const copy = copySegmentHeader({ ...HEADER, entries });
+    const identity = segmentIdentity(copy);
+    reversed = true;
+    expect(Object.getPrototypeOf(copy.entries)).toBe(Array.prototype);
+    expect(segmentIdentity(copy)).toEqual(identity);
+    expect(identity).toEqual(segmentIdentity(HEADER));
+  });
+
+  it("validates the header it copied, not a second read of the caller's", () => {
+    let reads = 0;
+    const shifting = Object.defineProperty({ ...HEADER }, "domain", { get: () => (reads++ === 0 ? DOMAIN : new Uint8Array(5)) });
+    expect(copySegmentHeader(shifting).domain).toEqual(DOMAIN);
+    expect(() => copySegmentHeader({ ...HEADER, entries: [null] } as unknown as typeof HEADER)).toThrow("malformed segment header");
+  });
+
   it("is well-formed only with a valid operator, a sequence from one, a canonical scope, and openings below this operator's sequence", () => {
     expect(isWellFormedHeader(HEADER)).toBe(true);
     const unsorted = { ...HEADER, entries: [...HEADER.entries].reverse() };

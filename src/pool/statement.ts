@@ -164,26 +164,39 @@ export function isWellFormedHeader(header: unknown): header is SegmentHeader {
   return true;
 }
 
-/** A header as fresh, frozen copies; throws EncodingError on anything else. */
+/**
+ * A header as fresh, frozen copies; throws EncodingError on anything else.
+ * Each field is read once and the copy is what is validated. The entries are
+ * copied into a plain array: a caller's array species could otherwise supply
+ * one whose prototype, and so whose iteration, it still controls.
+ */
 export function copySegmentHeader(header: SegmentHeader): SegmentHeader {
-  if (!isWellFormedHeader(header)) throw new EncodingError("malformed segment header");
-  return Object.freeze({
-    domain: copyBytes(header.domain),
-    venue: copyBytes(header.venue),
-    operator: copyBytes(header.operator),
-    sequence: header.sequence,
-    entries: Object.freeze(header.entries.map((entry) => Object.freeze({
-      backing: copyBytes(entry.backing),
-      link: copyBytes(entry.link),
-      ...(entry.opening === undefined ? {} : {
-        opening: Object.freeze({
-          operator: copyBytes(entry.opening.operator),
-          sequence: entry.opening.sequence,
-          root: copyBytes(entry.opening.root),
-        }),
-      }),
-    }))),
-  });
+  if (typeof header !== "object" || header === null) throw new EncodingError("malformed segment header");
+  let copy: SegmentHeader;
+  try {
+    const entries: unknown = header.entries;
+    if (!Array.isArray(entries) || entries.length > SCOPE_CAPACITY) throw new EncodingError("malformed segment header");
+    copy = Object.freeze({
+      domain: copyBytes(header.domain),
+      venue: copyBytes(header.venue),
+      operator: copyBytes(header.operator),
+      sequence: header.sequence,
+      entries: Object.freeze(Array.from(entries as readonly SegmentEntry[], (entry) => {
+        const opening = entry.opening;
+        return Object.freeze({
+          backing: copyBytes(entry.backing),
+          link: copyBytes(entry.link),
+          ...(opening === undefined ? {} : {
+            opening: Object.freeze({ operator: copyBytes(opening.operator), sequence: opening.sequence, root: copyBytes(opening.root) }),
+          }),
+        });
+      })),
+    });
+  } catch {
+    throw new EncodingError("malformed segment header");
+  }
+  if (!isWellFormedHeader(copy)) throw new EncodingError("malformed segment header");
+  return copy;
 }
 
 /**
