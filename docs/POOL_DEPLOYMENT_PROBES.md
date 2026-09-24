@@ -1453,6 +1453,38 @@ layout depends on the versioned method registry. The reader keeps its own
 decoder ([decision](../decisions/2026-09.md#2026-09-23--keep-the-readers-own-decoder-the-transaction-root-does-not-authenticate-the-nodes-field-split));
 resource bounds for adversarial inputs and a budget remain open.
 
+## Decoder node equivalence over the retained blocks
+
+The [chain-cost probe](#real-chain-exhaustion-cost-from-a-real-anchor) ran over every full
+block the [own mainnet node](#own-node-as-the-header-source) keeps after its
+UTXO snapshot, heights 1,830,001–1,879,100 (49,100 blocks, 69 days), in five
+chunks; an offline pass then compared, for every transaction, what the
+vendored release decoder reads with the node's JSON fields
+([guide](../experiments/ergo-range/README.md#real-chain-exhaustion-cost),
+[retained report](ergo-decoder-equivalence-verification.json)).
+
+| Blocks | Transactions | Outputs | Registers | Roots reproduced | Refused | Differing fields |
+|---|---|---|---|---|---|---|
+| 49,100 | 314,028 | 1,236,527 | 915,923 | 49,100 | 0 | 0 |
+
+Compared per transaction: id, witness id and output count, and per output
+the ErgoTree bytes, register names and register constants. In each chunk,
+mutating each of those fields in the node's statement of one real
+transaction shows as a difference, so the empty count is not a comparison
+that cannot fail. The pass recomputes each chunk's cache digest before
+comparing, links its headers by id, and binds the decoder's WASM and
+JavaScript glue against the vendored checksums; the summary joins chunks
+by header id and accepts only the driver's exact plan. The largest
+transaction is 91,842 bytes.
+
+The comparison is independent of the shared serializer only because each
+block's root, over ids equal to the node's, authenticates the bytes the
+decoder reads. Inputs, data inputs, values and tokens are not compared, since
+the verifier reads outputs only. These are valid transactions from one
+node's retention window: hostile inputs, script versions only earlier
+blocks carry, and containment are not exercised, and no decoder or profile
+is selected.
+
 ## Venue and restoration work still required
 
 The [publication experiment](#venue-publication-and-reassembly-on-a-node)

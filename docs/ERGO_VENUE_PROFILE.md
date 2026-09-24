@@ -299,9 +299,10 @@ A specification decision selects a venue profile and pins its identity;
 before that: an authenticated header source a reader can run (a node the
 reader runs is demonstrated, [own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source); whether the profile
 requires one or names a lighter source is the selection's choice), a contained
-decoder with node-equivalence evidence beyond the fixtures and one week (the
-pinned alpha reads the chain's current script versions and keeps unknown
-sized trees as bytes; its containment is not established), an exact-byte
+decoder with node-equivalence evidence beyond the valid transactions the
+reader's own node retains (the pinned release build reads each of them with
+the node's fields, [compared](POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks),
+and keeps unknown sized trees as bytes; its containment is not established), an exact-byte
 block source or the JSON-text discipline above, publication and reassembly
 on a node (P2: the [experiment](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)
 accepted every case on the public testnet and the verifier read each back
