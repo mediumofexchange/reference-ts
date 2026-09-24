@@ -8,7 +8,8 @@ venue with its finality rule and lag, and §13.1 adds the attribution rule to
 that name. This document fixes all of them for Ergo, as a candidate: no
 specification selects it, no backing may declare it, and no runtime path
 reads it. The v2 runtime's `src/ergo.ts` keeps its own identity and
-materialized view. Implementation: `model/pool-v3-ergo-profile.ts`; evidence:
+materialized view. Implementation: `model/pool-v3-ergo-profile.ts` and the
+header store `model/pool-v3-ergo-headers.ts`; evidence:
 [the experiment](#evidence).
 
 ## Identity
@@ -141,7 +142,7 @@ are positions in one section, so the union of several backings' answers
 
 The reader supplies, from its own retained evidence:
 
-- **Headers** from its authenticated header source, one contiguous chain
+- **Headers** from its authenticated header source ([below](#header-source)), one contiguous chain
   linked by parent id that contains the anchor's child (the header whose
   parent id is the anchor) and reaches a tip at or beyond the origin plus
   `toIndex + depth`, each with its id, parent id, height, version and
@@ -186,6 +187,62 @@ of the profile, the headers, the blocks and each request is read once into
 the reader's own copy before it is judged, so no accessor can pass one value
 to a check and another to a use. Answers are the reader's own output over
 its retained evidence and can be reproduced from it.
+
+## Header source
+
+The reader can be its own header source, with no node: the header store
+(`model/pool-v3-ergo-headers.ts`) takes header bytes from any supplier and
+keeps only the headers it verifies itself, so a supplier is untrusted, as
+a block supplier is. It is rooted at the anchor and built from the anchor's
+context: the anchor and at least the 1,024 headers below it, ascending,
+authenticated by linkage alone (each id is the hash of the bytes read, and
+the last is the pinned anchor id), because the difficulty rule reads eight
+epochs back. The anchor must be at or above height 844,672, so every header
+above it follows EIP-37. A header is then accepted where:
+
+- its bytes are a version 2–4 header in the pinned node's canonical
+  serialization (fixed-width roots, minimal VLQ timestamp and height, a zero
+  new-fields length, a miner key that decodes as a compressed secp256k1
+  point or is the 33-byte identity, the 8-byte nonce, nothing after), and its
+  id is their Blake2b-256;
+- its parent is the anchor or an accepted header (not a header below the
+  anchor), its height is the parent's plus one and its timestamp exceeds
+  the parent's;
+- its difficulty (the decoded `nBits`, so any encoding of the value) equals
+  the node's required difficulty: the parent's inside an epoch of 128
+  headers, and at a boundary the EIP-37 value over the headers at the
+  parent's height less 0 to 8 epochs, positive and at most the group order;
+- its Autolykos v2 hit is below the group order divided by that difficulty.
+
+The best chain is the accepted chain with the greatest sum of required
+difficulties, the node's score; among equal scores the first reached stays,
+as the node keeps its chain. Its headers from the anchor's child to the tip
+are the verifier's header input. The node's other header rules are not
+applied: its local clock (a timestamp at most 20 minutes ahead), its local
+bound on fork depth, its configured checkpoint (one id at height 1,231,454)
+and its marking of headers whose block failed full validation, which a
+header reader cannot see. The store therefore rests on the work, as a
+light client does: a supplier can withhold a heavier chain but cannot make
+the reader accept a header without work at the required difficulty, and
+several independent suppliers reduce, without removing, that withholding.
+Without the clock rule, though, a supplier can lower the required
+difficulty on a side branch by stating future timestamps: after about 256
+blocks of work at the starting difficulty it halves each epoch. Such a
+branch never outscores the work of the best chain, so the chain choice
+stands, but its headers are accepted and kept, each costing the reader one
+work check; bounding what a supplier may add (for instance, reading a
+supplier only while it extends the best chain) is the runtime's supplier
+policy. Only canonical bytes are read; the node also re-serializes some
+other spellings of a header to the same id, and a supplier copying the
+node's statement always writes the canonical one. Header versions above 4
+are refused, so any new header version, by soft or hard fork, stops the
+chain there until the profile names it, as it stops sections. NiPoPoW proofs
+add nothing here: the verifier needs every header from the anchor's child,
+and the anchor already fixes the ancestry that a proof would summarize. A
+node the reader runs is a supplier like any other
+([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)). The
+store's rules are checked on real mainnet headers in
+[reader-verified headers](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers).
 
 ## Costs and limits
 
@@ -253,12 +310,13 @@ its retained evidence and can be reproduced from it.
   over the bytes, measured in [P4](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor).
   The framer is one pass linear in the bytes and allocates nothing a count
   claims.
-- The header source is the reader's trust boundary. A node the reader runs
-  can be the header source: the reader's own
-  mainnet node validated the header chain from genesis in under two hours,
-  and the fixtures and the measured week stand on its best chain
-  ([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)). Objects at the locations before
-  the anchor are not in the record.
+- The header source is the reader's trust boundary, and the reader can hold
+  it itself: its [header store](#header-source) verifies each header's work
+  from the anchor, one Autolykos v2 check a header in pure JavaScript, and
+  keeps the header bytes beside the verifier's view
+  ([measured](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers)); what
+  remains trusted is that the heaviest chain it is shown is the network's.
+  Objects at the locations before the anchor are not in the record.
 
 ## Evidence
 
@@ -340,9 +398,10 @@ integration introduces no production path, profile selection or normative rule.
 ## Before selection
 
 A specification decision selects a venue profile and pins its identity;
-before that: an authenticated header source a reader can run (a node the
-reader runs is demonstrated, [own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source); whether the profile
-requires one or names a lighter source is the selection's choice), the
+before that: the header source it names (the reader's own
+[header store](#header-source), checked on real mainnet headers from
+untrusted nodes, or a node the reader runs; which is the selection's
+choice, as is the number of independent suppliers a reader consults), the
 framer's grammar checked against the selected deployment's publishing
 transactions, publication and reassembly
 on a node (P2: the [experiment](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)

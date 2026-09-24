@@ -659,7 +659,11 @@ Each names the rule, the candidate, the alternative, and what closes it.
   **Compared 2026-09-24:** over the own node's retained blocks the decoder
   reads every transaction with the node's id, witness id, trees and
   registers ([probe](POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks));
-  inputs the chain does not contain remain untested.
+  inputs the chain does not contain remain untested. **Headers
+  2026-09-24:** the reader verifies headers itself from the anchor (work,
+  EIP-37 difficulty, heaviest chain), so no header supplier is trusted for
+  validity; withholding a heavier chain remains
+  ([probe](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers)).
 - **A9 Same-index order.** Decided 2026-09-14 in pool-v3 §13: an operator's
   commitments at one index are read in ascending sequence from the records
   alone, so no intra-index order is needed for kinds 1–3; `extending()`'s

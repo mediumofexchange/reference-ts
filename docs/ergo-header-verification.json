@@ -1,0 +1,193 @@
+{
+  "status": "passed",
+  "node": "v24.6.0",
+  "window": {
+    "anchorHeight": 1873360,
+    "anchorId": "7f68159616d36daac172816fc02a57a6991bf9acf132a8d1840fe1e32a2dde98",
+    "contextFrom": 1872336,
+    "to": 1880300,
+    "depth": 10,
+    "tipHeight": 1880300,
+    "tipId": "fb88d929c3c5beb5288f061f78320fc7b134a4bcd4296f1555f846ad0ce8cb81",
+    "score": "448311284409040896",
+    "headersAbove": 6940
+  },
+  "sources": [
+    {
+      "url": "http://127.0.0.1:9053",
+      "info": null
+    },
+    {
+      "url": "https://node.ergo.watch",
+      "info": null
+    },
+    {
+      "url": "http://213.239.193.208:9053",
+      "info": null
+    }
+  ],
+  "contextLinks": {
+    "http://127.0.0.1:9053": {
+      "headers": 1025,
+      "links": true
+    },
+    "https://node.ergo.watch": {
+      "headers": 1025,
+      "links": true
+    },
+    "http://213.239.193.208:9053": {
+      "headers": 1025,
+      "links": true
+    }
+  },
+  "perSource": [
+    {
+      "source": "http://127.0.0.1:9053",
+      "offered": 6940,
+      "unsupplied": 0,
+      "added": 6940,
+      "known": 0,
+      "refused": null
+    },
+    {
+      "source": "https://node.ergo.watch",
+      "offered": 6940,
+      "unsupplied": 0,
+      "added": 0,
+      "known": 6940,
+      "refused": null
+    },
+    {
+      "source": "http://213.239.193.208:9053",
+      "offered": 6940,
+      "unsupplied": 0,
+      "added": 0,
+      "known": 6940,
+      "refused": null
+    }
+  ],
+  "agreement": [
+    {
+      "source": "http://127.0.0.1:9053",
+      "heights": 6940,
+      "equal": true
+    },
+    {
+      "source": "https://node.ergo.watch",
+      "heights": 6940,
+      "equal": true
+    },
+    {
+      "source": "http://213.239.193.208:9053",
+      "heights": 6940,
+      "equal": true
+    }
+  ],
+  "p4OnBest": true,
+  "refusals": {
+    "nonce": {
+      "expected": "pow",
+      "got": "pow"
+    },
+    "nBits": {
+      "expected": "difficulty",
+      "got": "difficulty"
+    },
+    "timestampEqualParent": {
+      "expected": "timestamp",
+      "got": "timestamp"
+    },
+    "unknownParent": {
+      "expected": "unknown-parent",
+      "got": "unknown-parent"
+    },
+    "belowAnchor": {
+      "expected": "below-anchor",
+      "got": "below-anchor"
+    },
+    "height": {
+      "expected": "height",
+      "got": "height"
+    },
+    "nonMinimalTimestamp": {
+      "expected": "malformed",
+      "got": "malformed"
+    },
+    "trailingByte": {
+      "expected": "malformed",
+      "got": "malformed"
+    },
+    "newFieldsLength": {
+      "expected": "malformed",
+      "got": "malformed"
+    }
+  },
+  "verifier": {
+    "built": true,
+    "witnessedIndex": "6929"
+  },
+  "recalculation": {
+    "oracle": "http://127.0.0.1:9053",
+    "fromHeight": 844673,
+    "toHeight": 1880300,
+    "expectedBoundaries": 8091,
+    "boundaries": 8091,
+    "difficultyEqual": 8091,
+    "difficultyDiffering": [],
+    "expectedHeaders": 16198,
+    "headersRead": 16198,
+    "unsupplied": 0,
+    "powValid": 16198,
+    "powInvalid": [],
+    "linked": 8091,
+    "incomplete": [],
+    "readSeconds": 5.3,
+    "checkSeconds": 373.8,
+    "powMsMedian": 20.506,
+    "tableSizes": 21
+  },
+  "cost": {
+    "verifiedHeaders": 6940,
+    "addMsMean": 21.152,
+    "addMsMedian": 20.577,
+    "addMsP99": 35.399,
+    "addSeconds": 146.8,
+    "wireBytesMean": 220,
+    "contextBytes": 225500,
+    "yearOfHeadersMinutes": 92.6
+  },
+  "cache": {
+    "directory": "scratch/ergo-headers",
+    "sha256": "5dc9fb1bc2321908084d7ecd3a9f6f25be240052410d6f66bf3a4e91c91565af"
+  },
+  "files": {
+    "experiments/ergo-range/header-verify.mjs": "c255342f5016278affcfdf72cf2b429da29f7e6282f761374384a543a1fac893",
+    "experiments/ergo-range/supply.mjs": "7f84a4df88ee0a6a2488cb72f8d775d1d4d88d780ccd181a25172224cd21ec40",
+    "experiments/ergo-range/supply-header.mjs": "6c135e5f66069c86286708f6498890ad0c7a6be25bcc9002e576ddeafeb84036",
+    "experiments/ergo-range/package.json": "4df25f63611d23d6ce62765c25cc26e5a3dc2bf9b97b05f3ae510b7f338ddcd7",
+    "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
+    "tsconfig.json": "5d7b9d7a9ad1947fa0139a3649914b3ce14e3315fe266ae5d4d88273426c1922",
+    "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
+    "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
+    "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
+    "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
+    "src/presentation.ts": "adcd73c862129f4ccd4d02b14df16c0f701127f3d8d504f0bb91e91734b46bb3",
+    "src/messages.ts": "8a941254bf24650f9146d3875add1f20993a08b17b40ddac1ed060e225191718",
+    "src/oplog.ts": "d1f2ad4b71a109948f3f39a869f25ae8faf63b3fcd0206b7f9015117e31a714a",
+    "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
+    "src/revocation.ts": "1b23bc3de5017738c1a056f013a83ce776caa099826c48c4091900f12c9474ea",
+    "src/venue.ts": "17d3bb0f968ff51aac423eb1f22aaef692d9b3023dc811f6820d67a2ce0042c4",
+    "src/replacement.ts": "9f65220ebebc4c1cec42b9b28c7667beec6b08e56159a701bbfa6c34755083c1",
+    "src/commitment.ts": "158070f78a3f76511381a598a2a91d79dcdfeb9b02442a22450cf556f88b9adf",
+    "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f",
+    "model/pool-v3-ergo-profile.ts": "67b21086a77938f2160f4fbc52b5c661cc8e99f322b1803df2fa440cca8fd417",
+    "model/pool-v3-ergo-headers.ts": "cd336cc17808a566db19655ed90a728a687cf0b213e854c7633433104a768606",
+    "docs/ergo-chain-cost-verification.json": "c5a5cd91990a71cc5ab23162e9d0872f4bae837701d1d7608f90a3df6ea46ff6"
+  },
+  "limitations": [
+    "The store applies the pinned node's header rules for a child header (height, timestamp above the parent's, EIP-37 difficulty, Autolykos v2 proof of work) to mainnet headers of versions 2–4 above an anchor at or after EIP-37 activation. It does not apply the node's local-clock rule, its local bound on fork depth or its marking of headers whose block failed full validation; a header-only reader rests on the work, as any light client does. Without the clock rule a supplier can lower the required difficulty on a side branch with future timestamps (halving each epoch after about 256 blocks of work at the starting difficulty): such a branch cannot outscore the best chain's work, but its headers are accepted and kept, so what a supplier may add must be bounded by the reader's supplier policy. Only canonical header bytes are read.",
+    "Sources are untrusted suppliers of bytes, and the reader takes the heaviest valid chain it is shown. A source can withhold a heavier chain: several independent sources reduce, and do not remove, that eclipse risk. No fork was offered here; fork choice is covered by the unit tests only.",
+    "The recalculation part reads the first source's accepted headers at each boundary and the eight epochs before it, not a contiguous chain: it compares the model's difficulty rule and proof of work with that node's acceptance on real data; the contiguous window is the store's own verification.",
+    "Each header costs one proof-of-work check in pure JavaScript (Blake2b over about 34 Autolykos elements of 8 KiB); a bogus header that passes the cheap checks costs the reader that check before its refusal."
+  ]
+}
