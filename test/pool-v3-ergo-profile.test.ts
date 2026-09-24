@@ -377,6 +377,13 @@ describe("Ergo venue-profile candidate", () => {
     expect(through(onlyMalformed, 0n, 0n)).toHaveLength(102);
     expect(through(onlyMalformed, 1n, 1n)).toBeUndefined();
     expect(Buffer.from(through(profile.ergoRangeVerifier(base, { ...chain, blocks: [...chain.blocks].reverse() })!, 0n, 6n)!)).toEqual(full);
+    // The header is found before a transaction is read: a block of another chain, or a second one for a supplied index,
+    // costs the reader no hashing, so none of its transactions is touched.
+    let touched = 0;
+    const untouchable = { get unsigned() { touched++; return b(1); }, get witnessId() { touched++; return b(1, 31); } } as unknown as profile.ErgoTransactionView;
+    const unread = { ...chain, blocks: [...chain.blocks, { headerId: b(9), transactions: [untouchable] }, { headerId: chain.blocks[3]!.headerId, transactions: [untouchable] }] };
+    expect(Buffer.from(through(profile.ergoRangeVerifier(base, unread)!, 0n, 6n)!)).toEqual(full);
+    expect(touched).toBe(0);
   });
 
   it("refuses evidence that is not one linked chain containing the anchor's child", () => {

@@ -299,14 +299,15 @@ export function ergoOrdinal(transaction: number, output: number): bigint {
       BigInt(transaction) > MAX_U32 || BigInt(output) > MAX_U32) throw new EncodingError("Ergo position out of range");
   return (BigInt(transaction) << 32n) | BigInt(output);
 }
-/** A transaction as the reader holds it: its id computed from the owned
- * unsigned bytes, its witness id, and the framer's outputs (`undefined`
- * where the framer does not read the transaction, which carries no record). */
-interface ReadTransaction { readonly id: Uint8Array; readonly witnessId: Uint8Array; readonly outputs: readonly ErgoOutputView[] | undefined }
+/** A transaction as the reader holds it: its owned unsigned bytes, the id
+ * computed from them and its witness id. Its outputs are framed only when
+ * it is attributed. */
+interface ReadTransaction { readonly id: Uint8Array; readonly witnessId: Uint8Array; readonly unsigned: Uint8Array }
 function attributeOwned(profile: ErgoProfile, transactions: readonly ReadTransaction[]): readonly AttributedObject[] {
   const objects: AttributedObject[] = [];
   transactions.forEach((transaction, position) => {
-    const { outputs } = transaction;
+    // A transaction the framer does not read carries no record.
+    const outputs = frameTransaction(transaction.unsigned);
     if (outputs === undefined) return;
     for (let at = 0; at < outputs.length; at++) {
       const first = attributeOutput(profile, outputs[at]!);
@@ -337,27 +338,24 @@ function attributeOwned(profile: ErgoProfile, transactions: readonly ReadTransac
 }
 /** Every view is read once, field by field, into an owned copy before
  * anything is judged, so no accessor can pass one value to a check and
- * another to a use; the id is hashed and the outputs framed from that copy.
- * A malformed view is undefined. */
+ * another to a use; the id is hashed, and the outputs later framed, from
+ * that copy. A malformed view is undefined. */
 function ownTransaction(transaction: ErgoTransactionView): ReadTransaction | undefined {
   if (transaction === null || typeof transaction !== "object") return undefined;
   const { unsigned, witnessId } = transaction;
   if (!isBytes(unsigned) || !isBytes(witnessId, 31)) return undefined;
   const bytes = copyBytes(unsigned);
-  return Object.freeze({ id: blake2b(bytes, { dkLen: 32 }), witnessId: copyBytes(witnessId), outputs: frameTransaction(bytes) });
+  return Object.freeze({ id: blake2b(bytes, { dkLen: 32 }), witnessId: copyBytes(witnessId), unsigned: bytes });
 }
-interface ReadBlock { readonly headerId: Uint8Array; readonly transactions: readonly ReadTransaction[] }
-function ownBlock(block: ErgoBlockView): ReadBlock | undefined {
-  if (block === null || typeof block !== "object") return undefined;
-  const { headerId, transactions } = block;
-  if (!isBytes(headerId, 32) || !Array.isArray(transactions)) return undefined;
-  const ownedTransactions: ReadTransaction[] = [];
+/** A block's transactions, each owned; undefined if any view is malformed. */
+function ownTransactions(transactions: readonly ErgoTransactionView[]): readonly ReadTransaction[] | undefined {
+  const owned: ReadTransaction[] = [];
   for (const transaction of transactions) {
-    const owned = ownTransaction(transaction);
-    if (owned === undefined) return undefined;
-    ownedTransactions.push(owned);
+    const read = ownTransaction(transaction);
+    if (read === undefined) return undefined;
+    owned.push(read);
   }
-  return Object.freeze({ headerId: copyBytes(headerId), transactions: Object.freeze(ownedTransactions) });
+  return Object.freeze(owned);
 }
 function ownHeader(header: ErgoHeaderView): ErgoHeaderView | undefined {
   if (header === null || typeof header !== "object") return undefined;
@@ -436,15 +434,19 @@ export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvide
   if (tip < origin + depth) return undefined;
   const sectionAt = new Map<bigint, readonly AttributedObject[]>();
   for (const supplied of evidence.blocks) {
-    const block = ownBlock(supplied);
-    if (block === undefined) continue;
-    const header = byId.get(bytesToHex(block.headerId));
-    // Sections at or below the anchor hold no index and are not read; nor are those of a block version the profile does not name.
-    if (header === undefined || header.height < origin || header.version > MAX_SECTION_VERSION || sectionAt.has(header.height - origin) ||
-        block.transactions.length === 0 ||
-        compareBytes(transactionsRoot(header.version, block.transactions), header.transactionsRoot) !== 0) continue;
+    if (supplied === null || typeof supplied !== "object") continue;
+    const { headerId, transactions } = supplied;
+    if (!isBytes(headerId, 32) || !Array.isArray(transactions)) continue;
+    // The header is found, from an owned copy of its id, before any transaction is read. Sections at or below the
+    // anchor hold no index and are not read; nor are those of a block version the profile does not name, nor a second
+    // section for one index.
+    const header = byId.get(bytesToHex(copyBytes(headerId)));
+    if (header === undefined || header.height < origin || header.version > MAX_SECTION_VERSION || sectionAt.has(header.height - origin)) continue;
+    const read = ownTransactions(transactions);
+    // Outputs are framed only from a section whose root holds.
+    if (read === undefined || read.length === 0 || compareBytes(transactionsRoot(header.version, read), header.transactionsRoot) !== 0) continue;
     try {
-      sectionAt.set(header.height - origin, attributeOwned(owned, block.transactions));
+      sectionAt.set(header.height - origin, attributeOwned(owned, read));
     } catch (error) {
       if (error instanceof EncodingError) continue;
       throw error;
