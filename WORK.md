@@ -4,8 +4,19 @@ Updated: 2026-09-24
 
 ## Goal
 
-No slice is open. Pick the next from Next below and state its acceptance
-here before starting.
+Open slice (branch `feat/hostile-node-equivalence`): Next 1's hostile-input
+node equivalence at the parse level. Acceptance: `node-read/NodeRead.java`
+reads bytes with the official v6.0.6 JAR's own `ErgoTransactionSerializer`
+(block-4 version context, the node's bundled JRE, offline) and its API
+encoder; `hostile-equivalence.mjs` runs deterministic mutations of the 29
+hash-pinned fixture transactions (byte replacements, deletions, insertions,
+prefixes, seeded cross-seed splices) through it and through
+`contained-decoder.mjs`, classifies each case (both read with equal id,
+witness id and view fields / both refuse / node reads, decoder refuses /
+decoder reads, node refuses / fields differ), with controls that a field
+difference shows; a retained report binds its sources. Limits: parse level
+only, mutations of 29 transactions, no validity or state. Stop: report,
+probe section, review; a field difference is a finding to analyse, not fix.
 
 ## Status
 
