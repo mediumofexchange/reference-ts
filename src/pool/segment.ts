@@ -877,7 +877,11 @@ export class Segment {
       }
       let own: ImportEvidence;
       try {
-        if (!isDirectory(item.checkpoint.directory)) throw new Error("malformed checkpoint directory");
+        // One read of the directory into a plain array, validated after the copy.
+        const directory: unknown = item.checkpoint.directory;
+        if (!Array.isArray(directory)) throw new Error("malformed checkpoint directory");
+        const ownDirectory = Array.from(directory as readonly SnapshotDigest[], e => ({ name: copyBytes(e.name), digest: copyBytes(e.digest) }));
+        if (!isDirectory(ownDirectory)) throw new Error("malformed checkpoint directory");
         if (!Array.isArray(item.trail?.statements) || typeof item.length !== "bigint" ||
             item.length < 0n || item.length > BigInt(item.trail.statements.length)) {
           throw new Error("an opening's checkpointed length exceeds its trail");
@@ -885,7 +889,7 @@ export class Segment {
         own = {
           checkpoint: {
             commitment: decodeCommitment(encodeCommitment(item.checkpoint.commitment)),
-            directory: item.checkpoint.directory.map(e => ({ name: copyBytes(e.name), digest: copyBytes(e.digest) })),
+            directory: ownDirectory,
           },
           // Evidence outside the checkpointed prefix is not imported or verified.
           trail: copyReplayTrail({ ...item.trail, statements: item.trail.statements.slice(0, Number(item.length)) }),

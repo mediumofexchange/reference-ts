@@ -448,15 +448,16 @@ export class PoolStore {
   /** Canonically prepare and durably sign an empty opening. Publishing is explicit. */
   async activate(id: string, backings: readonly SignedBacking[], evidence: readonly PoolCheckpointEvidence[] = []): Promise<Commitment> {
     const commandId = this.commandId(id);
-    const own = backings.map(b => ({ backing: makeBacking(b.backing), signature: copyBytes(b.signature) }))
+    // Array.from builds plain arrays; a caller's array species could hand back one it still holds.
+    const own = Array.from(backings, b => ({ backing: makeBacking(b.backing), signature: copyBytes(b.signature) }))
       .sort((a, b) => compareBytes(a.backing.name, b.backing.name));
     const request = scopeRequest(own);
     // Copy the import material before the first await via its canonical local codec.
-    const provided = evidence.map(e => ({ commitment: decodeCommitment(encodeCommitment(e.commitment)),
-      directory: e.directory.map(d => ({ name: copyBytes(d.name), digest: copyBytes(d.digest) })),
-      ...(e.snapshots === undefined ? {} : { snapshots: e.snapshots.map(s => ({ backing: copyBytes(s.backing), header: copySegmentHeader(s.header),
+    const provided = Array.from(evidence, e => ({ commitment: decodeCommitment(encodeCommitment(e.commitment)),
+      directory: Array.from(e.directory, d => ({ name: copyBytes(d.name), digest: copyBytes(d.digest) })),
+      ...(e.snapshots === undefined ? {} : { snapshots: Array.from(e.snapshots, s => ({ backing: copyBytes(s.backing), header: copySegmentHeader(s.header),
         historyHash: copyBytes(s.historyHash), issued: s.issued, burned: s.burned,
-        backings: s.backings.map(b => ({ backing: makeBacking(b.backing), signature: copyBytes(b.signature) })) })) }),
+        backings: Array.from(s.backings, b => ({ backing: makeBacking(b.backing), signature: copyBytes(b.signature) })) })) }),
       ...(e.history === undefined ? {} : { history: { trail: decodeStoredOpening(encodeStoredOpening(e.history.trail, []), this.config).trail,
         length: e.history.length } }) }));
     return this.run(async engine => {
