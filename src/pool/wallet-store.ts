@@ -68,6 +68,11 @@ function checkpointArguments(args: CheckpointArguments, checkpoint: Commitment):
 }
 /** The exact form walletChangeRequestId produces. */
 const CHANGE_REQUEST_ID = /^change_[0-9a-f]{64}$/;
+/** A request a payer may be invited to pay. A change owner is never a payee:
+ * no delivery capability, and no invitation handing the owner out. */
+function payeeId(value: string): string {
+  requireThat(!CHANGE_REQUEST_ID.test(id(value)), "INVALID", "change request namespace is reserved"); return value;
+}
 
 // Fixed table/column names, never SQL supplied by the backup. The custody row
 // is deliberately not transferable: the old source remains frozen forever.
@@ -314,7 +319,7 @@ export class PoolWalletStore {
   /** Provision locally, then share only with the intended payer over an
    * authenticated channel. A capability grants invoice access, not identity. */
   deliveryToken(requestId: string): string {
-    id(requestId);
+    payeeId(requestId);
     return this.transaction(() => this.tokenFor(requestId));
   }
   private tokenFor(requestId: string): string {
@@ -347,7 +352,7 @@ export class PoolWalletStore {
   }
   /** One snapshot prevents mixing a rotated certificate with an old capability. */
   deliveryInvitation(requestId: string, endpoint: string): string {
-    id(requestId);
+    payeeId(requestId);
     return this.transaction(() => {
       const tls = this.deliveryCredentials(); requireThat(tls !== undefined, "UNKNOWN", "wallet credentials are not provisioned");
       validateWalletTls(tls);
