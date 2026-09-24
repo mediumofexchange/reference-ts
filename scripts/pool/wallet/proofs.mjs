@@ -24,9 +24,10 @@ export async function openWalletProofs(directory) {
     assert.equal(sha(Buffer.from(program.bytecode, 'base64')), pins.circuits[kind].bytecode);
     return [kind, program];
   }));
-  const api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath: join(root, 'scratch/private-payment-crs') });
+  const crsPath = join(root, 'scratch/private-payment-crs');
+  const api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath });
   try {
-    const pool = await barretenbergPool(api, programs);
+    const pool = await barretenbergPool(api, programs, { crsPath });
     for (const kind of ['issue', 'spend', 'burn']) {
       assert.equal(Buffer.from(pool.identities[kind].vk).toString('hex'), pins.circuits[kind].vk);
     }
@@ -39,7 +40,7 @@ export async function openWalletProofs(directory) {
         assert.equal(await pool.verifier.verify(kind, expected, proof.proof), true);
         return proof.proof;
       },
-      close: () => api.destroy(),
+      close: async () => { try { await pool.close(); } finally { await api.destroy(); } },
     };
   } catch (error) { await api.destroy(); throw error; }
 }
