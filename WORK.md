@@ -9,25 +9,19 @@ here before starting.
 
 ## Status
 
-- Hostile-input node equivalence (merged 2026-09-24, reviewed): the node
-  JAR's own parser (`node-read/NodeRead.java`) against the contained decoder
-  on mutated corpus transactions; rerunning needs a JDK (`scratch/jdk/`).
-- Proof verifier failures (merged 2026-09-24, reviewed): bb.js 5.2.0's five
-  malformed-proof throws verify as `false`, other failures are rethrown,
-  and the verifier verifies only on its own instance, replaced after every
-  throw (a reused instance fails every call after 89 throws)
-  ([decision](decisions/2026-09.md#2026-09-24--answer-false-only-for-malformed-proofs-and-never-verify-on-an-instance-that-threw)).
-- Contained decoder (merged, reviewed): the reader decodes through
-  `contained-decoder.mjs`, a fresh metered instance per transaction under a
-  budget linear in its length
-  ([probe](docs/POOL_DEPLOYMENT_PROBES.md#contained-decoder)); `decoder.mjs`
-  stays the unmetered reference older reports bind. Over the own node's
-  49,100 retained blocks all 314,028 transactions read with the node's fields
-  ([probe](docs/POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks)).
-- A13 replay cost, served-trail prefixes (spec 786f962) and A10 inclusion
-  latency are merged and reviewed; numbers live in
-  [probes](docs/POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet)
-  and the retained reports. No depth is selected.
+- Code review pass (2026-09-24, merged): the verifier failures, contained
+  decoder, pool runtime review fixes and the three decoder reports were
+  reviewed again. Fixed: array-species aliasing in `PoolStore.activate`,
+  `Segment.replay` and `copySegmentHeader` (a journal left unloadable, a
+  segment identity changing after the copy), receipt checks of a second read
+  (a receipt verifying under another segment; the wallet storing another),
+  verifier options copy and contract, probe/decision rate and bucket text.
+- Merged and reviewed before it: hostile-input node equivalence (JDK in
+  `scratch/jdk/`), [verifier failures](decisions/2026-09.md#2026-09-24--answer-false-only-for-malformed-proofs-and-never-verify-on-an-instance-that-threw),
+  the [contained decoder](docs/POOL_DEPLOYMENT_PROBES.md#contained-decoder)
+  (`decoder.mjs` stays the unmetered reference older reports bind), field
+  equivalence over 314,028 retained transactions, A13 replay cost,
+  served-trail prefixes (spec 786f962) and A10 latency; no depth selected.
 - Own nodes (approved): `nodes.mjs` runs official v6.0.6 mainnet (snapshot
   bootstrap, full headers, 127.0.0.1:9053) and testnet (archive + index,
   127.0.0.1:9052) from `scratch/ergo-nodes/`, both synced (5.4 / 17.5 GB);
@@ -35,18 +29,16 @@ here before starting.
   through WMI `Win32_Process.Create`: nodes started from an app's terminal
   died with it on 2026-09-24. Header source: `docs/ergo-own-node-verification.json`.
 - Decoder pin: vendored reproducible release build of sigma-rust 2f840d3
-  (`experiments/ergo-range/vendor/`, decision 2026-09-23), merged; the npm
-  alpha was a debug build. Rust 1.87 + wasm-bindgen 0.2.128 installed
-  (`~/.cargo`, `scratch/rust-toolchain`, source cache `scratch/sigma-rust-src`).
-- Testnet wallet: key in ignored `scratch/ergo-testnet/wallet.json` (about
-  19,999.99 tERG), a copy kept outside the repository; testnet transactions
-  need no further approval; sweep boxes back and spend only fees.
+  (`experiments/ergo-range/vendor/`); Rust 1.87 + wasm-bindgen 0.2.128 in
+  `~/.cargo`, `scratch/rust-toolchain`, source cache `scratch/sigma-rust-src`.
+- Testnet wallet: key in ignored `scratch/ergo-testnet/wallet.json` (~19,999.99
+  tERG, copy outside the repository); testnet transactions need no further
+  approval; sweep boxes back and spend only fees.
 
 ## Evidence
 
 - [Hostile-input probe](docs/POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence):
-  159,397 cases, no same-id disagreement, cheap denial classes. Own node
-  headers, P2 testnet and replay cost: see the linked reports.
+  159,397 cases, no same-id disagreement, cheap denial classes.
 
 ## Next
 
@@ -56,15 +48,23 @@ here before starting.
    block. Decide: a lenient framer for ids with full decoding only where
    the profile reads outputs, or a recorded denial limit. Also: the profile
    accepts every header version, equivalence is measured at block 4 only.
-2. When chain-cost's report is next re-recorded: move it to
-   `contained-decoder.mjs`, fix `decoder.mjs`'s header comment, bind the
-   vendored glue and share helpers with the equivalence scripts.
-3. Deferred review items: retire the v1 store-codec path if no v1 journal
-   must load; shared v3 fixture/byte helpers across the check scripts.
+2. Evidence binding, at chain-cost's next re-record: move it to
+   `contained-decoder.mjs`, fix `decoder.mjs`'s header comment, share helpers
+   with the equivalence scripts. `check:evidence` checks only file-named keys,
+   so no report binds `ergo_lib_wasm_bg.wasm` (the contained decoder pins its
+   hash at load; `decoder.mjs`, used by the equivalence report, does not). That
+   report (already drifting on package.json) also omits `model/pool-v3-*.ts`'s
+   `src/` imports and `tsconfig.json`; `contained-range.mjs` binds no inputs.
+3. Deferred review items: the contained reader decodes every block before
+   header-id/height filtering (`replay-venue.mjs`), sets no per-read fuel or
+   host-memory total, and its instantiation sits outside the refusal try;
+   `inspectNotes` spreads caller args; a verifier throw during `submit`
+   reloads the whole journal (optionally a non-diverging refusal); retire
+   the v1 store-codec path if no v1 journal must load; shared v3
+   fixture/byte helpers; v3 harness verifiers reuse one instance.
 4. Later: a Linux or CI reproducible build of the decoder pin; the note
-   tree's Poseidon2 on Barretenberg wasm (about 6x); a per-read host-memory
-   budget for the contained decoder; a warmed spare verifier instance if
-   admission's ~1.1 s per malformed proof matters.
+   tree's Poseidon2 on Barretenberg wasm (about 6x); a warmed spare verifier
+   instance if admission's ~1.1 s per malformed proof matters.
 
 ## Retained boundaries and local state
 
@@ -85,9 +85,9 @@ here before starting.
   `scratch/equivalence/` (chunk and field reports the retained summary binds
   by hash) and its cache `scratch/ergo-chain-own/` reproduce the equivalence
   report offline; the node has since pruned their earliest blocks.
-- Legacy Temp/moeclean worktree points at a different Claude_local checkout;
-  preserve it. Configuration approval stays disabled. Device qualification and
-  external publication remain separate dependencies.
+- Preserve the legacy Temp/moeclean worktree (another checkout). Configuration
+  approval stays disabled; device qualification and external publication
+  remain separate dependencies.
 
 ## Open questions
 
