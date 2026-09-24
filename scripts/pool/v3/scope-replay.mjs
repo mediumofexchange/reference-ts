@@ -130,15 +130,9 @@ export async function classifyScopes(context, directories, record, evidence, hel
       const snapshot = snapshotFor(entry.digest);
       const scope = checkpointScope(trails, backing, entry.digest, snapshot, codec), { header } = scope;
       await context.faults.inspect(held, directory, scope);
-      const scopedTerms = new Map(), scopeViews = new Map();
-      // Required scope is discovered only after its header is authenticated.
-      for (let i = 0; i < header.entries.length; i++) {
-        const scoped = header.entries[i], signed = scope.terms[i];
-        if (signed === undefined || !same(codec.rootTermsName(signed.terms), scoped.backing) ||
-            !codec.verifyRootTermsSignature(signed.terms, signed.signature)) throw new EvidenceRefusal("unresolved-evidence");
-        const terms = codec.decodeRootTerms(signed.terms);
-        scopedTerms.set(hex(scoped.backing), terms);
-      }
+      // Required scope is discovered only after its header is authenticated;
+      // checkpointScope resolved and verified every scoped terms field.
+      const scopedTerms = new Map(header.entries.map((scoped, i) => [hex(scoped.backing), scope.rootTerms[i]])), scopeViews = new Map();
       const base = { commitment: c, index: held.index, segment: snapshot.segment, header, snapshot };
       try {
         check(same(header.domain, selection.domain) && same(header.venue, selection.venue) &&
@@ -242,11 +236,9 @@ export async function classifyScopes(context, directories, record, evidence, hel
     const receipt = codec.decodeReceipt(context.receiptBytes);
     const original = authenticatedScope(trails, receipt.segment, codec);
     const { header } = original, scopeViews = new Map(), termsByBacking = new Map();
+    // authenticatedScope resolved and verified every scoped terms field.
     for (let i = 0; i < header.entries.length; i++) {
-      const scoped = header.entries[i], signed = original.terms[i];
-      if (signed === undefined || !same(codec.rootTermsName(signed.terms), scoped.backing) ||
-          !codec.verifyRootTermsSignature(signed.terms, signed.signature)) throw new EvidenceRefusal("unresolved-evidence");
-      const terms = codec.decodeRootTerms(signed.terms);
+      const scoped = header.entries[i], terms = original.rootTerms[i];
       if (!same(terms.configuration, selection.domain) || !same(terms.venue, selection.venue)) throw new EvidenceRefusal("invalid-receipt");
       termsByBacking.set(hex(scoped.backing), terms);
       scopeViews.set(hex(scoped.backing), await viewFor(scoped.backing, terms));

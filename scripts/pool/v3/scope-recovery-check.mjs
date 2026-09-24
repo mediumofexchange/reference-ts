@@ -285,6 +285,35 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     const otherAfter = await accepted({ ...payloadY, seed: issuerSeed });
     assert.deepEqual(otherAfter.candidates.map(c => c.cm), [sy.output.cm.toString()]); assertPaths(otherAfter);
   });
+  await test("scoped clocks scan each backing's held checkpoints once and each publication is charged once", async () => {
+    // Later checkpoints of the joined segment repeat final's state; each resumes and adds no position.
+    const repeats = count => Array.from({ length: count }, (_, i) =>
+      ({ ...final, commitment: signCommitment(operatorSecret, 10n + BigInt(i), directoryRoot(final.directory)) }));
+    // The selection names the scope's first backing, under which the parent descent classifies each predecessor.
+    const variant = (count, extra = []) => {
+      const later = repeats(count);
+      return compose([...ancestry, adopted, final, ...later], later.at(-1) ?? final, [...publications, ...extra], joined.entries[0].backing);
+    };
+    const status = async (input, maxEvents) =>
+      (await replayLocalPackage(input, { ...verifier, importLimits: { maxCheckpoints: 128n, maxEvents } }, codec)).status;
+    // The smallest reader-selected event budget under which the read completes.
+    const smallest = async input => {
+      let low = 0n, high = 4096n;
+      assert.equal(await status(input, high), "selected-local-replay");
+      while (low < high) { const mid = (low + high) / 2n; if (await status(input, mid) === "selected-local-replay") high = mid; else low = mid + 1n; }
+      return low;
+    };
+    const exact = async (input, budget) => {
+      assert.equal(await status(input, budget), "selected-local-replay");
+      assert.equal(await status(input, budget - 1n), "resource-refusal");
+    };
+    const base = await smallest(variant(0)), step = await smallest(variant(1)) - base;
+    // Each later checkpoint adds one held index to each backing's clock scan and nothing else.
+    assert.equal(step, 2n);
+    await exact(variant(3), base + 3n * step);
+    // An undecodable publication is charged once, however many forces, clocks and counts read it.
+    await exact(variant(0, [{ backing: x, at: 5n, bytes: new Uint8Array(92) }]), base + 1n);
+  });
   await test("scope adoption rejects omitted reordered and changed proof bytes on the unselected backing", async () => {
     const reproof = (await settlement(splitY, dy2, fundedY, 1n, a1.tree, presenterY, 192n,
       "scope y alternative valid settlement proof")).record;

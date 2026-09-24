@@ -23,6 +23,7 @@ import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage, RANGE_LIMITS } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
 import { loadCandidateManifest, candidateConfiguration, loadConfigurationCodecs } from "./candidate.mjs";
+import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 
 const args = process.argv.slice(2);
 assert(args.length === 0 || (args.length === 2 && args[0] === "--out"), "usage: replay-cost.mjs [--out file]");
@@ -35,7 +36,8 @@ const hex = bytes => Buffer.from(bytes).toString("hex");
 try {
   const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const program = ts.createProgram(["trail", "configuration", "terms", "package", "range", "fault-evidence"].map(n => join(root, `model/pool-v3-${n}.ts`)),
+  const models = ["trail", "configuration", "terms", "package", "range", "fault-evidence"].map(n => `model/pool-v3-${n}.ts`);
+  const program = ts.createProgram(models.map(file => join(root, file)),
     { ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0); assert.equal(program.emit().emitSkipped, false);
   const codec = { ...await loadEvidenceCodecs(url), ...await loadConfigurationCodecs(url),
@@ -161,12 +163,11 @@ try {
     const values = conformance.metrics.filter(m => m.kind === kind).map(m => m.verifyMs);
     return [kind, { min: +Math.min(...values).toFixed(1), max: +Math.max(...values).toFixed(1), samples: values.length }];
   }));
-  const sourceHash = file => sha(readFileSync(join(root, file), "utf8").replace(/\r\n/g, "\n")).toString("hex");
-  const report = { schema: 1, purpose: "recovery map A13 / probe P3: local replay time, memory and evidence bytes",
+  const report = { schema: 1, purpose: "recovery map A13 / probe P3: local replay time, memory and evidence bytes", specification: V3_SPECIFICATION,
     node: process.version, platform: process.platform, arch: process.arch, cpu: cpus()[0]?.model ?? null,
     sourceHashEncoding: "SHA-256 of UTF-8 source with CRLF normalized to LF",
-    sources: Object.fromEntries(["scripts/pool/v3/replay-cost.mjs", "scripts/pool/v3/local-replay.mjs", "scripts/pool/v3/scope-replay.mjs",
-      "scripts/pool/spent-set/radix.mjs", "src/pool/note-tree.ts", "src/pool/poseidon2.ts"].map(file => [file, sourceHash(file)])),
+    // The executed dist modules with their src sources, and the compiled model files.
+    sources: sourceHashes(sourceClosure(["scripts/pool/v3/replay-cost.mjs", ...models])),
     verifier: "counting stub returning true; proofs are random bytes of the stated length",
     verifyMsFromConformanceReport: verifyMs, components, cases, maxRssMiB: Math.round(process.resourceUsage().maxRSS / 1024),
     limits: ["one synthetic single-backing segment of spends with empty-root anchors; no imports, scopes, publications or demands",

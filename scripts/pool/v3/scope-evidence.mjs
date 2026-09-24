@@ -91,13 +91,26 @@ export function resolveTerms(codec, trails, segment, entry, index) {
   return found;
 }
 
+/** The decoded terms of a field resolveTerms returned, decoded once per
+ * field. Resolution already verified its signature and name strictly, so
+ * callers pass these through instead of verifying the field again. */
+const decodedTerms = new WeakMap();
+export function rootTermsOf(codec, signed) {
+  if (!decodedTerms.has(codec)) decodedTerms.set(codec, new WeakMap());
+  const memo = decodedTerms.get(codec);
+  if (!memo.has(signed)) memo.set(signed, codec.decodeRootTerms(signed.terms));
+  return memo.get(signed);
+}
+
+/** The segment's header with every scoped field resolved (`terms[i]` for
+ * `header.entries[i]`) and decoded (`rootTerms[i]`). */
 export function authenticatedScope(trails, segment, codec) {
   const carrier = trails.find(trail => same(hash(trail.header), segment));
   if (carrier === undefined) throw new EvidenceRefusal("unresolved-evidence");
   const header = codec.decodeSegmentHeader(carrier.header);
   const terms = header.entries.map((entry, i) => resolveTerms(codec, trails, segment, entry, i));
   if (terms.some(signed => signed === undefined)) throw new EvidenceRefusal("unresolved-evidence");
-  return { header, terms };
+  return { header, terms, rootTerms: terms.map(signed => rootTermsOf(codec, signed)) };
 }
 
 export function checkpointScope(trails, backing, digest, snapshot, codec) {

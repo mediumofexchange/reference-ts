@@ -1,20 +1,21 @@
 {
   "status": "offline-decoder-feasibility-only",
   "node": "v24.6.0",
-  "checks": 20050,
+  "checks": 39637,
   "decoder": {
     "package": "ergo-lib-wasm-nodejs",
-    "version": "0.29.0-alpha-2f840d3",
+    "version": "0.28.0-2f840d3.release",
     "source": "https://github.com/ergoplatform/sigma-rust/tree/2f840d3872367d6181d66d4a168194dbefad77f1",
-    "provenance": "npm gitHead metadata of a pre-release; package integrity pinned, build not independently reproduced",
-    "wasmSha256": "65143062c54766fbc79b721ed77c43d199604c31bef535b99dca3b8842e1ea16"
+    "provenance": "vendored release build of that commit (vendor/ergo-lib-wasm-nodejs), reproduced from source by sigma-release-build.sh on a Windows host; every installed file checked against the pinned vendor SHA256SUMS",
+    "wasmSha256": "0d20038513c72a9daf859e3ea278735caef43305cde6bc7fb2764e8d933aa28a"
   },
   "inputManifestSha256": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
   "files": {
     "decoder-check.mjs": "6cc6a05640c808d6cd223610365e1f3cf4294a077148a77f273e1b3a3235bef8",
-    "decoder-cases.mjs": "6cb5f26c5df103f76bb186cf7fd6ff4aafd1107fbd8a5928962ba27894ed618a",
-    "package.json": "0b70863d77be0db3e944e4594bfd126a705ec0953053af0e1ce9198f7a436610",
-    "package-lock.json": "9133136e72d45c7bf8427d0cef6360454d2f12775a91dd6b1031ff6f8fbd6a70"
+    "decoder-cases.mjs": "5480bb64a873f906e081176dc011762f8bdf0d41a33a8414984563e9296cc3c5",
+    "decoder.mjs": "f2ab6943b8ab15ee236fefea12731a8e601e382c2da9b211b100bf239e288b26",
+    "package.json": "3e440154ec6bb0a3bdcc8f931a8e2e025f3c4233c3d4a817f9ef0b93541f4946",
+    "package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e"
   },
   "blocks": [
     {
@@ -47,6 +48,8 @@
   "rawParserTrailingBytesAccepted": 29,
   "rawParserOverlongCountsAccepted": 29,
   "strictWrapperRejectedBothForEveryTransaction": true,
+  "decoderMjsRefusals": 19444,
+  "decoderMjsMatchedNodeFieldsForEveryTransaction": true,
   "treeVersionsRead": {
     "0": 72,
     "1": 3,

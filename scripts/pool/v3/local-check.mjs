@@ -29,6 +29,7 @@ import { checkErgoReplay, replayPairs, underErgo } from "./ergo-check.mjs";
 import { field } from "../fixtures.mjs";
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration,
   readCandidateKeys, loadConfigurationCodecs } from "./candidate.mjs";
+import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../../..");
 assert(process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--ergo"), "unknown local-check option");
@@ -1218,28 +1219,17 @@ try {
       result.candidates.forEach(x => assert.equal(x.spendable, false));
     }
   });
-  const sources = ["scripts/pool/v3/local-replay.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/local-check.mjs",
-    "scripts/pool/v3/fixture-venue.mjs", "scripts/pool/v3/import-check.mjs", "scripts/pool/v3/ergo-check.mjs",
-    "scripts/pool/v3/scope-replay.mjs", "scripts/pool/v3/scope-check.mjs", "scripts/pool/v3/scope-evidence.mjs",
-    "scripts/pool/v3/scope-recovery.mjs", "scripts/pool/v3/scope-recovery-check.mjs", "scripts/pool/v3/scope-intrinsic-check.mjs",
-    "scripts/pool/v3/fault-evidence.mjs", "scripts/pool/v3/fault-check.mjs", "model/pool-v3-fault-evidence.ts",
-    "scripts/pool/v3/authorization-evidence.mjs", "scripts/pool/v3/authorization-check.mjs",
-    "src/keys.ts",
-    "scripts/pool/v3/recovery-state.mjs", "scripts/pool/v3/recovery-check.mjs",
-    "scripts/pool/v3/receipt-state.mjs", "scripts/pool/v3/receipt-check.mjs", "scripts/pool/v3/scope-receipt-check.mjs",
-    "scripts/pool/v3/non-service.mjs", "scripts/pool/v3/non-service-check.mjs", "scripts/pool/v3/scope-count-check.mjs",
-    "scripts/pool/delivery/evidence-reader.mjs", "scripts/pool/delivery/crypto.mjs", "scripts/pool/spent-set/radix.mjs",
-    "model/pool-v3-records.ts", "model/pool-v3-commitments.ts", "model/pool-v3-trail.ts", "model/pool-v3-headers.ts",
-    "model/pool-v3-configuration.ts", "model/pool-v3-terms.ts", "model/pool-v3-package.ts", "model/pool-v3-range.ts",
-    "scripts/pool/v3/candidate.mjs", "scripts/pool/v3/candidate-manifest.json",
-    "src/pool/note-tree.ts", "src/pool/notes.ts", "src/pool/poseidon2.ts", "src/pool/scope.ts",
-    "scripts/pool/v3/circuits/issue.nr", "scripts/pool/v3/circuits/spend.nr", "scripts/pool/v3/circuits/burn.nr",
-    "scripts/pool/v3/circuits/demand.nr", "scripts/pool/v3/circuits/settle.nr", "scripts/pool/v3/circuits/request.nr"];
-  if (withErgo) sources.push("model/pool-v3-ergo-profile.ts", "experiments/ergo-range/decoder.mjs",
-    "experiments/ergo-range/replay-venue.mjs", "experiments/ergo-range/replay-fixture.mjs",
-    "experiments/ergo-range/replay-venue-check.mjs", "experiments/ergo-range/package-lock.json");
+  // The repository sources the verdict executes, from the relative import graph (dist modules with their src
+  // sources), the compiled model roots, and the circuits, helpers and manifest the pinned identities come from.
+  // Packages are bound by the lockfiles; the vendored decoder by its checksum list.
+  const models = ["trail", "configuration", "terms", "package", "range", "fault-evidence", ...(withErgo ? ["ergo-profile"] : [])];
+  const sources = sourceClosure(["scripts/pool/v3/local-check.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/compile.mjs",
+    ...models.map(name => `model/pool-v3-${name}.ts`), "scripts/pool/v3/candidate-manifest.json",
+    ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
+    "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json",
+    ...(withErgo ? ["experiments/ergo-range/package-lock.json", "experiments/ergo-range/vendor/ergo-lib-wasm-nodejs/SHA256SUMS"] : [])]);
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-22", specification: "183c09f", node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-22", specification: V3_SPECIFICATION, node: process.version,
     compactIntrinsic: intrinsicPairs.map(item => ({ packageBytes: portable(item.payload).package.length, result: item.result })),
     compactAuthorizations: authorizationPairs.map(item => ({ packageBytes: portable(item.payload).package.length, result: item.result })),
     compactFaults: { faultRecordBytes: imported.compact.faultBytes,
@@ -1250,7 +1240,7 @@ try {
     fixtureVenueRecords: complete.venue.records.length,
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
     platform: process.platform, checks, identities, metrics,
-    sourceSha256Lf: Object.fromEntries(sources.map(path => [path, sha(readFileSync(join(root, path), "utf8").replaceAll("\r\n", "\n"))])),
+    sourceSha256Lf: sourceHashes(sources),
     audit, receiver, dependency, imports: { packageBytes: portable(imported.payload).package.length,
       audit: imported.result, receiver: imported.receiver },
     silenceImports: { packageBytes: portable(silent.payload).package.length, audit: silent.result, receiver: silent.receiver },

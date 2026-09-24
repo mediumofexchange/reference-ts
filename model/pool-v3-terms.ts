@@ -164,5 +164,8 @@ export function verifyRootTermsSignature(bytes: Uint8Array, signature: Uint8Arra
     const sig = own(signature, 64, "signature", true);
     const fields = decodeRootTerms(snapshot);
     return verifySignatureStrict(sig, rootTermsSignatureMessage(snapshot), fields.obligor);
-  } catch { return false; }
+  } catch (error) {
+    if (error instanceof EncodingError) return false;
+    throw error;
+  }
 }

@@ -266,7 +266,11 @@ function pairWith(other) {
 }
 const pair = pairFile === undefined ? null : { stateSha256: sha256(readFileSync(pairFile)), ...pairWith(JSON.parse(readFileSync(pairFile, "utf8"))) };
 
-const report = { status: "mainnet-observed-passively", node: process.version, nodeUrl: state.nodeUrl, nodeInfo: state.node,
+// The chain check decides the status and exit code: recorded blocks the node's chain does not hold at their
+// heights, headers that do not link, a missing height or a slice that stops short of the reported tip each fail it.
+const chainFailed = chain !== null && (chain.mismatched.length > 0 || chain.unlinked.length > 0 ||
+  chain.heights !== chain.expected || !chain.toTip.endsAtReportedTip);
+const report = { status: chainFailed ? "chain-check-failed" : "mainnet-observed-passively", node: process.version, nodeUrl: state.nodeUrl, nodeInfo: state.node,
   chain, pair, requests, failedRequests: failures, stateSha256: sha256(readFileSync(stateFile)), collector: state.collector ?? null, reportedBy: files,
   settings: reportOnly ? null : { hours, tailMinutes, pollSeconds, delayMs, reorgWindow: REORG_WINDOW }, ...summarize(state),
   limitations: [
@@ -283,3 +287,4 @@ const report = { status: "mainnet-observed-passively", node: process.version, no
 const text = `${JSON.stringify(report, null, 2)}\n`;
 if (out) { writeFileSync(resolve(root, out), text); console.error(`report written to ${out}`); }
 process.stdout.write(text);
+if (chainFailed) { console.error("the chain check failed; see report.chain"); process.exitCode = 1; }

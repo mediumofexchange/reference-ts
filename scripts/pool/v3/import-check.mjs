@@ -362,8 +362,9 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
     assert.equal(total, await smallest(compose([a0, a1, b0, b2, c0, c1, d0])));
     // a1, b1 and b2 each add one new position; openings and c1 add none.
     if (!silence) assert.equal(total, 3n);
-    for (const importLimits of [null, { maxCheckpoints: 128n }, { maxCheckpoints: -1n, maxEvents: 1n }, { maxCheckpoints: 1, maxEvents: 1n }]) {
-      assert.equal((await replayLocalPackage(payload, { ...verifier, importLimits }, codec)).status, "unresolved-evidence");
+    // An invalid reader budget is the reader's own configuration error, not missing evidence.
+    for (const importLimits of [null, 1n, { maxCheckpoints: 128n }, { maxCheckpoints: -1n, maxEvents: 1n }, { maxCheckpoints: 1, maxEvents: 1n }]) {
+      await assert.rejects(replayLocalPackage(payload, { ...verifier, importLimits }, codec), { name: "TypeError", message: "invalid import limits" });
     }
   });
   let refusedPayload;

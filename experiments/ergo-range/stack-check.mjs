@@ -57,8 +57,13 @@ if (args[0] === "--decoder") {
   process.exit(0);
 }
 
+// A trial that does not finish in time is its own outcome, never a success.
+const TRIAL_TIMEOUT_MS = 120_000;
 const run = (stackKb, childArgs) => {
-  const r = spawnSync(process.execPath, [`--stack-size=${stackKb}`, join(here, "stack-check.mjs"), ...childArgs], { encoding: "utf8" });
+  const r = spawnSync(process.execPath, [`--stack-size=${stackKb}`, join(here, "stack-check.mjs"), ...childArgs],
+    { encoding: "utf8", timeout: TRIAL_TIMEOUT_MS, windowsHide: true });
+  if (r.error?.code === "ETIMEDOUT") return "timeout";
+  if (r.error !== undefined) throw r.error;
   return (r.stdout.trim().split("\n").at(-1) ?? "").trim() || `exit-${r.status}`;
 };
 // The least stack (KB, to 8) at which a trial succeeds, or null above MAX_KB.

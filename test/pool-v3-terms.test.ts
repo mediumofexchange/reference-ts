@@ -210,5 +210,9 @@ describe("v3 model constant-root terms", () => {
       expect(terms.verifyRootTermsSignature(bad as unknown as Uint8Array, Buffer.alloc(64))).toBe(false);
       expect(terms.verifyRootTermsSignature(raw(fields()), bad as unknown as Uint8Array)).toBe(false);
     }
+    // Unexpected failures are not verification results.
+    const failing = Object.defineProperty(new Uint8Array(64), "buffer", { get() { throw new RangeError("unexpected"); } });
+    expect(() => terms.verifyRootTermsSignature(failing, Buffer.alloc(64))).toThrow(RangeError);
+    expect(() => terms.verifyRootTermsSignature(raw(fields()), failing)).toThrow(RangeError);
   });
 });

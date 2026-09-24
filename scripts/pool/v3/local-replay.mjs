@@ -15,7 +15,7 @@ import { recoveryState, effectOf, checkRecovery, applyRecovery, tagOf } from "./
 import { receiptWalk } from "./receipt-state.mjs";
 import { countNonService } from "./non-service.mjs";
 import { classifyScopes } from "./scope-replay.mjs";
-import { checkpointScope, resolveTerms, servedTrail, trailEvidenceChain } from "./scope-evidence.mjs";
+import { checkpointScope, resolveTerms, rootTermsOf, servedTrail, trailEvidenceChain } from "./scope-evidence.mjs";
 import { boundFaultInputs, faultObserver } from "./fault-evidence.mjs";
 
 const same = (a, b) => compareBytes(a, b) === 0;
@@ -25,7 +25,8 @@ export const PACKAGE_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxItems: 10
 export const RANGE_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxEntries: 4096n });
 // Work budgets for imported closures, including failed replays and merge work.
 // Events are the records a replay actually processes: a resumed checkpoint
-// charges only its positions after the last valid one. Copying the resumed
+// charges only its positions after the last valid one, and a replay charges
+// imported events only when it builds their ancestry. Copying the resumed
 // state is not charged; it hashes and verifies nothing and is bounded by the
 // checkpoint and event budgets together. A reader may select other local
 // budgets on its verifier; they are never protocol bounds.
@@ -33,10 +34,10 @@ export const IMPORT_LIMITS = Object.freeze({ maxCheckpoints: 128n, maxEvents: 81
 function importLimitsOf(verifier) {
   const limits = verifier?.importLimits;
   if (limits === undefined) return IMPORT_LIMITS;
-  if (limits === null || typeof limits !== "object") throw new EncodingError("invalid import limits");
+  if (limits === null || typeof limits !== "object") throw new TypeError("invalid import limits");
   // Each field is read once, so a getter cannot pass validation and then change.
   const { maxCheckpoints, maxEvents } = limits;
-  if (!isValue(maxCheckpoints) || !isValue(maxEvents)) throw new EncodingError("invalid import limits");
+  if (!isValue(maxCheckpoints) || !isValue(maxEvents)) throw new TypeError("invalid import limits");
   return Object.freeze({ maxCheckpoints, maxEvents });
 }
 const flags = Object.freeze({ fullV3Replay: false, currentRangeAuthenticated: false,
@@ -183,10 +184,11 @@ async function replayTrail({ selection, terms, scopedTerms, header, verifier, co
     [...(from?.totals ?? [])].map(([key, value]) => [key, { ...value }]));
   // One immutable imported frontier per local segment replay, shared by its
   // events. Local positions order themselves without quadratic ancestor sets.
+  // Building it reads each imported event once; a resumed replay reuses it.
   const ancestry = base?.ancestry ?? new Map();
-  for (const event of new Map(imported?.events).values()) {
+  if (base === undefined) for (const event of new Map(imported?.events).values()) {
     chargeEvents(1n);
-    if (base === undefined && event.segment !== undefined && (ancestry.get(event.segment) ?? 0n) < event.position) ancestry.set(event.segment, event.position);
+    if (event.segment !== undefined && (ancestry.get(event.segment) ?? 0n) < event.position) ancestry.set(event.segment, event.position);
   }
   const totalFor = backing => {
     const key = hex(backing);
@@ -442,6 +444,8 @@ async function classifyImports(context, directories, record, evidence) {
   const force = [], publicationVerdicts = [];
   const limits = context.importLimits;
   const charge = (amount = 1n) => { events += amount; if (events > limits.maxEvents) throw new EvidenceRefusal("resource-refusal"); };
+  // Each publication is charged once, for its answer; later passes do not charge it again.
+  if (publications !== undefined) charge(BigInt(publications.length));
   // At one index the whole publication group is read BEFORE any checkpoint.
   // Effects change recovery state but never extend the snapshot's forest.
   const publishThrough = async through => {
@@ -451,10 +455,11 @@ async function classifyImports(context, directories, record, evidence) {
     if (publications === undefined) {
       if (canonical === undefined || through - canonical.index <= duration) return;
       publications = (await view.ask(4, selection.backing)).entries;
+      charge(BigInt(publications.length));
     }
     while (publicationAt < publications.length && publications[publicationAt].index <= through) {
       const entry = publications[publicationAt++], item = { index: entry.index.toString(), ordinal: entry.ordinal.toString(), force: false };
-      publicationVerdicts.push(item); charge();
+      publicationVerdicts.push(item);
       let publication;
       try { publication = codec.decodePublication(entry.record); }
       catch (error) {
@@ -528,10 +533,8 @@ async function classifyImports(context, directories, record, evidence) {
       const scope = checkpointScope(trails, selection.backing, entry.digest, snapshot, codec), { header } = scope;
       if (header.entries.length !== 1) throw new ScopeRequired();
       await context.faults.inspect(held, directories.get(hex(c.root)), scope);
-      const scoped = header.entries[0], signed = scope.terms[0];
-      if (!same(codec.rootTermsName(signed.terms), selection.backing) || !codec.verifyRootTermsSignature(signed.terms, signed.signature)) {
-        throw new EvidenceRefusal("unresolved-evidence");
-      }
+      // checkpointScope resolved this one-entry scope's terms for the selected backing.
+      const scoped = header.entries[0];
       const item = { operator: hex(c.operator), sequence: c.sequence.toString(), index: held.index.toString() };
       try {
         requireReplay(same(header.domain, selection.domain) && same(header.venue, selection.venue) && same(header.operator, c.operator) &&
@@ -675,9 +678,9 @@ export async function replayLocalPackage(input, verifier, codec) {
     const suppliedTrails = [trail, ...decodedTrails(byteList(supplied.trails, "trails"), codec)];
     const signedTerms = header.entries.map((entry, i) => resolveTerms(codec, suppliedTrails, sha256(trail.header), entry, i));
     if (signedTerms.some(field => field === undefined)) throw new EvidenceRefusal("unresolved-evidence");
-    const signed = signedTerms[selectedEntry], terms = codec.decodeRootTerms(signed.terms);
-    requireReplay(codec.verifyRootTermsSignature(signed.terms, signed.signature), "TERMS_SIGNATURE");
-    requireReplay(same(codec.rootTermsName(signed.terms), selection.backing), "TERMS_NAME");
+    // Resolution verified the selected field's signature and its name as the
+    // selected backing (readLocalEvidence binds the backing to the header).
+    const terms = rootTermsOf(codec, signedTerms[selectedEntry]);
     requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
     // Empty-opening selections retain the original-operator scope. Imports
     // instead require the term-by-term record walk below.
