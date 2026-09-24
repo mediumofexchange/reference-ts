@@ -279,13 +279,13 @@ export function segmentAuthority(header: SegmentHeader): SegmentAuthority {
 }
 
 export function copySegmentAuthority(authority: SegmentAuthority): SegmentAuthority {
-  if (typeof authority !== "object" || authority === null || !isField(authority.scopeRoot)) {
-    throw new EncodingError("malformed segment authority");
-  }
+  if (typeof authority !== "object" || authority === null) throw new EncodingError("malformed segment authority");
+  const scopeRoot: unknown = authority.scopeRoot;
+  if (!isField(scopeRoot)) throw new EncodingError("malformed segment authority");
   return Object.freeze({
     domain: copyBytes(authority.domain),
     segment: copyBytes(authority.segment),
-    scopeRoot: authority.scopeRoot,
+    scopeRoot,
     operator: copyBytes(authority.operator),
   });
 }
