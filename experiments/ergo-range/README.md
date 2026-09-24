@@ -252,6 +252,39 @@ through the same verifier with every real register constant decoded beside
 sigma-rust's. Its [retained report](../../docs/ergo-range-profile-verification.json)
 is an offline observation; nothing connects to a node or selects the profile.
 
+## Contained decoder
+
+The reader's decoder is `contained-decoder.mjs`; the replay adapter
+(`replay-venue.mjs`), the v3 Ergo check and `profile-check.mjs` read through
+it. `wasm-meter.mjs` derives, from the vendored release build, a module with
+fuel charged at every function entry and loop head and with bulk memory,
+memory growth and table growth routed through charged, capped helpers; the
+derivation is deterministic and its SHA-256 is pinned. Each transaction runs
+in a fresh instance of that module with every import trapping, under the
+budget `budgetFor(length)` declares; fuel, memory, table, trap and stack
+exhaustion refuse that transaction with a reason and leave the next
+unaffected. `decoder.mjs` stays the unmetered reference the chain-cost,
+equivalence, publication and stack probes bound in their reports.
+
+`contained-check.mjs` runs in `npm run check:ergo:range`: exact-accounting
+controls on a hand-assembled module, the corpus against `decoder.mjs`,
+reduced budgets and synthetic hostile inputs. `contained-range.mjs` compares
+the contained decoder's fields with the node's over cached blocks and
+records each transaction's fuel and memory; the
+[retained report](../../docs/ergo-decoder-containment-verification.json)
+embeds its summaries:
+
+```powershell
+node experiments/ergo-range/contained-range.mjs corpus > scratch/containment/corpus.json
+node experiments/ergo-range/contained-range.mjs week > scratch/containment/week.json
+node experiments/ergo-range/contained-range.mjs retained --from 1830001 --to 1846367 > scratch/containment/retained-a.json
+# ... likewise 1846368-1862734 (b) and 1862735-1879100 (c), in parallel if cores allow
+node experiments/ergo-range/contained-check.mjs --report docs/ergo-decoder-containment-verification.json --ranges scratch/containment/corpus.json,scratch/containment/week.json,scratch/containment/retained-a.json,scratch/containment/retained-b.json,scratch/containment/retained-c.json
+```
+
+The week reads `scratch/ergo-chain` and the retained set
+`scratch/ergo-chain-own` ([Real-chain exhaustion cost](#real-chain-exhaustion-cost)).
+
 ## Metered decoder feasibility
 
 `metered-check.mjs` ([Decoder build](#decoder-build) above) needs a pinned
