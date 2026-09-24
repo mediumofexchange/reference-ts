@@ -22,7 +22,6 @@ import { closeSync, createReadStream, mkdirSync, openSync, readFileSync, writeFi
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { createInterface } from "node:readline";
-import { blake2b } from "@noble/hashes/blake2b";
 import { serializeTransaction } from "@fleet-sdk/serializer";
 import { Transaction } from "ergo-lib-wasm-nodejs";
 import { decodeContained, DERIVED_SHA256, VENDORED_SHA256 } from "./contained-decoder.mjs";
@@ -55,7 +54,7 @@ const firstLineOf = result => `${result.stderr ?? ""}${result.stdout ?? ""}`.tri
 const compiled = spawnSync(join(jdk, "bin", "javac"), ["--release", "21", "-nowarn", "-cp", jar, "-d", join(work, "classes"),
   join(here, "node-read", "NodeRead.java")], { encoding: "utf8" });
 assert.equal(compiled.status, 0, `javac: ${compiled.stderr}`);
-const node = { jarSha256: JAR_SHA256, runtime: firstLineOf(spawnSync(java, ["-version"], { encoding: "utf8" })),
+const node = { jarSha256: JAR_SHA256, runtimeReleaseSha256: sha256(readFileSync(join(nodeDir, "jre", "release"))), runtime: firstLineOf(spawnSync(java, ["-version"], { encoding: "utf8" })),
   compiler: firstLineOf(spawnSync(join(jdk, "bin", "javac"), ["-version"], { encoding: "utf8" })), heap: "-Xmx4G, as ergo-node.ps1 runs it" };
 
 // Seeds: every corpus transaction, pinned by the manifest before parsing, serialized as decoder-cases.mjs does.
@@ -74,12 +73,11 @@ for (const fixture of manifest.fixtures) {
 }
 seeds.splice(seedLimit);
 
-// The compared fields, from the decoder's view and from the node's JSON.
-const witnessOf = proofs => hex(blake2b(Buffer.concat(proofs.map(p => Buffer.from(p, "hex"))), { dkLen: 32 }).subarray(1));
+// The compared fields, from the decoder's view and as the node states them (NodeRead.java: its id and witness id, each
+// output's parsed ErgoTree bytes and register constants).
 const viewFields = view => ({ id: hex(view.id), witnessId: hex(view.witnessId),
   outputs: view.outputs.map(o => ({ ergoTree: hex(o.ergoTree), registers: Object.fromEntries(Object.entries(o.registers).map(([k, v]) => [k, hex(v)])) })) });
-const nodeFields = tx => ({ id: tx.id, witnessId: witnessOf(tx.inputs.map(i => i.spendingProof.proofBytes)),
-  outputs: tx.outputs.map(o => ({ ergoTree: o.ergoTree, registers: { ...(o.additionalRegisters ?? {}) } })) });
+const nodeFields = tx => ({ id: tx.id, witnessId: tx.witnessId, outputs: tx.outputs.map(o => ({ ergoTree: o.ergoTree, registers: { ...o.registers } })) });
 function differences(a, b) {
   const found = [];
   if (a.id !== b.id) found.push("id");
@@ -142,21 +140,30 @@ seeds.forEach(({ bytes }, seed) => {
 console.error(`${seeds.length} seeds, ${cases.length} distinct cases (${duplicates} duplicates or empty dropped)`);
 
 // The node reads every case in one run of its runtime; its answers stream back in case order.
-const casesFile = join(work, "cases.txt"), nodeFile = join(work, "node.jsonl");
-writeFileSync(casesFile, cases.map(c => hex(c.bytes)).join("\n") + "\n");
+const readByNode = (inputs, name) => {
+  const inputFile = join(work, `${name}.txt`), outputFile = join(work, `${name}-node.jsonl`);
+  writeFileSync(inputFile, inputs.join("\n") + "\n");
+  const fd = openSync(outputFile, "w");
+  const run = spawnSync(java, ["-Xmx4G", "-cp", `${jar}${process.platform === "win32" ? ";" : ":"}${join(work, "classes")}`, "NodeRead", inputFile],
+    { stdio: ["ignore", fd, "pipe"], encoding: "utf8", timeout: 4 * 3600 * 1000 });
+  closeSync(fd);
+  assert.equal(run.status, 0, `the node harness ran: ${run.stderr}`);
+  return outputFile;
+};
 const t0 = performance.now();
-const fd = openSync(nodeFile, "w");
-const run = spawnSync(java, ["-Xmx4G", "-cp", `${jar}${process.platform === "win32" ? ";" : ":"}${join(work, "classes")}`, "NodeRead", casesFile],
-  { stdio: ["ignore", fd, "pipe"], encoding: "utf8", timeout: 4 * 3600 * 1000 });
-closeSync(fd);
-assert.equal(run.status, 0, `the node harness ran: ${run.stderr}`);
+const nodeFile = readByNode(cases.map(c => hex(c.bytes)), "cases");
 const nodeMs = performance.now() - t0;
 
 const counts = {};
 const tally = (...path) => { let at = counts; for (const key of path.slice(0, -1)) at = at[key] ??= {}; at[path.at(-1)] = (at[path.at(-1)] ?? 0) + 1; };
 const samples = {};
 const SAMPLE = 20;
+// Resource refusals of either side are counted, never sampled: a sample is a reproducer.
+const RESOURCE = /^java\.lang\.(OutOfMemoryError|StackOverflowError|VirtualMachineError|InternalError)$/;
+const RESOURCE_REFUSALS = new Set(["input", "fuel", "memory", "table", "depth", "stack", "trap"]);
+let resourceCases = 0;
 const sample = (outcome, c, extra) => {
+  if (RESOURCE_REFUSALS.has(extra?.decoder) || extra?.node === "resource") { resourceCases++; return; }
   const list = samples[outcome] ??= [];
   if (list.length < SAMPLE) list.push({ seed: c.seed, kind: c.kind, at: c.at, ...(c.value === undefined ? {} : { value: c.value }),
     ...(c.to === undefined ? {} : { to: c.to, donor: c.donor }), length: c.bytes.length, ...extra });
@@ -164,8 +171,6 @@ const sample = (outcome, c, extra) => {
 // What the mutations reached: per compared field, how many cases both sides read equally with that field unlike the seed's.
 const reached = {};
 const seedFields = [];
-// Resource refusals of the node's runtime are counted, not described.
-const RESOURCE = /^java\.lang\.(OutOfMemoryError|StackOverflowError|VirtualMachineError|InternalError)$/;
 // The contained decoder refuses a sigma-rust error as the import that builds its JavaScript Error. For those, the
 // vendored build's own parser (decoder.mjs's reference instance; the contained run has already bounded that parse)
 // names the error, reduced to a category.
@@ -199,10 +204,16 @@ let sameIdsDiffer = 0;
 const note = (group, c, result, extra) => {
   tally(group, result.verdict);
   // Split by the node's stateless verdict: a denial matters where the node's stateless checks pass.
-  if (result.verdict === "decoderRefuses") tally(`${group}Refusals`, extra.stateless ? "statelessOk" : "statelessFailed", result.refusal);
+  if (result.verdict === "decoderRefuses") {
+    tally(`${group}Refusals`, extra.stateless ? "statelessOk" : "statelessFailed", result.refusal);
+    tally(`${group}RefusalsBySeedHeight`, seeds[c.seed].height);
+  }
   if (result.verdict === "sameIdsDiffer") sameIdsDiffer++;
   if (result.verdict !== "equal") sample(`${group}:${result.verdict}`, c, { ...extra, ...(result.fields ? { fields: result.fields } : { decoder: result.refusal }) });
 };
+// The node's rewrites, each read by the node again below: its writing must be what it reads back.
+const rewrites = new Map();
+let uncompared = 0;
 let versionContext, index = 0, decodeMs = 0, maxDecodeMs = 0;
 const lines = createInterface({ input: createReadStream(nodeFile, "utf8"), crlfDelay: Infinity });
 for await (const line of lines) {
@@ -215,11 +226,18 @@ for await (const line of lines) {
   const took = performance.now() - t1;
   decodeMs += took; maxDecodeMs = Math.max(maxDecodeMs, took);
   let outcome;
-  if (answer.encodeFailed !== undefined) { outcome = "nodeEncodeFailed"; sample(outcome, c, { node: answer.encodeFailed }); }
+  // A case the node read but could not state, or refused for its runtime's resources while the decoder reads it, was
+  // never compared: the run is then inconclusive.
+  if (answer.encodeFailed !== undefined) { outcome = "nodeEncodeFailed"; uncompared++; sample(outcome, c, { node: answer.encodeFailed }); }
   else if (answer.refused !== undefined) {
     const resource = RESOURCE.test(answer.refused);
     // Bytes the node refuses under this version context cannot be a transaction of a version-4 block.
-    if (decoded.view !== undefined) { outcome = "decoderReadsNodeRefuses"; tally("decoderReadsNodeRefusesBy", resource ? "resource" : answer.refused); sample(outcome, c, resource ? { node: "resource" } : { node: answer.refused, message: answer.message }); }
+    if (decoded.view !== undefined) {
+      outcome = "decoderReadsNodeRefuses";
+      if (resource) uncompared++;
+      tally("decoderReadsNodeRefusesBy", resource ? "resource" : answer.refused);
+      sample(outcome, c, resource ? { node: "resource" } : { node: answer.refused, message: answer.message.replace(/@[0-9a-f]+/g, "@") });
+    }
     else outcome = "bothRefuse";
     tally("nodeRefusals", resource ? "resource" : answer.refused);
   } else {
@@ -230,6 +248,7 @@ for await (const line of lines) {
       const result = compare(c.bytes, answer.tx, decoded);
       outcome = answer.rewritten ? "nodeReadsAndRewrites" : "nodeReads";
       note(outcome, c, result, extra);
+      if (c.kind === "seed") assert(answer.tx.id === seeds[c.seed].id && !answer.rewritten, `the node reads seed ${c.seed} under its chain id, unchanged`);
       if (result.verdict === "equal" && !answer.rewritten) {
         if (c.kind === "seed") seedFields[c.seed] = nodeFields(answer.tx);
         else if (seedFields[c.seed] !== undefined) for (const field of differences(nodeFields(answer.tx), seedFields[c.seed])) reached[field] = (reached[field] ?? 0) + 1;
@@ -241,8 +260,9 @@ for await (const line of lines) {
       note("nodeReadsPrefix", c, compare(c.bytes, answer.tx, decoded), { read: answer.read, ...extra });
       note("prefixOnly", c, compare(c.bytes.subarray(0, answer.read), answer.tx), { read: answer.read, ...extra });
     }
-    // Where the node writes what it read as other bytes, its id and fields are those bytes'; the decoder reads them too.
-    if (answer.rewritten) note("rewrittenBytes", c, compare(Buffer.from(answer.rewritten, "hex"), answer.tx), extra);
+    // Where the node writes what it read as other bytes, its ids and stated fields are those bytes'; the rewrite is read
+    // by the node and the decoder again below.
+    if (answer.rewritten && !rewrites.has(answer.rewritten)) rewrites.set(answer.rewritten, { c, extra, fields: nodeFields(answer.tx) });
   }
   tally("outcomes", outcome);
   tally("byKind", c.kind, outcome);
@@ -272,12 +292,49 @@ const controls = { seed: controlSeed, detected: Object.fromEntries(Object.entrie
   return [field, differences(control, copy).includes(field)];
 })) };
 assert(Object.values(controls.detected).every(Boolean), `every control shows as a difference: ${JSON.stringify(controls)}`);
+// And the verdicts: a view with the node's fields is equal, with another register under the node's ids differs under
+// the same ids, and with another id is under other ids.
+const asView = f => ({ view: { id: Buffer.from(f.id, "hex"), witnessId: Buffer.from(f.witnessId, "hex"),
+  outputs: f.outputs.map(o => ({ ergoTree: Buffer.from(o.ergoTree, "hex"), registers: Object.fromEntries(Object.entries(o.registers).map(([k, v]) => [k, Buffer.from(v, "hex")])) })) } });
+const mutated = mutate => { const copy = structuredClone(control); mutate(copy); return asView(copy); };
+controls.verdicts = { equal: compare(undefined, control, asView(control)).verdict === "equal",
+  sameIdsDiffer: compare(undefined, control, mutated(CONTROLS.register)).verdict === "sameIdsDiffer",
+  otherIds: compare(undefined, control, mutated(CONTROLS.id)).verdict === "otherIds" };
+assert(Object.values(controls.verdicts).every(Boolean), `every verdict control holds: ${JSON.stringify(controls.verdicts)}`);
+
+// The node reads each distinct rewrite of its own again: stable if it reads it whole and unchanged with the fields it
+// stated for the case. The bytes a supplier of the node's writing serves are the rewrite, so the decoder is compared on
+// the rewrite against the node's reading of it. An unstable rewrite goes uncompared.
+const rewriteInputs = [...rewrites.keys()];
+const rereads = { rewrites: rewriteInputs.length, stable: 0, unstable: {} };
+if (rewriteInputs.length > 0) {
+  const answers = readFileSync(readByNode(rewriteInputs, "rewrites"), "utf8").trim().split("\n").slice(1).map(line => JSON.parse(line));
+  assert.equal(answers.length, rewriteInputs.length, "one node answer per rewrite");
+  answers.forEach((answer, i) => {
+    const { c, extra, fields } = rewrites.get(rewriteInputs[i]);
+    const reason = answer.refused !== undefined ? (RESOURCE.test(answer.refused) ? "resource" : "refused") : answer.encodeFailed !== undefined ? "encodeFailed"
+      : answer.rewritten ? "rewritesAgain" : answer.read * 2 !== rewriteInputs[i].length ? "readsPrefix"
+      : differences(nodeFields(answer.tx), fields).length > 0 ? "otherFields" : undefined;
+    if (reason === undefined) { rereads.stable++; note("rewrittenBytes", c, compare(Buffer.from(rewriteInputs[i], "hex"), answer.tx), extra); }
+    else { rereads.unstable[reason] = (rereads.unstable[reason] ?? 0) + 1; uncompared++; sample("rewriteUnstable", c, { ...extra, node: reason }); }
+  });
+}
 
 const report = {
-  status: sameIdsDiffer === 0 ? "no-same-id-disagreement-on-these-cases" : "same-id-disagreement-found",
-  sameIdsDiffer,
-  compares: "per case, the node's reading (the pinned v6.0.6 JAR's ErgoTransactionSerializer.parse under block version 4's version context, then its API encoder) against contained-decoder.mjs's: id, witness id, output count, and each output's ErgoTree bytes, register names and register constants; where the node reads a proper prefix, the decoder's reading of the whole case and of that prefix; where the node's serializer writes what it read as other bytes, the decoder's reading of those bytes",
-  verdicts: { equal: "every compared field equal", otherIds: "the id or witness id differs, so the header's transactions root refuses the decoder's reading", sameIdsDiffer: "equal ids, other output fields: the root would not catch it", decoderRefuses: "a denial: the reader leaves the ranges through such a block unresolved" },
+  status: sameIdsDiffer > 0 ? "same-id-disagreement-found" : uncompared > 0 ? "inconclusive" : "no-same-id-disagreement-on-these-cases",
+  sameIdsDiffer, uncompared, resourceCasesCountedNotSampled: resourceCases,
+  limits: [
+    "parse level: no state, proofs or full validity; the stateless verdict uses the node's initial validation settings, not mainnet's voted ones",
+    "one version context, a version-4 block's (activated 3, tree 3): blocks of earlier versions are read by the node under other contexts, and the profile does not yet refuse them",
+    `mutations of the ${seeds.length} corpus transactions only: single-byte replacements, deletions and insertions, prefixes and seeded splices`,
+    `fields no mutation both sides read alike changed: ${["id", "witnessId", "outputCount", "ergoTree", "registerNames", "register"].filter(f => !(f in reached)).join(", ") || "none"}`,
+    "the node's resource refusals depend on its runtime's heap and stack; the harness runs its main thread with -Xmx4G",
+    "for a transaction the node rewrites, the header commits to the rewrite's ids; which bytes peers and node APIs serve for it (the miner's or the rewrite), and whether the node's section serializer (writing under version context 4, 4) gives the rewrite read here (3, 3), are not measured",
+  ],
+  compares: "per case, the node's reading (the pinned v6.0.6 JAR's BlockTransactionsSerializer.parse of a one-transaction version-4 section, then the node's id, witness id, parsed ErgoTree bytes and register constants stated in that transaction's version context) against contained-decoder.mjs's: id, witness id, output count, and each output's ErgoTree bytes, register names and register constants; where the node reads a proper prefix, the decoder's reading of the whole case and of that prefix; where the node's serializer writes what it read as other bytes, the decoder's reading of those bytes",
+  verdicts: { equal: "every compared field equal", otherIds: "the id or witness id differs, so the header's transactions root refuses the decoder's reading", sameIdsDiffer: "equal ids, other output fields: the root would not catch it", decoderRefuses: "a denial: the reader leaves the ranges through such a block unresolved",
+    nodeReadsAndRewrites: "the node's ids are of its rewrite, so the reader reads such a transaction only from a supplier that serves the node's rewrite (rewrittenBytes), and is denied it from one serving the raw section bytes" },
+  rereads,
   node, versionContext,
   decoder: { vendoredWasmSha256: VENDORED_SHA256, derivedWasmSha256: DERIVED_SHA256 },
   seeds: { transactions: seeds.length, limited: Number.isFinite(seedLimit), bytes: seeds.reduce((sum, s) => sum + s.bytes.length, 0), ids: seeds.map(s => s.id) },

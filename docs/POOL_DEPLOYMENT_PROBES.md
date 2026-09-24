@@ -1482,9 +1482,9 @@ The comparison is independent of the shared serializer only because each
 block's root, over ids equal to the node's, authenticates the bytes the
 decoder reads. Inputs, data inputs, values and tokens are not compared, since
 the verifier reads outputs only. These are valid transactions from one
-node's retention window: hostile inputs, script versions only earlier
-blocks carry, and containment are not exercised, and no decoder or profile
-is selected.
+node's retention window: script versions only earlier blocks carry are not
+exercised, and no decoder or profile is selected; hostile inputs are compared
+[separately](#hostile-input-node-equivalence).
 
 ## Contained decoder
 
@@ -1540,8 +1540,69 @@ budget is the reader's and a costlier node-valid transaction is refused,
 denying the ranges through its block); a bound on the host's own memory
 (a dropped instance's memory stays until V8 collects it, and the
 per-transaction caps summed over the replay adapter's read limits reach
-16 GiB); CPU time, which fuel only approximates; node equivalence for
-hostile inputs.
+16 GiB); CPU time, which fuel only approximates. Node equivalence on
+hostile inputs is measured [below](#hostile-input-node-equivalence).
+
+## Hostile-input node equivalence
+
+Offline, the 29 corpus transactions (19,380 bytes) were mutated
+deterministically into 159,397 distinct cases: every byte replaced by four
+values, deleted, and preceded by 0x00 and 0x80, every proper prefix, and 256
+seeded splices per transaction. Each case was read by the node and by the
+contained decoder
+([guide](../experiments/ergo-range/README.md#hostile-input-node-equivalence),
+[retained report](ergo-decoder-hostile-equivalence-verification.json)). The
+node's reading is the pinned v6.0.6 JAR's own `BlockTransactionsSerializer`
+on a one-transaction version-4 section, in its bundled runtime; it states
+its id, witness id, and each output's tree and register constants as its
+serializers write them. Where the node writes what it read as other bytes,
+it and the decoder read that rewrite again; all 2,845 distinct rewrites read
+back unchanged under the same ids and fields.
+
+| Node's reading | Readings | Node's ids and fields | Other ids | Node's ids, other fields | Decoder refuses |
+|---|---|---|---|---|---|
+| Whole case, written back unchanged | 50,754 | 49,613 | 0 | 0 | 1,141 |
+| Whole case, rewritten: the case | 3,127 | 0 | 392 | 0 | 2,735 |
+| Whole case, rewritten: the rewrite | 2,845 | 1,212 | 0 | 0 | 1,633 |
+| A proper prefix: the whole case | 227 | 0 | 0 | 0 | 227 |
+| A proper prefix: the prefix | 227 | 77 | 0 | 0 | 150 |
+
+The node refused the other 105,289 cases; the decoder read 10,171 of them,
+bytes that cannot be a transaction of a version-4 block. No case was left
+uncompared and no resource limit was reached on either side.
+
+The decoder never read a case under the node's ids with other output
+fields. The reader authenticates decoded transactions only by the header's
+transactions root over their ids and witness ids, so on these cases it
+either reads what the node committed to or leaves the block unresolved.
+Controls confirm that each compared field shows as a difference and that the
+verdicts separate equal, same-id and other-id readings. Mutations changed ids,
+witness ids, trees and registers in cases both sides read alike, but never
+the output count or register names.
+
+Refusals are the finding. Of the bytes the node reads and writes back
+unchanged, the decoder refuses 1,141, and all but 7 pass the node's
+stateless checks:
+
+- 624 are expressions sigma-rust's type check refuses while the node reads
+  them untyped.
+- 71 are opcodes or methods sigma-rust does not implement.
+- 359 are box values or token amounts outside sigma-rust's bounds.
+- 87 are bytes sigma-rust writes back differently.
+
+Of the node's own rewrites it refuses 1,633, of which 1,488 fail
+sigma-rust's type check. These come from every corpus era, including 148 from block 1,876,512's
+transactions. If such a transaction is also valid against state, which this
+does not test, one placed in a block denies the reader that block's ranges
+for the price of a transaction. The rewrites add a second denial: the header
+commits to the ids of the node's rewrite, so a supplier serving a miner's
+original bytes is refused (392 cases read under other ids).
+
+Not established: validity against state or proofs; version contexts other
+than a version-4 block's (the profile accepts every header version); which
+bytes peers and node APIs serve for a rewritten transaction; inputs beyond
+single-byte mutations and splices of these 29 transactions. The stateless
+verdict uses the node's initial validation settings.
 
 ## Venue and restoration work still required
 

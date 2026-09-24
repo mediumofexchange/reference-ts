@@ -4,40 +4,26 @@ Updated: 2026-09-24
 
 ## Goal
 
-Open slice (branch `feat/hostile-node-equivalence`): Next 1's hostile-input
-node equivalence at the parse level. Acceptance: `node-read/NodeRead.java`
-reads bytes with the official v6.0.6 JAR's own `ErgoTransactionSerializer`
-(block-4 version context, the node's bundled JRE, offline) and its API
-encoder; `hostile-equivalence.mjs` runs deterministic mutations of the 29
-hash-pinned fixture transactions (byte replacements, deletions, insertions,
-prefixes, seeded cross-seed splices) through it and through
-`contained-decoder.mjs`, classifies each case (both read with equal id,
-witness id and view fields / both refuse / node reads, decoder refuses /
-decoder reads, node refuses / fields differ), with controls that a field
-difference shows; a retained report binds its sources. Limits: parse level
-only, mutations of 29 transactions, no validity or state. Stop: report,
-probe section, review; a field difference is a finding to analyse, not fix.
+No slice is open. Pick the next from Next below and state its acceptance
+here before starting.
 
 ## Status
 
+- Hostile-input node equivalence (merged 2026-09-24, reviewed): the node
+  JAR's own parser (`node-read/NodeRead.java`) against the contained decoder
+  on mutated corpus transactions; rerunning needs a JDK (`scratch/jdk/`).
 - Proof verifier failures (merged 2026-09-24, reviewed): bb.js 5.2.0's five
   malformed-proof throws verify as `false`, other failures are rethrown,
   and the verifier verifies only on its own instance, replaced after every
   throw (a reused instance fails every call after 89 throws)
   ([decision](decisions/2026-09.md#2026-09-24--answer-false-only-for-malformed-proofs-and-never-verify-on-an-instance-that-threw)).
-- Contained decoder (merged 2026-09-24, reviewed): the reader's replay
-  adapter, v3 Ergo check and profile check decode through
-  `contained-decoder.mjs`, a fresh instance per transaction of a metered
-  derivation (`wasm-meter.mjs`: fuel, memory/table caps, call-depth ceiling)
-  under a budget linear in its length; all 342,253 corpus, week and retained
-  transactions decode with the node's fields
-  ([probe](docs/POOL_DEPLOYMENT_PROBES.md#contained-decoder)). `decoder.mjs`
-  stays the unmetered reference the older reports bind.
-- Decoder node equivalence (merged 2026-09-24, reviewed): over the own
-  node's 49,100 retained blocks the release decoder reads all 314,028
-  transactions with the node's id, witness id, trees and registers
-  ([probe](docs/POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks));
-  `equivalence-driver.mjs` → `equivalence-fields.mjs` → `equivalence-summary.mjs`.
+- Contained decoder (merged, reviewed): the reader decodes through
+  `contained-decoder.mjs`, a fresh metered instance per transaction under a
+  budget linear in its length
+  ([probe](docs/POOL_DEPLOYMENT_PROBES.md#contained-decoder)); `decoder.mjs`
+  stays the unmetered reference older reports bind. Over the own node's
+  49,100 retained blocks all 314,028 transactions read with the node's fields
+  ([probe](docs/POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks)).
 - A13 replay cost, served-trail prefixes (spec 786f962) and A10 inclusion
   latency are merged and reviewed; numbers live in
   [probes](docs/POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet)
@@ -58,22 +44,24 @@ probe section, review; a field difference is a finding to analyse, not fix.
 
 ## Evidence
 
-- Own node headers, P2 testnet and replay cost: see the linked reports.
+- [Hostile-input probe](docs/POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence):
+  159,397 cases, no same-id disagreement, cheap denial classes. Own node
+  headers, P2 testnet and replay cost: see the linked reports.
 
 ## Next
 
-1. Node equivalence for hostile inputs (the contained decoder bounds cost,
-   not agreement with the node on bytes it refuses or reads differently).
-   When chain-cost's report is next re-recorded: move its decoder to
-   `contained-decoder.mjs`, fix `decoder.mjs`'s header comment, bind the vendored JS glue
-   (`vendor/.../ergo_lib_wasm.js`, as `equivalence-fields.mjs` does) and share
-   its helpers (exact-text split, fetch/retry, model compile) with the
-   equivalence scripts; each move changes bound hashes.
-2. Deferred review items: retire the v1 store-codec path if no v1 journal
-   must load; shared v3 fixture/byte helpers across the check scripts. (A
-   v3 replay resumes only under its selected backing already: the resume
-   key carries it, `local-replay.mjs` `resumeKeyOf`.)
-3. Later: a Linux or CI reproducible build of the decoder pin; the note
+1. Reader denial by decoder strictness: sigma-rust refuses bytes the node
+   reads (tree type checks, opcodes, value bounds, its own rewrites), so one
+   such transaction, if block-valid (untested), denies the reader its
+   block. Decide: a lenient framer for ids with full decoding only where
+   the profile reads outputs, or a recorded denial limit. Also: the profile
+   accepts every header version, equivalence is measured at block 4 only.
+2. When chain-cost's report is next re-recorded: move it to
+   `contained-decoder.mjs`, fix `decoder.mjs`'s header comment, bind the
+   vendored glue and share helpers with the equivalence scripts.
+3. Deferred review items: retire the v1 store-codec path if no v1 journal
+   must load; shared v3 fixture/byte helpers across the check scripts.
+4. Later: a Linux or CI reproducible build of the decoder pin; the note
    tree's Poseidon2 on Barretenberg wasm (about 6x); a per-read host-memory
    budget for the contained decoder; a warmed spare verifier instance if
    admission's ~1.1 s per malformed proof matters.
@@ -104,7 +92,8 @@ probe section, review; a field difference is a finding to analyse, not fix.
 ## Open questions
 
 Roughly **50% done / 50% remaining**, plausible range **40–60%**, reassessed
-2026-09-24: the venue cost is measured and small, P2 is done on the testnet
-and the reader's decoder is contained under a budget; selection still needs
-an authenticated header source and hostile-input node equivalence. Runtime integration, selected venue/decoder, qualified custody
-and continuous wallet operation dominate remaining effort.
+2026-09-24: venue cost measured and small, P2 done on the testnet, the
+decoder contained and parse-equivalent to the node on mutated inputs;
+selection still needs an authenticated header source and an answer to
+decoder-strictness denial. Runtime integration, selected venue/decoder,
+qualified custody and continuous wallet operation dominate.

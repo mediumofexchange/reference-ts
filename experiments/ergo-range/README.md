@@ -294,13 +294,16 @@ The week reads `scratch/ergo-chain` and the retained set
 `hostile-equivalence.mjs` mutates the 29 hash-pinned corpus transactions
 deterministically (every byte replaced by four values, deleted, and preceded
 by 0x00 and 0x80; every proper prefix; seeded splices from other seeds) and
-reads each case twice: through `node-read/NodeRead.java`, which runs the
-pinned v6.0.6 node JAR's own `ErgoTransactionSerializer` offline under the
-version context of a version-4 block and encodes what it read with the node's
-API encoder, and through `contained-decoder.mjs`. It classifies every pair by
-whether the decoder reads the node's ids and fields, other ids (which the
-header's transactions root refuses), the node's ids with other fields (the
-disagreement the root would not catch), or refuses. The node's runtime has
+reads each case twice: through `node-read/NodeRead.java`, which frames it as
+a one-transaction version-4 block section, reads it offline with the pinned
+v6.0.6 node JAR's own `BlockTransactionsSerializer` and states the node's
+ids, parsed ErgoTree bytes and register constants in that transaction's
+version context, and through `contained-decoder.mjs`. Where the node writes
+what it read as other bytes, the node and the decoder also read that
+rewrite. Every pair is classified by whether the decoder reads the node's
+ids and fields, other ids (which the header's transactions root refuses), the
+node's ids with other fields (the disagreement the root would not catch), or
+refuses. The node's runtime has
 no compiler, so a JDK compiles the harness; the own node's bundle
 ([Own nodes](#own-nodes)) supplies the JAR and runtime:
 
