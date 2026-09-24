@@ -26,7 +26,7 @@ import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 import * as sigma from "ergo-lib-wasm-nodejs";
-import { supplyTransaction } from "./supply.mjs";
+import { parseNodeJson, supplyBlock, supplyTransaction } from "./supply.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../..");
 const args = process.argv.slice(2);
@@ -57,10 +57,9 @@ const TESTNET = sigma.NetworkPrefix.Testnet;
 const sha256 = bytes => createHash("sha256").update(bytes).digest();
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const fileHash = file => hex(sha256(readFileSync(join(root, file))));
-// The models' direct sources are bound by hash; their deeper src/ imports are bound through the repository revision.
+// The experiment's own sources are bound here; every repository source the models' compilation reads is added below.
 const files = Object.fromEntries(["experiments/ergo-range/publish.mjs", "experiments/ergo-range/supply.mjs", "experiments/ergo-range/package.json",
-  "experiments/ergo-range/package-lock.json", "model/pool-v3-ergo-profile.ts", "model/pool-v3-range.ts", "model/pool-v3-records.ts",
-  "src/bytes.ts", "src/contexts.ts", "src/pool/field.ts"].map(file => [file, fileHash(file)]));
+  "experiments/ergo-range/package-lock.json", "tsconfig.json"].map(file => [file, fileHash(file)]));
 const require = createRequire(join(here, "package.json"));
 const library = { version: require("ergo-lib-wasm-nodejs/package.json").version, wasmSha256: hex(sha256(readFileSync(require.resolve("ergo-lib-wasm-nodejs/ergo_lib_wasm_bg.wasm")))) };
 assert.equal(library.wasmSha256, "0d20038513c72a9daf859e3ea278735caef43305cde6bc7fb2764e8d933aa28a", "the installed WASM is the vendored release build");
@@ -73,24 +72,6 @@ const synthetic = (label, length) => {
   const parts = [];
   for (let i = 0; parts.reduce((n, p) => n + p.length, 0) < length; i++) parts.push(sha256(Buffer.from(`moe/experiment/ergo-publication/${label}/${i}`)));
   return Buffer.concat(parts).subarray(0, length);
-};
-// Node 24's source text keeps the node's large integers exact; the exact text of each array element is
-// what the pinned library serializes, since a re-emitted object sorts a spending-proof extension's keys.
-const parseExact = raw => JSON.parse(raw, (_key, v, context) => typeof v === "number" ? JSON.rawJSON(context.source) : v);
-const elementTexts = (text, key) => {
-  const start = text.indexOf(`"${key}"`);
-  assert(start >= 0, `no "${key}" in the response`);
-  let level = 0, inString = false, from = -1;
-  const found = [];
-  for (let i = text.indexOf("[", start) + 1; i < text.length; i++) {
-    const c = text[i];
-    if (inString) { if (c === "\\") i++; else if (c === '"') inString = false; continue; }
-    if (c === '"') inString = true;
-    else if (c === "{") { if (level === 0) from = i; level++; }
-    else if (c === "}") { level--; if (level === 0) found.push(text.slice(from, i + 1)); }
-    else if (c === "]" && level === 0) break;
-  }
-  return found;
 };
 
 // Node access: paced, every response digested; immutable responses cached by name (no ":" in a name on NTFS).
@@ -137,6 +118,10 @@ try {
   });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0, "models compile");
   assert.equal(program.emit().emitSkipped, false);
+  for (const source of program.getSourceFiles()) {
+    const path = resolve(source.fileName);
+    if (path.startsWith(root + sep) && !path.includes(`${sep}node_modules${sep}`)) files[path.slice(root.length + 1).replace(/\\/g, "/")] = fileHash(path.slice(root.length + 1));
+  }
   const profile = await import(new URL("model/pool-v3-ergo-profile.js", url));
   const range = await import(new URL("model/pool-v3-range.js", url));
   const records = await import(new URL("model/pool-v3-records.js", url));
@@ -302,8 +287,8 @@ try {
   };
   const summarize = ({ signed, json, ...rest }) => rest;
 
-  // The reader: headers as views, each transaction's unsigned bytes and witness id derived from the node's exact text
-  // (the pinned serializer, then supply.mjs, a supplier's work), the model verifier from the anchor, which hashes and
+  // The reader: headers as views, each transaction's unsigned bytes and witness id copied from the node's JSON text
+  // (supply.mjs, a supplier's work, no decoder), the model verifier from the anchor, which hashes and
   // frames them, and one kind-4 request under the subject.
   const headerView = header => ({ id: Buffer.from(header.id, "hex"), parentId: Buffer.from(header.parentId, "hex"), height: BigInt(header.height),
     version: BigInt(header.version), transactionsRoot: Buffer.from(header.transactionsRoot, "hex") });
@@ -363,28 +348,15 @@ try {
   };
   const sectionOf = async header => {
     const text = await cached(`tx-${header.height}-${header.id}.json`, `/blocks/${header.id}/transactions`);
-    const block = parseExact(text), texts = elementTexts(text, "transactions");
-    assert.equal(block.headerId, header.id, "the response names the requested block");
-    assert.equal(texts.length, block.transactions.length, "one exact text per transaction");
-    const views = [], ids = [], refused = [];
-    let sectionBytes = 0;
-    for (const [position, tx] of block.transactions.entries()) {
-      ids.push(tx.id);
-      let bytes;
-      try { const wasm = sigma.Transaction.from_json(texts[position]); try { bytes = wasm.sigma_serialize_bytes(); } finally { wasm.free(); } }
-      catch (error) {
-        // An overflow or trap leaves the library's instance unusable: fatal, never a refusal (decoder.mjs).
-        if (error instanceof RangeError || error instanceof WebAssembly.RuntimeError) throw error;
-        refused.push({ position, id: tx.id, step: "serialize", error: String(error).slice(0, 120) }); continue;
-      }
-      const view = supplyTransaction(bytes);
-      if (view === undefined) { refused.push({ position, id: tx.id, step: "supply" }); continue; }
-      views.push(view); sectionBytes += bytes.length;
-    }
-    // A block with a refused transaction has no section: its index stays unresolved and the read through it fails, as the profile says.
+    const { headerId, statements, supplied } = supplyBlock(text);
+    assert.equal(headerId, header.id, "the response names the requested block");
+    const ids = statements.map(statement => statement.get("id"));
+    const refused = supplied.flatMap((view, position) => view === undefined ? [{ position, id: ids[position], step: "supply" }] : []);
+    const views = supplied.filter(view => view !== undefined), sectionBytes = views.reduce((n, view) => n + view.signedBytes, 0);
+    // A block with an unsupplied transaction has no section: its index stays unresolved and the read through it fails, as the profile says.
     const complete = refused.length === 0 && hex(profile.transactionsRoot(BigInt(header.version), views)) === header.transactionsRoot;
     if (refused.length === 0) assert(complete, `the section reproduces the root at ${header.height}`);
-    return { height: BigInt(header.height), headerId: Buffer.from(header.id, "hex"), views: complete ? views : undefined, ids, transactions: block.transactions.length, sectionBytes, refused };
+    return { height: BigInt(header.height), headerId: Buffer.from(header.id, "hex"), views: complete ? views : undefined, ids, transactions: statements.length, sectionBytes, refused };
   };
 
   const layout = { pieceBytes: PIECE_BYTES, maxBoxBytes: MAX_BOX_BYTES, minValuePerByte: Number(MIN_VALUE_PER_BYTE), mempoolMaxTransactionBytes: MEMPOOL_MAX_TX_BYTES,
@@ -397,7 +369,7 @@ try {
     "The publications' frames and lengths are exact under pool-v3 §6; the proof, authorization and signature bytes are synthetic, since the venue applies no content rule and no real settle proof is retained outside the proving harness. Nothing here is a valid statement, a demand or a settlement.",
     "Headers come from the one node the transactions were submitted to; linkage, contiguity and the anchor's child are checked by the model, proof of work and chain selection are not.",
     "The four locations are pay-to-public-key trees of throwaway keys derived from the funded testnet key; no deployment, backing or specification names them.",
-    "Transaction bytes are the pinned library's serialization of the node's exact JSON text; the reader takes their unsigned bytes and witness ids, derived by supply.mjs, and a block counts only where they reproduce the header's transaction root. The reader runs no decoder: its framer reads the cases' transactions, and a transaction outside its grammar would carry no record.",
+    "The reader takes each transaction's unsigned bytes and witness id, copied from the node's JSON text by supply.mjs, and a block counts only where they reproduce the header's transaction root. Neither side runs a decoder: the supplier parses no constant, the reader's framer reads the cases' transactions, and a transaction outside its grammar would carry no record. The pinned library builds and signs the cases only.",
     "The cases are chained on one change box and submitted together, so their inclusion latencies are correlated observations, not a distribution; only the sweep is submitted at a separate time.",
     "The signed transactions' witness ids, and so a block root over them, vary between runs (Schnorr proofs are randomized); transaction ids, box ids, sizes and every answer are deterministic.",
     "No runtime path, profile selection, specification change or dependency change follows from this measurement.",
@@ -416,7 +388,9 @@ try {
     }
     const spend = buildTransaction("spend", pieceBoxes(Object.values(transactions)), ["sweep"]);
     assert.equal(spend.inputs.length, Object.values(transactions).reduce((n, t) => n + t.outputs.filter(r => r.role === "piece").length, 0), "the spend consumes every piece box");
-    const views = Object.values(transactions).map(t => supplyTransaction(t.signed.sigma_serialize_bytes()));
+    // The synthetic block's transactions are supplied as a node's would be, from each signed transaction's JSON.
+    const views = Object.values(transactions).map(t => supplyTransaction(parseNodeJson(t.json)));
+    assert(views.every(view => view !== undefined), "every case's copy hashes to its id");
     const anchor = latest, blockHeight = BigInt(anchor.height) + 1n;
     const blockRoot = profile.transactionsRoot(4n, views);
     const heightBytes = h => { const b = Buffer.alloc(8); b.writeBigUInt64BE(h); return b; };

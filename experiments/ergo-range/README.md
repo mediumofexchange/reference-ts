@@ -18,7 +18,23 @@ Do not expose this probe as an arbitrary-file or network verification API.
 A retired Windows-only preflight covered a separately built/run dedicated
 node; that path is superseded by [Own nodes](#own-nodes) below, which runs
 the project's official v6.0.6 distribution directly. See
-[Retired platform controls](#retired-platform-controls) for the permalink.
+[Retired tooling](#retired-tooling) for the permalinks.
+
+## Supplying the reader
+
+The candidate profile's reader takes each transaction as its unsigned bytes
+and witness id and frames the outputs itself. `supply.mjs` is the supplier:
+it copies the unsigned bytes from the node's JSON statement of a transaction
+(`/blocks/{id}/transactions`), hex fields and integers as they stand, and
+hashes the stated proofs for the witness id; it parses no constant and runs
+no decoder. Its small strict parser keeps object keys in text order (a
+spending-proof extension's key order is part of the bytes, and a parsed
+JavaScript object would sort it) and integers exact. A copy that does not
+hash to the stated id is unsupplied, never misread
+([decision](../../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)).
+`supply-check.mjs`, part of `check:ergo:range`, supplies every fixture
+transaction, reproduces the four fixture roots from the copies and checks
+each refusal.
 
 ## Real-chain exhaustion cost
 
@@ -28,7 +44,7 @@ mainnet from a real anchor. It is run explicitly, never by `check` or CI,
 because it reads public nodes (GET only; nothing is submitted):
 
 ```powershell
-node experiments/ergo-range/chain-cost.mjs --from 1873361 --count 5040 --depth 10 --alternate scratch/sigma-0.28.0 --out scratch/chain-cost.json
+node experiments/ergo-range/chain-cost.mjs --from 1873361 --count 5040 --depth 10 --out scratch/chain-cost.json
 ```
 
 The anchor is the block below `--from`; indices `0..count-1` are the next
@@ -39,57 +55,18 @@ refuses anything missing and records no live node state, and only the same
 window's header slices replay; `--delay` paces live reads, which rotate over
 `--sources` with backoff when a node throttles. Each source's headers are
 compared field by field, and the anchor's id is read from each; a
-disagreement gives an unresolved report and exit 2. Transaction bytes come
-from each transaction's exact text in the node's JSON (its spending-proof
-extension's key order is part of the bytes, and a parsed object would sort
-it) through the pinned sigma-rust serializer, and a block's section counts
-only where its bytes reproduce the header's transaction root through the
-model's root; `decoder.mjs` then reads them, and `--alternate` names a
-directory holding another `ergo-lib-wasm-nodejs` install that reads the
-same bytes through the script's verbatim copy of that round trip, checked
-against `decoder.mjs` on the pinned build for every transaction, with the
-two builds' outputs compared (the alternate's version and WASM hash are
-recorded; nothing is pinned by it). The pinned build is the vendored
-[release build](#decoder-build) of sigma-rust `2f840d3`; earlier pins are
-useful controls: 0.28.0 under `scratch/sigma-0.28.0`
-(`npm install ergo-lib-wasm-nodejs@0.28.0 --ignore-scripts`) shows the Ergo 6.0
-refusals, and the debug npm alpha `0.29.0-alpha-2f840d3` under
-`scratch/sigma-alpha` the same commit's reading. Moving the pin again means
-rerunning this window offline from the cache with zero refusals, every root
-reproduced and no differing view against the build being replaced. The
-reader itself decodes nothing: `supply.mjs` derives each transaction's
-unsigned bytes and witness id from the serialized bytes (a supplier's work),
-the model hashes and frames them, and the report compares every framed
-transaction's outputs with the node's JSON and totals the supplied bytes.
-The model verifier is built from the real headers and the read sections
-with four throwaway locations, so every answer is empty by exhaustion; its
-construction is where every output is scanned, and its single-index probes,
-the last-day and whole-window requests and the unresolved indices are
-reported. The [retained report](../../docs/ergo-chain-cost-verification.json)
+disagreement gives an unresolved report and exit 2. Each block's
+transactions are supplied through `supply.mjs`, and a block's section counts
+only where every transaction is supplied and the header's transaction root
+holds through the model's root; the report compares every framed
+transaction's outputs with the node's JSON and totals the supplied and
+section bytes. The model verifier is built from the real headers and the
+supplied sections with four throwaway locations, so every answer is empty by
+exhaustion; its construction is where every output is scanned, and its
+single-index probes, the last-day and whole-window requests and the
+unresolved indices are reported. The [retained report](../../docs/ergo-chain-cost-verification.json)
 records the window and anchor, the nodes' agreement, a digest of every
-cached response the run read, sizes, times and the refusals by output tree
-version.
-
-Over the [own node](#own-nodes)'s retained blocks the same probe runs in
-chunks, then an offline pass compares each decoded transaction with the
-node's JSON, and a summary adds them up:
-
-```powershell
-node experiments/ergo-range/equivalence-driver.mjs
-node experiments/ergo-range/equivalence-fields.mjs
-node experiments/ergo-range/equivalence-summary.mjs --out docs/ergo-decoder-equivalence-verification.json
-```
-
-The driver's constants fix the heights (the node keeps its last 50,000 full
-blocks); it and the field pass write to `scratch/equivalence/` and skip a
-chunk whose report exists, so either resumes. The field pass recomputes each
-chunk's cache digest before comparing, so it reads exactly the responses the
-chunk read, links the headers by id, and compares the decoder's id, witness
-id, output count and every output's ErgoTree, register names and register
-constants with the node's fields; mutating each of those fields in one real
-transaction per chunk must show as a difference. The summary requires the driver's exact plan, chunks joined by
-header id, every root reproduced, no refusal and no differing field
-([result](../../docs/POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks)).
+cached response the run read, sizes and times.
 
 ## Publication and reassembly on a node
 
@@ -117,52 +94,31 @@ three of four pieces, the release and a withdrawal adjacent, and the two
 separated by a plain output), waits for inclusion and the depth, sweeps every
 piece box back to the wallet, waits again, checks the UTXO and indexed views,
 then reads every block from the header below the first inclusion to the tip
-and asks the kind-4 range under the subject. `--state` (default
+through `supply.mjs` and asks the kind-4 range under the subject. `--state` (default
 `scratch/ergo-testnet/run.json`) records every step, including the run's
 pinned creation height, and `--resume` continues an interrupted run,
-re-submitting only what the node does not already hold; `--poll`,
-`--max-wait` and `--delay` pace it. The [retained report](../../docs/ergo-publication-verification.json)
-is the 2026-09-22 testnet run: the node's acceptance, sizes, values, each
-transaction's inclusion latency, the UTXO check and the read-back.
+re-submitting only what the node does not already hold, or re-reads a
+finished one; `--poll`, `--max-wait` and `--delay` pace it. The
+[retained report](../../docs/ergo-publication-verification.json) is the
+2026-09-24 run on the own testnet node: the node's acceptance, sizes, values,
+each transaction's inclusion latency, the UTXO check and the read-back.
 
-## Decoder build
+## Signing library build
 
-The decoder is `vendor/ergo-lib-wasm-nodejs`, a release build of sigma-rust
-`2f840d3` installed as a `file:` dependency
+The publication experiment signs, and the fixture and profile checks build
+trees and constants, with `vendor/ergo-lib-wasm-nodejs`, a release build of
+sigma-rust `2f840d3` installed as a `file:` dependency
 ([decision](../../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3)).
-Upstream's npm alphas of that commit are debug builds (`wasm-pack build --dev`)
-that overflow Node's default stack and trap on expression nesting of 50.
-`sigma-release-build.sh` rebuilds the package from a fresh checkout with
-the vendored lockfile, Rust 1.87 (`wasm32-unknown-unknown`) and the
-wasm-bindgen 0.2.128 CLI, and checks the committed and the built files against
-`SHA256SUMS`; the bytes reproduce on a Windows host (panic locations keep the
-host's path separators), and the corpus checks every installed file against
-the same list:
+No reader or supplier path uses it. Upstream's npm alphas of that commit are
+debug builds (`wasm-pack build --dev`) that overflow Node's default stack and
+trap on expression nesting of 50. `sigma-release-build.sh` rebuilds the
+package from a fresh checkout with the vendored lockfile, Rust 1.87
+(`wasm32-unknown-unknown`) and the wasm-bindgen 0.2.128 CLI, and checks the
+committed and the built files against `SHA256SUMS`; the bytes reproduce on a
+Windows host (panic locations keep the host's path separators):
 
 ```bash
 WASM_BINDGEN=<path to wasm-bindgen 0.2.128> bash experiments/ergo-range/sigma-release-build.sh
-```
-
-An overflow or trap inside the module leaves its one instance unusable, so
-`decoder.mjs` treats it as fatal, never as a refusal. `stack-check.mjs`
-measures the stack each build needs and the deepest nesting it parses, each
-trial in a fresh process, with earlier builds as controls
-([retained report](../../docs/ergo-decoder-stack-verification.json)):
-
-```powershell
-node experiments/ergo-range/stack-check.mjs --control scratch/sigma-alpha,scratch/sigma-0.28.0 --out docs/ergo-decoder-stack-verification.json
-```
-
-`metered-check.mjs` meters the pinned release build under the metering
-probe's Wasmtime install ([below](#metered-decoder-feasibility)) over the
-corpus and, with `--week`, the P4 window reserialized from the
-`scratch/ergo-chain` cache (about 17 minutes); it also shows that the
-node's JSON field split is not bound by the transaction id
-([retained report](../../docs/ergo-metered-release-verification.json),
-[probe](../../docs/POOL_DEPLOYMENT_PROBES.md#metered-release-decoder-over-the-week)):
-
-```powershell
-node experiments/ergo-range/metered-check.mjs $probePython --week > docs/ergo-metered-release-verification.json
 ```
 
 ## Inclusion latency on the mainnet
@@ -229,17 +185,11 @@ the sync cost:
 node experiments/ergo-range/header-check.mjs --out docs/ergo-own-node-verification.json
 ```
 
-## Full binary decoder and venue-profile checks
+## Venue-profile checks
 
 `npm run check:ergo:range` runs, in order, the block-root/Fleet experiment
-(`check.mjs`), the
-[full binary decoder experiment](../../docs/POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility)
-(`decoder-check.mjs`) and `profile-check.mjs`. `decoder-check.mjs` launches
-the fixed corpus in a child process with a 120-second deadline and 1 MiB
-output cap. The corpus checks fixture pins, all output fields/IDs, every
-proper transaction prefix, trailing bytes, nonminimal counts and JSON
-field-boundary aliases. Input budgets are experimental refusal limits;
-there is no hard process/WASM memory cap and no production decoder selection.
+(`check.mjs`), the supplier check (`supply-check.mjs`, [above](#supplying-the-reader))
+and `profile-check.mjs`.
 
 `profile-check.mjs` compiles `model/pool-v3-ergo-profile.ts` with the
 repository root's TypeScript into a disposable `scratch/` build, so run it
@@ -258,99 +208,42 @@ outputs and every real register constant read beside
 sigma-rust's. Its [retained report](../../docs/ergo-range-profile-verification.json)
 is an offline observation; nothing connects to a node or selects the profile.
 
-## Contained decoder
-
-`contained-decoder.mjs` was the reader's decoder until the reader switched
-to the profile's own framer over unsigned bytes (2026-09-24); it remains the
-decoder probes' tool (`hostile-equivalence.mjs`, `contained-range.mjs`), and
-no reader path imports it. `wasm-meter.mjs` derives, from the vendored release build, a module with
-fuel charged at every function entry and loop head, bulk memory, memory
-growth and table growth routed through charged, capped helpers, and a call
-depth counted at every call site against a ceiling; the derivation is
-deterministic and its SHA-256 is pinned. Each transaction runs in a fresh
-instance of that module with every import trapping, under the budget
-`budgetFor(length)` declares; fuel, memory, table and depth exhaustion and
-traps refuse that transaction with a reason and leave the next unaffected.
-A caller must leave the V8 stack the check measures for the depth ceiling
-to refuse before the engine's stack does. `decoder.mjs` stays the unmetered reference the chain-cost,
-equivalence, publication and stack probes bound in their reports.
-
-`contained-check.mjs` runs in `npm run check:ergo:range`: hand-counted
-exact-cost controls on an assembled module, the corpus against
-`decoder.mjs`, reduced budgets, synthetic hostile inputs and, in child
-processes at reduced `--stack-size`, the least V8 stack the depth ceiling
-needs. `contained-range.mjs` compares
-the contained decoder's fields with the node's over cached blocks and
-records each transaction's fuel and memory; the
-[retained report](../../docs/ergo-decoder-containment-verification.json)
-embeds its summaries:
-
-```powershell
-node experiments/ergo-range/contained-range.mjs corpus > scratch/containment/corpus.json
-node experiments/ergo-range/contained-range.mjs week > scratch/containment/week.json
-node experiments/ergo-range/contained-range.mjs retained --from 1830001 --to 1846367 > scratch/containment/retained-a.json
-# ... likewise 1846368-1862734 (b) and 1862735-1879100 (c), in parallel if cores allow
-node experiments/ergo-range/contained-check.mjs --report docs/ergo-decoder-containment-verification.json --ranges scratch/containment/corpus.json,scratch/containment/week.json,scratch/containment/retained-a.json,scratch/containment/retained-b.json,scratch/containment/retained-c.json
-```
-
-The week reads `scratch/ergo-chain` and the retained set
-`scratch/ergo-chain-own` ([Real-chain exhaustion cost](#real-chain-exhaustion-cost)).
-
 ## Hostile-input node equivalence
 
-`hostile-equivalence.mjs` mutates the 29 hash-pinned corpus transactions
-deterministically (every byte replaced by four values, deleted, and preceded
-by 0x00 and 0x80; every proper prefix; seeded splices from other seeds) and
-reads each case twice: through `node-read/NodeRead.java`, which frames it as
-a one-transaction version-4 block section, reads it offline with the pinned
-v6.0.6 node JAR's own `BlockTransactionsSerializer` and states the node's
-ids, parsed ErgoTree bytes and register constants in that transaction's
-version context, and through `contained-decoder.mjs`. Where the node writes
-what it read as other bytes, the node and the decoder also read that
-rewrite. Every pair is classified by whether the decoder reads the node's
-ids and fields, other ids (which the header's transactions root refuses), the
-node's ids with other fields (the disagreement the root would not catch), or
-refuses. The node's runtime has
-no compiler, so a JDK compiles the harness; the own node's bundle
-([Own nodes](#own-nodes)) supplies the JAR and runtime:
+`hostile-equivalence.mjs` takes the 29 hash-pinned corpus transactions'
+unsigned bytes as `supply.mjs` copies them, mutates them deterministically
+(every byte replaced by four values, deleted, and preceded by 0x00 and 0x80;
+every proper prefix; seeded splices from other seeds) and reads each case
+through `node-read/NodeRead.java`, which frames it as a one-transaction
+version-4 block section, reads it offline with the pinned v6.0.6 node JAR's
+own `BlockTransactionsSerializer` and states the node's ids, its own
+unsigned bytes (`messageToSign`), parsed ErgoTree bytes and register
+constants in that transaction's version context. Every reading the node
+gives (whole cases, prefixes and its rewrites, each rewrite read again) is
+put through the reader's path: its unsigned bytes must hash to the node's
+id, and where the profile's framer reads them the outputs must be the
+node's (`counts.framer`). The node's runtime has no compiler, so a JDK
+compiles the harness; the own node's bundle ([Own nodes](#own-nodes))
+supplies the JAR and runtime:
 
 ```powershell
 node experiments/ergo-range/hostile-equivalence.mjs --jdk <jdk-21 dir>
-node experiments/ergo-range/hostile-equivalence.mjs --jdk <jdk-21 dir> --unsigned --work scratch/hostile-unsigned --out docs/ergo-framer-hostile-equivalence-verification.json
 ```
 
-Every transaction the node reads is also put through the reader's own path:
-the node states its unsigned bytes (`messageToSign`), which must hash to its
-id, and where the profile's framer reads them its outputs must be the node's
-(`counts.framer`). With `--unsigned` the seeds are the corpus transactions'
-unsigned bytes (`supply.mjs`), so the mutations fall on the framer's own
-input. The first command writes the [retained report](../../docs/ergo-decoder-hostile-equivalence-verification.json)
-and keeps its cases and the node's answers in `scratch/hostile-equivalence/`;
-the second writes the framer report `docs/ergo-framer-hostile-equivalence-verification.json`
-(not yet recorded: its first run was stopped under memory pressure).
+It writes the [retained report](../../docs/ergo-framer-hostile-equivalence-verification.json)
+and keeps its cases and the node's answers in `scratch/hostile-framer/`;
+the run takes about two minutes.
 
-## Metered decoder feasibility
+## Retired tooling
 
-`metered-check.mjs` ([Decoder build](#decoder-build) above) needs a pinned
-Wasmtime engine reachable at `scratch/metering-python`. Install it once with
-an isolated Windows x64 Python 3.9+ interpreter and the pinned wheel hashes
-in `metering-requirements.txt`, then pass that interpreter's path as
-`$probePython` to the decoder-build commands above:
-
-```powershell
-$probePython = 'C:\path\to\python.exe'
-& $probePython -m pip install --no-deps --only-binary=:all: --require-hashes --target scratch/metering-python -r experiments/ergo-range/metering-requirements.txt
-```
-
-`metering-check.py` (loaded as a library by `metered-check.py`, which
-`metered-check.mjs` invokes) checks the loaded engine's package/DLL paths
-and Wasmtime **48.0.0** version before decoding, and traps rather than reads
-guest memory on every imported host function. `metered-check.mjs` runs it
-with a 20-minute timeout (60 minutes with `--week`); no production or
-default-check dependency is added, and the scratch Python install can be
-removed after a report is captured and reproduced with the same command.
-
-## Retired platform controls
+The reader's decoder tooling (the unmetered `decoder.mjs` and its corpus,
+the contained and metered derivations with their Wasmtime probe, the stack
+check, the decoder-against-node equivalence driver over the own node's
+retained blocks, and the decoder side of the hostile probe) was retired on
+2026-09-24 when the supplier stopped decoding; its reports stay in
+`docs/ergo-decoder-*.json` and `docs/ergo-meter*.json` as history, and the
+scripts are kept at the
+[`0453955` revision](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).
 
 Earlier sessions (2026-09-10 through 2026-09-12) evaluated a Windows-hosted
 contained Ergo node: stable/maintained-Java stock storage, a native RocksDB

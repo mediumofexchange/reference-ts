@@ -10,14 +10,14 @@
     "name": "ergo-testnet-6.0.6",
     "appVersion": "6.0.6",
     "network": "testnet",
-    "fullHeight": 561772,
-    "headersHeight": 561772,
-    "bestFullHeaderId": "d6306250e02fdb9823a9c38650dd59402a1e3f3ced0c20ff1c35a7daaaa7fbdd",
+    "fullHeight": 561873,
+    "headersHeight": 561873,
+    "bestFullHeaderId": "bc3adcddf350fba5aeebf5e20ef3b3c73df5c9c3347e04d0b80554f960e6e515",
     "parameters": {
       "outputCost": 100,
       "tokenAccessCost": 100,
       "maxBlockCost": 1000000,
-      "height": 561664,
+      "height": 561792,
       "maxBlockSize": 524288,
       "dataInputCost": 100,
       "blockVersion": 4,
@@ -27,7 +27,7 @@
       "minValuePerByte": 360
     }
   },
-  "requests": 111,
+  "requests": 58,
   "cacheDigest": "0c531222e946769f6742bf41cdbd3bbdc2c332a57c2420f9752618404c057ec6",
   "wallet": {
     "address": "3WzLhpY2Dbd8WSbvZTbHS5cbCiJFsfbLFrfoWWEt3GkQJJr6oxi9",
@@ -774,9 +774,9 @@
     "anchorId": "bb5f3d586066ebcd3cc788ac22157ba9063a2314b5e5b8a59060fc4ac75e8c4e",
     "firstHeight": 561774,
     "lastHeight": 561779,
-    "tipHeight": 561782,
+    "tipHeight": 561873,
     "depth": 2,
-    "headers": 9,
+    "headers": 100,
     "blocks": [
       {
         "height": "561774",
@@ -825,10 +825,10 @@
   "readBack": {
     "identity": "eebe2a67189411eae19318df1b2593f9e2da5fb6cae2fb210189fb31c9d83a83",
     "origin": "561774",
-    "witnessedIndex": "6",
+    "witnessedIndex": "97",
     "toIndex": "5",
-    "constructMs": 115,
-    "answerMs": 1.85,
+    "constructMs": 30,
+    "answerMs": 1.36,
     "answerBytes": 90575,
     "entries": [
       {
@@ -934,23 +934,34 @@
     ]
   },
   "files": {
-    "experiments/ergo-range/publish.mjs": "45a50f61a983eb033cb338c33a5f4d60c42bb198d800f7ff25c32083b3e84814",
-    "experiments/ergo-range/supply.mjs": "93ac469000e788f25912a2c0adea38f2b4e06e547c1f3fe1032c5e788d7c6a5c",
-    "experiments/ergo-range/package.json": "0eb7a7f6a08c6b80a601dc36787620c36f8a5ad643b3c2730eac30ef3c0f8c3a",
+    "experiments/ergo-range/publish.mjs": "6e0f85473079f47c0a5c460da8abc4d0a3df23e3203b63572474b84db761faad",
+    "experiments/ergo-range/supply.mjs": "7f84a4df88ee0a6a2488cb72f8d775d1d4d88d780ccd181a25172224cd21ec40",
+    "experiments/ergo-range/package.json": "4df25f63611d23d6ce62765c25cc26e5a3dc2bf9b97b05f3ae510b7f338ddcd7",
     "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
-    "model/pool-v3-ergo-profile.ts": "f3cc55986e9d3dbcf790242df1b3794ae4f65eb93b4c09cb60c9b0fc3def9813",
-    "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f",
-    "model/pool-v3-records.ts": "193e68179cf5c66d46f51f02562bb287d8c17a9aeb9952d223cf28dbfecd161f",
+    "tsconfig.json": "5d7b9d7a9ad1947fa0139a3649914b3ce14e3315fe266ae5d4d88273426c1922",
     "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
     "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
-    "src/pool/field.ts": "abd55bd8bd2a51fb954c9dc05fb3380bf4c2df6dd3c145c2eff0f29b1e36710a"
+    "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
+    "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
+    "src/presentation.ts": "adcd73c862129f4ccd4d02b14df16c0f701127f3d8d504f0bb91e91734b46bb3",
+    "src/messages.ts": "8a941254bf24650f9146d3875add1f20993a08b17b40ddac1ed060e225191718",
+    "src/oplog.ts": "d1f2ad4b71a109948f3f39a869f25ae8faf63b3fcd0206b7f9015117e31a714a",
+    "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
+    "src/revocation.ts": "1b23bc3de5017738c1a056f013a83ce776caa099826c48c4091900f12c9474ea",
+    "src/venue.ts": "17d3bb0f968ff51aac423eb1f22aaef692d9b3023dc811f6820d67a2ce0042c4",
+    "src/replacement.ts": "9f65220ebebc4c1cec42b9b28c7667beec6b08e56159a701bbfa6c34755083c1",
+    "src/commitment.ts": "158070f78a3f76511381a598a2a91d79dcdfeb9b02442a22450cf556f88b9adf",
+    "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f",
+    "model/pool-v3-ergo-profile.ts": "67b21086a77938f2160f4fbc52b5c661cc8e99f322b1803df2fa440cca8fd417",
+    "src/pool/field.ts": "abd55bd8bd2a51fb954c9dc05fb3380bf4c2df6dd3c145c2eff0f29b1e36710a",
+    "model/pool-v3-records.ts": "193e68179cf5c66d46f51f02562bb287d8c17a9aeb9952d223cf28dbfecd161f"
   },
   "limitations": [
     "The venue is the public Ergo testnet through one public node; acceptance, fees, minimum values and inclusion latency are the testnet's under its reported parameters and current miners, not mainnet's.",
     "The publications' frames and lengths are exact under pool-v3 §6; the proof, authorization and signature bytes are synthetic, since the venue applies no content rule and no real settle proof is retained outside the proving harness. Nothing here is a valid statement, a demand or a settlement.",
     "Headers come from the one node the transactions were submitted to; linkage, contiguity and the anchor's child are checked by the model, proof of work and chain selection are not.",
     "The four locations are pay-to-public-key trees of throwaway keys derived from the funded testnet key; no deployment, backing or specification names them.",
-    "Transaction bytes are the pinned library's serialization of the node's exact JSON text; the reader takes their unsigned bytes and witness ids, derived by supply.mjs, and a block counts only where they reproduce the header's transaction root. The reader runs no decoder: its framer reads the cases' transactions, and a transaction outside its grammar would carry no record.",
+    "The reader takes each transaction's unsigned bytes and witness id, copied from the node's JSON text by supply.mjs, and a block counts only where they reproduce the header's transaction root. Neither side runs a decoder: the supplier parses no constant, the reader's framer reads the cases' transactions, and a transaction outside its grammar would carry no record. The pinned library builds and signs the cases only.",
     "The cases are chained on one change box and submitted together, so their inclusion latencies are correlated observations, not a distribution; only the sweep is submitted at a separate time.",
     "The signed transactions' witness ids, and so a block root over them, vary between runs (Schnorr proofs are randomized); transaction ids, box ids, sizes and every answer are deterministic.",
     "No runtime path, profile selection, specification change or dependency change follows from this measurement."

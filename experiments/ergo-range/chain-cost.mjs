@@ -2,26 +2,23 @@
 // real anchor. GET-only reads of public Ergo nodes, cached under scratch/;
 // nothing is submitted, no runtime path reads this, and no answer selects the
 // profile. The public nodes are a trust input: header agreement between them
-// is recorded, proof of work and chain selection are not checked.
+// is recorded, proof of work and chain selection are not checked. Each block's
+// transactions are supplied by copying the node's JSON (supply.mjs); no
+// decoder runs.
 // Usage, from the repository root on Node 24 after `npm ci` and the
 // experiment's pinned install:
 //   node experiments/ergo-range/chain-cost.mjs --from 1873361 --count 5040
 //     [--depth 10] [--sources https://node.ergo.watch,http://213.239.193.208:9053]
-//     [--cache scratch/ergo-chain] [--alternate <dir with another ergo-lib-wasm-nodejs>]
-//     [--delay 250] [--offline] [--out <report file>]
+//     [--cache scratch/ergo-chain] [--delay 250] [--offline] [--out <report file>]
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { join, resolve, sep } from "node:path";
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
-import { blake2b } from "@noble/hashes/blake2b";
-import { Address, Transaction } from "ergo-lib-wasm-nodejs";
-import { decodeTransaction } from "./decoder.mjs";
-import { supplyTransaction } from "./supply.mjs";
+import { supplyBlock } from "./supply.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../..");
 const args = process.argv.slice(2);
@@ -30,7 +27,6 @@ const from = Number(option("--from")), count = Number(option("--count")), depth 
 assert(Number.isInteger(from) && from > 1 && Number.isInteger(count) && count > 0 && Number.isInteger(depth) && depth >= 0, "usage: --from <height> --count <blocks> [--depth d]");
 const sources = option("--sources", "https://node.ergo.watch,http://213.239.193.208:9053").split(",");
 const cache = resolve(root, option("--cache", "scratch/ergo-chain"));
-const alternateDir = option("--alternate") === undefined ? undefined : resolve(root, option("--alternate"));
 const delayMs = Number(option("--delay", "250")), offline = args.includes("--offline"), out = option("--out");
 const DAY = 720, HEADER_VIEW_BYTES = 32 + 32 + 8 + 1 + 32, EMPTY_ANSWER_BYTES = 102;
 mkdirSync(cache, { recursive: true });
@@ -39,73 +35,15 @@ const sha256 = bytes => createHash("sha256").update(bytes).digest();
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const fileHash = file => hex(sha256(readFileSync(join(root, file))));
 // The sources are hashed now, before any work, so the report names the files that produced it.
-const files = Object.fromEntries(["experiments/ergo-range/chain-cost.mjs", "experiments/ergo-range/decoder.mjs", "experiments/ergo-range/supply.mjs", "experiments/ergo-range/package.json",
-  "experiments/ergo-range/package-lock.json", "experiments/ergo-range/fixtures/manifest.json", "model/pool-v3-ergo-profile.ts", "model/pool-v3-range.ts"].map(file => [file, fileHash(file)]));
+const files = Object.fromEntries(["experiments/ergo-range/chain-cost.mjs", "experiments/ergo-range/supply.mjs", "experiments/ergo-range/package.json",
+  "experiments/ergo-range/package-lock.json", "experiments/ergo-range/fixtures/manifest.json", "tsconfig.json"].map(file => [file, fileHash(file)]));
 const REQUEST_SAMPLES = 5;
 // A cache name must not carry ":", which NTFS reads as an alternate data stream.
 const hostOf = url => new URL(url).host.replace(/:/g, "-");
-// Node 24's source text keeps the nodes' large integers exact; rawJSON re-emits them unchanged.
-const parseExact = raw => JSON.parse(raw, (_key, value, context) => typeof value === "number" ? JSON.rawJSON(context.source) : value);
-// The exact text of each element of the named array: a transaction's bytes
-// depend on its spending-proof extension's key order, which the node emits in
-// its map's order and JavaScript objects would sort, so the serializer reads
-// the node's text, not a re-serialization of a parsed object.
-const elementTexts = (text, key) => {
-  const start = text.indexOf(`"${key}"`);
-  assert(start >= 0, `no "${key}" in the response`);
-  let depth = 0, inString = false, from = -1;
-  const out = [];
-  for (let i = text.indexOf("[", start) + 1; i < text.length; i++) {
-    const c = text[i];
-    if (inString) { if (c === "\\") i++; else if (c === '"') inString = false; continue; }
-    if (c === '"') inString = true;
-    else if (c === "{") { if (depth === 0) from = i; depth++; }
-    else if (c === "}") { depth--; if (depth === 0) out.push(text.slice(from, i + 1)); }
-    else if (c === "]" && depth === 0) break;
-  }
-  return out;
-};
-const witnessOf = tx => blake2b(Buffer.concat(tx.inputs.map(input => Buffer.from(input.spendingProof.proofBytes, "hex"))), { dkLen: 32 }).subarray(1);
-const treeVersion = output => parseInt(output.ergoTree.slice(0, 2), 16) & 7;
+const treeVersion = tree => parseInt(tree.slice(0, 2), 16) & 7;
 const percentile = (sorted, p) => sorted.length === 0 ? 0 : sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)];
-const sameView = (a, b) => hex(a.id) === hex(b.id) && hex(a.witnessId) === hex(b.witnessId) && a.outputs.length === b.outputs.length && a.outputs.every((output, i) => {
-  const other = b.outputs[i], names = Object.keys(output.registers).sort();
-  return hex(output.ergoTree) === hex(other.ergoTree) && names.join() === Object.keys(other.registers).sort().join() &&
-    names.every(name => hex(output.registers[name]) === hex(other.registers[name]));
-});
-// decoder.mjs's strict round trip, verbatim, over whichever build of the library's `Transaction` class
-// is handed in; the run checks it against decoder.mjs itself on the pinned build for every transaction.
-// A stack overflow or trap in a build leaves its one instance unusable: fatal, never a refusal (decoder.mjs).
-const fatal = error => error instanceof RangeError || error instanceof WebAssembly.RuntimeError;
-const strictDecoder = TransactionClass => {
-  let poisoned;
-  return bytes => {
-    if (poisoned !== undefined) throw new Error("the decoder trapped earlier; its instance cannot be used", { cause: poisoned });
-    let tx;
-    try { tx = TransactionClass.sigma_parse_bytes(bytes); } catch (error) { if (fatal(error)) { poisoned = error; throw error; } return undefined; }
-    try {
-      if (hex(tx.sigma_serialize_bytes()) !== hex(bytes)) return undefined;
-      const js = tx.to_js_eip12();
-      const proofs = js.inputs.map(input => Buffer.from(input.spendingProof.proofBytes, "hex"));
-      return { id: Buffer.from(js.id, "hex"), witnessId: blake2b(Buffer.concat(proofs), { dkLen: 32 }).subarray(1),
-        outputs: js.outputs.map(output => ({ ergoTree: Buffer.from(output.ergoTree, "hex"),
-          registers: Object.fromEntries(Object.entries(output.additionalRegisters).map(([name, value]) => [name, Buffer.from(value, "hex")])) })) };
-    } catch (error) { if (fatal(error)) poisoned = error; throw error; }
-    finally { if (poisoned === undefined) tx.free(); }
-  };
-};
-
-const packageOf = dir => {
-  const require = createRequire(join(dir, "package.json"));
-  const { version } = require("ergo-lib-wasm-nodejs/package.json");
-  return { version, wasmSha256: hex(sha256(readFileSync(require.resolve("ergo-lib-wasm-nodejs/ergo_lib_wasm_bg.wasm")))), module: require("ergo-lib-wasm-nodejs") };
-};
-const pinned = packageOf(here);
-assert.equal(pinned.module.Transaction, Transaction, "the pinned decoder is the experiment's own package");
-const alternate = alternateDir === undefined ? undefined : packageOf(alternateDir);
-// The pinned package alone serializes; the alternate only reads the same bytes through the same strict round trip.
-const decoders = { pinned: { ...pinned, decode: decodeTransaction }, ...(alternate ? { alternate: { ...alternate, decode: strictDecoder(alternate.module.Transaction) } } : {}) };
-const pinnedCopy = strictDecoder(Transaction);
+// A pay-to-public-key tree: header 0x00, then the SigmaProp constant of a compressed point.
+const p2pk = point => Buffer.concat([Buffer.from("0008cd", "hex"), point]);
 
 // Paced GET reads with rotation over the sources; every response is cached by name and digested.
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -156,6 +94,11 @@ try {
   });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0, "model compiles");
   assert.equal(program.emit().emitSkipped, false);
+  // Every repository source the compilation reads is bound.
+  for (const source of program.getSourceFiles()) {
+    const path = resolve(source.fileName);
+    if (path.startsWith(root + sep) && !path.includes(`${sep}node_modules${sep}`)) files[path.slice(root.length + 1).replace(/\\/g, "/")] = fileHash(path.slice(root.length + 1));
+  }
   const profile = await import(new URL("model/pool-v3-ergo-profile.js", url));
 
   // Live source state, for the record only; an offline run records none.
@@ -207,97 +150,54 @@ try {
     report = { status: "unresolved-header-disagreement", node: process.version, window, sources: sourceInfo, headerAgreement };
     process.exitCode = 2;
   } else {
-    // Sections: every block of the window from its cached response, one transaction section per index.
-    const rows = [], bytesUnavailable = [], reordered = [];
-    const refusals = Object.fromEntries(Object.keys(decoders).map(name => [name, []]));
-    const decodeMs = Object.fromEntries(Object.keys(decoders).map(name => [name, 0]));
-    const views = Object.fromEntries(Object.keys(decoders).map(name => [name, []]));
-    const agreement = { compared: 0, differing: 0 }, equivalence = { transactions: 0, differing: 0 };
-    // The reader's evidence: each transaction's unsigned bytes and witness id, as a supplier derives them (supply.mjs).
-    const suppliedBlocks = [], framing = { transactions: 0, framed: 0, differing: 0, differingSample: [], unsupplied: 0, suppliedBytes: 0 };
-    let serializeMs = 0, reemitMs = 0, equivalenceMs = 0, rootCheckMs = 0, supplyMs = 0;
+    // Sections: every block of the window from its cached response, one transaction section per index. The reader's
+    // evidence is each transaction's unsigned bytes and witness id as a supplier copies them from the node's JSON
+    // (supply.mjs); a block counts only where every transaction is supplied and the header's root holds over them.
+    const rows = [], suppliedBlocks = [];
+    const framing = { transactions: 0, framed: 0, differing: 0, differingSample: [], unsupplied: 0, unsuppliedSample: [], suppliedBytes: 0 };
+    let supplyMs = 0, rootCheckMs = 0, frameMs = 0;
     for (let i = 0; i < count; i++) {
       const header = chain[i];
       assert.equal(header.height, from + i);
       const text = await cached(`tx-${header.height}-${header.id}.json`, `/blocks/${header.id}/transactions`);
       if (i % 500 === 499) console.error(`  ${i + 1}/${count} sections at ${header.height}`);
-      const block = parseExact(text);
-      assert.equal(block.headerId, header.id, "the response names the requested block");
-      const txs = block.transactions, texts = elementTexts(text, "transactions");
-      assert.equal(texts.length, txs.length, "one exact text per transaction");
-      let sectionBytes = 0, maxTx = 0, treeV3Outputs = 0, serialized = 0, outputs = 0;
-      const leaves = [], decoded = Object.fromEntries(Object.keys(decoders).map(name => [name, []])), supplied = [];
-      for (const [position, tx] of txs.entries()) {
-        outputs += tx.outputs.length;
-        const treeVersions = tx.outputs.map(treeVersion);
-        treeV3Outputs += treeVersions.filter(version => version === 3).length;
-        // Bytes come from the node's exact JSON text through the pinned serializer, which refuses a text whose
-        // claimed id differs from the id of its own serialization; the header root, not the serializer, authenticates them.
-        let bytes, id;
-        const t0 = performance.now();
-        try {
-          const wasm = Transaction.from_json(texts[position]);
-          let trapped = false;
-          try { const serialization = wasm.sigma_serialize_bytes(), own = Buffer.from(wasm.id().to_str(), "hex"); bytes = serialization; id = own; }
-          catch (error) { trapped = fatal(error); throw error; }
-          finally { if (!trapped) wasm.free(); }
-        } catch (error) { if (fatal(error)) throw error; bytesUnavailable.push({ height: header.height, position, id: tx.id, treeVersions, error: String(error).slice(0, 120) }); }
-        serializeMs += performance.now() - t0;
-        if (bytes === undefined) continue;
-        // The same transaction through a parsed-and-re-emitted object: integer-like keys come out sorted, so a
-        // spending-proof extension of several entries can serialize to bytes with another id, which the library refuses.
-        const t3 = performance.now();
-        try { const again = Transaction.from_json(JSON.stringify(tx)); again.free(); } catch (error) { if (fatal(error)) throw error; reordered.push({ height: header.height, position, id: tx.id, extensionKeys: tx.inputs.map(input => Object.keys(input.spendingProof.extension).length) }); }
-        reemitMs += performance.now() - t3;
-        serialized++;
-        sectionBytes += bytes.length;
-        maxTx = Math.max(maxTx, bytes.length);
-        leaves.push({ id, witnessId: witnessOf(tx) });
-        const t5 = performance.now();
-        const supply = supplyTransaction(bytes);
-        supplyMs += performance.now() - t5;
-        if (supply === undefined) framing.unsupplied++;
-        else {
-          supplied.push({ unsigned: supply.unsigned, witnessId: supply.witnessId });
-          framing.suppliedBytes += supply.unsigned.length + supply.witnessId.length;
-          // Where the framer reads a transaction, its outputs must be the node's own statement of them.
-          const outputs = profile.frameTransaction(supply.unsigned);
-          framing.transactions++;
-          if (outputs !== undefined) {
-            framing.framed++;
-            const same = outputs.length === tx.outputs.length && outputs.every((output, i) => hex(output.ergoTree) === tx.outputs[i].ergoTree &&
-              JSON.stringify(Object.entries(output.registers).map(([k, v]) => [k, hex(v)])) === JSON.stringify(Object.entries(tx.outputs[i].additionalRegisters ?? {})));
-            if (!same) { framing.differing++; if (framing.differingSample.length < 20) framing.differingSample.push({ height: header.height, position, id: tx.id }); }
-          }
+      const t0 = performance.now();
+      const { headerId, statements, supplied } = supplyBlock(text);
+      supplyMs += performance.now() - t0;
+      assert.equal(headerId, header.id, "the response names the requested block");
+      let sectionBytes = 0, maxTx = 0, treeV3Outputs = 0, outputs = 0;
+      for (const [position, statement] of statements.entries()) {
+        const stated = statement.get("outputs");
+        outputs += stated.length;
+        treeV3Outputs += stated.filter(output => treeVersion(output.get("ergoTree")) === 3).length;
+        const supply = supplied[position];
+        if (supply === undefined) {
+          framing.unsupplied++;
+          if (framing.unsuppliedSample.length < 20) framing.unsuppliedSample.push({ height: header.height, position, id: statement.get("id") });
+          continue;
         }
-        const viewsOf = {};
-        for (const [name, decoder] of Object.entries(decoders)) {
-          const t1 = performance.now();
-          const view = decoder.decode(bytes);
-          decodeMs[name] += performance.now() - t1;
-          viewsOf[name] = view;
-          if (view === undefined) refusals[name].push({ height: header.height, position, id: tx.id, treeVersions });
-          else decoded[name].push(view);
+        sectionBytes += supply.signedBytes;
+        maxTx = Math.max(maxTx, supply.signedBytes);
+        framing.suppliedBytes += supply.unsigned.length + supply.witnessId.length;
+        // Where the framer reads a transaction, its outputs must be the node's own statement of them.
+        const t1 = performance.now();
+        const framed = profile.frameTransaction(supply.unsigned);
+        frameMs += performance.now() - t1;
+        framing.transactions++;
+        if (framed !== undefined) {
+          framing.framed++;
+          const same = framed.length === stated.length && framed.every((output, o) => hex(output.ergoTree) === stated[o].get("ergoTree") &&
+            JSON.stringify(Object.entries(output.registers).map(([k, v]) => [k, hex(v)])) === JSON.stringify([...stated[o].get("additionalRegisters")]));
+          if (!same) { framing.differing++; if (framing.differingSample.length < 20) framing.differingSample.push({ height: header.height, position, id: statement.get("id") }); }
         }
-        // The verbatim copy must refuse and read exactly as decoder.mjs does, or the alternate's counts are not comparable.
-        const t4 = performance.now();
-        const copy = pinnedCopy(bytes);
-        equivalenceMs += performance.now() - t4;
-        equivalence.transactions++;
-        if ((copy === undefined) !== (viewsOf.pinned === undefined) || (copy !== undefined && !sameView(copy, viewsOf.pinned))) equivalence.differing++;
-        if (alternate && viewsOf.pinned !== undefined && viewsOf.alternate !== undefined) { agreement.compared++; if (!sameView(viewsOf.pinned, viewsOf.alternate)) agreement.differing++; }
       }
+      const complete = supplied.every(supply => supply !== undefined);
       const t2 = performance.now();
-      const rootOk = serialized === txs.length && hex(profile.transactionsRoot(BigInt(header.version), leaves)) === header.transactionsRoot;
+      const rootOk = complete && statements.length > 0 && hex(profile.transactionsRoot(BigInt(header.version), supplied)) === header.transactionsRoot;
       rootCheckMs += performance.now() - t2;
-      if (rootOk && supplied.length === txs.length) suppliedBlocks.push({ headerId: Buffer.from(header.id, "hex"), transactions: supplied });
-      const read = {};
-      for (const name of Object.keys(decoders)) {
-        read[name] = rootOk && decoded[name].length === txs.length;
-        if (read[name]) views[name].push({ headerId: Buffer.from(header.id, "hex"), transactions: decoded[name] });
-      }
-      rows.push({ height: header.height, version: header.version, timestamp: Number(header.timestamp), headerSize: header.size, transactions: txs.length, serialized, outputs,
-        jsonBytes: Buffer.byteLength(text), sectionBytes, maxTx, treeV3Outputs, rootOk, read });
+      if (rootOk) suppliedBlocks.push({ headerId: Buffer.from(header.id, "hex"), transactions: supplied.map(({ unsigned, witnessId }) => ({ unsigned, witnessId })) });
+      rows.push({ height: header.height, version: header.version, timestamp: Number(header.timestamp), headerSize: header.size, transactions: statements.length,
+        supplied: supplied.filter(supply => supply !== undefined).length, outputs, jsonBytes: Buffer.byteLength(text), sectionBytes, maxTx, treeV3Outputs, rootOk });
     }
 
     // Section sizes and contents are summed over the blocks whose root held; a block that did not is counted, and its
@@ -314,8 +214,8 @@ try {
         headerViewBytesPerBlock: HEADER_VIEW_BYTES, headerViewBytes: slice.length * HEADER_VIEW_BYTES,
         jsonBytes: all("jsonBytes"), treeV3Outputs: sum("treeV3Outputs"), blocksWithTreeV3: held.filter(row => row.treeV3Outputs > 0).length,
         firstTimestamp: first, lastTimestamp: last, spanHours: Number(spanHours.toFixed(2)),
-        blocksPerDay: slice.length > 1 && spanHours > 0 ? Number(((slice.length - 1) / (spanHours / 24)).toFixed(1)) : null, read: {} };
-      for (const name of Object.keys(decoders)) result.read[name] = slice.filter(row => row.read[name]).length;
+        blocksPerDay: slice.length > 1 && spanHours > 0 ? Number(((slice.length - 1) / (spanHours / 24)).toFixed(1)) : null,
+        suppliedTransactions: all("supplied") };
       return result;
     };
     const totals = aggregate(rows);
@@ -323,8 +223,8 @@ try {
     for (let start = 0; start < rows.length; start += DAY) days.push(aggregate(rows.slice(start, start + DAY)));
 
     // The model verifier from the real anchor, with four throwaway locations no real output uses.
-    const p2pk = n => Address.from_public_key(secp256k1.getPublicKey(new Uint8Array(32).fill(n), true)).to_ergo_tree().sigma_serialize_bytes();
-    const scripts = { 1: p2pk(1), 2: p2pk(2), 3: p2pk(3), 4: p2pk(4) };
+    const throwaway = n => p2pk(secp256k1.getPublicKey(new Uint8Array(32).fill(n), true));
+    const scripts = { 1: throwaway(1), 2: throwaway(2), 3: throwaway(3), 4: throwaway(4) };
     const candidate = { anchor: Buffer.from(anchorId, "hex"), depth: BigInt(depth), scripts };
     const identity = profile.ergoProfileIdentity(candidate);
     const headerViews = chain.map(header => ({ id: Buffer.from(header.id, "hex"), parentId: Buffer.from(header.parentId, "hex"), height: BigInt(header.height),
@@ -371,15 +271,6 @@ try {
         requestMsIs: `the least of ${REQUEST_SAMPLES} repetitions`, requests };
     }
 
-    const byTreeVersions = list => {
-      const counts = {};
-      for (const entry of list) { const key = [...new Set(entry.treeVersions)].sort().join(","); counts[key] = (counts[key] ?? 0) + 1; }
-      return counts;
-    };
-    const refusalSummary = {};
-    for (const [name, list] of Object.entries(refusals)) {
-      refusalSummary[name] = { transactions: list.length, blocks: new Set(list.map(r => r.height)).size, byOutputTreeVersions: byTreeVersions(list), sample: list.slice(0, 40) };
-    }
     const manifest = JSON.parse(readFileSync(join(here, "fixtures/manifest.json")));
     const { ergoNode, sigmaInterpreter, scrypto } = manifest.sources;
     report = {
@@ -388,26 +279,18 @@ try {
       sources: sourceInfo, headerAgreement,
       cache: { directory: cache, digest: digest.digest("hex"), covers: "every cached response read by this run, by name: the header slices and anchor read of each source and the window's block sections",
         liveFetches, liveFetchMs: Math.round(liveFetchMs), delayMs },
-      decoders: Object.fromEntries(Object.entries(decoders).map(([name, { version, wasmSha256 }]) => [name, { version, wasmSha256, path: name === "pinned" ? "experiments/ergo-range" : alternateDir }])),
-      decoderEquivalence: { ...equivalence, compares: "decoder.mjs against this script's verbatim copy of it on the pinned build: refusal or an equal id, witness id, ErgoTree and registers of every output, for every serialized transaction" },
-      framing: { ...framing, compares: "per transaction supplied, the framer's outputs (ErgoTree bytes, register names in order and constants) against the node's JSON statement, where the framer reads the unsigned bytes; suppliedBytes is what the reader takes, each unsigned byte string plus its 31-byte witness id" },
-      decoderAgreement: alternate ? { ...agreement, compares: "id, witness id, ErgoTree bytes and every register constant of every output, where both decoders read one transaction" } : null,
+      framing: { ...framing, compares: "per transaction supplied, the framer's outputs (ErgoTree bytes, register names in order and constants) against the node's JSON statement, where the framer reads the unsigned bytes (the bytes are copied from that same statement, so this shows the framer splits the id-verified bytes as the node's JSON does, not agreement with an independent parser; the hostile probe compares with the node's own parser); suppliedBytes is what the reader takes, each unsigned byte string plus its 31-byte witness id; unsupplied counts transactions whose copied unsigned bytes do not hash to the id the node states" },
       profile: { context: profile.ERGO_PROFILE_CONTEXT, identity: hex(identity), depth: String(depth), lag: String(depth + 1), locations: Object.fromEntries(Object.entries(scripts).map(([kind, script]) => [kind, hex(script)])) },
       totals, days,
-      bytes: { serialized: rows.reduce((total, row) => total + row.serialized, 0), unavailable: { transactions: bytesUnavailable.length, blocks: new Set(bytesUnavailable.map(r => r.height)).size,
-        byOutputTreeVersions: byTreeVersions(bytesUnavailable), sample: bytesUnavailable.slice(0, 40) },
-        refusedWhenReemitted: { transactions: reordered.length, blocks: new Set(reordered.map(r => r.height)).size, sample: reordered.slice(0, 40),
-          means: "the same transactions parsed into objects and re-emitted, which sorts integer-like keys, serialize to bytes whose id the library rejects" } },
-      timing: { serializeMs: Math.round(serializeMs), reemitMs: Math.round(reemitMs), rootCheckMs: Math.round(rootCheckMs), decodeMs: Object.fromEntries(Object.entries(decodeMs).map(([name, ms]) => [name, Math.round(ms)])),
-        equivalenceMs: Math.round(equivalenceMs), supplyMs: Math.round(supplyMs),
-        note: "serializeMs is the pinned library's text-to-bytes work including its own id; reemitMs the re-emitted-object control; rootCheckMs the script's root over the library's ids; decodeMs each decoder's strict round trip and field extraction over the same bytes; equivalenceMs the verbatim copy's second pinned round trip; supplyMs the pinned library's derivation of each unsigned byte string, a supplier's cost; the verifier's constructMs is where every section's root is rechecked from the hashes of the unsigned bytes and every output is framed and scanned, and a request afterwards walks per-index lists. JSON parsing, text splitting, witness ids and the alternate comparison are outside every timer." },
-      verifier: verifierResults, refusals: refusalSummary,
+      timing: { supplyMs: Math.round(supplyMs), frameMs: Math.round(frameMs), rootCheckMs: Math.round(rootCheckMs),
+        note: "supplyMs is the supplier's work: parsing each block's JSON text and copying every transaction's unsigned bytes, with their id and witness id hashes; frameMs the framer over every supplied transaction for the comparison with the node's statement; rootCheckMs the script's root over the supplied ids; the verifier's constructMs is where every section's root is rechecked from the hashes of the unsigned bytes and every output of a section whose root holds is framed and scanned, and a request afterwards walks per-index lists." },
+      verifier: verifierResults,
       pins: { ergoNode, sigmaInterpreter, scrypto },
       files,
       limitations: [
         "Public nodes are the header source: their agreement with each other on id, parent, height, version and transaction root, linkage and the anchor's child are checked; proof of work, chain selection and finality are not, and a colluding or shared upstream is not excluded.",
-        "Transaction bytes are obtained by serializing the nodes' exact JSON text with the pinned library; a block counts only where the bytes reproduce its header's transaction root. For block versions above 1 the root binds each transaction's unsigned bytes and the concatenation of its proofs, not the proofs' split among inputs; a version-1 root binds no proof bytes. Attribution reads outputs only, so neither gap reaches an answer, but the byte counts are authenticated only that far.",
-        "The reader takes unsigned bytes and witness ids and runs no decoder: a transaction outside its framer's grammar carries no record and its block keeps its section. The unsigned bytes are derived here with the pinned library (supply.mjs), a supplier's tool; a transaction it could not read would leave its block unsupplied in this run, a limit of this supplier, not of the reader. The decoders' refusal counts measure the libraries for the exact package versions named and this window only. The alternate build runs this script's verbatim copy of decoder.mjs, checked against decoder.mjs on the pinned build for every transaction; the two builds are compared on ids, witness ids and the outputs they both read, not on inputs or data inputs.",
+        "Each transaction's unsigned bytes are copied from the nodes' JSON text (supply.mjs); a block counts only where every copy hashes to the id the node states and the ids and witness ids reproduce its header's transaction root. Section bytes are the same copy with each input's proof, so for block versions above 1 the root binds each transaction's unsigned bytes and the concatenation of its proofs, not the proofs' split among inputs, and a version-1 root binds no proof bytes. Attribution reads outputs only, so neither gap reaches an answer, but the byte counts are authenticated only that far.",
+        "Neither the reader nor the supplier runs a decoder: the reader frames the unsigned bytes itself, and a transaction outside its framer's grammar carries no record while its block keeps its section; the supplier copies fields and parses no constant. A transaction whose copy did not hash to its id would leave its block unsupplied in this run, a limit of this supplier, not of the reader.",
         "The throwaway locations hold no real output and the subject is fixed, so every answer is empty by exhaustion: the cost measured is the scan at construction, not a real record set.",
         "Fetch time is the public nodes' response time under pacing from one host, only for responses fetched live in this run; an offline run records no live node state; only the exact window's header slices replay offline.",
         "No transaction was submitted, no node accepted anything of ours, no inclusion-latency distribution was taken, and no profile, decoder or dependency pin is selected here.",
