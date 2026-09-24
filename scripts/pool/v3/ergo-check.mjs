@@ -52,7 +52,7 @@ export function replayPairs(built, seeds) {
 }
 
 export async function checkErgoReplay({ groups, primary, fixture, adapter, codec, verifier, portable, test }) {
-  const { decodeTransaction } = await import("../../../experiments/ergo-range/decoder.mjs");
+  const { decodeTransaction } = await import("../../../experiments/ergo-range/contained-decoder.mjs");
   const { profile } = fixture, identity = codec.ergoProfileIdentity(profile);
   const selected = (chosen = profile, trustedHeaders, rawLimits = adapter.RAW_EVIDENCE_LIMITS, rangeLimits = RANGE_LIMITS) => ({
     ...verifier, record: data => adapter.ergoReplayVenue(chosen, { headers: trustedHeaders, blocks: data.blocks }, codec, rangeLimits, rawLimits),

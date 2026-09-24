@@ -1,9 +1,10 @@
 // Reader-selected candidate Ergo evidence adapter, outside the source-neutral
 // package. Headers are a reader trust input: authentication remains unproven.
 import { EvidenceRefusal } from "../../scripts/pool/delivery/evidence-reader.mjs";
-import { decodeTransaction } from "./decoder.mjs";
+import { decodeTransaction } from "./contained-decoder.mjs";
 
-// Local experiment budgets, not Ergo consensus or decoder memory limits.
+// Local experiment budgets, not Ergo consensus. Each transaction is decoded under the contained decoder's own budget
+// for its length, so these also bound a read's decoder work.
 export const RAW_EVIDENCE_LIMITS = Object.freeze({ maxBytes: 8_388_608n, maxBlocks: 256n, maxTransactions: 1024n });
 const typed = Object.getPrototypeOf(Uint8Array.prototype);
 const brandOf = Object.getOwnPropertyDescriptor(typed, Symbol.toStringTag).get;

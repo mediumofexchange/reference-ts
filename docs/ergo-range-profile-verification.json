@@ -22,9 +22,10 @@
   },
   "inputManifestSha256": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
   "files": {
-    "experiments/ergo-range/profile-check.mjs": "fa0ac7530efe8aef98e8b1fc902b822bd36accf0fb961f8c15b3026dc580d5e8",
-    "experiments/ergo-range/decoder.mjs": "f2ab6943b8ab15ee236fefea12731a8e601e382c2da9b211b100bf239e288b26",
-    "experiments/ergo-range/package.json": "3e440154ec6bb0a3bdcc8f931a8e2e025f3c4233c3d4a817f9ef0b93541f4946",
+    "experiments/ergo-range/profile-check.mjs": "34ade7559c33f5a53337b52fce9040e16a931a2ab94d300732b2023e1912d97d",
+    "experiments/ergo-range/contained-decoder.mjs": "706c3d42ec6a7f6f1051dfea267679f8189c0561026370ecdbe003068d469320",
+    "experiments/ergo-range/wasm-meter.mjs": "efc8e260bdc03c4193eb054c0fe709d32f95d4d55c0b8e6aa0475ec2a7b7bb1f",
+    "experiments/ergo-range/package.json": "0eb7a7f6a08c6b80a601dc36787620c36f8a5ad643b3c2730eac30ef3c0f8c3a",
     "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
     "model/pool-v3-ergo-profile.ts": "19a68c82f6410d551e589e34f69731e1cc8b73995a7cabe5cc75ff8b2e75128d",
     "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f"
@@ -116,7 +117,7 @@
     "Headers are the reader's own source: linkage, contiguity and the anchor's child are checked; proof of work, chain selection and finality are not.",
     "A transaction the reader's decoder refuses is unsupported evidence: its height has no section and every range through it stays unresolved until the decoder is repaired, a denial one node-valid transaction can trigger.",
     "Synthetic blocks are serialized by Fleet from local objects and were never accepted by a node; the fixtures are four non-contiguous real blocks and the real genesis header.",
-    "sigma-rust's strict round trip is the decoder boundary; it has no hard memory limit and no node-equivalence proof (see the decoder probe).",
+    "sigma-rust's strict round trip, run per transaction in a fresh metered instance under the reader's fuel and memory budget, is the decoder boundary; node equivalence for hostile inputs is not established (see the decoder probes).",
     "No range from index zero was read on a real chain from a real anchor; the cost of exhaustion over real block bytes is not measured here.",
     "Capacity is measured by serialization against the box limit and the pinned mempool policy; no transaction was relayed or accepted by a node.",
     "No runtime path, spec selection, publication, chunking on a node or C2.10.13 completeness claim for any real venue follows."
