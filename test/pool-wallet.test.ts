@@ -84,6 +84,23 @@ describe.skipIf(Number(process.versions.node.split(".")[0]) < 24)("local pool wa
     restored.request("other-invoice", f.request.backing, 10n);
     await expect(restored.fulfill("other-invoice", delivery, f.args)).rejects.toThrow(/match/);
   });
+  it("verifies and records one read of the checkpoint and note opening", async () => {
+    const f = await setup(), delivery = { statement: f.statement, opening: f.opening, receipt: f.receipt };
+    const held = f.args.checkpoint, unheld = { ...held, sequence: held.sequence + 5n };
+    // The checkpoint answers an unheld commitment first and the held one after.
+    let reads = 0;
+    const shifting = { ...f.args, get checkpoint() { return reads++ === 0 ? unheld : held; } };
+    expect((await f.wallet.fulfill("invoice", delivery, shifting)).kind).toBe("invalid");
+    expect(reads).toBe(1);
+    expect(f.wallet.received("invoice")).toBeUndefined();
+    // An opening that answers its value once validly, then out of range.
+    let valueReads = 0;
+    const flipping = { ...f.opening, get value() { return valueReads++ === 0 ? f.opening.value : 1n << 64n; } };
+    expect((await f.wallet.checkNote("invoice", flipping, f.args)).kind).toBe("unspent");
+    expect(valueReads).toBe(1);
+    expect(await f.wallet.checkNote("invoice", { ...f.opening, value: 1n << 64n }, f.args)).toEqual({ kind: "invalid", reason: "malformed note opening" });
+    expect((await f.wallet.fulfill("invoice", delivery, f.args)).kind).toBe("final");
+  });
   it("refuses another pending command that reserves the same input nullifier", async () => {
     const f = await setup();
     const statement = spendStatement(f.authority, [1n, 1n], [8n, 9n], [10n, 11n]);
