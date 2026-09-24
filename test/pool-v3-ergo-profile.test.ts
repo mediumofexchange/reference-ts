@@ -20,6 +20,9 @@ const sha = (bytes: Uint8Array): Buffer => createHash("sha256").update(bytes).di
 const b = (n: number, width = 32): Buffer => Buffer.alloc(width, n);
 const tree = (kind: number): Buffer => Buffer.from(`0008cd02${"ab".repeat(31)}0${kind}`, "hex");
 const scripts = { 1: tree(1), 2: tree(2), 3: tree(3), 4: tree(4) } as const;
+const MINER_FEE = Buffer.from(profile.MINER_FEE_TREE_HEX, "hex");
+// SHA-256 of the fee tree as mainnet block 1,876,512's fee output carries it (experiments/ergo-range/fixtures).
+const MINER_FEE_SHA256 = "744c727d6a1478912d1e7052957c2ba466bf9a5a89e9347309a58e2032473278";
 const wide = { maxBytes: 1n << 40n, maxEntries: 1n << 20n };
 const vlq = (n: number): Buffer => {
   const out: number[] = [];
@@ -41,24 +44,44 @@ function replacement(effective: bigint): Uint8Array {
 }
 const revocation = encodeRevocation(signRevocation(obligorSecret));
 
-type Output = profile.ErgoOutputView;
-const output = (ergoTree: Uint8Array, registers: Record<string, Uint8Array> = {}): Output => ({ ergoTree, registers });
-const record = (kind: 1 | 2 | 3 | 4, subject: Uint8Array, bytes: Uint8Array, extra: Record<string, Uint8Array> = {}): Output =>
-  output(scripts[kind], { R4: coll(subject), R5: coll(bytes), ...extra });
+// Outputs and transactions are written here, independently of the framer, in
+// the pinned node's unsigned transaction serialization: registers are R4
+// onward in order, every input has an empty proof.
+interface Output { readonly ergoTree: Uint8Array; readonly registers: readonly Uint8Array[]; readonly tokens?: readonly (readonly [number, bigint])[] }
+const output = (ergoTree: Uint8Array, registers: readonly Uint8Array[] = []): Output => ({ ergoTree, registers });
+const record = (kind: 1 | 2 | 3 | 4, subject: Uint8Array, bytes: Uint8Array, extra: readonly Uint8Array[] = []): Output =>
+  output(scripts[kind], [coll(subject), coll(bytes), ...extra]);
 const plain = output(Buffer.from("0008cd03" + "cc".repeat(32), "hex"));
-let counter = 0;
-const transaction = (outputs: Output[]): profile.ErgoTransactionView => {
-  const seed = sha(Buffer.from(`tx-${counter++}`));
-  return { id: seed, witnessId: blake2b(seed, { dkLen: 32 }).subarray(1), outputs };
+const bigVlq = (n: bigint): Buffer => {
+  const out: number[] = [];
+  do { let byte = Number(n & 0x7fn); n >>= 7n; if (n > 0n) byte |= 0x80; out.push(byte); } while (n > 0n);
+  return Buffer.from(out);
 };
+interface Shape { readonly extension?: readonly Uint8Array[]; readonly dataInputs?: number; readonly tokenIds?: number; readonly inputs?: number }
+function unsignedBytes(outputs: readonly Output[], seed: string, shape: Shape = {}): Buffer {
+  const extension = shape.extension ?? [], inputs = shape.inputs ?? 1;
+  const input = (i: number): Buffer => cat(sha(Buffer.from(`${seed}-${i}`)), vlq(0), Uint8Array.of(extension.length),
+    ...extension.flatMap((value, key) => [Uint8Array.of(key), value]));
+  return cat(vlq(inputs), ...Array.from({ length: inputs }, (_x, i) => input(i)),
+    vlq(shape.dataInputs ?? 0), ...Array.from({ length: shape.dataInputs ?? 0 }, (_x, i) => sha(Buffer.from(`${seed}-data-${i}`))),
+    vlq(shape.tokenIds ?? 0), ...Array.from({ length: shape.tokenIds ?? 0 }, (_x, i) => sha(Buffer.from(`${seed}-token-${i}`))),
+    vlq(outputs.length), ...outputs.map(o => cat(bigVlq(1_000_000n), o.ergoTree, vlq(2_000_000), Uint8Array.of((o.tokens ?? []).length),
+      ...(o.tokens ?? []).map(([index, amount]) => cat(vlq(index), bigVlq(amount))), Uint8Array.of(o.registers.length), ...o.registers)));
+}
+let counter = 0;
+const transaction = (outputs: readonly Output[], shape: Shape = {}): profile.ErgoTransactionView => {
+  const seed = `tx-${counter++}`;
+  return { unsigned: unsignedBytes(outputs, seed, shape), witnessId: blake2b(Buffer.from(seed), { dkLen: 32 }).subarray(1) };
+};
+const committed = (t: profile.ErgoTransactionView): { id: Uint8Array; witnessId: Uint8Array } => ({ id: blake2b(t.unsigned, { dkLen: 32 }), witnessId: t.witnessId });
 interface Spec { readonly [height: string]: Output[][] }
 /** Heights `from` through `to`; each block's transactions from the spec, else one plain transaction. */
 function evidence(spec: Spec, from: bigint, to: bigint, version = 3n): profile.ErgoRangeEvidence {
   const headers: profile.ErgoHeaderView[] = [], blocks: profile.ErgoBlockView[] = [];
   let parentId: Uint8Array = new Uint8Array(32);
   for (let height = from; height <= to; height++) {
-    const transactions = (spec[height.toString()] ?? [[plain]]).map(transaction);
-    const transactionsRoot = profile.transactionsRoot(version, transactions);
+    const transactions = (spec[height.toString()] ?? [[plain]]).map(outputs => transaction(outputs));
+    const transactionsRoot = profile.transactionsRoot(version, transactions.map(committed));
     const id = sha(cat(Buffer.from(height.toString()), transactionsRoot, parentId));
     headers.push({ id, parentId, height, version, transactionsRoot });
     blocks.push({ headerId: id, transactions });
@@ -83,7 +106,7 @@ const piece = (n: number, length = 40): Buffer => b(n, length);
 // Heights 4..9 are indices 2..7 under a chain from height 1.
 const spec: Spec = {
   4: [[plain, record(1, operator, commitment(1n))]],
-  5: [[record(2, backing, replacement(30n)), record(1, operator, junkCommitmentA, { R6: Buffer.from("0502", "hex") })]],
+  5: [[record(2, backing, replacement(30n)), record(1, operator, junkCommitmentA, [coll(b(2, 3))])]],
   6: [[record(1, operator, commitment(3n)), record(1, operator, commitment(2n))], [record(4, backing, piece(1))]],
   7: [[plain], [record(4, backing, piece(2)), record(4, backing, piece(3)), record(4, backing, piece(4)), plain, record(4, backingY, piece(5))]],
   8: [[record(3, obligor, revocation), record(3, obligor, revocation), record(1, other, commitment(7n, otherSecret))]],
@@ -98,11 +121,16 @@ describe("Ergo venue-profile candidate", () => {
     expect(profile.ergoLag(base)).toBe(3n);
     const variants: profile.ErgoProfile[] = [
       { ...base, anchor: b(5) }, { ...base, depth: 3n },
-      ...([1, 2, 3, 4] as const).map(kind => ({ ...base, scripts: { ...scripts, [kind]: cat(scripts[kind], Uint8Array.of(0)) } })),
+      ...([1, 2, 3, 4] as const).map(kind => ({ ...base, scripts: { ...scripts, [kind]: tree(kind + 4) } })),
+      { ...base, scripts: { ...scripts, 4: Buffer.from("0b03d17301", "hex") } },
     ];
     for (const variant of variants) expect(Buffer.from(profile.ergoProfileIdentity(variant))).not.toEqual(Buffer.from(identity));
     expect(() => profile.ergoProfileIdentity({ ...base, scripts: { ...scripts, 2: scripts[1] } })).toThrow(/one location/);
-    expect(() => profile.ergoProfileIdentity({ ...base, scripts: { ...scripts, 3: new Uint8Array(0) } })).toThrow(EncodingError);
+    // A location is exactly one tree the framer reads: sized, pay-to-public-key or the fee tree, nothing more or less.
+    for (const wrong of [new Uint8Array(0), cat(scripts[3], Uint8Array.of(0)), scripts[3].subarray(0, 35), Buffer.from("0b04d17301", "hex"),
+      Buffer.from("1005040004000e36", "hex"), Buffer.from("8b03d17301", "hex")]) {
+      expect(() => profile.ergoProfileIdentity({ ...base, scripts: { ...scripts, 3: wrong } })).toThrow(EncodingError);
+    }
     expect(() => profile.ergoProfileIdentity({ ...base, anchor: b(1, 31) })).toThrow(EncodingError);
     // The all-zero id names no header, so it would name no chain.
     expect(() => profile.ergoProfileIdentity({ ...base, anchor: new Uint8Array(32) })).toThrow(EncodingError);
@@ -127,7 +155,7 @@ describe("Ergo venue-profile candidate", () => {
     expect(Buffer.from(profile.merkleRoot([x]))).toEqual(Buffer.from(parent(leaf(x))));
     expect(Buffer.from(profile.merkleRoot([x, y, z]))).toEqual(Buffer.from(parent(parent(leaf(x), leaf(y)), parent(leaf(z)))));
     expect(() => profile.merkleRoot([])).toThrow(EncodingError);
-    const transactions = [transaction([plain]), transaction([plain])];
+    const transactions = [transaction([plain]), transaction([plain])].map(committed);
     const idsOnly = Buffer.from(profile.merkleRoot(transactions.map(t => t.id)));
     expect(Buffer.from(profile.transactionsRoot(1n, transactions))).toEqual(idsOnly);
     expect(Buffer.from(profile.transactionsRoot(0n, transactions))).toEqual(idsOnly);
@@ -142,21 +170,26 @@ describe("Ergo venue-profile candidate", () => {
     const objects = profile.attributeBlock(base, [
       transaction([plain, record(1, operator, commitment(1n)), record(1, operator, commitment(1n))]),
       transaction([
-        output(scripts[1], { R5: coll(commitment(1n)) }),
-        record(1, operator, commitment(1n), { R4: coll(b(1, 31)) }),
-        output(scripts[1], { R4: coll(operator), R5: Buffer.from("05" + "00".repeat(8), "hex") }),
+        output(scripts[1], [coll(commitment(1n))]),
+        record(1, b(1, 31), commitment(1n)),
+        output(scripts[1], [coll(operator)]),
         record(1, operator, commitment(1n).subarray(0, 135)),
         record(2, backing, replacement(30n).subarray(0, 232)),
         record(3, obligor, cat(revocation, Uint8Array.of(0))),
-        output(Buffer.from("0008cd02" + "ab".repeat(32), "hex"), { R4: coll(operator), R5: coll(commitment(1n)) }),
-        { ergoTree: scripts[1], registers: Object.create({ R4: coll(operator), R5: coll(commitment(1n)) }) as Record<string, Uint8Array> },
-        record(1, operator, junkCommitment, { R6: coll(b(1)), R9: Buffer.from("0400", "hex") }),
-      ]),
+        output(Buffer.from("0008cd02" + "ab".repeat(32), "hex"), [coll(operator), coll(commitment(1n))]),
+        output(MINER_FEE, [coll(operator), coll(commitment(1n))]),
+        record(1, operator, junkCommitment, [coll(b(1)), coll(new Uint8Array(0)), coll(b(2)), coll(b(3))]),
+      ], { extension: [coll(b(4)), coll(new Uint8Array(0))], dataInputs: 2, tokenIds: 1, inputs: 3 }),
       transaction([record(4, backing, piece(1)), record(4, backing, piece(2)), record(4, backing, piece(3)), plain,
         record(4, backing, piece(4)), record(4, backingY, piece(5)), record(1, operator, commitment(2n)), record(4, backing, piece(6))]),
       transaction(exactly.map(p => record(4, backing, p))),
       transaction(over.map(p => record(4, backing, p))),
       transaction([record(4, backing, new Uint8Array(0)), record(2, backing, replacement(31n)), record(3, obligor, revocation)]),
+      // Outside the framer's grammar (a register of another type), so none of its records is read.
+      transaction([record(1, operator, commitment(5n)), record(1, operator, commitment(6n), [Buffer.from("0502", "hex")])]),
+      // Sized locations and trees, tokens and a fee output are read like any other.
+      transaction([output(Buffer.from("0b03d17301", "hex")), { ...record(1, operator, commitment(7n)), tokens: [[0, 1n], [1, (1n << 64n) - 1n]] },
+        output(MINER_FEE)], { tokenIds: 2 }),
     ]);
     const summary = objects.map(o => [o.kind, o.ordinal.toString(16), Buffer.from(o.subject).equals(backingY) ? "Y" : "", o.record.length]);
     expect(summary).toEqual([
@@ -165,12 +198,84 @@ describe("Ergo venue-profile candidate", () => {
       [4, "200000000", "", 120], [4, "200000004", "", 40], [4, "200000005", "Y", 40], [1, "200000006", "", 136], [4, "200000007", "", 40],
       [4, "300000000", "", bound],
       [4, "500000000", "", 0], [2, "500000001", "", 233], [3, "500000002", "", 96],
+      [1, "700000001", "", 136],
     ]);
     expect(Buffer.from(objects[3]!.record)).toEqual(cat(piece(1), piece(2), piece(3)));
     expect(Buffer.from(objects[2]!.record)).toEqual(junkCommitment);
     expect(profile.ergoOrdinal(0xffff_ffff, 0xffff_ffff)).toBe((1n << 64n) - 1n);
     expect(() => profile.ergoOrdinal(0x1_0000_0000, 0)).toThrow(EncodingError);
-    expect(() => profile.attributeBlock(base, [transaction([{ ergoTree: "0008" as unknown as Uint8Array, registers: {} }])])).toThrow(EncodingError);
+    for (const malformed of [{ unsigned: "00", witnessId: b(1, 31) }, { unsigned: b(1), witnessId: b(1) }, null]) {
+      expect(() => profile.attributeBlock(base, [malformed as unknown as profile.ErgoTransactionView])).toThrow(EncodingError);
+    }
+  });
+
+  it("frames the node's unsigned transaction serialization and nothing else", () => {
+    const outputs = [record(1, operator, commitment(1n), [coll(b(5, 200))]), { ...plain, tokens: [[2, 7n]] as const }, output(MINER_FEE),
+      output(Buffer.from("0f8101" + "00".repeat(129), "hex"))];
+    const shape = { extension: [coll(b(4))], dataInputs: 1, tokenIds: 3, inputs: 2 };
+    const bytes = unsignedBytes(outputs, "frame", shape);
+    const framed = profile.frameTransaction(bytes)!;
+    expect(framed.map(o => [Buffer.from(o.ergoTree).toString("hex"), Object.entries(o.registers).map(([name, v]) => [name, Buffer.from(v).toString("hex")])]))
+      .toEqual(outputs.map(o => [Buffer.from(o.ergoTree).toString("hex"), o.registers.map((v, i) => [`R${4 + i}`, Buffer.from(v).toString("hex")])]));
+    // Every proper prefix, any suffix and a nonempty proof leave the grammar, and nothing throws.
+    for (let n = 0; n < bytes.length; n++) expect(profile.frameTransaction(bytes.subarray(0, n))).toBeUndefined();
+    expect(profile.frameTransaction(cat(bytes, Uint8Array.of(0)))).toBeUndefined();
+    const withProof = Buffer.from(bytes); withProof[1 + 32] = 1;
+    expect(profile.frameTransaction(withProof)).toBeUndefined();
+    const reject = (os: readonly Output[], s: Shape = {}): void => expect(profile.frameTransaction(unsignedBytes(os, "reject", s))).toBeUndefined();
+    // Values other than Coll[Byte] constants, in a register or an extension; more than six registers; an extension above 127 entries.
+    reject([output(plain.ergoTree, [Buffer.from("0400", "hex")])]);
+    reject([plain], { extension: [Buffer.from("0400", "hex")] });
+    reject([output(plain.ergoTree, Array.from({ length: 7 }, () => coll(b(1))))]);
+    reject([plain], { extension: Array.from({ length: 128 }, () => coll(b(1))) });
+    expect(profile.frameTransaction(unsignedBytes([plain], "ok", { extension: Array.from({ length: 127 }, () => coll(b(1))) }))).toHaveLength(1);
+    // Unsized trees other than pay-to-public-key and the fee tree; reserved header bits; a size past the end.
+    for (const tree of ["0008cd02", "10010400d17300", "00d17300", "8b03d17301", "2b03d17301", "4b03d17301"]) reject([output(Buffer.from(tree, "hex"))]);
+    const wrongSize = unsignedBytes([output(Buffer.from("0b03d17301", "hex"))], "size");
+    wrongSize[wrongSize.indexOf(Buffer.from("0b03d17301", "hex")) + 1] = 0x7f;
+    expect(profile.frameTransaction(wrongSize)).toBeUndefined();
+    // Nonminimal and overwide VLQs: the input count 2 written as 0x82 0x00, a count past an unsigned short, a VLQ past ten bytes.
+    expect(bytes[0]).toBe(2);
+    expect(profile.frameTransaction(cat(Buffer.from("8200", "hex"), bytes.subarray(1)))).toBeUndefined();
+    expect(profile.frameTransaction(cat(Buffer.from("808004", "hex"), bytes.subarray(1)))).toBeUndefined();
+    expect(profile.frameTransaction(Buffer.from("80".repeat(11) + "01", "hex"))).toBeUndefined();
+    // A claimed count is never allocated: 65,535 inputs over four bytes, or 2^32 - 1 token ids, fail at the first short read.
+    expect(profile.frameTransaction(Buffer.from("ffff0300", "hex"))).toBeUndefined();
+    expect(profile.frameTransaction(cat(vlq(0), vlq(0), bigVlq(0xffff_ffffn), b(1, 64)))).toBeUndefined();
+    // A u64 value at its bound and one past it.
+    const at = (value: bigint): Buffer => cat(vlq(0), vlq(0), vlq(0), vlq(1), bigVlq(value), plain.ergoTree, vlq(1), Uint8Array.of(0, 0));
+    expect(profile.frameTransaction(at((1n << 64n) - 1n))).toHaveLength(1);
+    expect(profile.frameTransaction(at(1n << 64n))).toBeUndefined();
+    for (const garbage of ["x", null, new Uint16Array(4)]) expect(profile.frameTransaction(garbage as unknown as Uint8Array)).toBeUndefined();
+    // Unsigned-short widths: a register of 65,535 bytes frames, one of 65,536 does not; so for 65,536 outputs claimed.
+    const register = (n: number): Buffer => cat(Uint8Array.of(0x0e), vlq(n), Buffer.alloc(n, 1));
+    const withRegister = (n: number): Buffer => cat(vlq(0), vlq(0), vlq(0), vlq(1), bigVlq(1n), plain.ergoTree, vlq(1), Uint8Array.of(0, 1), register(n));
+    expect(profile.frameTransaction(withRegister(0xffff))).toHaveLength(1);
+    expect(profile.frameTransaction(withRegister(0x10000))).toBeUndefined();
+    expect(profile.frameTransaction(cat(vlq(0), vlq(0), vlq(0), vlq(0x10000)))).toBeUndefined();
+    // The fee tree is Ergo's miner-fee proposition at minerRewardDelay 720, pinned here by its hash.
+    expect(createHash("sha256").update(MINER_FEE).digest("hex")).toBe(MINER_FEE_SHA256);
+  });
+
+  it("gives a transaction outside the framer's grammar no record but keeps its block's section", () => {
+    const hidden = record(1, operator, commitment(1n), [Buffer.from("0502", "hex")]);
+    const chain = evidence({ 2: [[hidden], [record(1, operator, commitment(2n))]], 3: [[hidden]] }, 1n, 5n);
+    const verifier = profile.ergoRangeVerifier(profileOf(chain), chain)!;
+    expect(answer(verifier, 1, operator, 0n, 1n).entries.map(e => [e.index, e.ordinal])).toEqual([[0n, 0n]]);
+    expect(answer(verifier, 1, operator, 1n, 1n).entries).toHaveLength(0);
+    // A block version the profile does not name supplies no section; its header still links the chain.
+    const later = evidence({}, 1n, 5n, 5n);
+    const v5 = profile.ergoRangeVerifier(profileOf(later), later)!;
+    expect(v5.witnessedIndex()).toBe(1n);
+    expect(v5.range(request(v5.identity, 1, operator, 0n, 0n), wide)).toBeUndefined();
+    // Version 1 commits to the ids alone: any witness id leaves its sections and answers as they were.
+    const v1 = evidence({ 3: [[record(1, operator, commitment(1n))]] }, 1n, 5n, 1n), v1Profile = profileOf(v1);
+    const v1Answer = Buffer.from(profile.ergoRangeVerifier(v1Profile, v1)!.range(request(profile.ergoProfileIdentity(v1Profile), 1, operator, 0n, 1n), wide)!);
+    const rewitnessed = { ...v1, blocks: v1.blocks.map(block => ({ ...block, transactions: block.transactions.map(t => ({ ...t, witnessId: b(9, 31) })) })) };
+    expect(Buffer.from(profile.ergoRangeVerifier(v1Profile, rewitnessed)!.range(request(profile.ergoProfileIdentity(v1Profile), 1, operator, 0n, 1n), wide)!)).toEqual(v1Answer);
+    expect(v1Answer.length).toBe(102 + 20 + 136);
+    const v4 = evidence({}, 1n, 5n, profile.MAX_SECTION_VERSION);
+    expect(profile.ergoRangeVerifier(profileOf(v4), v4)!.range(request(profile.ergoProfileIdentity(profileOf(v4)), 1, operator, 0n, 1n), wide)).toHaveLength(102);
   });
 
   it("answers every kind from the record alone and the reader derives the rules", () => {
@@ -246,9 +351,10 @@ describe("Ergo venue-profile candidate", () => {
     const full = Buffer.from(verifier.range(request(verifier.identity, 1, operator), wide)!);
     const through = (v: profile.ErgoRangeVerifier, fromIndex: bigint, toIndex: bigint): Uint8Array | undefined =>
       v.range(request(v.identity, 1, operator, fromIndex, toIndex), wide);
-    // A block whose root fails its header, here by another transaction id, supplies no section for its height.
+    // A block whose root fails its header, here by one flipped unsigned byte, supplies no section for its height.
     const idSwapped = structuredClone(chain);
-    (idSwapped.blocks[3]!.transactions[0] as { id: Uint8Array }).id = b(7);
+    const flipped = idSwapped.blocks[3]!.transactions[0]!.unsigned as Uint8Array;
+    flipped[40] = flipped[40]! ^ 1;
     const swapped = profile.ergoRangeVerifier(base, idSwapped)!;
     expect(through(swapped, 0n, 6n)).toBeUndefined();
     expect(through(swapped, 5n, 6n)).toBeInstanceOf(Uint8Array);
@@ -262,8 +368,8 @@ describe("Ergo venue-profile candidate", () => {
     }
     // A duplicate section, a block of another chain, an empty section, a root-failing twin and a malformed block change no answer.
     const twin = structuredClone(chain.blocks[3]!);
-    (twin.transactions[0] as { id: Uint8Array }).id = b(7);
-    const malformed = { headerId: chain.headers[2]!.id, transactions: [{ id: b(1), witnessId: b(1), outputs: [] }] } as unknown as profile.ErgoBlockView;
+    (twin.transactions[0] as { witnessId: Uint8Array }).witnessId = b(7, 31);
+    const malformed = { headerId: chain.headers[2]!.id, transactions: [{ unsigned: chain.blocks[2]!.transactions[0]!.unsigned, witnessId: b(1) }] } as unknown as profile.ErgoBlockView;
     const noisy = { ...chain, blocks: [twin, { headerId: b(9), transactions: chain.blocks[0]!.transactions }, malformed,
       { headerId: chain.headers[0]!.id, transactions: [] }, ...chain.blocks, chain.blocks[3]!] };
     expect(Buffer.from(through(profile.ergoRangeVerifier(base, noisy)!, 0n, 6n)!)).toEqual(full);
@@ -303,7 +409,7 @@ describe("Ergo venue-profile candidate", () => {
     for (const garbage of [{ headers: [{ ...chain.headers[0]!, id: "x" }], blocks: [] }, { headers: [{ ...chain.headers[0]!, height: 1 }], blocks: [] }, null, { headers: chain.headers }]) {
       expect(() => profile.ergoRangeVerifier(base, garbage as unknown as profile.ErgoRangeEvidence)).toThrow(EncodingError);
     }
-    expect(() => profile.attributeBlock(base, [{ id: b(1), witnessId: b(1, 31), outputs: [{ ergoTree: b(1), registers: { R4: "0e" } }] }] as unknown as profile.ErgoTransactionView[])).toThrow(EncodingError);
+    expect(() => profile.attributeBlock(base, [{ id: b(1), witnessId: b(1, 31), outputs: [] }] as unknown as profile.ErgoTransactionView[])).toThrow(EncodingError);
   });
 
   it("owns the profile, the evidence and each request: later reads and mutations change no answer", () => {
@@ -322,18 +428,20 @@ describe("Ergo venue-profile candidate", () => {
     const drifted = verifier.range(drifting, wide)!;
     const decoded = range.decodeRangeAnswer(drifted, request(verifier.identity, 1, operator, 0n, 4n), wide);
     expect(decoded.entries.map(e => e.index)).toEqual([2n, 3n, 4n, 4n]);
-    // Evidence whose fields drift after their single read: a header's height and a transaction's id.
-    let heightReads = 0, idReads = 0;
+    // Evidence whose fields drift after their single read: a header's height and a transaction's unsigned bytes.
+    let heightReads = 0, bytesReads = 0, witnessReads = 0;
     const drifted2 = chain.headers[1]!, driftedHeader = { ...drifted2, get height() { return heightReads++ === 0 ? drifted2.height : 4n; } };
-    const trueId = chain.blocks[3]!.transactions[0]!.id;
-    const driftedTransaction = { ...chain.blocks[3]!.transactions[0]!, get id() { return idReads++ === 0 ? trueId : b(7); } };
+    const trueBytes = chain.blocks[3]!.transactions[0]!.unsigned, otherBytes = unsignedBytes([record(1, operator, commitment(8n))], "other");
+    const trueWitness = chain.blocks[3]!.transactions[0]!.witnessId;
+    const driftedTransaction = { get unsigned() { return bytesReads++ === 0 ? trueBytes : otherBytes; },
+      get witnessId() { return witnessReads++ === 0 ? trueWitness : b(7, 31); } };
     const driftingEvidence = { headers: chain.headers.map((h, i) => (i === 1 ? driftedHeader : h)),
       blocks: chain.blocks.map((block, i) => (i === 3 ? { ...block, transactions: [driftedTransaction, ...block.transactions.slice(1)] } : block)) };
     const stable = profile.ergoRangeVerifier(base, driftingEvidence)!;
     expect(Buffer.from(stable.range(request(stable.identity, 1, operator), wide)!)).toEqual(before);
     expect(stable.range(request(stable.identity, 1, operator, 2n, 2n), wide)).toHaveLength(102 + 20 + 136);
     // Evidence mutated after construction.
-    chain.blocks[3]!.transactions[0]!.outputs[1]!.registers["R5"]!.fill(0);
+    (chain.blocks[3]!.transactions[0]!.unsigned as Uint8Array).fill(0);
     (chain.headers[7] as { height: bigint }).height = 100n;
     (chain.blocks as profile.ErgoBlockView[]).length = 0;
     expect(Buffer.from(verifier.range(request(verifier.identity, 1, operator), wide)!)).toEqual(before);

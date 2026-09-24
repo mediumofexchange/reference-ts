@@ -6,7 +6,9 @@
 // reassembled. This candidate fixes all three for an Ergo chain and reads the
 // record from full blocks: every output of every transaction of every block in
 // the range, each block's transaction section checked against its header's
-// transaction root, so absence is proven by exhaustion (§13.2). It applies no
+// transaction root, so absence is proven by exhaustion (§13.2). A transaction
+// is its unsigned bytes and witness id; the profile's own framer reads its
+// outputs, so no decoder refusal can leave an index without its section. It applies no
 // signature, sequence, kind or content rule; the reader's §13.3 rules do.
 // The header chain is the reader's own authenticated header source, checked
 // here only for contiguity, linkage and the anchor: the venue's index space
@@ -16,7 +18,7 @@
 // `src/ergo.ts` remains the v2 materialized view with its own identity.
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex } from "@noble/hashes/utils.js";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { ByteWriter, compareBytes, copyBytes, EncodingError } from "../src/bytes.js";
 import { utf8Encoder } from "../src/contexts.js";
 import { copyRequest, encodeRangeAnswer, MAX_RANGE_RECORD_BYTES, PUBLICATION_RANGE,
@@ -52,8 +54,11 @@ function ownProfile(profile: ErgoProfile): ErgoProfile {
   const owned: Partial<Record<RecordKind, Uint8Array>> = {};
   for (const kind of RECORD_KINDS) {
     const script = scripts[kind];
-    if (!isBytes(script) || script.length === 0) throw new EncodingError("invalid Ergo profile script");
-    owned[kind] = copyBytes(script);
+    if (!isBytes(script)) throw new EncodingError("invalid Ergo profile script");
+    const copy = copyBytes(script);
+    // A location is one tree the framer reads whole, or no output could be at it.
+    if (!isTree(copy)) throw new EncodingError("invalid Ergo profile script");
+    owned[kind] = copy;
   }
   // One location attributes to one kind; two kinds at one script would make one object two objects.
   for (const kind of RECORD_KINDS) {
@@ -85,11 +90,15 @@ export interface ErgoHeaderView {
   readonly version: bigint;
   readonly transactionsRoot: Uint8Array;
 }
-/** One output as the reader's own decoder derived it from the transaction's
- * exact bytes: the ErgoTree bytes and each present register's serialized constant. */
+/** One output as the profile's framer reads it from the transaction's
+ * unsigned bytes: the ErgoTree bytes and each present register's serialized constant. */
 export interface ErgoOutputView { readonly ergoTree: Uint8Array; readonly registers: Readonly<Record<string, Uint8Array>> }
-/** A transaction's id (32 bytes), its 31-byte witness id and its outputs in order. */
-export interface ErgoTransactionView { readonly id: Uint8Array; readonly witnessId: Uint8Array; readonly outputs: readonly ErgoOutputView[] }
+/** A transaction as a block commits to it: its unsigned bytes (the node's
+ * serialization with every input's proof empty, whose Blake2b-256 is the
+ * transaction id) and its 31-byte witness id (Blake2b-256 of the
+ * concatenated input proofs, first byte dropped; block version 1 does not
+ * commit to it). */
+export interface ErgoTransactionView { readonly unsigned: Uint8Array; readonly witnessId: Uint8Array }
 export interface ErgoBlockView { readonly headerId: Uint8Array; readonly transactions: readonly ErgoTransactionView[] }
 export interface ErgoRangeEvidence { readonly headers: readonly ErgoHeaderView[]; readonly blocks: readonly ErgoBlockView[] }
 
@@ -115,7 +124,7 @@ export function merkleRoot(leaves: readonly Uint8Array[]): Uint8Array {
 }
 /** Block versions above 1 commit to all transaction ids followed by all
  * witness ids; version 1 to the ids alone, as the pinned node reads them. */
-export function transactionsRoot(version: bigint, transactions: readonly ErgoTransactionView[]): Uint8Array {
+export function transactionsRoot(version: bigint, transactions: readonly { readonly id: Uint8Array; readonly witnessId: Uint8Array }[]): Uint8Array {
   const ids = transactions.map(transaction => transaction.id);
   return merkleRoot(version > 1n ? [...ids, ...transactions.map(transaction => transaction.witnessId)] : ids);
 }
@@ -136,6 +145,131 @@ export function collBytes(constant: Uint8Array): Uint8Array | undefined {
     }
   }
   return constant.length - at === length ? constant.subarray(at) : undefined;
+}
+
+/** The block versions whose sections the pinned node (v6.0.6) writes and
+ * this framer reads; a later version's block supplies no section until the
+ * profile names it, so a hard fork leaves ranges unresolved, never misread. */
+export const MAX_SECTION_VERSION = 4n;
+/** Ergo's miner-fee proposition (minerRewardDelay 720), the one unsized tree
+ * besides pay-to-public-key that the framer reads; a mempool admits a
+ * transaction only with a fee output at it. */
+export const MINER_FEE_TREE_HEX = "1005040004000e36100204a00b08cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a7017300730110010204" +
+  "02d19683030193a38cc7b2a57300000193c2b2a57301007473027303830108cdeeac93b1a57304";
+const MINER_FEE_TREE = hexToBytes(MINER_FEE_TREE_HEX);
+const P2PK_PREFIX = Uint8Array.of(0x00, 0x08, 0xcd), P2PK_BYTES = 36, SIZE_FLAG = 0x08, HEADER_RESERVED = 0xe0;
+const MAX_U16 = 0xffffn, MAX_EXTENSION = 127;
+
+/** A cursor over one transaction's unsigned bytes. Every read is bounded by
+ * the bytes themselves, so framing is linear in their length and allocates
+ * nothing a count claims. Any failure is `undefined`, never a throw. */
+class Cursor {
+  at = 0;
+  constructor(readonly bytes: Uint8Array) {}
+  byte(): number | undefined { return this.at < this.bytes.length ? this.bytes[this.at++] : undefined; }
+  /** A minimal unsigned VLQ no larger than `max`, as the node's writer emits it. */
+  vlq(max: bigint): bigint | undefined {
+    let value = 0n;
+    for (let shift = 0n; shift < 70n; shift += 7n) {
+      const byte = this.byte();
+      if (byte === undefined) return undefined;
+      value |= BigInt(byte & 0x7f) << shift;
+      if ((byte & 0x80) === 0) return (byte === 0 && shift > 0n) || value > max ? undefined : value;
+    }
+    return undefined;
+  }
+  skip(count: bigint): boolean {
+    if (count > BigInt(this.bytes.length - this.at)) return false;
+    this.at += Number(count);
+    return true;
+  }
+  startsWith(prefix: Uint8Array): boolean {
+    if (prefix.length > this.bytes.length - this.at) return false;
+    for (let i = 0; i < prefix.length; i++) if (this.bytes[this.at + i] !== prefix[i]) return false;
+    return true;
+  }
+}
+/** An ErgoTree as a box carries it: a sized tree (size flag set, header bits
+ * 5–7 clear) is its header, a minimal VLQ size and that many bytes, as the
+ * node writes a tree it parsed and as it keeps one it could not; an unsized
+ * tree is read only as exactly pay-to-public-key (`0008cd` and a 33-byte
+ * point) or the miner-fee tree, both complete expressions, so no other tree
+ * begins with them. */
+function frameTree(cursor: Cursor): Uint8Array | undefined {
+  const start = cursor.at, header = cursor.byte();
+  if (header === undefined || (header & HEADER_RESERVED) !== 0) return undefined;
+  if ((header & SIZE_FLAG) !== 0) {
+    const size = cursor.vlq(MAX_U32);
+    if (size === undefined || !cursor.skip(size)) return undefined;
+  } else {
+    cursor.at = start;
+    if (cursor.startsWith(P2PK_PREFIX) && cursor.skip(BigInt(P2PK_BYTES))) return cursor.bytes.subarray(start, cursor.at);
+    if (!cursor.startsWith(MINER_FEE_TREE)) return undefined;
+    cursor.at += MINER_FEE_TREE.length;
+  }
+  return cursor.bytes.subarray(start, cursor.at);
+}
+/** Whether `bytes` are exactly one tree as the framer reads it. */
+function isTree(bytes: Uint8Array): boolean {
+  const cursor = new Cursor(bytes);
+  return frameTree(cursor) !== undefined && cursor.at === bytes.length;
+}
+/** A `Coll[Byte]` constant in place: type code 0x0e, a minimal VLQ length of
+ * at most 65,535 (the node writes it as an unsigned short) and the bytes.
+ * The only value the framer reads, in registers and context extensions. */
+function frameCollBytes(cursor: Cursor): Uint8Array | undefined {
+  const start = cursor.at;
+  if (cursor.byte() !== COLL_BYTE_TYPE) return undefined;
+  const length = cursor.vlq(MAX_U16);
+  return length !== undefined && cursor.skip(length) ? cursor.bytes.subarray(start, cursor.at) : undefined;
+}
+/** The profile's reading of a transaction's unsigned bytes: its outputs in
+ * order, each tree and register constant as exact bytes, or `undefined` where
+ * the bytes leave the framer's grammar, in which case the transaction
+ * carries no record. The grammar is the pinned node's transaction
+ * serialization (inputs with empty proofs, data inputs, token ids, outputs)
+ * restricted to what a publisher needs: context extensions and registers of
+ * `Coll[Byte]` constants, trees as `frameTree` reads them, minimal VLQs, and
+ * nothing after the last output. Every reader frames the same committed
+ * bytes alike, and the root binds them, so framing needs no equivalence
+ * with the node beyond the publisher's own shape: a transaction outside it
+ * is one its author could have written inside it. */
+export function frameTransaction(unsigned: Uint8Array): readonly ErgoOutputView[] | undefined {
+  if (!isBytes(unsigned)) return undefined;
+  const cursor = new Cursor(unsigned);
+  const inputs = cursor.vlq(MAX_U16);
+  if (inputs === undefined) return undefined;
+  for (let i = 0n; i < inputs; i++) {
+    if (!cursor.skip(32n) || cursor.vlq(MAX_U16) !== 0n) return undefined;
+    const entries = cursor.byte();
+    if (entries === undefined || entries > MAX_EXTENSION) return undefined;
+    for (let e = 0; e < entries; e++) if (cursor.byte() === undefined || frameCollBytes(cursor) === undefined) return undefined;
+  }
+  const dataInputs = cursor.vlq(MAX_U16);
+  if (dataInputs === undefined || !cursor.skip(32n * dataInputs)) return undefined;
+  const tokenIds = cursor.vlq(MAX_U32);
+  if (tokenIds === undefined || !cursor.skip(32n * tokenIds)) return undefined;
+  const count = cursor.vlq(MAX_U16);
+  if (count === undefined) return undefined;
+  const outputs: ErgoOutputView[] = [];
+  for (let o = 0n; o < count; o++) {
+    if (cursor.vlq(MAX_U64) === undefined) return undefined;
+    const ergoTree = frameTree(cursor);
+    if (ergoTree === undefined || cursor.vlq(MAX_U32) === undefined) return undefined;
+    const tokens = cursor.byte();
+    if (tokens === undefined) return undefined;
+    for (let t = 0; t < tokens; t++) if (cursor.vlq(MAX_U32) === undefined || cursor.vlq(MAX_U64) === undefined) return undefined;
+    const registerCount = cursor.byte();
+    if (registerCount === undefined || registerCount > 6) return undefined;
+    const registers: Record<string, Uint8Array> = Object.create(null) as Record<string, Uint8Array>;
+    for (let r = 0; r < registerCount; r++) {
+      const constant = frameCollBytes(cursor);
+      if (constant === undefined) return undefined;
+      registers[`R${4 + r}`] = copyBytes(constant);
+    }
+    outputs.push(Object.freeze({ ergoTree: copyBytes(ergoTree), registers: Object.freeze(registers) }));
+  }
+  return cursor.at === unsigned.length ? Object.freeze(outputs) : undefined;
 }
 
 /** An object the profile attributes at one height: its kind and subject by
@@ -165,12 +299,15 @@ export function ergoOrdinal(transaction: number, output: number): bigint {
       BigInt(transaction) > MAX_U32 || BigInt(output) > MAX_U32) throw new EncodingError("Ergo position out of range");
   return (BigInt(transaction) << 32n) | BigInt(output);
 }
-function attributeOwned(profile: ErgoProfile, transactions: readonly ErgoTransactionView[]): readonly AttributedObject[] {
-  if (!Array.isArray(transactions)) throw new EncodingError("invalid Ergo transactions");
+/** A transaction as the reader holds it: its id computed from the owned
+ * unsigned bytes, its witness id, and the framer's outputs (`undefined`
+ * where the framer does not read the transaction, which carries no record). */
+interface ReadTransaction { readonly id: Uint8Array; readonly witnessId: Uint8Array; readonly outputs: readonly ErgoOutputView[] | undefined }
+function attributeOwned(profile: ErgoProfile, transactions: readonly ReadTransaction[]): readonly AttributedObject[] {
   const objects: AttributedObject[] = [];
   transactions.forEach((transaction, position) => {
-    if (transaction === null || typeof transaction !== "object" || !Array.isArray(transaction.outputs)) throw new EncodingError("invalid Ergo transaction view");
     const { outputs } = transaction;
+    if (outputs === undefined) return;
     for (let at = 0; at < outputs.length; at++) {
       const first = attributeOutput(profile, outputs[at]!);
       if (first === undefined) continue;
@@ -198,38 +335,23 @@ function attributeOwned(profile: ErgoProfile, transactions: readonly ErgoTransac
   });
   return Object.freeze(objects);
 }
-/** Every view is read once, field by field, into an owned frozen copy
- * before anything is judged, so no accessor can pass one value to a check
- * and another to a use. A malformed view is undefined. */
-function ownOutput(output: ErgoOutputView): ErgoOutputView | undefined {
-  if (output === null || typeof output !== "object") return undefined;
-  const { ergoTree, registers } = output;
-  if (!isBytes(ergoTree) || registers === null || typeof registers !== "object") return undefined;
-  // A null prototype, so a register named like a prototype property is an own entry like any other.
-  const ownedRegisters: Record<string, Uint8Array> = Object.create(null) as Record<string, Uint8Array>;
-  for (const [name, value] of Object.entries(registers)) {
-    if (!isBytes(value)) return undefined;
-    ownedRegisters[name] = copyBytes(value);
-  }
-  return Object.freeze({ ergoTree: copyBytes(ergoTree), registers: Object.freeze(ownedRegisters) });
-}
-function ownTransaction(transaction: ErgoTransactionView): ErgoTransactionView | undefined {
+/** Every view is read once, field by field, into an owned copy before
+ * anything is judged, so no accessor can pass one value to a check and
+ * another to a use; the id is hashed and the outputs framed from that copy.
+ * A malformed view is undefined. */
+function ownTransaction(transaction: ErgoTransactionView): ReadTransaction | undefined {
   if (transaction === null || typeof transaction !== "object") return undefined;
-  const { id, witnessId, outputs } = transaction;
-  if (!isBytes(id, 32) || !isBytes(witnessId, 31) || !Array.isArray(outputs)) return undefined;
-  const ownedOutputs: ErgoOutputView[] = [];
-  for (const output of outputs) {
-    const owned = ownOutput(output);
-    if (owned === undefined) return undefined;
-    ownedOutputs.push(owned);
-  }
-  return Object.freeze({ id: copyBytes(id), witnessId: copyBytes(witnessId), outputs: Object.freeze(ownedOutputs) });
+  const { unsigned, witnessId } = transaction;
+  if (!isBytes(unsigned) || !isBytes(witnessId, 31)) return undefined;
+  const bytes = copyBytes(unsigned);
+  return Object.freeze({ id: blake2b(bytes, { dkLen: 32 }), witnessId: copyBytes(witnessId), outputs: frameTransaction(bytes) });
 }
-function ownBlock(block: ErgoBlockView): ErgoBlockView | undefined {
+interface ReadBlock { readonly headerId: Uint8Array; readonly transactions: readonly ReadTransaction[] }
+function ownBlock(block: ErgoBlockView): ReadBlock | undefined {
   if (block === null || typeof block !== "object") return undefined;
   const { headerId, transactions } = block;
   if (!isBytes(headerId, 32) || !Array.isArray(transactions)) return undefined;
-  const ownedTransactions: ErgoTransactionView[] = [];
+  const ownedTransactions: ReadTransaction[] = [];
   for (const transaction of transactions) {
     const owned = ownTransaction(transaction);
     if (owned === undefined) return undefined;
@@ -248,13 +370,14 @@ function ownHeader(header: ErgoHeaderView): ErgoHeaderView | undefined {
  * length. A kind-4 object is the maximal run of adjacent outputs of one
  * transaction at the kind-4 location with one subject, its record the
  * pieces' bytes in output order, its ordinal the first output's; a run
- * longer than the kind's bound is no object. */
+ * longer than the kind's bound is no object. A transaction the framer does
+ * not read contributes nothing. */
 export function attributeBlock(profile: ErgoProfile, transactions: readonly ErgoTransactionView[]): readonly AttributedObject[] {
   const owned = ownProfile(profile);
   if (!Array.isArray(transactions)) throw new EncodingError("invalid Ergo transactions");
   const ownedTransactions = transactions.map(ownTransaction);
   if (ownedTransactions.some(transaction => transaction === undefined)) throw new EncodingError("invalid Ergo transaction view");
-  return attributeOwned(owned, ownedTransactions as ErgoTransactionView[]);
+  return attributeOwned(owned, ownedTransactions as ReadTransaction[]);
 }
 
 /** The venue's constants and one §13 answer per request, or none where the
@@ -274,8 +397,9 @@ export interface ErgoRangeVerifier {
  * that do not yet reach index 0 under the depth. Headers at or below the
  * anchor are linkage only and hold no index. Blocks may come from any
  * supplier: a block supplies the section of an index only where it is a
- * well-formed view, belongs to an indexed header of the chain and
- * reproduces that header's transaction root; any other block is passed
+ * well-formed view, belongs to an indexed header of the chain whose version
+ * is at most `MAX_SECTION_VERSION` and reproduces that header's transaction
+ * root from the ids of the unsigned bytes; any other block is passed
  * over, so no supplier can deny every read by adding a block, and an index
  * whose section is missing leaves only the ranges through it unresolved.
  * There is no answer for a range not yet witnessed under the depth or for
@@ -315,8 +439,9 @@ export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvide
     const block = ownBlock(supplied);
     if (block === undefined) continue;
     const header = byId.get(bytesToHex(block.headerId));
-    // Sections at or below the anchor hold no index and are not read.
-    if (header === undefined || header.height < origin || sectionAt.has(header.height - origin) || block.transactions.length === 0 ||
+    // Sections at or below the anchor hold no index and are not read; nor are those of a block version the profile does not name.
+    if (header === undefined || header.height < origin || header.version > MAX_SECTION_VERSION || sectionAt.has(header.height - origin) ||
+        block.transactions.length === 0 ||
         compareBytes(transactionsRoot(header.version, block.transactions), header.transactionsRoot) !== 0) continue;
     try {
       sectionAt.set(header.height - origin, attributeOwned(owned, block.transactions));

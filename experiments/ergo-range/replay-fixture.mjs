@@ -22,8 +22,9 @@ const tx = (height, ordinal, outputs) => ({
 });
 // Independent Fleet unsigned-byte ids and witness/root oracle, from the
 // profile probe; never ask the model/decoder what a header should commit to.
-const fleetId = transaction => blake2b(serializeTransaction({ ...transaction,
-  inputs: transaction.inputs.map(input => ({ boxId: input.boxId, extension: input.spendingProof.extension })) }).toBytes(), { dkLen: 32 });
+const unsignedBytes = transaction => serializeTransaction({ ...transaction,
+  inputs: transaction.inputs.map(input => ({ boxId: input.boxId, extension: input.spendingProof.extension })) }).toBytes();
+const fleetId = transaction => blake2b(unsignedBytes(transaction), { dkLen: 32 });
 const fleetWitness = transaction => blake2b(Buffer.concat(transaction.inputs.map(input => Buffer.from(input.spendingProof.proofBytes, "hex"))), { dkLen: 32 }).subarray(1);
 const root = transactions => {
   let level = [...transactions.map(fleetId), ...transactions.map(fleetWitness)]
@@ -69,7 +70,7 @@ const recordOutputs = ({ kind, subject, record }) => {
   return outputs;
 };
 
-/** Convert a TEST FixtureVenue export to raw block sections under the same
+/** Convert a TEST FixtureVenue export to block sections under the same
  * indices: the fixed, record-independent genesis at height 1 is the anchor,
  * so fixture index `i` is height `i + 2` and records carrying absolute
  * indices (replacement effect, demand deadlines) keep their meaning. The
@@ -97,7 +98,9 @@ export function fixtureEvidence(fixture) {
     const transactions = height === 1n ? [genesisTx] : at.get(height) ?? [tx(height, 0n, [box(plainTree)])];
     const current = header(height, parentId, transactions);
     headers.push(current);
-    blocks.push({ headerId: new Uint8Array(current.id), transactions: transactions.map(transaction => serializeTransaction(transaction).toBytes()) });
+    // As the reader's adapter takes a transaction: its witness id, then its unsigned bytes.
+    blocks.push({ headerId: new Uint8Array(current.id), transactions: transactions.map(transaction =>
+      new Uint8Array(Buffer.concat([fleetWitness(transaction), unsignedBytes(transaction)]))) });
     parentId = current.id;
   }
   return { headers, blocks };

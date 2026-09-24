@@ -1,10 +1,9 @@
 // Reader-selected candidate Ergo evidence adapter, outside the source-neutral
 // package. Headers are a reader trust input: authentication remains unproven.
 import { EvidenceRefusal } from "../../scripts/pool/delivery/evidence-reader.mjs";
-import { decodeTransaction } from "./contained-decoder.mjs";
 
-// Local experiment budgets, not Ergo consensus. Each transaction is decoded under the contained decoder's own budget
-// for its length, so these also bound a read's decoder work.
+// Local experiment budgets, not Ergo consensus. The model hashes and frames each transaction once, in time linear in
+// its length, so these also bound a read's work.
 export const RAW_EVIDENCE_LIMITS = Object.freeze({ maxBytes: 8_388_608n, maxBlocks: 256n, maxTransactions: 1024n });
 const typed = Object.getPrototypeOf(Uint8Array.prototype);
 const brandOf = Object.getOwnPropertyDescriptor(typed, Symbol.toStringTag).get;
@@ -14,11 +13,14 @@ const bufferLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byt
 const values = Uint8Array.prototype.values;
 const bytes = value => brandOf.call(value) === "Uint8Array";
 const u64 = value => typeof value === "bigint" && value >= 0n && value < (1n << 64n);
+// A supplied transaction is its 31-byte witness id followed by its unsigned bytes, the two things a block commits to.
+const WITNESS_ID_BYTES = 31;
 
 /** Bind reader-chosen profile, headers and answer budget. Only block bytes
- * are supplier evidence; supplied ids, outputs, clocks and answers are unused.
- * Raw evidence is bounded and owned before any transaction enters wasm.
- * A decoder refusal withholds its whole block, never proves absence there. */
+ * are supplier evidence, each transaction as its witness id and unsigned
+ * bytes; supplied ids, outputs, clocks and answers are unused. Raw evidence
+ * is bounded and owned before the model reads any of it. A transaction the
+ * profile's framer does not read carries no record and withholds nothing. */
 export function ergoReplayVenue(profile, evidence, codec, rangeLimits, rawLimits = RAW_EVIDENCE_LIMITS) {
   const { maxBytes, maxBlocks, maxTransactions } = rawLimits;
   const { maxBytes: answerBytes, maxEntries } = rangeLimits;
@@ -54,7 +56,7 @@ export function ergoReplayVenue(profile, evidence, codec, rangeLimits, rawLimits
     ownedHeaders.push({ id: own(id), parentId: own(parentId), height, version, transactionsRoot: own(transactionsRoot) });
   }
   // Charge each intrinsic view before copying, and finish owning all input
-  // before decoding. Total allocated source bytes cannot exceed the budget.
+  // before the model reads it. Total allocated source bytes cannot exceed the budget.
   const ownedBlocks = [];
   for (let i = 0; i < blockCount; i++) {
     const block = blocks[i];
@@ -66,27 +68,19 @@ export function ergoReplayVenue(profile, evidence, codec, rangeLimits, rawLimits
     if (count > maxTransactions) throw new codec.RangeLimitError("Ergo evidence transaction budget exceeded");
     const ownedId = bytes(headerId) ? own(headerId) : undefined;
     let valid = ownedId !== undefined && ownedId.length === 32;
-    const raw = [];
+    const owned = [];
     for (let j = 0; j < length; j++) {
       const transaction = transactions[j];
       if (!bytes(transaction)) { valid = false; continue; }
-      raw.push(own(transaction));
+      const copy = own(transaction);
+      // Too short to carry a witness id and a transaction: the block is malformed and is passed over like any other.
+      if (copy.length <= WITNESS_ID_BYTES) { valid = false; continue; }
+      owned.push({ witnessId: copy.subarray(0, WITNESS_ID_BYTES), unsigned: copy.subarray(WITNESS_ID_BYTES) });
     }
-    if (valid) ownedBlocks.push({ headerId: ownedId, transactions: raw });
+    if (valid) ownedBlocks.push({ headerId: ownedId, transactions: owned });
   }
-  const decodedBlocks = [];
-  // A block stops at its first refused transaction: it is withheld whole, so the rest need no decoding.
-  for (const block of ownedBlocks) {
-    const transactions = [];
-    for (const raw of block.transactions) {
-      const transaction = decodeTransaction(raw);
-      if (transaction === undefined) break;
-      transactions.push(transaction);
-    }
-    if (transactions.length === block.transactions.length) decodedBlocks.push({ headerId: block.headerId, transactions });
-  }
-  // Root failures and unavailable sections are resolved only by the model.
-  const verifier = codec.ergoRangeVerifier(ownedProfile, { headers: ownedHeaders, blocks: decodedBlocks });
+  // Root failures, unframed transactions and unavailable sections are resolved only by the model.
+  const verifier = codec.ergoRangeVerifier(ownedProfile, { headers: ownedHeaders, blocks: ownedBlocks });
   if (verifier === undefined) return undefined;
   return Object.freeze({ evidenceKind: "candidate-ergo-profile-synthetic-headers",
     range: request => verifier.range(request, answerLimits),

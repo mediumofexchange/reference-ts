@@ -954,19 +954,24 @@ difference, but the byte counts are authenticated only that far.
 | JSON fetched, bytes | 21,501,423 | 133,335,507 |
 | Indices without a section: sigma-rust 0.28.0 (the pin until 2026-09-22) / `0.29.0-alpha-2f840d3` (pinned 2026-09-22 to 09-23) | 5 / 0 | 58 / 0 |
 
-Decoding the week's 28,196 transactions took 253 s under the pinned
-`0.29.0-alpha-2f840d3` and 39 s under the 0.28.0 control (the retained run
-is the offline re-read of 2026-09-22 under the new pin; the first run, with
-the roles reversed, measured 32.5 s and 227.4 s); serializing them from
-text 254 s under the alpha; building the verifier from the read sections
-1.3 s, and that construction is where every output is scanned and
-attributed and every root rechecked from the decoder's ids; 5,040
-single-index probes afterwards took 38 ms and a day's or the week's
-range answers in a few milliseconds (the least of five repetitions),
-walking per-index lists. Under the new pin every index has its section, so
-the last-day and whole-window requests answer (empty, 102 bytes each)
-where the first run left 58 indices and every range through them
-unresolved. The week's
+Since 2026-09-24 the reader decodes nothing
+([decision](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)):
+the retained run, an offline re-read of the same cache (same digest), derives
+each transaction's unsigned bytes and witness id with `supply.mjs` and builds
+the verifier from those. The reader takes 24,165,521 bytes for the week
+against 26,639,110 section bytes; every root reproduces from the hashes of
+the unsigned bytes, all 5,040 indices have their sections, and the framer
+reads 4,707 of the 28,196 transactions, each with exactly the outputs the
+node's JSON states (the rest carry no record). Building the verifier, where
+every transaction is hashed and framed and every root rechecked, took 21 s
+on a desktop loaded by other jobs (13 s in an unloaded rerun); decoding the
+same transactions with the vendored release build took 154 s in the same
+run, and sigma-rust's serialization and the supplier's derivation are a
+supplier's cost. 5,040 single-index probes afterwards took 0.3 s and a day's
+or the week's range answers in a few milliseconds (the least of five
+repetitions), walking per-index lists; every request answers (empty, 102
+bytes each). Under the 2026-09-22 decoder reader the first run, on 0.28.0,
+left 58 indices and every range through them unresolved. The week's
 sections were fetched by a scratch probe whose log is not retained: about
 six minutes of response time, roughly 80 ms a response at 250 ms pacing
 from one host, and the 6.0.6 node refusing new connections after about 600
@@ -991,7 +996,8 @@ of wire headers at this rate.
 
 Not established: the nodes' authenticity (two public nodes agreeing is not
 proof of work, chain selection or finality, and a shared upstream is not
-excluded), decoder containment and node equivalence, the inclusion-latency
+excluded), a supplier for transactions the pinned library cannot read (none
+in this window), the inclusion-latency
 distribution (A10; it needs submitted transactions, which is P2), and any
 bound on future blocks: the counts are for these package versions and this
 window. No profile, decoder or dependency pin is selected by this probe.
@@ -1037,7 +1043,7 @@ sweep of all 25 piece boxes 2,412 bytes with one return output; read back
 from one synthetic block under the real latest header, the cases give the
 same seven objects as the testnet run below.
 
-**Testnet run, 2026-09-22** ([retained report](ergo-publication-verification.json)):
+**Testnet run, 2026-09-22** ([report](https://github.com/mediumofexchange/reference-ts/blob/d8f2b7b/docs/ergo-publication-verification.json)):
 the public node (`ergo-testnet-6.0.3`, `minValuePerByte` 360) accepted all
 seven transactions on first submission. The six cases, submitted together
 at full height 558,327 from one 20,000-tERG box, were all included in block
@@ -1077,6 +1083,17 @@ tip with the instant at the latest witnessed index has force when included
 at most `depth + 2` blocks above that tip (A10), so these landed two
 blocks inside the bound at depth 2; the report's latency note states the
 bound one block stricter.
+
+**Testnet run, 2026-09-24** ([retained report](ergo-publication-verification.json)),
+through the reader that decodes nothing: the own testnet node (v6.0.6)
+accepted the same seven transactions, the six cases in block 561,774
+(positions 1–6) and the sweep in 561,779, each two blocks above the full
+height at submission. Every block's unsigned bytes and witness ids, derived
+by `supply.mjs`, reproduced its header root, and the framer read each case
+built by sigma-rust's transaction builder (plain inputs, piece outputs, a
+pay-to-public-key change and the fee output): the kind-4 range answered the
+same seven objects in the same order, kinds 1–3 empty, after all 25 piece
+boxes were spent.
 
 **Not established:** an inclusion-latency distribution (A10: the six cases
 are one correlated observation and the sweep a second, on the testnet's fast
@@ -1604,8 +1621,21 @@ for the price of a transaction. The rewrites add a second denial: the header
 commits to the ids of the node's rewrite, so a supplier serving a miner's
 original bytes is refused (392 cases read under other ids).
 
+These refusals no longer reach the reader, which since 2026-09-24 takes each
+transaction's unsigned bytes and frames them itself
+([decision](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)).
+The 2026-09-24 rerun has the node also state its own unsigned bytes
+(`messageToSign`) for every transaction it reads: 56,953 readings (whole
+cases, prefixes and the 2,845 stable rewrites). Every one hashes to the
+node's id; the framer reads 18,382 of them, each with exactly the node's
+output count, trees, register names and constants, and leaves 38,571
+outside its grammar, which carry no record. The decoder's counts above are
+unchanged by the rerun. A second run whose seeds are the corpus's unsigned
+bytes, so that the mutations fall on the framer's own input, was stopped
+under memory pressure and is still owed.
+
 Not established: validity against state or proofs; version contexts other
-than a version-4 block's (the profile accepts every header version); which
+than a version-4 block's (the profile reads block versions 1–4); which
 bytes peers and node APIs serve for a rewritten transaction; inputs beyond
 single-byte mutations and splices of these 29 transactions. The stateless
 verdict uses the node's initial validation settings.

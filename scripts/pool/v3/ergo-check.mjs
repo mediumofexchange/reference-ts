@@ -1,7 +1,8 @@
 // Real-proof replay over the candidate Ergo profile. Headers are independently
 // chosen synthetic fixtures; only raw transaction sections come from the supplier.
 // Every replay group the fixture verifier answered is answered again by the
-// Ergo verifier from exact transaction bytes and checked roots (pool-v3 §13.2).
+// Ergo verifier from exact unsigned transaction bytes, witness ids and checked
+// roots (pool-v3 §13.2).
 import assert from "node:assert/strict";
 import { replayEvidencePackage, RANGE_LIMITS } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
@@ -52,7 +53,6 @@ export function replayPairs(built, seeds) {
 }
 
 export async function checkErgoReplay({ groups, primary, fixture, adapter, codec, verifier, portable, test }) {
-  const { decodeTransaction } = await import("../../../experiments/ergo-range/contained-decoder.mjs");
   const { profile } = fixture, identity = codec.ergoProfileIdentity(profile);
   const selected = (chosen = profile, trustedHeaders, rawLimits = adapter.RAW_EVIDENCE_LIMITS, rangeLimits = RANGE_LIMITS) => ({
     ...verifier, record: data => adapter.ergoReplayVenue(chosen, { headers: trustedHeaders, blocks: data.blocks }, codec, rangeLimits, rawLimits),
@@ -66,7 +66,7 @@ export async function checkErgoReplay({ groups, primary, fixture, adapter, codec
   };
   const run = (input, headers, chosen = selected(profile, headers)) => replayEvidencePackage(portable(input), chosen, codec);
   const counts = { groups: 0, kind4Subjects: 0, unionPositions: 0, otherRanges: 0, rawBytes: 0, blocks: 0 };
-  await test("every replay group agrees through the Ergo adapter from exact transaction bytes and checked roots", async () => {
+  await test("every replay group agrees through the Ergo adapter from exact unsigned bytes and checked roots", async () => {
     for (const { label, payload, result } of groups) {
       const { input, headers, rawBytes } = convert(payload);
       const witnessed = FixtureVenue.from(payload.venue), ergo = adapter.ergoReplayVenue(profile, { headers, blocks: input.venue.blocks }, codec, RANGE_LIMITS);
@@ -116,12 +116,13 @@ export async function checkErgoReplay({ groups, primary, fixture, adapter, codec
     assert.deepEqual(actual, result);
   });
   const missing = structuredClone(payload); missing.venue.blocks.splice(3, 1);
-  const tampered = structuredClone(payload); tampered.venue.blocks[3].transactions[0][1] ^= 1;
-  assert.notEqual(decodeTransaction(tampered.venue.blocks[3].transactions[0]), undefined,
-    "root-mismatch mutation must remain decodable");
-  const undecodable = structuredClone(payload); undecodable.venue.blocks[3].transactions[0] = new Uint8Array([255]);
-  await test("missing, tampered and undecodable Ergo sections refuse against unchanged trusted headers", async () => {
-    for (const input of [missing, tampered, undecodable]) await refusal(input);
+  // A byte of the first input's box id, after the 31-byte witness id and the input count.
+  const tampered = structuredClone(payload); tampered.venue.blocks[3].transactions[0][32] ^= 1;
+  assert.notEqual(codec.frameTransaction(tampered.venue.blocks[3].transactions[0].subarray(31)), undefined,
+    "root-mismatch mutation must remain framable");
+  const malformed = structuredClone(payload); malformed.venue.blocks[3].transactions[0] = new Uint8Array([255]);
+  await test("missing, tampered and malformed Ergo sections refuse against unchanged trusted headers", async () => {
+    for (const input of [missing, tampered, malformed]) await refusal(input);
     const injected = { ...missing, venue: { ...missing.venue, profile, headers, witnessedIndex: t, complete: true, rangeEvidence: "authenticated-chain" } };
     await refusal(injected);
   });

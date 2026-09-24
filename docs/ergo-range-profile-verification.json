@@ -1,7 +1,7 @@
 {
   "status": "offline-profile-candidate-only",
   "node": "v24.6.0",
-  "checks": 277,
+  "checks": 258,
   "profile": {
     "context": "moe/venue/ergo/v3",
     "identity": "ced67a67c9729c75394d74e59226d008a7ed2732b3696c0d9b9030a5e525d18d",
@@ -22,12 +22,10 @@
   },
   "inputManifestSha256": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
   "files": {
-    "experiments/ergo-range/profile-check.mjs": "34ade7559c33f5a53337b52fce9040e16a931a2ab94d300732b2023e1912d97d",
-    "experiments/ergo-range/contained-decoder.mjs": "935de261b840a03ed653202b74c739e37066146bbe45a58082847dfe8c86ca21",
-    "experiments/ergo-range/wasm-meter.mjs": "e9fad35867dc741a966d4e231264aa1e5e4846970ec20cb6b7e9638ad7cd1c49",
+    "experiments/ergo-range/profile-check.mjs": "d62044c75f6cb9f9d2b63ac6c9f333c3dd532ececd8a3709333e99cfac51bfea",
     "experiments/ergo-range/package.json": "0eb7a7f6a08c6b80a601dc36787620c36f8a5ad643b3c2730eac30ef3c0f8c3a",
     "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
-    "model/pool-v3-ergo-profile.ts": "19a68c82f6410d551e589e34f69731e1cc8b73995a7cabe5cc75ff8b2e75128d",
+    "model/pool-v3-ergo-profile.ts": "f3cc55986e9d3dbcf790242df1b3794ae4f65eb93b4c09cb60c9b0fc3def9813",
     "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f"
   },
   "genesisAnchor": {
@@ -60,6 +58,8 @@
       "version": "1",
       "transactions": "1",
       "outputs": "2",
+      "framedTransactions": 0,
+      "unsignedBytes": 345,
       "headerWireBytes": "281",
       "rootReproduced": true,
       "emptyAnswerBytes": 102
@@ -69,6 +69,8 @@
       "version": "3",
       "transactions": "17",
       "outputs": "46",
+      "framedTransactions": 11,
+      "unsignedBytes": 7891,
       "headerWireBytes": "221",
       "rootReproduced": true,
       "emptyAnswerBytes": 102
@@ -78,6 +80,8 @@
       "version": "3",
       "transactions": "6",
       "outputs": "17",
+      "framedTransactions": 0,
+      "unsignedBytes": 4422,
       "headerWireBytes": "221",
       "rootReproduced": true,
       "emptyAnswerBytes": 102
@@ -87,6 +91,8 @@
       "version": "4",
       "transactions": "5",
       "outputs": "12",
+      "framedTransactions": 1,
+      "unsignedBytes": 4706,
       "headerWireBytes": "221",
       "rootReproduced": true,
       "emptyAnswerBytes": 102
@@ -97,6 +103,11 @@
     "collByte": 43,
     "other": 22
   },
+  "feeTreeBlocks": [
+    "1000000",
+    "1500000",
+    "1876512"
+  ],
   "capacity": {
     "maxBoxBytes": 4096,
     "mempoolMaxTransactionBytes": 98304,
@@ -115,9 +126,9 @@
   },
   "limitations": [
     "Headers are the reader's own source: linkage, contiguity and the anchor's child are checked; proof of work, chain selection and finality are not.",
-    "A transaction the reader's decoder refuses is unsupported evidence: its height has no section and every range through it stays unresolved until the decoder is repaired, a denial one node-valid transaction can trigger.",
+    "A transaction outside the framer's grammar carries no record; its block keeps its section. Whether a record's author can always stay inside the grammar is shown here for Fleet-written transactions only.",
     "Synthetic blocks are serialized by Fleet from local objects and were never accepted by a node; the fixtures are four non-contiguous real blocks and the real genesis header.",
-    "sigma-rust's strict round trip, run per transaction in a fresh metered instance under the reader's fuel and memory budget, is the decoder boundary; node equivalence for hostile inputs is not established (see the decoder probes).",
+    "Fleet writes the unsigned bytes here; a supplier's derivation of them from a node is outside this check, and the header root, not the supplier, authenticates them.",
     "No range from index zero was read on a real chain from a real anchor; the cost of exhaustion over real block bytes is not measured here.",
     "Capacity is measured by serialization against the box limit and the pinned mempool policy; no transaction was relayed or accepted by a node.",
     "No runtime path, spec selection, publication, chunking on a node or C2.10.13 completeness claim for any real venue follows."

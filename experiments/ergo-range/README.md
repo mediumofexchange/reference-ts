@@ -56,7 +56,11 @@ useful controls: 0.28.0 under `scratch/sigma-0.28.0`
 refusals, and the debug npm alpha `0.29.0-alpha-2f840d3` under
 `scratch/sigma-alpha` the same commit's reading. Moving the pin again means
 rerunning this window offline from the cache with zero refusals, every root
-reproduced and no differing view against the build being replaced.
+reproduced and no differing view against the build being replaced. The
+reader itself decodes nothing: `supply.mjs` derives each transaction's
+unsigned bytes and witness id from the serialized bytes (a supplier's work),
+the model hashes and frames them, and the report compares every framed
+transaction's outputs with the node's JSON and totals the supplied bytes.
 The model verifier is built from the real headers and the read sections
 with four throwaway locations, so every answer is empty by exhaustion; its
 construction is where every output is scanned, and its single-index probes,
@@ -240,23 +244,26 @@ there is no hard process/WASM memory cap and no production decoder selection.
 `profile-check.mjs` compiles `model/pool-v3-ergo-profile.ts` with the
 repository root's TypeScript into a disposable `scratch/` build, so run it
 after `npm ci` at the root. It builds a twelve-height synthetic chain from
-Fleet-serialized transactions carrying real signed records in `R4`/`R5`
-register constants, decodes them with sigma-rust's strict round trip, and
+Fleet's unsigned bytes of transactions carrying real signed records in
+`R4`/`R5` register constants, which the model's framer reads, and
 checks the [candidate venue profile](../../docs/ERGO_VENUE_PROFILE.md):
 pool-v3 §13 answers by exhaustion over root-checked blocks, the reader's
-rules over them, refusals for unwitnessed, gapped, unlinked, substituted or
-truncated evidence, tolerance of stray and duplicate blocks, the pinned
+rules over them, refusals for unwitnessed, gapped, unlinked or substituted
+evidence, tolerance of stray and duplicate blocks, a transaction outside the
+framer's grammar, the pinned
 mainnet genesis header (`fixtures/mainnet-genesis-header.json`, listed under the
 manifest's `headers`) as the chain's anchor, and the four fixture blocks
-through the same verifier with every real register constant decoded beside
+through the same verifier, their framed transactions against the node's
+outputs and every real register constant read beside
 sigma-rust's. Its [retained report](../../docs/ergo-range-profile-verification.json)
 is an offline observation; nothing connects to a node or selects the profile.
 
 ## Contained decoder
 
-The reader's decoder is `contained-decoder.mjs`; the replay adapter
-(`replay-venue.mjs`), the v3 Ergo check and `profile-check.mjs` read through
-it. `wasm-meter.mjs` derives, from the vendored release build, a module with
+`contained-decoder.mjs` was the reader's decoder until the reader switched
+to the profile's own framer over unsigned bytes (2026-09-24); it remains the
+decoder probes' tool (`hostile-equivalence.mjs`, `contained-range.mjs`), and
+no reader path imports it. `wasm-meter.mjs` derives, from the vendored release build, a module with
 fuel charged at every function entry and loop head, bulk memory, memory
 growth and table growth routed through charged, capped helpers, and a call
 depth counted at every call site against a ceiling; the derivation is
@@ -309,10 +316,18 @@ no compiler, so a JDK compiles the harness; the own node's bundle
 
 ```powershell
 node experiments/ergo-range/hostile-equivalence.mjs --jdk <jdk-21 dir>
+node experiments/ergo-range/hostile-equivalence.mjs --jdk <jdk-21 dir> --unsigned --work scratch/hostile-unsigned --out docs/ergo-framer-hostile-equivalence-verification.json
 ```
 
-It writes the [retained report](../../docs/ergo-decoder-hostile-equivalence-verification.json)
-and keeps its cases and the node's answers in `scratch/hostile-equivalence/`.
+Every transaction the node reads is also put through the reader's own path:
+the node states its unsigned bytes (`messageToSign`), which must hash to its
+id, and where the profile's framer reads them its outputs must be the node's
+(`counts.framer`). With `--unsigned` the seeds are the corpus transactions'
+unsigned bytes (`supply.mjs`), so the mutations fall on the framer's own
+input. The first command writes the [retained report](../../docs/ergo-decoder-hostile-equivalence-verification.json)
+and keeps its cases and the node's answers in `scratch/hostile-equivalence/`;
+the second writes the framer report `docs/ergo-framer-hostile-equivalence-verification.json`
+(not yet recorded: its first run was stopped under memory pressure).
 
 ## Metered decoder feasibility
 

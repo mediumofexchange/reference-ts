@@ -180,12 +180,14 @@ whatever its header version or body, and exposes permissive parsing, with
 strict round-trip rejection controls; the experiment pins a vendored,
 reproducible release build of sigma-rust `2f840d3`
 ([decided 2026-09-23](../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3)) in place of the debug npm alpha, whose
-parser a node-valid output nested 50 deep could trap. The reader decodes
-through a [contained](POOL_DEPLOYMENT_PROBES.md#contained-decoder) metered
-derivation of that build: a fresh instance per transaction under a fuel and
-memory budget linear in its length, where exhaustion refuses that
-transaction only. Node equivalence for hostile inputs and authenticated
-complete-range reads remain unimplemented.
+parser a node-valid output nested 50 deep could trap; a
+[contained](POOL_DEPLOYMENT_PROBES.md#contained-decoder) metered derivation
+of it remains a probe tool. The reader decodes nothing: it takes each
+transaction's unsigned bytes and witness id and frames the outputs itself
+([decided 2026-09-24](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)),
+so no library's refusal withholds a section; a transaction outside the
+framer's grammar carries no record. Authenticated complete-range reads
+remain unimplemented.
 The [candidate Ergo venue profile](ERGO_VENUE_PROFILE.md) and
 `model/pool-v3-ergo-profile.ts` fix attribution by exact tree and `R4`/`R5`
 shape, run reassembly, transaction-then-output ordinals, an index space
@@ -197,15 +199,15 @@ reproduces the four fixture roots and answers synthetic ranges through
 Fleet and sigma-rust. The [local adapter](ERGO_VENUE_PROFILE.md#local-replay-adapter)
 replays every real-proof local replay group (single-backing imports and
 silence, two-backing scopes and recovery, receipts, non-service counts,
-compact faults, returning segments) from exact transaction bytes under
-independently selected synthetic headers with bounded ownership before
-decoding, reproducing the fixture verifier's results with kind-4 ordinals as
+compact faults, returning segments) from exact unsigned transaction bytes
+under independently selected synthetic headers with bounded ownership before
+reading, reproducing the fixture verifier's results with kind-4 ordinals as
 transaction positions. Fresh seedless and receiver readers retain this
 provenance. The [real-chain cost](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor)
 is measured over seven mainnet days from a real anchor against two agreeing
 public nodes: exact sections from the nodes' text reproduce every header
-root; the previous decoder pin left every index carrying an Ergo 6.0 script
-without a section, and the pinned alpha reads them all. The
+root, the reader's framer reads every supplied transaction it frames with the
+node's outputs, and every index has its section. The
 [publication experiment](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)
 published the profile's four-piece release and its duplicate, reordered,
 partial, merged and separated cases on the public testnet at the node's
@@ -218,10 +220,8 @@ measured week stand on its best chain
 is shown for the retained evidence, from one run of the reference client,
 while the verifier still leaves proof of work to its source and no runtime
 path reads the node. No specification selects the profile; header
-authentication for a reader and node equivalence beyond the own node's
-retained blocks ([compared field by field](POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks))
-remain open, and the decoder's budget is the reader's own, so a node-valid
-transaction above it would deny the ranges through its block.
+authentication for a reader remains open, and a record must be published
+inside the framer's grammar to be read.
 
 ## Successor record conformance
 

@@ -11,20 +11,30 @@
 // Nothing here says the node would accept a case: no state, proofs or validity are checked beyond the node's recorded
 // stateless verdict, and no runtime path reads this.
 //
+// The profile's reader runs no decoder: it takes a transaction's unsigned bytes and frames them itself
+// (model/pool-v3-ergo-profile.ts). So every transaction the node reads is also checked there: the node's own unsigned
+// bytes must hash to its id, and where the framer reads them, its outputs must be the node's. With --unsigned the
+// seeds are the corpus transactions' unsigned bytes (supply.mjs), so the mutations land in the framer's own input and
+// a case the node writes back unchanged is one a supplier could serve.
+//
 // Usage, from the repository root, with a JDK for javac (the node's bundled runtime has no compiler) and the own
 // node's bundle (nodes.mjs):
 //   node experiments/ergo-range/hostile-equivalence.mjs --jdk <jdk dir> [--node-dir scratch/ergo-nodes/v6.0.6]
-//     [--work scratch/hostile-equivalence] [--out docs/ergo-decoder-hostile-equivalence-verification.json]
+//     [--work scratch/hostile-equivalence] [--out docs/ergo-decoder-hostile-equivalence-verification.json] [--unsigned]
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { closeSync, createReadStream, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { closeSync, createReadStream, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
 import { performance } from "node:perf_hooks";
 import { createInterface } from "node:readline";
+import { pathToFileURL } from "node:url";
+import ts from "typescript";
+import { blake2b } from "@noble/hashes/blake2b";
 import { serializeTransaction } from "@fleet-sdk/serializer";
 import { Transaction } from "ergo-lib-wasm-nodejs";
 import { decodeContained, DERIVED_SHA256, VENDORED_SHA256 } from "./contained-decoder.mjs";
+import { supplyTransaction } from "./supply.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../..");
 const args = process.argv.slice(2);
@@ -34,12 +44,14 @@ assert(jdk, "--jdk <dir> names a JDK whose javac compiles the node harness");
 const nodeDir = resolve(root, option("--node-dir", "scratch/ergo-nodes/v6.0.6"));
 const work = resolve(root, option("--work", "scratch/hostile-equivalence"));
 const out = resolve(root, option("--out", "docs/ergo-decoder-hostile-equivalence-verification.json"));
+const unsignedSeeds = args.includes("--unsigned");
 mkdirSync(join(work, "classes"), { recursive: true });
 
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const files = Object.fromEntries(["experiments/ergo-range/hostile-equivalence.mjs", "experiments/ergo-range/node-read/NodeRead.java",
-  "experiments/ergo-range/contained-decoder.mjs", "experiments/ergo-range/wasm-meter.mjs", "experiments/ergo-range/fixtures/manifest.json",
+  "experiments/ergo-range/contained-decoder.mjs", "experiments/ergo-range/wasm-meter.mjs", "experiments/ergo-range/supply.mjs",
+  "experiments/ergo-range/decoder.mjs", "tsconfig.json", "experiments/ergo-range/fixtures/manifest.json",
   "experiments/ergo-range/package.json", "experiments/ergo-range/package-lock.json", "experiments/ergo-range/vendor/ergo-lib-wasm-nodejs/ergo_lib_wasm.js",
   "experiments/ergo-range/vendor/ergo-lib-wasm-nodejs/SHA256SUMS"].map(file => [file, sha256(readFileSync(join(root, file)))]));
 // The reference parse that names sigma-rust's errors is the vendored build the contained decoder derives from.
@@ -57,6 +69,24 @@ assert.equal(compiled.status, 0, `javac: ${compiled.stderr}`);
 const node = { jarSha256: JAR_SHA256, runtimeReleaseSha256: sha256(readFileSync(join(nodeDir, "jre", "release"))), runtime: firstLineOf(spawnSync(java, ["-version"], { encoding: "utf8" })),
   compiler: firstLineOf(spawnSync(join(jdk, "bin", "javac"), ["-version"], { encoding: "utf8" })), heap: "-Xmx4G, as ergo-node.ps1 runs it" };
 
+// The profile's framer, compiled from source into a disposable build as profile-check.mjs does; every repository source
+// the compilation reads is bound.
+const build = realpathSync(mkdtempSync(join(realpathSync(join(root, "scratch")), "hostile-framer-")));
+let profile;
+try {
+  const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
+  assert(!config.error, "TypeScript configuration unreadable");
+  const program = ts.createProgram([join(root, "model/pool-v3-ergo-profile.ts")], {
+    ...ts.parseJsonConfigFileContent(config.config, ts.sys, root).options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false });
+  assert.equal(ts.getPreEmitDiagnostics(program).length, 0, "model compiles");
+  assert.equal(program.emit().emitSkipped, false);
+  for (const source of program.getSourceFiles()) {
+    const path = resolve(source.fileName);
+    if (path.startsWith(root + sep) && !path.includes(`${sep}node_modules${sep}`)) files[path.slice(root.length + 1).replace(/\\/g, "/")] = sha256(readFileSync(path));
+  }
+  profile = await import(new URL("model/pool-v3-ergo-profile.js", pathToFileURL(build + sep).href));
+} finally { rmSync(build, { recursive: true, force: true }); }
+
 // Seeds: every corpus transaction, pinned by the manifest before parsing, serialized as decoder-cases.mjs does.
 const manifest = JSON.parse(readFileSync(join(here, "fixtures/manifest.json")));
 const lossless = text => JSON.parse(text, (_key, value, context) => typeof value === "number" ? BigInt(context.source) : value);
@@ -68,7 +98,10 @@ for (const fixture of manifest.fixtures) {
   assert.equal(sha256(raw), fixture.sha256, `${fixture.file} is the pinned fixture`);
   for (const [position, tx] of lossless(raw.toString("utf8")).blockTransactions.transactions.entries()) {
     const normalized = { ...tx, outputs: tx.outputs.map(o => ({ ...o, creationHeight: Number(o.creationHeight), index: Number(o.index) })) };
-    seeds.push({ height: fixture.height, position, id: tx.id, bytes: Buffer.from(serializeTransaction(normalized).toBytes()) });
+    const signed = Buffer.from(serializeTransaction(normalized).toBytes());
+    // Under --unsigned a seed is the transaction's unsigned bytes, which the node reads as that transaction with every proof empty.
+    const bytes = unsignedSeeds ? Buffer.from(supplyTransaction(signed).unsigned) : signed;
+    seeds.push({ height: fixture.height, position, id: tx.id, bytes });
   }
 }
 seeds.splice(seedLimit);
@@ -211,6 +244,22 @@ const note = (group, c, result, extra) => {
   if (result.verdict === "sameIdsDiffer") sameIdsDiffer++;
   if (result.verdict !== "equal") sample(`${group}:${result.verdict}`, c, { ...extra, ...(result.fields ? { fields: result.fields } : { decoder: result.refusal }) });
 };
+// The reader's own path for every transaction the node reads: the node's unsigned bytes must hash to its id, and where the
+// profile's framer reads them, every output must be the node's. A framed reading with other outputs is the disagreement
+// that would matter; an unframed one gives no record and withholds nothing.
+let framerDiffers = 0;
+const frameNode = (c, tx, extra) => {
+  const unsigned = Buffer.from(tx.unsigned, "hex");
+  tally("framer", hex(blake2b(unsigned, { dkLen: 32 })) === tx.id ? "idFromUnsigned" : "idNotFromUnsigned");
+  if (unsignedSeeds) tally("framer", unsigned.equals(c.bytes) ? "caseIsNodeWriting" : "caseRewritten");
+  const outputs = profile.frameTransaction(unsigned);
+  if (outputs === undefined) { tally("framer", "unframed"); return; }
+  const framed = { id: tx.id, witnessId: tx.witnessId,
+    outputs: outputs.map(o => ({ ergoTree: hex(o.ergoTree), registers: Object.fromEntries(Object.entries(o.registers).map(([k, v]) => [k, hex(v)])) })) };
+  const fields = differences(framed, nodeFields(tx));
+  tally("framer", fields.length === 0 ? "framedEqual" : "framedDiffers");
+  if (fields.length > 0) { framerDiffers++; sample("framer:differs", c, { ...extra, fields }); }
+};
 // The node's rewrites, each read by the node again below: its writing must be what it reads back.
 const rewrites = new Map();
 let uncompared = 0;
@@ -244,6 +293,7 @@ for await (const line of lines) {
     assert(Number.isSafeInteger(answer.read) && answer.read > 0 && answer.read <= c.bytes.length, "the node read within the case");
     tally("nodeStateless", answer.stateless === "ok" ? "ok" : "failed");
     const extra = { stateless: answer.stateless === "ok", ...(answer.rewritten ? { rewritten: true } : {}) };
+    frameNode(c, answer.tx, extra);
     if (answer.read === c.bytes.length) {
       const result = compare(c.bytes, answer.tx, decoded);
       outcome = answer.rewritten ? "nodeReadsAndRewrites" : "nodeReads";
@@ -315,22 +365,32 @@ if (rewriteInputs.length > 0) {
     const reason = answer.refused !== undefined ? (RESOURCE.test(answer.refused) ? "resource" : "refused") : answer.encodeFailed !== undefined ? "encodeFailed"
       : answer.rewritten ? "rewritesAgain" : answer.read * 2 !== rewriteInputs[i].length ? "readsPrefix"
       : differences(nodeFields(answer.tx), fields).length > 0 ? "otherFields" : undefined;
-    if (reason === undefined) { rereads.stable++; note("rewrittenBytes", c, compare(Buffer.from(rewriteInputs[i], "hex"), answer.tx), extra); }
+    if (reason === undefined) { rereads.stable++; frameNode(c, answer.tx, extra); note("rewrittenBytes", c, compare(Buffer.from(rewriteInputs[i], "hex"), answer.tx), extra); }
     else { rereads.unstable[reason] = (rereads.unstable[reason] ?? 0) + 1; uncompared++; sample("rewriteUnstable", c, { ...extra, node: reason }); }
   });
 }
 
+// A control for the framer's comparison: a seed's framed outputs with one register changed show as a difference.
+const framerControl = (() => {
+  const seedReading = seedFields.find(f => f.outputs.some(o => Object.keys(o.registers).length > 0));
+  const copy = structuredClone(seedReading); CONTROLS.register(copy);
+  return differences(seedReading, copy).includes("register");
+})();
+assert(framerControl, "the framer comparison detects a changed register");
+assert.equal(counts.framer?.idNotFromUnsigned, undefined, "every node reading's unsigned bytes hash to its id");
 const report = {
-  status: sameIdsDiffer > 0 ? "same-id-disagreement-found" : uncompared > 0 ? "inconclusive" : "no-same-id-disagreement-on-these-cases",
-  sameIdsDiffer, uncompared, resourceCasesCountedNotSampled: resourceCases,
+  status: sameIdsDiffer > 0 ? "same-id-disagreement-found" : framerDiffers > 0 ? "framer-disagreement-found" : uncompared > 0 ? "inconclusive"
+    : "no-same-id-disagreement-on-these-cases",
+  sameIdsDiffer, framerDiffers, uncompared, resourceCasesCountedNotSampled: resourceCases, seedsAre: unsignedSeeds ? "unsigned bytes" : "signed bytes",
   limits: [
     "parse level: no state, proofs or full validity; the stateless verdict uses the node's initial validation settings, not mainnet's voted ones",
-    "one version context, a version-4 block's (activated 3, tree 3): blocks of earlier versions are read by the node under other contexts, and the profile does not yet refuse them",
+    "one version context, a version-4 block's (activated 3, tree 3): blocks of earlier versions are read by the node under other contexts; the profile reads sections of block versions 1-4 only",
     `mutations of the ${seeds.length} corpus transactions only: single-byte replacements, deletions and insertions, prefixes and seeded splices`,
     `fields no mutation both sides read alike changed: ${["id", "witnessId", "outputCount", "ergoTree", "registerNames", "register"].filter(f => !(f in reached)).join(", ") || "none"}`,
     "the node's resource refusals depend on its runtime's heap and stack; the harness runs its main thread with -Xmx4G",
     "for a transaction the node rewrites, the header commits to the rewrite's ids; which bytes peers and node APIs serve for it (the miner's or the rewrite), and whether the node's section serializer (writing under version context 4, 4) gives the rewrite read here (3, 3), are not measured",
   ],
+  framer: "for every transaction the node reads (whole cases, prefixes and stable rewrites), the node's own unsigned bytes (messageToSign) hashed against its id and read by the profile's framer (model/pool-v3-ergo-profile.ts frameTransaction); a framed reading is compared with the node's output count, ErgoTree bytes, register names and constants (counts.framer)",
   compares: "per case, the node's reading (the pinned v6.0.6 JAR's BlockTransactionsSerializer.parse of a one-transaction version-4 section, then the node's id, witness id, parsed ErgoTree bytes and register constants stated in that transaction's version context) against contained-decoder.mjs's: id, witness id, output count, and each output's ErgoTree bytes, register names and register constants; where the node reads a proper prefix, the decoder's reading of the whole case and of that prefix; where the node's serializer writes what it read as other bytes, the decoder's reading of those bytes",
   verdicts: { equal: "every compared field equal", otherIds: "the id or witness id differs, so the header's transactions root refuses the decoder's reading", sameIdsDiffer: "equal ids, other output fields: the root would not catch it", decoderRefuses: "a denial: the reader leaves the ranges through such a block unresolved",
     nodeReadsAndRewrites: "the node's ids are of its rewrite, so the reader reads such a transaction only from a supplier that serves the node's rewrite (rewrittenBytes), and is denied it from one serving the raw section bytes" },
