@@ -55,36 +55,15 @@
     "liveFetchMs": 0,
     "delayMs": 250
   },
-  "decoders": {
-    "pinned": {
-      "version": "0.28.0-2f840d3.release",
-      "wasmSha256": "0d20038513c72a9daf859e3ea278735caef43305cde6bc7fb2764e8d933aa28a",
-      "path": "experiments/ergo-range"
-    },
-    "alternate": {
-      "version": "0.28.0",
-      "wasmSha256": "5c39a0933a07031492efbe956fb4f957da745e295a94c06efddb475d9d1db4e5",
-      "path": "C:\\Users\\Bob\\Documents\\medium-of-exchange-protocol\\reference-ts\\scratch\\sigma-0.28.0"
-    }
-  },
-  "decoderEquivalence": {
-    "transactions": 28196,
-    "differing": 0,
-    "compares": "decoder.mjs against this script's verbatim copy of it on the pinned build: refusal or an equal id, witness id, ErgoTree and registers of every output, for every serialized transaction"
-  },
   "framing": {
     "transactions": 28196,
     "framed": 4707,
     "differing": 0,
     "differingSample": [],
     "unsupplied": 0,
+    "unsuppliedSample": [],
     "suppliedBytes": 24165521,
-    "compares": "per transaction supplied, the framer's outputs (ErgoTree bytes, register names in order and constants) against the node's JSON statement, where the framer reads the unsigned bytes; suppliedBytes is what the reader takes, each unsigned byte string plus its 31-byte witness id"
-  },
-  "decoderAgreement": {
-    "compared": 28071,
-    "differing": 0,
-    "compares": "id, witness id, ErgoTree bytes and every register constant of every output, where both decoders read one transaction"
+    "compares": "per transaction supplied, the framer's outputs (ErgoTree bytes, register names in order and constants) against the node's JSON statement, where the framer reads the unsigned bytes (the bytes are copied from that same statement, so this shows the framer splits the id-verified bytes as the node's JSON does, not agreement with an independent parser; the hostile probe compares with the node's own parser); suppliedBytes is what the reader takes, each unsigned byte string plus its 31-byte witness id; unsupplied counts transactions whose copied unsigned bytes do not hash to the id the node states"
   },
   "profile": {
     "context": "moe/venue/ergo/v3",
@@ -124,10 +103,7 @@
     "lastTimestamp": 1790045798659,
     "spanHours": 169.03,
     "blocksPerDay": 715.5,
-    "read": {
-      "pinned": 5040,
-      "alternate": 4982
-    }
+    "suppliedTransactions": 28196
   },
   "days": [
     {
@@ -156,10 +132,7 @@
       "lastTimestamp": 1789523871025,
       "spanHours": 24.05,
       "blocksPerDay": 717.5,
-      "read": {
-        "pinned": 720,
-        "alternate": 720
-      }
+      "suppliedTransactions": 4374
     },
     {
       "fromHeight": 1874081,
@@ -187,10 +160,7 @@
       "lastTimestamp": 1789611575703,
       "spanHours": 24.36,
       "blocksPerDay": 708.4,
-      "read": {
-        "pinned": 720,
-        "alternate": 720
-      }
+      "suppliedTransactions": 3668
     },
     {
       "fromHeight": 1874801,
@@ -218,10 +188,7 @@
       "lastTimestamp": 1789696989538,
       "spanHours": 23.64,
       "blocksPerDay": 730.1,
-      "read": {
-        "pinned": 720,
-        "alternate": 720
-      }
+      "suppliedTransactions": 3456
     },
     {
       "fromHeight": 1875521,
@@ -249,10 +216,7 @@
       "lastTimestamp": 1789781730162,
       "spanHours": 23.53,
       "blocksPerDay": 733.4,
-      "read": {
-        "pinned": 720,
-        "alternate": 697
-      }
+      "suppliedTransactions": 4406
     },
     {
       "fromHeight": 1876241,
@@ -280,10 +244,7 @@
       "lastTimestamp": 1789873112717,
       "spanHours": 25.33,
       "blocksPerDay": 681.1,
-      "read": {
-        "pinned": 720,
-        "alternate": 702
-      }
+      "suppliedTransactions": 3844
     },
     {
       "fromHeight": 1876961,
@@ -311,10 +272,7 @@
       "lastTimestamp": 1789959281590,
       "spanHours": 23.91,
       "blocksPerDay": 721.6,
-      "read": {
-        "pinned": 720,
-        "alternate": 708
-      }
+      "suppliedTransactions": 3742
     },
     {
       "fromHeight": 1877681,
@@ -342,168 +300,25 @@
       "lastTimestamp": 1790045798659,
       "spanHours": 24,
       "blocksPerDay": 718.9,
-      "read": {
-        "pinned": 720,
-        "alternate": 715
-      }
+      "suppliedTransactions": 4706
     }
   ],
-  "bytes": {
-    "serialized": 28196,
-    "unavailable": {
-      "transactions": 0,
-      "blocks": 0,
-      "byOutputTreeVersions": {},
-      "sample": []
-    },
-    "refusedWhenReemitted": {
-      "transactions": 12,
-      "blocks": 12,
-      "sample": [
-        {
-          "height": 1873385,
-          "position": 4,
-          "id": "20ae837723bca86439a66ec2688e28b67fbb0de54726bdadf3db4e97349e65ff",
-          "extensionKeys": [
-            7,
-            1,
-            0
-          ]
-        },
-        {
-          "height": 1873429,
-          "position": 21,
-          "id": "1f095527a68a88d454d38acfcf8d00266c1bf3209855aab9cca3d033c7a22ce3",
-          "extensionKeys": [
-            7,
-            1,
-            0
-          ]
-        },
-        {
-          "height": 1874390,
-          "position": 12,
-          "id": "916954fb1090cb40a96ffeb29975d2e300df8176bde40a1ae1c1972c3b4fca00",
-          "extensionKeys": [
-            7,
-            1,
-            0
-          ]
-        },
-        {
-          "height": 1874432,
-          "position": 15,
-          "id": "9881d26747ae270cbba38e5cb69a69ea8140a2d8bc3b27081bf8fdb16b26917c",
-          "extensionKeys": [
-            7,
-            1,
-            0
-          ]
-        },
-        {
-          "height": 1875393,
-          "position": 12,
-          "id": "378e46cd597cd65cee99cd084298072b9ddf27bc881c37ccfdc4027da123550d",
-          "extensionKeys": [
-            7,
-            1,
-            0
-          ]
-        },
-        {
-          "height": 1875435,
-          "position": 7,
-          "id": "eaaf97c87689b2d479a20c28aaa6c5f73e162371557d6536008885d9dbb4aa75",
-          "extensionKeys": [
-            7,
-            1,
-            0
-          ]
-        },
-        {
-          "height": 1876395,
-          "position": 30,
-          "id": "2e1c8c4ea6c4450cc88b1eb045d19a37fcdbbbee5ccdb55358deeaf6a3a815f9",
-          "extensionKeys": [
-            7,
-            1,
-            0
-          ]
-        },
-        {
-          "height": 1876437,
-          "position": 4,
-          "id": "f948514c659a28ea33021b72655bb330be3d8cbcc80ede406d8dd9b6da4530f7",
-          "extensionKeys": [
-            7,
-            1,
-            0
-          ]
-        },
-        {
-          "height": 1876565,
-          "position": 26,
-          "id": "5a01dffe61d7dac523beaf10fa2da3081feab290eab9af76b997a96a0554eb66",
-          "extensionKeys": [
-            6
-          ]
-        },
-        {
-          "height": 1877396,
-          "position": 4,
-          "id": "2e7d37db0737c3b947d224a08517cd46071c81bbc4ce0dfc7e5ded4d22eb518d",
-          "extensionKeys": [
-            7,
-            1,
-            0
-          ]
-        },
-        {
-          "height": 1877438,
-          "position": 11,
-          "id": "b10c5383dbe70342300324c4635b2d99011301596a3dce7e6e47fd618648ad6d",
-          "extensionKeys": [
-            7,
-            1,
-            0
-          ]
-        },
-        {
-          "height": 1878399,
-          "position": 28,
-          "id": "a85466feb90b0cd6f143e04f9b87299057a36b7f4a68173f1f04e0165e9fda52",
-          "extensionKeys": [
-            7,
-            1,
-            0
-          ]
-        }
-      ],
-      "means": "the same transactions parsed into objects and re-emitted, which sorts integer-like keys, serialize to bytes whose id the library rejects"
-    }
-  },
   "timing": {
-    "serializeMs": 147167,
-    "reemitMs": 124343,
-    "rootCheckMs": 6711,
-    "decodeMs": {
-      "pinned": 153917,
-      "alternate": 147217
-    },
-    "equivalenceMs": 157875,
-    "supplyMs": 163488,
-    "note": "serializeMs is the pinned library's text-to-bytes work including its own id; reemitMs the re-emitted-object control; rootCheckMs the script's root over the library's ids; decodeMs each decoder's strict round trip and field extraction over the same bytes; equivalenceMs the verbatim copy's second pinned round trip; supplyMs the pinned library's derivation of each unsigned byte string, a supplier's cost; the verifier's constructMs is where every section's root is rechecked from the hashes of the unsigned bytes and every output is framed and scanned, and a request afterwards walks per-index lists. JSON parsing, text splitting, witness ids and the alternate comparison are outside every timer."
+    "supplyMs": 7449,
+    "frameMs": 236,
+    "rootCheckMs": 1927,
+    "note": "supplyMs is the supplier's work: parsing each block's JSON text and copying every transaction's unsigned bytes, with their id and witness id hashes; frameMs the framer over every supplied transaction for the comparison with the node's statement; rootCheckMs the script's root over the supplied ids; the verifier's constructMs is where every section's root is rechecked from the hashes of the unsigned bytes and every output of a section whose root holds is framed and scanned, and a request afterwards walks per-index lists."
   },
   "verifier": {
     "reader": {
       "blocksSupplied": 5040,
-      "constructMs": 21138,
+      "constructMs": 3450,
       "witnessedIndex": 5039,
       "resolvedIndices": 5040,
       "unresolvedIndices": 0,
       "longestResolvedRun": 5040,
       "firstUnresolvedIndices": [],
-      "singleIndexProbeMs": 303,
+      "singleIndexProbeMs": 39,
       "requestMsIs": "the least of 5 repetitions",
       "requests": {
         "lastDay": {
@@ -513,25 +328,25 @@
             "1": {
               "answered": true,
               "bytes": 102,
-              "ms": 0.33,
+              "ms": 0.19,
               "samples": 5
             },
             "2": {
               "answered": true,
               "bytes": 102,
-              "ms": 0.33,
+              "ms": 0.18,
               "samples": 5
             },
             "3": {
               "answered": true,
               "bytes": 102,
-              "ms": 0.36,
+              "ms": 0.31,
               "samples": 5
             },
             "4": {
               "answered": true,
               "bytes": 102,
-              "ms": 0.34,
+              "ms": 0.31,
               "samples": 5
             }
           }
@@ -543,473 +358,30 @@
             "1": {
               "answered": true,
               "bytes": 102,
-              "ms": 2.97,
+              "ms": 2.46,
               "samples": 5
             },
             "2": {
               "answered": true,
               "bytes": 102,
-              "ms": 3.41,
+              "ms": 2.46,
               "samples": 5
             },
             "3": {
               "answered": true,
               "bytes": 102,
-              "ms": 2.25,
+              "ms": 2.82,
               "samples": 5
             },
             "4": {
               "answered": true,
               "bytes": 102,
-              "ms": 2.08,
+              "ms": 1.71,
               "samples": 5
             }
           }
         }
       }
-    }
-  },
-  "refusals": {
-    "pinned": {
-      "transactions": 0,
-      "blocks": 0,
-      "byOutputTreeVersions": {},
-      "sample": []
-    },
-    "alternate": {
-      "transactions": 125,
-      "blocks": 58,
-      "byOutputTreeVersions": {
-        "0,3": 125
-      },
-      "sample": [
-        {
-          "height": 1876044,
-          "position": 2,
-          "id": "4d966f399a4564f6a825dc2f9f4b179d8afeabe359ade61f9d731efb21ed2818",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876049,
-          "position": 3,
-          "id": "74ab0934dcdd4cef50b7f85eeb28b3c15099b7ffe2f9d43659c679428365382e",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876053,
-          "position": 7,
-          "id": "5cc8423c00b34fc3747ae95d7c652cca61c07820d0a3886f4e65ace6faad72e2",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876053,
-          "position": 52,
-          "id": "3c018a6a9e941f93450d45b7993c7b36db2230fa17123551b3129c481749442e",
-          "treeVersions": [
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876058,
-          "position": 1,
-          "id": "8cf2b3d7221b65a73bed6033190b27432b5f3e4fa1c44a87d549b7c81090fdef",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876058,
-          "position": 15,
-          "id": "753c24a3e1a4c0f1ddb15bd688fe6be82dbfe2cdac053fdbf8fc3bf3648ba6aa",
-          "treeVersions": [
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876058,
-          "position": 16,
-          "id": "e04f301a6f35899391b18b53bdf9053d26c8ed9621298d616d77f057e84e6a38",
-          "treeVersions": [
-            3,
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876061,
-          "position": 3,
-          "id": "27a89845b9ad6e957d12df8cd63262c55416671afbf1064b88a0c1de85298089",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876061,
-          "position": 4,
-          "id": "e2409c34c220d777e0dcd4399c8115f491ed2171e44af68feeae834630134232",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876062,
-          "position": 4,
-          "id": "b828df0b6f2caf5b3c2506799d30fcbe98f5dc2885cb7e6e3b7ad51241b66153",
-          "treeVersions": [
-            3,
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876062,
-          "position": 6,
-          "id": "c77b517fd632fc6636b9321d2aff04aa7b5d7a538e1ae1df1b80b33d8ff3017f",
-          "treeVersions": [
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876068,
-          "position": 2,
-          "id": "6ceca72d241bb7fbeffe1637a07c23a02dca6f05feb90723ed4673a664983358",
-          "treeVersions": [
-            3,
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876068,
-          "position": 3,
-          "id": "4d4084e1824ef1808a4ee055a1d5b88061283843b8b85a14c1279849e1dfff3d",
-          "treeVersions": [
-            3,
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876068,
-          "position": 4,
-          "id": "2428f091a79286e766d14c76a88bc8887f678e319dd83fcaa6d64e26913868d4",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876068,
-          "position": 14,
-          "id": "4c33999e8616a71be161bb5db2b7234474974e46bab135fbb512afcba9386b8f",
-          "treeVersions": [
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876074,
-          "position": 8,
-          "id": "df8d04d8efcbefa613f285beff497d3669da62a4e8c13da9fae8da2e6984a0e4",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876074,
-          "position": 16,
-          "id": "9ab44d798aea9bc8f893cca17d38b4b2e1edecd578a14f553806eb281529aea9",
-          "treeVersions": [
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876074,
-          "position": 50,
-          "id": "6f15f8dd204cd6b65b6fdadd3da0c4f60df8300606f94efd2f604bc928b419f5",
-          "treeVersions": [
-            3,
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876085,
-          "position": 23,
-          "id": "70001c34de649cf045b445dae75c130053319090c07dfd66eb019d66860e4f87",
-          "treeVersions": [
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876085,
-          "position": 28,
-          "id": "378f690b97956e672ceb9936bbe28e3285b885f812648af35b3f458fef6773a8",
-          "treeVersions": [
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876095,
-          "position": 1,
-          "id": "cfbe4247ed4e641ae02bd736ddd9b6ce832a56df36380485f545fd08b23db50b",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876095,
-          "position": 2,
-          "id": "a460e4b14948aa1e69e3b94c944bc58b06cffe7a8d70c330824883a70c6b4f4e",
-          "treeVersions": [
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876101,
-          "position": 8,
-          "id": "7661d7c19170085ea902138161af654436577232fbf63290c248359781da3a7f",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876101,
-          "position": 10,
-          "id": "e0defe48fab30cc7f311edfa6efa5d8bce91fab457e1a50271b953ed43c1e615",
-          "treeVersions": [
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876101,
-          "position": 11,
-          "id": "7ffb7e9b324b6d066a92a25bbb0c8a97fbdf6dbe746766cb035d176dad1b606f",
-          "treeVersions": [
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876107,
-          "position": 1,
-          "id": "05115a7d5b7b47c4bc86828d694eaf623e7d9c1f96d4efda9678fdda25904e72",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876107,
-          "position": 2,
-          "id": "20f3c0ab770fbf3978f7431c94af203575d47e3f9447e41a6b1fad84cb74f1c2",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876107,
-          "position": 10,
-          "id": "4fc48f9de5f3f1faa7be9d4ce6237947fbc38762116ed84061ba0d15facdea54",
-          "treeVersions": [
-            3,
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876107,
-          "position": 21,
-          "id": "8080735f184e4ebfaefb1ca9481952de86a0850f9c0ba3a1a5335cb80f321294",
-          "treeVersions": [
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876115,
-          "position": 9,
-          "id": "0febd394859fc84ed51e26462b3a2968fe8bff07585210c0f2bff0afcc15dc78",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876115,
-          "position": 14,
-          "id": "c6111ac29c7660771daf62b0b2c56f50221b9ccbcd80ba128e407dc4516bb23c",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876116,
-          "position": 1,
-          "id": "fe56b3c5053c2aa6a54ef2e0a37fdccfde2c143a7433c9e0eec1029055f1b1d7",
-          "treeVersions": [
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876116,
-          "position": 2,
-          "id": "2a01280e527f93806a44ef536a95a3f4895b57dd72374968034a23744c30d891",
-          "treeVersions": [
-            3,
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876121,
-          "position": 5,
-          "id": "3e158847806a5a89c41504b2bdd1dcf525b40b42a017cd9cf049573ad84852a3",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876121,
-          "position": 9,
-          "id": "a2d932f4505de7c087e9ef4c59fbba155c94b5debbef9ee2f8fee80677a4a786",
-          "treeVersions": [
-            3,
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876123,
-          "position": 30,
-          "id": "0725711d851699da95fc40d4681e281f63132c16c23aa2f4f73a52e61728ac31",
-          "treeVersions": [
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876163,
-          "position": 16,
-          "id": "fd6ee69ec8e5160ea37bd14c144d1cdee6b940dc99aabc4839ea65c71ecb6c7e",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876163,
-          "position": 19,
-          "id": "256875ee0164f1db7554491e7323697afe803f86ca5e2668bb4eb18c871379de",
-          "treeVersions": [
-            3,
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876168,
-          "position": 2,
-          "id": "d36ac4481dacc346be00c8712eb5c1b3c70b26efd57dd2c43f6a8226aba1deac",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        },
-        {
-          "height": 1876171,
-          "position": 14,
-          "id": "e97a72b448f56660cfeed3fcf6256b04920a91076a8b24cae75ee6e28374eba7",
-          "treeVersions": [
-            3,
-            0,
-            0
-          ]
-        }
-      ]
     }
   },
   "pins": {
@@ -1018,19 +390,31 @@
     "scrypto": "https://github.com/ergoplatform/scrypto/tree/70b36102b2ed8f7a443cfc92f9f135665d777a37"
   },
   "files": {
-    "experiments/ergo-range/chain-cost.mjs": "f88badecaeb8dab1ee9a9dfaa6ba851717f7598bfe1bc6133e61c3015b0e09ed",
-    "experiments/ergo-range/decoder.mjs": "f2ab6943b8ab15ee236fefea12731a8e601e382c2da9b211b100bf239e288b26",
-    "experiments/ergo-range/supply.mjs": "93ac469000e788f25912a2c0adea38f2b4e06e547c1f3fe1032c5e788d7c6a5c",
-    "experiments/ergo-range/package.json": "0eb7a7f6a08c6b80a601dc36787620c36f8a5ad643b3c2730eac30ef3c0f8c3a",
+    "experiments/ergo-range/chain-cost.mjs": "dae257d6ffa885672b0a2943bb4d9724c57a96029c18b4e32b2c51f0c0e94da8",
+    "experiments/ergo-range/supply.mjs": "7f84a4df88ee0a6a2488cb72f8d775d1d4d88d780ccd181a25172224cd21ec40",
+    "experiments/ergo-range/package.json": "4df25f63611d23d6ce62765c25cc26e5a3dc2bf9b97b05f3ae510b7f338ddcd7",
     "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
     "experiments/ergo-range/fixtures/manifest.json": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
-    "model/pool-v3-ergo-profile.ts": "f3cc55986e9d3dbcf790242df1b3794ae4f65eb93b4c09cb60c9b0fc3def9813",
-    "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f"
+    "tsconfig.json": "5d7b9d7a9ad1947fa0139a3649914b3ce14e3315fe266ae5d4d88273426c1922",
+    "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
+    "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
+    "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
+    "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
+    "src/presentation.ts": "adcd73c862129f4ccd4d02b14df16c0f701127f3d8d504f0bb91e91734b46bb3",
+    "src/messages.ts": "8a941254bf24650f9146d3875add1f20993a08b17b40ddac1ed060e225191718",
+    "src/oplog.ts": "d1f2ad4b71a109948f3f39a869f25ae8faf63b3fcd0206b7f9015117e31a714a",
+    "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
+    "src/revocation.ts": "1b23bc3de5017738c1a056f013a83ce776caa099826c48c4091900f12c9474ea",
+    "src/venue.ts": "17d3bb0f968ff51aac423eb1f22aaef692d9b3023dc811f6820d67a2ce0042c4",
+    "src/replacement.ts": "9f65220ebebc4c1cec42b9b28c7667beec6b08e56159a701bbfa6c34755083c1",
+    "src/commitment.ts": "158070f78a3f76511381a598a2a91d79dcdfeb9b02442a22450cf556f88b9adf",
+    "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f",
+    "model/pool-v3-ergo-profile.ts": "67b21086a77938f2160f4fbc52b5c661cc8e99f322b1803df2fa440cca8fd417"
   },
   "limitations": [
     "Public nodes are the header source: their agreement with each other on id, parent, height, version and transaction root, linkage and the anchor's child are checked; proof of work, chain selection and finality are not, and a colluding or shared upstream is not excluded.",
-    "Transaction bytes are obtained by serializing the nodes' exact JSON text with the pinned library; a block counts only where the bytes reproduce its header's transaction root. For block versions above 1 the root binds each transaction's unsigned bytes and the concatenation of its proofs, not the proofs' split among inputs; a version-1 root binds no proof bytes. Attribution reads outputs only, so neither gap reaches an answer, but the byte counts are authenticated only that far.",
-    "The reader takes unsigned bytes and witness ids and runs no decoder: a transaction outside its framer's grammar carries no record and its block keeps its section. The unsigned bytes are derived here with the pinned library (supply.mjs), a supplier's tool; a transaction it could not read would leave its block unsupplied in this run, a limit of this supplier, not of the reader. The decoders' refusal counts measure the libraries for the exact package versions named and this window only. The alternate build runs this script's verbatim copy of decoder.mjs, checked against decoder.mjs on the pinned build for every transaction; the two builds are compared on ids, witness ids and the outputs they both read, not on inputs or data inputs.",
+    "Each transaction's unsigned bytes are copied from the nodes' JSON text (supply.mjs); a block counts only where every copy hashes to the id the node states and the ids and witness ids reproduce its header's transaction root. Section bytes are the same copy with each input's proof, so for block versions above 1 the root binds each transaction's unsigned bytes and the concatenation of its proofs, not the proofs' split among inputs, and a version-1 root binds no proof bytes. Attribution reads outputs only, so neither gap reaches an answer, but the byte counts are authenticated only that far.",
+    "Neither the reader nor the supplier runs a decoder: the reader frames the unsigned bytes itself, and a transaction outside its framer's grammar carries no record while its block keeps its section; the supplier copies fields and parses no constant. A transaction whose copy did not hash to its id would leave its block unsupplied in this run, a limit of this supplier, not of the reader.",
     "The throwaway locations hold no real output and the subject is fixed, so every answer is empty by exhaustion: the cost measured is the scan at construction, not a real record set.",
     "Fetch time is the public nodes' response time under pacing from one host, only for responses fetched live in this run; an offline run records no live node state; only the exact window's header slices replay offline.",
     "No transaction was submitted, no node accepted anything of ours, no inclusion-latency distribution was taken, and no profile, decoder or dependency pin is selected here."

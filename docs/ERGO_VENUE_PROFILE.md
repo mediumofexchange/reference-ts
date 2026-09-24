@@ -173,8 +173,11 @@ byte and the witness id, not the proofs' split among inputs; attribution
 reads outputs only, so that gap reaches no answer. A block that is not a well-formed
 section view, belongs to another chain or a height at or below the anchor,
 duplicates an established index or fails its root is passed over at the
-model boundary; an index without a section leaves only the ranges through it
-unresolved. A request is answered by scanning every output of every
+model boundary; its header is found before any of its transactions is read
+and its outputs are framed only once its root holds, so a block of another
+chain or of an established index costs nothing, and one for an index still
+without a section costs the hashing of what it carries. An index
+without a section leaves only the ranges through it unresolved. A request is answered by scanning every output of every
 transaction of every block in its range, so an empty answer is proven by
 exhaustion (§13.2). There is no answer where `toIndex` is above the witnessed
 index, where an index in the range has no section, where the request names
@@ -195,16 +198,21 @@ its retained evidence and can be reproduced from it.
   value bounds the node does not apply
   ([decision](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)).
   The framer's price is the grammar: a record outside it is not read.
-- A supplier derives the unsigned bytes. The public node API serves
-  transactions as JSON; sigma-rust's serializer reproduces the signed bytes
-  from the node's exact text, but only because that text keeps the
-  spending-proof extension's key order, which a JSON object model sorts
-  (re-serializing parsed objects gives 12 of the measured week's
-  transactions another id), and `supply.mjs` removes the proofs from them.
-  It supplies only what that library reads; the node's own serializer
-  (`messageToSign`, stated by the node harness) supplies every transaction
-  the node reads. The header root, not the supplier, authenticates the
-  unsigned bytes and the witness id.
+- A supplier derives the unsigned bytes, and runs no decoder either. The
+  public node API serves transactions as JSON, and every field the unsigned
+  bytes carry is there as exact hex (box and token ids, trees, register and
+  extension constants) or an integer, so `supply.mjs` writes them by copying,
+  parsing no constant; the witness id hashes the stated proofs. Two
+  properties of the text matter: integers above 2^53, read from their source
+  text, and each spending-proof extension's key order, which the node writes
+  in its map's order and a JSON object model sorts (2,272 inputs of the
+  measured week carry several entries), so the text is read by a small
+  order-keeping parser. A copy that does not hash to the stated id is
+  unsupplied, never misread; every transaction of the measured week, and of
+  the testnet publication run, is supplied
+  ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)).
+  The header root, not the supplier, authenticates the unsigned bytes and
+  the witness id.
 - A kind-4 object is one transaction's run, so a publication must fit one
   transaction. Under this layout a box carries a 3,981-byte piece within
   Ergo's 4,096-byte box limit, and one transaction under the pinned node's
@@ -255,7 +263,9 @@ its retained evidence and can be reproduced from it.
 ## Evidence
 
 `npm run check:ergo:range` runs `experiments/ergo-range/profile-check.mjs`
-after the block-root and decoder experiments. It compiles the model, reads
+after the block-root experiment and the supplier check (`supply-check.mjs`:
+every fixture transaction supplied under its id, the roots reproduced, and
+each shape the copy cannot reproduce unsupplied). It compiles the model, reads
 the pinned real mainnet genesis header as an anchor, builds a twelve-height
 synthetic chain anchored at its first header whose unsigned bytes Fleet
 writes and whose outputs the framer reads exactly as written, with real signed
@@ -332,9 +342,7 @@ integration introduces no production path, profile selection or normative rule.
 A specification decision selects a venue profile and pins its identity;
 before that: an authenticated header source a reader can run (a node the
 reader runs is demonstrated, [own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source); whether the profile
-requires one or names a lighter source is the selection's choice), a
-supplier of unsigned bytes for every transaction the node reads (the node's
-own serializer, or `supply.mjs` within what the pinned library reads), the
+requires one or names a lighter source is the selection's choice), the
 framer's grammar checked against the selected deployment's publishing
 transactions, publication and reassembly
 on a node (P2: the [experiment](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)

@@ -765,6 +765,8 @@ sequence and authority checks before acquiring protocol force.
 
 ## Full binary decoder feasibility
 
+*Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
+
 The same private experiment now evaluates `ergo-lib-wasm-nodejs`
 **0.29.0-alpha-2f840d3**, the npm alpha published 2025-08-13 and pinned on
 2026-09-22 in place of 0.28.0 (the npm stable of 2026-09-09) after 0.28.0
@@ -921,24 +923,27 @@ The recovery map's P4. `experiments/ergo-range/chain-cost.mjs` is run
 explicitly, never by `check` or CI, because it reads public mainnet nodes
 (GET only; nothing is submitted); the [experiment guide](../experiments/ergo-range/README.md#real-chain-exhaustion-cost)
 has the command. It reads the headers of a window from every named node and
-the anchor's id at its height, compares them field by field, obtains each
-block's transaction section by serializing the node's exact JSON text with
-the pinned sigma-rust, counts a section only where the bytes reproduce the
-header's transaction root through the model's root, reads the sections with
-the experiment's strict decoder and, beside it, with another named
-`ergo-lib-wasm-nodejs` install, then builds the model verifier from the real
-headers and the read sections under four throwaway locations, so every
+the anchor's id at its height, compares them field by field, supplies each
+block's transactions by copying the node's JSON text into unsigned bytes and
+witness ids (`supply.mjs`, no decoder), counts a section only where every
+copy hashes to its stated id and the header's transaction root holds through
+the model's root, checks every framed transaction against the node's
+statement of its outputs, then builds the model verifier from the real
+headers and the supplied sections under four throwaway locations, so every
 answer is empty by exhaustion. The [retained report](ergo-chain-cost-verification.json)
 records the window, the nodes' agreement, a digest of the cached responses,
-sizes, times and refusals.
+sizes and times. Until 2026-09-24 the run serialized the text with the
+pinned sigma-rust and decoded it with two builds
+([report at 0453955](https://github.com/mediumofexchange/reference-ts/blob/0453955/docs/ergo-chain-cost-verification.json)).
 
 The window is anchored at height 1873360, so indices 0–5039 are heights
 1873361–1878400, with headers to 1878410 for depth 10. `node.ergo.watch`
 (5.0.21) and `213.239.193.208:9053` (6.0.6) agree on all 5,050 headers
 and the anchor; the headers are version 4 of 220 or 221 wire bytes (mean
 220.9) and link without a gap; the window spans 169.0 hours, 716 blocks a day. Every
-one of the 5,040 sections reproduced its header root from the node's
-text, so the JSON route yields exact bytes when the text is fed as written.
+one of the 5,040 sections reproduced its header root from the copies of the
+node's text, so the JSON route yields exact bytes when the text is read in
+its own order.
 That root binds each transaction's unsigned bytes and the concatenation of
 its proofs, not the proofs' split among inputs (and a version-1 root binds
 no proofs); attribution reads outputs only, so no answer depends on the
@@ -952,26 +957,31 @@ difference, but the byte counts are authenticated only that far.
 | Largest transaction, bytes | 32,742 | 88,284 |
 | Headers retained (one per block), wire / verifier view, bytes | 159,022 / 75,600 | 1,113,468 / 529,200 |
 | JSON fetched, bytes | 21,501,423 | 133,335,507 |
-| Indices without a section: sigma-rust 0.28.0 (the pin until 2026-09-22) / `0.29.0-alpha-2f840d3` (pinned 2026-09-22 to 09-23) | 5 / 0 | 58 / 0 |
+| Indices without a section: sigma-rust 0.28.0 (the pin until 2026-09-22) / `0.29.0-alpha-2f840d3` (pinned 2026-09-22 to 09-23), decoder readers now retired | 5 / 0 | 58 / 0 |
 
-Since 2026-09-24 the reader decodes nothing
-([decision](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)):
-the retained run, an offline re-read of the same cache (same digest), derives
-each transaction's unsigned bytes and witness id with `supply.mjs` and builds
-the verifier from those. The reader takes 24,165,521 bytes for the week
-against 26,639,110 section bytes; every root reproduces from the hashes of
-the unsigned bytes, all 5,040 indices have their sections, and the framer
+Since 2026-09-24 neither the reader nor its supplier decodes
+([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)):
+the retained run, an offline re-read of the same cache (same digest), copies
+each transaction's unsigned bytes and witness id from the node's text and
+builds the verifier from those. All 28,196 transactions are supplied under
+their stated ids, and the section bytes (the same copies with their proofs)
+total 26,639,110, exactly the pinned serializer's count. The reader takes
+24,165,521 bytes for the week; every root reproduces from the hashes of the
+unsigned bytes, all 5,040 indices have their sections, and the framer
 reads 4,707 of the 28,196 transactions, each with exactly the outputs the
-node's JSON states (the rest carry no record). Building the verifier, where
-every transaction is hashed and framed and every root rechecked, took 21 s
-on a desktop loaded by other jobs (13 s in an unloaded rerun); decoding the
-same transactions with the vendored release build took 154 s in the same
-run, and sigma-rust's serialization and the supplier's derivation are a
-supplier's cost. 5,040 single-index probes afterwards took 0.3 s and a day's
-or the week's range answers in a few milliseconds (the least of five
-repetitions), walking per-index lists; every request answers (empty, 102
-bytes each). Under the 2026-09-22 decoder reader the first run, on 0.28.0,
-left 58 indices and every range through them unresolved. The week's
+node's JSON states (the rest carry no record); since the bytes are copied
+from that JSON, this shows the framer splits them as the node's statement
+does, and agreement with the node's own parser is the
+[hostile probe](#hostile-input-node-equivalence)'s. The supplier's work, parsing
+the week's 133 MB of JSON and copying every transaction, takes about 7.5 s
+against 163 s for sigma-rust's serialization and derivation; building the
+verifier, where every supplied section is hashed, rechecked against its root
+and framed, takes about 3.5 s (13–21 s in the earlier runs on a loaded host).
+5,040 single-index probes afterwards take under 0.1 s and a day's or the
+week's range answers in a few milliseconds (the least of five repetitions),
+walking per-index lists; every request answers (empty, 102 bytes each).
+Under the 2026-09-22 decoder reader the first run, on 0.28.0, left 58
+indices and every range through them unresolved. The week's
 sections were fetched by a scratch probe whose log is not retained: about
 six minutes of response time, roughly 80 ms a response at 250 ms pacing
 from one host, and the 6.0.6 node refusing new connections after about 600
@@ -988,16 +998,17 @@ after exact round trips and is the experiment's pin since 2026-09-22
 with 0.28.0 as the control build. Second, the node's JSON keeps a spending-proof
 extension's keys in its map's order, which a JSON object model sorts:
 re-serializing parsed objects gives 12 of the week's transactions a
-different id, so a reader on JSON must serialize the node's text as written,
-and the header root, not the serializer, authenticates the result. Third,
+different id, so a supplier on JSON must read the node's text in its own
+order (2,272 inputs carry several entries), and the header root, not the
+supplier, authenticates the result. Third,
 the node's header `size` (220–221 bytes) is twice the verifier's view (105), so
 header retention is the deployment's age at about 58 MB a year
 of wire headers at this rate.
 
 Not established: the nodes' authenticity (two public nodes agreeing is not
 proof of work, chain selection or finality, and a shared upstream is not
-excluded), a supplier for transactions the pinned library cannot read (none
-in this window), the inclusion-latency
+excluded), the copy for a node whose JSON states a transaction differently
+(none in this window), the inclusion-latency
 distribution (A10; it needs submitted transactions, which is P2), and any
 bound on future blocks: the counts are for these package versions and this
 window. No profile, decoder or dependency pin is selected by this probe.
@@ -1023,7 +1034,7 @@ spends every piece box back to the wallet, waits for the depth again, checks
 that the node's UTXO view serves no piece box and its indexed view names the
 spend for each, reads the headers from the header below the first inclusion to
 the tip and every block through the last inclusion through the JSON-text
-discipline of the chain-cost probe, builds the model verifier from that anchor
+copy of the chain-cost probe, builds the model verifier from that anchor
 and asks the kind-4 range under the subject, mapping each answered object to
 its transaction by index and ordinal. Every submission records the node's full
 height at submission and the inclusion height and block timestamp (A10); the
@@ -1088,8 +1099,10 @@ bound one block stricter.
 through the reader that decodes nothing: the own testnet node (v6.0.6)
 accepted the same seven transactions, the six cases in block 561,774
 (positions 1–6) and the sweep in 561,779, each two blocks above the full
-height at submission. Every block's unsigned bytes and witness ids, derived
-by `supply.mjs`, reproduced its header root, and the framer read each case
+height at submission. Every block's unsigned bytes and witness ids, copied
+from the node's JSON by `supply.mjs` (re-read from the same cached sections
+through the copy on the same day, with no new submission), reproduced its
+header root, and the framer read each case
 built by sigma-rust's transaction builder (plain inputs, piece outputs, a
 pay-to-public-key change and the fee output): the kind-4 range answered the
 same seven objects in the same order, kinds 1–3 empty, after all 25 piece
@@ -1213,6 +1226,8 @@ local browser page can read the node's key-free routes.
 
 ## Decoder stack budget
 
+*Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
+
 Reading the own node's retained mainnet blocks through the chain-cost probe,
 the npm alpha `ergo-lib-wasm-nodejs@0.29.0-alpha-2f840d3`, then pinned,
 overflowed Node's default stack inside `Transaction.sigma_parse_bytes` on a
@@ -1236,7 +1251,7 @@ range through its block. No such transaction was submitted to any node.
 
 The experiment now pins a release build of the same commit, vendored and
 reproducible ([decision](../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3);
-[guide](../experiments/ergo-range/README.md#decoder-build)).
+[guide](https://github.com/mediumofexchange/reference-ts/blob/0453955/experiments/ergo-range/README.md#decoder-build)).
 `experiments/ergo-range/stack-check.mjs` measures, each trial in a fresh
 process, the least V8 `--stack-size` a build needs (found to 8 KB; 71 KB is
 the least Node runs with at all) and the deepest expression nesting it
@@ -1281,10 +1296,12 @@ the immutable
 
 ## Metered decoder feasibility
 
+*Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
+
 The [baseline harness](https://github.com/mediumofexchange/reference-ts/blob/d446f83/experiments/ergo-range/metering-check.py) evaluates
 Wasmtime **48.0.0**, using the existing `ergo-lib-wasm-nodejs` 0.28.0 WASM hash.
 The Windows x64 wheel is
-[hash-pinned](../experiments/ergo-range/metering-requirements.txt), with a native
+[hash-pinned](https://github.com/mediumofexchange/reference-ts/blob/0453955/experiments/ergo-range/metering-requirements.txt), with a native
 DLL hash and loaded-path checks before controls. The
 [report](ergo-metering-verification.json) records the Python/native engine and
 harness hashes at `d446f83`; the cost probe below pins that report and verifies
@@ -1350,6 +1367,8 @@ hard hostile-parser containment, node equivalence and authenticated ranges as
 separate open gates.
 
 ## Decoder cost and host overhead
+
+*Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
 
 The [profile](ergo-decoder-cost-verification.json) uses the same pinned artifacts
 and replays all 24 valid fixtures at the original 10-million-fuel budget. It
@@ -1434,6 +1453,8 @@ on containment; they need not precede testing that independent node boundary.
 
 ## Metered release decoder over the week
 
+*Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
+
 `experiments/ergo-range/metered-check.mjs` runs the vendored release build of
 sigma-rust 2f840d3 (WASM SHA-256 `0d200385…aa28a`) under the
 [baseline](#metered-decoder-feasibility)'s pinned Wasmtime 48 engine and
@@ -1473,6 +1494,8 @@ it runs [contained](#contained-decoder) under the reader's budget.
 
 ## Decoder node equivalence over the retained blocks
 
+*Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
+
 The [chain-cost probe](#real-chain-exhaustion-cost-from-a-real-anchor) ran over every full
 block the [own mainnet node](#own-node-as-the-header-source) keeps after its
 UTXO snapshot, heights 1,830,001–1,879,100 (49,100 blocks, 69 days), in five
@@ -1505,9 +1528,11 @@ exercised, and no decoder or profile is selected; hostile inputs are compared
 
 ## Contained decoder
 
+*Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
+
 The reader decodes through `experiments/ergo-range/contained-decoder.mjs`
 ([decision](../decisions/2026-09.md#2026-09-24--contain-the-readers-decoder-per-transaction-under-a-deterministic-metered-budget),
-[guide](../experiments/ergo-range/README.md#contained-decoder),
+[guide](https://github.com/mediumofexchange/reference-ts/blob/0453955/experiments/ergo-range/README.md#contained-decoder),
 [retained report](ergo-decoder-containment-verification.json)). `wasm-meter.mjs`
 derives from the vendored release build (WASM `0d200385…`) a module
 (`bd7cfbb5…`, 13,727 functions, 16,050 charged regions, 54,467 counted call
@@ -1568,13 +1593,30 @@ hostile inputs is measured [below](#hostile-input-node-equivalence).
 
 ## Hostile-input node equivalence
 
+**Framer against node, 2026-09-24** ([guide](../experiments/ergo-range/README.md#hostile-input-node-equivalence),
+[retained report](ergo-framer-hostile-equivalence-verification.json)). The
+seeds are the 29 corpus transactions' unsigned bytes, copied by `supply.mjs`,
+so the mutations (as below) fall on the reader's own input: 143,227 distinct
+cases. Each is read by the node (as below, with the node also stating its own
+unsigned bytes, `messageToSign`); every reading the node gives, whole cases,
+proper prefixes and the 2,824 distinct rewrites (all stable on a second
+read), is 48,865 readings, and every one hashes to the node's id. The framer
+reads 15,202 of them, each with exactly the node's output count, trees,
+register names and constants, and leaves 33,663 outside its grammar, which
+carry no record; none differs and none went uncompared. Of the 97,186 cases
+the node refuses, the framer reads 4,608: bytes no version-4 section the
+node accepts can hold, so no root can commit to them. Mutations reached ids,
+trees and register constants among readings both sides agree on, not output
+counts or register names. The node took 50 s for all cases; the framer 0.4 s (the decoder took 34 min in its run).
+
+**Decoder against node, 2026-09-24, retired with the decoder**
+([harness and report at 0453955](https://github.com/mediumofexchange/reference-ts/blob/0453955/experiments/ergo-range/hostile-equivalence.mjs)).
 Offline, the 29 corpus transactions (19,380 bytes) were mutated
 deterministically into 159,397 distinct cases: every byte replaced by four
 values, deleted, and preceded by 0x00 and 0x80, every proper prefix, and 256
 seeded splices per transaction. Each case was read by the node and by the
 contained decoder
-([guide](../experiments/ergo-range/README.md#hostile-input-node-equivalence),
-[retained report](ergo-decoder-hostile-equivalence-verification.json)). The
+([retained report](ergo-decoder-hostile-equivalence-verification.json)). The
 node's reading is the pinned v6.0.6 JAR's own `BlockTransactionsSerializer`
 on a one-transaction version-4 section, in its bundled runtime; it states
 its id, witness id, and each output's tree and register constants as its
@@ -1630,9 +1672,8 @@ cases, prefixes and the 2,845 stable rewrites). Every one hashes to the
 node's id; the framer reads 18,382 of them, each with exactly the node's
 output count, trees, register names and constants, and leaves 38,571
 outside its grammar, which carry no record. The decoder's counts above are
-unchanged by the rerun. A second run whose seeds are the corpus's unsigned
-bytes, so that the mutations fall on the framer's own input, was stopped
-under memory pressure and is still owed.
+unchanged by the rerun. The run on unsigned seeds is the framer's section
+above.
 
 Not established: validity against state or proofs; version contexts other
 than a version-4 block's (the profile reads block versions 1–4); which

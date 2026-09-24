@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-24` [Supply Ergo unsigned bytes by copying the node's JSON](decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)
 - `2026-09-24` [Read venue transactions as unsigned bytes through the profile's own framer](decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)
 - `2026-09-24` [Answer false only for malformed proofs and never verify on an instance that threw](decisions/2026-09.md#2026-09-24--answer-false-only-for-malformed-proofs-and-never-verify-on-an-instance-that-threw)
 - `2026-09-24` [Contain the reader's decoder per transaction under a deterministic metered budget](decisions/2026-09.md#2026-09-24--contain-the-readers-decoder-per-transaction-under-a-deterministic-metered-budget)

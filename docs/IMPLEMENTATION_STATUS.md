@@ -180,14 +180,18 @@ whatever its header version or body, and exposes permissive parsing, with
 strict round-trip rejection controls; the experiment pins a vendored,
 reproducible release build of sigma-rust `2f840d3`
 ([decided 2026-09-23](../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3)) in place of the debug npm alpha, whose
-parser a node-valid output nested 50 deep could trap; a
-[contained](POOL_DEPLOYMENT_PROBES.md#contained-decoder) metered derivation
-of it remains a probe tool. The reader decodes nothing: it takes each
-transaction's unsigned bytes and witness id and frames the outputs itself
+parser a node-valid output nested 50 deep could trap; it now only builds and
+signs the publication experiment's transactions and the fixtures' trees. The
+reader decodes nothing: it takes each transaction's unsigned bytes and
+witness id and frames the outputs itself
 ([decided 2026-09-24](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)),
 so no library's refusal withholds a section; a transaction outside the
-framer's grammar carries no record. Authenticated complete-range reads
-remain unimplemented.
+framer's grammar carries no record. The supplier decodes nothing either: it
+copies each transaction's unsigned bytes from the node's JSON and checks them
+against the stated id
+([decided 2026-09-24](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)),
+and the decoder's containment and metering harnesses are retired.
+Authenticated complete-range reads remain unimplemented.
 The [candidate Ergo venue profile](ERGO_VENUE_PROFILE.md) and
 `model/pool-v3-ergo-profile.ts` fix attribution by exact tree and `R4`/`R5`
 shape, run reassembly, transaction-then-output ordinals, an index space
