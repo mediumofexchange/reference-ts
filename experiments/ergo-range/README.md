@@ -257,18 +257,22 @@ is an offline observation; nothing connects to a node or selects the profile.
 The reader's decoder is `contained-decoder.mjs`; the replay adapter
 (`replay-venue.mjs`), the v3 Ergo check and `profile-check.mjs` read through
 it. `wasm-meter.mjs` derives, from the vendored release build, a module with
-fuel charged at every function entry and loop head and with bulk memory,
-memory growth and table growth routed through charged, capped helpers; the
-derivation is deterministic and its SHA-256 is pinned. Each transaction runs
-in a fresh instance of that module with every import trapping, under the
-budget `budgetFor(length)` declares; fuel, memory, table, trap and stack
-exhaustion refuse that transaction with a reason and leave the next
-unaffected. `decoder.mjs` stays the unmetered reference the chain-cost,
+fuel charged at every function entry and loop head, bulk memory, memory
+growth and table growth routed through charged, capped helpers, and a call
+depth counted at every call site against a ceiling; the derivation is
+deterministic and its SHA-256 is pinned. Each transaction runs in a fresh
+instance of that module with every import trapping, under the budget
+`budgetFor(length)` declares; fuel, memory, table and depth exhaustion and
+traps refuse that transaction with a reason and leave the next unaffected.
+A caller must leave the V8 stack the check measures for the depth ceiling
+to refuse before the engine's stack does. `decoder.mjs` stays the unmetered reference the chain-cost,
 equivalence, publication and stack probes bound in their reports.
 
-`contained-check.mjs` runs in `npm run check:ergo:range`: exact-accounting
-controls on a hand-assembled module, the corpus against `decoder.mjs`,
-reduced budgets and synthetic hostile inputs. `contained-range.mjs` compares
+`contained-check.mjs` runs in `npm run check:ergo:range`: hand-counted
+exact-cost controls on an assembled module, the corpus against
+`decoder.mjs`, reduced budgets, synthetic hostile inputs and, in child
+processes at reduced `--stack-size`, the least V8 stack the depth ceiling
+needs. `contained-range.mjs` compares
 the contained decoder's fields with the node's over cached blocks and
 records each transaction's fuel and memory; the
 [retained report](../../docs/ergo-decoder-containment-verification.json)

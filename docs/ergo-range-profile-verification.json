@@ -23,8 +23,8 @@
   "inputManifestSha256": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
   "files": {
     "experiments/ergo-range/profile-check.mjs": "34ade7559c33f5a53337b52fce9040e16a931a2ab94d300732b2023e1912d97d",
-    "experiments/ergo-range/contained-decoder.mjs": "706c3d42ec6a7f6f1051dfea267679f8189c0561026370ecdbe003068d469320",
-    "experiments/ergo-range/wasm-meter.mjs": "efc8e260bdc03c4193eb054c0fe709d32f95d4d55c0b8e6aa0475ec2a7b7bb1f",
+    "experiments/ergo-range/contained-decoder.mjs": "935de261b840a03ed653202b74c739e37066146bbe45a58082847dfe8c86ca21",
+    "experiments/ergo-range/wasm-meter.mjs": "e9fad35867dc741a966d4e231264aa1e5e4846970ec20cb6b7e9638ad7cd1c49",
     "experiments/ergo-range/package.json": "0eb7a7f6a08c6b80a601dc36787620c36f8a5ad643b3c2730eac30ef3c0f8c3a",
     "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
     "model/pool-v3-ergo-profile.ts": "19a68c82f6410d551e589e34f69731e1cc8b73995a7cabe5cc75ff8b2e75128d",

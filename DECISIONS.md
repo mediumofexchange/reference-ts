@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-24` [Contain the reader's decoder per transaction under a deterministic metered budget](decisions/2026-09.md#2026-09-24--contain-the-readers-decoder-per-transaction-under-a-deterministic-metered-budget)
 - `2026-09-23` [Resolve a served trail from the prefix of a longer supplied trail](decisions/2026-09.md#2026-09-23--resolve-a-served-trail-from-the-prefix-of-a-longer-supplied-trail)
 - `2026-09-23` [Keep the reader's own decoder: the transaction root does not authenticate the node's field split](decisions/2026-09.md#2026-09-23--keep-the-readers-own-decoder-the-transaction-root-does-not-authenticate-the-nodes-field-split)
 - `2026-09-23` [Pin a reproducible release build of sigma-rust 2f840d3](decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3)

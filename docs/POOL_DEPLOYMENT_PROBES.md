@@ -1248,8 +1248,9 @@ no index is unresolved, with decoding about six times faster.
 
 Not established: recursion paths other than collection nesting and
 `LogicalNot` expressions; reproduction of the bytes on a host other than
-Windows (panic locations keep the host's path separators); the decoder's
-memory and CPU containment.
+Windows (panic locations keep the host's path separators). The reader now
+decodes [contained](#contained-decoder), where a depth ceiling refuses deep
+nesting before either stack.
 
 ## Windows process containment feasibility
 
@@ -1451,7 +1452,7 @@ length prefix (a scratch count over the same cache). At the node's pinned
 sigmastate v6.0.6, 102 expression serializers apply and a method call's
 layout depends on the versioned method registry. The reader keeps its own
 decoder ([decision](../decisions/2026-09.md#2026-09-23--keep-the-readers-own-decoder-the-transaction-root-does-not-authenticate-the-nodes-field-split));
-resource bounds for adversarial inputs and a budget remain open.
+it runs [contained](#contained-decoder) under the reader's budget.
 
 ## Decoder node equivalence over the retained blocks
 
@@ -1484,6 +1485,63 @@ the verifier reads outputs only. These are valid transactions from one
 node's retention window: hostile inputs, script versions only earlier
 blocks carry, and containment are not exercised, and no decoder or profile
 is selected.
+
+## Contained decoder
+
+The reader decodes through `experiments/ergo-range/contained-decoder.mjs`
+([decision](../decisions/2026-09.md#2026-09-24--contain-the-readers-decoder-per-transaction-under-a-deterministic-metered-budget),
+[guide](../experiments/ergo-range/README.md#contained-decoder),
+[retained report](ergo-decoder-containment-verification.json)). `wasm-meter.mjs`
+derives from the vendored release build (WASM `0d200385…`) a module
+(`bd7cfbb5…`, 13,727 functions, 16,050 charged regions, 54,467 counted call
+sites, 5,211 helper calls) that charges fuel at every function entry and loop
+head, charges and caps bulk memory, memory growth and table growth, and
+refuses a call depth past a ceiling. Each transaction runs in a fresh instance,
+every import trapping, under a budget linear in its length n: fuel
+2^26 + 2^21·n, linear memory 8 MiB + 1 KiB·n, 4,096 table elements and
+4,096 frames, inputs to 2 MiB (mainnet's voted `maxBlockSize` is 1,271,009
+bytes on the own node).
+
+| Input | Transactions | Decoded, fields equal to the node's | Least budget margin |
+|---|---|---|---|
+| Corpus fixtures | 29 | 29 | 4.45 |
+| P4 week, heights 1,873,361–1,878,400 | 28,196 | 28,196 | 3.69 |
+| Own node's retained blocks, heights 1,830,001–1,879,100 | 314,028 | 314,028 | 2.98 |
+
+Over all 342,253 transactions the budget is at least 5.4 times the fuel
+and 2.98 times the linear memory any of them took; the costliest, a
+52,030-byte transaction of block 1,867,680, took 18.4 × 10⁹ fuel and
+16.7 MB of memory, and none took more than 394,944 fuel per byte. The node's JSON fields are compared as in the
+[equivalence pass](#decoder-node-equivalence-over-the-retained-blocks), with a
+mutation control per set, so `decoder.mjs` and the contained decoder agree
+there transitively. On one desktop the derived module runs about 3.4 × 10¹⁰
+fuel a second, so a 98,304-byte transaction's budget is about six seconds
+and a 2 MiB input's about two minutes; a fresh instance costs 2.6–5 ms.
+
+`contained-check.mjs` counts by hand what each construct must cost on an
+assembled module and finds it exactly: straight code, a counted loop and
+nested loops with an outer-loop branch, `br_table` and `if`/`else`, every
+helper including a refused growth, direct and `call_indirect` recursion
+stopped at depth ceilings, and the depth back at zero after calls return. Growth past a ceiling returns −1 and sets its flag;
+tail calls, SIMD, `memory.init` and a start section make the rewriter throw.
+On the decoder, fuel and memory ceilings below a corpus transaction's need
+refuse it as `fuel` or `memory` and its exact need decodes it; an expression
+nested to the node's cap of 110 decodes within 361 frames, while nesting of
+2,000, 100,000 and 1,000,000 refuses as `depth` at frame 4,097 wherever the
+caller leaves 437 KB of V8's 984 KB default stack (measured on this unary
+nesting; review found other unary operators need no more, and other
+recursion paths are not measured); truncated, extended and
+pseudorandom bytes refuse; and the next transaction after every refusal
+decodes unchanged. Metering repeats exactly.
+
+Not established: that no node-valid transaction exceeds the budget (the
+node's rules bound neither a decoder's work nor its memory per byte, so the
+budget is the reader's and a costlier node-valid transaction is refused,
+denying the ranges through its block); a bound on the host's own memory
+(a dropped instance's memory stays until V8 collects it, and the
+per-transaction caps summed over the replay adapter's read limits reach
+16 GiB); CPU time, which fuel only approximates; node equivalence for
+hostile inputs.
 
 ## Venue and restoration work still required
 
