@@ -18,13 +18,16 @@ and tests before editing.
 | Component boundaries and retirement | Relevant row of [architecture](docs/PRIVATE_PAYMENT_ARCHITECTURE.md) |
 | Current component evidence and later specification pins | [Implementation status](docs/IMPLEMENTATION_STATUS.md) |
 | Prior rationale | Search `DECISIONS.md`, then read only its relevant linked entry |
-| Release gates and effort estimate | [Production requirements](docs/PRODUCTION_REQUIREMENTS.md) |
+| Release gates and estimate method | [Production requirements](docs/PRODUCTION_REQUIREMENTS.md) |
 | Fault-contract coverage and limits | [Fault recovery](docs/POOL_FAULT_RECOVERY.md) |
 
 Load sources for the mechanism being changed, not whole decision archives or every component guide.
 README stays an introduction; update each topic in place. Keep durable instructions here, active
 status in WORK.md, and substantive decisions in `decisions/` with an index entry. Retain selected
-checked reviews in `decisions/archive/`; superseded drafts and session logs belong in Git history.
+checked reviews in `decisions/archive/`; superseded drafts, retired harnesses and session logs
+belong in Git history (link a permalink when history must stay reachable). Each measurement has one
+home, normally its probes section or retained report; other documents link it with at most a
+one-clause summary instead of restating numbers or dated status lines.
 `CLAUDE.md` contains exactly `@AGENTS.md`, so agents share one source.
 
 ## Direction and authority
@@ -109,8 +112,11 @@ evidence. If review is unavailable, retain the merge gate and exact review owed;
 Delegate bounded work when it reduces the critical path. Use economical available agents for
 inventories/mechanical checks and strong reasoning for protocol, security/design or inconclusive
 work. Give outcomes, constraints, sources and acceptance criteria; let agents choose steps. One
-primary owns integration. Writers own disjoint files or isolated worktrees and never concurrently
-change a shared branch/index. Do not assume or install another provider/model.
+primary owns integration. Writers own disjoint files or isolated worktrees (`git worktree add
+scratch/wt/<name>`; dependencies resolve from the checkout) and never concurrently change a shared
+branch/index. Reviewers are read-only and report path:line, trigger, impact and fix. Check a
+finished agent's commits and leftovers rather than trusting its summary. Do not assume or install
+another provider/model.
 
 ## Verification and delivery
 
@@ -127,6 +133,7 @@ commands are in `package.json`.
 | v3 relations/keys/configuration | `npm run check:pool:v3` (add `-- --ergo` for its adapter) |
 | v3 replay-only experiment | `npm run check:pool:ergo-replay` |
 | Real-proof wallet flow | `npm run check:pool-wallet-real` |
+| Sources bound by a retained report | `npm run check:evidence`; re-record reports cited as current |
 
 Add the smallest regression test for changed behavior; hostile witnesses must otherwise satisfy the
 relation so unrelated constraints cannot hide a missing guard. Cover relevant replay, aliasing,
@@ -136,13 +143,18 @@ need no ceremonial tests.
 Iterate with focused checks; run expensive real-proof/full acceptance after the relevant patch
 stabilizes. Reuse a passing baseline when its inputs are unchanged, recording revision, affected
 checks and gaps. A report/cache is evidence only for the exact sources/artifacts/configuration it
-binds. Rerun affected checks after fixes and required checks on final code. Do not duplicate
-unchanged passing CI locally or weaken checks after failures.
+binds, so a report generator hashes every source its verdict depends on (including imported
+parsers) and takes specification pins from one constant. Rerun affected checks after fixes and
+required checks on final code. Do not duplicate unchanged passing CI locally or weaken checks after
+failures. A negative test asserts the specific refusal (code, check or reason), not merely a throw.
 
 Preserve unrelated changes. Make logical commits, fetch/inspect upstream, integrate without
 rewriting others' work, satisfy protections and required checks, then merge/push under standing
 authority. Verify final commit, clean status and remote parity. Inspect available CI for that
 revision and distinguish pending from passed. Do not bypass failed or unavailable required gates.
+After a verified merge, delete the merged branch locally and on the remote, remove its worktrees
+and delete the slice's disposable scratch files; only WORK.md's retained local state outlives a
+slice.
 Prefer one complete handoff in the delivery commit; add a follow-up only for material new evidence
 or a correction, not just to insert that commit's own hash.
 
@@ -160,26 +172,28 @@ session completion.
 
 Record choices, rationale, alternatives, evidence, limits and status neutrally; do not quote
 conversations or attribute authority to a person/model. Git records authorship. Use Construction's
-words and rule numbers in code, tests and commits.
+terms and rule numbers in code, tests and commits, not new metaphors; consult the [older
+vocabulary](docs/PROTOCOL_RULES.md#older-vocabulary) only for older material. Commit prefixes:
+`spec:`, `feat:`, `fix:`, `docs:`, `test:`, `chore:`, with a plain title naming the rule or change.
 
 Keep disposable probes/build copies in ignored `scratch/`; promote lasting evidence then remove
-obsolete copies. Preserve explicitly retained evidence and useful verified caches. Never place full
+obsolete copies. Edit files with the editor tool; a scripted edit is disposable and deleted after
+use. Preserve explicitly retained evidence and useful verified caches. Never place full
 clones/dependency trees at the workspace root. Apply obvious low-risk workflow improvements; put
 larger opportunities in WORK.md without derailing the slice.
 
-Keep the coarse product-effort estimate in WORK.md per production requirements. Reassess from
-gathered evidence after meaningful product progress or a major blocker; no extra research/delegation
-just to estimate. Credit reusable progress before release gates close; never infer progress from
-commit/test counts. Report changed/requested rounded estimates and blockers, omitting unchanged
-percentages from routine work. Workflow cleanup alone adds no product progress.
+The host is Windows (Git Bash, PowerShell; LF files). Use absolute paths or `git -C`; the shell's
+directory drifts. Write large text with the editor, not a heredoc. Run long jobs detached, logging
+output and exit code to scratch. WORK.md names detached jobs (own Ergo nodes, drivers); change
+files they read only on a branch/worktree, merging after they end. New commits, fresh file times
+or live agent processes mean another session shares the checkout: stay read-only until it stops.
 
-Final reports state behavior, verification/review, delivery and remaining limits. Explicitly
-recommend staying with this instance or switching, based on next work, context freshness and
-expected efficiency, not claimed comparative performance. Internal milestones do not require a new
-instance; switch when context or the next problem warrants it, with WORK.md sufficient to resume
-independently.
+WORK.md alone holds the coarse product-effort estimate (method in production requirements).
+Reassess from gathered evidence after meaningful product progress or a major blocker; no extra
+research/delegation just to estimate. Credit reusable progress before release gates close; never
+infer progress from commit/test counts. Report changed/requested rounded estimates and blockers,
+omitting unchanged percentages. Workflow cleanup adds no product progress.
 
-Use Construction's terms, not new metaphors; consult the [older
-vocabulary](docs/PROTOCOL_RULES.md#older-vocabulary) only when reading older material. Commit
-prefixes: `spec:`, `feat:`, `fix:`, `docs:`, `test:`, `chore:`. Use a title naming the rule or
-change in plain words.
+Final reports state behavior, verification/review, delivery and remaining limits, and recommend
+staying with this instance or switching, based on next work, context freshness and expected
+efficiency, not claimed comparative performance. WORK.md must suffice to resume independently.
