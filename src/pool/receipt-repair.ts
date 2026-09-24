@@ -7,7 +7,7 @@ import { readPoolCheckpoints, type PoolCheckpointEvidence, type PoolCheckpointFa
 import { readPoolReceiptRecord } from "./receipt-record.js";
 import { indexEvidence, relateHeld } from "./receipt-walk.js";
 import { copyPoolReceipt, type PoolReceipt } from "./receipt.js";
-import { PoolError, type SignedBacking, type StatementVerifier } from "./segment.js";
+import { PoolError, requireReaderConfiguration, type SignedBacking, type StatementVerifier } from "./segment.js";
 import { copyConfiguration, copySegmentHeader, segmentIdentity, type PoolConfiguration, type SegmentHeader } from "./statement.js";
 
 export interface PoolReceiptCheckpointFact { readonly commitment: Commitment; readonly at: bigint }
@@ -47,6 +47,8 @@ function identical(a: Commitment, b: Commitment): boolean { return same(encodeCo
  * failures propagate. External data is owned before callbacks.
  */
 export async function readPoolReceiptRepair(args: Arguments): Promise<PoolReceiptRepairResult> {
+  // The caller's own configuration and verifier: a mismatch throws, never classifies evidence.
+  requireReaderConfiguration(args);
   let stable = (): void => {};
   let owned: Omit<Arguments, "venue" | "verifier">, targets: Commitment[], witnessedIndex: bigint;
   let venue: Venue, verifier: StatementVerifier;

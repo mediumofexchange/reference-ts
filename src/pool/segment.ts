@@ -99,6 +99,55 @@ export interface StatementVerifier {
   readonly identities: CircuitIdentities;
 }
 
+/**
+ * §12: a configuration is served, replayed or read only if it is the one this
+ * implementation derives, never one a served trail names: §1's Poseidon2
+ * helper and the circuits whose keys `verifier` holds. Returns an owned copy;
+ * throws PoolError CONFIGURATION otherwise. The configuration and the verifier
+ * are the caller's own setup, so a reader calls this before it classifies any
+ * evidence, and a mismatch is never a verdict on what was served.
+ */
+export function requireConfiguration(configuration: PoolConfiguration, verifier: StatementVerifier): PoolConfiguration {
+  let config: PoolConfiguration;
+  try {
+    config = copyConfiguration(configuration);
+  } catch (cause) {
+    throw new PoolError("CONFIGURATION", malformed(cause, "malformed configuration"));
+  }
+  if (bytesToHex(config.helper) !== POOL_HELPER_SHA256) {
+    throw new PoolError("CONFIGURATION", "the configuration names another Poseidon2 helper (§1)");
+  }
+  let identities: unknown;
+  try {
+    identities = verifier.identities;
+  } catch {
+    identities = undefined;
+  }
+  for (const kind of ["issue", "spend", "burn"] as const) {
+    let same = false;
+    try {
+      const held = (identities as CircuitIdentities)[kind];
+      same = compareBytes(held.bytecode, config[kind].bytecode) === 0 && compareBytes(held.vk, config[kind].vk) === 0;
+    } catch {
+      throw new PoolError("CONFIGURATION", "the verifier does not name its circuit identities");
+    }
+    if (!same) throw new PoolError("CONFIGURATION", `the verifier's ${kind} circuit is not the configuration's`);
+  }
+  return config;
+}
+
+/**
+ * A reader's entry check on the configuration and verifier its arguments
+ * carry, before any evidence is classified. Arguments carrying neither are
+ * malformed arguments, which the readers answer as such.
+ */
+export function requireReaderConfiguration(args: unknown): void {
+  if (typeof args !== "object" || args === null) return;
+  const { configuration, verifier } = args as { readonly configuration?: unknown; readonly verifier?: unknown };
+  if (configuration === undefined && verifier === undefined) return;
+  requireConfiguration(configuration as PoolConfiguration, verifier as StatementVerifier);
+}
+
 export type PoolErrorCode =
   | "MALFORMED"
   | "PROOF"
@@ -474,29 +523,8 @@ export class Segment {
    * predecessor is the caller's to have established (C2.10.4).
    */
   constructor(configuration: PoolConfiguration, header: SegmentHeader, imports: readonly FinalizedPrefix[], verifier: StatementVerifier) {
-    try {
-      this.config = copyConfiguration(configuration);
-      this.domain = configurationHash(this.config);
-    } catch (cause) {
-      throw new PoolError("CONFIGURATION", malformed(cause, "malformed configuration"));
-    }
-    // §12: the configuration is the one this implementation derives, never one a
-    // served trail names: the pinned helper, and the circuits whose keys the
-    // verifier holds.
-    if (bytesToHex(this.config.helper) !== POOL_HELPER_SHA256) {
-      throw new PoolError("CONFIGURATION", "the configuration names another Poseidon2 helper (§1)");
-    }
-    const identities: unknown = verifier.identities;
-    for (const kind of ["issue", "spend", "burn"] as const) {
-      let same = false;
-      try {
-        const held = (identities as CircuitIdentities)[kind];
-        same = compareBytes(held.bytecode, this.config[kind].bytecode) === 0 && compareBytes(held.vk, this.config[kind].vk) === 0;
-      } catch {
-        throw new PoolError("CONFIGURATION", "the verifier does not name its circuit identities");
-      }
-      if (!same) throw new PoolError("CONFIGURATION", `the verifier's ${kind} circuit is not the configuration's`);
-    }
+    this.config = requireConfiguration(configuration, verifier);
+    this.domain = configurationHash(this.config);
     this.verifier = verifier;
     try {
       this.head = copySegmentHeader(header);
@@ -873,6 +901,8 @@ export class Segment {
     // later statements and ancestors we have not yet reached. A saved map key
     // must never name an evidence object the caller can replace underneath it.
     const ownTrail = copyReplayTrail(trail);
+    // The replayer's configuration, checked before any ancestry is read or imported.
+    requireConfiguration(ownTrail.configuration, verifier);
     const byKey = new Map<string, ImportEvidence>();
     if (!Array.isArray(evidence)) throw new PoolError("IMPORT", "malformed import evidence");
     for (const item of evidence as readonly ImportEvidence[]) {

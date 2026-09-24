@@ -381,6 +381,11 @@ describe("pool-v2 §9: the history, the directory and replay", () => {
       .rejects.toMatchObject({ code: "CONFIGURATION", message: /helper/ });
     await expect(Segment.replay({ configuration: otherHelper, header: { ...trail.header, domain: configurationHash(otherHelper) },
       backings: [], statements: [] }, verifier)).rejects.toMatchObject({ code: "CONFIGURATION", message: /helper/ });
+    // Before any opening's ancestry is looked for.
+    const opened = { ...trail.header, domain: configurationHash(otherHelper),
+      entries: trail.header.entries.map(e => ({ ...e, opening: { operator: KEYS.carol, sequence: 1n, root: new Uint8Array(32).fill(9) } })) };
+    await expect(Segment.replay({ configuration: otherHelper, header: opened, backings: [], statements: [] }, verifier))
+      .rejects.toMatchObject({ code: "CONFIGURATION", message: /helper/ });
     // Circuits other than the verifier's are refused the same way.
     const otherKey = { ...trail.configuration, spend: { ...trail.configuration.spend, vk: new Uint8Array(32).fill(5) } };
     await expect(Segment.replay({ configuration: otherKey, header: { ...trail.header, domain: configurationHash(otherKey) },
@@ -467,7 +472,7 @@ describe("pool-v2 §8: what leaves the segment aliases nothing, and what it trus
     expect(segment.identity).toEqual(auth.segment);
   });
 
-  it("refuses a verifier whose circuits are not the configuration's, where the verifier can say", () => {
+  it("refuses a verifier whose circuits are not the configuration's, or that names none, and another helper (§12)", () => {
     const a = signedPoolBacking(SECRETS.backer);
     const header = genesisHeader([a.backing]);
     const matching = Object.assign(new Oracle(), { identities: { issue: CONFIG.issue, spend: CONFIG.spend, burn: CONFIG.burn } });
@@ -475,9 +480,16 @@ describe("pool-v2 §8: what leaves the segment aliases nothing, and what it trus
     const other = Object.assign(new Oracle(), {
       identities: { issue: CONFIG.issue, spend: CONFIG.spend, burn: { bytecode: CONFIG.burn.bytecode, vk: new Uint8Array(32) } },
     });
-    expect(() => new Segment(CONFIG, header, [], other)).toThrow(PoolError);
-    expect(() => new Segment(CONFIG, header, [], other)).toThrow(/burn/);
-    expect(() => new Segment(CONFIG, header, [], new Oracle())).not.toThrow();
+    const refusal = (verifier: unknown, config = CONFIG): unknown => {
+      try { new Segment(config, header, [], verifier as never); } catch (error) { return error; }
+      return undefined;
+    };
+    expect(refusal(other)).toMatchObject({ name: "PoolError", code: "CONFIGURATION", message: "the verifier's burn circuit is not the configuration's" });
+    for (const unnamed of [{ verify: async () => true }, { identities: { issue: IDENTITIES.issue }, verify: async () => true }, null]) {
+      expect(refusal(unnamed)).toMatchObject({ name: "PoolError", code: "CONFIGURATION", message: "the verifier does not name its circuit identities" });
+    }
+    expect(refusal(new Oracle(), { ...CONFIG, helper: new Uint8Array(32) }))
+      .toMatchObject({ name: "PoolError", code: "CONFIGURATION", message: "the configuration names another Poseidon2 helper (§1)" });
   });
 
   it("answers a malformed backing, configuration or header with a PoolError, and positions a replay's failing statement", async () => {
@@ -496,16 +508,6 @@ describe("pool-v2 §8: what leaves the segment aliases nothing, and what it trus
       caught = error;
     }
     expect(caught).toMatchObject({ name: "PoolError", code: "CONFIGURATION" });
-    // A verifier always names the circuits its keys came from (§12).
-    for (const unnamed of [{ verify: async () => true }, { identities: { issue: IDENTITIES.issue }, verify: async () => true }]) {
-      caught = undefined;
-      try {
-        new Segment(CONFIG, genesisHeader([a.backing]), [], unnamed as never);
-      } catch (error) {
-        caught = error;
-      }
-      expect(caught).toMatchObject({ name: "PoolError", code: "CONFIGURATION", message: "the verifier does not name its circuit identities" });
-    }
     try {
       new Segment(CONFIG, { ...genesisHeader([a.backing]), sequence: 0n }, [], new Oracle());
     } catch (error) {

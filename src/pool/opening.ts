@@ -9,7 +9,7 @@ import { PoolAuthorityView } from "./authority.js";
 import { mergePoolEvidence } from "./evidence.js";
 import { readPoolCheckpoints, type PoolCheckpointEvidence, type PoolCheckpointFailure } from "./checkpoint.js";
 import { readPoolCurrent } from "./descent.js";
-import { PoolError, Segment, type SignedBacking, type StatementVerifier } from "./segment.js";
+import { PoolError, requireReaderConfiguration, Segment, type SignedBacking, type StatementVerifier } from "./segment.js";
 import { configurationHash, copyConfiguration, copySegmentHeader, type PoolConfiguration } from "./statement.js";
 
 export type PoolOpeningResult = PoolCheckpointFailure
@@ -55,6 +55,8 @@ export async function preparePoolOpening(args: {
   readonly verifier: StatementVerifier;
 }): Promise<PoolOpeningResult> {
   if (typeof args !== "object" || args === null) return { kind: "invalid", reason: "malformed opening arguments" };
+  // The caller's own configuration and verifier: a mismatch throws, never classifies evidence.
+  requireReaderConfiguration(args);
   const verifier = args.verifier;
   // Keep the trusted backend's exceptions outside malformed-input handling.
   let validation: ReturnType<typeof readPoolCheckpoints> | undefined;

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { directoryRoot, signCommitment } from "../src/commitment.js";
+import { readPoolCheckpoint } from "../src/pool/checkpoint.js";
 import { PoolError } from "../src/pool/segment.js";
 import { genesisHistoryHash, segmentIdentity, snapshotDigest, type SegmentHeader, type Statement } from "../src/pool/statement.js";
 import { LocalVenue, VenueError } from "../src/venue.js";
@@ -234,5 +235,15 @@ describe("C2.10.3–5 whole-scope checkpoint validation", () => {
     }
     vi.spyOn(f.venue, "previousFor").mockImplementation(() => { throw new VenueError("offline"); });
     await expect(read(f.venue, f.base, [], f.oracle)).rejects.toThrow("offline");
+  });
+
+  it("throws on the reader's own configuration or verifier instead of classifying the evidence (§12)", async () => {
+    const f = await fixture();
+    expect(await read(f.venue, f.base, [], f.oracle)).toMatchObject({ kind: "final" });
+    await expect(read(f.venue, f.base, [], { verify: f.oracle.verify.bind(f.oracle) } as never))
+      .rejects.toMatchObject({ name: "PoolError", code: "CONFIGURATION", message: "the verifier does not name its circuit identities" });
+    await expect(readPoolCheckpoint({ configuration: { ...CONFIG, helper: new Uint8Array(32) }, venue: f.venue,
+      checkpoint: f.base.commitment, evidence: [f.base], verifier: f.oracle }))
+      .rejects.toMatchObject({ name: "PoolError", code: "CONFIGURATION", message: /helper/ });
   });
 });
