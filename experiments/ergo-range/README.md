@@ -66,6 +66,27 @@ records the window and anchor, the nodes' agreement, a digest of every
 cached response the run read, sizes, times and the refusals by output tree
 version.
 
+Over the [own node](#own-nodes)'s retained blocks the same probe runs in
+chunks, then an offline pass compares each decoded transaction with the
+node's JSON, and a summary adds them up:
+
+```powershell
+node experiments/ergo-range/equivalence-driver.mjs
+node experiments/ergo-range/equivalence-fields.mjs
+node experiments/ergo-range/equivalence-summary.mjs --out docs/ergo-decoder-equivalence-verification.json
+```
+
+The driver's constants fix the heights (the node keeps its last 50,000 full
+blocks); it and the field pass write to `scratch/equivalence/` and skip a
+chunk whose report exists, so either resumes. The field pass recomputes each
+chunk's cache digest before comparing, so it reads exactly the responses the
+chunk read, links the headers by id, and compares the decoder's id, witness
+id, output count and every output's ErgoTree, register names and register
+constants with the node's fields; mutating each of those fields in one real
+transaction per chunk must show as a difference. The summary requires the driver's exact plan, chunks joined by
+header id, every root reproduced, no refusal and no differing field
+([result](../../docs/POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks)).
+
 ## Publication and reassembly on a node
 
 `publish.mjs` is the recovery map's P2: it publishes the candidate profile's
