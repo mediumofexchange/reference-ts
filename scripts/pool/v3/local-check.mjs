@@ -1219,13 +1219,15 @@ try {
       result.candidates.forEach(x => assert.equal(x.spendable, false));
     }
   });
-  // Every module the verdict can execute, from the import graph (dist modules with their src sources), the
-  // compiled model roots, and the circuits, helpers and manifest the pinned identities come from.
+  // The repository sources the verdict executes, from the relative import graph (dist modules with their src
+  // sources), the compiled model roots, and the circuits, helpers and manifest the pinned identities come from.
+  // Packages are bound by the lockfiles; the vendored decoder by its checksum list.
   const models = ["trail", "configuration", "terms", "package", "range", "fault-evidence", ...(withErgo ? ["ergo-profile"] : [])];
   const sources = sourceClosure(["scripts/pool/v3/local-check.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/compile.mjs",
     ...models.map(name => `model/pool-v3-${name}.ts`), "scripts/pool/v3/candidate-manifest.json",
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
-    "src/pool/circuits/vendor/poseidon2.nr", ...(withErgo ? ["experiments/ergo-range/package-lock.json"] : [])]);
+    "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json",
+    ...(withErgo ? ["experiments/ergo-range/package-lock.json", "experiments/ergo-range/vendor/ergo-lib-wasm-nodejs/SHA256SUMS"] : [])]);
   checkCandidateSources(manifest);
   const report = { schema: "moe-v3-local-replay-experiment-22", specification: V3_SPECIFICATION, node: process.version,
     compactIntrinsic: intrinsicPairs.map(item => ({ packageBytes: portable(item.payload).package.length, result: item.result })),

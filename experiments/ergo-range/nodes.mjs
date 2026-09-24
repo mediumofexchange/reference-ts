@@ -165,10 +165,12 @@ async function stop(name) {
 }
 
 async function status(name, print = true) {
-  const pid = pidOf(name), dir = join(base, name);
-  const row = { network: name, pid: pid ?? null, running: false, dataBytes: bytesUnder(join(dir, "data")) };
-  // An unanswered lookup is recorded as unknown rather than as a stopped node.
-  try { row.running = pid !== undefined && alive(pid, name); } catch (error) { row.running = null; row.lookup = String(error.message).slice(0, 160); }
+  const dir = join(base, name);
+  const row = { network: name, pid: null, running: false, dataBytes: bytesUnder(join(dir, "data")) };
+  // An unreadable pid file or an unanswered lookup is recorded as unknown rather than as a stopped node.
+  let pid;
+  try { pid = pidOf(name); row.pid = pid ?? null; row.running = pid !== undefined && alive(pid, name); }
+  catch (error) { row.running = null; row.lookup = String(error.message).slice(0, 160); }
   if (row.running) row.process = usage(pid);
   try {
     const info = await api(name, "/info");
