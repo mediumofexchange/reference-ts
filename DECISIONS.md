@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-25` [Serve and read v2 only under the pinned helper and the verifier's circuits](decisions/2026-09.md#2026-09-25--serve-and-read-v2-only-under-the-pinned-helper-and-the-verifiers-circuits)
 - `2026-09-24` [Verify Ergo headers in the reader from the pinned anchor](decisions/2026-09.md#2026-09-24--verify-ergo-headers-in-the-reader-from-the-pinned-anchor)
 - `2026-09-24` [Supply Ergo unsigned bytes by copying the node's JSON](decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)
 - `2026-09-24` [Read venue transactions as unsigned bytes through the profile's own framer](decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)
