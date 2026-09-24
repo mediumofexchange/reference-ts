@@ -1,7 +1,7 @@
 // Offline venue-profile candidate check: pool-v3 §13 answers over full-block
-// evidence. Fleet serializes synthetic transactions from locally built
-// objects and hash-pinned fixtures; sigma-rust decodes the exact bytes after
-// a strict round trip; the model verifier attributes, reassembles and answers.
+// evidence. Fleet serializes the unsigned bytes of synthetic transactions
+// built from local objects and of the hash-pinned fixtures; the model hashes
+// them into ids, frames their outputs, attributes, reassembles and answers.
 // Nothing here reads a network, a node or a runtime path, and no answer is
 // evidence: the retained report is an observation about fixed inputs.
 import assert from "node:assert/strict";
@@ -15,7 +15,6 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b";
 import { serializeTransaction } from "@fleet-sdk/serializer";
 import { Address, Constant, ErgoTree } from "ergo-lib-wasm-nodejs";
-import { decodeTransaction } from "./contained-decoder.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../..");
 const sha256 = bytes => createHash("sha256").update(bytes).digest();
@@ -67,6 +66,8 @@ try {
 
   // Independent oracle from check.mjs: Fleet's unsigned bytes and the node's root algorithm.
   const unsignedBytes = tx => serializeTransaction({ ...tx, inputs: tx.inputs.map(input => ({ boxId: input.boxId, extension: input.spendingProof.extension })) }).toBytes();
+  // What a supplier hands the reader for one transaction: its unsigned bytes and its witness id.
+  const supplied = tx => ({ unsigned: unsignedBytes(tx), witnessId: fleetWitness(tx) });
   const fleetId = tx => blake2b(unsignedBytes(tx), { dkLen: 32 });
   const fleetWitness = tx => blake2b(Buffer.concat(tx.inputs.map(input => Buffer.from(input.spendingProof.proofBytes, "hex"))), { dkLen: 32 }).subarray(1);
   const merkle = leaves => {
@@ -103,7 +104,7 @@ try {
   equal(atOrigin.witnessedIndex(), 0n, "the child, height 2, is index 0 and is witnessed at depth 0");
   equal(atOrigin.range({ venue: anchoredId, kind: 2, subject: b(17), fromIndex: 0n, toIndex: 0n }, wide), undefined, "index 0 needs its section");
   const withOrigin = profile.ergoRangeVerifier(anchored, { headers: [genesisView, childView],
-    blocks: [{ headerId: childView.id, transactions: [decodeTransaction(serializeTransaction(childTx).toBytes())] }] });
+    blocks: [{ headerId: childView.id, transactions: [supplied(childTx)] }] });
   equal(withOrigin.range({ venue: anchoredId, kind: 2, subject: b(17), fromIndex: 0n, toIndex: 0n }, wide).length, 102,
     "index 0 answers empty from its section by exhaustion");
   equal(profile.ergoRangeVerifier({ ...anchored, anchor: b(1) }, { headers: [genesisView, childView], blocks: [] }), undefined, "another anchor refuses the real header");
@@ -145,22 +146,19 @@ try {
   };
   const heights = 12n, depth = 2n, version = 3n;
   let serializedBytes = 0, transactions = 0;
-  const chain = { headers: [], blocks: [] }, txBytesAt = new Map();
+  const chain = { headers: [], blocks: [] };
   let parentId = Buffer.alloc(32);
   for (let height = 1n; height <= heights; height++) {
     const txs = spec[height] ?? [tx([plain()])];
     const bytes = txs.map(t => serializeTransaction(t).toBytes());
-    const decoded = bytes.map(decodeTransaction);
-    ok(decoded.every(d => d !== undefined), "every synthetic transaction decodes after an exact round trip");
-    decoded.forEach((d, i) => {
-      equal(hex(d.id), hex(fleetId(txs[i])), "decoder id equals Fleet's unsigned-bytes hash");
-      equal(hex(d.witnessId), hex(fleetWitness(txs[i])), "31-byte witness id from the decoded proofs");
-    });
+    const views = txs.map(supplied);
+    // The framer reads every output exactly as Fleet wrote it from the local objects.
+    views.forEach((view, i) => equal(profile.frameTransaction(view.unsigned).map(o => [hex(o.ergoTree), Object.entries(o.registers).map(([k, v]) => [k, hex(v)])]),
+      txs[i].outputs.map(o => [o.ergoTree, Object.entries(o.additionalRegisters)]), "the framer reads Fleet's outputs"));
     const transactionsRoot = oracleRoot(version, txs);
     const id = sha256(Buffer.concat([Buffer.from(height.toString()), transactionsRoot, parentId]));
     chain.headers.push({ id, parentId, height, version, transactionsRoot });
-    chain.blocks.push({ headerId: id, transactions: decoded });
-    txBytesAt.set(height, bytes);
+    chain.blocks.push({ headerId: id, transactions: views });
     serializedBytes += bytes.reduce((n, x) => n + x.length, 0); transactions += txs.length;
     parentId = id;
   }
@@ -206,20 +204,19 @@ try {
   equal(verifier.range({ venue: b(12), kind: 1, subject: operator, fromIndex: 0n, toIndex: t }, wide), undefined, "no answer for another venue");
   assert.throws(() => verifier.range({ venue: identity, kind: 1, subject: operator, fromIndex: 0n, toIndex: t }, { maxBytes: 300n, maxEntries: 8n }), range.RangeLimitError); checks++;
 
-  // Hostile evidence: a flipped byte inside a record still decodes, as another transaction whose id fails the
-  // block's root, so output bytes are bound to the header through the decoder's id and that height has no
-  // section; a truncated transaction fails the strict decode and is unsupported evidence; a broken link fails
-  // the chain; stray, duplicate and root-failing blocks beside the true sections change no answer.
-  const original = txBytesAt.get(4n)[0], flipped = Buffer.from(original); flipped[flipped.length - 20] ^= 1;
-  const reread = decodeTransaction(flipped);
-  ok(reread !== undefined && hex(reread.id) !== hex(chain.blocks[3].transactions[0].id), "a flipped record byte is another transaction");
-  const twin = { ...chain.blocks[3], transactions: [reread, chain.blocks[3].transactions[1]] };
+  // Hostile evidence: a flipped byte inside a record still frames, as another transaction whose id fails the
+  // block's root, so output bytes are bound to the header through their own hash and that height has no
+  // section; a broken link fails the chain; stray, duplicate and root-failing blocks beside the true sections
+  // change no answer.
+  const original = chain.blocks[3].transactions[0], flipped = Buffer.from(original.unsigned); flipped[flipped.length - 20] ^= 1;
+  ok(profile.frameTransaction(flipped) !== undefined && hex(blake2b(flipped, { dkLen: 32 })) !== hex(fleetId(spec[4][0])), "a flipped record byte is another transaction");
+  const twin = { ...chain.blocks[3], transactions: [{ ...original, unsigned: flipped }, chain.blocks[3].transactions[1]] };
   const damaged = profile.ergoRangeVerifier(candidate, { headers: chain.headers, blocks: chain.blocks.map((block, i) => (i === 3 ? twin : block)) });
   equal(ask(1, operator, 0n, t, damaged), undefined, "the flipped section fails its root, so ranges through index 2 (height 4) are unresolved");
   ok(ask(1, operator, 3n, t, damaged) !== undefined, "ranges past the damaged index answer");
-  equal(decodeTransaction(original.subarray(0, original.length - 1)), undefined, "a truncated transaction does not decode");
+  equal(profile.frameTransaction(original.unsigned.subarray(0, original.unsigned.length - 1)), undefined, "a truncated transaction does not frame");
   const noisy = profile.ergoRangeVerifier(candidate, { headers: chain.headers,
-    blocks: [twin, { headerId: b(9), transactions: chain.blocks[0].transactions }, { headerId: chain.headers[2].id, transactions: [{ id: b(1), witnessId: b(1), outputs: [] }] },
+    blocks: [twin, { headerId: b(9), transactions: chain.blocks[0].transactions }, { headerId: chain.headers[2].id, transactions: [{ unsigned: b(1), witnessId: b(1) }] },
       ...chain.blocks, chain.blocks[5]] });
   equal(hex(ask(1, operator, 0n, t, noisy).bytes), hex(commitments.bytes), "a root-failing twin, a stray block, a malformed block and a duplicate change no answer");
   const unlinked = { ...chain, headers: chain.headers.map((h, i) => (i === 5 ? { ...h, parentId: b(0) } : h)) };
@@ -232,21 +229,41 @@ try {
   equal(hex(ask(1, operator, 0n, t, profile.ergoRangeVerifier(candidate, { headers: chain.headers.slice(1), blocks: chain.blocks })).bytes), hex(commitments.bytes),
     "a chain from the anchor's child answers the same; the genesis block below it is not read");
 
-  // Real fixtures: one-block ranges at depth 0, each block index 0 under its own parent as the anchor. The model's
-  // root reproduces the node's header roots for block versions 1, 3 and 4 from decoder-derived ids; every real
-  // register constant is decoded beside sigma-rust's own constant decoder; exhaustion over every output
-  // attributes nothing at four throwaway locations.
+  // A transaction outside the framer's grammar, here by a register of another type, carries no record, yet the
+  // header commits to it and its block keeps its section: the record in the next transaction answers.
+  const outside = tx([record(1, operator, commitment(8n)), box(plainTree, { R4: "0502" })]), inside = tx([record(1, operator, commitment(9n))]);
+  equal(profile.frameTransaction(unsignedBytes(outside)), undefined, "a register of another type leaves the grammar");
+  const mixedRoot = oracleRoot(3n, [outside, inside]);
+  const mixedChild = { id: sha256(Buffer.concat([Buffer.from("mixed"), mixedRoot])), parentId: genesisView.id, height: 2n, version: 3n, transactionsRoot: mixedRoot };
+  const mixed = profile.ergoRangeVerifier(anchored, { headers: [genesisView, mixedChild], blocks: [{ headerId: mixedChild.id, transactions: [supplied(outside), supplied(inside)] }] });
+  const mixedAnswer = range.decodeRangeAnswer(mixed.range({ venue: anchoredId, kind: 1, subject: operator, fromIndex: 0n, toIndex: 0n }, wide),
+    { venue: anchoredId, kind: 1, subject: operator, fromIndex: 0n, toIndex: 0n }, wide);
+  equal(mixedAnswer.entries.map(e => hex(e.record)), [hex(commitment(9n))], "only the framed transaction's record; the section stands");
+
+  // Real fixtures: one-block ranges at depth 0, each block index 0 under its own parent as the anchor. Fleet writes
+  // each transaction's unsigned bytes, whose hash is the node's id; the model's root reproduces the node's header
+  // roots for block versions 1, 3 and 4 from them; wherever the framer reads a real transaction its outputs are the
+  // node's; every real register constant is read beside sigma-rust's own constant decoder; exhaustion over every
+  // output attributes nothing at four throwaway locations.
   const sdkIndex = value => { assert(value >= 0n && value <= 0x7fffffffn); return Number(value); };
-  const fixtures = [], registers = { total: 0, collByte: 0, other: 0 };
+  const fixtures = [], registers = { total: 0, collByte: 0, other: 0 }, feeTrees = new Set();
   for (const fixture of manifest.fixtures) {
     const raw = readFileSync(join(here, fixture.file));
     equal(hex(sha256(raw)), fixture.sha256, "fixture pin before parsing");
     const block = parseFixture(raw.toString("utf8")), { header } = block;
     const txs = block.blockTransactions.transactions.map(t => ({ ...t, outputs: t.outputs.map(o => ({ ...o, creationHeight: sdkIndex(o.creationHeight), index: sdkIndex(o.index) })) }));
-    const decoded = txs.map(t => decodeTransaction(serializeTransaction(t).toBytes()));
-    ok(decoded.every(d => d !== undefined), "every fixture transaction decodes");
-    decoded.forEach((d, i) => equal(hex(d.id), txs[i].id, "decoded id equals the node's"));
-    for (const d of decoded) for (const output of d.outputs) for (const value of Object.values(output.registers)) {
+    const views = txs.map(supplied);
+    views.forEach((view, i) => equal(hex(blake2b(view.unsigned, { dkLen: 32 })), txs[i].id, "the unsigned bytes hash to the node's id"));
+    let framed = 0;
+    views.forEach((view, i) => {
+      const outputs = profile.frameTransaction(view.unsigned);
+      if (outputs === undefined) return;
+      framed++;
+      equal(outputs.map(o => [hex(o.ergoTree), Object.entries(o.registers).map(([k, v]) => [k, hex(v)])]),
+        txs[i].outputs.map(o => [o.ergoTree, Object.entries(o.additionalRegisters)]), "a framed real transaction reads the node's outputs");
+    });
+    for (const t of txs) for (const output of t.outputs) if (output.ergoTree === profile.MINER_FEE_TREE_HEX) feeTrees.add(fixture.height);
+    for (const t of txs) for (const output of t.outputs) for (const value of Object.values(output.additionalRegisters).map(v => Buffer.from(v, "hex"))) {
       const constant = Constant.decode_from_base16(hex(value));
       try {
         equal(hex(constant.sigma_serialize_bytes()), hex(value), "a real register constant reserializes exactly");
@@ -259,17 +276,20 @@ try {
     const view = { id: Buffer.from(header.id, "hex"), parentId: Buffer.from(header.parentId, "hex"), height: header.height, version: header.version,
       transactionsRoot: Buffer.from(header.transactionsRoot, "hex") };
     const fixtureProfile = { anchor: view.parentId, depth: 0n, scripts };
-    const single = profile.ergoRangeVerifier(fixtureProfile, { headers: [view], blocks: [{ headerId: view.id, transactions: decoded }] });
+    const single = profile.ergoRangeVerifier(fixtureProfile, { headers: [view], blocks: [{ headerId: view.id, transactions: views }] });
     const request = { venue: profile.ergoProfileIdentity(fixtureProfile), kind: 1, subject: b(0), fromIndex: 0n, toIndex: 0n };
     ok(single !== undefined && single.range(request, wide) !== undefined, "the model reproduces the real transaction root, so the index has its section");
     equal(single.witnessedIndex(), 0n, "the block after the anchor is index 0, witnessed at depth 0");
     equal(single.range(request, wide).length, 102, "exhaustion over the real block answers empty at four throwaway locations");
-    const outputs = decoded.reduce((n, d) => n + d.outputs.length, 0);
-    equal(String(outputs), String(txs.reduce((n, t) => n + t.outputs.length, 0)), "every output scanned");
+    const outputs = txs.reduce((n, t) => n + t.outputs.length, 0);
     fixtures.push({ height: fixture.height, version: fixture.version, transactions: fixture.transactions, outputs: String(outputs),
+      framedTransactions: framed, unsignedBytes: views.reduce((n, v) => n + v.unsigned.length, 0),
       headerWireBytes: header.size.toString(), rootReproduced: true, emptyAnswerBytes: 102 });
   }
   ok(registers.collByte > 0 && registers.other > 0, "the register oracle saw both shapes");
+  ok(fixtures.some(f => f.framedTransactions > 0) && fixtures.some(f => f.framedTransactions < Number(f.transactions)), "the fixtures hold framed and unframed transactions");
+  // Block 100,000 carries no fee output; each later fixture pays to exactly the framer's miner-fee tree.
+  equal([...feeTrees].map(String), manifest.fixtures.map(f => String(f.height)).filter(h => h !== "100000"), "fee outputs use the framer's miner-fee tree");
 
   // Capacity under the profile's layout: the largest R5 piece whose box stays within the 4,096-byte box
   // limit with its 34 bytes of transaction id and index, and the most such boxes one transaction carries
@@ -297,13 +317,13 @@ try {
     profile: { context: profile.ERGO_PROFILE_CONTEXT, identity: hex(identity), depth: depth.toString(), lag: verifier.lag().toString(),
       locations: Object.fromEntries(Object.entries(scripts).map(([kind, script]) => [kind, hex(script)])) },
     sources: manifest.sources, inputManifestSha256: hex(sha256(readFileSync(join(here, "fixtures/manifest.json")))),
-    files: Object.fromEntries(["experiments/ergo-range/profile-check.mjs", "experiments/ergo-range/contained-decoder.mjs", "experiments/ergo-range/wasm-meter.mjs", "experiments/ergo-range/package.json", "experiments/ergo-range/package-lock.json",
+    files: Object.fromEntries(["experiments/ergo-range/profile-check.mjs", "experiments/ergo-range/package.json", "experiments/ergo-range/package-lock.json",
       "model/pool-v3-ergo-profile.ts", "model/pool-v3-range.ts"].map(file => [file, fileHash(file)])),
     genesisAnchor: { height: genesis.height.toString(), version: genesis.version.toString(), id: genesis.id, parentIdZero: true,
       headerWireBytes: genesis.size.toString(), indexZeroHeight: "2", emptyAnswerBytesAtIndexZero: 102 },
     synthetic: { heights: heights.toString(), witnessedIndex: t.toString(), transactions: String(transactions), serializedTransactionBytes: String(serializedBytes),
       headers: String(chain.headers.length), answerBytes: answers, heldCommitments: held.held.length, mergedPublications: merged.length },
-    fixtures, registerConstants: registers,
+    fixtures, registerConstants: registers, feeTreeBlocks: [...feeTrees].map(String),
     capacity: { maxBoxBytes: 4096, mempoolMaxTransactionBytes: 98304, maxPieceBytes: pieceBytes, piecesPerTransaction: pieces,
       transactionBytes: txSize(pieces, pieceBytes), payloadCapacity, observedProofBytes, releasePublicationBytes: publication.release,
       releasePieces: Math.ceil(publication.release / pieceBytes), demandPublicationBytes: publication.demand, requestPublicationBytes: publication.request,
@@ -311,9 +331,9 @@ try {
       note: "a kind-4 object is one transaction's run of outputs; a configuration is publishable here only where its largest publication fits one transaction" },
     limitations: [
       "Headers are the reader's own source: linkage, contiguity and the anchor's child are checked; proof of work, chain selection and finality are not.",
-      "A transaction the reader's decoder refuses is unsupported evidence: its height has no section and every range through it stays unresolved until the decoder is repaired, a denial one node-valid transaction can trigger.",
+      "A transaction outside the framer's grammar carries no record; its block keeps its section. Whether a record's author can always stay inside the grammar is shown here for Fleet-written transactions only.",
       "Synthetic blocks are serialized by Fleet from local objects and were never accepted by a node; the fixtures are four non-contiguous real blocks and the real genesis header.",
-      "sigma-rust's strict round trip, run per transaction in a fresh metered instance under the reader's fuel and memory budget, is the decoder boundary; node equivalence for hostile inputs is not established (see the decoder probes).",
+      "Fleet writes the unsigned bytes here; a supplier's derivation of them from a node is outside this check, and the header root, not the supplier, authenticates them.",
       "No range from index zero was read on a real chain from a real anchor; the cost of exhaustion over real block bytes is not measured here.",
       "Capacity is measured by serialization against the box limit and the pinned mempool policy; no transaction was relayed or accepted by a node.",
       "No runtime path, spec selection, publication, chunking on a node or C2.10.13 completeness claim for any real venue follows.",

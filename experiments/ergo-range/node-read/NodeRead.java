@@ -11,7 +11,7 @@
 // Each input line is a case's bytes in hex; the first output line states the version context, then one JSON object
 // per input line, in order:
 //   {"read":<bytes of the case consumed>,["rewritten":"<hex>",]"stateless":"ok"|"<failure>","tx":{"id","witnessId",
-//     "outputs":[{"ergoTree","registers":{"R4":...}}]}}
+//     "unsigned","outputs":[{"ergoTree","registers":{"R4":...}}]}}
 //       the node read a transaction from the case's first <read> bytes; "rewritten" is present when the node's own
 //       serializer writes that transaction as other bytes than those it read (the node's ids are of those bytes)
 //   {"refused":"<exception class>","message":"<first line, at most 200 chars>"}     the node's parse threw
@@ -68,8 +68,10 @@ public class NodeRead {
 
   // Every field the comparison reads, as the node holds it, stated inside the transaction's version context.
   static String fields(ErgoTransaction tx) {
+    // The unsigned bytes are the node's own serialization with every proof empty, the bytes its id hashes.
     StringBuilder b = new StringBuilder("{\"id\":\"").append(tx.id()).append("\",\"witnessId\":\"")
-      .append(HEX.formatHex(tx.witnessSerializedId())).append("\",\"outputs\":[");
+      .append(HEX.formatHex(tx.witnessSerializedId())).append("\",\"unsigned\":\"").append(HEX.formatHex(tx.messageToSign()))
+      .append("\",\"outputs\":[");
     for (int i = 0; i < tx.outputCandidates().length(); i++) {
       ErgoBoxCandidate out = tx.outputCandidates().apply(i);
       if (i > 0) b.append(',');
