@@ -11,7 +11,7 @@ import { decodeCommitment, encodeCommitment, type Commitment } from "../commitme
 import { isValue } from "./field.js";
 import { commitmentOf, copyNoteOpening, nullifierOf, ownerOf, type NoteOpening } from "./notes.js";
 import { readPoolCheckpoint, type PoolCheckpointFailure, type PoolCheckpointResult } from "./checkpoint.js";
-import { poolReceiptAttestsEvidence, poolReceiptCovers, type PoolReceipt } from "./receipt.js";
+import { copyPoolReceipt, poolReceiptAttestsEvidence, poolReceiptCovers, type PoolReceipt } from "./receipt.js";
 import { copySegmentAuthority, decodeStatement, encodeStatement, parsePublicInputs, segmentIdentity, type SegmentAuthority, type Statement } from "./statement.js";
 import { decodeStoredReceipt, encodeStoredReceipt } from "./store-codec.js";
 import { deriveWalletField, walletChangeRequestId, type WalletPurpose } from "./wallet.js";
@@ -508,8 +508,11 @@ export class PoolWalletStore {
     this.active();
     const pending = this.pending(commandId);
     const submitted = decodeStatement(encodeStatement(this.authority.domain, pending.statement)).statement;
-    const receipt = await client.submit({ domain: this.authority.domain.slice(), statement: submitted });
-    requireThat(poolReceiptCovers(this.authority, pending.statement, receipt), "INVALID", "receipt does not cover pending statement under wallet authority");
+    const supplied = await client.submit({ domain: this.authority.domain.slice(), statement: submitted });
+    // The receipt checked is the one stored: one read of the client's object.
+    let receipt: PoolReceipt | undefined;
+    try { receipt = copyPoolReceipt(supplied); } catch { receipt = undefined; }
+    requireThat(receipt !== undefined && poolReceiptCovers(this.authority, pending.statement, receipt), "INVALID", "receipt does not cover pending statement under wallet authority");
     const encoded = encodeStoredReceipt(receipt);
     this.transaction(() => {
       const old = this.pending(commandId).receipt;

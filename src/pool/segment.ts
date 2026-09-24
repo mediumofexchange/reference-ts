@@ -880,7 +880,12 @@ export class Segment {
         // One read of the directory into a plain array, validated after the copy.
         const directory: unknown = item.checkpoint.directory;
         if (!Array.isArray(directory)) throw new Error("malformed checkpoint directory");
-        const ownDirectory = Array.from(directory as readonly SnapshotDigest[], e => ({ name: copyBytes(e.name), digest: copyBytes(e.digest) }));
+        let ownDirectory: SnapshotDigest[];
+        try {
+          ownDirectory = Array.from(directory as readonly SnapshotDigest[], e => ({ name: copyBytes(e.name), digest: copyBytes(e.digest) }));
+        } catch {
+          throw new Error("malformed checkpoint directory");
+        }
         if (!isDirectory(ownDirectory)) throw new Error("malformed checkpoint directory");
         if (!Array.isArray(item.trail?.statements) || typeof item.length !== "bigint" ||
             item.length < 0n || item.length > BigInt(item.trail.statements.length)) {

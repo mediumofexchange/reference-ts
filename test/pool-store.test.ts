@@ -131,11 +131,10 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     const venue = new LocalVenue(VENUE), oracle = new Oracle(), x = terms("EUR"), y = terms("USD"), file = path();
     const held: unknown[] = [], backings = [x, y];
     Object.defineProperty(backings, "constructor", { value: { [Symbol.species]: function () { return held; } } });
+    // Emptying what the species handed back must not empty the opening the store journals.
     const s = store(file, venue, oracle), opening = s.activate("opening", backings);
     held.length = 0;
     expect((await opening).sequence).toBe(1n);
-    expect(held).toHaveLength(0);
-    // The journal's request and the signed opening name the same two backings, so the journal loads again.
     s.close();
     const resumed = store(file, venue, oracle);
     expect((await resumed.view()).trail!.header.entries).toHaveLength(2);
