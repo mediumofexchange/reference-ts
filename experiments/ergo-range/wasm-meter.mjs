@@ -3,13 +3,18 @@
 //
 // The input is a fixed, pinned module (the vendored decoder), not external data: an instruction or section this
 // rewriter does not know makes it throw rather than guess. The derived module differs from the input only by:
-// - four appended mutable globals, exported: `__meter_fuel` (i64, remaining fuel), `__meter_memory_pages` (i64,
-//   linear-memory ceiling in pages), `__meter_table_elements` (i64, per-table element ceiling) and `__meter_refused`
-//   (i32; 1 after a refused memory growth, 2 after a refused table growth);
+// - seven appended mutable globals, exported: `__meter_fuel` (i64, remaining fuel), `__meter_memory_pages` (i64,
+//   linear-memory ceiling in pages), `__meter_table_elements` (i64, per-table element ceiling), `__meter_refused`
+//   (i32; 1 after a refused memory growth, 2 after a refused table growth), `__meter_depth` (i64, current call depth
+//   below the host's call), `__meter_depth_limit` (i64, its ceiling) and `__meter_depth_max` (i64, the deepest reached);
 // - a charge at the start of every function body and every loop body: the number of instructions of that region
 //   (a loop body's instructions belong to the loop, not to the enclosing region) plus the charge's own ten
 //   instructions. Only a branch to a loop label moves backwards and it re-enters that loop's charge, so each
 //   instruction runs at most once per charge of its region and total fuel bounds every instruction executed;
+// - around every call and call_indirect of the module's own code, a depth count: before it, the depth rises, the
+//   deepest is recorded and a depth past the ceiling executes `unreachable`; after it returns, the depth falls. Every
+//   guest frame but the host's entry is made by such a call, so recursion stops at a declared depth whatever the
+//   engine's own stack, and the 21 instructions this adds count in the call's region;
 // - memory.copy, memory.fill, memory.grow, table.grow and table.fill replaced by calls to appended helpers that
 //   charge their own instructions, then their dynamic extent (bytes / 8, 8,192 per page, one per element), before
 //   acting; the growth helpers return -1, as a refused growth does, when the result would exceed the ceiling.
@@ -19,8 +24,9 @@
 const I32 = 0x7f, I64 = 0x7e, F32 = 0x7d, F64 = 0x7c, FUNCREF = 0x70, EXTERNREF = 0x6f;
 const VALTYPES = new Set([I32, I64, F32, F64, FUNCREF, EXTERNREF]);
 export const METER_EXPORTS = Object.freeze({ fuel: "__meter_fuel", memoryPages: "__meter_memory_pages",
-  tableElements: "__meter_table_elements", refused: "__meter_refused" });
-export const CHARGE_INSTRUCTIONS = 10n;
+  tableElements: "__meter_table_elements", refused: "__meter_refused", depth: "__meter_depth",
+  depthLimit: "__meter_depth_limit", depthMax: "__meter_depth_max" });
+export const CHARGE_INSTRUCTIONS = 10n, CALL_INSTRUCTIONS = 21;
 export const REFUSED_MEMORY = 1, REFUSED_TABLE = 2;
 
 const fail = message => { throw new Error(`wasm-meter: ${message}`); };
@@ -70,9 +76,10 @@ function instruction(r) {
   if (op === 0x05) return "else";
   if (op === 0x0b) return "end";
   if (op === 0x00 || op === 0x01 || op === 0x0f || op === 0x1a || op === 0x1b || op === 0xd1) return "plain";
-  if (op === 0x0c || op === 0x0d || op === 0x10 || (op >= 0x20 && op <= 0x26) || op === 0xd2) { r.u32(); return "plain"; }
+  if (op === 0x10) { r.u32(); return "call"; }
+  if (op === 0x11) { r.u32(); r.u32(); return "call"; }
+  if (op === 0x0c || op === 0x0d || (op >= 0x20 && op <= 0x26) || op === 0xd2) { r.u32(); return "plain"; }
   if (op === 0x0e) { const n = r.u32(); for (let i = 0; i <= n; i++) r.u32(); return "plain"; }
-  if (op === 0x11) { r.u32(); r.u32(); return "plain"; }
   if (op === 0x1c) { const n = r.u32(); for (let i = 0; i < n; i++) if (!VALTYPES.has(r.byte())) fail("select type"); return "plain"; }
   if (op >= 0x28 && op <= 0x3e) { if (r.u32() & 0x40) fail("multiple memories"); r.u32(); return "plain"; }
   if (op === 0x3f) { if (r.u32() !== 0) fail("memory index"); return "plain"; }
@@ -161,8 +168,9 @@ export function meter(input) {
   }
 
   // Appended globals, then helpers: one per replaced operation and table.
-  const G = { fuel: importedGlobals + definedGlobals, pages: importedGlobals + definedGlobals + 1,
-    elements: importedGlobals + definedGlobals + 2, refused: importedGlobals + definedGlobals + 3 };
+  const first = importedGlobals + definedGlobals;
+  const G = { fuel: first, pages: first + 1, elements: first + 2, refused: first + 3, depth: first + 4, depthLimit: first + 5,
+    depthMax: first + 6 };
   const newTypes = [], helpers = [], helperIndex = new Map();
   const typeOf = (params, results) => {
     const bytes = [0x60, ...vec(params.map(p => [p])), ...vec(results.map(p => [p]))];
@@ -208,13 +216,19 @@ export function meter(input) {
       [...chargeDynamic(2, 0x86, 0), 0x20, 0, 0x20, 1, 0x20, 2, 0xfc, 17, ...u32(kind.table)]);
     return undefined;
   };
+  // Around a call: depth += 1; if depth > max, max = depth; if depth > limit, unreachable; the call; depth -= 1.
+  // Seventeen instructions before and four after (CALL_INSTRUCTIONS).
+  const beforeCall = Uint8Array.from([0x23, ...u32(G.depth), 0x42, 0x01, 0x7c, 0x24, ...u32(G.depth),
+    0x23, ...u32(G.depth), 0x23, ...u32(G.depthMax), 0x55, 0x04, 0x40, 0x23, ...u32(G.depth), 0x24, ...u32(G.depthMax), 0x0b,
+    0x23, ...u32(G.depth), 0x23, ...u32(G.depthLimit), 0x55, 0x04, 0x40, 0x00, 0x0b]);
+  const afterCall = Uint8Array.from([0x23, ...u32(G.depth), 0x42, 0x01, 0x7d, 0x24, ...u32(G.depth)]);
   const cat = pieces => Buffer.concat(pieces.map(p => p instanceof Uint8Array ? p : Uint8Array.from(p)));
 
   // Code: two passes per body, counting each region's instructions, then emitting with charges and replacements.
   const code = reader(10);
   if (code.u32() !== definedFunctions) fail("function and code counts differ");
   const bodies = [];
-  let regions = 0, replaced = 0;
+  let regions = 0, replaced = 0, calls = 0;
   for (let f = 0; f < definedFunctions; f++) {
     const size = code.u32(), end = code.p + size, start = code.p;
     code.bytes(size);
@@ -226,7 +240,7 @@ export function meter(input) {
       if (body.p >= end) fail(`function ${f} has no final end`);
       const from = body.p, kind = instruction(body);
       const region = stack.at(-1);
-      counts[region]++;
+      counts[region] += kind === "call" ? 1 + CALL_INSTRUCTIONS : 1;
       list.push({ from, to: body.p, kind });
       if (kind === "loop") { counts.push(0); list.at(-1).region = counts.length - 1; stack.push(counts.length - 1); }
       else if (kind === "open") stack.push(region);
@@ -237,6 +251,7 @@ export function meter(input) {
     for (const item of list) {
       const index = replacement(item.kind);
       if (index !== undefined) { out.push([0x10, ...u32(index)]); replaced++; }
+      else if (item.kind === "call") { out.push(beforeCall, wasm.subarray(item.from, item.to), afterCall); calls++; }
       else out.push(wasm.subarray(item.from, item.to));
       if (item.kind === "loop") out.push(charge(BigInt(counts[item.region])));
     }
@@ -251,11 +266,11 @@ export function meter(input) {
   const payload = {
     1: cat([u32(typeCount + newTypes.length), typeBytes, ...newTypes]),
     3: cat([u32(definedFunctions + helpers.length), functionBytes, ...helpers.map(h => u32(h.type))]),
-    6: cat([u32(definedGlobals + 4), globalBytes, mutable(I64, [0x42, 0x00]), mutable(I64, [0x42, 0x00]),
-      mutable(I64, [0x42, 0x00]), mutable(I32, [0x41, 0x00])]),
-    7: cat([u32(exportCount + 4), exportBytes,
-      ...[[METER_EXPORTS.fuel, G.fuel], [METER_EXPORTS.memoryPages, G.pages], [METER_EXPORTS.tableElements, G.elements],
-        [METER_EXPORTS.refused, G.refused]].map(([text, index]) => [...name(text), 0x03, ...u32(index)])]),
+    6: cat([u32(definedGlobals + 7), globalBytes, mutable(I64, [0x42, 0x00]), mutable(I64, [0x42, 0x00]),
+      mutable(I64, [0x42, 0x00]), mutable(I32, [0x41, 0x00]), mutable(I64, [0x42, 0x00]), mutable(I64, [0x42, 0x00]),
+      mutable(I64, [0x42, 0x00])]),
+    7: cat([u32(exportCount + 7), exportBytes,
+      ...Object.entries(METER_EXPORTS).map(([key, text]) => [...name(text), 0x03, ...u32(G[{ memoryPages: "pages", tableElements: "elements" }[key] ?? key])])]),
     10: cat([u32(bodies.length / 2), ...bodies]),
   };
   const out = [wasm.subarray(0, 8)];
@@ -265,5 +280,5 @@ export function meter(input) {
   }
   const derived = new Uint8Array(cat(out));
   if (!WebAssembly.validate(derived)) fail("the derived module does not validate");
-  return { bytes: derived, stats: { functions: definedFunctions, regions, replaced, helpers: helpers.length } };
+  return { bytes: derived, stats: { functions: definedFunctions, regions, replaced, calls, helpers: helpers.length } };
 }
