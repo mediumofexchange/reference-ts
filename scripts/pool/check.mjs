@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { Noir } from '@noir-lang/noir_js';
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from '@aztec/bb.js';
-import { fixtures, field, U64_MAX } from './fixtures.mjs';
+import { fixtures, field, FIELD, U64_MAX } from './fixtures.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const source = join(root, 'src/pool/circuits'), scratchPath = join(root, 'scratch');
@@ -238,9 +238,46 @@ try {
     assert.equal(await verifier.verifyProof({ ...proof, proof: corrupt, verificationKey: circuits[kind].vk }, options), false);
     checks.push(`${kind} rejects corrupted proof`);
   }
+  // The claim layer's verifier over proofs bb.js throws on: an element past its modulus, a coordinate limb out of range,
+  // a commitment off the curve and pairing points at infinity. Each verifies as false, and a run of them longer than the
+  // one after which a reused instance fails every verification leaves a valid proof verifying.
+  {
+    const { barretenbergPool } = await import('../../dist/pool/barretenberg.js');
+    const programs = { issue: circuits.issue.program, spend: circuits.spend.program, burn: circuits.burn.program };
+    const valid = proofs.issue, inputs = valid.publicInputs.map(BigInt), vk = circuits.issue.vk;
+    const word = (i, value) => { const p = new Uint8Array(valid.proof); p.set(Buffer.from(value.toString(16).padStart(64, '0'), 'hex'), i * 32); return p; };
+    const malformed = [
+      ['an element past its modulus', word(0, (1n << 256n) - 1n), 'Non-canonical proof element: value >= field modulus'],
+      ['a low coordinate limb out of range', word(8, FIELD - 1n), 'Assertion failed: (uint256_t(fr_vec[0]) < (uint256_t(1) << (NUM_LIMB_BITS * 2)))'],
+      ['a high coordinate limb out of range', word(9, FIELD - 1n), 'Assertion failed: (uint256_t(fr_vec[1]) < (uint256_t(1) << (TOTAL_BITS - NUM_LIMB_BITS * 2)))'],
+      ['a commitment off the curve', word(8, 1n), 'Deserialized point is not on the curve'],
+      ['pairing points at infinity', new Uint8Array(valid.proof.length), 'Cannot aggregate: incoming pairing points are at infinity'],
+    ];
+    const raw = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath });
+    try {
+      const reused = new UltraHonkVerifierBackend(raw);
+      const rawVerify = proof => reused.verifyProof({ proof, publicInputs: valid.publicInputs, verificationKey: vk }, options);
+      for (const [, bytes, message] of malformed) await assert.rejects(rawVerify(bytes), error => error.message.startsWith(message));
+      const offCurve = malformed[3][1];
+      for (let i = 0; i < 96; i++) await rawVerify(offCurve).catch(() => {});
+      await assert.rejects(rawVerify(valid.proof), /memory access out of bounds/, 'the control: a reused instance fails after the run');
+    } finally { await raw.destroy(); }
+    const pool = await barretenbergPool(api, programs, { crsPath });
+    assert.equal(await pool.verifier.verify(1, inputs, valid.proof), true);
+    for (const [label, bytes] of malformed) {
+      assert.equal(await pool.verifier.verify(1, inputs, bytes), false, label);
+      checks.push(`the verifier answers false for ${label}`);
+    }
+    for (let i = 0; i < 96; i++) assert.equal(await pool.verifier.verify(1, inputs, malformed[3][1]), false);
+    assert.equal(await pool.verifier.verify(1, inputs, valid.proof), true);
+    checks.push('the verifier never reuses an instance that threw: a valid proof verifies after 96 malformed ones');
+    await pool.close();
+    await assert.rejects(pool.verifier.verify(1, inputs, valid.proof), /the proof verifier is closed/);
+    checks.push('a closed verifier refuses instead of calling a destroyed instance');
+  }
   // The claim layer over these circuits, with real proofs, through dist/pool.
   const { checkAdmission } = await import("./admission.mjs");
-  const claimLayer = await checkAdmission({ api, circuits, pins, checks, metrics });
+  const claimLayer = await checkAdmission({ api, crsPath, circuits, pins, checks, metrics });
   console.log("PASS: real-proof admission, refusal, import and replay through the claim layer.");
   // Snapshot of cache files, not a claim about consumed prefixes or provenance.
   const parameterCache = {};

@@ -28,10 +28,10 @@ import { BURN, configurationHash, ISSUE, SPEND, statementBytes } from '../../dis
 const decimal = value => value.toString();
 const limbs = identifier => limbsOf(identifier).map(decimal);
 
-/** @param {{ api: any, circuits: Record<string, { program: any, noir: any, backend: any }>, pins: any, checks: string[], metrics: object[] }} args */
-export async function checkAdmission({ api, circuits, pins, checks, metrics }) {
+/** @param {{ api: any, crsPath: string, circuits: Record<string, { program: any, noir: any, backend: any }>, pins: any, checks: string[], metrics: object[] }} args */
+export async function checkAdmission({ api, crsPath, circuits, pins, checks, metrics }) {
   const programs = { issue: circuits.issue.program, spend: circuits.spend.program, burn: circuits.burn.program };
-  const backend = await barretenbergPool(api, programs);
+  const backend = await barretenbergPool(api, programs, { crsPath });
   for (const kind of ['issue', 'spend', 'burn']) {
     assert.equal(bytesToHex(backend.identities[kind].bytecode), pins.circuits[kind].bytecode, `${kind} bytecode identity`);
     assert.equal(bytesToHex(backend.identities[kind].vk), pins.circuits[kind].vk, `${kind} verification-key identity`);
@@ -205,7 +205,8 @@ export async function checkAdmission({ api, circuits, pins, checks, metrics }) {
   checks.push('corrupted, cross-kind and truncated proofs are refused for a new statement; an accepted one answers with its record');
 
   // A stranger replays the served trail with its own verifier and recomputes everything.
-  const replayed = await Segment.replay(s1.trail(), (await barretenbergPool(api, programs)).verifier);
+  const stranger = await barretenbergPool(api, programs, { crsPath });
+  const replayed = await Segment.replay(s1.trail(), stranger.verifier);
   assert.deepEqual(replayed.historyHash(), s1.historyHash());
   assert.equal(replayed.noteRoot(), s1.noteRoot());
   assert.deepEqual(replayed.spentRoot(), s1.spentRoot());
@@ -304,7 +305,7 @@ export async function checkAdmission({ api, circuits, pins, checks, metrics }) {
 
   // A stranger replays S2 from its trail and the evidence for its opening: P's checkpoint and S1's trail.
   const evidence = [{ checkpoint: checkpoint1, trail: s1.trail(), length: 4n }];
-  const s2Replayed = await Segment.replay(s2.trail(), (await barretenbergPool(api, programs)).verifier, evidence);
+  const s2Replayed = await Segment.replay(s2.trail(), stranger.verifier, evidence);
   assert.deepEqual(s2Replayed.historyHash(), s2.historyHash());
   assert.deepEqual(s2Replayed.directory(), s2.directory());
   assert.deepEqual(s2Replayed.spentRoot(), s2.spentRoot());
@@ -315,6 +316,7 @@ export async function checkAdmission({ api, circuits, pins, checks, metrics }) {
   const tampered = directory1.map(entry => ({ name: entry.name, digest: sha256(entry.digest) }));
   await refused(Segment.replay(s2.trail(), backend.verifier, [{ checkpoint: { commitment: signCommitment(operatorSecret, 1n, directoryRoot(tampered)), directory: tampered }, trail: s1.trail(), length: 4n }]), 'IMPORT');
   checks.push('a stranger replays the successor segment from the checkpoint evidence; missing, longer or tampered evidence is refused');
+  await stranger.close();
   await backend.close();
   return {
     domain: bytesToHex(domain), backing: bytesToHex(backing.name),

@@ -9,6 +9,11 @@ here before starting.
 
 ## Status
 
+- Proof verifier failures (merged 2026-09-24, reviewed): bb.js 5.2.0's five
+  malformed-proof throws verify as `false`, other failures are rethrown,
+  and the verifier verifies only on its own instance, replaced after every
+  throw (a reused instance fails every call after 89 throws)
+  ([decision](decisions/2026-09.md#2026-09-24--answer-false-only-for-malformed-proofs-and-never-verify-on-an-instance-that-threw)).
 - Contained decoder (merged 2026-09-24, reviewed): the reader's replay
   adapter, v3 Ergo check and profile check decode through
   `contained-decoder.mjs`, a fresh instance per transaction of a metered
@@ -22,8 +27,6 @@ here before starting.
   transactions with the node's id, witness id, trees and registers
   ([probe](docs/POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks));
   `equivalence-driver.mjs` → `equivalence-fields.mjs` → `equivalence-summary.mjs`.
-- Review pass (merged 2026-09-24, reviewed): v2 ingestion, v3 replay
-  charging and Ergo tooling fixes; contained-node harness retired (c85af7b).
 - A13 replay cost, served-trail prefixes (spec 786f962) and A10 inclusion
   latency are merged and reviewed; numbers live in
   [probes](docs/POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet)
@@ -55,14 +58,14 @@ here before starting.
    (`vendor/.../ergo_lib_wasm.js`, as `equivalence-fields.mjs` does) and share
    its helpers (exact-text split, fetch/retry, model compile) with the
    equivalence scripts; each move changes bound hashes.
-2. Deferred review items: classify bb.js verifier throws (truncated,
-   past-modulus, off-curve proof, destroyed backend) before narrowing
-   `barretenberg.ts`'s catch-all; retire the v1 store-codec path if no v1
-   journal must load; shared v3 fixture/byte helpers across the check
-   scripts; scope replay resumes only under the same selected backing.
+2. Deferred review items: retire the v1 store-codec path if no v1 journal
+   must load; shared v3 fixture/byte helpers across the check scripts. (A
+   v3 replay resumes only under its selected backing already: the resume
+   key carries it, `local-replay.mjs` `resumeKeyOf`.)
 3. Later: a Linux or CI reproducible build of the decoder pin; the note
    tree's Poseidon2 on Barretenberg wasm (about 6x); a per-read host-memory
-   budget for the contained decoder.
+   budget for the contained decoder; a warmed spare verifier instance if
+   admission's ~1.1 s per malformed proof matters.
 
 ## Retained boundaries and local state
 
