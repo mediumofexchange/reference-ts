@@ -31,12 +31,12 @@ const leb = n => { const out = []; do { let b = n & 0x7f; n >>>= 7; if (n) b |= 
 const vec = items => [...leb(items.length), ...items.flat()];
 const section = (id, body) => [id, ...leb(body.length), ...body];
 const I32 = 0x7f, EXTERNREF = 0x6f;
-function assemble(functions, { extra = [] } = {}) {
+function assemble(functions, { extra = [], tables = [[EXTERNREF, 0x00, 0x01]] } = {}) {
   const types = functions.map(f => [0x60, ...vec(f.params.map(p => [p])), ...vec(f.results.map(r => [r]))]);
   const bodies = functions.map(f => { const body = [...(f.locals ?? [0x00]), ...f.code]; return [...leb(body.length), ...body]; });
   return Uint8Array.from([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     ...section(1, vec(types)), ...section(3, vec(functions.map((_, i) => leb(i)))),
-    ...section(4, vec([[EXTERNREF, 0x00, 0x01]])), ...section(5, vec([[0x00, 0x01]])),
+    ...section(4, vec(tables)), ...section(5, vec([[0x00, 0x01]])),
     ...section(6, vec([[I32, 0x00, 0x41, 0x00, 0x0b]])),
     ...section(7, vec([...functions.map((f, i) => [...leb(f.name.length), ...Buffer.from(f.name), 0x00, ...leb(i)]),
       [6, ...Buffer.from("memory"), 0x02, 0x00]])),
@@ -74,9 +74,15 @@ const CONTROL = [
     0x20, 0, 0x45, 0x0d, 1, 0x20, 0, 0x41, 1, 0x6b, 0x21, 0, 0x41, 2, 0x21, 1,
     0x03, 0x40, 0x20, 1, 0x45, 0x04, 0x40, 0x0c, 2, 0x05, 0x20, 1, 0x41, 1, 0x6b, 0x21, 1, 0x0b, 0x20, 1, 0x0e, 1, 0, 0, 0x0b,
     0x0b, 0x0b, 0x0b] },
+  // i32.const 0, call_indirect (type 10, table 1, whose only element is this function; 1 + 21), end = 24 per frame.
+  { name: "irecurse", params: [], results: [], code: [0x41, 0, 0x11, 10, 1, 0x0b] },
+  // Twice (i32.const, i32.const, call add (1 + 21), drop) = 50, end = 51; with the two calls of add, 61 + 2 * 14.
+  { name: "twice", params: [], results: [], code: [0x41, 1, 0x41, 2, 0x10, 1, 0x1a, 0x41, 1, 0x41, 2, 0x10, 1, 0x1a, 0x0b] },
 ];
+// Table 1 (funcref) holds irecurse, so call_indirect reaches it.
+const CONTROL_LAYOUT = { tables: [[EXTERNREF, 0x00, 0x01], [0x70, 0x00, 0x01]], extra: section(9, vec([[0x02, 0x01, 0x41, 0x00, 0x0b, 0x00, 0x01, 10]])) };
 function controls() {
-  const plain = assemble(CONTROL);
+  const plain = assemble(CONTROL, CONTROL_LAYOUT);
   assert(WebAssembly.validate(plain), "the control module validates");
   const { bytes } = meter(plain);
   const module = new WebAssembly.Module(bytes);
@@ -153,12 +159,24 @@ function controls() {
     assert.equal(used(e), (limit + 1n) * (23n + C), `recursion to ${limit}`);
     assert(e[METER_EXPORTS.fuel].value >= 0n);
   }
+  for (const limit of [0n, 1n, 100n]) {
+    e = fresh(BIG, 2n, 4n, limit);
+    assert.throws(() => e.irecurse(), WebAssembly.RuntimeError);
+    assert.equal(e[METER_EXPORTS.depth].value, limit + 1n, "call_indirect is counted too");
+    assert.equal(used(e), (limit + 1n) * (24n + C), `indirect recursion to ${limit}`);
+  }
+  // Every return lowers the depth again.
+  e = fresh();
+  e.twice();
+  assert.equal(used(e), 51n + C + 2n * (4n + C));
+  assert.equal(e[METER_EXPORTS.depth].value, 0n, "the depth returns to zero");
+  assert.equal(e[METER_EXPORTS.depthMax].value, 1n);
   e = fresh(1000n, 2n, 4n, 4096n);
   assert.throws(() => e.recurse(), WebAssembly.RuntimeError);
   assert(e[METER_EXPORTS.fuel].value < 0n);
   e = fresh(10n ** 12n);
   assert.throws(() => e.recurse(), RangeError);
-  out.recursion = { perFrame: 33, depthCeilings: [0, 1, 100, 4096], shortOfFuel: "fuel", noCeiling: "engine stack" };
+  out.recursion = { perFrame: 33, perIndirectFrame: 34, depthCeilings: [0, 1, 100, 4096], afterReturns: 0, shortOfFuel: "fuel", noCeiling: "engine stack" };
   // The rewriter refuses what it does not know.
   const unknown = (code, pattern) => assert.throws(() => meter(assemble([{ name: "f", params: [], results: [], code }])), pattern);
   unknown([0x12, 0x00, 0x0b], /unsupported instruction 0x12/);
@@ -257,7 +275,7 @@ function decoder() {
   let lo = 64, hi = 984;
   while (hi - lo > 8) { const mid = (lo + hi) >> 1; if (trial(mid) === "depth") hi = mid; else lo = mid; }
   out.depthCeiling = { frames: String(budgetFor(0).depth), leastStackKb: hi, defaultStackKb: 984, nodeCapFrames: String(atCap.depth),
-    meaning: "a caller leaving at least this much of V8's stack gets a depth refusal that depends on the bytes alone" };
+    meaning: "measured on unary-expression (LogicalNot) nesting: a caller leaving at least this much of V8's stack gets a depth refusal that depends on the bytes alone; other recursion paths may need more" };
   return out;
 }
 
