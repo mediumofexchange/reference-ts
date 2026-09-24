@@ -84,7 +84,9 @@ import {
  * Verifies a proof against the configuration's verification key for its
  * kind and these public inputs, and against nothing else (§8 check 2).
  * Resolves to exactly `true` for a proof that verifies; anything else, and
- * never a throw, for one that does not.
+ * never a throw, for one that does not. It rejects only when it cannot give
+ * a verdict (its backend failed, or it is closed), and a rejection is never
+ * a verdict on the proof.
  */
 export interface StatementVerifier {
   verify(kind: StatementKind, publicInputs: readonly bigint[], proof: Uint8Array): Promise<boolean>;

@@ -111,6 +111,9 @@ export function isMalformedProofFailure(error: unknown): boolean {
  * being retired.
  */
 export async function barretenbergPool(api: Barretenberg, circuits: CompiledCircuits, options: BackendOptions): Promise<BarretenbergPool> {
+  // Each replacement starts with these options as given now, not as the caller later changes them.
+  const { crsPath, threads } = options;
+  const own: BackendOptions = Object.freeze({ ...(crsPath === undefined ? {} : { crsPath }), ...(threads === undefined ? {} : { threads }) });
   const keys = new Map<StatementKind, Uint8Array>();
   const identities: Record<string, CircuitIdentity> = {};
   for (const kind of [1, 2, 3] as const) {
@@ -156,7 +159,7 @@ export async function barretenbergPool(api: Barretenberg, circuits: CompiledCirc
       return serially(async () => {
         if (closed) throw new Error("the proof verifier is closed");
         if (current === undefined) {
-          const fresh = await startBackend(options);
+          const fresh = await startBackend(own);
           current = { api: fresh, backend: new UltraHonkVerifierBackend(fresh) };
         }
         try {
