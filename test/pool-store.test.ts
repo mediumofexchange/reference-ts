@@ -617,11 +617,31 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     expect(oracle.calls).toBe(before + 2); // the imported issuance once, then the spend
     expect((await s.submit(spend(2n))).position).toBe(2n);
     expect(oracle.calls).toBe(before + 3);
-    // A proof the verifier refused is asked again, never remembered.
-    const unproven = spendStatement(authority, [root, root], [221n, 222n], [321n, 322n]);
-    await expect(s.submit(unproven)).rejects.toMatchObject({ code: "PROOF" });
-    await expect(s.submit(unproven)).rejects.toMatchObject({ code: "PROOF" });
-    expect(oracle.calls).toBe(before + 5);
+  });
+
+  it("asks a retained proof again after the verifier refused it during re-validation", async () => {
+    const venue = new LocalVenue(VENUE), oracle = new Oracle(), x = terms("EUR"), y = terms("USD");
+    const ancestor = openSegment(venue, [x, y], oracle);
+    const issue = oracle.accept(issueStatement(ancestor.authority(), x.backing.name, 10n, 101n, SECRETS.backer));
+    await ancestor.admit(issue);
+    const base = evidence(ancestor); venue.publish(base.commitment);
+    replace(venue, x, SECRETS.carol, 2n); venue.advance(2n);
+    const s = store(path(), venue, oracle, undefined, SECRETS.carol);
+    await s.activate("inherit", [x], [base]); await s.publish();
+    const authority = segmentAuthority((await s.view()).trail!.header), root = ancestor.noteRoot();
+    const spend = oracle.accept(spendStatement(authority, [root, root], [201n, 211n], [301n, 311n]));
+    // The retained issuance is refused once, then accepted.
+    let asked = 0;
+    const verify = oracle.verify.bind(oracle);
+    oracle.verify = async (kind, inputs, proof) => {
+      if (Buffer.from(proof).equals(issue.proof) && asked++ === 0) return false;
+      return verify(kind, inputs, proof);
+    };
+    await expect(s.submit(spend)).rejects.toMatchObject({ code: "UNAVAILABLE" });
+    expect((await s.submit(spend)).position).toBe(1n);
+    expect(asked).toBe(2); // the refusal was not remembered
+    await s.commit("after");
+    expect(asked).toBe(2); // the acceptance was
   });
 
   it("names a journal row by the statement it stores, however often a getter answers differently", async () => {
