@@ -83,13 +83,20 @@ export function nullifierOf(domain: Uint8Array, commitment: bigint, secret: bigi
   );
 }
 
-/** A copy that owns its bytes. */
+/**
+ * A copy that owns its bytes. Each field is read once and the copy itself is
+ * validated, so a getter cannot pass the check with one value and be copied
+ * with another. The bytes come from a genuine view, not a subclass's species.
+ */
 export function copyNoteOpening(note: NoteOpening): NoteOpening {
-  if (!isNoteOpening(note)) throw new EncodingError("malformed note opening");
-  return Object.freeze({
-    backing: Uint8Array.prototype.slice.call(note.backing),
-    value: note.value,
-    owner: note.owner,
-    rho: note.rho,
-  });
+  if (typeof note !== "object" || note === null) throw new EncodingError("malformed note opening");
+  const n = note as unknown as Record<string, unknown>;
+  const backing = n["backing"];
+  let bytes: Uint8Array | null = null;
+  if (backing instanceof Uint8Array && ArrayBuffer.isView(backing)) {
+    try { bytes = new Uint8Array(backing); } catch { bytes = null; }
+  }
+  const own = { backing: bytes, value: n["value"], owner: n["owner"], rho: n["rho"] };
+  if (!isNoteOpening(own)) throw new EncodingError("malformed note opening");
+  return Object.freeze(own);
 }

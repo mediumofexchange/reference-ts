@@ -60,16 +60,17 @@ import {
   ISSUE,
   isStatementKind,
   isWellFormedHeader,
-  isWellFormedStatement,
   nextHistoryHash,
   parsePublicInputs,
   POOL_CONSTRUCTION,
   PUBLIC_INPUT_COUNT,
+  readStatementFields,
   segmentAuthority,
   segmentIdentity,
   snapshotDigest,
   SPEND,
   statementBytes,
+  statementFromFields,
   type CircuitIdentities,
   type ParsedInputs,
   type PoolConfiguration,
@@ -676,6 +677,12 @@ export class Segment {
     return [...this.imported, ...this.local].map(copyEvent);
   }
 
+  /** This segment's own events after position `after`, in order, as copies. */
+  localEvents(after = 0n): PoolEvent[] {
+    if (typeof after !== "bigint" || after < 0n) throw new PoolError("MALFORMED", "no local events after that position");
+    return after >= this.length ? [] : this.local.slice(Number(after)).map(copyEvent);
+  }
+
   /** The served trail: header, every held backing's signed terms, and every local statement in order with its evidence. */
   trail(): SegmentTrail {
     return {
@@ -718,21 +725,23 @@ export class Segment {
   async admit(statement: Statement): Promise<AcceptedStatement> {
     // Check 1, on what the statement asserts: kind, count, canonical fields,
     // ranges, this domain, this segment and this scope. The evidence is not read yet.
-    if (typeof statement !== "object" || statement === null) throw new PoolError("MALFORMED", "malformed statement");
-    const kind: unknown = statement.kind;
-    const inputs: unknown = statement.publicInputs;
-    if (!isStatementKind(kind) || !allFields(inputs, PUBLIC_INPUT_COUNT[kind])) {
+    // Every field is read from the caller's object exactly once, here; the
+    // parse, the identity, the proof, the signature and the transition all
+    // read this one owned copy, so no later read can differ from what is proven.
+    const fields = readStatementFields(statement);
+    if (fields === undefined) throw new PoolError("MALFORMED", "malformed statement");
+    const { kind, publicInputs } = fields;
+    if (!isStatementKind(kind) || !allFields(publicInputs, PUBLIC_INPUT_COUNT[kind])) {
       throw new PoolError("MALFORMED", "public inputs do not match the kind");
     }
-    const publicInputs: readonly bigint[] = Object.freeze([...inputs]);
     const parsed = this.parse(kind, publicInputs);
     // Invariant 26 first: an exact resubmission is the same statement
     // whatever its proof bytes, and is answered before the evidence is looked at.
     const hash = sha256(statementBytes(this.domain, kind, publicInputs));
     const prior = this.accepted.get(bytesToHex(hash));
     if (prior !== undefined) return copyAccepted(prior);
-    if (!isWellFormedStatement(statement)) throw new PoolError("MALFORMED", "malformed proof or signature");
-    const own = copyStatement(statement);
+    const own = statementFromFields(fields);
+    if (own === undefined) throw new PoolError("MALFORMED", "malformed proof or signature");
     // Check 2, on the statement alone: the proof, against the configuration's
     // key for this kind. Asynchronous, and the only await in admission.
     if ((await this.verifier.verify(own.kind, own.publicInputs, own.proof)) !== true) {

@@ -4,9 +4,10 @@
 // handles of that journal; it cannot fence another database or a copied key.
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { encodeBacking, makeBacking, type Backing } from "../backing.js";
-import { compareBytes, copyBytes } from "../bytes.js";
+import { ByteWriter, compareBytes, copyBytes, EncodingError } from "../bytes.js";
 import { decodeCommitment, directoryRoot, encodeCommitment, signCommitment, verifyCommitment, type Commitment } from "../commitment.js";
 import { revokedAt } from "../revocation.js";
 import { VenueError, type Venue } from "../venue.js";
@@ -15,9 +16,9 @@ import { readPoolCheckpoint, readPoolCheckpoints, type PoolCheckpointEvidence } 
 import { mergePoolEvidence, replayedPoolEvidence } from "./evidence.js";
 import { preparePoolOpening } from "./opening.js";
 import { poolReceiptInHistory, poolReceiptAttestsEvidence, signPoolReceipt, type PoolReceipt } from "./receipt.js";
-import { Segment, type ImportEvidence, type SegmentTrail, type SignedBacking, type StatementVerifier } from "./segment.js";
-import { configurationHash, copyConfiguration, copySegmentHeader, decodeStatement, encodeStatement, ISSUE,
-  parsePublicInputs, segmentBytes, statementHash, type OpeningCheckpoint, type PoolConfiguration, type SegmentHeader, type Statement } from "./statement.js";
+import { PoolError, Segment, type AcceptedStatement, type ImportEvidence, type SegmentTrail, type SignedBacking, type StatementVerifier } from "./segment.js";
+import { allFields, configurationHash, copyConfiguration, copySegmentHeader, decodeStatement, encodeStatement, ISSUE, isStatementKind,
+  parsePublicInputs, PUBLIC_INPUT_COUNT, readStatementFields, segmentBytes, statementBytes, statementHash, type OpeningCheckpoint, type PoolConfiguration, type SegmentHeader, type Statement } from "./statement.js";
 import { copyPoolCheckpointEvidence, decodeStoredOpening, decodeStoredReceipt, encodeStoredOpening, encodeStoredReceipt } from "./store-codec.js";
 
 const PROFILE = "pool-store/v2";
@@ -125,8 +126,12 @@ export class PoolStore {
   private observedIndex: bigint;
   private engine: Engine | undefined;
   private busy = false;
+  /** Set once an action changes memory or writes the journal; see run(). */
+  private diverging = false;
   private closed = false;
   private readonly requiredSegment: Uint8Array | undefined;
+  private readonly signedEvidence = new WeakMap<Signed, PoolCheckpointEvidence>();
+  private readonly proven = new Set<string>();
 
   constructor(path: string, configuration: PoolConfiguration, secret: Uint8Array,
     private readonly venue: Venue, private readonly verifier: StatementVerifier,
@@ -220,8 +225,18 @@ export class PoolStore {
     requireThat(!this.closed, "STORAGE", "store is closed");
     requireThat(!this.busy, "BUSY", "a journal operation is in progress");
     this.busy = true;
+    this.diverging = false;
     try { await this.load(); return await action(this.engine!); }
-    catch (error) { this.engine = undefined; throw error; }
+    catch (error) {
+      // Discard memory only when it may differ from the journal: after an
+      // in-memory transition or a durable write this action has not finished
+      // reflecting, or on an unexpected failure. A refusal before either
+      // (Pool/Store/Venue/Encoding error) leaves memory as the journal has
+      // it, and Segment refusals change nothing, so it forces no replay.
+      if (this.diverging || !(error instanceof PoolError || error instanceof PoolStoreError ||
+        error instanceof VenueError || error instanceof EncodingError)) this.engine = undefined;
+      throw error;
+    }
     finally { this.busy = false; }
   }
 
@@ -298,8 +313,13 @@ export class PoolStore {
     } else throw new PoolStoreError("STORAGE", "unknown journal command");
   }
 
+  /** Fenced lookup. A conflicting identifier is refused after the read-only
+   * transaction ends, so that refusal does not discard the loaded engine. */
   private prior(id: string, request: string): string | undefined {
-    const row = this.db.prepare("SELECT request,response FROM events WHERE id=?").get(id);
+    const row = this.transaction(() => {
+      const found = this.db.prepare("SELECT request,response FROM events WHERE id=?").get(id);
+      return found === undefined ? undefined : { request: found.request, response: found.response };
+    });
     if (row === undefined) return undefined;
     requireThat(row.request === request && typeof row.response === "string", "CONFLICT", "command identifier names different content");
     return row.response;
@@ -309,7 +329,7 @@ export class PoolStore {
     return `command:${id}`;
   }
   private append(engine: Engine, id: string, request: string, command: Command, response: string, stable: () => void): void {
-    this.checkpoint?.("applied"); stable();
+    this.diverging = true; this.checkpoint?.("applied"); stable();
     requireThat(engine.revision < SQLITE_LIMIT, "STORAGE", "journal is full");
     this.db.prepare("INSERT INTO events VALUES(?,?,?,?,?)").run(engine.revision + 1n, id, request, commandText(command), response);
     this.db.prepare("UPDATE identity SET tip=?,observed=? WHERE id=1").run(engine.revision + 1n, this.observedIndex.toString());
@@ -354,14 +374,15 @@ export class PoolStore {
   }
   private unrevoked(statement: Statement, segment: Segment): void {
     if (statement.kind !== ISSUE) return;
-    const inputs = parsePublicInputs(statement.kind, statement.publicInputs);
+    let inputs: ReturnType<typeof parsePublicInputs>;
+    try { inputs = parsePublicInputs(statement.kind, statement.publicInputs); }
+    catch (cause) { if (cause instanceof EncodingError) throw new PoolError("MALFORMED", cause.message); throw cause; } // as admission answers
     if (inputs.kind !== ISSUE) throw new PoolStoreError("STORAGE", "issuance parse mismatch");
     const backing = segment.backing(inputs.backing)?.backing;
     requireThat(backing !== undefined && revokedAt(this.venue, backing) === undefined, "UNSUPPORTED", "revoked issuance cannot be admitted or newly committed");
   }
   private checkRevocations(engine: Engine): void {
     const segment = engine.segment!;
-    const statements = segment.trail().statements;
     for (const { backing } of this.terms(segment)) {
       const revoked = revokedAt(this.venue, backing); if (revoked === undefined) continue;
       let finalized = 0n;
@@ -369,10 +390,10 @@ export class PoolStore {
         const at = this.venue.witnessedAtSequence(this.operator, signed.commitment.sequence);
         if (at !== undefined && at < revoked && signed.length > finalized) finalized = signed.length;
       }
-      requireThat(!statements.slice(Number(finalized)).some(statement => {
-        const inputs = parsePublicInputs(statement.kind, statement.publicInputs);
-        return inputs.kind === ISSUE && same(inputs.backing, backing.name);
-      }), "UNSUPPORTED", "active history contains issuance without pre-revocation finality; recovery is required");
+      // Only for a revoked obligor: the local issuance events past the
+      // pre-revocation finalized length, from events rather than proofs.
+      requireThat(!segment.localEvents(finalized).some(event => event.lit?.kind === ISSUE && same(event.lit.backing, backing.name)),
+        "UNSUPPORTED", "active history contains issuance without pre-revocation finality; recovery is required");
     }
     engine.recheckImports();
   }
@@ -415,7 +436,7 @@ export class PoolStore {
     }
     if (targets.length !== 0) {
       const checked = await readPoolCheckpoints({ configuration: this.config, venue: this.venue,
-        checkpoints: targets, evidence: available, verifier: this.verifier });
+        checkpoints: targets, evidence: available, verifier: this.retainedVerifier() });
       requireThat(checked.kind === "final", "UNAVAILABLE", "retained opening evidence is unavailable or invalid");
       this.checkImportSupport(historyImports(checked.evidence));
     }
@@ -439,7 +460,7 @@ export class PoolStore {
       ...(e.history === undefined ? {} : { history: { trail: decodeStoredOpening(encodeStoredOpening(e.history.trail, []), this.config).trail,
         length: e.history.length } }) }));
     return this.run(async engine => {
-      const prior = this.transaction(() => this.prior(commandId, request));
+      const prior = this.prior(commandId, request);
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
       for (const b of own) requireThat(b.backing.evidence.silence === undefined, "UNSUPPORTED", "pool silence recovery is not implemented");
       const now = this.clock(), observed = encoded(this.latest());
@@ -498,12 +519,16 @@ export class PoolStore {
 
   /** Verify/admit, then atomically retain the statement and original receipt. */
   async submit(statement: Statement): Promise<PoolReceipt> {
-    const hash = bytesToHex(statementHash(this.domain, statement.kind, statement.publicInputs));
-    // Identity ignores new proof bytes on retries; only a new identity needs
-    // complete evidence. Copy before run() reaches its first await.
-    const own = { ...statement, publicInputs: [...statement.publicInputs],
-      ...(statement.proof instanceof Uint8Array ? { proof: copyBytes(statement.proof) } : {}),
-      ...(statement.obligorSignature instanceof Uint8Array ? { obligorSignature: copyBytes(statement.obligorSignature) } : {}) };
+    // One read of the caller's object before run() reaches its first await:
+    // the identity, the journal row and admission all derive from `own`, so
+    // a row's id always names the statement it stores. Identity ignores new
+    // proof bytes on retries; only a new identity needs complete evidence.
+    const fields = readStatementFields(statement);
+    if (fields === undefined || !isStatementKind(fields.kind) || !allFields(fields.publicInputs, PUBLIC_INPUT_COUNT[fields.kind])) {
+      throw new PoolError("MALFORMED", "public inputs do not match the kind");
+    }
+    const own = fields as Statement;
+    const hash = bytesToHex(statementHash(this.domain, own.kind, own.publicInputs));
     return this.run(async engine => {
       const prior = engine.receipts.get(hash);
       if (prior !== undefined) return decodeStoredReceipt(encodeStoredReceipt(prior));
@@ -511,7 +536,12 @@ export class PoolStore {
       this.ready(engine, "admit");
       const segment = engine.segment!, now = this.clock(), observed = encoded(this.latest());
       this.unrevoked(own, segment);
-      const accepted = await segment.admit(own);
+      const before = segment.length;
+      let accepted: AcceptedStatement;
+      // Once the segment holds a statement the journal does not, any failure
+      // reloads, including a refusal thrown after a change it should not have made.
+      try { accepted = await segment.admit(own); }
+      finally { if (segment.length !== before) this.diverging = true; }
       const result = this.transaction(() => {
         const stable = () => {
           this.stable(now, observed); this.ready(engine, "admit"); this.unrevoked(own, segment); this.stable(now, observed);
@@ -530,7 +560,7 @@ export class PoolStore {
   async commit(id: string): Promise<Commitment> {
     const commandId = this.commandId(id);
     return this.run(async engine => {
-      const prior = this.transaction(() => this.prior(commandId, "commit"));
+      const prior = this.prior(commandId, "commit");
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
       if (engine.segment !== undefined) await this.validateOpening(engine, engine.segment);
       this.ready(engine, "commit");
@@ -571,8 +601,37 @@ export class PoolStore {
     });
   }
 
+  /** A signed entry's commitment, segment prefix and length never change
+   * (segments only append, and their terms are fixed at opening), so its
+   * evidence is derived once per entry. A reload builds new entries.
+   * Consumers copy what they own and never mutate retained evidence. */
   private localEvidence(engine: Engine): PoolCheckpointEvidence[] {
-    return engine.signed.map(s => this.checkpointEvidence(s));
+    return engine.signed.map(s => {
+      let evidence = this.signedEvidence.get(s);
+      if (evidence === undefined) { evidence = this.checkpointEvidence(s); this.signedEvidence.set(s, evidence); }
+      return evidence;
+    });
+  }
+  /** This store's one verifier, remembering its `true` answers for the
+   * retained evidence validateOpening re-reads before every request. The key
+   * is SHA-256 of the exact statement bytes under this store's configuration
+   * and the exact proof; a verifier holding fixed keys answers those the
+   * same way every time. False answers and failures are never remembered,
+   * and every record, revocation and descent check still runs. */
+  private retainedVerifier(): StatementVerifier {
+    const backend = this.verifier, proven = this.proven, domain = this.domain;
+    return {
+      ...(backend.identities === undefined ? {} : { identities: backend.identities }),
+      async verify(kind, publicInputs, proof) {
+        const w = new ByteWriter();
+        w.context(statementBytes(domain, kind, publicInputs)); w.lengthPrefixed(proof);
+        const key = bytesToHex(sha256(w.finish()));
+        if (proven.has(key)) return true;
+        const result = await backend.verify(kind, publicInputs, proof);
+        if (result === true) proven.add(key);
+        return result;
+      },
+    };
   }
   private async importedEvidence(engine: Engine): Promise<PoolCheckpointEvidence[]> {
     const evidence: PoolCheckpointEvidence[] = [];

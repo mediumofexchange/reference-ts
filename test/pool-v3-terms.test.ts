@@ -13,9 +13,12 @@ const sk = (seed: Uint8Array) => createPrivateKey({ key: cat(Buffer.from("302e02
 const pub = (seed: Uint8Array): Buffer => Buffer.from(createPublicKey(sk(seed)).export({ format: "der", type: "spki" })).subarray(-32);
 const secret = b(7), obligor = pub(secret), operator = pub(b(8)), replacement = pub(b(9));
 const max64 = (1n << 64n) - 1n, max256 = (1n << 256n) - 1n;
+// Decoded terms own plain Uint8Array copies (copyBytes never keeps a subclass),
+// so the expected fields are plain arrays too; the framing helpers still use Buffer.
+const plain = (bytes: Uint8Array): Uint8Array => new Uint8Array(bytes);
 function fields(): terms.RootTerms {
-  return { obligor: Buffer.from(obligor), payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },
-    operator: Buffer.from(operator), configuration: b(3), venue: b(4), interval: 0n };
+  return { obligor: plain(obligor), payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },
+    operator: plain(operator), configuration: plain(b(3)), venue: plain(b(4)), interval: 0n };
 }
 function clauses(x: terms.RootTerms): Buffer[] {
   return [
@@ -37,7 +40,7 @@ function raw(x: terms.RootTerms, cs = clauses(x), p = prefix(x)): Buffer {
 }
 function all(): terms.RootTerms {
   return { ...fields(), interval: max64, silence: { noCommitmentDuration: 0n, challengeWindow: max64 },
-    replacementRule: Buffer.from(replacement), nonService: { duration: max64, count: 0xffff_ffffn, window: 0n } };
+    replacementRule: plain(replacement), nonService: { duration: max64, count: 0xffff_ffffn, window: 0n } };
 }
 
 describe("v3 model constant-root terms", () => {

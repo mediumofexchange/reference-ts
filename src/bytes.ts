@@ -42,11 +42,17 @@ export function validateQuantity(n: bigint, what: string): void {
  * an operation cannot vouch for it (venue.ts, publishOp).
  */
 export function copyBytes(bytes: Uint8Array): Uint8Array {
-  // instanceof rather than ArrayBuffer.isView: a DataView is a view and is
-  // still not a receiver TypedArray.slice accepts. Node's Buffer is a subclass,
-  // so it passes.
-  if (!(bytes instanceof Uint8Array)) throw new EncodingError("not a byte array");
-  return Uint8Array.prototype.slice.call(bytes);
+  // instanceof and ArrayBuffer.isView together: a DataView is a view but no
+  // Uint8Array, and a Proxy can claim the prototype but is no view. Node's
+  // Buffer is a subclass, so it passes. The constructor copies from the view's
+  // own buffer into a plain Uint8Array; slice would honour a subclass's
+  // Symbol.species, which can hand back memory the caller still holds.
+  if (!(bytes instanceof Uint8Array) || !ArrayBuffer.isView(bytes)) throw new EncodingError("not a byte array");
+  try {
+    return new Uint8Array(bytes);
+  } catch {
+    throw new EncodingError("not a byte array"); // a DataView given the prototype, or a detached buffer
+  }
 }
 
 /** Unsigned big-endian, minimal length: no leading zero byte, 0n -> empty. */

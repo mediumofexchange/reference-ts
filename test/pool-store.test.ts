@@ -8,8 +8,8 @@ import type { PoolCheckpointEvidence } from "../src/pool/checkpoint.js";
 import { readPoolReceiptCheckpoint, readPoolReceiptRecord } from "../src/pool/receipt-record.js";
 import { readPoolReceiptRepair } from "../src/pool/receipt-repair.js";
 import { readPoolReceiptStatus } from "../src/pool/receipt-status.js";
-import { Segment } from "../src/pool/segment.js";
-import { segmentAuthority } from "../src/pool/statement.js";
+import { PoolError, Segment } from "../src/pool/segment.js";
+import { segmentAuthority, statementHash, type Statement } from "../src/pool/statement.js";
 import { decodeStoredOpening, encodeStoredOpening, encodeStoredReceipt } from "../src/pool/store-codec.js";
 import type { PoolStore as Store, PoolStoreCheckpoint } from "../src/pool/store.js";
 import { LocalVenue } from "../src/venue.js";
@@ -583,6 +583,93 @@ describe.skipIf(!supported)("durable pool sequencing (Node 24)", () => {
     expect((await f.s.view()).latest).toEqual(f.opening);
     f.s.close();
     expect(await store(f.file, f.venue, f.oracle).submit(original)).toEqual(saved);
+  });
+
+  it("keeps the loaded journal through refusals: no replay re-verifies its proofs", async () => {
+    const f = await fixture(); await f.s.publish();
+    await f.s.submit(f.issue(101n)); await f.s.submit(f.issue(102n));
+    const authority = segmentAuthority(f.trail.header), before = f.oracle.calls;
+    const unproven = issueStatement(authority, f.x.backing.name, 10n, 103n, SECRETS.backer);
+    await expect(f.s.submit(unproven)).rejects.toMatchObject({ code: "PROOF" });
+    const reused = f.oracle.accept(issueStatement(authority, f.x.backing.name, 11n, 101n, SECRETS.backer));
+    await expect(f.s.submit(reused)).rejects.toMatchObject({ code: "OUTPUT" });
+    await expect(f.s.commit("opening")).rejects.toMatchObject({ code: "CONFLICT" });
+    const wide = issueStatement(authority, f.x.backing.name, 10n, 105n, SECRETS.backer);
+    await expect(f.s.submit({ ...wide, publicInputs: wide.publicInputs.map((v, i) => (i === 5 ? 1n << 128n : v)) }))
+      .rejects.toMatchObject({ name: "PoolError", code: "MALFORMED" }); // as admission would answer
+    expect((await f.s.submit(f.issue(104n))).position).toBe(3n);
+    expect(f.oracle.calls).toBe(before + 3); // the two refused proofs and the new one
+  });
+
+  it("reloads after an admission that changed the segment and then refused", async () => {
+    const f = await fixture(); await f.s.publish();
+    // Stand-in for a refusal thrown after a transition: the one path the
+    // store cannot see from the error class alone.
+    const segment = (f.s as unknown as { engine: { segment: Segment } }).engine.segment, admit = segment.admit.bind(segment);
+    segment.admit = async statement => { await admit(statement); throw new PoolError("OUTPUT", "refused after a transition"); };
+    await expect(f.s.submit(f.issue(101n))).rejects.toMatchObject({ code: "OUTPUT" });
+    expect((await f.s.submit(f.issue(101n))).position).toBe(1n); // replayed from the journal, which never held it
+  });
+
+  it("re-validates retained ancestry before each request without re-verifying its proofs", async () => {
+    const venue = new LocalVenue(VENUE), oracle = new Oracle(), x = terms("EUR"), y = terms("USD");
+    const ancestor = openSegment(venue, [x, y], oracle);
+    await ancestor.admit(oracle.accept(issueStatement(ancestor.authority(), x.backing.name, 10n, 101n, SECRETS.backer)));
+    const base = evidence(ancestor); venue.publish(base.commitment);
+    replace(venue, x, SECRETS.carol, 2n); venue.advance(2n);
+    const s = store(path(), venue, oracle, undefined, SECRETS.carol);
+    await s.activate("inherit", [x], [base]); await s.publish();
+    const authority = segmentAuthority((await s.view()).trail!.header), root = ancestor.noteRoot();
+    const spend = (n: bigint) => oracle.accept(spendStatement(authority, [root, root], [200n + n, 210n + n], [300n + n, 310n + n]));
+    const before = oracle.calls;
+    expect((await s.submit(spend(1n))).position).toBe(1n);
+    expect(oracle.calls).toBe(before + 2); // the imported issuance once, then the spend
+    expect((await s.submit(spend(2n))).position).toBe(2n);
+    expect(oracle.calls).toBe(before + 3);
+  });
+
+  it("asks a retained proof again after the verifier refused it during re-validation", async () => {
+    const venue = new LocalVenue(VENUE), oracle = new Oracle(), x = terms("EUR"), y = terms("USD");
+    const ancestor = openSegment(venue, [x, y], oracle);
+    const issue = oracle.accept(issueStatement(ancestor.authority(), x.backing.name, 10n, 101n, SECRETS.backer));
+    await ancestor.admit(issue);
+    const base = evidence(ancestor); venue.publish(base.commitment);
+    replace(venue, x, SECRETS.carol, 2n); venue.advance(2n);
+    const s = store(path(), venue, oracle, undefined, SECRETS.carol);
+    await s.activate("inherit", [x], [base]); await s.publish();
+    const authority = segmentAuthority((await s.view()).trail!.header), root = ancestor.noteRoot();
+    const spend = oracle.accept(spendStatement(authority, [root, root], [201n, 211n], [301n, 311n]));
+    // The retained issuance is refused once, then accepted.
+    let asked = 0;
+    const verify = oracle.verify.bind(oracle);
+    oracle.verify = async (kind, inputs, proof) => {
+      if (Buffer.from(proof).equals(issue.proof) && asked++ === 0) return false;
+      return verify(kind, inputs, proof);
+    };
+    await expect(s.submit(spend)).rejects.toMatchObject({ code: "UNAVAILABLE" });
+    expect((await s.submit(spend)).position).toBe(1n);
+    expect(asked).toBe(2); // the refusal was not remembered
+    await s.commit("after");
+    expect(asked).toBe(2); // the acceptance was
+  });
+
+  it("names a journal row by the statement it stores, however often a getter answers differently", async () => {
+    const f = await fixture(); await f.s.publish();
+    const first = f.issue(101n), later = f.issue(102n);
+    // Each field answers `first` on its first read and `later`, a complete
+    // valid statement too, on every later one.
+    const reads = { publicInputs: 0, proof: 0, obligorSignature: 0 };
+    const shifting = { kind: first.kind,
+      get publicInputs() { return reads.publicInputs++ === 0 ? first.publicInputs : later.publicInputs; },
+      get proof() { return reads.proof++ === 0 ? first.proof : later.proof; },
+      get obligorSignature() { return reads.obligorSignature++ === 0 ? first.obligorSignature : later.obligorSignature; } } as Statement;
+    const receipt = await f.s.submit(shifting);
+    expect(reads).toEqual({ publicInputs: 1, proof: 1, obligorSignature: 1 });
+    expect(receipt.statementHash).toEqual(statementHash(segmentAuthority(f.trail.header).domain, first.kind, first.publicInputs));
+    f.s.close();
+    const resumed = store(f.file, f.venue, f.oracle);
+    expect(await resumed.submit(first)).toEqual(receipt);
+    expect((await resumed.submit(later)).position).toBe(2n);
   });
 
   it.each(["DELETE FROM events WHERE seq=1", "UPDATE identity SET tip=0", "UPDATE events SET request='other' WHERE seq=1"])("refuses journal corruption: %s", async sql => {

@@ -119,8 +119,15 @@ describe.skipIf(Number(process.versions.node.split(".")[0]) < 24)("ordinary loca
     const pair = decodeWalletPairing(f.invitation); const changed = encodeWalletPairing({ ...pair, request: { ...pair.request, id: "other" }, endpoint: "https://localhost:7443/delivery/other" });
     expect(() => f.payer.acceptPairing("other", changed, walletPairingDigest(changed), { ...f.request, id: "other" })).toThrow(/already enrolled/);
     expect(() => f.payer.request(walletChangeRequestId("shop", 3n), f.request.backing, 3n)).toThrow(/namespace/);
-    f.payer.changeRequest("shop", f.request.backing, 3n);
-    f.payer.deliveryToken(walletChangeRequestId("shop", 3n));
+    const change = f.payer.changeRequest("shop", f.request.backing, 3n);
+    // No delivery capability or invitation is ever issued for a change owner.
+    expect(() => f.payer.deliveryToken(change.id)).toThrow(/namespace/);
+    expect(() => f.payer.deliveryInvitation(change.id, "https://localhost:7443/delivery/change")).toThrow(/namespace/);
+    // A historical wallet may still hold one; preparation refuses to reuse that owner.
+    const { DatabaseSync } = await import("node:sqlite");
+    const db = new DatabaseSync(join(f.directory, "payer.db"));
+    try { db.prepare("INSERT INTO wallet_delivery_tokens VALUES (?, ?)").run(change.id, "ab".repeat(32)); }
+    finally { db.close(); }
     await expect(prepareWalletPayment(f.payer, "shop", f.args, f.prove)).rejects.toThrow(/already used/);
     expect(f.calls()).toBe(0);
   });
@@ -152,9 +159,16 @@ describe.skipIf(Number(process.versions.node.split(".")[0]) < 24)("ordinary loca
     expect(walletPayment(f.payer, "shop").statement.publicInputs.every(n => n === 0n)).toBe(false);
   });
   it("rechecks change use during proving and refuses historical prepared change-owner collisions", async () => {
-    const f = await setup(), other = f.create("payer");
+    const f = await setup(), other = f.create("payer"), changeId = walletChangeRequestId("shop", 3n);
+    const { DatabaseSync } = await import("node:sqlite");
     await expect(prepareWalletPayment(f.payer, "shop", f.args, async (p, w) => {
-      other.deliveryToken(walletChangeRequestId("shop", 3n)); return f.prove(p, w);
+      // The API issues no capability for a change owner; a historical row
+      // appearing mid-proof (another writer's legacy state) is still refused.
+      expect(() => other.deliveryToken(changeId)).toThrow(/namespace/);
+      const db = new DatabaseSync(join(f.directory, "payer.db"));
+      try { db.prepare("INSERT INTO wallet_delivery_tokens VALUES (?, ?)").run(changeId, "cd".repeat(32)); }
+      finally { db.close(); }
+      return f.prove(p, w);
     })).rejects.toThrow(/already used/);
     expect(() => other.pending("shop")).toThrow(/unknown/);
     const g = await setup();
@@ -219,5 +233,12 @@ describe.skipIf(Number(process.versions.node.split(".")[0]) < 24)("ordinary loca
     expect(f.payer.request("change_legacy", original.backing, original.value)).toEqual({ ...original, id: "change_legacy" });
     expect(() => f.payer.request("change_legacy", original.backing, 3n)).toThrow(/changed terms/);
     expect(() => f.payer.request("change_new", original.backing, 2n)).toThrow(/namespace/);
+  });
+  it("never replays an internal change request as a public invoice", async () => {
+    const f = await setup();
+    const change = f.payer.changeRequest("shop", f.request.backing, 3n);
+    expect(change.id).toBe(walletChangeRequestId("shop", 3n));
+    expect(() => f.payer.request(change.id, change.backing, change.value)).toThrow(/namespace/);
+    expect(f.payer.changeRequest("shop", f.request.backing, 3n)).toEqual(change);
   });
 });

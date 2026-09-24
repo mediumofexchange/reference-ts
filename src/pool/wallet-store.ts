@@ -6,10 +6,10 @@ import { DatabaseSync } from "node:sqlite";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { closeSync, existsSync, openSync } from "node:fs";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { compareBytes } from "../bytes.js";
+import { compareBytes, EncodingError } from "../bytes.js";
 import { decodeCommitment, encodeCommitment, type Commitment } from "../commitment.js";
 import { isValue } from "./field.js";
-import { commitmentOf, copyNoteOpening, isNoteOpening, nullifierOf, ownerOf, type NoteOpening } from "./notes.js";
+import { commitmentOf, copyNoteOpening, nullifierOf, ownerOf, type NoteOpening } from "./notes.js";
 import { readPoolCheckpoint, type PoolCheckpointFailure, type PoolCheckpointResult } from "./checkpoint.js";
 import { poolReceiptAttestsEvidence, poolReceiptCovers, type PoolReceipt } from "./receipt.js";
 import { copySegmentAuthority, decodeStatement, encodeStatement, parsePublicInputs, segmentIdentity, type SegmentAuthority, type Statement } from "./statement.js";
@@ -60,6 +60,19 @@ function readNote(text: string): NoteOpening {
   return copyNoteOpening({ backing: hexToBytes(n[0]!), value: BigInt(n[1]!), owner: BigInt(n[2]!), rho: BigInt(n[3]!) });
 }
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
+type CheckpointArguments = Parameters<typeof readPoolCheckpoint>[0];
+/** The reader's arguments with an already owned checkpoint, without reading
+ * the caller's checkpoint again (a spread would call its getter). */
+function checkpointArguments(args: CheckpointArguments, checkpoint: Commitment): CheckpointArguments {
+  return { configuration: args.configuration, venue: args.venue, evidence: args.evidence, verifier: args.verifier, checkpoint };
+}
+/** The exact form walletChangeRequestId produces. */
+const CHANGE_REQUEST_ID = /^change_[0-9a-f]{64}$/;
+/** A request a payer may be invited to pay. A change owner is never a payee:
+ * no delivery capability, and no invitation handing the owner out. */
+function payeeId(value: string): string {
+  requireThat(!CHANGE_REQUEST_ID.test(id(value)), "INVALID", "change request namespace is reserved"); return value;
+}
 
 // Fixed table/column names, never SQL supplied by the backup. The custody row
 // is deliberately not transferable: the old source remains frozen forever.
@@ -281,6 +294,10 @@ export class PoolWalletStore {
     const name = bytesToHex(backing);
     return this.transaction(() => {
       if (change) this.unusedChange(requestId);
+      // The internal change-ID form is never a public invoice, even for an
+      // existing row: replaying one would hand out a change owner. Other
+      // historical `change_` IDs keep exact replay (below).
+      requireThat(change || !CHANGE_REQUEST_ID.test(requestId), "INVALID", "change request namespace is reserved");
       const old = this.db.prepare("SELECT * FROM wallet_requests WHERE id=?").get(requestId);
       if (old) {
         requireThat(old["backing"] === name && old["value"] === value.toString(), "CONFLICT", "request id reused with changed terms");
@@ -302,7 +319,7 @@ export class PoolWalletStore {
   /** Provision locally, then share only with the intended payer over an
    * authenticated channel. A capability grants invoice access, not identity. */
   deliveryToken(requestId: string): string {
-    id(requestId);
+    payeeId(requestId);
     return this.transaction(() => this.tokenFor(requestId));
   }
   private tokenFor(requestId: string): string {
@@ -335,7 +352,7 @@ export class PoolWalletStore {
   }
   /** One snapshot prevents mixing a rotated certificate with an old capability. */
   deliveryInvitation(requestId: string, endpoint: string): string {
-    id(requestId);
+    payeeId(requestId);
     return this.transaction(() => {
       const tls = this.deliveryCredentials(); requireThat(tls !== undefined, "UNKNOWN", "wallet credentials are not provisioned");
       validateWalletTls(tls);
@@ -396,10 +413,13 @@ export class PoolWalletStore {
   }
   /** Keep the final pairing guard and nullifier reservation in one transaction. */
   preparePayment(alias: string, statement: Statement, opening: NoteOpening, change: NoteOpening): void {
-    this.savePending(alias, statement, opening, change, () => {
+    requireThat(opening !== undefined && change !== undefined, "INVALID", "payment needs its delivery and change openings");
+    this.savePending(alias, statement, opening, change, own => {
+      // Only the owned copies savePending stores, never the caller's objects again.
+      const { opening, change } = own as { opening: NoteOpening; change: NoteOpening };
       this.assertNewPayment(alias);
       const pair = decodeWalletPairing(this.pairing(alias));
-      requireThat(statement.kind === 2 && bytesToHex(opening.backing) === pair.request.backing &&
+      requireThat(own.statement.kind === 2 && bytesToHex(opening.backing) === pair.request.backing &&
         opening.value.toString() === pair.request.value && opening.owner.toString() === pair.request.owner,
         "CONFLICT", "payment differs from paired invoice");
       if (change.value > 0n) {
@@ -453,19 +473,24 @@ export class PoolWalletStore {
   prepare(commandId: string, statement: Statement, opening?: NoteOpening, change?: NoteOpening): void {
     this.savePending(commandId, statement, opening, change);
   }
-  private savePending(commandId: string, statement: Statement, opening?: NoteOpening, change?: NoteOpening, guard?: () => void): void {
+  private savePending(commandId: string, statement: Statement, opening?: NoteOpening, change?: NoteOpening,
+    guard?: (own: { statement: Statement; opening?: NoteOpening; change?: NoteOpening }) => void): void {
     id(commandId);
+    // One read of each caller object: the stored frame and notes, every check
+    // and the guard all use these copies.
     const frame = bytesToHex(encodeStatement(this.authority.domain, statement));
     const own = decodeStatement(hexToBytes(frame)).statement, inputs = parsePublicInputs(own.kind, own.publicInputs);
     requireThat(same(inputs.domain, this.authority.domain) && same(inputs.segment, this.authority.segment) && inputs.scopeRoot === this.authority.scopeRoot, "INVALID", "statement authority differs");
-    const note = opening === undefined ? null : noteText(opening);
-    const changeNote = change === undefined ? null : noteText(change);
-    if (opening !== undefined) requireThat(inputs.outputs.includes(commitmentOf(this.authority.domain, opening)), "INVALID", "delivery is not an output");
-    if (change !== undefined) requireThat(inputs.outputs.includes(commitmentOf(this.authority.domain, change)), "INVALID", "change is not an output");
+    const ownOpening = opening === undefined ? undefined : copyNoteOpening(opening);
+    const ownChange = change === undefined ? undefined : copyNoteOpening(change);
+    const note = ownOpening === undefined ? null : noteText(ownOpening);
+    const changeNote = ownChange === undefined ? null : noteText(ownChange);
+    if (ownOpening !== undefined) requireThat(inputs.outputs.includes(commitmentOf(this.authority.domain, ownOpening)), "INVALID", "delivery is not an output");
+    if (ownChange !== undefined) requireThat(inputs.outputs.includes(commitmentOf(this.authority.domain, ownChange)), "INVALID", "change is not an output");
     this.transaction(() => {
       const old = this.db.prepare("SELECT frame, opening, change_opening FROM wallet_pending WHERE id=?").get(commandId);
       if (old) { requireThat(old["frame"] === frame && old["opening"] === note && old["change_opening"] === changeNote, "CONFLICT", "pending command changed"); return; }
-      guard?.();
+      guard?.({ statement: own, ...(ownOpening === undefined ? {} : { opening: ownOpening }), ...(ownChange === undefined ? {} : { change: ownChange }) });
       for (const nf of inputs.nullifiers) requireThat(this.db.prepare("SELECT 1 FROM wallet_reservations WHERE nullifier=?").get(nf.toString()) === undefined, "CONFLICT", "input already reserved");
       this.db.prepare("INSERT INTO wallet_pending VALUES (?, ?, ?, ?, NULL)").run(commandId, frame, note, changeNote);
       for (const nf of inputs.nullifiers) this.db.prepare("INSERT INTO wallet_reservations VALUES (?, ?)").run(nf.toString(), commandId);
@@ -538,8 +563,10 @@ export class PoolWalletStore {
   async checkNote(requestId: string, opening: NoteOpening, args: Parameters<typeof readPoolCheckpoint>[0]): Promise<WalletNoteResult> {
     const row = this.db.prepare("SELECT * FROM wallet_requests WHERE id=?").get(id(requestId));
     requireThat(row !== undefined, "UNKNOWN", "unknown request");
-    if (!isNoteOpening(opening)) return { kind: "invalid", reason: "malformed note opening" };
-    const note = copyNoteOpening(opening), secret = BigInt(row["secret"] as string);
+    let note: NoteOpening; // one read: the opening checked is the opening used
+    try { note = copyNoteOpening(opening); }
+    catch (error) { if (error instanceof EncodingError) return { kind: "invalid", reason: "malformed note opening" }; throw error; }
+    const secret = BigInt(row["secret"] as string);
     if (row["backing"] !== bytesToHex(note.backing) || row["value"] !== note.value.toString() ||
         row["owner"] !== note.owner.toString() || note.value === 0n || ownerOf(secret) !== note.owner) {
       return { kind: "invalid", reason: "note does not match receiver request" };
@@ -550,7 +577,7 @@ export class PoolWalletStore {
     let checkpoint: Commitment;
     try { checkpoint = decodeCommitment(encodeCommitment(args.checkpoint)); }
     catch { return { kind: "invalid", reason: "malformed note checkpoint" }; }
-    const result = await readPoolCheckpoint({ ...args, checkpoint });
+    const result = await readPoolCheckpoint(checkpointArguments(args, checkpoint));
     if (result.kind !== "final") return result;
     if (!same(segmentIdentity(result.prefix.header), this.authority.segment)) return { kind: "invalid", reason: "note checkpoint authority differs" };
     if (!result.prefix.events.some(event => event.outputs.includes(cm))) return { kind: "invalid", reason: "note is absent from verified checkpoint" };
@@ -574,15 +601,16 @@ export class PoolWalletStore {
   async fulfill(requestId: string, delivery: WalletDelivery, args: Parameters<typeof readPoolCheckpoint>[0]): Promise<PoolCheckpointResult> {
     this.active();
     const { opening, receipt, cm } = this.payment(requestId, delivery);
-    const checkpoint = encodeCommitment(args.checkpoint);
-    const result = await readPoolCheckpoint(args);
+    // One owned checkpoint: the one verified is the one recorded.
+    const checkpoint = decodeCommitment(encodeCommitment(args.checkpoint));
+    const result = await readPoolCheckpoint(checkpointArguments(args, checkpoint));
     if (result.kind !== "final") return result;
     const accepted = result.accepted.find(a => a.position === receipt.position);
     requireThat(same(segmentIdentity(result.prefix.header), this.authority.segment) && accepted !== undefined &&
       same(accepted.statementHash, receipt.statementHash) && same(accepted.historyHash, receipt.historyHash), "INVALID", "payment is not in the verified checkpoint");
     this.transaction(() => {
       requireThat(this.db.prepare("SELECT 1 FROM wallet_fulfilled WHERE id=? OR commitment=?").get(requestId, cm.toString()) === undefined, "CONFLICT", "invoice or payment already fulfilled");
-      this.db.prepare("INSERT INTO wallet_fulfilled VALUES (?, ?, ?, ?, ?)").run(requestId, cm.toString(), noteText(opening), encodeStoredReceipt(receipt), bytesToHex(checkpoint));
+      this.db.prepare("INSERT INTO wallet_fulfilled VALUES (?, ?, ?, ?, ?)").run(requestId, cm.toString(), noteText(opening), encodeStoredReceipt(receipt), bytesToHex(encodeCommitment(checkpoint)));
     });
     return result;
   }
