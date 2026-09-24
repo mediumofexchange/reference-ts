@@ -4,8 +4,17 @@ Updated: 2026-09-24
 
 ## Goal
 
-No slice is open. Pick the next from Next below and state its acceptance
-here before starting.
+Open slice (branch `feat/profile-framer`, from Next 1): no decoder refusal can
+deny a range. The candidate profile reads each transaction as its unsigned
+bytes (id = their Blake2b-256) plus its 31-byte witness id, and the model
+frames outputs itself under a small fixed grammar (sized trees by length,
+exact P2PK and miner-fee trees, `Coll[Byte]` registers and extension values);
+a transaction it cannot frame carries no record. Sections exist only for
+block versions 1–4. Acceptance: decision + profile text; model, tests and
+adapters (profile check, replay adapter/fixture, v3 ergo check, chain-cost,
+publish) without the decoder on the reader's path; framer against the node's
+own reading on the hostile corpus and real transactions; independent review;
+merge. Stop: re-recording real-proof v3 reports stays Next 2.
 
 ## Status
 
