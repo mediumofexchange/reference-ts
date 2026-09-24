@@ -37,6 +37,13 @@ export { POOL_CONSTRUCTION };
 /** The bounds this version fixes inside the configuration hash (§2). */
 export const POOL_BOUNDS = Object.freeze({ noteTreeDepth: 32, scopeDepth: 16, inputs: 2, outputs: 2 });
 
+/**
+ * SHA-256 of the Poseidon2 helper source §1 pins, whose sponge poseidon2.ts
+ * implements. A configuration naming another helper is not this construction,
+ * whatever circuits it names (§12).
+ */
+export const POOL_HELPER_SHA256 = "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8";
+
 /** SHA-256 of a circuit's compiled bytecode and of its verification key (§2). */
 export interface CircuitIdentity {
   readonly bytecode: Uint8Array;

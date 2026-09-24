@@ -21,7 +21,7 @@ import {
   type Statement,
 } from "../src/pool/statement.js";
 import {
-  burnStatement, CONFIG, DOMAIN, genesisHeader, headerOf, issueStatement, makePoolBacking, Oracle, signedPoolBacking, spendStatement, walletNote,
+  burnStatement, CONFIG, DOMAIN, genesisHeader, headerOf, IDENTITIES, issueStatement, makePoolBacking, Oracle, signedPoolBacking, spendStatement, walletNote,
 } from "./pool-support.js";
 import { KEYS, makeTransparentBacking, SECRETS } from "./support.js";
 
@@ -374,9 +374,17 @@ describe("pool-v2 §9: the history, the directory and replay", () => {
     await expect(Segment.replay(repeated, verifier)).rejects.toMatchObject({ code: "MALFORMED", message: /statement 4 repeats statement 1/ });
     await expect(Segment.replay({ ...trail, backings: trail.backings.filter((s) => Buffer.compare(s.backing.name, ctx.a.name) !== 0) }, verifier))
       .rejects.toMatchObject({ code: "BACKING", message: /statement 1/ });
-    // Another configuration is another domain: the header names this one.
-    await expect(Segment.replay({ ...trail, configuration: { ...trail.configuration, helper: new Uint8Array(32).fill(5) } }, verifier))
-      .rejects.toMatchObject({ code: "SEGMENT" });
+    // A served trail's configuration is the replayer's own (§12). Another helper is refused
+    // even where the whole trail, here empty, is consistent with the domain it names.
+    const otherHelper = { ...trail.configuration, helper: new Uint8Array(32).fill(5) };
+    await expect(Segment.replay({ ...trail, configuration: otherHelper }, verifier))
+      .rejects.toMatchObject({ code: "CONFIGURATION", message: /helper/ });
+    await expect(Segment.replay({ configuration: otherHelper, header: { ...trail.header, domain: configurationHash(otherHelper) },
+      backings: [], statements: [] }, verifier)).rejects.toMatchObject({ code: "CONFIGURATION", message: /helper/ });
+    // Circuits other than the verifier's are refused the same way.
+    const otherKey = { ...trail.configuration, spend: { ...trail.configuration.spend, vk: new Uint8Array(32).fill(5) } };
+    await expect(Segment.replay({ configuration: otherKey, header: { ...trail.header, domain: configurationHash(otherKey) },
+      backings: [], statements: [] }, verifier)).rejects.toMatchObject({ code: "CONFIGURATION", message: /spend circuit/ });
     // A trail under another header is another segment, and its statements name the first.
     await expect(Segment.replay({ ...trail, header: { ...trail.header, sequence: 2n } }, verifier))
       .rejects.toMatchObject({ code: "SEGMENT", message: /statement 1/ });
@@ -488,6 +496,16 @@ describe("pool-v2 §8: what leaves the segment aliases nothing, and what it trus
       caught = error;
     }
     expect(caught).toMatchObject({ name: "PoolError", code: "CONFIGURATION" });
+    // A verifier always names the circuits its keys came from (§12).
+    for (const unnamed of [{ verify: async () => true }, { identities: { issue: IDENTITIES.issue }, verify: async () => true }]) {
+      caught = undefined;
+      try {
+        new Segment(CONFIG, genesisHeader([a.backing]), [], unnamed as never);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toMatchObject({ name: "PoolError", code: "CONFIGURATION", message: "the verifier does not name its circuit identities" });
+    }
     try {
       new Segment(CONFIG, { ...genesisHeader([a.backing]), sequence: 0n }, [], new Oracle());
     } catch (error) {
@@ -525,7 +543,7 @@ describe("pool-v2 §8: what leaves the segment aliases nothing, and what it trus
     const burnInputs = [...issue.publicInputs, 1n, 2n, 3n, 4n];
     const overOtherKind = ctx.oracle.accept({ ...issue, obligorSignature: ed25519.sign(statementBytes(DOMAIN, BURN, burnInputs), SECRETS.backer) });
     await refused(ctx.segment.admit(overOtherKind), "SIGNATURE");
-    const yes = { verify: async () => "yes" as unknown as boolean };
+    const yes = { identities: IDENTITIES, verify: async () => "yes" as unknown as boolean };
     const trusting = new Segment(CONFIG, ctx.header, [], yes);
     trusting.register(ctx.a, signBacking(SECRETS.backer, ctx.a));
     await refused(trusting.admit(issue), "PROOF");

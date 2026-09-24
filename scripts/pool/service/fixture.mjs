@@ -6,11 +6,13 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { makeBacking, signBacking } from '@mediumofexchange/reference/backing';
 import { limbsOf } from '@mediumofexchange/reference/pool/field';
-import { configurationHash, ISSUE, segmentAuthority, statementBytes } from '@mediumofexchange/reference/pool/statement';
+import { configurationHash, ISSUE, POOL_HELPER_SHA256, segmentAuthority, statementBytes } from '@mediumofexchange/reference/pool/statement';
 
 const fill = byte => new Uint8Array(32).fill(byte);
-export const CONFIG = Object.freeze({ issue: { bytecode: fill(0x11), vk: fill(0x12) },
-  spend: { bytecode: fill(0x13), vk: fill(0x14) }, burn: { bytecode: fill(0x15), vk: fill(0x16) }, helper: fill(0x17) });
+// Placeholder circuits, which the ideal verifier names as its own, and §1's helper.
+const IDENTITIES = Object.freeze({ issue: { bytecode: fill(0x11), vk: fill(0x12) },
+  spend: { bytecode: fill(0x13), vk: fill(0x14) }, burn: { bytecode: fill(0x15), vk: fill(0x16) } });
+export const CONFIG = Object.freeze({ ...IDENTITIES, helper: Buffer.from(POOL_HELPER_SHA256, 'hex') });
 export const DOMAIN = configurationHash(CONFIG), VENUE = fill(0x33);
 export const OPERATOR_SECRET = fill(7), OPERATOR = ed25519.getPublicKey(OPERATOR_SECRET);
 const BACKER_SECRET = fill(1), BACKER = ed25519.getPublicKey(BACKER_SECRET);
@@ -30,6 +32,7 @@ export function issue(output = 101n) {
   return { kind: ISSUE, publicInputs, proof: sha256(message), obligorSignature: ed25519.sign(message, BACKER_SECRET) };
 }
 export class IdealVerifier {
+  identities = IDENTITIES;
   async verify(kind, inputs, proof) {
     return bytesToHex(proof) === bytesToHex(sha256(statementBytes(DOMAIN, kind, inputs)));
   }

@@ -18,9 +18,9 @@
 // two admissions that interleave at the proof step still see, and change,
 // one view each. The verifier is an interface, pinned to the configuration's
 // keys by whoever constructs it (barretenberg.ts), so the segment cannot be
-// handed a key with a statement (§2); where the verifier can name the
-// identities its keys were derived from, the segment refuses a configuration
-// naming others (§12).
+// handed a key with a statement (§2); it names the identities its keys were
+// derived from, and the segment refuses a configuration naming others or
+// another Poseidon2 helper than §1's (§12), including one a served trail names.
 //
 // Supply follows by induction from the empty book and canonical finalized
 // imports (§C1.2, invariant 12): only a verified issuance introduces claims,
@@ -63,6 +63,7 @@ import {
   nextHistoryHash,
   parsePublicInputs,
   POOL_CONSTRUCTION,
+  POOL_HELPER_SHA256,
   PUBLIC_INPUT_COUNT,
   readStatementFields,
   segmentAuthority,
@@ -91,11 +92,11 @@ import {
 export interface StatementVerifier {
   verify(kind: StatementKind, publicInputs: readonly bigint[], proof: Uint8Array): Promise<boolean>;
   /**
-   * The identities of the circuits whose keys this verifier holds, where it
-   * can say (barretenberg.ts derives them). A segment refuses a configuration
-   * naming other identities (§12).
+   * The identities of the circuits whose keys this verifier holds
+   * (barretenberg.ts derives them). A segment refuses a configuration naming
+   * other identities (§12).
    */
-  readonly identities?: CircuitIdentities;
+  readonly identities: CircuitIdentities;
 }
 
 export type PoolErrorCode =
@@ -479,16 +480,22 @@ export class Segment {
     } catch (cause) {
       throw new PoolError("CONFIGURATION", malformed(cause, "malformed configuration"));
     }
-    const identities = verifier.identities;
-    if (identities !== undefined) {
-      for (const kind of ["issue", "spend", "burn"] as const) {
-        if (
-          compareBytes(identities[kind].bytecode, this.config[kind].bytecode) !== 0 ||
-          compareBytes(identities[kind].vk, this.config[kind].vk) !== 0
-        ) {
-          throw new PoolError("CONFIGURATION", `the verifier's ${kind} circuit is not the configuration's`);
-        }
+    // §12: the configuration is the one this implementation derives, never one a
+    // served trail names: the pinned helper, and the circuits whose keys the
+    // verifier holds.
+    if (bytesToHex(this.config.helper) !== POOL_HELPER_SHA256) {
+      throw new PoolError("CONFIGURATION", "the configuration names another Poseidon2 helper (§1)");
+    }
+    const identities: unknown = verifier.identities;
+    for (const kind of ["issue", "spend", "burn"] as const) {
+      let same = false;
+      try {
+        const held = (identities as CircuitIdentities)[kind];
+        same = compareBytes(held.bytecode, this.config[kind].bytecode) === 0 && compareBytes(held.vk, this.config[kind].vk) === 0;
+      } catch {
+        throw new PoolError("CONFIGURATION", "the verifier does not name its circuit identities");
       }
+      if (!same) throw new PoolError("CONFIGURATION", `the verifier's ${kind} circuit is not the configuration's`);
     }
     this.verifier = verifier;
     try {

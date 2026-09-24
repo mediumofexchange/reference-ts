@@ -121,7 +121,7 @@ export async function readPoolCheckpoints(args: CheckpointReadArguments & { read
     requireThat(targets.length !== 0 && requested.size === targets.length, "checkpoint requests must be nonempty and distinct");
     const backend = args.verifier;
     const verifier: StatementVerifier = {
-      ...(backend.identities === undefined ? {} : { identities: backend.identities }),
+      identities: backend.identities,
       verify: async (kind, inputs, proof) => {
         try { return await backend.verify(kind, inputs, proof); }
         catch (cause) { throw new CallbackFailure(cause); }

@@ -6,7 +6,7 @@ import { poolReceiptBytes, signPoolReceipt } from "../src/pool/receipt.js";
 import { Segment } from "../src/pool/segment.js";
 import { LocalVenue, VenueError } from "../src/venue.js";
 import { evidence, issue, open, replace, terms } from "./pool-record-support.js";
-import { CONFIG, Oracle, VENUE } from "./pool-support.js";
+import { CONFIG, IDENTITIES, Oracle, VENUE } from "./pool-support.js";
 import { SECRETS } from "./support.js";
 
 async function fixture(includedAtAfter = false) {
@@ -202,9 +202,9 @@ describe("C2.10.9a receipt classification at a proven repair boundary", () => {
     const f = await fixture(true), r = await repair(f); f.venue.publish(r.checkpoint.commitment);
     vi.spyOn(f.venue, "previousFor").mockImplementation(() => { throw new VenueError("offline"); });
     await expect(readPoolReceiptRepair(args(f, r.checkpoint))).rejects.toThrow("offline"); vi.restoreAllMocks();
-    await expect(readPoolReceiptRepair({ ...args(f, r.checkpoint), verifier: { verify: async () => { throw new TypeError("backend"); } } }))
+    await expect(readPoolReceiptRepair({ ...args(f, r.checkpoint), verifier: { identities: IDENTITIES, verify: async () => { throw new TypeError("backend"); } } }))
       .rejects.toThrow("backend");
-    await expect(readPoolReceiptRepair({ ...args(f, r.checkpoint), verifier: { verify: async (...values) => {
+    await expect(readPoolReceiptRepair({ ...args(f, r.checkpoint), verifier: { identities: IDENTITIES, verify: async (...values) => {
       f.venue.advance(); return f.oracle.verify(...values);
     } } })).rejects.toThrow(VenueError);
   });

@@ -6,7 +6,7 @@ import { poolReceiptBytes, signPoolReceipt, type PoolReceipt } from "../src/pool
 import { Segment, type SignedBacking } from "../src/pool/segment.js";
 import { LocalVenue, VenueError } from "../src/venue.js";
 import { evidence, issue, open, replace, terms } from "./pool-record-support.js";
-import { CONFIG, Oracle, VENUE } from "./pool-support.js";
+import { CONFIG, IDENTITIES, Oracle, VENUE } from "./pool-support.js";
 import { SECRETS } from "./support.js";
 
 async function fixture(includedAtAfter = false) {
@@ -259,9 +259,9 @@ describe("C2.10.9b receipt verdicts at the present index", () => {
     vi.spyOn(f.venue, "previousFor").mockImplementation(() => { throw new VenueError("offline"); });
     await expect(status(f)).rejects.toThrow("offline"); vi.restoreAllMocks();
     await expect(readPoolReceiptStatus({ configuration: CONFIG, venue: f.venue, header: f.segment.header, receipt: f.receipt, backings: [f.x, f.y],
-      evidence: [f.base], verifier: { verify: async () => { throw new TypeError("backend"); } } })).rejects.toThrow("backend");
+      evidence: [f.base], verifier: { identities: IDENTITIES, verify: async () => { throw new TypeError("backend"); } } })).rejects.toThrow("backend");
     await expect(readPoolReceiptStatus({ configuration: CONFIG, venue: f.venue, header: f.segment.header, receipt: f.receipt, backings: [f.x, f.y],
-      evidence: [f.base], verifier: { verify: async (...values) => { f.venue.advance(); return f.oracle.verify(...values); } } })).rejects.toThrow(VenueError);
+      evidence: [f.base], verifier: { identities: IDENTITIES, verify: async (...values) => { f.venue.advance(); return f.oracle.verify(...values); } } })).rejects.toThrow(VenueError);
     const g = await fixture(), latest = g.venue.latestFor.bind(g.venue);
     vi.spyOn(g.venue, "latestFor").mockImplementation((...values) => { replace(g.venue, g.x, SECRETS.carol, 1n); return latest(...values); });
     await expect(status(g)).rejects.toThrow(VenueError);

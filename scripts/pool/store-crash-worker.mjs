@@ -27,18 +27,20 @@ if (!['opening', 'receipt', 'commit'].includes(mode) || typeof path !== 'string'
 }
 
 const fill = byte => new Uint8Array(32).fill(byte);
-const CONFIG = Object.freeze({
+// Placeholder circuits, which the oracle names as its own, and §1's helper.
+const IDENTITIES = Object.freeze({
   issue: { bytecode: fill(0x11), vk: fill(0x12) },
   spend: { bytecode: fill(0x13), vk: fill(0x14) },
   burn: { bytecode: fill(0x15), vk: fill(0x16) },
-  helper: fill(0x17),
 });
+const CONFIG = Object.freeze({ ...IDENTITIES, helper: Buffer.from(statement.POOL_HELPER_SHA256, 'hex') });
 const DOMAIN = statement.configurationHash(CONFIG);
 const VENUE = fill(0x33);
 const OPERATOR_SECRET = new Uint8Array(32).fill(7), OPERATOR = ed25519.getPublicKey(OPERATOR_SECRET);
 const BACKER_SECRET = new Uint8Array(32).fill(1), BACKER = ed25519.getPublicKey(BACKER_SECRET);
 
 class Oracle {
+  identities = IDENTITIES;
   accept(value) { return value; }
   async verify(kind, inputs, proof) {
     return bytesToHex(proof) === bytesToHex(sha256(statement.statementBytes(DOMAIN, kind, inputs)));

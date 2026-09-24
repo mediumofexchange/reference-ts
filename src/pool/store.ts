@@ -622,7 +622,7 @@ export class PoolStore {
   private retainedVerifier(): StatementVerifier {
     const backend = this.verifier, proven = this.proven, domain = this.domain;
     return {
-      ...(backend.identities === undefined ? {} : { identities: backend.identities }),
+      identities: backend.identities,
       async verify(kind, publicInputs, proof) {
         const w = new ByteWriter();
         w.context(statementBytes(domain, kind, publicInputs)); w.lengthPrefixed(proof);

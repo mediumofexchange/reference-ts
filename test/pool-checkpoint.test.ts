@@ -3,7 +3,7 @@ import { directoryRoot, signCommitment } from "../src/commitment.js";
 import { PoolError } from "../src/pool/segment.js";
 import { genesisHistoryHash, segmentIdentity, snapshotDigest, type SegmentHeader, type Statement } from "../src/pool/statement.js";
 import { LocalVenue, VenueError } from "../src/venue.js";
-import { CONFIG, Oracle, VENUE } from "./pool-support.js";
+import { CONFIG, IDENTITIES, Oracle, VENUE } from "./pool-support.js";
 import { KEYS, SECRETS } from "./support.js";
 import { evidence, fixture, issue, open, read, replace, terms } from "./pool-record-support.js";
 
@@ -230,7 +230,7 @@ describe("C2.10.3–5 whole-scope checkpoint validation", () => {
   it("propagates venue and unexpected verifier failures", async () => {
     const f = await fixture();
     for (const failure of [new Error("backend failure"), new TypeError("backend type failure"), new RangeError("backend range failure"), new PoolError("PROOF", "backend exception")]) {
-      await expect(read(f.venue, f.base, [], { verify: async () => { throw failure; } })).rejects.toBe(failure);
+      await expect(read(f.venue, f.base, [], { identities: IDENTITIES, verify: async () => { throw failure; } })).rejects.toBe(failure);
     }
     vi.spyOn(f.venue, "previousFor").mockImplementation(() => { throw new VenueError("offline"); });
     await expect(read(f.venue, f.base, [], f.oracle)).rejects.toThrow("offline");
