@@ -4,7 +4,7 @@ Updated: 2026-09-25
 
 ## Goal
 
-No slice is open. Take Next 1 and state its acceptance here before starting.
+No slice is open. Take Next 1 (M0 first); copy its acceptance and stop from the plan entry here.
 
 ## Status
 
@@ -39,41 +39,41 @@ No slice is open. Take Next 1 and state its acceptance here before starting.
 
 ## Next
 
-Direction ([2026-09-25](decisions/2026-09.md#2026-09-25--direct-the-next-work-at-the-v3-runtime-and-its-failure-path)):
-the release runs v3, which alone carries the failure path, so the claim layer,
-store and wallet move to it next, single-backing first. v2-only fixes wait for
-that move; review and audit runs favor code that carries forward.
+[Plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)
+(2026-09-25, each slice's acceptance and stop): v3 in `src/pool/v3/` beside a
+frozen v2 (no fixes), one moded state machine and one reader over §13 answers
+through `RecordVenue`; the candidate runs only on recomputed reference venue identities.
 
-1. v3 runtime plan (own slice, reviewed before code): map `model/pool-v3-*`
-   and `scripts/pool/v3/` onto `src/`; replace `src/pool` or run beside it
-   until v2 freezes as an oracle; order slices so issue→pay→receive→redeem
-   and the failure path run on `ErgoVenue` early; guard the unadopted
-   candidate; give each pool-v3 §1 adoption item (identities, complete
-   certificates, replay/import rules, resource bounds) its closing slice.
-   Acceptance: reviewed plan, decision entry, this list rewritten as slices.
-2. v3 core in the runtime: issue, spend with fee outputs and delivery
-   capsules, burn; store, wallet and service on the local venue and
-   `ErgoVenue`; shared v3 fixture/byte helpers.
-3. Failure path in the runtime, single-backing first: demand, settle,
-   request, silence clock and lapse, snapshot redemption and return, kind-4
-   runs on Ergo; a testnet drill with the operator offline and an independent
-   reader (needs testnet header rules). Then multi-backing recovery.
-4. Persistence: `ErgoVenue` headers and objects (spill past `retainedBytes`, prune side
-   branches below the clock); unsettled publications, preferably in the store's outbox.
-5. v3 adoption: circuit checks name refusals via `constraints.mjs`
-   (`v3/check.mjs:121`, `fees/check.mjs:158`, `delivery/binding/check.mjs:89`);
-   canonical ACIR identities; the approvals pool-v3 §1 lists.
-6. Hygiene when touching the files: `check:evidence` binds only file-named
-   keys (P2's wasm hash) and skips vanished files; generators should hash
-   sources at start; own-node and replay-cost reports drift. `ByteReader`
-   trusts a subclass's `length`; readers re-read `args.configuration`/`verifier`.
-   v2 items (`inspectNotes`, replay `statements.slice`, `activate`, `submit`
-   journal reload, v1 store codec, `bytecode(k)` gzip): fix in code that carries forward.
-7. Later, off the release path: cancelling an abandoned publication, batched
+1. v3 core (one segment, local and synthetic Ergo): M0 neutral core
+   (commitment/replacement/revocation codecs off frozen modules, a verifier
+   that takes its identity table as data); M1 promote the codecs, spent root,
+   C4.2–6 library, state machine and single-segment reader; M2 prover and v3
+   operator journal. Proof: issue→pay (fee, capsules)→burn, a seedless reader.
+2. Testnet venue: header rules (probe the own node first), identity
+   `moe/venue/ergo-testnet/reference`, a live supply check.
+3. Redemption and failure path, single backing: under service first, then
+   silence, force, snapshot redemption, return/adoption, non-service count,
+   kind-4 runs; testnet drills, the reader using only the holder's package.
+4. Succession, hostile operator: replacement/takeover, equivocation, key compromise.
+5. Persistence: `ErgoVenue` headers/objects (spill past `retainedBytes`, prune
+   side branches below the clock); publisher memory in the owning outbox.
+6. v3 wallet and service (C4.1–2 requests, funding disclosure); retire v2.
+7. Multi-backing: scope classification/recovery, counts, receipts.
+8. Adoption, pool-v3 §1: identities with parameter provenance, ACIR identities
+   and refusal checks via `constraints.mjs` (`v3/check.mjs:121`,
+   `fees/check.mjs:158`, `delivery/binding/check.mjs:89`), certificates,
+   replay/import rules, bounds, one-transaction condition. Mainnet needs funds.
+9. Hygiene when touching the files: `check:evidence` binds only file-named keys
+   (P2's wasm hash), skips vanished files; generators should hash sources at
+   start; own-node/replay-cost reports drift; `ByteReader` trusts a subclass's
+   `length`; readers re-read `args.configuration`/`verifier`. v2 items
+   (`inspectNotes`, replay `statements.slice`, `activate`, `submit` journal
+   reload, v1 store codec, `bytecode(k)` gzip): check v3 successors.
+10. Later, off the release path: cancelling an abandoned publication, batched
    records, an index-free box source, a venue-moving record (C2.3.1), the
    slowest-supplier clock, devnet mid-epoch versions, faster Blake2b, a
    multi-entry extension fixture, Poseidon2 on Barretenberg, a warmed
-   verifier. Mainnet publication needs a funded key (real funds).
+   verifier, sponsored holder publication funding.
 
 ## Retained boundaries and local state
 

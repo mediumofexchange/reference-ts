@@ -4,7 +4,9 @@ Current component boundaries. The normative source is the
 companion specification pinned in [README](../README.md). Build in this
 order: specification, adversarial model, claim layer, sequencing/recovery,
 wallet, external witness write adapter. [WORK](../WORK.md) owns the next task;
-[production requirements](PRODUCTION_REQUIREMENTS.md) owns release gates.
+[production requirements](PRODUCTION_REQUIREMENTS.md) owns release gates. The
+[v3 runtime plan](../decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)
+sets where v3 enters `src/pool/v3/` and when the v2 rows below retire.
 
 ## Active runtime
 
