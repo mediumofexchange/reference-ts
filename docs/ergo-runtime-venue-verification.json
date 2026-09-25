@@ -6,22 +6,22 @@
       "url": "http://127.0.0.1:9053",
       "name": "ergo-mainnet-6.0.6",
       "appVersion": "6.0.6",
-      "headersHeight": 1880873,
-      "fullHeight": 1880873
+      "headersHeight": 1880956,
+      "fullHeight": 1880956
     },
     {
       "url": "http://213.239.193.208:9053",
       "name": "ergo-mainnet-6.0.6",
       "appVersion": "6.0.5-46-78153a1e-SNAPSHOT",
-      "headersHeight": 1880873,
-      "fullHeight": 1880873
+      "headersHeight": 1880956,
+      "fullHeight": 1880956
     }
   ],
   "profile": {
-    "anchorHeight": "1880573",
-    "anchorId": "2c14aabfbca730eeed3b3a2e1c5744c2d028c15e0c6760b5f3a9bec93183bca3",
+    "anchorHeight": "1880656",
+    "anchorId": "9feae6a1a397f04a7efb60bb07c47b774e3727460202b6a0353caaf030cff54f",
     "depth": "10",
-    "identity": "d391254f9c1cb940629b95c267c55f6d5a48cbb09fa3c21d83fdc0970c372b10",
+    "identity": "34add4895710fd98ed42cd7090f09b49f6a834e38ab7f43e43d67f18a7c539f5",
     "locations": "pay-to-public-key trees of the throwaway keys 0x01..01 to 0x04..04"
   },
   "viewA": {
@@ -29,13 +29,13 @@
       "own node",
       "public node"
     ],
-    "ms": 14481,
+    "ms": 21088.8,
     "rounds": [
       {
-        "ms": 14480.8,
+        "ms": 21088.3,
         "witnessedIndex": "289",
         "chainWitnessedIndex": "289",
-        "tipHeight": "1880873",
+        "tipHeight": "1880956",
         "sectionsRead": 290,
         "unresolvedIndex": null,
         "suppliers": [
@@ -45,30 +45,30 @@
           },
           {
             "name": "public node",
-            "headersAdded": 1
+            "headersAdded": 0
           }
         ]
       }
     ],
     "witnessedIndex": "289",
-    "witnessedHeight": "1880863",
-    "witnessedHeaderId": "700b3cedef3544b5d6f1eb4ed716c176ccc3cb02c4d53185fe4e8eacfbbd0339",
+    "witnessedHeight": "1880946",
+    "witnessedHeaderId": "25309087ab8ac483d5e7618d6830a21a980b1886fe7b6408769f23ce99920aa0",
     "standsOnOwnNodeBlock": true,
-    "headersVerified": 301,
+    "headersVerified": 300,
     "sectionsRead": 290,
-    "msPerBlock": 49.93
+    "msPerBlock": 72.72
   },
   "viewB": {
     "suppliers": [
       "public node"
     ],
-    "ms": 38093.9,
+    "ms": 42612,
     "rounds": [
       {
-        "ms": 38093.8,
+        "ms": 42612,
         "witnessedIndex": "289",
         "chainWitnessedIndex": "289",
-        "tipHeight": "1880873",
+        "tipHeight": "1880956",
         "sectionsRead": 290,
         "unresolvedIndex": null,
         "suppliers": [
@@ -89,49 +89,49 @@
         "kind": 1,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "80e2a6518a90286d937ef1399f35d20c8b65fcf3bab58771cc99c7c9f4622ce2"
+        "sha256": "3f8bed1f77e7d33c811e807e96eea82b72a7fbec94e2f84ddf1a29ddacaaac75"
       },
       {
         "kind": 2,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "8b71ebda7d74d747a19cfd446c39ea9886c27212ab93d06ab943aa8a4e09a00a"
+        "sha256": "ace655bec258d3ab92ad6510782abe20f72c26a9a773e7733daff450716e174e"
       },
       {
         "kind": 3,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "0133466074f0f437e1d887ed4984b846c6fc520a3bfc0761a5709dfc9c519db3"
+        "sha256": "0398b2ad41329a0833d8ec3896845b52d80c349eb4f99527703861926149905d"
       },
       {
         "kind": 4,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "d3fbf08acbf9ec81148696ad880f0b9b47bef331ed90e8921ee084063cff7914"
+        "sha256": "e886a6838c2af86a9417aef8f3824dd4faa0163f1b6a6b2aa94b7393b06e3f57"
       },
       {
         "kind": 1,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "b9bc0876e1bf3c2279330b41b71cb4d75f9e24cccb808a73916ab50eec5ea53c"
+        "sha256": "29afd763f2ffdc0fe39c64141b20f12d1adc6c78e93863558f9e931bcee816e7"
       },
       {
         "kind": 2,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "5829aeca9ead1e299ec672e8eddccfb5f746ef33b6ae718ff6ec4e2f1a07a4b3"
+        "sha256": "1f415d34a9492d404ed76fa8d37b7bca16303bcc131d971bdbe30dcb7a946d47"
       },
       {
         "kind": 3,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "c835a994f1c4c450308de998e03f342f5f1c922c9d5f64a9dc2681802c96057e"
+        "sha256": "88dc4beae092ad299e6a5fb1c79e996906cee318b133cd22d4d6e691a16d2a88"
       },
       {
         "kind": 4,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "b6c10166c45852f8ba8db6805a2ee2f79a4dafd5f3bf5f6482e3f0c11d5bd29b"
+        "sha256": "29fa7a0c8e919bcea04532aa35704aa25e49a0b8b1f31d8136d6d9a2609b61a0"
       }
     ]
   },
@@ -140,7 +140,7 @@
     "aloneWitnessedIndex": "4",
     "aloneUnresolvedIndex": "5",
     "withOwnWitnessedIndex": "289",
-    "forgedHeaderHeight": "1880579",
+    "forgedHeaderHeight": "1880662",
     "forgingReport": [
       {
         "name": "forging",
@@ -149,10 +149,10 @@
       },
       {
         "name": "own node",
-        "headersAdded": 296
+        "headersAdded": 295
       }
     ],
-    "forgedWitnessedIndex": "290"
+    "forgedWitnessedIndex": "289"
   },
   "files": {
     "dist/backing.js": "08d80f493e1438d95739a2485571ecd5c16b3eb01ed4e6db68c2f5275eabf7e9",
@@ -174,7 +174,7 @@
     "dist/venue-records.js": "89738d897ce21a654d984894bb51c6825c231145509f4ee9b3f76974edc39168",
     "dist/venue.js": "85595f173d5fb16c50a68d995a15e3881fb5d320178b8a4ba1706a1d501485f8",
     "experiments/ergo-range/runtime-sync.mjs": "1fe8d9c13d1bddf905eea19538934ab35dcd7da2c2ea4a7c6d89bae5be68f2d3",
-    "package-lock.json": "cf204e6d0670db0eb95743194fc26a6fd248d99f96fce1ad0bba782670d833e7",
+    "package-lock.json": "8203171d98e330e29b091437c947e425fa7b8de9aafa0088a90aae2544f60c9a",
     "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
     "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
     "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
@@ -191,7 +191,7 @@
     "src/oplog.ts": "d1f2ad4b71a109948f3f39a869f25ae8faf63b3fcd0206b7f9015117e31a714a",
     "src/presentation.ts": "adcd73c862129f4ccd4d02b14df16c0f701127f3d8d504f0bb91e91734b46bb3",
     "src/record-range.ts": "181f5b9192c1f5df2f91da45423d363423149e4c9ff8e8f7bae2d4b54e535059",
-    "src/record-venue.ts": "b022b20676dfbc13058bc86da75a0c19a79432bf1d3386946594274f72b190ab",
+    "src/record-venue.ts": "19cc7913cd90de844d4b9e6b977ef452d0f682dbb7e8947843341908ff771233",
     "src/replacement.ts": "2505bd340fb656f615069fc464f0a16b258ddb3ddfe5f6798d37f7083f20bf76",
     "src/revocation.ts": "dd3c2e5d321931ae54e033b0091c6f15de52f11f018712c421ea813b3f440850",
     "src/venue-error.ts": "f2e9535ed81d544801967c1bd8edb26b0191900794a6f4fdc66a448612907810",

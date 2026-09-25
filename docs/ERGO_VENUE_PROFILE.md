@@ -43,7 +43,12 @@ the tests and the local replay) under the mainnet rules, and `ErgoVenue`
 reads it only above an anchor of difficulty 1: no mainnet header has it, and
 a header id commits to its ancestry, so a profile naming the synthetic
 context cannot follow the mainnet. The testnet's context joins with its
-header rules; `ownErgoProfile` refuses every other context.
+header rules; `ownErgoProfile` refuses every other context. Beside them,
+`moe/venue/local/reference` (`LOCAL_REFERENCE`, `src/record-venue.ts`) names
+a `FixtureVenue` by a 32-byte label and its lag, with no header rules. The
+pool-v3 candidate runs only on a venue whose identity its guard recomputes
+from one of these preimages (`src/pool/v3/guard.ts`); venue-ergo's own
+context is refused there.
 
 ## Header source
 

@@ -3,7 +3,7 @@
   "node": "v24.6.0",
   "platform": "win32",
   "arch": "x64",
-  "compileMs": 4832.332399999999,
+  "compileMs": 8207.5843,
   "pins": {
     "construction": "moe/pool/v2",
     "toolchain": {
@@ -238,192 +238,192 @@
     {
       "label": "authorized-relation issuance in scope",
       "kind": "issue",
-      "executionMs": 181.8405000000057,
-      "proveMs": 2096.8190999999933,
-      "verifyMs": 104.85319999999774,
+      "executionMs": 246.62870000000112,
+      "proveMs": 2731.006000000001,
+      "verifyMs": 128.2430000000022,
       "proofBytes": 14656
     },
     {
       "label": "one real input plus padding",
       "kind": "spend",
-      "executionMs": 98.82870000000548,
-      "proveMs": 5862.5746,
-      "verifyMs": 92.43989999999758,
+      "executionMs": 144.75390000000334,
+      "proveMs": 7836.636099999996,
+      "verifyMs": 119.71519999999873,
       "proofBytes": 14656
     },
     {
       "label": "two real inputs, same backing",
       "kind": "spend",
-      "executionMs": 105.51489999999467,
-      "proveMs": 6461.611799999999,
-      "verifyMs": 86.63750000000437,
+      "executionMs": 121.67020000000048,
+      "proveMs": 7179.103600000002,
+      "verifyMs": 107.49249999999302,
       "proofBytes": 14656
     },
     {
       "label": "two backings conserve separately",
       "kind": "spend",
-      "executionMs": 60.20260000000417,
-      "proveMs": 6055.497600000002,
-      "verifyMs": 84.89410000000498,
+      "executionMs": 67.93210000000545,
+      "proveMs": 6506.0708999999915,
+      "verifyMs": 189.29490000000806,
       "proofBytes": 14656
     },
     {
       "label": "two inputs against two different anchors",
       "kind": "spend",
-      "executionMs": 50.376600000003236,
-      "proveMs": 5606.295700000002,
-      "verifyMs": 72.63809999999648,
+      "executionMs": 151.83809999999357,
+      "proveMs": 7033.264599999995,
+      "verifyMs": 108.41359999999986,
       "proofBytes": 14656
     },
     {
       "label": "partial burn with padding",
       "kind": "burn",
-      "executionMs": 36.035699999993085,
-      "proveMs": 4027.8834999999963,
-      "verifyMs": 70.80189999999129,
+      "executionMs": 59.591599999999744,
+      "proveMs": 5700.6489,
+      "verifyMs": 95.47729999999865,
       "proofBytes": 14656
     },
     {
       "label": "all right-child bits including bit 31",
       "kind": "spend",
-      "executionMs": 48.41160000000673,
-      "proveMs": 6248.19249999999,
-      "verifyMs": 73.8801999999996,
+      "executionMs": 45.19529999999213,
+      "proveMs": 5273.976200000005,
+      "verifyMs": 88.14440000000468,
       "proofBytes": 14656
     },
     {
       "label": "two maximum u64 inputs conserve in u128",
       "kind": "spend",
-      "executionMs": 44.788200000009965,
-      "proveMs": 6941.613400000002,
-      "verifyMs": 107.64259999999194,
+      "executionMs": 58.93610000000626,
+      "proveMs": 6468.012600000002,
+      "verifyMs": 98.56510000000708,
       "proofBytes": 14656
     },
     {
       "label": "new anchor preserves both nullifiers",
       "kind": "spend",
-      "executionMs": 55.37579999997979,
-      "proveMs": 5975.003100000002,
-      "verifyMs": 95.11220000000321,
+      "executionMs": 66.34209999997984,
+      "proveMs": 6457.979499999987,
+      "verifyMs": 103.96900000001187,
       "proofBytes": 14656
     },
     {
       "label": "another segment keeps the nullifiers and outputs",
       "kind": "spend",
-      "executionMs": 45.2045999999973,
-      "proveMs": 5221.183099999995,
-      "verifyMs": 93.6414999999979,
+      "executionMs": 53.765199999994365,
+      "proveMs": 6457.248400000011,
+      "verifyMs": 97.0566000000108,
       "proofBytes": 14656
     },
     {
       "label": "full burn with zero change",
       "kind": "burn",
-      "executionMs": 33.63279999999213,
-      "proveMs": 3745.5547999999835,
-      "verifyMs": 72.72110000002431,
+      "executionMs": 51.431099999987055,
+      "proveMs": 5583.245400000014,
+      "verifyMs": 100.45939999999246,
       "proofBytes": 14656
     },
     {
       "label": "burn widens quantity plus change",
       "kind": "burn",
-      "executionMs": 36.42739999998594,
-      "proveMs": 3703.5020000000077,
-      "verifyMs": 72.84200000000419,
+      "executionMs": 47.587899999984074,
+      "proveMs": 5252.219600000011,
+      "verifyMs": 84.97949999998673,
       "proofBytes": 14656
     },
     {
       "label": "claim layer issue",
       "kind": "issue",
-      "executionMs": 14.702699999965262,
-      "proveMs": 2164.518400000001,
+      "executionMs": 11.667399999976624,
+      "proveMs": 2093.371999999974,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 67.18859999999404,
-      "proveMs": 6535.052499999991,
+      "executionMs": 47.911100000026636,
+      "proveMs": 6257.741500000004,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 59.23119999998016,
-      "proveMs": 6006.665399999998,
+      "executionMs": 57.66109999996843,
+      "proveMs": 6316.973199999949,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 53.148500000010245,
-      "proveMs": 5892.483500000031,
+      "executionMs": 51.10430000000633,
+      "proveMs": 6393.3174,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 71.7430999999633,
-      "proveMs": 4762.690599999973,
+      "executionMs": 60.13400000002002,
+      "proveMs": 6522.908400000015,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer burn",
       "kind": "burn",
-      "executionMs": 32.96320000005653,
-      "proveMs": 4318.305700000026,
+      "executionMs": 47.875400000019,
+      "proveMs": 5488.661800000002,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer burn",
       "kind": "burn",
-      "executionMs": 29.013099999981932,
-      "proveMs": 4775.655999999959,
+      "executionMs": 46.78299999999581,
+      "proveMs": 4754.143799999962,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 34.66790000000037,
-      "proveMs": 4499.159600000014,
+      "executionMs": 51.9721000000136,
+      "proveMs": 5548.092100000009,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 37.30820000002859,
-      "proveMs": 5253.093599999964,
+      "executionMs": 56.88980000000447,
+      "proveMs": 5374.423499999975,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 40.1585999999661,
-      "proveMs": 10350.443099999975,
+      "executionMs": 38.61089999997057,
+      "proveMs": 5356.345499999996,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 165.74280000000726,
-      "proveMs": 11185.890799999994,
+      "executionMs": 49.116900000022724,
+      "proveMs": 5316.894700000004,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 93.65810000000056,
-      "proveMs": 8606.557900000014,
+      "executionMs": 64.52529999997932,
+      "proveMs": 6423.12169999996,
       "verifyMs": 0,
       "proofBytes": 14656
     }
@@ -561,7 +561,7 @@
     "dist/venue-error.js": "0b01e9dd946d2d5d747a1a1d82e3b3d6a4c6c386710088f0eefe05aa2550466d",
     "dist/venue-records.js": "89738d897ce21a654d984894bb51c6825c231145509f4ee9b3f76974edc39168",
     "dist/venue.js": "85595f173d5fb16c50a68d995a15e3881fb5d320178b8a4ba1706a1d501485f8",
-    "package-lock.json": "cf204e6d0670db0eb95743194fc26a6fd248d99f96fce1ad0bba782670d833e7",
+    "package-lock.json": "8203171d98e330e29b091437c947e425fa7b8de9aafa0088a90aae2544f60c9a",
     "scripts/compile-noir.mjs": "b4dabba6406111e0a03b849e2ac5272d124ab7537ee4877333bfd105c8b18a03",
     "scripts/pool/admission.mjs": "a651f4d3682c8f7b96e8309b9086af090a531c7c24ea886890ff4af38a47ac96",
     "scripts/pool/check.mjs": "c3773c77a0d36514054c1038878cc34343c899ff83aa09c50e87647398ddb94e",

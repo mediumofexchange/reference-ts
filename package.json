@@ -54,7 +54,8 @@
     "check:pilot": "node scripts/pilot-demo.mjs",
     "pilot:demo": "npm run build && npm run check:pilot",
     "check:pool": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/check.mjs",
-    "check:pool:v3": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/check.mjs && node scripts/pool/v3/local-check.mjs",
+    "check:pool:v3": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/check.mjs && node scripts/pool/v3/store-check.mjs && node scripts/pool/v3/local-check.mjs",
+    "check:pool:v3-store": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/store-check.mjs",
     "check:pool:local-replay": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/local-check.mjs",
     "check:pool:ergo-replay": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/local-check.mjs --ergo",
     "bench:pool:prepare": "node scripts/pool/browser/prepare.mjs",
@@ -76,10 +77,14 @@
     "tag": "next"
   },
   "peerDependencies": {
-    "@aztec/bb.js": "5.2.0"
+    "@aztec/bb.js": "5.2.0",
+    "@noir-lang/noir_js": "1.0.0-beta.26"
   },
   "peerDependenciesMeta": {
     "@aztec/bb.js": {
+      "optional": true
+    },
+    "@noir-lang/noir_js": {
       "optional": true
     }
   },
