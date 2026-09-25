@@ -91,6 +91,11 @@ describe("the candidate guard", () => {
     // The same anchor, depth and locations under venue-ergo's own context: the mainnet profile.
     const { reference: _, ...mainnet } = profile;
     expect(() => referenceVenue({ context: ERGO_SYNTHETIC_REFERENCE, profile: mainnet })).toThrow(CandidateVenueError);
+    // A context that reads as synthetic once and as venue-ergo's afterwards is hashed as it was checked.
+    let reads = 0;
+    const shifting = { ...mainnet, get reference() { return reads++ === 0 ? ERGO_SYNTHETIC_REFERENCE : undefined; } };
+    const shifted = referenceVenue({ context: ERGO_SYNTHETIC_REFERENCE, profile: shifting as typeof profile });
+    expect(shifted.id).toEqual(synthetic.id);
   });
 });
 
@@ -240,6 +245,38 @@ describe.skipIf(!supported)("the v3 operator journal (Node 24)", () => {
     expect(await refusal(j.open("c", signedTerms(termsFields({ configuration: b(7) }))))).toEqual(["REFUSED", undefined]);
     expect(await refusal(j.open("d", signedTerms(termsFields(), b(98))))).toEqual(["REFUSED", undefined]);
     expect(await refusal(j.open("e", signedTerms(termsFields({ silence: { noCommitmentDuration: 5n, challengeWindow: 5n } }))))).toEqual(["UNSUPPORTED", undefined]);
+  });
+
+  it("admits and signs only what it can still serve within the reader's budget", async () => {
+    const { j } = await opened();
+    // Stand-in proofs at the §5 maximum: the trail passes the reader's 1 MiB budget within a few records.
+    const large = (n: number): Uint8Array => {
+      const r = record(issueTask(context, output(payerSeed, 100 + n, 1n)));
+      return encodeRecord(authorizeIssue({ ...r, proof: new Uint8Array(131040).fill(1) }, issuerSecret));
+    };
+    let admitted = 0;
+    for (;; admitted++) {
+      const error = await j.submit(large(admitted)).then(() => undefined, (e: unknown) => e);
+      if (error === undefined) continue;
+      expect([(error as StoreError).code, (error as StoreError).check]).toEqual(["REFUSED", "RESOURCE"]);
+      break;
+    }
+    expect(admitted).toBeGreaterThan(0);
+    // The refusal changed nothing: the admitted records commit, publish and serve.
+    await j.commit("c2"); await j.publish();
+    const trail = decodeTrail(decodeEvidencePackage((await j.package()).package, { maxBytes: 1n << 21n, maxItems: 64n })
+      .find(i => i.kind === 6)!.payload, { maxBytes: 1n << 21n, maxEvents: 1024n });
+    expect(trail.records.length).toBe(admitted);
+  });
+
+  it("serves only published commitments and the records they carry", async () => {
+    const { j } = await opened();
+    await j.submit(issue()); await j.commit("c2");
+    // The second commitment is still in the outbox: the opening is served, with no records.
+    const before = await j.package();
+    expect(before.selection.sequence).toBe(1n);
+    await j.publish();
+    expect((await j.package()).selection.sequence).toBe(2n);
   });
 
   it("fences an older handle and replays the journal on reopening", async () => {

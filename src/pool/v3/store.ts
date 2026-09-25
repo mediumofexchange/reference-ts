@@ -30,13 +30,13 @@ import { encodeReceipt, receiptBytes, snapshotBytes, snapshotDigest, type Snapsh
 import { configurationBytes, configurationHash, type CandidateConfiguration } from "./configuration.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "./headers.js";
-import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem, type PackageLimits } from "./package.js";
+import { encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem, type PackageLimits } from "./package.js";
 import { RANGE_LIMITS, TRAIL_LIMITS, type SignedTerms } from "./reader.js";
 import { decodeRecord, encodeRecord, evidenceHashes, statementHash } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
 import { applyRecord, openSegmentState, type ProofCheck, type SegmentReplay, type SegmentState } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature, type RootTerms } from "./terms.js";
-import { encodeTrail } from "./trail.js";
+import { encodeTrail, TrailLimitError } from "./trail.js";
 
 const PROFILE = "pool-store/v3";
 const U64 = 1n << 64n;
@@ -102,6 +102,8 @@ interface Engine {
   readonly records: Uint8Array[];
   readonly receipts: Map<string, Uint8Array>;
   readonly signed: Signed[];
+  /** The last admission's horizon; horizons never move back. */
+  horizon: bigint;
 }
 /** The venue at one instant: its clock and lag, this key's held commitments, the backing's term boundaries and K's revocation. */
 interface View {
@@ -257,7 +259,7 @@ export class V3OperatorJournal {
       const q = this.db.prepare("SELECT seq,id,request,command,response FROM events ORDER BY seq"); q.setReadBigInts(true);
       return q.all();
     });
-    const engine: Engine = { revision: 0n, opened: undefined, state: undefined, records: [], receipts: new Map(), signed: [] };
+    const engine: Engine = { revision: 0n, opened: undefined, state: undefined, records: [], receipts: new Map(), signed: [], horizon: 0n };
     for (const row of rows) {
       requireThat(row.seq === engine.revision + 1n && typeof row.command === "string" && typeof row.response === "string" &&
         typeof row.id === "string" && typeof row.request === "string", "STORAGE", "invalid journal row");
@@ -298,7 +300,10 @@ export class V3OperatorJournal {
       requireThat(id === `statement:${hash}` && request === hash && bytesToHex(encodeRecord(decodeRecord(bytes))) === command.record,
         "STORAGE", "stored statement disagrees with replay");
       // The original judgment at its horizon; the venue reads it made are not repeated.
-      try { await applyRecord(state, bytes, this.replayOf(opened, decimal(command.horizon), undefined)); } catch (error) {
+      const horizon = decimal(command.horizon);
+      requireThat(horizon >= engine.horizon && horizon <= this.observedIndex + this.lag, "STORAGE", "stored horizon is inconsistent");
+      engine.horizon = horizon;
+      try { await applyRecord(state, bytes, this.replayOf(opened, horizon, undefined)); } catch (error) {
         if (error instanceof ReplayRefusal || error instanceof EvidenceRefusal) throw new V3StoreError("STORAGE", "a stored statement no longer admits");
         throw error;
       }
@@ -316,7 +321,8 @@ export class V3OperatorJournal {
     const commitment = decodeCommitment(hexToBytes(response)), highest = engine.signed.at(-1)?.commitment.sequence ?? 0n;
     requireThat(hexOf(commitment) === response && verifyCommitment(commitment) && same(commitment.operator, this.operator) &&
       commitment.sequence === highest + 1n && same(commitment.root, directoryRoot(directory)), "STORAGE", "stored commitment disagrees with replay");
-    requireThat(command.observed === null || typeof command.observed === "string", "STORAGE", "invalid observed commitment");
+    // What the venue held of this key at signing: nothing yet, or a commitment this journal signed before.
+    requireThat(command.observed === null || engine.signed.some(s => hexOf(s.commitment) === command.observed), "STORAGE", "invalid observed commitment");
     engine.signed.push({ commitment, length: BigInt(engine.records.length), at, observed: command.observed, directory, snapshot, published: false });
   }
 
@@ -455,10 +461,12 @@ export class V3OperatorJournal {
       const opened = this.opening(own), view = this.view(engine);
       requireThat(view.held.length === 0, "CONFLICT", "this key already has commitments on the venue");
       const admitted = admittedReplacements(this.ask(2, opened.backing, view.now), opened.terms.replacementRule);
-      requireThat(replacementChain(admitted, { backing: opened.backing, original: this.operator, lag: this.lag, now: view.now }).chain.length === 1,
-        "STALE", "the operator's term has ended");
+      const { chain, pending } = replacementChain(admitted, { backing: opened.backing, original: this.operator, lag: this.lag, now: view.now });
+      requireThat(chain.length === 1, "STALE", "the operator's term has ended");
       requireThat(revocationIndex(this.ask(3, opened.terms.obligor, view.now)) === undefined, "UNSUPPORTED", "the backer has revoked K");
-      const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries: [], ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
+      // A witnessed replacement ends the term at its effective index: the opening is signed by C2.6.1's last signing index.
+      const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries: pending === undefined ? [] : [pending.from],
+        ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
       requireThat(schedule.commitNow, "SCHEDULE", "the opening's signing schedule is closed");
       const state = openSegmentState(opened.segment, undefined, undefined, undefined, () => {});
       const probe: Engine = { ...engine, opened, state };
@@ -495,6 +503,10 @@ export class V3OperatorJournal {
       this.ready(engine, view, "admit");
       const opened = engine.opened!, state = engine.state!, horizon = view.now + view.lag;
       requireThat(horizon < U64, "SCHEDULE", "the horizon is past the venue's index space");
+      // The checkpoint that will carry this record must still be served within the reader's budget.
+      const last = engine.signed.at(-1)!;
+      this.encodePackage(opened, [...engine.signed, { directory: [{ name: opened.backing, digest: new Uint8Array(32) }],
+        snapshot: new Uint8Array(last.snapshot.length) }], last.commitment, [...engine.records, bytes]);
       const before = state.position;
       try { await applyRecord(state, bytes, this.replayOf(opened, horizon, view.revokedAt)); }
       catch (error) {
@@ -511,7 +523,7 @@ export class V3OperatorJournal {
         this.append(engine, `statement:${hash}`, hash, { kind: "admit", record: bytesToHex(bytes), horizon: horizon.toString() }, bytesToHex(r));
         return r;
       });
-      engine.records.push(bytes); engine.receipts.set(hash, receipt); engine.revision++;
+      engine.records.push(bytes); engine.receipts.set(hash, receipt); engine.horizon = horizon; engine.revision++;
       return copyBytes(receipt);
     });
   }
@@ -527,6 +539,7 @@ export class V3OperatorJournal {
       const last = engine.signed.at(-1)!, sequence = last.commitment.sequence + 1n;
       requireThat(sequence < U64, "STORAGE", "signed sequence counter exhausted");
       const { directory, snapshot } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
+      this.encodePackage(engine.opened!, [...engine.signed, { directory, snapshot }], last.commitment, engine.records);
       const commitment = this.transaction(() => {
         this.stable(engine, view);
         const c = signCommitment(this.secret, sequence, directoryRoot(directory));
@@ -562,24 +575,43 @@ export class V3OperatorJournal {
   }
 
   /**
-   * The §12 package for the latest signed commitment: the configuration, that
-   * commitment, every signed directory and snapshot, and the one trail through
-   * it, whose prefixes serve each earlier checkpoint (§12.1). Records admitted
-   * after it are not served.
+   * The served §12 package: the configuration, `selected`, every directory and
+   * snapshot of `signed`, and the one trail through `records`, whose prefixes
+   * serve each earlier checkpoint (§12.1). A package past the reader's budget
+   * (`TRAIL_LIMITS`, `SERVED_PACKAGE_LIMITS`) refuses as RESOURCE, so the
+   * journal admits and signs only what it can still serve.
+   */
+  private encodePackage(opened: Opened, signed: readonly Pick<Signed, "directory" | "snapshot">[], selected: Commitment,
+    records: readonly Uint8Array[]): Uint8Array {
+    try {
+      const payloads = new Map<string, EvidenceItem>();
+      const add = (kind: number, payload: Uint8Array): void => { payloads.set(`${kind}:${bytesToHex(sha256(payload))}`, { kind, payload }); };
+      add(1, configurationBytes(this.configuration)); add(2, encodeCommitment(selected));
+      add(6, encodeTrail({ header: opened.headerBytes, terms: [opened.signed], records }, TRAIL_LIMITS));
+      for (const s of signed) { add(3, encodeEvidenceDirectory(s.directory, SERVED_PACKAGE_LIMITS)); add(4, s.snapshot); }
+      const items = [...payloads.values()].sort((a, b) => a.kind - b.kind || compareBytes(sha256(a.payload), sha256(b.payload)));
+      return encodeEvidencePackage(items, SERVED_PACKAGE_LIMITS);
+    } catch (error) {
+      if (error instanceof TrailLimitError || error instanceof PackageLimitError) {
+        throw new V3StoreError("REFUSED", "the served package would pass the reader's budget", "RESOURCE");
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * The §12 package for the latest published commitment, with every checkpoint
+   * signed through it. Records admitted after it are not served, nor is a
+   * commitment still in the outbox.
    */
   async package(): Promise<ServedPackage> {
     return this.run(async engine => {
-      const last = engine.signed.at(-1), opened = engine.opened;
-      requireThat(last !== undefined && opened !== undefined, "STALE", "no signed commitment to serve");
-      const trail = encodeTrail({ header: opened.headerBytes, terms: [opened.signed], records: engine.records.slice(0, Number(last.length)) }, TRAIL_LIMITS);
-      const payloads = new Map<string, EvidenceItem>();
-      const add = (kind: number, payload: Uint8Array): void => { payloads.set(`${kind}:${bytesToHex(sha256(payload))}`, { kind, payload }); };
-      add(1, configurationBytes(this.configuration)); add(2, encodeCommitment(last.commitment)); add(6, trail);
-      for (const s of engine.signed) { add(3, encodeEvidenceDirectory(s.directory, SERVED_PACKAGE_LIMITS)); add(4, s.snapshot); }
-      const items = [...payloads.values()].sort((a, b) => a.kind - b.kind || compareBytes(sha256(a.payload), sha256(b.payload)));
+      const opened = engine.opened, at = engine.signed.findLastIndex(s => s.published);
+      requireThat(opened !== undefined && at >= 0, "STALE", "no published commitment to serve");
+      const selected = engine.signed[at]!, through = engine.signed.slice(0, at + 1);
       return { selection: { domain: copyBytes(this.domain), venue: copyBytes(this.venueId), backing: copyBytes(opened.backing),
-        operator: copyBytes(this.operator), sequence: last.commitment.sequence, root: copyBytes(last.commitment.root) },
-      package: encodeEvidencePackage(items, SERVED_PACKAGE_LIMITS) };
+        operator: copyBytes(this.operator), sequence: selected.commitment.sequence, root: copyBytes(selected.commitment.root) },
+      package: this.encodePackage(opened, through, selected.commitment, engine.records.slice(0, Number(selected.length))) };
     });
   }
 

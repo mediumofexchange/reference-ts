@@ -6,8 +6,10 @@
 // its lag. venue-ergo's own context (the mainnet) and every other identity
 // are refused. The candidate configuration itself comes from the caller's
 // manifest check (pool-v3 §11.1) and is reported as candidate provenance.
+// The guard stops misuse, not a hostile caller: an adapter that presents a
+// reference identity while delegating elsewhere is outside what bytes can check.
 import { compareBytes, copyBytes } from "../../bytes.js";
-import { ergoLag, ergoProfileIdentity, ERGO_SYNTHETIC_REFERENCE, type ErgoProfile } from "../../ergo-profile.js";
+import { ergoLag, ergoProfileIdentity, ERGO_SYNTHETIC_REFERENCE, ownErgoProfile, type ErgoProfile } from "../../ergo-profile.js";
 import { LOCAL_REFERENCE, localVenueIdentity, type RecordVenue } from "../../record-venue.js";
 
 /** A reference venue's identity preimage, as the caller independently holds it. */
@@ -33,9 +35,10 @@ export function referenceVenue(reference: VenueReference): { readonly id: Uint8A
       return { id: localVenueIdentity(label, lag), lag };
     }
     if (context === ERGO_SYNTHETIC_REFERENCE) {
-      const { profile } = reference;
+      // Read once and owned, so the context checked is the context hashed.
+      const profile = ownErgoProfile(reference.profile);
       // A profile without the synthetic context is venue-ergo's: the mainnet.
-      if (profile?.reference !== ERGO_SYNTHETIC_REFERENCE) throw new CandidateVenueError("the candidate never runs on a deployment profile");
+      if (profile.reference !== ERGO_SYNTHETIC_REFERENCE) throw new CandidateVenueError("the candidate never runs on a deployment profile");
       return { id: ergoProfileIdentity(profile), lag: ergoLag(profile) };
     }
   } catch (error) {
