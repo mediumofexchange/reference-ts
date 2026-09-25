@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-25` [Plan the v3 runtime: one state machine and one reader beside a frozen v2](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)
 - `2026-09-25` [Direct the next work at the v3 runtime and its failure path](decisions/2026-09.md#2026-09-25--direct-the-next-work-at-the-v3-runtime-and-its-failure-path)
 - `2026-09-25` [Publish kind 1–3 records on Ergo from the runtime's own wallet](decisions/2026-09.md#2026-09-25--publish-kind-13-records-on-ergo-from-the-runtimes-own-wallet)
 - `2026-09-25` [Read Ergo in the runtime only under the selected profile](decisions/2026-09.md#2026-09-25--read-ergo-in-the-runtime-only-under-the-selected-profile)
