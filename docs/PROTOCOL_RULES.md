@@ -197,7 +197,7 @@ The invariants above say *what* must be true. These say *how* to build it. The g
 
 **Validate once, at the boundary that owns the rule.** `makeBacking` owns backing well-formedness; the ledger or segment owns the law and funds; the sequencer owns routing and refusal. A layer does not re-check what a layer below will check, and does not pre-check in order to relabel an error.
 
-**Copy on the way in, copy on the way out.** Bytes entering validated state are copied once at construction; every accessor returns a copy. `readonly` is erased at runtime and is not a boundary.
+**Copy on the way in, copy on the way out.** Bytes entering validated state are copied once at construction; every accessor returns a copy. `readonly` is erased at runtime and is not a boundary. A codec reads each caller field once, bounds a count or length before copying (`arrayLength`, `byteLength`), copies (`copyArray`, `copyBytes`, or `copyUnshared` where it takes no shared memory) and judges only the copy, so what it checks is what it writes, hashes or answers about.
 
 **Verifiers never throw.** Anything that answers a question about adversary-supplied data returns `false` or a typed rejection on any malformed input. A verifier that throws is a denial-of-service hole and tempts a caller to read "no exception" as "checked".
 
