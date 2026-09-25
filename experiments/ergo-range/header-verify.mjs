@@ -1,7 +1,7 @@
 // The reader as its own header source: the model's header store (model/pool-v3-ergo-headers.ts) verifies real
 // mainnet headers from the profile's pinned anchor, supplied by several nodes it does not trust, and its best chain
-// feeds the range verifier. GET-only reads, cached under scratch/; nothing is submitted, no runtime path reads this
-// and no answer selects the profile. Each header's bytes are copied from the node's JSON (supply-header.mjs); the store
+// feeds the range verifier. GET-only reads, cached under scratch/; nothing is submitted and no runtime path reads this
+// (the rules are venue-ergo.md §3). Each header's bytes are copied from the node's JSON (supply-header.mjs); the store
 // derives the id, linkage, difficulty and proof of work from those bytes alone.
 //
 // Two parts:
@@ -280,7 +280,7 @@ try {
     cache: { directory: "scratch/ergo-headers", sha256: digest.digest("hex") },
     files,
     limitations: [
-      "The store applies the pinned node's header rules for a child header (height, timestamp above the parent's, EIP-37 difficulty, Autolykos v2 proof of work) to mainnet headers of versions 2–4 above an anchor at or after EIP-37 activation. It does not apply the node's local-clock rule, its local bound on fork depth or its marking of headers whose block failed full validation; a header-only reader rests on the work, as any light client does. Without the clock rule a supplier can lower the required difficulty on a side branch with future timestamps (halving each epoch after about 256 blocks of work at the starting difficulty): such a branch cannot outscore the best chain's work, but its headers are accepted and kept, so what a supplier may add must be bounded by the reader's supplier policy. Only canonical header bytes are read.",
+      "The store applies the pinned node's header rules for a child header (height, timestamp above the parent's, EIP-37 difficulty, Autolykos proof of work) to mainnet headers above an anchor at or after EIP-37 activation; every header read is version 4. The node checks a block version only at a voting epoch's first block, so the store reads every version byte in the node's layout for it, Autolykos v1 for version 1 (unit-tested on real v1 headers, not in this window). It does not apply the node's local-clock rule, its local bound on fork depth or its marking of headers whose block failed full validation; a header-only reader rests on the work, as any light client does. Without the clock rule a supplier can lower the required difficulty on a side branch with future timestamps (halving each epoch after about 256 blocks of work at the starting difficulty): such a branch cannot outscore the best chain's work, but its headers are accepted and kept, so what a supplier may add must be bounded by the reader's supplier policy. Only canonical header bytes are read.",
       "Sources are untrusted suppliers of bytes, and the reader takes the heaviest valid chain it is shown. A source can withhold a heavier chain: several independent sources reduce, and do not remove, that eclipse risk. No fork was offered here; fork choice is covered by the unit tests only.",
       "The recalculation part reads the first source's accepted headers at each boundary and the eight epochs before it, not a contiguous chain: it compares the model's difficulty rule and proof of work with that node's acceptance on real data; the contiguous window is the store's own verification.",
       "Each header costs one proof-of-work check in pure JavaScript (Blake2b over about 34 Autolykos elements of 8 KiB); a bogus header that passes the cheap checks costs the reader that check before its refusal.",

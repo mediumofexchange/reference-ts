@@ -354,7 +354,7 @@ try {
     const refused = supplied.flatMap((view, position) => view === undefined ? [{ position, id: ids[position], step: "supply" }] : []);
     const views = supplied.filter(view => view !== undefined), sectionBytes = views.reduce((n, view) => n + view.signedBytes, 0);
     // A block with an unsupplied transaction has no section: its index stays unresolved and the read through it fails, as the profile says.
-    const complete = refused.length === 0 && hex(profile.transactionsRoot(BigInt(header.version), views)) === header.transactionsRoot;
+    const complete = refused.length === 0 && profile.sectionMatchesRoot(views, Buffer.from(header.transactionsRoot, "hex"));
     if (refused.length === 0) assert(complete, `the section reproduces the root at ${header.height}`);
     return { height: BigInt(header.height), headerId: Buffer.from(header.id, "hex"), views: complete ? views : undefined, ids, transactions: statements.length, sectionBytes, refused };
   };

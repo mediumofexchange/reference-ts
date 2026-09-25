@@ -93,6 +93,11 @@ function evidence(spec: Spec, from: bigint, to: bigint, version = 3n): profile.E
 const profileOf = (chain: profile.ErgoRangeEvidence, depth = 2n): profile.ErgoProfile => ({ anchor: chain.headers[0]!.id, depth, scripts });
 const request = (venue: Uint8Array, kind: range.RecordKind, subject: Uint8Array, fromIndex = 0n, toIndex = 6n): range.RangeRequest =>
   ({ venue, kind, subject, fromIndex, toIndex });
+/** The kind-1 entries for `operator` over indices 0–1 of a chain under its own profile. */
+function entriesOf(chain: profile.ErgoRangeEvidence): string[] {
+  const verifier = profile.ergoRangeVerifier(profileOf(chain), chain)!;
+  return answer(verifier, 1, operator, 0n, 1n).entries.map(e => `${e.index}/${e.ordinal}/${Buffer.from(e.record).toString("hex")}`);
+}
 function answer(verifier: profile.ErgoRangeVerifier, kind: range.RecordKind, subject: Uint8Array, fromIndex = 0n, toIndex = 6n): range.RangeAnswer {
   const r = request(verifier.identity, kind, subject, fromIndex, toIndex), bytes = verifier.range(r, wide);
   expect(bytes).toBeInstanceOf(Uint8Array);
@@ -158,9 +163,9 @@ describe("Ergo venue-profile candidate", () => {
     const transactions = [transaction([plain]), transaction([plain])].map(committed);
     const idsOnly = Buffer.from(profile.merkleRoot(transactions.map(t => t.id)));
     expect(Buffer.from(profile.transactionsRoot(1n, transactions))).toEqual(idsOnly);
-    expect(Buffer.from(profile.transactionsRoot(0n, transactions))).toEqual(idsOnly);
-    expect(Buffer.from(profile.transactionsRoot(3n, transactions)))
-      .toEqual(Buffer.from(profile.merkleRoot([...transactions.map(t => t.id), ...transactions.map(t => t.witnessId)])));
+    // Every other version byte, 0 and 128–255 included, commits to the witness ids too, as the node reads it.
+    const withWitness = Buffer.from(profile.merkleRoot([...transactions.map(t => t.id), ...transactions.map(t => t.witnessId)]));
+    for (const version of [0n, 2n, 3n, 5n, 128n, 255n]) expect(Buffer.from(profile.transactionsRoot(version, transactions))).toEqual(withWitness);
   });
 
   it("attributes by location and shape, reassembles runs and omits nothing else", () => {
@@ -263,19 +268,33 @@ describe("Ergo venue-profile candidate", () => {
     const verifier = profile.ergoRangeVerifier(profileOf(chain), chain)!;
     expect(answer(verifier, 1, operator, 0n, 1n).entries.map(e => [e.index, e.ordinal])).toEqual([[0n, 0n]]);
     expect(answer(verifier, 1, operator, 1n, 1n).entries).toHaveLength(0);
-    // A block version the profile does not name supplies no section; its header still links the chain.
-    const later = evidence({}, 1n, 5n, 5n);
-    const v5 = profile.ergoRangeVerifier(profileOf(later), later)!;
-    expect(v5.witnessedIndex()).toBe(1n);
-    expect(v5.range(request(v5.identity, 1, operator, 0n, 0n), wide)).toBeUndefined();
+    // Every block version supplies its section: the node checks a block's version only at a voting epoch's first
+    // block, so any miner can carry any version mid-epoch, and a gate on it would deny every range through the block.
+    const spec3 = { 3: [[record(1, operator, commitment(1n))]] };
+    const baseEntries = entriesOf(evidence(spec3, 1n, 5n));
+    expect(baseEntries).toHaveLength(1);
+    for (const version of [0n, 2n, 4n, 5n, 127n, 128n, 255n]) {
+      const chain = evidence(spec3, 1n, 5n, version);
+      expect(entriesOf(chain)).toEqual(baseEntries);
+      // A root over ids and witness ids binds the witness ids.
+      const rewitnessed = { ...chain, blocks: chain.blocks.map(block => ({ ...block, transactions: block.transactions.map(t => ({ ...t, witnessId: b(9, 31) })) })) };
+      expect(profile.ergoRangeVerifier(profileOf(rewitnessed), rewitnessed)!.range(request(profile.ergoProfileIdentity(profileOf(rewitnessed)), 1, operator, 0n, 1n), wide)).toBeUndefined();
+    }
     // Version 1 commits to the ids alone: any witness id leaves its sections and answers as they were.
     const v1 = evidence({ 3: [[record(1, operator, commitment(1n))]] }, 1n, 5n, 1n), v1Profile = profileOf(v1);
     const v1Answer = Buffer.from(profile.ergoRangeVerifier(v1Profile, v1)!.range(request(profile.ergoProfileIdentity(v1Profile), 1, operator, 0n, 1n), wide)!);
     const rewitnessed = { ...v1, blocks: v1.blocks.map(block => ({ ...block, transactions: block.transactions.map(t => ({ ...t, witnessId: b(9, 31) })) })) };
     expect(Buffer.from(profile.ergoRangeVerifier(v1Profile, rewitnessed)!.range(request(profile.ergoProfileIdentity(v1Profile), 1, operator, 0n, 1n), wide)!)).toEqual(v1Answer);
     expect(v1Answer.length).toBe(102 + 20 + 136);
-    const v4 = evidence({}, 1n, 5n, profile.MAX_SECTION_VERSION);
-    expect(profile.ergoRangeVerifier(profileOf(v4), v4)!.range(request(profile.ergoProfileIdentity(profileOf(v4)), 1, operator, 0n, 1n), wide)).toHaveLength(102);
+    // The section's own serialization, not its header, picks the root rule, so a miner may write either under any
+    // header version: an ids-only root under a version 4 header and a full root under a version 1 header both hold.
+    const relabel = (chain: profile.ErgoRangeEvidence, version: bigint): profile.ErgoRangeEvidence =>
+      ({ ...chain, headers: chain.headers.map(header => ({ ...header, version })) });
+    expect(entriesOf(relabel(evidence(spec3, 1n, 5n, 1n), 4n))).toEqual(baseEntries);
+    expect(entriesOf(relabel(evidence(spec3, 1n, 5n, 3n), 1n))).toEqual(baseEntries);
+    // Neither rule over other ids holds.
+    const foreign = evidence(spec3, 1n, 5n), swapped = { ...foreign, blocks: foreign.blocks.map((block, i) => ({ ...block, transactions: evidence(spec3, 1n, 5n).blocks[i]!.transactions })) };
+    expect(profile.ergoRangeVerifier(profileOf(swapped), swapped)!.range(request(profile.ergoProfileIdentity(profileOf(swapped)), 1, operator, 0n, 1n), wide)).toBeUndefined();
   });
 
   it("answers every kind from the record alone and the reader derives the rules", () => {
@@ -358,14 +377,13 @@ describe("Ergo venue-profile candidate", () => {
     const swapped = profile.ergoRangeVerifier(base, idSwapped)!;
     expect(through(swapped, 0n, 6n)).toBeUndefined();
     expect(through(swapped, 5n, 6n)).toBeInstanceOf(Uint8Array);
-    // A header whose root matches no block, or a version under which the section computes another root, likewise.
+    // A header whose root matches no block likewise; its version does not choose the root rule, so relabelling it does not.
     const header = (i: number, patch: Partial<profile.ErgoHeaderView>): profile.ErgoRangeEvidence =>
       ({ ...chain, headers: chain.headers.map((h, n) => (n === i ? { ...h, ...patch } : h)) });
-    for (const damaged of [header(6, { transactionsRoot: b(0) }), header(6, { version: 1n })]) {
-      const v = profile.ergoRangeVerifier(base, damaged)!;
-      expect(through(v, 0n, 6n)).toBeUndefined();
-      expect(through(v, 0n, 4n)).toBeInstanceOf(Uint8Array);
-    }
+    const unmatched = profile.ergoRangeVerifier(base, header(6, { transactionsRoot: b(0) }))!;
+    expect(through(unmatched, 0n, 6n)).toBeUndefined();
+    expect(through(unmatched, 0n, 4n)).toBeInstanceOf(Uint8Array);
+    expect(through(profile.ergoRangeVerifier(base, header(6, { version: 1n }))!, 0n, 6n)).toBeInstanceOf(Uint8Array);
     // A duplicate section, a block of another chain, an empty section, a root-failing twin and a malformed block change no answer.
     const twin = structuredClone(chain.blocks[3]!);
     (twin.transactions[0] as { witnessId: Uint8Array }).witnessId = b(7, 31);
@@ -392,7 +410,7 @@ describe("Ergo venue-profile candidate", () => {
       ({ ...chain, headers: chain.headers.map((h, n) => (n === i ? { ...h, ...patch } : h)) });
     expect(profile.ergoRangeVerifier(base, header(4, { parentId: b(0) }))).toBeUndefined();
     expect(profile.ergoRangeVerifier(base, header(4, { height: 6n }))).toBeUndefined();
-    expect(profile.ergoRangeVerifier(base, header(4, { version: 0n }))).toBeUndefined();
+    expect(profile.ergoRangeVerifier(base, header(4, { version: 256n }))).toBeUndefined();
     // The anchor's own parent is below the index space and is not read; the child's parent is the anchor.
     expect(profile.ergoRangeVerifier(base, header(0, { parentId: b(1) }))).toBeDefined();
     expect(profile.ergoRangeVerifier(base, header(1, { parentId: b(1) }))).toBeUndefined();
