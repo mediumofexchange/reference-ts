@@ -4,7 +4,10 @@ Updated: 2026-09-25
 
 ## Goal
 
-No slice is open. Take Next 1 (M0 first); copy its acceptance and stop from the plan entry here.
+Next 1, M0 (branch `feat/v3-neutral-core`): kind 1–3 records in `venue-records.ts`,
+a proof verifier over a circuit table as data, the Ergo synthetic reference context.
+Acceptance: transparent and v2 suites unchanged, import closure pinned, reports cited
+as current re-recorded with unchanged verdicts. Stop: no promotion (M1) or guard (M2).
 
 ## Status
 
@@ -44,11 +47,8 @@ No slice is open. Take Next 1 (M0 first); copy its acceptance and stop from the 
 frozen v2 (no fixes), one moded state machine and one reader over §13 answers
 through `RecordVenue`; the candidate runs only on recomputed reference venue identities.
 
-1. v3 core (one segment, local and synthetic Ergo): M0 neutral core
-   (commitment/replacement/revocation codecs off frozen modules, a verifier
-   that takes its identity table as data); M1 promote the codecs, spent root,
-   C4.2–6 library, state machine and single-segment reader; M2 prover and v3
-   operator journal. Proof: issue→pay (fee, capsules)→burn, a seedless reader.
+1. v3 core (one segment, local and synthetic Ergo): M0 (Goal); M1 codecs, spent
+   root, C4.2–6 library, state machine, single-segment reader; M2 prover, journal.
 2. Testnet venue: header rules (probe the own node first), identity
    `moe/venue/ergo-testnet/reference`, a live supply check.
 3. Redemption and failure path, single backing: under service first, then

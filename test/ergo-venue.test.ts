@@ -99,7 +99,7 @@ describe("a venue's identity is the profile's", () => {
     const { reference, ...mainnetContext } = PROFILE;
     expect(reference).toBe("moe/venue/ergo-synthetic/reference");
     expect(new ErgoVenue(mainnetContext, chain.context).id).not.toEqual(VENUE_ID);
-    // It reads only a chain of minimal work: over an anchor of any other difficulty (mainnet's are ~10^14) it refuses,
+    // It reads only a chain of minimal work: over an anchor of any other difficulty (mainnet's began near 1.2e12) it refuses,
     // while venue-ergo's context takes the same anchor.
     for (const bits of [0x0102_0000, 0x0601_1765]) {
       const other = chain.reanchored(bits);
