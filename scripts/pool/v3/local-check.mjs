@@ -16,24 +16,22 @@ import { decodeReplacement, directoryRoot, encodeCommitment, encodeReplacement, 
 import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
 import { LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
-import { replayLocalPackage, replayEvidencePackage, PACKAGE_LIMITS, RANGE_LIMITS } from "./local-replay.mjs";
-import { FixtureVenue } from "./fixture-venue.mjs";
+import { recordReader, replayLocalPackage, replayEvidencePackage, PACKAGE_LIMITS, RANGE_LIMITS } from "./local-replay.mjs";
+import { FixtureVenue } from "../../../dist/record-venue.js";
 import { checkImports } from "./import-check.mjs";
 import { checkScopes } from "./scope-check.mjs";
 import { checkScopeRecovery } from "./scope-recovery-check.mjs";
 import { checkRecovery } from "./recovery-check.mjs";
-import { checkErgoReplay, replayPairs, underErgo } from "./ergo-check.mjs";
+import { checkErgoReplay, ERGO_VENUE, replayPairs, underErgo } from "./ergo-check.mjs";
 import { field } from "../fixtures.mjs";
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration,
   readCandidateKeys } from "./candidate.mjs";
-import { v3Codec, v3ErgoCodec } from "./codec.mjs";
+import { v3Codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../../..");
 assert(process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--ergo"), "unknown local-check option");
 const withErgo = process.argv[2] === "--ergo";
-const ergoFixture = withErgo ? await import("../../../experiments/ergo-range/replay-fixture.mjs") : undefined;
-const ergoAdapter = withErgo ? await import("../../../experiments/ergo-range/replay-venue.mjs") : undefined;
 mkdirSync(join(root, "scratch"), { recursive: true });
 const scratch = realpathSync(join(root, "scratch"));
 const build = realpathSync(mkdtempSync(join(scratch, "pool-v3-local-replay-")));
@@ -44,11 +42,7 @@ const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 const test = async (name, fn) => { await fn(); checks.push(name); };
 let api;
 try {
-  const codec = withErgo ? v3ErgoCodec : v3Codec;
-  if (withErgo) {
-    const { checkErgoOwnership } = await import("../../../experiments/ergo-range/replay-venue-check.mjs");
-    await test("Ergo ownership bounds intrinsic byte views before getters can hide, grow or detach storage", () => checkErgoOwnership(codec));
-  }
+  const codec = v3Codec;
   const canonical = items => items.sort((a, b) => a.kind - b.kind || Buffer.compare(Buffer.from(sha(a.payload), "hex"), Buffer.from(sha(b.payload), "hex")));
   function portable(input) {
     const p = input.package, directories = [p.directory, ...(p.directories ?? [])];
@@ -81,13 +75,10 @@ try {
   // fixture's own witnessed records (pool-v3 §13.2), never from the package.
   const verifier = { configuration, verify: (kind, publicInputs, proof) => verifierBackend.verifyProof({
     proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
-  }, options), record: data => {
-    const witnessed = FixtureVenue.from(data);
-    return { evidenceKind: "fixture-verifier", range: request => witnessed.answer(request, codec, RANGE_LIMITS), witnessedIndex: () => witnessed.witnessedIndex, lag: () => witnessed.lag };
-  } };
-  // Under --ergo every fixture names the candidate profile's identity, so any group can be replayed through the adapter.
+  }, options), record: data => recordReader(FixtureVenue.from(data), "fixture-verifier") };
+  // Under --ergo every fixture names the synthetic chain's venue identity, so any group can be replayed through ErgoVenue.
   const domain = codec.configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16);
-  const venue = withErgo ? codec.ergoProfileIdentity(ergoFixture.profile) : b(12);
+  const venue = withErgo ? ERGO_VENUE : b(12);
   const payerSeed = b(21), receiverSeed = b(22), issuerKey = ed25519.getPublicKey(issuerSecret);
   const operator = ed25519.getPublicKey(operatorSecret);
   const termsFields = { obligor: issuerKey, payout: { thing: "test units", quantumExponent: 0, perUnit: 1n },
@@ -1106,14 +1097,14 @@ try {
   });
   let ergo;
   if (withErgo) {
-    // Every group above, replayed again through the candidate Ergo verifier from raw sections.
+    // Every group above, replayed again through ErgoVenue over the synthetic chain.
     const groups = [
       { label: "original", payload: complete, result: audit }, { label: "original.receiver", payload: { ...complete, seed: receiverSeed }, result: receiver },
       { label: "dependency", payload: extended, result: dependency },
       ...replayPairs({ imported, silent, scoped, scopeRecovery, recovery }, { receiverSeed }),
     ];
     ergo = await checkErgoReplay({ groups, primary: { payload: silent.payload, result: silent.result },
-      fixture: ergoFixture, adapter: ergoAdapter, codec, verifier, portable, test });
+      codec, verifier, portable, test });
     // Fresh processes: the primary seedless and receiver reads and a two-backing recovery read.
     const fresh = (payload, result) => ({ ...ergo.convert(payload), expected: underErgo(result) });
     ergo.processes = [fresh(silent.payload, silent.result), fresh({ ...silent.payload, seed: receiverSeed }, silent.receiver),
@@ -1170,13 +1161,13 @@ try {
       assert.equal(answer.status, "lapsed-selection"); assert.equal(answer.audit, null); assert.deepEqual(answer.candidates, []);
     }
   });
-  if (withErgo) await test("fresh seedless and receiver processes independently replay Ergo blocks and refuse missing or tampered sections", () => {
-    // Headers are a separate reader trust input, written per chain beside the independently held key files.
-    for (const { input, headers, expected } of ergo.processes) {
-      writeFileSync(join(build, "ergo-headers.v8"), serialize(headers));
+  if (withErgo) await test("fresh seedless and receiver processes independently verify Ergo blocks and refuse missing or tampered sections", () => {
+    // Each process chooses its own anchor and profile, reads its pin beside the keys, and verifies the package's blocks itself.
+    for (const { input, pin, expected } of ergo.processes) {
+      writeFileSync(join(build, "ergo-pin.bin"), pin);
       assert.deepEqual(worker(input, "--ergo"), expected);
     }
-    writeFileSync(join(build, "ergo-headers.v8"), serialize(ergo.primary.headers));
+    writeFileSync(join(build, "ergo-pin.bin"), ergo.primary.pin);
     for (const payload of [ergo.missing, ergo.tampered]) {
       for (const seed of [undefined, receiverSeed]) {
         const result = worker({ ...payload, ...(seed === undefined ? {} : { seed }) }, "--ergo");
@@ -1215,7 +1206,7 @@ try {
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-22", specification: V3_SPECIFICATION, node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-23", specification: V3_SPECIFICATION, node: process.version,
     compactIntrinsic: intrinsicPairs.map(item => ({ packageBytes: portable(item.payload).package.length, result: item.result })),
     compactAuthorizations: authorizationPairs.map(item => ({ packageBytes: portable(item.payload).package.length, result: item.result })),
     compactFaults: { faultRecordBytes: imported.compact.faultBytes,
@@ -1251,13 +1242,13 @@ try {
       absentClause: scoped.nonService.resultY.audit.range.nonService ?? null,
       recovery: scopeRecovery.nonService.result.audit.range.nonService,
       recoveryOtherBacking: scopeRecovery.nonService.resultY.audit.range.nonService },
-    ...(withErgo ? { ergo: { evidence: "synthetic-headers-and-exact-transaction-bytes", profile: hex(codec.ergoProfileIdentity(ergoFixture.profile)),
+    ...(withErgo ? { ergo: { evidence: "ergo-venue-verified-synthetic-chain", profile: hex(ERGO_VENUE),
       ...ergo.counts, freshProcesses: ergo.processes.length, audit: ergo.primary.result } } : {}),
-    limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results separately name their synthetic-header provenance; neither establishes authenticated chain evidence.",
+    limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results name their synthetic-chain provenance; neither establishes mainnet chain evidence.",
       "Multi-backing imports validate every scoped predecessor and snapshot, merge shared events once with causal recovery conflict checks, and retain per-backing totals, adoption indices and original-tree paths through split, rejoin, exact recovery adoption and continuation. Receipt queries authenticate the complete original scope and exact original/adopted inclusion, retaining liability and the earliest silence/term boundary. Non-service counts use each selected backing's own clause and canonical state strictly before judgment, preserving request ages, imported roots and spent/lock state across scopes and recovery. Import lapse uses snapshot-bound scope and signed terms without its event history; silence still requires the opening and canonical clock dependencies. Live validity requires full committed event evidence; single-backing or shared-scope continuations with complete sibling state and silence-clock dependencies may replace only an intrinsically faulty target trail under section 9.1 after complete opening/predecessor resolution, at a target position after the record-derived adopted block. Selected state retains its complete selection envelope. Checkpoint/event work remains bounded; large histories can refuse resources.",
       "Compact openings authenticate committed target bytes and retain proof/signature-rejection facts through import refusal or scope lapse. Issue and acceptance read the exact scoped obligor; withdrawal and release resolve the named demand's canonical statement preimage. A matching preimage establishes no demand admission/standing and its enclosing opening need not authenticate. Signature facts do not require a valid proof; unsupported authorization widths and zero-owner acceptance messages are not classified. The classifier may consume exact proof/issue-K rejection to exclude only a supported continuation with complete scoped snapshots and terms, a valid opening, known last-valid state, every resolved sibling clock and a target position after its record-derived adopted block; positions inside the block keep ordinary evidence. Other facts remain observational; missing ancestors, ranges or unsupported contexts still refuse. No target fact supplies state or permits rollback. Local budgets can refuse resources; verifier failures are not rejection.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };
-  if (withErgo) report.limits.push("The candidate Ergo adapter hashes and frames each transaction's unsigned bytes with the profile's own framer, no decoder, and checks roots against independently selected synthetic headers. No proof of work, chain selection, node acceptance or venue-profile adoption is established.");
+  if (withErgo) report.limits.push("ErgoVenue verifies the synthetic reference chain's headers under the mainnet rules at difficulty 1 from the reader's own anchor context and reads every section that reproduces its header's root, framing unsigned bytes with the profile's own framer, and reads it only where its clock stands on the block the reader pinned: at difficulty 1 anyone can mine a heavier branch, so the pin, held beside the keys, stands in for work. The chain is synthetic: no mainnet work, node acceptance or venue-profile adoption is established.");
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");
   console.log(`PASS: ${checks.length} local replay groups, ${metrics.length} real proofs; scratch/pool-v3-local-replay-results.json`);
 } finally {

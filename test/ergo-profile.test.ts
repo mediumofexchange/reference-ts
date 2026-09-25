@@ -9,12 +9,11 @@ import { encodeCommitment, signCommitment } from "../src/commitment.js";
 import { encodeReplacement, replacementMessage, ROLE_OPERATOR } from "../src/replacement.js";
 import { encodeRevocation, signRevocation } from "../src/revocation.js";
 
-// Synthetic block views: real signed records inside register constants,
-// headers linked by synthetic ids, the first header of each chain serving as
-// the profile's anchor so index 0 is height 2. No Ergo library, node or
-// header authentication is involved; the experiment checks the same rules
-// over Fleet-serialized, sigma-rust-decoded bytes, the real fixture roots,
-// real register constants and the real genesis header as an anchor.
+// Synthetic block sections: real signed records inside register constants,
+// in transactions written here in the node's unsigned serialization, each
+// section read against its own transaction root. No Ergo library or node is
+// involved; header authentication and the venue's clock are ErgoVenue's
+// (ergo-venue.test.ts), and the supplier tests reproduce real mainnet roots.
 const cat = (...parts: Uint8Array[]): Buffer => Buffer.concat(parts);
 const sha = (bytes: Uint8Array): Buffer => createHash("sha256").update(bytes).digest();
 const b = (n: number, width = 32): Buffer => Buffer.alloc(width, n);
@@ -74,54 +73,44 @@ const transaction = (outputs: readonly Output[], shape: Shape = {}): profile.Erg
   return { unsigned: unsignedBytes(outputs, seed, shape), witnessId: blake2b(Buffer.from(seed), { dkLen: 32 }).subarray(1) };
 };
 const committed = (t: profile.ErgoTransactionView): { id: Uint8Array; witnessId: Uint8Array } => ({ id: blake2b(t.unsigned, { dkLen: 32 }), witnessId: t.witnessId });
-interface Spec { readonly [height: string]: Output[][] }
-/** Heights `from` through `to`; each block's transactions from the spec, else one plain transaction. */
-function evidence(spec: Spec, from: bigint, to: bigint, version = 3n): profile.ErgoRangeEvidence {
-  const headers: profile.ErgoHeaderView[] = [], blocks: profile.ErgoBlockView[] = [];
-  let parentId: Uint8Array = new Uint8Array(32);
-  for (let height = from; height <= to; height++) {
-    const transactions = (spec[height.toString()] ?? [[plain]]).map(outputs => transaction(outputs));
-    const transactionsRoot = profile.transactionsRoot(version, transactions.map(committed));
-    const id = sha(cat(Buffer.from(height.toString()), transactionsRoot, parentId));
-    headers.push({ id, parentId, height, version, transactionsRoot });
-    blocks.push({ headerId: id, transactions });
-    parentId = id;
-  }
-  return { headers, blocks };
+/** A section's root under `version`'s rule, over its transactions' ids (and, but for version 1, witness ids). */
+const rootOf = (transactions: readonly profile.ErgoTransactionView[], version = 3n): Uint8Array =>
+  profile.transactionsRoot(version, transactions.map(committed));
+/** The profile under test; its anchor names no chain here, since sections are read directly. */
+const base: profile.ErgoProfile = { anchor: b(99), depth: 2n, scripts };
+const identity = profile.ergoProfileIdentity(base);
+interface Spec { readonly [index: string]: Output[][] }
+/** Indices 0 through `to`; each block's transactions from the spec, else one plain transaction. */
+function sections(spec: Spec, to: bigint): profile.ErgoTransactionView[][] {
+  const out: profile.ErgoTransactionView[][] = [];
+  for (let index = 0n; index <= to; index++) out.push((spec[index.toString()] ?? [[plain]]).map(outputs => transaction(outputs)));
+  return out;
 }
-/** The chain's first header is the anchor: its child is index 0, so a chain from height 1 indexes height `h` as `h - 2`. */
-const profileOf = (chain: profile.ErgoRangeEvidence, depth = 2n): profile.ErgoProfile => ({ anchor: chain.headers[0]!.id, depth, scripts });
-const request = (venue: Uint8Array, kind: range.RecordKind, subject: Uint8Array, fromIndex = 0n, toIndex = 6n): range.RangeRequest =>
-  ({ venue, kind, subject, fromIndex, toIndex });
-/** The kind-1 entries for `operator` over indices 0–1 of a chain under its own profile. */
-function entriesOf(chain: profile.ErgoRangeEvidence): string[] {
-  const verifier = profile.ergoRangeVerifier(profileOf(chain), chain)!;
-  return answer(verifier, 1, operator, 0n, 1n).entries.map(e => `${e.index}/${e.ordinal}/${Buffer.from(e.record).toString("hex")}`);
-}
-function answer(verifier: profile.ErgoRangeVerifier, kind: range.RecordKind, subject: Uint8Array, fromIndex = 0n, toIndex = 6n): range.RangeAnswer {
-  const r = request(verifier.identity, kind, subject, fromIndex, toIndex), bytes = verifier.range(r, wide);
-  expect(bytes).toBeInstanceOf(Uint8Array);
-  return range.decodeRangeAnswer(bytes!, r, wide);
+const request = (kind: range.RecordKind, subject: Uint8Array, fromIndex = 0n, toIndex = 6n): range.RangeRequest =>
+  ({ venue: identity, kind, subject, fromIndex, toIndex });
+/** §7's answer as a reader holding these sections derives it: each section read against its own root. */
+function answer(blocks: readonly profile.ErgoTransactionView[][], kind: range.RecordKind, subject: Uint8Array, fromIndex = 0n, toIndex = 6n): range.RangeAnswer {
+  const attributed = blocks.map(transactions => profile.attributeSection(base, transactions, rootOf(transactions)));
+  const r = request(kind, subject, fromIndex, toIndex), entries = profile.rangeEntries(i => attributed[Number(i)], r);
+  expect(entries).toBeDefined();
+  return range.decodeRangeAnswer(range.encodeRangeAnswer({ request: r, entries: entries! }, wide), r, wide);
 }
 
 // A record whose bytes are the right length but whose signature is nobody's: carried, never held.
 const junkCommitment = cat(commitment(2n).subarray(0, 72), b(0, 64));
 const junkCommitmentA = cat(Buffer.from(commitment(2n)).subarray(0, 8), b(1, 32), operator, b(0, 64));
 const piece = (n: number, length = 40): Buffer => b(n, length);
-// Heights 4..9 are indices 2..7 under a chain from height 1.
 const spec: Spec = {
-  4: [[plain, record(1, operator, commitment(1n))]],
-  5: [[record(2, backing, replacement(30n)), record(1, operator, junkCommitmentA, [coll(b(2, 3))])]],
-  6: [[record(1, operator, commitment(3n)), record(1, operator, commitment(2n))], [record(4, backing, piece(1))]],
-  7: [[plain], [record(4, backing, piece(2)), record(4, backing, piece(3)), record(4, backing, piece(4)), plain, record(4, backingY, piece(5))]],
-  8: [[record(3, obligor, revocation), record(3, obligor, revocation), record(1, other, commitment(7n, otherSecret))]],
-  9: [[record(1, operator, commitment(9n))]],
+  2: [[plain, record(1, operator, commitment(1n))]],
+  3: [[record(2, backing, replacement(30n)), record(1, operator, junkCommitmentA, [coll(b(2, 3))])]],
+  4: [[record(1, operator, commitment(3n)), record(1, operator, commitment(2n))], [record(4, backing, piece(1))]],
+  5: [[plain], [record(4, backing, piece(2)), record(4, backing, piece(3)), record(4, backing, piece(4)), plain, record(4, backingY, piece(5))]],
+  6: [[record(3, obligor, revocation), record(3, obligor, revocation), record(1, other, commitment(7n, otherSecret))]],
+  7: [[record(1, operator, commitment(9n))]],
 };
 
 describe("Ergo venue-profile candidate", () => {
   it("names the venue by anchor, depth and every kind's location", () => {
-    const chain = evidence({}, 1n, 3n), base = profileOf(chain);
-    const identity = profile.ergoProfileIdentity(base);
     expect(identity).toHaveLength(32);
     expect(profile.ergoLag(base)).toBe(3n);
     const variants: profile.ErgoProfile[] = [
@@ -143,7 +132,6 @@ describe("Ergo venue-profile candidate", () => {
   });
 
   it("hashes venue-ergo's context unless the profile names a reference context from the closed set", () => {
-    const base = profileOf(evidence({}, 1n, 3n));
     const u32 = (n: number): Buffer => { const out = Buffer.alloc(4); out.writeUInt32BE(n); return out; };
     const u64 = (n: bigint): Buffer => { const out = Buffer.alloc(8); out.writeBigUInt64BE(n); return out; };
     const prefixed = (bytes: Uint8Array): Buffer => cat(u32(bytes.length), bytes);
@@ -188,7 +176,6 @@ describe("Ergo venue-profile candidate", () => {
   });
 
   it("attributes by location and shape, reassembles runs and omits nothing else", () => {
-    const base = profileOf(evidence({}, 1n, 1n));
     const big = piece(6, 4000), bound = range.MAX_RANGE_RECORD_BYTES[4];
     const exactly = [...Array(32).fill(big), piece(7, bound - 32 * 4000)], over = [...Array(33).fill(big)];
     const objects = profile.attributeBlock(base, [
@@ -283,214 +270,107 @@ describe("Ergo venue-profile candidate", () => {
 
   it("gives a transaction outside the framer's grammar no record but keeps its block's section", () => {
     const hidden = record(1, operator, commitment(1n), [Buffer.from("0502", "hex")]);
-    const chain = evidence({ 2: [[hidden], [record(1, operator, commitment(2n))]], 3: [[hidden]] }, 1n, 5n);
-    const verifier = profile.ergoRangeVerifier(profileOf(chain), chain)!;
-    expect(answer(verifier, 1, operator, 0n, 1n).entries.map(e => [e.index, e.ordinal])).toEqual([[0n, 0n]]);
-    expect(answer(verifier, 1, operator, 1n, 1n).entries).toHaveLength(0);
-    // Every block version supplies its section: the node checks a block's version only at a voting epoch's first
+    const blocks = sections({ 0: [[hidden], [record(1, operator, commitment(2n))]], 1: [[hidden]] }, 1n);
+    expect(answer(blocks, 1, operator, 0n, 1n).entries.map(e => [e.index, e.ordinal])).toEqual([[0n, 0n]]);
+    expect(answer(blocks, 1, operator, 1n, 1n).entries).toHaveLength(0);
+    // A section reproduces its root under either rule, so its own serialization, not its header's version, picks the
+    // rule: every version supplies its section. The node checks a block's version only at a voting epoch's first
     // block, so any miner can carry any version mid-epoch, and a gate on it would deny every range through the block.
-    const spec3 = { 3: [[record(1, operator, commitment(1n))]] };
-    const baseEntries = entriesOf(evidence(spec3, 1n, 5n));
-    expect(baseEntries).toHaveLength(1);
-    for (const version of [0n, 2n, 4n, 5n, 127n, 128n, 255n]) {
-      const chain = evidence(spec3, 1n, 5n, version);
-      expect(entriesOf(chain)).toEqual(baseEntries);
-      // A root over ids and witness ids binds the witness ids.
-      const rewitnessed = { ...chain, blocks: chain.blocks.map(block => ({ ...block, transactions: block.transactions.map(t => ({ ...t, witnessId: b(9, 31) })) })) };
-      expect(profile.ergoRangeVerifier(profileOf(rewitnessed), rewitnessed)!.range(request(profile.ergoProfileIdentity(profileOf(rewitnessed)), 1, operator, 0n, 1n), wide)).toBeUndefined();
+    const transactions = [transaction([record(1, operator, commitment(1n))])];
+    const objects = profile.attributeSection(base, transactions, rootOf(transactions))!;
+    expect(objects.map(o => [o.kind, o.ordinal])).toEqual([[1, 0n]]);
+    for (const version of [0n, 1n, 2n, 4n, 5n, 127n, 128n, 255n]) {
+      expect(profile.attributeSection(base, transactions, rootOf(transactions, version))).toEqual(objects);
     }
-    // Version 1 commits to the ids alone: any witness id leaves its sections and answers as they were.
-    const v1 = evidence({ 3: [[record(1, operator, commitment(1n))]] }, 1n, 5n, 1n), v1Profile = profileOf(v1);
-    const v1Answer = Buffer.from(profile.ergoRangeVerifier(v1Profile, v1)!.range(request(profile.ergoProfileIdentity(v1Profile), 1, operator, 0n, 1n), wide)!);
-    const rewitnessed = { ...v1, blocks: v1.blocks.map(block => ({ ...block, transactions: block.transactions.map(t => ({ ...t, witnessId: b(9, 31) })) })) };
-    expect(Buffer.from(profile.ergoRangeVerifier(v1Profile, rewitnessed)!.range(request(profile.ergoProfileIdentity(v1Profile), 1, operator, 0n, 1n), wide)!)).toEqual(v1Answer);
-    expect(v1Answer.length).toBe(102 + 20 + 136);
-    // The section's own serialization, not its header, picks the root rule, so a miner may write either under any
-    // header version: an ids-only root under a version 4 header and a full root under a version 1 header both hold.
-    const relabel = (chain: profile.ErgoRangeEvidence, version: bigint): profile.ErgoRangeEvidence =>
-      ({ ...chain, headers: chain.headers.map(header => ({ ...header, version })) });
-    expect(entriesOf(relabel(evidence(spec3, 1n, 5n, 1n), 4n))).toEqual(baseEntries);
-    expect(entriesOf(relabel(evidence(spec3, 1n, 5n, 3n), 1n))).toEqual(baseEntries);
+    // A root over ids and witness ids binds the witness ids; version 1's ids-only root does not.
+    const rewitnessed = transactions.map(t => ({ ...t, witnessId: b(9, 31) }));
+    expect(profile.attributeSection(base, rewitnessed, rootOf(transactions, 3n))).toBeUndefined();
+    expect(profile.attributeSection(base, rewitnessed, rootOf(transactions, 1n))).toEqual(objects);
     // Neither rule over other ids holds.
-    const foreign = evidence(spec3, 1n, 5n), swapped = { ...foreign, blocks: foreign.blocks.map((block, i) => ({ ...block, transactions: evidence(spec3, 1n, 5n).blocks[i]!.transactions })) };
-    expect(profile.ergoRangeVerifier(profileOf(swapped), swapped)!.range(request(profile.ergoProfileIdentity(profileOf(swapped)), 1, operator, 0n, 1n), wide)).toBeUndefined();
+    expect(profile.attributeSection(base, [transaction([record(1, operator, commitment(1n))])], rootOf(transactions))).toBeUndefined();
   });
 
   it("answers every kind from the record alone and the reader derives the rules", () => {
-    const chain = evidence(spec, 1n, 10n), base = profileOf(chain), verifier = profile.ergoRangeVerifier(base, chain)!;
-    expect(verifier).toBeDefined();
-    expect(verifier.witnessedIndex()).toBe(6n);
-    expect(verifier.lag()).toBe(3n);
-    expect(Buffer.from(verifier.identity)).toEqual(Buffer.from(profile.ergoProfileIdentity(base)));
+    const blocks = sections(spec, 7n);
+    expect(profile.ergoLag(base)).toBe(3n);
 
-    const commitments = answer(verifier, 1, operator);
+    const commitments = answer(blocks, 1, operator);
     expect(commitments.entries.map(e => [e.index, e.ordinal])).toEqual([[2n, 0n], [3n, 0n], [4n, 0n], [4n, 0n]]);
     expect(Buffer.compare(commitments.entries[2]!.record, commitments.entries[3]!.record)).toBeLessThan(0);
     const held = range.heldCommitments(commitments);
     expect(held.held.map(h => [h.index, h.commitment.sequence])).toEqual([[2n, 1n], [4n, 2n], [4n, 3n]]);
     expect(held.next).toEqual({ fromIndex: 7n, highest: 3n });
 
-    const replacements = answer(verifier, 2, backing);
+    const replacements = answer(blocks, 2, backing);
     expect(range.admittedReplacements(replacements, rule).map(a => a.index)).toEqual([3n]);
     expect(range.admittedReplacements(replacements, undefined)).toHaveLength(0);
 
-    const revocations = answer(verifier, 3, obligor);
+    const revocations = answer(blocks, 3, obligor);
     expect(revocations.entries.map(e => e.index)).toEqual([6n, 6n]);
     expect(range.revocationIndex(revocations)).toBe(6n);
     expect(range.firstWitnessed(revocations)).toHaveLength(1);
-    expect(range.revocationIndex(answer(verifier, 3, obligor, 0n, 5n))).toBeUndefined();
+    expect(range.revocationIndex(answer(blocks, 3, obligor, 0n, 5n))).toBeUndefined();
 
-    const merged = range.mergeVenueOrder([answer(verifier, 4, backing), answer(verifier, 4, backingY)]);
+    const merged = range.mergeVenueOrder([answer(blocks, 4, backing), answer(blocks, 4, backingY)]);
     expect(merged.map(e => [e.index, e.ordinal.toString(16), e.record.length, Buffer.from(e.subject).equals(backingY)]))
       .toEqual([[4n, "100000000", 40, false], [5n, "100000000", 120, false], [5n, "100000004", 40, true]]);
 
-    const empty = answer(verifier, 1, other, 0n, 5n);
+    const empty = answer(blocks, 1, other, 0n, 5n);
     expect(empty.entries).toHaveLength(0);
-    expect(verifier.range(request(verifier.identity, 1, other, 0n, 5n), wide)).toHaveLength(102);
-    expect(answer(verifier, 1, other, 5n, 6n).entries.map(e => e.index)).toEqual([6n]);
-    expect(range.heldCommitments(answer(verifier, 1, other, 6n, 6n), { fromIndex: 6n, highest: 0n }).held.map(h => h.commitment.sequence)).toEqual([7n]);
+    expect(range.encodeRangeAnswer(empty, wide)).toHaveLength(102);
+    expect(answer(blocks, 1, other, 5n, 6n).entries.map(e => e.index)).toEqual([6n]);
+    expect(range.heldCommitments(answer(blocks, 1, other, 6n, 6n), { fromIndex: 6n, highest: 0n }).held.map(h => h.commitment.sequence)).toEqual([7n]);
   });
 
-  it("gives no answer where the evidence does not establish the range", () => {
-    const chain = evidence(spec, 1n, 10n), base = profileOf(chain), verifier = profile.ergoRangeVerifier(base, chain)!;
-    const ask = (r: Partial<range.RangeRequest>): Uint8Array | undefined =>
-      verifier.range({ ...request(verifier.identity, 1, operator), ...r }, wide);
-    expect(ask({})).toBeInstanceOf(Uint8Array);
-    expect(ask({ toIndex: 7n })).toBeUndefined();
-    expect(ask({ venue: b(12) })).toBeUndefined();
-    expect(ask({ fromIndex: 7n, toIndex: 6n })).toBeUndefined();
-    expect(() => verifier.range(request(verifier.identity, 1, operator, 0n, 4n), { maxBytes: 200n, maxEntries: 8n })).toThrow(range.RangeLimitError);
-
-    // The chain must contain the anchor's child, index 0; headers at or below the anchor are linkage only.
-    expect(profile.ergoRangeVerifier(base, { headers: chain.headers.slice(2), blocks: chain.blocks.slice(2) })).toBeUndefined();
-    const fromChild = profile.ergoRangeVerifier(base, { headers: chain.headers.slice(1), blocks: chain.blocks.slice(1) })!;
-    expect(Buffer.from(fromChild.range(request(fromChild.identity, 1, operator), wide)!)).toEqual(Buffer.from(ask({})!));
-    expect(verifier.range(request(verifier.identity, 1, operator, 0n, 0n), wide)).toHaveLength(102);
+  it("answers no range through an index without its section", () => {
+    const attributed = sections(spec, 7n).map(transactions => profile.attributeSection(base, transactions, rootOf(transactions)));
+    const through = (at: (index: bigint) => readonly profile.AttributedObject[] | undefined, fromIndex: bigint, toIndex: bigint): range.RangeEntry[] | undefined =>
+      profile.rangeEntries(at, request(1, operator, fromIndex, toIndex));
+    const all = (index: bigint): readonly profile.AttributedObject[] | undefined => attributed[Number(index)];
+    expect(through(index => (index === 3n ? undefined : all(index)), 0n, 6n)).toBeUndefined();
+    expect(through(index => (index === 3n ? undefined : all(index)), 4n, 6n)!.map(e => e.index)).toEqual([4n, 4n]);
     // Index 0 is a block like any other: without its section the ranges through it are unresolved.
-    const noOrigin = profile.ergoRangeVerifier(base, { headers: chain.headers, blocks: chain.blocks.slice(2) })!;
-    expect(noOrigin.range(request(noOrigin.identity, 1, operator, 0n, 0n), wide)).toBeUndefined();
-    expect(noOrigin.range(request(noOrigin.identity, 1, operator, 1n, 6n), wide)).toBeInstanceOf(Uint8Array);
-    // Index 0 holds objects, and nothing is witnessed until the tip reaches the origin plus the depth.
-    const early = evidence({ 2: [[record(1, operator, commitment(1n))]] }, 1n, 4n);
-    expect(profile.ergoRangeVerifier(profileOf(early, 3n), early)).toBeUndefined();
-    const atOrigin = profile.ergoRangeVerifier(profileOf(early), early)!;
-    expect(atOrigin.witnessedIndex()).toBe(0n);
-    expect(answer(atOrigin, 1, operator, 0n, 0n).entries.map(e => e.index)).toEqual([0n]);
-
-    // A height without its section leaves every range through it unresolved; other ranges answer.
-    const missing = { headers: chain.headers, blocks: chain.blocks.filter(block => !Buffer.from(block.headerId).equals(chain.headers[3]!.id)) };
-    const gapped = profile.ergoRangeVerifier(base, missing)!;
-    expect(gapped.range(request(gapped.identity, 1, operator, 0n, 6n), wide)).toBeUndefined();
-    expect(gapped.range(request(gapped.identity, 1, operator, 5n, 6n), wide)).toBeInstanceOf(Uint8Array);
+    expect(through(index => (index === 0n ? undefined : all(index)), 0n, 0n)).toBeUndefined();
+    expect(through(all, 0n, 0n)).toEqual([]);
+    // An answer past the reader's budget is refused, never cut.
+    const entries = through(all, 0n, 4n)!;
+    expect(() => range.encodeRangeAnswer({ request: request(1, operator, 0n, 4n), entries }, { maxBytes: 200n, maxEntries: 8n })).toThrow(range.RangeLimitError);
   });
 
-  it("passes over blocks that are not this chain's sections instead of refusing every read", () => {
-    const chain = evidence(spec, 1n, 10n), base = profileOf(chain), verifier = profile.ergoRangeVerifier(base, chain)!;
-    const full = Buffer.from(verifier.range(request(verifier.identity, 1, operator), wide)!);
-    const through = (v: profile.ErgoRangeVerifier, fromIndex: bigint, toIndex: bigint): Uint8Array | undefined =>
-      v.range(request(v.identity, 1, operator, fromIndex, toIndex), wide);
-    // A block whose root fails its header, here by one flipped unsigned byte, supplies no section for its height.
-    const idSwapped = structuredClone(chain);
-    const flipped = idSwapped.blocks[3]!.transactions[0]!.unsigned as Uint8Array;
-    flipped[40] = flipped[40]! ^ 1;
-    const swapped = profile.ergoRangeVerifier(base, idSwapped)!;
-    expect(through(swapped, 0n, 6n)).toBeUndefined();
-    expect(through(swapped, 5n, 6n)).toBeInstanceOf(Uint8Array);
-    // A header whose root matches no block likewise; its version does not choose the root rule, so relabelling it does not.
-    const header = (i: number, patch: Partial<profile.ErgoHeaderView>): profile.ErgoRangeEvidence =>
-      ({ ...chain, headers: chain.headers.map((h, n) => (n === i ? { ...h, ...patch } : h)) });
-    const unmatched = profile.ergoRangeVerifier(base, header(6, { transactionsRoot: b(0) }))!;
-    expect(through(unmatched, 0n, 6n)).toBeUndefined();
-    expect(through(unmatched, 0n, 4n)).toBeInstanceOf(Uint8Array);
-    expect(through(profile.ergoRangeVerifier(base, header(6, { version: 1n }))!, 0n, 6n)).toBeInstanceOf(Uint8Array);
-    // A duplicate section, a block of another chain, an empty section, a root-failing twin and a malformed block change no answer.
-    const twin = structuredClone(chain.blocks[3]!);
-    (twin.transactions[0] as { witnessId: Uint8Array }).witnessId = b(7, 31);
-    const malformed = { headerId: chain.headers[2]!.id, transactions: [{ unsigned: chain.blocks[2]!.transactions[0]!.unsigned, witnessId: b(1) }] } as unknown as profile.ErgoBlockView;
-    const noisy = { ...chain, blocks: [twin, { headerId: b(9), transactions: chain.blocks[0]!.transactions }, malformed,
-      { headerId: chain.headers[0]!.id, transactions: [] }, ...chain.blocks, chain.blocks[3]!] };
-    expect(Buffer.from(through(profile.ergoRangeVerifier(base, noisy)!, 0n, 6n)!)).toEqual(full);
-    const onlyMalformed = profile.ergoRangeVerifier(base, { ...chain, blocks: [chain.blocks[1]!, malformed] })!;
-    expect(through(onlyMalformed, 0n, 0n)).toHaveLength(102);
-    expect(through(onlyMalformed, 1n, 1n)).toBeUndefined();
-    expect(Buffer.from(through(profile.ergoRangeVerifier(base, { ...chain, blocks: [...chain.blocks].reverse() })!, 0n, 6n)!)).toEqual(full);
-    // The header is found before a transaction is read: a block of another chain, or a second one for a supplied index,
-    // costs the reader no hashing, so none of its transactions is touched.
-    let touched = 0;
-    const untouchable = { get unsigned() { touched++; return b(1); }, get witnessId() { touched++; return b(1, 31); } } as unknown as profile.ErgoTransactionView;
-    const unread = { ...chain, blocks: [...chain.blocks, { headerId: b(9), transactions: [untouchable] }, { headerId: chain.blocks[3]!.headerId, transactions: [untouchable] }] };
-    expect(Buffer.from(through(profile.ergoRangeVerifier(base, unread)!, 0n, 6n)!)).toEqual(full);
-    expect(touched).toBe(0);
+  it("reads a section only where it reproduces its header's root", () => {
+    const transactions = sections(spec, 7n)[4]!, root = rootOf(transactions), full = profile.attributeSection(base, transactions, root)!;
+    expect(full).toHaveLength(3);
+    // One flipped unsigned byte, a transaction dropped, the order changed or a foreign root: not this header's section.
+    const flipped = transactions.map((t, i) => (i === 0 ? { ...t, unsigned: Uint8Array.from(t.unsigned, (x, j) => (j === 40 ? x ^ 1 : x)) } : t));
+    expect(profile.attributeSection(base, flipped, root)).toBeUndefined();
+    expect(profile.attributeSection(base, transactions.slice(1), root)).toBeUndefined();
+    expect(profile.attributeSection(base, [...transactions].reverse(), root)).toBeUndefined();
+    expect(profile.attributeSection(base, transactions, b(0))).toBeUndefined();
+    // An empty section, a malformed view, a non-array and a malformed root are no section, and nothing throws.
+    expect(profile.attributeSection(base, [], root)).toBeUndefined();
+    expect(profile.attributeSection(base, [{ unsigned: transactions[0]!.unsigned, witnessId: b(1) }], root)).toBeUndefined();
+    expect(profile.attributeSection(base, null as unknown as profile.ErgoTransactionView[], root)).toBeUndefined();
+    expect(profile.attributeSection(base, transactions, b(0, 31))).toBeUndefined();
+    expect(profile.attributeSection(base, transactions, root)).toEqual(full);
   });
 
-  it("refuses evidence that is not one linked chain containing the anchor's child", () => {
-    const chain = evidence(spec, 1n, 10n), base = profileOf(chain);
-    const header = (i: number, patch: Partial<profile.ErgoHeaderView>): profile.ErgoRangeEvidence =>
-      ({ ...chain, headers: chain.headers.map((h, n) => (n === i ? { ...h, ...patch } : h)) });
-    expect(profile.ergoRangeVerifier(base, header(4, { parentId: b(0) }))).toBeUndefined();
-    expect(profile.ergoRangeVerifier(base, header(4, { height: 6n }))).toBeUndefined();
-    expect(profile.ergoRangeVerifier(base, header(4, { version: 256n }))).toBeUndefined();
-    // The anchor's own parent is below the index space and is not read; the child's parent is the anchor.
-    expect(profile.ergoRangeVerifier(base, header(0, { parentId: b(1) }))).toBeDefined();
-    expect(profile.ergoRangeVerifier(base, header(1, { parentId: b(1) }))).toBeUndefined();
-    expect(profile.ergoRangeVerifier({ ...base, anchor: b(1) }, chain)).toBeUndefined();
-    expect(() => profile.ergoRangeVerifier({ ...base, anchor: new Uint8Array(32) }, chain)).toThrow(EncodingError);
-    // A linked chain that carries the anchor's id again above its child names two candidates for index 0: no verifier.
-    const anchor = b(5), twice = (id: Buffer, parentId: Buffer, height: bigint): profile.ErgoHeaderView =>
-      ({ id, parentId, height, version: 3n, transactionsRoot: b(0) });
-    const once = [twice(b(1), anchor, 10n), twice(b(2), b(1), 11n), twice(b(3), b(2), 12n)];
-    expect(profile.ergoRangeVerifier({ ...base, anchor }, { headers: once, blocks: [] })!.witnessedIndex()).toBe(0n);
-    const again = [twice(b(1), anchor, 10n), twice(anchor, b(1), 11n), twice(b(3), anchor, 12n), twice(b(4), b(3), 13n)];
-    expect(profile.ergoRangeVerifier({ ...base, anchor }, { headers: again, blocks: [] })).toBeUndefined();
-    expect(profile.ergoRangeVerifier(base, { ...chain, headers: [] })).toBeUndefined();
-    expect(profile.ergoRangeVerifier(base, { ...chain, headers: [{ ...chain.headers[0]!, height: 0n }] })).toBeUndefined();
-    const stranger = { ...chain, headers: [...chain.headers, { ...chain.headers[9]!, id: b(3) }] };
-    expect(profile.ergoRangeVerifier(base, stranger)).toBeUndefined();
-    // A chain may start at any height, its first header the anchor; version 1 blocks commit ids alone.
-    const old = evidence(spec, 3n, 8n, 1n);
-    expect(profile.ergoRangeVerifier(profileOf(old), old)).toBeDefined();
-    // Headers are the reader's own chain, so a malformed one is a programming failure; a malformed block is a supplier's and is passed over.
-    for (const garbage of [{ headers: [{ ...chain.headers[0]!, id: "x" }], blocks: [] }, { headers: [{ ...chain.headers[0]!, height: 1 }], blocks: [] }, null, { headers: chain.headers }]) {
-      expect(() => profile.ergoRangeVerifier(base, garbage as unknown as profile.ErgoRangeEvidence)).toThrow(EncodingError);
-    }
-    expect(() => profile.attributeBlock(base, [{ id: b(1), witnessId: b(1, 31), outputs: [] }] as unknown as profile.ErgoTransactionView[])).toThrow(EncodingError);
-  });
-
-  it("owns the profile, the evidence and each request: later reads and mutations change no answer", () => {
-    const chain = evidence(spec, 1n, 10n), base = profileOf(chain);
+  it("owns the profile and each transaction view: a later read changes no attribution", () => {
+    const transactions = sections(spec, 7n)[4]!, root = rootOf(transactions), expected = profile.attributeSection(base, transactions, root);
     // A profile whose location changes after the first read: the identity and the attribution use the same bytes.
     let reads = 0;
     const shifting: profile.ErgoProfile = { ...base, scripts: { ...scripts, get 1() { return reads++ === 0 ? scripts[1] : tree(9); } } };
-    const verifier = profile.ergoRangeVerifier(shifting, chain)!;
-    expect(Buffer.from(verifier.identity)).toEqual(Buffer.from(profile.ergoProfileIdentity(base)));
-    const before = Buffer.from(verifier.range(request(verifier.identity, 1, operator), wide)!);
-    expect(range.decodeRangeAnswer(before, request(verifier.identity, 1, operator), wide).entries).toHaveLength(4);
-    // A request whose fields change after their single read answers the request as first read.
-    let subjectReads = 0, toReads = 0;
-    const drifting = { venue: verifier.identity, kind: 1 as const, fromIndex: 0n,
-      get subject() { return subjectReads++ === 0 ? operator : other; }, get toIndex() { return toReads++ === 0 ? 4n : 8n; } };
-    const drifted = verifier.range(drifting, wide)!;
-    const decoded = range.decodeRangeAnswer(drifted, request(verifier.identity, 1, operator, 0n, 4n), wide);
-    expect(decoded.entries.map(e => e.index)).toEqual([2n, 3n, 4n, 4n]);
-    // Evidence whose fields drift after their single read: a header's height and a transaction's unsigned bytes.
-    let heightReads = 0, bytesReads = 0, witnessReads = 0;
-    const drifted2 = chain.headers[1]!, driftedHeader = { ...drifted2, get height() { return heightReads++ === 0 ? drifted2.height : 4n; } };
-    const trueBytes = chain.blocks[3]!.transactions[0]!.unsigned, otherBytes = unsignedBytes([record(1, operator, commitment(8n))], "other");
-    const trueWitness = chain.blocks[3]!.transactions[0]!.witnessId;
-    const driftedTransaction = { get unsigned() { return bytesReads++ === 0 ? trueBytes : otherBytes; },
-      get witnessId() { return witnessReads++ === 0 ? trueWitness : b(7, 31); } };
-    const driftingEvidence = { headers: chain.headers.map((h, i) => (i === 1 ? driftedHeader : h)),
-      blocks: chain.blocks.map((block, i) => (i === 3 ? { ...block, transactions: [driftedTransaction, ...block.transactions.slice(1)] } : block)) };
-    const stable = profile.ergoRangeVerifier(base, driftingEvidence)!;
-    expect(Buffer.from(stable.range(request(stable.identity, 1, operator), wide)!)).toEqual(before);
-    expect(stable.range(request(stable.identity, 1, operator, 2n, 2n), wide)).toHaveLength(102 + 20 + 136);
-    // Evidence mutated after construction.
-    (chain.blocks[3]!.transactions[0]!.unsigned as Uint8Array).fill(0);
-    (chain.headers[7] as { height: bigint }).height = 100n;
-    (chain.blocks as profile.ErgoBlockView[]).length = 0;
-    expect(Buffer.from(verifier.range(request(verifier.identity, 1, operator), wide)!)).toEqual(before);
-    expect(verifier.witnessedIndex()).toBe(6n);
-    const copy = verifier.identity; copy.fill(0);
-    expect(Buffer.from(verifier.identity)).not.toEqual(Buffer.from(copy));
+    expect(profile.attributeSection(shifting, transactions, root)).toEqual(expected);
+    // A transaction view whose fields change after their single read.
+    let bytesReads = 0, witnessReads = 0;
+    const [first, ...rest] = transactions, otherBytes = unsignedBytes([record(1, operator, commitment(8n))], "other");
+    const drifting = { get unsigned() { return bytesReads++ === 0 ? first!.unsigned : otherBytes; },
+      get witnessId() { return witnessReads++ === 0 ? first!.witnessId : b(7, 31); } };
+    expect(profile.attributeSection(base, [drifting, ...rest], root)).toEqual(expected);
+    expect([bytesReads, witnessReads]).toEqual([1, 1]);
+    // Views mutated after attribution change no object.
+    const copy = transactions.map(t => ({ unsigned: new Uint8Array(t.unsigned), witnessId: new Uint8Array(t.witnessId) }));
+    const objects = profile.attributeSection(base, copy, root)!;
+    copy.forEach(t => t.unsigned.fill(0));
+    expect(objects).toEqual(expected);
   });
 });

@@ -4,7 +4,7 @@ import { compareBytes } from "../../../dist/bytes.js";
 import { identifierOf, VALUE_BOUND } from "../../../dist/pool/field.js";
 import { EMPTY_NOTE_ROOT } from "../../../dist/pool/note-tree.js";
 import { EvidenceRefusal } from "../delivery/evidence-reader.mjs";
-import { effectOf, applyRecovery } from "./recovery-state.mjs";
+import { effectOf, applyRecovery } from "../../../dist/pool/v3/recovery.js";
 import { scopeRecovery, venueOrder } from "./scope-recovery.mjs";
 import { receiptWalk } from "./receipt-state.mjs";
 import { countNonService } from "./non-service.mjs";
@@ -52,7 +52,7 @@ export function mergeFinalizedPrefixes(parents, { check, chargeEvents, codec }) 
       result.events.set(id, event);
       if (codec !== undefined) {
         if (event.record.kind >= 4) check(!result.effective.has(event.identity), "REPEATED_STATEMENT");
-        applyRecovery(event.record, result, codec);
+        applyRecovery(event.record, result);
       }
     }
     for (const root of parent.state.anchors) result.anchors.add(root);

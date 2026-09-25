@@ -1,6 +1,6 @@
 // The reader as its own header source: the header store (src/ergo-headers.ts) verifies real
-// mainnet headers from the profile's pinned anchor, supplied by several nodes it does not trust, and its best chain
-// feeds the range verifier. GET-only reads, cached under scratch/; nothing is submitted and no runtime path reads this
+// mainnet headers from the profile's pinned anchor, supplied by several nodes it does not trust, and names the best
+// chain every source serves. GET-only reads, cached under scratch/; nothing is submitted and no runtime path reads this
 // (the rules are venue-ergo.md §3). Each header's bytes are copied from the node's JSON (src/ergo-supplier.ts); the store
 // derives the id, linkage, difficulty and proof of work from those bytes alone.
 //
@@ -19,9 +19,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
-import { secp256k1 } from "@noble/curves/secp256k1.js";
 import * as headers from "../../dist/ergo-headers.js";
-import * as profile from "../../dist/ergo-profile.js";
 import { parseNodeJson, supplyHeader } from "../../dist/ergo-supplier.js";
 import { sourceClosure, sourceHashes } from "../../scripts/pool/v3/provenance.mjs";
 
@@ -180,11 +178,6 @@ const expected = { nonce: "pow", nBits: "difficulty", timestampEqualParent: "tim
 const refusals = Object.fromEntries(Object.entries(hostile).map(([name, bytes]) => [name, { expected: expected[name], got: store.add(bytes) }]));
 const refusalsHold = Object.values(refusals).every(r => r.got === r.expected) && store.add(base) === "known";
 
-// The best chain feeds the unchanged range verifier from the pinned anchor.
-const throwaway = n => Buffer.concat([Buffer.from("0008cd", "hex"), secp256k1.getPublicKey(new Uint8Array(32).fill(n), true)]);
-const candidate = { anchor: anchorId, depth: BigInt(depth), scripts: { 1: throwaway(1), 2: throwaway(2), 3: throwaway(3), 4: throwaway(4) } };
-const verifier = profile.ergoRangeVerifier(candidate, { headers: best.headers, blocks: [] });
-const verifierOk = verifier !== undefined && verifier.witnessedIndex() === best.height - BigInt(depth) - BigInt(anchorHeight + 1);
 
 // Recalculations: the oracle's accepted chain at every EIP-37 boundary up to --to.
 let recalculation = null;
@@ -246,7 +239,7 @@ const cost = {
   yearOfHeadersMinutes: round(262_800 * (addMs.reduce((a, b) => a + b, 0) / Math.max(1, addMs.length)) / 60000, 1),
 };
 const passed = best.height === BigInt(to) && agreement.every(a => a.equal) && perSource.every(s => s.refused === null) &&
-  Object.values(contextLinks).every(c => c.links) && refusalsHold && verifierOk && p4OnBest !== false &&
+  Object.values(contextLinks).every(c => c.links) && refusalsHold && p4OnBest !== false &&
   (recalculation === null || (recalculation.unsupplied === 0 && recalculation.powInvalid.length === 0 && recalculation.difficultyDiffering.length === 0 &&
     recalculation.incomplete.length === 0 && recalculation.boundaries === recalculation.expectedBoundaries &&
     recalculation.headersRead === recalculation.expectedHeaders && recalculation.linked === recalculation.boundaries &&
@@ -254,7 +247,7 @@ const passed = best.height === BigInt(to) && agreement.every(a => a.equal) && pe
 report = {
   status: passed ? "passed" : "failed",
   node: process.version,
-  window, sources: sourceInfo, contextLinks, perSource, agreement, p4OnBest, refusals, verifier: { built: verifier !== undefined, witnessedIndex: verifier === undefined ? null : String(verifier.witnessedIndex()) },
+  window, sources: sourceInfo, contextLinks, perSource, agreement, p4OnBest, refusals,
   recalculation, cost,
   cache: { directory: "scratch/ergo-headers", sha256: digest.digest("hex") },
   files,

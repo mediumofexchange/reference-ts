@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { makeBacking, signBacking, type Backing } from "../src/backing.js";
 import { encodeCommitment, signCommitment, type Commitment } from "../src/commitment.js";
 import { DEFAULT_ERGO_DEPTH, ergoAnchorContext, ergoProfile, ErgoVenue, type ErgoReaderPolicy } from "../src/ergo.js";
-import { ergoProfileIdentity, ergoRangeVerifier, type ErgoTransactionView } from "../src/ergo-profile.js";
-import { decodeRangeAnswer, type RangeRequest, type RecordKind } from "../src/record-range.js";
+import { ergoProfileIdentity, type ErgoTransactionView } from "../src/ergo-profile.js";
+import { decodeRangeAnswer, RangeLimitError, type RangeRequest, type RecordKind } from "../src/record-range.js";
 import { isSilent, quietFor } from "../src/recovery.js";
 import { encodeReplacement, operatorAt, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
 import { encodeRevocation, signRevocation } from "../src/revocation.js";
@@ -526,29 +526,36 @@ describe("no supplier is trusted", () => {
 
 describe("its answers are §13's", () => {
   const wide = { maxBytes: 1n << 30n, maxEntries: 1n << 20n };
-  it("equal the evidence verifier's over the same blocks, for every kind, and refuse what the view cannot answer", async () => {
+  it("answer every kind from the verified sections, refuse what the view cannot answer and throw past the reader's budget", async () => {
     const pieces = (n: number) => recordOutput(4, backing.name, new Uint8Array(40).fill(n));
     const at: Records = {
       1: [[committed(commitment(1n, 0xaa))], [pieces(1), pieces(2), plainOutput, pieces(3)]],
       3: [[revoked(SECRETS.backer, KEYS.backer), committed(commitment(2n, 0xab))]],
       4: [[replaced(ruled, replacement(ruled, KEYS.alice, SECRETS.alice, SECRETS.backer2, 30n))]],
     };
-    const { v, blocks } = await synced(12, at);
-    const views = blocks.map(block => ({ id: block.id, parentId: block.parent?.id ?? chain.anchor.id, height: block.height, version: 3n,
-      transactionsRoot: block.bytes.subarray(65, 97) }));
-    const verifier = ergoRangeVerifier(PROFILE, { headers: views, blocks: blocks.map(block => ({ headerId: block.id, transactions: block.section })) })!;
-    expect(verifier.witnessedIndex()).toBe(v.witnessedIndex());
-    const cases: [RecordKind, Uint8Array][] = [[1, KEYS.operator], [2, ruled.name], [3, KEYS.backer], [4, backing.name], [1, KEYS.alice]];
-    for (const [kind, subject] of cases) {
+    const { v } = await synced(12, at);
+    expect(v.witnessedIndex()).toBe(8n);
+    const entries = (kind: RecordKind, subject: Uint8Array): string[] => {
       const request: RangeRequest = { venue: VENUE_ID, kind, subject, fromIndex: 0n, toIndex: 8n };
-      const answer = v.range(request, wide);
-      expect(answer).toEqual(verifier.range(request, wide));
-      expect(decodeRangeAnswer(answer!, request, wide).entries.length).toBe(kind === 4 ? 2 : subject === KEYS.alice ? 0 : kind === 1 ? 2 : 1);
-    }
+      return decodeRangeAnswer(v.range(request, wide)!, request, wide).entries.map(e => `${e.index}/${e.ordinal.toString(16)}/${e.record.length}`);
+    };
+    // Kinds 1–3 at ordinal zero in ascending bytes; a kind-4 run reassembled at its first output's ordinal, a plain output ending it.
+    expect(entries(1, KEYS.operator)).toEqual(["1/0/136", "3/0/136"]);
+    expect(entries(2, ruled.name)).toEqual(["4/0/233"]);
+    expect(entries(3, KEYS.backer)).toEqual(["3/0/96"]);
+    expect(entries(4, backing.name)).toEqual(["1/100000000/80", "1/100000003/40"]);
+    expect(entries(1, KEYS.alice)).toEqual([]);
     const request: RangeRequest = { venue: VENUE_ID, kind: 1, subject: KEYS.operator, fromIndex: 0n, toIndex: 8n };
     expect(v.range({ ...request, toIndex: 9n }, wide)).toBeUndefined();
     expect(v.range({ ...request, venue: new Uint8Array(32) }, wide)).toBeUndefined();
-    expect(v.range(request, { maxBytes: 200n, maxEntries: 10n })).toBeUndefined();
+    expect(v.range({ ...request, fromIndex: 9n, toIndex: 8n }, wide)).toBeUndefined();
+    expect(() => v.range(request, { maxBytes: 200n, maxEntries: 10n })).toThrow(RangeLimitError);
+    // A request whose fields change after their single read is answered as first read.
+    let subjectReads = 0, toReads = 0;
+    const drifting = { venue: VENUE_ID, kind: 1 as const, fromIndex: 0n,
+      get subject() { return subjectReads++ === 0 ? KEYS.operator : KEYS.alice; }, get toIndex() { return toReads++ === 0 ? 2n : 8n; } };
+    const drifted = decodeRangeAnswer(v.range(drifting, wide)!, { ...request, toIndex: 2n }, wide);
+    expect(drifted.entries.map(e => e.index)).toEqual([1n]);
   });
 });
 
@@ -673,5 +680,64 @@ describe("a supplier's malformed answers supply nothing", () => {
     // Junk is not asked again after its first miss; the honest sections fill the rest of the budget.
     expect(asked).toBe(1);
     expect(report.witnessedIndex).toBeLessThan(6n);
+  });
+
+  it("owns each view by its intrinsic bytes: shadowed lengths, detached or shared storage and later mutation change nothing", async () => {
+    const at: Records = { 1: [[committed(commitment(1n, 0xaa))]] };
+    const blocks = branch(8, at), index1 = hex(blocks[1]!.id);
+    const answer = async (substitute: (views: readonly ErgoTransactionView[]) => ErgoTransactionView[], policy?: Partial<ErgoReaderPolicy>) => {
+      const s = serving(blocks);
+      s.substituted.set(index1, substitute(blocks[1]!.section));
+      const v = venue(policy);
+      await v.sync([s]);
+      return v;
+    };
+    const request: RangeRequest = { venue: VENUE_ID, kind: 1, subject: KEYS.operator, fromIndex: 0n, toIndex: 4n };
+    const wide = { maxBytes: 1n << 20n, maxEntries: 10n };
+    const { v: honest } = await synced(8, at);
+    const expected = honest.range(request, wide);
+    // A shadowed length of zero is charged by the view's own length: under a budget the section crosses, the sync
+    // stops exactly where it stops for the same bytes unshadowed.
+    const small = (views: readonly ErgoTransactionView[]) => views.map(t => {
+      const unsigned = new Uint8Array(t.unsigned);
+      Object.defineProperty(unsigned, "length", { value: 0 });
+      return { ...t, unsigned };
+    });
+    const policy = { sectionBytesPerSync: blocks[0]!.section.reduce((n, t) => n + t.unsigned.length + 31, 0) + 40 };
+    const control = (await answer(views => views.map(t => ({ ...t, unsigned: new Uint8Array(t.unsigned) })), policy)).witnessedIndex();
+    expect(control).toBeLessThan(4n);
+    expect((await answer(small, policy)).witnessedIndex()).toBe(control);
+    expect((await answer(small)).range(request, wide)).toEqual(expected);
+    // A detached view supplies no section; shared storage, even behind a shadowed buffer, is copied before it is read.
+    const detached = (views: readonly ErgoTransactionView[]) => views.map(t => {
+      const unsigned = new Uint8Array(t.unsigned);
+      structuredClone(unsigned.buffer, { transfer: [unsigned.buffer] });
+      return { ...t, unsigned };
+    });
+    expect((await answer(detached)).witnessedIndex()).toBe(0n);
+    const shared = (views: readonly ErgoTransactionView[]) => views.map(t => {
+      const unsigned = new Uint8Array(new SharedArrayBuffer(t.unsigned.length));
+      unsigned.set(t.unsigned);
+      Object.defineProperty(unsigned, "buffer", { value: new ArrayBuffer(0) });
+      return { ...t, unsigned };
+    });
+    const copied = await answer(shared);
+    expect(copied.range(request, wide)).toEqual(expected);
+    // Views the supplier mutates after the sync change no answer.
+    const kept: ErgoTransactionView[] = [];
+    const mutable = await answer(views => views.map(t => { const own = { ...t, unsigned: new Uint8Array(t.unsigned) }; kept.push(own); return own; }));
+    kept.forEach(t => t.unsigned.fill(0));
+    expect(mutable.range(request, wide)).toEqual(expected);
+  });
+
+  it("the synthetic supplier stops at parent links that loop or climb rather than following them", async () => {
+    const blocks = branch(6);
+    const looped = blocks.map(block => ({ ...block }));
+    for (let i = 1; i < looped.length; i++) (looped[i] as { parent: Block }).parent = looped[i - 1]!;
+    (looped[0] as { parent: Block }).parent = looped.at(-1)!;
+    const s = new BranchSupplier("looped", looped.at(-1)!, chain);
+    expect(await s.headers(ANCHOR_HEIGHT + 1n, ANCHOR_HEIGHT + 6n)).toHaveLength(6);
+    expect(await s.section(new Uint8Array(32))).toBeUndefined();
+    expect(await s.headers(ANCHOR_HEIGHT - 1n, ANCHOR_HEIGHT)).toHaveLength(2);
   });
 });

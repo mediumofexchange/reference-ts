@@ -1,6 +1,6 @@
 // Conditional C2b.5.1–2 count, over the reader's classified snapshot and record.
 import { compareBytes, EncodingError } from "../../../dist/bytes.js";
-import { locked } from "./recovery-state.mjs";
+import { locked } from "../../../dist/pool/v3/recovery.js";
 
 const same = (a, b) => compareBytes(a, b) === 0;
 const hex = bytes => Buffer.from(bytes).toString("hex");
@@ -21,7 +21,7 @@ export async function countNonService(context, view, canonical, publications, ch
     let publication;
     try { publication = codec.decodePublication(entry.record); }
     catch (error) {
-      if (error instanceof EncodingError || error instanceof codec.CodecEncodingError) continue;
+      if (error instanceof EncodingError) continue;
       throw error;
     }
     if (publication.kind !== 5 || !same(publication.domain, selection.domain) ||

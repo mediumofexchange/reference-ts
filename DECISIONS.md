@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-25` [Promote the v3 state machine and single-segment reader, and read Ergo only through ErgoVenue](decisions/2026-09.md#2026-09-25--promote-the-v3-state-machine-and-single-segment-reader-and-read-ergo-only-through-ergovenue)
 - `2026-09-25` [Retire probes whose questions are answered](decisions/2026-09.md#2026-09-25--retire-probes-whose-questions-are-answered)
 - `2026-09-25` [Promote v3's codecs, spent root and capsule library into src/pool/v3](decisions/2026-09.md#2026-09-25--promote-v3s-codecs-spent-root-and-capsule-library-into-srcpoolv3)
 - `2026-09-25` [Give v3 a construction-neutral core before it enters src/](decisions/2026-09.md#2026-09-25--give-v3-a-construction-neutral-core-before-it-enters-src)

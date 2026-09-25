@@ -14,10 +14,9 @@ The fixture manifest pins the original public response bytes before parsing;
 Git attributes preserve those raw responses, including trailing whitespace.
 `test/ergo-supplier.test.ts` and the hostile probe read them.
 
-The v3 replay's Ergo adapter (`replay-venue.mjs`, its ownership check
-`replay-venue-check.mjs` and the synthetic-chain converter
-`replay-fixture.mjs`) runs under `npm run check:pool:ergo-replay`; the
-[Ergo venue guide](../../docs/ERGO_VENUE_PROFILE.md#local-replay-adapter)
+The v3 replay reads Ergo through `ErgoVenue` over the synthetic reference
+chain (`src/ergo-synthetic.ts`) under `npm run check:pool:ergo-replay`; the
+[Ergo venue guide](../../docs/ERGO_VENUE_PROFILE.md#local-replay-through-the-venue)
 describes it.
 
 ## Supplying the reader
@@ -73,7 +72,7 @@ bytes are copied from a node's JSON by `src/ergo-supplier.ts` (unsupplied
 unless the copy hashes to the stated id); the store builds from the 1,024
 headers below the pinned anchor by linkage, then verifies every header above
 it from each source in turn (own node, then two public nodes), and its best
-chain must be every source's chain and feed the range verifier. It also
+chain must be every source's chain. It also
 checks nine real-data mutations for their refusal reasons and, with
 `--recalculations`, the model's EIP-37 difficulty and proof of work at every
 recalculation since activation against the first source's accepted headers.

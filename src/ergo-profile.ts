@@ -10,18 +10,17 @@
 // is its unsigned bytes and witness id; the profile's own framer reads its
 // outputs, so no decoder refusal can leave an index without its section. It applies no
 // signature, sequence, kind or content rule; the reader's §13.3 rules do.
-// The header chain is the reader's own authenticated header source, checked
-// here only for contiguity, linkage and the anchor: the venue's index space
-// begins at the block after the profile's pinned anchor header, so index 0 is
-// that block and a read from index zero is bounded by the anchor. The runtime
-// view `src/ergo.ts` reads under this profile.
+// The venue's index space begins at the block after the profile's pinned
+// anchor header, so index 0 is that block and a read from index zero is
+// bounded by the anchor. The one Ergo reader, the runtime view `src/ergo.ts`,
+// verifies the header chain itself (`src/ergo-headers.ts`) and reads each
+// section under this profile.
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
 import { utf8Encoder } from "./contexts.js";
-import { copyRequest, encodeRangeAnswer, MAX_RANGE_RECORD_BYTES, PUBLICATION_RANGE,
-  type RangeEntry, type RangeLimits, type RangeRequest, type RecordKind } from "./record-range.js";
+import { MAX_RANGE_RECORD_BYTES, PUBLICATION_RANGE, type RangeEntry, type RangeRequest, type RecordKind } from "./record-range.js";
 
 /** venue-ergo's own identity context: the mainnet chain under its header rules. */
 export const ERGO_PROFILE_CONTEXT = "moe/venue/ergo/v3";
@@ -95,14 +94,6 @@ export function ergoLag(profile: ErgoProfile): bigint {
   return ownErgoProfile(profile).depth + 1n;
 }
 
-/** Header fields the verifier reads; the reader's header source authenticates them. */
-export interface ErgoHeaderView {
-  readonly id: Uint8Array;
-  readonly parentId: Uint8Array;
-  readonly height: bigint;
-  readonly version: bigint;
-  readonly transactionsRoot: Uint8Array;
-}
 /** One output as the profile's framer reads it from the transaction's
  * unsigned bytes: the ErgoTree bytes and each present register's serialized constant. */
 export interface ErgoOutputView { readonly ergoTree: Uint8Array; readonly registers: Readonly<Record<string, Uint8Array>> }
@@ -112,8 +103,6 @@ export interface ErgoOutputView { readonly ergoTree: Uint8Array; readonly regist
  * concatenated input proofs, first byte dropped; a section under the
  * ids-only rule does not commit to it). */
 export interface ErgoTransactionView { readonly unsigned: Uint8Array; readonly witnessId: Uint8Array }
-export interface ErgoBlockView { readonly headerId: Uint8Array; readonly transactions: readonly ErgoTransactionView[] }
-export interface ErgoRangeEvidence { readonly headers: readonly ErgoHeaderView[]; readonly blocks: readonly ErgoBlockView[] }
 
 function concat(parts: readonly Uint8Array[]): Uint8Array {
   const out = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
@@ -378,12 +367,6 @@ function ownTransactions(transactions: readonly ErgoTransactionView[]): readonly
   }
   return Object.freeze(owned);
 }
-function ownHeader(header: ErgoHeaderView): ErgoHeaderView | undefined {
-  if (header === null || typeof header !== "object") return undefined;
-  const { id, parentId, height, version, transactionsRoot } = header;
-  if (!isBytes(id, 32) || !isBytes(parentId, 32) || !isBytes(transactionsRoot, 32) || !u64(height) || !u64(version)) return undefined;
-  return Object.freeze({ id: copyBytes(id), parentId: copyBytes(parentId), height, version, transactionsRoot: copyBytes(transactionsRoot) });
-}
 /** Every object the profile attributes in one block's transaction section,
  * in venue order. Kinds 1–3 are one output each, at exactly the kind's
  * length. A kind-4 object is the maximal run of adjacent outputs of one
@@ -404,107 +387,17 @@ export function attributeBlock(profile: ErgoProfile, transactions: readonly Ergo
  * either rule, the objects the profile attributes in it, in venue order.
  * Undefined for any other section, which is not that header's. */
 export function attributeSection(profile: ErgoProfile, transactions: readonly ErgoTransactionView[], root: Uint8Array): readonly AttributedObject[] | undefined {
-  return attributeOwnedSection(ownErgoProfile(profile), transactions, root);
-}
-function attributeOwnedSection(profile: ErgoProfile, transactions: readonly ErgoTransactionView[], root: Uint8Array): readonly AttributedObject[] | undefined {
+  const owned = ownErgoProfile(profile);
   if (!Array.isArray(transactions) || !isBytes(root, 32)) return undefined;
   const read = ownTransactions(transactions);
   // Outputs are framed only from a section whose root holds.
   if (read === undefined || read.length === 0 || !sectionMatchesRoot(read, root)) return undefined;
   try {
-    return attributeOwned(profile, read);
+    return attributeOwned(owned, read);
   } catch (error) {
     if (error instanceof EncodingError) return undefined;
     throw error;
   }
-}
-
-/** The venue's constants and one §13 answer per request, or none where the
- * evidence does not establish it. A reader's adapter binds its own answer
- * budget when it hands `range` to a replay. */
-export interface ErgoRangeVerifier {
-  readonly identity: Uint8Array;
-  lag(): bigint;
-  witnessedIndex(): bigint;
-  range(request: RangeRequest, limits: RangeLimits): Uint8Array | undefined;
-}
-/** §13.2 over the reader's retained evidence. The headers are the reader's
- * own chain: each is read once into an owned copy, a malformed one is a
- * programming failure, and headers that are not one contiguous linked
- * chain containing the block after the profile's anchor (the header whose
- * parent is the anchor, which is index 0) give no verifier; so do headers
- * that do not yet reach index 0 under the depth. Headers at or below the
- * anchor are linkage only and hold no index. Blocks may come from any
- * supplier: a block supplies the section of an index only where it is a
- * well-formed view, belongs to an indexed header of the chain and reproduces
- * that header's transaction
- * root from the ids of the unsigned bytes; any other block is passed
- * over, so no supplier can deny every read by adding a block, and an index
- * whose section is missing leaves only the ranges through it unresolved.
- * There is no answer for a range not yet witnessed under the depth or for
- * an index without its section. Every field of the profile, of each
- * header, block, transaction and output, and of each request is read once
- * into an owned copy before it is judged; only the two evidence arrays are
- * read as containers, and every element of the array that is iterated is
- * owned. */
-export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvidence): ErgoRangeVerifier | undefined {
-  const owned = ownErgoProfile(profile);
-  if (evidence === null || typeof evidence !== "object" || !Array.isArray(evidence.headers) || !Array.isArray(evidence.blocks)) {
-    throw new EncodingError("invalid Ergo range evidence");
-  }
-  const headers = evidence.headers.map(ownHeader);
-  if (headers.some(header => header === undefined)) throw new EncodingError("invalid Ergo header view");
-  const identity = ergoProfileIdentity(owned), depth = owned.depth;
-  const byId = new Map<string, ErgoHeaderView>();
-  let origin: bigint | undefined;
-  for (let i = 0; i < headers.length; i++) {
-    const header = headers[i]!, previous = headers[i - 1];
-    if (header.version > 255n || byId.has(bytesToHex(header.id))) return undefined;
-    if (previous !== undefined && (header.height !== previous.height + 1n || compareBytes(header.parentId, previous.id) !== 0)) return undefined;
-    // The anchor's child is index 0. A linked chain names that parent once unless
-    // it also carries the anchor's id at some height, which no authenticated source
-    // does; two candidates for index 0 give no verifier rather than the later one.
-    if (compareBytes(header.parentId, owned.anchor) === 0) {
-      if (origin !== undefined) return undefined;
-      origin = header.height;
-    }
-    byId.set(bytesToHex(header.id), header);
-  }
-  if (origin === undefined) return undefined;
-  const tip = (headers[headers.length - 1] as ErgoHeaderView).height;
-  if (tip < origin + depth) return undefined;
-  const sectionAt = new Map<bigint, readonly AttributedObject[]>();
-  for (const supplied of evidence.blocks) {
-    if (supplied === null || typeof supplied !== "object") continue;
-    const { headerId, transactions } = supplied;
-    if (!isBytes(headerId, 32) || !Array.isArray(transactions)) continue;
-    // The header is found, from an owned copy of its id, before any transaction is read. Sections at or below the
-    // anchor hold no index and are not read, nor is a second section for one index. Every header version has its
-    // section: the node checks a block's version only at a voting epoch's first block, so a gate on it would let any
-    // miner deny every range through its block.
-    const header = byId.get(bytesToHex(copyBytes(headerId)));
-    if (header === undefined || header.height < origin || sectionAt.has(header.height - origin)) continue;
-    const objects = attributeOwnedSection(owned, transactions, header.transactionsRoot);
-    if (objects !== undefined) sectionAt.set(header.height - origin, objects);
-  }
-  // Index `i` is height `origin + i`; index `i` is witnessed once the tip is at `origin + i + depth`.
-  const witnessed = tip - depth - origin;
-  return Object.freeze({
-    get identity() { return copyBytes(identity); },
-    lag: () => depth + 1n,
-    witnessedIndex: () => witnessed,
-    range(request: RangeRequest, limits: RangeLimits): Uint8Array | undefined {
-      // The request is read once, into the reader's own copy, before anything is judged.
-      let own: RangeRequest;
-      try { own = copyRequest(request); } catch (error) {
-        if (error instanceof EncodingError) return undefined;
-        throw error;
-      }
-      if (compareBytes(own.venue, identity) !== 0 || own.toIndex > witnessed) return undefined;
-      const entries = rangeEntries(index => sectionAt.get(index), own);
-      return entries === undefined ? undefined : encodeRangeAnswer({ request: own, entries }, limits);
-    },
-  });
 }
 
 /** §7's entries for an owned request over the attributed sections a reader

@@ -18,8 +18,8 @@ import { BarretenbergSync } from "@aztec/bb.js";
 import { directoryRoot, encodeCommitment, signCommitment } from "../../../dist/venue-records.js";
 import { LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
-import { replayLocalPackage, RANGE_LIMITS } from "./local-replay.mjs";
-import { FixtureVenue } from "./fixture-venue.mjs";
+import { recordReader, replayLocalPackage } from "./local-replay.mjs";
+import { FixtureVenue } from "../../../dist/record-venue.js";
 import { loadCandidateManifest, candidateConfiguration } from "./candidate.mjs";
 import { v3Codec as codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
@@ -95,11 +95,7 @@ const hex = bytes => Buffer.from(bytes).toString("hex");
       trail: chosen.trail, trails: [opening.trail, ...rest.map(x => x.trail)] },
     venue: witnessed.export() };
     let calls = 0;
-    const verifier = { configuration, verify: async () => { calls++; return true; }, record: data => {
-      const record = FixtureVenue.from(data);
-      return { evidenceKind: "fixture-verifier", range: request => record.answer(request, codec, RANGE_LIMITS),
-        witnessedIndex: () => record.witnessedIndex, lag: () => record.lag };
-    } };
+    const verifier = { configuration, verify: async () => { calls++; return true; }, record: data => recordReader(FixtureVenue.from(data), "fixture-verifier") };
     const start = performance.now();
     const result = await replayLocalPackage(input, verifier, codec);
     const ms = performance.now() - start;

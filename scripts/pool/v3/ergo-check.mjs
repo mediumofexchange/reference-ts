@@ -1,19 +1,47 @@
-// Real-proof replay over the candidate Ergo profile. Headers are independently
-// chosen synthetic fixtures; only raw transaction sections come from the supplier.
-// Every replay group the fixture verifier answered is answered again by the
-// Ergo verifier from exact unsigned transaction bytes, witness ids and checked
-// roots (pool-v3 §13.2).
+// Real-proof replay through the runtime's ErgoVenue over the synthetic
+// reference chain (src/ergo-synthetic.ts). The reader chooses the profile, the
+// anchor's context and the chain it reads: at difficulty 1 anyone can mine a
+// heavier branch, so the reader pins the id of the block its clock must stand
+// on, as it held the headers themselves before (a trust input beside the keys,
+// never read from the package). The package's venue data is a chain of blocks
+// that ErgoVenue verifies itself, header by header under the mainnet rules at
+// difficulty 1 and section by section against each header's root, before
+// answering pool-v3 §13 (§13.2). Every replay group the fixture venue answered
+// is answered again by the Ergo venue from exact unsigned transaction bytes.
 import assert from "node:assert/strict";
-import { replayEvidencePackage, RANGE_LIMITS } from "./local-replay.mjs";
-import { FixtureVenue } from "./fixture-venue.mjs";
+import { ErgoVenue } from "../../../dist/ergo.js";
+import { ergoProfileIdentity, frameTransaction } from "../../../dist/ergo-profile.js";
+import { BranchSupplier, Chain, plainOutput, recordOutput, transaction } from "../../../dist/ergo-synthetic.js";
+import { FixtureVenue } from "../../../dist/record-venue.js";
+import { mergeVenueOrder } from "../../../dist/record-range.js";
+import { recordReader, replayEvidencePackage, RANGE_LIMITS } from "./local-replay.mjs";
 
 const hex = bytes => Buffer.from(bytes).toString("hex");
-export const ERGO_EVIDENCE_KIND = "candidate-ergo-profile-synthetic-headers";
+export const ERGO_EVIDENCE_KIND = "ergo-venue-synthetic-chain";
+/** The reader's chain: the synthetic anchor and its context, the same in every process. */
+export const ERGO_CHAIN = new Chain();
+/** The harness fixtures declare lag 2, so the reader selects depth 1. */
+export const ERGO_PROFILE = ERGO_CHAIN.profile(1n);
+export const ERGO_VENUE = ergoProfileIdentity(ERGO_PROFILE);
+// A kind-4 record is split into outputs of at most this many bytes, as a box's register limit requires on the chain.
+const PIECE = 3981;
 
-/** A fixture-verifier result as the Ergo verifier must report it. Each fixture
+/** The reader's record factory over an Ergo package: a fresh ErgoVenue on its
+ * own anchor context, synced from a supplier serving the package's blocks, is
+ * the record only where its clock stands on the reader's pinned block. */
+export async function ergoRecord(data, { pin, profile = ERGO_PROFILE, context = ERGO_CHAIN.context, policy }) {
+  assert.ok(pin instanceof Uint8Array && pin.length === 32, "the reader pins the block its clock stands on");
+  const venue = new ErgoVenue(profile, context, policy);
+  const suppliers = (data?.tips ?? [data?.tip]).filter(tip => tip !== undefined).map((tip, i) => new BranchSupplier(`package-${i}`, tip, ERGO_CHAIN));
+  const { witnessedHeaderId } = await venue.sync(suppliers);
+  if (witnessedHeaderId === undefined || hex(witnessedHeaderId) !== hex(pin)) return undefined;
+  return recordReader(venue, ERGO_EVIDENCE_KIND);
+}
+
+/** A fixture-venue result as the Ergo venue must report it. Each fixture
  * record is its own transaction in the fixture's insertion order, so a kind-4
  * ordinal is the fixture's ordinal as a transaction position (`<< 32`), and
- * the provenance names the candidate. Nothing else may differ. */
+ * the provenance names the Ergo venue. Nothing else may differ. */
 export function underErgo(value) {
   if (Array.isArray(value)) return value.map(underErgo);
   if (value === null || typeof value !== "object" || value instanceof Uint8Array) return value;
@@ -22,10 +50,39 @@ export function underErgo(value) {
       : key === "rangeEvidence" && item === "fixture-verifier" ? ERGO_EVIDENCE_KIND : underErgo(item)]));
 }
 
+/** The fixture export's records as blocks of the synthetic chain under the
+ * same indices: index `i` is the block `i + 1` above the anchor, so records
+ * carrying absolute indices (replacement effect, demand deadlines) keep their
+ * meaning. The fixture's lag `l` is the profile's depth `l - 1`: the chain runs
+ * `l - 1` blocks past the fixture's witnessed index, so the venue's witnessed
+ * index is the fixture's. Each record is a separate transaction in the
+ * fixture's insertion order, preserving within-index order across every kind
+ * and subject and keeping adjacent publication runs apart. */
+export function fixtureChain(fixture) {
+  const { witnessedIndex, lag, records } = fixture;
+  assert.equal(lag, 2n, "the harness fixtures declare lag 2, the profile's depth 1");
+  const at = new Map();
+  for (const record of records) {
+    assert.ok(record.index <= witnessedIndex, "a fixture record is witnessed");
+    const list = at.get(record.index) ?? [];
+    const outputs = record.kind !== 4 || record.record.length === 0 ? [recordOutput(record.kind, record.subject, record.record)] : [];
+    if (record.kind === 4) {
+      for (let offset = 0; offset < record.record.length; offset += PIECE) {
+        outputs.push(recordOutput(4, record.subject, record.record.subarray(offset, offset + PIECE)));
+      }
+    }
+    list.push(transaction(outputs, 1n, `moe/test/ergo-replay/${record.index}/${list.length}`));
+    at.set(record.index, list);
+  }
+  const blocks = ERGO_CHAIN.extend(ERGO_CHAIN.anchor, Number(witnessedIndex + lag),
+    i => at.get(BigInt(i)) ?? [transaction([plainOutput], 1n, `moe/test/ergo-replay/${i}/plain`)]);
+  return blocks;
+}
+
 /** Every (payload, result) pair the builders returned, including receiver and
  * issuer restorations (`restored` reads the payload under the nearest enclosing
  * `issuerSeed`), as `{ label, payload, result }`. Only payloads carrying a
- * fixture venue export are replayable through a venue verifier. */
+ * fixture venue export are replayable through a venue. */
 export function replayPairs(built, seeds) {
   const out = [], seen = new Set();
   const walk = (value, path, issuerSeed) => {
@@ -52,132 +109,141 @@ export function replayPairs(built, seeds) {
   return out;
 }
 
-export async function checkErgoReplay({ groups, primary, fixture, adapter, codec, verifier, portable, test }) {
-  const { profile } = fixture, identity = codec.ergoProfileIdentity(profile);
-  const selected = (chosen = profile, trustedHeaders, rawLimits = adapter.RAW_EVIDENCE_LIMITS, rangeLimits = RANGE_LIMITS) => ({
-    ...verifier, record: data => adapter.ergoReplayVenue(chosen, { headers: trustedHeaders, blocks: data.blocks }, codec, rangeLimits, rawLimits),
-  });
-  /** The reader's conversion of a fixture export into raw sections under its own synthetic headers. */
+/** A copy of `blocks` on the same anchor whose block `n` serves `sectionOf(section, n)` under its unchanged header. */
+function reserved(blocks, sectionOf) {
+  const out = [];
+  let parent = blocks[0].parent;
+  for (const [n, block] of blocks.entries()) {
+    const next = { ...block, parent, section: sectionOf(block.section, n) };
+    out.push(next); parent = next;
+  }
+  return out;
+}
+const withSection = (blocks, i, section) => reserved(blocks, (own, n) => (n === i ? section : own));
+
+export async function checkErgoReplay({ groups, primary, codec, verifier, portable, test }) {
+  const selected = options => ({ ...verifier, record: data => ergoRecord(data, options) });
+  /** The package's venue data, the chain's tip whose ancestry carries every block, and the reader's
+   * pin: the block at the fixture's witnessed index. */
   const convert = payload => {
-    assert.equal(payload.venue.lag, 2n, "the harness fixtures declare lag 2, the profile's depth 1");
-    const evidence = fixture.fixtureEvidence(payload.venue);
-    return { input: { ...payload, venue: { blocks: evidence.blocks } }, headers: evidence.headers,
-      rawBytes: evidence.blocks.reduce((sum, block) => sum + block.transactions.reduce((n, tx) => n + tx.length, 0), 0) };
+    const blocks = fixtureChain(payload.venue);
+    return { input: { ...payload, venue: { tip: blocks.at(-1) } }, blocks, pin: blocks[Number(payload.venue.witnessedIndex)].id,
+      rawBytes: blocks.reduce((sum, block) => sum + block.bytes.length + block.section.reduce((n, tx) => n + tx.unsigned.length + tx.witnessId.length, 0), 0) };
   };
-  const run = (input, headers, chosen = selected(profile, headers)) => replayEvidencePackage(portable(input), chosen, codec);
+  const run = (input, chosen) => replayEvidencePackage(portable(input), chosen, codec);
   const counts = { groups: 0, kind4Subjects: 0, unionPositions: 0, otherRanges: 0, rawBytes: 0, blocks: 0 };
-  await test("every replay group agrees through the Ergo adapter from exact unsigned bytes and checked roots", async () => {
+  await test("every replay group agrees through ErgoVenue from verified headers, exact unsigned bytes and checked roots", async () => {
     for (const { label, payload, result } of groups) {
-      const { input, headers, rawBytes } = convert(payload);
-      const witnessed = FixtureVenue.from(payload.venue), ergo = adapter.ergoReplayVenue(profile, { headers, blocks: input.venue.blocks }, codec, RANGE_LIMITS);
-      assert.notEqual(ergo, undefined, label);
-      assert.equal(ergo.witnessedIndex(), witnessed.witnessedIndex, label); assert.equal(ergo.lag(), witnessed.lag, label);
+      const { input, blocks, pin, rawBytes } = convert(payload);
+      const witnessed = FixtureVenue.from(payload.venue), ergo = await ergoRecord(input.venue, { pin });
+      assert.equal(ergo.witnessedIndex(), witnessed.witnessedIndex(), label); assert.equal(ergo.lag(), witnessed.lag(), label);
       // Each subject's kind-4 answer entry by entry, and their union in venue order (C2b.4.2): the Ergo
       // ordinal is the fixture's position in the section. Kinds 1-3 answer identically.
       const subjectsOf = kind => [...new Map(payload.venue.records.filter(r => r.kind === kind).map(r => [hex(r.subject), r.subject])).values()];
       const answers = [];
       for (const subject of subjectsOf(4)) {
-        const request = { venue: identity, kind: 4, subject, fromIndex: 0n, toIndex: witnessed.witnessedIndex };
-        const expected = codec.decodeRangeAnswer(witnessed.answer(request, codec, RANGE_LIMITS), request, RANGE_LIMITS);
+        const request = { venue: ERGO_VENUE, kind: 4, subject, fromIndex: 0n, toIndex: witnessed.witnessedIndex() };
+        const expected = codec.decodeRangeAnswer(witnessed.range(request, RANGE_LIMITS), request, RANGE_LIMITS);
         const actual = codec.decodeRangeAnswer(ergo.range(request), request, RANGE_LIMITS);
         assert.deepEqual(actual.entries.map(e => [e.index, e.ordinal, hex(e.record)]), expected.entries.map(e => [e.index, e.ordinal << 32n, hex(e.record)]), `${label}: kind 4`);
         answers.push([expected, actual]); counts.kind4Subjects++;
       }
       if (answers.length > 0) {
-        const union = codec.mergeVenueOrder(answers.map(([expected]) => expected)), ergoUnion = codec.mergeVenueOrder(answers.map(([, actual]) => actual));
+        const union = mergeVenueOrder(answers.map(([expected]) => expected)), ergoUnion = mergeVenueOrder(answers.map(([, actual]) => actual));
         assert.deepEqual(ergoUnion.map(e => [e.index, e.ordinal, hex(e.subject), hex(e.record)]), union.map(e => [e.index, e.ordinal << 32n, hex(e.subject), hex(e.record)]), `${label}: union`);
         counts.unionPositions += union.length;
       }
       for (const kind of [1, 2, 3]) for (const subject of subjectsOf(kind)) {
-        const request = { venue: identity, kind, subject, fromIndex: 0n, toIndex: witnessed.witnessedIndex };
-        assert.deepEqual(hex(ergo.range(request)), hex(witnessed.answer(request, codec, RANGE_LIMITS)), `${label}: kind ${kind}`);
+        const request = { venue: ERGO_VENUE, kind, subject, fromIndex: 0n, toIndex: witnessed.witnessedIndex() };
+        assert.deepEqual(hex(ergo.range(request)), hex(witnessed.range(request, RANGE_LIMITS)), `${label}: kind ${kind}`);
         counts.otherRanges++;
       }
-      assert.deepEqual(await run(input, headers), underErgo(result), label);
-      counts.groups++; counts.rawBytes += rawBytes; counts.blocks += input.venue.blocks.length;
+      assert.deepEqual(await run(input, selected({ pin })), underErgo(result), label);
+      counts.groups++; counts.rawBytes += rawBytes; counts.blocks += blocks.length;
     }
   });
   // Refusals and substitutions on the primary group, the single-backing silence-bearing import.
-  const { input: payload, headers } = convert(primary.payload), result = underErgo(primary.result), t = payload.selection.judgingIndex;
-  const ergoVerifier = selected(profile, headers);
+  const { input: payload, blocks, pin } = convert(primary.payload), result = underErgo(primary.result), t = payload.selection.judgingIndex;
+  const ergoVerifier = selected({ pin });
   const refusal = async (input, expected = "unresolved-evidence", chosen = ergoVerifier) => {
-    const outcome = await run(input, headers, chosen);
+    const outcome = await run(input, chosen);
     assert.equal(outcome.status, expected); assert.equal(outcome.audit, null); assert.deepEqual(outcome.candidates, []);
     assert.equal(outcome.spendable, false); assert.equal(outcome.fullV3Replay, false);
     return outcome;
   };
   await test("the Ergo replay names its provenance and closes no finality, completeness or spendability flag", async () => {
-    // The adapter's own answer, not the harness's conversion of the fixture result.
-    const actual = await run(payload, headers);
+    // The venue's own answers, not the harness's conversion of the fixture result.
+    const actual = await run(payload, ergoVerifier);
     assert.equal(actual.status, "selected-local-replay"); assert.equal(actual.rangeEvidence, ERGO_EVIDENCE_KIND);
     assert.equal(actual.audit.range.lag, "2"); assert.equal(actual.audit.range.judgingIndex, t.toString());
     for (const flag of ["fullV3Replay", "completenessClaim", "noMatchesMeansZeroBalance", "spendable"]) assert.equal(actual[flag], false);
     assert.equal(actual.unresolvedCoverage, true);
     assert.deepEqual(actual, result);
   });
-  const missing = structuredClone(payload); missing.venue.blocks.splice(3, 1);
-  // A byte of the first input's box id, after the 31-byte witness id and the input count.
-  const tampered = structuredClone(payload); tampered.venue.blocks[3].transactions[0][32] ^= 1;
-  assert.notEqual(codec.frameTransaction(tampered.venue.blocks[3].transactions[0].subarray(31)), undefined,
-    "root-mismatch mutation must remain framable");
-  const malformed = structuredClone(payload); malformed.venue.blocks[3].transactions[0] = new Uint8Array([255]);
-  await test("missing, tampered and malformed Ergo sections refuse against unchanged trusted headers", async () => {
+  // Index 2's section: withheld (an empty section cannot reproduce the root), one flipped byte of the first input's
+  // box id (still framable), or bytes outside the framer's grammar. The clock stops before it.
+  const section = blocks[2].section, flipped = new Uint8Array(section[0].unsigned); flipped[1] ^= 1;
+  const missing = { ...payload, venue: { tip: withSection(blocks, 2, []).at(-1) } };
+  const tampered = { ...payload, venue: { tip: withSection(blocks, 2, [{ ...section[0], unsigned: flipped }, ...section.slice(1)]).at(-1) } };
+  const malformed = { ...payload, venue: { tip: withSection(blocks, 2, [{ ...section[0], unsigned: new Uint8Array([255]) }]).at(-1) } };
+  assert.notEqual(frameTransaction(flipped), undefined, "root-mismatch mutation must remain framable");
+  await test("missing, tampered and malformed Ergo sections stop the clock before them and refuse", async () => {
     for (const input of [missing, tampered, malformed]) await refusal(input);
-    const injected = { ...missing, venue: { ...missing.venue, profile, headers, witnessedIndex: t, complete: true, rangeEvidence: "authenticated-chain" } };
+    const injected = { ...missing, venue: { ...missing.venue, profile: ERGO_PROFILE, witnessedIndex: t, complete: true, rangeEvidence: "authenticated-chain" } };
     await refusal(injected);
+    // Another supplier's honest section is read beside the tampered one, whichever is asked first.
+    assert.deepEqual(await run({ ...payload, venue: { tips: [tampered.venue.tip, payload.venue.tip] } }, ergoVerifier), result);
   });
-  await test("reader-selected Ergo profile and header chain cannot be replaced by package claims", async () => {
-    const wrong = structuredClone(profile); wrong.anchor[0] ^= 1;
-    await refusal(payload, "unresolved-evidence", selected(wrong, headers));
-    const wrongHeaders = structuredClone(headers); wrongHeaders[1].parentId[0] ^= 1;
-    await refusal(payload, "unresolved-evidence", selected(profile, wrongHeaders));
-    // Headers without the anchor's child give no verifier; a chain from the child alone answers.
-    await refusal(payload, "unresolved-evidence", selected(profile, headers.slice(2)));
-    assert.deepEqual(await run(payload, headers.slice(1)), result);
+  await test("the reader's anchor, header rules and clock cannot be replaced by package claims", async () => {
+    // A chain of valid blocks that does not descend from the reader's anchor adds no header.
+    const elsewhere = { ...ERGO_CHAIN.anchor, id: new Uint8Array(32).fill(9) };
+    const foreign = ERGO_CHAIN.extend(elsewhere, blocks.length, i => blocks[i].section);
+    await refusal({ ...payload, venue: { tip: foreign.at(-1) } });
+    // A heavier branch re-mined from the anchor at difficulty 1, index 2's records dropped, is the chain an unpinned
+    // reader would follow; the pinned reader refuses it, alone or beside the pinned chain.
+    const remined = ERGO_CHAIN.extend(ERGO_CHAIN.anchor, blocks.length + 1,
+      i => (i === 2 ? [transaction([plainOutput], 1n, "moe/test/ergo-replay/remined")] : blocks[i]?.section ?? []), 1);
+    const unpinned = new ErgoVenue(ERGO_PROFILE, ERGO_CHAIN.context);
+    const report = await unpinned.sync([new BranchSupplier("pinned", payload.venue.tip, ERGO_CHAIN), new BranchSupplier("remined", remined.at(-1), ERGO_CHAIN)]);
+    assert.equal(hex(report.witnessedHeaderId), hex(remined[Number(t) + 1].id), "the re-mined branch is the heavier one");
+    await refusal({ ...payload, venue: { tip: remined.at(-1) } });
+    await refusal({ ...payload, venue: { tips: [payload.venue.tip, remined.at(-1)] } });
+    // A profile at another depth names another venue, so the package's identity has no answer.
+    await refusal(payload, "unresolved-evidence", selected({ pin, profile: ERGO_CHAIN.profile(2n) }));
     await refusal({ ...payload, selection: { ...payload.selection, judgingIndex: t + 1n } });
     await refusal({ ...payload, selection: { ...payload.selection, judgingIndex: t - 1n } });
-    const historical = await run({ ...payload, selection: { ...payload.selection, judgingIndex: t - 1n, mode: "historical-fixture" } }, headers);
+    const historical = await run({ ...payload, selection: { ...payload.selection, judgingIndex: t - 1n, mode: "historical-fixture" } }, ergoVerifier);
     assert.equal(historical.status, "historical-local-replay"); assert.equal(historical.currentRangeAuthenticated, false);
     assert.equal(historical.rangeEvidence, ERGO_EVIDENCE_KIND);
   });
-  await test("stray and root-failing duplicate blocks cannot erase a valid Ergo section", async () => {
-    const extra = structuredClone(payload), stray = structuredClone(payload.venue.blocks[3]); stray.headerId[0] ^= 1;
-    extra.venue.blocks.unshift(stray, tampered.venue.blocks[3]); extra.venue.blocks.push(payload.venue.blocks[3]);
-    assert.deepEqual(await run(extra, headers), result);
-  });
-  await test("Ergo evidence and answer limits refuse before proof replay without cloning the raw envelope", async () => {
-    const noProof = { ...ergoVerifier, verify() { throw new Error("resource guard ran after proof replay"); } };
-    const oversized = { ...payload, venue: { blocks: [{ headerId: headers[3].id,
-      transactions: [new Uint8Array(Number(adapter.RAW_EVIDENCE_LIMITS.maxBytes) + 1)] }] } };
+  await test("Ergo evidence and answer limits refuse before proof replay without cloning the package's chain", async () => {
+    const noProof = chosen => ({ ...chosen, verify() { throw new Error("resource guard ran after proof replay"); } });
     const originalClone = globalThis.structuredClone;
     try {
       globalThis.structuredClone = value => {
         assert.equal(value?.venue, undefined, "raw venue evidence reached the generic ownership clone");
         return originalClone(value);
       };
-      await refusal(oversized, "resource-refusal", noProof);
+      // A retained-bytes budget below the records stops the clock: unresolved, before any proof.
+      await refusal(payload, "unresolved-evidence", noProof(selected({ pin, policy: { retainedBytes: 64 } })));
     } finally { globalThis.structuredClone = originalClone; }
-    for (const limits of [{ ...adapter.RAW_EVIDENCE_LIMITS, maxBlocks: 1n },
-      { ...adapter.RAW_EVIDENCE_LIMITS, maxTransactions: 1n }]) {
-      await refusal(payload, "resource-refusal", { ...selected(profile, headers, limits), verify: noProof.verify });
-    }
-    await refusal(payload, "resource-refusal", { ...selected(profile, headers, adapter.RAW_EVIDENCE_LIMITS,
-      { maxBytes: 102n, maxEntries: 0n }), verify: noProof.verify });
+    // An answer over the reader's budget is a resource refusal.
+    const tight = { ...verifier, record: async data => {
+      const record = await ergoRecord(data, { pin });
+      return { ...record, range: request => record.range(request, { maxBytes: 102n, maxEntries: 0n }) };
+    } };
+    await refusal(payload, "resource-refusal", noProof(tight));
   });
-  await test("Ergo adapter owns exact byte views before awaits and refuses shared storage", async () => {
-    const owned = structuredClone(payload);
-    const tx = owned.venue.blocks[3].transactions[0], large = new Uint8Array(2_097_152); large.set(tx, 17);
-    owned.venue.blocks[3].transactions[0] = large.subarray(17, 17 + tx.length);
+  await test("the venue's own copies answer: blocks mutated during replay change no verdict", async () => {
+    // Every section copied, so the mutation reaches no other test's chain.
+    const copies = reserved(blocks, own => own.map(tx => ({ unsigned: new Uint8Array(tx.unsigned), witnessId: new Uint8Array(tx.witnessId) })));
+    const owned = { ...payload, venue: { tip: copies.at(-1) } };
     let calls = 0;
     const mutate = { ...ergoVerifier, verify: (...args) => {
-      if (calls++ === 0) { large.fill(0); owned.venue.blocks.length = 0; }
+      if (calls++ === 0) for (const block of copies) for (const tx of block.section) { tx.unsigned.fill(0); tx.witnessId.fill(0); }
       return verifier.verify(...args);
     } };
-    assert.deepEqual(await run(owned, headers, mutate), result);
-    const shared = structuredClone(payload), original = shared.venue.blocks[3].transactions[0];
-    shared.venue.blocks[3].transactions[0] = new Uint8Array(new SharedArrayBuffer(original.length));
-    shared.venue.blocks[3].transactions[0].set(original);
-    await refusal(shared);
+    assert.deepEqual(await run(owned, mutate), result);
   });
-  return { counts, convert, primary: { input: payload, headers, result }, missing, tampered };
+  return { counts, convert, primary: { input: payload, pin, result }, missing, tampered };
 }

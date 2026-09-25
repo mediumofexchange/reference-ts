@@ -12,7 +12,7 @@ import { LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { mergeFinalizedPrefixes } from "./scope-replay.mjs";
-import { FixtureVenue } from "./fixture-venue.mjs";
+import { FixtureVenue } from "../../../dist/record-venue.js";
 import { compactFault } from "./fault-check.mjs";
 import { faultObserver } from "./fault-evidence.mjs";
 import { checkSharedIntrinsic, withholdSharedTarget, sharedEquivalent } from "./scope-intrinsic-check.mjs";

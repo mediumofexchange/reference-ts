@@ -46,12 +46,12 @@ export function faultObserver(payloads = [], selection, verifier, codec) {
       const value = codec.decodeFaultEvidence(payload, FAULT_LIMITS.maxSuffixEntries);
       let statement;
       try { statement = codec.decodeStatement(value.statement); }
-      catch (error) { if (!(error instanceof codec.CodecEncodingError)) throw error; }
+      catch (error) { if (!(error instanceof EncodingError)) throw error; }
       evidence.push({ id: hex(hash(payload)), value, statement });
       if (statement?.kind === 4 && same(statement.domain, selection.domain)) demands.set(hex(hash(value.statement)), statement);
     } catch (error) {
       if (error instanceof codec.FaultEvidenceLimitError) throw new EvidenceRefusal("resource-refusal");
-      if (!(error instanceof codec.CodecEncodingError)) throw error;
+      if (!(error instanceof EncodingError)) throw error;
     }
   }
   return {

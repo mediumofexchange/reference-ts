@@ -430,12 +430,13 @@ or the force of those terms. `candidateConfigurationChecked` and
 `signedTermsAuthenticated` report only those narrower successful checks.
 `currentRangeAuthenticated` and `termsAuthorityAuthenticated` are true only
 under the selected verifier: `rangeEvidence: "fixture-verifier"` names the
-harness's fixture record, while `"candidate-ergo-profile-synthetic-headers"`
-names exact transaction decoding and checked roots against independently chosen
-synthetic headers. Neither authenticates a real chain; a historical read leaves
-currency false. `npm run check:pool:ergo-replay` runs the optional
-[Ergo adapter](ERGO_VENUE_PROFILE.md#local-replay-adapter) through the same
-import/payment/burn trace, including fresh readers and hostile evidence.
+harness's fixture venue, while `"ergo-venue-synthetic-chain"` names
+`ErgoVenue` over the synthetic reference chain, its headers verified from the
+reader's own anchor and its sections by root. Neither authenticates the
+mainnet; a historical read leaves currency false.
+`npm run check:pool:ergo-replay` reads the same import/payment/burn trace
+[through ErgoVenue](ERGO_VENUE_PROFILE.md#local-replay-through-the-venue),
+including fresh readers and hostile evidence.
 `fullV3Replay`, completeness and spendability remain false; coverage remains
 unresolved. A local path is not a certified anchor. The required full-package
 checks derive from pool-delivery C4.6, pool-v3 §§1/7/10/11/13 and the
@@ -848,7 +849,7 @@ No runtime API, venue profile or protocol rule changes in this experiment.
 
 ## Ergo venue-profile candidate and full-block range verifier
 
-*The profile experiment (`profile-check.mjs`) retired 2026-09-25 with the vendored sigma-rust build: the unit tests and the [node's own parser](#hostile-input-node-equivalence) cover it; it is kept at [1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range) and its report below stays as measured there.*
+*The profile experiment (`profile-check.mjs`) retired 2026-09-25 with the vendored sigma-rust build: the unit tests and the [node's own parser](#hostile-input-node-equivalence) cover it; it is kept at [1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range) and its report below stays as measured there. `ergoRangeVerifier` retired later that day: `ErgoVenue`, which verifies its own headers, is the one Ergo reader.*
 
 The [candidate Ergo venue profile](ERGO_VENUE_PROFILE.md) fixes what pool-v3
 §13 leaves to a profile: an identity over a pinned anchor header, the
@@ -1248,8 +1249,7 @@ the run's cached responses):
   copies of the same heights were already known: no header was unsupplied
   or refused, and the best chain is every source's chain height by height.
   P4's anchor and tip ids are on it, so P4's 5,040 root-checked sections
-  now stand on headers the reader verified. Its views build the unchanged
-  range verifier (witnessed index 6,929 at depth 10).
+  now stand on headers the reader verified.
 - **Every EIP-37 recalculation.** At each of the 8,091 difficulty
   recalculations from activation at 844,673 to 1,880,300, the model's
   EIP-37 value over the nine headers it reads equals the difficulty of the

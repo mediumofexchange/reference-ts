@@ -17,17 +17,18 @@ only under the profile: `ErgoVenue` in `src/ergo.ts` is the
 | Rule (venue-ergo.md) | Implementation | Tests and evidence |
 |---|---|---|
 | §1 identity and parameters | `ergoProfileIdentity`, `ownErgoProfile` in `src/ergo-profile.ts`; `ergoProfile` (default depth) in `src/ergo.ts` | `test/ergo-profile.test.ts`, `test/ergo-venue.test.ts` |
-| §2 index, finality, lag | `ErgoVenue.sync`/`witnessedIndex`/`lag`; `ergoRangeVerifier` for supplied evidence | same; [latency](POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet) |
+| §2 index, finality, lag | `ErgoVenue.sync`/`witnessedIndex`/`lag` | same; [latency](POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet) |
 | §3 header chain | `ergoHeaderStore`, `parseErgoHeader`, `eip37Difficulty`, `autolykosHit` in `src/ergo-headers.ts` | `test/ergo-headers.test.ts`; [reader-verified headers](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers) |
 | §4 block sections | `attributeSection`, `sectionMatchesRoot`, `transactionsRoot`, `merkleRoot` | `test/ergo-profile.test.ts`, `test/ergo-supplier.test.ts`; [P4](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor) |
 | §5 transaction grammar | `frameTransaction`, `frameTree`, `frameCollBytes` | [hostile framer probe](POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence) |
 | §6 attribution, reassembly, ordinal | `attributeOutput`, `attributeOwned`, `ergoOrdinal`, `collBytes` | `test/ergo-profile.test.ts`; [P2](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node) |
-| §7 answers | `rangeEntries` over `src/record-range.ts`, from `ErgoVenue.range` and `ergoRangeVerifier(...).range` | `test/ergo-venue.test.ts` (the two agree); local replay adapter |
+| §7 answers | `rangeEntries` over `src/record-range.ts`, from `ErgoVenue.range` (a `RecordVenue`, `src/record-venue.ts`) | `test/ergo-profile.test.ts`, `test/ergo-venue.test.ts`; [local replay](#local-replay-through-the-venue) |
 | §8 publishing | [kind-4 capacity](ergo-range-profile-verification.json) | [decision](../decisions/2026-09.md#2026-09-15--a-configurations-publications-fit-one-ergo-transaction) |
 
-`ergoRangeVerifier` takes supplied evidence, including any linked header
-chain, so the harnesses can feed it synthetic headers; `ErgoVenue` takes only
-headers its own store accepted.
+`ErgoVenue` is the one Ergo reader: it answers only from headers its own store
+accepted and sections that reproduce their roots, including in the harnesses,
+which serve it the synthetic reference chain
+([decision](../decisions/2026-09.md#2026-09-25--promote-the-v3-state-machine-and-single-segment-reader-and-read-ergo-only-through-ergovenue)).
 
 **Reference contexts.** venue-ergo's identity hashes its own context,
 `moe/venue/ergo/v3`, and names the mainnet chain under the mainnet header
@@ -37,14 +38,12 @@ and selects its header rules, so which chain an identity names is read from
 its preimage, never from its 32 bytes
 ([plan](../decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2),
 decision 8). `moe/venue/ergo-synthetic/reference` (`ERGO_SYNTHETIC_REFERENCE`)
-names the synthetic test chains (`test/ergo-chain.ts`, the local replay
-fixture, the profile experiment's chain) under the mainnet rules, and
-`ErgoVenue` reads it only above an anchor of difficulty 1: no mainnet header
-has it, and a header id commits to its ancestry, so a profile naming the
-synthetic context cannot follow the mainnet. `ergoRangeVerifier` applies no
-header rules under any context (its caller selects the headers). The testnet's
-context joins with its header rules; `ownErgoProfile` refuses every other
-context.
+names the synthetic chain (`src/ergo-synthetic.ts`, reference tooling for
+the tests and the local replay) under the mainnet rules, and `ErgoVenue`
+reads it only above an anchor of difficulty 1: no mainnet header has it, and
+a header id commits to its ancestry, so a profile naming the synthetic
+context cannot follow the mainnet. The testnet's context joins with its
+header rules; `ownErgoProfile` refuses every other context.
 
 ## Header source
 
@@ -53,12 +52,12 @@ profile): `ergoHeaderStore(anchorId, context)` takes the anchor's context,
 `add(bytes)` accepts one header from any supplier or names its refusal
 (`malformed`, `unknown-parent`, `below-anchor`, `height`, `timestamp`,
 `difficulty`, `pow`), and `best()` returns the heaviest chain's headers from
-the anchor's child for `ergoRangeVerifier`. The node checks a block's
+the anchor's child, which `ErgoVenue` reads sections by. The node checks a block's
 version against the voted parameters only at a voting epoch's first block,
 so a miner can carry any version byte mid-epoch; the store therefore reads
 every version in the node's layout for it (a new-fields length for 2–127,
 read above 4, and an Autolykos v1 solution for version 1), and
-`ergoRangeVerifier` reads every block's section. The node takes a section's
+`ErgoVenue` reads every block's section. The node takes a section's
 root rule (ids alone, or ids then witness ids) from the section's own
 serialization, not the header, so `sectionMatchesRoot` accepts either. No
 version byte or root rule a miner chooses can strand the reader or deny a
@@ -174,56 +173,48 @@ and the node's own parser cover what it checked. Its
 [1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range),
 keeps the kind-4 capacity measurement.
 
-## Local replay adapter
+## Local replay through the venue
 
 `npm run check:pool:ergo-replay` runs every local replay group of
-`scripts/pool/v3/local-check.mjs` a second time through the profile's model: the
+`scripts/pool/v3/local-check.mjs` a second time through `ErgoVenue`: the
 single-backing import, payment and burn traces with and without silence, the
 two-backing scope and scope-recovery histories, receipts, non-service counts,
 compact fault evidence and returning segments with their adopted blocks. The
-commands are in the
-[harness guide](../scripts/pool/v3/README.md). The
+commands are in the [harness guide](../scripts/pool/v3/README.md), and the
 [retained replay report](pool-v3-local-replay-verification.json) records the
-groups, the kind-4 subjects and the cross-backing union positions that agree,
-and the refusals: fresh seedless audit and receiver restoration, missing
-sections, framable root mismatches, malformed transactions, wrong profile/headers
-and resource refusal. The fixture converter constructs exact unsigned
-transaction bytes, witness ids and expected roots with its own node-layout
-serialization (byte-identical to Fleet's on these shapes when Fleet was
-retired), independently of the profile's framer: the profile names the synthetic reference context, the fixed synthetic genesis is the anchor, fixture index `i` is
-height `i + 2`, a fixture venue of lag `l` is read under depth `l − 1`, and
-each fixture record is a separate transaction in the fixture's insertion
-order, so a kind-4 ordinal is the fixture's ordinal shifted by 32 bits and
-every other field of a result is identical. Because of that layout the
-replay never places two records in one transaction; adjacency, run
-boundaries and over-bound runs are exercised by the unit tests only. Synthetic headers are selected separately by the
-reader; they have never been accepted by a node.
+groups, the kind-4 subjects and the cross-backing union positions that agree.
 
-`experiments/ergo-range/replay-venue.mjs` binds a reader-selected profile,
-header source and answer budget to the existing range interface. The supplier
-provides block sections, each transaction as one byte string (its 31-byte
-witness id, then its unsigned bytes), not transaction ids, decoded outputs,
-clocks or answers. The synchronous factory owns all evidence before returning or awaiting
-proof work. Each byte view is charged before its immediate copy, using intrinsic
-typed-array length and storage checks; shadowed properties cannot hide shared
-storage or an oversized view, and later getters cannot resize or detach an
-already owned view. Detached, out-of-bounds and shared views refuse. The adapter
-caps source bytes at 8 MiB, headers and supplied blocks at 256 each, and total
-transactions at 1024, before the model reads any of it. These are local
-experiment limits, not consensus bounds; since the model hashes and frames
-each transaction once in time linear in its length, they also bound a
-read's work. Budget or storage refusal
-rejects the whole read, even if the offending block would otherwise be ignored.
-The worker's separate V8 IPC envelope remains capped at 2 MiB.
+The reader chooses the profile (the synthetic reference context at depth 1)
+and the anchor's context, both from `src/ergo-synthetic.ts`, identical in every
+process. The package's venue data is a chain of blocks: `ErgoVenue` syncs from
+a supplier serving it, verifies every header under the mainnet rules at
+difficulty 1 from the reader's anchor, and reads every section that
+reproduces its header's root. At difficulty 1 anyone can mine a heavier
+branch from the anchor, so the reader also pins the id of the block its clock
+must stand on, held beside its keys as it once held the headers themselves:
+a venue whose clock stands elsewhere gives no answer. The converter (`scripts/pool/v3/ergo-check.mjs`)
+writes the fixture's records into that chain under the same indices: index `i`
+is the block `i + 1` above the anchor, a fixture venue of lag `l` is read under
+depth `l − 1`, and each fixture record is a separate transaction in the
+fixture's insertion order, its unsigned bytes written in the node's layout
+independently of the profile's framer, a kind-4 record split into outputs of
+at most 3,981 bytes. So a kind-4 ordinal is the fixture's ordinal shifted by 32
+bits and every other field of a result is identical. Because of that layout the
+replay never places two records in one transaction; adjacency, run boundaries
+and over-bound runs are exercised by the unit tests only.
 
-A transaction too short to hold a witness id and a transaction makes its
-block malformed, passed over like any other; a transaction outside the
-framer's grammar carries no record. The model then checks roots
-and range completeness. Successful replay reports
-`rangeEvidence: "candidate-ergo-profile-synthetic-headers"`; currency and
-authority flags describe only checks under that explicit trusted fixture.
-Full replay, complete-certificate and spendability flags remain false. This
-integration introduces no production path or normative rule.
+The refusals on the primary group: missing, root-failing and malformed
+sections stop the clock before them; a chain that does not descend from the
+reader's anchor adds no header; a heavier branch re-mined from the anchor
+without a record is refused by the pin, alone or beside the pinned chain; a profile at another depth names another
+venue; a judging index past or before the witnessed one; a retained-bytes
+budget below the records; an answer past the reader's budget (a resource
+refusal); and fresh seedless and receiver processes that verify the package's
+blocks themselves. An honest supplier's section is read beside a tampering
+one's. Successful replay reports `rangeEvidence: "ergo-venue-synthetic-chain"`;
+currency and authority flags describe only checks under that synthetic chain,
+whose headers no node has accepted. Full replay, complete-certificate and
+spendability flags remain false.
 
 ## Runtime venue
 
@@ -283,8 +274,9 @@ which a running or failed sync leaves in place.
   decodes and names the backing, for the walk to judge; revocations are the
   kind-3 objects that decode, name the key and verify. Every subject is
   answered by exhaustion, so no subject is registered before a sync.
-  `range(request, limits)` is the §13 answer from the same sections; it
-  equals `ergoRangeVerifier`'s over the same blocks. The profile carries no
+  `range(request, limits)` is the §13 answer from the same sections, a
+  `RecordVenue` answer: undefined where the view cannot answer, and a
+  `RangeLimitError` past the caller's budget. The profile carries no
   transparent operation or commit records, and the view refuses those reads
   rather than answering empty, so the frozen transparent path has no Ergo
   venue.

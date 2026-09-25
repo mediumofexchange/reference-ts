@@ -1,74 +1,14 @@
 // Public scope authentication is independent of the committed event chain.
 // A partial trail is only a bounded carrier for existing header/term bytes.
+// A checkpoint's served trail is the runtime's (src/pool/v3/served-trail.ts).
 import { createHash } from "node:crypto";
-import { compareBytes, EncodingError } from "../../../dist/bytes.js";
-import { EvidenceRefusal, LIMITS } from "../delivery/evidence-reader.mjs";
+import { compareBytes } from "../../../dist/bytes.js";
+import { EvidenceRefusal } from "../../../dist/pool/v3/refusals.js";
+import { servedTrail } from "../../../dist/pool/v3/served-trail.js";
 
 const same = (a, b) => compareBytes(a, b) === 0;
 const hash = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
 const hex = bytes => Buffer.from(bytes).toString("hex");
-
-// A decoded trail's evidence chain depends only on its own header and records
-// (pool-v3 §7), so one read computes it once per trail object: position i
-// holds evidenceHash_i, over the longest prefix whose records decode under §5.
-const chains = new WeakMap();
-function cacheFor(codec) {
-  if (!chains.has(codec)) chains.set(codec, new WeakMap());
-  return chains.get(codec);
-}
-export function trailEvidenceChain(codec, trail) {
-  const cached = cacheFor(codec);
-  if (cached.has(trail)) return cached.get(trail).chain;
-  const chain = [codec.genesisEvidenceHash(hash(trail.header))];
-  for (const [i, bytes] of trail.records.entries()) {
-    let record;
-    try { record = codec.decodeRecord(bytes); } catch (error) {
-      if (!(error instanceof EncodingError || error instanceof codec.CodecEncodingError)) throw error;
-      break;
-    }
-    chain.push(codec.nextEvidenceHash(chain[i], codec.evidenceHashes(record), BigInt(i) + 1n));
-  }
-  cached.set(trail, { chain });
-  return chain;
-}
-function positionOf(codec, trail, evidenceHash) {
-  trailEvidenceChain(codec, trail);
-  const entry = cacheFor(codec).get(trail);
-  entry.positions ??= new Map(entry.chain.map((value, i) => [hex(value), i]));
-  return entry.positions.get(hex(evidenceHash));
-}
-/** The trail cut at n: its header and terms with its first n records (§10). */
-function prefixOf(codec, trail, n) {
-  if (n === trail.records.length) return trail;
-  const entry = cacheFor(codec).get(trail);
-  entry.prefixes ??= new Map();
-  if (!entry.prefixes.has(n)) {
-    const prefix = Object.freeze({ header: trail.header, terms: trail.terms, records: Object.freeze(trail.records.slice(0, n)) });
-    cacheFor(codec).set(prefix, { chain: entry.chain.slice(0, n + 1) });
-    entry.prefixes.set(n, prefix);
-  }
-  return entry.prefixes.get(n);
-}
-/** pool-v3 §12.1: a checkpoint's served trail is the prefix of any supplied
- * trail of its segment whose decodable first n records reproduce the
- * snapshot's evidence hash (at n = 0, the seed); later records are not its
- * evidence. Matching prefixes share header and records, so the first one is
- * the dependency. §10.1's recurrence is the cached chain, computed once per
- * trail decoded under the local budget; the remaining §10.1 checks bind the
- * snapshot to the expected digest and the header scope to the backing.
- * Terms are resolved separately by backing name (resolveTerms). */
-export function servedTrail(codec, expected, snapshot, trails) {
-  if (!same(snapshot.backing, expected.backing) || !same(snapshot.segment, expected.segment) ||
-      !same(codec.snapshotDigest(snapshot), expected.digest)) return undefined;
-  for (const trail of trails) {
-    // Another segment's trail fails §10.1 before any record is decoded.
-    if (!same(hash(trail.header), expected.segment)) continue;
-    if (!codec.decodeSegmentHeader(trail.header).entries.some(entry => same(entry.backing, expected.backing))) continue;
-    const n = positionOf(codec, trail, snapshot.evidenceHash);
-    if (n !== undefined) return prefixOf(codec, trail, n);
-  }
-  return undefined;
-}
 
 /** pool-v3 §12.1: each scoped signed-terms field is resolved by its backing
  * name from any supplied trail of the segment whose field reproduces the name
@@ -122,7 +62,7 @@ export function checkpointScope(trails, backing, digest, snapshot, codec) {
   let full;
   const result = { ...scope, fullTrail() {
     if (full !== undefined) return full;
-    const served = servedTrail(codec, { backing, segment: snapshot.segment, digest }, snapshot, trails);
+    const served = servedTrail({ backing, segment: snapshot.segment, digest }, snapshot, trails);
     if (served === undefined) throw new EvidenceRefusal("unresolved-evidence");
     full = served; return full;
   } };
