@@ -33,8 +33,8 @@ one-clause summary instead of restating numbers or dated status lines.
 ## Direction and authority
 
 The shielded pool is the active claim layer (Construction C1.2). `src/pool/` is the v2 runtime;
-PoolStore refuses silence clauses. Successor recovery and v3 work in `model/`, `scripts/pool/v3/`
-and `experiments/` is conditional evidence, not runtime support or adoption. The fault model binds
+PoolStore refuses silence clauses. `src/pool/v3/` is the unadopted v3 candidate; successor work
+in `model/`, `scripts/pool/v3/` and `experiments/` is conditional evidence, not runtime support. The fault model binds
 exact bytes with real hashes and ideal proof/authentication oracles; current layout and adoption
 limits are in implementation status.
 

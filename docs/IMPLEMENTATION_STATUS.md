@@ -65,8 +65,7 @@ selected rules and model limits of the companion's
 pinned real circuits and multi-segment replay separately from the ordinary
 test suite. With Node 24, `npm run check:pool:delivery` exercises the
 [successor delivery/restoration probes](POOL_DEPLOYMENT_PROBES.md#delivery-and-seed-restoration):
-seed-encrypted capsules, fresh-process recovery over synthetic public data,
-real proof binding, and [candidate restoration from exact signed local evidence](POOL_DEPLOYMENT_PROBES.md#restoration-from-exact-local-evidence).
+real proof binding of the capsule digest and [candidate restoration from exact signed local evidence](POOL_DEPLOYMENT_PROBES.md#restoration-from-exact-local-evidence).
 The latter authenticates local record bytes and refuses stale or substituted
 packages against an independent fixture selection; all candidates remain
 unspendable without full replay, authenticated ranges and certified paths.
@@ -167,10 +166,10 @@ refusals preserve already proven contradictions. There is no spendability claim.
 `npm run check:pool:fees` compares the successor
 [transfer shapes and ordinary fees](POOL_DEPLOYMENT_PROBES.md#transfer-shape-and-ordinary-fees)
 with real proofs. These probes do not implement a pool wallet or v3 finality.
-`npm run check:pool:spent` verifies the successor's
-[canonical compressed spent-set candidate](POOL_DEPLOYMENT_PROBES.md#spent-set-replay)
-against independent batch roots and hostile keys; `npm run bench:pool:spent`
-compares per-insert replay cost with pinned v2. It is outside the runtime.
+`npm test` checks the successor's
+[canonical compressed spent root](POOL_DEPLOYMENT_PROBES.md#spent-set-replay)
+(`src/pool/v3/spent-set.ts`) against independent batch roots and hostile keys;
+`npm run bench:pool:spent` compares per-insert replay cost with pinned v2.
 
 The [Ergo full-block probe](POOL_DEPLOYMENT_PROBES.md#full-block-commitment-feasibility)
 reproduces real transaction roots and retains serializer counterexamples.
@@ -244,24 +243,31 @@ nothing across restarts and has not published on the mainnet.
 
 ## Successor record conformance
 
-`model/pool-v3-records.ts` implements the successor's reviewed
+The v3 codecs below, the spent root and the C4 capsule library live in
+`src/pool/v3/` as candidate runtime code (slice 1 M1 of the
+[v3 runtime plan](../decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2));
+the v3 scripts, including the experimental local replay, read them from
+`dist/`. No runtime state machine, admission or reader uses them yet, and
+nothing is adopted.
+
+`src/pool/v3/records.ts` implements the successor's reviewed
 [canonical record layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/ca727f6/pool-v3.md#5-canonical-statement-records).
 `npm test` checks exact bytes, hostile parsing, delivery association and
-signature-message binding. This codec is not exported or used for admission;
+signature-message binding. No admission uses it yet;
 approved v3 configuration, finality and adoption remain undefined.
-`model/pool-v3-commitments.ts` adds the reviewed history/evidence chains,
+`src/pool/v3/commitments.ts` adds the reviewed history/evidence chains,
 snapshot and receipt frames from [pool-v3 §7](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md#7-history-evidence-snapshots-and-receipts).
 Its tests distinguish authenticated failing evidence from substituted bytes
 using real signatures. Authentication alone supplies no checkpoint verdict.
-`model/pool-v3-headers.ts` implements [v3 segment headers](https://github.com/mediumofexchange/money-from-first-principles/blob/061f87e/pool-v3.md#8-segment-headers)
+`src/pool/v3/headers.ts` implements [v3 segment headers](https://github.com/mediumofexchange/money-from-first-principles/blob/061f87e/pool-v3.md#8-segment-headers)
 with canonical scope/opening references and bounded strict decoding. Its
 signed-directory and hostile-byte tests establish header conformance; complete
 opening evidence, complete certificate formats and runtime adoption remain open.
-`model/pool-v3-fault-evidence.ts` adds the [portable fault-evidence record](https://github.com/mediumofexchange/money-from-first-principles/blob/322bcae/pool-v3.md#9-fault-evidence-records):
+`src/pool/v3/fault-evidence.ts` adds the [portable fault-evidence record](https://github.com/mediumofexchange/money-from-first-principles/blob/322bcae/pool-v3.md#9-fault-evidence-records):
 exact raw target bytes and an evidence suffix, checked against an externally
 authenticated snapshot with an explicit reader budget. Successful evidence
 authentication is not an exclusion verdict or a complete served trail.
-`model/pool-v3-trail.ts` implements [served-trail transport](https://github.com/mediumofexchange/money-from-first-principles/blob/7ea0ee8/pool-v3.md#10-served-trail-transport)
+`src/pool/v3/trail.ts` implements [served-trail transport](https://github.com/mediumofexchange/money-from-first-principles/blob/7ea0ee8/pool-v3.md#10-served-trail-transport)
 with explicit byte/event budgets and raw inner-byte retention. Its local
 evidence helper authenticates the header and ordered event evidence against
 an expected signed-directory snapshot, including capsule association for
@@ -269,7 +275,7 @@ decodable records. It does not authenticate scoped terms, replay history or
 imports, resolve record ranges/adoption or establish a complete opening.
 Opaque terms still require their own decoding, name/signature and force checks.
 
-`model/pool-v3-package.ts` implements [§12 evidence transport](https://github.com/mediumofexchange/money-from-first-principles/blob/10dcf67/pool-v3.md#12-evidence-packages-and-dependency-retention):
+`src/pool/v3/package.ts` implements [§12 evidence transport](https://github.com/mediumofexchange/money-from-first-principles/blob/10dcf67/pool-v3.md#12-evidence-packages-and-dependency-retention):
 canonical typed exact-byte inventory, local byte/item limits before payload
 hashing, and the existing MOED directory-root preimage. Fresh local replay
 uses package bytes with exactly one configuration and signed commitment; the

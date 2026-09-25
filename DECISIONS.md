@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-25` [Promote v3's codecs, spent root and capsule library into src/pool/v3](decisions/2026-09.md#2026-09-25--promote-v3s-codecs-spent-root-and-capsule-library-into-srcpoolv3)
 - `2026-09-25` [Give v3 a construction-neutral core before it enters src/](decisions/2026-09.md#2026-09-25--give-v3-a-construction-neutral-core-before-it-enters-src)
 - `2026-09-25` [Plan the v3 runtime: one state machine and one reader beside a frozen v2](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)
 - `2026-09-25` [Direct the next work at the v3 runtime and its failure path](decisions/2026-09.md#2026-09-25--direct-the-next-work-at-the-v3-runtime-and-its-failure-path)

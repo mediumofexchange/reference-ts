@@ -93,28 +93,25 @@ key, new ownership algebra or payer-to-recipient key agreement. Arbitrary
 unsolicited amounts require a new receiver request; pending invoices and
 accounting labels still need a backup.
 
-Reproduce the cryptographic seam and proof-binding checks with Node 24:
+The capsule library is candidate runtime code in
+[`src/pool/v3/capsules.ts`](../src/pool/v3/capsules.ts); the delivery digest
+is the record codec's. `npm test` checks the recorded profile-1 vector byte
+for byte, deterministic retries, key separation, u64 and width bounds,
+malformed/context-swapped/tampered capsules, authenticated wrong-commitment
+plaintext, the ordered delivery vector, the settlement owner secret and an
+independent WebCrypto envelope. With Node 24, `npm run check:pool:delivery`
+adds the real proof binding and restoration from signed local evidence below;
+CI runs it on Linux and Windows beside the pinned v2 proof checks.
 
-```powershell
-npm run check:pool:delivery
-```
-
-The retained sources are under [scripts/pool/delivery](../scripts/pool/delivery/).
-Generated compilation and run reports stay under ignored `scratch/`.
-The [recorded result](pool-delivery-verification.json) identifies the exact
-sources/toolchain and records hostile checks and local measurements. CI runs
-the candidate checks on Linux and Windows beside the pinned v2 proof checks.
-No production circuit, key, configuration or exported runtime API changes.
-
-The fresh restoration process receives only a seed and synthetic public
-outputs/capsules, spent nullifiers and lit settlement data. It receives no
-request journal, original payer secrets or original operator callbacks.
-It reconstructs positive unspent notes, retains unresolved coverage, and
-separates force-created outputs awaiting canonical adoption. The probe also
-checks deterministic retries, key separation, malformed/context-swapped
-capsules, missing/reordered delivery vectors, authenticated wrong-commitment
-plaintext, spent/zero outputs and fresh request generation after journal loss.
-Node's cipher results are checked against WebCrypto independently.
+The first probe (retired at slice 1 M1; its
+[recorded result](pool-delivery-verification.json) and sources are at
+[17a9f1e](https://github.com/mediumofexchange/reference-ts/tree/17a9f1e/scripts/pool/delivery))
+restored notes in a fresh process from a seed and a prevalidated synthetic
+view: public outputs and capsules, spent nullifiers and lit settlements, with
+no request journal, payer secrets or operator callbacks. It kept unresolved
+coverage, separated force-created outputs awaiting adoption and generated a
+fresh request after journal loss. Restoration from exact signed evidence and
+the local replay's receivers now cover that path over authenticated bytes.
 
 Every capsule is 89 bytes. One aggregate digest adds two public field
 encodings, 64 bytes per issue/spend/burn before record framing: 242 extra
@@ -126,8 +123,8 @@ still rejects `2^128` in either limb over unchanged ACIR, establishing an
 actual circuit range constraint. This is a spend-binding measurement, not
 an already measured final v3 issue/spend/burn suite.
 
-On this Windows desktop (Node 24.6.0, i7-5500U), 1,000 / 10,000 / 100,000
-failed capsule opens took 79 ms / 738 ms / 12.36 s. These samples repeat one
+The retired probe recorded, on this Windows desktop (Node 24.6.0, i7-5500U),
+that 1,000 / 10,000 / 100,000 failed capsule opens took 79 ms / 738 ms / 12.36 s. These samples repeat one
 foreign envelope while deriving its subkey each time; they measure trial
 cryptography, not traversal of distinct history records. Existing commitment
 plus nullifier hashing averaged 2.11 ms per pair over 250 samples, excluding
@@ -135,22 +132,18 @@ owner derivation and the rest of successful recovery. The candidate spend
 proved in 4.38 s and verified in 92 ms. These are single local samples, not
 phone budgets or throughput guarantees.
 
-The restoration fixture is explicitly a **prevalidated synthetic view**.
-It does not verify full v3 history, force, adoption, venue ordering or range
-completeness. A caller's marker is no finality evidence. The production wallet
-must consume independently authenticated complete public packages, retain
-full evidence before payer/operator disappearance, and construct certified
-paths. Seed recovery does not discover unknown venues/backings, prove a
-complete balance or guarantee permanent availability. Device and full-history
-replay costs remain additional gates.
+The production wallet must consume independently authenticated complete
+public packages, retain full evidence before payer/operator disappearance, and
+construct certified paths. Seed recovery does not discover unknown
+venues/backings, prove a complete balance or guarantee permanent availability.
+Device and full-history replay costs remain additional gates.
 
 ### Restoration from exact local evidence
 
 `npm run check:pool:restoration` connects the existing capsule scanner to the
 canonical v3 served-trail, record, snapshot and header codecs. It also runs in
 `check:pool:delivery`, including Linux/Windows CI. The
-[retained result](pool-restoration-evidence-verification.json) pins the sources;
-temporary codec builds are removed after the run.
+[retained result](pool-restoration-evidence-verification.json) pins the sources.
 
 A fresh child receives only a synthetic seed, an independently selected fixture
 identity and public package bytes. It verifies the operator signature, complete
@@ -459,7 +452,9 @@ npm run check:pool:fees
 
 [Probe sources](../scripts/pool/fees/) generate candidates from the pinned v2
 spend; [recorded evidence](pool-fees-verification.json) pins their identities,
-inputs and measurement scope. Generated sources/builds/reports stay in
+inputs and measurement scope; it is historical, recorded at
+[fcf532c](https://github.com/mediumofexchange/reference-ts/tree/fcf532c) before the
+capsule library moved into `src/pool/v3/`. Generated sources/builds/reports stay in
 `scratch/pool-fees/`. CI runs this command on Linux and Windows.
 
 F4 selects two input/four output positions for successor spend, under
@@ -534,10 +529,10 @@ and deployment gates, not consequences of choosing an arity.
 
 A22 selects [the successor spent-root contract](https://github.com/mediumofexchange/money-from-first-principles/blob/78f8a8c/pool-spent.md):
 a canonical compressed binary tree with full-key leaves and absolute split
-positions. `scripts/pool/spent-set/` retains the candidate and an independent
-batch oracle; no runtime v2 code, root, proof or configuration changes.
-`npm run check:pool:spent` is included in `npm run check`, so Linux Node 20/24
-and Windows Node 24 CI exercise the deterministic checks.
+positions. [`src/pool/v3/spent-set.ts`](../src/pool/v3/spent-set.ts) holds the
+candidate and `test/pool-v3-spent-set.test.ts` an independent batch oracle;
+no v2 code, root, proof or configuration changes. `npm test` runs the checks
+in Linux Node 20/24 and Windows Node 24 CI.
 
 Ten check groups cover empty/singleton frames, all 120 insertion orders of a
 five-key boundary set, every prefix under four orders, every split position
@@ -552,7 +547,9 @@ format or parser.
 Run `npm run bench:pool:spent` to regenerate
 `scratch/pool-spent-set/report.json`. The
 [recorded report](pool-spent-verification.json) pins the specification and
-LF-normalized source hashes, environment and deterministic roots. Both shapes
+LF-normalized source hashes, environment and deterministic roots; it is
+historical, recorded at [c955798](https://github.com/mediumofexchange/reference-ts/tree/c955798)
+before the candidate moved into `src/pool/v3/`. Both shapes
 use the same SHA-256 library, and the harness reads the root after **every
 insert**, including v2's lazy singleton hashing. Sizes are 128, 1,024, 8,192
 and 100,000 keys, with one measured run after a 128-key warmup; a reversed
