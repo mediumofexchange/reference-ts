@@ -235,9 +235,12 @@ node suppliers under a per-supplier header budget, answers the runtime's
 `Venue` reads by exhaustion and §13 ranges from the same sections, stops its
 clock before a missing section and fails on a reorganization past the depth;
 it replaced the view over a node's box index. On the mainnet it synced 300
-blocks from the own node and matched a public-node-only view. It cannot
-publish, persists nothing across restarts, and a record must be published
-inside the framer's grammar to be read.
+blocks from the own node and matched a public-node-only view. Given an
+`ErgoPublisher` it publishes kind 1–3 records from its own funding key,
+building and signing each transaction without an Ergo library; the own
+testnet node accepted three chained publications and they read back from
+their block ([publisher](ERGO_VENUE_PROFILE.md#runtime-venue)). It persists
+nothing across restarts and has not published on the mainnet.
 
 ## Successor record conformance
 
