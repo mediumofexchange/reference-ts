@@ -6,7 +6,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { NoteTree } from "../../../dist/pool/note-tree.js";
 import { fieldToBytes } from "../../../dist/pool/field.js";
 import { directoryRoot, encodeReplacement, replacementMessage, ROLE_OPERATOR, signCommitment } from "../../../dist/venue-records.js";
-import { RadixSpentSet } from "../spent-set/radix.mjs";
+import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { LIMITS } from "../delivery/evidence-reader.mjs";
 import { replayLocalPackage } from "./local-replay.mjs";
 

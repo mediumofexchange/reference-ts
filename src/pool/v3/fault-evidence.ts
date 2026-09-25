@@ -1,10 +1,10 @@
 // Portable evidence authentication, pool-v3 §9 at 322bcae. This does not
 // classify checkpoints, validate target records/proofs or establish finality.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { compareBytes, copyBytes, EncodingError } from "../src/bytes.js";
-import { isValue } from "../src/pool/field.js";
-import { decodeSnapshot, snapshotBytes, verifyEvidenceOpening, type Snapshot } from "./pool-v3-commitments.js";
-import { hashEvidenceFields, type EvidenceDigests } from "./pool-v3-records.js";
+import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
+import { isValue } from "../field.js";
+import { decodeSnapshot, snapshotBytes, verifyEvidenceOpening, type Snapshot } from "./commitments.js";
+import { hashEvidenceFields, type EvidenceDigests } from "./records.js";
 
 const CONTEXT = new TextEncoder().encode("moe/pool/v3/fault-evidence");
 const SNAPSHOT_CONTEXT = new TextEncoder().encode("moe/pool/v3/snapshot");

@@ -1,24 +1,21 @@
-// Experiment only: pool-delivery C4.6 and pool-v3 §§5,7,8,10 at 7ea0ee8.
+// Experiment only: pool-delivery C4.6 and pool-v3 §§5,7,8,10 at 7ea0ee8, over the runtime's v3 codecs.
 // Authenticate LOCAL evidence, then recover candidates. This is not replay.
 import { compareBytes, EncodingError } from "../../../dist/bytes.js";
-import { decodeCommitment, directoryRoot, verifyCommitment } from "../../../dist/commitment.js";
+import { decodeCommitment, directoryRoot, verifyCommitment } from "../../../dist/venue-records.js";
 import { identifierOf, isValue } from "../../../dist/pool/field.js";
-import { CapsuleAssociationError, CapsuleFormatError, createCapsuleScanner } from "./crypto.mjs";
+import { CapsuleAssociationError, CapsuleFormatError, createCapsuleScanner } from "../../../dist/pool/v3/capsules.js";
+import * as trailCodec from "../../../dist/pool/v3/trail.js";
+import * as recordCodec from "../../../dist/pool/v3/records.js";
+import * as headerCodec from "../../../dist/pool/v3/headers.js";
+import * as commitmentCodec from "../../../dist/pool/v3/commitments.js";
 
 export const LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxEvents: 1024n });
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const same = (a, b) => compareBytes(a, b) === 0;
 
-export async function loadEvidenceCodecs(buildUrl) {
-  const [trail, records, headers, snapshots, bytes] = await Promise.all([
-    import(new URL("model/pool-v3-trail.js", buildUrl)),
-    import(new URL("model/pool-v3-records.js", buildUrl)),
-    import(new URL("model/pool-v3-headers.js", buildUrl)),
-    import(new URL("model/pool-v3-commitments.js", buildUrl)),
-    import(new URL("src/bytes.js", buildUrl)),
-  ]);
-  return { ...trail, ...records, ...headers, ...snapshots, CodecEncodingError: bytes.EncodingError };
-}
+/** The v3 evidence codecs from the runtime. CodecEncodingError names the one
+ * runtime EncodingError for callers written when the codecs compiled apart. */
+export const evidenceCodecs = Object.freeze({ ...trailCodec, ...recordCodec, ...headerCodec, ...commitmentCodec, CodecEncodingError: EncodingError });
 
 export class EvidenceRefusal extends Error {
   constructor(status) { super(status); this.status = status; }
@@ -106,8 +103,7 @@ export function inspectRestorationEvidence(seed, selection, supplied, codec) {
   } catch (error) {
     if (error instanceof EvidenceRefusal) return result(error.status);
     if (error instanceof codec.TrailLimitError) return result("resource-refusal");
-    // Compiled model and runtime each have their own EncodingError class.
-    if (error instanceof EncodingError || error instanceof codec.CodecEncodingError ||
+    if (error instanceof EncodingError ||
       error instanceof CapsuleFormatError || error instanceof CapsuleAssociationError) return result("unresolved-evidence");
     throw error;
   }

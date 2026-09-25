@@ -1,6 +1,6 @@
 import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import * as terms from "../model/pool-v3-terms.js";
+import * as terms from "../src/pool/v3/terms.js";
 import { decodeBacking } from "../src/backing.js";
 import { EncodingError } from "../src/bytes.js";
 

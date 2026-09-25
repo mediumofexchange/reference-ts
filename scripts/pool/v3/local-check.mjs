@@ -6,7 +6,6 @@ import { join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
 import { serialize } from "node:v8";
-import ts from "typescript";
 import { Noir } from "@noir-lang/noir_js";
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -14,9 +13,9 @@ import { NoteTree, notePathProves } from "../../../dist/pool/note-tree.js";
 import { ScopeTree } from "../../../dist/pool/scope.js";
 import { limbsOf, fieldToBytes } from "../../../dist/pool/field.js";
 import { decodeReplacement, directoryRoot, encodeCommitment, encodeReplacement, encodeRevocation, replacementHash, replacementMessage, ROLE_OPERATOR, signCommitment, signRevocation } from "../../../dist/venue-records.js";
-import { prepareExactOutput } from "../delivery/crypto.mjs";
-import { loadEvidenceCodecs, LIMITS } from "../delivery/evidence-reader.mjs";
-import { RadixSpentSet } from "../spent-set/radix.mjs";
+import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
+import { LIMITS } from "../delivery/evidence-reader.mjs";
+import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { replayLocalPackage, replayEvidencePackage, PACKAGE_LIMITS, RANGE_LIMITS } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
 import { checkImports } from "./import-check.mjs";
@@ -26,15 +25,13 @@ import { checkRecovery } from "./recovery-check.mjs";
 import { checkErgoReplay, replayPairs, underErgo } from "./ergo-check.mjs";
 import { field } from "../fixtures.mjs";
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration,
-  readCandidateKeys, loadConfigurationCodecs } from "./candidate.mjs";
+  readCandidateKeys } from "./candidate.mjs";
+import { v3Codec, v3ErgoCodec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../../..");
 assert(process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--ergo"), "unknown local-check option");
 const withErgo = process.argv[2] === "--ergo";
-// The TypeScript sources the replay compiles; their relative imports come with them.
-const compiledRoots = [...["trail", "configuration", "terms", "package", "fault-evidence"].map(name => `model/pool-v3-${name}.ts`),
-  "src/record-range.ts", ...(withErgo ? ["src/ergo-profile.ts"] : [])];
 const ergoFixture = withErgo ? await import("../../../experiments/ergo-range/replay-fixture.mjs") : undefined;
 const ergoAdapter = withErgo ? await import("../../../experiments/ergo-range/replay-venue.mjs") : undefined;
 mkdirSync(join(root, "scratch"), { recursive: true });
@@ -47,17 +44,7 @@ const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 const test = async (name, fn) => { await fn(); checks.push(name); };
 let api;
 try {
-  const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
-  if (config.error) throw new Error("TypeScript configuration unreadable");
-  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const program = ts.createProgram(compiledRoots.map(file => join(root, file)), {
-    ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false,
-  });
-  assert.equal(ts.getPreEmitDiagnostics(program).length, 0); assert.equal(program.emit().emitSkipped, false);
-  const codec = { ...await loadEvidenceCodecs(url), ...await loadConfigurationCodecs(url),
-    ...await import(new URL("model/pool-v3-fault-evidence.js", url)),
-    ...await import(new URL("model/pool-v3-package.js", url)), ...await import(new URL("src/record-range.js", url)),
-    ...(withErgo ? await import(new URL("src/ergo-profile.js", url)) : {}) };
+  const codec = withErgo ? v3ErgoCodec : v3Codec;
   if (withErgo) {
     const { checkErgoOwnership } = await import("../../../experiments/ergo-range/replay-venue-check.mjs");
     await test("Ergo ownership bounds intrinsic byte views before getters can hide, grow or detach storage", () => checkErgoOwnership(codec));
@@ -1221,10 +1208,10 @@ try {
     }
   });
   // The repository sources the verdict executes, from the relative import graph (dist modules with their src
-  // sources), the compiled model roots, and the circuits, helpers and manifest the pinned identities come from.
+  // sources) and the circuits, helpers and manifest the pinned identities come from.
   // Packages are bound by the lockfiles; the vendored library the Ergo fixture builds trees with by its checksum list.
   const sources = sourceClosure(["scripts/pool/v3/local-check.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/compile.mjs",
-    ...compiledRoots, "scripts/pool/v3/candidate-manifest.json",
+    "scripts/pool/v3/candidate-manifest.json",
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json",
     ...(withErgo ? ["experiments/ergo-range/package-lock.json", "experiments/ergo-range/vendor/ergo-lib-wasm-nodejs/SHA256SUMS"] : [])]);

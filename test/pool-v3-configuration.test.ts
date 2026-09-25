@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { configurationBytes, configurationHash, decodeConfiguration, verifyConfiguration, RELATIONS,
-  type CandidateConfiguration } from "../model/pool-v3-configuration.js";
+  type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { EncodingError } from "../src/bytes.js";
 
 const manifest = JSON.parse(readFileSync(new URL("../scripts/pool/v3/candidate-manifest.json", import.meta.url), "utf8"));

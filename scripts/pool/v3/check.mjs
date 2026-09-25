@@ -8,7 +8,8 @@ import { performance } from 'node:perf_hooks';
 import { Noir } from '@noir-lang/noir_js';
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from '@aztec/bb.js';
 import { fixtures, field, U64_MAX } from '../fixtures.mjs';
-import { deliveryHash, requireDeliveryVector } from '../delivery/crypto.mjs';
+import { EncodingError } from '../../../dist/bytes.js';
+import { deliveryHash } from '../../../dist/pool/v3/records.js';
 import { V3_SPECIFICATION } from './provenance.mjs';
 
 const here = import.meta.dirname, root = resolve(here, '../../..');
@@ -56,7 +57,7 @@ try {
     // Opaque public capsules are sufficient for the relation/host-hash boundary;
     // receiver decryption is deliberately not claimed by this fixture.
     const vector = commitments.map((cm, i) => ({ cm: BigInt(cm), capsule: Uint8Array.from({ length: 89 }, (_, j) => j === 0 ? 1 : (i + j) & 255) }));
-    const digest = deliveryHash(bytes32(v.domain), vector);
+    const digest = deliveryHash(bytes32(v.domain), vector.map(x => x.cm), vector.map(x => x.capsule));
     v.delivery = [digest.subarray(0, 16), digest.subarray(16)].map(b => BigInt('0x' + Buffer.from(b).toString('hex')).toString());
     return { vector, digest };
   };
@@ -324,10 +325,11 @@ try {
   for(const kind of ['issue','spend','burn']) {
     const v=structuredClone(bases[kind]), {vector,digest}=delivery(kind,v), domain=bytes32(v.domain);
     assert.equal(vector.length,{issue:1,spend:4,burn:1}[kind]);
-    assert.deepEqual(requireDeliveryVector(domain,vector,digest),digest);
-    assert.throws(()=>requireDeliveryVector(domain,vector.slice(0,-1),digest));
+    const hashOf=vector=>deliveryHash(domain,vector.map(x=>x.cm),vector.map(x=>x.capsule));
+    assert.deepEqual(hashOf(vector),digest);
+    assert.throws(()=>hashOf(vector.slice(0,-1)),EncodingError);
     const bad=structuredClone(vector);bad[0].capsule[1]^=1;
-    assert.throws(()=>requireDeliveryVector(domain,bad,digest));
+    assert.notDeepEqual(hashOf(bad),digest);
     checks.push(kind+': exact synthetic capsule vector hash, missing/tampered vector rejected');
   }
   const git=args=>execFileSync('git',args,{cwd:root,encoding:'utf8',windowsHide:true,timeout:30_000}).trim();

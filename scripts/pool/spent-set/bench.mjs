@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { cpus } from 'node:os';
 import { performance } from 'node:perf_hooks';
 import { SpentSet } from '../../../dist/pool/spent-set.js';
-import { RadixSpentSet } from './radix.mjs';
+import { RadixSpentSet } from '../../../dist/pool/v3/spent-set.js';
 
 const hash = bytes => createHash('sha256').update(bytes).digest();
 const keys = Array.from({ length: 100000 }, (_, i) => hash(Buffer.from(`A22/benchmark/${i}`)));
@@ -32,9 +32,8 @@ for (const count of [128, 1024, 8192, 100000]) {
   measurements.push(row); console.log(JSON.stringify(row));
 }
 const sourceHash = file => hash(readFileSync(file, 'utf8').replace(/\r\n/g, '\n')).toString('hex');
-const sources = Object.fromEntries(['radix.mjs', 'check.mjs', 'bench.mjs'].map(file =>
-  [`scripts/pool/spent-set/${file}`, sourceHash(new URL(file, import.meta.url))]));
-sources['src/pool/spent-set.ts'] = sourceHash(new URL('../../../src/pool/spent-set.ts', import.meta.url));
+const sources = Object.fromEntries(['scripts/pool/spent-set/bench.mjs', 'src/pool/v3/spent-set.ts',
+  'test/pool-v3-spent-set.test.ts', 'src/pool/spent-set.ts'].map(file => [file, sourceHash(new URL(`../../../${file}`, import.meta.url))]));
 const report = { schema: 1, specification: '78f8a8c8e4264ee8a406ea6dab91e02836c8272c',
   sourceHashEncoding: 'SHA-256 of UTF-8 source with CRLF normalized to LF',
   node: process.version, platform: process.platform, arch: process.arch,

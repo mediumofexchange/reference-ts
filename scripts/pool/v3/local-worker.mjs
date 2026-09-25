@@ -6,22 +6,17 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { deserialize } from "node:v8";
 import { Barretenberg, BackendType, UltraHonkVerifierBackend } from "@aztec/bb.js";
-import { loadEvidenceCodecs } from "../delivery/evidence-reader.mjs";
 import { replayEvidencePackage, RANGE_LIMITS } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
 import { field } from "../fixtures.mjs";
-import { loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys,
-  loadConfigurationCodecs } from "./candidate.mjs";
+import { loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys } from "./candidate.mjs";
+import { v3Codec, v3ErgoCodec } from "./codec.mjs";
 
 let api;
 try {
   if (process.argv.length > 4 || (process.argv[3] !== undefined && process.argv[3] !== "--ergo")) throw new Error("unknown reader mode");
   const withErgo = process.argv[3] === "--ergo";
-  const codec = { ...await loadEvidenceCodecs(process.argv[2]), ...await loadConfigurationCodecs(process.argv[2]),
-    ...await import(new URL("model/pool-v3-fault-evidence.js", process.argv[2])),
-    ...await import(new URL("model/pool-v3-package.js", process.argv[2])),
-    ...await import(new URL("src/record-range.js", process.argv[2])),
-    ...(withErgo ? await import(new URL("src/ergo-profile.js", process.argv[2])) : {}) };
+  const codec = withErgo ? v3ErgoCodec : v3Codec;
   const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
   const configuration = candidateConfiguration(manifest, codec);
   const keys = readCandidateKeys(fileURLToPath(process.argv[2]), manifest);

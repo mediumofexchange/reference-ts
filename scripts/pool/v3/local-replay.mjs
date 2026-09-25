@@ -8,8 +8,8 @@ import { fieldToBytes, identifierOf, isValue, VALUE_BOUND } from "../../../dist/
 import { NoteTree, EMPTY_NOTE_ROOT, NOTE_TREE_CAPACITY } from "../../../dist/pool/note-tree.js";
 import { ScopeTree } from "../../../dist/pool/scope.js";
 import { ownerOf, commitmentOf, nullifierOf } from "../../../dist/pool/notes.js";
-import { RadixSpentSet } from "../spent-set/radix.mjs";
-import { createCapsuleScanner, deriveSettlementOwnerSecret, CapsuleAssociationError, CapsuleFormatError } from "../delivery/crypto.mjs";
+import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
+import { createCapsuleScanner, deriveSettlementOwnerSecret, CapsuleAssociationError, CapsuleFormatError } from "../../../dist/pool/v3/capsules.js";
 import { EvidenceRefusal, LIMITS, readLocalEvidence } from "../delivery/evidence-reader.mjs";
 import { recoveryState, effectOf, checkRecovery, applyRecovery, tagOf } from "./recovery-state.mjs";
 import { receiptWalk } from "./receipt-state.mjs";

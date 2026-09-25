@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -16,6 +16,10 @@ const NEUTRAL = [
   "src/pool/scope.ts", "src/pool/schedule.ts", "src/pool/proof-verifier.ts",
 ];
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+// The v3 construction (plan decision 2): every module under src/pool/v3/,
+// which builds on the neutral core and nothing else.
+const V3 = readdirSync(join(root, "src/pool/v3"), { recursive: true, encoding: "utf8" }).filter(name => name.endsWith(".ts"))
+  .map(name => `src/pool/v3/${name.replace(/\\/g, "/")}`);
 
 /** Every module specifier a source names, in any form: the compiler's own scan, type-only imports included. */
 const specifiers = (source: string): string[] => ts.preProcessFile(source, true, true).importedFiles.map(file => file.fileName);
@@ -31,6 +35,15 @@ describe("the construction-neutral core", () => {
     const outside: string[] = [];
     for (const module of NEUTRAL) {
       for (const imported of relativeImports(module)) if (!NEUTRAL.includes(imported)) outside.push(`${module} -> ${imported}`);
+    }
+    expect(outside).toEqual([]);
+  });
+
+  it("carries v3, which imports only the neutral core and itself", () => {
+    expect(V3).toEqual(expect.arrayContaining(["src/pool/v3/records.ts", "src/pool/v3/capsules.ts", "src/pool/v3/spent-set.ts"]));
+    const outside: string[] = [];
+    for (const module of V3) {
+      for (const imported of relativeImports(module)) if (!NEUTRAL.includes(imported) && !V3.includes(imported)) outside.push(`${module} -> ${imported}`);
     }
     expect(outside).toEqual([]);
   });

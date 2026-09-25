@@ -1,12 +1,12 @@
-// Model-only terms conformance for pool-v3 §§11.2–11.3 at 916bffb.
+// Candidate root-terms bytes for pool-v3 §§11.2–11.3 at 916bffb.
 // Identity/signature evidence supplies no registration, currentness or adoption.
 import { sha256 } from "@noble/hashes/sha2.js";
 import {
   bigintToMinimalBytes, ByteReader, ByteWriter, compareBytes, copyBytes,
   EncodingError, MAX_QUANTITY_BYTES, minimalBytesToBigint, validateQuantity,
-} from "../src/bytes.js";
-import { BACKING_SIGNATURE_CONTEXT, utf8Decoder, utf8Encoder } from "../src/contexts.js";
-import { isValidPublicKey, verifySignatureStrict } from "../src/keys.js";
+} from "../../bytes.js";
+import { BACKING_SIGNATURE_CONTEXT, utf8Decoder, utf8Encoder } from "../../contexts.js";
+import { isValidPublicKey, verifySignatureStrict } from "../../keys.js";
 
 export const MAX_ROOT_TERMS_BYTES = 1305;
 const MAGIC = Uint8Array.of(0x4d, 0x4f, 0x45, 0x42);
