@@ -38,6 +38,7 @@
 // NOT here, deliberately: publishing. Building and signing a transaction needs
 // an Ergo library, and this package's dependencies are @noble/hashes and
 // @noble/curves. A verifier never publishes; the operator's wallet does.
+import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
 import type { Commitment } from "./commitment.js";
@@ -77,9 +78,11 @@ export interface ErgoReaderPolicy {
   readonly headersPerSupplier: number;
   /** Headers asked of a supplier per request; a longer answer is cut to it. */
   readonly headersPerRequest: number;
-  /** New headers one supplier may add, over the view's life, while its chain
-   * ends off the best chain. Past it the supplier's headers are not read and
-   * it no longer holds the clock back: it is withholding. This bounds the
+  /** New headers one supplier may add, over the view's life, that are off
+   * the best chain at the end of the sync that added them. Past it the
+   * supplier's headers are not read and it no longer holds the clock back:
+   * it is withholding. It is kept per supplier object, so a caller reuses
+   * its supplier objects across syncs. This bounds the
    * work and memory a cheap side branch can cost (venue-ergo.md §3: without
    * the node's clock rule, future timestamps lower a side branch's
    * difficulty). */
@@ -133,11 +136,12 @@ interface Snapshot {
   readonly sections: readonly (readonly AttributedObject[])[];
   readonly witnessedHeaderId: Uint8Array;
 }
-/** A supplier's header pass: its report, and where the header budget stopped
- * it before its tip, its last header and how many headers it added. */
+/** A supplier's header pass: its report, the ids of the headers it added,
+ * and, where the header budget stopped it before its tip, its last header. */
 interface HeaderPass {
   readonly report: ErgoSupplierReport;
-  readonly unfinished?: { readonly supplier: ErgoSupplier; readonly last: Uint8Array; readonly added: number };
+  readonly added: readonly Uint8Array[];
+  readonly last?: Uint8Array;
 }
 
 /**
@@ -224,13 +228,23 @@ export class ErgoVenue implements Venue {
     try {
       // The caller's list is read once; each supplier's name once, for its report.
       const sources = Array.from(suppliers, supplier => ({ supplier, name: nameOf(supplier) }));
-      const reports: ErgoSupplierReport[] = [], unfinished: NonNullable<HeaderPass["unfinished"]>[] = [];
-      for (const source of sources) {
-        const pass = await this.syncHeaders(source.supplier, source.name);
-        reports.push(pass.report);
-        if (pass.unfinished !== undefined) unfinished.push(pass.unfinished);
-      }
+      const passes: { supplier: ErgoSupplier; pass: HeaderPass }[] = [];
+      for (const source of sources) passes.push({ supplier: source.supplier, pass: await this.syncHeaders(source.supplier, source.name) });
       const best = this.store.best(), anchorHeight = this.store.tip().anchorHeight, depth = this.profile.depth;
+      // Each supplier is charged, whatever ended its pass, exactly the headers it added that are not on the best
+      // chain: a supplier whose chain keeps ending off it spends its side-branch quota and is then withholding, and a
+      // branch that briefly leads charges an honest supplier only its headers past the fork.
+      let lowest: bigint | undefined;
+      for (const { pass } of passes) for (const id of pass.added) {
+        const height = this.store.heightOf(id);
+        if (height !== undefined && (lowest === undefined || height < lowest)) lowest = height;
+      }
+      const onBest = new Set<string>();
+      if (lowest !== undefined) for (let i = Number(lowest - anchorHeight - 1n); i < best.headers.length; i++) onBest.add(bytesToHex(best.headers[i]!.id));
+      for (const { supplier, pass } of passes) {
+        const off = pass.added.filter(id => !onBest.has(bytesToHex(id))).length;
+        if (off > 0) this.sideHeaders.set(supplier, (this.sideHeaders.get(supplier) ?? 0) + off);
+      }
       // The best chain must keep the header at the published clock: its id commits to every block before it.
       const previous = this.snapshot, clock = previous?.witnessed ?? -1n;
       if (previous !== undefined) {
@@ -248,16 +262,16 @@ export class ErgoVenue implements Venue {
       }
       const chainWitnessed = best.height - depth - anchorHeight - 1n;
       let bound = chainWitnessed;
-      for (const { supplier, last, added } of unfinished) {
+      for (const { supplier, pass: { last } } of passes) {
+        if (last === undefined) continue;
         // A supplier the header budget stopped before its tip may yet show a heavier chain from its last header, so
         // the clock stays at or below where that header meets the best chain: the reader's own budget cannot make it
         // witness a block it would later have to unwitness. A fork below the published clock bounds nothing,
-        // since such a chain, were it heavier, fails the venue either way; and a supplier whose chain keeps ending
-        // off the best chain spends its side-branch quota, past which it is withholding. Only this stop bounds the
-        // clock: it takes a budget of headers with their work, while failing costs a supplier nothing.
+        // since such a chain, were it heavier, fails the venue either way; and a supplier past its side-branch quota
+        // is withholding. Only this stop bounds the clock: it takes a budget of headers with their work, while
+        // failing costs a supplier nothing.
         const header = parseErgoHeader(last), fork = header === undefined ? undefined : this.store.forkHeight(header.id), height = header?.height;
         if (fork === undefined || height === undefined) continue;
-        if (fork < height) this.sideHeaders.set(supplier, (this.sideHeaders.get(supplier) ?? 0) + added);
         if ((this.sideHeaders.get(supplier) ?? 0) >= this.policy.sideHeadersPerSupplier) continue;
         const forkIndex = fork - anchorHeight - 1n;
         if (forkIndex >= clock && forkIndex < bound) bound = forkIndex;
@@ -287,7 +301,7 @@ export class ErgoVenue implements Venue {
       const snapshot = this.snapshot;
       return Object.freeze({
         witnessedIndex: snapshot?.witnessed, witnessedHeaderId: snapshot === undefined ? undefined : copyBytes(snapshot.witnessedHeaderId),
-        chainWitnessedIndex: chainWitnessed >= 0n ? chainWitnessed : undefined, tipHeight: best.height, suppliers: Object.freeze(reports),
+        chainWitnessedIndex: chainWitnessed >= 0n ? chainWitnessed : undefined, tipHeight: best.height, suppliers: Object.freeze(passes.map(({ pass }) => pass.report)),
         sectionsRead, unresolvedIndex: unresolved, ...(reason === undefined ? {} : { unresolvedReason: reason }),
       });
     } finally {
@@ -303,10 +317,10 @@ export class ErgoVenue implements Venue {
 
   private async syncHeaders(supplier: ErgoSupplier, name: string): Promise<HeaderPass> {
     let added = 0, fetched = 0, last: Uint8Array | undefined;
-    const done = (stopped?: string): HeaderPass =>
-      ({ report: Object.freeze(stopped === undefined ? { name, headersAdded: added } : { name, headersAdded: added, stopped }) });
-    const unfinished = (): HeaderPass => last === undefined ? done("header budget")
-      : { ...done("header budget"), unfinished: { supplier, last, added } };
+    const ids: Uint8Array[] = [];
+    const done = (stopped?: string): HeaderPass => ({ added: ids,
+      report: Object.freeze(stopped === undefined ? { name, headersAdded: added } : { name, headersAdded: added, stopped }) });
+    const unfinished = (): HeaderPass => last === undefined ? done("header budget") : { ...done("header budget"), last };
     const { headersPerSupplier: budget, sideHeadersPerSupplier: sideQuota, supplierTimeoutMs: timeout } = this.policy;
     if ((this.sideHeaders.get(supplier) ?? 0) >= sideQuota) return done("side-branch quota");
     const fetchBudget = 4 * budget + 2 * ANCHOR_CONTEXT, perRequest = BigInt(this.policy.headersPerRequest);
@@ -332,7 +346,7 @@ export class ErgoVenue implements Venue {
         fetched++;
         const outcome = bytes === undefined ? "malformed" : this.store.add(bytes);
         if (outcome === "added" || outcome === "known") {
-          if (outcome === "added") added++;
+          if (outcome === "added") { added++; ids.push(blake2b(bytes!, { dkLen: 32 })); }
           last = bytes!;
         } else if (outcome === "unknown-parent" && position === 0 && from > anchorHeight + 1n) {
           // The supplier's chain leaves ours below `from`: step back until it connects.

@@ -331,6 +331,8 @@ export interface ErgoHeaderStore {
    * where they share nothing above it, undefined for an id the store has not
    * accepted above the anchor. Linear in the distance to that ancestor. */
   forkHeight(id: Uint8Array): bigint | undefined;
+  /** The height of an accepted header, in constant time; undefined for one the store has not accepted. */
+  heightOf(id: Uint8Array): bigint | undefined;
 }
 interface Entry { readonly header: ErgoHeader; readonly parent: Entry | undefined; readonly score: bigint; readonly above: boolean }
 
@@ -417,6 +419,9 @@ export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Arr
         else onBest = onBest.parent;
       }
       return at?.header.height ?? root.header.height;
+    },
+    heightOf(id: Uint8Array): bigint | undefined {
+      return isBytes(id) && id.length === 32 ? byId.get(bytesToHex(id))?.header.height : undefined;
     },
   });
 }

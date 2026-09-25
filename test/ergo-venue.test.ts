@@ -467,6 +467,36 @@ describe("no supplier is trusted", () => {
     expect(v.witnessedAtFor(KEYS.operator)).toBe(9n);
   });
 
+  it("a branch that briefly leads with two mined blocks each sync charges an honest supplier only its headers past the fork", async () => {
+    const honest = branch(60), policy = { headersPerSupplier: 10, sideHeadersPerSupplier: 30 };
+    const v = venue(policy), h = serving(honest, "honest"), m = serving(honest.slice(0, 1), "miner");
+    for (let k = 1; k <= 5; k++) {
+      // After the honest supplier's k-th budget, its last header is at height 10k; the miner forks at its parent
+      // (height 10k - 1) and mines two blocks, so its branch leads and the honest last header is off the best chain.
+      m.tip = chain.extend(honest[10 * k - 2]!, 2, () => [], 100 + k).at(-1)!;
+      const report = await v.sync([h, m]);
+      expect(report.suppliers[0]!.stopped).toBe("header budget");
+    }
+    let report = await v.sync([h]);
+    for (let i = 0; i < 3 && report.suppliers[0]!.stopped !== undefined; i++) report = await v.sync([h]);
+    expect(report.suppliers[0]!.stopped).toBeUndefined();
+    expect(v.witnessedIndex()).toBe(56n);
+  });
+
+  it("a lighter branch revealed below the budget each sync still spends its supplier's side-branch quota", async () => {
+    const honest = branch(40), side = branch(30, {}, honest[4]!, 7);
+    const v = venue({ headersPerSupplier: 10, sideHeadersPerSupplier: 30 });
+    await v.sync([serving(honest, "honest")]);
+    const s = serving(side.slice(0, 9), "side");
+    const stopped: (string | undefined)[] = [];
+    for (let k = 1; k <= 5; k++) {
+      s.tip = side[Math.min(9 * k, 30) - 1]!;
+      stopped.push((await v.sync([serving(honest, "honest"), s])).suppliers[1]!.stopped);
+    }
+    expect(stopped).toEqual([undefined, undefined, undefined, undefined, "side-branch quota"]);
+    expect(v.witnessedIndex()).toBe(36n);
+  });
+
   it("a section over the sync's byte budget waits for the next sync, and a retained-bytes budget stops the clock", async () => {
     const blocks = branch(10, { 2: [[committed(commitment(1n, 0xaa))]] });
     const v = venue({ headersPerSupplier: 100, sectionBytesPerSync: 150, retainedBytes: 1 << 20 });
