@@ -56,9 +56,9 @@ try {
   }
   const profile = await import(new URL("src/ergo-profile.js", url));
   const range = await import(new URL("src/record-range.js", url));
-  const { signCommitment, encodeCommitment } = await import(new URL("src/commitment.js", url));
-  const { encodeReplacement, replacementMessage, ROLE_OPERATOR } = await import(new URL("src/replacement.js", url));
-  const { encodeRevocation, signRevocation } = await import(new URL("src/revocation.js", url));
+  // The kind 1-3 records, from the neutral module the profile's range codec compiles with.
+  const { signCommitment, encodeCommitment, encodeReplacement, replacementMessage, ROLE_OPERATOR, encodeRevocation, signRevocation } =
+    await import(new URL("src/venue-records.js", url));
   const wide = { maxBytes: 1n << 40n, maxEntries: 1n << 20n };
   const b = (n, width = 32) => Buffer.alloc(width, n);
 

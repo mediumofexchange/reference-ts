@@ -580,7 +580,8 @@ selected. A counting stub stands in for proof verification; the
 [conformance report](pool-v3-conformance-verification.json) supplies real
 single-thread verification times. The
 [recorded report](pool-replay-cost-verification.json) binds LF-normalized source
-hashes, environment and every case.
+hashes, environment and every case; it is historical, recorded at
+[6c6a80a](https://github.com/mediumofexchange/reference-ts/tree/6c6a80a), and its bound sources have since moved.
 
 The first run found the local replay classifying each carrying checkpoint by
 replaying its whole trail from position 1: 60 events with a checkpoint every
