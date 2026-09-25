@@ -533,6 +533,11 @@ describe("a node as a publishing supplier", () => {
     expect(await answering({ [`/blockchain/transaction/byId/${id}`]: `{ "id" : "${id}", "inclusionHeight" : 5 }` }).hasTransaction(idBytes)).toBe(true);
     expect(await answering({ [`/blockchain/transaction/byId/${id}`]: `{ "id" : "${"cd".repeat(32)}" }` }).hasTransaction(idBytes)).toBe(false);
     expect(await answering({}).hasTransaction(idBytes)).toBe(false);
+    // A mempool that errors does not keep the index from being read; both failing is no answer.
+    const failingMempool = (index: number) => ergoNodePublisher("http://node", { fetch: recording(url =>
+      url.includes("/unconfirmed/") ? new Response("", { status: 500 }) : new Response(`{ "id" : "${id}" }`, { status: index })).fetch });
+    expect(await failingMempool(200).hasTransaction(idBytes)).toBe(true);
+    await expect(failingMempool(503).hasTransaction(idBytes)).rejects.toThrow(/500|503/);
   });
 
   it("takes a submission as accepted only where the node answers with the transaction's id", async () => {

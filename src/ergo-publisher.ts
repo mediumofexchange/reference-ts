@@ -639,10 +639,18 @@ export function ergoNodePublisher(baseUrl: string, options: ErgoNodePublisherOpt
     },
     async hasTransaction(txId: Uint8Array): Promise<boolean> {
       const id = bytesToHex(txId);
+      // Each place is asked on its own: a mempool that fails to answer does not keep the index from being read.
+      let answered = false, failure: unknown;
       for (const path of [`/transactions/unconfirmed/byTransactionId/${id}`, `/blockchain/transaction/byId/${id}`]) {
-        const transaction = await call(path);
-        if (transaction instanceof Map && transaction.get("id") === id) return true;
+        try {
+          const transaction = await call(path);
+          answered = true;
+          if (transaction instanceof Map && transaction.get("id") === id) return true;
+        } catch (error) {
+          failure = error;
+        }
       }
+      if (!answered) throw failure;
       return false;
     },
     async hasBox(boxId: Uint8Array): Promise<boolean> {
