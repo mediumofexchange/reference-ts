@@ -5,11 +5,10 @@ import {
   bigintToMinimalBytes, ByteReader, ByteWriter, compareBytes, copyBytes,
   EncodingError, MAX_QUANTITY_BYTES, minimalBytesToBigint, validateQuantity,
 } from "../../bytes.js";
-import { BACKING_SIGNATURE_CONTEXT, utf8Decoder, utf8Encoder } from "../../contexts.js";
+import { BACKING_SIGNATURE_CONTEXT, TERMS_MAGIC as MAGIC, utf8Decoder, utf8Encoder } from "../../contexts.js";
 import { isValidPublicKey, verifySignatureStrict } from "../../keys.js";
 
 export const MAX_ROOT_TERMS_BYTES = 1305;
-const MAGIC = Uint8Array.of(0x4d, 0x4f, 0x45, 0x42);
 const CONSTRUCTION = utf8Encoder.encode("moe/pool/v3");
 const MAX_U64 = (1n << 64n) - 1n;
 
@@ -29,12 +28,13 @@ export interface RootTerms {
   readonly nonService?: { readonly duration: bigint; readonly count: bigint; readonly window: bigint };
 }
 
+/** An owned copy, judged by its own length rather than the caller's. */
 function own(bytes: Uint8Array, max: number, what: string, exact = false): Uint8Array {
-  if (!(bytes instanceof Uint8Array) || bytes.buffer instanceof SharedArrayBuffer ||
-      bytes.length > max || (exact && bytes.length !== max)) {
+  const copy = copyBytes(bytes);
+  if (bytes.buffer instanceof SharedArrayBuffer || copy.length > max || (exact && copy.length !== max)) {
     throw new EncodingError(`invalid ${what} bytes`);
   }
-  return copyBytes(bytes);
+  return copy;
 }
 function key(bytes: Uint8Array, what: string): Uint8Array {
   const result = own(bytes, 32, what, true);

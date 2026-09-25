@@ -6,6 +6,7 @@ import { snapshotDigest, type Snapshot } from "../src/pool/v3/commitments.js";
 import { ByteReader, EncodingError } from "../src/bytes.js";
 import { directoryRoot, signCommitment, verifyCommitment } from "../src/commitment.js";
 import { segmentBytes as v2Bytes, decodeSegmentHeader as decodeV2 } from "../src/pool/statement.js";
+import { flipping, iterating, lookAlikes, lyingLength, silentArray } from "./hostile-bytes.js";
 
 // Independent wire/hash oracle; domains, roots and links are synthetic.
 // Real signatures authenticate assertions, not a replayed or finalized state.
@@ -162,6 +163,19 @@ describe("v3 canonical segment headers", () => {
       [e.backing, e.link, ...(e.opening ? [e.opening.operator, e.opening.root] : [])])]) field.fill(88);
     expect(h.segmentBytes(another)).toEqual(baseline);
     expect(Object.isFrozen(another.entries)).toBe(true);
+  });
+
+  it("encodes the header it judged: entries by index, each field read once, look-alikes refused", () => {
+    const x = header();
+    // An entries array whose iterator yields nothing still frames its indexed entries.
+    expect(eq(h.segmentBytes({ ...x, entries: silentArray(x.entries) }), raw(x))).toBe(true);
+    // An own iterator can no longer write other bytes than the ones checked.
+    expect(eq(h.segmentBytes({ ...x, domain: iterating(x.domain, b(99)) }), raw(x))).toBe(true);
+    expect(() => h.segmentBytes({ ...x, domain: lyingLength(new Uint8Array(31), 32) })).toThrow(EncodingError);
+    // The sequence judged is the sequence written.
+    const flipped = flipping(x, "sequence", 3n, 0n);
+    expect(eq(h.segmentBytes(flipped), raw(x))).toBe(true);
+    for (const fake of lookAlikes(raw(x).length)) expect(() => h.decodeSegmentHeader(fake)).toThrow("not a byte array");
   });
 
   it("authenticates the header through a signed directory and rejects substitutions", () => {

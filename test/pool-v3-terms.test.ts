@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import * as terms from "../src/pool/v3/terms.js";
 import { decodeBacking } from "../src/backing.js";
 import { EncodingError } from "../src/bytes.js";
+import { lookAlikes } from "./hostile-bytes.js";
 
 const b = (n: number): Buffer => Buffer.alloc(32, n);
 const cat = (...parts: Uint8Array[]): Buffer => Buffer.concat(parts);
@@ -58,6 +59,9 @@ describe("v3 model constant-root terms", () => {
       const v2 = Buffer.from(bytes); v2[v2.indexOf("moe/pool/v3") + 10] = 0x32;
       expect(() => terms.decodeRootTerms(v2)).toThrow(EncodingError);
       expect(terms.verifyRootTermsSignature(v2, signature)).toBe(false);
+      // Look-alikes answer false, not a TypeError.
+      for (const fake of lookAlikes(bytes.length)) expect(terms.verifyRootTermsSignature(fake, signature)).toBe(false);
+      for (const fake of lookAlikes(64)) expect(terms.verifyRootTermsSignature(bytes, fake)).toBe(false);
     }
   });
 

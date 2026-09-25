@@ -28,6 +28,13 @@ export function validateQuantity(n: bigint, what: string): void {
   if (!isValidQuantity(n)) throw new EncodingError(`${what} out of range`);
 }
 
+// Intrinsic getters: a subclass, own property or Proxy cannot misreport them.
+const typedArray = Object.getPrototypeOf(Uint8Array.prototype) as object;
+const intrinsic = (key: PropertyKey): ((this: unknown) => unknown) =>
+  Object.getOwnPropertyDescriptor(typedArray, key)!.get!;
+const brandOf = intrinsic(Symbol.toStringTag), lengthOf = intrinsic("length");
+const isBytes = (value: unknown): value is Uint8Array => brandOf.call(value) === "Uint8Array";
+
 /**
  * The one byte-copy in the codebase. Node's Buffer overrides `slice` to return
  * a view sharing memory, so the copying form must be forced explicitly or a
@@ -42,16 +49,18 @@ export function validateQuantity(n: bigint, what: string): void {
  * an operation cannot vouch for it (venue.ts, publishOp).
  */
 export function copyBytes(bytes: Uint8Array): Uint8Array {
-  // instanceof and ArrayBuffer.isView together: a DataView is a view but no
-  // Uint8Array, and a Proxy can claim the prototype but is no view. Node's
-  // Buffer is a subclass, so it passes. The constructor copies from the view's
-  // own buffer into a plain Uint8Array; slice would honour a subclass's
-  // Symbol.species, which can hand back memory the caller still holds.
-  if (!(bytes instanceof Uint8Array) || !ArrayBuffer.isView(bytes)) throw new EncodingError("not a byte array");
+  // The intrinsic brand, not instanceof: a Proxy or a DataView can claim the
+  // prototype, and another typed array given it would be copied element by
+  // element with each value reduced to a byte. Node's Buffer and any subclass
+  // carry the Uint8Array brand, so they pass. The constructor copies from the
+  // view's own buffer through its internal slots into a plain Uint8Array;
+  // slice would honour a subclass's Symbol.species, which can hand back memory
+  // the caller still holds, and `length` or an iterator can be overridden.
+  if (!isBytes(bytes)) throw new EncodingError("not a byte array");
   try {
     return new Uint8Array(bytes);
   } catch {
-    throw new EncodingError("not a byte array"); // a DataView given the prototype, or a detached buffer
+    throw new EncodingError("not a byte array"); // a detached or out-of-bounds buffer
   }
 }
 
@@ -64,6 +73,7 @@ export function copyBytes(bytes: Uint8Array): Uint8Array {
  * non-array or a longer one; `copy`'s own failures propagate.
  */
 export function copyArray<T, U>(values: readonly T[], copy: (value: T) => U, limit = Number.MAX_SAFE_INTEGER): U[] {
+  if (!Number.isSafeInteger(limit) || limit < 0) throw new RangeError("array limit is not a count");
   if (!Array.isArray(values)) throw new EncodingError("not an array");
   const read: unknown = values.length;
   // Only a Proxy can answer a length that is not an array index count.
@@ -77,6 +87,7 @@ export function copyArray<T, U>(values: readonly T[], copy: (value: T) => U, lim
 
 /** Unsigned big-endian, minimal length: no leading zero byte, 0n -> empty. */
 export function bigintToMinimalBytes(n: bigint): Uint8Array {
+  if (typeof n !== "bigint") throw new EncodingError("not a bigint");
   if (n < 0n) throw new EncodingError("negative quantity");
   if (n === 0n) return new Uint8Array(0);
   // Size first, then fill back-to-front. Prepending per byte would memmove the
@@ -93,22 +104,30 @@ export function bigintToMinimalBytes(n: bigint): Uint8Array {
 }
 
 export function minimalBytesToBigint(bytes: Uint8Array): bigint {
-  if (bytes.length > 0 && bytes[0] === 0) {
+  const own = copyBytes(bytes);
+  if (own.length > 0 && own[0] === 0) {
     throw new EncodingError("non-minimal bigint encoding");
   }
   let n = 0n;
-  for (const b of bytes) n = (n << 8n) | BigInt(b);
+  for (const b of own) n = (n << 8n) | BigInt(b);
   return n;
 }
 
-/** Lexicographic byte comparison, the sort order for reliance lists. */
+/**
+ * Lexicographic byte comparison, the sort order for reliance lists. A total
+ * order on bytes only: lengths are read through the intrinsic getter, and
+ * anything else is refused, since an order check written `>= 0` would read
+ * the NaN a string or a lying length produces as "in order".
+ */
 export function compareBytes(a: Uint8Array, b: Uint8Array): number {
-  const len = Math.min(a.length, b.length);
+  if (!isBytes(a) || !isBytes(b)) throw new EncodingError("not a byte array");
+  const aLength = lengthOf.call(a) as number, bLength = lengthOf.call(b) as number;
+  const len = Math.min(aLength, bLength);
   for (let i = 0; i < len; i++) {
     const d = (a[i] as number) - (b[i] as number);
     if (d !== 0) return d;
   }
-  return a.length - b.length;
+  return aLength - bLength;
 }
 
 /** Keys, backing names and hashes are all 32 bytes. */
@@ -140,7 +159,7 @@ export class ByteWriter {
   }
 
   u64(n: bigint): void {
-    if (n < 0n || n > 0xffffffffffffffffn) {
+    if (typeof n !== "bigint" || n < 0n || n > 0xffffffffffffffffn) {
       throw new EncodingError("u64 out of range");
     }
     for (let shift = 56n; shift >= 0n; shift -= 8n) {
@@ -152,18 +171,19 @@ export class ByteWriter {
    * A fixed-width field, asserted. This is the framing rule's enforcement
    * point: every raw byte field in every signed or hashed message goes through
    * here or through lengthPrefixed, so no two field values can ever share an
-   * encoding. The one exception is `pool/spent-set.ts`, whose two frames are
-   * hashed hundreds of times per nullifier and so are filled into a
-   * preallocated buffer; it asserts each field's width itself, and more
-   * strictly than this does — `fixed` reads `.length` without checking the
-   * type, so a 32-character string or a `Uint8ClampedArray(32)` encodes here
-   * as thirty-two zero bytes.
+   * encoding. Every byte write takes its own copy first (copyBytes), so the
+   * width asserted is the width written: a string, a plain array or a subclass
+   * reporting another length is refused or framed by its real bytes. The
+   * spent sets (`pool/spent-set.ts`, `pool/v3/spent-set.ts`) fill preallocated
+   * frames instead, hashed hundreds of times per nullifier, and assert each
+   * field's width and type themselves.
    */
   fixed(bytes: Uint8Array, length: number, what: string): void {
-    if (bytes.length !== length) {
+    const own = copyBytes(bytes);
+    if (own.length !== length) {
       throw new EncodingError(`${what} must be ${length} bytes`);
     }
-    for (const b of bytes) this.out.push(b);
+    this.write(own);
   }
 
   /** A 32-byte key, name, or hash. */
@@ -176,34 +196,47 @@ export class ByteWriter {
    * legitimate raw write: contexts are compile-time constants from
    * contexts.ts, and that module asserts they are prefix-free, so the first
    * field of two different message types always differs within the shorter
-   * tag. Framing them would add bytes without adding a property.
+   * tag. Framing them would add bytes without adding a property. A whole
+   * message this module encoded may open another the same way (a statement
+   * opening its record, a receipt's signed bytes their encoding): it starts
+   * with its own tag and frames every field, so its end is known without a
+   * length. Nothing else is written raw.
    */
   context(tag: Uint8Array): void {
-    for (const b of tag) this.out.push(b);
+    this.write(copyBytes(tag));
   }
 
   /** u32 length followed by the bytes. */
   lengthPrefixed(bytes: Uint8Array): void {
-    this.u32(bytes.length);
-    for (const b of bytes) this.out.push(b);
+    const own = copyBytes(bytes);
+    this.u32(own.length);
+    this.write(own);
   }
 
   finish(): Uint8Array {
     return Uint8Array.from(this.out);
   }
+
+  private write(own: Uint8Array): void {
+    for (const b of own) this.out.push(b);
+  }
 }
 
 export class ByteReader {
   private offset = 0;
+  private readonly bytes: Uint8Array;
 
   /**
-   * Bytes only: `readonly Uint8Array` is erased at runtime, so a decoder
-   * handed a string, an object or nothing would otherwise fail with a
-   * TypeError naming no boundary, where every decoder's contract is
-   * EncodingError.
+   * Bytes only, read from the reader's own copy. `readonly Uint8Array` is
+   * erased at runtime, so a decoder handed a string, an object or nothing
+   * would otherwise fail with a TypeError naming no boundary, where every
+   * decoder's contract is EncodingError. The copy (copyBytes) fixes the input
+   * as it was when decoding began: a subclass cannot report another length or
+   * hand back other memory from `subarray`, and a caller or another thread
+   * sharing the buffer cannot change bytes between two reads.
    */
-  constructor(private readonly bytes: Uint8Array) {
-    if (!(bytes instanceof Uint8Array)) throw new EncodingError("not a byte array");
+  constructor(bytes: Uint8Array) {
+    this.bytes = copyBytes(bytes);
   }
 
   u8(): number {
@@ -229,13 +262,17 @@ export class ByteReader {
   }
 
   raw(length: number): Uint8Array {
-    if (this.offset + length > this.bytes.length) throw new EncodingError("truncated");
+    // A decoder's own length, not input: a negative or fractional one is a
+    // programming failure and stays visible rather than rewinding the offset.
+    if (!Number.isSafeInteger(length) || length < 0) throw new RangeError("read length is not a byte count");
+    if (length > this.bytes.length - this.offset) throw new EncodingError("truncated");
     const out = copyBytes(this.bytes.subarray(this.offset, this.offset + length));
     this.offset += length;
     return out;
   }
 
   lengthPrefixed(maxLength: number): Uint8Array {
+    if (!Number.isSafeInteger(maxLength) || maxLength < 0) throw new RangeError("field bound is not a byte count");
     const length = this.u32();
     if (length > maxLength) throw new EncodingError("field too long");
     return this.raw(length);

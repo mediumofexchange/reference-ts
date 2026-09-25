@@ -193,7 +193,7 @@ The invariants above say *what* must be true. These say *how* to build it. The g
 
 **Say it plainly.** Names in code, comments and tests use Construction's words: commitment, directory, record, effective index, opening state, nullifier. No new metaphors. Cite rule numbers (`C2.5.3`) rather than quoting paragraphs.
 
-**Bytes are framed, not concatenated.** Every field in a signed or hashed message is fixed-width and asserted to be, or length-prefixed. Two different values must never produce one byte string. Use `ByteWriter.key32` / `ByteWriter.fixed` for fixed-width fields, except `pool/spent-set.ts`, which fills two preallocated frames and asserts each field itself, more strictly than `fixed` does.
+**Bytes are framed, not concatenated.** Every field in a signed or hashed message is fixed-width and asserted to be, or length-prefixed. Two different values must never produce one byte string. Use `ByteWriter.key32` / `ByteWriter.fixed` for fixed-width fields; `ByteWriter` and `ByteReader` take their own copy of every byte input (`copyBytes`), so the width asserted is the width written and read. The spent sets (`pool/spent-set.ts`, `pool/v3/spent-set.ts`) fill preallocated frames instead and assert each field's width and type themselves.
 
 **Validate once, at the boundary that owns the rule.** `makeBacking` owns backing well-formedness; the ledger or segment owns the law and funds; the sequencer owns routing and refusal. A layer does not re-check what a layer below will check, and does not pre-check in order to relabel an error.
 
@@ -205,6 +205,6 @@ The invariants above say *what* must be true. These say *how* to build it. The g
 
 **An error names the boundary that refused.** `EncodingError`, `SigningError`, `LedgerError` (`NonceError`), `SequencerError`, `VenueError`, `PilotError`, `PoolError`. Do not add one without a new boundary to name.
 
-**Domain tags live in one file.** Every context string that separates one signed message type from another is declared in `src/contexts.ts`, and the prefix-free property is asserted at load. A tag collision is a signature-forgery class.
+**Domain tags live in one file.** Every context string or magic that opens a signed or hashed message, for every construction (v2 and the v3 candidate), is declared in `src/contexts.ts`, and the prefix-free property is asserted at load. A tag collision is a signature-forgery class. Key-derivation labels and local wallet identifiers are not message tags and stay beside their use.
 
 **Cryptography is hashes, signatures and the declared proof system, and nothing else.** `@noble/hashes`, `@noble/curves`, and the pinned circuit backend the pool declares in **E**. A new primitive is a decision, not a dependency bump.

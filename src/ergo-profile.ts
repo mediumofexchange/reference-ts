@@ -158,7 +158,7 @@ export function collBytes(constant: Uint8Array): Uint8Array | undefined {
       break;
     }
   }
-  return constant.length - at === length ? constant.subarray(at) : undefined;
+  return constant.length - at === length ? copyBytes(constant.subarray(at)) : undefined;
 }
 
 /** Ergo's miner-fee proposition (minerRewardDelay 720), the one unsized tree

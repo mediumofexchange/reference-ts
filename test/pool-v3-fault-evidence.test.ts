@@ -7,6 +7,7 @@ import { deliveryHash, statementBytes, type EvidenceDigests, type Record as Stat
 import { EncodingError } from "../src/bytes.js";
 import { directoryRoot, signCommitment, verifyCommitment } from "../src/commitment.js";
 import { limbsOf } from "../src/pool/field.js";
+import { flipping, lookAlikes, lyingLength } from "./hostile-bytes.js";
 
 // Independent Buffer/node:crypto wire oracle. Domains, roots, statements and
 // proofs are synthetic; Ed25519 signatures and signed-directory context are real.
@@ -222,6 +223,17 @@ describe("v3 portable fault evidence", () => {
     for (const value of [undefined, null, {}, "bytes", new Uint8ClampedArray(250)]) {
       expect(() => f.decodeFaultEvidence(value as Uint8Array, 2n)).toThrow(EncodingError);
     }
+  });
+
+  it("encodes and authenticates one reading of each caller field, and refuses look-alikes by name", () => {
+    const x = fixture(), evidence = x.evidence(2), expected = { backing, segment, digest: x.digest };
+    // Judged once, hashed once: a field that later reads as a number neither escapes nor changes the answer.
+    expect(f.verifyFaultEvidence(expected, flipping(evidence, "statement", evidence.statement, 5), 1n)).toBe(true);
+    expect(f.verifyFaultEvidence(flipping(expected, "backing", b(1), backing), evidence, 1n)).toBe(false);
+    // A target's reported length is not its length.
+    const lying = { ...evidence, statement: lyingLength(evidence.statement, 40) };
+    expect(Buffer.from(f.encodeFaultEvidence(lying, 1n))).toEqual(Buffer.from(f.encodeFaultEvidence(evidence, 1n)));
+    for (const fake of lookAlikes(300)) expect(() => f.decodeFaultEvidence(fake, 2n)).toThrow("not a byte array");
   });
 
   it("owns Buffer and subarray inputs, decoded fields and encoded output", () => {

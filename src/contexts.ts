@@ -45,6 +45,34 @@
 //   moe/pool/v2/snapshot       a backing's snapshot digest in the directory (§9)
 //   moe/pool/v2/spent/leaf     a spent-set leaf (§11)
 //   moe/pool/v2/spent/node     a spent-set node (§11)
+//
+// Its candidate successor (pool-v3, pool-spent) has a family of its own:
+//
+//   moe/pool/v3/config         the candidate configuration (§11.1)
+//   moe/pool/v3/statement      a statement (§5); a record opens with its bytes
+//   moe/pool/v3/delivery       the delivery digest's preimage (pool-delivery C4.4)
+//   moe/pool/v3/acceptance     a backer's acceptance of a demand (§6)
+//   moe/pool/v3/release        a holder's release of an accepted demand (§6)
+//   moe/pool/v3/withdrawal     a holder's withdrawal of an unanswered demand (§6)
+//   moe/pool/v3/publication    a venue publication (§6)
+//   moe/pool/v3/genesis        historyHash_0 (§7)
+//   moe/pool/v3/history        historyHash_i (§7)
+//   moe/pool/v3/evidence-seed  evidenceHash_0 (§7)
+//   moe/pool/v3/evidence-link  evidenceHash_i (§7)
+//   moe/pool/v3/snapshot       a backing's snapshot digest (§7)
+//   moe/pool/v3/receipt        the operator's receipt (§7.2)
+//   moe/pool/v3/segment        a segment header, whose hash is the segment identity (§8)
+//   moe/pool/v3/fault-evidence a fault-evidence package (§9)
+//   moe/pool/v3/trail          a served trail (§10)
+//   moe/pool/v3/package        an evidence package (§12)
+//   moe/pool/v3/range          a record-range answer (§13)
+//   moe/pool/v3/spent/empty    the empty spent root (pool-spent C1.2.8)
+//   moe/pool/v3/spent/leaf     a spent-root leaf
+//   moe/pool/v3/spent/node     a spent-root node
+//
+// Two binary magics open hashed preimages too, and are held to the same rule:
+// "MOEB" a backing's terms (its name is their hash) and "MOED" a directory
+// (its root). The frozen transparent path keeps its own copy of "MOEB".
 
 const encoder = new TextEncoder();
 const tag = (s: string): Uint8Array => encoder.encode(s);
@@ -73,6 +101,29 @@ export const POOL_RECEIPT_CONTEXT = tag("moe/pool/v2/receipt");
 export const POOL_SNAPSHOT_CONTEXT = tag("moe/pool/v2/snapshot");
 export const POOL_SPENT_LEAF_CONTEXT = tag("moe/pool/v2/spent/leaf");
 export const POOL_SPENT_NODE_CONTEXT = tag("moe/pool/v2/spent/node");
+export const V3_CONFIG_CONTEXT = tag("moe/pool/v3/config");
+export const V3_STATEMENT_CONTEXT = tag("moe/pool/v3/statement");
+export const V3_DELIVERY_CONTEXT = tag("moe/pool/v3/delivery");
+export const V3_ACCEPTANCE_CONTEXT = tag("moe/pool/v3/acceptance");
+export const V3_RELEASE_CONTEXT = tag("moe/pool/v3/release");
+export const V3_WITHDRAWAL_CONTEXT = tag("moe/pool/v3/withdrawal");
+export const V3_PUBLICATION_CONTEXT = tag("moe/pool/v3/publication");
+export const V3_GENESIS_CONTEXT = tag("moe/pool/v3/genesis");
+export const V3_HISTORY_CONTEXT = tag("moe/pool/v3/history");
+export const V3_EVIDENCE_SEED_CONTEXT = tag("moe/pool/v3/evidence-seed");
+export const V3_EVIDENCE_LINK_CONTEXT = tag("moe/pool/v3/evidence-link");
+export const V3_SNAPSHOT_CONTEXT = tag("moe/pool/v3/snapshot");
+export const V3_RECEIPT_CONTEXT = tag("moe/pool/v3/receipt");
+export const V3_SEGMENT_CONTEXT = tag("moe/pool/v3/segment");
+export const V3_FAULT_EVIDENCE_CONTEXT = tag("moe/pool/v3/fault-evidence");
+export const V3_TRAIL_CONTEXT = tag("moe/pool/v3/trail");
+export const V3_PACKAGE_CONTEXT = tag("moe/pool/v3/package");
+export const V3_RANGE_CONTEXT = tag("moe/pool/v3/range");
+export const V3_SPENT_EMPTY_CONTEXT = tag("moe/pool/v3/spent/empty");
+export const V3_SPENT_LEAF_CONTEXT = tag("moe/pool/v3/spent/leaf");
+export const V3_SPENT_NODE_CONTEXT = tag("moe/pool/v3/spent/node");
+export const TERMS_MAGIC = tag("MOEB");
+export const DIRECTORY_MAGIC = tag("MOED");
 
 /** Shared UTF-8 codecs. The decoder is strict and BOM-preserving so that
  *  decode(encode(s)) === s for every well-formed string. */
@@ -110,6 +161,29 @@ const ALL_CONTEXTS = [
   POOL_SNAPSHOT_CONTEXT,
   POOL_SPENT_LEAF_CONTEXT,
   POOL_SPENT_NODE_CONTEXT,
+  V3_CONFIG_CONTEXT,
+  V3_STATEMENT_CONTEXT,
+  V3_DELIVERY_CONTEXT,
+  V3_ACCEPTANCE_CONTEXT,
+  V3_RELEASE_CONTEXT,
+  V3_WITHDRAWAL_CONTEXT,
+  V3_PUBLICATION_CONTEXT,
+  V3_GENESIS_CONTEXT,
+  V3_HISTORY_CONTEXT,
+  V3_EVIDENCE_SEED_CONTEXT,
+  V3_EVIDENCE_LINK_CONTEXT,
+  V3_SNAPSHOT_CONTEXT,
+  V3_RECEIPT_CONTEXT,
+  V3_SEGMENT_CONTEXT,
+  V3_FAULT_EVIDENCE_CONTEXT,
+  V3_TRAIL_CONTEXT,
+  V3_PACKAGE_CONTEXT,
+  V3_RANGE_CONTEXT,
+  V3_SPENT_EMPTY_CONTEXT,
+  V3_SPENT_LEAF_CONTEXT,
+  V3_SPENT_NODE_CONTEXT,
+  TERMS_MAGIC,
+  DIRECTORY_MAGIC,
 ];
 
 export function contextsArePrefixFree(tags: readonly Uint8Array[] = ALL_CONTEXTS): boolean {

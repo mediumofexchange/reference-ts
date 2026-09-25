@@ -51,7 +51,7 @@ describe("the construction-neutral core", () => {
   it("reads every import form, so the check cannot pass by missing one", () => {
     expect(specifiers(`import "./a.js";\nimport type { X } from './b.js';\nexport * from "./c.js";\nconst d = await import("./d.js");\n` +
       `import {\n  e,\n} from "./e.js";`)).toEqual(["./a.js", "./b.js", "./c.js", "./d.js", "./e.js"]);
-    expect(relativeImports("src/record-range.ts")).toEqual(["src/bytes.ts", "src/venue-records.ts"]);
+    expect(relativeImports("src/record-range.ts")).toEqual(["src/bytes.ts", "src/contexts.ts", "src/venue-records.ts"]);
     expect(relativeImports("src/commitment.ts")).toEqual(expect.arrayContaining(["src/ledger.ts", "src/venue-records.ts", "src/oplog.ts"]));
   });
 });

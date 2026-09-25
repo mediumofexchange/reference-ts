@@ -6,6 +6,7 @@ import { EncodingError } from "../src/bytes.js";
 import { encodeCommitment, signCommitment } from "../src/commitment.js";
 import { encodeReplacement, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
 import { encodeRevocation, signRevocation } from "../src/revocation.js";
+import { flipping, lookAlikes, lyingLength, silentArray } from "./hostile-bytes.js";
 
 // Independent Buffer framing and hash oracle. Commitments, replacements and
 // revocations are genuinely signed; nothing here is a venue, a verdict or a
@@ -215,6 +216,26 @@ describe("v3 record-range answers", () => {
     expect(decoded.entries[0]!.record.buffer.byteLength).toBe(136);
     expect(decoded.request.venue.buffer.byteLength).toBe(32);
     expect(Object.isFrozen(decoded) && Object.isFrozen(decoded.entries) && Object.isFrozen(decoded.entries[0])).toBe(true);
+  });
+
+  it("encodes and derives from one reading of each caller field, and refuses look-alikes by name", () => {
+    // A record's reported length is not its length.
+    const short = lyingLength(commitment(1n).subarray(0, 10), 136);
+    expect(() => range.encodeRangeAnswer({ request: request(1, operator), entries: [entry(2n, short)] }, wide))
+      .toThrow("range record length does not fit its kind");
+    // A request kind read once: whatever is encoded decodes under the request it carries.
+    const hostile = { request: flipping(request(4, operator), "kind", 4, 1), entries: [entry(2n, Uint8Array.of(1, 2, 3, 4, 5))] };
+    let encoded: Uint8Array | undefined;
+    try { encoded = range.encodeRangeAnswer(hostile, wide); } catch (error) { expect(error).toBeInstanceOf(EncodingError); }
+    if (encoded !== undefined) expect(range.decodeRangeAnswer(encoded, request(encoded[49] as range.RecordKind, operator), wide).entries).toHaveLength(1);
+    // Entries by index: a silent iterator hides none of them.
+    const honest = { request: request(1, operator), entries: [entry(2n, commitment(1n))] };
+    const answer = { ...honest, entries: silentArray(honest.entries) };
+    expect(Buffer.from(range.encodeRangeAnswer(answer, wide))).toEqual(rawAnswer(honest));
+    expect(range.heldCommitments(answer).held).toHaveLength(1);
+    for (const fake of lookAlikes(rawAnswer(answer).length)) {
+      expect(() => range.decodeRangeAnswer(fake, answer.request, wide)).toThrow("not a byte array");
+    }
   });
 
   it("merges several backings' publication answers into the venue's order and refuses mixed ranges or shared positions", () => {

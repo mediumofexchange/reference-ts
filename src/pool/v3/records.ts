@@ -2,6 +2,10 @@
 // adoption. No adopted configuration, proof verifier, admission or replay.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { ByteReader, ByteWriter, compareBytes, EncodingError } from "../../bytes.js";
+import {
+  V3_ACCEPTANCE_CONTEXT as ACCEPTANCE, V3_DELIVERY_CONTEXT as DELIVERY, V3_PUBLICATION_CONTEXT as PUBLICATION,
+  V3_RELEASE_CONTEXT as RELEASE, V3_STATEMENT_CONTEXT as STATEMENT, V3_WITHDRAWAL_CONTEXT as WITHDRAWAL,
+} from "../../contexts.js";
 import { bytesToField, fieldToBytes, identifierOf, isField, isValue } from "../field.js";
 
 export type Kind = 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -9,10 +13,6 @@ const COUNTS = [0, 11, 15, 15, 16, 7, 17, 7] as const;
 const AUTH_LENGTHS = [0, 64, 0, 0, 0, 64, 136, 0] as const;
 const CAPSULE_COUNTS = [0, 1, 4, 1, 0, 0, 0, 0] as const;
 const MAX_PROOF = 131072;
-const context = (name: string): Uint8Array => new TextEncoder().encode(`moe/pool/v3/${name}`);
-const STATEMENT = context("statement"), ACCEPTANCE = context("acceptance"),
-  RELEASE = context("release"), WITHDRAWAL = context("withdrawal"),
-  PUBLICATION = context("publication"), DELIVERY = context("delivery");
 
 export interface Statement {
   readonly domain: Uint8Array;

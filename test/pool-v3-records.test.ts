@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import * as codec from "../src/pool/v3/records.js";
 import { EncodingError } from "../src/bytes.js";
-import * as contexts from "../src/contexts.js";
 import { FIELD_MODULUS } from "../src/pool/field.js";
 import { verifySignatureStrict } from "../src/keys.js";
 import { decodeStatement as decodeV2 } from "../src/pool/statement.js";
@@ -342,8 +341,5 @@ describe("v3 publication and signed-object bytes", () => {
       expect(() => codec.encodePublication(bad)).toThrow(EncodingError);
       expect(() => codec.decodePublication(rawPublication(bad))).toThrow(EncodingError);
     }
-    const tags = Object.values(contexts).filter((v): v is Uint8Array => v instanceof Uint8Array);
-    for (const name of ["statement", "acceptance", "release", "withdrawal", "publication", "delivery"]) tags.push(ascii(`moe/pool/v3/${name}`));
-    expect(contexts.contextsArePrefixFree(tags)).toBe(true);
   });
 });

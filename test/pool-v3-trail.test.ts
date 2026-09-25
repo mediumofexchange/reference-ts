@@ -7,6 +7,7 @@ import type { SegmentEntry, SegmentHeader } from "../src/pool/v3/headers.js";
 import type { Record as PoolRecord } from "../src/pool/v3/records.js";
 import { ByteReader, EncodingError } from "../src/bytes.js";
 import { directoryRoot, signCommitment, verifyCommitment } from "../src/commitment.js";
+import { flipping, lookAlikes, lyingLength } from "./hostile-bytes.js";
 
 // Independent Buffer/node:crypto framing and hash oracle. The directory is
 // genuinely signed; synthetic proofs, terms and roots make no replay claim.
@@ -295,5 +296,22 @@ describe("v3 served-trail transport", () => {
     for (const value of [undefined, null, {}, "bytes", new Uint8ClampedArray(encoded.length)]) {
       expect(() => trailCodec.decodeTrail(value as Uint8Array, fresh.limits)).toThrow(EncodingError);
     }
+  });
+
+  it("reads each caller field once and decodes the input as copied, never through its own properties", () => {
+    const x = fixture(), encoded = rawTrail(x.served);
+    // A species that answers every subarray with other memory is never consulted.
+    const hostile = Uint8Array.from(encoded);
+    Object.defineProperty(hostile, "constructor", { value: { [Symbol.species]: function (_: ArrayBuffer, __: number, length: number) {
+      return new Uint8Array(length).fill(0xee);
+    } } });
+    expect(values(trailCodec.decodeTrail(hostile, x.limits))).toEqual(values(x.served));
+    for (const fake of lookAlikes(encoded.length)) expect(() => trailCodec.decodeTrail(fake, x.limits)).toThrow("not a byte array");
+    // A record's reported length is not its length; the judged records are the hashed ones.
+    const shorter = x.served.records[1]!, lying = { ...x.served, records: [x.served.records[0]!, lyingLength(shorter, shorter.length + 9)] };
+    expect(Buffer.from(trailCodec.encodeTrail(lying, x.limits))).toEqual(encoded);
+    const flipped = flipping(x.served, "records", x.served.records, [x.served.records[1]!, x.served.records[0]!]);
+    expect(trailCodec.verifyTrailEvidence(x.expected, x.snapshot, flipped, x.limits)).toBe(true);
+    expect(trailCodec.verifyTrailEvidence(flipping(x.expected, "segment", b(1), x.expected.segment), x.snapshot, x.served, x.limits)).toBe(false);
   });
 });

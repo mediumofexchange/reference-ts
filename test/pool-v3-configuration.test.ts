@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { configurationBytes, configurationHash, decodeConfiguration, verifyConfiguration, RELATIONS,
   type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { EncodingError } from "../src/bytes.js";
+import { flipping, lookAlikes } from "./hostile-bytes.js";
 
 const manifest = JSON.parse(readFileSync(new URL("../scripts/pool/v3/candidate-manifest.json", import.meta.url), "utf8"));
 const h = (value: string): Uint8Array => new Uint8Array(Buffer.from(value, "hex"));
@@ -62,5 +63,8 @@ describe("candidate configuration, pool-v3 §11.1; no adoption", () => {
     const sharedKey = new Uint8Array(new SharedArrayBuffer(32)); sharedKey.set(config.circuits.issue.vk);
     const sharedConfig = { ...config, circuits: { ...config.circuits, issue: { ...config.circuits.issue, vk: sharedKey } } };
     expect(() => configurationBytes(sharedConfig)).toThrow(EncodingError);
+    // Look-alikes answer false, not a TypeError; a helper judged once is the helper written.
+    for (const fake of lookAlikes(439)) expect(verifyConfiguration(fake, config)).toBe(false);
+    expect(configurationBytes(flipping(config, "helper", config.helper, new Uint8Array(32)))).toEqual(configurationBytes(config));
   });
 });
