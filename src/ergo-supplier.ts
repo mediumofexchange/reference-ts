@@ -343,6 +343,8 @@ export function ergoNodeSupplier(baseUrl: string, options: ErgoNodeSupplierOptio
         if (!Array.isArray(statements)) break;
         let next = low + 1n;
         for (const statement of statements) {
+          // A longer answer than asked is cut to it.
+          if (next > high) break;
           const supplied = supplyHeader(statement);
           // A gap or a fallback header ends the batch; the reader asks again from where it stands.
           const height = statement instanceof Map ? statement.get("height") : undefined;

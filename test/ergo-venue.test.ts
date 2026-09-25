@@ -35,13 +35,13 @@ const chain = new Chain();
 const DEPTH = 3n;
 const PROFILE = chain.profile(DEPTH);
 const VENUE_ID = ergoProfileIdentity(PROFILE);
-const venue = (policy?: ErgoReaderPolicy): ErgoVenue => new ErgoVenue(PROFILE, chain.context, policy);
+const venue = (policy?: Partial<ErgoReaderPolicy>): ErgoVenue => new ErgoVenue(PROFILE, chain.context, policy);
 type Records = Readonly<Record<number, readonly (readonly Output[])[]>>;
 /** `count` blocks from `parent` (index 0 on the anchor); `at[i]` are the transactions of the i-th block's outputs. */
 const branch = (count: number, at: Records = {}, parent: Block = chain.anchor, salt = 0): Block[] =>
   chain.extend(parent, count, i => (at[i] ?? []).map(outputs => transaction(outputs)), salt);
 const serving = (blocks: readonly Block[], name = "node"): BranchSupplier => new BranchSupplier(name, blocks.at(-1)!, chain);
-async function synced(count: number, at: Records = {}, policy?: ErgoReaderPolicy): Promise<{ v: ErgoVenue; blocks: Block[] }> {
+async function synced(count: number, at: Records = {}, policy?: Partial<ErgoReaderPolicy>): Promise<{ v: ErgoVenue; blocks: Block[] }> {
   const v = venue(policy), blocks = branch(count, at);
   await v.sync([serving(blocks)]);
   return { v, blocks };
@@ -275,7 +275,14 @@ describe("pool readers see only a complete Ergo snapshot", () => {
           () => new PoolAuthorityView(CONFIG, v, [signed]),
         ];
         try {
-          for (const read of reads) expect(read).toThrow(VenueError);
+          // Mid-sync, reads answer from the previous snapshot, or refuse where there is none.
+          if (initial) for (const read of reads) expect(read).toThrow(VenueError);
+          else {
+            expect(v.witnessedIndex()).toBe(8n);
+            expect(v.latestFor(KEYS.operator)).toEqual(first);
+            expect(v.replacementsFor(x.name)).toHaveLength(0);
+            expect(new PoolAuthorityView(CONFIG, v, [signed]).term(x.name)?.operator).toEqual(KEYS.operator);
+          }
           expect(v.id).toEqual(VENUE_ID); expect(v.lag()).toBe(4n);
         } finally { resume.resolve(); }
         const report = await pending;
@@ -393,6 +400,73 @@ describe("no supplier is trusted", () => {
     expect(v.witnessedAtFor(KEYS.operator)).toBe(9n);
   });
 
+  // Serving the known headers from the anchor's child (below the clock) or from the clock's own height (above it).
+  it.each([1n, 9n])("a supplier that walks the reader back with forged parents to height %s past the anchor, serves known headers, then fails, cannot hold the clock back", async knownFrom => {
+    const blocks = branch(20, { 14: [[committed(commitment(1n, 0xaa))]] });
+    const policy = { headersPerRequest: 4 };
+    const v = venue(policy);
+    await v.sync([serving(blocks.slice(0, 12))]);
+    expect(v.witnessedIndex()).toBe(8n);
+    // Listed first, claiming a far tip: a parseable header with an unknown parent at every `from` above the
+    // anchor's child (no work checked), then a full batch of headers the reader holds, then a failure. Costs nothing.
+    const stalling = serving(blocks, "stalling"), original = stalling.headers.bind(stalling);
+    let servedKnown = false;
+    stalling.tipHeight = async () => ANCHOR_HEIGHT + 1_000_000n;
+    stalling.headers = async (from, to) => {
+      if (from > ANCHOR_HEIGHT + knownFrom) {
+        const orphan: Block = { id: new Uint8Array(32).fill(0x5a), height: from - 1n, bytes: new Uint8Array(0), parent: undefined, section: [] };
+        return [chain.mine(orphan).bytes];
+      }
+      if (servedKnown) throw new Error("gone");
+      servedKnown = true;
+      return original(from, to);
+    };
+    const report = await v.sync([stalling, serving(blocks, "honest")]);
+    expect(servedKnown).toBe(true);
+    expect(report.suppliers.map(s => [s.headersAdded, s.stopped])).toEqual([[0, "failed: gone"], [8, undefined]]);
+    expect(v.witnessedIndex()).toBe(16n);
+    expect(v.witnessedAtFor(KEYS.operator)).toBe(14n);
+  });
+
+  it("a supplier whose budget stops it on a heavier fork above the clock holds the clock at the fork until the fork arrives", async () => {
+    const trunk = branch(10);
+    const light = [...trunk, ...branch(8, { 0: [[committed(commitment(1n, 0xaa))]] }, trunk.at(-1)!, 1)];
+    const heavy = [...trunk, ...branch(12, { 0: [[committed(commitment(1n, 0xbb))]] }, trunk.at(-1)!, 2)];
+    const v = venue({ headersPerSupplier: 6 });
+    await v.sync([serving(trunk)]);
+    // The trunk's supplier was stopped by its budget at six blocks, which held the clock at its last header's
+    // final index; the rest arrives in the next sync.
+    expect(v.witnessedIndex()).toBe(2n);
+    await v.sync([serving(trunk)]);
+    expect(v.witnessedIndex()).toBe(6n);
+    // Both stop on their budget at six blocks past the trunk; the light branch was accepted first, so it leads,
+    // and without the bound the clock would pass the trunk on it.
+    const first = await v.sync([serving(light, "light"), serving(heavy, "heavy")]);
+    expect(first.chainWitnessedIndex).toBe(12n);
+    expect(v.witnessedIndex()).toBe(9n);
+    await v.sync([serving(light, "light"), serving(heavy, "heavy")]);
+    expect(v.witnessedIndex()).toBe(18n);
+    expect(v.latestFor(KEYS.operator)?.root).toEqual(new Uint8Array(32).fill(0xbb));
+  });
+
+  it("a supplier whose chain keeps ending off the best chain spends its side-branch quota and then withholds", async () => {
+    const policy = { headersPerSupplier: 5, sideHeadersPerSupplier: 10 };
+    const honest = branch(14, { 9: [[committed(commitment(1n, 0xaa))]] });
+    // A branch from the anchor, longer than the honest chain, that the supplier serves a budget at a time.
+    const side = branch(40, {}, chain.anchor, 3);
+    const v = venue(policy);
+    const suppliers = () => [serving(honest, "honest"), sideSupplier];
+    const sideSupplier = serving(side, "side");
+    expect((await v.sync(suppliers())).witnessedIndex).toBeUndefined();
+    const second = await v.sync(suppliers());
+    expect(second.suppliers.map(s => [s.headersAdded, s.stopped])).toEqual([[5, "header budget"], [5, "header budget"]]);
+    expect(v.witnessedIndex()).toBe(6n);
+    const third = await v.sync(suppliers());
+    expect(third.suppliers[1]!.stopped).toBe("side-branch quota");
+    expect(v.witnessedIndex()).toBe(10n);
+    expect(v.witnessedAtFor(KEYS.operator)).toBe(9n);
+  });
+
   it("a section over the sync's byte budget waits for the next sync, and a retained-bytes budget stops the clock", async () => {
     const blocks = branch(10, { 2: [[committed(commitment(1n, 0xaa))]] });
     const v = venue({ headersPerSupplier: 100, sectionBytesPerSync: 150, retainedBytes: 1 << 20 });
@@ -401,7 +475,8 @@ describe("no supplier is trusted", () => {
     for (let i = 0; i < 10 && v.witnessedIndex() < 6n; i++) await v.sync([serving(blocks)]);
     expect(v.witnessedIndex()).toBe(6n);
     const full = venue({ headersPerSupplier: 100, sectionBytesPerSync: 1 << 20, retainedBytes: 100 });
-    expect((await full.sync([serving(blocks)])).unresolvedIndex).toBe(2n);
+    const stopped = await full.sync([serving(blocks)]);
+    expect([stopped.unresolvedIndex, stopped.unresolvedReason]).toEqual([2n, "retained budget"]);
     expect(full.witnessedIndex()).toBe(1n);
   });
 });
@@ -529,9 +604,29 @@ describe("a supplier's malformed answers supply nothing", () => {
     const odd = serving(blocks, "odd");
     odd.headers = async () => [1, "x", null] as unknown as Uint8Array[];
     odd.section = async () => ({ length: 1 }) as unknown as ErgoTransactionView[];
-    const v = venue();
-    const report = await v.sync([odd, serving(blocks, "honest")]);
-    expect(report.suppliers[0]!.stopped).toBe("refused header: malformed");
+    const throwing = serving(blocks, "throwing");
+    Object.defineProperty(throwing, "name", { get: () => { throw new Error("no name"); } });
+    throwing.section = async () => [{ get unsigned(): Uint8Array { throw new Error("getter"); }, witnessId: new Uint8Array(31) }];
+    throwing.tipHeight = async () => { throw { get message(): string { throw new Error("unreadable"); } }; };
+    const hanging = serving(blocks, "hanging");
+    hanging.section = () => new Promise<never>(() => {});
+    const v = venue({ supplierTimeoutMs: 50 });
+    const report = await v.sync([odd, throwing, hanging, serving(blocks, "honest")]);
+    expect(report.suppliers.map(s => [s.name, s.stopped])).toEqual([["odd", "refused header: malformed"],
+      ["unnamed supplier", "failed: [object Object]"], ["hanging", undefined], ["honest", undefined]]);
     expect(v.witnessedIndex()).toBe(4n);
+  });
+
+  it("charges every section received against the sync's budget, whether or not it matches its header", async () => {
+    const blocks = branch(10);
+    const junk = serving(blocks, "junk");
+    let asked = 0;
+    junk.section = async () => { asked++; return [transaction([rawOutput(SCRIPTS[4], [Uint8Array.of(0x0e, 0)])]), ...Array.from({ length: 40 }, () => transaction([plainOutput]))]; };
+    const v = venue({ sectionBytesPerSync: 2_000 });
+    const report = await v.sync([junk, serving(blocks, "honest")]);
+    expect(report.unresolvedReason).toBe("section budget");
+    // Junk is not asked again after its first miss; the honest sections fill the rest of the budget.
+    expect(asked).toBe(1);
+    expect(report.witnessedIndex).toBeLessThan(6n);
   });
 });

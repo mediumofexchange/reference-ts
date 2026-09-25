@@ -38,7 +38,6 @@
 // NOT here, deliberately: publishing. Building and signing a transaction needs
 // an Ergo library, and this package's dependencies are @noble/hashes and
 // @noble/curves. A verifier never publishes; the operator's wallet does.
-import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
 import type { Commitment } from "./commitment.js";
@@ -71,23 +70,39 @@ export function ergoProfile(anchor: Uint8Array, scripts: ErgoProfile["scripts"],
  * where withholding would, and the next sync continues from there.
  */
 export interface ErgoReaderPolicy {
-  /** Headers whose work one supplier may have checked in one sync. Accepted
-   * headers are kept, so a heavier chain longer than this arrives over
-   * several syncs: no supplier's budget refuses the heaviest chain, and one
-   * supplier's side branches cannot spend another's. */
+  /** New headers whose work one supplier may have checked in one sync.
+   * Accepted headers are kept, so a heavier chain longer than this arrives
+   * over several syncs, and one supplier's side branches cannot spend
+   * another's budget. */
   readonly headersPerSupplier: number;
-  /** Section bytes after which one sync reads no further section; the next continues. */
+  /** Headers asked of a supplier per request; a longer answer is cut to it. */
+  readonly headersPerRequest: number;
+  /** New headers one supplier may add, over the view's life, while its chain
+   * ends off the best chain. Past it the supplier's headers are not read and
+   * it no longer holds the clock back: it is withholding. This bounds the
+   * work and memory a cheap side branch can cost (venue-ergo.md §3: without
+   * the node's clock rule, future timestamps lower a side branch's
+   * difficulty). */
+  readonly sideHeadersPerSupplier: number;
+  /** Section bytes received, matching or not, after which one sync reads no
+   * further section; the next sync continues. */
   readonly sectionBytesPerSync: number;
-  /** Bytes of attributed objects the view retains. */
+  /** Bytes the retained objects may take (each record, its subject and a
+   * fixed overhead); past it the clock stops until the budget is raised. */
   readonly retainedBytes: number;
+  /** A supplier call not settled in this many milliseconds did not supply. */
+  readonly supplierTimeoutMs: number;
 }
 export const DEFAULT_ERGO_READER_POLICY: ErgoReaderPolicy = Object.freeze({
   headersPerSupplier: 2_000,
+  headersPerRequest: 500,
+  sideHeadersPerSupplier: 20_000,
   sectionBytesPerSync: 256 * 1024 * 1024,
   retainedBytes: 256 * 1024 * 1024,
+  supplierTimeoutMs: 60_000,
 });
-/** Headers asked of a supplier per request. */
-const HEADER_BATCH = 500n;
+/** What a retained object costs beside its record and subject. */
+const OBJECT_OVERHEAD = 64;
 
 /** What one sync did, for the operator's logs; the view's reads are the answers. */
 export interface ErgoSyncReport {
@@ -100,13 +115,14 @@ export interface ErgoSyncReport {
   readonly tipHeight: bigint;
   readonly suppliers: readonly ErgoSupplierReport[];
   readonly sectionsRead: number;
-  /** The first index past the clock whose section no supplier supplied within budget. */
+  /** The first index past the clock not read in this sync, and why. */
   readonly unresolvedIndex: bigint | undefined;
+  readonly unresolvedReason?: "no section" | "section budget" | "retained budget";
 }
 export interface ErgoSupplierReport {
   readonly name: string;
   readonly headersAdded: number;
-  /** Why this supplier stopped early: a refused header, a failure or its budget. */
+  /** Why this supplier stopped early: a refused header, a failure or a budget. */
   readonly stopped?: string;
 }
 
@@ -116,6 +132,12 @@ interface Snapshot {
   readonly witnessed: bigint;
   readonly sections: readonly (readonly AttributedObject[])[];
   readonly witnessedHeaderId: Uint8Array;
+}
+/** A supplier's header pass: its report, and where the header budget stopped
+ * it before its tip, its last header and how many headers it added. */
+interface HeaderPass {
+  readonly report: ErgoSupplierReport;
+  readonly unfinished?: { readonly supplier: ErgoSupplier; readonly last: Uint8Array; readonly added: number };
 }
 
 /**
@@ -134,10 +156,10 @@ export async function ergoAnchorContext(supplier: ErgoSupplier, anchorId: Uint8A
 /**
  * The Ergo chain, read as a venue under the selected profile.
  *
- * Empty until `sync` succeeds, and answering only from the last complete
- * snapshot. Reads refuse while a sync runs, and a failed sync leaves the
- * previous snapshot in place. The id is derived from the profile, never handed
- * in, so one declared venue cannot be read on two clocks.
+ * Empty until a sync publishes a snapshot, and answering only from the last
+ * complete one; a sync that runs or fails leaves the previous snapshot in
+ * place. The id is derived from the profile, never handed in, so one declared
+ * venue cannot be read on two clocks.
  */
 export class ErgoVenue implements Venue {
   private readonly profile: ErgoProfile;
@@ -149,23 +171,23 @@ export class ErgoVenue implements Venue {
   /** The header ids the sections were read for, by index. */
   private readonly sectionHeaders: Uint8Array[] = [];
   private retained = 0;
+  /** Headers each supplier added while its chain ended off the best chain. */
+  private readonly sideHeaders = new WeakMap<object, number>();
   private snapshot: Snapshot | undefined;
   private syncing = false;
   private failure: string | undefined;
   /** Per-snapshot derivations, by kind and subject. */
   private held = new Map<string, readonly HeldCommitment[]>();
 
-  constructor(profile: ErgoProfile, anchorContext: readonly Uint8Array[], policy: ErgoReaderPolicy = DEFAULT_ERGO_READER_POLICY) {
+  constructor(profile: ErgoProfile, anchorContext: readonly Uint8Array[], policy: Partial<ErgoReaderPolicy> = {}) {
     this.profile = ownErgoProfile(profile);
     this.venueId = ergoProfileIdentity(this.profile);
     const store = ergoHeaderStore(this.profile.anchor, anchorContext);
     if (store === undefined) throw new VenueError("the anchor context does not authenticate the profile's anchor");
     this.store = store;
-    const { headersPerSupplier, sectionBytesPerSync, retainedBytes } = policy;
-    if (![headersPerSupplier, sectionBytesPerSync, retainedBytes].every(n => Number.isSafeInteger(n) && n > 0)) {
-      throw new VenueError("invalid Ergo reader policy");
-    }
-    this.policy = Object.freeze({ headersPerSupplier, sectionBytesPerSync, retainedBytes });
+    const owned = { ...DEFAULT_ERGO_READER_POLICY, ...policy };
+    if (!Object.values(owned).every(n => Number.isSafeInteger(n) && n > 0)) throw new VenueError("invalid Ergo reader policy");
+    this.policy = Object.freeze(owned);
   }
 
   get id(): Uint8Array {
@@ -180,15 +202,17 @@ export class ErgoVenue implements Venue {
   /**
    * Take the chain's current word from the suppliers, in the caller's order.
    *
-   * Headers first: each supplier is asked from the depth below the best tip
-   * (so a fork inside the unfinal zone is seen), stepping back while its chain
-   * does not connect, and adds at most its budget of new headers. A supplier
-   * that fails or serves a header the store refuses stops for this sync; the
-   * headers it supplied before that stay. Then sections, index by index from
-   * the first not yet read up to the index the best chain makes final: any
-   * supplier's section that reproduces the header's root is read. The new
-   * snapshot's clock is the last index whose section, and every one before it,
-   * is held. It is published only when complete, with no await in between.
+   * Headers first: each supplier is asked from the depth below the lower of
+   * the best tip and its own (so a fork inside the unfinal zone, or a heavier
+   * shorter chain, is seen), stepping back while its chain does not connect,
+   * and adds at most its budget of new headers. A supplier that fails, times
+   * out or serves a header the store refuses stops for this sync; the headers
+   * it supplied before that stay. Then sections, index by index from the
+   * first not yet read up to the index the clock may reach: any supplier's
+   * section that reproduces the header's root is read, and a supplier that
+   * misses one is not asked again in this sync. The new snapshot is published
+   * only when complete, with no await in between; reads meanwhile answer from
+   * the previous one.
    *
    * Rejects with VenueError on a reorganization past the depth (the venue's
    * failure, after which every read refuses) and on a concurrent sync.
@@ -199,16 +223,16 @@ export class ErgoVenue implements Venue {
     this.syncing = true;
     try {
       // The caller's list is read once; each supplier's name once, for its report.
-      const sources = Array.from(suppliers, supplier => ({ supplier, name: String(supplier.name) }));
-      const reports: ErgoSupplierReport[] = [], unfinished: Uint8Array[] = [];
+      const sources = Array.from(suppliers, supplier => ({ supplier, name: nameOf(supplier) }));
+      const reports: ErgoSupplierReport[] = [], unfinished: NonNullable<HeaderPass["unfinished"]>[] = [];
       for (const source of sources) {
-        const { report, last } = await this.syncHeaders(source.supplier, source.name);
-        reports.push(report);
-        if (last !== undefined) unfinished.push(last);
+        const pass = await this.syncHeaders(source.supplier, source.name);
+        reports.push(pass.report);
+        if (pass.unfinished !== undefined) unfinished.push(pass.unfinished);
       }
       const best = this.store.best(), anchorHeight = this.store.tip().anchorHeight, depth = this.profile.depth;
       // The best chain must keep the header at the published clock: its id commits to every block before it.
-      const previous = this.snapshot;
+      const previous = this.snapshot, clock = previous?.witnessed ?? -1n;
       if (previous !== undefined) {
         const kept = best.headers[Number(previous.witnessed)];
         if (kept === undefined || compareBytes(kept.id, previous.witnessedHeaderId) !== 0) {
@@ -217,88 +241,99 @@ export class ErgoVenue implements Venue {
         }
       }
       // Sections read past an earlier clock were read for headers the chain may since have left.
-      const clock = previous?.witnessed ?? -1n;
       for (let i = this.sections.length - 1; i > Number(clock); i--) {
         const header = best.headers[i];
         if (header !== undefined && compareBytes(this.sectionHeaders[i]!, header.id) === 0) break;
         this.dropSection(i);
       }
       const chainWitnessed = best.height - depth - anchorHeight - 1n;
-      // A supplier stopped before its tip may yet show a heavier chain from any of its headers: the clock stays
-      // at or below where its last header meets the best chain, so a budget cannot make the reader witness a block
-      // it would later have to unwitness.
       let bound = chainWitnessed;
-      for (const id of unfinished) {
-        const fork = this.store.forkHeight(id);
-        if (fork !== undefined && fork - anchorHeight - 1n < bound) bound = fork - anchorHeight - 1n;
+      for (const { supplier, last, added } of unfinished) {
+        // A supplier the header budget stopped before its tip may yet show a heavier chain from its last header, so
+        // the clock stays at or below where that header meets the best chain: the reader's own budget cannot make it
+        // witness a block it would later have to unwitness. A fork below the published clock bounds nothing,
+        // since such a chain, were it heavier, fails the venue either way; and a supplier whose chain keeps ending
+        // off the best chain spends its side-branch quota, past which it is withholding. Only this stop bounds the
+        // clock: it takes a budget of headers with their work, while failing costs a supplier nothing.
+        const header = parseErgoHeader(last), fork = header === undefined ? undefined : this.store.forkHeight(header.id), height = header?.height;
+        if (fork === undefined || height === undefined) continue;
+        if (fork < height) this.sideHeaders.set(supplier, (this.sideHeaders.get(supplier) ?? 0) + added);
+        if ((this.sideHeaders.get(supplier) ?? 0) >= this.policy.sideHeadersPerSupplier) continue;
+        const forkIndex = fork - anchorHeight - 1n;
+        if (forkIndex >= clock && forkIndex < bound) bound = forkIndex;
       }
-      let spent = 0, sectionsRead = 0, unresolved: bigint | undefined;
+      const missed = new Set<ErgoSupplier>();
+      let spent = 0, sectionsRead = 0, unresolved: bigint | undefined, reason: ErgoSyncReport["unresolvedReason"];
       for (let index = BigInt(this.sections.length); index <= bound; index++) {
-        // The budget is checked before each section, so one larger than it is still read, alone in its sync.
-        if (spent >= this.policy.sectionBytesPerSync) { unresolved = index; break; }
+        // Checked before each section, so one larger than the budget is still read, alone in its sync.
+        if (spent >= this.policy.sectionBytesPerSync) { unresolved = index; reason = "section budget"; break; }
         const header = best.headers[Number(index)]!;
-        const read = await this.readSection(sources.map(source => source.supplier), header.id, header.transactionsRoot);
-        if (read === undefined) { unresolved = index; break; }
+        const read = await this.readSection(sources.map(source => source.supplier).filter(s => !missed.has(s)), missed,
+          header.id, header.transactionsRoot);
         spent += read.bytes;
+        if (read.objects === undefined) { unresolved = index; reason = read.retainedStop ? "retained budget" : "no section"; break; }
         this.sections.push(read.objects);
         this.sectionHeaders.push(copyBytes(header.id));
         sectionsRead++;
       }
       const witnessed = BigInt(this.sections.length) - 1n < bound ? BigInt(this.sections.length) - 1n : bound;
-      if (witnessed >= 0n && (previous === undefined || witnessed >= previous.witnessed)) {
+      if (witnessed >= 0n && witnessed >= clock) {
         // No await from here: the snapshot and every derivation change together.
         forgetAdmitted(this);
         this.held = new Map();
         this.snapshot = Object.freeze({ witnessed, sections: Object.freeze(this.sections.slice(0, Number(witnessed) + 1)),
           witnessedHeaderId: copyBytes(best.headers[Number(witnessed)]!.id) });
       }
-      return Object.freeze({ witnessedIndex: this.snapshot?.witnessed, witnessedHeaderId: this.snapshot === undefined ? undefined : copyBytes(this.snapshot.witnessedHeaderId), chainWitnessedIndex: chainWitnessed >= 0n ? chainWitnessed : undefined,
-        tipHeight: best.height, suppliers: Object.freeze(reports), sectionsRead, unresolvedIndex: unresolved });
+      const snapshot = this.snapshot;
+      return Object.freeze({
+        witnessedIndex: snapshot?.witnessed, witnessedHeaderId: snapshot === undefined ? undefined : copyBytes(snapshot.witnessedHeaderId),
+        chainWitnessedIndex: chainWitnessed >= 0n ? chainWitnessed : undefined, tipHeight: best.height, suppliers: Object.freeze(reports),
+        sectionsRead, unresolvedIndex: unresolved, ...(reason === undefined ? {} : { unresolvedReason: reason }),
+      });
     } finally {
       this.syncing = false;
     }
   }
 
   private dropSection(index: number): void {
-    for (const object of this.sections[index]!) this.retained -= object.record.length;
+    for (const object of this.sections[index]!) this.retained -= retainedSize(object);
     this.sections.length = index;
     this.sectionHeaders.length = index;
   }
 
-  /** One supplier's headers, and the id of the last it supplied where it
-   * stopped before its tip (budget or failure): that supplier's chain may
-   * still be heavier from there. */
-  private async syncHeaders(supplier: ErgoSupplier, name: string): Promise<{ report: ErgoSupplierReport; last?: Uint8Array }> {
+  private async syncHeaders(supplier: ErgoSupplier, name: string): Promise<HeaderPass> {
     let added = 0, fetched = 0, last: Uint8Array | undefined;
-    const done = (stopped?: string): { report: ErgoSupplierReport } =>
+    const done = (stopped?: string): HeaderPass =>
       ({ report: Object.freeze(stopped === undefined ? { name, headersAdded: added } : { name, headersAdded: added, stopped }) });
-    const unfinished = (stopped: string): { report: ErgoSupplierReport; last?: Uint8Array } =>
-      last === undefined ? done(stopped) : { ...done(stopped), last };
-    const budget = this.policy.headersPerSupplier, fetchBudget = 4 * budget + 2 * ANCHOR_CONTEXT;
+    const unfinished = (): HeaderPass => last === undefined ? done("header budget")
+      : { ...done("header budget"), unfinished: { supplier, last, added } };
+    const { headersPerSupplier: budget, sideHeadersPerSupplier: sideQuota, supplierTimeoutMs: timeout } = this.policy;
+    if ((this.sideHeaders.get(supplier) ?? 0) >= sideQuota) return done("side-branch quota");
+    const fetchBudget = 4 * budget + 2 * ANCHOR_CONTEXT, perRequest = BigInt(this.policy.headersPerRequest);
     const anchorHeight = this.store.tip().anchorHeight, depth = this.profile.depth;
-    const tip = await supplied(() => supplier.tipHeight());
+    const tip = await supplied(() => supplier.tipHeight(), timeout);
     if (!tip.ok) return done(tip.failure);
     if (typeof tip.value !== "bigint") return done("no tip height");
-    const start = this.store.tip().height - depth;
+    const ours = this.store.tip().height, start = (tip.value < ours ? tip.value : ours) - depth;
     let from = start > anchorHeight ? start : anchorHeight + 1n, back = depth + 1n;
     while (from <= tip.value) {
-      if (added >= budget) return unfinished("header budget");
-      if (fetched >= fetchBudget) return unfinished("fetch budget");
-      const to = from + HEADER_BATCH - 1n < tip.value ? from + HEADER_BATCH - 1n : tip.value;
-      const answer = await supplied(() => supplier.headers(from, to));
-      if (!answer.ok) return unfinished(answer.failure);
-      const batch = answer.value;
-      if (!Array.isArray(batch) || batch.length === 0) return done();
+      if (added >= budget) return unfinished();
+      if (fetched >= fetchBudget) return done("fetch budget");
+      const to = from + perRequest - 1n < tip.value ? from + perRequest - 1n : tip.value, asked = Number(to - from + 1n);
+      const answer = await supplied(() => supplier.headers(from, to), timeout);
+      if (!answer.ok) return done(answer.failure);
+      // The answer is cut to what was asked and owned before any header is judged.
+      const batch = ownHeaders(answer.value, asked);
+      if (batch === undefined) return done("malformed answer");
+      if (batch.length === 0) return done();
       let steppedBack = false, position = 0;
-      for (const item of batch) {
-        if (added >= budget) return unfinished("header budget");
+      for (const bytes of batch) {
+        if (added >= budget) return unfinished();
         fetched++;
-        // Owned before the store reads it, so the id taken below is of the bytes the store judged.
-        const bytes = item instanceof Uint8Array && !(item.buffer instanceof SharedArrayBuffer) ? copyBytes(item) : undefined;
         const outcome = bytes === undefined ? "malformed" : this.store.add(bytes);
         if (outcome === "added" || outcome === "known") {
           if (outcome === "added") added++;
-          last = blake2b(bytes!, { dkLen: 32 });
+          last = bytes!;
         } else if (outcome === "unknown-parent" && position === 0 && from > anchorHeight + 1n) {
           // The supplier's chain leaves ours below `from`: step back until it connects.
           from = from - back > anchorHeight ? from - back : anchorHeight + 1n;
@@ -309,37 +344,38 @@ export class ErgoVenue implements Venue {
         position++;
       }
       if (steppedBack) continue;
-      if (BigInt(batch.length) < to - from + 1n) return done();
+      if (batch.length < asked) return done();
       from = to + 1n;
     }
     return done();
   }
 
-  /** The first supplier's section that reproduces the root, attributed, or
-   * undefined where none does or its objects would exceed the retained bytes. */
-  private async readSection(suppliers: readonly ErgoSupplier[], headerId: Uint8Array, root: Uint8Array):
-    Promise<{ objects: readonly AttributedObject[]; bytes: number } | undefined> {
+  /** The first supplier's section that reproduces the root, attributed, and
+   * the bytes received from every supplier asked; no objects where none does
+   * or they would exceed the retained bytes. A supplier that does not supply
+   * joins `missed`. */
+  private async readSection(suppliers: readonly ErgoSupplier[], missed: Set<ErgoSupplier>, headerId: Uint8Array, root: Uint8Array):
+    Promise<{ objects?: readonly AttributedObject[]; bytes: number; retainedStop?: boolean }> {
+    let bytes = 0;
     for (const supplier of suppliers) {
-      const answer = await supplied(() => supplier.section(copyBytes(headerId)));
-      if (!answer.ok || !Array.isArray(answer.value)) continue;
-      const section: readonly ErgoTransactionView[] = answer.value;
-      let bytes = 0;
-      for (const transaction of section) bytes += transaction !== null && typeof transaction === "object" && transaction.unsigned instanceof Uint8Array ? transaction.unsigned.length : 0;
-      const objects = attributeSection(this.profile, section, root);
-      if (objects === undefined) continue;
-      const size = objects.reduce((total, object) => total + object.record.length, 0);
-      if (this.retained + size > this.policy.retainedBytes) return undefined;
+      const answer = await supplied(() => supplier.section(copyBytes(headerId)), this.policy.supplierTimeoutMs);
+      const owned = answer.ok ? ownSection(answer.value) : { bytes: 0 };
+      bytes += owned.bytes;
+      const objects = owned.views === undefined ? undefined : attributeSection(this.profile, owned.views, root);
+      if (objects === undefined) { missed.add(supplier); continue; }
+      const size = objects.reduce((total, object) => total + retainedSize(object), 0);
+      if (this.retained + size > this.policy.retainedBytes) return { bytes, retainedStop: true };
       this.retained += size;
       return { objects, bytes };
     }
-    return undefined;
+    return { bytes };
   }
 
   // --- Reads ------------------------------------------------------------------
 
   private requireSnapshot(): Snapshot {
     if (this.failure !== undefined) throw new VenueError(this.failure);
-    if (this.syncing || this.snapshot === undefined) throw new VenueError("this view has no settled snapshot");
+    if (this.snapshot === undefined) throw new VenueError("this view has no settled snapshot");
     return this.snapshot;
   }
 
@@ -485,7 +521,8 @@ export class ErgoVenue implements Venue {
 
   nextSequenceFor(operator: Uint8Array): bigint {
     const latest = this.latestHeld(operator);
-    return latest === undefined ? 0n : latest.commitment.sequence + 1n;
+    // The venue holds a sequence only above zero (pool-v3 §13.3; pool sequences count from one).
+    return latest === undefined ? 1n : latest.commitment.sequence + 1n;
   }
 
   /** The last held commitment witnessed at or before `asOf` with a sequence
@@ -503,16 +540,69 @@ export class ErgoVenue implements Venue {
   }
 }
 
-/** A supplier's answer, or its failure: a supplier that throws or rejects is
- * one that did not supply. Only supplier calls are wrapped, so the reader's
- * own failures stay visible. */
-async function supplied<T>(call: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; failure: string }> {
+/** A supplier's answer, or its failure: a supplier that throws, rejects or
+ * does not settle within `timeoutMs` is one that did not supply. Only
+ * supplier calls and the reading of their answers are guarded, so the
+ * reader's own failures stay visible. */
+async function supplied<T>(call: () => Promise<T>, timeoutMs: number): Promise<{ ok: true; value: T } | { ok: false; failure: string }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("timed out")), timeoutMs); });
   try {
-    return { ok: true, value: await call() };
+    return { ok: true, value: await Promise.race([Promise.resolve().then(call), late]) };
   } catch (error) {
-    return { ok: false, failure: `failed: ${error instanceof Error ? error.message : String(error)}` };
+    return { ok: false, failure: `failed: ${describe(error)}` };
+  } finally {
+    clearTimeout(timer);
   }
 }
+/** An error's message, whatever a supplier threw. */
+function describe(error: unknown): string {
+  try { return error instanceof Error ? String(error.message) : String(error); } catch { return "an unreadable error"; }
+}
+function nameOf(supplier: ErgoSupplier): string {
+  try { return String(supplier.name); } catch { return "unnamed supplier"; }
+}
+const isRealBytes = (value: unknown): value is Uint8Array =>
+  ArrayBuffer.isView(value) && value instanceof Uint8Array && !(value.buffer instanceof SharedArrayBuffer);
+/** At most `limit` header byte strings of a supplier's answer, each owned
+ * (undefined where it is not bytes); undefined for an answer that is not a
+ * list or throws while read. */
+function ownHeaders(answer: unknown, limit: number): (Uint8Array | undefined)[] | undefined {
+  try {
+    if (!Array.isArray(answer)) return undefined;
+    const out: (Uint8Array | undefined)[] = [];
+    for (let i = 0; i < answer.length && i < limit; i++) {
+      const item: unknown = answer[i];
+      out.push(isRealBytes(item) ? copyBytes(item) : undefined);
+    }
+    return out;
+  } catch {
+    return undefined;
+  }
+}
+/** A supplier's section as owned views, and the bytes received, which are
+ * charged whether or not the section is the header's; no views for an answer
+ * that is not a list of transaction views or throws while read. */
+function ownSection(answer: unknown): { views?: ErgoTransactionView[]; bytes: number } {
+  let bytes = 0;
+  try {
+    if (!Array.isArray(answer)) return { bytes };
+    const views: ErgoTransactionView[] = [];
+    for (const transaction of answer as unknown[]) {
+      if (transaction === null || typeof transaction !== "object") return { bytes };
+      const { unsigned, witnessId } = transaction as Record<string, unknown>;
+      if (!isRealBytes(unsigned) || !isRealBytes(witnessId)) return { bytes };
+      const view = { unsigned: copyBytes(unsigned), witnessId: copyBytes(witnessId) };
+      bytes += view.unsigned.length + view.witnessId.length;
+      views.push(view);
+    }
+    return { views, bytes };
+  } catch {
+    return { bytes };
+  }
+}
+/** What one retained object costs: its record, its subject and a fixed overhead. */
+const retainedSize = (object: AttributedObject): number => object.record.length + object.subject.length + OBJECT_OVERHEAD;
 
 function copyCommitment(value: Commitment | undefined): Commitment | undefined {
   return value === undefined ? undefined : {
