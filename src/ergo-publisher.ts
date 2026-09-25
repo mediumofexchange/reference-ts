@@ -277,6 +277,8 @@ export interface ErgoPublishingSupplier {
   unspentBoxes(tree: Uint8Array): Promise<readonly Uint8Array[]>;
   /** Whether a box with this id is unspent in the supplier's UTXO set or created in its mempool. */
   hasBox(boxId: Uint8Array): Promise<boolean>;
+  /** Whether the supplier holds a transaction with this id, in its mempool or its blocks. */
+  hasTransaction(id: Uint8Array): Promise<boolean>;
   /** Broadcast signed transaction bytes; resolves once the supplier accepted them. */
   submit(signed: Uint8Array, id: Uint8Array): Promise<void>;
 }
@@ -407,9 +409,18 @@ export class ErgoPublisher {
     if (pending !== undefined) {
       if (await this.#shown(pending) || await this.#send(pending, new Set())) return pending.publication;
       const { live, gone } = await this.#inspect(pending);
-      if (gone.length === 0) kept();
-      this.#forget(pending, gone);
-      pending = await this.#build(key, request, live, new Set(gone.map(box => bytesToHex(box.id))));
+      if (gone.length > 0) {
+        this.#forget(pending, gone);
+        pending = await this.#build(key, request, live, new Set(gone.map(box => bytesToHex(box.id))));
+      } else if (request.height !== pending.request.height) {
+        // Refused for something other than its inputs, such as a height the chain went back below:
+        // the same inputs at the caller's height, so the old and the new conflict.
+        const old = pending;
+        this.#forget(old, []);
+        pending = await this.#build(key, request, old.inputs, new Set());
+      } else {
+        kept();
+      }
     } else {
       if (this.#pending.size >= PENDING_LIMIT) throw new VenueError("the publisher holds too many unsettled publications; settle it from a view");
       pending = await this.#build(key, request, [], new Set());
@@ -419,7 +430,10 @@ export class ErgoPublisher {
   }
 
   /** A new transaction for the record, spending `required` and never `excluded`, remembered before it is sent. */
-  async #build(key: string, request: ErgoRecordRequest, required: readonly ErgoPlainBox[], excluded: ReadonlySet<string>): Promise<Pending> {
+  async #build(key: string, asked: ErgoRecordRequest, required: readonly ErgoPlainBox[], excluded: ReadonlySet<string>): Promise<Pending> {
+    // Outputs are created no lower than any required input (the node's txMonotonicHeight).
+    const floor = required.reduce((high, box) => (box.creationHeight > high ? box.creationHeight : high), asked.height);
+    const request: ErgoRecordRequest = floor === asked.height ? asked : Object.freeze({ ...asked, height: floor });
     const inputs = await this.#select(request.height, publicationCost(request, this.#tree, this.#fee, this.#perByte), required, excluded);
     const pending: Pending = Object.freeze({ key, request, inputs: Object.freeze(inputs),
       publication: buildPublication(this.#key, this.#tree, inputs, request, this.#fee, this.#perByte) });
@@ -464,8 +478,11 @@ export class ErgoPublisher {
     return accepted;
   }
 
-  #shown(pending: Pending): Promise<boolean> {
-    return this.#any(supplier => supplier.hasBox(copyBytes(pending.publication.recordBox)));
+  /** Whether a supplier shows the record box or holds the transaction: it is pending or it landed, and its
+   * inputs, spent by it, are not gone. */
+  async #shown(pending: Pending): Promise<boolean> {
+    return await this.#any(supplier => supplier.hasBox(copyBytes(pending.publication.recordBox))) ||
+      this.#any(supplier => supplier.hasTransaction(copyBytes(pending.publication.id)));
   }
 
   /**
@@ -582,6 +599,8 @@ const HEX = /^(?:[0-9a-f]{2})*$/;
  * A node as a publishing supplier, over its REST API: the key's boxes from its
  * index (`/blockchain/box/unspent/byErgoTree`, which needs `extraIndex`), a
  * box from its UTXO set with the mempool (`/utxo/withPool/byIdBinary/{id}`),
+ * a transaction from its mempool or its index
+ * (`/transactions/unconfirmed/byTransactionId/{id}`, `/blockchain/transaction/byId/{id}`),
  * and submission (`/transactions/bytes`). The node is untrusted: a box it
  * lists is copied to bytes and counts only where they hash to the id it
  * states, and a submission counts only where it answers with the id.
@@ -617,6 +636,14 @@ export function ergoNodePublisher(baseUrl: string, options: ErgoNodePublisherOpt
         if (statements.length < BOXES_PER_PAGE) break;
       }
       return out;
+    },
+    async hasTransaction(txId: Uint8Array): Promise<boolean> {
+      const id = bytesToHex(txId);
+      for (const path of [`/transactions/unconfirmed/byTransactionId/${id}`, `/blockchain/transaction/byId/${id}`]) {
+        const transaction = await call(path);
+        if (transaction instanceof Map && transaction.get("id") === id) return true;
+      }
+      return false;
     },
     async hasBox(boxId: Uint8Array): Promise<boolean> {
       const id = bytesToHex(boxId);

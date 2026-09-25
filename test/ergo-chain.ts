@@ -198,6 +198,8 @@ export class MempoolNode {
   refuse: (id: string) => boolean = () => false;
   /** Boxes in blocks, which a stale index lists. */
   readonly confirmed = new Map<string, Uint8Array>();
+  /** Ids of transactions `take` handed to a block. */
+  readonly mined = new Set<string>();
   private readonly spentInPool = new Set<string>();
   private readonly createdInPool = new Map<string, Uint8Array>();
 
@@ -219,6 +221,10 @@ export class MempoolNode {
 
   async hasBox(boxId: Uint8Array): Promise<boolean> {
     return this.boxes.has(hex(boxId));
+  }
+
+  async hasTransaction(id: Uint8Array): Promise<boolean> {
+    return this.mined.has(hex(id)) || this.pool.some(t => hex(hash(t.unsigned)) === hex(id));
   }
 
   async submit(signed: Uint8Array, id: Uint8Array): Promise<void> {
@@ -249,6 +255,7 @@ export class MempoolNode {
     for (const [id, box] of this.createdInPool) this.confirmed.set(id, box);
     this.createdInPool.clear();
     this.spentInPool.clear();
+    for (const t of this.pool) this.mined.add(hex(hash(t.unsigned)));
     return this.pool.splice(0);
   }
 }

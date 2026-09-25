@@ -138,12 +138,12 @@ describe("suppliers are untrusted", () => {
     ];
     const seen: Uint8Array[][] = [];
     const lying: ErgoPublishingSupplier = {
-      name: "liar", unspentBoxes: async () => offered, hasBox: async () => { throw new Error("no answer"); },
+      name: "liar", unspentBoxes: async () => offered, hasBox: async () => { throw new Error("no answer"); }, hasTransaction: async () => { throw new Error("no answer"); },
       submit: async (_signed, _id) => { throw new Error("refused"); },
     };
     const n = node();
     n.fund(good);
-    const spy: ErgoPublishingSupplier = { name: "spy", unspentBoxes: async t => n.unspentBoxes(t), hasBox: b => n.hasBox(b),
+    const spy: ErgoPublishingSupplier = { name: "spy", unspentBoxes: async t => n.unspentBoxes(t), hasBox: b => n.hasBox(b), hasTransaction: id => n.hasTransaction(id),
       submit: async (s, id) => { seen.push([s]); return n.submit(s, id); } };
     const publication = await publisher([lying, spy]).publish(request());
     expect(publication.inputs.map(hex)).toEqual([hex(hash(good))]);
@@ -153,11 +153,11 @@ describe("suppliers are untrusted", () => {
   it("passes over suppliers that throw, time out or answer nonsense, and fails only when none accepts", async () => {
     const n = funded([10_000_000n]);
     const broken: ErgoPublishingSupplier = {
-      name: "broken", unspentBoxes: async () => { throw new Error("down"); }, hasBox: async () => { throw new Error("down"); },
+      name: "broken", unspentBoxes: async () => { throw new Error("down"); }, hasBox: async () => { throw new Error("down"); }, hasTransaction: async () => { throw new Error("down"); },
       submit: async () => { throw new Error("down"); },
     };
-    const nonsense = { name: "nonsense", unspentBoxes: async () => "boxes", hasBox: async () => "yes", submit: async () => undefined } as unknown as ErgoPublishingSupplier;
-    const slow: ErgoPublishingSupplier = { name: "slow", unspentBoxes: () => new Promise(() => {}), hasBox: () => new Promise(() => {}), submit: () => new Promise(() => {}) };
+    const nonsense = { name: "nonsense", unspentBoxes: async () => "boxes", hasBox: async () => "yes", hasTransaction: async () => "yes", submit: async () => undefined } as unknown as ErgoPublishingSupplier;
+    const slow: ErgoPublishingSupplier = { name: "slow", unspentBoxes: () => new Promise(() => {}), hasBox: () => new Promise(() => {}), hasTransaction: () => new Promise(() => {}), submit: () => new Promise(() => {}) };
     const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [broken, slow, n], timeoutMs: 50 });
     await p.publish(request());
     expect(n.pool).toHaveLength(1);
@@ -173,20 +173,22 @@ describe("suppliers are untrusted", () => {
     const n = funded([10_000_000n]);
     const invented = plainBox(TREE, 1n << 62n, HEIGHT);
     const liar: ErgoPublishingSupplier = {
-      name: "liar", unspentBoxes: async () => [invented], hasBox: async id => hex(id) === hex(hash(invented)) || n.hasBox(id), submit: async () => {},
+      name: "liar", unspentBoxes: async () => [invented], hasBox: async id => hex(id) === hex(hash(invented)) || n.hasBox(id),
+      hasTransaction: id => n.hasTransaction(id), submit: async () => {},
     };
     const publication = await publisher([n, liar]).publish(request());
     expect(publication.inputs.map(hex)).not.toContain(hex(hash(invented)));
     expect(n.pool).toHaveLength(1);
     // The price: a supplier denying every box stops publication, visibly, rather than letting a false box through.
-    const denier: ErgoPublishingSupplier = { name: "denier", unspentBoxes: async () => [], hasBox: async () => false, submit: async () => {} };
+    const denier: ErgoPublishingSupplier = { name: "denier", unspentBoxes: async () => [], hasBox: async () => false, hasTransaction: async () => false, submit: async () => {} };
     await expect(publisher([funded([10_000_000n]), denier]).publish(request())).rejects.toThrow(/no supplier offered/);
   });
 });
 
 describe("a publication is sent once, and publications chain", () => {
-  it("returns the transaction already sent for a record, rebroadcasting it only while no supplier shows its record box", async () => {
-    const n = funded([10_000_000n]);
+  it("returns the transaction already sent for a record, sending it again only while no supplier shows its record box or holds it", async () => {
+    const funding = plainBox(TREE, 10_000_000n, HEIGHT - 5n), n = node();
+    n.fund(funding);
     const p = publisher([n]);
     const first = await p.publish(request());
     const again = await p.publish(request());
@@ -194,14 +196,19 @@ describe("a publication is sent once, and publications chain", () => {
     expect(n.submitted).toHaveLength(1); // the record box is in the mempool: nothing is sent
     n.boxes.delete(hex(first.recordBox));
     await p.publish(request());
+    expect(n.submitted).toHaveLength(1); // the node still holds the transaction
+    const pooled = n.pool.splice(0); // and now it does not: its input is unspent again
+    n.boxes.clear();
+    n.fund(funding);
+    await p.publish(request());
     expect(n.submitted).toEqual([hex(first.id), hex(first.id)]);
-    expect(n.pool).toHaveLength(1);
+    expect(pooled).toHaveLength(1);
   });
 
   it("keeps a transaction whose acceptance it never heard, and sends the same one again", async () => {
     const n = funded([10_000_000n]);
     // The node takes the transaction, and the answer is lost.
-    const lossy: ErgoPublishingSupplier = { name: "lossy", unspentBoxes: t => n.unspentBoxes(t), hasBox: id => n.hasBox(id),
+    const lossy: ErgoPublishingSupplier = { name: "lossy", unspentBoxes: t => n.unspentBoxes(t), hasBox: id => n.hasBox(id), hasTransaction: id => n.hasTransaction(id),
       submit: async (s, id) => { await n.submit(s, id).catch(() => {}); throw new Error("connection reset"); } };
     const p = publisher([lossy]);
     await expect(p.publish(request())).rejects.toThrow(/kept and sent again/);
@@ -217,7 +224,8 @@ describe("a publication is sent once, and publications chain", () => {
     let down = false;
     const flaky: ErgoPublishingSupplier = {
       name: "flaky", unspentBoxes: t => (down ? Promise.reject(new Error("down")) : n.unspentBoxes(t)),
-      hasBox: id => (down ? Promise.reject(new Error("down")) : n.hasBox(id)), submit: (s, id) => (down ? Promise.reject(new Error("down")) : n.submit(s, id)),
+      hasBox: id => (down ? Promise.reject(new Error("down")) : n.hasBox(id)),
+      hasTransaction: id => (down ? Promise.reject(new Error("down")) : n.hasTransaction(id)), submit: (s, id) => (down ? Promise.reject(new Error("down")) : n.submit(s, id)),
     };
     const p = publisher([flaky]);
     const first = await p.publish(request());
@@ -252,8 +260,10 @@ describe("a publication is sent once, and publications chain", () => {
     // The honest node fails to answer once, while a liar offers a box that does not exist.
     let silent = true;
     const honest: ErgoPublishingSupplier = { name: "honest", unspentBoxes: t => n.unspentBoxes(t),
-      hasBox: id => (silent ? (silent = false, Promise.reject(new Error("500"))) : n.hasBox(id)), submit: (s, id) => n.submit(s, id) };
+      hasBox: id => (silent ? (silent = false, Promise.reject(new Error("500"))) : n.hasBox(id)),
+      hasTransaction: id => n.hasTransaction(id), submit: (s, id) => n.submit(s, id) };
     const liar: ErgoPublishingSupplier = { name: "liar", unspentBoxes: async () => [invented], hasBox: async id => { if (hex(id) === hex(hash(invented))) return true; throw new Error("no answer"); },
+      hasTransaction: async () => false,
       submit: async () => { throw new Error("refused"); } };
     const p = publisher([honest, liar]);
     await expect(p.publish(request())).rejects.toThrow(/kept and sent again/);
@@ -283,6 +293,31 @@ describe("a publication is sent once, and publications chain", () => {
     expect(rebuilt.inputs.map(hex)).toContain(hex(hash(b)));
     expect(rebuilt.inputs.map(hex)).not.toContain(hex(hash(a)));
     expect(n.pool).toHaveLength(1);
+  });
+
+  it("takes a landed transaction whose record box was swept as published, not as one whose inputs are gone", async () => {
+    const n = funded([10_000_000n]);
+    const p = publisher([n]);
+    const first = await p.publish(request());
+    n.take(); // mined
+    n.boxes.delete(hex(first.recordBox)); // whoever holds the location spent it
+    n.refuse = () => true; // its inputs are spent: sending it again is refused
+    expect(hex((await p.publish(request())).id)).toBe(hex(first.id));
+    expect(new Set(n.submitted)).toEqual(new Set([hex(first.id)]));
+  });
+
+  it("rebuilds a transaction refused for something other than its inputs on the same inputs, at the new height", async () => {
+    const n = funded([10_000_000n]);
+    const p = publisher([n]);
+    n.refuse = () => true; // say, a node that will not take this height
+    await expect(p.publish(request())).rejects.toThrow(/kept and sent again/);
+    const refused = n.submitted[0]!;
+    n.refuse = id => id === refused; // the old transaction stays refused
+    const later = await p.publish({ ...request(), height: HEIGHT + 1n });
+    expect(hex(later.id)).not.toBe(refused);
+    expect(later.inputs).toHaveLength(1);
+    expect(n.pool).toHaveLength(1);
+    expect(frameTransaction(later.unsigned)).toBeDefined();
   });
 
   it("spends its own change before any index shows it, and never one box twice under concurrent calls", async () => {
@@ -485,6 +520,19 @@ describe("a node as a publishing supplier", () => {
     expect(await answer(`${BOX_BYTES}00`).hasBox(Buffer.from(BOX_ID, "hex"))).toBe(false);
     const missing = ergoNodePublisher("http://node", { fetch: recording(() => new Response("", { status: 404 })).fetch });
     expect(await missing.hasBox(Buffer.from(BOX_ID, "hex"))).toBe(false);
+  });
+
+  it("holds a transaction only where its mempool or its index states it under that id", async () => {
+    const id = "ab".repeat(32);
+    const answering = (routes: Record<string, string>) => ergoNodePublisher("http://node", { fetch: recording(url => {
+      const route = routes[url.slice("http://node".length)];
+      return route === undefined ? new Response("", { status: 404 }) : new Response(route);
+    }).fetch });
+    const idBytes = Buffer.from(id, "hex");
+    expect(await answering({ [`/transactions/unconfirmed/byTransactionId/${id}`]: `{ "id" : "${id}" }` }).hasTransaction(idBytes)).toBe(true);
+    expect(await answering({ [`/blockchain/transaction/byId/${id}`]: `{ "id" : "${id}", "inclusionHeight" : 5 }` }).hasTransaction(idBytes)).toBe(true);
+    expect(await answering({ [`/blockchain/transaction/byId/${id}`]: `{ "id" : "${"cd".repeat(32)}" }` }).hasTransaction(idBytes)).toBe(false);
+    expect(await answering({}).hasTransaction(idBytes)).toBe(false);
   });
 
   it("takes a submission as accepted only where the node answers with the transaction's id", async () => {
