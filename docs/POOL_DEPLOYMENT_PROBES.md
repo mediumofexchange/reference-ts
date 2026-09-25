@@ -914,8 +914,8 @@ largest publication under the observed 14,656-byte proofs is a release of
 15,498 bytes in four pieces, and any proof up to 94,702 bytes fits, so the
 frame's 131,914-byte ceiling is a parser bound no configuration-conformant
 publication approaches. A configuration is publishable here only where its
-largest publication fits one transaction. No specification selects the
-profile.
+largest publication fits one transaction, which the selected profile makes
+normative ([venue-ergo.md §8](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md#8-publishing)).
 
 ## Real-chain exhaustion cost from a real anchor
 
@@ -1735,7 +1735,7 @@ unchanged by the rerun. The run on unsigned seeds is the framer's section
 above.
 
 Not established: validity against state or proofs; version contexts other
-than a version-4 block's (the profile reads block versions 1–4); which
+than a version-4 block's (the profile reads every block version); which
 bytes peers and node APIs serve for a rewritten transaction; inputs beyond
 single-byte mutations and splices of these 29 transactions. The stateless
 verdict uses the node's initial validation settings.

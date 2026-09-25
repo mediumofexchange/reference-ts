@@ -1,248 +1,66 @@
-# Ergo venue profile candidate
+# Ergo venue profile
 
-A candidate profile for reading [pool-v3 §13](https://github.com/mediumofexchange/money-from-first-principles/blob/6272040/pool-v3.md#13-record-range-evidence)
-record-range answers from an Ergo chain. Section 13 fixes the request, the
-answer and the reader's rules and leaves to the venue profile which venue
-evidence establishes an answer and how; Construction C2.3.2 and C2.3.5 name a
-venue with its finality rule and lag, and §13.1 adds the attribution rule to
-that name. This document fixes all of them for Ergo, as a candidate: no
-specification selects it, no backing may declare it, and no runtime path
-reads it. The v2 runtime's `src/ergo.ts` keeps its own identity and
-materialized view. Implementation: `model/pool-v3-ergo-profile.ts` and the
-header store `model/pool-v3-ergo-headers.ts`; evidence:
-[the experiment](#evidence).
+The specification selects the Ergo venue profile for
+[pool-v3 §13](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/pool-v3.md#13-record-range-evidence)
+record-range answers, and its rules are normative in
+[venue-ergo.md](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md)
+([decision](../decisions/2026-09.md#2026-09-25--select-the-ergo-venue-profile-for-pool-v3-record-ranges)).
+This guide maps those rules to the model, the experiments and their
+evidence, and records the measured costs and limits. The model implements the
+profile, but no runtime path reads it yet: the v2 runtime's `src/ergo.ts`
+keeps its own identity (`moe/venue/ergo/v1`), its height-as-index convention
+and its materialized view, and v2 backings keep them.
 
-## Identity
+## Where each rule is implemented
 
-```text
-identity = SHA256(lp("moe/venue/ergo/v3") || anchor[32] || u64 depth ||
-                  lp(script_1) || lp(script_2) || lp(script_3) || lp(script_4))
-```
+| Rule (venue-ergo.md) | Model | Tests and evidence |
+|---|---|---|
+| §1 identity and parameters | `ergoProfileIdentity`, `ownProfile` in `model/pool-v3-ergo-profile.ts` | `test/pool-v3-ergo-profile.test.ts` |
+| §2 index, finality, lag | `ergoRangeVerifier` (origin, `witnessedIndex`), `ergoLag` | same; [latency](POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet) |
+| §3 header chain | `ergoHeaderStore`, `parseErgoHeader`, `eip37Difficulty`, `autolykosHit` in `model/pool-v3-ergo-headers.ts` | `test/pool-v3-ergo-headers.test.ts`; [reader-verified headers](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers) |
+| §4 block sections | `sectionMatchesRoot`, `transactionsRoot`, `merkleRoot`; section acceptance in `ergoRangeVerifier` | profile experiment; [P4](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor) |
+| §5 transaction grammar | `frameTransaction`, `frameTree`, `frameCollBytes` | [hostile framer probe](POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence) |
+| §6 attribution, reassembly, ordinal | `attributeOutput`, `attributeOwned`, `ergoOrdinal`, `collBytes` | profile experiment; [P2](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node) |
+| §7 answers | `ergoRangeVerifier(...).range` over `model/pool-v3-range.ts` | local replay adapter |
+| §8 publishing | [kind-4 capacity](ergo-range-profile-verification.json) | [decision](../decisions/2026-09.md#2026-09-15--a-configurations-publications-fit-one-ergo-transaction) |
 
-`lp` is a u32 length prefix. `anchor` is the id of one header of the chain,
-the last block before the venue's index space: index 0 is the anchor's child.
-A header id commits to its whole ancestry through parent ids, so the anchor
-names the chain up to itself as tightly as a genesis would; the all-zero id
-names no header and is refused. A deployment anchors at a block before its
-first record that is already final under its declared depth, so a read from
-index zero begins there rather than at the chain's genesis; an anchor the
-chain later orphans is in no chain, and every read under that identity is
-unresolved for good. The mainnet genesis header, pinned as a fixture in the
-experiment, is one possible anchor, under which index 0 is height 2. `depth`
-is the finality depth; `script_k` is the exact ErgoTree that is the location
-of record kind `k` (§13.1's kinds: 1 commitment, 2 replacement, 3 revocation,
-4 publication). Naming the venue is agreeing the chain from its anchor, the
-depth and the attribution rule; a different anchor, depth or location is a
-different venue. The four trees are the deployment's choice and must be
-distinct; the checked candidate uses four pay-to-public-key trees of
-throwaway keys. The profile is read once and owned, so the identity is hashed
-over the same bytes every output is attributed by. The runtime's
-`ergoVenueId` binds a chain string, the depth and one publication script and
-leaves the other locations injected; a backing that declares this profile
-declares this identity, and existing v2 backings keep theirs and their
-height-as-index convention.
-
-## Index, finality and lag
-
-The witnessed index of an object is derived from the height of the block
-whose transaction created it, never a box's own creation height (decision
-2026-08-20, slice 17): index `i` is the block `i + 1` heights above the
-anchor, so with the anchor at height `A` the origin height `A + 1` is index 0
-and height `h` is index `h − A − 1`. An index `t` is witnessed once the
-chain's tip is at `A + 1 + t + depth` or beyond, so the venue's current
-witnessed index is the tip less the depth less the origin, and nothing is
-witnessed until the tip reaches the origin plus the depth. The lag is
-`depth + 1` (C2.3.5): a transaction submitted at clock `c` is included at
-index `c + depth + 1` at the earliest. The depth and lag rules are the v2
-adapter's; the index is relative to the anchor rather than to the chain.
-The depth is also the holder's margin: a publication authorized at the tip
-has force when included at most `depth + 2` blocks above it (C3.3). Over one
-mainnet day that held for 76% of included transactions at depth 2, 94% at
-depth 6 and 99.8% at depth 10
-([latency](POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet)).
-The depth is not selected here.
-
-## Attribution and reassembly
-
-An output is attributed by its location and shape (§13.1): its ErgoTree
-equals `script_k` exactly, its own register `R4` is a `Coll[Byte]` constant
-of exactly 32 bytes, the subject, and its own `R5` is a `Coll[Byte]`
-constant, the bytes. A register constant is the type code `0x0e`, a minimal
-unsigned VLQ length and the bytes, ending exactly, as sigma-rust's constant
-decoder reads the fixtures' real `Coll[Byte]` constants; any other
-register value is not the shape. Registers other than `R4` and `R5` are not
-read. An output at no location, or at a location without that shape, is not
-an object here. Outputs are those the framer reads (below); a transaction
-outside its grammar has none here.
-
-## Reading a transaction
-
-A transaction is what its block commits to: its unsigned bytes (the node's
-serialization with every input's proof empty, whose Blake2b-256 is the
-transaction id) and its 31-byte witness id (Blake2b-256 of the concatenated
-input proofs, first byte dropped). The profile's framer reads the outputs
-from the unsigned bytes under a fixed grammar, the pinned node's layout
-restricted to what a publisher needs:
-
-- inputs as a box id, an empty proof and a context extension of at most 127
-  entries, each a key byte and a `Coll[Byte]` constant; data inputs and
-  token ids as 32-byte ids;
-- outputs as a value, a tree, a creation height, token entries and at most
-  six registers, each a `Coll[Byte]` constant (`0x0e`, a VLQ length of at
-  most 65,535, the bytes);
-- a tree as either a sized tree (size flag set, header bits 5–7 clear: the
-  header, a VLQ size and that many bytes, as the node writes a tree it
-  parsed and keeps one it could not) or exactly pay-to-public-key (`0008cd`
-  and a 33-byte point) or Ergo's miner-fee tree, both complete expressions;
-- minimal VLQs within their field widths, and nothing after the last output.
-
-A transaction outside the grammar carries no record, yet its id enters the
-root like any other, so its block keeps its section: no transaction can
-deny a range by being unreadable. Every reader frames the same committed
-bytes alike, so the reading is deterministic whatever the grammar admits; a
-transaction outside it is one its author could have written inside it. A
-publisher therefore spends plain boxes, pays change to pay-to-public-key
-and the fee to the fee tree, and writes registers as `Coll[Byte]`; each
-location must itself be one tree the framer reads and the node's canonical
-writing of it (the node re-writes a sized tree it parses from the parse, so
-a location written otherwise could never be carried; pay-to-public-key is
-canonical). Where the framer reads the unsigned bytes of a transaction the
-node reads, its outputs are the node's: measured on the
-real corpus and week and on hostile mutations
-([probe](POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence),
-[decision](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)).
-
-- Kinds 1–3: the object is one output; its record is `R5`'s bytes, and it is
-  omitted unless its length is the kind's exact length (136, 233, 96).
-- Kind 4: the object is the maximal run of adjacent outputs of one
-  transaction at the kind-4 location with one subject, in output order; its
-  record is the concatenation of their `R5` bytes, and it is omitted where
-  that exceeds 131914 bytes. A publisher separates two publications of one
-  subject in one transaction with any other output or uses two transactions;
-  a run that merges two publications does not decode under §6 and has no
-  force, which is the publisher's cost.
-
-The verifier applies no signature, sequence or content rule: a 136-byte
-object nobody signed is carried under its `R4` subject and §13.3 disregards
-it. Identical objects at two positions are two witnessings of one object.
-
-## The venue's order
-
-The ordinal of an object at an index is its transaction's position in the
-block's transaction section, then its first output's index, packed as
-`position · 2^32 + index` so that ordinals compare as the chain orders them
-and as §13.1 requires for a chain: transaction order, then output order. A
-reassembled object takes its first piece's position. The answer carries the
-ordinal for kind 4 and zero for kinds 1–3, whose entries at one index stand
-in ascending record-byte order. Ordinals of different subjects at one index
-are positions in one section, so the union of several backings' answers
-(C2b.4.2's adopted block) is the section's order.
-
-## What the verifier consumes and establishes
-
-The reader supplies, from its own retained evidence:
-
-- **Headers** from its authenticated header source ([below](#header-source)), one contiguous chain
-  linked by parent id that contains the anchor's child (the header whose
-  parent id is the anchor) and reaches a tip at or beyond the origin plus
-  `toIndex + depth`, each with its id, parent id, height, version and
-  transaction root. Headers at or below the anchor are linkage only. Proof of
-  work and chain selection are the header source's; this verifier checks
-  linkage, contiguity and the anchor only, and a set of headers that is not
-  one such chain, that does not contain the anchor's child, or that names
-  the anchor as a parent twice, gives no verifier. Every read therefore
-  presents the chain from the anchor's child, not a suffix: the header
-  retention cost is the venue's age in headers, the price of a bounded
-  index space and of an identity every read is linked to.
-- **Blocks**: for every index in the range, the block's transactions in
-  section order, each as its unsigned bytes and witness id, which the
-  reader hashes and frames itself. The node's own JSON split of output
-  fields cannot stand in: the root binds a transaction's concatenated
-  bytes, not where one field ends
-  ([probe](POOL_DEPLOYMENT_PROBES.md#metered-release-decoder-over-the-week)).
-
-A block supplies the section of an index only where its header's version is
-1–4, it belongs to an indexed header of the chain and it reproduces that
-header's transaction root, recomputed from the hashes of the unsigned bytes
-(block version 1 commits to the ids alone; later
-versions to all ids followed by all witness ids, over scrypto's tree with
-leaf prefix 0, internal prefix 1, an absent right sibling contributing no
-bytes and a lone leaf keeping its parent). A later block version supplies
-no section until the profile names it, so a hard fork leaves the ranges
-through it unresolved rather than misread. The root binds every unsigned
-byte and the witness id, not the proofs' split among inputs; attribution
-reads outputs only, so that gap reaches no answer. A block that is not a well-formed
-section view, belongs to another chain or a height at or below the anchor,
-duplicates an established index or fails its root is passed over at the
-model boundary; its header is found before any of its transactions is read
-and its outputs are framed only once its root holds, so a block of another
-chain or of an established index costs nothing, and one for an index still
-without a section costs the hashing of what it carries. An index
-without a section leaves only the ranges through it unresolved. A request is answered by scanning every output of every
-transaction of every block in its range, so an empty answer is proven by
-exhaustion (§13.2). There is no answer where `toIndex` is above the witnessed
-index, where an index in the range has no section, where the request names
-another venue, or where the reader's answer budget is exceeded. Every field
-of the profile, the headers, the blocks and each request is read once into
-the reader's own copy before it is judged, so no accessor can pass one value
-to a check and another to a use. Answers are the reader's own output over
-its retained evidence and can be reproduced from it.
+The range verifier takes any linked header chain, so the harnesses can feed
+it synthetic headers; under the profile the chain is the header store's best
+chain.
 
 ## Header source
 
-The reader can be its own header source, with no node: the header store
-(`model/pool-v3-ergo-headers.ts`) takes header bytes from any supplier and
-keeps only the headers it verifies itself, so a supplier is untrusted, as
-a block supplier is. It is rooted at the anchor and built from the anchor's
-context: the anchor and at least the 1,024 headers below it, ascending,
-authenticated by linkage alone (each id is the hash of the bytes read, and
-the last is the pinned anchor id), because the difficulty rule reads eight
-epochs back. The anchor must be at or above height 844,672, so every header
-above it follows EIP-37. A header is then accepted where:
+`model/pool-v3-ergo-headers.ts` is the reader's own header source (§3 of the
+profile): `ergoHeaderStore(anchorId, context)` takes the anchor's context,
+`add(bytes)` accepts one header from any supplier or names its refusal
+(`malformed`, `unknown-parent`, `below-anchor`, `height`, `timestamp`,
+`difficulty`, `pow`), and `best()` returns the heaviest chain's headers from
+the anchor's child for `ergoRangeVerifier`. The node checks a block's
+version against the voted parameters only at a voting epoch's first block,
+so a miner can carry any version byte mid-epoch; the store therefore reads
+every version in the node's layout for it (a new-fields length for 2–127,
+read above 4, and an Autolykos v1 solution for version 1), and
+`ergoRangeVerifier` reads every block's section. The node takes a section's
+root rule (ids alone, or ids then witness ids) from the section's own
+serialization, not the header, so `sectionMatchesRoot` accepts either. No
+version byte or root rule a miner chooses can strand the reader or deny a
+range. A node the reader runs is a
+supplier like any other ([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)).
+The node's upstream v6.0.6 sources are the reference for the difficulty and
+work arithmetic, checked on real mainnet headers from three nodes and every
+EIP-37 recalculation of the window
+([reader-verified headers](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers)).
 
-- its bytes are a version 2–4 header in the pinned node's canonical
-  serialization (fixed-width roots, minimal VLQ timestamp and height, a zero
-  new-fields length, a miner key that decodes as a compressed secp256k1
-  point or is the 33-byte identity, the 8-byte nonce, nothing after), and its
-  id is their Blake2b-256;
-- its parent is the anchor or an accepted header (not a header below the
-  anchor), its height is the parent's plus one and its timestamp exceeds
-  the parent's;
-- its difficulty (the decoded `nBits`, so any encoding of the value) equals
-  the node's required difficulty: the parent's inside an epoch of 128
-  headers, and at a boundary the EIP-37 value over the headers at the
-  parent's height less 0 to 8 epochs, positive and at most the group order;
-- its Autolykos v2 hit is below the group order divided by that difficulty.
-
-The best chain is the accepted chain with the greatest sum of required
-difficulties, the node's score; among equal scores the first reached stays,
-as the node keeps its chain. Its headers from the anchor's child to the tip
-are the verifier's header input. The node's other header rules are not
-applied: its local clock (a timestamp at most 20 minutes ahead), its local
-bound on fork depth, its configured checkpoint (one id at height 1,231,454)
-and its marking of headers whose block failed full validation, which a
-header reader cannot see. The store therefore rests on the work, as a
-light client does: a supplier can withhold a heavier chain but cannot make
-the reader accept a header without work at the required difficulty, and
-several independent suppliers reduce, without removing, that withholding.
-Without the clock rule, though, a supplier can lower the required
-difficulty on a side branch by stating future timestamps: after about 256
-blocks of work at the starting difficulty it halves each epoch. Such a
-branch never outscores the work of the best chain, so the chain choice
-stands, but its headers are accepted and kept, each costing the reader one
-work check; bounding what a supplier may add (for instance, reading a
-supplier only while it extends the best chain) is the runtime's supplier
-policy. Only canonical bytes are read; the node also re-serializes some
-other spellings of a header to the same id, and a supplier copying the
-node's statement always writes the canonical one. Header versions above 4
-are refused, so any new header version, by soft or hard fork, stops the
-chain there until the profile names it, as it stops sections. NiPoPoW proofs
-add nothing here: the verifier needs every header from the anchor's child,
-and the anchor already fixes the ancestry that a proof would summarize. A
-node the reader runs is a supplier like any other
-([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)). The
-store's rules are checked on real mainnet headers in
-[reader-verified headers](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers).
+Without the node's clock bound a supplier can lower the required difficulty
+on a side branch by stating future timestamps: after about 256 blocks of work
+at the starting difficulty it halves each epoch. Such a branch never outscores
+the best chain's work, but the store accepts and keeps its headers, one work
+check each (about 21 ms a header in pure JavaScript). The profile makes
+supplier choice and per-supplier budgets reader policy; the runtime adoption
+fixes that policy (for instance, reading a supplier only while it extends
+the best chain or competes within a bounded distance of its tip). NiPoPoW
+proofs add nothing here: the verifier needs every header from the anchor's
+child, and the anchor already fixes the ancestry a proof would summarize.
 
 ## Costs and limits
 
@@ -347,7 +165,7 @@ library.
 ## Local replay adapter
 
 `npm run check:pool:ergo-replay` runs every local replay group of
-`scripts/pool/v3/local-check.mjs` a second time through this candidate: the
+`scripts/pool/v3/local-check.mjs` a second time through the profile's model: the
 single-backing import, payment and burn traces with and without silence, the
 two-backing scope and scope-recovery histories, receipts, non-service counts,
 compact fault evidence and returning segments with their adopted blocks. The
@@ -393,21 +211,18 @@ and range completeness. Successful replay reports
 `rangeEvidence: "candidate-ergo-profile-synthetic-headers"`; currency and
 authority flags describe only checks under that explicit trusted fixture.
 Full replay, complete-certificate and spendability flags remain false. This
-integration introduces no production path, profile selection or normative rule.
+integration introduces no production path or normative rule.
 
-## Before selection
+## Before runtime adoption
 
-A specification decision selects a venue profile and pins its identity;
-before that: the header source it names (the reader's own
-[header store](#header-source), checked on real mainnet headers from
-untrusted nodes, or a node the reader runs; which is the selection's
-choice, as is the number of independent suppliers a reader consults), the
-framer's grammar checked against the selected deployment's publishing
-transactions, publication and reassembly
-on a node (P2: the [experiment](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)
-accepted every case on the public testnet and the verifier read each back
-from block sections after the boxes were spent), the adoption condition above checked
-against the selected configuration, and the runtime's adoption in place of
-the v2 materialized view. P4's cost measurement and P2's testnet run are
-done; inclusion latency has two correlated testnet observations, and a
-distribution needs repeated independent submissions.
+The profile is selected; what remains is the runtime's reading of it in
+place of the v2 materialized view: the header store and range verifier moved
+behind the runtime's venue interface, the supplier policy above, the
+reference default depth of 10
+([decision](../decisions/2026-09.md#2026-09-25--select-the-ergo-venue-profile-for-pool-v3-record-ranges)),
+the framer's grammar checked against the deployment's own publishing
+transactions, and the one-transaction condition checked against the adopted
+configuration. Publication on the mainnet, and a latency distribution of
+kind-4 publications at their size and fee, are not yet measured: A10 timed
+the mainnet's own transactions, and P2 made two correlated testnet
+observations.

@@ -34,7 +34,7 @@ hash to the stated id is unsupplied, never misread
 ([decision](../../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)).
 `supply-check.mjs`, part of `check:ergo:range`, supplies every fixture
 transaction, reproduces the four fixture roots from the copies and checks
-each refusal; it also copies every fixture header of versions 2–4 through
+each refusal; it also copies every fixture header, of versions 1 to 4, through
 `supply-header.mjs`, the header store's supplier, to its id.
 
 ## Real-chain exhaustion cost

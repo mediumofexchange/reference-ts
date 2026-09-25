@@ -109,17 +109,17 @@ for (const bad of ['{"a":1,"a":2}', '{"a":1.5}', '{"a":"\\u0041"}', '{"a":1} x',
 assert.throws(() => supplyBlock('{"headerId":"00"}'), /not a block's transactions/);
 checks++;
 
-// Headers: every fixture header of version 2–4 is copied to bytes hashing to its id; version 1 and every shape the
-// copy cannot reproduce are unsupplied.
+// Headers: every fixture header, version 1 with its Autolykos v1 solution included, is copied to bytes hashing to its
+// id; every shape the copy cannot reproduce is unsupplied.
 const fixtureHeaders = manifest.fixtures.map(fixture => parseNodeJson(readFileSync(`${here}/${fixture.file}`, "utf8")).get("header"));
 fixtureHeaders.push(parseNodeJson(readFileSync(`${here}/fixtures/mainnet-genesis-header.json`, "utf8")));
 let headersSupplied = 0;
 for (const header of fixtureHeaders) {
   const supplied = supplyHeader(header);
-  equal(supplied === undefined, header.get("version") < 2n, `header ${header.get("height")} is supplied exactly when its version is 2–4`);
+  equal(supplied === undefined, false, `header ${header.get("height")} (version ${header.get("version")}) is supplied`);
   if (supplied !== undefined) { equal(hex(supplied.id), header.get("id"), "a supplied header hashes to its stated id"); headersSupplied++; }
 }
-assert(headersSupplied >= 3, "several fixture headers of versions 2–4");
+assert(headersSupplied === fixtureHeaders.length && fixtureHeaders.some(header => header.get("version") === 1n), "every fixture header, version 1 included");
 const headerV4 = fixtureHeaders.find(header => header.get("version") === 4n);
 const editedHeader = edit => { const copy = structuredClone(headerV4); edit(copy); return supplyHeader(copy); };
 equal(editedHeader(header => header.set("unparsedBytes", "")) !== undefined, true, "an empty unparsedBytes is the node's zero length");

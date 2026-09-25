@@ -152,8 +152,8 @@ one. The original classifier now explicitly excludes nonempty opening checkpoint
 before establishing the compact path's valid-opening condition.
 Local limits bound compact bytes, items and suffix
 work, and verifier exceptions remain visible. Runtime adoption remains open.
-Configuration adoption, a selected venue profile and runtime
-imports remain open. Signed non-service terms drive single and multi-backing
+Configuration adoption, runtime reading of the selected venue profile and
+runtime imports remain open. Signed non-service terms drive single and multi-backing
 real-proof counts against each selected backing's strictly preceding canonical
 state, preserving first request indices, distinct tags and spent/lock status
 across scope changes and handover. Unadopted publications and checkpoints at
@@ -192,8 +192,9 @@ against the stated id
 ([decided 2026-09-24](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)),
 and the decoder's containment and metering harnesses are retired.
 Authenticated complete-range reads remain unimplemented.
-The [candidate Ergo venue profile](ERGO_VENUE_PROFILE.md) and
-`model/pool-v3-ergo-profile.ts` fix attribution by exact tree and `R4`/`R5`
+The [Ergo venue profile](ERGO_VENUE_PROFILE.md), selected by
+[venue-ergo.md](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md),
+and `model/pool-v3-ergo-profile.ts` fix attribution by exact tree and `R4`/`R5`
 shape, run reassembly, transaction-then-output ordinals, an index space
 anchored at a pinned header (index 0 is the anchor's child, so reads from
 index zero are bounded by the deployment's age) and a §13 verifier by
@@ -228,7 +229,7 @@ best chain, checked on real mainnet headers from three nodes and every
 EIP-37 recalculation
 ([reader-verified headers](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers));
 it rests on the work, so withholding a heavier chain remains a supplier's
-power. No specification selects the profile, no runtime path reads it, and
+power. The specification selects the profile; no runtime path reads it, and
 a record must be published inside the framer's grammar to be read.
 
 ## Successor record conformance
@@ -276,7 +277,7 @@ the cross-backing venue order for publications, and C2.5's walk over admitted
 replacements (lead floor from the venue's lag, supersession, revocation and
 the lesser identity at one index), checked against the runtime walk.
 `scripts/pool/v3/fixture-venue.mjs` is the harness's default fixture verifier;
-`experiments/ergo-range/replay-venue.mjs` is its optional candidate Ergo adapter.
+`experiments/ergo-range/replay-venue.mjs` is its optional Ergo-profile adapter.
 The local replay integrates these answers with the bounded clock and import
 checks described above. Venue-source authentication, complete shared-scope
 authority, recovery and adoption remain open.

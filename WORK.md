@@ -9,16 +9,13 @@ here before starting.
 
 ## Status
 
-- v2 proof-relation audit (2026-09-25, `test/v2-circuit-refusals`): circuits
-  match pool-v2 §7. `check:pool` now requires ACIR range checks on every
-  integer/boolean input and names each hostile witness's refused constraint
-  (`scripts/pool/constraints.mjs`); before, noir_js's encoder refused them.
-  Segment, store and readers refuse any configuration but §1's helper and the
-  verifier's circuits ([decision](decisions/2026-09.md#2026-09-25--serve-and-read-v2-only-under-the-pinned-helper-and-the-verifiers-circuits)).
-- Reader-verified headers (2026-09-24, merged): `model/pool-v3-ergo-headers.ts`
-  ([decision](decisions/2026-09.md#2026-09-24--verify-ergo-headers-in-the-reader-from-the-pinned-anchor),
-  [rules](docs/ERGO_VENUE_PROFILE.md#header-source)); side-branch
-  difficulty lowering is a recorded limit (Next 4).
+- Ergo venue profile selected (2026-09-25): spec [venue-ergo.md](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md),
+  pool-v3 §1/§13 ([decision](decisions/2026-09.md#2026-09-25--select-the-ergo-venue-profile-for-pool-v3-record-ranges)).
+  Review changed the models: every header version byte is read (Autolykos
+  v1 included) and every section under either root rule. Model only.
+- v2 proof-relation audit (2026-09-25): ACIR range checks required and named
+  in `check:pool`; v2 readers refuse any configuration but the pinned one
+  ([decision](decisions/2026-09.md#2026-09-25--serve-and-read-v2-only-under-the-pinned-helper-and-the-verifiers-circuits)).
 - Own nodes (approved): `nodes.mjs` runs official v6.0.6 mainnet (snapshot
   bootstrap, 127.0.0.1:9053) and testnet (archive + index, 127.0.0.1:9052)
   from `scratch/ergo-nodes/`; after a reboot run `nodes.mjs start` and `watch
@@ -32,19 +29,19 @@ here before starting.
 
 ## Evidence
 
-- [Header verification](docs/ergo-header-verification.json) (09-24, offline
-  from `scratch/ergo-headers/`; [probe](docs/POOL_DEPLOYMENT_PROBES.md#reader-verified-headers)).
-- [v2 circuits](docs/pool-v2-verification.json) (09-25): 180 checks, 89 named refusals, 7 hostile proofs refused beside valid controls.
-- Current: [P4](docs/ergo-chain-cost-verification.json), [hostile framer probe](docs/ergo-framer-hostile-equivalence-verification.json),
+- Re-recorded 09-25 on the selected models: [header verification](docs/ergo-header-verification.json)
+  (offline from `scratch/ergo-headers/`), [range profile](docs/ergo-range-profile-verification.json),
+  [P4](docs/ergo-chain-cost-verification.json), [hostile framer](docs/ergo-framer-hostile-equivalence-verification.json),
   [P2 read-back](docs/ergo-publication-verification.json), [local v3 replay](docs/pool-v3-local-replay-verification.json).
+- [v2 circuits](docs/pool-v2-verification.json) (09-25): 180 checks, 89 named refusals, 7 hostile proofs refused beside valid controls.
 
 ## Next
 
-1. Venue-profile selection proposal: what a specification decision would
-   pin for Ergo (identity and attribution rules, header store rules and
-   suppliers consulted, depth from the A10 latency data), following the
-   protocol-change procedure in AGENTS.md; then the runtime's adoption in
-   place of the v2 materialized view.
+1. Runtime adoption of the selected Ergo profile in place of the v2
+   materialized view (`src/ergo.ts`): header store and range verifier behind
+   the runtime venue interface, a header supplier policy (budget per supplier
+   without refusing the heaviest visible chain), default depth 10, the
+   grammar checked against the deployment's own publishing transactions.
 2. Evidence binding: `check:evidence` checks only file-named keys (P2's
    `ergo_lib_wasm_bg.wasm` hash is unbound); `ergo-own-node-verification.json`
    drifts (re-run `header-check.mjs` on the own node); replay-cost drifts
@@ -57,7 +54,10 @@ here before starting.
    reuse one instance.
 4. Side paths: a supplier policy bounding what a header supplier may add
    (future-timestamp side branches halve their difficulty each epoch after
-   ~256 blocks of work; the store keeps them); testnet header rules; a
+   ~256 blocks of work; the store keeps them); a pool-v3 record that moves
+   a backing's venue (C2.3.1), so a hard fork need not force successors;
+   exercise a mid-epoch odd header version and an ids-rule section on a
+   devnet node (read from source only); testnet header rules; a
    faster Blake2b (the work check is ~21 ms a header in pure JavaScript);
    pin a real fixture with a multi-entry context extension; probe
    node/framer agreement under block-version 1–3 contexts.
@@ -86,14 +86,13 @@ here before starting.
   (`scratch/ergo-chain/`) and of the header verification
   (`scratch/ergo-headers/`); their digests are in the reports.
 - Preserve the legacy Temp/moeclean worktree (another checkout). Configuration
-  approval stays disabled; device qualification and external publication
-  remain separate dependencies.
+  approval stays disabled; device qualification and external publication too.
 
 ## Open questions
 
 None.
 
-Roughly **52% done / 48% remaining**, plausible range **42–62%**, reassessed
-2026-09-24: the venue path needs neither a decoder nor a node; selection
-still needs a specification decision. Runtime integration, selected venue,
-qualified custody and continuous wallet operation dominate.
+Roughly **54% done / 46% remaining**, plausible range **44–64%**, reassessed
+2026-09-25: the Ergo venue profile is specified and its models conform;
+runtime integration of that venue, qualified custody and continuous wallet
+operation dominate.

@@ -10,14 +10,14 @@
     "name": "ergo-testnet-6.0.6",
     "appVersion": "6.0.6",
     "network": "testnet",
-    "fullHeight": 561873,
-    "headersHeight": 561873,
-    "bestFullHeaderId": "bc3adcddf350fba5aeebf5e20ef3b3c73df5c9c3347e04d0b80554f960e6e515",
+    "fullHeight": 562169,
+    "headersHeight": 562169,
+    "bestFullHeaderId": "eb5effab227b060b6f044ad16d1ecea8f3946ba9cdc4b8f3bbcf2d81ed2f9327",
     "parameters": {
       "outputCost": 100,
       "tokenAccessCost": 100,
       "maxBlockCost": 1000000,
-      "height": 561792,
+      "height": 562048,
       "maxBlockSize": 524288,
       "dataInputCost": 100,
       "blockVersion": 4,
@@ -774,9 +774,9 @@
     "anchorId": "bb5f3d586066ebcd3cc788ac22157ba9063a2314b5e5b8a59060fc4ac75e8c4e",
     "firstHeight": 561774,
     "lastHeight": 561779,
-    "tipHeight": 561873,
+    "tipHeight": 562169,
     "depth": 2,
-    "headers": 100,
+    "headers": 396,
     "blocks": [
       {
         "height": "561774",
@@ -825,10 +825,10 @@
   "readBack": {
     "identity": "eebe2a67189411eae19318df1b2593f9e2da5fb6cae2fb210189fb31c9d83a83",
     "origin": "561774",
-    "witnessedIndex": "97",
+    "witnessedIndex": "393",
     "toIndex": "5",
-    "constructMs": 30,
-    "answerMs": 1.36,
+    "constructMs": 25,
+    "answerMs": 0.98,
     "answerBytes": 90575,
     "entries": [
       {
@@ -934,7 +934,7 @@
     ]
   },
   "files": {
-    "experiments/ergo-range/publish.mjs": "6e0f85473079f47c0a5c460da8abc4d0a3df23e3203b63572474b84db761faad",
+    "experiments/ergo-range/publish.mjs": "018679e0ca205cc09b080a017d0cdb3db353d46c4b5c4b2c1bb36543f0f47e5f",
     "experiments/ergo-range/supply.mjs": "7f84a4df88ee0a6a2488cb72f8d775d1d4d88d780ccd181a25172224cd21ec40",
     "experiments/ergo-range/package.json": "4df25f63611d23d6ce62765c25cc26e5a3dc2bf9b97b05f3ae510b7f338ddcd7",
     "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
@@ -952,7 +952,7 @@
     "src/replacement.ts": "9f65220ebebc4c1cec42b9b28c7667beec6b08e56159a701bbfa6c34755083c1",
     "src/commitment.ts": "158070f78a3f76511381a598a2a91d79dcdfeb9b02442a22450cf556f88b9adf",
     "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f",
-    "model/pool-v3-ergo-profile.ts": "67b21086a77938f2160f4fbc52b5c661cc8e99f322b1803df2fa440cca8fd417",
+    "model/pool-v3-ergo-profile.ts": "12c73223580143da5fa7e3df532a1ea92acd7b04f90dd1116764f421ab7c64af",
     "src/pool/field.ts": "abd55bd8bd2a51fb954c9dc05fb3380bf4c2df6dd3c145c2eff0f29b1e36710a",
     "model/pool-v3-records.ts": "193e68179cf5c66d46f51f02562bb287d8c17a9aeb9952d223cf28dbfecd161f"
   },

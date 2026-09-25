@@ -1,9 +1,9 @@
-// Ergo venue-profile candidate for pool-v3 §13 answers.
+// The Ergo venue profile (venue-ergo.md) for pool-v3 §13 answers.
 //
 // A venue is named with its finality rule and lag (C2.3.2, C2.3.5), and §13.1
 // makes the attribution rule part of that name: how an object at the venue is
 // assigned to a record kind and subject and how its exact bytes are
-// reassembled. This candidate fixes all three for an Ergo chain and reads the
+// reassembled. The profile fixes all three for an Ergo chain and reads the
 // record from full blocks: every output of every transaction of every block in
 // the range, each block's transaction section checked against its header's
 // transaction root, so absence is proven by exhaustion (§13.2). A transaction
@@ -13,8 +13,8 @@
 // The header chain is the reader's own authenticated header source, checked
 // here only for contiguity, linkage and the anchor: the venue's index space
 // begins at the block after the profile's pinned anchor header, so index 0 is
-// that block and a read from index zero is bounded by the anchor. No
-// specification selects this profile and no runtime path reads it;
+// that block and a read from index zero is bounded by the anchor. No runtime
+// path reads this model yet;
 // `src/ergo.ts` remains the v2 materialized view with its own identity.
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -96,8 +96,8 @@ export interface ErgoOutputView { readonly ergoTree: Uint8Array; readonly regist
 /** A transaction as a block commits to it: its unsigned bytes (the node's
  * serialization with every input's proof empty, whose Blake2b-256 is the
  * transaction id) and its 31-byte witness id (Blake2b-256 of the
- * concatenated input proofs, first byte dropped; block version 1 does not
- * commit to it). */
+ * concatenated input proofs, first byte dropped; a section under the
+ * ids-only rule does not commit to it). */
 export interface ErgoTransactionView { readonly unsigned: Uint8Array; readonly witnessId: Uint8Array }
 export interface ErgoBlockView { readonly headerId: Uint8Array; readonly transactions: readonly ErgoTransactionView[] }
 export interface ErgoRangeEvidence { readonly headers: readonly ErgoHeaderView[]; readonly blocks: readonly ErgoBlockView[] }
@@ -122,11 +122,23 @@ export function merkleRoot(leaves: readonly Uint8Array[]): Uint8Array {
   } while (level.length > 1);
   return level[0]!;
 }
-/** Block versions above 1 commit to all transaction ids followed by all
- * witness ids; version 1 to the ids alone, as the pinned node reads them. */
+/** The root under a section's own version, the marker in the section's
+ * serialization (1 = ids only), never the header's: version 1 over the
+ * transaction ids alone, every other version over all ids followed by all
+ * witness ids. A reader matches a header with `sectionMatchesRoot`. */
 export function transactionsRoot(version: bigint, transactions: readonly { readonly id: Uint8Array; readonly witnessId: Uint8Array }[]): Uint8Array {
   const ids = transactions.map(transaction => transaction.id);
-  return merkleRoot(version > 1n ? [...ids, ...transactions.map(transaction => transaction.witnessId)] : ids);
+  return merkleRoot(version === 1n ? ids : [...ids, ...transactions.map(transaction => transaction.witnessId)]);
+}
+/** Whether a section reproduces a header's transactions root under either
+ * rule. The node takes the rule from the section's own serialization (its
+ * version marker, absent for version 1), which nothing compares with the
+ * header's version, so the miner chooses it. Without a Blake2b collision two
+ * sections cannot match under different rules: leaves and nodes hash under
+ * different prefixes, and only the second rule has 31-byte leaves. Under the
+ * ids-only rule the witness ids are unbound, which nothing here reads. */
+export function sectionMatchesRoot(transactions: readonly { readonly id: Uint8Array; readonly witnessId: Uint8Array }[], root: Uint8Array): boolean {
+  return compareBytes(transactionsRoot(1n, transactions), root) === 0 || compareBytes(transactionsRoot(2n, transactions), root) === 0;
 }
 
 /** A `Coll[Byte]` constant as a box carries it: type code 0x0e, a minimal
@@ -147,10 +159,6 @@ export function collBytes(constant: Uint8Array): Uint8Array | undefined {
   return constant.length - at === length ? constant.subarray(at) : undefined;
 }
 
-/** The block versions whose sections the pinned node (v6.0.6) writes and
- * this framer reads; a later version's block supplies no section until the
- * profile names it, so a hard fork leaves ranges unresolved, never misread. */
-export const MAX_SECTION_VERSION = 4n;
 /** Ergo's miner-fee proposition (minerRewardDelay 720), the one unsized tree
  * besides pay-to-public-key that the framer reads; a mempool admits a
  * transaction only with a fee output at it. */
@@ -395,8 +403,8 @@ export interface ErgoRangeVerifier {
  * that do not yet reach index 0 under the depth. Headers at or below the
  * anchor are linkage only and hold no index. Blocks may come from any
  * supplier: a block supplies the section of an index only where it is a
- * well-formed view, belongs to an indexed header of the chain whose version
- * is at most `MAX_SECTION_VERSION` and reproduces that header's transaction
+ * well-formed view, belongs to an indexed header of the chain and reproduces
+ * that header's transaction
  * root from the ids of the unsigned bytes; any other block is passed
  * over, so no supplier can deny every read by adding a block, and an index
  * whose section is missing leaves only the ranges through it unresolved.
@@ -418,7 +426,7 @@ export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvide
   let origin: bigint | undefined;
   for (let i = 0; i < headers.length; i++) {
     const header = headers[i]!, previous = headers[i - 1];
-    if (header.version < 1n || header.version > 255n || byId.has(bytesToHex(header.id))) return undefined;
+    if (header.version > 255n || byId.has(bytesToHex(header.id))) return undefined;
     if (previous !== undefined && (header.height !== previous.height + 1n || compareBytes(header.parentId, previous.id) !== 0)) return undefined;
     // The anchor's child is index 0. A linked chain names that parent once unless
     // it also carries the anchor's id at some height, which no authenticated source
@@ -438,13 +446,14 @@ export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvide
     const { headerId, transactions } = supplied;
     if (!isBytes(headerId, 32) || !Array.isArray(transactions)) continue;
     // The header is found, from an owned copy of its id, before any transaction is read. Sections at or below the
-    // anchor hold no index and are not read; nor are those of a block version the profile does not name, nor a second
-    // section for one index.
+    // anchor hold no index and are not read, nor is a second section for one index. Every header version has its
+    // section: the node checks a block's version only at a voting epoch's first block, so a gate on it would let any
+    // miner deny every range through its block.
     const header = byId.get(bytesToHex(copyBytes(headerId)));
-    if (header === undefined || header.height < origin || header.version > MAX_SECTION_VERSION || sectionAt.has(header.height - origin)) continue;
+    if (header === undefined || header.height < origin || sectionAt.has(header.height - origin)) continue;
     const read = ownTransactions(transactions);
     // Outputs are framed only from a section whose root holds.
-    if (read === undefined || read.length === 0 || compareBytes(transactionsRoot(header.version, read), header.transactionsRoot) !== 0) continue;
+    if (read === undefined || read.length === 0 || !sectionMatchesRoot(read, header.transactionsRoot)) continue;
     try {
       sectionAt.set(header.height - origin, attributeOwned(owned, read));
     } catch (error) {

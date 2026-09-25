@@ -193,7 +193,7 @@ try {
       }
       const complete = supplied.every(supply => supply !== undefined);
       const t2 = performance.now();
-      const rootOk = complete && statements.length > 0 && hex(profile.transactionsRoot(BigInt(header.version), supplied)) === header.transactionsRoot;
+      const rootOk = complete && statements.length > 0 && profile.sectionMatchesRoot(supplied, Buffer.from(header.transactionsRoot, "hex"));
       rootCheckMs += performance.now() - t2;
       if (rootOk) suppliedBlocks.push({ headerId: Buffer.from(header.id, "hex"), transactions: supplied.map(({ unsigned, witnessId }) => ({ unsigned, witnessId })) });
       rows.push({ height: header.height, version: header.version, timestamp: Number(header.timestamp), headerSize: header.size, transactions: statements.length,

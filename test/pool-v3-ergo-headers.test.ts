@@ -26,13 +26,33 @@ const vlq = (n: bigint): number[] => {
   return out;
 };
 const GENERATOR = secp256k1.ProjectivePoint.BASE.toRawBytes(true);
-interface Fields { version?: number; parentId: Uint8Array; timestamp: bigint; nBits: number; height: bigint; nonce?: bigint; minerKey?: Uint8Array }
-function encode(fields: Fields): Uint8Array {
+interface Fields { version?: number; parentId: Uint8Array; timestamp: bigint; nBits: number; height: bigint; nonce?: bigint; minerKey?: Uint8Array; newFields?: number[] }
+/** A header in the node's layout for its version byte: a new-fields length only for versions 2–127 (a signed byte
+ * above 1), and for version 1 an Autolykos v1 solution with `w` and `d`. */
+function encode(fields: Fields, v1?: { w: Uint8Array; d: bigint }): Uint8Array {
+  const version = fields.version ?? 4, signed = version < 128 ? version : version - 256;
   const nBits = [(fields.nBits >>> 24) & 0xff, (fields.nBits >>> 16) & 0xff, (fields.nBits >>> 8) & 0xff, fields.nBits & 0xff];
   const nonce = new Uint8Array(8);
   new DataView(nonce.buffer).setBigUint64(0, fields.nonce ?? 0n);
-  return Uint8Array.from([fields.version ?? 4, ...fields.parentId, ...new Uint8Array(32).fill(1), ...new Uint8Array(32).fill(2), ...new Uint8Array(33).fill(3),
-    ...vlq(fields.timestamp), ...new Uint8Array(32).fill(4), ...nBits, ...vlq(fields.height), 0, 0, 0, 0, ...(fields.minerKey ?? GENERATOR), ...nonce]);
+  const newFields = signed > 1 ? [(fields.newFields ?? []).length, ...(fields.newFields ?? [])] : [];
+  const minerKey = fields.minerKey ?? GENERATOR;
+  const d = v1 === undefined ? [] : [...Buffer.from(v1.d.toString(16).padStart(v1.d.toString(16).length + (v1.d.toString(16).length % 2), "0"), "hex")];
+  const solution = version === 1 ? [...minerKey, ...v1!.w, ...nonce, d.length, ...d] : [...minerKey, ...nonce];
+  return Uint8Array.from([version, ...fields.parentId, ...new Uint8Array(32).fill(1), ...new Uint8Array(32).fill(2), ...new Uint8Array(33).fill(3),
+    ...vlq(fields.timestamp), ...new Uint8Array(32).fill(4), ...nBits, ...vlq(fields.height), 0, 0, 0, ...newFields, ...solution]);
+}
+const Q = secp256k1.CURVE.n;
+/** A worked version 1 header: with `pk = g^sk` and `w = g^x`, `d = x·f − sk` solves `w^f = g^d · pk`; a nonce whose
+ * `d` falls below `q / difficulty` has the work. */
+function mineV1(fields: Fields): Uint8Array {
+  const sk = 7n, x = 11n, pk = secp256k1.ProjectivePoint.BASE.multiply(sk).toRawBytes(true), w = secp256k1.ProjectivePoint.BASE.multiply(x).toRawBytes(true);
+  const target = Q / headers.decodeCompactBits(fields.nBits);
+  for (let nonce = 0n; ; nonce++) {
+    const draft = parse(encode({ ...fields, version: 1, nonce, minerKey: pk }, { w, d: 0n }));
+    const f = headers.autolykosV1Exponent(draft.withoutPow, draft.nonce, pk, w);
+    const d = ((x * f - sk) % Q + Q) % Q;
+    if (d < target) return encode({ ...fields, version: 1, nonce, minerKey: pk }, { w, d });
+  }
 }
 /** The first nonce from `start` whose proof of work holds (or, with `valid` false, fails) at the header's difficulty. */
 function mine(fields: Fields, valid = true, start = 0n): Uint8Array {
@@ -41,6 +61,8 @@ function mine(fields: Fields, valid = true, start = 0n): Uint8Array {
     if (headers.autolykosPowValid(parse(bytes)) === valid) return bytes;
   }
 }
+const v1Fixture = JSON.parse(readFileSync(new URL("./fixtures/ergo-mainnet-v1-headers.json", import.meta.url), "utf8")) as
+  { headers: { height: number; version: number; id: string; bytes: string }[] };
 const D4 = 0x0104_0000, D6 = 0x0106_0000;
 const MINUTE = 60_000n, T0 = 1_700_000_000_000n;
 /** 1,024 headers below an anchor at `anchorHeight`, then the anchor, `spacing` apart at difficulty 4. */
@@ -101,8 +123,9 @@ describe("Ergo headers from their bytes", () => {
     const edit = (at: number, value: number): Uint8Array => { const copy = Uint8Array.from(base); copy[at] = value; return copy; };
     const splice = (at: number, length: number, replacement: number[]): Uint8Array =>
       Uint8Array.from([...base.slice(0, at), ...replacement, ...base.slice(at + length)]);
-    expect(headers.parseErgoHeader(edit(0, 1))).toBeUndefined();
-    expect(headers.parseErgoHeader(edit(0, 5))).toBeUndefined();
+    // Version 1 reads a v1 solution, and versions 0 and 128–255 (a signed byte at or below 1) no new-fields length,
+    // so this version 4 layout under those bytes is malformed.
+    for (const version of [0, 1, 128, 255]) expect(headers.parseErgoHeader(edit(0, version))).toBeUndefined();
     expect(headers.parseErgoHeader(Uint8Array.from([...base, 0]))).toBeUndefined();
     expect(headers.parseErgoHeader(base.slice(0, base.length - 1))).toBeUndefined();
     expect(headers.parseErgoHeader(base.slice(0, withoutPow))).toBeUndefined();
@@ -139,6 +162,62 @@ describe("Ergo headers from their bytes", () => {
     expect(headers.parseErgoHeader(bad)).toBeUndefined();
     // The id is the hash of the bytes read, so any change of a field is a different header.
     expect(hex(parse(edit(1, base[1]! ^ 1)).id)).not.toBe(hex(parsed.id));
+  });
+
+  it("reads a later version's new fields into the id and the work message", () => {
+    const base = real[9]!.bytes, parsed = parse(base), withoutPow = parsed.withoutPow.length;
+    const later = (version: number, fields: number[]): Uint8Array =>
+      Uint8Array.from([version, ...base.slice(1, withoutPow - 1), fields.length, ...fields, ...base.slice(withoutPow)]);
+    // Version 5 with no new fields is the same layout under another version byte.
+    const five = parse(later(5, []));
+    expect(five.version).toBe(5);
+    expect(five.height).toBe(parsed.height);
+    const fields = [0xaa, 0xbb, 0xcc];
+    for (const version of [5, 127]) {
+      const bytes = later(version, fields), header = parse(bytes);
+      expect(hex(header.id)).toBe(hex(blake2b(bytes, { dkLen: 32 })));
+      expect(hex(header.withoutPow)).toBe(hex(bytes.slice(0, withoutPow + fields.length)));
+      expect(hex(header.transactionsRoot)).toBe(hex(parsed.transactionsRoot));
+    }
+    // The fields are read exactly: a length the bytes do not hold, or a byte left over, is malformed.
+    const short = later(5, fields);
+    expect(headers.parseErgoHeader(short.slice(0, short.length - 1))).toBeUndefined();
+    expect(headers.parseErgoHeader(Uint8Array.from([...short, 0]))).toBeUndefined();
+    expect(headers.parseErgoHeader(later(4, fields))).toBeUndefined();
+    // Versions 0 and 128–255 carry no new-fields length at all.
+    const bare = (version: number): Uint8Array => Uint8Array.from([version, ...base.slice(1, withoutPow - 1), ...base.slice(withoutPow)]);
+    for (const version of [0, 128, 255]) {
+      const header = parse(bare(version));
+      expect(header.version).toBe(version);
+      expect(hex(header.withoutPow)).toBe(hex(bare(version).slice(0, withoutPow - 1)));
+    }
+  });
+
+  it("reads real version 1 headers with their Autolykos v1 solution and checks its equation", () => {
+    for (const entry of v1Fixture.headers) {
+      const bytes = Uint8Array.from(Buffer.from(entry.bytes, "hex")), header = parse(bytes);
+      expect(hex(header.id)).toBe(entry.id);
+      expect(header.version).toBe(entry.version);
+      expect(headers.autolykosPowValid(header)).toBe(true);
+    }
+    const first = v1Fixture.headers.find(entry => entry.version === 1)!, bytes = Uint8Array.from(Buffer.from(first.bytes, "hex"));
+    const header = parse(bytes), dAt = bytes.length - 1 - (bytes.length - header.withoutPow.length - 33 - 33 - 8 - 1);
+    expect(bytes[dAt]).toBe(bytes.length - dAt - 1);
+    // Any change of the nonce, w or d breaks the equation.
+    for (const at of [bytes.length - 1, header.withoutPow.length + 33 + 32 + 8]) {
+      const changed = Uint8Array.from(bytes);
+      changed[at]! ^= 1;
+      const parsed = headers.parseErgoHeader(changed);
+      if (parsed !== undefined) expect(headers.autolykosPowValid(parsed)).toBe(false);
+    }
+    // d is written minimally: a leading zero byte, or no bytes for zero, is another spelling.
+    expect(headers.parseErgoHeader(Uint8Array.from([...bytes.slice(0, dAt), bytes[dAt]! + 1, 0, ...bytes.slice(dAt + 1)]))).toBeUndefined();
+    expect(headers.parseErgoHeader(Uint8Array.from([...bytes.slice(0, dAt), 0]))).toBeUndefined();
+    expect(headers.parseErgoHeader(Uint8Array.from([...bytes.slice(0, dAt), 1, 0]))).toBeDefined();
+    // A v1 miner key or w that is the identity parses, as the node's does, but has no work.
+    const identityW = Uint8Array.from(bytes);
+    identityW.fill(0, header.withoutPow.length + 33, header.withoutPow.length + 66);
+    expect(headers.autolykosPowValid(parse(identityW))).toBe(false);
   });
 
   it("decodes compact difficulty and normalizes as the node does", () => {
@@ -229,16 +308,37 @@ describe("the reader's header store", () => {
     const best = s.best();
     expect(best.headers.map(view => hex(view.id))).toEqual([hex(parse(b1).id), hex(parse(b2).id)]);
     expect(best.score).toBe(8n);
+    // A later header version takes part in chain choice, so a soft fork moves the best chain with the work.
+    const c2 = mine(child(parse(a1), { version: 5, newFields: [1, 2] })), c3 = mine(child(parse(c2), { version: 5 }));
+    expect(s.add(c2)).toBe("added");
+    expect(hex(s.best().tipId)).toBe(hex(parse(b2).id));
+    expect(s.add(c3)).toBe("added");
+    expect(s.best().headers.map(view => view.version)).toEqual([4n, 5n, 5n]);
+    expect(s.best().score).toBe(12n);
+    // The node checks no version inside a voting epoch, so a miner may carry any version byte: each one extends the
+    // chain in the node's layout for it, Autolykos v1 included.
+    let tip = parse(c3);
+    for (const version of [0, 128, 255, 1, 3]) {
+      const next = version === 1 ? mineV1(child(tip)) : mine(child(tip, { version }));
+      expect(s.add(next)).toBe("added");
+      tip = parse(next);
+      expect(tip.version).toBe(version);
+    }
+    expect(hex(s.best().tipId)).toBe(hex(tip.id));
+    expect(s.best().headers.map(view => view.version)).toEqual([4n, 5n, 5n, 0n, 128n, 255n, 1n, 3n]);
     // A fork below the anchor is refused however much work it carries.
     const side = mine({ ...child(parse(baseContext.at(-2)!)), timestamp: anchor.timestamp + 1n });
     expect(s.add(side)).toBe("below-anchor");
     // The best chain is the range verifier's header input from the same anchor.
     const tree = (kind: number): Uint8Array => Uint8Array.from(Buffer.from(`0008cd02${"ab".repeat(31)}0${kind}`, "hex"));
-    const verifier = profile.ergoRangeVerifier({ anchor: anchor.id, depth: 1n, scripts: { 1: tree(1), 2: tree(2), 3: tree(3), 4: tree(4) } },
-      { headers: best.headers, blocks: [] });
+    const scripts = { 1: tree(1), 2: tree(2), 3: tree(3), 4: tree(4) };
+    const verifier = profile.ergoRangeVerifier({ anchor: anchor.id, depth: 1n, scripts }, { headers: best.headers, blocks: [] });
     expect(verifier?.witnessedIndex()).toBe(0n);
+    // Over the mixed-version chain the index advances with every header; the profile tests pin that each version has its section.
+    expect(profile.ergoRangeVerifier({ anchor: anchor.id, depth: 1n, scripts }, { headers: s.best().headers, blocks: [] })?.witnessedIndex()).toBe(6n);
     // Views are copies: changing one does not change the store.
-    best.headers[0]!.id[0]! ^= 1;
-    expect(hex(s.best().headers[0]!.id)).toBe(hex(parse(b1).id));
+    const now = s.best();
+    now.headers[0]!.id[0]! ^= 1;
+    expect(hex(s.best().headers[0]!.id)).toBe(hex(parse(a1).id));
   });
 });

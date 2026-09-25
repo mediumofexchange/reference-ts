@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-25` [Select the Ergo venue profile for pool-v3 record ranges](decisions/2026-09.md#2026-09-25--select-the-ergo-venue-profile-for-pool-v3-record-ranges)
 - `2026-09-25` [Serve and read v2 only under the pinned helper and the verifier's circuits](decisions/2026-09.md#2026-09-25--serve-and-read-v2-only-under-the-pinned-helper-and-the-verifiers-circuits)
 - `2026-09-24` [Verify Ergo headers in the reader from the pinned anchor](decisions/2026-09.md#2026-09-24--verify-ergo-headers-in-the-reader-from-the-pinned-anchor)
 - `2026-09-24` [Supply Ergo unsigned bytes by copying the node's JSON](decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)

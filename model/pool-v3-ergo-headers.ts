@@ -6,7 +6,7 @@
 // each header from its canonical bytes and derives the id from them, then
 // applies the pinned node's (v6.0.6) header rules for a child header: height
 // one above the parent, timestamp above the parent's, the EIP-37 required
-// difficulty and the Autolykos v2 proof of work. It keeps every header it has
+// difficulty and the Autolykos proof of work. It keeps every header it has
 // accepted as a tree rooted at the anchor and names the heaviest chain by the
 // node's score (the sum of required difficulties). Headers may therefore come
 // from any supplier: a supplier can withhold a heavier chain, but it cannot
@@ -14,17 +14,26 @@
 // the anchor, which the difficulty rule reads, are authenticated by linkage to
 // the anchor id rather than by work.
 //
+// The node's header rules do not read the version: it checks a block's
+// version against the voted parameters only at a voting epoch's first block,
+// so any miner can carry any version byte mid-epoch. Every version is therefore
+// read here in the layout the node reads it (the version is a signed byte: a
+// new-fields length for 2–127, read above 4; an Autolykos v1 solution for
+// version 1, v2 otherwise), so no version can leave the reader on a branch the
+// network has left.
+//
 // Not applied, and recorded as limits: the node's local-clock rule (a
 // timestamp at most 20 minutes ahead of the node's clock), its bound on fork
-// depth (a local setting) and its marking of headers whose block failed full
-// validation, which a header-only reader cannot see. Without the clock rule a
-// supplier can lower the required difficulty on a side branch by stating
-// future timestamps (halving each epoch after about 256 blocks of work at the
-// starting difficulty); such a branch cannot outscore the work of the best
-// chain, but its headers are accepted and kept, so bounding what a supplier
-// may add is the runtime's supplier policy. Only canonical bytes are read,
-// though the node also re-serializes some non-canonical spellings to the same
-// id. No specification selects this source and no runtime path reads it.
+// depth and its checkpoint (local settings) and its marking of headers whose
+// block failed full validation, which a header-only reader cannot see. Without
+// the clock rule a supplier can lower the required difficulty on a side branch
+// by stating future timestamps (halving each epoch after about 256 blocks of
+// work at the starting difficulty); such a branch cannot outscore the work of
+// the best chain, but its headers are accepted and kept, so bounding what a
+// supplier may add is the runtime's supplier policy. Only canonical bytes are
+// read, though the node also re-serializes some non-canonical spellings to the
+// same id. The Ergo venue profile (venue-ergo.md §3) specifies these rules; no
+// runtime path reads this source yet.
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
@@ -39,8 +48,10 @@ const USE_LAST_EPOCHS = 8n, BLOCK_INTERVAL_MS = 120_000n, PRECISION = 1_000_000_
 const INITIAL_DIFFICULTY = 0x0117_6500_0000n;
 /** Headers below the anchor the difficulty rule can read: eight epochs. */
 export const ANCHOR_CONTEXT = Number(USE_LAST_EPOCHS * DIFFICULTY_EPOCH);
-/** Header versions whose rules this module applies (hardening, 5.0, 6.0). */
-export const MIN_HEADER_VERSION = 2, MAX_HEADER_VERSION = 4;
+/** Version 1 carries an Autolykos v1 solution and no new-fields length. */
+const INITIAL_VERSION = 1;
+/** The last version whose new-fields length the node skips rather than reads. */
+const LAST_FIXED_LAYOUT_VERSION = 4;
 /** The secp256k1 group order, Autolykos' `q`. */
 const Q = 0xffff_ffff_ffff_ffff_ffff_ffff_ffff_fffe_baae_dce6_af48_a03b_bfd2_5e8c_d036_4141n;
 const K = 32, N_BASE = 1n << 26n, N_INCREASE_START = 600n * 1024n, N_INCREASE_PERIOD = 50n * 1024n, N_INCREASE_MAX = 4_198_400n;
@@ -48,6 +59,8 @@ const MAX_TIMESTAMP = (1n << 63n) - 1n, MAX_HEIGHT = (1n << 31n) - 1n;
 /** Autolykos' constant `M`: the 8-byte big-endian integers 0 to 1023. */
 const M = new Uint8Array(8192);
 for (let i = 0; i < 1024; i++) { M[i * 8 + 6] = i >> 8; M[i * 8 + 7] = i & 0xff; }
+/** The largest multiple of `q` not above 2^256: Autolykos v1's hash to `[0, q)` rehashes above it. */
+const MOD_Q_RANGE = ((1n << 256n) / Q) * Q;
 
 const hash = (bytes: Uint8Array): Uint8Array => blake2b(bytes, { dkLen: 32 });
 /** A real byte array: `ArrayBuffer.isView` is read first, so an object that
@@ -63,11 +76,14 @@ function concat(...parts: Uint8Array[]): Uint8Array {
   for (const part of parts) { out.set(part, at); at += part.length; }
   return out;
 }
+/** The version byte as the node reads it, a signed byte. */
+const signedVersion = (version: number): number => version < 128 ? version : version - 256;
 
 /** A header read from its canonical bytes, owned and frozen. */
 export interface ErgoHeader {
   readonly bytes: Uint8Array;
   readonly id: Uint8Array;
+  /** The version byte, 0–255. */
   readonly version: number;
   readonly parentId: Uint8Array;
   readonly transactionsRoot: Uint8Array;
@@ -76,7 +92,10 @@ export interface ErgoHeader {
   readonly height: bigint;
   /** The serialization without the solution, whose hash is the PoW message. */
   readonly withoutPow: Uint8Array;
+  readonly minerKey: Uint8Array;
   readonly nonce: Uint8Array;
+  /** Autolykos v1's one-time key `w` and its `d`, for version 1 only. */
+  readonly v1?: { readonly w: Uint8Array; readonly d: bigint };
 }
 
 /** A minimal unsigned VLQ at `at`, or undefined when absent, non-minimal or above `max`. */
@@ -95,28 +114,31 @@ function readVlq(bytes: Uint8Array, at: number, max: bigint): { value: bigint; n
   }
 }
 
-/** A miner key as the node reads it: a leading zero byte is the group
- * identity (canonical only as 33 zero bytes); otherwise a compressed
- * secp256k1 point that decodes. */
+/** A group element as the node writes it: 33 zero bytes for the identity,
+ * otherwise a compressed secp256k1 point that decodes. */
 function canonicalPoint(bytes: Uint8Array): boolean {
   if (bytes[0] === 0) return bytes.every(byte => byte === 0);
   if (bytes[0] !== 2 && bytes[0] !== 3) return false;
   try { secp256k1.ProjectivePoint.fromHex(bytes); return true; } catch { return false; }
 }
+const isIdentity = (bytes: Uint8Array): boolean => bytes[0] === 0;
 
-/** One header from its bytes as the pinned node serializes it (versions 2–4:
- * version, parent id, AD-proofs root, transactions root, 33-byte state root,
- * VLQ timestamp, extension root, big-endian nBits, VLQ height, three vote
- * bytes, a zero new-fields length, then the Autolykos v2 solution: the
- * 33-byte miner key and the 8-byte nonce), ending exactly. Only the
- * canonical form is read, so the id is the hash of exactly these bytes, as
- * the node's id is the hash of its own serialization; any other input is
+/** One header from its bytes as the pinned node serializes it: version,
+ * parent id, AD-proofs root, transactions root, 33-byte state root, VLQ
+ * timestamp, extension root, big-endian nBits, VLQ height, three vote bytes;
+ * for versions 2–127 a new-fields length, zero through version 4 and followed
+ * by that many bytes above it; then the Autolykos solution: for version 1 the
+ * 33-byte miner key, the 33-byte `w`, the 8-byte nonce and `d` as a length
+ * byte and its minimal unsigned bytes (a single zero byte for zero), for every
+ * other version the miner key and the nonce. The bytes end exactly. Only the
+ * canonical form is read, so the id is the hash of exactly these bytes, as the
+ * node's id is the hash of its own serialization; any other input is
  * undefined. */
 export function parseErgoHeader(input: Uint8Array): ErgoHeader | undefined {
   if (!isBytes(input)) return undefined;
   const bytes = copyBytes(input);
   const version = bytes[0];
-  if (version === undefined || version < MIN_HEADER_VERSION || version > MAX_HEADER_VERSION) return undefined;
+  if (version === undefined) return undefined;
   let at = 1;
   const take = (length: number): Uint8Array | undefined => {
     if (at + length > bytes.length) return undefined;
@@ -134,16 +156,40 @@ export function parseErgoHeader(input: Uint8Array): ErgoHeader | undefined {
   const height = readVlq(bytes, at, MAX_HEIGHT);
   if (height === undefined) return undefined;
   at = height.next;
-  const votes = take(3), newFields = take(1);
-  // A version 2–4 node skips a nonzero new-fields length without reading the fields and writes it back as zero.
-  if (votes === undefined || newFields === undefined || newFields[0] !== 0) return undefined;
+  if (take(3) === undefined) return undefined;
+  const signed = signedVersion(version);
+  if (signed > INITIAL_VERSION) {
+    const length = take(1);
+    if (length === undefined) return undefined;
+    // Through version 4 the node skips a nonzero new-fields length without reading the fields and writes it back as
+    // zero; above it the node reads the fields and keeps them, so they are part of the id and the work message.
+    if (signed <= LAST_FIXED_LAYOUT_VERSION ? length[0] !== 0 : take(length[0]!) === undefined) return undefined;
+  }
   const withoutPow = bytes.slice(0, at);
-  const minerKey = take(33), nonce = take(8);
-  if (minerKey === undefined || nonce === undefined || at !== bytes.length || !canonicalPoint(minerKey)) return undefined;
-  return Object.freeze({
-    bytes, id: hash(bytes), version, parentId, transactionsRoot, timestamp: timestamp.value,
-    nBits: Number(unsigned(nBitsBytes)), height: height.value, withoutPow, nonce,
-  });
+  const minerKey = take(33);
+  if (minerKey === undefined || !canonicalPoint(minerKey)) return undefined;
+  let v1: { w: Uint8Array; d: bigint } | undefined;
+  if (version === INITIAL_VERSION) {
+    const w = take(33);
+    if (w === undefined || !canonicalPoint(w)) return undefined;
+    const nonce = take(8), dLength = take(1);
+    if (nonce === undefined || dLength === undefined) return undefined;
+    const dBytes = take(dLength[0]!);
+    // The node writes d minimally, and zero as one zero byte.
+    if (dBytes === undefined || dBytes.length === 0 || (dBytes.length > 1 && dBytes[0] === 0) || at !== bytes.length) return undefined;
+    v1 = Object.freeze({ w, d: unsigned(dBytes) });
+    return freeze(nonce);
+  }
+  const nonce = take(8);
+  if (nonce === undefined || at !== bytes.length) return undefined;
+  return freeze(nonce);
+
+  function freeze(nonce: Uint8Array): ErgoHeader {
+    return Object.freeze({
+      bytes, id: hash(bytes), version: version!, parentId: parentId!, transactionsRoot: transactionsRoot!, timestamp: timestamp!.value,
+      nBits: Number(unsigned(nBitsBytes!)), height: height!.value, withoutPow, minerKey: minerKey!, nonce, ...(v1 === undefined ? {} : { v1 }),
+    });
+  }
 }
 
 /** Bitcoin's compact encoding as the node decodes it (sign bit honoured). */
@@ -174,27 +220,55 @@ export function autolykosTableSize(height: bigint): bigint {
   for (let i = 0n; i < (h - N_INCREASE_START) / N_INCREASE_PERIOD + 1n; i++) n = n / 100n * 105n;
   return n;
 }
+/** Autolykos' `k` indices in `[0, N)` from a seed. */
+function indexes(seed: Uint8Array, n: bigint): bigint[] {
+  const digest = hash(seed), extended = concat(digest, digest.slice(0, 3));
+  return Array.from({ length: K }, (_, k) => unsigned(extended.slice(k, k + 4)) % n);
+}
 
 /** The Autolykos v2 hit of a header, which proof of work requires below `q / difficulty`. */
 export function autolykosHit(header: ErgoHeader): bigint {
   const msg = hash(header.withoutPow), heightBytes = u32be(header.height), n = autolykosTableSize(header.height);
   const i = u32be(unsigned(hash(concat(msg, header.nonce)).slice(24)) % n);
   const f = hash(concat(i, heightBytes, M)).slice(1);
-  const seed = hash(concat(f, msg, header.nonce));
-  const extended = concat(seed, seed.slice(0, 3));
   let sum = 0n;
-  for (let k = 0; k < K; k++) {
-    const index = unsigned(extended.slice(k, k + 4)) % n;
-    sum += unsigned(hash(concat(u32be(index), heightBytes, M)).slice(1));
-  }
+  for (const index of indexes(concat(f, msg, header.nonce), n)) sum += unsigned(hash(concat(u32be(index), heightBytes, M)).slice(1));
   return unsigned(hash(hexToBytes32(sum)));
+}
+/** Autolykos v1's hash to `[0, q)`: Blake2b-256, rehashed until below the largest multiple of `q`, then reduced. */
+function hashModQ(input: Uint8Array): bigint {
+  for (let digest = hash(input); ; digest = hash(digest)) {
+    const value = unsigned(digest);
+    if (value < MOD_Q_RANGE) return value % Q;
+  }
+}
+/** Autolykos v1's `f` mod `q`: the sum of `k` elements `H(j | M | pk | m | w)`
+ * over the indices from `m | nonce` in a table of the fixed size `N`, where
+ * `m` hashes the header without its solution. It does not read `d`. */
+export function autolykosV1Exponent(withoutPow: Uint8Array, nonce: Uint8Array, minerKey: Uint8Array, w: Uint8Array): bigint {
+  const msg = hash(withoutPow);
+  let f = 0n;
+  for (const index of indexes(concat(msg, nonce), N_BASE)) f += hashModQ(concat(u32be(index), M, minerKey, msg, w));
+  return f % Q;
+}
+/** Autolykos v1's equation for a version 1 header: `d` below the target, the
+ * miner key and `w` not the identity, and `w^f = g^d · pk`. */
+function autolykosV1Valid(header: ErgoHeader, target: bigint): boolean {
+  const { v1 } = header;
+  if (v1 === undefined || v1.d >= target || isIdentity(header.minerKey) || isIdentity(v1.w)) return false;
+  const Point = secp256k1.ProjectivePoint;
+  const left = Point.fromHex(v1.w).multiplyUnsafe(autolykosV1Exponent(header.withoutPow, header.nonce, header.minerKey, v1.w));
+  const right = Point.BASE.multiplyUnsafe(v1.d % Q).add(Point.fromHex(header.minerKey));
+  return left.equals(right);
 }
 /** Proof of work at the header's own difficulty: positive and at most `q`
  * (above it no hit qualifies; at zero or below the node's target is
- * undefined), with the hit below `q / difficulty`. */
+ * undefined), then Autolykos v1 for version 1 and the v2 hit below
+ * `q / difficulty` for every other version, as the node dispatches. */
 export function autolykosPowValid(header: ErgoHeader): boolean {
   const difficulty = decodeCompactBits(header.nBits);
-  return difficulty > 0n && difficulty <= Q && autolykosHit(header) < Q / difficulty;
+  if (difficulty <= 0n || difficulty > Q) return false;
+  return header.version === INITIAL_VERSION ? autolykosV1Valid(header, Q / difficulty) : autolykosHit(header) < Q / difficulty;
 }
 function hexToBytes32(value: bigint): Uint8Array {
   const out = new Uint8Array(32);
