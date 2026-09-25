@@ -1,8 +1,8 @@
 // The Ergo venue profile's header source, run by the reader itself.
 //
-// The profile's range verifier reads a header chain it does not authenticate:
-// proof of work and chain selection are the header source's. This module is
-// that source, for mainnet headers above the profile's pinned anchor. It reads
+// The profile reads each block's section against its header's transaction
+// root; proof of work and chain selection are the header source's. This module
+// is that source, for mainnet headers above the profile's pinned anchor. It reads
 // each header from its canonical bytes and derives the id from them, then
 // applies the pinned node's (v6.0.6) header rules for a child header: height
 // one above the parent, timestamp above the parent's, the EIP-37 required
@@ -32,13 +32,12 @@
 // the best chain, but its headers are accepted and kept, so bounding what a
 // supplier may add is the runtime's supplier policy. Only canonical bytes are
 // read, though the node also re-serializes some non-canonical spellings to the
-// same id. The Ergo venue profile (venue-ergo.md §3) specifies these rules; no
-// runtime path reads this source yet.
+// same id. The Ergo venue profile (venue-ergo.md §3) specifies these rules;
+// `ErgoVenue` (src/ergo.ts) reads the chain through this store.
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes } from "./bytes.js";
-import type { ErgoHeaderView } from "./ergo-profile.js";
 
 /** Mainnet's EIP-37 rule applies to every header at or above this height. */
 export const EIP37_ACTIVATION_HEIGHT = 844_673n;
@@ -311,12 +310,20 @@ export function eip37Difficulty(previous: readonly ErgoHeader[]): bigint {
 }
 
 export type ErgoHeaderRefusal = "malformed" | "unknown-parent" | "below-anchor" | "height" | "timestamp" | "difficulty" | "pow";
+/** The fields of an accepted header a reader reads its block's section by. */
+export interface ErgoHeaderView {
+  readonly id: Uint8Array;
+  readonly parentId: Uint8Array;
+  readonly height: bigint;
+  readonly version: bigint;
+  readonly transactionsRoot: Uint8Array;
+}
 export interface ErgoHeaderChain {
   readonly tipId: Uint8Array;
   readonly height: bigint;
   /** Sum of required difficulties above the anchor. */
   readonly score: bigint;
-  /** The best chain from the anchor's child to its tip, for the range verifier. */
+  /** The best chain from the anchor's child to its tip. */
   readonly headers: readonly ErgoHeaderView[];
 }
 export interface ErgoHeaderStore {

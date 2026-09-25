@@ -14,7 +14,7 @@ import { LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { replayLocalPackage, RANGE_LIMITS } from "./local-replay.mjs";
 import { mergeFinalizedPrefixes } from "./scope-replay.mjs";
-import { FixtureVenue } from "./fixture-venue.mjs";
+import { FixtureVenue } from "../../../dist/record-venue.js";
 import { checkRecoveryScopeReceipts } from "./scope-receipt-check.mjs";
 import { checkRecoveryScopeCounts } from "./scope-count-check.mjs";
 import { checkSharedIntrinsic, withholdSharedTarget, sharedEquivalent } from "./scope-intrinsic-check.mjs";

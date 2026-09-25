@@ -117,23 +117,25 @@ state. A non-service clause needs no silence clause; without the former
 there is no count. Missing range or ancestry evidence returns no audit.
 The count shares the import work budget and fixture authority boundary.
 
-To replay every group above a second time through exact synthetic Ergo
-transaction bytes, run `npm run check:pool:ergo-replay` (Node 24; it needs only
-the root dependencies). CI uses
-`npm run check:pool:v3 -- --ergo` to include both relation conformance and this
-adapter. Under `--ergo` every fixture names the candidate profile's identity;
-each fixture venue export is converted to raw sections under the reader's own
-synthetic headers (the fixed genesis is the anchor, fixture index `i` is height
-`i + 2`, lag 2 is depth 1, one transaction per record in insertion order), and
-the Ergo result must equal the fixture verifier's with kind-4 ordinals as
-transaction positions. The reader fixes the profile, limits and a separate
-trusted header file per chain; the package supplies only raw block sections.
-The adapter charges each intrinsic byte view before copying it and owns all
-bytes before decoding. Missing, undecodable or root-mismatched sections leave
-the range unresolved. Successful results carry
-`candidate-ergo-profile-synthetic-headers` provenance; they establish no
-real-chain authentication, decoder containment or spendability.
-See the [adapter contract](../../../docs/ERGO_VENUE_PROFILE.md#local-replay-adapter).
+The reader is the runtime's (`src/pool/v3/reader.ts` and `state.ts` in
+`dist/`); `local-replay.mjs` layers imports, scopes, receipts, recovery force
+and non-service counts over it, and reads each package's venue data through
+the verifier's record factory, a `RecordVenue` (`FixtureVenue` by default).
+
+To replay every group above a second time through `ErgoVenue`, run
+`npm run check:pool:ergo-replay` (Node 24; it needs only the root
+dependencies). CI uses `npm run check:pool:v3 -- --ergo` to include both
+relation conformance and this read. Under `--ergo` every fixture names the
+synthetic reference chain's venue identity; each fixture venue export is
+written into blocks of that chain (index `i` is the block `i + 1` above the
+anchor, lag 2 is depth 1, one transaction per record in insertion order), the
+reader's own `ErgoVenue` verifies them from its own anchor context, and the
+Ergo result must equal the fixture venue's with kind-4 ordinals as
+transaction positions. Missing, unframable or root-mismatched sections stop
+the clock and leave the range unresolved. Successful results carry
+`ergo-venue-synthetic-chain` provenance; they establish no mainnet
+authentication or spendability.
+See the [Ergo venue guide](../../../docs/ERGO_VENUE_PROFILE.md#local-replay-through-the-venue).
 
 The npm command verifies parameter cache/download lengths and SHA-256 hashes
 with `../prepare-crs.mjs` before starting the suite. It checks both upstream

@@ -2,21 +2,20 @@
 // in the independently held candidate manifest,
 // never read from the supplied record package. No witness or original journal.
 import { fileURLToPath } from "node:url";
-import { readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { deserialize } from "node:v8";
 import { Barretenberg, BackendType, UltraHonkVerifierBackend } from "@aztec/bb.js";
-import { replayEvidencePackage, RANGE_LIMITS } from "./local-replay.mjs";
-import { FixtureVenue } from "./fixture-venue.mjs";
+import { recordReader, replayEvidencePackage } from "./local-replay.mjs";
+import { FixtureVenue } from "../../../dist/record-venue.js";
 import { field } from "../fixtures.mjs";
 import { loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys } from "./candidate.mjs";
-import { v3Codec, v3ErgoCodec } from "./codec.mjs";
+import { v3Codec } from "./codec.mjs";
 
 let api;
 try {
   if (process.argv.length > 4 || (process.argv[3] !== undefined && process.argv[3] !== "--ergo")) throw new Error("unknown reader mode");
   const withErgo = process.argv[3] === "--ergo";
-  const codec = withErgo ? v3ErgoCodec : v3Codec;
+  const codec = v3Codec;
   const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
   const configuration = candidateConfiguration(manifest, codec);
   const keys = readCandidateKeys(fileURLToPath(process.argv[2]), manifest);
@@ -41,16 +40,9 @@ try {
   // rebuilt from the fixture IPC beside the selection; the package cannot supply it.
   const verifier = { configuration, verify: (kind, publicInputs, proof) => backend.verifyProof({
     proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
-  }, { verifierTarget: "noir-recursive" }), record: data => {
-    const witnessed = FixtureVenue.from(data);
-    return { evidenceKind: "fixture-verifier", range: request => witnessed.answer(request, codec, RANGE_LIMITS), witnessedIndex: () => witnessed.witnessedIndex, lag: () => witnessed.lag };
-  } };
-  if (withErgo) {
-    const { profile } = await import("../../../experiments/ergo-range/replay-fixture.mjs");
-    const { ergoReplayVenue } = await import("../../../experiments/ergo-range/replay-venue.mjs");
-    const headers = deserialize(readFileSync(join(fileURLToPath(process.argv[2]), "ergo-headers.v8")));
-    verifier.record = data => ergoReplayVenue(profile, { headers, blocks: data.blocks }, codec, RANGE_LIMITS);
-  }
+  }, { verifierTarget: "noir-recursive" }), record: data => recordReader(FixtureVenue.from(data), "fixture-verifier") };
+  // Under --ergo the process's own ErgoVenue, on its own anchor context, verifies the package's blocks.
+  if (withErgo) verifier.record = (await import("./ergo-check.mjs")).ergoRecord;
   process.stdout.write(JSON.stringify(await replayEvidencePackage(input, verifier, codec)));
 } catch {
   process.stderr.write("local replay fixture failed\n");

@@ -72,7 +72,7 @@ export async function checkCompactFault({ payload, complete, fault, codec, verif
       assert.equal(answer.status, "unresolved-evidence"); assert.equal(answer.faultEvidence, undefined);
     }
     for (const cause of [new Error("verifier failure"), new EncodingError("verifier encoding"),
-      new codec.CodecEncodingError("verifier codec"), new EvidenceRefusal("unresolved-evidence")]) {
+      new EncodingError("verifier codec"), new EvidenceRefusal("unresolved-evidence")]) {
       const custom = { ...verifier, verify: (kind, inputs, proof) => {
         if (isTarget(proof)) throw cause;
         return verifier.verify(kind, inputs, proof);

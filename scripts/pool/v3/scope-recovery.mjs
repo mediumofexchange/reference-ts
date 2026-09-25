@@ -4,7 +4,7 @@ import { compareBytes, EncodingError } from "../../../dist/bytes.js";
 import { identifierOf } from "../../../dist/pool/field.js";
 import { ScopeTree } from "../../../dist/pool/scope.js";
 import { EvidenceRefusal } from "../delivery/evidence-reader.mjs";
-import { recoveryState, effectOf, checkRecovery, applyRecovery } from "./recovery-state.mjs";
+import { recoveryState, effectOf, checkRecovery, applyRecovery } from "../../../dist/pool/v3/recovery.js";
 
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const same = (a, b) => compareBytes(a, b) === 0;
@@ -66,7 +66,7 @@ export function scopeRecovery({ context, viewFor, latest, check, charge, ReplayR
     let publication;
     try { publication = codec.decodePublication(entry.record); }
     catch (error) {
-      if (error instanceof EncodingError || error instanceof codec.CodecEncodingError) return;
+      if (error instanceof EncodingError) return;
       throw error;
     }
     if (!same(publication.domain, selection.domain) || !same(publication.backing, backing) ||
@@ -76,7 +76,7 @@ export function scopeRecovery({ context, viewFor, latest, check, charge, ReplayR
     const source = snapshot.state;
     const state = { ...recoveryState(source), nullifiers: new Set(source.nullifiers), outputsSeen: new Set(source.outputsSeen) };
     for (const prior of force) if (prior.index > (source.adoptionIndices.get(name) ?? 0n)) {
-      charge(1n); applyRecovery(prior.record, state, codec);
+      charge(1n); applyRecovery(prior.record, state);
       const effect = effectOf(prior.record);
       effect.nfs.forEach(nf => state.nullifiers.add(nf)); effect.outputs.forEach(cm => state.outputsSeen.add(cm));
     }
@@ -89,7 +89,7 @@ export function scopeRecovery({ context, viewFor, latest, check, charge, ReplayR
       check(roots.every(root => source.anchors.has(root)), "ANCHOR");
       check(new Set(nfs).size === nfs.length && nfs.every(nf => nf !== 0n && !state.nullifiers.has(nf)), "SPENT");
       check(new Set(outputs).size === outputs.length && outputs.every(cm => cm !== 0n && !state.outputsSeen.has(cm)), "OUTPUT");
-      checkRecovery(record, state, { codec, check, backing, issuer: terms.obligor, at: entry.index, lag: view.lag, publication: true });
+      checkRecovery(record, state, { check, backing, issuer: terms.obligor, at: entry.index, lag: view.lag, publication: true });
       force.push({ backing: name, index: entry.index, ordinal: entry.ordinal, record, bytes: codec.encodeRecord(record) });
       item.force = true;
     } catch (error) {

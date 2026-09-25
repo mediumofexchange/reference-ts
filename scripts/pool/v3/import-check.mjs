@@ -10,7 +10,7 @@ import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
 import { inspectRestorationEvidence, LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { replayLocalPackage } from "./local-replay.mjs";
-import { FixtureVenue } from "./fixture-venue.mjs";
+import { FixtureVenue } from "../../../dist/record-venue.js";
 import { compactFault, checkCompactFault, withoutFaultReasons } from "./fault-check.mjs";
 import { checkAuthorizationCase } from "./authorization-check.mjs";
 

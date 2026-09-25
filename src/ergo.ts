@@ -50,9 +50,10 @@ import {
 import type { ErgoPublisher, ErgoRecordRequest } from "./ergo-publisher.js";
 import type { ErgoSupplier } from "./ergo-supplier.js";
 import {
-  COMMITMENT_RANGE, copyRequest, encodeRangeAnswer, heldCommitments, RangeLimitError, REPLACEMENT_RANGE, REVOCATION_RANGE,
+  COMMITMENT_RANGE, copyRequest, encodeRangeAnswer, heldCommitments, REPLACEMENT_RANGE, REVOCATION_RANGE,
   type HeldCommitment, type RangeAnswer, type RangeLimits, type RangeRequest, type RecordKind,
 } from "./record-range.js";
+import type { RecordVenue } from "./record-venue.js";
 // The transparent `Venue` face below serves pool-v2's store and retires with it.
 import { forgetAdmitted, type WitnessedReplacement } from "./replacement.js";
 import type { WitnessedRevocation } from "./revocation.js";
@@ -173,7 +174,7 @@ export async function ergoAnchorContext(supplier: ErgoSupplier, anchorId: Uint8A
  * place. The id is derived from the profile, never handed in, so one declared
  * venue cannot be read on two clocks.
  */
-export class ErgoVenue implements Venue {
+export class ErgoVenue implements Venue, RecordVenue {
   private readonly profile: ErgoProfile;
   private readonly venueId: Uint8Array;
   private readonly store: ErgoHeaderStore;
@@ -423,9 +424,10 @@ export class ErgoVenue implements Venue {
 
   /**
    * pool-v3 §13's answer to one request from this view, or undefined where the
-   * request names another venue, reaches past the clock or exceeds `limits`.
-   * The answer is the reader's own, computed from the verified sections, so a
-   * replay may consume it as its venue-evidence verifier's output (§12.1).
+   * request is malformed, names another venue or reaches past the clock; an
+   * answer over `limits` throws `RangeLimitError` (`RecordVenue`). The answer
+   * is the reader's own, computed from the verified sections, so a replay
+   * consumes it as its venue-evidence verifier's output (§12.1).
    */
   range(request: RangeRequest, limits: RangeLimits): Uint8Array | undefined {
     const snapshot = this.requireSnapshot();
@@ -435,13 +437,7 @@ export class ErgoVenue implements Venue {
       throw error;
     }
     if (compareBytes(own.venue, this.venueId) !== 0 || own.toIndex > snapshot.witnessed) return undefined;
-    const entries = rangeEntries(index => snapshot.sections[Number(index)], own)!;
-    try {
-      return encodeRangeAnswer({ request: own, entries }, limits);
-    } catch (error) {
-      if (error instanceof EncodingError || error instanceof RangeLimitError) return undefined;
-      throw error;
-    }
+    return encodeRangeAnswer({ request: own, entries: rangeEntries(index => snapshot.sections[Number(index)], own)! }, limits);
   }
 
   /** Every object of one kind and subject through the clock, as §13.3 reads them. */

@@ -8,18 +8,17 @@ import * as trailCodec from "../../../dist/pool/v3/trail.js";
 import * as recordCodec from "../../../dist/pool/v3/records.js";
 import * as headerCodec from "../../../dist/pool/v3/headers.js";
 import * as commitmentCodec from "../../../dist/pool/v3/commitments.js";
+import { TRAIL_LIMITS } from "../../../dist/pool/v3/reader.js";
+import { EvidenceRefusal } from "../../../dist/pool/v3/refusals.js";
 
-export const LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxEvents: 1024n });
+export { EvidenceRefusal };
+export const LIMITS = TRAIL_LIMITS;
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const same = (a, b) => compareBytes(a, b) === 0;
 
-/** The v3 evidence codecs from the runtime. CodecEncodingError names the one
- * runtime EncodingError for callers written when the codecs compiled apart. */
-export const evidenceCodecs = Object.freeze({ ...trailCodec, ...recordCodec, ...headerCodec, ...commitmentCodec, CodecEncodingError: EncodingError });
+/** The v3 evidence codecs from the runtime. */
+export const evidenceCodecs = Object.freeze({ ...trailCodec, ...recordCodec, ...headerCodec, ...commitmentCodec });
 
-export class EvidenceRefusal extends Error {
-  constructor(status) { super(status); this.status = status; }
-}
 function requireEvidence(condition, status = "unresolved-evidence") {
   if (!condition) throw new EvidenceRefusal(status);
 }

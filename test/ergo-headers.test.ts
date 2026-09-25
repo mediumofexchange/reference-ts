@@ -3,7 +3,6 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { describe, expect, it } from "vitest";
 import * as headers from "../src/ergo-headers.js";
-import * as profile from "../src/ergo-profile.js";
 
 // Real mainnet headers pin the difficulty rule, proof of work, parsing and
 // ids; synthetic chains at difficulty 4 to 6, whose proof of work a test can
@@ -329,13 +328,13 @@ describe("the reader's header store", () => {
     // A fork below the anchor is refused however much work it carries.
     const side = mine({ ...child(parse(baseContext.at(-2)!)), timestamp: anchor.timestamp + 1n });
     expect(s.add(side)).toBe("below-anchor");
-    // The best chain is the range verifier's header input from the same anchor.
-    const tree = (kind: number): Uint8Array => Uint8Array.from(Buffer.from(`0008cd02${"ab".repeat(31)}0${kind}`, "hex"));
-    const scripts = { 1: tree(1), 2: tree(2), 3: tree(3), 4: tree(4) };
-    const verifier = profile.ergoRangeVerifier({ anchor: anchor.id, depth: 1n, scripts }, { headers: best.headers, blocks: [] });
-    expect(verifier?.witnessedIndex()).toBe(0n);
-    // Over the mixed-version chain the index advances with every header; the profile tests pin that each version has its section.
-    expect(profile.ergoRangeVerifier({ anchor: anchor.id, depth: 1n, scripts }, { headers: s.best().headers, blocks: [] })?.witnessedIndex()).toBe(6n);
+    // The best chain runs from the anchor's child, one linked header per height, whatever each one's version.
+    const chain = s.best().headers;
+    expect(hex(chain[0]!.parentId)).toBe(hex(anchor.id));
+    chain.forEach((view, i) => {
+      expect(view.height).toBe(anchor.height + BigInt(i) + 1n);
+      if (i > 0) expect(hex(view.parentId)).toBe(hex(chain[i - 1]!.id));
+    });
     // Views are copies: changing one does not change the store.
     const now = s.best();
     now.headers[0]!.id[0]! ^= 1;
