@@ -41,8 +41,10 @@ import { encodeTrail, TrailLimitError } from "./trail.js";
 const PROFILE = "pool-store/v3";
 const U64 = 1n << 64n;
 const SQLITE_LIMIT = (1n << 63n) - 1n;
-/** The served package's bound; a reader applies its own. */
+/** The reference reader's package budget; a reader applies its own. */
 export const SERVED_PACKAGE_LIMITS: PackageLimits = Object.freeze({ maxBytes: 1_048_576n, maxItems: 1024n });
+/** What a served package may fill: the budget less one receipt item (§12 kind 10, a 355-byte record), so a receipt query still fits. */
+const SERVED_ROOM: PackageLimits = Object.freeze({ maxBytes: SERVED_PACKAGE_LIMITS.maxBytes - 360n, maxItems: SERVED_PACKAGE_LIMITS.maxItems - 1n });
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 const hexOf = (c: Commitment | undefined): string | null => (c === undefined ? null : bytesToHex(encodeCommitment(c)));
 const copyCommitment = (c: Commitment): Commitment => decodeCommitment(encodeCommitment(c));
@@ -578,7 +580,7 @@ export class V3OperatorJournal {
    * The served §12 package: the configuration, `selected`, every directory and
    * snapshot of `signed`, and the one trail through `records`, whose prefixes
    * serve each earlier checkpoint (§12.1). A package past the reader's budget
-   * (`TRAIL_LIMITS`, `SERVED_PACKAGE_LIMITS`) refuses as RESOURCE, so the
+   * (`TRAIL_LIMITS`, `SERVED_PACKAGE_LIMITS` with room for one receipt) refuses as RESOURCE, so the
    * journal admits and signs only what it can still serve.
    */
   private encodePackage(opened: Opened, signed: readonly Pick<Signed, "directory" | "snapshot">[], selected: Commitment,
@@ -590,7 +592,7 @@ export class V3OperatorJournal {
       add(6, encodeTrail({ header: opened.headerBytes, terms: [opened.signed], records }, TRAIL_LIMITS));
       for (const s of signed) { add(3, encodeEvidenceDirectory(s.directory, SERVED_PACKAGE_LIMITS)); add(4, s.snapshot); }
       const items = [...payloads.values()].sort((a, b) => a.kind - b.kind || compareBytes(sha256(a.payload), sha256(b.payload)));
-      return encodeEvidencePackage(items, SERVED_PACKAGE_LIMITS);
+      return encodeEvidencePackage(items, SERVED_ROOM);
     } catch (error) {
       if (error instanceof TrailLimitError || error instanceof PackageLimitError) {
         throw new V3StoreError("REFUSED", "the served package would pass the reader's budget", "RESOURCE");
@@ -600,13 +602,14 @@ export class V3OperatorJournal {
   }
 
   /**
-   * The §12 package for the latest published commitment, with every checkpoint
-   * signed through it. Records admitted after it are not served, nor is a
-   * commitment still in the outbox.
+   * The §12 package for the latest commitment published or held on the venue,
+   * with every checkpoint signed through it. Records admitted after it are not
+   * served, nor is a commitment still in the outbox. A held one counts even
+   * where a lost reply left its publication unrecorded.
    */
   async package(): Promise<ServedPackage> {
     return this.run(async engine => {
-      const opened = engine.opened, at = engine.signed.findLastIndex(s => s.published);
+      const view = this.view(engine), opened = engine.opened, at = engine.signed.findLastIndex(s => s.published || this.isHeld(view, s));
       requireThat(opened !== undefined && at >= 0, "STALE", "no published commitment to serve");
       const selected = engine.signed[at]!, through = engine.signed.slice(0, at + 1);
       return { selection: { domain: copyBytes(this.domain), venue: copyBytes(this.venueId), backing: copyBytes(opened.backing),

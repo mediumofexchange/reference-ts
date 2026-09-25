@@ -277,6 +277,11 @@ describe.skipIf(!supported)("the v3 operator journal (Node 24)", () => {
     expect(before.selection.sequence).toBe(1n);
     await j.publish();
     expect((await j.package()).selection.sequence).toBe(2n);
+    // Held on the venue though the journal never recorded its publication, as after a lost reply: served.
+    const { venue, j: k } = await opened();
+    await k.submit(issue());
+    await venue.publishRecord(1, operator, encodeCommitment(await k.commit("c2")));
+    expect((await k.package()).selection.sequence).toBe(2n);
   });
 
   it("fences an older handle and replays the journal on reopening", async () => {
