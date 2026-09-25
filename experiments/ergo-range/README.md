@@ -1,8 +1,10 @@
 # Ergo range-source feasibility
 
-Private probe; no runtime exports and no transaction submission. The checked
-command connects to nothing; only the explicit [chain-cost probe](#real-chain-exhaustion-cost)
-below reads public nodes. Use Node 24, then from the repository root:
+Private probes of the Ergo venue profile, whose runtime code is in `src/`
+(`ergo.ts`, `ergo-headers.ts`, `ergo-profile.ts`, `ergo-supplier.ts`,
+`record-range.ts`); nothing here is exported. The checked command connects to
+nothing; the explicit probes below read nodes (GET only), and only
+[publication](#publication-and-reassembly-on-a-node) submits, on the testnet. Use Node 24, then from the repository root:
 
 ```powershell
 npm --prefix experiments/ergo-range ci --ignore-scripts --no-audit --no-fund
@@ -22,8 +24,8 @@ the project's official v6.0.6 distribution directly. See
 
 ## Supplying the reader
 
-The candidate profile's reader takes each transaction as its unsigned bytes
-and witness id and frames the outputs itself. `supply.mjs` is the supplier:
+The profile's reader takes each transaction as its unsigned bytes
+and witness id and frames the outputs itself. `src/ergo-supplier.ts` is the supplier:
 it copies the unsigned bytes from the node's JSON statement of a transaction
 (`/blocks/{id}/transactions`), hex fields and integers as they stand, and
 hashes the stated proofs for the witness id; it parses no constant and runs
@@ -32,15 +34,15 @@ spending-proof extension's key order is part of the bytes, and a parsed
 JavaScript object would sort it) and integers exact. A copy that does not
 hash to the stated id is unsupplied, never misread
 ([decision](../../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)).
-`supply-check.mjs`, part of `check:ergo:range`, supplies every fixture
+`test/ergo-supplier.test.ts` supplies every fixture
 transaction, reproduces the four fixture roots from the copies and checks
-each refusal; it also copies every fixture header, of versions 1 to 4, through
-`supply-header.mjs`, the header store's supplier, to its id.
+each refusal; it also copies every fixture header, of versions 1 to 4, to its
+id, and drives `ergoNodeSupplier` over HTTP responses.
 
 ## Real-chain exhaustion cost
 
 `chain-cost.mjs` is the recovery map's P4: it measures what the
-[candidate profile's](../../docs/ERGO_VENUE_PROFILE.md) exhaustion costs on
+[profile's](../../docs/ERGO_VENUE_PROFILE.md) exhaustion costs on
 mainnet from a real anchor. It is run explicitly, never by `check` or CI,
 because it reads public nodes (GET only; nothing is submitted):
 
@@ -57,7 +59,7 @@ window's header slices replay; `--delay` paces live reads, which rotate over
 `--sources` with backoff when a node throttles. Each source's headers are
 compared field by field, and the anchor's id is read from each; a
 disagreement gives an unresolved report and exit 2. Each block's
-transactions are supplied through `supply.mjs`, and a block's section counts
+transactions are supplied through `src/ergo-supplier.ts`, and a block's section counts
 only where every transaction is supplied and the header's transaction root
 holds through the model's root; the report compares every framed
 transaction's outputs with the node's JSON and totals the supplied and
@@ -71,7 +73,7 @@ cached response the run read, sizes and times.
 
 ## Publication and reassembly on a node
 
-`publish.mjs` is the recovery map's P2: it publishes the candidate profile's
+`publish.mjs` is the recovery map's P2: it publishes the profile's
 kind-4 layout on the public Ergo **testnet** and reads it back through the
 model verifier. It is run explicitly, never by `check` or CI, because it
 submits transactions to and reads blocks from a public node. It refuses any
@@ -95,7 +97,7 @@ three of four pieces, the release and a withdrawal adjacent, and the two
 separated by a plain output), waits for inclusion and the depth, sweeps every
 piece box back to the wallet, waits again, checks the UTXO and indexed views,
 then reads every block from the header below the first inclusion to the tip
-through `supply.mjs` and asks the kind-4 range under the subject. `--state` (default
+through `src/ergo-supplier.ts` and asks the kind-4 range under the subject. `--state` (default
 `scratch/ergo-testnet/run.json`) records every step, including the run's
 pinned creation height, and `--resume` continues an interrupted run,
 re-submitting only what the node does not already hold, or re-reads a
@@ -189,8 +191,8 @@ node experiments/ergo-range/header-check.mjs --out docs/ergo-own-node-verificati
 ## Reader-verified headers
 
 `header-verify.mjs` runs the reader's own header store
-(`model/pool-v3-ergo-headers.ts`) on real mainnet headers. Each header's
-bytes are copied from a node's JSON by `supply-header.mjs` (unsupplied
+(`src/ergo-headers.ts`) on real mainnet headers. Each header's
+bytes are copied from a node's JSON by `src/ergo-supplier.ts` (unsupplied
 unless the copy hashes to the stated id); the store builds from the 1,024
 headers below the pinned anchor by linkage, then verifies every header above
 it from each source in turn (own node, then two public nodes), and its best
@@ -208,10 +210,9 @@ node experiments/ergo-range/header-verify.mjs --anchor 1873360 --to 1880300 --re
 ## Venue-profile checks
 
 `npm run check:ergo:range` runs, in order, the block-root/Fleet experiment
-(`check.mjs`), the supplier check (`supply-check.mjs`, [above](#supplying-the-reader))
-and `profile-check.mjs`.
+(`check.mjs`) and `profile-check.mjs`.
 
-`profile-check.mjs` compiles `model/pool-v3-ergo-profile.ts` with the
+`profile-check.mjs` compiles `src/ergo-profile.ts` with the
 repository root's TypeScript into a disposable `scratch/` build, so run it
 after `npm ci` at the root. It builds a twelve-height synthetic chain from
 Fleet's unsigned bytes of transactions carrying real signed records in
@@ -228,10 +229,24 @@ outputs and every real register constant read beside
 sigma-rust's. Its [retained report](../../docs/ergo-range-profile-verification.json)
 is an offline observation; nothing connects to a node or selects the profile.
 
+## Runtime venue on the mainnet
+
+`runtime-sync.mjs` runs the runtime's `ErgoVenue` (`src/ergo.ts`) on the
+real mainnet: anchored `--blocks` (default 300) below the own node's tip at
+the default depth, a view syncs from the own node and a public node, then a
+second view from the public node alone, and a supplier that substitutes one
+section and one that raises one header's difficulty are each set beside the
+own node. It needs the own mainnet node running, caches nothing and writes
+the [runtime venue report](../../docs/ergo-runtime-venue-verification.json):
+
+```powershell
+node experiments/ergo-range/runtime-sync.mjs --out docs/ergo-runtime-venue-verification.json
+```
+
 ## Hostile-input node equivalence
 
 `hostile-equivalence.mjs` takes the 29 hash-pinned corpus transactions'
-unsigned bytes as `supply.mjs` copies them, mutates them deterministically
+unsigned bytes as `src/ergo-supplier.ts` copies them, mutates them deterministically
 (every byte replaced by four values, deleted, and preceded by 0x00 and 0x80;
 every proper prefix; seeded splices from other seeds) and reads each case
 through `node-read/NodeRead.java`, which frames it as a one-transaction

@@ -19,10 +19,10 @@
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { ByteWriter, compareBytes, copyBytes, EncodingError } from "../src/bytes.js";
-import { utf8Encoder } from "../src/contexts.js";
+import { ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
+import { utf8Encoder } from "./contexts.js";
 import { copyRequest, encodeRangeAnswer, MAX_RANGE_RECORD_BYTES, PUBLICATION_RANGE,
-  type RangeEntry, type RangeLimits, type RangeRequest, type RecordKind } from "./pool-v3-range.js";
+  type RangeEntry, type RangeLimits, type RangeRequest, type RecordKind } from "./record-range.js";
 
 export const ERGO_PROFILE_CONTEXT = "moe/venue/ergo/v3";
 export const RECORD_KINDS: readonly RecordKind[] = Object.freeze([1, 2, 3, 4]);
@@ -44,7 +44,7 @@ export interface ErgoProfile {
 }
 /** The profile is read once and owned: the identity is hashed over, and every
  * output attributed by, the same bytes (§13.1: two attribution rules are two venues). */
-function ownProfile(profile: ErgoProfile): ErgoProfile {
+export function ownErgoProfile(profile: ErgoProfile): ErgoProfile {
   if (profile === null || typeof profile !== "object") throw new EncodingError("invalid Ergo profile");
   const { anchor, depth, scripts } = profile;
   if (!isBytes(anchor, 32) || compareBytes(anchor, ZERO32) === 0 || !u64(depth) || depth === MAX_U64 ||
@@ -70,7 +70,7 @@ function ownProfile(profile: ErgoProfile): ErgoProfile {
 }
 /** Naming the venue is agreeing the chain from its anchor, the depth and the attribution rule (C2.3.2, §13.1). */
 export function ergoProfileIdentity(profile: ErgoProfile): Uint8Array {
-  const owned = ownProfile(profile), w = new ByteWriter();
+  const owned = ownErgoProfile(profile), w = new ByteWriter();
   w.lengthPrefixed(utf8Encoder.encode(ERGO_PROFILE_CONTEXT));
   w.key32(owned.anchor, "anchor header id");
   w.u64(owned.depth);
@@ -79,7 +79,7 @@ export function ergoProfileIdentity(profile: ErgoProfile): Uint8Array {
 }
 /** C2.3.5: a transaction submitted at clock `c` lands at height `c + depth + 1` at the earliest. */
 export function ergoLag(profile: ErgoProfile): bigint {
-  return ownProfile(profile).depth + 1n;
+  return ownErgoProfile(profile).depth + 1n;
 }
 
 /** Header fields the verifier reads; the reader's header source authenticates them. */
@@ -379,11 +379,31 @@ function ownHeader(header: ErgoHeaderView): ErgoHeaderView | undefined {
  * longer than the kind's bound is no object. A transaction the framer does
  * not read contributes nothing. */
 export function attributeBlock(profile: ErgoProfile, transactions: readonly ErgoTransactionView[]): readonly AttributedObject[] {
-  const owned = ownProfile(profile);
+  const owned = ownErgoProfile(profile);
   if (!Array.isArray(transactions)) throw new EncodingError("invalid Ergo transactions");
   const ownedTransactions = transactions.map(ownTransaction);
   if (ownedTransactions.some(transaction => transaction === undefined)) throw new EncodingError("invalid Ergo transaction view");
   return attributeOwned(owned, ownedTransactions as ReadTransaction[]);
+}
+
+/** §4 and §6 for one supplied section: every transaction view owned once,
+ * then, only where the section is nonempty and reproduces `root` under
+ * either rule, the objects the profile attributes in it, in venue order.
+ * Undefined for any other section, which is not that header's. */
+export function attributeSection(profile: ErgoProfile, transactions: readonly ErgoTransactionView[], root: Uint8Array): readonly AttributedObject[] | undefined {
+  return attributeOwnedSection(ownErgoProfile(profile), transactions, root);
+}
+function attributeOwnedSection(profile: ErgoProfile, transactions: readonly ErgoTransactionView[], root: Uint8Array): readonly AttributedObject[] | undefined {
+  if (!Array.isArray(transactions) || !isBytes(root, 32)) return undefined;
+  const read = ownTransactions(transactions);
+  // Outputs are framed only from a section whose root holds.
+  if (read === undefined || read.length === 0 || !sectionMatchesRoot(read, root)) return undefined;
+  try {
+    return attributeOwned(profile, read);
+  } catch (error) {
+    if (error instanceof EncodingError) return undefined;
+    throw error;
+  }
 }
 
 /** The venue's constants and one §13 answer per request, or none where the
@@ -415,7 +435,7 @@ export interface ErgoRangeVerifier {
  * read as containers, and every element of the array that is iterated is
  * owned. */
 export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvidence): ErgoRangeVerifier | undefined {
-  const owned = ownProfile(profile);
+  const owned = ownErgoProfile(profile);
   if (evidence === null || typeof evidence !== "object" || !Array.isArray(evidence.headers) || !Array.isArray(evidence.blocks)) {
     throw new EncodingError("invalid Ergo range evidence");
   }
@@ -451,15 +471,8 @@ export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvide
     // miner deny every range through its block.
     const header = byId.get(bytesToHex(copyBytes(headerId)));
     if (header === undefined || header.height < origin || sectionAt.has(header.height - origin)) continue;
-    const read = ownTransactions(transactions);
-    // Outputs are framed only from a section whose root holds.
-    if (read === undefined || read.length === 0 || !sectionMatchesRoot(read, header.transactionsRoot)) continue;
-    try {
-      sectionAt.set(header.height - origin, attributeOwned(owned, read));
-    } catch (error) {
-      if (error instanceof EncodingError) continue;
-      throw error;
-    }
+    const objects = attributeOwnedSection(owned, transactions, header.transactionsRoot);
+    if (objects !== undefined) sectionAt.set(header.height - origin, objects);
   }
   // Index `i` is height `origin + i`; index `i` is witnessed once the tip is at `origin + i + depth`.
   const witnessed = tip - depth - origin;
@@ -475,17 +488,28 @@ export function ergoRangeVerifier(profile: ErgoProfile, evidence: ErgoRangeEvide
         throw error;
       }
       if (compareBytes(own.venue, identity) !== 0 || own.toIndex > witnessed) return undefined;
-      const entries: RangeEntry[] = [];
-      for (let index = own.fromIndex; index <= own.toIndex; index++) {
-        const objects = sectionAt.get(index);
-        if (objects === undefined) return undefined;
-        const matching = objects
-          .filter(object => object.kind === own.kind && compareBytes(object.subject, own.subject) === 0)
-          .map(object => ({ index, ordinal: own.kind === PUBLICATION_RANGE ? object.ordinal : 0n, record: copyBytes(object.record) }));
-        if (own.kind !== PUBLICATION_RANGE) matching.sort((a, b) => compareBytes(a.record, b.record));
-        for (const entry of matching) entries.push(entry);
-      }
-      return encodeRangeAnswer({ request: own, entries }, limits);
+      const entries = rangeEntries(index => sectionAt.get(index), own);
+      return entries === undefined ? undefined : encodeRangeAnswer({ request: own, entries }, limits);
     },
   });
+}
+
+/** §7's entries for an owned request over the attributed sections a reader
+ * holds by index: index by index, every object of the request's kind and
+ * subject, for kind 4 in ordinal order carrying the ordinal, for kinds 1–3
+ * with ordinal zero in ascending record-byte order. Undefined where an index
+ * of the range has no section. The caller checks the venue and that
+ * `toIndex` is witnessed. */
+export function rangeEntries(sectionAt: (index: bigint) => readonly AttributedObject[] | undefined, request: RangeRequest): RangeEntry[] | undefined {
+  const entries: RangeEntry[] = [];
+  for (let index = request.fromIndex; index <= request.toIndex; index++) {
+    const objects = sectionAt(index);
+    if (objects === undefined) return undefined;
+    const matching = objects
+      .filter(object => object.kind === request.kind && compareBytes(object.subject, request.subject) === 0)
+      .map(object => ({ index, ordinal: request.kind === PUBLICATION_RANGE ? object.ordinal : 0n, record: copyBytes(object.record) }));
+    if (request.kind !== PUBLICATION_RANGE) matching.sort((a, b) => compareBytes(a.record, b.record));
+    for (const entry of matching) entries.push(entry);
+  }
+  return entries;
 }

@@ -52,6 +52,8 @@ import { readPoolReceiptStatus } from '@mediumofexchange/reference/pool/receipt-
 import { readPoolPredecessor, readPoolCurrent } from '@mediumofexchange/reference/pool/descent';
 import { readPoolCheckpoint, readPoolCheckpoints } from '@mediumofexchange/reference/pool/checkpoint';
 import { preparePoolOpening } from '@mediumofexchange/reference/pool/opening';
+import { ErgoVenue, DEFAULT_ERGO_DEPTH } from '@mediumofexchange/reference/ergo';
+import { ergoNodeSupplier } from '@mediumofexchange/reference/ergo-supplier';
 import { ed25519 } from '@noble/curves/ed25519.js';
 const circuits = join(dirname(fileURLToPath(import.meta.resolve('@mediumofexchange/reference/package.json'))), 'src/pool/circuits');
 const manifest = JSON.parse(readFileSync(join(circuits, 'manifest.json'), 'utf8'));
@@ -91,6 +93,10 @@ assert.equal(WALLET_DELIVERY_PROFILE, 'wallet-delivery/v2');
 assert.equal(WALLET_PAIRING_PROFILE, 'moe/wallet-pairing/v1');
 assert.equal(MAX_WALLET_PAIRING_BYTES, 16384);
 assert.equal(MAX_WALLET_DELIVERY_BYTES, 300_000);
+assert.equal(typeof ErgoVenue, 'function');
+assert.equal(DEFAULT_ERGO_DEPTH, 10n);
+assert.equal(ergoNodeSupplier('http://127.0.0.1:9053/').name, 'http://127.0.0.1:9053');
+assert.equal(core.ErgoVenue, undefined);
 if (Number(process.versions.node.split('.')[0]) >= 24) {
   const { PilotStore } = await import('@mediumofexchange/reference/pilot-store');
   const { PoolStore, PoolStoreError } = await import('@mediumofexchange/reference/pool/store');

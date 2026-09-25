@@ -37,8 +37,8 @@
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { compareBytes, copyBytes } from "../src/bytes.js";
-import type { ErgoHeaderView } from "./pool-v3-ergo-profile.js";
+import { compareBytes, copyBytes } from "./bytes.js";
+import type { ErgoHeaderView } from "./ergo-profile.js";
 
 /** Mainnet's EIP-37 rule applies to every header at or above this height. */
 export const EIP37_ACTIVATION_HEIGHT = 844_673n;
@@ -324,6 +324,15 @@ export interface ErgoHeaderStore {
   add(bytes: Uint8Array): "added" | "known" | ErgoHeaderRefusal;
   /** The best chain, copied out: linear in its length, so call it after a batch of additions. */
   best(): ErgoHeaderChain;
+  /** The best chain's tip and the anchor's height, in constant time. */
+  tip(): { readonly id: Uint8Array; readonly height: bigint; readonly score: bigint; readonly anchorHeight: bigint };
+  /** The height of the highest header that is both an ancestor of (or equal
+   * to) the accepted header `id` and on the best chain; the anchor's height
+   * where they share nothing above it, undefined for an id the store has not
+   * accepted above the anchor. Linear in the distance to that ancestor. */
+  forkHeight(id: Uint8Array): bigint | undefined;
+  /** The height of an accepted header, in constant time; undefined for one the store has not accepted. */
+  heightOf(id: Uint8Array): bigint | undefined;
 }
 interface Entry { readonly header: ErgoHeader; readonly parent: Entry | undefined; readonly score: bigint; readonly above: boolean }
 
@@ -394,6 +403,25 @@ export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Arr
       }
       headers.reverse();
       return Object.freeze({ tipId: copyBytes(best.header.id), height: best.header.height, score: best.score, headers: Object.freeze(headers) });
+    },
+    tip() {
+      return Object.freeze({ id: copyBytes(best.header.id), height: best.header.height, score: best.score, anchorHeight: root.header.height });
+    },
+    forkHeight(id: Uint8Array): bigint | undefined {
+      if (!isBytes(id) || id.length !== 32) return undefined;
+      let at = byId.get(bytesToHex(id));
+      if (at === undefined || !at.above) return undefined;
+      // Walk the best chain down to the side header's height, then both down together until they meet.
+      let onBest: Entry | undefined = best;
+      while (onBest !== undefined && onBest.header.height > at.header.height) onBest = onBest.parent;
+      while (at !== undefined && onBest !== undefined && at !== onBest) {
+        if (at.header.height >= onBest.header.height) at = at.parent;
+        else onBest = onBest.parent;
+      }
+      return at?.header.height ?? root.header.height;
+    },
+    heightOf(id: Uint8Array): bigint | undefined {
+      return isBytes(id) && id.length === 32 ? byId.get(bytesToHex(id))?.header.height : undefined;
     },
   });
 }

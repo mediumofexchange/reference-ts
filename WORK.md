@@ -9,10 +9,15 @@ here before starting.
 
 ## Status
 
-- Ergo venue profile selected (2026-09-25): spec [venue-ergo.md](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md),
-  pool-v3 §1/§13 ([decision](decisions/2026-09.md#2026-09-25--select-the-ergo-venue-profile-for-pool-v3-record-ranges)).
-  Review changed the models: every header version byte is read (Autolykos
-  v1 included) and every section under either root rule. Model only.
+- Runtime Ergo venue (2026-09-25): `ErgoVenue` (`src/ergo.ts`) reads Ergo only
+  under the selected profile, verifying headers from the anchor context and
+  sections by root from untrusted suppliers (`src/ergo-supplier.ts`); the
+  node-index view is retired and the profile code moved from `model/` to
+  `src/` ([guide](docs/ERGO_VENUE_PROFILE.md#runtime-venue),
+  [decision](decisions/2026-09.md#2026-09-25--read-ergo-in-the-runtime-only-under-the-selected-profile),
+  spec [venue-ergo.md at 01d8db2](https://github.com/mediumofexchange/money-from-first-principles/blob/01d8db2/venue-ergo.md);
+  [selection](decisions/2026-09.md#2026-09-25--select-the-ergo-venue-profile-for-pool-v3-record-ranges)).
+  No publishing, nothing persisted across restarts.
 - v2 proof-relation audit (2026-09-25): ACIR range checks required and named
   in `check:pool`; v2 readers refuse any configuration but the pinned one
   ([decision](decisions/2026-09.md#2026-09-25--serve-and-read-v2-only-under-the-pinned-helper-and-the-verifiers-circuits)).
@@ -29,62 +34,58 @@ here before starting.
 
 ## Evidence
 
-- Re-recorded 09-25 on the selected models: [header verification](docs/ergo-header-verification.json)
+- [Runtime venue on the mainnet](docs/ergo-runtime-venue-verification.json) (09-25):
+  301 real headers and 291 sections from the own node, same block and answers
+  from a public node alone, hostile suppliers passed over.
+- Re-recorded 09-25 on the moved sources: [header verification](docs/ergo-header-verification.json)
   (offline from `scratch/ergo-headers/`), [range profile](docs/ergo-range-profile-verification.json),
   [P4](docs/ergo-chain-cost-verification.json), [hostile framer](docs/ergo-framer-hostile-equivalence-verification.json),
-  [P2 read-back](docs/ergo-publication-verification.json), [local v3 replay](docs/pool-v3-local-replay-verification.json).
-- [v2 circuits](docs/pool-v2-verification.json) (09-25): 180 checks, 89 named refusals, 7 hostile proofs refused beside valid controls.
+  [P2 read-back](docs/ergo-publication-verification.json), [local v3 replay](docs/pool-v3-local-replay-verification.json),
+  [v2 circuits](docs/pool-v2-verification.json).
 
 ## Next
 
-1. Runtime adoption of the selected Ergo profile in place of the v2
-   materialized view (`src/ergo.ts`): header store and range verifier behind
-   the runtime venue interface, a header supplier policy (budget per supplier
-   without refusing the heaviest visible chain), default depth 10, the
-   grammar checked against the deployment's own publishing transactions.
-2. Evidence binding: `check:evidence` checks only file-named keys (P2's
-   `ergo_lib_wasm_bg.wasm` hash is unbound); `ergo-own-node-verification.json`
-   drifts (re-run `header-check.mjs` on the own node); replay-cost drifts
-   (`bytes.ts`, `scope.ts`, `notes.ts`, `poseidon2.ts`): re-record. Generators
-   hash sources when writing, not building: hash at start (`local-check.mjs`).
-3. Deferred review items: `inspectNotes`, replay's `statements.slice` and
-   `activate`'s snapshots and history still read caller data twice (copies
-   owned); a verifier throw in `submit` reloads the whole journal; retire the
-   v1 store-codec path; shared v3 fixture/byte helpers; v3 harness verifiers
-   reuse one instance.
-4. Side paths: a supplier policy bounding what a header supplier may add
-   (future-timestamp side branches halve their difficulty each epoch after
-   ~256 blocks of work; the store keeps them); a pool-v3 record that moves
-   a backing's venue (C2.3.1), so a hard fork need not force successors;
-   exercise a mid-epoch odd header version and an ids-rule section on a
-   devnet node (read from source only); testnet header rules; a
-   faster Blake2b (the work check is ~21 ms a header in pure JavaScript);
-   pin a real fixture with a multi-entry context extension; probe
-   node/framer agreement under block-version 1–3 contexts.
-5. Audit follow-ups: v3, fees and delivery circuit checks accept any refusal
+1. Ergo publishing adapter, so one supported witness accepts the runtime's
+   publications: the PoolStore outbox (and replacement/revocation records)
+   written as transactions in the framer's grammar at the profile's
+   locations and read back through `ErgoVenue`. Cheapest decisive probe
+   first: sign a P2PK input with Ergo's proveDlog Schnorr on
+   `@noble/curves` (no sigma-rust in the runtime) and have the own testnet
+   node accept it. Then fees/change, minimum box values, resubmission.
+2. `ErgoVenue` persistence: headers and retained objects across restarts,
+   spilling past `retainedBytes`, pruning side branches below the clock.
+3. Evidence binding: `check:evidence` checks only file-named keys (P2's
+   `ergo_lib_wasm_bg.wasm` hash is unbound) and skips bound files that no
+   longer exist; `ergo-own-node-verification.json` drifts (re-run
+   `header-check.mjs` on the own node); replay-cost drifts: re-record.
+   Generators hash sources when writing, not building: hash at start.
+4. Deferred review items: `inspectNotes`, replay's `statements.slice`, `activate`
+   read caller data twice; a verifier throw in `submit` reloads the journal;
+   retire the v1 store-codec path; shared v3 fixture/byte helpers.
+5. Side paths: the clock follows the slowest supplier its header budget
+   stops; a pool-v3 record moving a backing’s venue (C2.3.1); a devnet check
+   of mid-epoch header versions and ids-rule sections; testnet header rules;
+   a faster Blake2b (~21 ms a header); a multi-entry context extension fixture.
+6. Audit follow-ups: v3, fees and delivery circuit checks accept any refusal
    (`v3/check.mjs:121`, `fees/check.mjs:158`, `delivery/binding/check.mjs:89`):
    use `constraints.mjs`. `ByteReader` trusts a subclass's `length`
    (`src/bytes.ts`); readers re-read `args.configuration`/`verifier` after
    the entry check. v2 `bytecode(k)` hashes gzip output; v3: canonical ACIR.
-6. Later: note tree Poseidon2 on Barretenberg wasm (~6x); a warmed spare
-   verifier if ~1.1 s per malformed proof matters.
+7. Later: note tree Poseidon2 on Barretenberg wasm (~6x); a warmed verifier.
 
 ## Retained boundaries and local state
 
 - Configured v2 has local real-proof payments, private delivery and public audit;
-  venue/digest authentication are modeled. Offline handoff freezes the source
-  and binds one destination; old exports cannot resume after activity.
+  digest authentication is modeled; offline handoff freezes the source.
 - [Device contract](docs/POOL_WALLET_DEVICE.md) and
   [observations](docs/pool-wallet-device-verification.json): preflight fails;
   qualified hardware, theft/power-loss/backup drills and continuous recovery
   require separate provisioning authority.
-- The contained-sync node of 2026-09-12 is stopped. Retain the detached 20 GiB image
+- Retain the stopped contained-sync node’s detached 20 GiB image
   `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd` and verified
   parameter/tool caches. Do not delete the image or allocate another.
-  [Sync handoff](https://github.com/mediumofexchange/reference-ts/blob/c85af7b/docs/ergo-node-sync-resume-verification.json): headers 97,923;
-  full heights null/unresolved. Keep the cached node responses of P4
-  (`scratch/ergo-chain/`) and of the header verification
-  (`scratch/ergo-headers/`); their digests are in the reports.
+  Keep the cached node responses of P4 (`scratch/ergo-chain/`) and of the
+  header verification (`scratch/ergo-headers/`); their digests are in the reports.
 - Preserve the legacy Temp/moeclean worktree (another checkout). Configuration
   approval stays disabled; device qualification and external publication too.
 
@@ -92,7 +93,6 @@ here before starting.
 
 None.
 
-Roughly **54% done / 46% remaining**, plausible range **44–64%**, reassessed
-2026-09-25: the Ergo venue profile is specified and its models conform;
-runtime integration of that venue, qualified custody and continuous wallet
-operation dominate.
+Roughly **56% done / 44% remaining**, plausible range **46–66%**, reassessed
+2026-09-25: the runtime reads an external witness it verifies itself;
+publishing to it, qualified custody and continuous wallet operation dominate.

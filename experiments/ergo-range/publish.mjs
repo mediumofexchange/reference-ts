@@ -26,7 +26,6 @@ import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 import * as sigma from "ergo-lib-wasm-nodejs";
-import { parseNodeJson, supplyBlock, supplyTransaction } from "./supply.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../..");
 const args = process.argv.slice(2);
@@ -58,7 +57,7 @@ const sha256 = bytes => createHash("sha256").update(bytes).digest();
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const fileHash = file => hex(sha256(readFileSync(join(root, file))));
 // The experiment's own sources are bound here; every repository source the models' compilation reads is added below.
-const files = Object.fromEntries(["experiments/ergo-range/publish.mjs", "experiments/ergo-range/supply.mjs", "experiments/ergo-range/package.json",
+const files = Object.fromEntries(["experiments/ergo-range/publish.mjs", "experiments/ergo-range/package.json",
   "experiments/ergo-range/package-lock.json", "tsconfig.json"].map(file => [file, fileHash(file)]));
 const require = createRequire(join(here, "package.json"));
 const library = { version: require("ergo-lib-wasm-nodejs/package.json").version, wasmSha256: hex(sha256(readFileSync(require.resolve("ergo-lib-wasm-nodejs/ergo_lib_wasm_bg.wasm")))) };
@@ -113,7 +112,7 @@ try {
   const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
   assert(!config.error, "TypeScript configuration unreadable");
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const program = ts.createProgram(["ergo-profile", "range", "records"].map(name => join(root, `model/pool-v3-${name}.ts`)), {
+  const program = ts.createProgram(["src/ergo-profile.ts", "src/ergo-supplier.ts", "src/record-range.ts", "model/pool-v3-records.ts"].map(file => join(root, file)), {
     ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false,
   });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0, "models compile");
@@ -122,8 +121,9 @@ try {
     const path = resolve(source.fileName);
     if (path.startsWith(root + sep) && !path.includes(`${sep}node_modules${sep}`)) files[path.slice(root.length + 1).replace(/\\/g, "/")] = fileHash(path.slice(root.length + 1));
   }
-  const profile = await import(new URL("model/pool-v3-ergo-profile.js", url));
-  const range = await import(new URL("model/pool-v3-range.js", url));
+  const profile = await import(new URL("src/ergo-profile.js", url));
+  const range = await import(new URL("src/record-range.js", url));
+  const { parseNodeJson, supplyBlock, supplyTransaction } = await import(new URL("src/ergo-supplier.js", url));
   const records = await import(new URL("model/pool-v3-records.js", url));
   const { limbsOf } = await import(new URL("src/pool/field.js", url));
 
@@ -288,7 +288,7 @@ try {
   const summarize = ({ signed, json, ...rest }) => rest;
 
   // The reader: headers as views, each transaction's unsigned bytes and witness id copied from the node's JSON text
-  // (supply.mjs, a supplier's work, no decoder), the model verifier from the anchor, which hashes and
+  // (src/ergo-supplier.ts, a supplier's work, no decoder), the model verifier from the anchor, which hashes and
   // frames them, and one kind-4 request under the subject.
   const headerView = header => ({ id: Buffer.from(header.id, "hex"), parentId: Buffer.from(header.parentId, "hex"), height: BigInt(header.height),
     version: BigInt(header.version), transactionsRoot: Buffer.from(header.transactionsRoot, "hex") });
@@ -369,7 +369,7 @@ try {
     "The publications' frames and lengths are exact under pool-v3 §6; the proof, authorization and signature bytes are synthetic, since the venue applies no content rule and no real settle proof is retained outside the proving harness. Nothing here is a valid statement, a demand or a settlement.",
     "Headers come from the one node the transactions were submitted to; linkage, contiguity and the anchor's child are checked by the model, proof of work and chain selection are not.",
     "The four locations are pay-to-public-key trees of throwaway keys derived from the funded testnet key; no deployment, backing or specification names them.",
-    "The reader takes each transaction's unsigned bytes and witness id, copied from the node's JSON text by supply.mjs, and a block counts only where they reproduce the header's transaction root. Neither side runs a decoder: the supplier parses no constant, the reader's framer reads the cases' transactions, and a transaction outside its grammar would carry no record. The pinned library builds and signs the cases only.",
+    "The reader takes each transaction's unsigned bytes and witness id, copied from the node's JSON text by src/ergo-supplier.ts, and a block counts only where they reproduce the header's transaction root. Neither side runs a decoder: the supplier parses no constant, the reader's framer reads the cases' transactions, and a transaction outside its grammar would carry no record. The pinned library builds and signs the cases only.",
     "The cases are chained on one change box and submitted together, so their inclusion latencies are correlated observations, not a distribution; only the sweep is submitted at a separate time.",
     "The signed transactions' witness ids, and so a block root over them, vary between runs (Schnorr proofs are randomized); transaction ids, box ids, sizes and every answer are deterministic.",
     "No runtime path, profile selection, specification change or dependency change follows from this measurement.",

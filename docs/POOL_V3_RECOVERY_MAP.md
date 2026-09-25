@@ -488,12 +488,15 @@ segment `S1` over one backing `b`, venue **V** (Ergo, depth `d`, lag
 | Count at `t` | C2b.5.2 | requests under `b` over `[t − W, t − d]`; the canonical state at `t` | each request's proof against the state's forest | venue, replicas |
 | Classification of one checkpoint | C2.10.11 | its own record prefix | header, scope, terms, trail with exact evidence, imports, passed checkpoints | operator, replicas |
 
-**Ergo today** (`src/ergo.ts`): a materialized view from a node with
+**Ergo when this map was written**: a materialized view from a node with
 `extraIndex`, every box at the operator's commitment address and the
 backing's publication address, spent or not, read at indexed height less
-`depth`. Completeness of a range and each box's `inclusionHeight` are the
-node's word, and order within one height is the order the node returns.
-Candidates to authenticate what C2.10.13 requires, none selected:
+`depth`. Completeness of a range and each box's `inclusionHeight` were the
+node's word, and order within one height the order the node returned. The
+first candidate below was later selected as the
+[Ergo venue profile](ERGO_VENUE_PROFILE.md) and now is the runtime's only
+Ergo read path. Candidates to authenticate what C2.10.13 requires, as then
+listed:
 
 - verify block headers and download the transactions of every block in the
   range, checking them against each header's transaction root, so absence

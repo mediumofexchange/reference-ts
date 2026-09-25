@@ -3,7 +3,7 @@
 // nothing is submitted, no runtime path reads this, and no answer selects the
 // profile. The public nodes are a trust input: header agreement between them
 // is recorded, proof of work and chain selection are not checked. Each block's
-// transactions are supplied by copying the node's JSON (supply.mjs); no
+// transactions are supplied by copying the node's JSON (src/ergo-supplier.ts); no
 // decoder runs.
 // Usage, from the repository root on Node 24 after `npm ci` and the
 // experiment's pinned install:
@@ -18,7 +18,6 @@ import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
-import { supplyBlock } from "./supply.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../..");
 const args = process.argv.slice(2);
@@ -35,7 +34,7 @@ const sha256 = bytes => createHash("sha256").update(bytes).digest();
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const fileHash = file => hex(sha256(readFileSync(join(root, file))));
 // The sources are hashed now, before any work, so the report names the files that produced it.
-const files = Object.fromEntries(["experiments/ergo-range/chain-cost.mjs", "experiments/ergo-range/supply.mjs", "experiments/ergo-range/package.json",
+const files = Object.fromEntries(["experiments/ergo-range/chain-cost.mjs", "experiments/ergo-range/package.json",
   "experiments/ergo-range/package-lock.json", "experiments/ergo-range/fixtures/manifest.json", "tsconfig.json"].map(file => [file, fileHash(file)]));
 const REQUEST_SAMPLES = 5;
 // A cache name must not carry ":", which NTFS reads as an alternate data stream.
@@ -89,7 +88,7 @@ try {
   const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
   assert(!config.error, "TypeScript configuration unreadable");
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const program = ts.createProgram([join(root, "model/pool-v3-ergo-profile.ts")], {
+  const program = ts.createProgram([join(root, "src/ergo-profile.ts"), join(root, "src/ergo-supplier.ts")], {
     ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false,
   });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0, "model compiles");
@@ -99,7 +98,8 @@ try {
     const path = resolve(source.fileName);
     if (path.startsWith(root + sep) && !path.includes(`${sep}node_modules${sep}`)) files[path.slice(root.length + 1).replace(/\\/g, "/")] = fileHash(path.slice(root.length + 1));
   }
-  const profile = await import(new URL("model/pool-v3-ergo-profile.js", url));
+  const profile = await import(new URL("src/ergo-profile.js", url));
+  const { supplyBlock } = await import(new URL("src/ergo-supplier.js", url));
 
   // Live source state, for the record only; an offline run records none.
   const sourceInfo = [];
@@ -152,7 +152,7 @@ try {
   } else {
     // Sections: every block of the window from its cached response, one transaction section per index. The reader's
     // evidence is each transaction's unsigned bytes and witness id as a supplier copies them from the node's JSON
-    // (supply.mjs); a block counts only where every transaction is supplied and the header's root holds over them.
+    // (src/ergo-supplier.ts); a block counts only where every transaction is supplied and the header's root holds over them.
     const rows = [], suppliedBlocks = [];
     const framing = { transactions: 0, framed: 0, differing: 0, differingSample: [], unsupplied: 0, unsuppliedSample: [], suppliedBytes: 0 };
     let supplyMs = 0, rootCheckMs = 0, frameMs = 0;
@@ -289,7 +289,7 @@ try {
       files,
       limitations: [
         "Public nodes are the header source: their agreement with each other on id, parent, height, version and transaction root, linkage and the anchor's child are checked; proof of work, chain selection and finality are not, and a colluding or shared upstream is not excluded.",
-        "Each transaction's unsigned bytes are copied from the nodes' JSON text (supply.mjs); a block counts only where every copy hashes to the id the node states and the ids and witness ids reproduce its header's transaction root. Section bytes are the same copy with each input's proof, so for block versions above 1 the root binds each transaction's unsigned bytes and the concatenation of its proofs, not the proofs' split among inputs, and a version-1 root binds no proof bytes. Attribution reads outputs only, so neither gap reaches an answer, but the byte counts are authenticated only that far.",
+        "Each transaction's unsigned bytes are copied from the nodes' JSON text (src/ergo-supplier.ts); a block counts only where every copy hashes to the id the node states and the ids and witness ids reproduce its header's transaction root. Section bytes are the same copy with each input's proof, so for block versions above 1 the root binds each transaction's unsigned bytes and the concatenation of its proofs, not the proofs' split among inputs, and a version-1 root binds no proof bytes. Attribution reads outputs only, so neither gap reaches an answer, but the byte counts are authenticated only that far.",
         "Neither the reader nor the supplier runs a decoder: the reader frames the unsigned bytes itself, and a transaction outside its framer's grammar carries no record while its block keeps its section; the supplier copies fields and parses no constant. A transaction whose copy did not hash to its id would leave its block unsupplied in this run, a limit of this supplier, not of the reader.",
         "The throwaway locations hold no real output and the subject is fixed, so every answer is empty by exhaustion: the cost measured is the scan at construction, not a real record set.",
         "Fetch time is the public nodes' response time under pacing from one host, only for responses fetched live in this run; an offline run records no live node state; only the exact window's header slices replay offline.",

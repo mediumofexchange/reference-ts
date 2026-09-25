@@ -20,8 +20,8 @@ try {
   const codec = { ...await loadEvidenceCodecs(process.argv[2]), ...await loadConfigurationCodecs(process.argv[2]),
     ...await import(new URL("model/pool-v3-fault-evidence.js", process.argv[2])),
     ...await import(new URL("model/pool-v3-package.js", process.argv[2])),
-    ...await import(new URL("model/pool-v3-range.js", process.argv[2])),
-    ...(withErgo ? await import(new URL("model/pool-v3-ergo-profile.js", process.argv[2])) : {}) };
+    ...await import(new URL("src/record-range.js", process.argv[2])),
+    ...(withErgo ? await import(new URL("src/ergo-profile.js", process.argv[2])) : {}) };
   const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
   const configuration = candidateConfiguration(manifest, codec);
   const keys = readCandidateKeys(fileURLToPath(process.argv[2]), manifest);

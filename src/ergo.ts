@@ -1,503 +1,441 @@
-// Ergo as a witness venue (§C2).
+// Ergo as a witness venue (§C2), read under the selected Ergo venue profile
+// (venue-ergo.md).
 //
 // The chain **witnesses, and adjudicates nothing**. No contract here verifies a
-// signature; a commitment is a record in box registers, and everything that
-// judges it — equivocation, the silence grade, the redemption walk — is done by
-// whoever reads. That is why this needs no ErgoScript and no change of curve.
+// signature; a record is a box's registers at a location the venue identity
+// names, and everything that judges it — held commitments, succession,
+// revocation, the silence grade — is done by whoever reads.
 //
-// **Reads are a materialised view, and that is structural rather than a
-// workaround.** `Venue` is synchronous and every caller through recovery, fault
-// and the sequencer is synchronous with it; making it async to accommodate HTTP
-// would ripple through the codebase for nothing. So this syncs asynchronously
-// and answers synchronously: fetch the record, then reason over it offline.
-// §C0b says what that is — "Published means retrievable by a stranger...
-// Content-addressed storage gives integrity, not availability" — a holder
-// obtains the trail and the checking never touches the network again.
+// **The reader verifies the chain itself; no supplier is trusted.** A node,
+// the reader's own included, is a supplier of header bytes and block sections.
+// The header store checks every header from the anchor's context (linkage,
+// height, timestamp, EIP-37 difficulty, Autolykos work) and names the heaviest
+// chain; a section counts only where it reproduces the transaction root of a
+// header on that chain. Every output of every transaction of every block from
+// the anchor's child to the witnessed index is read, so a record's absence is
+// proven by exhaustion, never reported by a source (pool-v3 §13.2). A supplier
+// can withhold, which leaves reads unresolved, but cannot make the reader
+// accept a header without its work or a section its header did not commit to.
 //
-// The layout, and the one line of it that is a security property:
+// **Reads are a materialised view.** `Venue` is synchronous, so this syncs
+// asynchronously and answers synchronously from the last complete snapshot.
+// The view keeps only the objects the profile attributes at the four
+// locations, by index, and the headers it accepted; a later sync reads the new
+// blocks only.
 //
-//   commitment box   R4 operator key (32) || R5 root (32)
-//                    || R6 sequence (Long) || R7 signature (64)
-//   publication box  R4 backing name (32, a scan key)
-//                    || R5 the record bytes (authoritative)
+// **The witnessed index is the block that included the transaction**, index
+// `i` being the block `i + 1` heights above the anchor, never a box's creation
+// height, which its builder writes and may set lower: backdating a commitment
+// would put it before a redemption leg it actually followed. **Nothing inside
+// the finality depth is read at all**, and the depth is part of the venue's
+// identity with the anchor and the locations, so naming the venue is agreeing
+// the clock (C2.3.2). A block whose section no supplier supplies stops the
+// clock at the index before it: a stale view, which every earlier snapshot
+// also was, rather than an empty one, which would read as silence. A
+// reorganization past the depth is the venue's failure (§13.2): the view then
+// refuses every read rather than change its mind about the past.
 //
-// **The witnessed index is the box's `inclusionHeight`, never its
-// `creationHeight`.** The latter is written by whoever builds the transaction:
-// consensus stops it exceeding the including block's height, but it may be set
-// LOWER. An operator backdating a commitment would put it before a redemption
-// leg it actually followed, which is precisely the veto slice 8 closed — a
-// publication is judged against the record as it stood strictly before its own
-// index, and the tie must not go to the party watching the venue.
-//
-// **Every read is taken at `height − depth`**, because `inclusionHeight` is
-// reorg-sensitive and a venue answering from the tip would change its mind about
-// the past. The depth is not a client setting: §C2 names a venue "together with
-// its finality rule... That is a floor under the interval, or two sequencers
-// answer §C3's release predicate differently." So the venue's own id commits to
-// it (see `ergoVenueId`), and naming the venue is agreeing the depth. The same
-// depth fixes the venue's lag (`lag()`): a transaction submitted now is included
-// at the next height at the earliest, so an act signed at clock c is witnessed
-// at c + depth + 1 or later — the number §C2's lead floor reads, and the
-// parties' own rule for a handover.
-//
-// Reading requires a node with `extraIndex` enabled, since the /blockchain
-// routes exist only then. That is a real floor under "retrievable by a
-// stranger", and it is said here rather than discovered later.
-//
-// NOT here, deliberately: publishing. Building and submitting a transaction
-// needs an Ergo library, and this repository's dependencies are @noble/hashes
-// and @noble/curves. A verifier never publishes — only an operator does — so the
-// read surface is the whole of what a holder needs, and publication is injected
-// by whoever has a wallet. See DECISIONS.md.
-
-import { sha256 } from "@noble/hashes/sha2.js";
+// NOT here, deliberately: publishing. Building and signing a transaction needs
+// an Ergo library, and this package's dependencies are @noble/hashes and
+// @noble/curves. A verifier never publishes; the operator's wallet does.
+import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
+import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
+import type { Commitment } from "./commitment.js";
+import { ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, type ErgoHeaderStore } from "./ergo-headers.js";
 import {
-  decodeCommitment,
-  encodeCommitment,
-  verifyCommitment,
-  type Commitment,
-} from "./commitment.js";
-import { utf8Encoder } from "./contexts.js";
-import { copyOp, decodePublishedOp, type PublishedOp } from "./oplog.js";
-import { copyReplacement, decodeReplacement, forgetAdmitted, type Replacement, type WitnessedReplacement } from "./replacement.js";
+  attributeSection, ergoProfileIdentity, ownErgoProfile, rangeEntries, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
+} from "./ergo-profile.js";
+import type { ErgoSupplier } from "./ergo-supplier.js";
 import {
-  copyRevocation,
-  decodeRevocation,
-  isSignedRevocation,
-  type Revocation,
-  type WitnessedRevocation,
-} from "./revocation.js";
-import { successionOf } from "./replacement.js";
-import { UNNAMED_VENUE, VenueError, type Venue, type WitnessedOp } from "./venue.js";
-import { makeBacking, type Backing } from "./backing.js";
+  COMMITMENT_RANGE, copyRequest, encodeRangeAnswer, heldCommitments, RangeLimitError, REPLACEMENT_RANGE, REVOCATION_RANGE,
+  type HeldCommitment, type RangeAnswer, type RangeLimits, type RangeRequest, type RecordKind,
+} from "./record-range.js";
+import { copyReplacement, decodeReplacement, forgetAdmitted, type WitnessedReplacement } from "./replacement.js";
+import { copyRevocation, decodeRevocation, isSignedRevocation, type WitnessedRevocation } from "./revocation.js";
+import { VenueError, type Venue, type WitnessedCommit, type WitnessedOp } from "./venue.js";
+
+/** The reference runtime's finality depth: over one measured mainnet day,
+ * 99.8% of included transactions landed inside C3.3's window at depth 10,
+ * against 94% at 6 (venue-ergo.md §2). A deployment may choose another. */
+export const DEFAULT_ERGO_DEPTH = 10n;
+
+/** A deployment's profile with the reference default depth unless it names one. */
+export function ergoProfile(anchor: Uint8Array, scripts: ErgoProfile["scripts"], depth: bigint = DEFAULT_ERGO_DEPTH): ErgoProfile {
+  return ownErgoProfile({ anchor, depth, scripts });
+}
 
 /**
- * One box, as the node's indexed API returns it, reduced to what a venue reads.
- *
- * `inclusionHeight` is the field this whole module turns on: "height of the block
- * in which the creating transaction was included", which is the chain's word
- * rather than the publisher's. The box's own `creationHeight` is deliberately not
- * modelled, so it cannot be reached for by mistake.
+ * The reader's local budgets (venue-ergo.md §3, pool-v3 §13.1): they bound
+ * work and memory, never an answer. A budget that runs out leaves the view
+ * where withholding would, and the next sync continues from there.
  */
-export interface ErgoBoxView {
-  readonly inclusionHeight: bigint;
-  /** Registers R4..R9, by name, as raw bytes. Absent registers are omitted. */
-  readonly registers: Readonly<Record<string, Uint8Array>>;
+export interface ErgoReaderPolicy {
+  /** New headers whose work one supplier may have checked in one sync.
+   * Accepted headers are kept, so a heavier chain longer than this arrives
+   * over several syncs, and one supplier's side branches cannot spend
+   * another's budget. */
+  readonly headersPerSupplier: number;
+  /** Headers asked of a supplier per request; a longer answer is cut to it. */
+  readonly headersPerRequest: number;
+  /** New headers one supplier may add, over the view's life, that are off
+   * the best chain at the end of the sync that added them. Past it the
+   * supplier's headers are not read and it no longer holds the clock back:
+   * it is withholding. It is kept per supplier object, so a caller reuses
+   * its supplier objects across syncs. This bounds the
+   * work and memory a cheap side branch can cost (venue-ergo.md §3: without
+   * the node's clock rule, future timestamps lower a side branch's
+   * difficulty). */
+  readonly sideHeadersPerSupplier: number;
+  /** Section bytes received, matching or not, after which one sync reads no
+   * further section; the next sync continues. */
+  readonly sectionBytesPerSync: number;
+  /** Bytes the retained objects may take (each record, its subject and a
+   * fixed overhead); past it the clock stops until the budget is raised. */
+  readonly retainedBytes: number;
+  /** A supplier call not settled in this many milliseconds did not supply. */
+  readonly supplierTimeoutMs: number;
+}
+export const DEFAULT_ERGO_READER_POLICY: ErgoReaderPolicy = Object.freeze({
+  headersPerSupplier: 2_000,
+  headersPerRequest: 500,
+  sideHeadersPerSupplier: 20_000,
+  sectionBytesPerSync: 256 * 1024 * 1024,
+  retainedBytes: 256 * 1024 * 1024,
+  supplierTimeoutMs: 60_000,
+});
+/** What a retained object costs beside its record and subject. */
+const OBJECT_OVERHEAD = 64;
+
+/** What one sync did, for the operator's logs; the view's reads are the answers. */
+export interface ErgoSyncReport {
+  /** The view's clock after the sync; undefined while nothing is witnessed. */
+  readonly witnessedIndex: bigint | undefined;
+  /** The id of the block the clock stands on. */
+  readonly witnessedHeaderId: Uint8Array | undefined;
+  /** The index the best chain makes final under the depth, sections aside. */
+  readonly chainWitnessedIndex: bigint | undefined;
+  readonly tipHeight: bigint;
+  readonly suppliers: readonly ErgoSupplierReport[];
+  readonly sectionsRead: number;
+  /** The first index past the clock not read in this sync, and why. */
+  readonly unresolvedIndex: bigint | undefined;
+  readonly unresolvedReason?: "no section" | "section budget" | "retained budget";
+}
+export interface ErgoSupplierReport {
+  readonly name: string;
+  readonly headersAdded: number;
+  /** Why this supplier stopped early: a refused header, a failure or a budget. */
+  readonly stopped?: string;
+}
+
+/** One complete view: the clock, the attributed objects by index through it,
+ * and the header at the clock, which later chains must keep. */
+interface Snapshot {
+  readonly witnessed: bigint;
+  readonly sections: readonly (readonly AttributedObject[])[];
+  readonly witnessedHeaderId: Uint8Array;
+}
+/** A supplier's header pass: its report, the ids of the headers it added,
+ * and, where the header budget stopped it before its tip, its last header. */
+interface HeaderPass {
+  readonly report: ErgoSupplierReport;
+  readonly added: readonly Uint8Array[];
+  readonly last?: Uint8Array;
 }
 
 /**
- * The node, reduced to the reads a venue needs. Four calls, all of them
- * `/blockchain/*` routes that exist only with `extraIndex` enabled.
- *
- * An interface rather than an HTTP client, because the client is the one part
- * that cannot be checked without a node, and everything above it can.
+ * The anchor's context for a new view: the anchor and the 1,024 headers below
+ * it, from one supplier. The header store authenticates them by linkage to
+ * the anchor id alone, so any supplier will do.
  */
-export interface ErgoNode {
-  /** `/blockchain/indexedHeight` — how far the index has reached. */
-  indexedHeight(): Promise<bigint>;
-  /**
-   * `/blockchain/box/byAddress` — every box at an address, **spent or not**, in
-   * the order the chain saw them. The spent-inclusive route is the one a venue
-   * needs: a commitment's history has to survive its box being spent.
-   */
-  boxesByAddress(address: string): Promise<ErgoBoxView[]>;
+export async function ergoAnchorContext(supplier: ErgoSupplier, anchorId: Uint8Array, anchorHeight: bigint): Promise<Uint8Array[]> {
+  const from = anchorHeight - BigInt(ANCHOR_CONTEXT);
+  const context = [...await supplier.headers(from, anchorHeight)];
+  const last = context.length === ANCHOR_CONTEXT + 1 ? parseErgoHeader(context[ANCHOR_CONTEXT]!) : undefined;
+  if (last === undefined || compareBytes(last.id, anchorId) !== 0) throw new VenueError("the supplier did not supply the anchor's context");
+  return context;
 }
 
 /**
- * Where a backing's records live. Address derivation and spend policy are
- * injected rather than fixed here: they turn on Ergo economics — storage rent,
- * minimum box value, whether a spend guard needs a secp256k1 key E does not name
- * — which wants a node and experiments rather than a decision from reading. None
- * of the logic below depends on the answer.
- */
-export interface ErgoAddressing {
-  /** Where this operator publishes its commitments. */
-  commitments(operator: Uint8Array): string;
-  /** Where anyone publishes operations and replacements for this backing. */
-  publications(backingName: Uint8Array): string;
-  /**
-   * Where K publishes its own revocation. Keyed by the obligor key rather than
-   * by a backing, because §C2b's revocation is about a key and one K obligates
-   * many backings.
-   */
-  revocations(obligor: Uint8Array): string;
-}
-
-/**
- * A venue's identity, committing to its finality rule.
+ * The Ergo chain, read as a venue under the selected profile.
  *
- * §C2 names a venue together with the depth under which an index counts as
- * witnessed there, and warns why: a floor under the interval, "or two sequencers
- * answer §C3's release predicate differently". If each backing declared its own
- * depth for one chain, two backings would disagree about when a block counts as
- * witnessed — exactly that divergence. Deriving the id from the depth instead
- * makes naming the venue the same act as agreeing the depth.
- *
- * Still 32 bytes in E's witnessing clause; only what they denote has changed.
- */
-export function ergoVenueId(chain: string, depth: bigint, publicationScript: string): Uint8Array {
-  const w = new ByteWriter();
-  // Length-prefixed, not written raw. ByteWriter.context is the one legitimate
-  // raw write and its licence is narrow: contexts.ts asserts its tags are
-  // prefix-free, and this one is not among them. Borrowing the escape hatch
-  // outside the condition that justifies it is how a checked invariant turns
-  // into a convention.
-  w.lengthPrefixed(utf8Encoder.encode("moe/venue/ergo/v1"));
-  w.lengthPrefixed(utf8Encoder.encode(chain));
-  w.u64(depth);
-  w.lengthPrefixed(utf8Encoder.encode(publicationScript));
-  return sha256(w.finish());
-}
-
-/**
- * Which window of a commitment's canonical record goes in which register.
- *
- * **The one definition of the layout**, read by both directions: the registers
- * are windows onto the record rather than a second encoding of it, so there is
- * nothing here that can drift out of step with `encodeCommitment`. Written as a
- * table for the same reason ByteWriter asserts widths at the point that writes —
- * the first version of this file spelled the offsets out twice and the two
- * spellings disagreed about R4 and R5.
- */
-const COMMITMENT_LAYOUT: readonly (readonly [string, number, number])[] = [
-  ["R6", 0, 8], // sequence
-  ["R5", 8, 40], // root
-  ["R4", 40, 72], // operator key
-  ["R7", 72, 136], // signature
-];
-
-/** A record the venue read, and the index the chain witnessed it at. */
-interface Witnessed<T> {
-  readonly value: T;
-  readonly at: bigint;
-}
-
-/**
- * The commitments a venue keeps for one key: **strictly rising in sequence as
- * they rise in index**, which is what the Venue contract requires of every
- * implementation and what nine readers already assumed (slice 39s fix panel).
- *
- * A chain orders nothing. Any decodable box at the address whose signature
- * verifies is a record here, so an old commitment delayed in the mempool, or a
- * replay of one anybody can copy off the chain, lands now and would otherwise
- * BE the record last: it moves the tip backwards, and the tip is what the era
- * resolves against, what the seat pins against, and what the next sequence is
- * taken from. One keyless replay could turn a lapsed pair into a fault proof
- * against an honest operator, and an honest restart into an equivocation
- * against its own key.
- *
- * A box skipped here is a commitment its own signer superseded before the
- * chain took it. It is a position in a record, never evidence: an
- * equivocation is proved from two signatures and needs no venue at all.
- *
- * Sorted by index and then sequence before filtering. Several increasing
- * commitments may share one index, and `witnessedAtSequence` makes each one a
- * readable fact; the ordering therefore has to be independent of the order in
- * which a node returns boxes. A repeated or decreasing sequence is still
- * skipped by the one extending rule below.
- */
-function extending(gathered: Witnessed<Commitment>[]): Witnessed<Commitment>[] {
-  const ordered = [...gathered].sort((a, b) =>
-    a.at < b.at
-      ? -1
-      : a.at > b.at
-        ? 1
-        : a.value.sequence < b.value.sequence
-          ? -1
-          : a.value.sequence > b.value.sequence
-            ? 1
-            : 0,
-  );
-  const kept: Witnessed<Commitment>[] = [];
-  for (const witnessed of ordered) {
-    const top = kept[kept.length - 1];
-    if (top !== undefined && witnessed.value.sequence <= top.value.sequence) continue;
-    kept.push(witnessed);
-  }
-  return kept;
-}
-
-function register(box: ErgoBoxView, name: string): Uint8Array {
-  const bytes = box.registers[name];
-  if (bytes === undefined) throw new EncodingError(`box has no ${name}`);
-  return bytes;
-}
-
-/**
- * The Ergo chain, read as a venue.
- *
- * Empty until `sync` is called, and answering only from what the last sync
- * gathered. A holder syncs once and then checks a grade, a redemption or a
- * receipt without touching the network — which is the shape §C2b assumes when it
- * says the unspentness proof "runs against the published trail, which replicas
- * serve because publication was the point".
+ * Empty until a sync publishes a snapshot, and answering only from the last
+ * complete one; a sync that runs or fails leaves the previous snapshot in
+ * place. The id is derived from the profile, never handed in, so one declared
+ * venue cannot be read on two clocks.
  */
 export class ErgoVenue implements Venue {
+  private readonly profile: ErgoProfile;
   private readonly venueId: Uint8Array;
-  private readonly depth: bigint;
-  private readonly addressing: ErgoAddressing;
-  private height = 0n;
-  /** Whether `sync` has run: until it has, the clock is nothing this view can answer. */
-  private synced = false;
-  /** Held before the height request, so two refreshes cannot interleave views. */
+  private readonly store: ErgoHeaderStore;
+  private readonly policy: ErgoReaderPolicy;
+  /** Attributed objects by index, from index 0, read so far; may run past the clock. */
+  private readonly sections: (readonly AttributedObject[])[] = [];
+  /** The header ids the sections were read for, by index. */
+  private readonly sectionHeaders: Uint8Array[] = [];
+  private retained = 0;
+  /** Headers each supplier added while its chain ended off the best chain. */
+  private readonly sideHeaders = new WeakMap<object, number>();
+  private snapshot: Snapshot | undefined;
   private syncing = false;
-  /** Operator hex -> its commitments, in witnessed order. */
-  private commitments = new Map<string, Witnessed<Commitment>[]>();
-  /** Backing name hex -> operations, in witnessed order. */
-  private ops = new Map<string, Witnessed<PublishedOp>[]>();
-  /** Backing name hex -> replacements, in witnessed order. */
-  private replacements = new Map<string, Witnessed<Replacement>[]>();
-  /** The backings this view was gathered for. Anything else it will not answer. */
-  private covered = new Set<string>();
-  /** The operators it fetched — every one in a covered backing's chain. */
-  private fetched = new Set<string>();
-  /** Obligor key hex -> that key's revocation records. */
-  private revocations = new Map<string, Witnessed<Revocation>[]>();
-  /** The obligor keys it fetched revocations for. */
-  private revoked = new Set<string>();
+  private failure: string | undefined;
+  /** Per-snapshot derivations, by kind and subject. */
+  private held = new Map<string, readonly HeldCommitment[]>();
 
-  /**
-   * The id is derived here from the chain, the depth and the publication script,
-   * never handed in: taken as a separate argument, one declared venue could be
-   * read on two clocks — the exact fork `ergoVenueId` exists to rule out (found
-   * by the 2026-08-22 audit, twice).
-   */
-  constructor(private readonly chain: string, depth: bigint, private readonly publicationScript: string, addressing: ErgoAddressing) {
-    if (depth < 0n) throw new VenueError("a finality depth cannot be negative");
-    this.venueId = ergoVenueId(chain, depth, publicationScript);
-    this.depth = depth;
-    this.addressing = addressing;
+  constructor(profile: ErgoProfile, anchorContext: readonly Uint8Array[], policy: Partial<ErgoReaderPolicy> = {}) {
+    this.profile = ownErgoProfile(profile);
+    this.venueId = ergoProfileIdentity(this.profile);
+    const store = ergoHeaderStore(this.profile.anchor, anchorContext);
+    if (store === undefined) throw new VenueError("the anchor context does not authenticate the profile's anchor");
+    this.store = store;
+    const owned = { ...DEFAULT_ERGO_READER_POLICY, ...policy };
+    if (!Object.values(owned).every(n => Number.isSafeInteger(n) && n > 0)) throw new VenueError("invalid Ergo reader policy");
+    this.policy = Object.freeze(owned);
   }
 
   get id(): Uint8Array {
     return copyBytes(this.venueId);
   }
 
-  /**
-   * The depth plus one: the clock reads `depth` behind the indexed height, and
-   * a transaction submitted now is included at the next height at the
-   * earliest, so an act signed at clock `c` is witnessed at `c + depth + 1` or
-   * later. A constant of the id, not of the view, so it answers unsynced.
-   */
+  /** The depth plus one (C2.3.5): a constant of the identity, answered unsynced. */
   lag(): bigint {
-    return this.depth + 1n;
+    return this.profile.depth + 1n;
   }
 
   /**
-   * Take the chain's current word on every target this venue answers for.
+   * Take the chain's current word from the suppliers, in the caller's order.
    *
-   * The height is the indexed height less the declared depth, and **nothing
-   * deeper than that is read at all**: a box whose inclusion height is inside the
-   * unfinalised zone is not yet witnessed, so admitting it would let the venue
-   * change its mind about the past when the chain reorganises.
+   * Headers first: each supplier is asked from the depth below the lower of
+   * the best tip and its own (so a fork inside the unfinal zone, or a heavier
+   * shorter chain, is seen), stepping back while its chain does not connect,
+   * and adds at most its budget of new headers. A supplier that fails, times
+   * out or serves a header the store refuses stops for this sync; the headers
+   * it supplied before that stay. Then sections, index by index from the
+   * first not yet read up to the index the clock may reach: any supplier's
+   * section that reproduces the header's root is read, and a supplier that
+   * misses one is not asked again in this sync. The new snapshot is published
+   * only when complete, with no await in between; reads meanwhile answer from
+   * the previous one.
    *
-   * **The whole view is replaced, and it takes every target at once.** A venue
-   * has one height, because `witnessedIndex` answers without being asked about a
-   * backing — so it must have one coherent set of records to go with it.
-   * Refreshing part of the view while the height moved for all of it grades a
-   * punctual operator silent: its records stop where the last partial sync left
-   * them while the clock runs on, which opens snapshot redemption against
-   * somebody who committed seven blocks ago. A grade is meant to be a fact a
-   * stranger checks, not an artefact of the order somebody synced in.
-   *
-   * A box that does not decode is skipped rather than fatal. Anyone may create a
-   * box at these addresses, so noise there is ordinary — the same posture the
-   * local venue takes toward a publication it cannot read.
-   * Concurrent calls and record reads during refresh are rejected. The next
-   * snapshot becomes visible only after its entire operator frontier is fetched.
-   * A failed refresh leaves the last successful snapshot intact at its old index;
-   * failure on the first sync leaves the view unavailable.
+   * Rejects with VenueError on a reorganization past the depth (the venue's
+   * failure, after which every read refuses) and on a concurrent sync.
    */
-  async sync(node: ErgoNode, backings: readonly Backing[]): Promise<void> {
+  async sync(suppliers: readonly ErgoSupplier[]): Promise<ErgoSyncReport> {
+    if (this.failure !== undefined) throw new VenueError(this.failure);
     if (this.syncing) throw new VenueError("a sync is already in progress");
     this.syncing = true;
     try {
-      // Own both the set and its terms before the first await. Otherwise a
-      // caller can change a name between address selection and record filtering.
-      const requested = backings.map(backing => makeBacking(backing));
-      // The frontier walk needs a readable clock and replacement records before
-      // every operator is fetched. Give it a private view: those intermediate
-      // facts must never escape through this public Venue, even on failure.
-      const next = new ErgoVenue(this.chain, this.depth, this.publicationScript, this.addressing);
-      await next.syncView(node, requested);
-      // No await or external callback inside publication. Invalidate the old
-      // replacement memo only when its complete replacement is ready.
-      forgetAdmitted(this);
-      this.height = next.height;
-      this.commitments = next.commitments;
-      this.ops = next.ops;
-      this.replacements = next.replacements;
-      this.covered = next.covered;
-      this.fetched = next.fetched;
-      this.revocations = next.revocations;
-      this.revoked = next.revoked;
-      this.synced = true;
+      // The caller's list is read once; each supplier's name once, for its report.
+      const sources = Array.from(suppliers, supplier => ({ supplier, name: nameOf(supplier) }));
+      const passes: { supplier: ErgoSupplier; pass: HeaderPass }[] = [];
+      for (const source of sources) passes.push({ supplier: source.supplier, pass: await this.syncHeaders(source.supplier, source.name) });
+      const best = this.store.best(), anchorHeight = this.store.tip().anchorHeight, depth = this.profile.depth;
+      // Each supplier is charged, whatever ended its pass, exactly the headers it added that are not on the best
+      // chain: a supplier whose chain keeps ending off it spends its side-branch quota and is then withholding, and a
+      // branch that briefly leads charges an honest supplier only its headers past the fork.
+      let lowest: bigint | undefined;
+      for (const { pass } of passes) for (const id of pass.added) {
+        const height = this.store.heightOf(id);
+        if (height !== undefined && (lowest === undefined || height < lowest)) lowest = height;
+      }
+      const onBest = new Set<string>();
+      if (lowest !== undefined) for (let i = Number(lowest - anchorHeight - 1n); i < best.headers.length; i++) onBest.add(bytesToHex(best.headers[i]!.id));
+      for (const { supplier, pass } of passes) {
+        const off = pass.added.filter(id => !onBest.has(bytesToHex(id))).length;
+        if (off > 0) this.sideHeaders.set(supplier, (this.sideHeaders.get(supplier) ?? 0) + off);
+      }
+      // The best chain must keep the header at the published clock: its id commits to every block before it.
+      const previous = this.snapshot, clock = previous?.witnessed ?? -1n;
+      if (previous !== undefined) {
+        const kept = best.headers[Number(previous.witnessed)];
+        if (kept === undefined || compareBytes(kept.id, previous.witnessedHeaderId) !== 0) {
+          this.failure = "venue failure: the best chain left a block witnessed under the depth";
+          throw new VenueError(this.failure);
+        }
+      }
+      // Sections read past an earlier clock were read for headers the chain may since have left.
+      for (let i = this.sections.length - 1; i > Number(clock); i--) {
+        const header = best.headers[i];
+        if (header !== undefined && compareBytes(this.sectionHeaders[i]!, header.id) === 0) break;
+        this.dropSection(i);
+      }
+      const chainWitnessed = best.height - depth - anchorHeight - 1n;
+      let bound = chainWitnessed;
+      for (const { supplier, pass: { last } } of passes) {
+        if (last === undefined) continue;
+        // A supplier the header budget stopped before its tip may yet show a heavier chain from its last header, so
+        // the clock stays at or below where that header meets the best chain: the reader's own budget cannot make it
+        // witness a block it would later have to unwitness. A fork below the published clock bounds nothing,
+        // since such a chain, were it heavier, fails the venue either way; and a supplier past its side-branch quota
+        // is withholding. Only this stop bounds the clock: it takes a budget of headers with their work, while
+        // failing costs a supplier nothing.
+        const header = parseErgoHeader(last), fork = header === undefined ? undefined : this.store.forkHeight(header.id), height = header?.height;
+        if (fork === undefined || height === undefined) continue;
+        if ((this.sideHeaders.get(supplier) ?? 0) >= this.policy.sideHeadersPerSupplier) continue;
+        const forkIndex = fork - anchorHeight - 1n;
+        if (forkIndex >= clock && forkIndex < bound) bound = forkIndex;
+      }
+      const missed = new Set<ErgoSupplier>();
+      let spent = 0, sectionsRead = 0, unresolved: bigint | undefined, reason: ErgoSyncReport["unresolvedReason"];
+      for (let index = BigInt(this.sections.length); index <= bound; index++) {
+        // Checked before each section, so one larger than the budget is still read, alone in its sync.
+        if (spent >= this.policy.sectionBytesPerSync) { unresolved = index; reason = "section budget"; break; }
+        const header = best.headers[Number(index)]!;
+        const read = await this.readSection(sources.map(source => source.supplier).filter(s => !missed.has(s)), missed,
+          header.id, header.transactionsRoot);
+        spent += read.bytes;
+        if (read.objects === undefined) { unresolved = index; reason = read.retainedStop ? "retained budget" : "no section"; break; }
+        this.sections.push(read.objects);
+        this.sectionHeaders.push(copyBytes(header.id));
+        sectionsRead++;
+      }
+      const witnessed = BigInt(this.sections.length) - 1n < bound ? BigInt(this.sections.length) - 1n : bound;
+      if (witnessed >= 0n && witnessed >= clock) {
+        // No await from here: the snapshot and every derivation change together.
+        forgetAdmitted(this);
+        this.held = new Map();
+        this.snapshot = Object.freeze({ witnessed, sections: Object.freeze(this.sections.slice(0, Number(witnessed) + 1)),
+          witnessedHeaderId: copyBytes(best.headers[Number(witnessed)]!.id) });
+      }
+      const snapshot = this.snapshot;
+      return Object.freeze({
+        witnessedIndex: snapshot?.witnessed, witnessedHeaderId: snapshot === undefined ? undefined : copyBytes(snapshot.witnessedHeaderId),
+        chainWitnessedIndex: chainWitnessed >= 0n ? chainWitnessed : undefined, tipHeight: best.height, suppliers: Object.freeze(passes.map(({ pass }) => pass.report)),
+        sectionsRead, unresolvedIndex: unresolved, ...(reason === undefined ? {} : { unresolvedReason: reason }),
+      });
     } finally {
       this.syncing = false;
     }
   }
 
-  private async syncView(node: ErgoNode, backings: readonly Backing[]): Promise<void> {
-    const indexed = await node.indexedHeight();
-    if (typeof indexed !== "bigint" || indexed < 0n) throw new VenueError("invalid indexed height");
-    this.height = indexed > this.depth ? indexed - this.depth : 0n;
+  private dropSection(index: number): void {
+    for (const object of this.sections[index]!) this.retained -= retainedSize(object);
+    this.sections.length = index;
+    this.sectionHeaders.length = index;
+  }
 
-    for (const backing of backings) {
-      await this.syncPublications(node, backing.name);
-      this.covered.add(backing.nameHex);
-      // Each covered backing's obligor, because a revocation is read per key.
-      // Not answering for one that was never fetched is worth more here than
-      // anywhere else: absence of a revocation record reads as NOT revoked,
-      // which is the direction that gets a holder paid in units nobody backs.
-      await this.syncRevocations(node, backing.obligor);
-      this.revoked.add(bytesToHex(backing.obligor));
-    }
-    // Only the private frontier walk can read this intermediate snapshot.
-    this.synced = true;
-    // Fetch every operator in each witnessed chain before publishing the view.
-    // A failure discards this private candidate, including its replacement memo.
-    for (const backing of backings) {
-      for (;;) {
-        const chain = successionOf(backing, this);
-        const missing = chain
-          .map((link) => link.operator)
-          .filter((operator) => !this.fetched.has(bytesToHex(operator)));
-        if (missing.length === 0) break;
-        for (const operator of missing) {
-          await this.syncCommitments(node, operator);
-          this.fetched.add(bytesToHex(operator));
-        }
+  private async syncHeaders(supplier: ErgoSupplier, name: string): Promise<HeaderPass> {
+    let added = 0, fetched = 0, last: Uint8Array | undefined;
+    const ids: Uint8Array[] = [];
+    const done = (stopped?: string): HeaderPass => ({ added: ids,
+      report: Object.freeze(stopped === undefined ? { name, headersAdded: added } : { name, headersAdded: added, stopped }) });
+    const unfinished = (): HeaderPass => last === undefined ? done("header budget") : { ...done("header budget"), last };
+    const { headersPerSupplier: budget, sideHeadersPerSupplier: sideQuota, supplierTimeoutMs: timeout } = this.policy;
+    if ((this.sideHeaders.get(supplier) ?? 0) >= sideQuota) return done("side-branch quota");
+    const fetchBudget = 4 * budget + 2 * ANCHOR_CONTEXT, perRequest = BigInt(this.policy.headersPerRequest);
+    const anchorHeight = this.store.tip().anchorHeight, depth = this.profile.depth;
+    const tip = await supplied(() => supplier.tipHeight(), timeout);
+    if (!tip.ok) return done(tip.failure);
+    if (typeof tip.value !== "bigint") return done("no tip height");
+    const ours = this.store.tip().height, start = (tip.value < ours ? tip.value : ours) - depth;
+    let from = start > anchorHeight ? start : anchorHeight + 1n, back = depth + 1n;
+    while (from <= tip.value) {
+      if (added >= budget) return unfinished();
+      if (fetched >= fetchBudget) return done("fetch budget");
+      const to = from + perRequest - 1n < tip.value ? from + perRequest - 1n : tip.value, asked = Number(to - from + 1n);
+      const answer = await supplied(() => supplier.headers(from, to), timeout);
+      if (!answer.ok) return done(answer.failure);
+      // The answer is cut to what was asked and owned before any header is judged.
+      const batch = ownHeaders(answer.value, asked);
+      if (batch === undefined) return done("malformed answer");
+      if (batch.length === 0) return done();
+      let steppedBack = false, position = 0;
+      for (const bytes of batch) {
+        if (added >= budget) return unfinished();
+        fetched++;
+        const outcome = bytes === undefined ? "malformed" : this.store.add(bytes);
+        if (outcome === "added" || outcome === "known") {
+          if (outcome === "added") { added++; ids.push(blake2b(bytes!, { dkLen: 32 })); }
+          last = bytes!;
+        } else if (outcome === "unknown-parent" && position === 0 && from > anchorHeight + 1n) {
+          // The supplier's chain leaves ours below `from`: step back until it connects.
+          from = from - back > anchorHeight ? from - back : anchorHeight + 1n;
+          back *= 2n;
+          steppedBack = true;
+          break;
+        } else return done(`refused header: ${outcome}`);
+        position++;
       }
+      if (steppedBack) continue;
+      if (batch.length < asked) return done();
+      from = to + 1n;
     }
+    return done();
   }
 
-  /**
-   * The boxes this venue will read at all: finalised, decodable, in the order
-   * the chain witnessed them. Everything else is skipped rather than fatal,
-   * since anyone may create a box at these addresses.
-   */
-  private finalised<T>(boxes: ErgoBoxView[], read: (box: ErgoBoxView) => T): Witnessed<T>[] {
-    const out: Witnessed<T>[] = [];
-    for (const box of boxes) {
-      if (box.inclusionHeight > this.height) continue;
-      try {
-        out.push({ value: read(box), at: box.inclusionHeight });
-      } catch {
-        continue;
-      }
+  /** The first supplier's section that reproduces the root, attributed, and
+   * the bytes received from every supplier asked; no objects where none does
+   * or they would exceed the retained bytes. A supplier that does not supply
+   * joins `missed`. */
+  private async readSection(suppliers: readonly ErgoSupplier[], missed: Set<ErgoSupplier>, headerId: Uint8Array, root: Uint8Array):
+    Promise<{ objects?: readonly AttributedObject[]; bytes: number; retainedStop?: boolean }> {
+    let bytes = 0;
+    for (const supplier of suppliers) {
+      const answer = await supplied(() => supplier.section(copyBytes(headerId)), this.policy.supplierTimeoutMs);
+      const owned = answer.ok ? ownSection(answer.value) : { bytes: 0 };
+      bytes += owned.bytes;
+      const objects = owned.views === undefined ? undefined : attributeSection(this.profile, owned.views, root);
+      if (objects === undefined) { missed.add(supplier); continue; }
+      const size = objects.reduce((total, object) => total + retainedSize(object), 0);
+      if (this.retained + size > this.policy.retainedBytes) return { bytes, retainedStop: true };
+      this.retained += size;
+      return { objects, bytes };
     }
-    return out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+    return { bytes };
   }
 
-  /**
-   * Whether this view was gathered for a backing. **False is not an answer about
-   * the backing**, it is the absence of one: a venue asked about something it
-   * never synced would report no commitments, and no commitments reads as
-   * silence — an accusation built out of not having looked.
-   */
-  private requireCovered(backingName: Uint8Array): void {
-    this.requireSettled();
-    if (!this.covered.has(bytesToHex(backingName))) {
-      throw new VenueError("this view was not synced for that backing");
-    }
-  }
+  // --- Reads ------------------------------------------------------------------
 
-  /**
-   * The same rule for an operator. It has to be here as well as on the backing
-   * reads: a backing declaring no replacement rule never reaches
-   * replacementsFor at all, so the grade would be computed from an operator this
-   * view never fetched — no commitments, which reads as silence since genesis.
-   * Every operator in a covered backing's chain is fetched, so succession is
-   * unaffected.
-   */
-  private requireFetched(operator: Uint8Array): void {
-    this.requireSettled();
-    if (!this.fetched.has(bytesToHex(operator))) {
-      throw new VenueError("this view was not synced for that operator");
-    }
-  }
-
-  private async syncCommitments(node: ErgoNode, operator: Uint8Array): Promise<void> {
-
-
-    const commitmentBoxes = await node.boxesByAddress(this.addressing.commitments(operator));
-    this.commitments.set(
-      bytesToHex(operator),
-      extending(this.finalised(commitmentBoxes, (box) => {
-        // Reassembled in the record's own order, which the table gives.
-        const record = new Uint8Array(136);
-        for (const [name, start, end] of COMMITMENT_LAYOUT) {
-          const bytes = register(box, name);
-          if (bytes.length !== end - start) throw new EncodingError(`${name} is the wrong width`);
-          record.set(bytes, start);
-        }
-        const commitment = decodeCommitment(record);
-        // The box says whose it is; the signature says whether that is true.
-        // Anyone may create a box at this address, so nothing here rests on the
-        // address alone.
-        if (compareBytes(commitment.operator, operator) !== 0) {
-          throw new EncodingError("box is not this operator's");
-        }
-        if (!verifyCommitment(commitment)) throw new EncodingError("commitment does not verify");
-        return commitment;
-      })),
-    );
-
-  }
-
-  private async syncRevocations(node: ErgoNode, obligor: Uint8Array): Promise<void> {
-    const boxes = await node.boxesByAddress(this.addressing.revocations(obligor));
-    this.revocations.set(
-      bytesToHex(obligor),
-      this.finalised(boxes, (box) => {
-        const revocation = decodeRevocation(register(box, "R5"));
-        // The box says whose it is; the signature says whether that is true.
-        if (compareBytes(revocation.obligor, obligor) !== 0) {
-          throw new EncodingError("box is not this key's revocation");
-        }
-        if (!isSignedRevocation(revocation)) {
-          throw new EncodingError("revocation does not verify");
-        }
-        return revocation;
-      }),
-    );
-  }
-
-  private async syncPublications(node: ErgoNode, backingName: Uint8Array): Promise<void> {
-    const publicationBoxes = await node.boxesByAddress(this.addressing.publications(backingName));
-    const key = bytesToHex(backingName);
-    this.ops.set(
-      key,
-      this.finalised(publicationBoxes, (box) => {
-        const decoded = decodePublishedOp(register(box, "R5"));
-        // A commit record names no backing and is filed under none here.
-        if (decoded.backingName === undefined || compareBytes(decoded.backingName, backingName) !== 0) {
-          throw new EncodingError("record is not this backing's");
-        }
-        return decoded.op;
-      }),
-    );
-    this.replacements.set(
-      key,
-      this.finalised(publicationBoxes, (box) => {
-        const decoded = decodeReplacement(register(box, "R5"));
-        if (compareBytes(decoded.backingName, backingName) !== 0) {
-          throw new EncodingError("record is not this backing's");
-        }
-        return decoded.replacement;
-      }),
-    );
+  private requireSnapshot(): Snapshot {
+    if (this.failure !== undefined) throw new VenueError(this.failure);
+    if (this.snapshot === undefined) throw new VenueError("this view has no settled snapshot");
+    return this.snapshot;
   }
 
   witnessedIndex(): bigint {
-    this.requireSettled();
-    return this.height;
+    return this.requireSnapshot().witnessed;
   }
 
-  private requireSettled(): void {
-    if (this.syncing || !this.synced) throw new VenueError("this view has no settled snapshot");
+  /**
+   * pool-v3 §13's answer to one request from this view, or undefined where the
+   * request names another venue, reaches past the clock or exceeds `limits`.
+   * The answer is the reader's own, computed from the verified sections, so a
+   * replay may consume it as its venue-evidence verifier's output (§12.1).
+   */
+  range(request: RangeRequest, limits: RangeLimits): Uint8Array | undefined {
+    const snapshot = this.requireSnapshot();
+    let own: RangeRequest;
+    try { own = copyRequest(request); } catch (error) {
+      if (error instanceof EncodingError) return undefined;
+      throw error;
+    }
+    if (compareBytes(own.venue, this.venueId) !== 0 || own.toIndex > snapshot.witnessed) return undefined;
+    const entries = rangeEntries(index => snapshot.sections[Number(index)], own)!;
+    try {
+      return encodeRangeAnswer({ request: own, entries }, limits);
+    } catch (error) {
+      if (error instanceof EncodingError || error instanceof RangeLimitError) return undefined;
+      throw error;
+    }
+  }
+
+  /** Every object of one kind and subject through the clock, as §13.3 reads them. */
+  private entries(kind: RecordKind, subject: Uint8Array): RangeAnswer {
+    const snapshot = this.requireSnapshot();
+    if (!(subject instanceof Uint8Array) || subject.length !== 32) throw new EncodingError("a subject is 32 bytes");
+    const request = copyRequest({ venue: this.venueId, kind, subject, fromIndex: 0n, toIndex: snapshot.witnessed });
+    return { request, entries: rangeEntries(index => snapshot.sections[Number(index)], request)! };
+  }
+
+  /** C2.3.3 read index by index (§13.3): the held commitments of one key, rising in sequence as they rise in index. */
+  private heldFor(operator: Uint8Array): readonly HeldCommitment[] {
+    const key = bytesToHex(operator);
+    const cached = this.held.get(key);
+    if (cached !== undefined) return cached;
+    const held = heldCommitments(this.entries(COMMITMENT_RANGE, operator)).held;
+    this.held.set(key, held);
+    return held;
   }
 
   publish(): void {
@@ -521,136 +459,167 @@ export class ErgoVenue implements Venue {
   }
 
   /**
-   * Commits are not synced, and this refuses rather than answering empty.
-   *
-   * A commit is read to settle an atomic bundle, and no commits reads as "the
-   * attempt did not commit" — which frees a reservation that may in fact have
-   * settled elsewhere, splitting the bundle. That is the direction this venue
-   * guards against everywhere else, so it guards here by not pretending: a
-   * cross-operator bundle over an Ergo venue needs the box layout for a commit,
-   * which is the write path this module deliberately does not build.
+   * The profile carries no transparent operation record, and this refuses
+   * rather than answering empty: no operations reads as nothing published.
    */
-  commitsFor(): never {
-    throw new VenueError("this view does not sync commits");
+  publishedOpsFor(): WitnessedOp[] {
+    throw new VenueError("this venue carries no transparent operation records");
   }
 
   /**
-   * Every revocation this key published here, in witnessed order.
-   *
-   * The guard is the same rule as the other two, and it bites hardest here: a
-   * view never synced for a key would report no revocation, and no revocation
-   * reads as a live backer whose issuance is good. The other absences read as an
-   * accusation against an operator; this one reads as a clean bill of health for
-   * a stolen key.
+   * Nor commits (pool-v3 §13.1 names them outside the frame): no commits reads
+   * as "the attempt did not commit", which frees a reservation that may have
+   * settled elsewhere.
    */
+  commitsFor(): WitnessedCommit[] {
+    throw new VenueError("this venue carries no commit records");
+  }
+
+  /** Every revocation object K published here that decodes, names K and verifies, in witnessed order. */
   revocationsFor(obligor: Uint8Array): WitnessedRevocation[] {
-    this.requireRevoked(obligor);
-    const log = this.revocations.get(bytesToHex(obligor)) ?? [];
-    return log.map((w) => ({ revocation: copyRevocation(w.value), at: w.at }));
-  }
-
-  private requireRevoked(obligor: Uint8Array): void {
-    this.requireSettled();
-    if (!this.revoked.has(bytesToHex(obligor))) {
-      throw new VenueError("this view was not synced for that obligor key");
+    const out: WitnessedRevocation[] = [];
+    for (const entry of this.entries(REVOCATION_RANGE, obligor).entries) {
+      try {
+        const revocation = decodeRevocation(entry.record);
+        if (compareBytes(revocation.obligor, obligor) !== 0 || !isSignedRevocation(revocation)) continue;
+        out.push({ revocation: copyRevocation(revocation), at: entry.index });
+      } catch (error) {
+        if (error instanceof EncodingError) continue;
+        throw error;
+      }
     }
+    return out;
   }
 
-  publishedOpsFor(backingName: Uint8Array): WitnessedOp[] {
-    this.requireCovered(backingName);
-    const log = this.ops.get(bytesToHex(backingName)) ?? [];
-    return log.map((w) => ({ op: copyOp(w.value), at: w.at }));
-  }
-
+  /**
+   * Every replacement object filed under the backing that decodes and names
+   * it, in witnessed order, as copies. Signatures, the lead floor and the walk
+   * are the reader's (`successionOf`).
+   */
   replacementsFor(backingName: Uint8Array): WitnessedReplacement[] {
-    this.requireCovered(backingName);
-    const log = this.replacements.get(bytesToHex(backingName)) ?? [];
-    // Copies on the way out — the interface promises them, LocalVenue keeps
-    // it, and this view handed out its stored objects: one reader overwriting
-    // a field it was given rewrote succession for every later reader in the
-    // process (found by the slice-37 panel's inventory angle). Field-wise,
-    // not through the canonical encoding: the same guarantee at a fourteenth
-    // of the cost, on the read every walk makes (the review's ADV-11).
-    return log.map((w) => ({ replacement: copyReplacement(w.value), at: w.at }));
+    const out: WitnessedReplacement[] = [];
+    for (const entry of this.entries(REPLACEMENT_RANGE, backingName).entries) {
+      try {
+        const decoded = decodeReplacement(entry.record);
+        if (compareBytes(decoded.backingName, backingName) !== 0) continue;
+        out.push({ replacement: copyReplacement(decoded.replacement), at: entry.index });
+      } catch (error) {
+        if (error instanceof EncodingError) continue;
+        throw error;
+      }
+    }
+    return out;
   }
 
   latestFor(operator: Uint8Array, asOf?: bigint): Commitment | undefined {
-    return this.readCommitment(operator, asOf);
+    return copyCommitment(this.latestHeld(operator, asOf)?.commitment);
   }
 
   previousFor(operator: Uint8Array, beforeSequence: bigint, asOf?: bigint): Commitment | undefined {
-    return this.readCommitment(operator, asOf, beforeSequence);
-  }
-
-  private readCommitment(operator: Uint8Array, asOf?: bigint, beforeSequence?: bigint): Commitment | undefined {
-    this.requireFetched(operator);
-    const value = this.latestWitnessedFor(operator, asOf, beforeSequence)?.value;
-    return value === undefined ? undefined : {
-      sequence: value.sequence,
-      root: copyBytes(value.root),
-      operator: copyBytes(value.operator),
-      signature: copyBytes(value.signature),
-    };
+    return copyCommitment(this.latestHeld(operator, asOf, beforeSequence)?.commitment);
   }
 
   witnessedAtFor(operator: Uint8Array, asOf?: bigint): bigint | undefined {
-    this.requireFetched(operator);
-    return this.latestWitnessedFor(operator, asOf)?.at;
+    return this.latestHeld(operator, asOf)?.index;
   }
 
   witnessedAtSequence(operator: Uint8Array, sequence: bigint): bigint | undefined {
-    this.requireFetched(operator);
-    const witnessed = this.latestWitnessedFor(operator, undefined, sequence + 1n);
-    return witnessed?.value.sequence === sequence ? witnessed.at : undefined;
+    const held = this.latestHeld(operator, undefined, sequence + 1n);
+    return held?.commitment.sequence === sequence ? held.index : undefined;
   }
 
   firstCommitmentFor(operator: Uint8Array, notBefore = 0n): bigint | undefined {
-    this.requireFetched(operator);
-    for (const witnessed of this.commitments.get(bytesToHex(operator)) ?? []) {
-      if (witnessed.at >= notBefore) return witnessed.at;
-    }
+    for (const held of this.heldFor(operator)) if (held.index >= notBefore) return held.index;
     return undefined;
   }
 
   nextSequenceFor(operator: Uint8Array): bigint {
-    this.requireFetched(operator);
-    const latest = this.latestWitnessedFor(operator);
-    return latest === undefined ? 0n : latest.value.sequence + 1n;
+    const latest = this.latestHeld(operator);
+    // The venue holds a sequence only above zero (pool-v3 §13.3; pool sequences count from one).
+    return latest === undefined ? 1n : latest.commitment.sequence + 1n;
   }
 
-  private latestWitnessedFor(
-    operator: Uint8Array,
-    asOf?: bigint,
-    beforeSequence?: bigint,
-  ): Witnessed<Commitment> | undefined {
-    const log = this.commitments.get(bytesToHex(operator)) ?? [];
-    const limit = asOf ?? this.height;
-    // finalised + extending establish C2.3.3's monotone index/sequence order.
+  /** The last held commitment witnessed at or before `asOf` with a sequence
+   * below `beforeSequence`; held commitments rise in both, so one search. */
+  private latestHeld(operator: Uint8Array, asOf?: bigint, beforeSequence?: bigint): HeldCommitment | undefined {
+    const log = this.heldFor(operator), limit = asOf ?? this.requireSnapshot().witnessed;
     let low = 0, high = log.length;
     while (low < high) {
       const mid = low + Math.floor((high - low) / 2);
-      const witnessed = log[mid]!;
-      if (witnessed.at <= limit &&
-          (beforeSequence === undefined || witnessed.value.sequence < beforeSequence)) low = mid + 1;
+      const held = log[mid]!;
+      if (held.index <= limit && (beforeSequence === undefined || held.commitment.sequence < beforeSequence)) low = mid + 1;
       else high = mid;
     }
     return log[low - 1];
   }
 }
 
-/**
- * The registers a commitment goes into, for whoever builds the transaction.
- *
- * Written here rather than left to a wallet, so that the layout has one
- * definition and the venue above is reading back exactly what this wrote.
- */
-export function commitmentRegisters(commitment: Commitment): Record<string, Uint8Array> {
-  const bytes = encodeCommitment(commitment);
-  const registers: Record<string, Uint8Array> = {};
-  for (const [name, start, end] of COMMITMENT_LAYOUT) {
-    registers[name] = bytes.slice(start, end);
+/** A supplier's answer, or its failure: a supplier that throws, rejects or
+ * does not settle within `timeoutMs` is one that did not supply. Only
+ * supplier calls and the reading of their answers are guarded, so the
+ * reader's own failures stay visible. */
+async function supplied<T>(call: () => Promise<T>, timeoutMs: number): Promise<{ ok: true; value: T } | { ok: false; failure: string }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("timed out")), timeoutMs); });
+  try {
+    return { ok: true, value: await Promise.race([Promise.resolve().then(call), late]) };
+  } catch (error) {
+    return { ok: false, failure: `failed: ${describe(error)}` };
+  } finally {
+    clearTimeout(timer);
   }
-  return registers;
 }
+/** An error's message, whatever a supplier threw. */
+function describe(error: unknown): string {
+  try { return error instanceof Error ? String(error.message) : String(error); } catch { return "an unreadable error"; }
+}
+function nameOf(supplier: ErgoSupplier): string {
+  try { return String(supplier.name); } catch { return "unnamed supplier"; }
+}
+const isRealBytes = (value: unknown): value is Uint8Array =>
+  ArrayBuffer.isView(value) && value instanceof Uint8Array && !(value.buffer instanceof SharedArrayBuffer);
+/** At most `limit` header byte strings of a supplier's answer, each owned
+ * (undefined where it is not bytes); undefined for an answer that is not a
+ * list or throws while read. */
+function ownHeaders(answer: unknown, limit: number): (Uint8Array | undefined)[] | undefined {
+  try {
+    if (!Array.isArray(answer)) return undefined;
+    const out: (Uint8Array | undefined)[] = [];
+    for (let i = 0; i < answer.length && i < limit; i++) {
+      const item: unknown = answer[i];
+      out.push(isRealBytes(item) ? copyBytes(item) : undefined);
+    }
+    return out;
+  } catch {
+    return undefined;
+  }
+}
+/** A supplier's section as owned views, and the bytes received, which are
+ * charged whether or not the section is the header's; no views for an answer
+ * that is not a list of transaction views or throws while read. */
+function ownSection(answer: unknown): { views?: ErgoTransactionView[]; bytes: number } {
+  let bytes = 0;
+  try {
+    if (!Array.isArray(answer)) return { bytes };
+    const views: ErgoTransactionView[] = [];
+    for (const transaction of answer as unknown[]) {
+      if (transaction === null || typeof transaction !== "object") return { bytes };
+      const { unsigned, witnessId } = transaction as Record<string, unknown>;
+      if (!isRealBytes(unsigned) || !isRealBytes(witnessId)) return { bytes };
+      const view = { unsigned: copyBytes(unsigned), witnessId: copyBytes(witnessId) };
+      bytes += view.unsigned.length + view.witnessId.length;
+      views.push(view);
+    }
+    return { views, bytes };
+  } catch {
+    return { bytes };
+  }
+}
+/** What one retained object costs: its record, its subject and a fixed overhead. */
+const retainedSize = (object: AttributedObject): number => object.record.length + object.subject.length + OBJECT_OVERHEAD;
 
-export { UNNAMED_VENUE };
+function copyCommitment(value: Commitment | undefined): Commitment | undefined {
+  return value === undefined ? undefined : {
+    sequence: value.sequence, root: copyBytes(value.root), operator: copyBytes(value.operator), signature: copyBytes(value.signature),
+  };
+}
