@@ -40,13 +40,13 @@ try {
   const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
   assert(!config.error, "TypeScript configuration unreadable");
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const program = ts.createProgram([join(root, "model/pool-v3-ergo-profile.ts")], {
+  const program = ts.createProgram([join(root, "src/ergo-profile.ts")], {
     ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false,
   });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0, "model compiles");
   assert.equal(program.emit().emitSkipped, false);
-  const profile = await import(new URL("model/pool-v3-ergo-profile.js", url));
-  const range = await import(new URL("model/pool-v3-range.js", url));
+  const profile = await import(new URL("src/ergo-profile.js", url));
+  const range = await import(new URL("src/record-range.js", url));
   const { signCommitment, encodeCommitment } = await import(new URL("src/commitment.js", url));
   const { encodeReplacement, replacementMessage, ROLE_OPERATOR } = await import(new URL("src/replacement.js", url));
   const { encodeRevocation, signRevocation } = await import(new URL("src/revocation.js", url));
@@ -318,7 +318,7 @@ try {
       locations: Object.fromEntries(Object.entries(scripts).map(([kind, script]) => [kind, hex(script)])) },
     sources: manifest.sources, inputManifestSha256: hex(sha256(readFileSync(join(here, "fixtures/manifest.json")))),
     files: Object.fromEntries(["experiments/ergo-range/profile-check.mjs", "experiments/ergo-range/package.json", "experiments/ergo-range/package-lock.json",
-      "model/pool-v3-ergo-profile.ts", "model/pool-v3-range.ts"].map(file => [file, fileHash(file)])),
+      "src/ergo-profile.ts", "src/record-range.ts"].map(file => [file, fileHash(file)])),
     genesisAnchor: { height: genesis.height.toString(), version: genesis.version.toString(), id: genesis.id, parentIdZero: true,
       headerWireBytes: genesis.size.toString(), indexZeroHeight: "2", emptyAnswerBytesAtIndexZero: 102 },
     synthetic: { heights: heights.toString(), witnessedIndex: t.toString(), transactions: String(transactions), serializedTransactionBytes: String(serializedBytes),

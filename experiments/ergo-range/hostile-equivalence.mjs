@@ -1,6 +1,6 @@
 // Framer node equivalence on hostile bytes, at the parse level: deterministic mutations of the hash-pinned corpus
 // transactions' unsigned bytes, each read by the node's own parser (node-read/NodeRead.java over the official v6.0.6
-// JAR, offline), and every reading the node gives read again by the profile's framer (model/pool-v3-ergo-profile.ts).
+// JAR, offline), and every reading the node gives read again by the profile's framer (src/ergo-profile.ts).
 //
 // The reader takes a transaction's unsigned bytes and frames them itself; the header's root binds those bytes, so
 // every reader frames a committed transaction alike. What matters is that the framer never reads a transaction the
@@ -9,7 +9,7 @@
 // where the framer reads them, give the node's output count, ErgoTree bytes and register constants. A transaction the
 // framer does not read carries no record and withholds nothing. Bytes the node refuses cannot be a transaction of a
 // block the node accepts under this version context, so a framer reading of them is counted, not compared. The seeds
-// are the unsigned bytes supply.mjs copies from the corpus, so the mutations land in the framer's own input.
+// are the unsigned bytes src/ergo-supplier.ts copies from the corpus, so the mutations land in the framer's own input.
 // Nothing here says the node would accept a case: no state, proofs or validity are checked beyond the node's recorded
 // stateless verdict, and no runtime path reads this.
 //
@@ -27,7 +27,6 @@ import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 import { blake2b } from "@noble/hashes/blake2b";
-import { parseNodeJson, supplyTransaction } from "./supply.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../..");
 const args = process.argv.slice(2);
@@ -42,7 +41,7 @@ mkdirSync(join(work, "classes"), { recursive: true });
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const files = Object.fromEntries(["experiments/ergo-range/hostile-equivalence.mjs", "experiments/ergo-range/node-read/NodeRead.java",
-  "experiments/ergo-range/supply.mjs", "tsconfig.json", "experiments/ergo-range/fixtures/manifest.json",
+  "tsconfig.json", "experiments/ergo-range/fixtures/manifest.json",
   "experiments/ergo-range/package.json", "experiments/ergo-range/package-lock.json"].map(file => [file, sha256(readFileSync(join(root, file)))]));
 
 // The node: the JAR nodes.mjs pins, compiled against and run in the bundle's own runtime.
@@ -59,11 +58,11 @@ const node = { jarSha256: JAR_SHA256, runtimeReleaseSha256: sha256(readFileSync(
 // The profile's framer, compiled from source into a disposable build as profile-check.mjs does; every repository source
 // the compilation reads is bound.
 const build = realpathSync(mkdtempSync(join(realpathSync(join(root, "scratch")), "hostile-framer-")));
-let profile;
+let profile, parseNodeJson, supplyTransaction;
 try {
   const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
   assert(!config.error, "TypeScript configuration unreadable");
-  const program = ts.createProgram([join(root, "model/pool-v3-ergo-profile.ts")], {
+  const program = ts.createProgram([join(root, "src/ergo-profile.ts"), join(root, "src/ergo-supplier.ts")], {
     ...ts.parseJsonConfigFileContent(config.config, ts.sys, root).options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0, "model compiles");
   assert.equal(program.emit().emitSkipped, false);
@@ -71,10 +70,11 @@ try {
     const path = resolve(source.fileName);
     if (path.startsWith(root + sep) && !path.includes(`${sep}node_modules${sep}`)) files[path.slice(root.length + 1).replace(/\\/g, "/")] = sha256(readFileSync(path));
   }
-  profile = await import(new URL("model/pool-v3-ergo-profile.js", pathToFileURL(build + sep).href));
+  profile = await import(new URL("src/ergo-profile.js", pathToFileURL(build + sep).href));
+  ({ parseNodeJson, supplyTransaction } = await import(new URL("src/ergo-supplier.js", pathToFileURL(build + sep).href)));
 } finally { rmSync(build, { recursive: true, force: true }); }
 
-// Seeds: every corpus transaction, pinned by the manifest before parsing, as the unsigned bytes supply.mjs copies from it.
+// Seeds: every corpus transaction, pinned by the manifest before parsing, as the unsigned bytes src/ergo-supplier.ts copies from it.
 const manifest = JSON.parse(readFileSync(join(here, "fixtures/manifest.json")));
 // --seeds n keeps the first n seeds, for a quick run; the report records it.
 const seedLimit = Number(option("--seeds", "Infinity"));
@@ -292,7 +292,7 @@ if (rewriteInputs.length > 0) {
 assert.equal(counts.framer?.idNotFromUnsigned, undefined, "every node reading's unsigned bytes hash to its id");
 const report = {
   status: framerDiffers > 0 ? "framer-disagreement-found" : uncompared > 0 ? "inconclusive" : "no-framer-disagreement-on-these-cases",
-  framerDiffers, uncompared, seedsAre: "unsigned bytes, copied from the corpus by supply.mjs",
+  framerDiffers, uncompared, seedsAre: "unsigned bytes, copied from the corpus by src/ergo-supplier.ts",
   limits: [
     "parse level: no state, proofs or full validity; the stateless verdict uses the node's initial validation settings, not mainnet's voted ones",
     "one version context, a version-4 block's (activated 3, tree 3): blocks of earlier versions are read by the node under other contexts; the profile reads sections of block versions 1-4 only",
@@ -301,7 +301,7 @@ const report = {
     "the node's resource refusals depend on its runtime's heap and stack; the harness runs its main thread with -Xmx4G",
     "for a transaction the node rewrites, the header commits to the rewrite's ids; which bytes peers and node APIs serve for it, and whether the node's section serializer (writing under version context 4, 4) gives the rewrite read here (3, 3), are not measured",
   ],
-  compares: "for every transaction the node reads (whole cases, prefixes and stable rewrites; the pinned v6.0.6 JAR's BlockTransactionsSerializer.parse of a one-transaction version-4 section), the node's own unsigned bytes (messageToSign) hashed against its id and read by the profile's framer (model/pool-v3-ergo-profile.ts frameTransaction); a framed reading is compared with the node's output count, ErgoTree bytes, register names and constants (counts.framer)",
+  compares: "for every transaction the node reads (whole cases, prefixes and stable rewrites; the pinned v6.0.6 JAR's BlockTransactionsSerializer.parse of a one-transaction version-4 section), the node's own unsigned bytes (messageToSign) hashed against its id and read by the profile's framer (src/ergo-profile.ts frameTransaction); a framed reading is compared with the node's output count, ErgoTree bytes, register names and constants (counts.framer)",
   verdicts: { framedEqual: "the framer reads the node's unsigned bytes as the node does", framedDiffers: "the framer reads the node's unsigned bytes with other outputs: a reader would attribute what the node does not hold",
     unframed: "outside the framer's grammar: the transaction carries no record and its block keeps its section",
     framerReadsNodeRefuses: "bytes the node refuses under this version context, which no section it accepts holds; counted, not compared" },

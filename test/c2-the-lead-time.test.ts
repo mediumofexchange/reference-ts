@@ -260,7 +260,7 @@ describe("§C2: a replacement's lead is floored at the venue's lag plus one", ()
     // it is not — and the two views share one id, so this is the hazard the
     // Venue contract forbids, built to be seen: two honest readers of one
     // declared venue disagreeing about who is in force at a past index. A
-    // real venue's id commits to its finality rule (`ergoVenueId`), so honest
+    // real venue's id commits to its finality rule (`ergoProfileIdentity`), so honest
     // readers of it share a lag; a view that declares another is out of
     // contract (the slice-38 review's security angle, S6).
     const chain = new LocalVenue();

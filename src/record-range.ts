@@ -2,11 +2,11 @@
 // reader's independently selected venue-evidence verifier and its replay.
 // A decoded answer is that verifier's output, never supplied evidence, and it
 // establishes no directory, trail, classification, force or verdict.
-import { compareBytes, copyBytes, EncodingError } from "../src/bytes.js";
-import { decodeCommitment, verifyCommitment, type Commitment } from "../src/commitment.js";
-import { verifySignatureStrict } from "../src/keys.js";
-import { decodeReplacement, replacementHash, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
-import { decodeRevocation, isSignedRevocation } from "../src/revocation.js";
+import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
+import { decodeCommitment, verifyCommitment, type Commitment } from "./commitment.js";
+import { verifySignatureStrict } from "./keys.js";
+import { decodeReplacement, replacementHash, replacementMessage, ROLE_OPERATOR, type Replacement } from "./replacement.js";
+import { decodeRevocation, isSignedRevocation } from "./revocation.js";
 
 const CONTEXT = new TextEncoder().encode("moe/pool/v3/range");
 const FIXED_BYTES = 102, ENTRY_BYTES = 20, MAX_U32 = 0xffff_ffff, MAX_U64 = (1n << 64n) - 1n;

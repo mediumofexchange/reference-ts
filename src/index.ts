@@ -46,6 +46,7 @@ export * from "./fault.js";
 // `pool/barretenberg`, on its own subpath, since that one needs `@aztec/bb.js`.
 export * from "./pool/index.js";
 
-// The Ergo read-only venue adapter is not part of the root surface. It is the
-// venue direction, kept until the commitment format is final, and reachable on
-// its own subpath: `@mediumofexchange/reference/ergo`.
+// The Ergo venue (venue-ergo.md) is not part of the root surface: its reader,
+// header store, profile, suppliers and pool-v3 §13 answers are on their own
+// subpaths (`@mediumofexchange/reference/ergo`, `/ergo-headers`,
+// `/ergo-profile`, `/ergo-supplier`, `/record-range`).

@@ -36,13 +36,13 @@ const hex = bytes => Buffer.from(bytes).toString("hex");
 try {
   const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const models = ["trail", "configuration", "terms", "package", "range", "fault-evidence"].map(n => `model/pool-v3-${n}.ts`);
+  const models = [...["trail", "configuration", "terms", "package", "fault-evidence"].map(n => `model/pool-v3-${n}.ts`), "src/record-range.ts"];
   const program = ts.createProgram(models.map(file => join(root, file)),
     { ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0); assert.equal(program.emit().emitSkipped, false);
   const codec = { ...await loadEvidenceCodecs(url), ...await loadConfigurationCodecs(url),
     ...await import(new URL("model/pool-v3-fault-evidence.js", url)), ...await import(new URL("model/pool-v3-package.js", url)),
-    ...await import(new URL("model/pool-v3-range.js", url)) };
+    ...await import(new URL("src/record-range.js", url)) };
 
   const b = n => new Uint8Array(32).fill(n);
   const MODULUS = 21888242871839275222246405745257275088548364400416903490308238158651n;

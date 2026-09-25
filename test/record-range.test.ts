@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
-import * as range from "../model/pool-v3-range.js";
+import * as range from "../src/record-range.js";
 import { EncodingError } from "../src/bytes.js";
 import { encodeCommitment, signCommitment } from "../src/commitment.js";
 import { encodeReplacement, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";

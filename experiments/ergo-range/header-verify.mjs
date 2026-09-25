@@ -1,7 +1,7 @@
-// The reader as its own header source: the model's header store (model/pool-v3-ergo-headers.ts) verifies real
+// The reader as its own header source: the header store (src/ergo-headers.ts) verifies real
 // mainnet headers from the profile's pinned anchor, supplied by several nodes it does not trust, and its best chain
 // feeds the range verifier. GET-only reads, cached under scratch/; nothing is submitted and no runtime path reads this
-// (the rules are venue-ergo.md §3). Each header's bytes are copied from the node's JSON (supply-header.mjs); the store
+// (the rules are venue-ergo.md §3). Each header's bytes are copied from the node's JSON (src/ergo-supplier.ts); the store
 // derives the id, linkage, difficulty and proof of work from those bytes alone.
 //
 // Two parts:
@@ -22,8 +22,6 @@ import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
-import { parseNodeJson } from "./supply.mjs";
-import { supplyHeader } from "./supply-header.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../..");
 const args = process.argv.slice(2);
@@ -40,8 +38,10 @@ const sha256 = bytes => createHash("sha256").update(bytes).digest();
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const fileHash = file => hex(sha256(readFileSync(join(root, file))));
 // The sources are hashed now, before any work, so the report names the files that produced it.
-const files = Object.fromEntries(["experiments/ergo-range/header-verify.mjs", "experiments/ergo-range/supply.mjs", "experiments/ergo-range/supply-header.mjs", "experiments/ergo-range/package.json",
+const files = Object.fromEntries(["experiments/ergo-range/header-verify.mjs", "experiments/ergo-range/package.json",
   "experiments/ergo-range/package-lock.json", "tsconfig.json"].map(file => [file, fileHash(file)]));
+// The supplier is compiled with the store below.
+let parseNodeJson, supplyHeader;
 const hostOf = url => new URL(url).host.replace(/:/g, "-");
 const percentile = (sorted, p) => sorted.length === 0 ? 0 : sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)];
 const round = (value, digits = 3) => Number(value.toFixed(digits));
@@ -90,7 +90,7 @@ try {
   const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
   assert(!config.error, "TypeScript configuration unreadable");
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const program = ts.createProgram([join(root, "model/pool-v3-ergo-headers.ts"), join(root, "model/pool-v3-ergo-profile.ts")], {
+  const program = ts.createProgram([join(root, "src/ergo-headers.ts"), join(root, "src/ergo-profile.ts"), join(root, "src/ergo-supplier.ts")], {
     ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false,
   });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0, "model compiles");
@@ -100,8 +100,9 @@ try {
     const path = resolve(source.fileName);
     if (path.startsWith(root + sep) && !path.includes(`${sep}node_modules${sep}`)) files[path.slice(root.length + 1).replace(/\\/g, "/")] = fileHash(path.slice(root.length + 1));
   }
-  const headers = await import(new URL("model/pool-v3-ergo-headers.js", url));
-  const profile = await import(new URL("model/pool-v3-ergo-profile.js", url));
+  const headers = await import(new URL("src/ergo-headers.js", url));
+  const profile = await import(new URL("src/ergo-profile.js", url));
+  ({ parseNodeJson, supplyHeader } = await import(new URL("src/ergo-supplier.js", url)));
 
   const sourceInfo = [];
   for (const source of sources) {

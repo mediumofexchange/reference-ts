@@ -211,8 +211,8 @@ export interface WitnessedOp {
  *     venue's finality rule — the least number of indices by which an act
  *     signed at its clock is witnessed after it — never a view's state, so it
  *     answers unsynced, and the id a backing declares must determine it, as
- *     `ergoVenueId` does; the index a view reports a record at is the same
- *     kind of word. The walk floors a replacement's lead on it (§C2,
+ *     `ergoProfileIdentity` does; the index a view reports a record at is the
+ *     same kind of word. The walk floors a replacement's lead on it (§C2,
  *     slice 38). Nothing here can check the number: a view declaring less
  *     than the venue lags reopens the erasure the floor closes, one declaring
  *     more holds a retired key in force, and two views answering one id with
@@ -234,7 +234,7 @@ export interface Venue {
    * the finality depth plus one where a chain includes in its next block and
    * the venue reads behind the chain by that depth (`ErgoVenue`). A constant
    * of the venue's finality rule, which the venue's id must commit to — as
-   * `ergoVenueId` commits to the depth — so that naming the venue agrees it;
+   * `ergoProfileIdentity` commits to the depth — so that naming the venue agrees it;
    * never a view's state, so it answers on an unsynced view. One reader,
    * §C2's (slice 38): the walk floors a replacement's lead at the lag plus
    * one (`replacement.ts`), so every party reads the record before the last

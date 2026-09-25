@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { describe, expect, it } from "vitest";
-import * as headers from "../model/pool-v3-ergo-headers.js";
-import * as profile from "../model/pool-v3-ergo-profile.js";
+import * as headers from "../src/ergo-headers.js";
+import * as profile from "../src/ergo-profile.js";
 
 // Real mainnet headers pin the difficulty rule, proof of work, parsing and
 // ids; synthetic chains at difficulty 4 to 6, whose proof of work a test can

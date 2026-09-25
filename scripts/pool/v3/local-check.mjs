@@ -34,6 +34,9 @@ import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs"
 const here = import.meta.dirname, root = resolve(here, "../../..");
 assert(process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--ergo"), "unknown local-check option");
 const withErgo = process.argv[2] === "--ergo";
+// The TypeScript sources the replay compiles; their relative imports come with them.
+const compiledRoots = [...["trail", "configuration", "terms", "package", "fault-evidence"].map(name => `model/pool-v3-${name}.ts`),
+  "src/record-range.ts", ...(withErgo ? ["src/ergo-profile.ts"] : [])];
 const ergoFixture = withErgo ? await import("../../../experiments/ergo-range/replay-fixture.mjs") : undefined;
 const ergoAdapter = withErgo ? await import("../../../experiments/ergo-range/replay-venue.mjs") : undefined;
 mkdirSync(join(root, "scratch"), { recursive: true });
@@ -49,14 +52,14 @@ try {
   const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
   if (config.error) throw new Error("TypeScript configuration unreadable");
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const program = ts.createProgram(["trail", "configuration", "terms", "package", "range", "fault-evidence", ...(withErgo ? ["ergo-profile"] : [])].map(name => join(root, `model/pool-v3-${name}.ts`)), {
+  const program = ts.createProgram(compiledRoots.map(file => join(root, file)), {
     ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false,
   });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0); assert.equal(program.emit().emitSkipped, false);
   const codec = { ...await loadEvidenceCodecs(url), ...await loadConfigurationCodecs(url),
     ...await import(new URL("model/pool-v3-fault-evidence.js", url)),
-    ...await import(new URL("model/pool-v3-package.js", url)), ...await import(new URL("model/pool-v3-range.js", url)),
-    ...(withErgo ? await import(new URL("model/pool-v3-ergo-profile.js", url)) : {}) };
+    ...await import(new URL("model/pool-v3-package.js", url)), ...await import(new URL("src/record-range.js", url)),
+    ...(withErgo ? await import(new URL("src/ergo-profile.js", url)) : {}) };
   if (withErgo) {
     const { checkErgoOwnership } = await import("../../../experiments/ergo-range/replay-venue-check.mjs");
     await test("Ergo ownership bounds intrinsic byte views before getters can hide, grow or detach storage", () => checkErgoOwnership(codec));
@@ -1222,9 +1225,8 @@ try {
   // The repository sources the verdict executes, from the relative import graph (dist modules with their src
   // sources), the compiled model roots, and the circuits, helpers and manifest the pinned identities come from.
   // Packages are bound by the lockfiles; the vendored library the Ergo fixture builds trees with by its checksum list.
-  const models = ["trail", "configuration", "terms", "package", "range", "fault-evidence", ...(withErgo ? ["ergo-profile"] : [])];
   const sources = sourceClosure(["scripts/pool/v3/local-check.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/compile.mjs",
-    ...models.map(name => `model/pool-v3-${name}.ts`), "scripts/pool/v3/candidate-manifest.json",
+    ...compiledRoots, "scripts/pool/v3/candidate-manifest.json",
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json",
     ...(withErgo ? ["experiments/ergo-range/package-lock.json", "experiments/ergo-range/vendor/ergo-lib-wasm-nodejs/SHA256SUMS"] : [])]);
