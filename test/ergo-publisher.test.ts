@@ -10,7 +10,8 @@ import { signCommitment, type Commitment } from "../src/commitment.js";
 import { ErgoVenue } from "../src/ergo.js";
 import { attributeBlock, frameTransaction, MINER_FEE_TREE_HEX } from "../src/ergo-profile.js";
 import {
-  DEFAULT_ERGO_FEE, DEFAULT_MIN_VALUE_PER_BYTE, ErgoPublisher, payToPublicKeyTree, readPlainBox, verifyErgoProof, type ErgoPublishingSupplier,
+  DEFAULT_ERGO_FEE, DEFAULT_MIN_VALUE_PER_BYTE, ergoNodePublisher, ErgoPublisher, payToPublicKeyTree, readPlainBox, verifyErgoProof,
+  type ErgoPublishingSupplier, type NodeRequestInit,
 } from "../src/ergo-publisher.js";
 import { operatorAt, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
 import { signRevocation } from "../src/revocation.js";
@@ -71,11 +72,14 @@ describe("proveDlog proofs are Ergo's", () => {
     }
   });
 
-  it("refuses keys that are not scalars below the order", () => {
+  it("refuses keys that are not scalars below the order, and a fee or per-byte minimum the network would refuse", () => {
     for (const secretKey of [new Uint8Array(32), new Uint8Array(31).fill(1),
       Buffer.from(secp256k1.CURVE.n.toString(16).padStart(64, "0"), "hex")]) {
       expect(() => new ErgoPublisher({ secretKey, suppliers: [node()] })).toThrow(VenueError);
     }
+    // The fee box's minimum: its 105-byte tree, value, height and counts, the transaction id and its index.
+    expect(() => publisher([node()], { fee: 50_000n })).toThrow(/below its box's minimum/);
+    expect(() => new ErgoPublisher({ secretKey: SECRET, suppliers: [node()], minValuePerByte: 0n })).toThrow(VenueError);
   });
 });
 
@@ -134,7 +138,7 @@ describe("suppliers are untrusted", () => {
     ];
     const seen: Uint8Array[][] = [];
     const lying: ErgoPublishingSupplier = {
-      name: "liar", unspentBoxes: async () => offered, hasBox: async () => false,
+      name: "liar", unspentBoxes: async () => offered, hasBox: async () => { throw new Error("no answer"); },
       submit: async (_signed, _id) => { throw new Error("refused"); },
     };
     const n = node();
@@ -164,6 +168,20 @@ describe("suppliers are untrusted", () => {
     refusing.refuse = () => true;
     await expect(publisher([broken, refusing]).publish(request())).rejects.toThrow(/no supplier accepted/);
   });
+
+  it("spends no box a supplier invents where another answers that it lacks it", async () => {
+    const n = funded([10_000_000n]);
+    const invented = plainBox(TREE, 1n << 62n, HEIGHT);
+    const liar: ErgoPublishingSupplier = {
+      name: "liar", unspentBoxes: async () => [invented], hasBox: async id => hex(id) === hex(hash(invented)) || n.hasBox(id), submit: async () => {},
+    };
+    const publication = await publisher([n, liar]).publish(request());
+    expect(publication.inputs.map(hex)).not.toContain(hex(hash(invented)));
+    expect(n.pool).toHaveLength(1);
+    // The price: a supplier denying every box stops publication, visibly, rather than letting a false box through.
+    const denier: ErgoPublishingSupplier = { name: "denier", unspentBoxes: async () => [], hasBox: async () => false, submit: async () => {} };
+    await expect(publisher([funded([10_000_000n]), denier]).publish(request())).rejects.toThrow(/no supplier offered/);
+  });
 });
 
 describe("a publication is sent once, and publications chain", () => {
@@ -180,36 +198,51 @@ describe("a publication is sent once, and publications chain", () => {
     expect(n.pool).toHaveLength(1);
   });
 
-  it("builds anew once no supplier accepts or shows the old transaction", async () => {
+  it("keeps a transaction whose acceptance it never heard, and sends the same one again", async () => {
     const n = funded([10_000_000n]);
-    const p = publisher([n]);
-    const first = await p.publish(request());
-    // The node dropped the transaction: its inputs are back and its outputs gone.
-    n.pool.splice(0);
-    n.boxes.clear();
-    const funding = plainBox(TREE, 10_000_000n, HEIGHT - 5n);
-    n.fund(funding);
-    n.refuse = id => id === hex(first.id);
-    const rebuilt = await p.publish(request());
-    expect(hex(rebuilt.id)).not.toBe(hex(first.id));
-    expect(rebuilt.inputs.map(hex)).toEqual([hex(hash(funding))]);
-    expect(n.submitted).toEqual([hex(first.id), hex(first.id), hex(rebuilt.id)]);
+    // The node takes the transaction, and the answer is lost.
+    const lossy: ErgoPublishingSupplier = { name: "lossy", unspentBoxes: t => n.unspentBoxes(t), hasBox: id => n.hasBox(id),
+      submit: async (s, id) => { await n.submit(s, id).catch(() => {}); throw new Error("connection reset"); } };
+    const p = publisher([lossy]);
+    await expect(p.publish(request())).rejects.toThrow(/kept and sent again/);
+    // The retry finds the record box the lost submission created, and sends nothing.
+    const retried = await p.publish(request());
+    expect(n.submitted).toEqual([hex(retried.id)]);
     expect(n.pool).toHaveLength(1);
+    expect(p.unsettled).toBe(1);
   });
 
-  it("forgets change and spends of a transaction the network dropped once a new one cannot be sent", async () => {
+  it("survives an unreachable supplier without building a second transaction", async () => {
     const n = funded([10_000_000n]);
+    let down = false;
+    const flaky: ErgoPublishingSupplier = {
+      name: "flaky", unspentBoxes: t => (down ? Promise.reject(new Error("down")) : n.unspentBoxes(t)),
+      hasBox: id => (down ? Promise.reject(new Error("down")) : n.hasBox(id)), submit: (s, id) => (down ? Promise.reject(new Error("down")) : n.submit(s, id)),
+    };
+    const p = publisher([flaky]);
+    const first = await p.publish(request());
+    n.boxes.delete(hex(first.recordBox)); // not shown: a retry sends it again
+    down = true;
+    await expect(p.publish(request())).rejects.toThrow(/kept and sent again/);
+    down = false;
+    expect(hex((await p.publish(request())).id)).toBe(hex(first.id));
+    expect(n.pool).toHaveLength(1);
+    expect(new Set(n.submitted)).toEqual(new Set([hex(first.id)]));
+  });
+
+  it("sends a dropped transaction again before the one that spends its change", async () => {
+    const funding = plainBox(TREE, 10_000_000n, HEIGHT - 5n), n = node();
+    n.fund(funding);
     const p = publisher([n]);
     const dropped = await p.publish(request());
+    // The network forgot the first transaction: its input is unspent again and its outputs gone.
     n.pool.splice(0);
     n.boxes.clear();
-    const funding = plainBox(TREE, 5_000_000n, HEIGHT - 5n);
     n.fund(funding);
-    // The remembered change is larger and chosen first; the node has never seen it.
     const next = await p.publish(request(new Uint8Array(136).fill(7)));
-    expect(next.inputs.map(hex)).toEqual([hex(hash(funding))]);
-    expect(n.submitted.filter(id => id !== hex(dropped.id))).toHaveLength(2);
-    expect(n.pool).toHaveLength(1);
+    expect(next.inputs.map(hex)).toEqual([hex(dropped.change!.id)]);
+    expect(n.submitted.slice(-2)).toEqual([hex(dropped.id), hex(next.id)]);
+    expect(n.pool).toHaveLength(2);
   });
 
   it("spends its own change before any index shows it, and never one box twice under concurrent calls", async () => {
@@ -290,14 +323,35 @@ describe("the view publishes through its wallet and holds only what it reads", (
   it("refuses to publish unsigned records, and before a settled snapshot", async () => {
     const network = new Network();
     const unsynced = new ErgoVenue(PROFILE, chain.context, {}, publisher([network.node]));
-    await expect(unsynced.publish(commitmentOf(1n, 1))).rejects.toThrow(/no settled snapshot/);
+    expect(() => unsynced.publish(commitmentOf(1n, 1))).toThrow(/no settled snapshot/);
     network.mine(5);
     const v = await view(network);
     const c = commitmentOf(1n, 1);
-    await expect(v.publish({ ...c, signature: new Uint8Array(64) })).rejects.toThrow(/signature invalid/);
+    expect(() => v.publish({ ...c, signature: new Uint8Array(64) })).toThrow(/signature invalid/);
     const revocation = signRevocation(SECRETS.backer);
-    await expect(v.publishRevocation({ ...revocation, obligor: KEYS.backer2 })).rejects.toThrow(/not signed/);
+    expect(() => v.publishRevocation({ ...revocation, obligor: KEYS.backer2 })).toThrow(/not signed/);
     expect(network.node.submitted).toHaveLength(0);
+  });
+
+  it("settles its wallet as it reads: a publication is forgotten once its record is final, and its inputs once it landed", async () => {
+    const network = new Network();
+    network.mine(5);
+    const p = publisher([network.node]);
+    const v = new ErgoVenue(PROFILE, chain.context, {}, p);
+    await v.sync([network.supplier]);
+    await v.publish(commitmentOf(1n, 2));
+    await v.publish(commitmentOf(2n, 3));
+    expect(p.unsettled).toBe(2);
+    network.mine(Number(DEPTH));
+    await v.sync([network.supplier]);
+    expect(p.unsettled).toBe(2); // included, not yet final
+    network.mine();
+    await v.sync([network.supplier]);
+    expect(p.unsettled).toBe(0);
+    // A later publication spends the confirmed change the node offers.
+    const next = await p.publish({ location: SCRIPTS[1], subject: KEYS.operator, record: new Uint8Array(136).fill(4), height: network.tip.height });
+    expect(network.node.pool).toHaveLength(1);
+    expect(next.inputs).toHaveLength(1);
   });
 });
 
@@ -341,5 +395,57 @@ describe.skipIf(!supported)("a pool store publishes on the Ergo view (Node 24)",
     } finally {
       store.close();
     }
+  });
+});
+
+describe("a node as a publishing supplier", () => {
+  // A real testnet box of the experiment's throwaway key, as the node's index and UTXO set state it.
+  const TREE = "0008cd03eb9432b2aaf72b39f474ea8daec054a85f1b34ed2423aa0731221117f62af749";
+  const BOX_ID = "9d9f9c692d414e6f8bbd74fafea11c6c1742ebba2be5c24841a835c6f5c9879d";
+  const BOX_BYTES = `90acb3c089c604${TREE}eca4220000553a060beb6098b15b50eaff149ac48b4579c0efacd11ec47c2bee96553d072206`;
+  const statement = (changes: Record<string, unknown> = {}): string => `{
+    "globalIndex" : 3877053, "inclusionHeight" : 561774, "address" : "3WzLhpY2Dbd8WSbvZTbHS5cbCiJFsfbLFrfoWWEt3GkQJJr6oxi9",
+    "spentTransactionId" : null, "spendingProof" : null, "boxId" : ${JSON.stringify(changes.boxId ?? BOX_ID)}, "value" : 19999918708240,
+    "ergoTree" : "${TREE}", "assets" : ${JSON.stringify(changes.assets ?? [])}, "creationHeight" : 561772,
+    "additionalRegisters" : ${JSON.stringify(changes.additionalRegisters ?? {})},
+    "transactionId" : "553a060beb6098b15b50eaff149ac48b4579c0efacd11ec47c2bee96553d0722", "index" : 6 }`;
+  const recording = (answer: (url: string) => Response) => {
+    const calls: { url: string; method?: string; body?: string }[] = [];
+    const fetch = async (url: string, init: NodeRequestInit): Promise<Response> => {
+      calls.push({ url, ...(init.method === undefined ? {} : { method: init.method }), ...(init.body === undefined ? {} : { body: init.body }) });
+      return answer(url);
+    };
+    return { calls, fetch };
+  };
+
+  it("copies plain boxes from the index, bound to their ids, and passes over every other box", async () => {
+    const { calls, fetch } = recording(() => new Response(`[${[statement(), statement({ assets: [{ tokenId: "11".repeat(32), amount: 1 }] }),
+      statement({ additionalRegisters: { R4: "0e0100" } }), statement({ boxId: "22".repeat(32) })].join(",")}]`));
+    const supplier = ergoNodePublisher("http://node", { fetch });
+    const boxes = await supplier.unspentBoxes(Buffer.from(TREE, "hex"));
+    expect(boxes.map(hex)).toEqual([BOX_BYTES]);
+    expect(hex(hash(boxes[0]!))).toBe(BOX_ID);
+    expect(calls).toEqual([{ method: "POST", body: JSON.stringify(TREE), url:
+      "http://node/blockchain/box/unspent/byErgoTree?offset=0&limit=100&sortDirection=asc&includeUnconfirmed=true&excludeMempoolSpent=true" }]);
+    const none = ergoNodePublisher("http://node", { fetch: recording(() => new Response("", { status: 404 })).fetch });
+    expect(await none.unspentBoxes(Buffer.from(TREE, "hex"))).toEqual([]);
+  });
+
+  it("shows a box only where the bytes served hash to its id", async () => {
+    const answer = (bytes: string) => ergoNodePublisher("http://node", { fetch: recording(() => new Response(`{ "boxId" : "${BOX_ID}", "bytes" : "${bytes}" }`)).fetch });
+    expect(await answer(BOX_BYTES).hasBox(Buffer.from(BOX_ID, "hex"))).toBe(true);
+    expect(await answer(`${BOX_BYTES}00`).hasBox(Buffer.from(BOX_ID, "hex"))).toBe(false);
+    const missing = ergoNodePublisher("http://node", { fetch: recording(() => new Response("", { status: 404 })).fetch });
+    expect(await missing.hasBox(Buffer.from(BOX_ID, "hex"))).toBe(false);
+  });
+
+  it("takes a submission as accepted only where the node answers with the transaction's id", async () => {
+    const id = new Uint8Array(32).fill(0xab);
+    const { calls, fetch } = recording(() => new Response(`"${hex(id)}"`));
+    await ergoNodePublisher("http://node", { fetch }).submit(Uint8Array.of(1, 2, 3), id);
+    expect(calls).toEqual([{ url: "http://node/transactions/bytes", method: "POST", body: '"010203"' }]);
+    await expect(ergoNodePublisher("http://node", { fetch }).submit(Uint8Array.of(1), new Uint8Array(32))).rejects.toThrow(/did not accept/);
+    const refusing = recording(() => new Response('{ "error" : 400, "reason" : "bad.request", "detail" : "Can not parse transaction bytes: null" }', { status: 400 }));
+    await expect(ergoNodePublisher("http://node", { fetch: refusing.fetch }).submit(Uint8Array.of(0), id)).rejects.toThrow(/400/);
   });
 });

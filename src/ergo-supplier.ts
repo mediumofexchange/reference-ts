@@ -22,7 +22,6 @@
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import type { ErgoTransactionView } from "./ergo-profile.js";
-import type { ErgoPublishingSupplier } from "./ergo-publisher.js";
 
 /** One source of header bytes and sections. Every method may fail (throw or
  * reject), return fewer headers than asked or no section; the reader treats
@@ -283,7 +282,7 @@ export interface ErgoNodeSupplierOptions {
   /** A label for reports; defaults to the base URL. */
   readonly name?: string;
   /** Defaults to the global `fetch`. */
-  readonly fetch?: (url: string, init: NodeRequestInit) => Promise<Response>;
+  readonly fetch?: (url: string, init: { signal: AbortSignal }) => Promise<Response>;
   /** Per request. */
   readonly timeoutMs?: number;
   /** A response longer than this is not read: it supplies nothing. */
@@ -291,55 +290,23 @@ export interface ErgoNodeSupplierOptions {
   /** Headers asked of the node per request. */
   readonly batch?: bigint;
 }
-/** What the node supplier asks of `fetch`: a GET, or a POST of a JSON string. */
-export interface NodeRequestInit {
-  readonly signal: AbortSignal;
-  readonly method?: "GET" | "POST";
-  readonly headers?: Readonly<Record<string, string>>;
-  readonly body?: string;
-}
 /** Consensus caps a block near 8 MB; its JSON is at most a few times that. */
 const DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
 const DEFAULT_BATCH = 500n;
-/** Unspent boxes asked of the node's index per request: plenty for a funding key. */
-const BOXES_PER_REQUEST = 100;
 
-/** A plain box (no tokens, no registers) copied from the node's statement of
- * it, as its index lists them: value, tree, creation height, the two empty
- * counts, the creating transaction's id and the output index. Undefined for
- * any other box, or one whose copy does not hash to the id stated. */
-function copyPlainBox(statement: NodeJson): Uint8Array | undefined {
-  try {
-    if (list(statement, "assets").length !== 0) return undefined;
-    const registers = field(statement, "additionalRegisters");
-    if (!(registers instanceof Map) || registers.size !== 0) return undefined;
-    const out = concat([vlq(integer(field(statement, "value"), MAX_U64)), bytes(field(statement, "ergoTree")),
-      vlq(integer(field(statement, "creationHeight"), MAX_U32)), Uint8Array.of(0, 0), bytes(field(statement, "transactionId"), 32),
-      vlq(integer(field(statement, "index"), BigInt(MAX_U16)))]);
-    return field(statement, "boxId") === bytesToHex(hash(out)) ? out : undefined;
-  } catch (error) {
-    if (error instanceof Unsupplied) return undefined;
-    throw error;
-  }
-}
-
-/** A supplier over one node's REST API. Reading: `/info`,
- * `/blocks/chainSlice`, `/blocks/{id}/transactions`. Publishing: the node's
- * box index (`/blockchain/box/unspent/byErgoTree`, which needs its
- * `extraIndex`), `/utxo/withPool/byIdBinary/{id}` and `/transactions/bytes`.
- * The node is untrusted: what it serves is copied to bytes and the reader
- * verifies them, and a statement the copy cannot reproduce leaves the header,
- * section or box unsupplied. */
-export function ergoNodeSupplier(baseUrl: string, options: ErgoNodeSupplierOptions = {}): ErgoSupplier & ErgoPublishingSupplier {
+/** A supplier over one node's REST API (`/info`, `/blocks/chainSlice`,
+ * `/blocks/{id}/transactions`), GET only. The node is untrusted: what it
+ * serves is copied to bytes and the reader verifies them. A statement the
+ * copy cannot reproduce leaves the header or section unsupplied. */
+export function ergoNodeSupplier(baseUrl: string, options: ErgoNodeSupplierOptions = {}): ErgoSupplier {
   const base = baseUrl.replace(/\/+$/, "");
-  const fetcher = options.fetch ?? ((url: string, init: NodeRequestInit) => fetch(url, init));
+  const fetcher = options.fetch ?? ((url: string, init: { signal: AbortSignal }) => fetch(url, init));
   const timeoutMs = options.timeoutMs ?? 30_000, maxBytes = options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
   const batch = options.batch ?? DEFAULT_BATCH;
   if (batch < 1n) throw new RangeError("a header batch is positive");
-  /** The body as text, or undefined where the node answers 404. A body is POSTed as a JSON string. */
-  const get = async (path: string, body?: string): Promise<string | undefined> => {
-    const response = await fetcher(`${base}${path}`, body === undefined ? { signal: AbortSignal.timeout(timeoutMs) } :
-      { signal: AbortSignal.timeout(timeoutMs), method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  /** The body as text, or undefined where the node answers 404. */
+  const get = async (path: string): Promise<string | undefined> => {
+    const response = await fetcher(`${base}${path}`, { signal: AbortSignal.timeout(timeoutMs) });
     if (response.status === 404) return undefined;
     if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
     const declared = Number(response.headers.get("content-length") ?? "0");
@@ -401,30 +368,6 @@ export function ergoNodeSupplier(baseUrl: string, options: ErgoNodeSupplierOptio
         views.push(Object.freeze({ unsigned: supplied.unsigned, witnessId: supplied.witnessId }));
       }
       return Object.freeze(views);
-    },
-    async unspentBoxes(tree: Uint8Array): Promise<readonly Uint8Array[]> {
-      const text = await get(`/blockchain/box/unspent/byErgoTree?offset=0&limit=${BOXES_PER_REQUEST}&sortDirection=desc` +
-        "&includeUnconfirmed=true&excludeMempoolSpent=true", bytesToHex(tree));
-      const statements = text === undefined ? [] : parseNodeJson(text);
-      if (!Array.isArray(statements)) throw new Error("unspent boxes: not a list");
-      const out: Uint8Array[] = [];
-      for (const statement of statements.slice(0, BOXES_PER_REQUEST)) {
-        const box = copyPlainBox(statement);
-        if (box !== undefined) out.push(box);
-      }
-      return out;
-    },
-    async hasBox(boxId: Uint8Array): Promise<boolean> {
-      const id = bytesToHex(boxId);
-      const text = await get(`/utxo/withPool/byIdBinary/${id}`);
-      if (text === undefined) return false;
-      const box = parseNodeJson(text);
-      const stated = box instanceof Map ? box.get("bytes") : undefined;
-      return typeof stated === "string" && HEX.test(stated) && bytesToHex(hash(hexToBytes(stated))) === id;
-    },
-    async submit(signed: Uint8Array, id: Uint8Array): Promise<void> {
-      const text = await get("/transactions/bytes", bytesToHex(signed));
-      if (text === undefined || parseNodeJson(text) !== bytesToHex(id)) throw new Error("/transactions/bytes: the node did not accept the transaction");
     },
   });
 }

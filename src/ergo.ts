@@ -48,7 +48,7 @@ import { ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, type ErgoHeaderStore 
 import {
   attributeSection, ergoProfileIdentity, ownErgoProfile, rangeEntries, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
 } from "./ergo-profile.js";
-import type { ErgoPublisher } from "./ergo-publisher.js";
+import type { ErgoPublisher, ErgoRecordRequest } from "./ergo-publisher.js";
 import type { ErgoSupplier } from "./ergo-supplier.js";
 import {
   COMMITMENT_RANGE, copyRequest, encodeRangeAnswer, heldCommitments, RangeLimitError, REPLACEMENT_RANGE, REVOCATION_RANGE,
@@ -306,6 +306,8 @@ export class ErgoVenue implements Venue {
           witnessedHeaderId: copyBytes(best.headers[Number(witnessed)]!.id) });
       }
       const snapshot = this.snapshot;
+      // The publisher forgets what this view now holds; its supplier calls never fail the sync.
+      if (this.publisher !== undefined && snapshot !== undefined) await this.publisher.settle(request => this.holds(request));
       return Object.freeze({
         witnessedIndex: snapshot?.witnessed, witnessedHeaderId: snapshot === undefined ? undefined : copyBytes(snapshot.witnessedHeaderId),
         chainWitnessedIndex: chainWitnessed >= 0n ? chainWitnessed : undefined, tipHeight: best.height, suppliers: Object.freeze(passes.map(({ pass }) => pass.report)),
@@ -445,10 +447,13 @@ export class ErgoVenue implements Venue {
     return held;
   }
 
-  /** Publish a signed commitment through the view's publisher (kind 1, filed under its operator). */
-  async publish(commitment: Commitment): Promise<void> {
+  /** Publish a signed commitment through the view's publisher (kind 1, filed
+   * under its operator). A refusal throws at once; the returned promise
+   * settles when a supplier accepted the transaction, and a caller awaits it,
+   * as `PoolStore.publish` does. */
+  publish(commitment: Commitment): Promise<void> {
     if (!verifyCommitment(commitment)) throw new VenueError("commitment signature invalid");
-    await this.publishRecord(COMMITMENT_RANGE, commitment.operator, encodeCommitment(commitment));
+    return this.publishRecord(COMMITMENT_RANGE, commitment.operator, encodeCommitment(commitment));
   }
 
   publishOp(): void {
@@ -457,20 +462,20 @@ export class ErgoVenue implements Venue {
 
   /** Publish a replacement record (kind 2, filed under its backing). Whether it
    * is signed and in force is the walk's question, as on every venue. */
-  async publishReplacement(backingName: Uint8Array, replacement: Replacement): Promise<void> {
+  publishReplacement(backingName: Uint8Array, replacement: Replacement): Promise<void> {
     let record: Uint8Array;
     try {
       record = encodeReplacement(backingName, replacement);
     } catch (cause) {
       throw new VenueError(`published replacement does not encode: ${String(cause)}`);
     }
-    await this.publishRecord(REPLACEMENT_RANGE, backingName, record);
+    return this.publishRecord(REPLACEMENT_RANGE, backingName, record);
   }
 
   /** Publish a revocation signed by the key it revokes (kind 3, filed under that key). */
-  async publishRevocation(revocation: Revocation): Promise<void> {
+  publishRevocation(revocation: Revocation): Promise<void> {
     if (!isSignedRevocation(revocation)) throw new VenueError("revocation is not signed by the key it revokes");
-    await this.publishRecord(REVOCATION_RANGE, revocation.obligor, encodeRevocation(revocation));
+    return this.publishRecord(REVOCATION_RANGE, revocation.obligor, encodeRevocation(revocation));
   }
 
   /**
@@ -480,10 +485,16 @@ export class ErgoVenue implements Venue {
    * and never a supplier's word. Resolves when a supplier accepted the
    * transaction; the record counts once a later sync reads it.
    */
-  private async publishRecord(kind: 1 | 2 | 3, subject: Uint8Array, record: Uint8Array): Promise<void> {
+  private publishRecord(kind: 1 | 2 | 3, subject: Uint8Array, record: Uint8Array): Promise<void> {
     if (this.publisher === undefined) throw new VenueError("this view has no publisher; publishing is the operator's wallet");
     this.requireSnapshot();
-    await this.publisher.publish({ location: this.profile.scripts[kind], subject, record, height: this.store.tip().height });
+    return this.publisher.publish({ location: this.profile.scripts[kind], subject, record, height: this.store.tip().height }).then(() => {});
+  }
+
+  /** Whether the snapshot holds this exact record at its location under its subject. */
+  private holds(request: ErgoRecordRequest): boolean {
+    const kind = ([1, 2, 3] as const).find(k => compareBytes(this.profile.scripts[k], request.location) === 0);
+    return kind !== undefined && this.entries(kind, request.subject).entries.some(entry => compareBytes(entry.record, request.record) === 0);
   }
 
   publishCommit(): void {

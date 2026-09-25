@@ -243,20 +243,15 @@ export interface Venue {
    * shut is a lever (the slice-38 review).
    */
   lag(): bigint;
-  /**
-   * Publication may settle later: a chain's publisher resolves once its
-   * transaction was accepted for inclusion, which is not holding. A record
-   * counts only once a read returns it.
-   */
-  publish(commitment: Commitment): void | Promise<void>;
+  publish(commitment: Commitment): void;
   publishOp(backingName: Uint8Array, op: PublishedOp): void;
-  publishReplacement(backingName: Uint8Array, replacement: Replacement): void | Promise<void>;
+  publishReplacement(backingName: Uint8Array, replacement: Replacement): void;
   /**
    * Filed under the key it revokes, not under a backing: §C2b's revocation is
    * "published by K to every venue its backings name", and one K obligates many
    * backings. The record names its own subject, so nothing is passed beside it.
    */
-  publishRevocation(revocation: Revocation): void | Promise<void>;
+  publishRevocation(revocation: Revocation): void;
   /**
    * Filed under the attempt it commits, not under a backing: §C3's commit is one
    * object read by every sequencer in a bundle, and which backings those are is

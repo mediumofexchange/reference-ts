@@ -25,20 +25,25 @@
 // its record. Each box at a location carries the network's minimum value,
 // which whoever can spend that location collects (§1).
 //
-// **Idempotence is by memory, not by storage.** A record already published
-// by this publisher is rebroadcast as the same transaction while any supplier
-// still refuses to confirm its record box exists, so a retry after a lost
-// response does not publish twice. After a restart the memory is gone and a
-// retry may publish a second, identical object: readers take identical
-// records as one (a commitment's second witnessing is below the held
-// sequence, a revocation's is not its first), so the cost is one fee. Boxes
-// this publisher has spent or created stay in memory, so publications chain
-// in the mempool without waiting for a block.
+// **One transaction per record, remembered before it is sent.** A record's
+// transaction is built once; every later attempt sends the same bytes (after
+// any unsettled transaction whose change it spends), so a lost response, an
+// unreachable supplier or a dropped transaction never leads to a second,
+// non-conflicting one. It is forgotten only once a verifying view holds the
+// record (`settle`). The memory is not stored: after a restart a retry may
+// publish a second, identical object, which readers take as one (a
+// commitment's later witnessing is below the held sequence, a revocation's
+// first witnessing counts, and a repeated replacement restates its own
+// link), so the cost is a fee. Change this publisher created is spent before
+// any index shows it, so publications chain in the mempool. The funding key
+// must be this publisher's alone: a transaction spending its boxes elsewhere
+// can invalidate a remembered one for good.
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex, hexToBytes, randomBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes } from "./bytes.js";
 import { MINER_FEE_TREE_HEX } from "./ergo-profile.js";
+import { parseNodeJson, type NodeJson } from "./ergo-supplier.js";
 import { VenueError } from "./venue.js";
 
 /** The pinned node's minimum fee for its mempool (`minimalFeeAmount`) plus
@@ -62,7 +67,7 @@ const MAX_BOX_BYTES = 4096;
 const MAX_U16 = 0xffff;
 const MAX_U64 = (1n << 64n) - 1n;
 const MAX_INPUTS = 64;
-/** Publications remembered for rebroadcast; older ones may publish twice after a refusal. */
+/** Unsettled publications remembered at once; a view settles them as it reads their records. */
 const PENDING_LIMIT = 1024;
 
 const hash = (bytes: Uint8Array): Uint8Array => blake2b(bytes, { dkLen: 32 });
@@ -277,7 +282,8 @@ export interface ErgoPublishingSupplier {
 }
 
 export interface ErgoPublisherOptions {
-  /** The funding key: a 32-byte secp256k1 scalar. Copied; it pays fees and box minimums. */
+  /** The funding key: a 32-byte secp256k1 scalar. Copied; it pays fees and box
+   * minimums, and no other wallet may spend its boxes. */
   readonly secretKey: Uint8Array;
   readonly suppliers: readonly ErgoPublishingSupplier[];
   readonly fee?: bigint;
@@ -286,12 +292,18 @@ export interface ErgoPublisherOptions {
   readonly timeoutMs?: number;
 }
 
-interface Pending { readonly publication: ErgoPublication }
+/** A publication built for one record, remembered before it is first sent. */
+interface Pending {
+  readonly key: string;
+  readonly request: ErgoRecordRequest;
+  readonly publication: ErgoPublication;
+}
+const recordKey = (r: ErgoRecordRequest): string =>
+  bytesToHex(concat(vlq(BigInt(r.location.length)), r.location, r.subject, vlq(BigInt(r.record.length)), r.record));
 
 /**
- * An operator's wallet for venue records: one funding key, publishing one
- * record per transaction. Calls are serialized, so two publications never
- * choose one box.
+ * An operator's wallet for venue records: one funding key, one record per
+ * transaction. Calls are serialized, so two publications never choose one box.
  */
 export class ErgoPublisher {
   readonly #key: ErgoKey;
@@ -300,11 +312,12 @@ export class ErgoPublisher {
   readonly #fee: bigint;
   readonly #perByte: bigint;
   readonly #timeoutMs: number;
-  /** Publications by record (location, subject, record), oldest first. */
+  /** Unsettled publications by record, oldest first. */
   readonly #pending = new Map<string, Pending>();
-  /** Boxes remembered publications spend, and the change they create. */
+  /** The unsettled publication that creates each change box, by box id. */
+  readonly #byChange = new Map<string, Pending>();
+  /** Boxes remembered publications spend. */
   readonly #spent = new Set<string>();
-  readonly #created = new Map<string, ErgoPlainBox>();
   #queue: Promise<unknown> = Promise.resolve();
 
   constructor(options: ErgoPublisherOptions) {
@@ -315,8 +328,12 @@ export class ErgoPublisher {
     this.#fee = options.fee ?? DEFAULT_ERGO_FEE;
     this.#perByte = options.minValuePerByte ?? DEFAULT_MIN_VALUE_PER_BYTE;
     this.#timeoutMs = options.timeoutMs ?? 60_000;
-    if (typeof this.#fee !== "bigint" || this.#fee <= 0n || this.#fee > MAX_U64 || typeof this.#perByte !== "bigint" || this.#perByte < 0n ||
-        this.#perByte > 1_000_000n || !Number.isSafeInteger(this.#timeoutMs) || this.#timeoutMs <= 0) throw new VenueError("invalid Ergo publisher options");
+    if (typeof this.#fee !== "bigint" || typeof this.#perByte !== "bigint" || this.#perByte < 1n || this.#perByte > 1_000_000n ||
+        this.#fee > MAX_U64 || !Number.isSafeInteger(this.#timeoutMs) || this.#timeoutMs <= 0) throw new VenueError("invalid Ergo publisher options");
+    // The fee box is a box too: it must reach the minimum at any height.
+    if (this.#fee < minimumValue({ tree: FEE_TREE, registers: [] }, 0xffff_ffffn, 2, this.#perByte)) {
+      throw new VenueError("the fee is below its box's minimum value");
+    }
   }
 
   /** The funding key's pay-to-public-key tree, where its boxes and change are. */
@@ -324,83 +341,119 @@ export class ErgoPublisher {
     return copyBytes(this.#tree);
   }
 
-  /** Publish one record at its location, or confirm the transaction this
-   * publisher already sent for it. Resolves once some supplier accepted the
-   * transaction or shows its record box; throws `VenueError` otherwise. */
+  /** How many publications are remembered and not yet settled. */
+  get unsettled(): number {
+    return this.#pending.size;
+  }
+
+  /**
+   * Publish one record at its location. A record this publisher already built
+   * a transaction for gets that same transaction, sent again unless a
+   * supplier shows its record box: it is remembered before it is first sent,
+   * so a lost response or an unreachable supplier never leads to a second
+   * transaction. Resolves once a supplier accepted it or shows its record
+   * box; otherwise throws `VenueError` and keeps it for the next attempt.
+   */
   async publish(request: ErgoRecordRequest): Promise<ErgoPublication> {
     const owned = ownRequest(request);
-    const run = this.#queue.then(() => this.#publish(owned));
+    return this.#serialized(() => this.#publish(owned));
+  }
+
+  /**
+   * Forget the publications whose records a verifying view holds (`holds`
+   * answers for a record at a final index). A publication whose record box
+   * or change a supplier shows has landed, so its inputs leave the memory
+   * too; otherwise, as when someone else published the same record, its
+   * inputs stay reserved, so no later transaction conflicts with one that
+   * may still land.
+   */
+  async settle(holds: (request: ErgoRecordRequest) => boolean): Promise<void> {
+    return this.#serialized(async () => {
+      for (const pending of [...this.#pending.values()]) {
+        if (!holds(pending.request)) continue;
+        const { publication } = pending, change = publication.change;
+        const landed = await this.#any(s => s.hasBox(copyBytes(publication.recordBox))) ||
+          (change !== undefined && await this.#any(s => s.hasBox(copyBytes(change.id))));
+        this.#pending.delete(pending.key);
+        if (change !== undefined) this.#byChange.delete(bytesToHex(change.id));
+        if (landed) for (const input of publication.inputs) this.#spent.delete(bytesToHex(input));
+      }
+    });
+  }
+
+  #serialized<T>(action: () => Promise<T>): Promise<T> {
+    const run = this.#queue.then(action);
     this.#queue = run.catch(() => undefined);
     return run;
   }
 
   async #publish(request: ErgoRecordRequest): Promise<ErgoPublication> {
-    const key = bytesToHex(concat(vlq(BigInt(request.location.length)), request.location, request.subject, request.record));
-    const pending = this.#pending.get(key);
-    if (pending !== undefined) {
-      const { publication } = pending;
-      if (await this.#any(supplier => supplier.hasBox(publication.recordBox))) return publication;
-      if (await this.#broadcast(publication)) return publication;
-      this.#forget(key, pending);
+    const key = recordKey(request);
+    let pending = this.#pending.get(key);
+    if (pending === undefined) {
+      if (this.#pending.size >= PENDING_LIMIT) throw new VenueError("the publisher holds too many unsettled publications; settle it from a view");
+      const inputs = await this.#select(request.height, publicationCost(request, this.#tree, this.#fee, this.#perByte));
+      pending = Object.freeze({ key, request, publication: buildPublication(this.#key, this.#tree, inputs, request, this.#fee, this.#perByte) });
+      this.#remember(pending);
+    } else if (await this.#shown(pending)) {
+      return pending.publication;
     }
-    let publication: ErgoPublication;
-    try {
-      publication = await this.#build(request);
-    } catch (error) {
-      // Remembered change or spends may belong to transactions the network dropped: forget those no supplier
-      // shows, and try once more.
-      if (!(error instanceof VenueError) || !await this.#prune()) throw error;
-      publication = await this.#build(request);
+    if (!await this.#send(pending, new Set())) {
+      throw new VenueError("no supplier accepted the publication; it is kept and sent again on the next attempt");
     }
-    this.#remember(key, { publication });
-    return publication;
+    return pending.publication;
   }
 
-  /** A new transaction for the record, accepted by some supplier. */
-  async #build(request: ErgoRecordRequest): Promise<ErgoPublication> {
-    const inputs = await this.#select(request.height, publicationCost(request, this.#tree, this.#fee, this.#perByte));
-    const publication = buildPublication(this.#key, this.#tree, inputs, request, this.#fee, this.#perByte);
-    if (!await this.#broadcast(publication)) throw new VenueError("no supplier accepted the publication");
-    return publication;
+  /** Send a publication after the unsettled ones whose change it spends and no supplier shows. */
+  async #send(pending: Pending, visited: Set<string>): Promise<boolean> {
+    visited.add(pending.key);
+    for (const input of pending.publication.inputs) {
+      const parent = this.#byChange.get(bytesToHex(input));
+      if (parent !== undefined && !visited.has(parent.key) && !await this.#shown(parent)) await this.#send(parent, visited);
+    }
+    let accepted = false;
+    for (const supplier of this.#suppliers) {
+      const answer = await this.#call(() => supplier.submit(copyBytes(pending.publication.signed), copyBytes(pending.publication.id)));
+      accepted ||= answer.ok;
+    }
+    return accepted;
   }
 
-  /** Forget remembered change no supplier shows, and remembered publications
-   * whose record box no supplier shows, which frees their inputs: a new
-   * transaction spending one of them excludes the old, so at most one lands.
-   * Nothing is rebroadcast here, since a record may have been abandoned.
-   * Whether anything was forgotten. */
-  async #prune(): Promise<boolean> {
-    let pruned = false;
-    for (const [id, box] of [...this.#created]) {
-      if (!await this.#any(supplier => supplier.hasBox(copyBytes(box.id)))) { this.#created.delete(id); pruned = true; }
-    }
-    for (const [key, pending] of [...this.#pending]) {
-      if (!await this.#any(supplier => supplier.hasBox(copyBytes(pending.publication.recordBox)))) { this.#forget(key, pending); pruned = true; }
-    }
-    return pruned;
+  #shown(pending: Pending): Promise<boolean> {
+    return this.#any(supplier => supplier.hasBox(copyBytes(pending.publication.recordBox)));
   }
 
-  /** Plain boxes of the key that suppliers offer and remembered change, less
-   * what remembered publications spend; the largest first until the record's
-   * minimum, the fee and a change box are covered, or `MAX_INPUTS` are taken. */
+  /**
+   * Boxes covering the record's minimum, the fee and a change box, largest
+   * first, at most `MAX_INPUTS`: change of unsettled publications that none
+   * spends, which this publisher built, and plain boxes of the key that
+   * suppliers offer, each taken only as bytes hashing to its id and only
+   * where no supplier answers that it lacks the box, so a supplier inventing
+   * a box cannot outvote one that knows better.
+   */
   async #select(height: bigint, needed: bigint): Promise<ErgoPlainBox[]> {
-    const offered = new Map<string, ErgoPlainBox>(this.#created);
+    const own = new Map<string, ErgoPlainBox>();
+    for (const [id, pending] of this.#byChange) if (!this.#spent.has(id)) own.set(id, pending.publication.change!);
+    const offered = new Map<string, ErgoPlainBox>();
     for (const supplier of this.#suppliers) {
       const answer = await this.#call(() => supplier.unspentBoxes(copyBytes(this.#tree)));
-      if (!answer.ok || !Array.isArray(answer.value)) continue;
+      if (!answer.ok) continue;
       try {
+        if (!Array.isArray(answer.value)) continue;
         for (const bytes of answer.value as unknown[]) {
           const box = isRealBytes(bytes) && bytes.length <= MAX_BOX_BYTES ? readPlainBox(copyBytes(bytes), this.#tree) : undefined;
-          if (box !== undefined) offered.set(bytesToHex(box.id), box);
+          if (box !== undefined && !own.has(bytesToHex(box.id))) offered.set(bytesToHex(box.id), box);
         }
       } catch { /* an answer that throws while read supplies nothing more */ }
     }
-    const boxes = [...offered.entries()].filter(([id, box]) => !this.#spent.has(id) && box.creationHeight <= height)
-      .map(([, box]) => box).sort((a, b) => (a.value > b.value ? -1 : a.value < b.value ? 1 : compareBytes(a.id, b.id)));
+    const candidates = [...own.entries(), ...offered.entries()]
+      .filter(([id, box]) => !this.#spent.has(id) && box.creationHeight <= height)
+      .sort(([, a], [, b]) => (a.value > b.value ? -1 : a.value < b.value ? 1 : compareBytes(a.id, b.id)));
     const chosen: ErgoPlainBox[] = [];
     let total = 0n;
-    for (const box of boxes) {
+    for (const [id, box] of candidates) {
       if (chosen.length === MAX_INPUTS || total >= needed) break;
+      if (!own.has(id) && await this.#denied(box.id)) continue;
       chosen.push(box);
       total += box.value;
     }
@@ -408,14 +461,13 @@ export class ErgoPublisher {
     return chosen;
   }
 
-  /** Whether any supplier accepted the signed transaction. */
-  async #broadcast(publication: ErgoPublication): Promise<boolean> {
-    let accepted = false;
+  /** Whether some supplier answers that it lacks the box. */
+  async #denied(boxId: Uint8Array): Promise<boolean> {
     for (const supplier of this.#suppliers) {
-      const answer = await this.#call(() => supplier.submit(copyBytes(publication.signed), copyBytes(publication.id)));
-      accepted ||= answer.ok;
+      const answer = await this.#call(() => supplier.hasBox(copyBytes(boxId)));
+      if (answer.ok && answer.value === false) return true;
     }
-    return accepted;
+    return false;
   }
 
   async #any(call: (supplier: ErgoPublishingSupplier) => Promise<boolean>): Promise<boolean> {
@@ -426,24 +478,11 @@ export class ErgoPublisher {
     return false;
   }
 
-  #remember(key: string, pending: Pending): void {
-    this.#pending.set(key, pending);
-    for (const input of pending.publication.inputs) { const id = bytesToHex(input); this.#spent.add(id); this.#created.delete(id); }
+  #remember(pending: Pending): void {
+    this.#pending.set(pending.key, pending);
+    for (const input of pending.publication.inputs) this.#spent.add(bytesToHex(input));
     const change = pending.publication.change;
-    if (change !== undefined) this.#created.set(bytesToHex(change.id), Object.freeze({ id: change.id, value: change.value, creationHeight: change.creationHeight }));
-    if (this.#pending.size > PENDING_LIMIT) {
-      const [oldest, entry] = this.#pending.entries().next().value!;
-      this.#pending.delete(oldest);
-      // An old publication's inputs are long settled; its change stays offered until a supplier stops offering it.
-      for (const input of entry.publication.inputs) this.#spent.delete(bytesToHex(input));
-    }
-  }
-
-  /** A publication no supplier accepts or shows: its inputs are free again and its change never existed. */
-  #forget(key: string, pending: Pending): void {
-    this.#pending.delete(key);
-    for (const input of pending.publication.inputs) this.#spent.delete(bytesToHex(input));
-    if (pending.publication.change !== undefined) this.#created.delete(bytesToHex(pending.publication.change.id));
+    if (change !== undefined) this.#byChange.set(bytesToHex(change.id), pending);
   }
 
   async #call<T>(call: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false }> {
@@ -465,3 +504,105 @@ function ownRequest(request: ErgoRecordRequest): ErgoRecordRequest {
       typeof height !== "bigint" || height < 0n || height > 0xffff_ffffn) throw new VenueError("invalid Ergo record request");
   return Object.freeze({ location: copyBytes(location), subject: copyBytes(subject), record: copyBytes(record), height });
 }
+
+// --- A node as a publishing supplier ------------------------------------------------------------------------
+
+export interface ErgoNodePublisherOptions {
+  /** A label; defaults to the base URL. */
+  readonly name?: string;
+  /** Defaults to the global `fetch`. */
+  readonly fetch?: (url: string, init: NodeRequestInit) => Promise<Response>;
+  /** Per request. */
+  readonly timeoutMs?: number;
+}
+/** What the node publisher asks of `fetch`: a GET, or a POST of a JSON string. */
+export interface NodeRequestInit {
+  readonly signal: AbortSignal;
+  readonly method?: "GET" | "POST";
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly body?: string;
+}
+/** Boxes asked of the node's index per request, and the pages read, oldest
+ * first, so boxes a stranger sends later cannot push the funding out of view. */
+const BOXES_PER_PAGE = 100, BOX_PAGES = 10;
+/** Every answer here is small: a page of boxes, one box or an id. */
+const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+const HEX = /^(?:[0-9a-f]{2})*$/;
+
+/**
+ * A node as a publishing supplier, over its REST API: the key's boxes from its
+ * index (`/blockchain/box/unspent/byErgoTree`, which needs `extraIndex`), a
+ * box from its UTXO set with the mempool (`/utxo/withPool/byIdBinary/{id}`),
+ * and submission (`/transactions/bytes`). The node is untrusted: a box it
+ * lists is copied to bytes and counts only where they hash to the id it
+ * states, and a submission counts only where it answers with the id.
+ */
+export function ergoNodePublisher(baseUrl: string, options: ErgoNodePublisherOptions = {}): ErgoPublishingSupplier {
+  const base = baseUrl.replace(/\/+$/, "");
+  const fetcher = options.fetch ?? ((url: string, init: NodeRequestInit) => fetch(url, init));
+  const timeoutMs = options.timeoutMs ?? 30_000;
+  /** The answer as the node's JSON, or undefined where it answers 404. A body is POSTed as a JSON string. */
+  const call = async (path: string, body?: string): Promise<NodeJson | undefined> => {
+    const response = await fetcher(`${base}${path}`, body === undefined ? { signal: AbortSignal.timeout(timeoutMs) } :
+      { signal: AbortSignal.timeout(timeoutMs), method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    if (response.status === 404) return undefined;
+    if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+    if (Number(response.headers.get("content-length") ?? "0") > MAX_RESPONSE_BYTES) throw new Error(`${path}: response too long`);
+    const text = await response.text();
+    if (text.length > MAX_RESPONSE_BYTES) throw new Error(`${path}: response too long`);
+    return parseNodeJson(text);
+  };
+  return Object.freeze({
+    name: options.name ?? base,
+    async unspentBoxes(tree: Uint8Array): Promise<readonly Uint8Array[]> {
+      const out: Uint8Array[] = [];
+      for (let page = 0; page < BOX_PAGES; page++) {
+        const statements = await call(`/blockchain/box/unspent/byErgoTree?offset=${page * BOXES_PER_PAGE}&limit=${BOXES_PER_PAGE}` +
+          "&sortDirection=asc&includeUnconfirmed=true&excludeMempoolSpent=true", bytesToHex(tree));
+        if (statements === undefined) break;
+        if (!Array.isArray(statements)) throw new Error("unspent boxes: not a list");
+        for (const statement of statements.slice(0, BOXES_PER_PAGE)) {
+          const box = copyPlainBox(statement);
+          if (box !== undefined) out.push(box);
+        }
+        if (statements.length < BOXES_PER_PAGE) break;
+      }
+      return out;
+    },
+    async hasBox(boxId: Uint8Array): Promise<boolean> {
+      const id = bytesToHex(boxId);
+      const box = await call(`/utxo/withPool/byIdBinary/${id}`);
+      const stated = box instanceof Map ? box.get("bytes") : undefined;
+      return typeof stated === "string" && HEX.test(stated) && bytesToHex(hash(hexToBytes(stated))) === id;
+    },
+    async submit(signed: Uint8Array, id: Uint8Array): Promise<void> {
+      if (await call("/transactions/bytes", bytesToHex(signed)) !== bytesToHex(id)) {
+        throw new Error("/transactions/bytes: the node did not accept the transaction");
+      }
+    },
+  });
+}
+
+/** A plain box (no tokens, no registers) copied from the node's statement of
+ * it, as its index lists them: value, tree, creation height, the two empty
+ * counts, the creating transaction's id and the output index; undefined for
+ * any other box, or one whose copy does not hash to the id stated. */
+function copyPlainBox(statement: NodeJson): Uint8Array | undefined {
+  if (!(statement instanceof Map)) return undefined;
+  const text = (key: string, width?: number): Uint8Array | undefined => {
+    const value = statement.get(key);
+    return typeof value === "string" && HEX.test(value) && (width === undefined || value.length === 2 * width) ? hexToBytes(value) : undefined;
+  };
+  const integer = (key: string, max: bigint): bigint | undefined => {
+    const value = statement.get(key);
+    return typeof value === "bigint" && value >= 0n && value <= max ? value : undefined;
+  };
+  const assets = statement.get("assets"), registers = statement.get("additionalRegisters");
+  if (!Array.isArray(assets) || assets.length !== 0 || !(registers instanceof Map) || registers.size !== 0) return undefined;
+  const value = integer("value", MAX_U64), tree = text("ergoTree"), height = integer("creationHeight", 0xffff_ffffn);
+  const txId = text("transactionId", 32), index = integer("index", BigInt(MAX_U16));
+  if (value === undefined || tree === undefined || height === undefined || txId === undefined || index === undefined) return undefined;
+  const out = concat(vlq(value), tree, vlq(height), Uint8Array.of(0, 0), txId, vlq(index));
+  return statement.get("boxId") === bytesToHex(hash(out)) ? out : undefined;
+}
+

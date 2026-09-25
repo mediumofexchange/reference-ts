@@ -11,7 +11,9 @@
 // - publishing a record again returns the transaction already sent and submits nothing;
 // - once each transaction is `--depth` blocks deep, its block's section, fetched from the node and accepted only
 //   where it reproduces the header's transaction root, carries exactly the three records at their kinds, subjects
-//   and ordinals under the profile's attribution.
+//   and ordinals under the profile's attribution;
+// - the replacement's first submission reaches the node and its answer is lost: the publication fails, and the retry
+//   finds the record box and returns that same transaction without sending another.
 // The testnet has no verified header view here (the runtime's header rules are the mainnet's), so the outputs'
 // creation height is the node's full height and the header is the node's word; the root binds the section to it.
 // Usage, from the repository root on Node 24 with the own testnet node (extraIndex) running:
@@ -69,7 +71,7 @@ try {
     const path = resolve(source.fileName);
     if (path.startsWith(root + sep) && !path.includes(`${sep}node_modules${sep}`)) files[path.slice(root.length + 1).replace(/\\/g, "/")] = fileHash(path.slice(root.length + 1));
   }
-  const { ErgoPublisher, payToPublicKeyTree, DEFAULT_ERGO_FEE, DEFAULT_MIN_VALUE_PER_BYTE } = await import(new URL("src/ergo-publisher.js", url));
+  const { ErgoPublisher, ergoNodePublisher, payToPublicKeyTree, DEFAULT_ERGO_FEE, DEFAULT_MIN_VALUE_PER_BYTE } = await import(new URL("src/ergo-publisher.js", url));
   const { ergoNodeSupplier } = await import(new URL("src/ergo-supplier.js", url));
   const { attributeSection, ergoOrdinal, ownErgoProfile } = await import(new URL("src/ergo-profile.js", url));
   const { parseErgoHeader } = await import(new URL("src/ergo-headers.js", url));
@@ -109,17 +111,20 @@ try {
   assert.deepEqual(records.map(r => r.record.length), [136, 233, 96]);
 
   // The node, checked before every submission: the true bytes pass, one changed proof byte fails.
-  const supplier = ergoNodeSupplier(nodeUrl, { name: "own testnet node" });
+  const supplier = ergoNodeSupplier(nodeUrl, { name: "own testnet node" }), nodePublisher = ergoNodePublisher(nodeUrl, { name: "own testnet node" });
   const checks = [];
+  // One submission (the replacement's) reaches the node and its answer is lost.
+  let loseNext = false, lost = null;
   const checking = {
-    name: supplier.name, unspentBoxes: t => supplier.unspentBoxes(t), hasBox: id => supplier.hasBox(id),
+    name: nodePublisher.name, unspentBoxes: t => nodePublisher.unspentBoxes(t), hasBox: id => nodePublisher.hasBox(id),
     async submit(signed, id) {
       const corrupted = Uint8Array.from(signed);
       corrupted[1 + 32 + 1 + 30] ^= 0x01; // inside the first input's proof, after its count, id and length
       const bad = await node("POST", "/transactions/checkBytes", hex(corrupted));
       const good = await node("POST", "/transactions/checkBytes", hex(signed));
       checks.push({ id: hex(id), corruptedStatus: bad.status, trueStatus: good.status, trueAnswer: good.text.replace(/\s+/g, "") });
-      return supplier.submit(signed, id);
+      await nodePublisher.submit(signed, id);
+      if (loseNext) { loseNext = false; lost = hex(id); throw new Error("the answer was lost"); }
     },
   };
   const submitted = [];
@@ -127,9 +132,21 @@ try {
   const publisher = new ErgoPublisher({ secretKey, suppliers: [counting] });
 
   const publications = [];
+  let lostResponse;
   for (const r of records) {
-    const publication = await publisher.publish({ location: profile.scripts[r.kind], subject: r.subject, record: r.record, height: startHeight });
-    publications.push({ ...r, publication });
+    const request = { location: profile.scripts[r.kind], subject: r.subject, record: r.record, height: startHeight };
+    if (r.kind === 2) {
+      loseNext = true;
+      const refused = await publisher.publish(request).then(() => null, error => String(error.message));
+      assert(refused !== null && lost !== null, "the lost answer is a failed publication");
+      const retried = await publisher.publish(request);
+      assert.equal(hex(retried.id), lost, "the retry is the transaction the node took");
+      lostResponse = { txId: lost, firstAttempt: refused, submissionsForRecord: submitted.filter(id => id === lost).length };
+      assert.equal(lostResponse.submissionsForRecord, 1, "the retry found the record box and sent nothing");
+      publications.push({ ...r, publication: retried });
+      continue;
+    }
+    publications.push({ ...r, publication: await publisher.publish(request) });
   }
   // Chained: each publication after the first spends the one before's change.
   for (let i = 1; i < publications.length; i++) {
@@ -181,7 +198,7 @@ try {
   report = {
     status: "Live testnet run of the runtime publisher: three records signed by their own keys, published as chained transactions " +
       "built and signed without an Ergo library, checked by the node (a changed proof byte refused), not resubmitted when published " +
-      "again, and read back from each including block under the profile's attribution with exact bytes.",
+      "again or after a lost answer, and read back from each including block under the profile's attribution with exact bytes.",
     node: { url: nodeUrl, name: info.name, appVersion: info.appVersion, network: info.network, startHeight: startHeight.toString(),
       minValuePerByte: minValuePerByte.toString() },
     fee: DEFAULT_ERGO_FEE.toString(),
@@ -193,6 +210,7 @@ try {
     })),
     nodeChecks: checks,
     republished: { txId: hex(again.id), submissions: submitted.length },
+    lostResponse,
     duplicateSubmission: { status: duplicate.status, answer: duplicate.text.replace(/\s+/g, " ").slice(0, 300) },
     readBack,
     files,

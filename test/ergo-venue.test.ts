@@ -543,9 +543,9 @@ describe("this view reads; publishing is a wallet handed to it", () => {
   it("refuses to publish without a publisher, and refuses the records the profile does not carry rather than answering empty", async () => {
     const { v } = await synced(5);
     for (const call of [() => v.publishOp(), () => v.publishCommit(), () => v.publishedOpsFor(), () => v.commitsFor()]) expect(call).toThrow(VenueError);
-    await expect(v.publish(commitment(1n, 0xaa))).rejects.toThrow(/no publisher/);
-    await expect(v.publishRevocation(signRevocation(SECRETS.backer))).rejects.toThrow(/no publisher/);
-    await expect(v.publishReplacement(ruled.name, replacement(ruled, KEYS.carol, SECRETS.carol, SECRETS.backer2, 5n))).rejects.toThrow(/no publisher/);
+    expect(() => v.publish(commitment(1n, 0xaa))).toThrow(/no publisher/);
+    expect(() => v.publishRevocation(signRevocation(SECRETS.backer))).toThrow(/no publisher/);
+    expect(() => v.publishReplacement(ruled.name, replacement(ruled, KEYS.carol, SECRETS.carol, SECRETS.backer2, 5n))).toThrow(/no publisher/);
   });
 });
 

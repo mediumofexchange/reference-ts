@@ -4,7 +4,7 @@ import { blake2b } from "@noble/hashes/blake2b.js";
 import { describe, expect, it } from "vitest";
 import { sectionMatchesRoot } from "../src/ergo-profile.js";
 import {
-  copyTransaction, ergoNodeSupplier, parseNodeJson, supplyBlock, supplyHeader, supplyTransaction, type NodeJson, type NodeRequestInit,
+  copyTransaction, ergoNodeSupplier, parseNodeJson, supplyBlock, supplyHeader, supplyTransaction, type NodeJson,
 } from "../src/ergo-supplier.js";
 
 // The supplier's copy over the experiment's hash-pinned mainnet fixtures: every
@@ -188,57 +188,5 @@ describe("the node supplier over HTTP", () => {
     await expect(big.tipHeight()).rejects.toThrow(/over 10 bytes/);
     const failing = ergoNodeSupplier("http://node", { fetch: served({ "/info": 503 }) });
     await expect(failing.tipHeight()).rejects.toThrow(/503/);
-  });
-});
-
-describe("the node supplier's publishing side", () => {
-  // A real testnet box of the experiment's throwaway key, as the node's index and UTXO set state it.
-  const TREE = "0008cd03eb9432b2aaf72b39f474ea8daec054a85f1b34ed2423aa0731221117f62af749";
-  const BOX_ID = "9d9f9c692d414e6f8bbd74fafea11c6c1742ebba2be5c24841a835c6f5c9879d";
-  const BOX_BYTES = `90acb3c089c604${TREE}eca4220000553a060beb6098b15b50eaff149ac48b4579c0efacd11ec47c2bee96553d072206`;
-  const statement = (changes: Record<string, unknown> = {}): string => `{
-    "globalIndex" : 3877053, "inclusionHeight" : 561774, "address" : "3WzLhpY2Dbd8WSbvZTbHS5cbCiJFsfbLFrfoWWEt3GkQJJr6oxi9",
-    "spentTransactionId" : null, "spendingProof" : null, "boxId" : ${JSON.stringify(changes.boxId ?? BOX_ID)}, "value" : 19999918708240,
-    "ergoTree" : "${TREE}", "assets" : ${JSON.stringify(changes.assets ?? [])}, "creationHeight" : 561772,
-    "additionalRegisters" : ${JSON.stringify(changes.additionalRegisters ?? {})},
-    "transactionId" : "553a060beb6098b15b50eaff149ac48b4579c0efacd11ec47c2bee96553d0722", "index" : 6 }`;
-  const recording = (answer: (url: string) => Response) => {
-    const calls: { url: string; method?: string; body?: string }[] = [];
-    const fetch = async (url: string, init: NodeRequestInit): Promise<Response> => {
-      calls.push({ url, ...(init.method === undefined ? {} : { method: init.method }), ...(init.body === undefined ? {} : { body: init.body }) });
-      return answer(url);
-    };
-    return { calls, fetch };
-  };
-
-  it("copies plain boxes from the index, bound to their ids, and passes over every other box", async () => {
-    const { calls, fetch } = recording(() => new Response(`[${[statement(), statement({ assets: [{ tokenId: "11".repeat(32), amount: 1 }] }),
-      statement({ additionalRegisters: { R4: "0e0100" } }), statement({ boxId: "22".repeat(32) })].join(",")}]`));
-    const supplier = ergoNodeSupplier("http://node", { fetch });
-    const boxes = await supplier.unspentBoxes(Buffer.from(TREE, "hex"));
-    expect(boxes.map(hex)).toEqual([BOX_BYTES]);
-    expect(hex(blake2b(boxes[0]!, { dkLen: 32 }))).toBe(BOX_ID);
-    expect(calls).toEqual([{ method: "POST", body: JSON.stringify(TREE), url:
-      "http://node/blockchain/box/unspent/byErgoTree?offset=0&limit=100&sortDirection=desc&includeUnconfirmed=true&excludeMempoolSpent=true" }]);
-    const none = ergoNodeSupplier("http://node", { fetch: recording(() => new Response("", { status: 404 })).fetch });
-    expect(await none.unspentBoxes(Buffer.from(TREE, "hex"))).toEqual([]);
-  });
-
-  it("shows a box only where the bytes served hash to its id", async () => {
-    const answer = (bytes: string) => ergoNodeSupplier("http://node", { fetch: recording(() => new Response(`{ "boxId" : "${BOX_ID}", "bytes" : "${bytes}" }`)).fetch });
-    expect(await answer(BOX_BYTES).hasBox(Buffer.from(BOX_ID, "hex"))).toBe(true);
-    expect(await answer(`${BOX_BYTES}00`).hasBox(Buffer.from(BOX_ID, "hex"))).toBe(false);
-    const missing = ergoNodeSupplier("http://node", { fetch: recording(() => new Response("", { status: 404 })).fetch });
-    expect(await missing.hasBox(Buffer.from(BOX_ID, "hex"))).toBe(false);
-  });
-
-  it("takes a submission as accepted only where the node answers with the transaction's id", async () => {
-    const id = new Uint8Array(32).fill(0xab);
-    const { calls, fetch } = recording(() => new Response(`"${hex(id)}"`));
-    await ergoNodeSupplier("http://node", { fetch }).submit(Uint8Array.of(1, 2, 3), id);
-    expect(calls).toEqual([{ url: "http://node/transactions/bytes", method: "POST", body: '"010203"' }]);
-    await expect(ergoNodeSupplier("http://node", { fetch }).submit(Uint8Array.of(1), new Uint8Array(32))).rejects.toThrow(/did not accept/);
-    const refusing = recording(() => new Response('{ "error" : 400, "reason" : "bad.request", "detail" : "Can not parse transaction bytes: null" }', { status: 400 }));
-    await expect(ergoNodeSupplier("http://node", { fetch: refusing.fetch }).submit(Uint8Array.of(0), id)).rejects.toThrow(/400/);
   });
 });
