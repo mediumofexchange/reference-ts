@@ -5,10 +5,10 @@
 // (decisions 2026-09-25); its callers differ in the index they judge at and in
 // which checks apply:
 //
-// | Mode     | Judged at                          | Proof, signature, context, anchor, recovery | State and supply |
-// |----------|------------------------------------|---------------------------------------------|------------------|
-// | replay   | the checkpoint's witnessed index    | yes; door deadlines not re-judged (C3.8)    | yes              |
-// | adoption | an adopted publication's own index  | no: exact bytes the force judgment verified | yes              |
+// | Mode     | Judged at                          | Proof, context, anchor, recovery guards      | Issuer signature, revocation, supply, spent, outputs |
+// |----------|------------------------------------|----------------------------------------------|------------------------------------------------------|
+// | replay   | the checkpoint's witnessed index    | yes; door deadlines not re-judged (C3.8)     | yes                                                  |
+// | adoption | an adopted publication's own index  | no: exact bytes the force judgment verified  | yes                                                  |
 //
 // Admission (the operator, at the horizon) and publication force (the
 // reader, C2b.3.2) join as modes when their callers land.

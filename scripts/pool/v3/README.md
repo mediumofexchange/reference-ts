@@ -129,7 +129,8 @@ relation conformance and this read. Under `--ergo` every fixture names the
 synthetic reference chain's venue identity; each fixture venue export is
 written into blocks of that chain (index `i` is the block `i + 1` above the
 anchor, lag 2 is depth 1, one transaction per record in insertion order), the
-reader's own `ErgoVenue` verifies them from its own anchor context, and the
+reader's own `ErgoVenue` verifies them from its own anchor context up to the
+block the reader pinned (a heavier re-mined branch is refused), and the
 Ergo result must equal the fixture venue's with kind-4 ordinals as
 transaction positions. Missing, unframable or root-mismatched sections stop
 the clock and leave the range unresolved. Successful results carry

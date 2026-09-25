@@ -11,9 +11,9 @@
 // verifies every header and section, so nothing here is trusted by a reader;
 // no mainnet header has difficulty 1 and a header id commits to its ancestry,
 // so a profile of this chain cannot follow the mainnet.
-import { createHash } from "node:crypto";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { ANCHOR_CONTEXT } from "./ergo-headers.js";
 import { ERGO_SYNTHETIC_REFERENCE, transactionsRoot, type ErgoProfile, type ErgoTransactionView } from "./ergo-profile.js";
@@ -21,7 +21,7 @@ import type { ErgoSupplier } from "./ergo-supplier.js";
 import type { RecordKind } from "./record-range.js";
 
 const cat = (...parts: Uint8Array[]): Uint8Array => Buffer.concat(parts);
-const sha = (bytes: Uint8Array | string): Uint8Array => createHash("sha256").update(bytes).digest();
+const sha = (bytes: Uint8Array | string): Uint8Array => sha256(typeof bytes === "string" ? new TextEncoder().encode(bytes) : bytes);
 const hash = (bytes: Uint8Array): Uint8Array => blake2b(bytes, { dkLen: 32 });
 const vlq = (n: bigint): Uint8Array => {
   const out: number[] = [];
@@ -128,6 +128,17 @@ export class Chain {
   }
 }
 
+/** A block's ancestors from `tip` down, while each is strictly lower than the block before it: a
+ * supplied graph whose parent links loop or climb ends there instead of looping. */
+function* ancestors(tip: Block | undefined): Generator<Block> {
+  let previous: bigint | undefined;
+  for (let block = tip; block !== undefined; block = block.parent) {
+    if (typeof block.height !== "bigint" || (previous !== undefined && block.height >= previous)) return;
+    previous = block.height;
+    yield block;
+  }
+}
+
 /** A supplier serving one branch (its tip and every ancestor to the anchor), with hooks for failures. */
 export class BranchSupplier implements ErgoSupplier {
   readonly name: string;
@@ -148,9 +159,7 @@ export class BranchSupplier implements ErgoSupplier {
   }
 
   private at(height: bigint): Block | undefined {
-    let block: Block | undefined = this.tip;
-    while (block !== undefined && block.height > height) block = block.parent;
-    if (block?.height === height) return block;
+    for (const block of ancestors(this.tip)) if (block.height <= height) { if (block.height === height) return block; break; }
     // The context below the anchor, as a node serves it.
     const offset = Number(height - (SYNTHETIC_ANCHOR_HEIGHT - BigInt(ANCHOR_CONTEXT)));
     const bytes = this.chain.context[offset];
@@ -182,9 +191,7 @@ export class BranchSupplier implements ErgoSupplier {
     if (this.withheld.has(key)) return undefined;
     const substitute = this.substituted.get(key);
     if (substitute !== undefined) return substitute;
-    for (let block: Block | undefined = this.tip; block !== undefined; block = block.parent) {
-      if (bytesToHex(block.id) === key) return block.section;
-    }
+    for (const block of ancestors(this.tip)) if (bytesToHex(block.id) === key) return block.section;
     return undefined;
   }
 }

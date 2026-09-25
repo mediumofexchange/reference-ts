@@ -1,7 +1,10 @@
 // Real-proof replay through the runtime's ErgoVenue over the synthetic
-// reference chain (src/ergo-synthetic.ts). The reader chooses the profile and
-// the anchor's context; the package's venue data is a chain of blocks that
-// ErgoVenue verifies itself, header by header under the mainnet rules at
+// reference chain (src/ergo-synthetic.ts). The reader chooses the profile, the
+// anchor's context and the chain it reads: at difficulty 1 anyone can mine a
+// heavier branch, so the reader pins the id of the block its clock must stand
+// on, as it held the headers themselves before (a trust input beside the keys,
+// never read from the package). The package's venue data is a chain of blocks
+// that ErgoVenue verifies itself, header by header under the mainnet rules at
 // difficulty 1 and section by section against each header's root, before
 // answering pool-v3 §13 (§13.2). Every replay group the fixture venue answered
 // is answered again by the Ergo venue from exact unsigned transaction bytes.
@@ -24,11 +27,14 @@ export const ERGO_VENUE = ergoProfileIdentity(ERGO_PROFILE);
 const PIECE = 3981;
 
 /** The reader's record factory over an Ergo package: a fresh ErgoVenue on its
- * own anchor context, synced from a supplier serving the package's blocks. */
-export async function ergoRecord(data, { profile = ERGO_PROFILE, context = ERGO_CHAIN.context, policy } = {}) {
+ * own anchor context, synced from a supplier serving the package's blocks, is
+ * the record only where its clock stands on the reader's pinned block. */
+export async function ergoRecord(data, { pin, profile = ERGO_PROFILE, context = ERGO_CHAIN.context, policy }) {
+  assert.ok(pin instanceof Uint8Array && pin.length === 32, "the reader pins the block its clock stands on");
   const venue = new ErgoVenue(profile, context, policy);
   const suppliers = (data?.tips ?? [data?.tip]).filter(tip => tip !== undefined).map((tip, i) => new BranchSupplier(`package-${i}`, tip, ERGO_CHAIN));
-  await venue.sync(suppliers);
+  const { witnessedHeaderId } = await venue.sync(suppliers);
+  if (witnessedHeaderId === undefined || hex(witnessedHeaderId) !== hex(pin)) return undefined;
   return recordReader(venue, ERGO_EVIDENCE_KIND);
 }
 
@@ -117,19 +123,19 @@ const withSection = (blocks, i, section) => reserved(blocks, (own, n) => (n === 
 
 export async function checkErgoReplay({ groups, primary, codec, verifier, portable, test }) {
   const selected = options => ({ ...verifier, record: data => ergoRecord(data, options) });
-  const ergoVerifier = selected();
-  /** The package's venue data: the chain's tip, whose ancestry carries every block. */
+  /** The package's venue data, the chain's tip whose ancestry carries every block, and the reader's
+   * pin: the block at the fixture's witnessed index. */
   const convert = payload => {
     const blocks = fixtureChain(payload.venue);
-    return { input: { ...payload, venue: { tip: blocks.at(-1) } }, blocks,
+    return { input: { ...payload, venue: { tip: blocks.at(-1) } }, blocks, pin: blocks[Number(payload.venue.witnessedIndex)].id,
       rawBytes: blocks.reduce((sum, block) => sum + block.bytes.length + block.section.reduce((n, tx) => n + tx.unsigned.length + tx.witnessId.length, 0), 0) };
   };
-  const run = (input, chosen = ergoVerifier) => replayEvidencePackage(portable(input), chosen, codec);
+  const run = (input, chosen) => replayEvidencePackage(portable(input), chosen, codec);
   const counts = { groups: 0, kind4Subjects: 0, unionPositions: 0, otherRanges: 0, rawBytes: 0, blocks: 0 };
   await test("every replay group agrees through ErgoVenue from verified headers, exact unsigned bytes and checked roots", async () => {
     for (const { label, payload, result } of groups) {
-      const { input, blocks, rawBytes } = convert(payload);
-      const witnessed = FixtureVenue.from(payload.venue), ergo = await ergoRecord(input.venue);
+      const { input, blocks, pin, rawBytes } = convert(payload);
+      const witnessed = FixtureVenue.from(payload.venue), ergo = await ergoRecord(input.venue, { pin });
       assert.equal(ergo.witnessedIndex(), witnessed.witnessedIndex(), label); assert.equal(ergo.lag(), witnessed.lag(), label);
       // Each subject's kind-4 answer entry by entry, and their union in venue order (C2b.4.2): the Ergo
       // ordinal is the fixture's position in the section. Kinds 1-3 answer identically.
@@ -152,12 +158,13 @@ export async function checkErgoReplay({ groups, primary, codec, verifier, portab
         assert.deepEqual(hex(ergo.range(request)), hex(witnessed.range(request, RANGE_LIMITS)), `${label}: kind ${kind}`);
         counts.otherRanges++;
       }
-      assert.deepEqual(await run(input), underErgo(result), label);
+      assert.deepEqual(await run(input, selected({ pin })), underErgo(result), label);
       counts.groups++; counts.rawBytes += rawBytes; counts.blocks += blocks.length;
     }
   });
   // Refusals and substitutions on the primary group, the single-backing silence-bearing import.
-  const { input: payload, blocks } = convert(primary.payload), result = underErgo(primary.result), t = payload.selection.judgingIndex;
+  const { input: payload, blocks, pin } = convert(primary.payload), result = underErgo(primary.result), t = payload.selection.judgingIndex;
+  const ergoVerifier = selected({ pin });
   const refusal = async (input, expected = "unresolved-evidence", chosen = ergoVerifier) => {
     const outcome = await run(input, chosen);
     assert.equal(outcome.status, expected); assert.equal(outcome.audit, null); assert.deepEqual(outcome.candidates, []);
@@ -166,7 +173,7 @@ export async function checkErgoReplay({ groups, primary, codec, verifier, portab
   };
   await test("the Ergo replay names its provenance and closes no finality, completeness or spendability flag", async () => {
     // The venue's own answers, not the harness's conversion of the fixture result.
-    const actual = await run(payload);
+    const actual = await run(payload, ergoVerifier);
     assert.equal(actual.status, "selected-local-replay"); assert.equal(actual.rangeEvidence, ERGO_EVIDENCE_KIND);
     assert.equal(actual.audit.range.lag, "2"); assert.equal(actual.audit.range.judgingIndex, t.toString());
     for (const flag of ["fullV3Replay", "completenessClaim", "noMatchesMeansZeroBalance", "spendable"]) assert.equal(actual[flag], false);
@@ -185,18 +192,27 @@ export async function checkErgoReplay({ groups, primary, codec, verifier, portab
     const injected = { ...missing, venue: { ...missing.venue, profile: ERGO_PROFILE, witnessedIndex: t, complete: true, rangeEvidence: "authenticated-chain" } };
     await refusal(injected);
     // Another supplier's honest section is read beside the tampered one, whichever is asked first.
-    assert.deepEqual(await run({ ...payload, venue: { tips: [tampered.venue.tip, payload.venue.tip] } }), result);
+    assert.deepEqual(await run({ ...payload, venue: { tips: [tampered.venue.tip, payload.venue.tip] } }, ergoVerifier), result);
   });
   await test("the reader's anchor, header rules and clock cannot be replaced by package claims", async () => {
     // A chain of valid blocks that does not descend from the reader's anchor adds no header.
     const elsewhere = { ...ERGO_CHAIN.anchor, id: new Uint8Array(32).fill(9) };
     const foreign = ERGO_CHAIN.extend(elsewhere, blocks.length, i => blocks[i].section);
     await refusal({ ...payload, venue: { tip: foreign.at(-1) } });
+    // A heavier branch re-mined from the anchor at difficulty 1, index 2's records dropped, is the chain an unpinned
+    // reader would follow; the pinned reader refuses it, alone or beside the pinned chain.
+    const remined = ERGO_CHAIN.extend(ERGO_CHAIN.anchor, blocks.length + 1,
+      i => (i === 2 ? [transaction([plainOutput], 1n, "moe/test/ergo-replay/remined")] : blocks[i]?.section ?? []), 1);
+    const unpinned = new ErgoVenue(ERGO_PROFILE, ERGO_CHAIN.context);
+    const report = await unpinned.sync([new BranchSupplier("pinned", payload.venue.tip, ERGO_CHAIN), new BranchSupplier("remined", remined.at(-1), ERGO_CHAIN)]);
+    assert.equal(hex(report.witnessedHeaderId), hex(remined[Number(t) + 1].id), "the re-mined branch is the heavier one");
+    await refusal({ ...payload, venue: { tip: remined.at(-1) } });
+    await refusal({ ...payload, venue: { tips: [payload.venue.tip, remined.at(-1)] } });
     // A profile at another depth names another venue, so the package's identity has no answer.
-    await refusal(payload, "unresolved-evidence", selected({ profile: ERGO_CHAIN.profile(2n) }));
+    await refusal(payload, "unresolved-evidence", selected({ pin, profile: ERGO_CHAIN.profile(2n) }));
     await refusal({ ...payload, selection: { ...payload.selection, judgingIndex: t + 1n } });
     await refusal({ ...payload, selection: { ...payload.selection, judgingIndex: t - 1n } });
-    const historical = await run({ ...payload, selection: { ...payload.selection, judgingIndex: t - 1n, mode: "historical-fixture" } });
+    const historical = await run({ ...payload, selection: { ...payload.selection, judgingIndex: t - 1n, mode: "historical-fixture" } }, ergoVerifier);
     assert.equal(historical.status, "historical-local-replay"); assert.equal(historical.currentRangeAuthenticated, false);
     assert.equal(historical.rangeEvidence, ERGO_EVIDENCE_KIND);
   });
@@ -209,11 +225,11 @@ export async function checkErgoReplay({ groups, primary, codec, verifier, portab
         return originalClone(value);
       };
       // A retained-bytes budget below the records stops the clock: unresolved, before any proof.
-      await refusal(payload, "unresolved-evidence", noProof(selected({ policy: { retainedBytes: 64 } })));
+      await refusal(payload, "unresolved-evidence", noProof(selected({ pin, policy: { retainedBytes: 64 } })));
     } finally { globalThis.structuredClone = originalClone; }
     // An answer over the reader's budget is a resource refusal.
     const tight = { ...verifier, record: async data => {
-      const record = await ergoRecord(data);
+      const record = await ergoRecord(data, { pin });
       return { ...record, range: request => record.range(request, { maxBytes: 102n, maxEntries: 0n }) };
     } };
     await refusal(payload, "resource-refusal", noProof(tight));
@@ -229,5 +245,5 @@ export async function checkErgoReplay({ groups, primary, codec, verifier, portab
     } };
     assert.deepEqual(await run(owned, mutate), result);
   });
-  return { counts, convert, primary: { input: payload, result }, missing, tampered };
+  return { counts, convert, primary: { input: payload, pin, result }, missing, tampered };
 }

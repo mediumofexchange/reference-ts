@@ -15,7 +15,8 @@ import { copyRequest, encodeRangeAnswer, type RangeLimits, type RangeRequest, ty
  * range past the witnessed index, or evidence it does not hold. An answer over
  * the caller's `limits` throws `RangeLimitError`: the evidence exists and the
  * reader's own budget refuses it. A venue with no answer at all (an unsynced or
- * failed view) throws `VenueError` from every read.
+ * failed view) throws `VenueError` from every read; invalid `limits` are the
+ * caller's error (`EncodingError`). Every read answers synchronously.
  */
 export interface RecordVenue {
   readonly id: Uint8Array;
@@ -47,7 +48,8 @@ const isKind = (value: unknown): value is RecordKind => value === 1 || value ===
  * clock that only moves forward. Venue order within an index is insertion
  * order across every kind and subject; a kind-4 ordinal is that position,
  * comparable across answers, and kinds 1–3 carry zero (§13.1). Bytes are
- * copied in and out; nothing is decoded, filtered or judged here.
+ * copied in and out; nothing is decoded, filtered or judged here. Its owner's
+ * misuse throws TypeError, never a refusal a reader could take for evidence.
  */
 export class FixtureVenue implements RecordVenue {
   readonly #id: Uint8Array;
@@ -56,7 +58,7 @@ export class FixtureVenue implements RecordVenue {
   readonly #records: Witnessed[] = [];
 
   constructor(id: Uint8Array, witnessedIndex = 0n, lag = 0n) {
-    if (!isKey(id) || !isIndex(witnessedIndex) || !isIndex(lag)) throw new EncodingError("invalid fixture venue");
+    if (!isKey(id) || !isIndex(witnessedIndex) || !isIndex(lag)) throw new TypeError("invalid fixture venue");
     this.#id = copyBytes(id);
     this.#witnessed = witnessedIndex;
     this.#lag = lag;
@@ -76,14 +78,14 @@ export class FixtureVenue implements RecordVenue {
 
   /** Move the clock forward to `to`. */
   advance(to: bigint): void {
-    if (!isIndex(to) || to < this.#witnessed) throw new EncodingError("a fixture venue's clock only moves forward");
+    if (!isIndex(to) || to < this.#witnessed) throw new TypeError("a fixture venue's clock only moves forward");
     this.#witnessed = to;
   }
 
   /** Witness `record` of `kind`, filed under `subject`, at index `at`. */
   witness(kind: RecordKind, subject: Uint8Array, at: bigint, record: Uint8Array): void {
     if (!isKind(kind) || !isKey(subject) || !isIndex(at) || at > this.#witnessed ||
-        !(record instanceof Uint8Array) || record.buffer instanceof SharedArrayBuffer) throw new EncodingError("invalid fixture venue record");
+        !(record instanceof Uint8Array) || record.buffer instanceof SharedArrayBuffer) throw new TypeError("invalid fixture venue record");
     const ordinal = kind === 4 ? BigInt(this.#records.filter(r => r.index === at).length) : 0n;
     this.#records.push({ kind, subject: copyBytes(subject), index: at, ordinal, record: copyBytes(record) });
   }
@@ -111,7 +113,7 @@ export class FixtureVenue implements RecordVenue {
 
   /** The venue `data` describes, its records witnessed again in their order, so ordinals come out the same. */
   static from(data: FixtureVenueData): FixtureVenue {
-    if (data === null || typeof data !== "object" || !Array.isArray(data.records)) throw new EncodingError("invalid fixture venue data");
+    if (data === null || typeof data !== "object" || !Array.isArray(data.records)) throw new TypeError("invalid fixture venue data");
     const venue = new FixtureVenue(data.id, data.witnessedIndex, data.lag);
     for (const r of data.records) venue.witness(r.kind, r.subject, r.index, r.record);
     return venue;

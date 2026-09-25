@@ -681,4 +681,63 @@ describe("a supplier's malformed answers supply nothing", () => {
     expect(asked).toBe(1);
     expect(report.witnessedIndex).toBeLessThan(6n);
   });
+
+  it("owns each view by its intrinsic bytes: shadowed lengths, detached or shared storage and later mutation change nothing", async () => {
+    const at: Records = { 1: [[committed(commitment(1n, 0xaa))]] };
+    const blocks = branch(8, at), index1 = hex(blocks[1]!.id);
+    const answer = async (substitute: (views: readonly ErgoTransactionView[]) => ErgoTransactionView[], policy?: Partial<ErgoReaderPolicy>) => {
+      const s = serving(blocks);
+      s.substituted.set(index1, substitute(blocks[1]!.section));
+      const v = venue(policy);
+      await v.sync([s]);
+      return v;
+    };
+    const request: RangeRequest = { venue: VENUE_ID, kind: 1, subject: KEYS.operator, fromIndex: 0n, toIndex: 4n };
+    const wide = { maxBytes: 1n << 20n, maxEntries: 10n };
+    const { v: honest } = await synced(8, at);
+    const expected = honest.range(request, wide);
+    // A shadowed length of zero is charged by the view's own length: under a budget the section crosses, the sync
+    // stops exactly where it stops for the same bytes unshadowed.
+    const small = (views: readonly ErgoTransactionView[]) => views.map(t => {
+      const unsigned = new Uint8Array(t.unsigned);
+      Object.defineProperty(unsigned, "length", { value: 0 });
+      return { ...t, unsigned };
+    });
+    const policy = { sectionBytesPerSync: blocks[0]!.section.reduce((n, t) => n + t.unsigned.length + 31, 0) + 40 };
+    const control = (await answer(views => views.map(t => ({ ...t, unsigned: new Uint8Array(t.unsigned) })), policy)).witnessedIndex();
+    expect(control).toBeLessThan(4n);
+    expect((await answer(small, policy)).witnessedIndex()).toBe(control);
+    expect((await answer(small)).range(request, wide)).toEqual(expected);
+    // A detached view supplies no section; shared storage, even behind a shadowed buffer, is copied before it is read.
+    const detached = (views: readonly ErgoTransactionView[]) => views.map(t => {
+      const unsigned = new Uint8Array(t.unsigned);
+      structuredClone(unsigned.buffer, { transfer: [unsigned.buffer] });
+      return { ...t, unsigned };
+    });
+    expect((await answer(detached)).witnessedIndex()).toBe(0n);
+    const shared = (views: readonly ErgoTransactionView[]) => views.map(t => {
+      const unsigned = new Uint8Array(new SharedArrayBuffer(t.unsigned.length));
+      unsigned.set(t.unsigned);
+      Object.defineProperty(unsigned, "buffer", { value: new ArrayBuffer(0) });
+      return { ...t, unsigned };
+    });
+    const copied = await answer(shared);
+    expect(copied.range(request, wide)).toEqual(expected);
+    // Views the supplier mutates after the sync change no answer.
+    const kept: ErgoTransactionView[] = [];
+    const mutable = await answer(views => views.map(t => { const own = { ...t, unsigned: new Uint8Array(t.unsigned) }; kept.push(own); return own; }));
+    kept.forEach(t => t.unsigned.fill(0));
+    expect(mutable.range(request, wide)).toEqual(expected);
+  });
+
+  it("the synthetic supplier stops at parent links that loop or climb rather than following them", async () => {
+    const blocks = branch(6);
+    const looped = blocks.map(block => ({ ...block }));
+    for (let i = 1; i < looped.length; i++) (looped[i] as { parent: Block }).parent = looped[i - 1]!;
+    (looped[0] as { parent: Block }).parent = looped.at(-1)!;
+    const s = new BranchSupplier("looped", looped.at(-1)!, chain);
+    expect(await s.headers(ANCHOR_HEIGHT + 1n, ANCHOR_HEIGHT + 6n)).toHaveLength(6);
+    expect(await s.section(new Uint8Array(32))).toBeUndefined();
+    expect(await s.headers(ANCHOR_HEIGHT - 1n, ANCHOR_HEIGHT)).toHaveLength(2);
+  });
 });

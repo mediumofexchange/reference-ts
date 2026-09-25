@@ -5,6 +5,7 @@ import { EMPTY_NOTE_ROOT } from "../src/pool/note-tree.js";
 import { deliveryHash, encodeRecord, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { readRecordView, RANGE_LIMITS, type ReaderSelection } from "../src/pool/v3/reader.js";
 import { EvidenceRefusal, ReplayRefusal } from "../src/pool/v3/refusals.js";
+import { tagOf } from "../src/pool/v3/recovery.js";
 import { applyRecord, modeAt, openSegmentState, type ProofCheck, type SegmentReplay, type SegmentState } from "../src/pool/v3/state.js";
 import type { RootTerms } from "../src/pool/v3/terms.js";
 import { RangeLimitError } from "../src/record-range.js";
@@ -37,6 +38,12 @@ const spend = (anchors: [bigint, bigint], nullifiers: [bigint, bigint], outputs:
   record(2, [...anchors, ...nullifiers], outputs, options);
 const burn = (quantity: bigint, anchors: [bigint, bigint], nullifiers: [bigint, bigint], change: bigint): Uint8Array =>
   record(3, [...limbsOf(BACKING), quantity, ...anchors, ...nullifiers], [change]);
+
+/** A kind-4 demand for 5 units of the backing: its roots, tags and deadline, presented by key 18. */
+function demand(roots: [bigint, bigint], tags: [bigint, bigint], deadline: bigint): Uint8Array {
+  const publicInputs = [...prefix(), ...limbsOf(BACKING), 5n, ...roots, ...tags, ...limbsOf(b(18)), 1n, deadline];
+  return encodeRecord({ domain: DOMAIN, kind: 4, publicInputs, proof: new Uint8Array(32).fill(4), authorization: new Uint8Array(0), capsules: [] });
+}
 
 const accepting: ProofCheck = { verify: () => true };
 const fresh = (): SegmentState => openSegmentState(SEGMENT, undefined, undefined, undefined, () => {});
@@ -105,6 +112,31 @@ describe("the v3 state machine in replay mode", () => {
     expect(await refusal(fresh(), issue(9n, 101n), replay({ lastValid }))).toBe("CONTINUITY");
     // Issuance the last valid checkpoint finalized was witnessed at its index, not the revoked later one.
     await applyRecord(fresh(), issue(10n, 101n), replay({ lastValid, revokedAt: 5n }));
+    // The history hash is compared last, over the new state: the caller discards that state.
+    const rewritten = { ...lastValid, historyHash: b(9) };
+    await expect(applyRecord(fresh(), issue(10n, 101n), replay({ lastValid: rewritten }))).rejects.toMatchObject({ check: "CONTINUITY" });
+  });
+
+  it("keeps demands, their locks and spent tags (C3.7), and refuses an unindexed recovery record", async () => {
+    const state = fresh(), context = replay();
+    await applyRecord(state, issue(10n, 101n), context);
+    const root = state.tree.root(), locked = tagOf(301n);
+    expect(await refusal(state, demand([root, root], [0n, 0n], 9n), context)).toBe("TAGS");
+    expect(await refusal(state, demand([root, root], [locked, locked], 9n), context)).toBe("TAGS");
+    expect(await refusal(state, demand([999n, root], [locked, 0n], 9n), context)).toBe("ANCHOR");
+    const first = demand([root, root], [locked, 0n], 9n);
+    await applyRecord(state, first, context);
+    expect(state.demands.size).toBe(1);
+    expect(await refusal(state, first, context)).toBe("REPEATED_STATEMENT");
+    // A standing demand locks its tag against another demand and a spend of the tagged note, while its deadline stands.
+    expect(await refusal(state, demand([root, root], [locked, 0n], 8n), context)).toBe("LOCKED");
+    expect(await refusal(state, spend([root, root], [301n, 302n], [110n, 111n, 112n, 113n]), context)).toBe("LOCKED");
+    await applyRecord(state, spend([root, root], [301n, 302n], [110n, 111n, 112n, 113n]), replay({ index: 10n }));
+    expect(state.spentTags.has(locked)).toBe(true);
+    const unindexed = await applyRecord(fresh(), demand([EMPTY_NOTE_ROOT, EMPTY_NOTE_ROOT], [locked, 0n], 9n), replay({ index: undefined }))
+      .then(() => undefined, (e: unknown) => e);
+    expect(unindexed).toBeInstanceOf(EvidenceRefusal);
+    expect((unindexed as EvidenceRefusal).status).toBe("unsupported-scope");
   });
 });
 
@@ -158,6 +190,8 @@ describe("the reader's venue", () => {
     expect(await status(view(flooded))).toBeInstanceOf(RangeLimitError);
     const broken = new Error("supplier bug");
     expect(await status(view({ ...failed, witnessedIndex: () => 4n, range: () => { throw broken; } }))).toBe(broken);
+    // A venue answering with promises is the caller's error, not missing evidence.
+    expect(await status(view({ ...failed, witnessedIndex: () => Promise.resolve(4n) } as unknown as RecordVenue))).toBeInstanceOf(TypeError);
   });
 
   it("answers only its own witnessed ranges, ordered as §13.1 orders them, and rebuilds identically", () => {
@@ -173,7 +207,9 @@ describe("the reader's venue", () => {
     expect(venue.range({ ...request, venue: b(13) }, wide)).toBeUndefined();
     expect(venue.range({ ...request, fromIndex: 3n, toIndex: 2n }, wide)).toBeUndefined();
     expect(() => venue.range(request, { maxBytes: 1n << 20n, maxEntries: 1n })).toThrow(RangeLimitError);
-    expect(() => venue.witness(1, OTHER, 3n, new Uint8Array(136))).toThrow(/record/);
-    expect(() => venue.advance(1n)).toThrow(/forward/);
+    // Its owner's misuse is a TypeError, never a refusal a reader could take for missing evidence.
+    expect(() => venue.witness(1, OTHER, 3n, new Uint8Array(136))).toThrow(TypeError);
+    expect(() => venue.advance(1n)).toThrow(TypeError);
+    expect(() => FixtureVenue.from({ ...venue.export(), id: b(1).subarray(1) })).toThrow(TypeError);
   });
 });

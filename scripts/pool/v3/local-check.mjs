@@ -1162,8 +1162,12 @@ try {
     }
   });
   if (withErgo) await test("fresh seedless and receiver processes independently verify Ergo blocks and refuse missing or tampered sections", () => {
-    // Each process chooses its own anchor and profile and verifies the package's blocks itself.
-    for (const { input, expected } of ergo.processes) assert.deepEqual(worker(input, "--ergo"), expected);
+    // Each process chooses its own anchor and profile, reads its pin beside the keys, and verifies the package's blocks itself.
+    for (const { input, pin, expected } of ergo.processes) {
+      writeFileSync(join(build, "ergo-pin.bin"), pin);
+      assert.deepEqual(worker(input, "--ergo"), expected);
+    }
+    writeFileSync(join(build, "ergo-pin.bin"), ergo.primary.pin);
     for (const payload of [ergo.missing, ergo.tampered]) {
       for (const seed of [undefined, receiverSeed]) {
         const result = worker({ ...payload, ...(seed === undefined ? {} : { seed }) }, "--ergo");
@@ -1244,7 +1248,7 @@ try {
       "Multi-backing imports validate every scoped predecessor and snapshot, merge shared events once with causal recovery conflict checks, and retain per-backing totals, adoption indices and original-tree paths through split, rejoin, exact recovery adoption and continuation. Receipt queries authenticate the complete original scope and exact original/adopted inclusion, retaining liability and the earliest silence/term boundary. Non-service counts use each selected backing's own clause and canonical state strictly before judgment, preserving request ages, imported roots and spent/lock state across scopes and recovery. Import lapse uses snapshot-bound scope and signed terms without its event history; silence still requires the opening and canonical clock dependencies. Live validity requires full committed event evidence; single-backing or shared-scope continuations with complete sibling state and silence-clock dependencies may replace only an intrinsically faulty target trail under section 9.1 after complete opening/predecessor resolution, at a target position after the record-derived adopted block. Selected state retains its complete selection envelope. Checkpoint/event work remains bounded; large histories can refuse resources.",
       "Compact openings authenticate committed target bytes and retain proof/signature-rejection facts through import refusal or scope lapse. Issue and acceptance read the exact scoped obligor; withdrawal and release resolve the named demand's canonical statement preimage. A matching preimage establishes no demand admission/standing and its enclosing opening need not authenticate. Signature facts do not require a valid proof; unsupported authorization widths and zero-owner acceptance messages are not classified. The classifier may consume exact proof/issue-K rejection to exclude only a supported continuation with complete scoped snapshots and terms, a valid opening, known last-valid state, every resolved sibling clock and a target position after its record-derived adopted block; positions inside the block keep ordinary evidence. Other facts remain observational; missing ancestors, ranges or unsupported contexts still refuse. No target fact supplies state or permits rollback. Local budgets can refuse resources; verifier failures are not rejection.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };
-  if (withErgo) report.limits.push("ErgoVenue verifies the synthetic reference chain's headers under the mainnet rules at difficulty 1 from the reader's own anchor context and reads every section that reproduces its header's root, framing unsigned bytes with the profile's own framer. The chain is synthetic: no mainnet work, node acceptance or venue-profile adoption is established.");
+  if (withErgo) report.limits.push("ErgoVenue verifies the synthetic reference chain's headers under the mainnet rules at difficulty 1 from the reader's own anchor context and reads every section that reproduces its header's root, framing unsigned bytes with the profile's own framer, and reads it only where its clock stands on the block the reader pinned: at difficulty 1 anyone can mine a heavier branch, so the pin, held beside the keys, stands in for work. The chain is synthetic: no mainnet work, node acceptance or venue-profile adoption is established.");
   writeFileSync(join(scratch, "pool-v3-local-replay-results.json"), JSON.stringify(report, null, 2) + "\n");
   console.log(`PASS: ${checks.length} local replay groups, ${metrics.length} real proofs; scratch/pool-v3-local-replay-results.json`);
 } finally {

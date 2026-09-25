@@ -60,12 +60,16 @@ export interface RecordView {
   ask(kind: RecordKind, subject: Uint8Array): Promise<RangeAnswer>;
 }
 
-/** A venue read; a venue with no answer at all (unsynced or failed) leaves the read unresolved. */
+/** A venue read; a venue with no answer at all (unsynced or failed) leaves the read unresolved. A
+ * `RecordVenue` answers synchronously, so a promise is the caller's error, never missing evidence. */
 function read<T>(call: () => T): T {
-  try { return call(); } catch (error) {
+  let value: T;
+  try { value = call(); } catch (error) {
     if (error instanceof VenueError) throw new EvidenceRefusal("unresolved-evidence");
     throw error;
   }
+  if (value instanceof Promise) throw new TypeError("a RecordVenue answers synchronously");
+  return value;
 }
 
 /** §13 reads against the reader's independently selected venue over [0, t]:
