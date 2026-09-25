@@ -539,11 +539,13 @@ describe("its answers are §13's", () => {
   });
 });
 
-describe("this venue reads; publishing is somebody else's wallet", () => {
-  it("refuses to publish, and refuses the records the profile does not carry rather than answering empty", async () => {
+describe("this view reads; publishing is a wallet handed to it", () => {
+  it("refuses to publish without a publisher, and refuses the records the profile does not carry rather than answering empty", async () => {
     const { v } = await synced(5);
-    for (const call of [() => v.publish(), () => v.publishOp(), () => v.publishReplacement(), () => v.publishRevocation(), () => v.publishCommit(),
-      () => v.publishedOpsFor(), () => v.commitsFor()]) expect(call).toThrow(VenueError);
+    for (const call of [() => v.publishOp(), () => v.publishCommit(), () => v.publishedOpsFor(), () => v.commitsFor()]) expect(call).toThrow(VenueError);
+    expect(() => v.publish(commitment(1n, 0xaa))).toThrow(/no publisher/);
+    expect(() => v.publishRevocation(signRevocation(SECRETS.backer))).toThrow(/no publisher/);
+    expect(() => v.publishReplacement(ruled.name, replacement(ruled, KEYS.carol, SECRETS.carol, SECRETS.backer2, 5n))).toThrow(/no publisher/);
   });
 });
 

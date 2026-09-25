@@ -6,22 +6,22 @@
       "url": "http://127.0.0.1:9053",
       "name": "ergo-mainnet-6.0.6",
       "appVersion": "6.0.6",
-      "headersHeight": 1880582,
-      "fullHeight": 1880582
+      "headersHeight": 1880658,
+      "fullHeight": 1880658
     },
     {
       "url": "http://213.239.193.208:9053",
       "name": "ergo-mainnet-6.0.6",
       "appVersion": "6.0.5-46-78153a1e-SNAPSHOT",
-      "headersHeight": 1880582,
-      "fullHeight": 1880582
+      "headersHeight": 1880658,
+      "fullHeight": 1880658
     }
   ],
   "profile": {
-    "anchorHeight": "1880282",
-    "anchorId": "d47eea6a2f891abb6ace083b72b52d6c966a23f67184a83ef77f2ab2eb0daf33",
+    "anchorHeight": "1880358",
+    "anchorId": "8905c26237eeb9ff513d41b35af7e486ca941052e711d2580cd153347056e3b3",
     "depth": "10",
-    "identity": "0f74df9e4f3b4d7272d68749316189b3aa3384b8be2680a8f35f624a2ba83029",
+    "identity": "852b3396562ee24741db64c2abc57dd65e5f1e7e84f08215d7c169cbbe6d49ad",
     "locations": "pay-to-public-key trees of the throwaway keys 0x01..01 to 0x04..04"
   },
   "viewA": {
@@ -29,14 +29,14 @@
       "own node",
       "public node"
     ],
-    "ms": 11227,
+    "ms": 11692.3,
     "rounds": [
       {
-        "ms": 11226.9,
-        "witnessedIndex": "290",
-        "chainWitnessedIndex": "290",
-        "tipHeight": "1880583",
-        "sectionsRead": 291,
+        "ms": 11692.2,
+        "witnessedIndex": "289",
+        "chainWitnessedIndex": "289",
+        "tipHeight": "1880658",
+        "sectionsRead": 290,
         "unresolvedIndex": null,
         "suppliers": [
           {
@@ -45,93 +45,93 @@
           },
           {
             "name": "public node",
-            "headersAdded": 1
+            "headersAdded": 0
           }
         ]
       }
     ],
-    "witnessedIndex": "290",
-    "witnessedHeight": "1880573",
-    "witnessedHeaderId": "2c14aabfbca730eeed3b3a2e1c5744c2d028c15e0c6760b5f3a9bec93183bca3",
+    "witnessedIndex": "289",
+    "witnessedHeight": "1880648",
+    "witnessedHeaderId": "96bb36fefb733c4f08a0a1ec9481e149fd6b56ad8404e16b4dc22d8ca2236a60",
     "standsOnOwnNodeBlock": true,
-    "headersVerified": 301,
-    "sectionsRead": 291,
-    "msPerBlock": 38.58
+    "headersVerified": 300,
+    "sectionsRead": 290,
+    "msPerBlock": 40.32
   },
   "viewB": {
     "suppliers": [
       "public node"
     ],
-    "ms": 45889.2,
+    "ms": 34746.3,
     "rounds": [
       {
-        "ms": 45889.1,
-        "witnessedIndex": "290",
-        "chainWitnessedIndex": "290",
-        "tipHeight": "1880583",
-        "sectionsRead": 291,
+        "ms": 34746.3,
+        "witnessedIndex": "289",
+        "chainWitnessedIndex": "289",
+        "tipHeight": "1880658",
+        "sectionsRead": 290,
         "unresolvedIndex": null,
         "suppliers": [
           {
             "name": "public node",
-            "headersAdded": 301
+            "headersAdded": 300
           }
         ]
       }
     ],
-    "witnessedIndex": "290"
+    "witnessedIndex": "289"
   },
   "answers": {
-    "toIndex": "290",
+    "toIndex": "289",
     "agree": true,
     "viewA": [
       {
         "kind": 1,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "57541225e56f34f0fc7d04bef0fec7542b710cbe35a376d60e6a92af1ece1443"
+        "sha256": "a10161ccb3f58e3c85f964f3d3932b07ba729a0aca6aa8e0cbd279ba485bd239"
       },
       {
         "kind": 2,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "c1c9da135cee38783083190c539c61a36ee66d8d893370c7dec500574fb6c073"
+        "sha256": "639b10ae52f171b686db25aec24c5e5a23373f1dcbe4c5222b2c750e36ab461d"
       },
       {
         "kind": 3,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "9ad4f6b405c65c7dd72bfad318e422c1b039cf4a9828ab7f4814837a8d6cf159"
+        "sha256": "d71b9a3bb9c91bd97bcd2fbf21996c2f864bdd541d36801b766d38adea8767c3"
       },
       {
         "kind": 4,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "3c59662cb9ee1bb08781e3152e87d3d2a26fc1c9629ec9140b5a9f9543ccb9fd"
+        "sha256": "d2997a2ef03c3286fa6d0f5724c887b3c9552d815cfe82f666e444274676158f"
       },
       {
         "kind": 1,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "c5210d0531fd86ab1060d524f05cf59406900f5072e60b5ca0ff1b3d9faac9b6"
+        "sha256": "e068a6bc8a07e45196a4057b5144013dc27d87f7d653196002107a0ac537d8e9"
       },
       {
         "kind": 2,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "39679668911e261aeadbca8da6408a4756fa3c97bef2018e5c5463bbf722d347"
+        "sha256": "b637da22ad95c45b70e81cf7832ad0b0ac7d633458fffe2fc7a07481d904c1f5"
       },
       {
         "kind": 3,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "c79740329dd0c196855fadbb0d9ee431e5961ab40ab65d7e559070aa8f0300c0"
+        "sha256": "8b236cea0c4f5931c782bb33b0d1231a53b0dc369c2856659b6964ab3bfe6c88"
       },
       {
         "kind": 4,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "6694fd801001276f8a0d9ff69e4bbfb56d582434b842722650d7525cc657d48a"
+        "sha256": "9a226d0568f039bc74295f92b40a822fb788a9ffb9db7fdcf8a6d4cf5ec9ab1e"
       }
     ]
   },
@@ -139,8 +139,8 @@
     "substitutedIndex": "5",
     "aloneWitnessedIndex": "4",
     "aloneUnresolvedIndex": "5",
-    "withOwnWitnessedIndex": "292",
-    "forgedHeaderHeight": "1880288",
+    "withOwnWitnessedIndex": "289",
+    "forgedHeaderHeight": "1880364",
     "forgingReport": [
       {
         "name": "forging",
@@ -149,10 +149,10 @@
       },
       {
         "name": "own node",
-        "headersAdded": 298
+        "headersAdded": 295
       }
     ],
-    "forgedWitnessedIndex": "292"
+    "forgedWitnessedIndex": "289"
   },
   "files": {
     "experiments/ergo-range/runtime-sync.mjs": "07fa83cff9d0a6c812902010f02da1daf5c09d7e4a8305fad12633690a5a587c",
@@ -175,7 +175,8 @@
     "src/ergo-profile.ts": "8af9b51098300fe0a6f982ed471b5a189d05715002b8c9c76c0a0d48e530bb97",
     "src/ergo-headers.ts": "8bfd750c08225e2f09eb46b58730684b091e6e3febf9b794cfda54357ae73448",
     "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02",
-    "src/ergo.ts": "6c9552077791a4a02a6ee6d1d706ae85004e16268b55620c8711bdc2396186b4"
+    "src/ergo-publisher.ts": "93549226d3259327e2378e7bcc1107f5a6b9de3f59521f80f4b4a7eaf77a0b8d",
+    "src/ergo.ts": "385093af087f126908e195e1cdde3e2c7fe14f5c1f06a1dfa94cd71d0cc6d187"
   },
   "limitations": [
     "One pass over a few hundred recent mainnet blocks from two node suppliers; no fork arose, so fork choice and a reorganization past the depth are exercised by the unit tests only.",

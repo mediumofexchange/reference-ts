@@ -35,24 +35,27 @@
 // reorganization past the depth is the venue's failure (§13.2): the view then
 // refuses every read rather than change its mind about the past.
 //
-// NOT here, deliberately: publishing. Building and signing a transaction needs
-// an Ergo library, and this package's dependencies are @noble/hashes and
-// @noble/curves. A verifier never publishes; the operator's wallet does.
+// **Publishing is a separate wallet the view hands records to**
+// (`ergo-publisher.ts`): it builds, signs and broadcasts one transaction per
+// record, and nothing it says reaches a read. A record the view publishes is
+// held only once a later sync reads it from a verified block, like anyone
+// else's; a view built without a publisher only reads.
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
-import type { Commitment } from "./commitment.js";
+import { encodeCommitment, verifyCommitment, type Commitment } from "./commitment.js";
 import { ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, type ErgoHeaderStore } from "./ergo-headers.js";
 import {
   attributeSection, ergoProfileIdentity, ownErgoProfile, rangeEntries, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
 } from "./ergo-profile.js";
+import type { ErgoPublisher, ErgoRecordRequest } from "./ergo-publisher.js";
 import type { ErgoSupplier } from "./ergo-supplier.js";
 import {
   COMMITMENT_RANGE, copyRequest, encodeRangeAnswer, heldCommitments, RangeLimitError, REPLACEMENT_RANGE, REVOCATION_RANGE,
   type HeldCommitment, type RangeAnswer, type RangeLimits, type RangeRequest, type RecordKind,
 } from "./record-range.js";
-import { copyReplacement, decodeReplacement, forgetAdmitted, type WitnessedReplacement } from "./replacement.js";
-import { copyRevocation, decodeRevocation, isSignedRevocation, type WitnessedRevocation } from "./revocation.js";
+import { copyReplacement, decodeReplacement, encodeReplacement, forgetAdmitted, type Replacement, type WitnessedReplacement } from "./replacement.js";
+import { copyRevocation, decodeRevocation, encodeRevocation, isSignedRevocation, type Revocation, type WitnessedRevocation } from "./revocation.js";
 import { VenueError, type Venue, type WitnessedCommit, type WitnessedOp } from "./venue.js";
 
 /** The reference runtime's finality depth: over one measured mainnet day,
@@ -183,7 +186,11 @@ export class ErgoVenue implements Venue {
   /** Per-snapshot derivations, by kind and subject. */
   private held = new Map<string, readonly HeldCommitment[]>();
 
-  constructor(profile: ErgoProfile, anchorContext: readonly Uint8Array[], policy: Partial<ErgoReaderPolicy> = {}) {
+  /** Where this view's own records go out; a view without one only reads. */
+  private readonly publisher: ErgoPublisher | undefined;
+
+  constructor(profile: ErgoProfile, anchorContext: readonly Uint8Array[], policy: Partial<ErgoReaderPolicy> = {}, publisher?: ErgoPublisher) {
+    this.publisher = publisher;
     this.profile = ownErgoProfile(profile);
     this.venueId = ergoProfileIdentity(this.profile);
     const store = ergoHeaderStore(this.profile.anchor, anchorContext);
@@ -299,6 +306,8 @@ export class ErgoVenue implements Venue {
           witnessedHeaderId: copyBytes(best.headers[Number(witnessed)]!.id) });
       }
       const snapshot = this.snapshot;
+      // The publisher forgets what this view now holds, in its own queue: it never fails or holds up the sync.
+      if (this.publisher !== undefined && snapshot !== undefined) this.publisher.settle(request => this.holds(request)).catch(() => {});
       return Object.freeze({
         witnessedIndex: snapshot?.witnessed, witnessedHeaderId: snapshot === undefined ? undefined : copyBytes(snapshot.witnessedHeaderId),
         chainWitnessedIndex: chainWitnessed >= 0n ? chainWitnessed : undefined, tipHeight: best.height, suppliers: Object.freeze(passes.map(({ pass }) => pass.report)),
@@ -438,20 +447,57 @@ export class ErgoVenue implements Venue {
     return held;
   }
 
-  publish(): void {
-    throw new VenueError("this venue reads the chain; publishing is the operator's wallet");
+  /** Publish a signed commitment through the view's publisher (kind 1, filed
+   * under its operator). A refusal throws at once; the returned promise
+   * settles when a supplier accepted the transaction, and a caller awaits it,
+   * as `PoolStore.publish` does. */
+  publish(commitment: Commitment): Promise<void> {
+    if (!verifyCommitment(commitment)) throw new VenueError("commitment signature invalid");
+    return this.publishRecord(COMMITMENT_RANGE, commitment.operator, encodeCommitment(commitment));
   }
 
   publishOp(): void {
-    throw new VenueError("this venue reads the chain; publishing is the operator's wallet");
+    throw new VenueError("this venue carries no transparent operation records");
   }
 
-  publishReplacement(): void {
-    throw new VenueError("this venue reads the chain; publishing is the operator's wallet");
+  /** Publish a replacement record (kind 2, filed under its backing). Whether it
+   * is signed and in force is the walk's question, as on every venue. */
+  publishReplacement(backingName: Uint8Array, replacement: Replacement): Promise<void> {
+    let record: Uint8Array;
+    try {
+      record = encodeReplacement(backingName, replacement);
+    } catch (cause) {
+      throw new VenueError(`published replacement does not encode: ${String(cause)}`);
+    }
+    return this.publishRecord(REPLACEMENT_RANGE, backingName, record);
   }
 
-  publishRevocation(): void {
-    throw new VenueError("this venue reads the chain; publishing is the backer's wallet");
+  /** Publish a revocation signed by the key it revokes (kind 3, filed under that key). */
+  publishRevocation(revocation: Revocation): Promise<void> {
+    if (!isSignedRevocation(revocation)) throw new VenueError("revocation is not signed by the key it revokes");
+    return this.publishRecord(REVOCATION_RANGE, revocation.obligor, encodeRevocation(revocation));
+  }
+
+  /**
+   * One record at its kind's location, through the view's publisher, with
+   * every output created at the tip of the chain this view verified: at most
+   * the height of the block that will include it, which the network requires,
+   * and never a supplier's word. Resolves when a supplier accepted the
+   * transaction; the record counts once a later sync reads it.
+   */
+  private publishRecord(kind: 1 | 2 | 3, subject: Uint8Array, record: Uint8Array): Promise<void> {
+    if (this.publisher === undefined) throw new VenueError("this view has no publisher; publishing is the operator's wallet");
+    this.requireSnapshot();
+    const request = { location: this.profile.scripts[kind], subject, record, height: this.store.tip().height };
+    // Held already, as when a sync settled it after the caller last read: nothing to send.
+    if (this.holds(request)) return Promise.resolve();
+    return this.publisher.publish(request).then(() => {});
+  }
+
+  /** Whether the snapshot holds this exact record at its location under its subject. */
+  private holds(request: ErgoRecordRequest): boolean {
+    const kind = ([1, 2, 3] as const).find(k => compareBytes(this.profile.scripts[k], request.location) === 0);
+    return kind !== undefined && this.entries(kind, request.subject).entries.some(entry => compareBytes(entry.record, request.record) === 0);
   }
 
   publishCommit(): void {

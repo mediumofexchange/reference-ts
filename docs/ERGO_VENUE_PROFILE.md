@@ -277,25 +277,86 @@ which a running or failed sync leaves in place.
   transparent operation or commit records, and the view refuses those reads
   rather than answering empty, so the frozen transparent path has no Ergo
   venue.
-- **Not here**: publishing (the operator's wallet builds and signs the
-  transaction; `experiments/ergo-range/publish.mjs` is the testnet
-  experiment), persistence of the headers and objects across restarts (the
+- **Publishing** (`src/ergo-publisher.ts`): a view given an `ErgoPublisher`
+  publishes commitments, replacements and revocations (kinds 1–3; it refuses
+  an unsigned commitment or revocation), one transaction per record, with
+  every output created at the tip of the chain the view verified. The
+  publisher holds one funding key, a secp256k1 scalar that pays fees and box
+  minimums and nothing else, and builds the transaction in §5's grammar:
+  plain boxes of the key as inputs, output 0 the record at its location with
+  `R4` the subject and `R5` the record at the network minimum (360 nanoERG a
+  byte of the full box), change to the key where it reaches its own minimum
+  (otherwise it joins the fee), and the fee (1.1 mERG by default) at the
+  miner-fee tree. It signs every input with Ergo's proveDlog Schnorr proof
+  over the unsigned bytes on `@noble/curves` (the hedged nonce mixes the key,
+  the message, the input position and fresh randomness), verifies each
+  proof before it leaves, and broadcasts through `ErgoPublishingSupplier`s:
+  `ergoNodePublisher` reads the key's boxes from the node's index
+  (`extraIndex`, oldest first over ten pages of 100, so dust sent later
+  cannot hide the funding), shows boxes through its UTXO set with the
+  mempool, and submits bytes. A box counts only as bytes hashing to its id,
+  and one a supplier offers is skipped where any supplier answers that it
+  lacks it; a supplier that lies costs a publication, never funds (Ergo
+  balances values exactly), and one that denies every box stops publication
+  visibly. **One transaction per record:** it is built once and remembered
+  before it is first sent; a retry after a lost answer, an outage or a drop
+  sends the same bytes, after any unsettled transaction whose change it
+  spends, so no second, non-conflicting transaction for the record exists.
+  A transaction a supplier holds (mempool or blocks) or whose record box it
+  shows counts as sent, so a landed one whose record box was swept is not
+  mistaken for one whose inputs vanished. One that can never land (no
+  supplier holds it, every one refuses it and one answers that an input is
+  gone: an invented box, a dropped parent) is dropped with its change and
+  rebuilt spending every input still shown, and one refused for anything
+  else is rebuilt on the same inputs at the caller's new height, so the old
+  and new conflict wherever they can. Later publications spend the publisher's own change,
+  landed or not, before any index shows it, and calls are serialized. The
+  view settles its publisher after each sync, in the publisher's queue: a
+  publication is forgotten once the snapshot holds its record, and its
+  inputs once a supplier shows that it landed; a record the view already
+  holds is not sent. The view's `publish` throws
+  its refusals at once and resolves on acceptance, which is not holding;
+  a `PoolStore` awaits it inside its existing lag window. After a restart
+  the memory is gone, so a retry may publish a second, identical object,
+  which readers take as one at the cost of a fee; the funding key must be
+  the publisher's alone.
+- **Not here**: persistence of the headers and objects across restarts (the
   store keeps every header it accepted, and the retained objects stay in
-  memory), and pruning of side branches.
+  memory), pruning of side branches, kind-4 runs, and cancelling an
+  abandoned publication by spending its input.
 
 [`runtime-sync.mjs`](../experiments/ergo-range/runtime-sync.mjs) runs the
 view on the real mainnet ([report](ergo-runtime-venue-verification.json)):
-anchored 300 blocks below the own node's tip, it verified 301 headers and read
-291 sections in one sync of 11 s (about 39 ms a block, most of it the work checks),
+anchored 300 blocks below the own node's tip, it verified 300 headers and read
+290 sections in one sync of 11.7 s (about 40 ms a block, most of it the work checks),
 stood on the own node's block at its final index, and a second view synced
 from a public node alone reached the same block with byte-identical empty
 answers for every kind. A supplier substituting one section alone stopped the
 clock before that block, and the own node beside it carried the clock past; a
 supplier raising one header's difficulty bits was stopped at that header.
 
-What remains before an Ergo deployment: a publishing adapter (and with it the
-framer's grammar checked against the deployment's own publishing
-transactions), persistence, the one-transaction condition checked against an
-adopted configuration, and publication on the mainnet with a latency
-distribution of kind-4 publications at their size and fee (A10 timed the
-mainnet's own transactions; P2 made two correlated testnet observations).
+[`publisher-check.mjs`](../experiments/ergo-range/publisher-check.mjs) runs
+the publisher on the own testnet node
+([report](ergo-publisher-verification.json)): a commitment, a replacement
+and a revocation, each signed by its own key, went out as three
+transactions chained in the mempool (416, 513 and 375 unsigned bytes, each
+56 bytes more signed); before each submission the node checked the bytes
+and refused them with one proof byte changed; the replacement's first
+answer was lost, and the retry found its record box and sent nothing;
+publishing the commitment again submitted nothing (the node itself answers
+a second submission of a pooled transaction with a refusal); and the including blocks' sections,
+each accepted only where it reproduced its header's root, carried exactly the
+three records at their kinds, subjects and ordinals. In tests
+(`test/ergo-publisher.test.ts`) proofs signed by the vendored sigma-rust
+verify and every variation is refused, a mempool written independently of
+the publisher admits only balanced, fully signed transactions, a lost
+answer, an outage and a dropped parent each leave one transaction per
+record, an invented box is refused beside a node that lacks it, and a
+`PoolStore` on an `ErgoVenue` over the synthetic chain publishes its opening
+and finds it held after the depth.
+
+What remains before an Ergo deployment: persistence, the one-transaction
+condition checked against an adopted configuration, publication on the
+mainnet (real funds), and a latency distribution of kind-4 publications at
+their size and fee (A10 timed the mainnet's own transactions; P2 made two
+correlated testnet observations).
