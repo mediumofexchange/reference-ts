@@ -14,6 +14,11 @@ the check records observed source/bytecode/key hashes, checks and metrics in
 runs Barretenberg with one worker thread. The hashes are observations, not
 configuration pins. Final pinning requires separate review.
 
+`store-check.mjs` (also `npm run check:pool:v3-store`) runs the runtime's
+operator journal, prover and guard (`src/pool/v3/store.ts`, `prover.ts`,
+`guard.ts`) with real proofs on the local reference venue and records
+`scratch/pool-v3-store-results.json`; its fresh reader is `local-worker.mjs`.
+
 The local replay command additionally uses the independently held
 `candidate-manifest.json` and [pool-v3 §11 at 916bffb](https://github.com/mediumofexchange/money-from-first-principles/blob/916bffb/pool-v3.md#11-configuration-and-backing-evidence-before-adoption).
 It checks all six candidate source/toolchain/bytecode/key identities, the fixed

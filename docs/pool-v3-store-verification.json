@@ -1,0 +1,922 @@
+{
+  "schema": "moe-v3-operator-journal-1",
+  "specification": "786f962",
+  "node": "v24.6.0",
+  "platform": "win32",
+  "candidateDomain": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
+  "backing": "89d450780ba17b065eb69f19616164a8093d2d05088406fe41606159c5c7b613",
+  "venue": {
+    "context": "moe/venue/local/reference",
+    "label": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+    "lag": "2",
+    "id": "199539b5f0a2ef9002be70883d38c8b3f11f1019fb6926dbf17e012693e0586b"
+  },
+  "checks": [
+    "the prover refuses artifacts whose keys are not the configuration's",
+    "the journal runs only on a venue whose identity recomputes from its reference preimage",
+    "the operator opens and publishes the genesis segment the backer's terms name",
+    "the backer proves and signs issue 10 to the payer's request; the journal admits, commits and publishes",
+    "the payer spends its restored note: 7 to the receiver, a fee of 1 to the operator's request, change 2",
+    "the receiver burns 5 of its restored 7 with change 2",
+    "admission refuses a real proof moved to another statement, a changed public input and a valid double spend",
+    "exact retries return original replies, a new proof of an admitted statement included",
+    "the reader derives supply 10 minus 5 and reads each original receipt as final",
+    "receiver, payer and operator restore exactly their unspent notes from their seeds",
+    "a fresh seedless process verifies the same supply from the package and the venue alone",
+    "a fresh process restores the receiver's note from its seed and public bytes",
+    "a reopened journal replays its commands to the same package and replies"
+  ],
+  "metrics": [
+    {
+      "label": "issue 10",
+      "kind": 1,
+      "proofBytes": 14656,
+      "elapsedMs": 4028
+    },
+    {
+      "label": "pay 7, fee 1, change 2",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 7103
+    },
+    {
+      "label": "burn 5, change 2",
+      "kind": 3,
+      "proofBytes": 14656,
+      "elapsedMs": 5499
+    },
+    {
+      "label": "double spend refused",
+      "kind": 2,
+      "proofBytes": 14656,
+      "elapsedMs": 5408
+    },
+    {
+      "label": "issue 10 again",
+      "kind": 1,
+      "proofBytes": 14656,
+      "elapsedMs": 1803
+    }
+  ],
+  "packageBytes": 48250,
+  "recordBytes": {
+    "issue": 15231,
+    "pay": 15562,
+    "burn": 15295
+  },
+  "venueRecords": 4,
+  "sourceSha256Lf": {
+    "dist/backing.js": "08d80f493e1438d95739a2485571ecd5c16b3eb01ed4e6db68c2f5275eabf7e9",
+    "dist/bytes.js": "e28cf286ba7ea38c1d0dffd0e28ace75ad7404e669202e2c42f8b491f93b53e0",
+    "dist/commitment.js": "810e35251311d26a90d99035f100b190a89f732a910d757eda9fa2115a109e2d",
+    "dist/contexts.js": "2d8481a2cf178fedb18c965dfc33f024e5fb2c4e65fb7437bee8213e53d26d48",
+    "dist/ergo-headers.js": "2e272856dddc98ec56eabd5cf7969e7bcbca3edb6cd3163452608f44e9135e19",
+    "dist/ergo-profile.js": "25d312c7eb3aeb975dce06c77fd183dca27d7fb75744dede34e91dfa049bcc61",
+    "dist/ergo-synthetic.js": "a424554153ed81408bbda2513d4f6619786436e7da694e69b3b0a9bb751b8e1f",
+    "dist/ergo.js": "186afdd35c3a1374831cabbb6169c3a50186bfccdc5e8a85f871125da65bebde",
+    "dist/keys.js": "07993d86bebf4555f59b82374f616cecfe9be5dc1d3ff19ac8fbc7d31163ed5c",
+    "dist/messages.js": "ab09944d243cc56b1d7b8e0e7b94801d37be5de9a2706b0cb4966a989e46a8c4",
+    "dist/oplog.js": "06f4e626b03c86daa5dd869351ac7897065d333e7261fd3dd0855d4d1534cbd1",
+    "dist/pool/field.js": "8348d48159c397cb49bcb03ced9e606103d689d7892072b27b9a05b50e9f2bb8",
+    "dist/pool/note-tree.js": "15ad3655c234be813d86c1f34908106ca83eabea56caf11b8a8727885844b0ee",
+    "dist/pool/notes.js": "cef12625888dc3eead053638fc22ecf5bb78c75499bc0945286f9b821fe401bf",
+    "dist/pool/poseidon2.js": "0cb1af62e50b25d604ad9b259d77e0531164e6e5a620eadf64744d78f010bf11",
+    "dist/pool/proof-verifier.js": "fde5e5054ecceced5dd46d3ea002c287852413567d610266fd20f2e1b62622ed",
+    "dist/pool/schedule.js": "47136b811c6f4cb3aea5edb82bfe7f051a76583c943bfc0a892714ca6718c967",
+    "dist/pool/scope.js": "de29da23e0b75149e1bc5b83568781b0821a26362ba8daec2da283f51a80bcf9",
+    "dist/pool/v3/capsules.js": "594dfaaf85da7ec968a00c636598642634805d36ce3525c3e20a1fa5bf75e324",
+    "dist/pool/v3/commitments.js": "081b8a6b5ab6825daeb5fadedb03520ab2ecd6a34881b222ad8e567e75cee152",
+    "dist/pool/v3/configuration.js": "44aca7cbd71d298c02e05bc52088582f21098de406300fe939542aa1e7e241c7",
+    "dist/pool/v3/fault-evidence.js": "b9676b05c40f3242146fde8559633be1f1124c28721f7647dba3aa6ed49050bc",
+    "dist/pool/v3/guard.js": "640c1dddd4cc22c10b5bc41d1426e81ed9bb1c44b7b7ee0ea08e8087cb00236c",
+    "dist/pool/v3/headers.js": "fc48f7fd718aceb323d29ac3e0f696fe52978727a9a6785d403c5ec3739b90e1",
+    "dist/pool/v3/package.js": "9d228024c4d7a57f54e312a04c9c30eb4242a035b816f8af33d15a156f28fcc3",
+    "dist/pool/v3/prover.js": "8d9e819f892337028157258b37ffced0184424063ba3d1624e2ef1ca9e73c16e",
+    "dist/pool/v3/reader.js": "7d69a042530c91d72273628f8a83254226f3d3759c7cb593bd9f2e9b9b4c4c3a",
+    "dist/pool/v3/records.js": "93448217d43f77acc3ac7c6de79eb6f4c500def2b7828ca1f05a819bcee4e884",
+    "dist/pool/v3/recovery.js": "b78a0465b0590bc5d9c8c0965f116d01f555f06ce707eab6a4e64ccbac0a9374",
+    "dist/pool/v3/refusals.js": "afa71e4c26b186239740950d00e012eec821d75c3f17423d07db2806478be904",
+    "dist/pool/v3/served-trail.js": "c63f5c82e0e641994ac5a525a89af8675468d1d07fbbc50fa1e654b2c51faafd",
+    "dist/pool/v3/spent-set.js": "b5df225482ef1f2fff7aaa8974bec2950287cc2dd131e625e01f114f48d233c5",
+    "dist/pool/v3/state.js": "8af5dd6167aec4d2d1ab3cb176a4a85befe6c455bb4fef4c8ed57a2232b5ef09",
+    "dist/pool/v3/store.js": "1c54078a3613b944dcb175e18fd79539f9f7ff45b77a1b56612b7be9965daf71",
+    "dist/pool/v3/terms.js": "2921fc3be441b2129c4c576a893019595ce9c9680853e9b10d8c7f7d7c7445a7",
+    "dist/pool/v3/trail.js": "32f087f18f089072903956e3726ec35ad2cafa65752d1a20e78a4518a55e39cb",
+    "dist/pool/v3/witness.js": "97739585618fe57a723d76574022439d45e387296129cc95c56c18105445cb6d",
+    "dist/presentation.js": "6ad4dae46ede448079dc0dd824fe1b12bc770b204f9d84b20facafa8dc308dac",
+    "dist/record-range.js": "8448ef918c8b60b88847da3731dc913c6cd6bc9e076db95d77cdc4a574d3e349",
+    "dist/record-venue.js": "5d66c88d298800211a159d4db8f3b2fcd4adcf28131e976817e070e6d16fb916",
+    "dist/replacement.js": "e9ef3ef56ab04cd8053daae5871c00c5998894ed83f151f72f38dd59b0fdbfab",
+    "dist/revocation.js": "343f6f52cc386a6410452bfd28f49c6fa8dae4b87ad7564fb789db91882e0c32",
+    "dist/venue-error.js": "0b01e9dd946d2d5d747a1a1d82e3b3d6a4c6c386710088f0eefe05aa2550466d",
+    "dist/venue-records.js": "89738d897ce21a654d984894bb51c6825c231145509f4ee9b3f76974edc39168",
+    "dist/venue.js": "85595f173d5fb16c50a68d995a15e3881fb5d320178b8a4ba1706a1d501485f8",
+    "package-lock.json": "8203171d98e330e29b091437c947e425fa7b8de9aafa0088a90aae2544f60c9a",
+    "scripts/pool/delivery/evidence-reader.mjs": "719a4f1eac2ba2ee10b05d588d13aa819afae25d9cf8cc9a8cf257702609c486",
+    "scripts/pool/fixtures.mjs": "9062b9825218adb87171f06261d3c15635efcca6925352562734ca72c2ee5878",
+    "scripts/pool/v3/authorization-evidence.mjs": "338821b52a8415aba08513e1b6c201ea0f51f17bc256fcd5559171adb8a16b09",
+    "scripts/pool/v3/candidate-manifest.json": "a5f34d76b1ac9cba71d322c5263fee75120a7756d0b5609720682c344e5049ae",
+    "scripts/pool/v3/candidate.mjs": "51273e876c6fe3a6bb76d57e81e379cc82115f942802436ca81e71fd07b1a460",
+    "scripts/pool/v3/circuits/burn.nr": "fc701db0ddf076004621ec91dcd25972d46b91bef5f2b00277155ef8a73b8fe5",
+    "scripts/pool/v3/circuits/demand.nr": "c0fe4af4fb64f8494b16a40f49a526b048e9c41b68924c471e99ef898c15c349",
+    "scripts/pool/v3/circuits/issue.nr": "dfc3a4c8c39e870e942d6c7c512af2a6d07e5a5f5eb01bbccf9fbf03a5c91167",
+    "scripts/pool/v3/circuits/notes.nr": "c606dd994e523631a969de861b909128b834be8f6fba4be11a4e2a217262270d",
+    "scripts/pool/v3/circuits/request.nr": "d6abd650c01efb37bd5ced2c38068ab64c99e62f3cba02468ec1107f985dca27",
+    "scripts/pool/v3/circuits/settle.nr": "5c7ed9ce647fa4440a11b6e43d62d889bd65f26016d9267b702bbac5393ad92d",
+    "scripts/pool/v3/circuits/spend.nr": "bde18e670aac3c1771419211a5685e5531da8c75fe1297f78e489855e511fdf7",
+    "scripts/pool/v3/codec.mjs": "950686981ff30cce660ff032f2dc29b4caf87fc0f4dac48ca9978f42b17a5e99",
+    "scripts/pool/v3/compile.mjs": "a5a066ae697ff5fce5dd45f55772d14a13c28d5766350af575f4fbc627f1112b",
+    "scripts/pool/v3/ergo-check.mjs": "d2113a043f54ed59dceca6d270e2d6fe205c45d6e4e02231a31b6b3bc4fb0b84",
+    "scripts/pool/v3/fault-evidence.mjs": "97ac98b9269f8e75705fbff7035d72abea1f0d1eacadf53859bdad05bd2e679f",
+    "scripts/pool/v3/local-replay.mjs": "dc2e2f47d23c30cf2e13099e2f926672ed09d5af78641db00eec4ac88d7ba01a",
+    "scripts/pool/v3/local-worker.mjs": "2e705eb79564e88314f27e5d04cff26949c9ac3156c2781a92ee6522b9929de9",
+    "scripts/pool/v3/non-service.mjs": "f573f4556b99049ef0c7e46d42f4b3f380a6b9ebe9c450aca20ef616fce4573a",
+    "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
+    "scripts/pool/v3/receipt-state.mjs": "5c4e69983c2900ab72f41bbe9a34f8d7ad7a5ceebbccc6d96931e55e1c3f3245",
+    "scripts/pool/v3/scope-evidence.mjs": "a5bdd711885ded5bb5f43f13c7769b7e9e86789658fe9af0a3627581b4f85a16",
+    "scripts/pool/v3/scope-recovery.mjs": "ae6f5a68680110cf19604a71047230c84ad296cbd71f5e457a1fb1618d02a6de",
+    "scripts/pool/v3/scope-replay.mjs": "ebe0ad85da4f1d64087026b82e4ad93932926a5bd2bfa7307ebfad6dc6a194ff",
+    "scripts/pool/v3/store-check.mjs": "6a63a0bedaabcde527c912b7530b8521f63887ab2b475cbd5c808082b707cc98",
+    "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
+    "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
+    "src/commitment.ts": "98eac617566d4b1770d99a5a0da94b9047e5a57ec4e576eb1ec20597b69aa93e",
+    "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
+    "src/ergo-headers.ts": "17c0c2f19779037642b16a73489cc794061703e7ccbd3bd438b284c24c443fe5",
+    "src/ergo-profile.ts": "7052bce624ae7c3d49dac2646284701fa80dd2477f8e4c6919fcf7b2b45672a4",
+    "src/ergo-publisher.ts": "2dabd89ca03ce53a1bbab4142e2bfdd053f0cec625d67cd3cca3e7fd1930de92",
+    "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02",
+    "src/ergo-synthetic.ts": "d6c62463be0be0161b253b6ddd7e677a7e784b2b0485fd6af8b2ac7c01a571ba",
+    "src/ergo.ts": "574d26352e2f4583eb5d58d09fad38398a661026a3120904954452f0dfcd99d6",
+    "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
+    "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
+    "src/messages.ts": "8a941254bf24650f9146d3875add1f20993a08b17b40ddac1ed060e225191718",
+    "src/oplog.ts": "d1f2ad4b71a109948f3f39a869f25ae8faf63b3fcd0206b7f9015117e31a714a",
+    "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
+    "src/pool/field.ts": "abd55bd8bd2a51fb954c9dc05fb3380bf4c2df6dd3c145c2eff0f29b1e36710a",
+    "src/pool/note-tree.ts": "2188f3210d2fd8552f1cd5a463c75bd80e91d0d1c742e766a32edb88d4a91d7d",
+    "src/pool/notes.ts": "fafd7e7efeb05a0cac26632162eff748ac580db4f50f65a4e99fde6fef6fc4f7",
+    "src/pool/poseidon2.ts": "f064d7648479957450208971ab845bb799c06d63e47607d1dcabb1c6c42386d7",
+    "src/pool/proof-verifier.ts": "e0f04446afea1b2f071c66cd4a978f08c948ab14df04b3d84e6365388640a64b",
+    "src/pool/schedule.ts": "4c4936504b7e1445548df649bbbc1a120196ff155a7954a138ffab29b578834a",
+    "src/pool/scope.ts": "fe8a66c268bd6a96ba62a1cdbcefd26e0c634de2f5fac44bb4c72722436391c0",
+    "src/pool/v3/capsules.ts": "95b7c258cf66913ff9a7ffff37c59de453279149b62dbfd4e38519604858505d",
+    "src/pool/v3/commitments.ts": "26f5465573ff921ca054417fda8ac471956945266c075f2694d8b15dbc14e8e1",
+    "src/pool/v3/configuration.ts": "d641c612b702c637e1ef4c33cbfafcf0922fba38a297731cbede09cbf16dbea8",
+    "src/pool/v3/fault-evidence.ts": "760ca4611d546202fcf1e0cd8700e843062601e639ab5d41faf7c4f28b5c8621",
+    "src/pool/v3/guard.ts": "6f54f62ed0d6c9cb91f4c4bcce5b7fec06ab63dbaf022cc1773a560c8371c792",
+    "src/pool/v3/headers.ts": "42d2c1baf8aca0dcbef3d79acf48194a6d3dcc8189b90c91010eebf2d0cfa841",
+    "src/pool/v3/package.ts": "4be4d9a573493c09be5ac635b167b67423b206990cafbfbd5e74771b5d98a9e1",
+    "src/pool/v3/prover.ts": "ba76c8acd439b28ec54d5dc5b21152df822d33ca93df363b4ddad90ed7fadfec",
+    "src/pool/v3/reader.ts": "46b203d3fe3c45050f2907d94728991497d68ceddd805ebbc8d357b66fc3b174",
+    "src/pool/v3/records.ts": "94eebb79fe44a421e17978a0192074e447552bc3ce5d9e36412ef880438c2d7d",
+    "src/pool/v3/recovery.ts": "8c6e1a1c70d5a2799f705b07af1b55a5521c3e97049f48449467d770ac4f8b36",
+    "src/pool/v3/refusals.ts": "3a95f2631f87aff52b6e6434fe8c3a7ce91c5c78d06ed14be3cf9ef2936a5b90",
+    "src/pool/v3/served-trail.ts": "7e03a0f71795828b0574a21087fd32910bd09d74280d900cababdd7bf361a3d8",
+    "src/pool/v3/spent-set.ts": "9a19743ec59ad28df625a55b34d77f458d1bf0e2848f64bc05ba6d786196bb59",
+    "src/pool/v3/state.ts": "541323cc329cfb63acc39b5161e458d2eae2d2914e3b0542c535c46917db87b9",
+    "src/pool/v3/store.ts": "5c3d030a600e42a2634eff7d8c5641c270b7c1686881e407d6460ffa0bad274d",
+    "src/pool/v3/terms.ts": "7dfa593a220aa07fe7b128a8afb1ffaab82da5e47ed7c998d8f4eeec99dc88d6",
+    "src/pool/v3/trail.ts": "ab543cc603e02c3b5cee49c5d2a2746e3adc51c02781d896f009a4bde1001fb2",
+    "src/pool/v3/witness.ts": "cfd868739b5c2f84b7e8f4890f65e0212a50cf5d7a9d470b239bbf592611c7ea",
+    "src/presentation.ts": "adcd73c862129f4ccd4d02b14df16c0f701127f3d8d504f0bb91e91734b46bb3",
+    "src/record-range.ts": "181f5b9192c1f5df2f91da45423d363423149e4c9ff8e8f7bae2d4b54e535059",
+    "src/record-venue.ts": "19cc7913cd90de844d4b9e6b977ef452d0f682dbb7e8947843341908ff771233",
+    "src/replacement.ts": "2505bd340fb656f615069fc464f0a16b258ddb3ddfe5f6798d37f7083f20bf76",
+    "src/revocation.ts": "dd3c2e5d321931ae54e033b0091c6f15de52f11f018712c421ea813b3f440850",
+    "src/venue-error.ts": "f2e9535ed81d544801967c1bd8edb26b0191900794a6f4fdc66a448612907810",
+    "src/venue-records.ts": "904f449a238b4263d11b71b975e1ea1c6fdae4272fcf5558ac5a887f2fa44ad3",
+    "src/venue.ts": "841a4cd70df8afbb570c107de6c6223076786d92779d276c04e0e5969964deae"
+  },
+  "audit": {
+    "status": "selected-local-replay",
+    "fullV3Replay": false,
+    "currentRangeAuthenticated": true,
+    "candidateConfigurationChecked": true,
+    "signedTermsAuthenticated": true,
+    "termsAuthorityAuthenticated": true,
+    "completenessClaim": false,
+    "noMatchesMeansZeroBalance": false,
+    "unresolvedCoverage": true,
+    "spendable": false,
+    "rangeEvidence": "fixture-verifier",
+    "audit": {
+      "records": "3",
+      "issued": "10",
+      "burned": "5",
+      "outstanding": "5",
+      "noteRoot": "7231822036288919436587147665818438489521674833661194700893671511900006386110",
+      "spentRoot": "03fee7e38aed2a9bf6c6fdc48a21ee9b82b78591d2264a7163bd326b01cfdc12",
+      "historyHash": "df3aa6fda69926415dcfe5bbef3ec6d948ed0566b7d093dc3230f55846bf51bb",
+      "evidenceHash": "e7c143030d41cda9b740f2279a551e00ffd944321f23b622ba82d457524c4672",
+      "range": {
+        "judgingIndex": "4",
+        "lag": "2",
+        "checkpointIndex": "4",
+        "revokedAt": null,
+        "heldBefore": 3,
+        "heldAfter": 0,
+        "chain": [
+          {
+            "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+            "from": "0",
+            "link": "89d450780ba17b065eb69f19616164a8093d2d05088406fe41606159c5c7b613"
+          }
+        ],
+        "carrying": [
+          {
+            "sequence": "1",
+            "index": "1",
+            "class": "valid"
+          },
+          {
+            "sequence": "2",
+            "index": "2",
+            "class": "valid"
+          },
+          {
+            "sequence": "3",
+            "index": "3",
+            "class": "valid"
+          },
+          {
+            "sequence": "4",
+            "index": "4",
+            "class": "valid"
+          }
+        ],
+        "clock": null
+      }
+    },
+    "candidates": []
+  },
+  "holdings": {
+    "receiver": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "3",
+        "issued": "10",
+        "burned": "5",
+        "outstanding": "5",
+        "noteRoot": "7231822036288919436587147665818438489521674833661194700893671511900006386110",
+        "spentRoot": "03fee7e38aed2a9bf6c6fdc48a21ee9b82b78591d2264a7163bd326b01cfdc12",
+        "historyHash": "df3aa6fda69926415dcfe5bbef3ec6d948ed0566b7d093dc3230f55846bf51bb",
+        "evidenceHash": "e7c143030d41cda9b740f2279a551e00ffd944321f23b622ba82d457524c4672",
+        "range": {
+          "judgingIndex": "4",
+          "lag": "2",
+          "checkpointIndex": "4",
+          "revokedAt": null,
+          "heldBefore": 3,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "89d450780ba17b065eb69f19616164a8093d2d05088406fe41606159c5c7b613"
+            }
+          ],
+          "carrying": [
+            {
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "sequence": "3",
+              "index": "3",
+              "class": "valid"
+            },
+            {
+              "sequence": "4",
+              "index": "4",
+              "class": "valid"
+            }
+          ],
+          "clock": null
+        }
+      },
+      "candidates": [
+        {
+          "cm": "17930391209882134273965272477919194901108937604901423513167592276179084555853",
+          "nf": "4439289982828961970364655769070535024358288927116546478120651618983611319261",
+          "value": "2",
+          "leaf": "5",
+          "anchor": "7231822036288919436587147665818438489521674833661194700893671511900006386110",
+          "siblings": [
+            "14354366340504215442304289211394463989543470322484470239713111233718827042096",
+            "16257989699773466206393016511488115181357775227253857822747532441271299011144",
+            "1666021592903031324485330259169514319622881397960683409137021222418169823992",
+            "1935094829533267935830464563796710052445228582946993128186972021230315590035",
+            "18383913181606838331795460117774658566856597132399717689821053927504534850729",
+            "6650121914657515867260011416921319045587517571339686030450569779952452434446",
+            "845043333535205747680782585765216487309952857158244204638951000115525663969",
+            "1798565372180516634517843282450706694542445499858350052460863933410324420334",
+            "12082351775801795992599119410575771090046502720172243783387647860247227871902",
+            "17392670516229609273138538435194690200647498693429087923197847846467620878366",
+            "18270147803583966115185581568756452890223528135804716937646296736746340714319",
+            "6245281075527541134368495049517243664719812052214528999106154137816504162189",
+            "5771305936450134295237779198955973617491950584355028563949759501589674323328",
+            "8375117846537600003339886617732755020518140880023263272035782507904755134166",
+            "1402956623894417358519384271339285842133055840035948184830517042721409232939",
+            "10518453832655181976446617300434900287841057900980895845234303440776175031342",
+            "15485975685389868597531359628984423612206441834147218371890432861420618086233",
+            "15422680120123365729179431955186502234992765602151752301487612439836632415437",
+            "3956483861973015592013083471667691148363938305872047999848739786219821549630",
+            "1086051623285356080920660076036760901133490110146331619651622591312371431716",
+            "2915904499750125353540875529397177727199377493198348513681582475949711605897",
+            "20164087144993267523342657261822731817585018270367494699207673407082461049973",
+            "6242064092034472953019862381003839448720318820550567656011695795729872763820",
+            "486473096388032301890231500231637785138514345257938344321238940657971574478",
+            "8682912164133426756325886608207438073742770514324345939761663338459940455365",
+            "9032327814826196994352281082085265791527933228092108861697327508420029459713",
+            "11946683638986745115214649685278219707650430060924747485486585022833169300696",
+            "19219361000372015911425077088009647148763037724375627703239846977182347147882",
+            "20250997086726519601015986826877099693245538547315475919513141220642229899021",
+            "14413420282722522993748367414404798853361893034082534437626176948595980240628",
+            "4920301475339101562902404357157229632407380396727250905915335784284364493374",
+            "3490399488954770152131810821200763799606626796619604090245668179171764908058"
+          ],
+          "right": [
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "pathScope": "replayed-local-tree-only",
+          "spendable": false
+        }
+      ]
+    },
+    "payer": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "3",
+        "issued": "10",
+        "burned": "5",
+        "outstanding": "5",
+        "noteRoot": "7231822036288919436587147665818438489521674833661194700893671511900006386110",
+        "spentRoot": "03fee7e38aed2a9bf6c6fdc48a21ee9b82b78591d2264a7163bd326b01cfdc12",
+        "historyHash": "df3aa6fda69926415dcfe5bbef3ec6d948ed0566b7d093dc3230f55846bf51bb",
+        "evidenceHash": "e7c143030d41cda9b740f2279a551e00ffd944321f23b622ba82d457524c4672",
+        "range": {
+          "judgingIndex": "4",
+          "lag": "2",
+          "checkpointIndex": "4",
+          "revokedAt": null,
+          "heldBefore": 3,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "89d450780ba17b065eb69f19616164a8093d2d05088406fe41606159c5c7b613"
+            }
+          ],
+          "carrying": [
+            {
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "sequence": "3",
+              "index": "3",
+              "class": "valid"
+            },
+            {
+              "sequence": "4",
+              "index": "4",
+              "class": "valid"
+            }
+          ],
+          "clock": null
+        }
+      },
+      "candidates": [
+        {
+          "cm": "10178328711593781802829170148173316469336404132837279344054815250422508231621",
+          "nf": "14968524595961521640286613165010220474960357434590970176523238613981557504630",
+          "value": "2",
+          "leaf": "3",
+          "anchor": "7231822036288919436587147665818438489521674833661194700893671511900006386110",
+          "siblings": [
+            "20914027814639484698631997610013975799696725109434784598571809176121730989948",
+            "2194598596371798712674817431259465815377650391738192977346242872470642609901",
+            "12356353845555332987362537390048052555750573748698733357784494992029545034863",
+            "1935094829533267935830464563796710052445228582946993128186972021230315590035",
+            "18383913181606838331795460117774658566856597132399717689821053927504534850729",
+            "6650121914657515867260011416921319045587517571339686030450569779952452434446",
+            "845043333535205747680782585765216487309952857158244204638951000115525663969",
+            "1798565372180516634517843282450706694542445499858350052460863933410324420334",
+            "12082351775801795992599119410575771090046502720172243783387647860247227871902",
+            "17392670516229609273138538435194690200647498693429087923197847846467620878366",
+            "18270147803583966115185581568756452890223528135804716937646296736746340714319",
+            "6245281075527541134368495049517243664719812052214528999106154137816504162189",
+            "5771305936450134295237779198955973617491950584355028563949759501589674323328",
+            "8375117846537600003339886617732755020518140880023263272035782507904755134166",
+            "1402956623894417358519384271339285842133055840035948184830517042721409232939",
+            "10518453832655181976446617300434900287841057900980895845234303440776175031342",
+            "15485975685389868597531359628984423612206441834147218371890432861420618086233",
+            "15422680120123365729179431955186502234992765602151752301487612439836632415437",
+            "3956483861973015592013083471667691148363938305872047999848739786219821549630",
+            "1086051623285356080920660076036760901133490110146331619651622591312371431716",
+            "2915904499750125353540875529397177727199377493198348513681582475949711605897",
+            "20164087144993267523342657261822731817585018270367494699207673407082461049973",
+            "6242064092034472953019862381003839448720318820550567656011695795729872763820",
+            "486473096388032301890231500231637785138514345257938344321238940657971574478",
+            "8682912164133426756325886608207438073742770514324345939761663338459940455365",
+            "9032327814826196994352281082085265791527933228092108861697327508420029459713",
+            "11946683638986745115214649685278219707650430060924747485486585022833169300696",
+            "19219361000372015911425077088009647148763037724375627703239846977182347147882",
+            "20250997086726519601015986826877099693245538547315475919513141220642229899021",
+            "14413420282722522993748367414404798853361893034082534437626176948595980240628",
+            "4920301475339101562902404357157229632407380396727250905915335784284364493374",
+            "3490399488954770152131810821200763799606626796619604090245668179171764908058"
+          ],
+          "right": [
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "pathScope": "replayed-local-tree-only",
+          "spendable": false
+        }
+      ]
+    },
+    "operator": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "3",
+        "issued": "10",
+        "burned": "5",
+        "outstanding": "5",
+        "noteRoot": "7231822036288919436587147665818438489521674833661194700893671511900006386110",
+        "spentRoot": "03fee7e38aed2a9bf6c6fdc48a21ee9b82b78591d2264a7163bd326b01cfdc12",
+        "historyHash": "df3aa6fda69926415dcfe5bbef3ec6d948ed0566b7d093dc3230f55846bf51bb",
+        "evidenceHash": "e7c143030d41cda9b740f2279a551e00ffd944321f23b622ba82d457524c4672",
+        "range": {
+          "judgingIndex": "4",
+          "lag": "2",
+          "checkpointIndex": "4",
+          "revokedAt": null,
+          "heldBefore": 3,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "89d450780ba17b065eb69f19616164a8093d2d05088406fe41606159c5c7b613"
+            }
+          ],
+          "carrying": [
+            {
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "sequence": "3",
+              "index": "3",
+              "class": "valid"
+            },
+            {
+              "sequence": "4",
+              "index": "4",
+              "class": "valid"
+            }
+          ],
+          "clock": null
+        }
+      },
+      "candidates": [
+        {
+          "cm": "20914027814639484698631997610013975799696725109434784598571809176121730989948",
+          "nf": "18512852599629434216279160762195759149755606131450140734274458703702106073459",
+          "value": "1",
+          "leaf": "2",
+          "anchor": "7231822036288919436587147665818438489521674833661194700893671511900006386110",
+          "siblings": [
+            "10178328711593781802829170148173316469336404132837279344054815250422508231621",
+            "2194598596371798712674817431259465815377650391738192977346242872470642609901",
+            "12356353845555332987362537390048052555750573748698733357784494992029545034863",
+            "1935094829533267935830464563796710052445228582946993128186972021230315590035",
+            "18383913181606838331795460117774658566856597132399717689821053927504534850729",
+            "6650121914657515867260011416921319045587517571339686030450569779952452434446",
+            "845043333535205747680782585765216487309952857158244204638951000115525663969",
+            "1798565372180516634517843282450706694542445499858350052460863933410324420334",
+            "12082351775801795992599119410575771090046502720172243783387647860247227871902",
+            "17392670516229609273138538435194690200647498693429087923197847846467620878366",
+            "18270147803583966115185581568756452890223528135804716937646296736746340714319",
+            "6245281075527541134368495049517243664719812052214528999106154137816504162189",
+            "5771305936450134295237779198955973617491950584355028563949759501589674323328",
+            "8375117846537600003339886617732755020518140880023263272035782507904755134166",
+            "1402956623894417358519384271339285842133055840035948184830517042721409232939",
+            "10518453832655181976446617300434900287841057900980895845234303440776175031342",
+            "15485975685389868597531359628984423612206441834147218371890432861420618086233",
+            "15422680120123365729179431955186502234992765602151752301487612439836632415437",
+            "3956483861973015592013083471667691148363938305872047999848739786219821549630",
+            "1086051623285356080920660076036760901133490110146331619651622591312371431716",
+            "2915904499750125353540875529397177727199377493198348513681582475949711605897",
+            "20164087144993267523342657261822731817585018270367494699207673407082461049973",
+            "6242064092034472953019862381003839448720318820550567656011695795729872763820",
+            "486473096388032301890231500231637785138514345257938344321238940657971574478",
+            "8682912164133426756325886608207438073742770514324345939761663338459940455365",
+            "9032327814826196994352281082085265791527933228092108861697327508420029459713",
+            "11946683638986745115214649685278219707650430060924747485486585022833169300696",
+            "19219361000372015911425077088009647148763037724375627703239846977182347147882",
+            "20250997086726519601015986826877099693245538547315475919513141220642229899021",
+            "14413420282722522993748367414404798853361893034082534437626176948595980240628",
+            "4920301475339101562902404357157229632407380396727250905915335784284364493374",
+            "3490399488954770152131810821200763799606626796619604090245668179171764908058"
+          ],
+          "right": [
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "pathScope": "replayed-local-tree-only",
+          "spendable": false
+        }
+      ]
+    }
+  },
+  "receiptReads": {
+    "issue": {
+      "status": "final",
+      "sequence": "held",
+      "includedAt": [
+        {
+          "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+          "sequence": "2",
+          "index": "2"
+        }
+      ],
+      "contradictedAt": []
+    },
+    "pay": {
+      "status": "final",
+      "sequence": "held",
+      "includedAt": [
+        {
+          "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+          "sequence": "3",
+          "index": "3"
+        }
+      ],
+      "contradictedAt": []
+    },
+    "burn": {
+      "status": "final",
+      "sequence": "held",
+      "includedAt": [
+        {
+          "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+          "sequence": "4",
+          "index": "4"
+        }
+      ],
+      "contradictedAt": []
+    }
+  },
+  "fresh": {
+    "audit": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "3",
+        "issued": "10",
+        "burned": "5",
+        "outstanding": "5",
+        "noteRoot": "7231822036288919436587147665818438489521674833661194700893671511900006386110",
+        "spentRoot": "03fee7e38aed2a9bf6c6fdc48a21ee9b82b78591d2264a7163bd326b01cfdc12",
+        "historyHash": "df3aa6fda69926415dcfe5bbef3ec6d948ed0566b7d093dc3230f55846bf51bb",
+        "evidenceHash": "e7c143030d41cda9b740f2279a551e00ffd944321f23b622ba82d457524c4672",
+        "range": {
+          "judgingIndex": "4",
+          "lag": "2",
+          "checkpointIndex": "4",
+          "revokedAt": null,
+          "heldBefore": 3,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "89d450780ba17b065eb69f19616164a8093d2d05088406fe41606159c5c7b613"
+            }
+          ],
+          "carrying": [
+            {
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "sequence": "3",
+              "index": "3",
+              "class": "valid"
+            },
+            {
+              "sequence": "4",
+              "index": "4",
+              "class": "valid"
+            }
+          ],
+          "clock": null
+        }
+      },
+      "candidates": []
+    },
+    "receiver": {
+      "status": "selected-local-replay",
+      "fullV3Replay": false,
+      "currentRangeAuthenticated": true,
+      "candidateConfigurationChecked": true,
+      "signedTermsAuthenticated": true,
+      "termsAuthorityAuthenticated": true,
+      "completenessClaim": false,
+      "noMatchesMeansZeroBalance": false,
+      "unresolvedCoverage": true,
+      "spendable": false,
+      "rangeEvidence": "fixture-verifier",
+      "audit": {
+        "records": "3",
+        "issued": "10",
+        "burned": "5",
+        "outstanding": "5",
+        "noteRoot": "7231822036288919436587147665818438489521674833661194700893671511900006386110",
+        "spentRoot": "03fee7e38aed2a9bf6c6fdc48a21ee9b82b78591d2264a7163bd326b01cfdc12",
+        "historyHash": "df3aa6fda69926415dcfe5bbef3ec6d948ed0566b7d093dc3230f55846bf51bb",
+        "evidenceHash": "e7c143030d41cda9b740f2279a551e00ffd944321f23b622ba82d457524c4672",
+        "range": {
+          "judgingIndex": "4",
+          "lag": "2",
+          "checkpointIndex": "4",
+          "revokedAt": null,
+          "heldBefore": 3,
+          "heldAfter": 0,
+          "chain": [
+            {
+              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+              "from": "0",
+              "link": "89d450780ba17b065eb69f19616164a8093d2d05088406fe41606159c5c7b613"
+            }
+          ],
+          "carrying": [
+            {
+              "sequence": "1",
+              "index": "1",
+              "class": "valid"
+            },
+            {
+              "sequence": "2",
+              "index": "2",
+              "class": "valid"
+            },
+            {
+              "sequence": "3",
+              "index": "3",
+              "class": "valid"
+            },
+            {
+              "sequence": "4",
+              "index": "4",
+              "class": "valid"
+            }
+          ],
+          "clock": null
+        }
+      },
+      "candidates": [
+        {
+          "cm": "17930391209882134273965272477919194901108937604901423513167592276179084555853",
+          "nf": "4439289982828961970364655769070535024358288927116546478120651618983611319261",
+          "value": "2",
+          "leaf": "5",
+          "anchor": "7231822036288919436587147665818438489521674833661194700893671511900006386110",
+          "siblings": [
+            "14354366340504215442304289211394463989543470322484470239713111233718827042096",
+            "16257989699773466206393016511488115181357775227253857822747532441271299011144",
+            "1666021592903031324485330259169514319622881397960683409137021222418169823992",
+            "1935094829533267935830464563796710052445228582946993128186972021230315590035",
+            "18383913181606838331795460117774658566856597132399717689821053927504534850729",
+            "6650121914657515867260011416921319045587517571339686030450569779952452434446",
+            "845043333535205747680782585765216487309952857158244204638951000115525663969",
+            "1798565372180516634517843282450706694542445499858350052460863933410324420334",
+            "12082351775801795992599119410575771090046502720172243783387647860247227871902",
+            "17392670516229609273138538435194690200647498693429087923197847846467620878366",
+            "18270147803583966115185581568756452890223528135804716937646296736746340714319",
+            "6245281075527541134368495049517243664719812052214528999106154137816504162189",
+            "5771305936450134295237779198955973617491950584355028563949759501589674323328",
+            "8375117846537600003339886617732755020518140880023263272035782507904755134166",
+            "1402956623894417358519384271339285842133055840035948184830517042721409232939",
+            "10518453832655181976446617300434900287841057900980895845234303440776175031342",
+            "15485975685389868597531359628984423612206441834147218371890432861420618086233",
+            "15422680120123365729179431955186502234992765602151752301487612439836632415437",
+            "3956483861973015592013083471667691148363938305872047999848739786219821549630",
+            "1086051623285356080920660076036760901133490110146331619651622591312371431716",
+            "2915904499750125353540875529397177727199377493198348513681582475949711605897",
+            "20164087144993267523342657261822731817585018270367494699207673407082461049973",
+            "6242064092034472953019862381003839448720318820550567656011695795729872763820",
+            "486473096388032301890231500231637785138514345257938344321238940657971574478",
+            "8682912164133426756325886608207438073742770514324345939761663338459940455365",
+            "9032327814826196994352281082085265791527933228092108861697327508420029459713",
+            "11946683638986745115214649685278219707650430060924747485486585022833169300696",
+            "19219361000372015911425077088009647148763037724375627703239846977182347147882",
+            "20250997086726519601015986826877099693245538547315475919513141220642229899021",
+            "14413420282722522993748367414404798853361893034082534437626176948595980240628",
+            "4920301475339101562902404357157229632407380396727250905915335784284364493374",
+            "3490399488954770152131810821200763799606626796619604090245668179171764908058"
+          ],
+          "right": [
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "pathScope": "replayed-local-tree-only",
+          "spendable": false
+        }
+      ]
+    }
+  },
+  "limits": [
+    "Candidate configuration from the independently held manifest and a local reference venue whose identity the guard recomputes; no adopted domain, chain venue or finality.",
+    "One genesis segment of one backing: no imports, recovery kinds, replacement, second backing or silence/non-service clause. The journal reads the venue's full ranges on every operation.",
+    "Holders are this script: the payer and receiver restore paths through the reader and prove with the runtime prover; no wallet store, request transport or fee quote.",
+    "Restart replay is exercised once here; restarts mid-publication and exact retry across restarts are slice 5."
+  ]
+}

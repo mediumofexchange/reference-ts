@@ -303,6 +303,17 @@ The reader (`src/pool/v3/reader.ts`) reads them through a `RecordVenue`
 bounded clock and import checks described above. Venue-source authentication, complete shared-scope
 authority, recovery and adoption remain open.
 
+The operator side runs in `src/pool/v3/` on reference venues only
+([decision](../decisions/2026-09.md#2026-09-25--admit-commit-and-serve-v3-through-an-operator-journal-proving-in-the-runtime-on-reference-venues-only)):
+the runtime prover (`prover.ts`, `witness.ts`), admission at the horizon in
+`state.ts`, the operator journal (`store.ts`) and the candidate guard
+(`guard.ts`). `npm run check:pool:v3-store` proves an issue, a payment with a
+fee to the operator's own request and a burn through the journal on the local
+reference venue; holders spend notes restored from the served package, and a
+fresh seedless process verifies supply from the package and the venue alone
+([report](pool-v3-store-verification.json)). One genesis segment of one
+backing; no recovery kinds, imports, replacement service or chain venue yet.
+
 ## Runtime pin and recovery models
 
 The runtime follows specification revision
