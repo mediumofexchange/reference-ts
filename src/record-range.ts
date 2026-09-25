@@ -2,7 +2,7 @@
 // reader's independently selected venue-evidence verifier and its replay.
 // A decoded answer is that verifier's output, never supplied evidence, and it
 // establishes no directory, trail, classification, force or verdict.
-import { compareBytes, copyArray, copyBytes, EncodingError } from "./bytes.js";
+import { arrayLength, byteLength, compareBytes, copyArray, copyBytes, copyUnshared, EncodingError } from "./bytes.js";
 import { V3_RANGE_CONTEXT as CONTEXT } from "./contexts.js";
 import {
   decodeCommitment, decodeReplacement, decodeRevocation, isSignedRevocation, replacementHash, verifyCommitment, verifyReplacement,
@@ -36,17 +36,19 @@ export interface RangeAnswer { readonly request: RangeRequest; readonly entries:
 
 const u64 = (v: unknown): v is bigint => typeof v === "bigint" && v >= 0n && v <= MAX_U64;
 const isKind = (v: unknown): v is RecordKind => v === 1 || v === 2 || v === 3 || v === 4;
-/** The caller's bytes as an owned copy: nothing below reads the caller again. */
+/** The caller's bytes as an owned copy, never over shared memory: nothing
+ * below reads the caller again. */
 function bytes(value: unknown, width?: number): Uint8Array {
-  const own = copyBytes(value as Uint8Array);
-  if ((value as Uint8Array).buffer instanceof SharedArrayBuffer ||
-      (width !== undefined && own.length !== width)) throw new EncodingError("invalid or shared range bytes");
+  const own = copyUnshared(value as Uint8Array);
+  if (width !== undefined && own.length !== width) throw new EncodingError("invalid range bytes");
   return own;
 }
-function limits(value: RangeLimits): void {
-  if (value === null || typeof value !== "object" || !u64(value.maxBytes) || !u64(value.maxEntries)) {
-    throw new EncodingError("invalid range budget");
-  }
+/** The caller's budget, read once. */
+function limits(value: RangeLimits): RangeLimits {
+  if (value === null || typeof value !== "object") throw new EncodingError("invalid range budget");
+  const { maxBytes, maxEntries } = value;
+  if (!u64(maxBytes) || !u64(maxEntries)) throw new EncodingError("invalid range budget");
+  return { maxBytes, maxEntries };
 }
 function budget(size: bigint, count: bigint, bound: RangeLimits): void {
   if (size > bound.maxBytes || count > bound.maxEntries) throw new RangeLimitError("range reader budget exceeded");
@@ -73,29 +75,34 @@ export function sameRequest(a: RangeRequest, b: RangeRequest): boolean {
   return a.kind === b.kind && a.fromIndex === b.fromIndex && a.toIndex === b.toIndex &&
     compareBytes(a.venue, b.venue) === 0 && compareBytes(a.subject, b.subject) === 0;
 }
-/** Each field is read once, then judged and copied, so a caller's accessor
- * cannot pass one value to the check and another to the copy. */
+/** Each field is read once and its bytes copied, then the copy is judged, so
+ * a caller's accessor or reported length cannot pass one value to the check
+ * and another to the copy. */
 export function copyRequest(r: RangeRequest): RangeRequest {
   if (r === null || typeof r !== "object") throw new EncodingError("malformed range request");
-  const captured = { venue: r.venue, kind: r.kind, subject: r.subject, fromIndex: r.fromIndex, toIndex: r.toIndex };
-  if (!isWellFormedRequest(captured)) throw new EncodingError("malformed range request");
-  return Object.freeze({ venue: copyBytes(captured.venue), kind: captured.kind, subject: copyBytes(captured.subject),
-    fromIndex: captured.fromIndex, toIndex: captured.toIndex });
+  const { venue, kind, subject, fromIndex, toIndex } = r;
+  const own = { venue: copyUnshared(venue), kind, subject: copyUnshared(subject), fromIndex, toIndex };
+  if (!isWellFormedRequest(own)) throw new EncodingError("malformed range request");
+  return Object.freeze(own);
 }
 
 /** §13.1's structure over caller objects, read once: every entry's fields
  * are captured here so a later read cannot present other values. Budgets are
  * the caller's; an in-memory answer that breaks the frame's order, range or
  * length rules is refused before any rule reads it. */
-function validEntries(answer: RangeAnswer): { request: RangeRequest; entries: readonly Position[] } {
+function validEntries(answer: RangeAnswer, bound?: RangeLimits): { request: RangeRequest; entries: readonly Position[]; size: bigint } {
   if (answer === null || typeof answer !== "object") throw new EncodingError("invalid range answer");
-  const requestField = answer.request, entryField = answer.entries;
-  if (!isWellFormedRequest(requestField) || !Array.isArray(entryField)) throw new EncodingError("invalid range answer");
-  const request = copyRequest(requestField), entries = copyArray(entryField, value => value);
-  if (entries.length > MAX_U32) throw new EncodingError("range entry count exceeds u32");
-  const captured: Position[] = [];
+  const request = copyRequest(answer.request), entryField = answer.entries;
+  if (!Array.isArray(entryField)) throw new EncodingError("invalid range answer");
+  // A budget applies to the count before any entry is read; each entry is
+  // then read and judged once inside the copy, so a long sparse array stops
+  // at its first hole.
+  const count = arrayLength(entryField);
+  if (count > MAX_U32) throw new EncodingError("range entry count exceeds u32");
+  let size = BigInt(FIXED_BYTES) + BigInt(ENTRY_BYTES) * BigInt(count);
+  if (bound !== undefined) budget(size, BigInt(count), bound);
   let previous: Position | undefined;
-  for (const entry of entries) {
+  const entries = copyArray(entryField, (entry: RangeEntry): Position => {
     if (entry === null || typeof entry !== "object") throw new EncodingError("invalid range entry");
     const { index, ordinal, record: recordField } = entry;
     if (!u64(index) || !u64(ordinal)) throw new EncodingError("invalid range entry");
@@ -105,18 +112,19 @@ function validEntries(answer: RangeAnswer): { request: RangeRequest; entries: re
       throw new EncodingError("range entry out of order, ordinal or range");
     }
     if (!recordLengthFits(request.kind, record.length)) throw new EncodingError("range record length does not fit its kind");
-    previous = position; captured.push(position);
-  }
-  return { request, entries: captured };
+    size += BigInt(record.length);
+    if (bound !== undefined) budget(size, BigInt(count), bound);
+    previous = position;
+    return position;
+  }, count);
+  // Only a Proxy or an entry's getter can change the length between reads.
+  if (entries.length !== count) throw new EncodingError("range entries changed while read");
+  return { request, entries, size };
 }
 
 /** Shape, order and budgets before any output allocation. */
 function requireAnswer(answer: RangeAnswer, bound: RangeLimits): { size: bigint; request: RangeRequest; entries: readonly Position[] } {
-  limits(bound);
-  const { request, entries } = validEntries(answer), count = BigInt(entries.length);
-  let size = BigInt(FIXED_BYTES) + BigInt(ENTRY_BYTES) * count;
-  budget(size, count, bound);
-  for (const entry of entries) { size += BigInt(entry.record.length); budget(size, count, bound); }
+  const { request, entries, size } = validEntries(answer, limits(bound));
   if (size > BigInt(Number.MAX_SAFE_INTEGER)) throw new RangeLimitError("range allocation range exceeded");
   return { size, request, entries };
 }
@@ -140,10 +148,10 @@ export function encodeRangeAnswer(answer: RangeAnswer, bound: RangeLimits): Uint
 /** The request is the reader's own input: bytes answering another request are
  * refused before any entry is read. Two passes bound and scan the whole frame
  * before copying records; exact inner bytes are owned, never decoded here. */
-export function decodeRangeAnswer(bytesIn: Uint8Array, expectedIn: RangeRequest, bound: RangeLimits): RangeAnswer {
-  limits(bound);
+export function decodeRangeAnswer(bytesIn: Uint8Array, expectedIn: RangeRequest, boundIn: RangeLimits): RangeAnswer {
+  const bound = limits(boundIn);
+  budget(BigInt(byteLength(bytesIn)), 0n, bound);
   const input = bytes(bytesIn), expected = copyRequest(expectedIn);
-  budget(BigInt(input.length), 0n, bound);
   if (input.length < FIXED_BYTES) throw new EncodingError("truncated range answer");
   if (compareBytes(input.subarray(0, 17), CONTEXT) !== 0) throw new EncodingError("wrong range context");
   const view = new DataView(input.buffer, input.byteOffset, input.byteLength);
@@ -191,9 +199,7 @@ export interface HeldCommitments { readonly held: readonly HeldCommitment[]; rea
  * derivation never reads an order or range the frame forbids. */
 function requireKind(answer: RangeAnswer, kind: RecordKind): { request: RangeRequest; entries: readonly Position[] } {
   if (answer === null || typeof answer !== "object") throw new EncodingError("wrong range kind");
-  const requestField = answer.request;
-  if (!isWellFormedRequest(requestField)) throw new EncodingError("wrong range kind");
-  const request = copyRequest(requestField);
+  const request = copyRequest(answer.request);
   if (request.kind !== kind) throw new EncodingError("wrong range kind");
   return validEntries({ request, entries: answer.entries });
 }
@@ -217,9 +223,11 @@ export function heldCommitments(answer: RangeAnswer, prior?: HeldPrior): HeldCom
     if (prior !== undefined) throw new EncodingError("a range from index zero has no prior held state");
     highest = 0n;
   } else {
-    if (prior === null || typeof prior !== "object" || !u64(prior.fromIndex) || !u64(prior.highest) ||
-        prior.fromIndex !== request.fromIndex) throw new EncodingError("held prior must be established for the range's first index");
-    highest = prior.highest;
+    const { fromIndex, highest: priorHighest } = prior === null || typeof prior !== "object" ? {} as Partial<HeldPrior> : prior;
+    if (!u64(fromIndex) || !u64(priorHighest) || fromIndex !== request.fromIndex) {
+      throw new EncodingError("held prior must be established for the range's first index");
+    }
+    highest = priorHighest;
   }
   const held: HeldCommitment[] = [];
   for (let at = 0; at < entries.length;) {
@@ -341,10 +349,20 @@ export interface ChainContext {
  * where witnessed strictly before its effective index (C2.5.5). A link whose
  * effective index is past `now` is pending, not in force. Records after
  * `now` are not in the answer, so the chain is the chain at `now`. */
-export function replacementChain(admitted: readonly AdmittedReplacement[], context: ChainContext): ReplacementChain {
-  if (context === null || typeof context !== "object" || !Array.isArray(admitted)) throw new EncodingError("invalid chain context");
+export function replacementChain(admittedIn: readonly AdmittedReplacement[], context: ChainContext): ReplacementChain {
+  if (context === null || typeof context !== "object" || !Array.isArray(admittedIn)) throw new EncodingError("invalid chain context");
   const { lag, now } = context, backing = bytes(context.backing, 32), original = bytes(context.original, 32);
   if (!u64(lag) || !u64(now)) throw new EncodingError("invalid chain context");
+  // The walk reads each record many times, so it reads owned copies.
+  const admitted = copyArray(admittedIn, (a: AdmittedReplacement) => {
+    if (a === null || typeof a !== "object" || a.replacement === null || typeof a.replacement !== "object") {
+      throw new EncodingError("invalid admitted replacement");
+    }
+    const { index, identity, replacement: { predecessor, successor, effective } } = a;
+    if (!u64(index) || !u64(effective)) throw new EncodingError("invalid admitted replacement");
+    return { index, identity: bytes(identity, 32),
+      replacement: { predecessor: bytes(predecessor, 32), successor: bytes(successor, 32), effective } };
+  });
   const floored = admitted.filter(a => a.replacement.effective >= a.index + 2n * lag + 1n);
   const chain: ChainLink[] = [Object.freeze({ operator: copyBytes(original), from: 0n, link: copyBytes(backing) })];
   const seen: Uint8Array[] = [backing];
@@ -355,7 +373,7 @@ export function replacementChain(admitted: readonly AdmittedReplacement[], conte
       .filter(a => compareBytes(a.replacement.predecessor, link) === 0 &&
         (a.replacement.effective > incumbent.from || compareBytes(a.replacement.successor, incumbent.operator) === 0))
       .sort((x, y) => (x.index < y.index ? -1 : x.index > y.index ? 1 : compareBytes(x.identity, y.identity)));
-    let chosen: AdmittedReplacement | undefined, consideredAt: bigint | undefined;
+    let chosen: (typeof admitted)[number] | undefined, consideredAt: bigint | undefined;
     for (const candidate of candidates) {
       if (consideredAt !== undefined && candidate.index === consideredAt) continue;
       if (chosen !== undefined && candidate.index >= chosen.replacement.effective) break;

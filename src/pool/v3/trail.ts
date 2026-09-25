@@ -1,7 +1,7 @@
 // Served-trail transport and LOCAL evidence authentication, pool-v3 §10 at
 // 7ea0ee8. No terms validation, history replay, complete opening or verdict.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { compareBytes, copyArray, copyBytes, EncodingError } from "../../bytes.js";
+import { arrayLength, byteLength, compareBytes, copyArray, copyBytes, EncodingError } from "../../bytes.js";
 import { V3_SEGMENT_CONTEXT as HEADER_CONTEXT, V3_TRAIL_CONTEXT as CONTEXT } from "../../contexts.js";
 import { isValue } from "../field.js";
 import { decodeSegmentHeader, MAX_HEADER_BYTES, type SegmentHeader } from "./headers.js";
@@ -37,9 +37,12 @@ function bytes(value: unknown, width?: number): Uint8Array {
   if (width !== undefined && own.length !== width) throw new EncodingError("invalid trail bytes");
   return own;
 }
-function limits(value: TrailLimits): void {
+/** The caller's budget, read once. */
+function limits(value: TrailLimits): TrailLimits {
   object(value);
-  if (!isValue(value.maxBytes) || !isValue(value.maxEvents)) throw new EncodingError("invalid trail budget");
+  const { maxBytes, maxEvents } = value;
+  if (!isValue(maxBytes) || !isValue(maxEvents)) throw new EncodingError("invalid trail budget");
+  return { maxBytes, maxEvents };
 }
 function byteBudget(size: bigint, budget: TrailLimits): void {
   if (size > budget.maxBytes) throw new TrailLimitError("trail exceeds reader byte budget");
@@ -67,33 +70,37 @@ function headerCount(input: Uint8Array, offset: number, length: number): number 
 /** Shape and budgets precede full header decoding and all payload hashing.
  * Each caller field is read once into the owned trail returned, the only one
  * the encoder and the verifier then read. */
-function requireTrail(input: ServedTrail, budget: TrailLimits): { size: number; header: SegmentHeader; trail: ServedTrail } {
-  limits(budget); object(input);
+function requireTrail(input: ServedTrail, budgetIn: TrailLimits): { size: number; header: SegmentHeader; trail: ServedTrail } {
+  const budget = limits(budgetIn); object(input);
   const termField = input.terms, recordField = input.records;
   if (!Array.isArray(recordField) || !Array.isArray(termField)) throw new EncodingError("invalid trail arrays");
-  // Element references only; each element is read and copied once below.
-  const records = copyArray(recordField, value => value), terms = copyArray(termField, value => value);
-  eventBudget(BigInt(records.length), budget);
+  // Counts are budgeted before any element is read; elements are then read
+  // and judged once each, so a long sparse array stops at its first hole.
+  const recordCount = arrayLength(recordField), termCount = arrayLength(termField);
+  eventBudget(BigInt(recordCount), budget);
   const header = bytes(input.header);
-  let size = BigInt(FIXED_BYTES + header.length) + 68n * BigInt(terms.length) + 4n * BigInt(records.length);
+  let size = BigInt(FIXED_BYTES + header.length) + 68n * BigInt(termCount) + 4n * BigInt(recordCount);
   byteBudget(size, budget);
   const count = headerCount(header, 0, header.length);
-  if (terms.length !== count) throw new EncodingError("wrong scoped terms count");
-  const ownTerms: { terms: Uint8Array; signature: Uint8Array }[] = [], ownRecords: Uint8Array[] = [];
-  for (let i = 0; i < count; i++) {
-    const term = terms[i]!; object(term);
+  if (termCount !== count) throw new EncodingError("wrong scoped terms count");
+  const terms = copyArray(termField, (term: ServedTrail["terms"][number]) => {
+    object(term);
     const own = Object.freeze({ terms: bytes(term.terms), signature: bytes(term.signature, 64) });
     if (own.terms.length > 0xffffffff) throw new EncodingError("terms exceed u32 length");
-    size += BigInt(own.terms.length); byteBudget(size, budget); ownTerms.push(own);
-  }
-  for (let i = 0; i < records.length; i++) {
-    const record = bytes(records[i]);
+    size += BigInt(own.terms.length); byteBudget(size, budget);
+    return own;
+  }, count);
+  const records = copyArray(recordField, (value: Uint8Array) => {
+    const record = bytes(value);
     if (record.length > MAX_TRAIL_RECORD_BYTES) throw new EncodingError("trail record too long");
-    size += BigInt(record.length); byteBudget(size, budget); ownRecords.push(record);
-  }
+    size += BigInt(record.length); byteBudget(size, budget);
+    return record;
+  }, recordCount);
+  // Only a Proxy or an element's getter can change a length between reads.
+  if (terms.length !== count || records.length !== recordCount) throw new EncodingError("trail arrays changed while read");
   if (size > BigInt(Number.MAX_SAFE_INTEGER)) throw new TrailLimitError("trail exceeds implementation allocation range");
   return { size: Number(size), header: decodeSegmentHeader(header),
-    trail: Object.freeze({ header, terms: Object.freeze(ownTerms), records: Object.freeze(ownRecords) }) };
+    trail: Object.freeze({ header, terms: Object.freeze(terms), records: Object.freeze(records) }) };
 }
 
 export function encodeTrail(input: ServedTrail, budget: TrailLimits): Uint8Array {
@@ -111,9 +118,10 @@ export function encodeTrail(input: ServedTrail, budget: TrailLimits): Uint8Array
 
 /** Two passes: bound and scan the entire transport before creating payload
  * arrays or decoding the header. Exact inner bytes, including Buffer, are owned. */
-export function decodeTrail(bytesIn: Uint8Array, budget: TrailLimits): ServedTrail {
-  limits(budget);
-  const input = bytes(bytesIn); byteBudget(BigInt(input.length), budget);
+export function decodeTrail(bytesIn: Uint8Array, budgetIn: TrailLimits): ServedTrail {
+  const budget = limits(budgetIn);
+  byteBudget(BigInt(byteLength(bytesIn)), budget);
+  const input = bytes(bytesIn);
   if (input.length < FIXED_BYTES + MIN_HEADER_BYTES + 68) throw new EncodingError("truncated trail");
   contextAt(input, 0, CONTEXT);
   const view = new DataView(input.buffer, input.byteOffset, input.byteLength);

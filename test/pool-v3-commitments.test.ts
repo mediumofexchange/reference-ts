@@ -9,7 +9,7 @@ import * as contexts from "../src/contexts.js";
 import { directoryRoot, signCommitment, verifyCommitment } from "../src/commitment.js";
 import { FIELD_MODULUS, limbsOf } from "../src/pool/field.js";
 import { verifySignatureStrict } from "../src/keys.js";
-import { flipping, iterating, lookAlikes, lyingLength } from "./hostile-bytes.js";
+import { flipping, hugeSparse, iterating, lookAlikes, lyingLength } from "./hostile-bytes.js";
 
 // Independent framing oracle. Roots, domains and proof bytes are synthetic;
 // Ed25519 signatures are real. No fixture claims valid state, proof or finality.
@@ -303,6 +303,15 @@ describe("evidence suffix and receipt boundaries", () => {
       expect(() => c.decodeReceipt(fake)).toThrow("not a byte array");
       expect(c.verifyReceipt(authority, { ...r, signature: fake })).toBe(false);
     }
+    // An opening at position 1 whose chain starts from a non-genesis link, with a
+    // getter answering genesis once: the link checked is the link hashed.
+    const f = suffixFixture(), other = bytes(99), chain = [other];
+    for (let i = 0; i < f.events.length; i++) chain.push(rawEvidence(chain[i]!, f.events[i]!, BigInt(i + 1)));
+    const forged = snapshot(chain[3]!), digest = sha(rawSnapshot(forged));
+    const opening = { ...f.opening(1), previous: other };
+    expect(c.verifyEvidenceOpening(digest, forged, opening)).toBe(false);
+    expect(c.verifyEvidenceOpening(digest, forged, flipping(opening, "previous", f.before[0]!, other))).toBe(false);
+    expect(c.verifyEvidenceOpening(f.digest, f.s, { ...f.opening(1), suffix: hugeSparse() })).toBe(false);
   });
   it("declares every v3 context in contexts.ts, whose load asserts them prefix-free with the rest, as the specification spells it", () => {
     const declared: [string, Uint8Array][] = [["genesis", contexts.V3_GENESIS_CONTEXT], ["history", contexts.V3_HISTORY_CONTEXT],

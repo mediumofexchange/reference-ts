@@ -7,7 +7,7 @@ import { deliveryHash, statementBytes, type EvidenceDigests, type Record as Stat
 import { EncodingError } from "../src/bytes.js";
 import { directoryRoot, signCommitment, verifyCommitment } from "../src/commitment.js";
 import { limbsOf } from "../src/pool/field.js";
-import { flipping, lookAlikes, lyingLength } from "./hostile-bytes.js";
+import { flipping, hugeSparse, lookAlikes, lyingLength } from "./hostile-bytes.js";
 
 // Independent Buffer/node:crypto wire oracle. Domains, roots, statements and
 // proofs are synthetic; Ed25519 signatures and signed-directory context are real.
@@ -234,6 +234,10 @@ describe("v3 portable fault evidence", () => {
     const lying = { ...evidence, statement: lyingLength(evidence.statement, 40) };
     expect(Buffer.from(f.encodeFaultEvidence(lying, 1n))).toEqual(Buffer.from(f.encodeFaultEvidence(evidence, 1n)));
     for (const fake of lookAlikes(300)) expect(() => f.decodeFaultEvidence(fake, 2n)).toThrow("not a byte array");
+    // A sparse suffix of the largest u32 length is refused by its length before any entry is read.
+    const sparse = { ...evidence, suffix: hugeSparse<EvidenceDigests>() };
+    expect(() => f.encodeFaultEvidence(sparse, 1n)).toThrow("wrong evidence suffix length");
+    expect(f.verifyFaultEvidence(expected, sparse, 1n)).toBe(false);
   });
 
   it("owns Buffer and subarray inputs, decoded fields and encoded output", () => {

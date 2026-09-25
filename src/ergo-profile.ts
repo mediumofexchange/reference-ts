@@ -18,7 +18,7 @@
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
+import { ByteWriter, compareBytes, copyBytes, copyUnshared, EncodingError } from "./bytes.js";
 import { utf8Encoder } from "./contexts.js";
 import { MAX_RANGE_RECORD_BYTES, PUBLICATION_RANGE, type RangeEntry, type RangeRequest, type RecordKind } from "./record-range.js";
 
@@ -146,8 +146,13 @@ export function sectionMatchesRoot(transactions: readonly { readonly id: Uint8Ar
 /** A `Coll[Byte]` constant as a box carries it: type code 0x0e, a minimal
  * unsigned VLQ length and the bytes, ending exactly. Any other register
  * value is not the profile's shape. */
-export function collBytes(constant: Uint8Array): Uint8Array | undefined {
-  if (!isBytes(constant) || constant.length < 2 || constant[0] !== COLL_BYTE_TYPE) return undefined;
+export function collBytes(input: Uint8Array): Uint8Array | undefined {
+  let constant: Uint8Array; // read as copied, never through the caller's properties
+  try { constant = copyUnshared(input); } catch (error) {
+    if (error instanceof EncodingError) return undefined;
+    throw error;
+  }
+  if (constant.length < 2 || constant[0] !== COLL_BYTE_TYPE) return undefined;
   let length = 0, at = 1;
   for (let shift = 0; ; shift += 7) {
     if (at >= constant.length || shift > 28) return undefined;
@@ -158,7 +163,7 @@ export function collBytes(constant: Uint8Array): Uint8Array | undefined {
       break;
     }
   }
-  return constant.length - at === length ? copyBytes(constant.subarray(at)) : undefined;
+  return constant.length - at === length ? constant.slice(at) : undefined;
 }
 
 /** Ergo's miner-fee proposition (minerRewardDelay 720), the one unsized tree

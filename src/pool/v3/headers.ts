@@ -1,7 +1,7 @@
 // Byte conformance for pool-v3 §8 at 061f87e. No adopted configuration,
 // opening replay, key authentication, checkpoint classification or finality.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { ByteReader, compareBytes, copyArray, copyBytes, EncodingError } from "../../bytes.js";
+import { byteLength, ByteReader, compareBytes, copyArray, copyBytes, EncodingError } from "../../bytes.js";
 import { V3_SEGMENT_CONTEXT as CONTEXT } from "../../contexts.js";
 
 const PREFIX_BYTES = 127, ENTRY_BYTES = 136;
@@ -90,10 +90,11 @@ export function segmentIdentity(header: SegmentHeader): Uint8Array { return sha2
 /** Owns decoded byte fields, including when the input is a Node Buffer.
  * Refusal is a structural error, never an operator-fault verdict. */
 export function decodeSegmentHeader(input: Uint8Array): SegmentHeader {
-  const bytes = copyBytes(input);
-  if (bytes.length < PREFIX_BYTES + ENTRY_BYTES || bytes.length > MAX_HEADER_BYTES) {
+  const length = byteLength(input); // bounded before anything is copied
+  if (length < PREFIX_BYTES + ENTRY_BYTES || length > MAX_HEADER_BYTES) {
     throw new EncodingError("v3 segment header byte bound");
   }
+  const bytes = copyBytes(input);
   const r = new ByteReader(bytes);
   if (compareBytes(r.raw(CONTEXT.length), CONTEXT) !== 0) throw new EncodingError("wrong segment context");
   const domain = r.raw(32), venue = r.raw(32), operator = r.raw(32), sequence = r.u64(), count = r.u32();

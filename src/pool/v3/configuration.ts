@@ -1,7 +1,7 @@
 // Candidate configuration framing, pool-v3 §11.1 at 916bffb.
 // No approved domain, declaration capability or artifact loader.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { ByteReader, ByteWriter, compareBytes, copyBytes, EncodingError } from "../../bytes.js";
+import { ByteReader, ByteWriter, compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
 import { V3_CONFIG_CONTEXT as CONTEXT } from "../../contexts.js";
 
 export const RELATIONS = Object.freeze(["issue", "spend", "burn", "demand", "settle", "request"] as const);
@@ -14,25 +14,24 @@ const BOUNDS = Uint8Array.of(32, 16, 2, 4, 1);
 const HELPER = Uint8Array.from("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8".match(/../g)!, x => parseInt(x, 16));
 export const CONFIGURATION_BYTES = 439;
 
-/** An owned copy, judged by its own length rather than the caller's. */
+/** An owned copy, never over shared memory, judged by its own length. */
 function bytes(value: unknown, length: number): Uint8Array {
-  const own = copyBytes(value as Uint8Array);
-  if (own.length !== length || (value as Uint8Array).buffer instanceof SharedArrayBuffer) {
-    throw new EncodingError("invalid candidate configuration bytes");
-  }
+  const own = copyUnshared(value as Uint8Array);
+  if (own.length !== length) throw new EncodingError("invalid candidate configuration bytes");
   return own;
 }
 
 export function configurationBytes(value: CandidateConfiguration): Uint8Array {
-  if (value === null || typeof value !== "object" || value.circuits === null || typeof value.circuits !== "object" ||
-    Object.keys(value.circuits).sort().join(",") !== [...RELATIONS].sort().join(",")) {
+  const circuits = value === null || typeof value !== "object" ? null : value.circuits;
+  if (circuits === null || typeof circuits !== "object" ||
+    Object.keys(circuits).sort().join(",") !== [...RELATIONS].sort().join(",")) {
     throw new EncodingError("configuration must name all six relations exactly");
   }
   const helper = bytes(value.helper, 32);
   if (compareBytes(helper, HELPER) !== 0) throw new EncodingError("unsupported helper");
   const w = new ByteWriter(); w.context(CONTEXT);
   for (const name of RELATIONS) {
-    const identity = value.circuits[name];
+    const identity = circuits[name];
     if (identity === null || typeof identity !== "object") throw new EncodingError("missing circuit identity");
     w.fixed(bytes(identity.bytecode, 32), 32, "bytecode"); w.fixed(bytes(identity.vk, 32), 32, "key");
   }

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import * as terms from "../src/pool/v3/terms.js";
 import { decodeBacking } from "../src/backing.js";
 import { EncodingError } from "../src/bytes.js";
-import { lookAlikes } from "./hostile-bytes.js";
+import { hiddenShared, lookAlikes } from "./hostile-bytes.js";
 
 const b = (n: number): Buffer => Buffer.alloc(32, n);
 const cat = (...parts: Uint8Array[]): Buffer => Buffer.concat(parts);
@@ -62,6 +62,7 @@ describe("v3 model constant-root terms", () => {
       // Look-alikes answer false, not a TypeError.
       for (const fake of lookAlikes(bytes.length)) expect(terms.verifyRootTermsSignature(fake, signature)).toBe(false);
       for (const fake of lookAlikes(64)) expect(terms.verifyRootTermsSignature(bytes, fake)).toBe(false);
+      expect(terms.verifyRootTermsSignature(hiddenShared(bytes), signature)).toBe(false);
     }
   });
 
@@ -217,9 +218,9 @@ describe("v3 model constant-root terms", () => {
       expect(terms.verifyRootTermsSignature(bad as unknown as Uint8Array, Buffer.alloc(64))).toBe(false);
       expect(terms.verifyRootTermsSignature(raw(fields()), bad as unknown as Uint8Array)).toBe(false);
     }
-    // Unexpected failures are not verification results.
+    // The caller's own `buffer` property is never read: bytes are judged through their intrinsic slots.
     const failing = Object.defineProperty(new Uint8Array(64), "buffer", { get() { throw new RangeError("unexpected"); } });
-    expect(() => terms.verifyRootTermsSignature(failing, Buffer.alloc(64))).toThrow(RangeError);
-    expect(() => terms.verifyRootTermsSignature(raw(fields()), failing)).toThrow(RangeError);
+    expect(terms.verifyRootTermsSignature(failing, Buffer.alloc(64))).toBe(false);
+    expect(terms.verifyRootTermsSignature(raw(fields()), failing)).toBe(false);
   });
 });

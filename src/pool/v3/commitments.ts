@@ -1,7 +1,7 @@
 // Byte conformance for pool-v3 §7 at 4a58fdc. This is not runtime replay,
 // checkpoint classification, a certificate transport or an adopted domain.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { ByteReader, ByteWriter, compareBytes, copyBytes, EncodingError } from "../../bytes.js";
+import { arrayLength, ByteReader, ByteWriter, compareBytes, copyArray, copyBytes, EncodingError } from "../../bytes.js";
 import {
   V3_EVIDENCE_LINK_CONTEXT as LINK, V3_EVIDENCE_SEED_CONTEXT as SEED, V3_GENESIS_CONTEXT as GENESIS,
   V3_HISTORY_CONTEXT as HISTORY, V3_RECEIPT_CONTEXT as RECEIPT, V3_SNAPSHOT_CONTEXT as SNAPSHOT,
@@ -22,6 +22,11 @@ function owned(bytes: Uint8Array): Uint8Array {
   const own = copyBytes(bytes);
   if (own.length !== 32) throw new EncodingError("fixed field must be 32 bytes");
   return own;
+}
+function ownDigests(d: EvidenceDigests): EvidenceDigests {
+  object(d);
+  const { statementHash, proofHash, signatureHash } = d;
+  return { statementHash: owned(statementHash), proofHash: owned(proofHash), signatureHash: owned(signatureHash) };
 }
 function u64(w: ByteWriter, value: bigint, positive = false): void {
   if (!isValue(value) || (positive && value === 0n)) throw new EncodingError("invalid u64");
@@ -89,22 +94,21 @@ export interface EvidenceOpening {
  * authenticated directory. A caller-chosen digest has no authority. Returns
  * only preimage/suffix authentication; never validity, finality or exclusion.
  * Resource or unexpected programming failures propagate, not a fault verdict. */
-export function verifyEvidenceOpening(expectedSnapshotDigest: Uint8Array, snapshot: Snapshot, opening: EvidenceOpening): boolean {
+export function verifyEvidenceOpening(expectedIn: Uint8Array, snapshotIn: Snapshot, opening: EvidenceOpening): boolean {
   try {
-    const w = new ByteWriter(); fixed(w, expectedSnapshotDigest);
-    if (compareBytes(snapshotDigest(snapshot), expectedSnapshotDigest) !== 0) return false;
+    // Every argument is read once into owned values; the answer is about them.
+    const expected = owned(expectedIn), snapshot = decodeSnapshot(snapshotBytes(snapshotIn));
+    if (compareBytes(snapshotDigest(snapshot), expected) !== 0) return false;
     object(opening);
-    if (!isValue(opening.position) || opening.position === 0n || !isValue(opening.length) ||
-        opening.length < opening.position || !Array.isArray(opening.suffix) ||
-        opening.length - opening.position !== BigInt(opening.suffix.length)) return false;
-    if (opening.position === 1n) {
-      fixed(w, opening.previous);
-      if (compareBytes(opening.previous, genesisEvidenceHash(snapshot.segment)) !== 0) return false;
-    }
-    let result = nextEvidenceHash(opening.previous, opening.target, opening.position);
-    for (let i = 0; i < opening.suffix.length; i++) {
-      result = nextEvidenceHash(result, opening.suffix[i]!, opening.position + BigInt(i) + 1n);
-    }
+    const { position, length, previous: previousIn, target: targetIn, suffix: suffixIn } = opening;
+    if (!isValue(position) || position === 0n || !isValue(length) || length < position || !Array.isArray(suffixIn) ||
+        length - position !== BigInt(arrayLength(suffixIn))) return false;
+    const previous = owned(previousIn), target = ownDigests(targetIn);
+    const suffix = copyArray(suffixIn, ownDigests, Number(length - position));
+    if (BigInt(suffix.length) !== length - position) return false;
+    if (position === 1n && compareBytes(previous, genesisEvidenceHash(snapshot.segment)) !== 0) return false;
+    let result = nextEvidenceHash(previous, target, position);
+    for (let i = 0; i < suffix.length; i++) result = nextEvidenceHash(result, suffix[i]!, position + BigInt(i) + 1n);
     return compareBytes(result, snapshot.evidenceHash) === 0;
   } catch (error) {
     if (error instanceof EncodingError) return false;

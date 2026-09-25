@@ -33,6 +33,19 @@ export function flipping<T extends object>(object: T, key: keyof T & string, fir
   return copy;
 }
 
+/** Bytes over shared memory whose own `buffer` getter reports an ordinary buffer. */
+export function hiddenShared(bytes: Uint8Array): Uint8Array {
+  class Hiding extends Uint8Array {
+    override get buffer(): ArrayBuffer { return new ArrayBuffer(this.byteLength); }
+  }
+  const own = new Hiding(new SharedArrayBuffer(bytes.length) as unknown as ArrayBuffer);
+  own.set(bytes);
+  return own;
+}
+
+/** An array of the largest u32 length with no elements: cheap to make, fatal to walk. */
+export const hugeSparse = <T>(): T[] => new Array<T>(0xffff_ffff);
+
 /** Objects that pass `instanceof Uint8Array` without being one. */
 export function lookAlikes(length: number): Uint8Array[] {
   const view = new DataView(new ArrayBuffer(length));

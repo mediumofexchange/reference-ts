@@ -1,7 +1,7 @@
 // Source-neutral evidence transport, pool-v3 §12 at 10dcf67.
 // Structural success is never a complete certificate or a verdict.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { compareBytes, copyArray, copyBytes, EncodingError } from "../../bytes.js";
+import { arrayLength, byteLength, compareBytes, copyArray, copyBytes, copyUnshared, EncodingError } from "../../bytes.js";
 import { DIRECTORY_MAGIC, V3_PACKAGE_CONTEXT as CONTEXT } from "../../contexts.js";
 import type { SnapshotDigest } from "../../venue-records.js";
 import { isValue } from "../field.js";
@@ -14,17 +14,19 @@ export interface PackageLimits { readonly maxBytes: bigint; readonly maxItems: b
  * 7 fault, 8 signed terms, 9 publication, 10 receipt record, 11 venue evidence. */
 export interface EvidenceItem { readonly kind: number; readonly payload: Uint8Array }
 
-/** The caller's bytes as an owned copy: nothing below reads the caller again. */
+/** The caller's bytes as an owned copy, never over shared memory: nothing
+ * below reads the caller again. */
 function bytes(value: unknown, width?: number): Uint8Array {
-  const own = copyBytes(value as Uint8Array);
-  if ((value as Uint8Array).buffer instanceof SharedArrayBuffer ||
-      (width !== undefined && own.length !== width)) throw new EncodingError("invalid or shared package bytes");
+  const own = copyUnshared(value as Uint8Array);
+  if (width !== undefined && own.length !== width) throw new EncodingError("invalid package bytes");
   return own;
 }
-function limits(value: PackageLimits): void {
-  if (value === null || typeof value !== "object" || !isValue(value.maxBytes) || !isValue(value.maxItems)) {
-    throw new EncodingError("invalid package budget");
-  }
+/** The caller's budget, read once. */
+function limits(value: PackageLimits): PackageLimits {
+  if (value === null || typeof value !== "object") throw new EncodingError("invalid package budget");
+  const { maxBytes, maxItems } = value;
+  if (!isValue(maxBytes) || !isValue(maxItems)) throw new EncodingError("invalid package budget");
+  return { maxBytes, maxItems };
 }
 function budget(size: bigint, count: bigint, bound: PackageLimits): void {
   if (size > bound.maxBytes || count > bound.maxItems) throw new PackageLimitError("package reader budget exceeded");
@@ -51,23 +53,24 @@ function ordered(items: readonly EvidenceItem[]): void {
 }
 
 /** Accept canonical order, never repair or deduplicate caller evidence. */
-export function encodeEvidencePackage(input: readonly EvidenceItem[], bound: PackageLimits): Uint8Array {
-  limits(bound);
+export function encodeEvidencePackage(input: readonly EvidenceItem[], boundIn: PackageLimits): Uint8Array {
+  const bound = limits(boundIn);
   if (!Array.isArray(input)) throw new EncodingError("invalid evidence count");
-  // Element references only; each item is read once into an owned item below.
-  const references = copyArray(input, value => value);
-  if (references.length > MAX_U32) throw new EncodingError("invalid evidence count");
-  let size = 23n + 5n * BigInt(references.length);
-  budget(size, BigInt(references.length), bound);
-  const items: EvidenceItem[] = [];
-  for (const reference of references) {
+  // The count is budgeted before any item is read; each item is then read and
+  // judged once, so a long sparse array stops at its first hole.
+  const count = arrayLength(input);
+  if (count > MAX_U32) throw new EncodingError("invalid evidence count");
+  let size = 23n + 5n * BigInt(count);
+  budget(size, BigInt(count), bound);
+  const items = copyArray(input, (reference: EvidenceItem): EvidenceItem => {
     if (reference === null || typeof reference !== "object") throw new EncodingError("invalid evidence item");
     const tag: unknown = reference.kind; kind(tag);
     const item = { kind: tag, payload: bytes(reference.payload) };
     if (item.payload.length > MAX_U32) throw new EncodingError("evidence payload too long");
-    size += BigInt(item.payload.length); budget(size, BigInt(references.length), bound);
-    items.push(item);
-  }
+    size += BigInt(item.payload.length); budget(size, BigInt(count), bound);
+    return item;
+  }, count);
+  if (items.length !== count) throw new EncodingError("invalid evidence count");
   if (size > BigInt(Number.MAX_SAFE_INTEGER)) throw new PackageLimitError("package allocation range exceeded");
   ordered(items);
   const out = new Uint8Array(Number(size)), view = new DataView(out.buffer);
@@ -80,9 +83,10 @@ export function encodeEvidencePackage(input: readonly EvidenceItem[], bound: Pac
   return out;
 }
 
-export function decodeEvidencePackage(bytesIn: Uint8Array, bound: PackageLimits): readonly EvidenceItem[] {
-  limits(bound);
-  const input = bytes(bytesIn); budget(BigInt(input.length), 0n, bound);
+export function decodeEvidencePackage(bytesIn: Uint8Array, boundIn: PackageLimits): readonly EvidenceItem[] {
+  const bound = limits(boundIn);
+  budget(BigInt(byteLength(bytesIn)), 0n, bound);
+  const input = bytes(bytesIn);
   if (input.length < 23) throw new EncodingError("truncated package");
   context(input, CONTEXT);
   const view = new DataView(input.buffer, input.byteOffset, input.byteLength);
@@ -104,22 +108,24 @@ export function decodeEvidencePackage(bytesIn: Uint8Array, bound: PackageLimits)
 }
 
 /** Existing MOED v1 root preimage. No new directory identity or root. */
-export function encodeEvidenceDirectory(input: readonly SnapshotDigest[], bound: PackageLimits): Uint8Array {
-  limits(bound);
+export function encodeEvidenceDirectory(input: readonly SnapshotDigest[], boundIn: PackageLimits): Uint8Array {
+  const bound = limits(boundIn);
   if (!Array.isArray(input)) throw new EncodingError("invalid directory count");
-  // Element references only; each entry is read once into an owned entry below.
-  const references = copyArray(input, value => value);
-  if (references.length > MAX_U32) throw new EncodingError("invalid directory count");
-  const size = 9n + 64n * BigInt(references.length);
-  budget(size, BigInt(references.length), bound);
-  const entries: SnapshotDigest[] = [];
+  // The count is budgeted before any entry is read; each entry is then read
+  // and judged once, so a long sparse array stops at its first hole.
+  const count = arrayLength(input);
+  if (count > MAX_U32) throw new EncodingError("invalid directory count");
+  const size = 9n + 64n * BigInt(count);
+  budget(size, BigInt(count), bound);
   let previous: Uint8Array | undefined;
-  for (const reference of references) {
+  const entries = copyArray(input, (reference: SnapshotDigest): SnapshotDigest => {
     if (reference === null || typeof reference !== "object") throw new EncodingError("invalid directory entry");
     const entry = { name: bytes(reference.name, 32), digest: bytes(reference.digest, 32) };
     if (previous && compareBytes(previous, entry.name) >= 0) throw new EncodingError("unordered directory");
-    previous = entry.name; entries.push(entry);
-  }
+    previous = entry.name;
+    return entry;
+  }, count);
+  if (entries.length !== count) throw new EncodingError("invalid directory count");
   // u32 entry count bounds the fixed-size multiplication below 2^48.
   const out = new Uint8Array(Number(size)), view = new DataView(out.buffer);
   out.set(DIRECTORY); view.setUint32(5, entries.length, false);
@@ -127,9 +133,10 @@ export function encodeEvidenceDirectory(input: readonly SnapshotDigest[], bound:
   return out;
 }
 
-export function decodeEvidenceDirectory(bytesIn: Uint8Array, bound: PackageLimits): readonly SnapshotDigest[] {
-  limits(bound);
-  const input = bytes(bytesIn); budget(BigInt(input.length), 0n, bound);
+export function decodeEvidenceDirectory(bytesIn: Uint8Array, boundIn: PackageLimits): readonly SnapshotDigest[] {
+  const bound = limits(boundIn);
+  budget(BigInt(byteLength(bytesIn)), 0n, bound);
+  const input = bytes(bytesIn);
   if (input.length < 9) throw new EncodingError("truncated directory");
   context(input, DIRECTORY);
   const count = new DataView(input.buffer, input.byteOffset, input.byteLength).getUint32(5, false);

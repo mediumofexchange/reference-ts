@@ -1,7 +1,7 @@
 // Portable evidence authentication, pool-v3 §9 at 322bcae. This does not
 // classify checkpoints, validate target records/proofs or establish finality.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { compareBytes, copyArray, copyBytes, EncodingError } from "../../bytes.js";
+import { arrayLength, compareBytes, copyArray, copyBytes, EncodingError } from "../../bytes.js";
 import { V3_FAULT_EVIDENCE_CONTEXT as CONTEXT, V3_SNAPSHOT_CONTEXT as SNAPSHOT_CONTEXT } from "../../contexts.js";
 import { isValue } from "../field.js";
 import { decodeSnapshot, snapshotBytes, verifyEvidenceOpening, type Snapshot } from "./commitments.js";
@@ -55,20 +55,22 @@ function requireEvidence(e: FaultEvidence, maximum: bigint): { snapshot: Uint8Ar
   object(e);
   const position = e.position, length = e.length, suffixField = e.suffix;
   const count = suffixCount(position, length, maximum);
-  if (!Array.isArray(suffixField)) throw new EncodingError("wrong evidence suffix length");
-  const suffix = copyArray(suffixField, value => value);
-  if (BigInt(suffix.length) !== count) throw new EncodingError("wrong evidence suffix length");
+  // The suffix length is checked before any entry is read, then each entry is
+  // read and judged once, so a long sparse array stops at its first hole.
+  const declared = Array.isArray(suffixField) ? arrayLength(suffixField) : -1;
+  if (BigInt(declared) !== count) throw new EncodingError("wrong evidence suffix length");
   const [statement, proof, authorization] = [e.statement, e.proof, e.authorization].map(field => {
     const own = bytes(field);
     if (own.length > MAX_TARGET_FIELD_BYTES) throw new EncodingError("target field too long");
     return own;
   }) as [Uint8Array, Uint8Array, Uint8Array];
   const previous = bytes(e.previous, 32), snapshot = snapshotBytes(e.snapshot);
-  const triples = suffix.map(triple => {
+  const triples = copyArray(suffixField, (triple: EvidenceDigests) => {
     object(triple);
     return Object.freeze({ statementHash: bytes(triple.statementHash, 32), proofHash: bytes(triple.proofHash, 32),
       signatureHash: bytes(triple.signatureHash, 32) });
-  });
+  }, declared);
+  if (triples.length !== declared) throw new EncodingError("wrong evidence suffix length");
   return { snapshot, evidence: Object.freeze({ snapshot: decodeSnapshot(snapshot), position, length, previous,
     statement, proof, authorization, suffix: Object.freeze(triples) }) };
 }

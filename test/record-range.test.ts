@@ -6,7 +6,7 @@ import { EncodingError } from "../src/bytes.js";
 import { encodeCommitment, signCommitment } from "../src/commitment.js";
 import { encodeReplacement, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
 import { encodeRevocation, signRevocation } from "../src/revocation.js";
-import { flipping, lookAlikes, lyingLength, silentArray } from "./hostile-bytes.js";
+import { flipping, hiddenShared, hugeSparse, lookAlikes, lyingLength, silentArray } from "./hostile-bytes.js";
 
 // Independent Buffer framing and hash oracle. Commitments, replacements and
 // revocations are genuinely signed; nothing here is a venue, a verdict or a
@@ -223,11 +223,21 @@ describe("v3 record-range answers", () => {
     const short = lyingLength(commitment(1n).subarray(0, 10), 136);
     expect(() => range.encodeRangeAnswer({ request: request(1, operator), entries: [entry(2n, short)] }, wide))
       .toThrow("range record length does not fit its kind");
-    // A request kind read once: whatever is encoded decodes under the request it carries.
+    // A request kind read once governs the checks and the bytes written.
     const hostile = { request: flipping(request(4, operator), "kind", 4, 1), entries: [entry(2n, Uint8Array.of(1, 2, 3, 4, 5))] };
-    let encoded: Uint8Array | undefined;
-    try { encoded = range.encodeRangeAnswer(hostile, wide); } catch (error) { expect(error).toBeInstanceOf(EncodingError); }
-    if (encoded !== undefined) expect(range.decodeRangeAnswer(encoded, request(encoded[49] as range.RecordKind, operator), wide).entries).toHaveLength(1);
+    const encoded = range.encodeRangeAnswer(hostile, wide);
+    expect(encoded[49]).toBe(4);
+    expect(range.decodeRangeAnswer(encoded, request(4, operator), wide).entries).toHaveLength(1);
+    // A subject is judged by its copied bytes, not a reported length.
+    for (const subject of [lyingLength(new Uint8Array(0), 32), lyingLength(new Uint8Array(33), 32)]) {
+      expect(() => range.copyRequest({ ...request(1, operator), subject })).toThrow("malformed range request");
+    }
+    expect(() => range.copyRequest({ ...request(1, operator), venue: hiddenShared(venue) })).toThrow("shared byte array");
+    // A sparse entry list of the largest u32 length meets the count budget, or stops at its first hole.
+    expect(() => range.encodeRangeAnswer({ request: request(1, operator), entries: hugeSparse() }, wide)).toThrow(range.RangeLimitError);
+    const unbounded = { maxBytes: (1n << 64n) - 1n, maxEntries: (1n << 64n) - 1n };
+    expect(() => range.encodeRangeAnswer({ request: request(1, operator), entries: hugeSparse() }, unbounded)).toThrow("invalid range entry");
+    expect(() => range.heldCommitments({ request: request(1, operator), entries: hugeSparse() })).toThrow("invalid range entry");
     // Entries by index: a silent iterator hides none of them.
     const honest = { request: request(1, operator), entries: [entry(2n, commitment(1n))] };
     const answer = { ...honest, entries: silentArray(honest.entries) };

@@ -32,8 +32,26 @@ export function validateQuantity(n: bigint, what: string): void {
 const typedArray = Object.getPrototypeOf(Uint8Array.prototype) as object;
 const intrinsic = (key: PropertyKey): ((this: unknown) => unknown) =>
   Object.getOwnPropertyDescriptor(typedArray, key)!.get!;
-const brandOf = intrinsic(Symbol.toStringTag), lengthOf = intrinsic("length");
+const brandOf = intrinsic(Symbol.toStringTag), lengthOf = intrinsic("length"), bufferOf = intrinsic("buffer");
 const isBytes = (value: unknown): value is Uint8Array => brandOf.call(value) === "Uint8Array";
+
+/**
+ * The length of genuine bytes through the intrinsic getter, so a budget can be
+ * applied before anything is copied. EncodingError for anything else.
+ */
+export function byteLength(bytes: Uint8Array): number {
+  if (!isBytes(bytes)) throw new EncodingError("not a byte array");
+  return lengthOf.call(bytes) as number;
+}
+
+/**
+ * copyBytes for a codec whose policy is to take no bytes over shared memory,
+ * read through the intrinsic getter rather than the caller's `buffer`.
+ */
+export function copyUnshared(bytes: Uint8Array): Uint8Array {
+  if (isBytes(bytes) && bufferOf.call(bytes) instanceof SharedArrayBuffer) throw new EncodingError("shared byte array");
+  return copyBytes(bytes);
+}
 
 /**
  * The one byte-copy in the codebase. Node's Buffer overrides `slice` to return
@@ -65,20 +83,29 @@ export function copyBytes(bytes: Uint8Array): Uint8Array {
 }
 
 /**
+ * The length of a genuine array, read once, so a count budget can be applied
+ * before any element is copied. EncodingError for a non-array.
+ */
+export function arrayLength(values: readonly unknown[]): number {
+  if (!Array.isArray(values)) throw new EncodingError("not an array");
+  const read: unknown = values.length;
+  // Only a Proxy can answer a length that is not an array index count.
+  if (typeof read !== "number" || !Number.isSafeInteger(read) || read < 0) throw new EncodingError("not an array");
+  return read;
+}
+
+/**
  * A plain array of `copy` applied to each index of a genuine array, reading its
  * length once and each element once. Neither the argument's species (which
  * `map`, `slice` and `filter` honour) nor its iterator (which `Array.from` and
  * spreading walk) is consulted, so a caller can neither hand back an array it
  * still holds nor copy more than `limit` elements. EncodingError for a
- * non-array or a longer one; `copy`'s own failures propagate.
+ * non-array or a longer one; `copy`'s own failures propagate, so validating
+ * inside `copy` stops at the first bad element of a long sparse array.
  */
 export function copyArray<T, U>(values: readonly T[], copy: (value: T) => U, limit = Number.MAX_SAFE_INTEGER): U[] {
   if (!Number.isSafeInteger(limit) || limit < 0) throw new RangeError("array limit is not a count");
-  if (!Array.isArray(values)) throw new EncodingError("not an array");
-  const read: unknown = values.length;
-  // Only a Proxy can answer a length that is not an array index count.
-  if (typeof read !== "number" || !Number.isSafeInteger(read) || read < 0) throw new EncodingError("not an array");
-  const length = read;
+  const length = arrayLength(values);
   if (length > limit) throw new EncodingError("array longer than its limit");
   const own: U[] = [];
   for (let i = 0; i < length; i++) own.push(copy(values[i] as T));
