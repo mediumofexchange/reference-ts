@@ -42,11 +42,11 @@ pool rules land, then retire covered material. Do not review or extend it otherw
 retired exhibit walk/signed opening claim. Keep one production path and never reinterpret pinned
 versions. Develop wallet, transport and witness feasibility alongside the core.
 
-Standing authorization effective 2026-09-08 covers development, protocol decisions, and merge/push
-after verification until superseded. Continue within that scope without renewed permission. It
-excludes real funds, public releases, live deployment, destructive data/history operations and
-access-control changes unless separately authorized. Pause only for unavailable access/physical
-input, a departure from core intent, or actions outside authority; continue safe work.
+Standing authorization effective 2026-09-08 covers development, protocol decisions and merge/push
+after verification until superseded, without renewed permission; it excludes real funds, public
+releases, live deployment, destructive data/history operations and access-control changes unless
+separately authorized. Pause only for unavailable access/physical input, a departure from core
+intent, or actions outside authority; continue safe work.
 
 Preserve open entry, independent verification, private payments, public supply verification, holder
 authorization and compartmentalized failure. Prefer fewer mechanisms and lower measured compute,
@@ -76,13 +76,12 @@ and adversarial tests together. Code/tests do not override the specification.
 
 ## Work and review
 
-Default to a complete capability at the selected layer: a user/recovery path or end-to-end
-experiment, not one helper or missing guard. Choose scope by product dependencies and consequential
-uncertainty, not expected commit count. A slice may span specification, models, implementation,
-audit/restoration and several commits. Before substantial work, state observable acceptance,
-evidence limits and the real stop boundary in WORK.md. Use internal milestones to keep changes
-reviewable; continue through them until acceptance and delivery are complete. Start with the
-cheapest decisive probe for the largest uncertainty. If it fails, resolve the design before building
+Default to a complete capability at the selected layer (a user/recovery path or end-to-end
+experiment, not one helper or missing guard), scoped by product dependencies and consequential
+uncertainty, not commit count; it may span specification, models, implementation and audit. Before
+substantial work, state observable acceptance, evidence limits and the real stop boundary in WORK.md.
+Continue through reviewable internal milestones until acceptance and delivery are complete. Start
+with the cheapest decisive probe for the largest uncertainty; if it fails, resolve the design before
 dependent machinery. A probe, measurement or hardening item names the decision or release gate it
 serves and retires with it: once that is recorded or a runtime test or conformance suite covers it,
 delete the probe and cite its report at its last revision. Only acceptance evidence for current
@@ -98,12 +97,11 @@ another approval. Reopen it only for new evidence or a missed requirement. Keep 
 and implementation pins coordinated.
 
 Every patch gets self-review. Review consequential design choices before dependent code, then review
-the integrated sensitive patch at a stable acceptance boundary. Do not commission a new round for
-each helper, test or internal commit; additional review is driven by changed risk or unresolved
-findings, not slice size alone. Documentation, tooling and mechanical edits need focused
-verification, not a panel. Signed bytes, parsers, circuits, authorization, custody, balances, state
-transitions, time/finality, recovery and consensus-sensitive changes need independent adversarial
-review before merge.
+the integrated sensitive patch at a stable acceptance boundary; further rounds follow changed risk or
+unresolved findings, not each helper, test or commit. Documentation, tooling and mechanical edits
+need focused verification, not a panel. Signed bytes, parsers, circuits, authorization, custody,
+balances, state transitions, time/finality, recovery and consensus-sensitive changes need
+independent adversarial review before merge.
 
 Use one fresh reviewer by default; add one only for a distinct risk or unresolved disagreement.
 Supply the actual patch/commit range, normative intent and acceptance criteria. Require concrete
@@ -139,8 +137,7 @@ commands are in `package.json`.
 
 Add the smallest regression test for changed behavior; hostile witnesses must otherwise satisfy the
 relation so unrelated constraints cannot hide a missing guard. Cover relevant replay, aliasing,
-overflow, index boundaries, withheld data and wrong-context proofs. Documentation/mechanical edits
-need no ceremonial tests.
+overflow, index boundaries, withheld data and wrong-context proofs.
 
 Iterate with focused checks; run expensive real-proof/full acceptance after the relevant patch
 stabilizes. Reuse a passing baseline when its inputs are unchanged, recording revision, affected
@@ -155,7 +152,8 @@ rewriting others' work, satisfy protections and required checks, then merge/push
 authority. Verify final commit, clean status and remote parity. Inspect available CI for that
 revision and distinguish pending from passed. Do not bypass failed or unavailable required gates.
 After a verified merge, delete the merged branch locally and on the remote, its worktrees and the
-slice's disposable scratch files; only WORK.md's retained local state outlives a slice.
+slice's disposable scratch files; only WORK.md's retained local state outlives a slice. Deletions
+the permission check refuses go into the one deletion list under WORK.md's Open questions.
 Prefer one complete handoff in the delivery commit; add a follow-up only for material new evidence
 or a correction, not just to insert that commit's own hash.
 
@@ -183,17 +181,19 @@ clones/dependency trees at the workspace root. Apply obvious low-risk workflow i
 larger opportunities in WORK.md without derailing the slice.
 
 The host is Windows (Git Bash, PowerShell; LF files). Use absolute paths or `git -C`; the shell's
-directory drifts. Write large text with the editor, not a heredoc. Run long jobs detached, logging
-output and exit code to scratch. WORK.md names detached jobs (own Ergo nodes, drivers); change
-files they read only on a branch/worktree, merging after they end. New commits, fresh file times
-or live agent processes mean another session shares the checkout: stay read-only until it stops.
+directory drifts. Write large text and multi-line scripts to a scratch file with the editor, not a
+heredoc or `node -e`. Search with the Grep tool or `git grep`: `scratch/` holds tens of GB of node
+data. Start commands that can pass two minutes (`npm test`, `npm run check`, `check:pool*`,
+`check:evidence`, probes, CI waits) in the background, logging output and exit code to scratch; wait
+with an until-loop or Monitor, never `sleep N; check`. WORK.md names detached jobs (own Ergo nodes,
+drivers); change files they read only on a branch/worktree, merging after they end. New commits,
+fresh file times or live agent processes mean another session shares the checkout: stay read-only.
 
 WORK.md alone holds the coarse product-effort estimate (method in production requirements).
-Reassess from gathered evidence after meaningful product progress or a major blocker; no extra
-research/delegation just to estimate. Credit reusable progress before release gates close; never
-infer progress from commit/test counts. Report changed/requested rounded estimates and blockers,
-omitting unchanged percentages. Workflow cleanup adds no product progress.
+Reassess from gathered evidence after meaningful product progress or a major blocker, without extra
+research just to estimate; credit reusable progress, never commit/test counts or workflow cleanup.
+Report changed/requested rounded estimates and blockers, omitting unchanged percentages.
 
 Final reports state behavior, verification/review, delivery and remaining limits, and recommend
-staying with this instance or switching, based on next work, context freshness and expected
-efficiency, not claimed comparative performance. WORK.md must suffice to resume independently.
+staying with this instance or switching by next work and context freshness. WORK.md must suffice to
+resume independently.

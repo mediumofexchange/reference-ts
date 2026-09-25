@@ -58,40 +58,40 @@ reader over §13 answers; the candidate runs only on recomputed reference venue 
    drills for the journal; its full-range reads per operation become a cursor.
 6. v3 wallet and service (C4.1–2 requests, funding disclosure); retire v2.
 7. Multi-backing: scope classification/recovery, counts, receipts.
-8. Adoption, pool-v3 §1: identities with parameter provenance, ACIR identities
-   and refusal checks via `constraints.mjs` (`v3/check.mjs:121`), certificates,
-   replay/import rules, bounds, one-transaction condition. Mainnet needs funds.
+8. Adoption, pool-v3 §1: identities with parameter provenance, ACIR identities and refusal checks
+   via `constraints.mjs` (`v3/check.mjs:121`), certificates, replay/import rules, bounds,
+   one-transaction condition. Mainnet needs funds.
 9. Segment length: a served trail from the opening fits ~68 real-proof records in the reader's
    1 MiB budget (then RESOURCE); decide imports or a served suffix before slice 3's drills.
 10. Hygiene when touching the files: `ByteReader`, `ByteWriter.fixed` and v3 `records.ts`
-   `requireBytes` trust a subclass's `length`/iterator; with both nodes running, run vitest
-   with `--maxWorkers=2`; readers re-read
-   `args.configuration`/`verifier`; `ErgoVenue` charges section bytes, not transaction
-   count; `applyRecord`'s history check follows its effects; `served-trail.ts` caches by
-   caller trail object; `heldCommitments` hides a twin at an already-held sequence from
-   the journal's CONFLICT check (fault evidence, slice 4). v2 items (`inspectNotes`,
-   replay `statements.slice`, `activate`, `submit` journal reload, v1 store codec,
-   `bytecode(k)` gzip): check v3 successors.
-11. Later, only when a decision or gate needs it: cancelling an abandoned publication,
-   batched records, an index-free box source, a venue-moving record (C2.3.1), the
-   slowest-supplier clock, a multi-entry extension fixture, Poseidon2 on Barretenberg,
-   sponsored holder funding (devnet versions, faster Blake2b, a warmed verifier dropped).
+   `requireBytes` trust a subclass's `length`/iterator; with both nodes running, run vitest with
+   `--maxWorkers=2`; readers re-read `args.configuration`/`verifier`; `ErgoVenue` charges section
+   bytes, not transaction count; `applyRecord`'s history check follows its effects;
+   `served-trail.ts` caches by caller trail object; `heldCommitments` hides a twin at an
+   already-held sequence from the journal's CONFLICT check (fault evidence, slice 4). v2 items
+   (`inspectNotes`, replay `statements.slice`, `activate`, `submit` journal reload, v1 store
+   codec, `bytecode(k)` gzip): check v3 successors.
+11. Later, only when a decision or gate needs it: cancelling an abandoned publication, batched
+   records, an index-free box source, a venue-moving record (C2.3.1), the slowest-supplier clock,
+   a multi-entry extension fixture, Poseidon2 on Barretenberg, sponsored holder funding (devnet
+   versions, faster Blake2b, a warmed verifier dropped).
 
 ## Retained boundaries and local state
 
-- Configured v2: local real-proof payments, private delivery, public audit. [Device contract](docs/POOL_WALLET_DEVICE.md), [observations](docs/pool-wallet-device-verification.json):
-  preflight fails; qualified hardware, theft/power-loss/backup drills and
-  continuous recovery require separate provisioning authority.
+- Configured v2: local real-proof payments, private delivery, public audit. [Device contract](docs/POOL_WALLET_DEVICE.md),
+  [observations](docs/pool-wallet-device-verification.json): preflight fails; qualified hardware,
+  theft/power-loss/backup drills and continuous recovery require separate provisioning authority.
 - Retain the stopped contained-sync node’s detached 20 GiB image
-  `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd` and verified
-  parameter/tool caches; do not delete it or allocate another. Keep the cached header
-  responses (`scratch/ergo-headers/`); their report holds the digests.
-- Preserve the legacy Temp/moeclean worktree (another checkout). Configuration
-  approval stays disabled; device qualification and mainnet publication too.
+  `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd` with its tool caches
+  (`node-startup/`, `sync-preparation/`); do not delete it or allocate another. Keep `private-payment-crs/`,
+  `jdk/` (the framer probe's javac) and `ergo-headers/` (their report holds the digests).
+- Preserve the legacy Temp/moeclean worktree (another checkout). Configuration approval stays
+  disabled; device qualification and mainnet publication too.
 
 ## Open questions
 
-None.
+- 2026-09-25, non-blocking, deletions refused by the permission check: `rm -rf scratch/hostile-framer
+  scratch/pool-store-l9Xyy5` (430 MB rewritten by every framer probe run; 92 KB interrupted test store).
 
 Roughly **52% done / 48% remaining**, plausible range **42–62%**, reassessed 2026-09-25
 (M2a): the operator now proves, admits, commits, publishes and serves v3 in the runtime,
