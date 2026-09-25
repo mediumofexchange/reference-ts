@@ -13,20 +13,21 @@
 // Nothing here says the node would accept a case: no state, proofs or validity are checked beyond the node's recorded
 // stateless verdict, and no runtime path reads this.
 //
-// Usage, from the repository root, with a JDK for javac (the node's bundled runtime has no compiler) and the own
-// node's bundle (nodes.mjs):
+// Usage, from the repository root after `npm run build` (it reads the framer from dist/), with a JDK for javac (the
+// node's bundled runtime has no compiler) and the own node's bundle (nodes.mjs):
 //   node experiments/ergo-range/hostile-equivalence.mjs --jdk <jdk dir> [--node-dir scratch/ergo-nodes/v6.0.6]
 //     [--work scratch/hostile-framer] [--out docs/ergo-framer-hostile-equivalence-verification.json] [--seeds n]
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { closeSync, createReadStream, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { closeSync, createReadStream, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { createInterface } from "node:readline";
-import { pathToFileURL } from "node:url";
-import ts from "typescript";
 import { blake2b } from "@noble/hashes/blake2b";
+import * as profile from "../../dist/ergo-profile.js";
+import { parseNodeJson, supplyTransaction } from "../../dist/ergo-supplier.js";
+import { sourceClosure, sourceHashes } from "../../scripts/pool/v3/provenance.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../..");
 const args = process.argv.slice(2);
@@ -40,9 +41,9 @@ mkdirSync(join(work, "classes"), { recursive: true });
 
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const hex = bytes => Buffer.from(bytes).toString("hex");
-const files = Object.fromEntries(["experiments/ergo-range/hostile-equivalence.mjs", "experiments/ergo-range/node-read/NodeRead.java",
-  "tsconfig.json", "experiments/ergo-range/fixtures/manifest.json",
-  "experiments/ergo-range/package.json", "experiments/ergo-range/package-lock.json"].map(file => [file, sha256(readFileSync(join(root, file)))]));
+// This script, the node harness, the corpus manifest and the framer it reads from dist/, each with its src/ source.
+const files = sourceHashes(sourceClosure(["experiments/ergo-range/hostile-equivalence.mjs", "experiments/ergo-range/node-read/NodeRead.java",
+  "experiments/ergo-range/fixtures/manifest.json", "package-lock.json", "tsconfig.json", "tsconfig.build.json"]));
 
 // The node: the JAR nodes.mjs pins, compiled against and run in the bundle's own runtime.
 const JAR_SHA256 = "21b9023933b19b98b7eb4d50cb78bcb6c827a0fe65711a00ceaf1b83f8f3a323";
@@ -54,25 +55,6 @@ const compiled = spawnSync(join(jdk, "bin", "javac"), ["--release", "21", "-nowa
 assert.equal(compiled.status, 0, `javac: ${compiled.stderr}`);
 const node = { jarSha256: JAR_SHA256, runtimeReleaseSha256: sha256(readFileSync(join(nodeDir, "jre", "release"))), runtime: firstLineOf(spawnSync(java, ["-version"], { encoding: "utf8" })),
   compiler: firstLineOf(spawnSync(join(jdk, "bin", "javac"), ["-version"], { encoding: "utf8" })), heap: "-Xmx4G, as ergo-node.ps1 runs it" };
-
-// The profile's framer, compiled from source into a disposable build as profile-check.mjs does; every repository source
-// the compilation reads is bound.
-const build = realpathSync(mkdtempSync(join(realpathSync(join(root, "scratch")), "hostile-framer-")));
-let profile, parseNodeJson, supplyTransaction;
-try {
-  const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
-  assert(!config.error, "TypeScript configuration unreadable");
-  const program = ts.createProgram([join(root, "src/ergo-profile.ts"), join(root, "src/ergo-supplier.ts")], {
-    ...ts.parseJsonConfigFileContent(config.config, ts.sys, root).options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false });
-  assert.equal(ts.getPreEmitDiagnostics(program).length, 0, "model compiles");
-  assert.equal(program.emit().emitSkipped, false);
-  for (const source of program.getSourceFiles()) {
-    const path = resolve(source.fileName);
-    if (path.startsWith(root + sep) && !path.includes(`${sep}node_modules${sep}`)) files[path.slice(root.length + 1).replace(/\\/g, "/")] = sha256(readFileSync(path));
-  }
-  profile = await import(new URL("src/ergo-profile.js", pathToFileURL(build + sep).href));
-  ({ parseNodeJson, supplyTransaction } = await import(new URL("src/ergo-supplier.js", pathToFileURL(build + sep).href)));
-} finally { rmSync(build, { recursive: true, force: true }); }
 
 // Seeds: every corpus transaction, pinned by the manifest before parsing, as the unsigned bytes src/ergo-supplier.ts copies from it.
 const manifest = JSON.parse(readFileSync(join(here, "fixtures/manifest.json")));
