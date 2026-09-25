@@ -304,21 +304,21 @@
     }
   ],
   "timing": {
-    "supplyMs": 6255,
-    "frameMs": 177,
-    "rootCheckMs": 2376,
+    "supplyMs": 11095,
+    "frameMs": 271,
+    "rootCheckMs": 3701,
     "note": "supplyMs is the supplier's work: parsing each block's JSON text and copying every transaction's unsigned bytes, with their id and witness id hashes; frameMs the framer over every supplied transaction for the comparison with the node's statement; rootCheckMs the script's root over the supplied ids; the verifier's constructMs is where every section's root is rechecked from the hashes of the unsigned bytes and every output of a section whose root holds is framed and scanned, and a request afterwards walks per-index lists."
   },
   "verifier": {
     "reader": {
       "blocksSupplied": 5040,
-      "constructMs": 3118,
+      "constructMs": 6352,
       "witnessedIndex": 5039,
       "resolvedIndices": 5040,
       "unresolvedIndices": 0,
       "longestResolvedRun": 5040,
       "firstUnresolvedIndices": [],
-      "singleIndexProbeMs": 33,
+      "singleIndexProbeMs": 51,
       "requestMsIs": "the least of 5 repetitions",
       "requests": {
         "lastDay": {
@@ -328,25 +328,25 @@
             "1": {
               "answered": true,
               "bytes": 102,
-              "ms": 0.17,
+              "ms": 0.21,
               "samples": 5
             },
             "2": {
               "answered": true,
               "bytes": 102,
-              "ms": 0.17,
+              "ms": 0.21,
               "samples": 5
             },
             "3": {
               "answered": true,
               "bytes": 102,
-              "ms": 0.17,
+              "ms": 0.18,
               "samples": 5
             },
             "4": {
               "answered": true,
               "bytes": 102,
-              "ms": 0.16,
+              "ms": 0.17,
               "samples": 5
             }
           }
@@ -358,25 +358,25 @@
             "1": {
               "answered": true,
               "bytes": 102,
-              "ms": 1.31,
+              "ms": 2.8,
               "samples": 5
             },
             "2": {
               "answered": true,
               "bytes": 102,
-              "ms": 2.86,
+              "ms": 1.96,
               "samples": 5
             },
             "3": {
               "answered": true,
               "bytes": 102,
-              "ms": 1.4,
+              "ms": 0.99,
               "samples": 5
             },
             "4": {
               "answered": true,
               "bytes": 102,
-              "ms": 1.37,
+              "ms": 0.9,
               "samples": 5
             }
           }
@@ -390,9 +390,8 @@
     "scrypto": "https://github.com/ergoplatform/scrypto/tree/70b36102b2ed8f7a443cfc92f9f135665d777a37"
   },
   "files": {
-    "experiments/ergo-range/chain-cost.mjs": "998190ca176dd0b0bd0219dd74f325b65eeaf7506303a0e7f682e2a5016ed182",
-    "experiments/ergo-range/supply.mjs": "7f84a4df88ee0a6a2488cb72f8d775d1d4d88d780ccd181a25172224cd21ec40",
-    "experiments/ergo-range/package.json": "4df25f63611d23d6ce62765c25cc26e5a3dc2bf9b97b05f3ae510b7f338ddcd7",
+    "experiments/ergo-range/chain-cost.mjs": "329bdcd4be5760bc9bd394dd3ea36571b9f3c8a5eeb723e539c8c76b7a3d712a",
+    "experiments/ergo-range/package.json": "075ac896aac44c23770ecb6310bb76b5ed75588234c0d7895fb012b3f383df3b",
     "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
     "experiments/ergo-range/fixtures/manifest.json": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
     "tsconfig.json": "5d7b9d7a9ad1947fa0139a3649914b3ce14e3315fe266ae5d4d88273426c1922",
@@ -405,15 +404,16 @@
     "src/oplog.ts": "d1f2ad4b71a109948f3f39a869f25ae8faf63b3fcd0206b7f9015117e31a714a",
     "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
     "src/revocation.ts": "1b23bc3de5017738c1a056f013a83ce776caa099826c48c4091900f12c9474ea",
-    "src/venue.ts": "17d3bb0f968ff51aac423eb1f22aaef692d9b3023dc811f6820d67a2ce0042c4",
+    "src/venue.ts": "0558501b7e23879adc3fbc2c0c5cb53ad2de2d9c527ea533b537affbb7e200a4",
     "src/replacement.ts": "9f65220ebebc4c1cec42b9b28c7667beec6b08e56159a701bbfa6c34755083c1",
     "src/commitment.ts": "158070f78a3f76511381a598a2a91d79dcdfeb9b02442a22450cf556f88b9adf",
-    "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f",
-    "model/pool-v3-ergo-profile.ts": "12c73223580143da5fa7e3df532a1ea92acd7b04f90dd1116764f421ab7c64af"
+    "src/record-range.ts": "14cb0d1079bf2608b2cd3b0f76a032a628da85726c9709294d69c330c88fe074",
+    "src/ergo-profile.ts": "8af9b51098300fe0a6f982ed471b5a189d05715002b8c9c76c0a0d48e530bb97",
+    "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02"
   },
   "limitations": [
     "Public nodes are the header source: their agreement with each other on id, parent, height, version and transaction root, linkage and the anchor's child are checked; proof of work, chain selection and finality are not, and a colluding or shared upstream is not excluded.",
-    "Each transaction's unsigned bytes are copied from the nodes' JSON text (supply.mjs); a block counts only where every copy hashes to the id the node states and the ids and witness ids reproduce its header's transaction root. Section bytes are the same copy with each input's proof, so for block versions above 1 the root binds each transaction's unsigned bytes and the concatenation of its proofs, not the proofs' split among inputs, and a version-1 root binds no proof bytes. Attribution reads outputs only, so neither gap reaches an answer, but the byte counts are authenticated only that far.",
+    "Each transaction's unsigned bytes are copied from the nodes' JSON text (src/ergo-supplier.ts); a block counts only where every copy hashes to the id the node states and the ids and witness ids reproduce its header's transaction root. Section bytes are the same copy with each input's proof, so for block versions above 1 the root binds each transaction's unsigned bytes and the concatenation of its proofs, not the proofs' split among inputs, and a version-1 root binds no proof bytes. Attribution reads outputs only, so neither gap reaches an answer, but the byte counts are authenticated only that far.",
     "Neither the reader nor the supplier runs a decoder: the reader frames the unsigned bytes itself, and a transaction outside its framer's grammar carries no record while its block keeps its section; the supplier copies fields and parses no constant. A transaction whose copy did not hash to its id would leave its block unsupplied in this run, a limit of this supplier, not of the reader.",
     "The throwaway locations hold no real output and the subject is fixed, so every answer is empty by exhaustion: the cost measured is the scan at construction, not a real record set.",
     "Fetch time is the public nodes' response time under pacing from one host, only for responses fetched live in this run; an offline run records no live node state; only the exact window's header slices replay offline.",

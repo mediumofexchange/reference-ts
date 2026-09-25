@@ -3,34 +3,35 @@
 The specification selects the Ergo venue profile for
 [pool-v3 §13](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/pool-v3.md#13-record-range-evidence)
 record-range answers, and its rules are normative in
-[venue-ergo.md](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md)
+[venue-ergo.md](https://github.com/mediumofexchange/money-from-first-principles/blob/01d8db2/venue-ergo.md)
 ([decision](../decisions/2026-09.md#2026-09-25--select-the-ergo-venue-profile-for-pool-v3-record-ranges)).
-This guide maps those rules to the model, the experiments and their
-evidence, and records the measured costs and limits. The model implements the
-profile, but no runtime path reads it yet: the v2 runtime's `src/ergo.ts`
-keeps its own identity (`moe/venue/ergo/v1`), its height-as-index convention
-and its materialized view, and v2 backings keep them.
+This guide maps those rules to the runtime, the experiments and their
+evidence, and records the measured costs and limits. The runtime reads Ergo
+only under the profile: `ErgoVenue` in `src/ergo.ts` is the
+[runtime venue](#runtime-venue), and the earlier view over a node's box index
+(`moe/venue/ergo/v1`), which trusted that node for completeness, is retired
+([decision](../decisions/2026-09.md#2026-09-25--read-ergo-in-the-runtime-only-under-the-selected-profile)).
 
 ## Where each rule is implemented
 
-| Rule (venue-ergo.md) | Model | Tests and evidence |
+| Rule (venue-ergo.md) | Implementation | Tests and evidence |
 |---|---|---|
-| §1 identity and parameters | `ergoProfileIdentity`, `ownProfile` in `model/pool-v3-ergo-profile.ts` | `test/pool-v3-ergo-profile.test.ts` |
-| §2 index, finality, lag | `ergoRangeVerifier` (origin, `witnessedIndex`), `ergoLag` | same; [latency](POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet) |
-| §3 header chain | `ergoHeaderStore`, `parseErgoHeader`, `eip37Difficulty`, `autolykosHit` in `model/pool-v3-ergo-headers.ts` | `test/pool-v3-ergo-headers.test.ts`; [reader-verified headers](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers) |
-| §4 block sections | `sectionMatchesRoot`, `transactionsRoot`, `merkleRoot`; section acceptance in `ergoRangeVerifier` | profile experiment; [P4](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor) |
+| §1 identity and parameters | `ergoProfileIdentity`, `ownErgoProfile` in `src/ergo-profile.ts`; `ergoProfile` (default depth) in `src/ergo.ts` | `test/ergo-profile.test.ts`, `test/ergo-venue.test.ts` |
+| §2 index, finality, lag | `ErgoVenue.sync`/`witnessedIndex`/`lag`; `ergoRangeVerifier` for supplied evidence | same; [latency](POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet) |
+| §3 header chain | `ergoHeaderStore`, `parseErgoHeader`, `eip37Difficulty`, `autolykosHit` in `src/ergo-headers.ts` | `test/ergo-headers.test.ts`; [reader-verified headers](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers) |
+| §4 block sections | `attributeSection`, `sectionMatchesRoot`, `transactionsRoot`, `merkleRoot` | profile experiment; [P4](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor) |
 | §5 transaction grammar | `frameTransaction`, `frameTree`, `frameCollBytes` | [hostile framer probe](POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence) |
 | §6 attribution, reassembly, ordinal | `attributeOutput`, `attributeOwned`, `ergoOrdinal`, `collBytes` | profile experiment; [P2](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node) |
-| §7 answers | `ergoRangeVerifier(...).range` over `model/pool-v3-range.ts` | local replay adapter |
+| §7 answers | `rangeEntries` over `src/record-range.ts`, from `ErgoVenue.range` and `ergoRangeVerifier(...).range` | `test/ergo-venue.test.ts` (the two agree); local replay adapter |
 | §8 publishing | [kind-4 capacity](ergo-range-profile-verification.json) | [decision](../decisions/2026-09.md#2026-09-15--a-configurations-publications-fit-one-ergo-transaction) |
 
-The range verifier takes any linked header chain, so the harnesses can feed
-it synthetic headers; under the profile the chain is the header store's best
-chain.
+`ergoRangeVerifier` takes supplied evidence, including any linked header
+chain, so the harnesses can feed it synthetic headers; `ErgoVenue` takes only
+headers its own store accepted.
 
 ## Header source
 
-`model/pool-v3-ergo-headers.ts` is the reader's own header source (§3 of the
+`src/ergo-headers.ts` is the reader's own header source (§3 of the
 profile): `ergoHeaderStore(anchorId, context)` takes the anchor's context,
 `add(bytes)` accepts one header from any supplier or names its refusal
 (`malformed`, `unknown-parent`, `below-anchor`, `height`, `timestamp`,
@@ -56,9 +57,8 @@ on a side branch by stating future timestamps: after about 256 blocks of work
 at the starting difficulty it halves each epoch. Such a branch never outscores
 the best chain's work, but the store accepts and keeps its headers, one work
 check each (about 21 ms a header in pure JavaScript). The profile makes
-supplier choice and per-supplier budgets reader policy; the runtime adoption
-fixes that policy (for instance, reading a supplier only while it extends
-the best chain or competes within a bounded distance of its tip). NiPoPoW
+supplier choice and per-supplier budgets reader policy; the runtime venue's
+policy is [below](#runtime-venue). NiPoPoW
 proofs add nothing here: the verifier needs every header from the anchor's
 child, and the anchor already fixes the ancestry a proof would summarize.
 
@@ -76,7 +76,7 @@ child, and the anchor already fixes the ancestry a proof would summarize.
 - A supplier derives the unsigned bytes, and runs no decoder either. The
   public node API serves transactions as JSON, and every field the unsigned
   bytes carry is there as exact hex (box and token ids, trees, register and
-  extension constants) or an integer, so `supply.mjs` writes them by copying,
+  extension constants) or an integer, so `src/ergo-supplier.ts` writes them by copying,
   parsing no constant; the witness id hashes the stated proofs. Two
   properties of the text matter: integers above 2^53, read from their source
   text, and each spending-proof extension's key order, which the node writes
@@ -138,10 +138,11 @@ child, and the anchor already fixes the ancestry a proof would summarize.
 
 ## Evidence
 
-`npm run check:ergo:range` runs `experiments/ergo-range/profile-check.mjs`
-after the block-root experiment and the supplier check (`supply-check.mjs`:
-every fixture transaction supplied under its id, the roots reproduced, and
-each shape the copy cannot reproduce unsupplied). It compiles the model, reads
+`test/ergo-supplier.test.ts` supplies every fixture transaction and header
+under its id, reproduces the fixture roots and leaves each shape the copy
+cannot reproduce unsupplied. `npm run check:ergo:range` runs
+`experiments/ergo-range/profile-check.mjs` after the block-root experiment.
+It compiles the profile, reads
 the pinned real mainnet genesis header as an anchor, builds a twelve-height
 synthetic chain anchored at its first header whose unsigned bytes Fleet
 writes and whose outputs the framer reads exactly as written, with real signed
@@ -156,7 +157,7 @@ reproduce for block versions 1, 3 and 4, the framed real transactions read
 the node's outputs, the later blocks' fee outputs use the framer's fee tree,
 and the real register constants read beside sigma-rust's constant decoder.
 The [retained report](ergo-range-profile-verification.json) records the
-sizes. `test/pool-v3-ergo-profile.test.ts` covers the identity, the framer's
+sizes. `test/ergo-profile.test.ts` covers the identity, the framer's
 grammar and refusals, register reading, the tree, attribution and reassembly
 cases, ordering, the anchor and origin rules, the block versions, ownership
 of the profile, evidence and request, and every refusal without an Ergo
@@ -213,16 +214,88 @@ authority flags describe only checks under that explicit trusted fixture.
 Full replay, complete-certificate and spendability flags remain false. This
 integration introduces no production path or normative rule.
 
-## Before runtime adoption
+## Runtime venue
 
-The profile is selected; what remains is the runtime's reading of it in
-place of the v2 materialized view: the header store and range verifier moved
-behind the runtime's venue interface, the supplier policy above, the
-reference default depth of 10
+`new ErgoVenue(profile, anchorContext, policy?)` implements the runtime's
+`Venue` for any backing whose **E** declares the profile's identity;
+`ergoProfile` applies the reference default depth of 10
 ([decision](../decisions/2026-09.md#2026-09-25--select-the-ergo-venue-profile-for-pool-v3-record-ranges)),
-the framer's grammar checked against the deployment's own publishing
-transactions, and the one-transaction condition checked against the adopted
-configuration. Publication on the mainnet, and a latency distribution of
-kind-4 publications at their size and fee, are not yet measured: A10 timed
-the mainnet's own transactions, and P2 made two correlated testnet
-observations.
+and `ergoAnchorContext` takes the anchor's 1,024-header context from any
+supplier, authenticated by linkage alone. `sync(suppliers)` is asynchronous
+and incremental; every read is synchronous, from the last complete snapshot,
+which a running or failed sync leaves in place.
+
+- **Suppliers** (`src/ergo-supplier.ts`): `ErgoSupplier` is header bytes by
+  height and a block's section by header id; `ergoNodeSupplier(url)` copies
+  them from a node's REST JSON (GET only, bounded responses, answers cut to
+  what was asked). A supplier that throws, rejects, does not settle within
+  `supplierTimeoutMs` (60 s) or answers with anything else, hostile getters
+  included, does not supply; only supplier calls and the reading of their
+  answers are guarded, so the reader's own failures stay visible.
+- **Headers**: each supplier is asked from the depth below the lower of the
+  best tip and its own (so a heavier shorter chain is seen), in requests of
+  `headersPerRequest` (500), steps back while its chain does not connect,
+  and adds at most `headersPerSupplier` (2,000, about 42 s of work checks)
+  per sync; accepted headers are kept, so a longer heavier chain arrives
+  over several syncs and one supplier's side branches never spend another's
+  budget. A refused header stops that supplier for the sync. Every new
+  header a supplier added that is off the best chain at the end of that
+  sync counts against its `sideHeadersPerSupplier` (20,000 over the view's
+  life, per supplier object, so callers reuse their suppliers); past it the
+  supplier is not read and is withholding, which bounds what a cheap
+  future-timestamp side branch can cost in work and memory, while a branch
+  that briefly leads charges an honest supplier only its headers past the
+  fork.
+- **Clock**: the snapshot's index is the lowest of the best chain's final
+  index, the last index whose section and every earlier one are held, and,
+  for a supplier its header budget stopped before its tip at or above the
+  clock, the index where its last header meets the best chain: the reader's
+  own budget can never make it witness a block that a heavier chain it has
+  not finished reading would unwitness. A fork below the clock bounds
+  nothing, since that chain, were it heavier, fails the venue either way.
+  Only the header budget's stop bounds the clock: it takes a budget of
+  headers with their work, while failing, or claiming a tip never served,
+  costs nothing and is withholding. A withheld or root-failing section
+  stops the clock before its block: the view is stale, as every earlier
+  snapshot was, never empty. A supplier that misses one section is not
+  asked again in that sync. `sectionBytesPerSync` (256 MiB) ends a sync's
+  section reading once that many bytes were received, matching or not;
+  `retainedBytes` (256 MiB, each object's record, subject and a fixed
+  overhead) stops the clock where it would be exceeded, reported as
+  `unresolvedReason: "retained budget"`, until the budget is raised.
+- **Failure**: if the best chain leaves the block the clock stands on, the
+  reorganization passed the depth (§13.2): every read and later sync
+  refuses with `VenueError`, and the reader needs a new view.
+- **Reads**: commitments are pool-v3 §13.3's held commitments (a sequence
+  held only above zero, so `nextSequenceFor` starts at one, as pool
+  commitment sequences do); replacements are every kind-2 object that
+  decodes and names the backing, for the walk to judge; revocations are the
+  kind-3 objects that decode, name the key and verify. Every subject is
+  answered by exhaustion, so no subject is registered before a sync.
+  `range(request, limits)` is the §13 answer from the same sections; it
+  equals `ergoRangeVerifier`'s over the same blocks. The profile carries no
+  transparent operation or commit records, and the view refuses those reads
+  rather than answering empty, so the frozen transparent path has no Ergo
+  venue.
+- **Not here**: publishing (the operator's wallet builds and signs the
+  transaction; `experiments/ergo-range/publish.mjs` is the testnet
+  experiment), persistence of the headers and objects across restarts (the
+  store keeps every header it accepted, and the retained objects stay in
+  memory), and pruning of side branches.
+
+[`runtime-sync.mjs`](../experiments/ergo-range/runtime-sync.mjs) runs the
+view on the real mainnet ([report](ergo-runtime-venue-verification.json)):
+anchored 300 blocks below the own node's tip, it verified 301 headers and read
+291 sections in one sync of 11 s (about 39 ms a block, most of it the work checks),
+stood on the own node's block at its final index, and a second view synced
+from a public node alone reached the same block with byte-identical empty
+answers for every kind. A supplier substituting one section alone stopped the
+clock before that block, and the own node beside it carried the clock past; a
+supplier raising one header's difficulty bits was stopped at that header.
+
+What remains before an Ergo deployment: a publishing adapter (and with it the
+framer's grammar checked against the deployment's own publishing
+transactions), persistence, the one-transaction condition checked against an
+adopted configuration, and publication on the mainnet with a latency
+distribution of kind-4 publications at their size and fee (A10 timed the
+mainnet's own transactions; P2 made two correlated testnet observations).

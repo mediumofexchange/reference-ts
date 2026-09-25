@@ -2,7 +2,7 @@
   "status": "no-framer-disagreement-on-these-cases",
   "framerDiffers": 0,
   "uncompared": 0,
-  "seedsAre": "unsigned bytes, copied from the corpus by supply.mjs",
+  "seedsAre": "unsigned bytes, copied from the corpus by src/ergo-supplier.ts",
   "limits": [
     "parse level: no state, proofs or full validity; the stateless verdict uses the node's initial validation settings, not mainnet's voted ones",
     "one version context, a version-4 block's (activated 3, tree 3): blocks of earlier versions are read by the node under other contexts; the profile reads sections of block versions 1-4 only",
@@ -11,7 +11,7 @@
     "the node's resource refusals depend on its runtime's heap and stack; the harness runs its main thread with -Xmx4G",
     "for a transaction the node rewrites, the header commits to the rewrite's ids; which bytes peers and node APIs serve for it, and whether the node's section serializer (writing under version context 4, 4) gives the rewrite read here (3, 3), are not measured"
   ],
-  "compares": "for every transaction the node reads (whole cases, prefixes and stable rewrites; the pinned v6.0.6 JAR's BlockTransactionsSerializer.parse of a one-transaction version-4 section), the node's own unsigned bytes (messageToSign) hashed against its id and read by the profile's framer (model/pool-v3-ergo-profile.ts frameTransaction); a framed reading is compared with the node's output count, ErgoTree bytes, register names and constants (counts.framer)",
+  "compares": "for every transaction the node reads (whole cases, prefixes and stable rewrites; the pinned v6.0.6 JAR's BlockTransactionsSerializer.parse of a one-transaction version-4 section), the node's own unsigned bytes (messageToSign) hashed against its id and read by the profile's framer (src/ergo-profile.ts frameTransaction); a framed reading is compared with the node's output count, ErgoTree bytes, register names and constants (counts.framer)",
   "verdicts": {
     "framedEqual": "the framer reads the node's unsigned bytes as the node does",
     "framedDiffers": "the framer reads the node's unsigned bytes with other outputs: a reader would attribute what the node does not hold",
@@ -329,20 +329,19 @@
     ]
   },
   "timing": {
-    "nodeMs": 45294,
-    "frameMs": 245
+    "nodeMs": 69606,
+    "frameMs": 422
   },
   "host": {
     "node": "v24.6.0",
     "platform": "win32"
   },
   "files": {
-    "experiments/ergo-range/hostile-equivalence.mjs": "1b349b9938599e22acda2c1a2d135a077ed9f7655cbcfb38b8f0c4823c7ab9bc",
+    "experiments/ergo-range/hostile-equivalence.mjs": "f4c545a6ab9dd355a37d1b62e24cd93369b655a4501e24112c20361cc529d543",
     "experiments/ergo-range/node-read/NodeRead.java": "11dbe51dc1767374b84075c8683f956fee6f64530cbd21d0af1dac5c9d5d913d",
-    "experiments/ergo-range/supply.mjs": "7f84a4df88ee0a6a2488cb72f8d775d1d4d88d780ccd181a25172224cd21ec40",
     "tsconfig.json": "5d7b9d7a9ad1947fa0139a3649914b3ce14e3315fe266ae5d4d88273426c1922",
     "experiments/ergo-range/fixtures/manifest.json": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
-    "experiments/ergo-range/package.json": "4df25f63611d23d6ce62765c25cc26e5a3dc2bf9b97b05f3ae510b7f338ddcd7",
+    "experiments/ergo-range/package.json": "075ac896aac44c23770ecb6310bb76b5ed75588234c0d7895fb012b3f383df3b",
     "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
     "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
     "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
@@ -353,10 +352,11 @@
     "src/oplog.ts": "d1f2ad4b71a109948f3f39a869f25ae8faf63b3fcd0206b7f9015117e31a714a",
     "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
     "src/revocation.ts": "1b23bc3de5017738c1a056f013a83ce776caa099826c48c4091900f12c9474ea",
-    "src/venue.ts": "17d3bb0f968ff51aac423eb1f22aaef692d9b3023dc811f6820d67a2ce0042c4",
+    "src/venue.ts": "0558501b7e23879adc3fbc2c0c5cb53ad2de2d9c527ea533b537affbb7e200a4",
     "src/replacement.ts": "9f65220ebebc4c1cec42b9b28c7667beec6b08e56159a701bbfa6c34755083c1",
     "src/commitment.ts": "158070f78a3f76511381a598a2a91d79dcdfeb9b02442a22450cf556f88b9adf",
-    "model/pool-v3-range.ts": "729973332a460d642e09b759d07e26ab16604a91b9fb63db5bf6436edff0992f",
-    "model/pool-v3-ergo-profile.ts": "12c73223580143da5fa7e3df532a1ea92acd7b04f90dd1116764f421ab7c64af"
+    "src/record-range.ts": "14cb0d1079bf2608b2cd3b0f76a032a628da85726c9709294d69c330c88fe074",
+    "src/ergo-profile.ts": "8af9b51098300fe0a6f982ed471b5a189d05715002b8c9c76c0a0d48e530bb97",
+    "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02"
   }
 }

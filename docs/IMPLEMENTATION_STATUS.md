@@ -194,7 +194,7 @@ and the decoder's containment and metering harnesses are retired.
 Authenticated complete-range reads remain unimplemented.
 The [Ergo venue profile](ERGO_VENUE_PROFILE.md), selected by
 [venue-ergo.md](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md),
-and `model/pool-v3-ergo-profile.ts` fix attribution by exact tree and `R4`/`R5`
+and `src/ergo-profile.ts` fix attribution by exact tree and `R4`/`R5`
 shape, run reassembly, transaction-then-output ordinals, an index space
 anchored at a pinned header (index 0 is the anchor's child, so reads from
 index zero are bounded by the deployment's age) and a §13 verifier by
@@ -222,15 +222,22 @@ two correlated observations, not a distribution. The reader's own mainnet
 node validated the header chain from genesis, and the fixtures and the
 measured week stand on its best chain
 ([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)). The reader no longer
-needs a node for that: `model/pool-v3-ergo-headers.ts` verifies header bytes
+needs a node for that: `src/ergo-headers.ts` verifies header bytes
 from any supplier from the pinned anchor (canonical parse and id, EIP-37
 difficulty, Autolykos v2 work, heaviest chain) and feeds the verifier its
 best chain, checked on real mainnet headers from three nodes and every
 EIP-37 recalculation
 ([reader-verified headers](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers));
 it rests on the work, so withholding a heavier chain remains a supplier's
-power. The specification selects the profile; no runtime path reads it, and
-a record must be published inside the framer's grammar to be read.
+power. The [runtime venue](ERGO_VENUE_PROFILE.md#runtime-venue) reads Ergo only
+under the profile: `ErgoVenue` syncs headers and sections from untrusted
+node suppliers under a per-supplier header budget, answers the runtime's
+`Venue` reads by exhaustion and §13 ranges from the same sections, stops its
+clock before a missing section and fails on a reorganization past the depth;
+it replaced the view over a node's box index. On the mainnet it synced 300
+blocks from the own node and matched a public-node-only view. It cannot
+publish, persists nothing across restarts, and a record must be published
+inside the framer's grammar to be read.
 
 ## Successor record conformance
 
@@ -269,7 +276,7 @@ and trails of the other carrying checkpoints its range read classifies. Other
 dependency shapes refuse without a verdict. The in-memory fixture shares the
 same replay engine.
 
-`model/pool-v3-range.ts` implements [§13 record-range answers](https://github.com/mediumofexchange/money-from-first-principles/blob/6272040/pool-v3.md#13-record-range-evidence):
+`src/record-range.ts` implements [§13 record-range answers](https://github.com/mediumofexchange/money-from-first-principles/blob/6272040/pool-v3.md#13-record-range-evidence):
 the request/answer frame with kind bounds and budgets, held commitments per
 C2.3.3 by ascending sequence within an index with lesser-bytes ties and
 reader-established priors, replacement identities, first-entry revocations

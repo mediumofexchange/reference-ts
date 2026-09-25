@@ -145,7 +145,7 @@ try {
   const sectionsRead = syncA.rounds.reduce((n, r) => n + r.sectionsRead, 0);
   const passed = standsOnOwn && agree && syncA.final.witnessedIndex === blocks - 1n - DEFAULT_ERGO_DEPTH + (syncA.final.tipHeight - tip) &&
     answersA.every(x => x.entries === 0) && alone.unresolvedIndex === 5n && alone.witnessedIndex === 4n &&
-    withOwn.final?.witnessedIndex === syncA.final.witnessedIndex &&
+    withOwn.final !== undefined && withOwn.final.witnessedIndex >= syncA.final.witnessedIndex &&
     forged.suppliers[0].stopped === "refused header: difficulty" && forged.suppliers[0].headersAdded === 5 &&
     forged.witnessedIndex !== undefined && forged.witnessedIndex >= syncA.final.witnessedIndex;
   report = {

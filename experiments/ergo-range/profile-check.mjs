@@ -45,6 +45,15 @@ try {
   });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0, "model compiles");
   assert.equal(program.emit().emitSkipped, false);
+  // Every repository source the compilation reads is bound, hashed now, before any work.
+  const compiled = {};
+  for (const source of program.getSourceFiles()) {
+    const path = resolve(source.fileName);
+    if (path.startsWith(root + sep) && !path.includes(`${sep}node_modules${sep}`)) {
+      const file = path.slice(root.length + 1).replace(/\\/g, "/");
+      compiled[file] = fileHash(file);
+    }
+  }
   const profile = await import(new URL("src/ergo-profile.js", url));
   const range = await import(new URL("src/record-range.js", url));
   const { signCommitment, encodeCommitment } = await import(new URL("src/commitment.js", url));
@@ -317,8 +326,8 @@ try {
     profile: { context: profile.ERGO_PROFILE_CONTEXT, identity: hex(identity), depth: depth.toString(), lag: verifier.lag().toString(),
       locations: Object.fromEntries(Object.entries(scripts).map(([kind, script]) => [kind, hex(script)])) },
     sources: manifest.sources, inputManifestSha256: hex(sha256(readFileSync(join(here, "fixtures/manifest.json")))),
-    files: Object.fromEntries(["experiments/ergo-range/profile-check.mjs", "experiments/ergo-range/package.json", "experiments/ergo-range/package-lock.json",
-      "src/ergo-profile.ts", "src/record-range.ts"].map(file => [file, fileHash(file)])),
+    files: { ...Object.fromEntries(["experiments/ergo-range/profile-check.mjs", "experiments/ergo-range/package.json",
+      "experiments/ergo-range/package-lock.json"].map(file => [file, fileHash(file)])), ...compiled },
     genesisAnchor: { height: genesis.height.toString(), version: genesis.version.toString(), id: genesis.id, parentIdZero: true,
       headerWireBytes: genesis.size.toString(), indexZeroHeight: "2", emptyAnswerBytesAtIndexZero: 102 },
     synthetic: { heights: heights.toString(), witnessedIndex: t.toString(), transactions: String(transactions), serializedTransactionBytes: String(serializedBytes),

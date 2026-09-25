@@ -858,7 +858,7 @@ length and kind 4 as one transaction's maximal run of adjacent same-subject
 outputs; the index as the number of blocks above the anchor's child, so a
 read from index zero begins at the deployment's anchor rather than the
 chain's genesis; and the ordinal as transaction position then output index.
-`model/pool-v3-ergo-profile.ts` answers a request by recomputing every
+`ergoRangeVerifier` (`src/ergo-profile.ts`) answers a request by recomputing every
 block's transaction root from decoder-derived ids and scanning every output
 in the range, so an empty answer is proven by exhaustion; unwitnessed,
 gapped or unlinked evidence and headers without the anchor's child give no
@@ -925,7 +925,7 @@ explicitly, never by `check` or CI, because it reads public mainnet nodes
 has the command. It reads the headers of a window from every named node and
 the anchor's id at its height, compares them field by field, supplies each
 block's transactions by copying the node's JSON text into unsigned bytes and
-witness ids (`supply.mjs`, no decoder), counts a section only where every
+witness ids (`src/ergo-supplier.ts`, no decoder), counts a section only where every
 copy hashes to its stated id and the header's transaction root holds through
 the model's root, checks every framed transaction against the node's
 statement of its outputs, then builds the model verifier from the real
@@ -1100,7 +1100,7 @@ through the reader that decodes nothing: the own testnet node (v6.0.6)
 accepted the same seven transactions, the six cases in block 561,774
 (positions 1–6) and the sweep in 561,779, each two blocks above the full
 height at submission. Every block's unsigned bytes and witness ids, copied
-from the node's JSON by `supply.mjs` (re-read from the same cached sections
+from the node's JSON by `src/ergo-supplier.ts` (re-read from the same cached sections
 through the copy on the same day, with no new submission), reproduced its
 header root, and the framer read each case
 built by sigma-rust's transaction builder (plain inputs, piece outputs, a
@@ -1229,7 +1229,7 @@ local browser page can read the node's key-free routes.
 
 The reader need not run a node to authenticate headers: the profile's
 [header store](ERGO_VENUE_PROFILE.md#header-source)
-(`model/pool-v3-ergo-headers.ts`) verifies header bytes itself from the
+(`src/ergo-headers.ts`) verifies header bytes itself from the
 pinned anchor. `experiments/ergo-range/header-verify.mjs` ran it on real
 mainnet headers on 2026-09-24
 ([retained report](ergo-header-verification.json), recorded offline from
@@ -1266,9 +1266,9 @@ the run's cached responses):
   anchor's context is 225,500 bytes once per venue.
 
 The headers' bytes are copied from each node's JSON by
-`experiments/ergo-range/supply-header.mjs` and are unsupplied unless the
+`src/ergo-supplier.ts` and are unsupplied unless the
 copy hashes to the stated id (nodes before 6.0 omit `unparsedBytes`).
-Unit tests (`test/pool-v3-ergo-headers.test.ts`) pin one real
+Unit tests (`test/ergo-headers.test.ts`) pin one real
 recalculation, canonical parsing, compact normalization, the context rule
 and each refusal, the boundary rule and fork choice on synthetic chains.
 One independent review found no divergence from the pinned node's rules
@@ -1654,7 +1654,7 @@ hostile inputs is measured [below](#hostile-input-node-equivalence).
 
 **Framer against node, 2026-09-24** ([guide](../experiments/ergo-range/README.md#hostile-input-node-equivalence),
 [retained report](ergo-framer-hostile-equivalence-verification.json)). The
-seeds are the 29 corpus transactions' unsigned bytes, copied by `supply.mjs`,
+seeds are the 29 corpus transactions' unsigned bytes, copied by `src/ergo-supplier.ts`,
 so the mutations (as below) fall on the reader's own input: 143,227 distinct
 cases. Each is read by the node (as below, with the node also stating its own
 unsigned bytes, `messageToSign`); every reading the node gives, whole cases,
