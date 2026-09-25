@@ -27,16 +27,15 @@ status in WORK.md, and substantive decisions in `decisions/` with an index entry
 checked reviews in `decisions/archive/`; superseded drafts, retired harnesses and session logs
 belong in Git history (link a permalink when history must stay reachable). Each measurement has one
 home, normally its probes section or retained report; other documents link it with at most a
-one-clause summary instead of restating numbers or dated status lines.
-`CLAUDE.md` contains exactly `@AGENTS.md`, so agents share one source.
+one-clause summary, not numbers or dated status. `CLAUDE.md` contains exactly `@AGENTS.md`.
 
 ## Direction and authority
 
 The shielded pool is the active claim layer (Construction C1.2). `src/pool/` is the v2 runtime;
-PoolStore refuses silence clauses. `src/pool/v3/` is the unadopted v3 candidate; successor work
-in `model/`, `scripts/pool/v3/` and `experiments/` is conditional evidence, not runtime support. The fault model binds
-exact bytes with real hashes and ideal proof/authentication oracles; current layout and adoption
-limits are in implementation status.
+PoolStore refuses silence clauses. `src/pool/v3/` is the unadopted v3 candidate; successor work in
+`model/`, `scripts/pool/v3/` and `experiments/` is conditional evidence, not runtime support. The
+fault model binds exact bytes with real hashes and ideal proof/authentication oracles; current
+layout and adoption limits are in implementation status.
 
 The transparent path is frozen as a differential oracle and adversarial case library. Port cases as
 pool rules land, then retire covered material. Do not review or extend it otherwise, or port the
@@ -84,8 +83,11 @@ audit/restoration and several commits. Before substantial work, state observable
 evidence limits and the real stop boundary in WORK.md. Use internal milestones to keep changes
 reviewable; continue through them until acceptance and delivery are complete. Start with the
 cheapest decisive probe for the largest uncertainty. If it fails, resolve the design before building
-dependent machinery. Do not broaden into unrelated cleanup or call an experiment a runtime
-capability.
+dependent machinery. A probe, measurement or hardening item names the decision or release gate it
+serves and retires with it: once that is recorded or a runtime test or conformance suite covers it,
+delete the probe and cite its report at its last revision. Only acceptance evidence for current
+runtime behavior is re-recorded as current. Do not broaden into unrelated cleanup or call an
+experiment a runtime capability.
 
 For a protocol ambiguity/change: identify the exact rule and conflict; compare the smallest
 alternatives, including reuse or omission; explain invariants, trust/privacy, compatibility and
@@ -152,9 +154,8 @@ Preserve unrelated changes. Make logical commits, fetch/inspect upstream, integr
 rewriting others' work, satisfy protections and required checks, then merge/push under standing
 authority. Verify final commit, clean status and remote parity. Inspect available CI for that
 revision and distinguish pending from passed. Do not bypass failed or unavailable required gates.
-After a verified merge, delete the merged branch locally and on the remote, remove its worktrees
-and delete the slice's disposable scratch files; only WORK.md's retained local state outlives a
-slice.
+After a verified merge, delete the merged branch locally and on the remote, its worktrees and the
+slice's disposable scratch files; only WORK.md's retained local state outlives a slice.
 Prefer one complete handoff in the delivery commit; add a follow-up only for material new evidence
 or a correction, not just to insert that commit's own hash.
 
@@ -166,9 +167,8 @@ verdicts cannot close runtime or release gates.
 
 Keep AGENTS.md under 200 lines and WORK.md under 100. Before stopping/compaction, replace stale
 handoff status with goal/acceptance, branch/relevant commits, evidence, next executable action,
-blockers/review owed, and companion branch or decision links. Distinguish
-source/model/proof/fixture/live evidence. Do not append diaries or create decisions merely to record
-session completion.
+blockers/review owed, and companion branch or decision links. Distinguish source/model/proof/
+fixture/live evidence. Do not append diaries or create decisions merely to record completion.
 
 Record choices, rationale, alternatives, evidence, limits and status neutrally; do not quote
 conversations or attribute authority to a person/model. Git records authorship. Use Construction's

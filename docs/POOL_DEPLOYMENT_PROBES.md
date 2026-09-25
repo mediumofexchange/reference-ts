@@ -99,9 +99,11 @@ is the record codec's. `npm test` checks the recorded profile-1 vector byte
 for byte, deterministic retries, key separation, u64 and width bounds,
 malformed/context-swapped/tampered capsules, authenticated wrong-commitment
 plaintext, the ordered delivery vector, the settlement owner secret and an
-independent WebCrypto envelope. With Node 24, `npm run check:pool:delivery`
-adds the real proof binding and restoration from signed local evidence below;
-CI runs it on Linux and Windows beside the pinned v2 proof checks.
+independent WebCrypto envelope. With Node 24, `npm run check:pool:restoration`
+adds restoration from signed local evidence below; CI runs it on Linux and
+Windows beside the pinned v2 proof checks. The v3 conformance suite
+(`npm run check:pool:v3`) proves the digest's binding in all three successor
+relations.
 
 The first probe (retired at slice 1 M1; its
 [recorded result](pool-delivery-verification.json) and sources are at
@@ -120,8 +122,11 @@ public `u128` limbs uses 19,050 gates versus 19,034 (+16); its subgroup
 remains 32,768 and proof remains 14,656 bytes. Mutating either limb rejects
 the original proof. Changing only the compiler ABI metadata to `Field`
 still rejects `2^128` in either limb over unchanged ACIR, establishing an
-actual circuit range constraint. This is a spend-binding measurement, not
-an already measured final v3 issue/spend/burn suite.
+actual circuit range constraint. This was a spend-binding measurement on a
+circuit derived from v2's spend; the v3 conformance suite now binds and
+range-checks the limbs in the successor relations themselves, so the binding
+probe retired on 2026-09-25 (sources at
+[1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/scripts/pool/delivery/binding)).
 
 The retired probe recorded, on this Windows desktop (Node 24.6.0, i7-5500U),
 that 1,000 / 10,000 / 100,000 failed capsule opens took 79 ms / 738 ms / 12.36 s. These samples repeat one
@@ -141,8 +146,8 @@ Device and full-history replay costs remain additional gates.
 ### Restoration from exact local evidence
 
 `npm run check:pool:restoration` connects the existing capsule scanner to the
-canonical v3 served-trail, record, snapshot and header codecs. It also runs in
-`check:pool:delivery`, including Linux/Windows CI. The
+canonical v3 served-trail, record, snapshot and header codecs; Linux and
+Windows CI run it. The
 [retained result](pool-restoration-evidence-verification.json) pins the sources.
 
 A fresh child receives only a synthetic seed, an independently selected fixture
@@ -444,18 +449,13 @@ venue record alongside the canonical package bytes.
 
 ## Transfer shape and ordinary fees
 
-Run the retained comparison and hostile checks with Node 24:
-
-```powershell
-npm run check:pool:fees
-```
-
-[Probe sources](../scripts/pool/fees/) generate candidates from the pinned v2
-spend; [recorded evidence](pool-fees-verification.json) pins their identities,
-inputs and measurement scope; it is historical, recorded at
-[fcf532c](https://github.com/mediumofexchange/reference-ts/tree/fcf532c) before the
-capsule library moved into `src/pool/v3/`. Generated sources/builds/reports stay in
-`scratch/pool-fees/`. CI runs this command on Linux and Windows.
+The F4 probe generated candidates from the pinned v2 spend; its
+[recorded evidence](pool-fees-verification.json) pins their identities,
+inputs and measurement scope and is historical, recorded at
+[fcf532c](https://github.com/mediumofexchange/reference-ts/tree/fcf532c). It
+retired on 2026-09-25 (sources at
+[1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/scripts/pool/fees)):
+the v3 conformance suite proves the chosen spend, fee output included.
 
 F4 selects two input/four output positions for successor spend, under
 [pool-fees C1.2.3–7](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-fees.md).
@@ -687,11 +687,11 @@ under the candidate profile's layout and the reassembly cases are now in the
 
 ## Full-block commitment feasibility
 
-The private [offline experiment](../experiments/ergo-range/README.md) checks
+*Retired 2026-09-25 with its Fleet dependency: the range source is chosen and `test/ergo-supplier.test.ts` reproduces the fixture roots; the script (`check.mjs`, run by the former `npm run check:ergo:range`) is kept at [1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range).*
+
+The private offline experiment checked
 complete block transaction commitments before choosing an A8/A9 range source.
-Run it on Node 24 with `npm run check:ergo:range` after the experiment's
-separate pinned install. CI runs it on Linux and Windows. It adds no library
-runtime dependency or exported verification API.
+It added no library runtime dependency or exported verification API.
 
 The source baseline matches the publication probe: Ergo node v6.1.5 at
 [`c364664`](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/ergo-core/src/main/scala/org/ergoplatform/modifiers/history/BlockTransactions.scala),
@@ -848,6 +848,8 @@ No runtime API, venue profile or protocol rule changes in this experiment.
 
 ## Ergo venue-profile candidate and full-block range verifier
 
+*The profile experiment (`profile-check.mjs`) retired 2026-09-25 with the vendored sigma-rust build: the unit tests and the [node's own parser](#hostile-input-node-equivalence) cover it; it is kept at [1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range) and its report below stays as measured there.*
+
 The [candidate Ergo venue profile](ERGO_VENUE_PROFILE.md) fixes what pool-v3
 §13 leaves to a profile: an identity over a pinned anchor header, the
 finality depth and one exact ErgoTree per record kind; attribution by that
@@ -917,10 +919,11 @@ normative ([venue-ergo.md §8](https://github.com/mediumofexchange/money-from-fi
 
 ## Real-chain exhaustion cost from a real anchor
 
-The recovery map's P4. `experiments/ergo-range/chain-cost.mjs` is run
-explicitly, never by `check` or CI, because it reads public mainnet nodes
-(GET only; nothing is submitted); the [experiment guide](../experiments/ergo-range/README.md#real-chain-exhaustion-cost)
-has the command. It reads the headers of a window from every named node and
+*Retired 2026-09-25: P4 is answered and the runtime's `ErgoVenue` reads the mainnet itself ([runtime venue](ERGO_VENUE_PROFILE.md#runtime-venue)); `chain-cost.mjs` and its guide are kept at [1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range), and the report below stands as recorded there.*
+
+The recovery map's P4. `experiments/ergo-range/chain-cost.mjs` was run
+explicitly, never by `check` or CI, because it read public mainnet nodes
+(GET only; nothing is submitted). It reads the headers of a window from every named node and
 the anchor's id at its height, compares them field by field, supplies each
 block's transactions by copying the node's JSON text into unsigned bytes and
 witness ids (`src/ergo-supplier.ts`, no decoder), counts a section only where every
@@ -1013,11 +1016,11 @@ window. No profile, decoder or dependency pin is selected by this probe.
 
 ## Venue publication and reassembly on a node
 
-The recovery map's P2. `experiments/ergo-range/publish.mjs` is run explicitly,
+*Retired 2026-09-25 with the vendored sigma-rust it signed with: P2 is answered, the runtime's own publisher is [testnet-verified](ERGO_VENUE_PROFILE.md#runtime-venue) for kinds 1–3, and kind-4 runs arrive with the publisher's pieces (v3 plan slice 3). `publish.mjs` and its guide are kept at [1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range); the runs below stand as recorded.*
+
+The recovery map's P2. `experiments/ergo-range/publish.mjs` was run explicitly,
 never by `check` or CI, because it submits transactions to a public Ergo
-**testnet** node and reads blocks back from it; the
-[experiment guide](../experiments/ergo-range/README.md#publication-and-reassembly-on-a-node)
-has the commands. It refuses a node whose `/info` does not report the
+**testnet** node and reads blocks back from it. It refuses a node whose `/info` does not report the
 testnet, signs with the pinned sigma-rust from a throwaway key in ignored
 `scratch/ergo-testnet/`, and never touches mainnet or real funds. Under the
 [candidate profile](ERGO_VENUE_PROFILE.md)'s layout it builds two publications
@@ -1116,6 +1119,8 @@ bytes not), which the venue does not read.
 
 ## Inclusion latency on the mainnet
 
+*The collector (`latency.mjs`) retired 2026-09-25 once the depth was chosen; it is kept at [1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range) for a later distribution.*
+
 Recovery map A10 asks how many blocks a publication takes to land against
 C3.3's window. Authorized at tip `T` with the instant at the latest
 witnessed index, it has force when included at `T + k` with
@@ -1179,6 +1184,8 @@ were not checked. No depth or target miss rate is selected, and no profile,
 runtime or specification changes.
 
 ## Own node as the header source
+
+*`header-check.mjs` retired 2026-09-25: the reader now verifies headers itself ([below](#reader-verified-headers)); it is kept at [1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range).*
 
 The profile leaves proof of work and chain selection to the reader's header
 source, and until now that source was two public nodes. On 2026-09-22 the
@@ -1558,7 +1565,7 @@ block the [own mainnet node](#own-node-as-the-header-source) keeps after its
 UTXO snapshot, heights 1,830,001–1,879,100 (49,100 blocks, 69 days), in five
 chunks; an offline pass then compared, for every transaction, what the
 vendored release decoder reads with the node's JSON fields
-([guide](../experiments/ergo-range/README.md#real-chain-exhaustion-cost),
+([guide](https://github.com/mediumofexchange/reference-ts/blob/1b4857a/experiments/ergo-range/README.md#real-chain-exhaustion-cost),
 [retained report](ergo-decoder-equivalence-verification.json)).
 
 | Blocks | Transactions | Outputs | Registers | Roots reproduced | Refused | Differing fields |

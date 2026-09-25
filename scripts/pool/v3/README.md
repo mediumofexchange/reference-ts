@@ -118,9 +118,8 @@ there is no count. Missing range or ancestry evidence returns no audit.
 The count shares the import work budget and fixture authority boundary.
 
 To replay every group above a second time through exact synthetic Ergo
-transaction bytes, install the pinned optional experiment dependencies with
-`npm --prefix experiments/ergo-range ci --ignore-scripts --no-audit --no-fund`
-and run `npm run check:pool:ergo-replay` (Node 24). CI uses
+transaction bytes, run `npm run check:pool:ergo-replay` (Node 24; it needs only
+the root dependencies). CI uses
 `npm run check:pool:v3 -- --ergo` to include both relation conformance and this
 adapter. Under `--ergo` every fixture names the candidate profile's identity;
 each fixture venue export is converted to raw sections under the reader's own
