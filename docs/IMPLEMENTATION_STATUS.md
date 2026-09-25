@@ -199,18 +199,19 @@ The [Ergo venue profile](ERGO_VENUE_PROFILE.md), selected by
 and `src/ergo-profile.ts` fix attribution by exact tree and `R4`/`R5`
 shape, run reassembly, transaction-then-output ordinals, an index space
 anchored at a pinned header (index 0 is the anchor's child, so reads from
-index zero are bounded by the deployment's age) and a §13 verifier by
-exhaustion over root-checked blocks behind a linked header chain; the
-unit tests reproduce the four fixture roots and answer synthetic ranges (the
+index zero are bounded by the deployment's age) and §13 answers by
+exhaustion over root-checked blocks, which `ErgoVenue`, the one Ergo reader,
+reads behind the header chain it verifies itself; the unit tests reproduce
+the four fixture roots and answer synthetic ranges (the
 [profile experiment](POOL_DEPLOYMENT_PROBES.md#ergo-venue-profile-candidate-and-full-block-range-verifier)
-that also read them through Fleet and sigma-rust is retired). The [local adapter](ERGO_VENUE_PROFILE.md#local-replay-adapter)
-replays every real-proof local replay group (single-backing imports and
+that also read them through Fleet and sigma-rust is retired). The [local replay](ERGO_VENUE_PROFILE.md#local-replay-through-the-venue)
+reads every real-proof local replay group (single-backing imports and
 silence, two-backing scopes and recovery, receipts, non-service counts,
-compact faults, returning segments) from exact unsigned transaction bytes
-under independently selected synthetic headers with bounded ownership before
-reading, reproducing the fixture verifier's results with kind-4 ordinals as
-transaction positions. Fresh seedless and receiver readers retain this
-provenance. The retired P4 and P2 probes' results stand as measured at
+compact faults, returning segments) through `ErgoVenue` over the synthetic
+reference chain, its headers verified from the reader's own anchor and its
+sections by root, reproducing the fixture venue's results with kind-4
+ordinals as transaction positions. Fresh seedless and receiver readers verify
+the chain themselves. The retired P4 and P2 probes' results stand as measured at
 1b4857a. The [real-chain cost](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor)
 was measured over seven mainnet days from a real anchor against two agreeing
 public nodes: exact sections from the nodes' text reproduce every header
@@ -296,10 +297,10 @@ reader-established priors, replacement identities, first-entry revocations
 the cross-backing venue order for publications, and C2.5's walk over admitted
 replacements (lead floor from the venue's lag, supersession, revocation and
 the lesser identity at one index), checked against the runtime walk.
-`scripts/pool/v3/fixture-venue.mjs` is the harness's default fixture verifier;
-`experiments/ergo-range/replay-venue.mjs` is its optional Ergo-profile adapter.
-The local replay integrates these answers with the bounded clock and import
-checks described above. Venue-source authentication, complete shared-scope
+The reader (`src/pool/v3/reader.ts`) reads them through a `RecordVenue`
+(`src/record-venue.ts`): `FixtureVenue` in the harness by default and
+`ErgoVenue` under `--ergo`. The local replay integrates these answers with the
+bounded clock and import checks described above. Venue-source authentication, complete shared-scope
 authority, recovery and adoption remain open.
 
 ## Runtime pin and recovery models

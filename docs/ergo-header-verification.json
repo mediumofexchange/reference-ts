@@ -122,10 +122,6 @@
       "got": "malformed"
     }
   },
-  "verifier": {
-    "built": true,
-    "witnessedIndex": "6929"
-  },
   "recalculation": {
     "oracle": "http://127.0.0.1:9053",
     "fromHeight": 844673,
@@ -141,20 +137,20 @@
     "powInvalid": [],
     "linked": 8091,
     "incomplete": [],
-    "readSeconds": 27.5,
-    "checkSeconds": 350,
-    "powMsMedian": 17.717,
+    "readSeconds": 9.3,
+    "checkSeconds": 615.5,
+    "powMsMedian": 31.34,
     "tableSizes": 21
   },
   "cost": {
     "verifiedHeaders": 6940,
-    "addMsMean": 32.216,
-    "addMsMedian": 29.556,
-    "addMsP99": 89.794,
-    "addSeconds": 223.6,
+    "addMsMean": 36.584,
+    "addMsMedian": 31.574,
+    "addMsP99": 104.978,
+    "addSeconds": 253.9,
     "wireBytesMean": 220,
     "contextBytes": 225500,
-    "yearOfHeadersMinutes": 141.1
+    "yearOfHeadersMinutes": 160.2
   },
   "cache": {
     "directory": "scratch/ergo-headers",
@@ -162,20 +158,15 @@
   },
   "files": {
     "dist/bytes.js": "e28cf286ba7ea38c1d0dffd0e28ace75ad7404e669202e2c42f8b491f93b53e0",
-    "dist/contexts.js": "2d8481a2cf178fedb18c965dfc33f024e5fb2c4e65fb7437bee8213e53d26d48",
-    "dist/ergo-headers.js": "d6673905ecbe8bbc5bf253527371040b872f1ec7acd7c91edfdcc47415715326",
-    "dist/ergo-profile.js": "08ebbe7f21c6ee2a8cad50e15a822707059ff2613f298cd24cd700ded66a01a0",
+    "dist/ergo-headers.js": "2e272856dddc98ec56eabd5cf7969e7bcbca3edb6cd3163452608f44e9135e19",
     "dist/ergo-supplier.js": "40fecdeade74039f75442c2eea21691fc7369a6faae4623fe06cb7e021ceff7d",
-    "dist/keys.js": "07993d86bebf4555f59b82374f616cecfe9be5dc1d3ff19ac8fbc7d31163ed5c",
-    "dist/record-range.js": "8448ef918c8b60b88847da3731dc913c6cd6bc9e076db95d77cdc4a574d3e349",
-    "dist/venue-records.js": "89738d897ce21a654d984894bb51c6825c231145509f4ee9b3f76974edc39168",
-    "experiments/ergo-range/header-verify.mjs": "0c7ea199ec187af8f988dafe6036b9213288332f9119dfd97db1ff7f1f9da759",
+    "experiments/ergo-range/header-verify.mjs": "fefe0b7df29bd0ab91ad8caea7f4da6672024c0a6be6d201e5e9bb529d93cffd",
     "package-lock.json": "cf204e6d0670db0eb95743194fc26a6fd248d99f96fce1ad0bba782670d833e7",
     "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
     "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
     "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
-    "src/ergo-headers.ts": "8bfd750c08225e2f09eb46b58730684b091e6e3febf9b794cfda54357ae73448",
-    "src/ergo-profile.ts": "2bf77b0dbb78afd2fedb824e4c2c8ddd9320265ed6ce7a0d491dce997e8440a4",
+    "src/ergo-headers.ts": "17c0c2f19779037642b16a73489cc794061703e7ccbd3bd438b284c24c443fe5",
+    "src/ergo-profile.ts": "7052bce624ae7c3d49dac2646284701fa80dd2477f8e4c6919fcf7b2b45672a4",
     "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02",
     "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
     "src/record-range.ts": "181f5b9192c1f5df2f91da45423d363423149e4c9ff8e8f7bae2d4b54e535059",

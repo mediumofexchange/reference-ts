@@ -329,26 +329,34 @@
     ]
   },
   "timing": {
-    "nodeMs": 48390,
-    "frameMs": 341
+    "nodeMs": 56948,
+    "frameMs": 574
   },
   "host": {
     "node": "v24.6.0",
     "platform": "win32"
   },
   "files": {
-    "experiments/ergo-range/hostile-equivalence.mjs": "f4c545a6ab9dd355a37d1b62e24cd93369b655a4501e24112c20361cc529d543",
-    "experiments/ergo-range/node-read/NodeRead.java": "11dbe51dc1767374b84075c8683f956fee6f64530cbd21d0af1dac5c9d5d913d",
-    "tsconfig.json": "5d7b9d7a9ad1947fa0139a3649914b3ce14e3315fe266ae5d4d88273426c1922",
+    "dist/bytes.js": "e28cf286ba7ea38c1d0dffd0e28ace75ad7404e669202e2c42f8b491f93b53e0",
+    "dist/contexts.js": "2d8481a2cf178fedb18c965dfc33f024e5fb2c4e65fb7437bee8213e53d26d48",
+    "dist/ergo-profile.js": "25d312c7eb3aeb975dce06c77fd183dca27d7fb75744dede34e91dfa049bcc61",
+    "dist/ergo-supplier.js": "40fecdeade74039f75442c2eea21691fc7369a6faae4623fe06cb7e021ceff7d",
+    "dist/keys.js": "07993d86bebf4555f59b82374f616cecfe9be5dc1d3ff19ac8fbc7d31163ed5c",
+    "dist/record-range.js": "8448ef918c8b60b88847da3731dc913c6cd6bc9e076db95d77cdc4a574d3e349",
+    "dist/venue-records.js": "89738d897ce21a654d984894bb51c6825c231145509f4ee9b3f76974edc39168",
     "experiments/ergo-range/fixtures/manifest.json": "4ba3120b61dce7621c40e391faa70c46c6765b33a971815b35725da1e2c1d869",
-    "experiments/ergo-range/package.json": "075ac896aac44c23770ecb6310bb76b5ed75588234c0d7895fb012b3f383df3b",
-    "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
+    "experiments/ergo-range/hostile-equivalence.mjs": "0e300431bca1eef45f6eb38065e3a08a3533a6a4b29d35dece6fd29151150d4f",
+    "experiments/ergo-range/node-read/NodeRead.java": "11dbe51dc1767374b84075c8683f956fee6f64530cbd21d0af1dac5c9d5d913d",
+    "package-lock.json": "cf204e6d0670db0eb95743194fc26a6fd248d99f96fce1ad0bba782670d833e7",
+    "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
     "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
     "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
+    "src/ergo-profile.ts": "7052bce624ae7c3d49dac2646284701fa80dd2477f8e4c6919fcf7b2b45672a4",
+    "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02",
     "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
-    "src/venue-records.ts": "904f449a238b4263d11b71b975e1ea1c6fdae4272fcf5558ac5a887f2fa44ad3",
     "src/record-range.ts": "181f5b9192c1f5df2f91da45423d363423149e4c9ff8e8f7bae2d4b54e535059",
-    "src/ergo-profile.ts": "2bf77b0dbb78afd2fedb824e4c2c8ddd9320265ed6ce7a0d491dce997e8440a4",
-    "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02"
+    "src/venue-records.ts": "904f449a238b4263d11b71b975e1ea1c6fdae4272fcf5558ac5a887f2fa44ad3",
+    "tsconfig.build.json": "203a03f31b881ab04e52869d4646ce582b34175782e59d84894a591e12af898a",
+    "tsconfig.json": "5d7b9d7a9ad1947fa0139a3649914b3ce14e3315fe266ae5d4d88273426c1922"
   }
 }

@@ -5,7 +5,7 @@
     "name": "ergo-testnet-6.0.6",
     "appVersion": "6.0.6",
     "network": "testnet",
-    "startHeight": "563488",
+    "startHeight": "563604",
     "minValuePerByte": "360"
   },
   "fee": "1100000",
@@ -25,14 +25,14 @@
       "subject": "0eeaa15da10e7ccc20fe08665761e6551c93b9552a3558e9396767efd1e7e77f",
       "recordBytes": 136,
       "recordSha256": "4d43259d1d3d79d28edffe5ace887e03374249de8f11c48a615613f41f06172f",
-      "txId": "1df9b2bae1e01eb5e8c4414ff3493940793c2dea39aa386bb74db1ecc80df5d0",
+      "txId": "d9994eb3b9351ab66474885bb338cde1e7792b8003f72deee8338ca865beac1e",
       "inputs": [
-        "0f2c525e0be2d8393451125d91304fbd586f4aa2c3dea12e18c88b0175a8e34f"
+        "ab168dd5cab4c79b79250ab454125db281ba3ecf25988422a3bcf1e2571e7d6a"
       ],
       "unsignedBytes": 416,
       "signedBytes": 472,
-      "change": "19999903157600",
-      "inclusionHeight": "563490"
+      "change": "19999899567440",
+      "inclusionHeight": "563606"
     },
     {
       "kind": 2,
@@ -40,14 +40,14 @@
       "subject": "9161543511a82793c5ef66994fffb7100ea86c2210916b80362ed588ab1cda2c",
       "recordBytes": 233,
       "recordSha256": "68786869c3cd1e10bdf5655f9ed10ac76375e07cecc5f854623e62cca48f9289",
-      "txId": "a91e162ae0950199e76424aeb777bfbf68dadede14bb9a7bcb7e951bc8f18cb5",
+      "txId": "66ab74352a31233743056218a52e8f8dee620413e7e34d15c70ef623a05f6578",
       "inputs": [
-        "3aec000d354d472bed39cc5e801f6900252537205e7ae2f4e5fc352e22f04a6a"
+        "5d55f4d69e5a95be49e8d23795065dc509ccd28ed52f0e87c921f755a6e06c51"
       ],
       "unsignedBytes": 513,
       "signedBytes": 569,
-      "change": "19999901932680",
-      "inclusionHeight": "563490"
+      "change": "19999898342520",
+      "inclusionHeight": "563606"
     },
     {
       "kind": 3,
@@ -55,53 +55,53 @@
       "subject": "c633c6c151da9bcd4bc45611f9644385593608c6887ebed339b5bf08f8825a5f",
       "recordBytes": 96,
       "recordSha256": "75ac6b0aa130ffcf6ca2d998e74b94ed99a3b349a7522402e45711489f028a5f",
-      "txId": "17691552831034738da1dab6fa74cfd5a7ea78c2cb076dd66eb554a41539513a",
+      "txId": "a3324fb4d6bb4eba11d0e9e9b1e59a735d35a6585ee317311944182da34d9a37",
       "inputs": [
-        "b25d81a76772d1d98d1fe826d54b81d8baebb31070e22a224be31975fbeccee5"
+        "b970c11f8915292b0564d3d63969424b11210699644c04ff3d2303d37eb04acf"
       ],
       "unsignedBytes": 375,
       "signedBytes": 431,
-      "change": "19999900757440",
-      "inclusionHeight": "563490"
+      "change": "19999897167280",
+      "inclusionHeight": "563606"
     }
   ],
   "nodeChecks": [
     {
-      "id": "1df9b2bae1e01eb5e8c4414ff3493940793c2dea39aa386bb74db1ecc80df5d0",
+      "id": "d9994eb3b9351ab66474885bb338cde1e7792b8003f72deee8338ca865beac1e",
       "corruptedStatus": 400,
       "trueStatus": 200,
-      "trueAnswer": "\"1df9b2bae1e01eb5e8c4414ff3493940793c2dea39aa386bb74db1ecc80df5d0\""
+      "trueAnswer": "\"d9994eb3b9351ab66474885bb338cde1e7792b8003f72deee8338ca865beac1e\""
     },
     {
-      "id": "a91e162ae0950199e76424aeb777bfbf68dadede14bb9a7bcb7e951bc8f18cb5",
+      "id": "66ab74352a31233743056218a52e8f8dee620413e7e34d15c70ef623a05f6578",
       "corruptedStatus": 400,
       "trueStatus": 200,
-      "trueAnswer": "\"a91e162ae0950199e76424aeb777bfbf68dadede14bb9a7bcb7e951bc8f18cb5\""
+      "trueAnswer": "\"66ab74352a31233743056218a52e8f8dee620413e7e34d15c70ef623a05f6578\""
     },
     {
-      "id": "17691552831034738da1dab6fa74cfd5a7ea78c2cb076dd66eb554a41539513a",
+      "id": "a3324fb4d6bb4eba11d0e9e9b1e59a735d35a6585ee317311944182da34d9a37",
       "corruptedStatus": 400,
       "trueStatus": 200,
-      "trueAnswer": "\"17691552831034738da1dab6fa74cfd5a7ea78c2cb076dd66eb554a41539513a\""
+      "trueAnswer": "\"a3324fb4d6bb4eba11d0e9e9b1e59a735d35a6585ee317311944182da34d9a37\""
     }
   ],
   "republished": {
-    "txId": "1df9b2bae1e01eb5e8c4414ff3493940793c2dea39aa386bb74db1ecc80df5d0",
+    "txId": "d9994eb3b9351ab66474885bb338cde1e7792b8003f72deee8338ca865beac1e",
     "submissions": 3
   },
   "lostResponse": {
-    "txId": "a91e162ae0950199e76424aeb777bfbf68dadede14bb9a7bcb7e951bc8f18cb5",
+    "txId": "66ab74352a31233743056218a52e8f8dee620413e7e34d15c70ef623a05f6578",
     "firstAttempt": "no supplier accepted the publication; it is kept and sent again on the next attempt",
     "submissionsForRecord": 1
   },
   "duplicateSubmission": {
     "status": 400,
-    "answer": "{ \"error\" : 400, \"reason\" : \"bad.request\", \"detail\" : \"Pool can not accept transaction 1df9b2bae1e01eb5e8c4414ff3493940793c2dea39aa386bb74db1ecc80df5d0, it is already in the mempool\" }"
+    "answer": "{ \"error\" : 400, \"reason\" : \"bad.request\", \"detail\" : \"Pool can not accept transaction d9994eb3b9351ab66474885bb338cde1e7792b8003f72deee8338ca865beac1e, it is already in the mempool\" }"
   },
   "readBack": [
     {
-      "height": "563490",
-      "headerId": "d0f708c13b4019df89334b4b668598d1634482edde8fb4280f692692085e40b1",
+      "height": "563606",
+      "headerId": "bb16e77f910750e026e23b544021cf478e3b83c106a814eeeda0ee6b4f7a847e",
       "transactions": 5,
       "objects": [
         {
@@ -128,8 +128,8 @@
   "files": {
     "dist/bytes.js": "e28cf286ba7ea38c1d0dffd0e28ace75ad7404e669202e2c42f8b491f93b53e0",
     "dist/contexts.js": "2d8481a2cf178fedb18c965dfc33f024e5fb2c4e65fb7437bee8213e53d26d48",
-    "dist/ergo-headers.js": "d6673905ecbe8bbc5bf253527371040b872f1ec7acd7c91edfdcc47415715326",
-    "dist/ergo-profile.js": "08ebbe7f21c6ee2a8cad50e15a822707059ff2613f298cd24cd700ded66a01a0",
+    "dist/ergo-headers.js": "2e272856dddc98ec56eabd5cf7969e7bcbca3edb6cd3163452608f44e9135e19",
+    "dist/ergo-profile.js": "25d312c7eb3aeb975dce06c77fd183dca27d7fb75744dede34e91dfa049bcc61",
     "dist/ergo-publisher.js": "89a98a9c7338e04296e6be1122aed7589e9bb184143d93cb779c77bbf303c6af",
     "dist/ergo-supplier.js": "40fecdeade74039f75442c2eea21691fc7369a6faae4623fe06cb7e021ceff7d",
     "dist/keys.js": "07993d86bebf4555f59b82374f616cecfe9be5dc1d3ff19ac8fbc7d31163ed5c",
@@ -141,8 +141,8 @@
     "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
     "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
     "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
-    "src/ergo-headers.ts": "8bfd750c08225e2f09eb46b58730684b091e6e3febf9b794cfda54357ae73448",
-    "src/ergo-profile.ts": "2bf77b0dbb78afd2fedb824e4c2c8ddd9320265ed6ce7a0d491dce997e8440a4",
+    "src/ergo-headers.ts": "17c0c2f19779037642b16a73489cc794061703e7ccbd3bd438b284c24c443fe5",
+    "src/ergo-profile.ts": "7052bce624ae7c3d49dac2646284701fa80dd2477f8e4c6919fcf7b2b45672a4",
     "src/ergo-publisher.ts": "2dabd89ca03ce53a1bbab4142e2bfdd053f0cec625d67cd3cca3e7fd1930de92",
     "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02",
     "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
