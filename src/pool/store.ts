@@ -591,7 +591,8 @@ export class PoolStore {
       // Exact held bytes already satisfy publication; do not send them again.
       const held = this.held(last);
       this.transaction(() => {}); // Fence again after the adapter's read callback.
-      if (!held) this.venue.publish(decodeCommitment(encodeCommitment(last.commitment)));
+      // A chain's publisher settles once a supplier accepted the transaction; holding comes with a later read.
+      if (!held) await this.venue.publish(decodeCommitment(encodeCommitment(last.commitment)));
       if (!last.published) {
         this.transaction(() => this.append(engine, `published:${last.commitment.sequence}`, "published",
           { kind: "published", sequence: last.commitment.sequence.toString() }, "", () => {}));
