@@ -3,7 +3,7 @@
   "node": "v24.6.0",
   "platform": "win32",
   "arch": "x64",
-  "compileMs": 8207.5843,
+  "compileMs": 10128.3676,
   "pins": {
     "construction": "moe/pool/v2",
     "toolchain": {
@@ -238,192 +238,192 @@
     {
       "label": "authorized-relation issuance in scope",
       "kind": "issue",
-      "executionMs": 246.62870000000112,
-      "proveMs": 2731.006000000001,
-      "verifyMs": 128.2430000000022,
+      "executionMs": 206.51060000000143,
+      "proveMs": 2245.731599999999,
+      "verifyMs": 119.52499999999418,
       "proofBytes": 14656
     },
     {
       "label": "one real input plus padding",
       "kind": "spend",
-      "executionMs": 144.75390000000334,
-      "proveMs": 7836.636099999996,
-      "verifyMs": 119.71519999999873,
+      "executionMs": 123.99989999999525,
+      "proveMs": 5835.264000000003,
+      "verifyMs": 85.83499999999913,
       "proofBytes": 14656
     },
     {
       "label": "two real inputs, same backing",
       "kind": "spend",
-      "executionMs": 121.67020000000048,
-      "proveMs": 7179.103600000002,
-      "verifyMs": 107.49249999999302,
+      "executionMs": 148.28570000000036,
+      "proveMs": 6399.998,
+      "verifyMs": 87.74189999999362,
       "proofBytes": 14656
     },
     {
       "label": "two backings conserve separately",
       "kind": "spend",
-      "executionMs": 67.93210000000545,
-      "proveMs": 6506.0708999999915,
-      "verifyMs": 189.29490000000806,
+      "executionMs": 45.73210000000836,
+      "proveMs": 5707.0088000000105,
+      "verifyMs": 102.159799999994,
       "proofBytes": 14656
     },
     {
       "label": "two inputs against two different anchors",
       "kind": "spend",
-      "executionMs": 151.83809999999357,
-      "proveMs": 7033.264599999995,
-      "verifyMs": 108.41359999999986,
+      "executionMs": 66.3573000000033,
+      "proveMs": 6850.717199999999,
+      "verifyMs": 100.34999999999127,
       "proofBytes": 14656
     },
     {
       "label": "partial burn with padding",
       "kind": "burn",
-      "executionMs": 59.591599999999744,
-      "proveMs": 5700.6489,
-      "verifyMs": 95.47729999999865,
+      "executionMs": 74.32540000000154,
+      "proveMs": 7504.486600000004,
+      "verifyMs": 140.30190000000584,
       "proofBytes": 14656
     },
     {
       "label": "all right-child bits including bit 31",
       "kind": "spend",
-      "executionMs": 45.19529999999213,
-      "proveMs": 5273.976200000005,
-      "verifyMs": 88.14440000000468,
+      "executionMs": 61.70889999999781,
+      "proveMs": 5632.656100000007,
+      "verifyMs": 84.4152999999933,
       "proofBytes": 14656
     },
     {
       "label": "two maximum u64 inputs conserve in u128",
       "kind": "spend",
-      "executionMs": 58.93610000000626,
-      "proveMs": 6468.012600000002,
-      "verifyMs": 98.56510000000708,
+      "executionMs": 53.09659999998985,
+      "proveMs": 5669.260399999999,
+      "verifyMs": 88.28699999998207,
       "proofBytes": 14656
     },
     {
       "label": "new anchor preserves both nullifiers",
       "kind": "spend",
-      "executionMs": 66.34209999997984,
-      "proveMs": 6457.979499999987,
-      "verifyMs": 103.96900000001187,
+      "executionMs": 59.226599999994505,
+      "proveMs": 5431.467100000009,
+      "verifyMs": 97.10039999999572,
       "proofBytes": 14656
     },
     {
       "label": "another segment keeps the nullifiers and outputs",
       "kind": "spend",
-      "executionMs": 53.765199999994365,
-      "proveMs": 6457.248400000011,
-      "verifyMs": 97.0566000000108,
+      "executionMs": 52.03220000001602,
+      "proveMs": 6863.3213000000105,
+      "verifyMs": 100.72990000000573,
       "proofBytes": 14656
     },
     {
       "label": "full burn with zero change",
       "kind": "burn",
-      "executionMs": 51.431099999987055,
-      "proveMs": 5583.245400000014,
-      "verifyMs": 100.45939999999246,
+      "executionMs": 52.405200000008335,
+      "proveMs": 5426.73490000001,
+      "verifyMs": 101.8299999999872,
       "proofBytes": 14656
     },
     {
       "label": "burn widens quantity plus change",
       "kind": "burn",
-      "executionMs": 47.587899999984074,
-      "proveMs": 5252.219600000011,
-      "verifyMs": 84.97949999998673,
+      "executionMs": 48.944100000022445,
+      "proveMs": 5532.597000000009,
+      "verifyMs": 96.85209999998915,
       "proofBytes": 14656
     },
     {
       "label": "claim layer issue",
       "kind": "issue",
-      "executionMs": 11.667399999976624,
-      "proveMs": 2093.371999999974,
+      "executionMs": 9.804399999964517,
+      "proveMs": 1770.5212000000174,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 47.911100000026636,
-      "proveMs": 6257.741500000004,
+      "executionMs": 60.78059999999823,
+      "proveMs": 5247.964199999988,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 57.66109999996843,
-      "proveMs": 6316.973199999949,
+      "executionMs": 41.08189999999013,
+      "proveMs": 5442.318900000013,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 51.10430000000633,
-      "proveMs": 6393.3174,
+      "executionMs": 42.631900000036694,
+      "proveMs": 6118.29720000003,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 60.13400000002002,
-      "proveMs": 6522.908400000015,
+      "executionMs": 57.52620000002207,
+      "proveMs": 6836.930999999982,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer burn",
       "kind": "burn",
-      "executionMs": 47.875400000019,
-      "proveMs": 5488.661800000002,
+      "executionMs": 47.3181999999797,
+      "proveMs": 5480.344699999958,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer burn",
       "kind": "burn",
-      "executionMs": 46.78299999999581,
-      "proveMs": 4754.143799999962,
+      "executionMs": 40.633900000015274,
+      "proveMs": 5362.919800000032,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 51.9721000000136,
-      "proveMs": 5548.092100000009,
+      "executionMs": 54.99220000003697,
+      "proveMs": 6425.675300000003,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 56.88980000000447,
-      "proveMs": 5374.423499999975,
+      "executionMs": 49.62410000001546,
+      "proveMs": 6275.887099999993,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 38.61089999997057,
-      "proveMs": 5356.345499999996,
+      "executionMs": 63.54340000002412,
+      "proveMs": 6309.064599999983,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 49.116900000022724,
-      "proveMs": 5316.894700000004,
+      "executionMs": 48.723600000026636,
+      "proveMs": 5513.028100000054,
       "verifyMs": 0,
       "proofBytes": 14656
     },
     {
       "label": "claim layer spend",
       "kind": "spend",
-      "executionMs": 64.52529999997932,
-      "proveMs": 6423.12169999996,
+      "executionMs": 42.20569999999134,
+      "proveMs": 5215.81799999997,
       "verifyMs": 0,
       "proofBytes": 14656
     }
@@ -538,9 +538,9 @@
   },
   "sourceSha256Lf": {
     "dist/backing.js": "08d80f493e1438d95739a2485571ecd5c16b3eb01ed4e6db68c2f5275eabf7e9",
-    "dist/bytes.js": "e28cf286ba7ea38c1d0dffd0e28ace75ad7404e669202e2c42f8b491f93b53e0",
+    "dist/bytes.js": "803a06d482439a9fe98de311a08a26c82c1be10e986d09c2a3bd42b169bf6d21",
     "dist/commitment.js": "810e35251311d26a90d99035f100b190a89f732a910d757eda9fa2115a109e2d",
-    "dist/contexts.js": "2d8481a2cf178fedb18c965dfc33f024e5fb2c4e65fb7437bee8213e53d26d48",
+    "dist/contexts.js": "76c4e48662040899dffdf49152193f2058001164e75f5bb7aefc1b5d964a7b38",
     "dist/keys.js": "07993d86bebf4555f59b82374f616cecfe9be5dc1d3ff19ac8fbc7d31163ed5c",
     "dist/messages.js": "ab09944d243cc56b1d7b8e0e7b94801d37be5de9a2706b0cb4966a989e46a8c4",
     "dist/oplog.js": "06f4e626b03c86daa5dd869351ac7897065d333e7261fd3dd0855d4d1534cbd1",
@@ -559,7 +559,7 @@
     "dist/replacement.js": "e9ef3ef56ab04cd8053daae5871c00c5998894ed83f151f72f38dd59b0fdbfab",
     "dist/revocation.js": "343f6f52cc386a6410452bfd28f49c6fa8dae4b87ad7564fb789db91882e0c32",
     "dist/venue-error.js": "0b01e9dd946d2d5d747a1a1d82e3b3d6a4c6c386710088f0eefe05aa2550466d",
-    "dist/venue-records.js": "89738d897ce21a654d984894bb51c6825c231145509f4ee9b3f76974edc39168",
+    "dist/venue-records.js": "9a5ef5790e349c69c108d8a2894ae231f87e3e32030de4cfcfb622e637429b8f",
     "dist/venue.js": "85595f173d5fb16c50a68d995a15e3881fb5d320178b8a4ba1706a1d501485f8",
     "package-lock.json": "8203171d98e330e29b091437c947e425fa7b8de9aafa0088a90aae2544f60c9a",
     "scripts/compile-noir.mjs": "b4dabba6406111e0a03b849e2ac5272d124ab7537ee4877333bfd105c8b18a03",
@@ -571,9 +571,9 @@
     "scripts/pool/prepare-crs.mjs": "d99fcbabe5f1bebe7dd6816319aea748054b2e09a2c1f3498ca6099a67f767d3",
     "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
     "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
-    "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
+    "src/bytes.ts": "7b78d53db688cb16092e2fdcb0689968f3e8f6765f56303abfb50816b2a6f3bd",
     "src/commitment.ts": "98eac617566d4b1770d99a5a0da94b9047e5a57ec4e576eb1ec20597b69aa93e",
-    "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
+    "src/contexts.ts": "9cd0dc417e99aa8be367caf7548cc588caa4a750f08864037645cb75779c69fa",
     "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
     "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
     "src/messages.ts": "8a941254bf24650f9146d3875add1f20993a08b17b40ddac1ed060e225191718",
@@ -599,7 +599,7 @@
     "src/replacement.ts": "2505bd340fb656f615069fc464f0a16b258ddb3ddfe5f6798d37f7083f20bf76",
     "src/revocation.ts": "dd3c2e5d321931ae54e033b0091c6f15de52f11f018712c421ea813b3f440850",
     "src/venue-error.ts": "f2e9535ed81d544801967c1bd8edb26b0191900794a6f4fdc66a448612907810",
-    "src/venue-records.ts": "904f449a238b4263d11b71b975e1ea1c6fdae4272fcf5558ac5a887f2fa44ad3",
+    "src/venue-records.ts": "72c93b2d55255c500918620a3e19ef70e1fe7dda587242222fccdb9171171abe",
     "src/venue.ts": "841a4cd70df8afbb570c107de6c6223076786d92779d276c04e0e5969964deae"
   }
 }

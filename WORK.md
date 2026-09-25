@@ -21,21 +21,21 @@ refusals at the reader. Stop: no testnet (slice 2), no recovery kinds.
 - Ergo ([guide](docs/ERGO_VENUE_PROFILE.md#runtime-venue), spec [01d8db2](https://github.com/mediumofexchange/money-from-first-principles/blob/01d8db2/venue-ergo.md)):
   `ErgoVenue` verifies headers and sections itself; `ErgoPublisher` publishes kinds
   1–3, one remembered transaction per record. Testnet only; nothing persisted.
-- Own nodes (approved): `experiments/ergo-range/nodes.mjs` runs official v6.0.6 mainnet (snapshot
-  bootstrap, 127.0.0.1:9053) and testnet (archive + index, 127.0.0.1:9052)
-  from `scratch/ergo-nodes/`; after a reboot run `nodes.mjs start` and `watch
-  10` via WMI `Win32_Process.Create` (an app terminal's children die with it).
+- Shared-encoding audit (area 8, PR #21): codecs read once, bound, copy, judge the copy; tags in `contexts.ts`.
+- Own nodes (approved): `experiments/ergo-range/nodes.mjs` runs official v6.0.6 mainnet (snapshot,
+  127.0.0.1:9053) and testnet (archive + index, 127.0.0.1:9052) from `scratch/ergo-nodes/`; after a
+  reboot run `nodes.mjs start` and `watch 10` via WMI `Win32_Process.Create` (terminal children die).
 - Testnet wallet: ignored `scratch/ergo-testnet/wallet.json` (~19,999.89 tERG, copy outside
   the repo), no approval needed.
 
 ## Evidence
 
-- Current: [journal](docs/pool-v3-store-verification.json) (new), and re-recorded with M2a,
-  verdicts unchanged: [v3 replay](docs/pool-v3-local-replay-verification.json), [v2](docs/pool-v2-verification.json),
-  [restoration](docs/pool-restoration-evidence-verification.json), [runtime venue](docs/ergo-runtime-venue-verification.json).
-  Current, drifted only by the lockfile's noir_js peer entry: [publisher](docs/ergo-publisher-verification.json),
-  [headers](docs/ergo-header-verification.json), [framer](docs/ergo-framer-hostile-equivalence-verification.json);
-  unchanged: [conformance](docs/pool-v3-conformance-verification.json).
+- Current, all re-recorded with the shared-encoding audit, verdicts unchanged (heights, testnet
+  transactions and idle-host timings moved): [journal](docs/pool-v3-store-verification.json),
+  [v3 replay](docs/pool-v3-local-replay-verification.json), [conformance](docs/pool-v3-conformance-verification.json),
+  [v2](docs/pool-v2-verification.json), [restoration](docs/pool-restoration-evidence-verification.json),
+  [runtime venue](docs/ergo-runtime-venue-verification.json), [publisher](docs/ergo-publisher-verification.json),
+  [headers](docs/ergo-header-verification.json), [framer](docs/ergo-framer-hostile-equivalence-verification.json).
 - Historical (retired probes, sources at 1b4857a): P4, P2, range profile, F3, F4, latency, own node.
 
 ## Next
@@ -58,23 +58,24 @@ reader over §13 answers; the candidate runs only on recomputed reference venue 
    drills for the journal; its full-range reads per operation become a cursor.
 6. v3 wallet and service (C4.1–2 requests, funding disclosure); retire v2.
 7. Multi-backing: scope classification/recovery, counts, receipts.
-8. Adoption, pool-v3 §1: identities with parameter provenance, ACIR identities and refusal checks
-   via `constraints.mjs` (`v3/check.mjs:121`), certificates, replay/import rules, bounds,
-   one-transaction condition. Mainnet needs funds.
+8. Adoption, pool-v3 §1: identities with parameter provenance, ACIR identities and refusal checks via
+   `constraints.mjs` (`v3/check.mjs:121`), certificates, replay/import rules, bounds, one-transaction
+   condition, the proof curve's stated margin (BN254: ~100-bit discrete log). Mainnet needs funds.
 9. Segment length: a served trail from the opening fits ~68 real-proof records in the reader's
    1 MiB budget (then RESOURCE); decide imports or a served suffix before slice 3's drills.
-10. Hygiene when touching the files: `ByteReader`, `ByteWriter.fixed` and v3 `records.ts`
-   `requireBytes` trust a subclass's `length`/iterator; with both nodes running, run vitest with
-   `--maxWorkers=2`; readers re-read `args.configuration`/`verifier`; `ErgoVenue` charges section
-   bytes, not transaction count; `applyRecord`'s history check follows its effects;
-   `served-trail.ts` caches by caller trail object; `heldCommitments` hides a twin at an
-   already-held sequence from the journal's CONFLICT check (fault evidence, slice 4). v2 items
-   (`inspectNotes`, replay `statements.slice`, `activate`, `submit` journal reload, v1 store
-   codec, `bytecode(k)` gzip): check v3 successors.
-11. Later, only when a decision or gate needs it: cancelling an abandoned publication, batched
-   records, an index-free box source, a venue-moving record (C2.3.1), the slowest-supplier clock,
-   a multi-entry extension fixture, Poseidon2 on Barretenberg, sponsored holder funding (devnet
-   versions, faster Blake2b, a warmed verifier dropped).
+10. Hygiene when touching the files: the ~10 local byte predicates onto the `bytes.ts` intake (Ergo
+   and `record-venue` ones read `.length`/`.buffer` and throw TypeError on a look-alike); the
+   hand-parsed v3 codecs (`trail`, `package`, `fault-evidence`, `record-range`) onto ByteReader/
+   ByteWriter; vitest `--maxWorkers=2` beside both nodes; readers re-read `args.configuration`/
+   `verifier`; `ErgoVenue` charges section bytes, not transactions; `applyRecord`'s history check
+   follows its effects; `served-trail.ts` caches by caller trail object; `heldCommitments` hides a
+   twin at a held sequence from the journal's CONFLICT check (slice 4). v2 items (`inspectNotes`,
+   replay `statements.slice`, `activate`, `submit` reload, v1 store codec, `bytecode(k)` gzip,
+   `encodeSpentProof` holes, lenient wallet-restore `BigInt`): check v3 successors.
+11. Later, only when a decision or gate needs it: cancelling an abandoned publication, batched records,
+   an index-free box source, a venue-moving record (C2.3.1), the slowest-supplier clock, a multi-entry
+   extension fixture, Poseidon2 on Barretenberg, sponsored holder funding (devnet versions, faster
+   Blake2b, a warmed verifier dropped).
 
 ## Retained boundaries and local state
 
@@ -90,8 +91,7 @@ reader over §13 answers; the candidate runs only on recomputed reference venue 
 
 ## Open questions
 
-- 2026-09-25, non-blocking, deletions refused by the permission check: `rm -rf scratch/hostile-framer
-  scratch/pool-store-l9Xyy5` (430 MB rewritten by every framer probe run; 92 KB interrupted test store).
+- None.
 
 Roughly **52% done / 48% remaining**, plausible range **42–62%**, reassessed 2026-09-25
 (M2a): the operator now proves, admits, commits, publishes and serves v3 in the runtime,

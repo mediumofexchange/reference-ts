@@ -1,9 +1,9 @@
 // Byte conformance for pool-v3 §8 at 061f87e. No adopted configuration,
 // opening replay, key authentication, checkpoint classification or finality.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { ByteReader, compareBytes, EncodingError } from "../../bytes.js";
+import { byteLength, ByteReader, compareBytes, copyArray, copyBytes, EncodingError } from "../../bytes.js";
+import { V3_SEGMENT_CONTEXT as CONTEXT } from "../../contexts.js";
 
-const CONTEXT = new TextEncoder().encode("moe/pool/v3/segment");
 const PREFIX_BYTES = 127, ENTRY_BYTES = 136;
 export const MAX_ENTRIES = 65536;
 export const MAX_HEADER_BYTES = PREFIX_BYTES + ENTRY_BYTES * MAX_ENTRIES;
@@ -51,7 +51,23 @@ export function isWellFormedHeader(h: unknown): h is SegmentHeader {
   return true;
 }
 
-export function segmentBytes(header: SegmentHeader): Uint8Array {
+/** Each caller field read once into owned bytes, so the checks and the
+ * writes below see one header. Shape is judged by isWellFormedHeader. */
+function ownHeader(h: SegmentHeader): SegmentHeader {
+  if (!object(h)) throw new EncodingError("malformed v3 segment header");
+  const entry = (e: SegmentEntry): SegmentEntry => {
+    if (!object(e)) throw new EncodingError("malformed v3 segment header");
+    const o = e.opening, own = { backing: copyBytes(e.backing), link: copyBytes(e.link) };
+    if (o === undefined) return own;
+    if (!object(o)) throw new EncodingError("malformed v3 segment header");
+    return { ...own, opening: { operator: copyBytes(o.operator), sequence: o.sequence, root: copyBytes(o.root) } };
+  };
+  return { domain: copyBytes(h.domain), venue: copyBytes(h.venue), operator: copyBytes(h.operator), sequence: h.sequence,
+    entries: copyArray(h.entries, entry, MAX_ENTRIES) };
+}
+
+export function segmentBytes(input: SegmentHeader): Uint8Array {
+  const header = ownHeader(input);
   if (!isWellFormedHeader(header)) throw new EncodingError("malformed v3 segment header");
   // Fixed-size output avoids an expanding per-byte JS array at maximum scope.
   const out = new Uint8Array(PREFIX_BYTES + ENTRY_BYTES * header.entries.length);
@@ -73,10 +89,12 @@ export function segmentIdentity(header: SegmentHeader): Uint8Array { return sha2
 
 /** Owns decoded byte fields, including when the input is a Node Buffer.
  * Refusal is a structural error, never an operator-fault verdict. */
-export function decodeSegmentHeader(bytes: Uint8Array): SegmentHeader {
-  if (!(bytes instanceof Uint8Array) || bytes.length < PREFIX_BYTES + ENTRY_BYTES || bytes.length > MAX_HEADER_BYTES) {
+export function decodeSegmentHeader(input: Uint8Array): SegmentHeader {
+  const length = byteLength(input); // bounded before anything is copied
+  if (length < PREFIX_BYTES + ENTRY_BYTES || length > MAX_HEADER_BYTES) {
     throw new EncodingError("v3 segment header byte bound");
   }
+  const bytes = copyBytes(input);
   const r = new ByteReader(bytes);
   if (compareBytes(r.raw(CONTEXT.length), CONTEXT) !== 0) throw new EncodingError("wrong segment context");
   const domain = r.raw(32), venue = r.raw(32), operator = r.raw(32), sequence = r.u64(), count = r.u32();

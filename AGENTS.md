@@ -45,8 +45,9 @@ versions. Develop wallet, transport and witness feasibility alongside the core.
 Standing authorization effective 2026-09-08 covers development, protocol decisions and merge/push
 after verification until superseded, without renewed permission; it excludes real funds, public
 releases, live deployment, destructive data/history operations and access-control changes unless
-separately authorized. Pause only for unavailable access/physical input, a departure from core
-intent, or actions outside authority; continue safe work.
+separately authorized. Deleting disposable files in ignored `scratch/` is authorized (2026-09-25),
+except WORK.md's retained local state. Pause only for unavailable access/physical input, a
+departure from core intent, or actions outside authority; continue safe work.
 
 Preserve open entry, independent verification, private payments, public supply verification, holder
 authorization and compartmentalized failure. Prefer fewer mechanisms and lower measured compute,
@@ -153,9 +154,8 @@ authority. Verify final commit, clean status and remote parity. Inspect availabl
 revision and distinguish pending from passed. Do not bypass failed or unavailable required gates.
 After a verified merge, delete the merged branch locally and on the remote, its worktrees and the
 slice's disposable scratch files; only WORK.md's retained local state outlives a slice. Deletions
-the permission check refuses go into the one deletion list under WORK.md's Open questions.
-Prefer one complete handoff in the delivery commit; add a follow-up only for material new evidence
-or a correction, not just to insert that commit's own hash.
+the permission check refuses go into the one deletion list under WORK.md's Open questions. Prefer
+one complete handoff in the delivery commit; follow up only for new evidence or a correction.
 
 A slice is complete when acceptance is demonstrated, relevant hostile cases pass, material review
 findings are resolved, specification/code/docs agree, and delivery is verified. Models and fixture

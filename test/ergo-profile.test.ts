@@ -154,6 +154,9 @@ describe("Ergo venue-profile candidate", () => {
     expect(Buffer.from(profile.collBytes(coll(long))!)).toEqual(long);
     expect(Buffer.from(coll(long)).subarray(0, 3)).toEqual(Buffer.from("0e8801", "hex"));
     expect(profile.collBytes(coll(new Uint8Array(0)))).toHaveLength(0);
+    const constant = coll(long), read = profile.collBytes(constant)!;
+    constant.fill(0);
+    expect(Buffer.from(read)).toEqual(long);
     for (const wrong of ["0c20" + "00".repeat(32), "0502", "0e", "0e21" + "00".repeat(32), "0e1f" + "00".repeat(32),
       "0e8000", "0e8100" + "00", "0e8080808080" + "00"]) {
       expect(profile.collBytes(Buffer.from(wrong, "hex"))).toBeUndefined();

@@ -1,15 +1,16 @@
 // Served-trail transport and LOCAL evidence authentication, pool-v3 §10 at
 // 7ea0ee8. No terms validation, history replay, complete opening or verdict.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
+import { arrayLength, byteLength, compareBytes, copyArray, copyBytes, EncodingError } from "../../bytes.js";
+import { V3_SEGMENT_CONTEXT as HEADER_CONTEXT, V3_TRAIL_CONTEXT as CONTEXT } from "../../contexts.js";
 import { isValue } from "../field.js";
 import { decodeSegmentHeader, MAX_HEADER_BYTES, type SegmentHeader } from "./headers.js";
-import { genesisEvidenceHash, nextEvidenceHash, snapshotDigest, type Snapshot } from "./commitments.js";
+import {
+  decodeSnapshot, genesisEvidenceHash, nextEvidenceHash, snapshotBytes, snapshotDigest, type Snapshot,
+} from "./commitments.js";
 import { decodeRecord, hashEvidenceFields, statementBytes } from "./records.js";
 import type { ExpectedSnapshot } from "./fault-evidence.js";
 
-const CONTEXT = new TextEncoder().encode("moe/pool/v3/trail");
-const HEADER_CONTEXT = new TextEncoder().encode("moe/pool/v3/segment");
 const FIXED_BYTES = 29, MIN_HEADER_BYTES = 263;
 export const MAX_TRAIL_RECORD_BYTES = 131978;
 
@@ -30,14 +31,18 @@ export interface ServedTrail {
 function object(value: unknown): void {
   if (value === null || typeof value !== "object") throw new EncodingError("not an object");
 }
-function bytes(value: unknown, width?: number): asserts value is Uint8Array {
-  if (!(value instanceof Uint8Array) || (width !== undefined && value.length !== width)) {
-    throw new EncodingError("invalid trail bytes");
-  }
+/** The caller's bytes as an owned copy: nothing below reads the caller again. */
+function bytes(value: unknown, width?: number): Uint8Array {
+  const own = copyBytes(value as Uint8Array);
+  if (width !== undefined && own.length !== width) throw new EncodingError("invalid trail bytes");
+  return own;
 }
-function limits(value: TrailLimits): void {
+/** The caller's budget, read once. */
+function limits(value: TrailLimits): TrailLimits {
   object(value);
-  if (!isValue(value.maxBytes) || !isValue(value.maxEvents)) throw new EncodingError("invalid trail budget");
+  const { maxBytes, maxEvents } = value;
+  if (!isValue(maxBytes) || !isValue(maxEvents)) throw new EncodingError("invalid trail budget");
+  return { maxBytes, maxEvents };
 }
 function byteBudget(size: bigint, budget: TrailLimits): void {
   if (size > budget.maxBytes) throw new TrailLimitError("trail exceeds reader byte budget");
@@ -62,32 +67,44 @@ function headerCount(input: Uint8Array, offset: number, length: number): number 
   return count;
 }
 
-/** Shape and budgets precede full header decoding and all payload hashing. */
-function requireTrail(trail: ServedTrail, budget: TrailLimits): { size: number; header: SegmentHeader } {
-  limits(budget); object(trail);
-  if (!Array.isArray(trail.records) || !Array.isArray(trail.terms)) throw new EncodingError("invalid trail arrays");
-  eventBudget(BigInt(trail.records.length), budget);
-  bytes(trail.header);
-  let size = BigInt(FIXED_BYTES + trail.header.length) + 68n * BigInt(trail.terms.length) + 4n * BigInt(trail.records.length);
+/** Shape and budgets precede full header decoding and all payload hashing.
+ * Each caller field is read once into the owned trail returned, the only one
+ * the encoder and the verifier then read. */
+function requireTrail(input: ServedTrail, budgetIn: TrailLimits): { size: number; header: SegmentHeader; trail: ServedTrail } {
+  const budget = limits(budgetIn); object(input);
+  const termField = input.terms, recordField = input.records;
+  if (!Array.isArray(recordField) || !Array.isArray(termField)) throw new EncodingError("invalid trail arrays");
+  // Counts are budgeted before any element is read; elements are then read
+  // and judged once each, so a long sparse array stops at its first hole.
+  const recordCount = arrayLength(recordField), termCount = arrayLength(termField);
+  eventBudget(BigInt(recordCount), budget);
+  const header = bytes(input.header);
+  let size = BigInt(FIXED_BYTES + header.length) + 68n * BigInt(termCount) + 4n * BigInt(recordCount);
   byteBudget(size, budget);
-  const count = headerCount(trail.header, 0, trail.header.length);
-  if (trail.terms.length !== count) throw new EncodingError("wrong scoped terms count");
-  for (let i = 0; i < count; i++) {
-    const term = trail.terms[i]!; object(term); bytes(term.terms); bytes(term.signature, 64);
-    if (term.terms.length > 0xffffffff) throw new EncodingError("terms exceed u32 length");
-    size += BigInt(term.terms.length); byteBudget(size, budget);
-  }
-  for (let i = 0; i < trail.records.length; i++) {
-    const record = trail.records[i]!; bytes(record);
+  const count = headerCount(header, 0, header.length);
+  if (termCount !== count) throw new EncodingError("wrong scoped terms count");
+  const terms = copyArray(termField, (term: ServedTrail["terms"][number]) => {
+    object(term);
+    const own = Object.freeze({ terms: bytes(term.terms), signature: bytes(term.signature, 64) });
+    if (own.terms.length > 0xffffffff) throw new EncodingError("terms exceed u32 length");
+    size += BigInt(own.terms.length); byteBudget(size, budget);
+    return own;
+  }, count);
+  const records = copyArray(recordField, (value: Uint8Array) => {
+    const record = bytes(value);
     if (record.length > MAX_TRAIL_RECORD_BYTES) throw new EncodingError("trail record too long");
     size += BigInt(record.length); byteBudget(size, budget);
-  }
+    return record;
+  }, recordCount);
+  // Only a Proxy or an element's getter can change a length between reads.
+  if (terms.length !== count || records.length !== recordCount) throw new EncodingError("trail arrays changed while read");
   if (size > BigInt(Number.MAX_SAFE_INTEGER)) throw new TrailLimitError("trail exceeds implementation allocation range");
-  return { size: Number(size), header: decodeSegmentHeader(trail.header) };
+  return { size: Number(size), header: decodeSegmentHeader(header),
+    trail: Object.freeze({ header, terms: Object.freeze(terms), records: Object.freeze(records) }) };
 }
 
-export function encodeTrail(trail: ServedTrail, budget: TrailLimits): Uint8Array {
-  const { size } = requireTrail(trail, budget);
+export function encodeTrail(input: ServedTrail, budget: TrailLimits): Uint8Array {
+  const { size, trail } = requireTrail(input, budget);
   const out = new Uint8Array(size), view = new DataView(out.buffer);
   let offset = 0;
   const put = (value: Uint8Array): void => { out.set(value, offset); offset += value.length; };
@@ -101,8 +118,11 @@ export function encodeTrail(trail: ServedTrail, budget: TrailLimits): Uint8Array
 
 /** Two passes: bound and scan the entire transport before creating payload
  * arrays or decoding the header. Exact inner bytes, including Buffer, are owned. */
-export function decodeTrail(input: Uint8Array, budget: TrailLimits): ServedTrail {
-  limits(budget); bytes(input); byteBudget(BigInt(input.length), budget);
+export function decodeTrail(bytesIn: Uint8Array, budgetIn: TrailLimits): ServedTrail {
+  const budget = limits(budgetIn);
+  byteBudget(BigInt(byteLength(bytesIn)), budget);
+  // Checked again on the copy: shared memory may have grown in between.
+  const input = bytes(bytesIn); byteBudget(BigInt(input.length), budget);
   if (input.length < FIXED_BYTES + MIN_HEADER_BYTES + 68) throw new EncodingError("truncated trail");
   contextAt(input, 0, CONTEXT);
   const view = new DataView(input.buffer, input.byteOffset, input.byteLength);
@@ -147,12 +167,14 @@ export function decodeTrail(input: Uint8Array, budget: TrailLimits): ServedTrail
  * record failure is inconclusive here; use §9 for raw target authentication.
  * The expected snapshot must come from the expected signed directory.
  * Resource and programming failures propagate, never becoming exclusion. */
-export function verifyTrailEvidence(expected: ExpectedSnapshot, snapshot: Snapshot,
-  trail: ServedTrail, budget: TrailLimits): boolean {
+export function verifyTrailEvidence(expectedIn: ExpectedSnapshot, snapshotIn: Snapshot,
+  trailIn: ServedTrail, budget: TrailLimits): boolean {
   try {
-    object(expected); bytes(expected.backing, 32); bytes(expected.segment, 32); bytes(expected.digest, 32);
-    const { header } = requireTrail(trail, budget);
-    const digest = snapshotDigest(snapshot);
+    // Every argument is read once into owned values; the answer is about them.
+    object(expectedIn);
+    const expected = { backing: bytes(expectedIn.backing, 32), segment: bytes(expectedIn.segment, 32), digest: bytes(expectedIn.digest, 32) };
+    const { header, trail } = requireTrail(trailIn, budget);
+    const snapshot = decodeSnapshot(snapshotBytes(snapshotIn)), digest = snapshotDigest(snapshot);
     if (compareBytes(snapshot.backing, expected.backing) !== 0 || compareBytes(snapshot.segment, expected.segment) !== 0 ||
         compareBytes(digest, expected.digest) !== 0 || compareBytes(sha256(trail.header), expected.segment) !== 0 ||
         !header.entries.some(entry => compareBytes(entry.backing, expected.backing) === 0)) return false;

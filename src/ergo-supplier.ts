@@ -41,9 +41,11 @@ export interface ErgoSupplier {
 /** A value of the node's JSON: objects as Maps in text order, integers as bigint. */
 export type NodeJson = Map<string, NodeJson> | NodeJson[] | string | bigint | boolean | null;
 
+const MAX_INTEGER_DIGITS = 78;
+
 /** The node's JSON, strictly: objects as Maps in text order (a repeated key
- * is refused), integers as bigint, strings without escapes (the node's block
- * JSON has none). Anything else throws a SyntaxError. */
+ * is refused), integers of at most 78 digits as bigint, strings without
+ * escapes (the node's block JSON has none). Anything else throws a SyntaxError. */
 export function parseNodeJson(text: string): NodeJson {
   let at = 0;
   const fail = (what: string): never => { throw new SyntaxError(`node JSON: ${what} at ${at}`); };
@@ -99,6 +101,10 @@ export function parseNodeJson(text: string): NodeJson {
     integer.lastIndex = at;
     const match = integer.exec(text);
     if (match !== null) {
+      // The widest integer a node statement carries is an Autolykos v1 `d`,
+      // below the group order (78 digits); converting a longer literal would
+      // let a node's answer cost seconds of CPU before any check reads it.
+      if (match[0].length - (match[0][0] === "-" ? 1 : 0) > MAX_INTEGER_DIGITS) fail("an integer over 78 digits");
       at += match[0].length;
       if (/[.eE]/.test(text[at] ?? "")) fail("a non-integer number");
       return BigInt(match[0]);

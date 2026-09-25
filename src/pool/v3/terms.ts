@@ -2,14 +2,13 @@
 // Identity/signature evidence supplies no registration, currentness or adoption.
 import { sha256 } from "@noble/hashes/sha2.js";
 import {
-  bigintToMinimalBytes, ByteReader, ByteWriter, compareBytes, copyBytes,
+  bigintToMinimalBytes, ByteReader, ByteWriter, compareBytes, copyUnshared,
   EncodingError, MAX_QUANTITY_BYTES, minimalBytesToBigint, validateQuantity,
 } from "../../bytes.js";
-import { BACKING_SIGNATURE_CONTEXT, utf8Decoder, utf8Encoder } from "../../contexts.js";
+import { BACKING_SIGNATURE_CONTEXT, TERMS_MAGIC as MAGIC, utf8Decoder, utf8Encoder } from "../../contexts.js";
 import { isValidPublicKey, verifySignatureStrict } from "../../keys.js";
 
 export const MAX_ROOT_TERMS_BYTES = 1305;
-const MAGIC = Uint8Array.of(0x4d, 0x4f, 0x45, 0x42);
 const CONSTRUCTION = utf8Encoder.encode("moe/pool/v3");
 const MAX_U64 = (1n << 64n) - 1n;
 
@@ -29,12 +28,11 @@ export interface RootTerms {
   readonly nonService?: { readonly duration: bigint; readonly count: bigint; readonly window: bigint };
 }
 
+/** An owned copy, never over shared memory, judged by its own length. */
 function own(bytes: Uint8Array, max: number, what: string, exact = false): Uint8Array {
-  if (!(bytes instanceof Uint8Array) || bytes.buffer instanceof SharedArrayBuffer ||
-      bytes.length > max || (exact && bytes.length !== max)) {
-    throw new EncodingError(`invalid ${what} bytes`);
-  }
-  return copyBytes(bytes);
+  const copy = copyUnshared(bytes);
+  if (copy.length > max || (exact && copy.length !== max)) throw new EncodingError(`invalid ${what} bytes`);
+  return copy;
 }
 function key(bytes: Uint8Array, what: string): Uint8Array {
   const result = own(bytes, 32, what, true);
@@ -52,13 +50,15 @@ function unsigned(value: bigint, max: bigint, what: string): void {
 
 /** Emits only the constant-payout, empty-reliance v3 profile. */
 export function encodeRootTerms(fields: RootTerms): Uint8Array {
+  // Every field is read once; the checks and the writes below use those reads.
   object(fields, "root terms");
-  object(fields.payout, "payout");
-  if ("backing" in fields.payout || "reliance" in fields) throw new EncodingError("unsupported root terms shape");
+  const payout = fields.payout;
+  object(payout, "payout");
+  if ("backing" in payout || "reliance" in fields) throw new EncodingError("unsupported root terms shape");
   const obligor = key(fields.obligor, "obligor"), operator = key(fields.operator, "operator");
   const configuration = own(fields.configuration, 32, "configuration", true);
   const venue = own(fields.venue, 32, "venue", true);
-  const { thing, quantumExponent, perUnit } = fields.payout;
+  const { thing, quantumExponent, perUnit } = payout;
   // A code-unit bound prevents an oversized string allocation before UTF-8 encoding.
   if (typeof thing !== "string" || thing.length === 0 || thing.length > 1024 || !thing.isWellFormed()) {
     throw new EncodingError("invalid payout thing");
@@ -69,19 +69,26 @@ export function encodeRootTerms(fields: RootTerms): Uint8Array {
     throw new EncodingError("invalid quantum exponent");
   }
   validateQuantity(perUnit, "payout per unit");
-  unsigned(fields.interval, MAX_U64, "witness interval");
-  const { silence, nonService } = fields;
-  if (silence !== undefined) {
-    object(silence, "silence clause");
-    unsigned(silence.noCommitmentDuration, MAX_U64, "no-commitment duration");
-    unsigned(silence.challengeWindow, MAX_U64, "challenge window");
+  const interval = fields.interval;
+  unsigned(interval, MAX_U64, "witness interval");
+  const { silence: silenceField, nonService: nonServiceField, replacementRule: ruleField } = fields;
+  let silence: { noCommitmentDuration: bigint; challengeWindow: bigint } | undefined;
+  if (silenceField !== undefined) {
+    object(silenceField, "silence clause");
+    const { noCommitmentDuration, challengeWindow } = silenceField;
+    unsigned(noCommitmentDuration, MAX_U64, "no-commitment duration");
+    unsigned(challengeWindow, MAX_U64, "challenge window");
+    silence = { noCommitmentDuration, challengeWindow };
   }
-  const replacementRule = fields.replacementRule === undefined ? undefined : key(fields.replacementRule, "replacement");
-  if (nonService !== undefined) {
-    object(nonService, "non-service clause");
-    unsigned(nonService.duration, MAX_U64, "non-service duration");
-    unsigned(nonService.count, 0xffff_ffffn, "non-service count");
-    unsigned(nonService.window, MAX_U64, "non-service window");
+  const replacementRule = ruleField === undefined ? undefined : key(ruleField, "replacement");
+  let nonService: { duration: bigint; count: bigint; window: bigint } | undefined;
+  if (nonServiceField !== undefined) {
+    object(nonServiceField, "non-service clause");
+    const { duration, count, window } = nonServiceField;
+    unsigned(duration, MAX_U64, "non-service duration");
+    unsigned(count, 0xffff_ffffn, "non-service count");
+    unsigned(window, MAX_U64, "non-service window");
+    nonService = { duration, count, window };
   }
   const w = new ByteWriter();
   w.fixed(MAGIC, 4, "magic"); w.u8(1); w.u8(1); w.key32(obligor, "obligor");
@@ -90,7 +97,7 @@ export function encodeRootTerms(fields: RootTerms): Uint8Array {
   w.u8(5); w.key32(operator, "operator");
   w.u32(2 + Number(silence !== undefined) + Number(replacementRule !== undefined) + Number(nonService !== undefined));
   if (silence !== undefined) { w.u8(1); w.u64(silence.noCommitmentDuration); w.u64(silence.challengeWindow); }
-  w.u8(2); w.key32(venue, "venue"); w.u64(fields.interval);
+  w.u8(2); w.key32(venue, "venue"); w.u64(interval);
   if (replacementRule !== undefined) { w.u8(3); w.key32(replacementRule, "replacement"); }
   if (nonService !== undefined) { w.u8(4); w.u64(nonService.duration); w.u32(Number(nonService.count)); w.u64(nonService.window); }
   w.u8(5); w.lengthPrefixed(CONSTRUCTION); w.key32(configuration, "configuration");

@@ -2,11 +2,9 @@
 // binary tree of full-key leaves, nonempty children and absolute
 // first-differing-bit branches, so one set has one root in any insert order.
 import { sha256 } from "@noble/hashes/sha2.js";
+import { V3_SPENT_EMPTY_CONTEXT, V3_SPENT_LEAF_CONTEXT as LEAF, V3_SPENT_NODE_CONTEXT as NODE } from "../../contexts.js";
 
-const encoder = new TextEncoder();
-const EMPTY = sha256(encoder.encode("moe/pool/v3/spent/empty"));
-const LEAF = encoder.encode("moe/pool/v3/spent/leaf");
-const NODE = encoder.encode("moe/pool/v3/spent/node");
+const EMPTY = sha256(V3_SPENT_EMPTY_CONTEXT);
 // Intrinsic getters: a subclass or own property cannot misreport a key.
 const typed = Object.getPrototypeOf(Uint8Array.prototype) as object;
 const getter = (target: object, key: PropertyKey): ((this: unknown) => unknown) =>

@@ -1,21 +1,32 @@
 // Byte conformance for pool-v3 §7 at 4a58fdc. This is not runtime replay,
 // checkpoint classification, a certificate transport or an adopted domain.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { ByteReader, ByteWriter, compareBytes, EncodingError } from "../../bytes.js";
+import { arrayLength, ByteReader, ByteWriter, compareBytes, copyArray, copyBytes, EncodingError } from "../../bytes.js";
+import {
+  V3_EVIDENCE_LINK_CONTEXT as LINK, V3_EVIDENCE_SEED_CONTEXT as SEED, V3_GENESIS_CONTEXT as GENESIS,
+  V3_HISTORY_CONTEXT as HISTORY, V3_RECEIPT_CONTEXT as RECEIPT, V3_SNAPSHOT_CONTEXT as SNAPSHOT,
+} from "../../contexts.js";
 import { bytesToField, fieldToBytes, isValue } from "../field.js";
 import { verifySignatureStrict } from "../../keys.js";
 import type { EvidenceDigests } from "./records.js";
 
-const tag = (s: string): Uint8Array => new TextEncoder().encode(`moe/pool/v3/${s}`);
-const GENESIS = tag("genesis"), HISTORY = tag("history"), SEED = tag("evidence-seed"),
-  LINK = tag("evidence-link"), SNAPSHOT = tag("snapshot"), RECEIPT = tag("receipt");
 
 function object(value: unknown): void {
   if (value === null || typeof value !== "object") throw new EncodingError("not an object");
 }
 function fixed(w: ByteWriter, bytes: Uint8Array, width = 32): void {
-  if (!(bytes instanceof Uint8Array)) throw new EncodingError("not bytes");
   w.fixed(bytes, width, "fixed field");
+}
+/** An owned copy of a caller's 32-byte field. */
+function owned(bytes: Uint8Array): Uint8Array {
+  const own = copyBytes(bytes);
+  if (own.length !== 32) throw new EncodingError("fixed field must be 32 bytes");
+  return own;
+}
+function ownDigests(d: EvidenceDigests): EvidenceDigests {
+  object(d);
+  const { statementHash, proofHash, signatureHash } = d;
+  return { statementHash: owned(statementHash), proofHash: owned(proofHash), signatureHash: owned(signatureHash) };
 }
 function u64(w: ByteWriter, value: bigint, positive = false): void {
   if (!isValue(value) || (positive && value === 0n)) throw new EncodingError("invalid u64");
@@ -83,22 +94,21 @@ export interface EvidenceOpening {
  * authenticated directory. A caller-chosen digest has no authority. Returns
  * only preimage/suffix authentication; never validity, finality or exclusion.
  * Resource or unexpected programming failures propagate, not a fault verdict. */
-export function verifyEvidenceOpening(expectedSnapshotDigest: Uint8Array, snapshot: Snapshot, opening: EvidenceOpening): boolean {
+export function verifyEvidenceOpening(expectedIn: Uint8Array, snapshotIn: Snapshot, opening: EvidenceOpening): boolean {
   try {
-    const w = new ByteWriter(); fixed(w, expectedSnapshotDigest);
-    if (compareBytes(snapshotDigest(snapshot), expectedSnapshotDigest) !== 0) return false;
+    // Every argument is read once into owned values; the answer is about them.
+    const expected = owned(expectedIn), snapshot = decodeSnapshot(snapshotBytes(snapshotIn));
+    if (compareBytes(snapshotDigest(snapshot), expected) !== 0) return false;
     object(opening);
-    if (!isValue(opening.position) || opening.position === 0n || !isValue(opening.length) ||
-        opening.length < opening.position || !Array.isArray(opening.suffix) ||
-        opening.length - opening.position !== BigInt(opening.suffix.length)) return false;
-    if (opening.position === 1n) {
-      fixed(w, opening.previous);
-      if (compareBytes(opening.previous, genesisEvidenceHash(snapshot.segment)) !== 0) return false;
-    }
-    let result = nextEvidenceHash(opening.previous, opening.target, opening.position);
-    for (let i = 0; i < opening.suffix.length; i++) {
-      result = nextEvidenceHash(result, opening.suffix[i]!, opening.position + BigInt(i) + 1n);
-    }
+    const { position, length, previous: previousIn, target: targetIn, suffix: suffixIn } = opening;
+    if (!isValue(position) || position === 0n || !isValue(length) || length < position || !Array.isArray(suffixIn) ||
+        length - position !== BigInt(arrayLength(suffixIn))) return false;
+    const previous = owned(previousIn), target = ownDigests(targetIn);
+    const suffix = copyArray(suffixIn, ownDigests, Number(length - position));
+    if (BigInt(suffix.length) !== length - position) return false;
+    if (position === 1n && compareBytes(previous, genesisEvidenceHash(snapshot.segment)) !== 0) return false;
+    let result = nextEvidenceHash(previous, target, position);
+    for (let i = 0; i < suffix.length; i++) result = nextEvidenceHash(result, suffix[i]!, position + BigInt(i) + 1n);
     return compareBytes(result, snapshot.evidenceHash) === 0;
   } catch (error) {
     if (error instanceof EncodingError) return false;
@@ -146,12 +156,14 @@ export function decodeReceipt(bytes: Uint8Array): Receipt {
 }
 /** Verify exact signed fields against the expected segment authority. This
  * neither compares a statement's source segment nor authorizes adoption. */
-export function verifyReceipt(authority: ReceiptAuthority, receipt: Receipt): boolean {
+export function verifyReceipt(authorityIn: ReceiptAuthority, receiptIn: Receipt): boolean {
   try {
-    object(authority);
-    const message = receiptBytes(receipt), w = new ByteWriter();
-    fixed(w, receipt.operator); fixed(w, receipt.signature, 64);
-    fixed(w, authority.domain); fixed(w, authority.segment); fixed(w, authority.operator); fixed(w, fieldToBytes(authority.scopeRoot));
+    // Both arguments are read once into owned values; the answer is about them.
+    object(authorityIn);
+    const receipt = decodeReceipt(encodeReceipt(receiptIn)), message = receiptBytes(receipt);
+    const authority = { domain: owned(authorityIn.domain), segment: owned(authorityIn.segment),
+      operator: owned(authorityIn.operator), scopeRoot: authorityIn.scopeRoot };
+    fieldToBytes(authority.scopeRoot);
     return compareBytes(authority.domain, receipt.domain) === 0 && compareBytes(authority.segment, receipt.segment) === 0 &&
       authority.scopeRoot === receipt.scopeRoot && compareBytes(authority.operator, receipt.operator) === 0 &&
       verifySignatureStrict(receipt.signature, message, authority.operator);
@@ -164,13 +176,20 @@ export function verifyReceipt(authority: ReceiptAuthority, receipt: Receipt): bo
 /** Compare the five inclusion fields to an event already authenticated in a
  * VALID checkpoint of the same segment. This comparison alone grants neither
  * validity nor inclusion; caller establishes the checkpoint/segment binding. */
-export function receiptMatchesEvent(receipt: ReceiptFields, event: Pick<ReceiptFields,
+export function receiptMatchesEvent(receiptIn: ReceiptFields, eventIn: Pick<ReceiptFields,
   "position" | "statementHash" | "historyHash" | "proofHash" | "signatureHash">): boolean {
   try {
-    receiptBytes(receipt); object(event);
-    const w = new ByteWriter(); u64(w, event.position, true);
+    // Both arguments are read once into owned values; the answer is about them.
+    object(receiptIn); object(eventIn);
+    const receipt: ReceiptFields = { domain: owned(receiptIn.domain), segment: owned(receiptIn.segment),
+      scopeRoot: receiptIn.scopeRoot, position: receiptIn.position, statementHash: owned(receiptIn.statementHash),
+      historyHash: owned(receiptIn.historyHash), proofHash: owned(receiptIn.proofHash),
+      signatureHash: owned(receiptIn.signatureHash), after: receiptIn.after };
+    receiptBytes(receipt);
+    const event = { position: eventIn.position, statementHash: owned(eventIn.statementHash), historyHash: owned(eventIn.historyHash),
+      proofHash: owned(eventIn.proofHash), signatureHash: owned(eventIn.signatureHash) };
+    if (!isValue(event.position) || event.position === 0n) throw new EncodingError("invalid u64");
     for (const key of ["statementHash", "historyHash", "proofHash", "signatureHash"] as const) {
-      fixed(w, event[key]);
       if (compareBytes(receipt[key], event[key]) !== 0) return false;
     }
     return receipt.position === event.position;

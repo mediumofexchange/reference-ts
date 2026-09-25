@@ -1,8 +1,19 @@
 import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as terms from "../src/pool/v3/terms.js";
+
+// Lets one case make signature verification fail unexpectedly; every other case verifies for real.
+const keysFailure = vi.hoisted(() => ({ error: undefined as Error | undefined }));
+vi.mock("../src/keys.js", async importOriginal => {
+  const actual = await importOriginal<typeof import("../src/keys.js")>();
+  return { ...actual, verifySignatureStrict: (...args: Parameters<typeof actual.verifySignatureStrict>) => {
+    if (keysFailure.error !== undefined) throw keysFailure.error;
+    return actual.verifySignatureStrict(...args);
+  } };
+});
 import { decodeBacking } from "../src/backing.js";
 import { EncodingError } from "../src/bytes.js";
+import { hiddenShared, lookAlikes } from "./hostile-bytes.js";
 
 const b = (n: number): Buffer => Buffer.alloc(32, n);
 const cat = (...parts: Uint8Array[]): Buffer => Buffer.concat(parts);
@@ -58,6 +69,10 @@ describe("v3 model constant-root terms", () => {
       const v2 = Buffer.from(bytes); v2[v2.indexOf("moe/pool/v3") + 10] = 0x32;
       expect(() => terms.decodeRootTerms(v2)).toThrow(EncodingError);
       expect(terms.verifyRootTermsSignature(v2, signature)).toBe(false);
+      // Look-alikes answer false, not a TypeError.
+      for (const fake of lookAlikes(bytes.length)) expect(terms.verifyRootTermsSignature(fake, signature)).toBe(false);
+      for (const fake of lookAlikes(64)) expect(terms.verifyRootTermsSignature(bytes, fake)).toBe(false);
+      expect(terms.verifyRootTermsSignature(hiddenShared(bytes), signature)).toBe(false);
     }
   });
 
@@ -213,9 +228,14 @@ describe("v3 model constant-root terms", () => {
       expect(terms.verifyRootTermsSignature(bad as unknown as Uint8Array, Buffer.alloc(64))).toBe(false);
       expect(terms.verifyRootTermsSignature(raw(fields()), bad as unknown as Uint8Array)).toBe(false);
     }
-    // Unexpected failures are not verification results.
+    // The caller's own `buffer` property is never read: bytes are judged through their intrinsic slots.
     const failing = Object.defineProperty(new Uint8Array(64), "buffer", { get() { throw new RangeError("unexpected"); } });
-    expect(() => terms.verifyRootTermsSignature(failing, Buffer.alloc(64))).toThrow(RangeError);
-    expect(() => terms.verifyRootTermsSignature(raw(fields()), failing)).toThrow(RangeError);
+    expect(terms.verifyRootTermsSignature(failing, Buffer.alloc(64))).toBe(false);
+    expect(terms.verifyRootTermsSignature(raw(fields()), failing)).toBe(false);
+    // Unexpected failures in what it does read are not verification results.
+    keysFailure.error = new RangeError("unexpected");
+    try {
+      expect(() => terms.verifyRootTermsSignature(raw(fields()), Buffer.alloc(64))).toThrow(RangeError);
+    } finally { keysFailure.error = undefined; }
   });
 });

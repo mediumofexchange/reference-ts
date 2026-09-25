@@ -13,7 +13,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { ByteReader, ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
-import { COMMITMENT_CONTEXT, REPLACEMENT_CONTEXT, REVOCATION_CONTEXT } from "./contexts.js";
+import { COMMITMENT_CONTEXT, DIRECTORY_MAGIC, REPLACEMENT_CONTEXT, REVOCATION_CONTEXT } from "./contexts.js";
 import { verifySignatureStrict } from "./keys.js";
 
 // --- Kind 1: commitments (C2.3) ----------------------------------------------
@@ -49,7 +49,7 @@ export interface SnapshotDigest {
  */
 export function directoryRoot(directory: readonly SnapshotDigest[]): Uint8Array {
   const w = new ByteWriter();
-  w.fixed(new Uint8Array([0x4d, 0x4f, 0x45, 0x44]), 4, "directory magic"); // MOED
+  w.context(DIRECTORY_MAGIC);
   w.u8(1);
   w.u32(directory.length);
   let previous: Uint8Array | undefined;

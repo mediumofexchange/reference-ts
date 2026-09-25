@@ -1263,8 +1263,8 @@ the run's cached responses):
   unknown or below-anchor parent, a changed height, a non-minimal VLQ
   timestamp, a trailing byte and a nonzero new-fields length (`malformed`).
 - **Cost.** Accepting a header (parse, rules and the work check) took a
-  median of 21 ms (mean 21, p99 35) on this host in pure JavaScript, 147 s
-  for the window; the work check alone has a median of 21 ms, almost all of
+  median of 21 ms (mean 22, p99 44) on this host in pure JavaScript, 153 s
+  for the window; the work check alone has a median of 20 ms, almost all of
   it Blake2b over about 34 Autolykos elements of 8 KiB. A year of headers
   (262,800) is therefore about an hour and a half once, then 21 ms a block. A header
   is 220 wire bytes, kept beside the verifier's 105-byte view, and the

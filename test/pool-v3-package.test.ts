@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as p from "../src/pool/v3/package.js";
 import { EncodingError } from "../src/bytes.js";
 import { directoryRoot, signCommitment, verifyCommitment, type SnapshotDigest } from "../src/commitment.js";
+import { flipping, hiddenShared, hugeSparse, lookAlikes, lyingLength, silentArray } from "./hostile-bytes.js";
 
 vi.mock("@noble/hashes/sha2.js", async importOriginal => {
   const actual = await importOriginal<typeof import("@noble/hashes/sha2.js")>();
@@ -252,5 +253,30 @@ describe("v3 evidence directory preimage", () => {
     expect(() => p.encodeEvidenceDirectory([{ name: sharedName, digest: b(1) }], generous)).toThrow(EncodingError);
     const sharedInput = new Uint8Array(new SharedArrayBuffer(baseline.length)); sharedInput.set(baseline);
     expect(() => p.decodeEvidenceDirectory(sharedInput, generous)).toThrow(EncodingError);
+  });
+
+  it("frames the entries and items it judged, each read once, and refuses look-alikes by name", () => {
+    // Entries by index: a silent iterator neither hides disorder nor drops entries.
+    expect(Buffer.from(p.encodeEvidenceDirectory(silentArray(entries), generous))).toEqual(rawDirectory(entries));
+    expect(() => p.encodeEvidenceDirectory(silentArray([entries[1]!, entries[0]!]), generous)).toThrow("unordered directory");
+    // A kind judged once is the kind written; a payload's reported length is not its length.
+    const item = { kind: 1, payload: b(5) };
+    expect(Buffer.from(p.encodeEvidencePackage([flipping(item, "kind", 1, 300)], generous))).toEqual(rawPackage([item]));
+    const short = Uint8Array.of(1, 2, 3);
+    expect(Buffer.from(p.encodeEvidencePackage([{ kind: 2, payload: lyingLength(short, 32) }], generous)))
+      .toEqual(rawPackage([{ kind: 2, payload: short }]));
+    for (const fake of lookAlikes(rawDirectory(entries).length)) {
+      expect(() => p.decodeEvidenceDirectory(fake, generous)).toThrow("not a byte array");
+      expect(() => p.decodeEvidencePackage(fake, generous)).toThrow("not a byte array");
+    }
+    // Shared memory is refused through the intrinsic buffer, not the caller's getter.
+    expect(() => p.decodeEvidenceDirectory(hiddenShared(rawDirectory(entries)), generous)).toThrow("shared byte array");
+    expect(() => p.encodeEvidencePackage([{ kind: 1, payload: hiddenShared(b(5)) }], generous)).toThrow("shared byte array");
+    // A sparse list of the largest u32 length meets the count budget, or stops at its first hole.
+    expect(() => p.encodeEvidencePackage(hugeSparse(), generous)).toThrow(p.PackageLimitError);
+    expect(() => p.encodeEvidenceDirectory(hugeSparse(), generous)).toThrow(p.PackageLimitError);
+    const unbounded = { maxBytes: 1n << 63n, maxItems: 1n << 63n };
+    expect(() => p.encodeEvidencePackage(hugeSparse(), unbounded)).toThrow("invalid evidence item");
+    expect(() => p.encodeEvidenceDirectory(hugeSparse(), unbounded)).toThrow("invalid directory entry");
   });
 });

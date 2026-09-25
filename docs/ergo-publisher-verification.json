@@ -5,7 +5,7 @@
     "name": "ergo-testnet-6.0.6",
     "appVersion": "6.0.6",
     "network": "testnet",
-    "startHeight": "563604",
+    "startHeight": "564136",
     "minValuePerByte": "360"
   },
   "fee": "1100000",
@@ -25,14 +25,14 @@
       "subject": "0eeaa15da10e7ccc20fe08665761e6551c93b9552a3558e9396767efd1e7e77f",
       "recordBytes": 136,
       "recordSha256": "4d43259d1d3d79d28edffe5ace887e03374249de8f11c48a615613f41f06172f",
-      "txId": "d9994eb3b9351ab66474885bb338cde1e7792b8003f72deee8338ca865beac1e",
+      "txId": "599950ff92d8c4f80a9c302503de55be2be6e20f55ad8beb204f7666b338750a",
       "inputs": [
-        "ab168dd5cab4c79b79250ab454125db281ba3ecf25988422a3bcf1e2571e7d6a"
+        "4c71653186f140cae85231d85e65ffa6b97a29c01aff7ec848605a2d0dc91e01"
       ],
       "unsignedBytes": 416,
       "signedBytes": 472,
-      "change": "19999899567440",
-      "inclusionHeight": "563606"
+      "change": "19999895977280",
+      "inclusionHeight": "564139"
     },
     {
       "kind": 2,
@@ -40,14 +40,14 @@
       "subject": "9161543511a82793c5ef66994fffb7100ea86c2210916b80362ed588ab1cda2c",
       "recordBytes": 233,
       "recordSha256": "68786869c3cd1e10bdf5655f9ed10ac76375e07cecc5f854623e62cca48f9289",
-      "txId": "66ab74352a31233743056218a52e8f8dee620413e7e34d15c70ef623a05f6578",
+      "txId": "03a93497d2d3948e5df3c39d6cf9dda3b608ba2d52044416253cabeac2beb53a",
       "inputs": [
-        "5d55f4d69e5a95be49e8d23795065dc509ccd28ed52f0e87c921f755a6e06c51"
+        "714d03f8e67d5c30e514b5531d2eac347f6beeae43050ac245062f0517b46b24"
       ],
       "unsignedBytes": 513,
       "signedBytes": 569,
-      "change": "19999898342520",
-      "inclusionHeight": "563606"
+      "change": "19999894752360",
+      "inclusionHeight": "564139"
     },
     {
       "kind": 3,
@@ -55,54 +55,54 @@
       "subject": "c633c6c151da9bcd4bc45611f9644385593608c6887ebed339b5bf08f8825a5f",
       "recordBytes": 96,
       "recordSha256": "75ac6b0aa130ffcf6ca2d998e74b94ed99a3b349a7522402e45711489f028a5f",
-      "txId": "a3324fb4d6bb4eba11d0e9e9b1e59a735d35a6585ee317311944182da34d9a37",
+      "txId": "6620465deb9b83fa2a155de124f4381036034f56fc807c2d14dad3bdcf16031a",
       "inputs": [
-        "b970c11f8915292b0564d3d63969424b11210699644c04ff3d2303d37eb04acf"
+        "1f54d378ec69ef6671379d869ea686e513b8af6548d387de30311b6624f05d0c"
       ],
       "unsignedBytes": 375,
       "signedBytes": 431,
-      "change": "19999897167280",
-      "inclusionHeight": "563606"
+      "change": "19999893577120",
+      "inclusionHeight": "564139"
     }
   ],
   "nodeChecks": [
     {
-      "id": "d9994eb3b9351ab66474885bb338cde1e7792b8003f72deee8338ca865beac1e",
+      "id": "599950ff92d8c4f80a9c302503de55be2be6e20f55ad8beb204f7666b338750a",
       "corruptedStatus": 400,
       "trueStatus": 200,
-      "trueAnswer": "\"d9994eb3b9351ab66474885bb338cde1e7792b8003f72deee8338ca865beac1e\""
+      "trueAnswer": "\"599950ff92d8c4f80a9c302503de55be2be6e20f55ad8beb204f7666b338750a\""
     },
     {
-      "id": "66ab74352a31233743056218a52e8f8dee620413e7e34d15c70ef623a05f6578",
+      "id": "03a93497d2d3948e5df3c39d6cf9dda3b608ba2d52044416253cabeac2beb53a",
       "corruptedStatus": 400,
       "trueStatus": 200,
-      "trueAnswer": "\"66ab74352a31233743056218a52e8f8dee620413e7e34d15c70ef623a05f6578\""
+      "trueAnswer": "\"03a93497d2d3948e5df3c39d6cf9dda3b608ba2d52044416253cabeac2beb53a\""
     },
     {
-      "id": "a3324fb4d6bb4eba11d0e9e9b1e59a735d35a6585ee317311944182da34d9a37",
+      "id": "6620465deb9b83fa2a155de124f4381036034f56fc807c2d14dad3bdcf16031a",
       "corruptedStatus": 400,
       "trueStatus": 200,
-      "trueAnswer": "\"a3324fb4d6bb4eba11d0e9e9b1e59a735d35a6585ee317311944182da34d9a37\""
+      "trueAnswer": "\"6620465deb9b83fa2a155de124f4381036034f56fc807c2d14dad3bdcf16031a\""
     }
   ],
   "republished": {
-    "txId": "d9994eb3b9351ab66474885bb338cde1e7792b8003f72deee8338ca865beac1e",
+    "txId": "599950ff92d8c4f80a9c302503de55be2be6e20f55ad8beb204f7666b338750a",
     "submissions": 3
   },
   "lostResponse": {
-    "txId": "66ab74352a31233743056218a52e8f8dee620413e7e34d15c70ef623a05f6578",
+    "txId": "03a93497d2d3948e5df3c39d6cf9dda3b608ba2d52044416253cabeac2beb53a",
     "firstAttempt": "no supplier accepted the publication; it is kept and sent again on the next attempt",
     "submissionsForRecord": 1
   },
   "duplicateSubmission": {
     "status": 400,
-    "answer": "{ \"error\" : 400, \"reason\" : \"bad.request\", \"detail\" : \"Pool can not accept transaction d9994eb3b9351ab66474885bb338cde1e7792b8003f72deee8338ca865beac1e, it is already in the mempool\" }"
+    "answer": "{ \"error\" : 400, \"reason\" : \"bad.request\", \"detail\" : \"Pool can not accept transaction 599950ff92d8c4f80a9c302503de55be2be6e20f55ad8beb204f7666b338750a, it is already in the mempool\" }"
   },
   "readBack": [
     {
-      "height": "563606",
-      "headerId": "bb16e77f910750e026e23b544021cf478e3b83c106a814eeeda0ee6b4f7a847e",
-      "transactions": 5,
+      "height": "564139",
+      "headerId": "0846d62d469d494cd8c607e1c2b58b3c6bec4c8812089b1b607db598bb8b7bcc",
+      "transactions": 6,
       "objects": [
         {
           "kind": 1,
@@ -119,36 +119,36 @@
         {
           "kind": 3,
           "subject": "c633c6c151da9bcd4bc45611f9644385593608c6887ebed339b5bf08f8825a5f",
-          "ordinal": "12884901888",
+          "ordinal": "17179869184",
           "recordSha256": "75ac6b0aa130ffcf6ca2d998e74b94ed99a3b349a7522402e45711489f028a5f"
         }
       ]
     }
   ],
   "files": {
-    "dist/bytes.js": "e28cf286ba7ea38c1d0dffd0e28ace75ad7404e669202e2c42f8b491f93b53e0",
-    "dist/contexts.js": "2d8481a2cf178fedb18c965dfc33f024e5fb2c4e65fb7437bee8213e53d26d48",
+    "dist/bytes.js": "803a06d482439a9fe98de311a08a26c82c1be10e986d09c2a3bd42b169bf6d21",
+    "dist/contexts.js": "76c4e48662040899dffdf49152193f2058001164e75f5bb7aefc1b5d964a7b38",
     "dist/ergo-headers.js": "2e272856dddc98ec56eabd5cf7969e7bcbca3edb6cd3163452608f44e9135e19",
-    "dist/ergo-profile.js": "25d312c7eb3aeb975dce06c77fd183dca27d7fb75744dede34e91dfa049bcc61",
+    "dist/ergo-profile.js": "cf05f525e18c218b5d10c72dd51b4ebf5f63b2f247993c5d988b43f6e099b25e",
     "dist/ergo-publisher.js": "89a98a9c7338e04296e6be1122aed7589e9bb184143d93cb779c77bbf303c6af",
-    "dist/ergo-supplier.js": "40fecdeade74039f75442c2eea21691fc7369a6faae4623fe06cb7e021ceff7d",
+    "dist/ergo-supplier.js": "793f4c0c527918e8b3391a2286a3f19447bcfeb7fd0cde05353efe53a94644dd",
     "dist/keys.js": "07993d86bebf4555f59b82374f616cecfe9be5dc1d3ff19ac8fbc7d31163ed5c",
-    "dist/record-range.js": "8448ef918c8b60b88847da3731dc913c6cd6bc9e076db95d77cdc4a574d3e349",
+    "dist/record-range.js": "d7e1c2f8cb58256abbbce621e32f152c021e55a7eb0471dbbd906a07c6c23a8c",
     "dist/venue-error.js": "0b01e9dd946d2d5d747a1a1d82e3b3d6a4c6c386710088f0eefe05aa2550466d",
-    "dist/venue-records.js": "89738d897ce21a654d984894bb51c6825c231145509f4ee9b3f76974edc39168",
+    "dist/venue-records.js": "9a5ef5790e349c69c108d8a2894ae231f87e3e32030de4cfcfb622e637429b8f",
     "experiments/ergo-range/publisher-check.mjs": "9e23431d102c6e409190654326f5f06ea9645dd328b4ad1e34628bae6d1f2bb3",
-    "package-lock.json": "cf204e6d0670db0eb95743194fc26a6fd248d99f96fce1ad0bba782670d833e7",
+    "package-lock.json": "8203171d98e330e29b091437c947e425fa7b8de9aafa0088a90aae2544f60c9a",
     "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
-    "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
-    "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
+    "src/bytes.ts": "7b78d53db688cb16092e2fdcb0689968f3e8f6765f56303abfb50816b2a6f3bd",
+    "src/contexts.ts": "9cd0dc417e99aa8be367caf7548cc588caa4a750f08864037645cb75779c69fa",
     "src/ergo-headers.ts": "17c0c2f19779037642b16a73489cc794061703e7ccbd3bd438b284c24c443fe5",
-    "src/ergo-profile.ts": "7052bce624ae7c3d49dac2646284701fa80dd2477f8e4c6919fcf7b2b45672a4",
+    "src/ergo-profile.ts": "e3789d16774c0aa3b78bfdebe3ee007168b80b2204a85958eb50c58d32568476",
     "src/ergo-publisher.ts": "2dabd89ca03ce53a1bbab4142e2bfdd053f0cec625d67cd3cca3e7fd1930de92",
-    "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02",
+    "src/ergo-supplier.ts": "b9bb52129f4e2fcfdb936682294476ba11e2fa55e27c5775f4000914cdae73f7",
     "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
-    "src/record-range.ts": "181f5b9192c1f5df2f91da45423d363423149e4c9ff8e8f7bae2d4b54e535059",
+    "src/record-range.ts": "0658a6592bba3883c5f9c7fd368cdee07f9fe8049ab5ee041af40df78577a840",
     "src/venue-error.ts": "f2e9535ed81d544801967c1bd8edb26b0191900794a6f4fdc66a448612907810",
-    "src/venue-records.ts": "904f449a238b4263d11b71b975e1ea1c6fdae4272fcf5558ac5a887f2fa44ad3",
+    "src/venue-records.ts": "72c93b2d55255c500918620a3e19ef70e1fe7dda587242222fccdb9171171abe",
     "tsconfig.build.json": "203a03f31b881ab04e52869d4646ce582b34175782e59d84894a591e12af898a",
     "tsconfig.json": "5d7b9d7a9ad1947fa0139a3649914b3ce14e3315fe266ae5d4d88273426c1922"
   },

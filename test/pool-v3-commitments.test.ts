@@ -9,6 +9,7 @@ import * as contexts from "../src/contexts.js";
 import { directoryRoot, signCommitment, verifyCommitment } from "../src/commitment.js";
 import { FIELD_MODULUS, limbsOf } from "../src/pool/field.js";
 import { verifySignatureStrict } from "../src/keys.js";
+import { flipping, hugeSparse, iterating, lookAlikes, lyingLength } from "./hostile-bytes.js";
 
 // Independent framing oracle. Roots, domains and proof bytes are synthetic;
 // Ed25519 signatures are real. No fixture claims valid state, proof or finality.
@@ -286,10 +287,41 @@ describe("evidence suffix and receipt boundaries", () => {
     expect(() => c.verifyEvidenceOpening(f.digest, f.s, broken as c.EvidenceOpening)).toThrow(failure);
     expect(() => c.verifyReceipt(authority, { ...receipt(), get position(): bigint { throw failure; } })).toThrow(failure);
   });
-  it("keeps all new contexts prefix-free with the existing construction contexts", () => {
-    const tags = Object.values(contexts).filter((v): v is Uint8Array => v instanceof Uint8Array);
-    for (const name of ["genesis", "history", "evidence-seed", "evidence-link", "snapshot", "receipt",
-      "statement", "acceptance", "release", "withdrawal", "publication", "delivery", "spent/empty", "spent/leaf", "spent/node"]) tags.push(ascii(name));
-    expect(contexts.contextsArePrefixFree(tags)).toBe(true);
+  it("answers about one reading of each argument: signed bytes are the bytes compared", () => {
+    const r = receipt(), unsigned = bytes(211);
+    // Elements 211, iterator yielding the signed 47s: the signed message is built from the elements.
+    expect(c.verifyReceipt(authority, { ...r, statementHash: iterating(unsigned, r.statementHash) })).toBe(false);
+    expect(c.receiptMatchesEvent({ ...r, statementHash: iterating(unsigned, r.statementHash) }, { ...r, statementHash: unsigned })).toBe(true);
+    // A getter judged on one value and compared on another.
+    expect(c.receiptMatchesEvent(flipping(r, "statementHash", unsigned, r.statementHash), r)).toBe(false);
+    expect(c.receiptMatchesEvent(r, flipping(r, "statementHash", unsigned, r.statementHash))).toBe(false);
+    expect(c.verifyReceipt(flipping(authority, "operator", bytes(0), operator), r)).toBe(false);
+    // Trailing bytes behind a reported length, and look-alikes, are refused by name.
+    const encoded = c.encodeReceipt(r);
+    expect(() => c.decodeReceipt(lyingLength(cat(encoded, Uint8Array.of(1, 2, 3, 4, 5)), encoded.length))).toThrow("trailing bytes");
+    for (const fake of lookAlikes(encoded.length)) {
+      expect(() => c.decodeReceipt(fake)).toThrow("not a byte array");
+      expect(c.verifyReceipt(authority, { ...r, signature: fake })).toBe(false);
+    }
+    // An opening at position 1 whose chain starts from a non-genesis link, with a
+    // getter answering genesis once: the link checked is the link hashed.
+    const f = suffixFixture(), other = bytes(99), chain = [other];
+    for (let i = 0; i < f.events.length; i++) chain.push(rawEvidence(chain[i]!, f.events[i]!, BigInt(i + 1)));
+    const forged = snapshot(chain[3]!), digest = sha(rawSnapshot(forged));
+    const opening = { ...f.opening(1), previous: other };
+    expect(c.verifyEvidenceOpening(digest, forged, opening)).toBe(false);
+    expect(c.verifyEvidenceOpening(digest, forged, flipping(opening, "previous", f.before[0]!, other))).toBe(false);
+    expect(c.verifyEvidenceOpening(f.digest, f.s, { ...f.opening(1), suffix: hugeSparse() })).toBe(false);
+  });
+  it("declares every v3 context in contexts.ts, whose load asserts them prefix-free with the rest, as the specification spells it", () => {
+    const declared: [string, Uint8Array][] = [["genesis", contexts.V3_GENESIS_CONTEXT], ["history", contexts.V3_HISTORY_CONTEXT],
+      ["evidence-seed", contexts.V3_EVIDENCE_SEED_CONTEXT], ["evidence-link", contexts.V3_EVIDENCE_LINK_CONTEXT],
+      ["snapshot", contexts.V3_SNAPSHOT_CONTEXT], ["receipt", contexts.V3_RECEIPT_CONTEXT], ["statement", contexts.V3_STATEMENT_CONTEXT],
+      ["acceptance", contexts.V3_ACCEPTANCE_CONTEXT], ["release", contexts.V3_RELEASE_CONTEXT], ["withdrawal", contexts.V3_WITHDRAWAL_CONTEXT],
+      ["publication", contexts.V3_PUBLICATION_CONTEXT], ["delivery", contexts.V3_DELIVERY_CONTEXT], ["config", contexts.V3_CONFIG_CONTEXT],
+      ["segment", contexts.V3_SEGMENT_CONTEXT], ["fault-evidence", contexts.V3_FAULT_EVIDENCE_CONTEXT], ["trail", contexts.V3_TRAIL_CONTEXT],
+      ["package", contexts.V3_PACKAGE_CONTEXT], ["range", contexts.V3_RANGE_CONTEXT], ["spent/empty", contexts.V3_SPENT_EMPTY_CONTEXT],
+      ["spent/leaf", contexts.V3_SPENT_LEAF_CONTEXT], ["spent/node", contexts.V3_SPENT_NODE_CONTEXT]];
+    for (const [name, tag] of declared) expect(Buffer.from(tag).equals(ascii(name)), name).toBe(true);
   });
 });

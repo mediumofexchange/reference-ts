@@ -1,6 +1,11 @@
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { describe, expect, it } from "vitest";
-import { bigintToMinimalBytes, ByteWriter, copyArray, copyBytes, EncodingError } from "../src/bytes.js";
+import { runInNewContext } from "node:vm";
+import {
+  bigintToMinimalBytes, byteLength, ByteReader, ByteWriter, compareBytes, copyArray, copyBytes, copyUnshared, EncodingError,
+  minimalBytesToBigint,
+} from "../src/bytes.js";
+import * as contexts from "../src/contexts.js";
 import { contextsArePrefixFree } from "../src/contexts.js";
 
 // The byte primitives, pinned against literal expected output.
@@ -69,6 +74,88 @@ describe("the framing rule is enforced at the writer", () => {
   });
 });
 
+describe("every byte write and read works on its own copy", () => {
+  // A subclass whose length and subarray lie: the intrinsic bytes are 1..31.
+  class Lying extends Uint8Array {
+    override get length(): number { return 32; }
+    override subarray(): Uint8Array<ArrayBuffer> { return new Uint8Array(32).fill(7); }
+  }
+  const lying = (): Uint8Array => new Lying(Array.from({ length: 31 }, (_, i) => i + 1));
+
+  it("fixed and key32 assert the width of the bytes they write", () => {
+    expect(() => hex((w) => w.key32(lying(), "k"))).toThrow("k must be 32 bytes");
+    for (const fake of ["a".repeat(32), Array(32).fill(1), new Proxy(new Uint8Array(32), {})]) {
+      expect(() => hex((w) => w.key32(fake as unknown as Uint8Array, "k")), typeof fake).toThrow("not a byte array");
+    }
+    expect(() => hex((w) => w.fixed(new Uint8ClampedArray(4) as unknown as Uint8Array, 4, "f"))).toThrow("not a byte array");
+  });
+
+  it("lengthPrefixed frames the bytes it writes, never a reported length", () => {
+    expect(hex((w) => w.lengthPrefixed(lying()))).toBe("0000001f" + bytesToHex(Uint8Array.from(lying())));
+    expect(() => hex((w) => w.lengthPrefixed("abc" as unknown as Uint8Array))).toThrow("not a byte array");
+    expect(() => hex((w) => w.context([1, 2] as unknown as Uint8Array))).toThrow("not a byte array");
+  });
+
+  it("u64 and bigintToMinimalBytes refuse a number as an encoding error", () => {
+    expect(() => hex((w) => w.u64(5 as unknown as bigint))).toThrow("u64 out of range");
+    expect(() => bigintToMinimalBytes(5 as unknown as bigint)).toThrow("not a bigint");
+  });
+
+  it("ByteReader reads the input as it was, through neither its length nor its subarray", () => {
+    const r = new ByteReader(lying());
+    expect(bytesToHex(r.raw(31))).toBe(bytesToHex(Uint8Array.from(lying())));
+    r.expectEnd();
+    const input = Uint8Array.of(0, 0, 0, 2, 9, 9);
+    const later = new ByteReader(input);
+    input.fill(0xff);
+    expect(bytesToHex(later.lengthPrefixed(2))).toBe("0909");
+    const shared = new Uint8Array(new SharedArrayBuffer(2));
+    shared[0] = 5;
+    const fromShared = new ByteReader(shared);
+    shared[0] = 6;
+    expect(fromShared.u8()).toBe(5);
+    for (const fake of [new Proxy(new Uint8Array(2), {}), [1, 2], "ab"]) {
+      expect(() => new ByteReader(fake as unknown as Uint8Array)).toThrow("not a byte array");
+    }
+  });
+
+  it("a read length or bound that is not a byte count is a visible programming failure", () => {
+    for (const length of [-1, 1.5, NaN, Infinity, "2" as unknown as number]) {
+      const r = new ByteReader(Uint8Array.of(0, 0, 0, 0));
+      expect(() => r.raw(length), String(length)).toThrow("read length is not a byte count");
+      expect(() => r.lengthPrefixed(length), String(length)).toThrow("field bound is not a byte count");
+      expect(() => copyArray([1], v => v, length), String(length)).toThrow("array limit is not a count");
+    }
+    const r = new ByteReader(Uint8Array.of(1, 2));
+    expect(() => r.raw(3)).toThrow("truncated");
+    expect(bytesToHex(r.raw(2))).toBe("0102");
+    r.expectEnd();
+  });
+
+  it("the other primitives refuse look-alikes by their brand, never reading a reported length", () => {
+    const float = new Float64Array([1.5, 300]);
+    Object.setPrototypeOf(float, Uint8Array.prototype);
+    expect(() => copyBytes(float as unknown as Uint8Array)).toThrow("not a byte array");
+    expect(() => minimalBytesToBigint([1, 300] as unknown as Uint8Array)).toThrow("not a byte array");
+    expect(minimalBytesToBigint(Uint8Array.of(1, 44))).toBe(300n);
+    expect(() => compareBytes("a" as unknown as Uint8Array, "b" as unknown as Uint8Array)).toThrow("not a byte array");
+    const short = Uint8Array.of(1, 2, 3);
+    Object.defineProperty(short, "length", { value: 2 });
+    expect(compareBytes(short, Uint8Array.of(1, 2))).toBe(1);
+    expect(compareBytes(lying(), lying())).toBe(0);
+    expect(compareBytes(Buffer.from([2]), Uint8Array.of(1, 9))).toBe(1);
+  });
+
+  it("copyUnshared refuses shared memory by the buffer's own slot, from any realm", () => {
+    const shared = new Uint8Array(new SharedArrayBuffer(2));
+    const foreign = runInNewContext("new Uint8Array(new SharedArrayBuffer(2))") as Uint8Array;
+    for (const value of [shared, foreign]) expect(() => copyUnshared(value)).toThrow("shared byte array");
+    expect(copyUnshared(runInNewContext("new Uint8Array([7, 8])") as Uint8Array)).toEqual(Uint8Array.of(7, 8));
+    expect(byteLength(Buffer.from([1, 2, 3]))).toBe(3);
+    expect(() => byteLength("abc" as unknown as Uint8Array)).toThrow("not a byte array");
+  });
+});
+
 describe("bigintToMinimalBytes is unsigned big-endian with no leading zero", () => {
   it("matches literal expectations across the range", () => {
     expect(bytesToHex(bigintToMinimalBytes(0n))).toBe("");
@@ -87,8 +174,11 @@ describe("bigintToMinimalBytes is unsigned big-endian with no leading zero", () 
 });
 
 describe("domain-separation tags are prefix-free", () => {
-  it("no live tag is a prefix of another", () => {
+  it("no live tag is a prefix of another, including any exported but left out of the load-time list", () => {
     expect(contextsArePrefixFree()).toBe(true);
+    const exported = Object.values(contexts).filter((v): v is Uint8Array => v instanceof Uint8Array);
+    expect(exported.length).toBe(47);
+    expect(contextsArePrefixFree(exported)).toBe(true);
   });
 
   it("the check actually detects a prefix collision", () => {

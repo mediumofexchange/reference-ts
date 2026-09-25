@@ -111,6 +111,13 @@ describe("the order-keeping node JSON parser", () => {
   it.each(['{"a":1,"a":2}', '{"a":1.5}', '{"a":"\\u0041"}', '{"a":1} x', '{"a":01}', "[1,]"])("refuses %s", bad => {
     expect(() => parseNodeJson(bad)).toThrow(SyntaxError);
   });
+  it("converts integers of at most 78 digits and refuses a longer literal before converting it", () => {
+    const widest = "9".repeat(78);
+    expect(parseNodeJson(`[${widest}, -${widest}]`)).toEqual([BigInt(widest), -BigInt(widest)]);
+    for (const long of ["1" + "0".repeat(78), "-1" + "0".repeat(78), "1".repeat(4_000_000)]) {
+      expect(() => parseNodeJson(`{"d" : ${long}}`)).toThrow("an integer over 78 digits");
+    }
+  });
   it("refuses text that is not a block's transactions", () => {
     expect(() => supplyBlock('{"headerId":"00"}')).toThrow(/not a block's transactions/);
   });
