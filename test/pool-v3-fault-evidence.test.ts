@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it, vi } from "vitest";
-import * as f from "../model/pool-v3-fault-evidence.js";
-import * as c from "../model/pool-v3-commitments.js";
-import { deliveryHash, statementBytes, type EvidenceDigests, type Record as StatementRecord } from "../model/pool-v3-records.js";
+import * as f from "../src/pool/v3/fault-evidence.js";
+import * as c from "../src/pool/v3/commitments.js";
+import { deliveryHash, statementBytes, type EvidenceDigests, type Record as StatementRecord } from "../src/pool/v3/records.js";
 import { EncodingError } from "../src/bytes.js";
 import { directoryRoot, signCommitment, verifyCommitment } from "../src/commitment.js";
 import { limbsOf } from "../src/pool/field.js";

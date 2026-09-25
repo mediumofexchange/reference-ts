@@ -10,14 +10,14 @@
     "name": "ergo-testnet-6.0.6",
     "appVersion": "6.0.6",
     "network": "testnet",
-    "fullHeight": 563315,
-    "headersHeight": 563315,
-    "bestFullHeaderId": "d82536c02418a4c6e8651cf8f037360f2d2d01caaab6c9768be580ce44c24ee5",
+    "fullHeight": 563383,
+    "headersHeight": 563383,
+    "bestFullHeaderId": "329670a7f1c3557082342e6067768ae78d529a3a3037e60dead870ab62eb2738",
     "parameters": {
       "outputCost": 100,
       "tokenAccessCost": 100,
       "maxBlockCost": 1000000,
-      "height": 563200,
+      "height": 563328,
       "maxBlockSize": 524288,
       "dataInputCost": 100,
       "blockVersion": 4,
@@ -774,9 +774,9 @@
     "anchorId": "bb5f3d586066ebcd3cc788ac22157ba9063a2314b5e5b8a59060fc4ac75e8c4e",
     "firstHeight": 561774,
     "lastHeight": 561779,
-    "tipHeight": 563315,
+    "tipHeight": 563383,
     "depth": 2,
-    "headers": 1542,
+    "headers": 1610,
     "blocks": [
       {
         "height": "561774",
@@ -825,10 +825,10 @@
   "readBack": {
     "identity": "eebe2a67189411eae19318df1b2593f9e2da5fb6cae2fb210189fb31c9d83a83",
     "origin": "561774",
-    "witnessedIndex": "1539",
+    "witnessedIndex": "1607",
     "toIndex": "5",
-    "constructMs": 44,
-    "answerMs": 1.64,
+    "constructMs": 77,
+    "answerMs": 1.85,
     "answerBytes": 90575,
     "entries": [
       {
@@ -934,7 +934,7 @@
     ]
   },
   "files": {
-    "experiments/ergo-range/publish.mjs": "11e7e3e20721c8513fe583f0751723fbf820ff303b5ed474bdc8f2ef3766fa95",
+    "experiments/ergo-range/publish.mjs": "fc6b8518760da37c5d237cb588e0ca3c2e2f4530622dfe7bcec11116d6f39765",
     "experiments/ergo-range/package.json": "075ac896aac44c23770ecb6310bb76b5ed75588234c0d7895fb012b3f383df3b",
     "experiments/ergo-range/package-lock.json": "621e03283edd63df8939a8e54972560ade477d3a3bb20bccc8e8e55812a1b84e",
     "tsconfig.json": "5d7b9d7a9ad1947fa0139a3649914b3ce14e3315fe266ae5d4d88273426c1922",
@@ -946,7 +946,7 @@
     "src/ergo-profile.ts": "2bf77b0dbb78afd2fedb824e4c2c8ddd9320265ed6ce7a0d491dce997e8440a4",
     "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02",
     "src/pool/field.ts": "abd55bd8bd2a51fb954c9dc05fb3380bf4c2df6dd3c145c2eff0f29b1e36710a",
-    "model/pool-v3-records.ts": "193e68179cf5c66d46f51f02562bb287d8c17a9aeb9952d223cf28dbfecd161f"
+    "src/pool/v3/records.ts": "94eebb79fe44a421e17978a0192074e447552bc3ce5d9e36412ef880438c2d7d"
   },
   "limitations": [
     "The venue is the public Ergo testnet through one public node; acceptance, fees, minimum values and inclusion latency are the testnet's under its reported parameters and current miners, not mainnet's.",

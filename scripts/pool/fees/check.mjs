@@ -12,7 +12,9 @@ import { gunzipSync } from 'node:zlib';
 import { Noir } from '@noir-lang/noir_js';
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from '@aztec/bb.js';
 import { fixtures, field, U64_MAX } from '../fixtures.mjs';
-import { deliveryHash, prepareExactOutput, recoverCapsule, requireDeliveryVector } from '../delivery/crypto.mjs';
+import { prepareExactOutput, recoverCapsule } from '../../../dist/pool/v3/capsules.js';
+import { fieldToBytes } from '../../../dist/pool/field.js';
+import { deliveryHash as recordDeliveryHash } from '../../../dist/pool/v3/records.js';
 
 const root = resolve(import.meta.dirname, '../../..');
 const scratchCandidate = join(root, 'scratch');
@@ -64,6 +66,19 @@ const openingOf = prepared => ({
   backing: limbsFromBytes(prepared.opening.backing),
   value: prepared.opening.value.toString(), owner: field(prepared.opening.owner), rho: field(prepared.opening.rho),
 });
+// C4.4's digest framing over any output count: the 2x3 candidate has three
+// outputs, which no v3 record carries, so the record codec refuses it.
+function deliveryHash(domain, vector) {
+  const hash = createHash('sha256').update('moe/pool/v3/delivery').update(domain);
+  const count = Buffer.alloc(4); count.writeUInt32BE(vector.length); hash.update(count);
+  for (const { cm, capsule } of vector) hash.update(fieldToBytes(cm)).update(capsule);
+  return new Uint8Array(hash.digest());
+}
+function requireDeliveryVector(domain, vector, claimed) {
+  const actual = deliveryHash(domain, vector);
+  if (Buffer.compare(actual, claimed) !== 0) throw new Error('delivery hash mismatch');
+  return actual;
+}
 const digestLimbs = (domain, prepared) => limbsFromBytes(deliveryHash(domain,
   prepared.map(output => ({ cm: output.cm, capsule: output.capsule }))));
 
@@ -143,6 +158,7 @@ try {
   checks.push('selected 2x4 fee output is recoverable only by the fee receiver seed; its backing-B change is payer-seed controlled');
   const fourVector = fourOutputs.map(output => ({ cm: output.cm, capsule: output.capsule }));
   const fourDigest = deliveryHash(domainBytes, fourVector);
+  assert.deepEqual(fourDigest, recordDeliveryHash(domainBytes, fourVector.map(x => x.cm), fourVector.map(x => x.capsule)));
   assert.deepEqual(requireDeliveryVector(domainBytes, fourVector, fourDigest), fourDigest);
   assert.throws(() => requireDeliveryVector(domainBytes, fourVector.slice(0, -1), fourDigest));
   const alteredFourVector = structuredClone(fourVector);
@@ -340,7 +356,8 @@ try {
       compileScriptSha256: sha256(readFileSync(join(import.meta.dirname, 'compile.mjs'))),
       checkScriptSha256: sha256(readFileSync(import.meta.filename)),
       fixturesSha256: sha256(readFileSync(join(root, 'scripts/pool/fixtures.mjs'))),
-      deliveryCryptoSha256: sha256(readFileSync(join(root, 'scripts/pool/delivery/crypto.mjs'))),
+      capsulesSha256: sha256(readFileSync(join(root, 'src/pool/v3/capsules.ts'))),
+      recordsSha256: sha256(readFileSync(join(root, 'src/pool/v3/records.ts'))),
       notesSha256: sha256(readFileSync(join(root, 'src/pool/circuits/notes.nr'))),
       poseidon2Sha256: sha256(readFileSync(join(root, 'src/pool/circuits/vendor/poseidon2.nr'))) },
     limitations: [

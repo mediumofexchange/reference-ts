@@ -103,7 +103,7 @@ async function cached(name, path) {
   return text;
 }
 
-// The models are compiled from source into a disposable build, as the profile and chain-cost experiments do.
+// The sources are compiled into a disposable build, as the profile and chain-cost experiments do.
 mkdirSync(join(root, "scratch"), { recursive: true });
 const build = realpathSync(mkdtempSync(join(realpathSync(join(root, "scratch")), "ergo-publish-")));
 const url = pathToFileURL(build + sep).href;
@@ -112,7 +112,7 @@ try {
   const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
   assert(!config.error, "TypeScript configuration unreadable");
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const program = ts.createProgram(["src/ergo-profile.ts", "src/ergo-supplier.ts", "src/record-range.ts", "model/pool-v3-records.ts"].map(file => join(root, file)), {
+  const program = ts.createProgram(["src/ergo-profile.ts", "src/ergo-supplier.ts", "src/record-range.ts", "src/pool/v3/records.ts"].map(file => join(root, file)), {
     ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false,
   });
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0, "models compile");
@@ -124,7 +124,7 @@ try {
   const profile = await import(new URL("src/ergo-profile.js", url));
   const range = await import(new URL("src/record-range.js", url));
   const { parseNodeJson, supplyBlock, supplyTransaction } = await import(new URL("src/ergo-supplier.js", url));
-  const records = await import(new URL("model/pool-v3-records.js", url));
+  const records = await import(new URL("src/pool/v3/records.js", url));
   const { limbsOf } = await import(new URL("src/pool/field.js", url));
 
   // The node must be the testnet before anything else is read from it, let alone submitted, and its votable

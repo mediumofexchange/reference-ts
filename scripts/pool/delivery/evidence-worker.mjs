@@ -1,9 +1,8 @@
 // Bounded local fixture IPC, not a protocol wire or user wallet interface.
 import { deserialize } from "node:v8";
-import { inspectRestorationEvidence, loadEvidenceCodecs } from "./evidence-reader.mjs";
+import { evidenceCodecs as codec, inspectRestorationEvidence } from "./evidence-reader.mjs";
 
 try {
-  const codec = await loadEvidenceCodecs(process.argv[2]);
   const chunks = [];
   let size = 0;
   for await (const chunk of process.stdin) {

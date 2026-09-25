@@ -3,6 +3,8 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import * as configurationCodec from "../../../dist/pool/v3/configuration.js";
+import * as termsCodec from "../../../dist/pool/v3/terms.js";
 
 export const RELATION_KINDS = Object.freeze([[1, "issue"], [2, "spend"], [3, "burn"], [4, "demand"], [6, "settle"], [7, "request"]].map(Object.freeze));
 const root = resolve(import.meta.dirname, "../../..");
@@ -59,10 +61,4 @@ export function readCandidateKeys(build, manifest) {
   return keys;
 }
 
-export async function loadConfigurationCodecs(buildUrl) {
-  const [configuration, terms] = await Promise.all([
-    import(new URL("model/pool-v3-configuration.js", buildUrl)),
-    import(new URL("model/pool-v3-terms.js", buildUrl)),
-  ]);
-  return { ...configuration, ...terms };
-}
+export const configurationCodecs = Object.freeze({ ...configurationCodec, ...termsCodec });

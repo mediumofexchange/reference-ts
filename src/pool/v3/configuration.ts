@@ -1,7 +1,7 @@
 // Candidate configuration framing, pool-v3 §11.1 at 916bffb.
-// No approved domain, declaration capability, artifact loader or runtime API.
+// No approved domain, declaration capability or artifact loader.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { ByteReader, ByteWriter, compareBytes, EncodingError } from "../src/bytes.js";
+import { ByteReader, ByteWriter, compareBytes, EncodingError } from "../../bytes.js";
 
 export const RELATIONS = Object.freeze(["issue", "spend", "burn", "demand", "settle", "request"] as const);
 export type Relation = typeof RELATIONS[number];

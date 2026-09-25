@@ -1,9 +1,8 @@
-// Canonical byte conformance for pool-v3 §§5–7 at 4a58fdc. No adopted
-// configuration, proof verifier, admission or replay. Move this codec and its
-// tests into the single runtime path only after final v3 configuration review.
+// Canonical record bytes for pool-v3 §§5–7 at 4a58fdc, candidate until
+// adoption. No adopted configuration, proof verifier, admission or replay.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { ByteReader, ByteWriter, compareBytes, EncodingError } from "../src/bytes.js";
-import { bytesToField, fieldToBytes, identifierOf, isField, isValue } from "../src/pool/field.js";
+import { ByteReader, ByteWriter, compareBytes, EncodingError } from "../../bytes.js";
+import { bytesToField, fieldToBytes, identifierOf, isField, isValue } from "../field.js";
 
 export type Kind = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 const COUNTS = [0, 11, 15, 15, 16, 7, 17, 7] as const;

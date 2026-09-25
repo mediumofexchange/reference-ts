@@ -1,12 +1,12 @@
 // Served-trail transport and LOCAL evidence authentication, pool-v3 §10 at
 // 7ea0ee8. No terms validation, history replay, complete opening or verdict.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { compareBytes, copyBytes, EncodingError } from "../src/bytes.js";
-import { isValue } from "../src/pool/field.js";
-import { decodeSegmentHeader, MAX_HEADER_BYTES, type SegmentHeader } from "./pool-v3-headers.js";
-import { genesisEvidenceHash, nextEvidenceHash, snapshotDigest, type Snapshot } from "./pool-v3-commitments.js";
-import { decodeRecord, hashEvidenceFields, statementBytes } from "./pool-v3-records.js";
-import type { ExpectedSnapshot } from "./pool-v3-fault-evidence.js";
+import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
+import { isValue } from "../field.js";
+import { decodeSegmentHeader, MAX_HEADER_BYTES, type SegmentHeader } from "./headers.js";
+import { genesisEvidenceHash, nextEvidenceHash, snapshotDigest, type Snapshot } from "./commitments.js";
+import { decodeRecord, hashEvidenceFields, statementBytes } from "./records.js";
+import type { ExpectedSnapshot } from "./fault-evidence.js";
 
 const CONTEXT = new TextEncoder().encode("moe/pool/v3/trail");
 const HEADER_CONTEXT = new TextEncoder().encode("moe/pool/v3/segment");

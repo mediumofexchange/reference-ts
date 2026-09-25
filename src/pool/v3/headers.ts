@@ -1,7 +1,7 @@
 // Byte conformance for pool-v3 §8 at 061f87e. No adopted configuration,
 // opening replay, key authentication, checkpoint classification or finality.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { ByteReader, compareBytes, EncodingError } from "../src/bytes.js";
+import { ByteReader, compareBytes, EncodingError } from "../../bytes.js";
 
 const CONTEXT = new TextEncoder().encode("moe/pool/v3/segment");
 const PREFIX_BYTES = 127, ENTRY_BYTES = 136;

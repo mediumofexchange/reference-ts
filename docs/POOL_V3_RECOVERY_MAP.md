@@ -53,7 +53,7 @@ record (C2b.3.1).
 
 The [header bytes are fixed by v3 §8](https://github.com/mediumofexchange/money-from-first-principles/blob/061f87e/pool-v3.md#8-segment-headers):
 127 prefix bytes plus 136 per entry, at most 8,913,023 bytes. Retained codec
-`model/pool-v3-headers.ts` bounds count and exact size before reading entries,
+`src/pool/v3/headers.ts` bounds count and exact size before reading entries,
 preserves the sole empty sentinel and independent operator counters, and
 rejects unordered scopes. Its tests bind identity through a real signed
 directory without claiming complete opening state or a device budget.
@@ -274,8 +274,8 @@ runtime must never interpret these layouts under the v2 domain.
 ## 3. Signed objects and publications
 
 These bytes and the complete record framing are now normative in pool-v3
-§§5–6 at `ca727f6`. `model/pool-v3-records.ts` and its focused tests retain
-byte conformance outside the runtime: exact vectors, bounded malformed-input
+§§5–6 at `ca727f6`. `src/pool/v3/records.ts` and its focused tests retain
+byte conformance as candidate runtime code: exact vectors, bounded malformed-input
 rejection, delivery association and real Ed25519 message-binding checks.
 Publication bodies have a u32 length; statement records end with a u32 capsule
 count and fixed 89-byte capsules. No configuration or runtime gate is closed.
@@ -325,7 +325,7 @@ Estimates assume a 14,656-byte proof and the frames above;
 
 The hash and receipt frames below are normative in
 [pool-v3 §7 at 4a58fdc](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md#7-history-evidence-snapshots-and-receipts).
-`model/pool-v3-commitments.ts` retains exact byte conformance and the evidence
+`src/pool/v3/commitments.ts` retains exact byte conformance and the evidence
 suffix opening relation. Its snapshot hashing accepts invalid u64 supply
 assertions so they can authenticate before replay rejects them; raw proof and
 authorization fields can likewise be hashed despite invalid lengths. Missing
@@ -337,7 +337,7 @@ Complete certificate encoding and replay integration remain open.
 
 [Pool-v3 §9](https://github.com/mediumofexchange/money-from-first-principles/blob/322bcae/pool-v3.md#9-fault-evidence-records)
 now frames the target byte preimages and suffix as a portable fault-evidence
-record. `model/pool-v3-fault-evidence.ts` checks the raw bytes against an
+record. `src/pool/v3/fault-evidence.ts` checks the raw bytes against an
 externally authenticated snapshot and expected backing/segment, with local
 suffix budgets before payload allocation or hashing. The frame costs 250
 bytes plus target fields and 96 per later event; each raw field is at most
@@ -349,7 +349,7 @@ that a capsule was served, missing or corrupted.
 
 [Pool-v3 §10](https://github.com/mediumofexchange/money-from-first-principles/blob/7ea0ee8/pool-v3.md#10-served-trail-transport)
 frames the canonical header, every scoped terms/signature pair and exact
-ordered record bytes. `model/pool-v3-trail.ts` checks explicit byte/event budgets
+ordered record bytes. `src/pool/v3/trail.ts` checks explicit byte/event budgets
 and all outer boundaries before payload allocation or hashing. Inner terms
 and records remain raw; local authentication decodes §5 records and binds
 their evidence chain and capsule association to an expected directory snapshot.

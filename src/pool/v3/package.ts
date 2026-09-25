@@ -1,9 +1,9 @@
 // Source-neutral evidence transport, pool-v3 §12 at 10dcf67.
 // Structural success is never a complete certificate or a verdict.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { compareBytes, copyBytes, EncodingError } from "../src/bytes.js";
-import type { SnapshotDigest } from "../src/venue-records.js";
-import { isValue } from "../src/pool/field.js";
+import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
+import type { SnapshotDigest } from "../../venue-records.js";
+import { isValue } from "../field.js";
 
 const CONTEXT = new TextEncoder().encode("moe/pool/v3/package");
 const DIRECTORY = Uint8Array.of(0x4d, 0x4f, 0x45, 0x44, 1);

@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it, vi } from "vitest";
-import * as h from "../model/pool-v3-headers.js";
-import { snapshotDigest, type Snapshot } from "../model/pool-v3-commitments.js";
+import * as h from "../src/pool/v3/headers.js";
+import { snapshotDigest, type Snapshot } from "../src/pool/v3/commitments.js";
 import { ByteReader, EncodingError } from "../src/bytes.js";
 import { directoryRoot, signCommitment, verifyCommitment } from "../src/commitment.js";
 import { segmentBytes as v2Bytes, decodeSegmentHeader as decodeV2 } from "../src/pool/statement.js";

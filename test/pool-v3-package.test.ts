@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 as packageSha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it, vi } from "vitest";
-import * as p from "../model/pool-v3-package.js";
+import * as p from "../src/pool/v3/package.js";
 import { EncodingError } from "../src/bytes.js";
 import { directoryRoot, signCommitment, verifyCommitment, type SnapshotDigest } from "../src/commitment.js";
 

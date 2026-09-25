@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it, vi } from "vitest";
-import * as trailCodec from "../model/pool-v3-trail.js";
-import type { Snapshot } from "../model/pool-v3-commitments.js";
-import type { SegmentEntry, SegmentHeader } from "../model/pool-v3-headers.js";
-import type { Record as PoolRecord } from "../model/pool-v3-records.js";
+import * as trailCodec from "../src/pool/v3/trail.js";
+import type { Snapshot } from "../src/pool/v3/commitments.js";
+import type { SegmentEntry, SegmentHeader } from "../src/pool/v3/headers.js";
+import type { Record as PoolRecord } from "../src/pool/v3/records.js";
 import { ByteReader, EncodingError } from "../src/bytes.js";
 import { directoryRoot, signCommitment, verifyCommitment } from "../src/commitment.js";
 

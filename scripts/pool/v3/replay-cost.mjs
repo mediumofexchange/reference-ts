@@ -6,11 +6,9 @@
 //   node scripts/pool/v3/replay-cost.mjs [--out docs/pool-replay-cost-verification.json]
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { cpus } from "node:os";
-import { join, resolve, sep } from "node:path";
-import { pathToFileURL } from "node:url";
-import ts from "typescript";
+import { join, resolve } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { NoteTree, EMPTY_NOTE_ROOT } from "../../../dist/pool/note-tree.js";
 import { ScopeTree } from "../../../dist/pool/scope.js";
@@ -18,32 +16,20 @@ import { limbsOf, fieldToBytes } from "../../../dist/pool/field.js";
 import { poseidon2Hash, poseidon2Permutation } from "../../../dist/pool/poseidon2.js";
 import { BarretenbergSync } from "@aztec/bb.js";
 import { directoryRoot, encodeCommitment, signCommitment } from "../../../dist/venue-records.js";
-import { loadEvidenceCodecs, LIMITS } from "../delivery/evidence-reader.mjs";
-import { RadixSpentSet } from "../spent-set/radix.mjs";
+import { LIMITS } from "../delivery/evidence-reader.mjs";
+import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { replayLocalPackage, RANGE_LIMITS } from "./local-replay.mjs";
 import { FixtureVenue } from "./fixture-venue.mjs";
-import { loadCandidateManifest, candidateConfiguration, loadConfigurationCodecs } from "./candidate.mjs";
+import { loadCandidateManifest, candidateConfiguration } from "./candidate.mjs";
+import { v3Codec as codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 
 const args = process.argv.slice(2);
 assert(args.length === 0 || (args.length === 2 && args[0] === "--out"), "usage: replay-cost.mjs [--out file]");
-const root = resolve(import.meta.dirname, "../../.."), scratch = join(root, "scratch");
-mkdirSync(scratch, { recursive: true });
-const build = realpathSync(mkdtempSync(join(realpathSync(scratch), "replay-cost-")));
-const url = pathToFileURL(build + sep).href;
+const root = resolve(import.meta.dirname, "../../..");
 const sha = bytes => createHash("sha256").update(bytes).digest();
 const hex = bytes => Buffer.from(bytes).toString("hex");
-try {
-  const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
-  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const models = [...["trail", "configuration", "terms", "package", "fault-evidence"].map(n => `model/pool-v3-${n}.ts`), "src/record-range.ts"];
-  const program = ts.createProgram(models.map(file => join(root, file)),
-    { ...parsed.options, noEmit: false, rootDir: root, outDir: build, declaration: false, sourceMap: false });
-  assert.equal(ts.getPreEmitDiagnostics(program).length, 0); assert.equal(program.emit().emitSkipped, false);
-  const codec = { ...await loadEvidenceCodecs(url), ...await loadConfigurationCodecs(url),
-    ...await import(new URL("model/pool-v3-fault-evidence.js", url)), ...await import(new URL("model/pool-v3-package.js", url)),
-    ...await import(new URL("src/record-range.js", url)) };
-
+{
   const b = n => new Uint8Array(32).fill(n);
   const MODULUS = 21888242871839275222246405745257275088548364400416903490308238158651n;
   const fieldOf = () => { for (;;) { const v = BigInt("0x" + randomBytes(32).toString("hex")) % MODULUS; if (v !== 0n) return v; } };
@@ -166,8 +152,8 @@ try {
   const report = { schema: 1, purpose: "recovery map A13 / probe P3: local replay time, memory and evidence bytes", specification: V3_SPECIFICATION,
     node: process.version, platform: process.platform, arch: process.arch, cpu: cpus()[0]?.model ?? null,
     sourceHashEncoding: "SHA-256 of UTF-8 source with CRLF normalized to LF",
-    // The executed dist modules with their src sources, and the compiled model files.
-    sources: sourceHashes(sourceClosure(["scripts/pool/v3/replay-cost.mjs", ...models])),
+    // The executed dist modules with their src sources.
+    sources: sourceHashes(sourceClosure(["scripts/pool/v3/replay-cost.mjs"])),
     verifier: "counting stub returning true; proofs are random bytes of the stated length",
     verifyMsFromConformanceReport: verifyMs, components, cases, maxRssMiB: Math.round(process.resourceUsage().maxRSS / 1024),
     limits: ["one synthetic single-backing segment of spends with empty-root anchors; no imports, scopes, publications or demands",
@@ -176,6 +162,4 @@ try {
       "32-byte proof stand-ins beyond 60 events keep trails inside the 1 MiB local budget"] };
   if (args[0] === "--out") writeFileSync(resolve(root, args[1]), JSON.stringify(report, null, 2) + "\n");
   else console.log(JSON.stringify({ components, verifyMs }, null, 2));
-} finally {
-  rmSync(build, { recursive: true, force: true });
 }

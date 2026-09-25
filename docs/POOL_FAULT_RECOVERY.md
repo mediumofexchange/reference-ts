@@ -101,7 +101,7 @@ directory proof and ancestry. A tree could reduce suffix cost. No v3 encoding,
 production retention bound or node acceptance is established by those v2 tests.
 
 The successor's [pool-v3 §7 frames](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md#7-history-evidence-snapshots-and-receipts)
-are now implemented outside the runtime in `model/pool-v3-commitments.ts`.
+are implemented in `src/pool/v3/commitments.ts`, candidate runtime code.
 `test/pool-v3-commitments.test.ts` authenticates exact evidence against signed
 directories, distinguishing a committed failing backer signature from replica
 substitution. It checks raw malformed-length fields, snapshot/receipt bytes,
@@ -111,7 +111,7 @@ fault certificate or checkpoint classification; header/trail/record evidence,
 final configuration and runtime replay remain required.
 
 The [portable §9 fault-evidence record](https://github.com/mediumofexchange/money-from-first-principles/blob/322bcae/pool-v3.md#9-fault-evidence-records)
-is retained in `model/pool-v3-fault-evidence.ts`. Its raw target fields retain
+is retained in `src/pool/v3/fault-evidence.ts`. Its raw target fields retain
 malformed committed bytes, and its verifier requires expected snapshot,
 backing and segment context from an authenticated directory. Explicit local
 suffix budgets bound allocation and hashing without changing classification

@@ -1,10 +1,10 @@
 // Byte conformance for pool-v3 §7 at 4a58fdc. This is not runtime replay,
 // checkpoint classification, a certificate transport or an adopted domain.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { ByteReader, ByteWriter, compareBytes, EncodingError } from "../src/bytes.js";
-import { bytesToField, fieldToBytes, isValue } from "../src/pool/field.js";
-import { verifySignatureStrict } from "../src/keys.js";
-import type { EvidenceDigests } from "./pool-v3-records.js";
+import { ByteReader, ByteWriter, compareBytes, EncodingError } from "../../bytes.js";
+import { bytesToField, fieldToBytes, isValue } from "../field.js";
+import { verifySignatureStrict } from "../../keys.js";
+import type { EvidenceDigests } from "./records.js";
 
 const tag = (s: string): Uint8Array => new TextEncoder().encode(`moe/pool/v3/${s}`);
 const GENESIS = tag("genesis"), HISTORY = tag("history"), SEED = tag("evidence-seed"),
