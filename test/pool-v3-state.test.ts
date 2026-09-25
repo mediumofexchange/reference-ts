@@ -163,6 +163,25 @@ describe("the v3 state machine in adoption mode", () => {
   });
 });
 
+describe("the v3 state machine in admission mode", () => {
+  it("judges kinds 1–3 at the horizon with every replay check, and refuses recovery kinds until slice 3", async () => {
+    const context = replay({ admission: true, index: 9n }), state = fresh();
+    expect(modeAt(context, 0n)).toBe("admission");
+    await applyRecord(state, issue(10n, 101n), context);
+    expect(state.eventIndices).toEqual([9n]);
+    expect(await refusal(state, issue(1n, 110n), replay({ admission: true, index: 9n, verifier: { verify: () => false } }))).toBe("PROOF");
+    expect(await refusal(state, spend([999n, 998n], [201n, 202n], [110n, 111n, 112n, 113n]), context)).toBe("ANCHOR");
+    // K's revocation witnessed at or before the horizon voids a new issue (C2b.1).
+    expect(await refusal(state, issue(1n, 110n), replay({ admission: true, index: 9n, revokedAt: 9n }))).toBe("REVOKED");
+    const root = state.tree.root();
+    const kind4 = await applyRecord(state, demand([root, root], [1n, 2n], 20n), context).then(() => undefined, (e: unknown) => e);
+    expect(kind4).toBeInstanceOf(EvidenceRefusal);
+    expect((kind4 as EvidenceRefusal).status).toBe("unsupported-scope");
+    await expect(applyRecord(state, issue(1n, 110n), replay({ admission: true, index: undefined }))).rejects.toThrow(TypeError);
+    expect(state.position).toBe(1n);
+  });
+});
+
 describe("the reader's venue", () => {
   const selection: ReaderSelection = { mode: "current-fixture", domain: DOMAIN, venue: b(12), backing: BACKING, operator: terms.operator,
     root: b(17), sequence: 1n, judgingIndex: 4n };

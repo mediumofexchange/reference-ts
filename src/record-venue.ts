@@ -1,13 +1,30 @@
-// pool-v3 §13's read side of a witness venue, and a local venue that answers
-// it from records its owner witnessed.
+// pool-v3 §13's read side of a witness venue, its publishing side, and a
+// local venue that answers from records its owner witnessed or was handed.
 //
 // A reader asks a venue for exact range answers (§13.1) over indices it has
 // witnessed, under the venue's lag (C2.3.5). `ErgoVenue` answers from the
 // sections it verified itself; `FixtureVenue` answers from the records handed
 // to it, so it is a local reference venue for tests and local operation, never
 // a source of chain evidence.
-import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
+import { utf8Encoder } from "./contexts.js";
 import { copyRequest, encodeRangeAnswer, type RangeLimits, type RangeRequest, type RecordKind } from "./record-range.js";
+
+/** The local reference context: a reference-only venue, never a deployment
+ * profile. Its identity names a label and a lag under this context, so which
+ * kind of venue an identity names is read from its preimage, never its bytes. */
+export const LOCAL_REFERENCE = "moe/venue/local/reference";
+
+/** A local reference venue's identity: the context, a 32-byte label and the lag, each framed. */
+export function localVenueIdentity(label: Uint8Array, lag: bigint): Uint8Array {
+  if (!isKey(label) || !isIndex(lag)) throw new EncodingError("invalid local venue preimage");
+  const w = new ByteWriter();
+  w.lengthPrefixed(utf8Encoder.encode(LOCAL_REFERENCE));
+  w.fixed(label, 32, "local venue label");
+  w.u64(lag);
+  return sha256(w.finish());
+}
 
 /**
  * The narrow venue a v3 reader reads. `range` returns the exact §13.1 answer,
@@ -25,6 +42,17 @@ export interface RecordVenue {
   /** The last index this venue has witnessed; answers reach no further. */
   witnessedIndex(): bigint;
   range(request: RangeRequest, limits: RangeLimits): Uint8Array | undefined;
+}
+
+/**
+ * The publishing side (C2.3.1): submit one kind 1–4 record, filed under its
+ * subject. It resolves once the venue took the record for witnessing, not once
+ * witnessed; whether and where it was witnessed is read back through `range`.
+ * Exact resubmission is harmless. A venue that cannot take it throws
+ * `VenueError`; malformed arguments are the caller's error.
+ */
+export interface RecordPublisher {
+  publishRecord(kind: RecordKind, subject: Uint8Array, record: Uint8Array): Promise<void>;
 }
 
 /** A fixture venue's records as plain data, for a fresh process to rebuild it in the same order. */
@@ -51,7 +79,7 @@ const isKind = (value: unknown): value is RecordKind => value === 1 || value ===
  * copied in and out; nothing is decoded, filtered or judged here. Its owner's
  * misuse throws TypeError, never a refusal a reader could take for evidence.
  */
-export class FixtureVenue implements RecordVenue {
+export class FixtureVenue implements RecordVenue, RecordPublisher {
   readonly #id: Uint8Array;
   readonly #lag: bigint;
   #witnessed: bigint;
@@ -62,6 +90,12 @@ export class FixtureVenue implements RecordVenue {
     this.#id = copyBytes(id);
     this.#witnessed = witnessedIndex;
     this.#lag = lag;
+  }
+
+  /** A venue of the local reference context (`LOCAL_REFERENCE`), its identity recomputed from its preimage. */
+  static reference(label: Uint8Array, lag: bigint, witnessedIndex = 0n): FixtureVenue {
+    if (!isKey(label) || !isIndex(lag)) throw new TypeError("invalid fixture venue");
+    return new FixtureVenue(localVenueIdentity(label, lag), witnessedIndex, lag);
   }
 
   get id(): Uint8Array {
@@ -88,6 +122,21 @@ export class FixtureVenue implements RecordVenue {
         !(record instanceof Uint8Array) || record.buffer instanceof SharedArrayBuffer) throw new TypeError("invalid fixture venue record");
     const ordinal = kind === 4 ? BigInt(this.#records.filter(r => r.index === at).length) : 0n;
     this.#records.push({ kind, subject: copyBytes(subject), index: at, ordinal, record: copyBytes(record) });
+  }
+
+  /**
+   * A local venue witnesses each published record at the next index, moving
+   * its clock there. An exact record already witnessed under the same kind
+   * and subject is not witnessed again.
+   */
+  async publishRecord(kind: RecordKind, subject: Uint8Array, record: Uint8Array): Promise<void> {
+    if (!isKind(kind) || !isKey(subject) || !(record instanceof Uint8Array) || record.buffer instanceof SharedArrayBuffer) {
+      throw new TypeError("invalid fixture venue record");
+    }
+    if (this.#records.some(r => r.kind === kind && compareBytes(r.subject, subject) === 0 && compareBytes(r.record, record) === 0)) return;
+    if (this.#witnessed === MAX_U64) throw new TypeError("a fixture venue's clock is exhausted");
+    this.advance(this.#witnessed + 1n);
+    this.witness(kind, subject, this.#witnessed, record);
   }
 
   range(request: RangeRequest, limits: RangeLimits): Uint8Array | undefined {

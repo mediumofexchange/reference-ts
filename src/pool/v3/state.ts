@@ -5,13 +5,15 @@
 // (decisions 2026-09-25); its callers differ in the index they judge at and in
 // which checks apply:
 //
-// | Mode     | Judged at                          | Proof, context, anchor, recovery guards      | Issuer signature, revocation, supply, spent, outputs |
-// |----------|------------------------------------|----------------------------------------------|------------------------------------------------------|
-// | replay   | the checkpoint's witnessed index    | yes; door deadlines not re-judged (C3.8)     | yes                                                  |
-// | adoption | an adopted publication's own index  | no: exact bytes the force judgment verified  | yes                                                  |
+// | Mode      | Judged at                          | Proof, context, anchor, recovery guards      | Issuer signature, revocation, supply, spent, outputs |
+// |-----------|------------------------------------|----------------------------------------------|------------------------------------------------------|
+// | admission | the horizon: read index plus lag    | yes; kinds 1–3 only until slice 3            | yes                                                  |
+// | replay    | the checkpoint's witnessed index    | yes; door deadlines not re-judged (C3.8)     | yes                                                  |
+// | adoption  | an adopted publication's own index  | no: exact bytes the force judgment verified  | yes                                                  |
 //
-// Admission (the operator, at the horizon) and publication force (the
-// reader, C2b.3.2) join as modes when their callers land.
+// Admission is the operator journal's (store.ts); recovery kinds join it with
+// their door conditions at the horizon in slice 3. Publication force (the
+// reader, C2b.3.2) joins as a mode when its caller lands.
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes } from "../../bytes.js";
 import { verifySignatureStrict } from "../../keys.js";
@@ -26,7 +28,7 @@ import type { RootTerms } from "./terms.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 
-export type StepMode = "replay" | "adoption";
+export type StepMode = "admission" | "replay" | "adoption";
 
 /** The reader's proof verifier: true only for a proof of `kind` over exactly these public inputs. */
 export interface ProofCheck {
@@ -162,8 +164,10 @@ export interface SegmentReplay {
   readonly terms: RootTerms;
   readonly scopedTerms?: ReadonlyMap<string, RootTerms | undefined> | undefined;
   readonly verifier: ProofCheck;
-  /** The checkpoint's witnessed index; undefined for a read without venue answers. */
+  /** The checkpoint's witnessed index; undefined for a read without venue answers. In admission, the horizon. */
   readonly index?: bigint | undefined;
+  /** The operator's admission (store.ts) rather than a reader's replay. */
+  readonly admission?: boolean | undefined;
   /** K's revocation index (C2b.1), or per scoped backing. */
   readonly revokedAt?: bigint | undefined;
   readonly revocations?: ReadonlyMap<string, bigint | undefined> | undefined;
@@ -173,9 +177,9 @@ export interface SegmentReplay {
   readonly contextReceipt?: { readonly position: bigint; readonly segment: Uint8Array } | undefined;
 }
 
-/** The mode a position replays in: exact adopted bytes inside the adopted block, replay after it. */
+/** The mode a position applies in: exact adopted bytes inside the adopted block, then the caller's admission or replay. */
 export function modeAt(replay: SegmentReplay, position: bigint): StepMode {
-  return replay.block[Number(position)] === undefined ? "replay" : "adoption";
+  return replay.block[Number(position)] !== undefined ? "adoption" : replay.admission === true ? "admission" : "replay";
 }
 
 /**
@@ -190,6 +194,10 @@ export async function applyRecord(state: SegmentState, bytes: Uint8Array, replay
   const { position } = state, mode = modeAt(replay, position), adopted = replay.block[Number(position)];
   const record = decodeRecord(bytes), p = record.publicInputs, kind = record.kind;
   if (![1, 2, 3, 4, 5, 6].includes(kind)) throw new EvidenceRefusal("unsupported-scope");
+  if (mode === "admission") {
+    if (replay.index === undefined) throw new TypeError("admission is judged at the horizon");
+    if (kind > 3) throw new EvidenceRefusal("unsupported-scope");
+  }
   const demandId = kind === 5 || kind === 6 ? hex(identifierOf(p[kind === 5 ? 5 : 15]!, p[kind === 5 ? 6 : 16]!)) : undefined;
   const demand = demandId === undefined ? undefined : state.demands.get(demandId);
   const backing = kind === 5 ? demand?.backing ?? replay.backing : kind !== 2 ? identifierOf(p[5]!, p[6]!) : replay.backing;
@@ -218,7 +226,7 @@ export async function applyRecord(state: SegmentState, bytes: Uint8Array, replay
     const cutoff = replay.revocations === undefined ? replay.revokedAt : replay.revocations.get(hex(backing));
     requireReplay(cutoff === undefined || cutoff > replay.index, "REVOKED");
   }
-  if (mode === "replay" && kind !== 5) requireReplay(await replay.verifier.verify(kind, [...p], new Uint8Array(record.proof)) === true, "PROOF");
+  if (mode !== "adoption" && kind !== 5) requireReplay(await replay.verifier.verify(kind, [...p], new Uint8Array(record.proof)) === true, "PROOF");
   if (kind !== 2 && kind !== 5) {
     requireReplay(scoped || same(backing, replay.backing), "BACKING");
     if (kind === 1) {
@@ -227,7 +235,7 @@ export async function applyRecord(state: SegmentState, bytes: Uint8Array, replay
     } else if (kind === 3) requireReplay(p[7]! <= total.issued - total.burned, "SUPPLY");
   }
   const { nfs, roots, outputs } = effectOf(record);
-  if (mode === "replay") {
+  if (mode !== "adoption") {
     requireReplay(roots.every(root => state.anchors.has(root)), "ANCHOR");
     checkRecovery(record, state, { check: requireReplay, backing, issuer: issuerKey, at });
   }

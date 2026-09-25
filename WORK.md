@@ -4,17 +4,18 @@ Updated: 2026-09-25
 
 ## Goal
 
-Next 1, M2 (M0, M1a, M1b done), new branch, per the [plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)'s
-slice 1: `src/pool/v3/prover.ts` (noir_js witness + bb.js, optional peers, reviewed pin), a
-v3 operator journal `src/pool/v3/store.ts` on PoolStore's SQLite pattern (genesis opening
-only; admits issue, 2-in/4-out spend with fee output and capsules, burn through
-`state.ts`'s new admission mode; commits directories, snapshots, receipts; serves §12
-packages), `RecordVenue.publishRecord` (kinds 1–3; `FixtureVenue`, `ErgoVenue`'s
-publisher), and the candidate guard (identity recomputed under
-`moe/venue/{local,ergo-synthetic}/reference`; mainnet refused). Acceptance: issue 10,
-pay 7 with fee and change, burn, all through the store; a fresh seedless process verifies
-supply from the package via `FixtureVenue` and `ErgoVenue` (synthetic, pinned); a harness
-receiver restores from its seed; guard refusals tested. Stop: no imports or recovery kinds.
+Next 1, M2 of the [plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)'s
+slice 1, split in two. **M2a** (branch `feat/v3-operator-journal`): `src/pool/v3/witness.ts`
++ `prover.ts` (noir_js + bb.js, optional peers), `state.ts` admission mode, the operator
+journal `src/pool/v3/store.ts` (SQLite, genesis opening only; admits kinds 1–3, commits,
+receipts, publishes, serves §12 packages), `RecordPublisher` on `FixtureVenue`, and the
+candidate guard (identity recomputed from its preimage under `moe/venue/{local,ergo-synthetic}/reference`).
+Acceptance: issue 10, pay 7 with a fee 1 to the operator's own request and change 2, burn 5,
+each through the store with real proofs, the payer spending a note restored from the
+served package; a fresh seedless process verifies supply 5 from the package over
+`FixtureVenue`; receiver, payer and operator restore from seeds; exact retry and guard
+refusals tested. Stop: `FixtureVenue` only. **M2b**: `ErgoVenue` publishing over the
+synthetic chain, the fresh process through `ErgoVenue`, the reader-entry guard, docs.
 
 ## Status
 
