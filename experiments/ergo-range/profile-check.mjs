@@ -171,8 +171,8 @@ try {
     serializedBytes += bytes.reduce((n, x) => n + x.length, 0); transactions += txs.length;
     parentId = id;
   }
-  // The chain's first header is the anchor, so height h is index h - 2.
-  const candidate = { anchor: chain.headers[0].id, depth, scripts };
+  // The chain's first header is the anchor, so height h is index h - 2. A synthetic chain names the reference context.
+  const candidate = { reference: profile.ERGO_SYNTHETIC_REFERENCE, anchor: chain.headers[0].id, depth, scripts };
   const identity = profile.ergoProfileIdentity(candidate);
   const verifier = profile.ergoRangeVerifier(candidate, chain);
   ok(verifier !== undefined, "model root agrees with the independent oracle on every synthetic block");
@@ -323,7 +323,7 @@ try {
 
   Object.assign(report, {
     status: "offline-profile-candidate-only", node: process.version, checks,
-    profile: { context: profile.ERGO_PROFILE_CONTEXT, identity: hex(identity), depth: depth.toString(), lag: verifier.lag().toString(),
+    profile: { context: candidate.reference, identity: hex(identity), depth: depth.toString(), lag: verifier.lag().toString(),
       locations: Object.fromEntries(Object.entries(scripts).map(([kind, script]) => [kind, hex(script)])) },
     sources: manifest.sources, inputManifestSha256: hex(sha256(readFileSync(join(here, "fixtures/manifest.json")))),
     files: { ...Object.fromEntries(["experiments/ergo-range/profile-check.mjs", "experiments/ergo-range/package.json",

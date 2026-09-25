@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 // The construction-neutral core (decision "Plan the v3 runtime", M0): what a
@@ -16,11 +17,13 @@ const NEUTRAL = [
 ];
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Every relative module a source imports or re-exports, type-only ones included. */
+/** Every module specifier a source names, in any form: the compiler's own scan, type-only imports included. */
+const specifiers = (source: string): string[] => ts.preProcessFile(source, true, true).importedFiles.map(file => file.fileName);
+
+/** Every relative module a repository source imports or re-exports, as a repository path. */
 function relativeImports(path: string): string[] {
-  const source = readFileSync(join(root, path), "utf8");
-  const found = [...source.matchAll(/(?:^|\n)\s*(?:import|export)\b[^;]*?\bfrom\s+"(\.[^"]+)"/g), ...source.matchAll(/import\(\s*"(\.[^"]+)"\s*\)/g)];
-  return found.map(match => relative(root, join(root, dirname(path), match[1]!.replace(/\.js$/, ".ts"))).replace(/\\/g, "/"));
+  return specifiers(readFileSync(join(root, path), "utf8")).filter(name => name.startsWith("."))
+    .map(name => relative(root, join(root, dirname(path), name.replace(/\.js$/, ".ts"))).replace(/\\/g, "/"));
 }
 
 describe("the construction-neutral core", () => {
@@ -32,10 +35,10 @@ describe("the construction-neutral core", () => {
     expect(outside).toEqual([]);
   });
 
-  it("reads the imports the check depends on", () => {
-    // The scanner sees multi-line, type-only and re-export forms, so the check above cannot pass by missing them.
+  it("reads every import form, so the check cannot pass by missing one", () => {
+    expect(specifiers(`import "./a.js";\nimport type { X } from './b.js';\nexport * from "./c.js";\nconst d = await import("./d.js");\n` +
+      `import {\n  e,\n} from "./e.js";`)).toEqual(["./a.js", "./b.js", "./c.js", "./d.js", "./e.js"]);
     expect(relativeImports("src/record-range.ts")).toEqual(["src/bytes.ts", "src/venue-records.ts"]);
     expect(relativeImports("src/commitment.ts")).toEqual(expect.arrayContaining(["src/ledger.ts", "src/venue-records.ts", "src/oplog.ts"]));
-    expect(relativeImports("src/revocation.ts")).toEqual(expect.arrayContaining(["src/backing.ts", "src/venue.ts"]));
   });
 });

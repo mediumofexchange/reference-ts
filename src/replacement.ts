@@ -47,12 +47,9 @@
 
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { backingName, type Backing } from "./backing.js";
-// Type-only: `commitment.ts` imports this module, and a value import here would
-// close that into a runtime cycle. Erased at compile time, so it does not.
-import type { Commitment } from "./commitment.js";
 import { compareBytes, copyBytes } from "./bytes.js";
 import { answering, type Venue } from "./venue.js";
-import { copyReplacement, replacementHash, verifyReplacement, type Replacement } from "./venue-records.js";
+import { copyReplacement, replacementHash, verifyReplacement, type Commitment, type Replacement } from "./venue-records.js";
 
 // The record, its hash and its signature check are construction-neutral
 // (`venue-records.ts`); this module walks them on a transparent venue view.

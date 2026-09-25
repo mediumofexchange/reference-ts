@@ -37,9 +37,9 @@ export const ANCHOR_HEIGHT = 900_000n;
 const GENERATOR = secp256k1.ProjectivePoint.BASE.toRawBytes(true);
 
 /** A version 3 header (new-fields length zero) in the node's layout. */
-function header(parentId: Uint8Array, height: bigint, timestamp: bigint, root: Uint8Array, salt = 0): Uint8Array {
+function header(parentId: Uint8Array, height: bigint, timestamp: bigint, root: Uint8Array, salt = 0, bits = D1): Uint8Array {
   const nBits = new Uint8Array(4);
-  new DataView(nBits.buffer).setUint32(0, D1, false);
+  new DataView(nBits.buffer).setUint32(0, bits, false);
   const nonce = new Uint8Array(8);
   new DataView(nonce.buffer).setUint32(4, salt, false);
   return cat(Uint8Array.of(3), parentId, new Uint8Array(32).fill(1), root, new Uint8Array(33).fill(3), vlq(timestamp),
@@ -89,6 +89,13 @@ export class Chain {
     }
     this.context = context;
     this.anchor = last!;
+  }
+
+  /** This context with its anchor rewritten at difficulty bits `bits`: another anchor over the same ancestors. */
+  reanchored(bits: number): { readonly anchorId: Uint8Array; readonly context: readonly Uint8Array[] } {
+    const parent = this.context[this.context.length - 2]!;
+    const bytes = header(hash(parent), ANCHOR_HEIGHT, T0 + BigInt(ANCHOR_CONTEXT) * SPACING, new Uint8Array(32).fill(7), 0, bits);
+    return { anchorId: hash(bytes), context: [...this.context.slice(0, -1), bytes] };
   }
 
   /** A block on `parent` with these transactions (a plain one where none are given). */

@@ -99,6 +99,15 @@ describe("a venue's identity is the profile's", () => {
     const { reference, ...mainnetContext } = PROFILE;
     expect(reference).toBe("moe/venue/ergo-synthetic/reference");
     expect(new ErgoVenue(mainnetContext, chain.context).id).not.toEqual(VENUE_ID);
+    // It reads only a chain of minimal work: over an anchor of any other difficulty (mainnet's are ~10^14) it refuses,
+    // while venue-ergo's context takes the same anchor.
+    for (const bits of [0x0102_0000, 0x0601_1765]) {
+      const other = chain.reanchored(bits);
+      expect(() => new ErgoVenue({ ...PROFILE, anchor: other.anchorId }, other.context)).toThrow(
+        new VenueError("the synthetic reference context reads only a chain whose anchor has difficulty 1"));
+      expect(new ErgoVenue({ ...mainnetContext, anchor: other.anchorId }, other.context).id).toHaveLength(32);
+    }
+    expect(Buffer.from(chain.reanchored(0x0101_0000).anchorId)).toEqual(Buffer.from(chain.anchor.id));
     expect(ergoProfile(PROFILE.anchor, SCRIPTS).depth).toBe(DEFAULT_ERGO_DEPTH);
     expect(DEFAULT_ERGO_DEPTH).toBe(10n);
   });
