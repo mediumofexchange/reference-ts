@@ -50,7 +50,7 @@ const publisher = (suppliers: readonly ErgoPublishingSupplier[], options: { fee?
   new ErgoPublisher({ secretKey: SECRET, suppliers, ...options });
 
 describe("proveDlog proofs are Ergo's", () => {
-  // Signed by the vendored sigma-rust release build (Wallet.sign_message_using_p2pk) with this key.
+  // Signed by the sigma-rust 2f840d3 release build (Wallet.sign_message_using_p2pk) with this key.
   const KNOWN = [
     ["", "5b4965c54f5a34cb8d7ce3b69fc45b7e6c0bc796096fd3ebf4cdf092ade298fdd88f25d10b2e9898104ccc2b5d6297fd8de9839ac59a2afd"],
     ["6d6f65", "c01251c78fce4bfb391bfb2090e6ec760177174062de99ea591c98adfd0e967a1e17de13a18ea76c8e7885a21a8805bc0a14c4a90e8da770"],

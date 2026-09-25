@@ -19,9 +19,9 @@ only under the profile: `ErgoVenue` in `src/ergo.ts` is the
 | §1 identity and parameters | `ergoProfileIdentity`, `ownErgoProfile` in `src/ergo-profile.ts`; `ergoProfile` (default depth) in `src/ergo.ts` | `test/ergo-profile.test.ts`, `test/ergo-venue.test.ts` |
 | §2 index, finality, lag | `ErgoVenue.sync`/`witnessedIndex`/`lag`; `ergoRangeVerifier` for supplied evidence | same; [latency](POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet) |
 | §3 header chain | `ergoHeaderStore`, `parseErgoHeader`, `eip37Difficulty`, `autolykosHit` in `src/ergo-headers.ts` | `test/ergo-headers.test.ts`; [reader-verified headers](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers) |
-| §4 block sections | `attributeSection`, `sectionMatchesRoot`, `transactionsRoot`, `merkleRoot` | profile experiment; [P4](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor) |
+| §4 block sections | `attributeSection`, `sectionMatchesRoot`, `transactionsRoot`, `merkleRoot` | `test/ergo-profile.test.ts`, `test/ergo-supplier.test.ts`; [P4](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor) |
 | §5 transaction grammar | `frameTransaction`, `frameTree`, `frameCollBytes` | [hostile framer probe](POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence) |
-| §6 attribution, reassembly, ordinal | `attributeOutput`, `attributeOwned`, `ergoOrdinal`, `collBytes` | profile experiment; [P2](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node) |
+| §6 attribution, reassembly, ordinal | `attributeOutput`, `attributeOwned`, `ergoOrdinal`, `collBytes` | `test/ergo-profile.test.ts`; [P2](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node) |
 | §7 answers | `rangeEntries` over `src/record-range.ts`, from `ErgoVenue.range` and `ergoRangeVerifier(...).range` | `test/ergo-venue.test.ts` (the two agree); local replay adapter |
 | §8 publishing | [kind-4 capacity](ergo-range-profile-verification.json) | [decision](../decisions/2026-09.md#2026-09-15--a-configurations-publications-fit-one-ergo-transaction) |
 
@@ -157,28 +157,22 @@ child, and the anchor already fixes the ancestry a proof would summarize.
 
 `test/ergo-supplier.test.ts` supplies every fixture transaction and header
 under its id, reproduces the fixture roots and leaves each shape the copy
-cannot reproduce unsupplied. `npm run check:ergo:range` runs
-`experiments/ergo-range/profile-check.mjs` after the block-root experiment.
-It compiles the profile, reads
-the pinned real mainnet genesis header as an anchor, builds a twelve-height
-synthetic chain anchored at its first header whose unsigned bytes Fleet
-writes and whose outputs the framer reads exactly as written, with real signed
-commitments, a replacement, revocations and single- and multi-piece
-publications in register constants, and checks the answers, the reader's
-rules over them, refusals for unwitnessed, gapped, unlinked and substituted
-evidence, tolerance of stray, duplicate and root-failing blocks, a
-transaction outside the grammar that keeps its block's section, and the four
-mainnet fixture blocks through the same verifier as index 0 under their
-parents as anchors: Fleet's unsigned bytes hash to the node's ids, the roots
-reproduce for block versions 1, 3 and 4, the framed real transactions read
-the node's outputs, the later blocks' fee outputs use the framer's fee tree,
-and the real register constants read beside sigma-rust's constant decoder.
-The [retained report](ergo-range-profile-verification.json) records the
-sizes. `test/ergo-profile.test.ts` covers the identity, the framer's
-grammar and refusals, register reading, the tree, attribution and reassembly
-cases, ordering, the anchor and origin rules, the block versions, ownership
-of the profile, evidence and request, and every refusal without an Ergo
-library.
+cannot reproduce unsupplied. `test/ergo-profile.test.ts` covers the
+identity, the framer's grammar and refusals, register reading, the tree,
+attribution and reassembly cases, ordering, the anchor and origin rules, the
+block versions, ownership of the profile, evidence and request, and every
+refusal without an Ergo library. The
+[hostile framer probe](POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence)
+checks the framer's outputs against the pinned node's own parser.
+
+The range-profile experiment (`profile-check.mjs` under `npm run
+check:ergo:range`) drove the profile over a synthetic chain whose bytes Fleet
+wrote and over the four mainnet fixture blocks, reading register constants
+beside sigma-rust's decoder. It retired on 2026-09-25: the unit tests above
+and the node's own parser cover what it checked. Its
+[report](ergo-range-profile-verification.json), with sources at
+[1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range),
+keeps the kind-4 capacity measurement.
 
 ## Local replay adapter
 
@@ -187,22 +181,22 @@ library.
 single-backing import, payment and burn traces with and without silence, the
 two-backing scope and scope-recovery histories, receipts, non-service counts,
 compact fault evidence and returning segments with their adopted blocks. The
-optional dependencies and commands are in the
+commands are in the
 [harness guide](../scripts/pool/v3/README.md). The
 [retained replay report](pool-v3-local-replay-verification.json) records the
 groups, the kind-4 subjects and the cross-backing union positions that agree,
 and the refusals: fresh seedless audit and receiver restoration, missing
 sections, framable root mismatches, malformed transactions, wrong profile/headers
 and resource refusal. The fixture converter constructs exact unsigned
-transaction bytes, witness ids and expected roots with Fleet, independently
-of the profile verifier: the profile names the synthetic reference context, the fixed synthetic genesis is the anchor, fixture index `i` is
+transaction bytes, witness ids and expected roots with its own node-layout
+serialization (byte-identical to Fleet's on these shapes when Fleet was
+retired), independently of the profile's framer: the profile names the synthetic reference context, the fixed synthetic genesis is the anchor, fixture index `i` is
 height `i + 2`, a fixture venue of lag `l` is read under depth `l − 1`, and
 each fixture record is a separate transaction in the fixture's insertion
 order, so a kind-4 ordinal is the fixture's ordinal shifted by 32 bits and
 every other field of a result is identical. Because of that layout the
 replay never places two records in one transaction; adjacency, run
-boundaries and over-bound runs are exercised by the unit tests and the
-profile experiment only. Synthetic headers are selected separately by the
+boundaries and over-bound runs are exercised by the unit tests only. Synthetic headers are selected separately by the
 reader; they have never been accepted by a node.
 
 `experiments/ergo-range/replay-venue.mjs` binds a reader-selected profile,
@@ -364,7 +358,7 @@ publishing the commitment again submitted nothing (the node itself answers
 a second submission of a pooled transaction with a refusal); and the including blocks' sections,
 each accepted only where it reproduced its header's root, carried exactly the
 three records at their kinds, subjects and ordinals. In tests
-(`test/ergo-publisher.test.ts`) proofs signed by the vendored sigma-rust
+(`test/ergo-publisher.test.ts`) recorded proofs signed by sigma-rust
 verify and every variation is refused, a mempool written independently of
 the publisher admits only balanced, fully signed transactions, a lost
 answer, an outage and a dropped parent each leave one transaction per

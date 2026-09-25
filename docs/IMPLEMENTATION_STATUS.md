@@ -63,10 +63,12 @@ selected rules and model limits of the companion's
 
 `npm run check:pool` exercises the
 pinned real circuits and multi-segment replay separately from the ordinary
-test suite. With Node 24, `npm run check:pool:delivery` exercises the
-[successor delivery/restoration probes](POOL_DEPLOYMENT_PROBES.md#delivery-and-seed-restoration):
-real proof binding of the capsule digest and [candidate restoration from exact signed local evidence](POOL_DEPLOYMENT_PROBES.md#restoration-from-exact-local-evidence).
-The latter authenticates local record bytes and refuses stale or substituted
+test suite. With Node 24, `npm run check:pool:restoration` exercises
+[candidate restoration from exact signed local evidence](POOL_DEPLOYMENT_PROBES.md#restoration-from-exact-local-evidence);
+`npm run check:pool:v3` proves the capsule digest's binding in the successor
+relations, which retired the earlier
+[delivery binding probe](POOL_DEPLOYMENT_PROBES.md#delivery-and-seed-restoration).
+Restoration authenticates local record bytes and refuses stale or substituted
 packages against an independent fixture selection; all candidates remain
 unspendable without full replay, authenticated ranges and certified paths.
 The [conditional initial-segment replay](POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay)
@@ -163,9 +165,10 @@ and the complete original scope's earliest silence/term boundary. Transitions
 carrying any original backing count; held noncarrying/excluded sequences cannot
 create repair holes. Earlier finality survives unavailable later dependencies;
 refusals preserve already proven contradictions. There is no spendability claim.
-`npm run check:pool:fees` compares the successor
+The successor's
 [transfer shapes and ordinary fees](POOL_DEPLOYMENT_PROBES.md#transfer-shape-and-ordinary-fees)
-with real proofs. These probes do not implement a pool wallet or v3 finality.
+were chosen with a retired probe; `npm run check:pool:v3` proves the chosen
+two-in, four-out spend. These probes do not implement a pool wallet or v3 finality.
 `npm test` checks the successor's
 [canonical compressed spent root](POOL_DEPLOYMENT_PROBES.md#spent-set-replay)
 (`src/pool/v3/spent-set.ts`) against independent batch roots and hostile keys;
@@ -198,17 +201,18 @@ shape, run reassembly, transaction-then-output ordinals, an index space
 anchored at a pinned header (index 0 is the anchor's child, so reads from
 index zero are bounded by the deployment's age) and a §13 verifier by
 exhaustion over root-checked blocks behind a linked header chain; the
+unit tests reproduce the four fixture roots and answer synthetic ranges (the
 [profile experiment](POOL_DEPLOYMENT_PROBES.md#ergo-venue-profile-candidate-and-full-block-range-verifier)
-reproduces the four fixture roots and answers synthetic ranges through
-Fleet and sigma-rust. The [local adapter](ERGO_VENUE_PROFILE.md#local-replay-adapter)
+that also read them through Fleet and sigma-rust is retired). The [local adapter](ERGO_VENUE_PROFILE.md#local-replay-adapter)
 replays every real-proof local replay group (single-backing imports and
 silence, two-backing scopes and recovery, receipts, non-service counts,
 compact faults, returning segments) from exact unsigned transaction bytes
 under independently selected synthetic headers with bounded ownership before
 reading, reproducing the fixture verifier's results with kind-4 ordinals as
 transaction positions. Fresh seedless and receiver readers retain this
-provenance. The [real-chain cost](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor)
-is measured over seven mainnet days from a real anchor against two agreeing
+provenance. The retired P4 and P2 probes' results stand as measured at
+1b4857a. The [real-chain cost](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor)
+was measured over seven mainnet days from a real anchor against two agreeing
 public nodes: exact sections from the nodes' text reproduce every header
 root, the reader's framer reads every supplied transaction it frames with the
 node's outputs, and every index has its section. The
