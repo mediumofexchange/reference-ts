@@ -13,9 +13,8 @@
 // The header chain is the reader's own authenticated header source, checked
 // here only for contiguity, linkage and the anchor: the venue's index space
 // begins at the block after the profile's pinned anchor header, so index 0 is
-// that block and a read from index zero is bounded by the anchor. No runtime
-// path reads this model yet;
-// `src/ergo.ts` remains the v2 materialized view with its own identity.
+// that block and a read from index zero is bounded by the anchor. The runtime
+// view `src/ergo.ts` reads under this profile.
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
@@ -24,7 +23,16 @@ import { utf8Encoder } from "./contexts.js";
 import { copyRequest, encodeRangeAnswer, MAX_RANGE_RECORD_BYTES, PUBLICATION_RANGE,
   type RangeEntry, type RangeLimits, type RangeRequest, type RecordKind } from "./record-range.js";
 
+/** venue-ergo's own identity context: the mainnet chain under its header rules. */
 export const ERGO_PROFILE_CONTEXT = "moe/venue/ergo/v3";
+/** A reference-only context, never a deployment profile (venue-ergo stays
+ * mainnet-only): the synthetic test chain, read under the mainnet header
+ * rules. A profile naming it hashes to another identity, so which chain a
+ * venue identity names is read from its preimage, never from its 32 bytes. */
+export const ERGO_SYNTHETIC_REFERENCE = "moe/venue/ergo-synthetic/reference";
+/** The closed set of reference contexts; the testnet's joins with its header rules. */
+export const ERGO_REFERENCE_CONTEXTS = Object.freeze([ERGO_SYNTHETIC_REFERENCE] as const);
+export type ErgoReferenceContext = (typeof ERGO_REFERENCE_CONTEXTS)[number];
 export const RECORD_KINDS: readonly RecordKind[] = Object.freeze([1, 2, 3, 4]);
 const MAX_U64 = (1n << 64n) - 1n, MAX_U32 = 0xffff_ffffn, COLL_BYTE_TYPE = 0x0e;
 const ZERO32 = new Uint8Array(32);
@@ -36,8 +44,10 @@ const isBytes = (v: unknown, width?: number): v is Uint8Array =>
  * block before the venue's index space, so index `i` is the block `i + 1`
  * heights above it), the finality depth, and one location (an exact
  * ErgoTree) per record kind. A header id commits to its whole ancestry, so
- * the anchor names the chain; the all-zero id names no header. */
+ * the anchor names the chain; the all-zero id names no header. A profile
+ * without `reference` is venue-ergo's; one with it names a reference context. */
 export interface ErgoProfile {
+  readonly reference?: ErgoReferenceContext;
   readonly anchor: Uint8Array;
   readonly depth: bigint;
   readonly scripts: Readonly<Record<RecordKind, Uint8Array>>;
@@ -46,8 +56,8 @@ export interface ErgoProfile {
  * output attributed by, the same bytes (§13.1: two attribution rules are two venues). */
 export function ownErgoProfile(profile: ErgoProfile): ErgoProfile {
   if (profile === null || typeof profile !== "object") throw new EncodingError("invalid Ergo profile");
-  const { anchor, depth, scripts } = profile;
-  if (!isBytes(anchor, 32) || compareBytes(anchor, ZERO32) === 0 || !u64(depth) || depth === MAX_U64 ||
+  const { reference, anchor, depth, scripts } = profile;
+  if ((reference !== undefined && !ERGO_REFERENCE_CONTEXTS.includes(reference)) || !isBytes(anchor, 32) || compareBytes(anchor, ZERO32) === 0 || !u64(depth) || depth === MAX_U64 ||
       scripts === null || typeof scripts !== "object") {
     throw new EncodingError("invalid Ergo profile");
   }
@@ -66,12 +76,15 @@ export function ownErgoProfile(profile: ErgoProfile): ErgoProfile {
       if (other < kind && compareBytes(owned[other]!, owned[kind]!) === 0) throw new EncodingError("two kinds at one location");
     }
   }
-  return Object.freeze({ anchor: copyBytes(anchor), depth, scripts: Object.freeze(owned as Record<RecordKind, Uint8Array>) });
+  return Object.freeze({ ...(reference === undefined ? {} : { reference }), anchor: copyBytes(anchor), depth,
+    scripts: Object.freeze(owned as Record<RecordKind, Uint8Array>) });
 }
-/** Naming the venue is agreeing the chain from its anchor, the depth and the attribution rule (C2.3.2, §13.1). */
+/** Naming the venue is agreeing the chain from its anchor, the depth and the
+ * attribution rule (C2.3.2, §13.1), under venue-ergo's context or the
+ * reference context the profile names. */
 export function ergoProfileIdentity(profile: ErgoProfile): Uint8Array {
   const owned = ownErgoProfile(profile), w = new ByteWriter();
-  w.lengthPrefixed(utf8Encoder.encode(ERGO_PROFILE_CONTEXT));
+  w.lengthPrefixed(utf8Encoder.encode(owned.reference ?? ERGO_PROFILE_CONTEXT));
   w.key32(owned.anchor, "anchor header id");
   w.u64(owned.depth);
   for (const kind of RECORD_KINDS) w.lengthPrefixed(owned.scripts[kind]);

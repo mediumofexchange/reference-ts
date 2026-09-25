@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { limbsOf } from "../../../dist/pool/field.js";
 import { poseidon2Hash } from "../../../dist/pool/poseidon2.js";
-import { signCommitment, directoryRoot } from "../../../dist/commitment.js";
+import { directoryRoot, signCommitment } from "../../../dist/venue-records.js";
 import { replayLocalPackage, RANGE_LIMITS } from "./local-replay.mjs";
 
 const hex = bytes => Buffer.from(bytes).toString("hex");

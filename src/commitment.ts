@@ -32,31 +32,25 @@
 // proves omission; a named log that was not supplied is unavailable evidence.
 // Neither the directory nor its digest proves availability or continuity.
 
-import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { ByteReader, ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
-import { COMMITMENT_CONTEXT } from "./contexts.js";
-import { verifySignatureStrict } from "./keys.js";
+import { ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
 import { backingName, type Backing } from "./backing.js";
 import type { BackingSnapshot } from "./ledger.js";
 import { isAnOperator } from "./replacement.js";
 import { answering, type Venue } from "./venue.js";
 import { copyOpEntry, opIdentityOfEntry, type OpLogEntry } from "./oplog.js";
+import {
+  decodeCommitment, directoryRoot, encodeCommitment, verifyCommitment, type Commitment, type SnapshotDigest,
+} from "./venue-records.js";
 
 export type { BackingSnapshot } from "./ledger.js";
-
-export interface Commitment {
-  /**
-   * The operator's own count of its commitments — NOT the venue's witnessed
-   * index. Equivocation is two different roots signed at one sequence number;
-   * the clock deadlines are read against is the venue's (venue.ts).
-   */
-  readonly sequence: bigint;
-  readonly root: Uint8Array;
-  readonly operator: Uint8Array;
-  readonly signature: Uint8Array;
-}
+// The record, its signature and the directory root are construction-neutral
+// (`venue-records.ts`); this module derives a directory from transparent logs.
+export {
+  commitmentIdentity, decodeCommitment, directoryRoot, encodeCommitment, isEquivocation, signCommitment, verifyCommitment,
+  type Commitment, type SnapshotDigest,
+} from "./venue-records.js";
 
 /**
  * A logged operation is committed as the exact bytes the party signed. So the
@@ -94,12 +88,6 @@ function encodeSnapshot(snapshot: BackingSnapshot): Uint8Array {
   return w.finish();
 }
 
-/** One entry in the complete authenticated directory, ordered by backing name. */
-export interface SnapshotDigest {
-  readonly name: Uint8Array;
-  readonly digest: Uint8Array;
-}
-
 /** Derive a canonical directory, copying its names and rejecting duplicate snapshots. */
 export function directoryOf(snapshots: readonly BackingSnapshot[]): SnapshotDigest[] {
   const sorted = [...snapshots].sort((a, b) => compareBytes(a.name, b.name));
@@ -109,24 +97,6 @@ export function directoryOf(snapshots: readonly BackingSnapshot[]): SnapshotDige
     }
   }
   return sorted.map((snapshot) => ({ name: copyBytes(snapshot.name), digest: sha256(encodeSnapshot(snapshot)) }));
-}
-
-/** Hash the strict canonical directory; never sort or repair external evidence. */
-export function directoryRoot(directory: readonly SnapshotDigest[]): Uint8Array {
-  const w = new ByteWriter();
-  w.fixed(new Uint8Array([0x4d, 0x4f, 0x45, 0x44]), 4, "directory magic"); // MOED
-  w.u8(1);
-  w.u32(directory.length);
-  let previous: Uint8Array | undefined;
-  for (const entry of directory) {
-    w.key32(entry.name, "backing name");
-    w.key32(entry.digest, "snapshot digest");
-    if (previous !== undefined && compareBytes(previous, entry.name) >= 0) {
-      throw new EncodingError("directory names must be strictly increasing");
-    }
-    previous = entry.name;
-  }
-  return sha256(w.finish());
 }
 
 /** Deterministic root over all snapshots. External proofs use stateProvesCommitment. */
@@ -262,103 +232,4 @@ export function committedLogFor(
     }
     return { kind: "log", sequence, opLog: snapshot.opLog };
   }, undefined);
-}
-
-/**
- * A commitment's identity as one comparable value: operator, sequence, root —
- * the triple every reader that asks "is this THAT commitment" compares. Three
- * sites compared the fields inline and a fourth (the seat's pin, 35d's fix
- * round) joined them, so the comparison lives once. A string rather than
- * bytes, deliberately: it is compared and stored in private maps, never
- * signed or hashed, and a string retains no live reference to the arrays.
- */
-export function commitmentIdentity(commitment: Commitment): string {
-  return `${bytesToHex(commitment.operator)}:${commitment.sequence.toString()}:${bytesToHex(commitment.root)}`;
-}
-
-function commitmentMessage(sequence: bigint, root: Uint8Array): Uint8Array {
-  const w = new ByteWriter();
-  w.context(COMMITMENT_CONTEXT);
-  w.u64(sequence);
-  w.key32(root, "root");
-  return w.finish();
-}
-
-/**
- * Sign a root as this operator's next commitment. Does not copy `root`, where
- * signReceipt copies what it is handed: the difference is that the sequencer
- * retains the receipts it issues, while a commitment is retained only by the
- * venue, which copies on the way in. The returned object does alias `root`, so a
- * caller that mutates it before publishing invalidates its own commitment and
- * nobody else's.
- */
-export function signCommitment(
-  operatorSecret: Uint8Array,
-  sequence: bigint,
-  root: Uint8Array,
-): Commitment {
-  const operator = ed25519.getPublicKey(operatorSecret);
-  const signature = ed25519.sign(commitmentMessage(sequence, root), operatorSecret);
-  return { sequence, root, operator, signature };
-}
-
-/**
- * A commitment as a **record**, for a venue that stores bytes rather than
- * objects: sequence, root, operator, signature. Fixed width throughout, so there
- * is one spelling and no length to disagree with.
- */
-export function encodeCommitment(commitment: Commitment): Uint8Array {
-  const w = new ByteWriter();
-  w.u64(commitment.sequence);
-  w.key32(commitment.root, "root");
-  w.key32(commitment.operator, "operator key");
-  w.fixed(commitment.signature, 64, "signature");
-  return w.finish();
-}
-
-/** Strict inverse of encodeCommitment. Throws EncodingError on anything else. */
-export function decodeCommitment(bytes: Uint8Array): Commitment {
-  const r = new ByteReader(bytes);
-  const sequence = r.u64();
-  const root = r.raw(32);
-  const operator = r.raw(32);
-  const signature = r.raw(64);
-  r.expectEnd();
-  return { sequence, root, operator, signature };
-}
-
-/** A commitment is valid iff the operator signed exactly (sequence, root). */
-export function verifyCommitment(commitment: Commitment): boolean {
-  try {
-    const message = commitmentMessage(commitment.sequence, commitment.root);
-    return verifySignatureStrict(commitment.signature, message, commitment.operator);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Two commitments are equivocation iff the same operator validly signed two
- * different roots at one sequence number — a provable fault against invariant
- * 22. Keyed on the operator's own sequence, not on the venue's clock: an
- * operator publishing two roots in one venue interval is ordinary batching,
- * while signing two roots as its Nth commitment is the fault.
- */
-export function isEquivocation(a: Commitment, b: Commitment): boolean {
-  // A verifier, and it was the one that did not say so: anyone may exhibit two
-  // commitments they found at a venue, and these fields are read before
-  // anything verifies them, so a malformed one crashed the proof instead of
-  // failing it. The try is the mechanism the other fault predicates already use
-  // (receiptCovers, isDoublePosition, equivocatingSigner), not a new layer.
-  try {
-    return (
-      compareBytes(a.operator, b.operator) === 0 &&
-      a.sequence === b.sequence &&
-      compareBytes(a.root, b.root) !== 0 &&
-      verifyCommitment(a) &&
-      verifyCommitment(b)
-    );
-  } catch {
-    return false;
-  }
 }

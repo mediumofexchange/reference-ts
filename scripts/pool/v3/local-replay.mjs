@@ -2,7 +2,7 @@
 // pool-v3 §§3,5,7,10,12,13; pool-v2 §8 host checks; pool-spent C1.2.8–9.
 import { createHash } from "node:crypto";
 import { compareBytes, copyBytes, EncodingError } from "../../../dist/bytes.js";
-import { decodeCommitment, directoryRoot } from "../../../dist/commitment.js";
+import { decodeCommitment, directoryRoot } from "../../../dist/venue-records.js";
 import { verifySignatureStrict } from "../../../dist/keys.js";
 import { fieldToBytes, identifierOf, isValue, VALUE_BOUND } from "../../../dist/pool/field.js";
 import { NoteTree, EMPTY_NOTE_ROOT, NOTE_TREE_CAPACITY } from "../../../dist/pool/note-tree.js";

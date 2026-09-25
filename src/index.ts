@@ -25,7 +25,9 @@ export * from "./oplog.js";
 // Holdings and the arithmetic the law constrains.
 export * from "./ledger.js";
 
-// Ordering and witnessing.
+// Ordering and witnessing: the venue records of kinds 1–3 every construction
+// reads, then the transparent view of them.
+export * from "./venue-records.js";
 export * from "./venue.js";
 export * from "./commitment.js";
 export * from "./sequencer.js";

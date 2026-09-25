@@ -2,7 +2,7 @@
 // Structural success is never a complete certificate or a verdict.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { compareBytes, copyBytes, EncodingError } from "../src/bytes.js";
-import type { SnapshotDigest } from "../src/commitment.js";
+import type { SnapshotDigest } from "../src/venue-records.js";
 import { isValue } from "../src/pool/field.js";
 
 const CONTEXT = new TextEncoder().encode("moe/pool/v3/package");

@@ -8,7 +8,7 @@ import { ScopeTree } from "../../../dist/pool/scope.js";
 import { limbsOf, fieldToBytes } from "../../../dist/pool/field.js";
 import { ownerOf, commitmentOf, nullifierOf } from "../../../dist/pool/notes.js";
 import { poseidon2Hash } from "../../../dist/pool/poseidon2.js";
-import { signCommitment, encodeCommitment, directoryRoot } from "../../../dist/commitment.js";
+import { directoryRoot, encodeCommitment, signCommitment } from "../../../dist/venue-records.js";
 import { prepareExactOutput, deriveSettlementOwnerSecret } from "../delivery/crypto.mjs";
 import { LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../spent-set/radix.mjs";

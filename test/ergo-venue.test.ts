@@ -95,6 +95,10 @@ describe("a venue's identity is the profile's", () => {
     expect(ergoProfileIdentity(chain.profile(4n))).not.toEqual(VENUE_ID);
     expect(ergoProfileIdentity({ ...PROFILE, scripts: { ...SCRIPTS, 4: SCRIPTS[1], 1: SCRIPTS[4] } })).not.toEqual(VENUE_ID);
     expect(new ErgoVenue(chain.profile(0n), chain.context).id).not.toEqual(VENUE_ID);
+    // The synthetic chain is a reference venue: the same profile under venue-ergo's context is another venue.
+    const { reference, ...mainnetContext } = PROFILE;
+    expect(reference).toBe("moe/venue/ergo-synthetic/reference");
+    expect(new ErgoVenue(mainnetContext, chain.context).id).not.toEqual(VENUE_ID);
     expect(ergoProfile(PROFILE.anchor, SCRIPTS).depth).toBe(DEFAULT_ERGO_DEPTH);
     expect(DEFAULT_ERGO_DEPTH).toBe(10n);
   });

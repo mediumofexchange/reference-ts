@@ -43,7 +43,6 @@
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
-import { encodeCommitment, verifyCommitment, type Commitment } from "./commitment.js";
 import { ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, type ErgoHeaderStore } from "./ergo-headers.js";
 import {
   attributeSection, ergoProfileIdentity, ownErgoProfile, rangeEntries, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
@@ -54,9 +53,15 @@ import {
   COMMITMENT_RANGE, copyRequest, encodeRangeAnswer, heldCommitments, RangeLimitError, REPLACEMENT_RANGE, REVOCATION_RANGE,
   type HeldCommitment, type RangeAnswer, type RangeLimits, type RangeRequest, type RecordKind,
 } from "./record-range.js";
-import { copyReplacement, decodeReplacement, encodeReplacement, forgetAdmitted, type Replacement, type WitnessedReplacement } from "./replacement.js";
-import { copyRevocation, decodeRevocation, encodeRevocation, isSignedRevocation, type Revocation, type WitnessedRevocation } from "./revocation.js";
-import { VenueError, type Venue, type WitnessedCommit, type WitnessedOp } from "./venue.js";
+// The transparent `Venue` face below serves pool-v2's store and retires with it.
+import { forgetAdmitted, type WitnessedReplacement } from "./replacement.js";
+import type { WitnessedRevocation } from "./revocation.js";
+import type { Venue, WitnessedCommit, WitnessedOp } from "./venue.js";
+import { VenueError } from "./venue-error.js";
+import {
+  copyReplacement, copyRevocation, decodeReplacement, decodeRevocation, encodeCommitment, encodeReplacement, encodeRevocation,
+  isSignedRevocation, verifyCommitment, type Commitment, type Replacement, type Revocation,
+} from "./venue-records.js";
 
 /** The reference runtime's finality depth: over one measured mainnet day,
  * 99.8% of included transactions landed inside C3.3's window at depth 10,

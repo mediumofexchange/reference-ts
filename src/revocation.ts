@@ -27,88 +27,20 @@
 // the same K". Two revocations by one key are byte-identical, which is what
 // makes republishing harmless.
 
-import { ed25519 } from "@noble/curves/ed25519.js";
 import type { Backing } from "./backing.js";
-import { ByteReader, ByteWriter, copyBytes } from "./bytes.js";
-import { REVOCATION_CONTEXT } from "./contexts.js";
-import { verifySignatureStrict } from "./keys.js";
 import { venueIsDeclared, type Venue } from "./venue.js";
+import type { Revocation } from "./venue-records.js";
 
-/** K's own signature that K issues no more. */
-export interface Revocation {
-  /** The obligor key being revoked. */
-  readonly obligor: Uint8Array;
-  /** That key's signature over the message below. */
-  readonly signature: Uint8Array;
-}
+// The record and its signature check are construction-neutral
+// (`venue-records.ts`); this module reads them on a transparent venue view.
+export {
+  copyRevocation, decodeRevocation, encodeRevocation, isSignedRevocation, revocationMessage, signRevocation, type Revocation,
+} from "./venue-records.js";
 
 /** A revocation together with the venue's word on when it witnessed it. */
 export interface WitnessedRevocation {
   readonly revocation: Revocation;
   readonly at: bigint;
-}
-
-/**
- * The bytes K signs: the tag and K itself, and nothing more.
- *
- * Signing over its own key is what makes the act self-contained — a record that
- * named anything else would need that thing to be checked too, and there is
- * nothing here to check against. Throws on a malformed key.
- */
-export function revocationMessage(obligor: Uint8Array): Uint8Array {
-  const w = new ByteWriter();
-  w.context(REVOCATION_CONTEXT);
-  w.key32(obligor, "obligor key");
-  return w.finish();
-}
-
-/** Revoke this key. Idempotent by construction: the bytes are always the same. */
-export function signRevocation(obligorSecret: Uint8Array): Revocation {
-  const obligor = ed25519.getPublicKey(obligorSecret);
-  return {
-    obligor,
-    signature: ed25519.sign(revocationMessage(obligor), obligorSecret),
-  };
-}
-
-/**
- * A revocation as a **record**: the key, then the signature. Fixed width
- * throughout, so there is one spelling and no length to disagree with.
- */
-export function encodeRevocation(revocation: Revocation): Uint8Array {
-  const w = new ByteWriter();
-  w.key32(revocation.obligor, "obligor key");
-  w.fixed(revocation.signature, 64, "signature");
-  return w.finish();
-}
-
-/** Strict inverse of encodeRevocation. Throws EncodingError on anything else. */
-export function decodeRevocation(bytes: Uint8Array): Revocation {
-  const r = new ByteReader(bytes);
-  const obligor = r.raw(32);
-  const signature = r.raw(64);
-  r.expectEnd();
-  return { obligor, signature };
-}
-
-/**
- * Whether this really is K's signature over K. A verifier: the record comes from
- * whoever published it, so anything malformed is a revocation that is not
- * proven rather than a throw.
- *
- * There is no second party to check against — a revocation is one key's word
- * about itself — which is exactly why it is safe for anyone at all to relay one.
- */
-export function isSignedRevocation(revocation: Revocation): boolean {
-  try {
-    return verifySignatureStrict(
-      revocation.signature,
-      revocationMessage(revocation.obligor),
-      revocation.obligor,
-    );
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -140,12 +72,4 @@ export function revokedAt(venue: Venue, backing: Backing): bigint | undefined {
     if (earliest === undefined || witnessed.at < earliest) earliest = witnessed.at;
   }
   return earliest;
-}
-
-/** A copy, for the same reason every other record hands out copies. */
-export function copyRevocation(revocation: Revocation): Revocation {
-  return {
-    obligor: copyBytes(revocation.obligor),
-    signature: copyBytes(revocation.signature),
-  };
 }

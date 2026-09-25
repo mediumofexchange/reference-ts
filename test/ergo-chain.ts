@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { ANCHOR_CONTEXT } from "../src/ergo-headers.js";
-import { transactionsRoot, type ErgoProfile, type ErgoTransactionView } from "../src/ergo-profile.js";
+import { ERGO_SYNTHETIC_REFERENCE, transactionsRoot, type ErgoProfile, type ErgoTransactionView } from "../src/ergo-profile.js";
 import type { ErgoSupplier } from "../src/ergo-supplier.js";
 import type { RecordKind } from "../src/record-range.js";
 
@@ -108,8 +108,9 @@ export class Chain {
     return out;
   }
 
+  /** A profile under the synthetic reference context: this chain is no deployment's. */
   profile(depth: bigint, scripts = SCRIPTS): ErgoProfile {
-    return { anchor: this.anchor.id, depth, scripts };
+    return { reference: ERGO_SYNTHETIC_REFERENCE, anchor: this.anchor.id, depth, scripts };
   }
 }
 

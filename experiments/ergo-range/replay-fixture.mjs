@@ -44,13 +44,13 @@ const header = (height, parentId, transactions) => {
 };
 const genesisTx = tx(1n, 0n, [box(plainTree)]);
 const genesis = header(1n, new Uint8Array(32), [genesisTx]);
-/** The reader's candidate profile at one finality depth: the fixed genesis
- * as the anchor (so fixture index `i` is height `i + 2`), the depth and the
- * four throwaway locations. The depth is part of the identity, so a fixture
+/** The reader's candidate profile at one finality depth, under the synthetic
+ * reference context: the fixed genesis as the anchor (so fixture index `i`
+ * is height `i + 2`), the depth and the four throwaway locations. The depth is part of the identity, so a fixture
  * venue of lag `l` is read under depth `l - 1`. */
 export function profileFor(depth) {
   if (typeof depth !== "bigint" || depth < 0n || depth >= 256n) throw new TypeError("fixture depth out of local scope");
-  return Object.freeze({ anchor: new Uint8Array(genesis.id), depth,
+  return Object.freeze({ reference: "moe/venue/ergo-synthetic/reference", anchor: new Uint8Array(genesis.id), depth,
     scripts: Object.freeze(Object.fromEntries(Object.entries(scripts).map(([kind, script]) => [kind, new Uint8Array(script)]))) });
 }
 /** The harness fixtures declare lag 2, so the reader selects depth 1. */
