@@ -44,7 +44,7 @@ import { bytesToHex, hexToBytes, randomBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes } from "./bytes.js";
 import { MINER_FEE_TREE_HEX } from "./ergo-profile.js";
 import { parseNodeJson, type NodeJson } from "./ergo-supplier.js";
-import { VenueError } from "./venue.js";
+import { VenueError } from "./venue-error.js";
 
 /** The pinned node's minimum fee for its mempool (`minimalFeeAmount`) plus
  * the margin wallets add; a deployment may pay more. */

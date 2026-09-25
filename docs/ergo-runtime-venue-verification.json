@@ -6,22 +6,22 @@
       "url": "http://127.0.0.1:9053",
       "name": "ergo-mainnet-6.0.6",
       "appVersion": "6.0.6",
-      "headersHeight": 1880658,
-      "fullHeight": 1880658
+      "headersHeight": 1880753,
+      "fullHeight": 1880753
     },
     {
       "url": "http://213.239.193.208:9053",
       "name": "ergo-mainnet-6.0.6",
       "appVersion": "6.0.5-46-78153a1e-SNAPSHOT",
-      "headersHeight": 1880658,
-      "fullHeight": 1880658
+      "headersHeight": 1880753,
+      "fullHeight": 1880753
     }
   ],
   "profile": {
-    "anchorHeight": "1880358",
-    "anchorId": "8905c26237eeb9ff513d41b35af7e486ca941052e711d2580cd153347056e3b3",
+    "anchorHeight": "1880453",
+    "anchorId": "854e4ec223a32de8cbf69f59f7348f1acf27e3fcaab79eb671a6f019c08dd833",
     "depth": "10",
-    "identity": "852b3396562ee24741db64c2abc57dd65e5f1e7e84f08215d7c169cbbe6d49ad",
+    "identity": "9aa762274910b142005be01c0af94d859b88e6e0d5d930607322a804beb46e54",
     "locations": "pay-to-public-key trees of the throwaway keys 0x01..01 to 0x04..04"
   },
   "viewA": {
@@ -29,13 +29,13 @@
       "own node",
       "public node"
     ],
-    "ms": 11692.3,
+    "ms": 7159.4,
     "rounds": [
       {
-        "ms": 11692.2,
+        "ms": 7159.2,
         "witnessedIndex": "289",
         "chainWitnessedIndex": "289",
-        "tipHeight": "1880658",
+        "tipHeight": "1880753",
         "sectionsRead": 290,
         "unresolvedIndex": null,
         "suppliers": [
@@ -51,24 +51,24 @@
       }
     ],
     "witnessedIndex": "289",
-    "witnessedHeight": "1880648",
-    "witnessedHeaderId": "96bb36fefb733c4f08a0a1ec9481e149fd6b56ad8404e16b4dc22d8ca2236a60",
+    "witnessedHeight": "1880743",
+    "witnessedHeaderId": "9be120423216711502d926917774063e652bfa786feda494b7c92778fa795404",
     "standsOnOwnNodeBlock": true,
     "headersVerified": 300,
     "sectionsRead": 290,
-    "msPerBlock": 40.32
+    "msPerBlock": 24.69
   },
   "viewB": {
     "suppliers": [
       "public node"
     ],
-    "ms": 34746.3,
+    "ms": 32178.2,
     "rounds": [
       {
-        "ms": 34746.3,
+        "ms": 32178.2,
         "witnessedIndex": "289",
         "chainWitnessedIndex": "289",
-        "tipHeight": "1880658",
+        "tipHeight": "1880753",
         "sectionsRead": 290,
         "unresolvedIndex": null,
         "suppliers": [
@@ -89,49 +89,49 @@
         "kind": 1,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "a10161ccb3f58e3c85f964f3d3932b07ba729a0aca6aa8e0cbd279ba485bd239"
+        "sha256": "c8491fc5092dc29329aeb9f31fe0b04d175d64277b162483c499672e44186fe0"
       },
       {
         "kind": 2,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "639b10ae52f171b686db25aec24c5e5a23373f1dcbe4c5222b2c750e36ab461d"
+        "sha256": "be1b715897f7debfe7a510140ce7104a9460749a8436ff3968fc6666bcf3d33a"
       },
       {
         "kind": 3,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "d71b9a3bb9c91bd97bcd2fbf21996c2f864bdd541d36801b766d38adea8767c3"
+        "sha256": "13770b467e2ca9ef737177869c5a9e0301a20c9fd06443e611bfe425fd9896a6"
       },
       {
         "kind": 4,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "d2997a2ef03c3286fa6d0f5724c887b3c9552d815cfe82f666e444274676158f"
+        "sha256": "a8abff05792b5dce0aea2b17c94b6e4f47bd5603197e1ad457c4b52f6ed40b84"
       },
       {
         "kind": 1,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "e068a6bc8a07e45196a4057b5144013dc27d87f7d653196002107a0ac537d8e9"
+        "sha256": "471aa7aeee776da3e734243cd9363e345db5a20a6829de1f89449f7431b344f7"
       },
       {
         "kind": 2,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "b637da22ad95c45b70e81cf7832ad0b0ac7d633458fffe2fc7a07481d904c1f5"
+        "sha256": "a8595db6bd5430874be4abfb4468cc8282287a3a6940b25b4819f7eed74b1ac1"
       },
       {
         "kind": 3,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "8b236cea0c4f5931c782bb33b0d1231a53b0dc369c2856659b6964ab3bfe6c88"
+        "sha256": "d7245d21216534b018eb37d80d9e7e9df32b0bb41c1bb04d28bd5c26e972912c"
       },
       {
         "kind": 4,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "9a226d0568f039bc74295f92b40a822fb788a9ffb9db7fdcf8a6d4cf5ec9ab1e"
+        "sha256": "2f77930551a48237987862b83526e158b1e4748c6f00bba05ca044f290d0e345"
       }
     ]
   },
@@ -139,8 +139,8 @@
     "substitutedIndex": "5",
     "aloneWitnessedIndex": "4",
     "aloneUnresolvedIndex": "5",
-    "withOwnWitnessedIndex": "289",
-    "forgedHeaderHeight": "1880364",
+    "withOwnWitnessedIndex": "291",
+    "forgedHeaderHeight": "1880459",
     "forgingReport": [
       {
         "name": "forging",
@@ -149,10 +149,10 @@
       },
       {
         "name": "own node",
-        "headersAdded": 295
+        "headersAdded": 297
       }
     ],
-    "forgedWitnessedIndex": "289"
+    "forgedWitnessedIndex": "291"
   },
   "files": {
     "experiments/ergo-range/runtime-sync.mjs": "07fa83cff9d0a6c812902010f02da1daf5c09d7e4a8305fad12633690a5a587c",
@@ -162,21 +162,23 @@
     "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
     "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
     "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
+    "src/venue-records.ts": "904f449a238b4263d11b71b975e1ea1c6fdae4272fcf5558ac5a887f2fa44ad3",
+    "src/record-range.ts": "181f5b9192c1f5df2f91da45423d363423149e4c9ff8e8f7bae2d4b54e535059",
+    "src/ergo-profile.ts": "2bf77b0dbb78afd2fedb824e4c2c8ddd9320265ed6ce7a0d491dce997e8440a4",
+    "src/ergo-headers.ts": "8bfd750c08225e2f09eb46b58730684b091e6e3febf9b794cfda54357ae73448",
+    "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02",
+    "src/venue-error.ts": "f2e9535ed81d544801967c1bd8edb26b0191900794a6f4fdc66a448612907810",
+    "src/ergo-publisher.ts": "2dabd89ca03ce53a1bbab4142e2bfdd053f0cec625d67cd3cca3e7fd1930de92",
     "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
     "src/presentation.ts": "adcd73c862129f4ccd4d02b14df16c0f701127f3d8d504f0bb91e91734b46bb3",
     "src/messages.ts": "8a941254bf24650f9146d3875add1f20993a08b17b40ddac1ed060e225191718",
     "src/oplog.ts": "d1f2ad4b71a109948f3f39a869f25ae8faf63b3fcd0206b7f9015117e31a714a",
     "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
-    "src/revocation.ts": "1b23bc3de5017738c1a056f013a83ce776caa099826c48c4091900f12c9474ea",
-    "src/venue.ts": "0558501b7e23879adc3fbc2c0c5cb53ad2de2d9c527ea533b537affbb7e200a4",
-    "src/replacement.ts": "9f65220ebebc4c1cec42b9b28c7667beec6b08e56159a701bbfa6c34755083c1",
-    "src/commitment.ts": "158070f78a3f76511381a598a2a91d79dcdfeb9b02442a22450cf556f88b9adf",
-    "src/record-range.ts": "14cb0d1079bf2608b2cd3b0f76a032a628da85726c9709294d69c330c88fe074",
-    "src/ergo-profile.ts": "8af9b51098300fe0a6f982ed471b5a189d05715002b8c9c76c0a0d48e530bb97",
-    "src/ergo-headers.ts": "8bfd750c08225e2f09eb46b58730684b091e6e3febf9b794cfda54357ae73448",
-    "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02",
-    "src/ergo-publisher.ts": "93549226d3259327e2378e7bcc1107f5a6b9de3f59521f80f4b4a7eaf77a0b8d",
-    "src/ergo.ts": "385093af087f126908e195e1cdde3e2c7fe14f5c1f06a1dfa94cd71d0cc6d187"
+    "src/commitment.ts": "98eac617566d4b1770d99a5a0da94b9047e5a57ec4e576eb1ec20597b69aa93e",
+    "src/revocation.ts": "dd3c2e5d321931ae54e033b0091c6f15de52f11f018712c421ea813b3f440850",
+    "src/venue.ts": "841a4cd70df8afbb570c107de6c6223076786d92779d276c04e0e5969964deae",
+    "src/replacement.ts": "2505bd340fb656f615069fc464f0a16b258ddb3ddfe5f6798d37f7083f20bf76",
+    "src/ergo.ts": "5ac8be9ec051473aef66a77de235449611cc3ab2c59138618425d0c51e108b71"
   },
   "limitations": [
     "One pass over a few hundred recent mainnet blocks from two node suppliers; no fork arose, so fork choice and a reorganization past the depth are exercised by the unit tests only.",

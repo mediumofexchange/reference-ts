@@ -43,10 +43,9 @@
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
-import { encodeCommitment, verifyCommitment, type Commitment } from "./commitment.js";
-import { ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, type ErgoHeaderStore } from "./ergo-headers.js";
+import { decodeCompactBits, ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, type ErgoHeaderStore } from "./ergo-headers.js";
 import {
-  attributeSection, ergoProfileIdentity, ownErgoProfile, rangeEntries, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
+  attributeSection, ERGO_SYNTHETIC_REFERENCE, ergoProfileIdentity, ownErgoProfile, rangeEntries, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
 } from "./ergo-profile.js";
 import type { ErgoPublisher, ErgoRecordRequest } from "./ergo-publisher.js";
 import type { ErgoSupplier } from "./ergo-supplier.js";
@@ -54,9 +53,15 @@ import {
   COMMITMENT_RANGE, copyRequest, encodeRangeAnswer, heldCommitments, RangeLimitError, REPLACEMENT_RANGE, REVOCATION_RANGE,
   type HeldCommitment, type RangeAnswer, type RangeLimits, type RangeRequest, type RecordKind,
 } from "./record-range.js";
-import { copyReplacement, decodeReplacement, encodeReplacement, forgetAdmitted, type Replacement, type WitnessedReplacement } from "./replacement.js";
-import { copyRevocation, decodeRevocation, encodeRevocation, isSignedRevocation, type Revocation, type WitnessedRevocation } from "./revocation.js";
-import { VenueError, type Venue, type WitnessedCommit, type WitnessedOp } from "./venue.js";
+// The transparent `Venue` face below serves pool-v2's store and retires with it.
+import { forgetAdmitted, type WitnessedReplacement } from "./replacement.js";
+import type { WitnessedRevocation } from "./revocation.js";
+import type { Venue, WitnessedCommit, WitnessedOp } from "./venue.js";
+import { VenueError } from "./venue-error.js";
+import {
+  copyReplacement, copyRevocation, decodeReplacement, decodeRevocation, encodeCommitment, encodeReplacement, encodeRevocation,
+  isSignedRevocation, verifyCommitment, type Commitment, type Replacement, type Revocation,
+} from "./venue-records.js";
 
 /** The reference runtime's finality depth: over one measured mainnet day,
  * 99.8% of included transactions landed inside C3.3's window at depth 10,
@@ -195,6 +200,16 @@ export class ErgoVenue implements Venue {
     this.venueId = ergoProfileIdentity(this.profile);
     const store = ergoHeaderStore(this.profile.anchor, anchorContext);
     if (store === undefined) throw new VenueError("the anchor context does not authenticate the profile's anchor");
+    // Each context selects its header rules. venue-ergo's and the synthetic reference context read the mainnet
+    // rules, the synthetic one only above an anchor of difficulty 1: no mainnet header has it, and a header id
+    // commits to its ancestry, so a profile naming that context can never follow the mainnet.
+    if (this.profile.reference === ERGO_SYNTHETIC_REFERENCE) {
+      const last: unknown = anchorContext[anchorContext.length - 1];
+      const anchor = last instanceof Uint8Array ? parseErgoHeader(copyBytes(last)) : undefined;
+      if (anchor === undefined || compareBytes(anchor.id, this.profile.anchor) !== 0 || decodeCompactBits(anchor.nBits) !== 1n) {
+        throw new VenueError("the synthetic reference context reads only a chain whose anchor has difficulty 1");
+      }
+    }
     this.store = store;
     const owned = { ...DEFAULT_ERGO_READER_POLICY, ...policy };
     if (!Object.values(owned).every(n => Number.isSafeInteger(n) && n > 0)) throw new VenueError("invalid Ergo reader policy");

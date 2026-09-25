@@ -10,14 +10,14 @@
     "name": "ergo-testnet-6.0.6",
     "appVersion": "6.0.6",
     "network": "testnet",
-    "fullHeight": 562593,
-    "headersHeight": 562594,
-    "bestFullHeaderId": "101879d62b352c28c9ae1b470f84493038c5aa12e8d6b1e928b0a15a6fee9a00",
+    "fullHeight": 563315,
+    "headersHeight": 563315,
+    "bestFullHeaderId": "d82536c02418a4c6e8651cf8f037360f2d2d01caaab6c9768be580ce44c24ee5",
     "parameters": {
       "outputCost": 100,
       "tokenAccessCost": 100,
       "maxBlockCost": 1000000,
-      "height": 562560,
+      "height": 563200,
       "maxBlockSize": 524288,
       "dataInputCost": 100,
       "blockVersion": 4,
@@ -27,7 +27,7 @@
       "minValuePerByte": 360
     }
   },
-  "requests": 58,
+  "requests": 59,
   "cacheDigest": "0c531222e946769f6742bf41cdbd3bbdc2c332a57c2420f9752618404c057ec6",
   "wallet": {
     "address": "3WzLhpY2Dbd8WSbvZTbHS5cbCiJFsfbLFrfoWWEt3GkQJJr6oxi9",
@@ -774,9 +774,9 @@
     "anchorId": "bb5f3d586066ebcd3cc788ac22157ba9063a2314b5e5b8a59060fc4ac75e8c4e",
     "firstHeight": 561774,
     "lastHeight": 561779,
-    "tipHeight": 562595,
+    "tipHeight": 563315,
     "depth": 2,
-    "headers": 822,
+    "headers": 1542,
     "blocks": [
       {
         "height": "561774",
@@ -825,10 +825,10 @@
   "readBack": {
     "identity": "eebe2a67189411eae19318df1b2593f9e2da5fb6cae2fb210189fb31c9d83a83",
     "origin": "561774",
-    "witnessedIndex": "819",
+    "witnessedIndex": "1539",
     "toIndex": "5",
-    "constructMs": 37,
-    "answerMs": 1.56,
+    "constructMs": 44,
+    "answerMs": 1.64,
     "answerBytes": 90575,
     "entries": [
       {
@@ -941,17 +941,9 @@
     "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
     "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
     "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
-    "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
-    "src/presentation.ts": "adcd73c862129f4ccd4d02b14df16c0f701127f3d8d504f0bb91e91734b46bb3",
-    "src/messages.ts": "8a941254bf24650f9146d3875add1f20993a08b17b40ddac1ed060e225191718",
-    "src/oplog.ts": "d1f2ad4b71a109948f3f39a869f25ae8faf63b3fcd0206b7f9015117e31a714a",
-    "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
-    "src/revocation.ts": "1b23bc3de5017738c1a056f013a83ce776caa099826c48c4091900f12c9474ea",
-    "src/venue.ts": "0558501b7e23879adc3fbc2c0c5cb53ad2de2d9c527ea533b537affbb7e200a4",
-    "src/replacement.ts": "9f65220ebebc4c1cec42b9b28c7667beec6b08e56159a701bbfa6c34755083c1",
-    "src/commitment.ts": "158070f78a3f76511381a598a2a91d79dcdfeb9b02442a22450cf556f88b9adf",
-    "src/record-range.ts": "14cb0d1079bf2608b2cd3b0f76a032a628da85726c9709294d69c330c88fe074",
-    "src/ergo-profile.ts": "8af9b51098300fe0a6f982ed471b5a189d05715002b8c9c76c0a0d48e530bb97",
+    "src/venue-records.ts": "904f449a238b4263d11b71b975e1ea1c6fdae4272fcf5558ac5a887f2fa44ad3",
+    "src/record-range.ts": "181f5b9192c1f5df2f91da45423d363423149e4c9ff8e8f7bae2d4b54e535059",
+    "src/ergo-profile.ts": "2bf77b0dbb78afd2fedb824e4c2c8ddd9320265ed6ce7a0d491dce997e8440a4",
     "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02",
     "src/pool/field.ts": "abd55bd8bd2a51fb954c9dc05fb3380bf4c2df6dd3c145c2eff0f29b1e36710a",
     "model/pool-v3-records.ts": "193e68179cf5c66d46f51f02562bb287d8c17a9aeb9952d223cf28dbfecd161f"

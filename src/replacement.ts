@@ -45,111 +45,23 @@
 //
 // Everything below is a verifier: the bytes come from whoever publishes them.
 
-import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { backingName, type Backing } from "./backing.js";
-// Type-only: `commitment.ts` imports this module, and a value import here would
-// close that into a runtime cycle. Erased at compile time, so it does not.
-import type { Commitment } from "./commitment.js";
-import { ByteReader, ByteWriter, compareBytes, copyBytes } from "./bytes.js";
-import { REPLACEMENT_CONTEXT } from "./contexts.js";
-import { verifySignatureStrict } from "./keys.js";
+import { compareBytes, copyBytes } from "./bytes.js";
 import { answering, type Venue } from "./venue.js";
+import { copyReplacement, replacementHash, verifyReplacement, type Commitment, type Replacement } from "./venue-records.js";
 
-/** The only role this slice can replace. */
-export const ROLE_OPERATOR = 0x01;
-
-export interface Replacement {
-  /** Which role is being replaced. Only ROLE_OPERATOR is served here. */
-  readonly role: number;
-  /** The key taking over. */
-  readonly successor: Uint8Array;
-  /** The previous link: that replacement's own hash, or the backing name. */
-  readonly predecessor: Uint8Array;
-  /** The witnessed index from which the successor may take over. */
-  readonly effective: bigint;
-  /** The signature of the key E's replacement clause names. */
-  readonly signature: Uint8Array;
-  /**
-   * The successor's own signature, over the SAME message (§C2, 2026-08-29).
-   * Naming somebody is not a power over them: signed by the rule-holder alone,
-   * one published record made any commitment-publishing key the operator of
-   * record of any backing, and its own next punctual commitment then proved a
-   * fault against it. One message rather than two, so there is one record, one
-   * domain tag and nothing that can fall out of step with itself.
-   */
-  readonly successorSignature: Uint8Array;
-}
+// The record, its hash and its signature check are construction-neutral
+// (`venue-records.ts`); this module walks them on a transparent venue view.
+export {
+  copyReplacement, decodeReplacement, encodeReplacement, replacementHash, replacementMessage, ROLE_OPERATOR, verifyReplacement,
+  type Replacement,
+} from "./venue-records.js";
 
 /** A replacement together with the venue's own word on when it was witnessed. */
 export interface WitnessedReplacement {
   readonly replacement: Replacement;
   readonly at: bigint;
-}
-
-/** The bytes the replacement rule's key signs. Throws on a malformed field. */
-export function replacementMessage(backingName: Uint8Array, replacement: Replacement): Uint8Array {
-  const w = new ByteWriter();
-  w.context(REPLACEMENT_CONTEXT);
-  w.key32(backingName, "backing name");
-  w.u8(replacement.role);
-  w.key32(replacement.successor, "successor key");
-  w.key32(replacement.predecessor, "predecessor");
-  w.u64(replacement.effective);
-  return w.finish();
-}
-
-/** A replacement's identity, and the value its successor names as predecessor. */
-export function replacementHash(backingName: Uint8Array, replacement: Replacement): Uint8Array {
-  return sha256(replacementMessage(backingName, replacement));
-}
-
-/**
- * A replacement as a **record**, for a venue that stores bytes: the backing it
- * replaces the operator of, the signed fields, then the signature.
- *
- * **The backing name is in the record**, as it is in an operation's, so a record
- * stands alone. A chain finds a box and has to know what it is without being
- * told; a record that needed its filing to say which backing it belongs to would
- * be one more thing an implementation could get wrong. It costs 32 bytes and it
- * is already inside the signature, so it cannot disagree with itself.
- */
-export function encodeReplacement(
-  backingName: Uint8Array,
-  replacement: Replacement,
-): Uint8Array {
-  const w = new ByteWriter();
-  w.key32(backingName, "backing name");
-  w.u8(replacement.role);
-  w.key32(replacement.successor, "successor key");
-  w.key32(replacement.predecessor, "predecessor");
-  w.u64(replacement.effective);
-  w.fixed(replacement.signature, 64, "signature");
-  w.fixed(replacement.successorSignature, 64, "successor signature");
-  return w.finish();
-}
-
-/**
- * Strict inverse of encodeReplacement, handing back the backing it names.
- * Throws EncodingError on anything else.
- */
-export function decodeReplacement(bytes: Uint8Array): {
-  readonly backingName: Uint8Array;
-  readonly replacement: Replacement;
-} {
-  const r = new ByteReader(bytes);
-  const backingName = r.raw(32);
-  const role = r.u8();
-  const successor = r.raw(32);
-  const predecessor = r.raw(32);
-  const effective = r.u64();
-  const signature = r.raw(64);
-  const successorSignature = r.raw(64);
-  r.expectEnd();
-  return {
-    backingName,
-    replacement: { role, successor, predecessor, effective, signature, successorSignature },
-  };
 }
 
 /**
@@ -169,13 +81,7 @@ export function decodeReplacement(bytes: Uint8Array): {
 export function isSignedReplacement(backing: Backing, replacement: Replacement): boolean {
   try {
     const rule = backing.evidence.replacementRule;
-    if (rule === undefined) return false;
-    if (replacement.role !== ROLE_OPERATOR) return false;
-    const message = replacementMessage(backing.name, replacement);
-    return (
-      verifySignatureStrict(replacement.signature, message, rule) &&
-      verifySignatureStrict(replacement.successorSignature, message, replacement.successor)
-    );
+    return rule !== undefined && verifyReplacement(backing.name, replacement, rule);
   } catch {
     return false;
   }
@@ -281,18 +187,6 @@ const admittedByVenue = new WeakMap<Venue, Map<string, { through: number; seen: 
  */
 export function forgetAdmitted(venue: Venue): void {
   admittedByVenue.delete(venue);
-}
-
-/** A replacement as the reader's own: every byte array copied. */
-export function copyReplacement(replacement: Replacement): Replacement {
-  return {
-    role: replacement.role,
-    successor: copyBytes(replacement.successor),
-    predecessor: copyBytes(replacement.predecessor),
-    effective: replacement.effective,
-    signature: copyBytes(replacement.signature),
-    successorSignature: copyBytes(replacement.successorSignature),
-  };
 }
 
 /**

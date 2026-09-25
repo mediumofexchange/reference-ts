@@ -56,9 +56,9 @@ try {
   }
   const profile = await import(new URL("src/ergo-profile.js", url));
   const range = await import(new URL("src/record-range.js", url));
-  const { signCommitment, encodeCommitment } = await import(new URL("src/commitment.js", url));
-  const { encodeReplacement, replacementMessage, ROLE_OPERATOR } = await import(new URL("src/replacement.js", url));
-  const { encodeRevocation, signRevocation } = await import(new URL("src/revocation.js", url));
+  // The kind 1-3 records, from the neutral module the profile's range codec compiles with.
+  const { signCommitment, encodeCommitment, encodeReplacement, replacementMessage, ROLE_OPERATOR, encodeRevocation, signRevocation } =
+    await import(new URL("src/venue-records.js", url));
   const wide = { maxBytes: 1n << 40n, maxEntries: 1n << 20n };
   const b = (n, width = 32) => Buffer.alloc(width, n);
 
@@ -171,8 +171,8 @@ try {
     serializedBytes += bytes.reduce((n, x) => n + x.length, 0); transactions += txs.length;
     parentId = id;
   }
-  // The chain's first header is the anchor, so height h is index h - 2.
-  const candidate = { anchor: chain.headers[0].id, depth, scripts };
+  // The chain's first header is the anchor, so height h is index h - 2. A synthetic chain names the reference context.
+  const candidate = { reference: profile.ERGO_SYNTHETIC_REFERENCE, anchor: chain.headers[0].id, depth, scripts };
   const identity = profile.ergoProfileIdentity(candidate);
   const verifier = profile.ergoRangeVerifier(candidate, chain);
   ok(verifier !== undefined, "model root agrees with the independent oracle on every synthetic block");
@@ -323,7 +323,7 @@ try {
 
   Object.assign(report, {
     status: "offline-profile-candidate-only", node: process.version, checks,
-    profile: { context: profile.ERGO_PROFILE_CONTEXT, identity: hex(identity), depth: depth.toString(), lag: verifier.lag().toString(),
+    profile: { context: candidate.reference, identity: hex(identity), depth: depth.toString(), lag: verifier.lag().toString(),
       locations: Object.fromEntries(Object.entries(scripts).map(([kind, script]) => [kind, hex(script)])) },
     sources: manifest.sources, inputManifestSha256: hex(sha256(readFileSync(join(here, "fixtures/manifest.json")))),
     files: { ...Object.fromEntries(["experiments/ergo-range/profile-check.mjs", "experiments/ergo-range/package.json",

@@ -142,6 +142,25 @@ describe("Ergo venue-profile candidate", () => {
     expect(() => profile.ergoProfileIdentity({ ...base, depth: (1n << 64n) - 1n })).toThrow(EncodingError);
   });
 
+  it("hashes venue-ergo's context unless the profile names a reference context from the closed set", () => {
+    const base = profileOf(evidence({}, 1n, 3n));
+    const u32 = (n: number): Buffer => { const out = Buffer.alloc(4); out.writeUInt32BE(n); return out; };
+    const u64 = (n: bigint): Buffer => { const out = Buffer.alloc(8); out.writeBigUInt64BE(n); return out; };
+    const prefixed = (bytes: Uint8Array): Buffer => cat(u32(bytes.length), bytes);
+    const expected = (context: string): Buffer => sha(cat(prefixed(Buffer.from(context, "utf8")), base.anchor, u64(base.depth),
+      ...([1, 2, 3, 4] as const).map(kind => prefixed(scripts[kind]))));
+    expect(profile.ERGO_PROFILE_CONTEXT).toBe("moe/venue/ergo/v3");
+    expect(Buffer.from(profile.ergoProfileIdentity(base))).toEqual(expected("moe/venue/ergo/v3"));
+    const synthetic: profile.ErgoProfile = { ...base, reference: profile.ERGO_SYNTHETIC_REFERENCE };
+    expect(Buffer.from(profile.ergoProfileIdentity(synthetic))).toEqual(expected("moe/venue/ergo-synthetic/reference"));
+    expect(profile.ownErgoProfile(synthetic).reference).toBe(profile.ERGO_SYNTHETIC_REFERENCE);
+    expect("reference" in profile.ownErgoProfile(base)).toBe(false);
+    // Any other context, venue-ergo's own spelled out included, is not in the set.
+    for (const reference of ["moe/venue/ergo/v3", "moe/venue/ergo-testnet/reference", "moe/venue/local/reference", "", null, 1]) {
+      expect(() => profile.ergoProfileIdentity({ ...base, reference } as unknown as profile.ErgoProfile)).toThrow(EncodingError);
+    }
+  });
+
   it("reads only exact Coll[Byte] constants with minimal lengths", () => {
     const long = b(9, 136);
     expect(Buffer.from(profile.collBytes(coll(long))!)).toEqual(long);

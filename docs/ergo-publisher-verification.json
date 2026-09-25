@@ -5,7 +5,7 @@
     "name": "ergo-testnet-6.0.6",
     "appVersion": "6.0.6",
     "network": "testnet",
-    "startHeight": "562964",
+    "startHeight": "563309",
     "minValuePerByte": "360"
   },
   "fee": "1100000",
@@ -25,14 +25,14 @@
       "subject": "0eeaa15da10e7ccc20fe08665761e6551c93b9552a3558e9396767efd1e7e77f",
       "recordBytes": 136,
       "recordSha256": "4d43259d1d3d79d28edffe5ace887e03374249de8f11c48a615613f41f06172f",
-      "txId": "e715f5f18a377708ee7a1b1806b2b068ad73b8ff250e84266ac82bbf93b498cf",
+      "txId": "522dccc750ffea7d0a8735ab8507c60209a7b3b30d8c2e58e5f46553e635c781",
       "inputs": [
-        "848b39cf3a73ee5e5e289a348d0c5e5e76c90f8dbd4809d4478652ecca78bb87"
+        "629fb1de0f4ae75888216c8e336537ce732c0af574428976283c91398ee49c9b"
       ],
       "unsignedBytes": 416,
       "signedBytes": 472,
-      "change": "19999910337920",
-      "inclusionHeight": "562965"
+      "change": "19999906747760",
+      "inclusionHeight": "563311"
     },
     {
       "kind": 2,
@@ -40,14 +40,14 @@
       "subject": "9161543511a82793c5ef66994fffb7100ea86c2210916b80362ed588ab1cda2c",
       "recordBytes": 233,
       "recordSha256": "68786869c3cd1e10bdf5655f9ed10ac76375e07cecc5f854623e62cca48f9289",
-      "txId": "283600f72dccf4780805cbab97cc807fbe08e54caaddad177e9c41b0f374721b",
+      "txId": "00f508a0826d1cb4450738ffa6498f037c600a32d1ef83d8162626bbf48dda20",
       "inputs": [
-        "d7f570fd65a5e0151fbca7bd84dee867e8f8bbdd4dda6f530c04e5d12143a551"
+        "b4d5d7133b98dce4731621c15d547cb6c6c3c5b383bf70cf69b3342abf8671f7"
       ],
       "unsignedBytes": 513,
       "signedBytes": 569,
-      "change": "19999909113000",
-      "inclusionHeight": "562966"
+      "change": "19999905522840",
+      "inclusionHeight": "563311"
     },
     {
       "kind": 3,
@@ -55,78 +55,71 @@
       "subject": "c633c6c151da9bcd4bc45611f9644385593608c6887ebed339b5bf08f8825a5f",
       "recordBytes": 96,
       "recordSha256": "75ac6b0aa130ffcf6ca2d998e74b94ed99a3b349a7522402e45711489f028a5f",
-      "txId": "8a31677babf6f3c66fa6c1fef36e510ae2757870df8162236f763ae8a0bea629",
+      "txId": "9215b3752e165f83dc756af0b8a80d77b3a81391bb2761a46a5badb6e4bc06d4",
       "inputs": [
-        "65aa6452a57c860a439ac423274db4666a61d41a7f153a1b13994ba249ddf695"
+        "6749324da4e1c02e3289152023751758ef2a189acb65a056327c69575ccf3488"
       ],
       "unsignedBytes": 375,
       "signedBytes": 431,
-      "change": "19999907937760",
-      "inclusionHeight": "562966"
+      "change": "19999904347600",
+      "inclusionHeight": "563311"
     }
   ],
   "nodeChecks": [
     {
-      "id": "e715f5f18a377708ee7a1b1806b2b068ad73b8ff250e84266ac82bbf93b498cf",
+      "id": "522dccc750ffea7d0a8735ab8507c60209a7b3b30d8c2e58e5f46553e635c781",
       "corruptedStatus": 400,
       "trueStatus": 200,
-      "trueAnswer": "\"e715f5f18a377708ee7a1b1806b2b068ad73b8ff250e84266ac82bbf93b498cf\""
+      "trueAnswer": "\"522dccc750ffea7d0a8735ab8507c60209a7b3b30d8c2e58e5f46553e635c781\""
     },
     {
-      "id": "283600f72dccf4780805cbab97cc807fbe08e54caaddad177e9c41b0f374721b",
+      "id": "00f508a0826d1cb4450738ffa6498f037c600a32d1ef83d8162626bbf48dda20",
       "corruptedStatus": 400,
       "trueStatus": 200,
-      "trueAnswer": "\"283600f72dccf4780805cbab97cc807fbe08e54caaddad177e9c41b0f374721b\""
+      "trueAnswer": "\"00f508a0826d1cb4450738ffa6498f037c600a32d1ef83d8162626bbf48dda20\""
     },
     {
-      "id": "8a31677babf6f3c66fa6c1fef36e510ae2757870df8162236f763ae8a0bea629",
+      "id": "9215b3752e165f83dc756af0b8a80d77b3a81391bb2761a46a5badb6e4bc06d4",
       "corruptedStatus": 400,
       "trueStatus": 200,
-      "trueAnswer": "\"8a31677babf6f3c66fa6c1fef36e510ae2757870df8162236f763ae8a0bea629\""
+      "trueAnswer": "\"9215b3752e165f83dc756af0b8a80d77b3a81391bb2761a46a5badb6e4bc06d4\""
     }
   ],
   "republished": {
-    "txId": "e715f5f18a377708ee7a1b1806b2b068ad73b8ff250e84266ac82bbf93b498cf",
+    "txId": "522dccc750ffea7d0a8735ab8507c60209a7b3b30d8c2e58e5f46553e635c781",
     "submissions": 3
   },
   "lostResponse": {
-    "txId": "283600f72dccf4780805cbab97cc807fbe08e54caaddad177e9c41b0f374721b",
+    "txId": "00f508a0826d1cb4450738ffa6498f037c600a32d1ef83d8162626bbf48dda20",
     "firstAttempt": "no supplier accepted the publication; it is kept and sent again on the next attempt",
     "submissionsForRecord": 1
   },
   "duplicateSubmission": {
     "status": 400,
-    "answer": "{ \"error\" : 400, \"reason\" : \"bad.request\", \"detail\" : \"Pool can not accept transaction e715f5f18a377708ee7a1b1806b2b068ad73b8ff250e84266ac82bbf93b498cf, it is already in the mempool\" }"
+    "answer": "{ \"error\" : 400, \"reason\" : \"bad.request\", \"detail\" : \"Pool can not accept transaction 522dccc750ffea7d0a8735ab8507c60209a7b3b30d8c2e58e5f46553e635c781, it is already in the mempool\" }"
   },
   "readBack": [
     {
-      "height": "562965",
-      "headerId": "1f35472110134fbc9e8bd75525ba3bdbafd6ca65130228036f8ef4da38177743",
-      "transactions": 4,
+      "height": "563311",
+      "headerId": "f95804ada9556bac045ebb9023e6417350f5365679fa13c5a3312d2d995b3aa6",
+      "transactions": 5,
       "objects": [
         {
           "kind": 1,
           "subject": "0eeaa15da10e7ccc20fe08665761e6551c93b9552a3558e9396767efd1e7e77f",
-          "ordinal": "8589934592",
+          "ordinal": "4294967296",
           "recordSha256": "4d43259d1d3d79d28edffe5ace887e03374249de8f11c48a615613f41f06172f"
-        }
-      ]
-    },
-    {
-      "height": "562966",
-      "headerId": "0a0c0025dd5e56c77ffe9df346e250ff2d032a1a3bd0b4cef2dbe6e505f3163f",
-      "transactions": 4,
-      "objects": [
+        },
         {
           "kind": 2,
           "subject": "9161543511a82793c5ef66994fffb7100ea86c2210916b80362ed588ab1cda2c",
-          "ordinal": "4294967296",
+          "ordinal": "8589934592",
           "recordSha256": "68786869c3cd1e10bdf5655f9ed10ac76375e07cecc5f854623e62cca48f9289"
         },
         {
           "kind": 3,
           "subject": "c633c6c151da9bcd4bc45611f9644385593608c6887ebed339b5bf08f8825a5f",
-          "ordinal": "8589934592",
+          "ordinal": "12884901888",
           "recordSha256": "75ac6b0aa130ffcf6ca2d998e74b94ed99a3b349a7522402e45711489f028a5f"
         }
       ]
@@ -140,20 +133,22 @@
     "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
     "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
     "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
+    "src/venue-records.ts": "904f449a238b4263d11b71b975e1ea1c6fdae4272fcf5558ac5a887f2fa44ad3",
+    "src/record-range.ts": "181f5b9192c1f5df2f91da45423d363423149e4c9ff8e8f7bae2d4b54e535059",
+    "src/ergo-profile.ts": "2bf77b0dbb78afd2fedb824e4c2c8ddd9320265ed6ce7a0d491dce997e8440a4",
+    "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02",
+    "src/venue-error.ts": "f2e9535ed81d544801967c1bd8edb26b0191900794a6f4fdc66a448612907810",
+    "src/ergo-publisher.ts": "2dabd89ca03ce53a1bbab4142e2bfdd053f0cec625d67cd3cca3e7fd1930de92",
+    "src/ergo-headers.ts": "8bfd750c08225e2f09eb46b58730684b091e6e3febf9b794cfda54357ae73448",
     "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
     "src/presentation.ts": "adcd73c862129f4ccd4d02b14df16c0f701127f3d8d504f0bb91e91734b46bb3",
     "src/messages.ts": "8a941254bf24650f9146d3875add1f20993a08b17b40ddac1ed060e225191718",
     "src/oplog.ts": "d1f2ad4b71a109948f3f39a869f25ae8faf63b3fcd0206b7f9015117e31a714a",
     "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
-    "src/revocation.ts": "1b23bc3de5017738c1a056f013a83ce776caa099826c48c4091900f12c9474ea",
-    "src/venue.ts": "0558501b7e23879adc3fbc2c0c5cb53ad2de2d9c527ea533b537affbb7e200a4",
-    "src/replacement.ts": "9f65220ebebc4c1cec42b9b28c7667beec6b08e56159a701bbfa6c34755083c1",
-    "src/commitment.ts": "158070f78a3f76511381a598a2a91d79dcdfeb9b02442a22450cf556f88b9adf",
-    "src/record-range.ts": "14cb0d1079bf2608b2cd3b0f76a032a628da85726c9709294d69c330c88fe074",
-    "src/ergo-profile.ts": "8af9b51098300fe0a6f982ed471b5a189d05715002b8c9c76c0a0d48e530bb97",
-    "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02",
-    "src/ergo-publisher.ts": "93549226d3259327e2378e7bcc1107f5a6b9de3f59521f80f4b4a7eaf77a0b8d",
-    "src/ergo-headers.ts": "8bfd750c08225e2f09eb46b58730684b091e6e3febf9b794cfda54357ae73448"
+    "src/revocation.ts": "dd3c2e5d321931ae54e033b0091c6f15de52f11f018712c421ea813b3f440850",
+    "src/venue.ts": "841a4cd70df8afbb570c107de6c6223076786d92779d276c04e0e5969964deae",
+    "src/replacement.ts": "2505bd340fb656f615069fc464f0a16b258ddb3ddfe5f6798d37f7083f20bf76",
+    "src/commitment.ts": "98eac617566d4b1770d99a5a0da94b9047e5a57ec4e576eb1ec20597b69aa93e"
   },
   "limitations": [
     "Testnet acceptance is not mainnet acceptance; the transaction rules exercised (signatures, value balance, minimum box value, fee, creation heights) are the same node release's, but no mainnet transaction was sent.",

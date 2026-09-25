@@ -17,7 +17,7 @@ import { ScopeTree } from "../../../dist/pool/scope.js";
 import { limbsOf, fieldToBytes } from "../../../dist/pool/field.js";
 import { poseidon2Hash, poseidon2Permutation } from "../../../dist/pool/poseidon2.js";
 import { BarretenbergSync } from "@aztec/bb.js";
-import { signCommitment, encodeCommitment, directoryRoot } from "../../../dist/commitment.js";
+import { directoryRoot, encodeCommitment, signCommitment } from "../../../dist/venue-records.js";
 import { loadEvidenceCodecs, LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../spent-set/radix.mjs";
 import { replayLocalPackage, RANGE_LIMITS } from "./local-replay.mjs";

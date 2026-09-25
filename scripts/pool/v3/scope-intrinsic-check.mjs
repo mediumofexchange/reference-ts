@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { directoryRoot, signCommitment } from "../../../dist/commitment.js";
+import { directoryRoot, signCommitment } from "../../../dist/venue-records.js";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { compactFault, withoutFaultReasons } from "./fault-check.mjs";
 import { LIMITS } from "../delivery/evidence-reader.mjs";

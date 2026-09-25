@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { FAULT_LIMITS, boundFaultInputs, faultObserver } from "./fault-evidence.mjs";
 import { EncodingError } from "../../../dist/bytes.js";
-import { decodeCommitment, directoryRoot, signCommitment } from "../../../dist/commitment.js";
+import { decodeCommitment, directoryRoot, signCommitment } from "../../../dist/venue-records.js";
 import { createHash } from "node:crypto";
 import { EvidenceRefusal, LIMITS } from "../delivery/evidence-reader.mjs";
 

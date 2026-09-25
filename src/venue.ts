@@ -79,8 +79,9 @@ import {
   type Revocation,
   type WitnessedRevocation,
 } from "./revocation.js";
+import { VenueError } from "./venue-error.js";
 
-export class VenueError extends Error {}
+export { VenueError } from "./venue-error.js";
 
 /**
  * Run a verifier's body, keeping the one distinction every catch in this system

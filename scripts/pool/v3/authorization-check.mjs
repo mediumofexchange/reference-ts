@@ -1,7 +1,7 @@
 // Signature fixtures use real Ed25519; proof generation is supplied by the harness.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { decodeCommitment, directoryRoot, encodeCommitment, signCommitment } from "../../../dist/commitment.js";
+import { decodeCommitment, directoryRoot, encodeCommitment, signCommitment } from "../../../dist/venue-records.js";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { FAULT_LIMITS } from "./fault-evidence.mjs";
 import { limbsOf } from "../../../dist/pool/field.js";

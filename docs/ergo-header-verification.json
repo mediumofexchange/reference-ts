@@ -141,20 +141,20 @@
     "powInvalid": [],
     "linked": 8091,
     "incomplete": [],
-    "readSeconds": 6.5,
-    "checkSeconds": 427.5,
-    "powMsMedian": 25.287,
+    "readSeconds": 10.8,
+    "checkSeconds": 372.3,
+    "powMsMedian": 19.882,
     "tableSizes": 21
   },
   "cost": {
     "verifiedHeaders": 6940,
-    "addMsMean": 28.378,
-    "addMsMedian": 27.973,
-    "addMsP99": 64.806,
-    "addSeconds": 196.9,
+    "addMsMean": 22.393,
+    "addMsMedian": 21.176,
+    "addMsP99": 44.817,
+    "addSeconds": 155.4,
     "wireBytesMean": 220,
     "contextBytes": 225500,
-    "yearOfHeadersMinutes": 124.3
+    "yearOfHeadersMinutes": 98.1
   },
   "cache": {
     "directory": "scratch/ergo-headers",
@@ -168,20 +168,12 @@
     "src/bytes.ts": "0e1f37a66d2c12445407f5dc8dbfd3166e12ebca9f5be6ab20d8961719345678",
     "src/contexts.ts": "12a786fc894708a87abdce6923591ca790775a51bfe6b8fcd22ead895fbae8da",
     "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
-    "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
-    "src/presentation.ts": "adcd73c862129f4ccd4d02b14df16c0f701127f3d8d504f0bb91e91734b46bb3",
-    "src/messages.ts": "8a941254bf24650f9146d3875add1f20993a08b17b40ddac1ed060e225191718",
-    "src/oplog.ts": "d1f2ad4b71a109948f3f39a869f25ae8faf63b3fcd0206b7f9015117e31a714a",
-    "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
-    "src/revocation.ts": "1b23bc3de5017738c1a056f013a83ce776caa099826c48c4091900f12c9474ea",
-    "src/venue.ts": "0558501b7e23879adc3fbc2c0c5cb53ad2de2d9c527ea533b537affbb7e200a4",
-    "src/replacement.ts": "9f65220ebebc4c1cec42b9b28c7667beec6b08e56159a701bbfa6c34755083c1",
-    "src/commitment.ts": "158070f78a3f76511381a598a2a91d79dcdfeb9b02442a22450cf556f88b9adf",
-    "src/record-range.ts": "14cb0d1079bf2608b2cd3b0f76a032a628da85726c9709294d69c330c88fe074",
-    "src/ergo-profile.ts": "8af9b51098300fe0a6f982ed471b5a189d05715002b8c9c76c0a0d48e530bb97",
+    "src/venue-records.ts": "904f449a238b4263d11b71b975e1ea1c6fdae4272fcf5558ac5a887f2fa44ad3",
+    "src/record-range.ts": "181f5b9192c1f5df2f91da45423d363423149e4c9ff8e8f7bae2d4b54e535059",
+    "src/ergo-profile.ts": "2bf77b0dbb78afd2fedb824e4c2c8ddd9320265ed6ce7a0d491dce997e8440a4",
     "src/ergo-headers.ts": "8bfd750c08225e2f09eb46b58730684b091e6e3febf9b794cfda54357ae73448",
     "src/ergo-supplier.ts": "5d1d10c5e5e24b84b51deadb21615c3a6c07705fc064f35f5e82078ec58eaa02",
-    "docs/ergo-chain-cost-verification.json": "69644fabed235fdccf91529710ca60e173f31fc3c401684c4ed2d75b660caa81"
+    "docs/ergo-chain-cost-verification.json": "f7e36c97a858ccf8a76bdc6f4b5f0890d26c18b27f4d7e4f72540e75bfb661dc"
   },
   "limitations": [
     "The store applies the pinned node's header rules for a child header (height, timestamp above the parent's, EIP-37 difficulty, Autolykos proof of work) to mainnet headers above an anchor at or after EIP-37 activation; every header read is version 4. The node checks a block version only at a voting epoch's first block, so the store reads every version byte in the node's layout for it, Autolykos v1 for version 1 (unit-tested on real v1 headers, not in this window). It does not apply the node's local-clock rule, its local bound on fork depth or its marking of headers whose block failed full validation; a header-only reader rests on the work, as any light client does. Without the clock rule a supplier can lower the required difficulty on a side branch with future timestamps (halving each epoch after about 256 blocks of work at the starting difficulty): such a branch cannot outscore the best chain's work, but its headers are accepted and kept, so what a supplier may add must be bounded by the reader's supplier policy. Only canonical header bytes are read.",

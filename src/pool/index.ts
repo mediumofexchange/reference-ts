@@ -3,9 +3,10 @@
 // tree, the spent set, the scope, the frames, the segment with its import,
 // admission and replay, and the receipt.
 //
-// The proof backend (`pool/barretenberg.ts`) is reachable on its own subpath
-// only, since it needs `@aztec/bb.js`; the circuits it verifies are the
-// pinned sources in `pool/circuits/`.
+// The proof backend (`pool/proof-verifier.ts`, with pool-v2's circuits bound
+// in `pool/barretenberg.ts`) is reachable on its own subpaths only, since it
+// needs `@aztec/bb.js`; the circuits it verifies are the pinned sources in
+// `pool/circuits/`.
 // `pool/store.ts` is also a separate subpath: its durable SQLite journal
 // requires Node 24, while this barrel retains the package's Node 20 floor.
 

@@ -4,8 +4,7 @@ import { createHash } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { limbsOf } from "../../../dist/pool/field.js";
 import { poseidon2Hash } from "../../../dist/pool/poseidon2.js";
-import { signCommitment, directoryRoot } from "../../../dist/commitment.js";
-import { encodeReplacement, replacementMessage, replacementHash, ROLE_OPERATOR } from "../../../dist/replacement.js";
+import { directoryRoot, encodeReplacement, replacementHash, replacementMessage, ROLE_OPERATOR, signCommitment } from "../../../dist/venue-records.js";
 import { LIMITS } from "../delivery/evidence-reader.mjs";
 import { replayLocalPackage } from "./local-replay.mjs";
 

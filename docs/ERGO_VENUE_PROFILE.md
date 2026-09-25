@@ -29,6 +29,23 @@ only under the profile: `ErgoVenue` in `src/ergo.ts` is the
 chain, so the harnesses can feed it synthetic headers; `ErgoVenue` takes only
 headers its own store accepted.
 
+**Reference contexts.** venue-ergo's identity hashes its own context,
+`moe/venue/ergo/v3`, and names the mainnet chain under the mainnet header
+rules. A profile may instead name one of a closed set of reference-only
+contexts, which are not deployment profiles; each hashes to another identity
+and selects its header rules, so which chain an identity names is read from
+its preimage, never from its 32 bytes
+([plan](../decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2),
+decision 8). `moe/venue/ergo-synthetic/reference` (`ERGO_SYNTHETIC_REFERENCE`)
+names the synthetic test chains (`test/ergo-chain.ts`, the local replay
+fixture, the profile experiment's chain) under the mainnet rules, and
+`ErgoVenue` reads it only above an anchor of difficulty 1: no mainnet header
+has it, and a header id commits to its ancestry, so a profile naming the
+synthetic context cannot follow the mainnet. `ergoRangeVerifier` applies no
+header rules under any context (its caller selects the headers). The testnet's
+context joins with its header rules; `ownErgoProfile` refuses every other
+context.
+
 ## Header source
 
 `src/ergo-headers.ts` is the reader's own header source (§3 of the
@@ -178,7 +195,7 @@ and the refusals: fresh seedless audit and receiver restoration, missing
 sections, framable root mismatches, malformed transactions, wrong profile/headers
 and resource refusal. The fixture converter constructs exact unsigned
 transaction bytes, witness ids and expected roots with Fleet, independently
-of the profile verifier: the fixed synthetic genesis is the anchor, fixture index `i` is
+of the profile verifier: the profile names the synthetic reference context, the fixed synthetic genesis is the anchor, fixture index `i` is
 height `i + 2`, a fixture venue of lag `l` is read under depth `l − 1`, and
 each fixture record is a separate transaction in the fixture's insertion
 order, so a kind-4 ordinal is the fixture's ordinal shifted by 32 bits and

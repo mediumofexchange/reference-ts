@@ -3,10 +3,10 @@
 // A decoded answer is that verifier's output, never supplied evidence, and it
 // establishes no directory, trail, classification, force or verdict.
 import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
-import { decodeCommitment, verifyCommitment, type Commitment } from "./commitment.js";
-import { verifySignatureStrict } from "./keys.js";
-import { decodeReplacement, replacementHash, replacementMessage, ROLE_OPERATOR, type Replacement } from "./replacement.js";
-import { decodeRevocation, isSignedRevocation } from "./revocation.js";
+import {
+  decodeCommitment, decodeReplacement, decodeRevocation, isSignedRevocation, replacementHash, verifyCommitment, verifyReplacement,
+  type Commitment, type Replacement,
+} from "./venue-records.js";
 
 const CONTEXT = new TextEncoder().encode("moe/pool/v3/range");
 const FIXED_BYTES = 102, ENTRY_BYTES = 20, MAX_U32 = 0xffff_ffff, MAX_U64 = (1n << 64n) - 1n;
@@ -274,10 +274,7 @@ export function admittedReplacements(answer: RangeAnswer, ruleKey: Uint8Array | 
     const decoded = decodeOrSkip(() => decodeReplacement(entry.record));
     if (decoded === undefined) continue;
     const { backingName, replacement } = decoded;
-    if (compareBytes(backingName, answer.request.subject) !== 0 || replacement.role !== ROLE_OPERATOR) continue;
-    const message = replacementMessage(backingName, replacement);
-    if (!verifySignatureStrict(replacement.signature, message, ruleKey) ||
-        !verifySignatureStrict(replacement.successorSignature, message, replacement.successor)) continue;
+    if (compareBytes(backingName, answer.request.subject) !== 0 || !verifyReplacement(backingName, replacement, ruleKey)) continue;
     const identity = replacementHash(backingName, replacement);
     if (admitted.some(earlier => compareBytes(earlier.identity, identity) === 0)) continue;
     admitted.push(Object.freeze({ index: entry.index, identity,

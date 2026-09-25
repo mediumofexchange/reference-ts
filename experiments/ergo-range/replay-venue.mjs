@@ -46,8 +46,10 @@ export function ergoReplayVenue(profile, evidence, codec, rangeLimits, rawLimits
     return new Uint8Array(value);
   };
   // Small reader-owned inputs are copied before reading supplier containers.
-  const { anchor, depth, scripts } = profile;
-  const ownedProfile = { anchor: own(anchor), depth, scripts: Object.fromEntries([1, 2, 3, 4].map(kind => [kind, own(scripts[kind])])) };
+  const { reference, anchor, depth, scripts } = profile;
+  // The reference context goes through as named, so the identity is the one the profile hashes (ownErgoProfile checks it).
+  const ownedProfile = { ...(reference === undefined ? {} : { reference }), anchor: own(anchor), depth,
+    scripts: Object.fromEntries([1, 2, 3, 4].map(kind => [kind, own(scripts[kind])])) };
   const ownedHeaders = [];
   for (let i = 0; i < headerCount; i++) {
     const header = headers[i];
