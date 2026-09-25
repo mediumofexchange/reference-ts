@@ -1,7 +1,9 @@
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { describe, expect, it } from "vitest";
+import { runInNewContext } from "node:vm";
 import {
-  bigintToMinimalBytes, ByteReader, ByteWriter, compareBytes, copyArray, copyBytes, EncodingError, minimalBytesToBigint,
+  bigintToMinimalBytes, byteLength, ByteReader, ByteWriter, compareBytes, copyArray, copyBytes, copyUnshared, EncodingError,
+  minimalBytesToBigint,
 } from "../src/bytes.js";
 import * as contexts from "../src/contexts.js";
 import { contextsArePrefixFree } from "../src/contexts.js";
@@ -142,6 +144,15 @@ describe("every byte write and read works on its own copy", () => {
     expect(compareBytes(short, Uint8Array.of(1, 2))).toBe(1);
     expect(compareBytes(lying(), lying())).toBe(0);
     expect(compareBytes(Buffer.from([2]), Uint8Array.of(1, 9))).toBe(1);
+  });
+
+  it("copyUnshared refuses shared memory by the buffer's own slot, from any realm", () => {
+    const shared = new Uint8Array(new SharedArrayBuffer(2));
+    const foreign = runInNewContext("new Uint8Array(new SharedArrayBuffer(2))") as Uint8Array;
+    for (const value of [shared, foreign]) expect(() => copyUnshared(value)).toThrow("shared byte array");
+    expect(copyUnshared(runInNewContext("new Uint8Array([7, 8])") as Uint8Array)).toEqual(Uint8Array.of(7, 8));
+    expect(byteLength(Buffer.from([1, 2, 3]))).toBe(3);
+    expect(() => byteLength("abc" as unknown as Uint8Array)).toThrow("not a byte array");
   });
 });
 

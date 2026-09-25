@@ -1,6 +1,16 @@
 import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as terms from "../src/pool/v3/terms.js";
+
+// Lets one case make signature verification fail unexpectedly; every other case verifies for real.
+const keysFailure = vi.hoisted(() => ({ error: undefined as Error | undefined }));
+vi.mock("../src/keys.js", async importOriginal => {
+  const actual = await importOriginal<typeof import("../src/keys.js")>();
+  return { ...actual, verifySignatureStrict: (...args: Parameters<typeof actual.verifySignatureStrict>) => {
+    if (keysFailure.error !== undefined) throw keysFailure.error;
+    return actual.verifySignatureStrict(...args);
+  } };
+});
 import { decodeBacking } from "../src/backing.js";
 import { EncodingError } from "../src/bytes.js";
 import { hiddenShared, lookAlikes } from "./hostile-bytes.js";
@@ -222,5 +232,10 @@ describe("v3 model constant-root terms", () => {
     const failing = Object.defineProperty(new Uint8Array(64), "buffer", { get() { throw new RangeError("unexpected"); } });
     expect(terms.verifyRootTermsSignature(failing, Buffer.alloc(64))).toBe(false);
     expect(terms.verifyRootTermsSignature(raw(fields()), failing)).toBe(false);
+    // Unexpected failures in what it does read are not verification results.
+    keysFailure.error = new RangeError("unexpected");
+    try {
+      expect(() => terms.verifyRootTermsSignature(raw(fields()), Buffer.alloc(64))).toThrow(RangeError);
+    } finally { keysFailure.error = undefined; }
   });
 });

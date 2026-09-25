@@ -44,12 +44,19 @@ export function byteLength(bytes: Uint8Array): number {
   return lengthOf.call(bytes) as number;
 }
 
+// SharedArrayBuffer's own byteLength getter answers only for a shared buffer,
+// from any realm; instanceof would miss another realm's.
+const sharedLength = Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, "byteLength")!.get!;
+function isShared(buffer: unknown): boolean {
+  try { sharedLength.call(buffer); return true; } catch { return false; }
+}
+
 /**
  * copyBytes for a codec whose policy is to take no bytes over shared memory,
- * read through the intrinsic getter rather than the caller's `buffer`.
+ * read through the intrinsic getters rather than the caller's `buffer`.
  */
 export function copyUnshared(bytes: Uint8Array): Uint8Array {
-  if (isBytes(bytes) && bufferOf.call(bytes) instanceof SharedArrayBuffer) throw new EncodingError("shared byte array");
+  if (isBytes(bytes) && isShared(bufferOf.call(bytes))) throw new EncodingError("shared byte array");
   return copyBytes(bytes);
 }
 

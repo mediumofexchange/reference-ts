@@ -121,7 +121,8 @@ export function encodeTrail(input: ServedTrail, budget: TrailLimits): Uint8Array
 export function decodeTrail(bytesIn: Uint8Array, budgetIn: TrailLimits): ServedTrail {
   const budget = limits(budgetIn);
   byteBudget(BigInt(byteLength(bytesIn)), budget);
-  const input = bytes(bytesIn);
+  // Checked again on the copy: shared memory may have grown in between.
+  const input = bytes(bytesIn); byteBudget(BigInt(input.length), budget);
   if (input.length < FIXED_BYTES + MIN_HEADER_BYTES + 68) throw new EncodingError("truncated trail");
   contextAt(input, 0, CONTEXT);
   const view = new DataView(input.buffer, input.byteOffset, input.byteLength);
