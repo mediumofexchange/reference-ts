@@ -6,7 +6,7 @@ import { blake2b } from "@noble/hashes/blake2b.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeBacking, signBacking } from "../src/backing.js";
 import type { SignedBacking } from "../src/pool/segment.js";
-import { signCommitment, type Commitment } from "../src/commitment.js";
+import { encodeCommitment, signCommitment, type Commitment } from "../src/commitment.js";
 import { ErgoVenue } from "../src/ergo.js";
 import { attributeBlock, frameTransaction, MINER_FEE_TREE_HEX } from "../src/ergo-profile.js";
 import {
@@ -245,6 +245,46 @@ describe("a publication is sent once, and publications chain", () => {
     expect(n.pool).toHaveLength(2);
   });
 
+  it("rebuilds a transaction that can never land, and builds nothing further on its change", async () => {
+    const funding = plainBox(TREE, 10_000_000n, HEIGHT - 5n), n = node();
+    n.fund(funding);
+    const invented = plainBox(TREE, 1n << 40n, HEIGHT);
+    // The honest node fails to answer once, while a liar offers a box that does not exist.
+    let silent = true;
+    const honest: ErgoPublishingSupplier = { name: "honest", unspentBoxes: t => n.unspentBoxes(t),
+      hasBox: id => (silent ? (silent = false, Promise.reject(new Error("500"))) : n.hasBox(id)), submit: (s, id) => n.submit(s, id) };
+    const liar: ErgoPublishingSupplier = { name: "liar", unspentBoxes: async () => [invented], hasBox: async id => { if (hex(id) === hex(hash(invented))) return true; throw new Error("no answer"); },
+      submit: async () => { throw new Error("refused"); } };
+    const p = publisher([honest, liar]);
+    await expect(p.publish(request())).rejects.toThrow(/kept and sent again/);
+    // A second record is not built on the doomed transaction's change: that change is not anyone's box.
+    // The retry sees the invented input denied and rebuilds on the real funding.
+    const repaired = await p.publish(request());
+    expect(repaired.inputs.map(hex)).toEqual([hex(hash(funding))]);
+    const second = await p.publish(request(new Uint8Array(136).fill(8)));
+    expect(second.inputs.map(hex)).toEqual([hex(repaired.change!.id)]);
+    expect(n.pool).toHaveLength(2);
+    expect(p.unsettled).toBe(2);
+  });
+
+  it("rebuilds keeping every input still shown, so the old and new transactions conflict", async () => {
+    const a = plainBox(TREE, 700_000n, HEIGHT - 5n), b = plainBox(TREE, 800_000n, HEIGHT - 5n), n = node();
+    n.fund(a);
+    n.fund(b);
+    const p = publisher([n]);
+    const first = await p.publish(request());
+    expect(first.inputs.map(hex).sort()).toEqual([hex(hash(a)), hex(hash(b))].sort());
+    // The network dropped it, and one of its inputs is gone for good; the other is still there.
+    n.pool.splice(0);
+    n.boxes.clear();
+    n.fund(b);
+    n.fund(plainBox(TREE, 5_000_000n, HEIGHT - 5n));
+    const rebuilt = await p.publish(request());
+    expect(rebuilt.inputs.map(hex)).toContain(hex(hash(b)));
+    expect(rebuilt.inputs.map(hex)).not.toContain(hex(hash(a)));
+    expect(n.pool).toHaveLength(1);
+  });
+
   it("spends its own change before any index shows it, and never one box twice under concurrent calls", async () => {
     const n = funded([10_000_000n]);
     n.mempoolAware = false; // a stale index: it still offers the spent box and not the change
@@ -340,18 +380,26 @@ describe("the view publishes through its wallet and holds only what it reads", (
     const v = new ErgoVenue(PROFILE, chain.context, {}, p);
     await v.sync([network.supplier]);
     await v.publish(commitmentOf(1n, 2));
-    await v.publish(commitmentOf(2n, 3));
+    const second = await p.publish({ location: SCRIPTS[1], subject: KEYS.operator, record: encodeCommitment(commitmentOf(2n, 3)), height: network.tip.height });
     expect(p.unsettled).toBe(2);
     network.mine(Number(DEPTH));
     await v.sync([network.supplier]);
+    await p.settle(() => false); // the view settles in the publisher's queue: wait for it
     expect(p.unsettled).toBe(2); // included, not yet final
     network.mine();
     await v.sync([network.supplier]);
+    await p.settle(() => false);
     expect(p.unsettled).toBe(0);
-    // A later publication spends the confirmed change the node offers.
+    // Landed change stays the publisher's own, whether or not an index lists it.
+    network.node.mempoolAware = false;
+    network.node.confirmed.delete(hex(second.change!.id));
     const next = await p.publish({ location: SCRIPTS[1], subject: KEYS.operator, record: new Uint8Array(136).fill(4), height: network.tip.height });
+    expect(next.inputs.map(hex)).toEqual([hex(second.change!.id)]);
     expect(network.node.pool).toHaveLength(1);
-    expect(next.inputs).toHaveLength(1);
+    // A record the view already holds is not sent again.
+    const before = network.node.submitted.length;
+    await v.publish(commitmentOf(1n, 2));
+    expect(network.node.submitted).toHaveLength(before);
   });
 });
 

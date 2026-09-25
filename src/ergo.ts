@@ -306,8 +306,8 @@ export class ErgoVenue implements Venue {
           witnessedHeaderId: copyBytes(best.headers[Number(witnessed)]!.id) });
       }
       const snapshot = this.snapshot;
-      // The publisher forgets what this view now holds; its supplier calls never fail the sync.
-      if (this.publisher !== undefined && snapshot !== undefined) await this.publisher.settle(request => this.holds(request));
+      // The publisher forgets what this view now holds, in its own queue: it never fails or holds up the sync.
+      if (this.publisher !== undefined && snapshot !== undefined) this.publisher.settle(request => this.holds(request)).catch(() => {});
       return Object.freeze({
         witnessedIndex: snapshot?.witnessed, witnessedHeaderId: snapshot === undefined ? undefined : copyBytes(snapshot.witnessedHeaderId),
         chainWitnessedIndex: chainWitnessed >= 0n ? chainWitnessed : undefined, tipHeight: best.height, suppliers: Object.freeze(passes.map(({ pass }) => pass.report)),
@@ -488,7 +488,10 @@ export class ErgoVenue implements Venue {
   private publishRecord(kind: 1 | 2 | 3, subject: Uint8Array, record: Uint8Array): Promise<void> {
     if (this.publisher === undefined) throw new VenueError("this view has no publisher; publishing is the operator's wallet");
     this.requireSnapshot();
-    return this.publisher.publish({ location: this.profile.scripts[kind], subject, record, height: this.store.tip().height }).then(() => {});
+    const request = { location: this.profile.scripts[kind], subject, record, height: this.store.tip().height };
+    // Held already, as when a sync settled it after the caller last read: nothing to send.
+    if (this.holds(request)) return Promise.resolve();
+    return this.publisher.publish(request).then(() => {});
   }
 
   /** Whether the snapshot holds this exact record at its location under its subject. */

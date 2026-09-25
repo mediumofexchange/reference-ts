@@ -296,6 +296,7 @@ export interface ErgoPublisherOptions {
 interface Pending {
   readonly key: string;
   readonly request: ErgoRecordRequest;
+  readonly inputs: readonly ErgoPlainBox[];
   readonly publication: ErgoPublication;
 }
 const recordKey = (r: ErgoRecordRequest): string =>
@@ -318,6 +319,8 @@ export class ErgoPublisher {
   readonly #byChange = new Map<string, Pending>();
   /** Boxes remembered publications spend. */
   readonly #spent = new Set<string>();
+  /** Change this publisher created and has not spent, landed or not, while no supplier shows it gone. */
+  readonly #created = new Map<string, ErgoPlainBox>();
   #queue: Promise<unknown> = Promise.resolve();
 
   constructor(options: ErgoPublisherOptions) {
@@ -353,6 +356,14 @@ export class ErgoPublisher {
    * so a lost response or an unreachable supplier never leads to a second
    * transaction. Resolves once a supplier accepted it or shows its record
    * box; otherwise throws `VenueError` and keeps it for the next attempt.
+   *
+   * A remembered transaction every supplier refuses, one of whose inputs no
+   * supplier shows and one answers it lacks (an invented box, a dropped
+   * parent), can never land as it is: it is dropped with its change and
+   * rebuilt spending every input of it that a supplier still shows, so the
+   * two conflict wherever they can. Where none is shown, the old one could
+   * land only if its inputs came back, and the record would then be
+   * witnessed twice, which readers take as once.
    */
   async publish(request: ErgoRecordRequest): Promise<ErgoPublication> {
     const owned = ownRequest(request);
@@ -376,7 +387,9 @@ export class ErgoPublisher {
           (change !== undefined && await this.#any(s => s.hasBox(copyBytes(change.id))));
         this.#pending.delete(pending.key);
         if (change !== undefined) this.#byChange.delete(bytesToHex(change.id));
+        // Landed change stays the publisher's own until it spends it, whatever an index lists.
         if (landed) for (const input of publication.inputs) this.#spent.delete(bytesToHex(input));
+        else if (change !== undefined) this.#created.delete(bytesToHex(change.id));
       }
     });
   }
@@ -389,19 +402,51 @@ export class ErgoPublisher {
 
   async #publish(request: ErgoRecordRequest): Promise<ErgoPublication> {
     const key = recordKey(request);
+    const kept = (): never => { throw new VenueError("no supplier accepted the publication; it is kept and sent again on the next attempt"); };
     let pending = this.#pending.get(key);
-    if (pending === undefined) {
+    if (pending !== undefined) {
+      if (await this.#shown(pending) || await this.#send(pending, new Set())) return pending.publication;
+      const { live, gone } = await this.#inspect(pending);
+      if (gone.length === 0) kept();
+      this.#forget(pending, gone);
+      pending = await this.#build(key, request, live, new Set(gone.map(box => bytesToHex(box.id))));
+    } else {
       if (this.#pending.size >= PENDING_LIMIT) throw new VenueError("the publisher holds too many unsettled publications; settle it from a view");
-      const inputs = await this.#select(request.height, publicationCost(request, this.#tree, this.#fee, this.#perByte));
-      pending = Object.freeze({ key, request, publication: buildPublication(this.#key, this.#tree, inputs, request, this.#fee, this.#perByte) });
-      this.#remember(pending);
-    } else if (await this.#shown(pending)) {
-      return pending.publication;
+      pending = await this.#build(key, request, [], new Set());
     }
-    if (!await this.#send(pending, new Set())) {
-      throw new VenueError("no supplier accepted the publication; it is kept and sent again on the next attempt");
-    }
+    if (!await this.#send(pending, new Set())) kept();
     return pending.publication;
+  }
+
+  /** A new transaction for the record, spending `required` and never `excluded`, remembered before it is sent. */
+  async #build(key: string, request: ErgoRecordRequest, required: readonly ErgoPlainBox[], excluded: ReadonlySet<string>): Promise<Pending> {
+    const inputs = await this.#select(request.height, publicationCost(request, this.#tree, this.#fee, this.#perByte), required, excluded);
+    const pending: Pending = Object.freeze({ key, request, inputs: Object.freeze(inputs),
+      publication: buildPublication(this.#key, this.#tree, inputs, request, this.#fee, this.#perByte) });
+    this.#remember(pending);
+    return pending;
+  }
+
+  /** A refused publication's inputs that some supplier answers it lacks
+   * (gone, as selection judges a box), and those one shows and none denies
+   * (live). A supplier denying a real input costs at most a second witnessing
+   * of the record; one vouching for an invented input cannot keep it. */
+  async #inspect(pending: Pending): Promise<{ live: ErgoPlainBox[]; gone: ErgoPlainBox[] }> {
+    const live: ErgoPlainBox[] = [], gone: ErgoPlainBox[] = [];
+    for (const box of pending.inputs) {
+      if (await this.#denied(box.id)) gone.push(box);
+      else if (await this.#any(supplier => supplier.hasBox(copyBytes(box.id)))) live.push(box);
+    }
+    return { live, gone };
+  }
+
+  /** Drop a publication that cannot land: its change never existed, its inputs are free, and `gone` ones are no one's. */
+  #forget(pending: Pending, gone: readonly ErgoPlainBox[]): void {
+    this.#pending.delete(pending.key);
+    const change = pending.publication.change;
+    if (change !== undefined) { this.#byChange.delete(bytesToHex(change.id)); this.#created.delete(bytesToHex(change.id)); }
+    for (const input of pending.publication.inputs) this.#spent.delete(bytesToHex(input));
+    for (const box of gone) this.#created.delete(bytesToHex(box.id));
   }
 
   /** Send a publication after the unsettled ones whose change it spends and no supplier shows. */
@@ -424,16 +469,16 @@ export class ErgoPublisher {
   }
 
   /**
-   * Boxes covering the record's minimum, the fee and a change box, largest
-   * first, at most `MAX_INPUTS`: change of unsettled publications that none
-   * spends, which this publisher built, and plain boxes of the key that
-   * suppliers offer, each taken only as bytes hashing to its id and only
-   * where no supplier answers that it lacks the box, so a supplier inventing
-   * a box cannot outvote one that knows better.
+   * `required`, then boxes covering the record's minimum, the fee and a
+   * change box, largest first, at most `MAX_INPUTS`: change this publisher
+   * created and has not spent, and plain boxes of the key that suppliers
+   * offer, each taken only as bytes hashing to its id and only where no
+   * supplier answers that it lacks the box, so a supplier inventing a box
+   * cannot outvote one that knows better.
    */
-  async #select(height: bigint, needed: bigint): Promise<ErgoPlainBox[]> {
+  async #select(height: bigint, needed: bigint, required: readonly ErgoPlainBox[], excluded: ReadonlySet<string>): Promise<ErgoPlainBox[]> {
     const own = new Map<string, ErgoPlainBox>();
-    for (const [id, pending] of this.#byChange) if (!this.#spent.has(id)) own.set(id, pending.publication.change!);
+    for (const [id, box] of this.#created) if (!this.#spent.has(id)) own.set(id, box);
     const offered = new Map<string, ErgoPlainBox>();
     for (const supplier of this.#suppliers) {
       const answer = await this.#call(() => supplier.unspentBoxes(copyBytes(this.#tree)));
@@ -446,11 +491,12 @@ export class ErgoPublisher {
         }
       } catch { /* an answer that throws while read supplies nothing more */ }
     }
+    const requiredIds = new Set(required.map(box => bytesToHex(box.id)));
     const candidates = [...own.entries(), ...offered.entries()]
-      .filter(([id, box]) => !this.#spent.has(id) && box.creationHeight <= height)
+      .filter(([id, box]) => !this.#spent.has(id) && !excluded.has(id) && !requiredIds.has(id) && box.creationHeight <= height)
       .sort(([, a], [, b]) => (a.value > b.value ? -1 : a.value < b.value ? 1 : compareBytes(a.id, b.id)));
-    const chosen: ErgoPlainBox[] = [];
-    let total = 0n;
+    const chosen: ErgoPlainBox[] = [...required];
+    let total = required.reduce((sum, box) => sum + box.value, 0n);
     for (const [id, box] of candidates) {
       if (chosen.length === MAX_INPUTS || total >= needed) break;
       if (!own.has(id) && await this.#denied(box.id)) continue;
@@ -480,9 +526,12 @@ export class ErgoPublisher {
 
   #remember(pending: Pending): void {
     this.#pending.set(pending.key, pending);
-    for (const input of pending.publication.inputs) this.#spent.add(bytesToHex(input));
+    for (const input of pending.publication.inputs) { this.#spent.add(bytesToHex(input)); this.#created.delete(bytesToHex(input)); }
     const change = pending.publication.change;
-    if (change !== undefined) this.#byChange.set(bytesToHex(change.id), pending);
+    if (change !== undefined) {
+      this.#byChange.set(bytesToHex(change.id), pending);
+      this.#created.set(bytesToHex(change.id), Object.freeze({ id: change.id, value: change.value, creationHeight: change.creationHeight }));
+    }
   }
 
   async #call<T>(call: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false }> {

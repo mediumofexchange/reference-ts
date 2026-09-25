@@ -196,7 +196,8 @@ export class MempoolNode {
   /** Whether `unspentBoxes` shows the mempool's outputs and hides what it spends; a stale index does neither. */
   mempoolAware = true;
   refuse: (id: string) => boolean = () => false;
-  private readonly confirmed = new Map<string, Uint8Array>();
+  /** Boxes in blocks, which a stale index lists. */
+  readonly confirmed = new Map<string, Uint8Array>();
   private readonly spentInPool = new Set<string>();
   private readonly createdInPool = new Map<string, Uint8Array>();
 
