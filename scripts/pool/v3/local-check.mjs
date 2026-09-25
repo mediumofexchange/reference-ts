@@ -1209,12 +1209,11 @@ try {
   });
   // The repository sources the verdict executes, from the relative import graph (dist modules with their src
   // sources) and the circuits, helpers and manifest the pinned identities come from.
-  // Packages are bound by the lockfiles; the vendored library the Ergo fixture builds trees with by its checksum list.
+  // Packages are bound by the lockfile.
   const sources = sourceClosure(["scripts/pool/v3/local-check.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/compile.mjs",
     "scripts/pool/v3/candidate-manifest.json",
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
-    "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json",
-    ...(withErgo ? ["experiments/ergo-range/package-lock.json", "experiments/ergo-range/vendor/ergo-lib-wasm-nodejs/SHA256SUMS"] : [])]);
+    "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
   checkCandidateSources(manifest);
   const report = { schema: "moe-v3-local-replay-experiment-22", specification: V3_SPECIFICATION, node: process.version,
     compactIntrinsic: intrinsicPairs.map(item => ({ packageBytes: portable(item.payload).package.length, result: item.result })),

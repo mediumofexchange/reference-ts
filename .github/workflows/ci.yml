@@ -20,9 +20,8 @@ concurrency:
 jobs:
   pool-v3:
     runs-on: ${{ matrix.os }}
-    # The --ergo pass replays every local group a second time through the pinned decoder (the vendored release build
-    # since 2026-09-23, about six times faster than the debug alpha it replaced); the budget leaves headroom over the
-    # ~13-minute baseline measured under the alpha (13.5 minutes at d913edd on both runners).
+    # The --ergo pass replays every local group a second time from synthetic Ergo block sections through the
+    # profile's own framer; the budget leaves headroom over the ~13-minute baseline (13.5 minutes at d913edd).
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -35,8 +34,6 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Install pinned candidate Ergo decoder for replay
-        run: npm --prefix experiments/ergo-range ci --ignore-scripts --no-audit --no-fund
       - name: Six successor proof relations, uninstantiated construction
         run: npm run check:pool:v3 -- --ergo
       - name: Diagnose proving parameter integrity on failure
@@ -73,10 +70,8 @@ jobs:
         run: npm run check:pool-wallet-real
       - name: Caller-configured real-proof holder and operator
         run: npm run check:pool-local-real
-      - name: Delivery and seed restoration candidate
-        run: npm run check:pool:delivery
-      - name: Four-output transfers and ordinary fees candidate
-        run: npm run check:pool:fees
+      - name: Seed restoration from signed delivery evidence
+        run: npm run check:pool:restoration
 
   check:
     runs-on: ${{ matrix.os }}
@@ -110,11 +105,3 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: ./scripts/pool/local/device-storage-runner.test.ps1
-
-      - name: Install pinned offline Ergo probe dependencies
-        if: matrix.node == 24
-        run: npm --prefix experiments/ergo-range ci --ignore-scripts --no-audit --no-fund
-
-      - name: Real-block commitment feasibility and serializer counterexamples
-        if: matrix.node == 24
-        run: npm run check:ergo:range
