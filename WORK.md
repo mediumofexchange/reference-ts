@@ -3,13 +3,13 @@
 Updated: 2026-09-27
 
 ## Goal
-Slice 5: durable reference venue and exact publisher retry on `feat/v3-persistence`,
-from `6e4cea8` ([slice 4 delivery](https://github.com/mediumofexchange/reference-ts/pull/27)).
-Acceptance: synthetic restart reproduces exact witnessed ranges and continues sync;
-interrupted sync/publication preserves atomic snapshots and exact signed retries.
-Retain reproducing sections and all objects, including non-held commitments;
-prune completed deep side paths without losing budget-stopped fork continuation.
-Reuse the owning journal's fenced outbox. Stop before wallet redesign or live runs.
+Slice 5's bounded process persistence acceptance is complete; delivery is
+[PR #28](https://github.com/mediumofexchange/reference-ts/pull/28), implementation
+`f8fb78a` from `6e4cea8`. Synthetic restarts reproduce exact witnessed ranges,
+continue sync and preserve exact signed publication retries in the owning outbox.
+Complete section evidence retains non-held records; deep-side pruning preserves
+budget-stopped fork continuation and durable finality failure. Independent review
+passed. Stop before wallet redesign or live runs.
 
 ## Status
 - Runtime implemented: optional `ErgoVenueJournal`, revalidated headers/sections,
@@ -18,16 +18,17 @@ Reuse the owning journal's fenced outbox. Stop before wallet redesign or live ru
 - Independent design/integrated review passed after fixes for incomplete fork
   pruning, raw-header/ID handling and reuse of one outbox adapter by two publishers.
   No unresolved review blocker. No specification change or companion branch.
-- Node 24 typecheck passes. Publisher/journal: 58 focused cases plus final
-  adapter-reuse regression pass. Venue/header regression: all 74 assertions passed,
-  but the test process reported a Vitest worker RPC timeout; this is not a clean
-  passing run. Full final verification remains required.
+- All seven full reference and v2/v3 proof jobs passed for `f8fb78a` in
+  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36351105871).
+  This includes Node 20/24 Linux and Node 24 Windows full checks. Clean CI
+  supersedes a local Vitest RPC timeout; the redundant local full run was stopped.
 - `npm run check:ergo-persistence` passed 11 fresh-process synthetic stages:
   mid-sync, before/after commit, lost submission reply/exact retry and terminal
   failure. No proof, physical power-loss or live-operation claim.
-- Final verification job planned: `scratch/persistence-check.ps1`, output
-  `scratch/persistence-check.log`, completion `scratch/persistence-check.exit`.
-  Do not edit runtime/check inputs while it runs. No companion branch.
+- Six affected reports are refreshed from the passing Linux artifact; all their
+  source bindings match. Final changes only retain reports and correct documentation;
+  runtime/check inputs reuse the passing baseline. No active local job or companion
+  branch. Inspect PR #28 for merge revision and post-merge CI when resuming.
 
 ## Evidence
 - Design, rejected alternatives, review correction and scalability plan:
@@ -41,20 +42,25 @@ Reuse the owning journal's fenced outbox. Stop before wallet redesign or live ru
 - Publisher restore verifies exact signed transaction consistency; individual
   historical input values/heights rely on local journal integrity. Corruption can
   impair rebuild availability, not alter a network-accepted payment.
-- Pre-slice current reports bind `6e4cea8` or earlier inputs. Refresh affected
-  reports from final passing CI, or cite their historical revision; do not describe
-  old bindings as current. Live recovery remains historical at
+- Current reports: [journal](docs/pool-v3-store-verification.json),
+  [replay](docs/pool-v3-local-replay-verification.json),
+  [recovery](docs/pool-v3-recovery-store-verification.json),
+  [Ergo recovery](docs/pool-v3-recovery-store-ergo-verification.json),
+  [succession](docs/pool-v3-succession-store-verification.json) and
+  [Ergo succession](docs/pool-v3-succession-store-ergo-verification.json).
+  They prove the existing runtime flows; process persistence is separate synthetic
+  crash evidence. Live recovery remains historical at
   [a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json),
-  prior live journal/publisher at `2c6b20c`. Testnet header evidence is unchanged.
-- Slice 3 and 4 delivered single-backing recovery, succession and compact faults;
-  last full pre-slice proof baseline `ededc97` passed seven jobs in
-  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36347810739).
-  Merge `6e4cea8` post-merge run is `36349234692`; check its final status.
+  prior live journal/publisher at `2c6b20c`. Header and real-mainnet reader reports
+  are historical at `6e4cea8` after their bound modules changed.
+- Slice 4 merged at `6e4cea8`; all seven post-merge jobs passed in `36349234692`.
 
 ## Next
-1. Finish final full checks, refresh affected evidence, verify review readback,
-   commit/push PR, inspect required CI, merge, verify parity and clean scratch.
-2. V3 wallet/service (C4.1–2 requests/funding disclosure), retire v2; then
+1. Begin v3 wallet/service (C4.1–2 requests/funding disclosure) with a focused
+   inventory of reusable v2 custody/transport and acceptance cases. Port a complete
+   request-to-fulfillment capability, preserving reference guards and exact retry.
+   Recommend a fresh instance for this new component boundary.
+2. Retire v2 only after its wallet/service cases pass on v3; then
    multi-backing including compact fault orchestration (slice 7).
 3. Configuration adoption: provenance, ACIR identities/certificates, replay/import
    bounds, one-transaction condition and BN254 margin. Mainnet needs separate authority.
@@ -82,7 +88,8 @@ Reuse the owning journal's fenced outbox. Stop before wallet redesign or live ru
   recovery need separate provisioning authority. Configuration/mainnet remain disabled.
 
 ## Open questions
-- No unresolved design/review finding. Final acceptance and delivery remain open.
+- No unresolved design/review finding; disk streaming and physical custody remain
+  explicit later boundaries, not missing process-restart acceptance.
 
 Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-27.
 Persistence adds reusable process recovery; configuration adoption, wallet custody,

@@ -19,55 +19,55 @@
       "name": "issue 0",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1680
+      "elapsedMs": 1677
     },
     {
       "name": "issue 1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1050
+      "elapsedMs": 1044
     },
     {
       "name": "service demand withdrawn",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2665
+      "elapsedMs": 2651
     },
     {
       "name": "service demand settled",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2642
+      "elapsedMs": 2634
     },
     {
       "name": "service settlement at inclusive horizon",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2643
+      "elapsedMs": 2637
     },
     {
       "name": "unanswered request",
       "kind": 7,
       "bytes": 14656,
-      "elapsedMs": 1453
+      "elapsedMs": 1445
     },
     {
       "name": "forced first demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2643
+      "elapsedMs": 2628
     },
     {
       "name": "forced second demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2638
+      "elapsedMs": 2633
     },
     {
       "name": "forced settlement at return index",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2637
+      "elapsedMs": 2633
     }
   ],
   "transactions": [
@@ -115,13 +115,13 @@
     "position": "4",
     "adoptionIndex": "31",
     "spentRoot": "fffd456a20d0d582a358aaf322350494f197abdd3494f66bce0903d8c5b59e78",
-    "history": "3908b3dc556752f7812330648e4bef847b102161792ceaacfc62d88a88431832",
+    "history": "fe0e32f11d595b5308026858de476d42bd3c045498aa55a51dc18f26416d0611",
     "canonicalIndex": "33",
     "force": [
       {
         "index": "25",
         "kind": 4,
-        "sha256": "48f980ee9c2853931bf645d9a08dca481af8b77369ee97bbf015d8dc7a590400"
+        "sha256": "f1352eb319ea0a29cfde6a3c93e8403aa7f5257287a4c227d8929fe3d1e33e06"
       },
       {
         "index": "27",
@@ -131,12 +131,12 @@
       {
         "index": "29",
         "kind": 4,
-        "sha256": "d93ac1d67cc90b25590a18742c50593756aae55c81199dcc4d2f16761009da0b"
+        "sha256": "0651e98190b45bd9b980a992410f8ed882896227d5b9a2ab7655cf861d5fe442"
       },
       {
         "index": "31",
         "kind": 6,
-        "sha256": "72b5b63f30189f1580210b80f69ddb6c170957432951e2afaa9144562f3d2d52"
+        "sha256": "9a052ea2ce516b3501aa4820ba49709e1b621b28c2916f9f96baa367b2da3a2b"
       }
     ],
     "clock": {
@@ -157,18 +157,18 @@
       "snapshotIndex": "31"
     }
   },
-  "elapsedMs": 43044,
+  "elapsedMs": 42606,
   "sourceSha256Lf": {
     "dist/backing.js": "08d80f493e1438d95739a2485571ecd5c16b3eb01ed4e6db68c2f5275eabf7e9",
     "dist/bytes.js": "803a06d482439a9fe98de311a08a26c82c1be10e986d09c2a3bd42b169bf6d21",
     "dist/commitment.js": "810e35251311d26a90d99035f100b190a89f732a910d757eda9fa2115a109e2d",
     "dist/contexts.js": "76c4e48662040899dffdf49152193f2058001164e75f5bb7aefc1b5d964a7b38",
-    "dist/ergo-headers.js": "14e14e42681342fcec2fed74c9e006ac683bf1c5214c7a823ce91b5803d9953e",
+    "dist/ergo-headers.js": "788c2461e4b268c8c571f5b71b71b84e1fea445e931fcb825ed426262da4aba8",
     "dist/ergo-profile.js": "6accb1f4e0307f6570e8ebfdccb656fcb3a9dd10ecaae4d3ab1d7fe80e77c36c",
-    "dist/ergo-publisher.js": "935ce4c66155999c3bd58a96e3d6ac4c9a4f3b267a3da5ef3e536240bf6530b4",
+    "dist/ergo-publisher.js": "79e433c95349a202dea25a9ed33c2ae1093bbcafee5ecfe241c7ddbf69ab10b2",
     "dist/ergo-supplier.js": "793f4c0c527918e8b3391a2286a3f19447bcfeb7fd0cde05353efe53a94644dd",
     "dist/ergo-synthetic.js": "1994ef09fb8cec90d861ebfd0b163a09283c73ad12ed2a9372e02810a0216533",
-    "dist/ergo.js": "fa69e3f108af859b8cb706c55bf77f01978fee52a554b0ab2359ffc2d4f351d5",
+    "dist/ergo.js": "d1dfed20766a49ffcdf71f6f5daa567807469d691438255625b1ee97fb8f2186",
     "dist/keys.js": "07993d86bebf4555f59b82374f616cecfe9be5dc1d3ff19ac8fbc7d31163ed5c",
     "dist/messages.js": "ab09944d243cc56b1d7b8e0e7b94801d37be5de9a2706b0cb4966a989e46a8c4",
     "dist/oplog.js": "06f4e626b03c86daa5dd869351ac7897065d333e7261fd3dd0855d4d1534cbd1",
@@ -201,7 +201,7 @@
     "dist/pool/v3/served-trail.js": "c63f5c82e0e641994ac5a525a89af8675468d1d07fbbc50fa1e654b2c51faafd",
     "dist/pool/v3/spent-set.js": "c98a2825f8dbaac330ea6ce4c2ff655a468b9d143ba822f6848700886fb85a45",
     "dist/pool/v3/state.js": "1823f0097a5578976b8f0902c114e28e063194984ef73bcebbd01b2e5d7539c0",
-    "dist/pool/v3/store.js": "a80d3121ce020db51b32be279fafcd42d8de1119a7f3518a3a758c30d8dfa32e",
+    "dist/pool/v3/store.js": "2ba8a0e142d3fa52829dc7837a4c8fbd64d1d4f154b3bc6e3ffc1edd3306bdbb",
     "dist/pool/v3/terms.js": "7a7c4432cb7b49b8e8e5018829567946b2c2aebaf9ca13c4f3f8cb79d0d547f5",
     "dist/pool/v3/trail.js": "2dab50c14cf643e9cfddf742b5b30c82a69e177f1471a4992cebca7ac598cbfc",
     "dist/pool/v3/witness.js": "e4e2cce534c8d54cdec4ad899897b0d315c3528a2b0c80a9cc2a9e33a289f508",
@@ -245,12 +245,13 @@
     "src/bytes.ts": "7b78d53db688cb16092e2fdcb0689968f3e8f6765f56303abfb50816b2a6f3bd",
     "src/commitment.ts": "98eac617566d4b1770d99a5a0da94b9047e5a57ec4e576eb1ec20597b69aa93e",
     "src/contexts.ts": "9cd0dc417e99aa8be367caf7548cc588caa4a750f08864037645cb75779c69fa",
-    "src/ergo-headers.ts": "808872a0e47327d804287c4718616b3d413fffb52605d90f37c68b1e3d5a198f",
+    "src/ergo-headers.ts": "fc308579697076e7476617e1c5141710cdf7aa83953effbf92be45c74d0426dc",
     "src/ergo-profile.ts": "12ee44043a1dce07e8c86984b061b87cb79fa3193365b162d97db7632c21d631",
-    "src/ergo-publisher.ts": "6b438c4c775ddddc96b1c55d0584d2e4a1320f8ca417cc1022fab65bdf6cde8a",
+    "src/ergo-publisher.ts": "0a6ccd09740141632ec673bf8877d9d9754b3cce07ea67936bc075841f7e020b",
+    "src/ergo-store.ts": "2a48f58b3117bf83be17023c9d149c4cf10e40dd860061188e60b1d2702cb1b6",
     "src/ergo-supplier.ts": "b9bb52129f4e2fcfdb936682294476ba11e2fa55e27c5775f4000914cdae73f7",
     "src/ergo-synthetic.ts": "46548045ce2cf328dde12a04982cc23ddf3ac849e53b901c43ba15c8f4437b2e",
-    "src/ergo.ts": "c8e82588894ee42f0b23d737ea7410e9c3da292c6544849910a9f40da5b61a5d",
+    "src/ergo.ts": "d6bb206950ad82a32402fc5d55a25954bbb4c2eab242e12a5e4bf0cb29227b6a",
     "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
     "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
     "src/messages.ts": "8a941254bf24650f9146d3875add1f20993a08b17b40ddac1ed060e225191718",
@@ -285,7 +286,7 @@
     "src/pool/v3/served-trail.ts": "7e03a0f71795828b0574a21087fd32910bd09d74280d900cababdd7bf361a3d8",
     "src/pool/v3/spent-set.ts": "66d4531c9b227fb31b21fca10e65983a7c303b22cb2c84f6e33febe273973239",
     "src/pool/v3/state.ts": "dac25a47af0f2d53018dfcf27feb237430424129160d7d30352d84c4a0e3f2d4",
-    "src/pool/v3/store.ts": "907044c758f45a4c5474017b7fea83ef7c15ac7c4ff86e8b0f4460490c5baec9",
+    "src/pool/v3/store.ts": "e698236ea007e00724d7435b4cc5f33ea548113437ba8dd4f9aa35bbf29b63d4",
     "src/pool/v3/terms.ts": "d70b26e03d11e303f88b6a19d396cea01cb74275891b8fe898d195b35faeff04",
     "src/pool/v3/trail.ts": "2b3f5e5cf4b8828080b1706f303bfad785388cf9518671ddfea7ac07e330097a",
     "src/pool/v3/witness.ts": "3d48d91112d90bdf8c5a07b1df7878d130c5c9cc1a9437278e54588f2105e760",

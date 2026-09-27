@@ -106,7 +106,7 @@ child, and the anchor already fixes the ancestry a proof would summarize.
 
 The reference-testnet header check is
 [`testnet-header-check.mjs`](../experiments/ergo-range/testnet-header-check.mjs).
-Its [source-bound report](ergo-testnet-header-verification.json) records a
+Its [historical source-bound report](https://github.com/mediumofexchange/reference-ts/blob/6e4cea8/docs/ergo-testnet-header-verification.json) records a
 contiguous real window, every recalculation in that window and fresh own-node
 tip agreement. It takes an independently pinned anchor and applies the runtime
 store to every descendant. Terminal signed-Int arithmetic and activation reset
@@ -418,7 +418,7 @@ observed finality failure was not durably written.
 
 [`runtime-sync.mjs`](../experiments/ergo-range/runtime-sync.mjs) runs the
 view on real mainnet headers and sections. The
-[report](ergo-runtime-venue-verification.json) owns the anchor, ranges and
+[historical report at 6e4cea8](https://github.com/mediumofexchange/reference-ts/blob/6e4cea8/docs/ergo-runtime-venue-verification.json) owns the anchor, ranges and
 measurements. It compares a view synced from the own node with an independent
 view synced from a public node, including their witnessed block and exact
 range answers. It also checks that a substituted section stops the clock,
