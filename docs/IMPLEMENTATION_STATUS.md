@@ -9,7 +9,9 @@ pin changes; dated decisions retain the reasoning behind those changes.
 way to try the implementation. There is no published npm release, no
 deployment, and no completed security audit.
 
-The active implementation is the shielded pool in `src/pool/`: pinned v2
+Active development is the guarded candidate in `src/pool/v3/`, with ordinary
+payments and single-backing recovery described below. The frozen v2 implementation
+in `src/pool/` retains pinned v2
 circuits and proofs, private notes, public supply replay, record-derived
 authority and canonical history, receipt readers, and durable sequencing.
 The [local service/client transport](POOL_SERVICE.md) exposes durable submission,
@@ -47,8 +49,9 @@ hardware, physical failure drills and continuous recovery remain open.
 An exact segment constraint prevents another profile from fencing an existing
 operator journal or signing another scope. Local ledger authentication, device
 custody and continuous recovery remain deployment preconditions and open work.
-Silence recovery is modeled but not implemented in the
-runtime; usable wallet custody and an external witness write adapter remain open.
+This v2 wallet has no runtime silence recovery. The v3 runtime implements
+single-backing recovery and Ergo publication; usable wallet custody, v3 wallet
+integration and durable venue/publisher operation remain open.
 
 The frozen transparent implementation and its local pilot remain adversarial
 and integration evidence. The duplicate private-payment experiment is retired;
@@ -259,17 +262,18 @@ frozen until the v3 wallet and service pass its ported cases.
 `src/pool/v3/records.ts` implements the successor's reviewed
 [canonical record layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/ca727f6/pool-v3.md#5-canonical-statement-records).
 `npm test` checks exact bytes, hostile parsing, delivery association and
-signature-message binding. The candidate journal admits issue, spend and burn
-through those records; approved v3 configuration, deployment finality and
-adoption remain undefined.
+signature-message binding. The candidate journal admits ordinary and recovery
+statements through those records; configuration adoption and deployment
+acceptance remain open.
 `src/pool/v3/commitments.ts` adds the reviewed history/evidence chains,
 snapshot and receipt frames from [pool-v3 §7](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md#7-history-evidence-snapshots-and-receipts).
 Its tests distinguish authenticated failing evidence from substituted bytes
 using real signatures. Authentication alone supplies no checkpoint verdict.
 `src/pool/v3/headers.ts` implements [v3 segment headers](https://github.com/mediumofexchange/money-from-first-principles/blob/061f87e/pool-v3.md#8-segment-headers)
 with canonical scope/opening references and bounded strict decoding. Its
-signed-directory and hostile-byte tests establish header conformance; complete
-opening evidence, complete certificate formats and runtime adoption remain open.
+signed-directory and hostile-byte tests establish header conformance. The reader
+checks single-backing opening evidence and recovery adoption; complete certificate
+formats, replacement-service acceptance and configuration adoption remain open.
 `src/pool/v3/fault-evidence.ts` adds the [portable fault-evidence record](https://github.com/mediumofexchange/money-from-first-principles/blob/322bcae/pool-v3.md#9-fault-evidence-records):
 exact raw target bytes and an evidence suffix, checked against an externally
 authenticated snapshot with an explicit reader budget. Successful evidence
@@ -302,8 +306,10 @@ the lesser identity at one index), checked against the runtime walk.
 The reader (`src/pool/v3/reader.ts`) reads them through a `RecordVenue`
 (`src/record-venue.ts`): `FixtureVenue` in the harness by default and
 `ErgoVenue` under `--ergo`. The local replay integrates these answers with the
-bounded clock and import checks described above. Venue-source authentication, complete shared-scope
-authority, recovery and adoption remain open.
+bounded clock and import checks described above. Ergo authenticates venue
+evidence from untrusted suppliers; the runtime recovery path below verifies single-backing force and
+adoption. Complete shared-scope runtime recovery and configuration adoption
+remain open.
 
 The operator side runs in `src/pool/v3/` on reference venues only
 ([decision](../decisions/2026-09.md#2026-09-25--admit-commit-and-serve-v3-through-an-operator-journal-proving-in-the-runtime-on-reference-venues-only)):
@@ -340,8 +346,10 @@ includes a fresh process that has only public evidence and independent reader
 inputs. The [local](pool-v3-recovery-store-verification.json) and
 [synthetic Ergo](pool-v3-recovery-store-ergo-verification.json) real-proof
 acceptance passed in [CI at 74eade8](https://github.com/mediumofexchange/reference-ts/actions/runs/36327647966)
-on Linux and Windows. The separately authorized [live testnet recovery](pool-v3-recovery-store-testnet-verification.json)
-and retained public-bundle readback also passed; [measurements and limits](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
+on Linux and Windows. The separately authorized [live testnet recovery](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
+and retained public-bundle readback also passed. That live evidence is historical
+at `a72888b`; later journal changes need their own acceptance evidence.
+[Measurements and limits](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
 distinguish this single-backing candidate drill from deployment acceptance.
 Complete trails remain bounded; imports do not erase ancestry or reset the
 package/work budgets. No replacement service, wallet custody, persistence,
