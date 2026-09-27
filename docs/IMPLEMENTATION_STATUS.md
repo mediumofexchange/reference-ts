@@ -318,6 +318,10 @@ explicit mining and synchronization witness them. Holders spend notes restored
 from the served package; a fresh seedless process verifies supply from the
 package and venue records. In synthetic mode it receives block evidence and
 holds the witnessed block pin separately ([report](pool-v3-store-verification.json)).
+The explicit `store-check.mjs --testnet` path uses the reference testnet identity
+and a fresh reader fetching its own headers/sections. Its live acceptance gate
+is tracked in WORK.md; the implemented header rules already have a
+[source-bound own-node check](ergo-testnet-header-verification.json).
 One genesis segment of one backing; no recovery kinds, imports, replacement
 service, live-chain deployment or adopted configuration.
 

@@ -33,7 +33,7 @@ one-clause summary, not numbers or dated status. `CLAUDE.md` contains exactly `@
 
 The shielded pool is the active claim layer (Construction C1.2). Develop v3 in `src/pool/v3/`:
 one moded state machine and one reader over the neutral core, guarded to recomputed local/synthetic
-reference identities. Freeze v2-specific `src/pool/` code (no features or fixes); retain its checks
+or testnet reference identities. Freeze v2-specific `src/pool/` code (no features or fixes); retain its checks
 until the v3 wallet/service pass the ported cases and v2 retires. PoolStore refuses silence clauses.
 V3 is unadopted; remaining model/harness work is conditional evidence. See implementation status.
 

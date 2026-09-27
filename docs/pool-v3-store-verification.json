@@ -3,6 +3,7 @@
   "specification": "786f962",
   "node": "v24.21.0",
   "platform": "linux",
+  "elapsedMs": 28879,
   "candidateDomain": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
   "backing": "b2ba4542689d5c78f19e03b18b94954356be31526ea4c7a23cdd105138dfaec6",
   "venue": {
@@ -11,7 +12,7 @@
     "id": "55ae0a5d111ed4e8e93056315c03554c262c329b02ebae1fc458f409ae34974c",
     "anchor": "e82e1330effedb38f0962713a8462fd54117e2231bad8f2c9880ca43d596a7f1",
     "depth": "1",
-    "witnessedBlock": "dfc401f26bf45180e412147ebd6967786c0be65f2ad0259afcd0298d70c204d2",
+    "witnessedBlock": "467e2d5d4c31d8a7c591206aefb832e063b9a4e445fd30dec136acf173b77013",
     "tipHeight": "900010",
     "funding": "invented synthetic box",
     "publisher": "ErgoPublisher"
@@ -37,31 +38,31 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1662
+      "elapsedMs": 1309
     },
     {
       "label": "pay 7, fee 1, change 2",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3179
+      "elapsedMs": 2678
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 2645
+      "elapsedMs": 2235
     },
     {
       "label": "double spend refused",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3116
+      "elapsedMs": 2666
     },
     {
       "label": "issue 10 again",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1042
+      "elapsedMs": 866
     }
   ],
   "packageBytes": 48250,
@@ -76,12 +77,12 @@
     "dist/bytes.js": "803a06d482439a9fe98de311a08a26c82c1be10e986d09c2a3bd42b169bf6d21",
     "dist/commitment.js": "810e35251311d26a90d99035f100b190a89f732a910d757eda9fa2115a109e2d",
     "dist/contexts.js": "76c4e48662040899dffdf49152193f2058001164e75f5bb7aefc1b5d964a7b38",
-    "dist/ergo-headers.js": "2e272856dddc98ec56eabd5cf7969e7bcbca3edb6cd3163452608f44e9135e19",
-    "dist/ergo-profile.js": "cf05f525e18c218b5d10c72dd51b4ebf5f63b2f247993c5d988b43f6e099b25e",
+    "dist/ergo-headers.js": "14e14e42681342fcec2fed74c9e006ac683bf1c5214c7a823ce91b5803d9953e",
+    "dist/ergo-profile.js": "6accb1f4e0307f6570e8ebfdccb656fcb3a9dd10ecaae4d3ab1d7fe80e77c36c",
     "dist/ergo-publisher.js": "89a98a9c7338e04296e6be1122aed7589e9bb184143d93cb779c77bbf303c6af",
     "dist/ergo-supplier.js": "793f4c0c527918e8b3391a2286a3f19447bcfeb7fd0cde05353efe53a94644dd",
     "dist/ergo-synthetic.js": "1994ef09fb8cec90d861ebfd0b163a09283c73ad12ed2a9372e02810a0216533",
-    "dist/ergo.js": "7b34ab1e9a81cbd0b0ec83f7d63f9fb727124125c82e6aea4a64663148cce679",
+    "dist/ergo.js": "506d9c0288c64876e62d3cd90d62220ab62f97f5bdf910544a90e670ec321f44",
     "dist/keys.js": "07993d86bebf4555f59b82374f616cecfe9be5dc1d3ff19ac8fbc7d31163ed5c",
     "dist/messages.js": "ab09944d243cc56b1d7b8e0e7b94801d37be5de9a2706b0cb4966a989e46a8c4",
     "dist/oplog.js": "06f4e626b03c86daa5dd869351ac7897065d333e7261fd3dd0855d4d1534cbd1",
@@ -96,7 +97,7 @@
     "dist/pool/v3/commitments.js": "d75b0216af32fa8b28e28f21634446c58ee34aa16b7e7a43d031da6358b8afa4",
     "dist/pool/v3/configuration.js": "225a94dbcda3cfaea355b999c287043f8ee5b1a53f88fd5904d7af8f7444c830",
     "dist/pool/v3/fault-evidence.js": "39af73b8067aa0568dfd70533ed61effabf3911adb98d1ba70ef9afa084d8786",
-    "dist/pool/v3/guard.js": "640c1dddd4cc22c10b5bc41d1426e81ed9bb1c44b7b7ee0ea08e8087cb00236c",
+    "dist/pool/v3/guard.js": "022fcfe559809db0681cc0aeedb1ebba030f9f4964853fc8def2b7b0418f088e",
     "dist/pool/v3/headers.js": "932184def09c7f76e27da3699f9d205bc56677df742a0285cdf5fd45b3a9c6ff",
     "dist/pool/v3/package.js": "5a0073c9068342854b8368a48a2423d3a56f42ba3639524d07995c2875abada6",
     "dist/pool/v3/prover.js": "8d9e819f892337028157258b37ffced0184424063ba3d1624e2ef1ca9e73c16e",
@@ -137,24 +138,25 @@
     "scripts/pool/v3/ergo-check.mjs": "d2113a043f54ed59dceca6d270e2d6fe205c45d6e4e02231a31b6b3bc4fb0b84",
     "scripts/pool/v3/fault-evidence.mjs": "97ac98b9269f8e75705fbff7035d72abea1f0d1eacadf53859bdad05bd2e679f",
     "scripts/pool/v3/local-replay.mjs": "46f4269219079b4f70ac9632a2eb62dd70dc853ff514d2e11de565b2341bbde2",
-    "scripts/pool/v3/local-worker.mjs": "c2f4397c9aefcd7f0a0464eafe284cd2dc18f9b3a0700d218ab6400b71538424",
+    "scripts/pool/v3/local-worker.mjs": "964a9c911b52e994d263fd387071a743d2910d3a4bead286a614f1dff157e5ae",
     "scripts/pool/v3/non-service.mjs": "f573f4556b99049ef0c7e46d42f4b3f380a6b9ebe9c450aca20ef616fce4573a",
     "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
     "scripts/pool/v3/receipt-state.mjs": "5c4e69983c2900ab72f41bbe9a34f8d7ad7a5ceebbccc6d96931e55e1c3f3245",
     "scripts/pool/v3/scope-evidence.mjs": "a5bdd711885ded5bb5f43f13c7769b7e9e86789658fe9af0a3627581b4f85a16",
     "scripts/pool/v3/scope-recovery.mjs": "ae6f5a68680110cf19604a71047230c84ad296cbd71f5e457a1fb1618d02a6de",
     "scripts/pool/v3/scope-replay.mjs": "99519763746d9b17e10dc3b125f84b38189e35bd1b67f1a6b2a2745355dcc86f",
-    "scripts/pool/v3/store-check.mjs": "86393ea97da4c8fe3cc0075a5389d26391784d570e009673e66efbd1584f168f",
+    "scripts/pool/v3/store-check.mjs": "69ddc3359b0fdff53c38a96f73789263ed2269bcf0ba2d074aa28f7da243e6d8",
+    "scripts/pool/v3/testnet.mjs": "acd65d9845744e1ce0b822c2b368aadbf308631a2e31378bca3e79fb9bb4956e",
     "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
     "src/bytes.ts": "7b78d53db688cb16092e2fdcb0689968f3e8f6765f56303abfb50816b2a6f3bd",
     "src/commitment.ts": "98eac617566d4b1770d99a5a0da94b9047e5a57ec4e576eb1ec20597b69aa93e",
     "src/contexts.ts": "9cd0dc417e99aa8be367caf7548cc588caa4a750f08864037645cb75779c69fa",
-    "src/ergo-headers.ts": "17c0c2f19779037642b16a73489cc794061703e7ccbd3bd438b284c24c443fe5",
-    "src/ergo-profile.ts": "e3789d16774c0aa3b78bfdebe3ee007168b80b2204a85958eb50c58d32568476",
+    "src/ergo-headers.ts": "808872a0e47327d804287c4718616b3d413fffb52605d90f37c68b1e3d5a198f",
+    "src/ergo-profile.ts": "12ee44043a1dce07e8c86984b061b87cb79fa3193365b162d97db7632c21d631",
     "src/ergo-publisher.ts": "2dabd89ca03ce53a1bbab4142e2bfdd053f0cec625d67cd3cca3e7fd1930de92",
     "src/ergo-supplier.ts": "b9bb52129f4e2fcfdb936682294476ba11e2fa55e27c5775f4000914cdae73f7",
     "src/ergo-synthetic.ts": "46548045ce2cf328dde12a04982cc23ddf3ac849e53b901c43ba15c8f4437b2e",
-    "src/ergo.ts": "0a841c506ecf75054b576c30d418c68f24278d2a2924f95aa81484eb424ef2b2",
+    "src/ergo.ts": "e35289491737d62a36663c292c62229d5901cc19edb714048bac1d4a818873cd",
     "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
     "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
     "src/messages.ts": "8a941254bf24650f9146d3875add1f20993a08b17b40ddac1ed060e225191718",
@@ -171,7 +173,7 @@
     "src/pool/v3/commitments.ts": "23dbabca0a95179e92ff5fb276de0f94948458b4d749b7da37ac43c115c8593b",
     "src/pool/v3/configuration.ts": "cec9026ac24d98495f80902180c130cc043e563823323705e316708cc27fe245",
     "src/pool/v3/fault-evidence.ts": "ada8e79acac5b0d642da0e691834c3da5bd6c4fd0faed70d447b409c57a2ec57",
-    "src/pool/v3/guard.ts": "6f54f62ed0d6c9cb91f4c4bcce5b7fec06ab63dbaf022cc1773a560c8371c792",
+    "src/pool/v3/guard.ts": "aeb6252e1f9ba92d1d8ac9d047ef74c9e87b8b9e385edcbf5758621536d06a5b",
     "src/pool/v3/headers.ts": "2c9c9969dd43c07c1125f07625c94f7ad995b8c0c1274692eeed426ff26c4618",
     "src/pool/v3/package.ts": "80429cf017eb2c8b09bfc8afe2ae0f3b15c5dccb92a0e812eb189672318561ce",
     "src/pool/v3/prover.ts": "ba76c8acd439b28ec54d5dc5b21152df822d33ca93df363b4ddad90ed7fadfec",
@@ -215,7 +217,7 @@
       "noteRoot": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
       "spentRoot": "41e94caf3396dda075e9a2387c9b08df36128abf54b7ca339fe569498c8c4196",
       "historyHash": "69b4a3ce59763cabd06f8b554bc320642cfb7b5892899919c897a861ea180cdb",
-      "evidenceHash": "24ee35761f3ea35e77b4b5551f33c27de9ddc8423ea3d6a0242ec7865a5863a1",
+      "evidenceHash": "221808265d530a8f3490b757539bca2d12a1b1cae3d13b1b69b0e663214d1da7",
       "range": {
         "judgingIndex": "8",
         "lag": "2",
@@ -278,7 +280,7 @@
         "noteRoot": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
         "spentRoot": "41e94caf3396dda075e9a2387c9b08df36128abf54b7ca339fe569498c8c4196",
         "historyHash": "69b4a3ce59763cabd06f8b554bc320642cfb7b5892899919c897a861ea180cdb",
-        "evidenceHash": "24ee35761f3ea35e77b4b5551f33c27de9ddc8423ea3d6a0242ec7865a5863a1",
+        "evidenceHash": "221808265d530a8f3490b757539bca2d12a1b1cae3d13b1b69b0e663214d1da7",
         "range": {
           "judgingIndex": "8",
           "lag": "2",
@@ -418,7 +420,7 @@
         "noteRoot": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
         "spentRoot": "41e94caf3396dda075e9a2387c9b08df36128abf54b7ca339fe569498c8c4196",
         "historyHash": "69b4a3ce59763cabd06f8b554bc320642cfb7b5892899919c897a861ea180cdb",
-        "evidenceHash": "24ee35761f3ea35e77b4b5551f33c27de9ddc8423ea3d6a0242ec7865a5863a1",
+        "evidenceHash": "221808265d530a8f3490b757539bca2d12a1b1cae3d13b1b69b0e663214d1da7",
         "range": {
           "judgingIndex": "8",
           "lag": "2",
@@ -558,7 +560,7 @@
         "noteRoot": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
         "spentRoot": "41e94caf3396dda075e9a2387c9b08df36128abf54b7ca339fe569498c8c4196",
         "historyHash": "69b4a3ce59763cabd06f8b554bc320642cfb7b5892899919c897a861ea180cdb",
-        "evidenceHash": "24ee35761f3ea35e77b4b5551f33c27de9ddc8423ea3d6a0242ec7865a5863a1",
+        "evidenceHash": "221808265d530a8f3490b757539bca2d12a1b1cae3d13b1b69b0e663214d1da7",
         "range": {
           "judgingIndex": "8",
           "lag": "2",
@@ -738,7 +740,7 @@
         "noteRoot": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
         "spentRoot": "41e94caf3396dda075e9a2387c9b08df36128abf54b7ca339fe569498c8c4196",
         "historyHash": "69b4a3ce59763cabd06f8b554bc320642cfb7b5892899919c897a861ea180cdb",
-        "evidenceHash": "24ee35761f3ea35e77b4b5551f33c27de9ddc8423ea3d6a0242ec7865a5863a1",
+        "evidenceHash": "221808265d530a8f3490b757539bca2d12a1b1cae3d13b1b69b0e663214d1da7",
         "range": {
           "judgingIndex": "8",
           "lag": "2",
@@ -800,7 +802,7 @@
         "noteRoot": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
         "spentRoot": "41e94caf3396dda075e9a2387c9b08df36128abf54b7ca339fe569498c8c4196",
         "historyHash": "69b4a3ce59763cabd06f8b554bc320642cfb7b5892899919c897a861ea180cdb",
-        "evidenceHash": "24ee35761f3ea35e77b4b5551f33c27de9ddc8423ea3d6a0242ec7865a5863a1",
+        "evidenceHash": "221808265d530a8f3490b757539bca2d12a1b1cae3d13b1b69b0e663214d1da7",
         "range": {
           "judgingIndex": "8",
           "lag": "2",

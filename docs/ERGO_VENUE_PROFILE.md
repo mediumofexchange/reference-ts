@@ -104,6 +104,16 @@ child, and the anchor already fixes the ancestry a proof would summarize.
 
 ## Costs and limits
 
+The reference-testnet header check is
+[`testnet-header-check.mjs`](../experiments/ergo-range/testnet-header-check.mjs).
+Its [source-bound report](ergo-testnet-header-verification.json) records a
+contiguous real window, every recalculation in that window and fresh own-node
+tip agreement. It takes an independently pinned anchor and applies the runtime
+store to every descendant. Terminal signed-Int arithmetic and activation reset
+are covered by hostile unit fixtures, rather than the current-height window.
+This is header evidence only; live journal/publication acceptance has its own
+gate in WORK.md.
+
 - The reader runs no decoder, so no decoder's refusal denies a range. Until
   2026-09-24 it decoded with sigma-rust, first unpinned and then as a
   [contained](POOL_DEPLOYMENT_PROBES.md#contained-decoder) release build, and
@@ -366,8 +376,10 @@ an honest supplier supplies the missing valid section, and altered difficulty
 bits stop the offending supplier's header pass.
 
 [`publisher-check.mjs`](../experiments/ergo-range/publisher-check.mjs) runs
-the publisher on the own testnet node
-([report](ergo-publisher-verification.json)): a commitment, a replacement
+the publisher on the own testnet node. Its retained
+[report](ergo-publisher-verification.json) is historical evidence at `4c42bba`;
+acceptance on the new reference-testnet profile remains tracked in WORK.md.
+In that run a commitment, a replacement
 and a revocation, each signed by its own key, went out as three
 transactions chained in the mempool (416, 513 and 375 unsigned bytes, each
 56 bytes more signed); before each submission the node checked the bytes
