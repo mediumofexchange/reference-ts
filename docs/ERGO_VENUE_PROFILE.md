@@ -111,8 +111,8 @@ contiguous real window, every recalculation in that window and fresh own-node
 tip agreement. It takes an independently pinned anchor and applies the runtime
 store to every descendant. Terminal signed-Int arithmetic and activation reset
 are covered by hostile unit fixtures, rather than the current-height window.
-This is header evidence only; live journal/publication acceptance has its own
-gate in WORK.md.
+This is header evidence only; the [live journal report](pool-v3-testnet-verification.json)
+separately records publication and public supply verification.
 
 - The reader runs no decoder, so no decoder's refusal denies a range. Until
   2026-09-24 it decoded with sigma-rust, first unpinned and then as a
@@ -376,19 +376,13 @@ an honest supplier supplies the missing valid section, and altered difficulty
 bits stop the offending supplier's header pass.
 
 [`publisher-check.mjs`](../experiments/ergo-range/publisher-check.mjs) runs
-the publisher on the own testnet node. Its retained
-[report](ergo-publisher-verification.json) is historical evidence at `4c42bba`;
-acceptance on the new reference-testnet profile remains tracked in WORK.md.
-In that run a commitment, a replacement
-and a revocation, each signed by its own key, went out as three
-transactions chained in the mempool (416, 513 and 375 unsigned bytes, each
-56 bytes more signed); before each submission the node checked the bytes
-and refused them with one proof byte changed; the replacement's first
-answer was lost, and the retry found its record box and sent nothing;
-publishing the commitment again submitted nothing (the node itself answers
-a second submission of a pooled transaction with a refusal); and the including blocks' sections,
-each accepted only where it reproduced its header's root, carried exactly the
-three records at their kinds, subjects and ordinals. In tests
+the publisher on the own testnet node under the reference-testnet identity.
+Its [report](ergo-publisher-verification.json) records signed commitment,
+replacement and revocation transactions, verified inclusion and depth, and
+exact record bytes, subjects and ordinals in their carrying sections.
+The node refuses an altered proof; lost-answer and exact retries submit no
+additional transaction. The report owns the anchor, transaction ids and sizes.
+In tests
 (`test/ergo-publisher.test.ts`) recorded proofs signed by sigma-rust
 verify and every variation is refused, a mempool written independently of
 the publisher admits only balanced, fully signed transactions, a lost
@@ -403,7 +397,9 @@ serves packages and mined block evidence to a fresh seedless reader, whose
 witnessed block pin is held independently beside its candidate keys. Both
 journal and reader require the caller's reference identity preimage. See the
 [journal acceptance](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
-for the report and synthetic-only limits; no live node or funds enter that flow.
+for the synthetic report and limits. The explicit `--testnet` path uses the same
+journal on the live reference testnet, with throwaway tERG funding and a fresh
+reader fetching its own headers and sections ([live report](pool-v3-testnet-verification.json)).
 
 What remains before an Ergo deployment: persistence, the one-transaction
 condition checked against an adopted configuration, publication on the

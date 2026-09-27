@@ -31,6 +31,7 @@ import { PACKAGE_LIMITS, recordReader, replayEvidencePackage } from "./local-rep
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys } from "./candidate.mjs";
 import { v3Codec as codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
+import { publicArtifactFiles } from "./public-artifacts.mjs";
 import { ERGO_CHAIN, ERGO_PROFILE, ERGO_EVIDENCE_KIND, ergoRecord } from "./ergo-check.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../../..");
@@ -245,8 +246,8 @@ try {
   // The fresh reader holds this pin beside its keys, independently of the served package.
   if (withErgo || withTestnet) writeFileSync(join(build, "ergo-pin.bin"), pin);
   if (withTestnet) writeFileSync(join(build, "testnet-reader.json"), JSON.stringify(live.readerConfig()));
-  const url = pathToFileURL(build + sep).href;
-  const worker = input => {
+  const worker = (input, directory = build) => {
+    const url = pathToFileURL(directory + sep).href;
     const child = spawnSync(process.execPath, [join(here, "local-worker.mjs"), url, ...(withTestnet ? ["--testnet"] : withErgo ? ["--ergo"] : [])], {
       input: serialize(input), timeout: withTestnet ? testnet.TESTNET_LIMITS.workerMs : 120_000, cwd: build, windowsHide: true, maxBuffer: 1_048_576 });
     assert.equal(child.error, undefined); assert.equal(child.status, 0, child.stderr.toString());
@@ -311,19 +312,16 @@ try {
     } finally { await reopenApi.destroy(); }
   });
 
-  assert.deepEqual(sourceHashes(sources), sourceSha256Lf, "acceptance sources changed during the run");
-  const elapsedMs = Math.round(performance.now() - runStarted);
-  if (withTestnet) assert(elapsedMs < testnet.TESTNET_LIMITS.runMs, "testnet run time budget");
   let publicBundle;
   if (withTestnet) {
     // Retain only public replay inputs, independently selected trust inputs
-    // and checked verification keys. No journal, witness, seed or funding key.
+    // and checked public bytecode/keys. No journal, witness, seed or funding key.
     const directory = join(scratch, "pool-v3-testnet-reader"), input = await served();
     assert.deepEqual(Object.keys(input).sort(), ["package", "selection"]);
     const files = new Map([["input.bin", serialize(input)],
       ["testnet-reader.json", Buffer.from(JSON.stringify(live.readerConfig(), null, 2) + "\n")],
       ["ergo-pin.bin", pin],
-      ...RELATION_KINDS.map(([kind]) => [`${kind}.vk`, readFileSync(join(build, `${kind}.vk`))])]);
+      ...publicArtifactFiles(build, manifest)]);
     const launcher = 'import { spawnSync } from "node:child_process";\n' +
       'import { readFileSync } from "node:fs";\nimport { fileURLToPath } from "node:url";\n' +
       'const child = spawnSync(process.execPath, [fileURLToPath(new URL("../../scripts/pool/v3/local-worker.mjs", import.meta.url)), ' +
@@ -335,10 +333,14 @@ try {
     assert(totalBytes <= 4_194_304, "public testnet reader bundle budget");
     mkdirSync(directory, { recursive: true });
     for (const [name, value] of files) writeFileSync(join(directory, name), value);
+    assert.deepEqual(worker(input, directory), fresh.audit, "the retained public bundle must replay independently");
     publicBundle = { directory: "scratch/pool-v3-testnet-reader", totalBytes,
       replay: "node scratch/pool-v3-testnet-reader/replay.mjs",
       sha256: Object.fromEntries([...files].map(([name, value]) => [name, hex(sha(value))])) };
   }
+  assert.deepEqual(sourceHashes(sources), sourceSha256Lf, "acceptance sources changed during the run");
+  const elapsedMs = Math.round(performance.now() - runStarted);
+  if (withTestnet) assert(elapsedMs < testnet.TESTNET_LIMITS.runMs, "testnet run time budget");
   const report = { schema: withTestnet ? "moe-v3-testnet-journal-1" : "moe-v3-operator-journal-1",
     specification: V3_SPECIFICATION, node: process.version, platform: process.platform, elapsedMs,
     candidateDomain: hex(domain), backing: hex(backing), venue: { context: reference.context, lag: lag.toString(), id: hex(venue.id),

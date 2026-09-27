@@ -41,7 +41,12 @@ candidate keys held outside the supplied package. Wrong pins and withheld
 sections must remain unresolved. Successful runs retain
 `scratch/pool-v3-testnet-results.json` and a public reader bundle, replayed with
 `node scratch/pool-v3-testnet-reader/replay.mjs`. The bundle holds no wallet key,
-holder seed, witness or journal. Live acceptance status belongs in WORK.md.
+holder seed, witness or journal; it includes the public bytecode required by
+the reader's six artifact/key identity checks. The retained [live report](../../../docs/pool-v3-testnet-verification.json)
+records transaction acceptance at `acc1ab7`. Run
+`node scripts/pool/v3/testnet-reader-check.mjs` to check the completed bundle
+without transactions; its [readback report](../../../docs/pool-v3-testnet-reader-verification.json)
+binds current sources and bundle hashes. Current work belongs in WORK.md.
 
 The local replay command additionally uses the independently held
 `candidate-manifest.json` and [pool-v3 §11 at 916bffb](https://github.com/mediumofexchange/money-from-first-principles/blob/916bffb/pool-v3.md#11-configuration-and-backing-evidence-before-adoption).
