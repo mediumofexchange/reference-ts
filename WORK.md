@@ -3,32 +3,27 @@
 Updated: 2026-09-27
 
 ## Goal
-Succession capability within slice 4 of the [v3 runtime plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)
-is complete at the reference-venue boundary; delivery is [PR #26](https://github.com/mediumofexchange/reference-ts/pull/26).
-Implementation `b109f9e`, harness correction `2026c1a`, from `7ae61e6`.
-Accepted: distinct-key A→B takeover from signed terms and public witnessed evidence,
-inherited spending, exact-link authority, complete empty-book descent, missing-evidence
-refusal, and witnessed opening/adoption before service. A→B→A preserves signed counters
-and spent state. Hostile checkpoints, K revocation, cancellation and asynchronous
-authority changes refuse without unauthorized signing.
-Stop reached: no second backing, persistence, wallet custody or configuration adoption.
-Evidence limit: local/synthetic reference venues; earlier live allowances are exhausted.
+Active: finish slice 4's single-backing compact fault-package orchestration on
+`feat/v3-compact-faults`, from `e8cf7e5`. Accept kind-7 evidence through both runtime
+package readers using the same observer as the harness. Acceptance: exact proof/issue-K
+rejection can replace only a non-opening target trail after complete dependency
+resolution; full and compact reads agree on state and classification, hostile/missing
+evidence refuses, selected envelopes stay complete, and recovery/adoption boundaries
+remain enforced. Verify focused cases, full check and local/synthetic real proofs;
+independent design and integrated adversarial review precede delivery.
+Stop at the single-backing reference boundary: no persistence, second backing,
+configuration adoption or new live runs. Prior delivery follows for baseline context.
 
 ## Status
-- Succession preserves the delivered signing-safety prerequisite: raw signed records
-  remain separate from held selection. Affected reader reports are refreshed.
-- Succession design review accepted the shared frontier and exact-link authority.
-  Runtime and local/synthetic acceptance script are implemented; focused reader,
-  journal and recovery tests pass. Integrated review found a checkpoint reservation
-  missing the published-but-unwitnessed checkpoint; the reviewed fix covers admission,
-  takeover, return and adoption. Both boundary regressions pass without signing.
-  Local and synthetic Ergo real-proof succession passed; fresh public-only readers
-  agree. No active local job or companion branch exists.
-- All seven full reference and pool-v2/v3 proof jobs passed for `2026c1a`
-  in [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36344843879).
-  Final changes only retain reports and update documentation; runtime/check inputs
-  reuse that passing baseline. Final docs/link and nine report-binding checks pass.
-  Inspect PR #26 for the merge revision and its post-merge CI status when resuming.
+- Succession delivered in [PR #26](https://github.com/mediumofexchange/reference-ts/pull/26)
+  at `e8cf7e5`; its post-merge CI was running at slice startup.
+- Compact design review found no normative blocker. Typed observer/authentication
+  facts now share runtime and harness code. Both public readers accept kind-7 bytes.
+- Typecheck and 19 focused frontier tests pass, including nine compact cases.
+  Integrated independent adversarial review and real-proof acceptance are running.
+- Detached `scratch/compact-check.ps1` runs local-check `--ergo`; log and completion
+  marker are `scratch/compact-real.log` and `scratch/compact-real.exit` (PID 8488).
+  Do not change its source inputs or rebuild dist until it ends. No companion branch.
 
 ## Evidence
 - Current succession: [local](docs/pool-v3-succession-store-verification.json) and
@@ -50,10 +45,9 @@ Evidence limit: local/synthetic reference venues; earlier live allowances are ex
   No new live run is authorized. Testnet header evidence remains current and unchanged.
 
 ## Next
-1. Finish slice 4's compact fault-package orchestration in the runtime. Full-trail
-   hostile checkpoint classification now works through the journal/public reader;
-   compact §9.1 exclusions remain harness-only. Port the corresponding `fault-check`
-   cases without weakening complete-evidence requirements or selected envelopes.
+1. Finish compact acceptance/review, full required checks, refresh affected retained
+   reports, then deliver and clean this slice. Current reports below are baseline
+   evidence until refreshed, not acceptance of the uncommitted port.
 2. Persistence: venue headers/objects beyond retainedBytes, prune side branches, publisher
    outbox, restart drills; replace full-range reads with a cursor retaining non-held records.
 3. V3 wallet/service (C4.1–2 requests/funding disclosure), retire v2; then multi-backing.
@@ -83,7 +77,7 @@ Evidence limit: local/synthetic reference venues; earlier live allowances are ex
   need separate provisioning authority. Configuration approval and mainnet remain disabled.
 
 ## Open questions
-- No unresolved signing-safety or succession review findings.
+- Integrated compact-fault adversarial review is owed before merge.
 - No normative specification change or companion branch is currently proposed.
 
 Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-27:

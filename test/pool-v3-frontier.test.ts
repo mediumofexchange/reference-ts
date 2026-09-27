@@ -2,22 +2,24 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { describe, expect, it } from "vitest";
-import { compareBytes } from "../src/bytes.js";
+import { compareBytes, EncodingError } from "../src/bytes.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
 import { directoryRoot, encodeCommitment, encodeReplacement, replacementHash, replacementMessage, ROLE_OPERATOR,
   signCommitment, type Commitment } from "../src/venue-records.js";
 import { limbsOf } from "../src/pool/field.js";
 import { ScopeTree } from "../src/pool/scope.js";
-import { snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
+import { decodeSnapshot, genesisEvidenceHash, nextEvidenceHash, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
 import { configurationBytes, configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { decodeFaultEvidence, encodeFaultEvidence } from "../src/pool/v3/fault-evidence.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
+import type { CanonicalCheckpoint } from "../src/pool/v3/import-reader.js";
 import { readSingleBackingFrontier, readSingleBackingPackage, PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
-import { deliveryHash, encodeRecord, statementBytes, type Record } from "../src/pool/v3/records.js";
-import { applyRecord, openSegmentState, type SegmentState } from "../src/pool/v3/state.js";
+import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
+import { applyRecord, openSegmentState, type ProofCheck, type SegmentState } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
-import { encodeTrail } from "../src/pool/v3/trail.js";
+import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
 
 const b = (n: number) => new Uint8Array(32).fill(n);
 const issuerSecret = b(3), originalSecret = b(4), nextSecret = b(5), ruleSecret = b(6);
@@ -56,8 +58,8 @@ function fixture() {
     venue.witness(1, target.header.operator, index, encodeCommitment(commitment));
     return commitment;
   }
-  async function issue(target: Segment) {
-    const scope = new ScopeTree(target.header.entries).root(), capsules = [new Uint8Array(89).fill(1)], outputs = [101n];
+  async function issue(target: Segment, output = 101n) {
+    const scope = new ScopeTree(target.header.entries).root(), capsules = [new Uint8Array(89).fill(1)], outputs = [output];
     const record: Record = { domain, kind: 1, publicInputs: [...limbsOf(domain), ...limbsOf(target.id), scope, ...limbsOf(backing),
       5n, ...outputs, ...limbsOf(deliveryHash(domain, outputs, capsules))], proof: b(7), authorization: new Uint8Array(64), capsules };
     const bytes = encodeRecord({ ...record, authorization: ed25519.sign(statementBytes(record), issuerSecret) });
@@ -78,6 +80,47 @@ function fixture() {
     { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(commitment) }]);
   const read = (evidence = pack(items)) => readSingleBackingFrontier(evidence, signed, venue.witnessedIndex(), options);
   return { venue, fields, signed, backing, items, options, segment, checkpoint, issue, replace, selection, selectedPackage, read };
+}
+
+// Oracle proofs isolate the reader's evidence contract. The invalid checkpoint
+// otherwise extends its valid prefix, including an authenticated suffix record.
+async function compactFixture(failure: "PROOF" | "SIGNATURE" = "PROOF", validTail = false) {
+  const f = fixture(), segment = f.segment(), opening = f.checkpoint(segment, 1n);
+  await f.issue(segment); const predecessor = f.checkpoint(segment, 2n);
+  const tail = f.segment(originalSecret, f.backing, 4n, predecessor, segment.state);
+  await f.issue(segment, 102n); await f.issue(segment, 103n);
+  const records = segment.records.map(decodeRecord), target = records[1]!;
+  records[1] = failure === "PROOF" ? { ...target, proof: b(99) } : { ...target, authorization: new Uint8Array(64) };
+  segment.records = records.map(encodeRecord);
+  segment.state.evidence = records.reduce((previous, record, i) => nextEvidenceHash(previous, evidenceHashes(record), BigInt(i + 1)),
+    genesisEvidenceHash(segment.id));
+  const hostile = f.checkpoint(segment, 3n), fullTrail = encodeTrail({ header: segmentBytes(segment.header), terms: [f.signed],
+    records: segment.records }, TRAIL_LIMITS);
+  const snapshot = f.items.filter(item => item.kind === 4).map(item => decodeSnapshot(item.payload))
+    .find(value => compareBytes(value.evidenceHash, segment.state.evidence) === 0)!;
+  const fault = encodeFaultEvidence({ snapshot, position: 2n, length: 3n,
+    previous: nextEvidenceHash(genesisEvidenceHash(segment.id), evidenceHashes(records[0]!), 1n),
+    statement: statementBytes(records[1]!), proof: records[1]!.proof, authorization: records[1]!.authorization,
+    suffix: [evidenceHashes(records[2]!)] }, 1024n);
+  const selected = validTail ? f.checkpoint(tail, 4n) : predecessor;
+  const compactItems = f.items.filter(item => item.kind !== 6 || compareBytes(item.payload, fullTrail) !== 0);
+  const proofVerifier: ProofCheck = { verify: (_kind, _inputs, proof) => compareBytes(proof, b(99)) !== 0 };
+  const options = { ...f.options, verifier: proofVerifier };
+  const readFrontier = (items = compactItems, faults = [fault], custom = proofVerifier) =>
+    readSingleBackingFrontier(pack([...items, ...faults.map(payload => ({ kind: 7, payload }))]), f.signed, 10n, { ...options, verifier: custom });
+  const readSelected = (items = compactItems, faults = [fault], commitment = selected) =>
+    readSingleBackingPackage(pack([...items, ...faults.map(payload => ({ kind: 7, payload })),
+      { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(commitment) }]),
+    f.selection(commitment), options);
+  return { f, opening, predecessor, hostile, selected, fault, compactItems, readFrontier, readSelected };
+}
+
+// Resume keys contain per-read bound verifier functions, whose identity is
+// intentionally different. Compare the replayed values and private spent root.
+function canonicalEvidence(canonical: CanonicalCheckpoint | undefined) {
+  if (canonical === undefined) return undefined;
+  const { resumeKey: _resumeKey, spent, ...state } = canonical.state;
+  return { ...canonical, state: { ...state, spent: { root: spent.root(), size: spent.size } } };
 }
 
 describe("single-backing complete frontier reader", () => {
@@ -189,5 +232,109 @@ describe("single-backing complete frontier reader", () => {
       await expect(readSingleBackingFrontier(bytes, f.signed, 10n, { ...f.options, importLimits }))
         .rejects.toMatchObject({ status: "resource-refusal" });
     }
+  });
+});
+
+describe("single-backing compact fault packages", () => {
+  it.each(["PROOF", "SIGNATURE"] as const)("agrees with complete replay for an intrinsic %s failure", async failure => {
+    const f = await compactFixture(failure);
+    const compact = await f.readFrontier(), complete = await f.readFrontier(f.f.items);
+    expect(canonicalEvidence(compact.canonical)).toEqual(canonicalEvidence(complete.canonical));
+    expect(compact.canonical!.commitment).toEqual(f.predecessor);
+    expect(compact.carrying).toEqual(complete.carrying);
+    expect(compact.carrying.at(-1)).toMatchObject({ class: "excluded", check: failure });
+    expect(compact.ranges).toEqual(complete.ranges); expect(compact.clock).toEqual(complete.clock);
+    expect(compact.force).toEqual(complete.force);
+    expect(compact.faultEvidence).toEqual(complete.faultEvidence);
+    expect(compact.faultEvidence).toEqual([expect.objectContaining({ check: failure, sequence: "3", position: "2", length: "3",
+      classification: "not-established", ...(failure === "SIGNATURE" ? { authorizationRole: "issue", signer: hex(issuer) } : {}) })]);
+    const selected = await f.readSelected(), fullSelected = await f.readSelected(f.f.items);
+    expect(canonicalEvidence(selected.canonical)).toEqual(canonicalEvidence(fullSelected.canonical));
+    expect(selected.carrying).toEqual(fullSelected.carrying);
+    expect(selected.faultEvidence).toEqual(compact.faultEvidence);
+    expect((await f.readFrontier(f.f.items, [])).faultEvidence).toBeUndefined();
+    await expect(f.readFrontier(f.compactItems, [])).rejects.toMatchObject({ status: "unresolved-evidence" });
+  });
+
+  it("preserves a valid later opening's inherited state after excluding a compact target", async () => {
+    const f = await compactFixture("PROOF", true), compact = await f.readFrontier(), complete = await f.readFrontier(f.f.items);
+    expect(canonicalEvidence(compact.canonical)).toEqual(canonicalEvidence(complete.canonical));
+    expect(compact.canonical!.commitment).toEqual(f.selected);
+    expect(compact.canonical!.state.issued).toBe(5n);
+    expect(compact.carrying.map(item => item.class)).toEqual(["valid", "valid", "excluded", "valid"]);
+    expect(canonicalEvidence((await f.readSelected()).canonical)).toEqual(canonicalEvidence(compact.canonical));
+  });
+
+  it("requires complete opening and predecessor evidence despite an authenticated fault", async () => {
+    const f = await compactFixture("PROOF", true);
+    const snapshots = f.f.items.filter(item => item.kind === 4);
+    for (const missing of snapshots.slice(0, 2)) {
+      const items = f.compactItems.filter(item => item !== missing);
+      await expect(f.readFrontier(items)).rejects.toMatchObject({ status: "unresolved-evidence" });
+      await expect(f.readSelected(items)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    }
+    const withheldPrefix = f.compactItems.filter(item => item.kind !== 6 || decodeTrail(item.payload, TRAIL_LIMITS).records.length !== 1);
+    await expect(f.readFrontier(withheldPrefix)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    await expect(f.readSelected(withheldPrefix)).rejects.toMatchObject({ status: "unresolved-evidence" });
+  });
+
+  it("never substitutes a compact target for the selected checkpoint's complete envelope", async () => {
+    const f = await compactFixture();
+    await expect(f.readSelected(f.compactItems, [f.fault], f.hostile)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    await expect(f.readSelected(f.f.items, [f.fault], f.hostile)).rejects.toMatchObject({ check: "PROOF" });
+  });
+
+  it("cannot descend with altered target fields, snapshot fields, positions or suffix", async () => {
+    const f = await compactFixture(), value = decodeFaultEvidence(f.fault, 1024n), variants: Uint8Array[] = [];
+    for (const key of ["statement", "proof", "authorization", "previous"] as const) {
+      const changed = structuredClone(value); changed[key][0]! ^= 1; variants.push(encodeFaultEvidence(changed, 1024n));
+    }
+    for (const key of ["backing", "segment", "historyHash", "evidenceHash"] as const) {
+      const changed = structuredClone(value); changed.snapshot[key][0]! ^= 1; variants.push(encodeFaultEvidence(changed, 1024n));
+    }
+    const suffix = structuredClone(value); suffix.suffix[0]!.proofHash[0]! ^= 1;
+    variants.push(encodeFaultEvidence(suffix, 1024n), encodeFaultEvidence({ ...value, position: 1n, length: 2n }, 1024n),
+      f.fault.subarray(0, f.fault.length - 1));
+    for (const changed of variants) {
+      await expect(f.readFrontier(f.compactItems, [changed])).rejects.toMatchObject({ status: "unresolved-evidence" });
+      await expect(f.readSelected(f.compactItems, [changed])).rejects.toMatchObject({ status: "unresolved-evidence" });
+    }
+  });
+
+  it("requires strict false from the proof verifier and exposes verifier exceptions", async () => {
+    const f = await compactFixture();
+    for (const outcome of [true, undefined, null, 0]) {
+      const custom = { verify: (_kind: number, _inputs: bigint[], proof: Uint8Array) => compareBytes(proof, b(99)) === 0 ? outcome : true };
+      await expect(f.readFrontier(f.compactItems, [f.fault], custom as ProofCheck))
+        .rejects.toMatchObject({ status: "unresolved-evidence" });
+    }
+    for (const cause of [new Error("verifier failed"), new EncodingError("verifier encoding failed")]) {
+      const custom: ProofCheck = { verify(_kind, _inputs, proof) { if (compareBytes(proof, b(99)) === 0) throw cause; return true; } };
+      await expect(f.readFrontier(f.compactItems, [f.fault], custom)).rejects.toMatchObject({ cause });
+    }
+  });
+
+  it("refuses more than 32 fault items or 1024 suffix entries before verification", async () => {
+    const f = await compactFixture(), value = decodeFaultEvidence(f.fault, 1024n);
+    // Canonical package items are distinct even when all 33 claims are invalid.
+    const excessiveItems = Array.from({ length: 33 }, (_, i) => encodeFaultEvidence({ ...value, previous: b(i) }, 1024n));
+    const excessiveSuffix = encodeFaultEvidence({ ...value, length: value.position + 1025n,
+      suffix: Array.from({ length: 1025 }, () => value.suffix[0]!) }, 1025n);
+    const custom: ProofCheck = { verify() { throw new Error("resource refusal must precede proof verification"); } };
+    for (const faults of [excessiveItems, [excessiveSuffix]]) {
+      await expect(f.readFrontier(f.compactItems, faults, custom)).rejects.toMatchObject({ status: "resource-refusal" });
+      await expect(f.readSelected(f.compactItems, faults)).rejects.toMatchObject({ status: "resource-refusal" });
+    }
+  });
+
+  it("owns compact bytes across the first asynchronous venue descent and proof check", async () => {
+    const f = await compactFixture(), expected = await f.readFrontier();
+    const bytes = Buffer.from(pack([...f.compactItems, { kind: 7, payload: f.fault }]));
+    const pending = readSingleBackingFrontier(bytes, f.f.signed, 10n, { ...f.f.options,
+      verifier: { async verify(_kind, _inputs, proof) { await Promise.resolve(); return compareBytes(proof, b(99)) !== 0; } } });
+    bytes.fill(0);
+    const actual = await pending;
+    expect({ ...actual, canonical: canonicalEvidence(actual.canonical) })
+      .toEqual({ ...expected, canonical: canonicalEvidence(expected.canonical) });
   });
 });
