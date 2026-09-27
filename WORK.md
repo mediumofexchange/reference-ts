@@ -4,15 +4,15 @@ Updated: 2026-09-27
 
 ## Goal
 Slice 3 of the [plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)
-is active on `feat/v3-recovery`, from merged slice 2 `2c6b20c` ([PR #23](https://github.com/mediumofexchange/reference-ts/pull/23)).
+has completed acceptance on `feat/v3-recovery`, from slice 2 `2c6b20c` ([PR #23](https://github.com/mediumofexchange/reference-ts/pull/23)).
 Acceptance: real-proof redemption under service, disappearance with force from a holder's
 package and venue alone, return with exact adoption, non-service counting, and missing-evidence
 refusal. Run ported hostile cases, independent review, full checks and source-bound acceptance.
 The [reviewed design](decisions/2026-09.md#2026-09-27--preserve-complete-recovery-evidence-and-share-the-force-transition)
 retains complete bounded ancestry; imports do not reset lifetime evidence budgets.
 Stop: no replacement drills, persistence, wallet custody, multi-backing or configuration adoption.
-Live recovery needs a concrete plan and separate authorization; slice 2's seven authorized
-testnet transactions are exhausted. No new live transactions have been made.
+The authorized live recovery drill passed within its ten-transaction, 0.011 tERG fee
+and 0.05 tERG total caps. Its allowance and slice 2's separate allowance are exhausted.
 
 ## Status
 - Runtime: demand/withdrawal/settlement admission and witnesses; fixed-anchor publication force;
@@ -34,10 +34,11 @@ testnet transactions are exhausted. No new live transactions have been made.
   package and transaction measurements. Fresh public readers verify force and exact adoption.
 - Gated live mode and narrow optional submission-budget callback passed independent source
   review and rebuilt offline hostile guard checks. The [live plan](docs/POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
-  caps ten transactions, 0.011 tERG fees and 0.05 tERG total; synthetic cost fits. No live run yet.
-- Reviewed implementation is `74eade8`, pushed in draft [PR #24](https://github.com/mediumofexchange/reference-ts/pull/24).
-  [CI run](https://github.com/mediumofexchange/reference-ts/actions/runs/36327647966) passed; no merge.
-  No companion branch or normative change. Following commit retains evidence and this handoff only.
+  ran successfully within its caps; [live report](docs/pool-v3-recovery-store-testnet-verification.json)
+  binds unchanged reviewed sources. A fresh process verified the retained public reader bundle.
+- Reviewed implementation is `74eade8`, delivered through [PR #24](https://github.com/mediumofexchange/reference-ts/pull/24).
+  [CI at a34a046](https://github.com/mediumofexchange/reference-ts/actions/runs/36328998544) passed all seven jobs.
+  Delivery follow-up changes reports/docs only; docs/links and current source bindings passed.
 
 ## Evidence
 - Slice 2 reports are historical at `2c6b20c` where recovery changes touch their source bindings:
@@ -53,10 +54,10 @@ testnet transactions are exhausted. No new live transactions have been made.
   `23aabead`, legacy 45 s predictor, signed-Int overflow and terminal reset; no EIP-37 clamps.
 
 ## Next
-1. Obtain separate authorization for the prepared ten-transaction testnet drill; then run
-   `node scripts/pool/v3/recovery-store-check.mjs --testnet --authorized-testnet` once.
-2. Complete live single-backing recovery and holder-only readback after separate authorization.
-   Deliver slice only after acceptance, reviewed final patch, CI and merge verification.
+1. Finish delivery through PR #24 after final CI; verify
+   merge/main parity and remove merged branch and disposable slice scratch. No live job remains.
+2. Begin slice 4 only after delivery. Prefer a fresh instance for the distinct succession scope;
+   this handoff and the linked plan are sufficient startup context.
 3. Succession/hostile operator: replacement/takeover, equivocation, key compromise.
 4. Persistence: venue headers/objects beyond retainedBytes, prune side branches, publisher outbox,
    restart drills; replace journal full-range reads per operation with a cursor.
@@ -77,7 +78,8 @@ testnet transactions are exhausted. No new live transactions have been made.
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes remain running under
   `scratch/ergo-nodes/`; approved WMI launcher `experiments/ergo-range/nodes.mjs`.
 - Keep `scratch/ergo-testnet/wallet.json` (backed up; slice 2 ~19,999.88 tERG), public
-  `scratch/pool-v3-testnet-reader/` bundle, `testnet-header-probe/`, `private-payment-crs/`,
+  `scratch/pool-v3-testnet-reader/` and `scratch/pool-v3-recovery-testnet-reader/` public bundles,
+  `testnet-header-probe/`, `private-payment-crs/`,
   `jdk/` and `ergo-headers/`. Node management remains authorized.
 - Retain stopped contained-sync node's 20 GiB
   `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd` and
@@ -88,9 +90,9 @@ testnet transactions are exhausted. No new live transactions have been made.
   require separate provisioning authority. Configuration approval and mainnet stay disabled.
 
 ## Open questions
-- Live recovery authorization outstanding; live acceptance and final merge/delivery remain open.
+- Live recovery and independent bundle acceptance passed; final merge/delivery remains open.
 - No unresolved review findings; local/synthetic acceptance and required CI passed.
 
 Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-27:
 single-backing recovery now shares reviewed runtime transitions and independent real-proof readers.
-Live recovery, replacement, configuration adoption, persistence, wallet custody and mainnet remain.
+Replacement, configuration adoption, persistence, wallet custody and mainnet remain.

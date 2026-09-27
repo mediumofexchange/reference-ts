@@ -340,7 +340,9 @@ includes a fresh process that has only public evidence and independent reader
 inputs. The [local](pool-v3-recovery-store-verification.json) and
 [synthetic Ergo](pool-v3-recovery-store-ergo-verification.json) real-proof
 acceptance passed in [CI at 74eade8](https://github.com/mediumofexchange/reference-ts/actions/runs/36327647966)
-on Linux and Windows. No live recovery acceptance is claimed.
+on Linux and Windows. The separately authorized [live testnet recovery](pool-v3-recovery-store-testnet-verification.json)
+and retained public-bundle readback also passed; [measurements and limits](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
+distinguish this single-backing candidate drill from deployment acceptance.
 Complete trails remain bounded; imports do not erase ancestry or reset the
 package/work budgets. No replacement service, wallet custody, persistence,
 live deployment or adopted configuration is supplied by this slice.

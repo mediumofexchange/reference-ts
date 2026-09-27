@@ -220,10 +220,10 @@ The [local](pool-v3-recovery-store-verification.json) and
 the passing real-proof acceptance, package size and actual funding cost.
 Both commands passed on Linux and Windows in
 [CI at 74eade8](https://github.com/mediumofexchange/reference-ts/actions/runs/36327647966).
-They do not provide live recovery evidence. Earlier live publisher and journal reports are historical at
+Earlier live publisher and journal reports are historical at
 [`2c6b20c`](https://github.com/mediumofexchange/reference-ts/tree/2c6b20c).
 
-The prepared live recovery command is
+The live recovery command is
 `node scripts/pool/v3/recovery-store-check.mjs --testnet --authorized-testnet`.
 It requires separate authorization after local/synthetic acceptance and runner
 review. Its ten planned transactions are, in order: genesis opening, funded
@@ -248,6 +248,16 @@ its force, and the drill retains the fees and partial-run evidence limit.
 The public reader bundle retains package bytes, selection, verification keys,
 artifact identities and independently held venue profile/pin, without seeds or
 journal contents. Offline guard checks run with `recovery-testnet.mjs --check`.
+
+The authorized 2026-09-27 [live testnet acceptance](pool-v3-recovery-store-testnet-verification.json)
+passed all four groups with nine real proofs and ten distinct transactions.
+Total spend was 0.03434168 tERG, including 0.011 tERG fees; the complete package
+was 126,037 bytes. The holder-only reader verified force, non-service count,
+unchanged supply of 20 and exact adoption of four recovery records at opening
+index 51; missing directories, snapshots and trails refused. A separate fresh
+process also verified the retained public bundle. This is single-backing testnet
+evidence under the candidate configuration; persistence, replacement service,
+custody, configuration adoption and mainnet remain outside the acceptance.
 
 The explicit `node scripts/pool/v3/store-check.mjs --testnet` path uses the own
 v6.0.6 testnet node and throwaway tERG funding. It selects the distinct
