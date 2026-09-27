@@ -18,6 +18,7 @@ import { VenueError } from "../../venue-error.js";
 import type { Commitment, SnapshotDigest } from "../../venue-records.js";
 import { ScopeTree } from "../scope.js";
 import { decodeSnapshot, type Snapshot } from "./commitments.js";
+import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
 import { ReplayRefusal, EvidenceRefusal, ScopeRequired, requireReplay, type ClockRecord } from "./refusals.js";
 import { servedTrail, trailEvidenceChain } from "./served-trail.js";
@@ -80,8 +81,14 @@ function read<T>(call: () => T): T {
  * venue's; a supplied answer is never evidence. This view is shared by the
  * original-segment clock and the import walks. Nothing here classifies a
  * checkpoint. */
-export async function readRecordView(selection: ReaderSelection, terms: RootTerms, directories: Directories, venue: RecordVenue): Promise<RecordView> {
-  const t = selection.judgingIndex, now: unknown = read(() => venue.witnessedIndex()), lag: unknown = read(() => venue.lag());
+export async function readRecordView(selection: ReaderSelection, terms: RootTerms, directories: Directories,
+  venue: RecordVenue, reference: VenueReference): Promise<RecordView> {
+  // The caller holds this preimage independently of supplied record evidence.
+  // Candidate v3 never reads a deployment venue, even if it offers valid ranges.
+  const lag = read(() => venue.lag());
+  const id = requireReferenceVenue(reference, { id: venue.id, lag: () => lag });
+  if (!same(id, selection.venue)) throw new EvidenceRefusal("selection-mismatch");
+  const t = selection.judgingIndex, now: unknown = read(() => venue.witnessedIndex());
   if (typeof now !== "bigint" || typeof lag !== "bigint" || t > now || (selection.mode === "current-fixture" && t !== now)) {
     throw new EvidenceRefusal("unresolved-evidence");
   }
@@ -136,8 +143,8 @@ export interface OriginalRanges {
 /** Original-segment selection: its opening checkpoint anchors the silence
  * boundary. Successor and import selections take the import walk instead. */
 export async function readRecordRanges(selection: ReaderSelection, terms: RootTerms, header: SegmentHeader,
-  directories: Directories, venue: RecordVenue): Promise<OriginalRanges> {
-  const { t, lag, chain, revokedAt, heldBy, termEnd, carries } = await readRecordView(selection, terms, directories, venue);
+  directories: Directories, venue: RecordVenue, reference: VenueReference): Promise<OriginalRanges> {
+  const { t, lag, chain, revokedAt, heldBy, termEnd, carries } = await readRecordView(selection, terms, directories, venue, reference);
   const held = await heldBy(chain[0]!.operator);
   const at = held.findIndex(h => h.commitment.sequence === selection.sequence && same(h.commitment.root, selection.root));
   if (at < 0) throw new EvidenceRefusal("selection-mismatch");

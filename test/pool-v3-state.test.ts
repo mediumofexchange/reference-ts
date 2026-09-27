@@ -9,7 +9,8 @@ import { tagOf } from "../src/pool/v3/recovery.js";
 import { applyRecord, modeAt, openSegmentState, type ProofCheck, type SegmentReplay, type SegmentState } from "../src/pool/v3/state.js";
 import type { RootTerms } from "../src/pool/v3/terms.js";
 import { RangeLimitError } from "../src/record-range.js";
-import { FixtureVenue, type RecordVenue } from "../src/record-venue.js";
+import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity, type RecordVenue } from "../src/record-venue.js";
+import { CandidateVenueError, type VenueReference } from "../src/pool/v3/guard.js";
 import { VenueError } from "../src/venue-error.js";
 
 // The v3 state machine (src/pool/v3/state.ts) over synthetic §5 records: the
@@ -183,34 +184,55 @@ describe("the v3 state machine in admission mode", () => {
 });
 
 describe("the reader's venue", () => {
-  const selection: ReaderSelection = { mode: "current-fixture", domain: DOMAIN, venue: b(12), backing: BACKING, operator: terms.operator,
+  const reference: VenueReference = { context: LOCAL_REFERENCE, label: b(12), lag: 2n };
+  const venueId = localVenueIdentity(b(12), 2n);
+  const selection: ReaderSelection = { mode: "current-fixture", domain: DOMAIN, venue: venueId, backing: BACKING, operator: terms.operator,
     root: b(17), sequence: 1n, judgingIndex: 4n };
-  const view = (venue: RecordVenue, chosen = selection) => readRecordView(chosen, terms, new Map(), venue);
+  const view = (venue: RecordVenue, chosen = selection) => readRecordView(chosen, terms, new Map(), venue, reference);
   const status = (promise: Promise<unknown>): Promise<unknown> => promise.then(() => "read", (e: unknown) => e instanceof EvidenceRefusal ? e.status : e);
 
   it("reads the chain and revocation from a fixture venue's answers at the witnessed index", async () => {
-    const venue = new FixtureVenue(b(12), 4n, 2n);
+    const venue = FixtureVenue.reference(b(12), 2n, 4n);
     const read = await view(venue);
     expect([read.t, read.lag, read.revokedAt, read.chain.map(link => link.from)]).toEqual([4n, 2n, undefined, [0n]]);
     expect(await read.heldBy(terms.operator)).toEqual([]);
   });
 
   it("is unresolved past the clock, off the current index, on another venue and on a venue with no answer", async () => {
-    const venue = new FixtureVenue(b(12), 4n, 2n);
+    const venue = FixtureVenue.reference(b(12), 2n, 4n);
     expect(await status(view(venue, { ...selection, judgingIndex: 5n }))).toBe("unresolved-evidence");
     expect(await status(view(venue, { ...selection, judgingIndex: 3n }))).toBe("unresolved-evidence");
     expect(await status(view(venue, { ...selection, judgingIndex: 3n, mode: "historical-fixture" }))).toBe("read");
-    expect(await status(view(new FixtureVenue(b(13), 4n, 2n)))).toBe("unresolved-evidence");
-    const failed: RecordVenue = { id: b(12), lag: () => 2n, witnessedIndex: () => { throw new VenueError("this view has no settled snapshot"); }, range: () => undefined };
+    expect(await status(view(venue, { ...selection, venue: b(13) }))).toBe("selection-mismatch");
+    const failed: RecordVenue = { id: venueId, lag: () => 2n, witnessedIndex: () => { throw new VenueError("this view has no settled snapshot"); }, range: () => undefined };
     expect(await status(view(failed))).toBe("unresolved-evidence");
     // Past the reader's budget is a resource refusal the caller names; any other failure is the venue's and propagates.
-    const flooded = new FixtureVenue(b(12), 4n, 2n);
+    const flooded = FixtureVenue.reference(b(12), 2n, 4n);
     for (let i = 0n; i <= RANGE_LIMITS.maxEntries; i++) flooded.witness(2, BACKING, 1n, new Uint8Array(233));
     expect(await status(view(flooded))).toBeInstanceOf(RangeLimitError);
     const broken = new Error("supplier bug");
     expect(await status(view({ ...failed, witnessedIndex: () => 4n, range: () => { throw broken; } }))).toBe(broken);
     // A venue answering with promises is the caller's error, not missing evidence.
     expect(await status(view({ ...failed, witnessedIndex: () => Promise.resolve(4n) } as unknown as RecordVenue))).toBeInstanceOf(TypeError);
+  });
+
+  it("requires the independently held reference preimage before asking for evidence", async () => {
+    let reads = 0;
+    const venue: RecordVenue = { id: venueId, lag: () => 2n,
+      witnessedIndex: () => { reads++; return 4n; }, range: () => { reads++; return undefined; } };
+    const refused = (r: VenueReference, v = venue) => readRecordView(selection, terms, new Map(), v, r);
+    for (const r of [undefined, { ...reference, label: b(13) }, { ...reference, lag: 3n },
+      { context: "moe/venue/ergo-testnet/reference" }, { context: "moe/venue/ergo/mainnet" }]) {
+      await expect(refused(r as VenueReference)).rejects.toThrow(CandidateVenueError);
+    }
+    await expect(refused(reference, { ...venue, id: b(12) })).rejects.toThrow(CandidateVenueError);
+    await expect(refused(reference, { ...venue, lag: () => 3n })).rejects.toThrow(CandidateVenueError);
+    expect(reads).toBe(0);
+    let lagReads = 0;
+    const fixture = FixtureVenue.reference(b(12), 2n, 4n);
+    const stable = await view({ ...venue, lag: () => ++lagReads === 1 ? 2n : 3n,
+      range: (request, limits) => fixture.range(request, limits) });
+    expect(stable.lag).toBe(2n); expect(lagReads).toBe(1);
   });
 
   it("answers only its own witnessed ranges, ordered as §13.1 orders them, and rebuilds identically", () => {

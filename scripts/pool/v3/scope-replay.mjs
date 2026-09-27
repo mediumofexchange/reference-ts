@@ -83,7 +83,7 @@ export async function classifyScopes(context, directories, record, evidence, hel
   };
   const viewFor = async (backing, terms) => {
     const id = hex(backing);
-    if (!views.has(id)) views.set(id, readRecordView({ ...selection, backing }, terms, directories, record, codec));
+    if (!views.has(id)) views.set(id, readRecordView({ ...selection, backing }, terms, directories, record));
     return views.get(id);
   };
   const snapshotFor = digest => {

@@ -1,7 +1,8 @@
-// Real-proof acceptance for the v3 operator journal (runtime plan slice 1, M2a):
+// Real-proof acceptance for the v3 operator journal (runtime plan slice 1, M2a–b):
 // the backer issues, a holder pays with a fee and change, another burns, each
 // proven by the runtime prover and admitted by src/pool/v3/store.ts on the local
-// reference venue; holders spend notes they restore from the served package;
+// reference venue, or --ergo through the actual publisher and a synthetic mining
+// supplier; holders spend notes they restore from the served package;
 // a fresh seedless process verifies supply from the package and the venue alone.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -13,6 +14,10 @@ import { serialize } from "node:v8";
 import { Barretenberg, BackendType, UltraHonkBackend } from "@aztec/bb.js";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../../../dist/record-venue.js";
+import { ErgoVenue } from "../../../dist/ergo.js";
+import { ERGO_SYNTHETIC_REFERENCE } from "../../../dist/ergo-profile.js";
+import { ErgoPublisher, verifyErgoProof } from "../../../dist/ergo-publisher.js";
+import { MiningSupplier, plainBox } from "../../../dist/ergo-synthetic.js";
 import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
 import { decodeReceipt } from "../../../dist/pool/v3/commitments.js";
 import { CandidateVenueError } from "../../../dist/pool/v3/guard.js";
@@ -25,9 +30,11 @@ import { PACKAGE_LIMITS, recordReader, replayEvidencePackage } from "./local-rep
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys } from "./candidate.mjs";
 import { v3Codec as codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
+import { ERGO_CHAIN, ERGO_PROFILE, ERGO_EVIDENCE_KIND, ergoRecord } from "./ergo-check.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../../..");
-assert.equal(process.argv.length, 2, "store-check takes no options");
+assert(process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--ergo"), "store-check takes only --ergo");
+const withErgo = process.argv[2] === "--ergo";
 mkdirSync(join(root, "scratch"), { recursive: true });
 const scratch = realpathSync(join(root, "scratch"));
 const build = realpathSync(mkdtempSync(join(scratch, "pool-v3-store-")));
@@ -55,8 +62,6 @@ try {
   }
   readCandidateKeys(build, manifest);
   const prover = await openV3Prover(api, programs, configuration, { crsPath });
-  const verifier = { configuration, verify: (kind, inputs, proof) => prover.verifier.verify(kind, inputs, proof),
-    record: data => recordReader(FixtureVenue.from(data), "fixture-verifier") };
   async function prove(task, label) {
     const start = performance.now(), record = await prover.prove(task);
     metrics.push({ label, kind: task.kind, proofBytes: record.proof.length, elapsedMs: Math.round(performance.now() - start) });
@@ -66,8 +71,28 @@ try {
   // The parties: a backer (K), the operator it names, and three holders' seeds.
   const issuerSecret = b(15), operatorSecret = b(16), issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
   const payerSeed = b(21), receiverSeed = b(22), operatorSeed = b(23);
-  const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag };
-  const venue = FixtureVenue.reference(label, lag), domain = codec.configurationHash(configuration);
+  const label = b(12), lag = 2n;
+  const reference = withErgo ? { context: ERGO_SYNTHETIC_REFERENCE, profile: ERGO_PROFILE } : { context: LOCAL_REFERENCE, label, lag };
+  const supplier = withErgo ? new MiningSupplier("journal-synthetic", ERGO_CHAIN, verifyErgoProof) : undefined;
+  const publisher = withErgo ? new ErgoPublisher({ secretKey: b(17), suppliers: [supplier.mempool] }) : undefined;
+  const venue = withErgo ? new ErgoVenue(ERGO_PROFILE, ERGO_CHAIN.context, {}, publisher) : FixtureVenue.reference(label, lag);
+  const evidenceKind = withErgo ? ERGO_EVIDENCE_KIND : "fixture-verifier";
+  let pin;
+  async function mineAndSync() {
+    supplier.mine(Number(ERGO_PROFILE.depth + 1n));
+    const synced = await venue.sync([supplier]);
+    assert(synced.witnessedHeaderId instanceof Uint8Array, "the synthetic chain must witness a block");
+    assert.equal(synced.unresolvedIndex, undefined);
+    pin = synced.witnessedHeaderId;
+  }
+  if (withErgo) {
+    // Invented funding is only for the synthetic mempool's balance/proof checks.
+    supplier.mempool.fund(plainBox(publisher.tree, 100_000_000n, ERGO_CHAIN.anchor.height));
+    await mineAndSync();
+  }
+  const verifier = { configuration, reference, verify: (kind, inputs, proof) => prover.verifier.verify(kind, inputs, proof),
+    record: data => withErgo ? ergoRecord(data, { pin }) : recordReader(FixtureVenue.from(data), evidenceKind) };
+  const domain = codec.configurationHash(configuration);
   const termsBytes = codec.encodeRootTerms({ obligor: issuer, payout: { thing: "test units", quantumExponent: 0, perUnit: 1n },
     operator, configuration: domain, venue: venue.id, interval: 10n });
   const signed = { terms: termsBytes, signature: ed25519.sign(codec.rootTermsSignatureMessage(termsBytes), issuerSecret) };
@@ -84,7 +109,7 @@ try {
   async function served(seed) {
     const { selection, package: bytes } = await journal.package();
     return { selection: { ...selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" }, package: bytes,
-      venue: venue.export(), ...(seed === undefined ? {} : { seed }) };
+      venue: withErgo ? { tip: supplier.tip } : venue.export(), ...(seed === undefined ? {} : { seed }) };
   }
   /** A holder's note as the reader restores it from public evidence, joined to the holder's own request. */
   async function restored(seed, prepared) {
@@ -95,7 +120,18 @@ try {
     assert.equal(BigInt(found.value), prepared.opening.value);
     return { note: prepared, anchor: BigInt(found.anchor), path: { siblings: found.siblings.map(BigInt), right: found.right } };
   }
-  async function checkpoint(id) { await journal.commit(id); return journal.publish(); }
+  async function publish() {
+    const before = venue.witnessedIndex(), commitment = await journal.publish();
+    if (withErgo) {
+      assert.equal(venue.witnessedIndex(), before, "mempool acceptance cannot advance the venue's clock");
+      assert.equal(supplier.mempool.pool.length, 1, "one actual signed transaction per new commitment");
+      await mineAndSync();
+      assert.equal(supplier.mempool.pool.length, 0);
+      assert.equal(venue.witnessedIndex(), before + lag);
+    }
+    return commitment;
+  }
+  async function checkpoint(id) { await journal.commit(id); return publish(); }
 
   const records = {}, receipts = {};
   let spent;
@@ -106,14 +142,15 @@ try {
   });
   await test("the journal runs only on a venue whose identity recomputes from its reference preimage", () => {
     assert.throws(() => new V3OperatorJournal(join(build, "refused.db"), { ...options, venue: new FixtureVenue(b(12), 0n, lag) }), CandidateVenueError);
-    assert.throws(() => new V3OperatorJournal(join(build, "refused.db"), { ...options, reference: { ...reference, lag: 3n } }), CandidateVenueError);
+    const wrongReference = withErgo ? { ...reference, profile: { ...ERGO_PROFILE, depth: 2n } } : { ...reference, lag: 3n };
+    assert.throws(() => new V3OperatorJournal(join(build, "refused.db"), { ...options, reference: wrongReference }), CandidateVenueError);
   });
   journal = new V3OperatorJournal(journalPath, options);
   await test("the operator opens and publishes the genesis segment the backer's terms name", async () => {
     const opening = await journal.open("genesis", signed);
     assert.equal(opening.sequence, 1n);
     await refusal(journal.submit(new Uint8Array(0)), "REFUSED", "MALFORMED");
-    await journal.publish();
+    await publish();
   });
   await test("the backer proves and signs issue 10 to the payer's request; the journal admits, commits and publishes", async () => {
     records.issue = encodeRecord(authorizeIssue(await prove(issueTask(context, funded), "issue 10"), issuerSecret));
@@ -159,7 +196,7 @@ try {
   for (const [name, seed] of Object.entries(holders)) holdings[name] = await replayEvidencePackage(await served(seed), verifier, codec);
   const receiptReads = {};
   await test("the reader derives supply 10 minus 5 and reads each original receipt as final", async () => {
-    assert.equal(audit.status, "selected-local-replay"); assert.equal(audit.rangeEvidence, "fixture-verifier");
+    assert.equal(audit.status, "selected-local-replay"); assert.equal(audit.rangeEvidence, evidenceKind);
     assert.deepEqual([audit.audit.issued, audit.audit.burned, audit.audit.outstanding, audit.audit.records], ["10", "5", "5", "3"]);
     assert.equal(audit.audit.range.carrying.length, 4);
     for (const kind of ["issue", "pay", "burn"]) {
@@ -180,9 +217,11 @@ try {
   });
   await prover.close();
   await api.destroy(); api = undefined;
+  // The fresh reader holds this pin beside its keys, independently of the served package.
+  if (withErgo) writeFileSync(join(build, "ergo-pin.bin"), pin);
   const url = pathToFileURL(build + sep).href;
   const worker = input => {
-    const child = spawnSync(process.execPath, [join(here, "local-worker.mjs"), url], {
+    const child = spawnSync(process.execPath, [join(here, "local-worker.mjs"), url, ...(withErgo ? ["--ergo"] : [])], {
       input: serialize(input), timeout: 120_000, cwd: build, windowsHide: true, maxBuffer: 1_048_576 });
     assert.equal(child.error, undefined); assert.equal(child.status, 0, child.stderr.toString());
     return JSON.parse(child.stdout.toString());
@@ -197,6 +236,25 @@ try {
   await test("a fresh process restores the receiver's note from its seed and public bytes", async () => {
     fresh.receiver = worker(await served(receiverSeed));
     assert.deepEqual(fresh.receiver, holdings.receiver);
+  });
+  if (withErgo) await test("the fresh reader refuses a wrong independent pin and a withheld carrying section", async () => {
+    const input = await served();
+    const refused = result => {
+      assert.equal(result.status, "unresolved-evidence"); assert.equal(result.audit, null);
+      assert.deepEqual(result.candidates, []); assert.equal(result.spendable, false);
+      assert.equal(result.fullV3Replay, false);
+      return result;
+    };
+    const wrongPin = new Uint8Array(pin); wrongPin[0] ^= 1;
+    try {
+      writeFileSync(join(build, "ergo-pin.bin"), wrongPin);
+      fresh.wrongPin = refused(worker(input));
+    } finally { writeFileSync(join(build, "ergo-pin.bin"), pin); }
+    // At depth 1 the tip's parent is the witnessed block carrying the last commitment.
+    // Keep that header and all ancestry intact, withholding only its transaction section.
+    assert.equal(hex(input.venue.tip.parent.id), hex(pin));
+    fresh.withheldSection = refused(worker({ ...input,
+      venue: { tip: { ...input.venue.tip, parent: { ...input.venue.tip.parent, section: [] } } } }));
   });
   const finalPackage = await journal.package();
   await test("a reopened journal replays its commands to the same package and replies", async () => {
@@ -221,10 +279,14 @@ try {
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
   const report = { schema: "moe-v3-operator-journal-1", specification: V3_SPECIFICATION, node: process.version, platform: process.platform,
-    candidateDomain: hex(domain), backing: hex(backing), venue: { context: LOCAL_REFERENCE, label: hex(label), lag: lag.toString(), id: hex(venue.id) },
+    candidateDomain: hex(domain), backing: hex(backing), venue: { context: reference.context, lag: lag.toString(), id: hex(venue.id),
+      ...(withErgo ? { anchor: hex(ERGO_PROFILE.anchor), depth: ERGO_PROFILE.depth.toString(), witnessedBlock: hex(pin),
+        tipHeight: supplier.tip.height.toString(), funding: "invented synthetic box", publisher: "ErgoPublisher" } : { label: hex(label) }) },
     checks, metrics, packageBytes: finalPackage.package.length, recordBytes: Object.fromEntries(Object.entries(records).map(([k, v]) => [k, v.length])),
-    venueRecords: venue.export().records.length, sourceSha256Lf: sourceHashes(sources), audit, holdings, receiptReads, fresh,
-    limits: ["Candidate configuration from the independently held manifest and a local reference venue whose identity the guard recomputes; no adopted domain, chain venue or finality.",
+    venueRecords: audit.audit.range.carrying.length, sourceSha256Lf: sourceHashes(sources), audit, holdings, receiptReads, fresh,
+    limits: [withErgo
+      ? "Candidate configuration from the independently held manifest; actual ErgoPublisher transactions mined by a synthetic supplier and read through ErgoVenue under a recomputed synthetic reference identity. The seedless reader independently holds the witnessed block pin: difficulty 1 permits anyone to re-mine a heavier chain. Invented funding; no live node, network deployment, adopted domain or real-chain finality."
+      : "Candidate configuration from the independently held manifest and a local reference venue whose identity the guard recomputes; no adopted domain, chain venue or finality.",
       "One genesis segment of one backing: no imports, recovery kinds, replacement, second backing or silence/non-service clause. The journal reads the venue's full ranges on every operation.",
       "Holders are this script: the payer and receiver restore paths through the reader and prove with the runtime prover; no wallet store, request transport or fee quote.",
       "Restart replay is exercised once here; restarts mid-publication and exact retry across restarts are slice 5."] };

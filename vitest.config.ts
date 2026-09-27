@@ -16,6 +16,8 @@ import { defineConfig } from "vitest/config";
 // wrong, and the point of the margin is that exceeding it means something.
 export default defineConfig({
   test: {
+    // Leave capacity for the local reference nodes during verification.
+    maxWorkers: 2,
     testTimeout: 30_000,
     hookTimeout: 30_000,
     // `scratch/` is gitignored and is where a proof script is compiled to run

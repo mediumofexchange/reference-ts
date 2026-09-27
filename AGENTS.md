@@ -31,11 +31,11 @@ one-clause summary, not numbers or dated status. `CLAUDE.md` contains exactly `@
 
 ## Direction and authority
 
-The shielded pool is the active claim layer (Construction C1.2). `src/pool/` is the v2 runtime;
-PoolStore refuses silence clauses. `src/pool/v3/` is the unadopted v3 candidate; successor work in
-`model/`, `scripts/pool/v3/` and `experiments/` is conditional evidence, not runtime support. The
-fault model binds exact bytes with real hashes and ideal proof/authentication oracles; current
-layout and adoption limits are in implementation status.
+The shielded pool is the active claim layer (Construction C1.2). Develop v3 in `src/pool/v3/`:
+one moded state machine and one reader over the neutral core, guarded to recomputed local/synthetic
+reference identities. Freeze v2-specific `src/pool/` code (no features or fixes); retain its checks
+until the v3 wallet/service pass the ported cases and v2 retires. PoolStore refuses silence clauses.
+V3 is unadopted; remaining model/harness work is conditional evidence. See implementation status.
 
 The transparent path is frozen as a differential oracle and adversarial case library. Port cases as
 pool rules land, then retire covered material. Do not review or extend it otherwise, or port the
@@ -59,7 +59,7 @@ test or benchmark.
 - Use `bigint` for money, counters, epochs, positions and timestamps; convert to `number` only at checked external-library boundaries.
 - Sign canonical framed bytes with fixed domain tags; no delimiter concatenation, JSON signing, variable domains or permissive signature parsing.
 - Validate at trust boundaries. Copy mutable inputs on ingestion and outputs on return; keep internal helpers small.
-- Public verification returns `false` for malformed/invalid external data. Venue mutation throws `VenueError` with a stable code. Unexpected programming failures remain visible.
+- Public verification returns `false` for malformed/invalid external data. Venue refusals throw `VenueError`; `RecordPublisher` treats malformed arguments as caller errors. Unexpected programming failures remain visible.
 - Time is a witnessed venue index or another protocol-defined witness, never local wall-clock time.
 - Issuance is distinct from movement. No clawback, reversal, freeze or privileged debit path.
 - A backing's terms are committed once inside its name. A construction/version change needs a successor.

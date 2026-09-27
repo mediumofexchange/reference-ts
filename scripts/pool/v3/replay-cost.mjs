@@ -19,7 +19,7 @@ import { directoryRoot, encodeCommitment, signCommitment } from "../../../dist/v
 import { LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { recordReader, replayLocalPackage } from "./local-replay.mjs";
-import { FixtureVenue } from "../../../dist/record-venue.js";
+import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity } from "../../../dist/record-venue.js";
 import { loadCandidateManifest, candidateConfiguration } from "./candidate.mjs";
 import { v3Codec as codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
@@ -34,7 +34,8 @@ const hex = bytes => Buffer.from(bytes).toString("hex");
   const MODULUS = 21888242871839275222246405745257275088548364400416903490308238158651n;
   const fieldOf = () => { for (;;) { const v = BigInt("0x" + randomBytes(32).toString("hex")) % MODULUS; if (v !== 0n) return v; } };
   const configuration = candidateConfiguration(loadCandidateManifest(), codec), configurationBytes = codec.configurationBytes(configuration);
-  const domain = codec.configurationHash(configuration), venue = b(12), issuerSecret = b(15), operatorSecret = b(16);
+  const reference = { context: LOCAL_REFERENCE, label: b(12), lag: 2n };
+  const domain = codec.configurationHash(configuration), venue = localVenueIdentity(reference.label, reference.lag), issuerSecret = b(15), operatorSecret = b(16);
   const issuerKey = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
   const termsBytes = codec.encodeRootTerms({ obligor: issuerKey, payout: { thing: "test units", quantumExponent: 0, perUnit: 1n },
     operator, configuration: domain, venue, interval: 10n });
@@ -95,7 +96,7 @@ const hex = bytes => Buffer.from(bytes).toString("hex");
       trail: chosen.trail, trails: [opening.trail, ...rest.map(x => x.trail)] },
     venue: witnessed.export() };
     let calls = 0;
-    const verifier = { configuration, verify: async () => { calls++; return true; }, record: data => recordReader(FixtureVenue.from(data), "fixture-verifier") };
+    const verifier = { configuration, reference, verify: async () => { calls++; return true; }, record: data => recordReader(FixtureVenue.from(data), "fixture-verifier") };
     const start = performance.now();
     const result = await replayLocalPackage(input, verifier, codec);
     const ms = performance.now() - start;
