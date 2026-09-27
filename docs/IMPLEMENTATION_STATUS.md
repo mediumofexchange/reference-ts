@@ -346,8 +346,8 @@ reads publications through that index before issuing adopted receipts.
 includes a fresh process that has only public evidence and independent reader
 inputs. The [local](pool-v3-recovery-store-verification.json) and
 [synthetic Ergo](pool-v3-recovery-store-ergo-verification.json) real-proof
-acceptance passed in [CI at 74eade8](https://github.com/mediumofexchange/reference-ts/actions/runs/36327647966)
-on Linux and Windows. The separately authorized [live testnet recovery](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
+acceptance is retained for the current reader; WORK.md records its checked CI baseline.
+The separately authorized [live testnet recovery](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
 and retained public-bundle readback also passed. That live evidence is historical
 at `a72888b`; later journal changes need their own acceptance evidence.
 [Measurements and limits](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)

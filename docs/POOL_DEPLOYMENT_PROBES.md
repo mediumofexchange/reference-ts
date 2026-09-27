@@ -218,8 +218,7 @@ checkpoints and imported ancestry; unchanged snapshots cannot evade them.
 The [local](pool-v3-recovery-store-verification.json) and
 [synthetic Ergo](pool-v3-recovery-store-ergo-verification.json) reports retain
 the passing real-proof acceptance, package size and actual funding cost.
-Both commands passed on Linux and Windows in
-[CI at 74eade8](https://github.com/mediumofexchange/reference-ts/actions/runs/36327647966).
+The current reader's checked CI baseline is recorded in WORK.md.
 Earlier live publisher and journal reports are historical at
 [`2c6b20c`](https://github.com/mediumofexchange/reference-ts/tree/2c6b20c).
 
