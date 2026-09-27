@@ -323,8 +323,24 @@ and a fresh reader fetching its own headers/sections. The [live journal report](
 records successful public supply verification and hostile refusals; the header rules have a separate
 [source-bound own-node check](ergo-testnet-header-verification.json).
 The corrected retained public bundle has a separate [standalone readback](pool-v3-testnet-reader-verification.json).
-One genesis segment of one backing; no recovery kinds, imports, replacement
-service, live-chain deployment or adopted configuration.
+Those live observations describe slice 2 at
+[`2c6b20c`](https://github.com/mediumofexchange/reference-ts/tree/2c6b20c); their
+source bindings are historical after the recovery changes.
+
+Slice 3 adds single-backing recovery admission, publication force over fixed
+snapshot anchors, non-service counts and exact return/adoption to the runtime.
+`package-reader.ts` verifies complete bounded ancestry through `import-reader.ts`;
+the existing multi-backing harness calls the same transitions. The journal
+refuses service at the silence horizon but discards its tail only at a proven
+witnessed boundary. A return waits for its empty opening's actual index and
+reads publications through that index before issuing adopted receipts.
+`npm run check:pool:v3-recovery` is the real-proof acceptance command, with
+`-- --ergo` selecting actual kind-4 transactions on the synthetic chain. It
+includes a fresh process that has only public evidence and independent reader
+inputs. Verification is in progress; no live recovery acceptance is claimed.
+Complete trails remain bounded; imports do not erase ancestry or reset the
+package/work budgets. No replacement service, wallet custody, persistence,
+live deployment or adopted configuration is supplied by this slice.
 
 ## Runtime pin and recovery models
 

@@ -67,22 +67,22 @@ export interface RecoveryCheck {
   /** The publication's own index, or the checkpoint's index in replay; undefined without venue answers. */
   readonly at: bigint | undefined;
   readonly lag?: bigint;
-  /** A publication judged for force: its door deadlines apply (C2b.3.2). */
-  readonly publication?: boolean;
+  /** Admission at the horizon or publication force at its own index: C3.8's door deadlines apply. */
+  readonly door?: boolean;
 }
 
 /** Pure guards, before any mutation. The caller verifies proofs, context and
- * roots. Door deadlines are checked only for publications, never in replay. */
-export function checkRecovery(record: Record, state: RecoveryState, { check, backing, issuer, at, lag, publication = false }: RecoveryCheck): void {
+ * roots. Door deadlines are checked at admission and force, never in replay. */
+export function checkRecovery(record: Record, state: RecoveryState, { check, backing, issuer, at, lag, door = false }: RecoveryCheck): void {
   const p = record.publicInputs, kind = record.kind, id = hex(statementHash(record));
   const { nfs } = effectOf(record);
-  if (publication && (at === undefined || lag === undefined)) throw new Error("a publication is judged at its own index under the venue's lag");
+  if (door && (at === undefined || lag === undefined)) throw new TypeError("a door is judged at an index under the venue's lag");
   if (kind >= 4) check(!state.effective.has(id), "REPEATED_STATEMENT");
   if (kind === 4) {
     const tags = p.slice(10, 12).filter(tag => tag !== 0n);
     check(tags.length > 0 && new Set(tags).size === tags.length, "TAGS");
     check(tags.every(tag => !state.spentTags.has(tag) && !locked(state, tag, at)), "LOCKED");
-    if (publication) check(p[14]! >= at! - 2n * lag! && p[14]! <= at! - lag! && p[15]! > at!, "DEADLINE");
+    if (door) check(p[14]! >= at! - 2n * lag! && p[14]! <= at! - lag! && p[15]! > at!, "DEADLINE");
   } else if (kind === 5 || kind === 6) {
     const demandId = hex(identifierOf(p[kind === 5 ? 5 : 15]!, p[kind === 5 ? 6 : 16]!));
     const demand = state.demands.get(demandId);
@@ -95,7 +95,7 @@ export function checkRecovery(record: Record, state: RecoveryState, { check, bac
       check(auth.acceptance.deadline <= demand!.deadline, "DEADLINE");
       check(verifySignatureStrict(auth.acceptance.signature, auth.acceptanceMessage, issuer) &&
         verifySignatureStrict(auth.releaseSignature, auth.releaseMessage, demand!.presenter), "SIGNATURE");
-      if (publication) check(demand!.deadline >= at! && auth.acceptance.deadline >= at!, "DEADLINE");
+      if (door) check(demand!.deadline >= at! && auth.acceptance.deadline >= at!, "DEADLINE");
       check(nfs.every((nf, i) => demand!.tags[i] === 0n || demand!.tags[i] === tagOf(nf)), "TAGS");
       check(nfs.every(nf => !locked(state, tagOf(nf), at, demandId)), "LOCKED");
     }

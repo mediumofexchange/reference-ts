@@ -1,10 +1,9 @@
 // Conditional C2b.3.1–4.2 reads. Snapshots exclude the entire publication index;
 // canonical opening predecessors additionally include lower same-key sequences.
 import { compareBytes, EncodingError } from "../../../dist/bytes.js";
-import { identifierOf } from "../../../dist/pool/field.js";
 import { ScopeTree } from "../../../dist/pool/scope.js";
 import { EvidenceRefusal } from "../delivery/evidence-reader.mjs";
-import { recoveryState, effectOf, checkRecovery, applyRecovery } from "../../../dist/pool/v3/recovery.js";
+import { openForceState, applyForceRecord, applyForceEffects } from "../../../dist/pool/v3/state.js";
 
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const same = (a, b) => compareBytes(a, b) === 0;
@@ -74,22 +73,15 @@ export function scopeRecovery({ context, viewFor, latest, check, charge, ReplayR
     const snapshot = await snapshotAt(backing, terms, entry.index);
     if (snapshot === undefined || entry.index - snapshot.index <= duration) return;
     const source = snapshot.state;
-    const state = { ...recoveryState(source), nullifiers: new Set(source.nullifiers), outputsSeen: new Set(source.outputsSeen) };
+    const state = openForceState(source);
     for (const prior of force) if (prior.index > (source.adoptionIndices.get(name) ?? 0n)) {
-      charge(1n); applyRecovery(prior.record, state);
-      const effect = effectOf(prior.record);
-      effect.nfs.forEach(nf => state.nullifiers.add(nf)); effect.outputs.forEach(cm => state.outputsSeen.add(cm));
+      charge(1n); applyForceEffects(state, prior.record);
     }
-    const record = publication.record, p = record.publicInputs;
+    const record = publication.record;
     try {
-      check(same(identifierOf(p[2], p[3]), snapshot.segment) && p[4] === new ScopeTree(snapshot.header.entries).root(), "CONTEXT");
-      if (record.kind !== 5) check(same(identifierOf(p[5], p[6]), backing), "BACKING");
-      if (record.kind !== 5) check(await verifier.verify(record.kind, [...p], new Uint8Array(record.proof)) === true, "PROOF");
-      const { roots, nfs, outputs } = effectOf(record);
-      check(roots.every(root => source.anchors.has(root)), "ANCHOR");
-      check(new Set(nfs).size === nfs.length && nfs.every(nf => nf !== 0n && !state.nullifiers.has(nf)), "SPENT");
-      check(new Set(outputs).size === outputs.length && outputs.every(cm => cm !== 0n && !state.outputsSeen.has(cm)), "OUTPUT");
-      checkRecovery(record, state, { check, backing, issuer: terms.obligor, at: entry.index, lag: view.lag, publication: true });
+      await applyForceRecord(state, codec.encodeRecord(record), { mode: "force", domain: selection.domain, backing,
+        segment: snapshot.segment, scope: new ScopeTree(snapshot.header.entries).root(), issuer: terms.obligor,
+        index: entry.index, lag: view.lag, verifier });
       force.push({ backing: name, index: entry.index, ordinal: entry.ordinal, record, bytes: codec.encodeRecord(record) });
       item.force = true;
     } catch (error) {

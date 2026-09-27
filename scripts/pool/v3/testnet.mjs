@@ -78,6 +78,12 @@ export function readTestnetSelection(file) {
 /** The same actual node adapter for positive and hostile readers. Pin and
  * withholding choices are reader-owned, never accepted from IPC/package data. */
 export async function testnetRecord(selection, pin) {
+  const venue = await testnetVenue(selection, pin);
+  return venue === undefined ? undefined : recordReader(venue, TESTNET_EVIDENCE_KIND);
+}
+
+/** A fresh runtime venue at the independently held reader selection and pin. */
+export async function testnetVenue(selection, pin) {
   assert(pin instanceof Uint8Array && pin.length === 32);
   const { profile, anchorHeight, judgingIndex, withheldHeader } = selection;
   const supplier = supplierFor();
@@ -91,11 +97,12 @@ export async function testnetRecord(selection, pin) {
   const synced = await venue.sync([capped]);
   if (synced.witnessedHeaderId === undefined || hex(synced.witnessedHeaderId) !== hex(pin) ||
       synced.witnessedIndex !== judgingIndex || synced.unresolvedIndex !== undefined) return undefined;
-  return recordReader(venue, TESTNET_EVIDENCE_KIND);
+  return venue;
 }
 
 /** Live writer, only constructed by store-check --testnet. */
-export async function openTestnet() {
+export async function openTestnet({ authorizeSubmission } = {}) {
+  assert(authorizeSubmission === undefined || typeof authorizeSubmission === "function");
   const started = Date.now(), info = await testnetInfo(), supplier = supplierFor();
   const anchorHeight = info.get("fullHeight") - TESTNET_DEPTH;
   const anchor = await headerAt(supplier, anchorHeight), profile = profileAt(anchor.id);
@@ -107,7 +114,11 @@ export async function openTestnet() {
   assert.equal(hex(payToPublicKeyTree(secp256k1.getPublicKey(secretKey, true))), wallet.ergoTree);
   const submitted = [], nodePublisher = ergoNodePublisher(TESTNET_ENDPOINT);
   const counting = { name: nodePublisher.name, unspentBoxes: tree => nodePublisher.unspentBoxes(tree), hasBox: id => nodePublisher.hasBox(id),
-    submit: async (signed, id) => { submitted.push(hex(id)); return nodePublisher.submit(signed, id); } };
+    submit: async (signed, id) => {
+      if (authorizeSubmission !== undefined) await authorizeSubmission({ signed: new Uint8Array(signed), id: new Uint8Array(id),
+        tree: publisher.tree, boxes: await nodePublisher.unspentBoxes(publisher.tree) });
+      submitted.push(hex(id)); return nodePublisher.submit(signed, id);
+    } };
   const publisher = new ErgoPublisher({ secretKey, suppliers: [counting] });
   const venue = new ErgoVenue(profile, context, policy, publisher);
   let last;
@@ -126,7 +137,7 @@ export async function openTestnet() {
   while ((await sync()).witnessedHeaderId === undefined) {
     assert(Date.now() < bootstrapDeadline, "testnet first witnessed block wait budget"); await pause();
   }
-  return { venue, profile, publisher, submitted, anchorHeight, context,
+  return { venue, profile, publisher, submitted, anchorHeight, context, sync,
     reference: { context: ERGO_TESTNET_REFERENCE, profile },
     get pin() { return last.witnessedHeaderId; },
     get tipHeight() { return last.tipHeight; },
@@ -135,6 +146,25 @@ export async function openTestnet() {
       context: ERGO_TESTNET_REFERENCE, depth: profile.depth.toString(), anchor: hex(profile.anchor),
       anchorHeight: anchorHeight.toString(), judgingIndex: venue.witnessedIndex().toString() }; },
     headerId: async index => (await headerAt(supplier, anchorHeight + 1n + index)).id,
+    async waitUntil(index) {
+      assert(typeof index === "bigint" && index >= 0n);
+      const deadline = Date.now() + TESTNET_LIMITS.publicationWaitMs;
+      for (;;) {
+        await sync(); if (venue.witnessedIndex() >= index) return;
+        assert(Date.now() < deadline, "testnet witnessed index wait budget"); await pause();
+      }
+    },
+    async waitForRecord(kind, subject, bytes) {
+      const deadline = Date.now() + TESTNET_LIMITS.publicationWaitMs, encoded = hex(bytes);
+      for (;;) {
+        await sync();
+        const request = { venue: venue.id, kind, subject, fromIndex: 0n, toIndex: venue.witnessedIndex() };
+        const answer = decodeRangeAnswer(venue.range(request, RANGE_LIMITS), request, RANGE_LIMITS);
+        const entry = answer.entries.find(entry => hex(entry.record) === encoded);
+        if (entry !== undefined) return entry.index;
+        assert(Date.now() < deadline, "testnet record inclusion and depth wait budget"); await pause();
+      }
+    },
     async waitFor(commitment) {
       const deadline = Date.now() + TESTNET_LIMITS.publicationWaitMs, encoded = hex(encodeCommitment(commitment));
       for (;;) {

@@ -188,7 +188,7 @@ synthetic Ergo reference chain: the journal publishes through `ErgoVenue`'s
 `RecordPublisher` interface and the actual `ErgoPublisher`, with invented
 funding in a synthetic mempool. Explicit mining and synchronization separate
 transaction acceptance from witnessing. Raw Ergo publication supports record
-kinds 1–3; kind-4 publication runs remain outside this slice.
+kinds 1–4; this original acceptance flow uses only kinds 1–3.
 
 The acceptance flow issues to a holder's request, pays with a fee and change,
 then burns. Holders restore their input notes through the reader. A fresh
@@ -206,6 +206,44 @@ custody, recovery admission, imports or replacement service. The synthetic
 chain's difficulty permits anyone to re-mine it, so its independent pin remains
 an explicit trust input. Restart replay does not establish publisher or venue
 persistence across a process restart.
+
+The recovery acceptance is `npm run check:pool:v3-recovery`, and
+`npm run check:pool:v3-recovery -- --ergo` for the synthetic Ergo reference.
+It covers service demand/withdrawal/settlement, a request count, silence,
+holder-only force verification, return and exact adoption including a release
+at the opening index. The fresh process receives no journal or asserted state;
+missing directories, snapshots or ancestry refuse. The complete package must
+fit the existing byte budget with receipt headroom. Work budgets also cover
+checkpoints and imported ancestry; unchanged snapshots cannot evade them.
+These new commands are under verification and do not yet provide live recovery
+evidence. The earlier live publisher and journal reports are historical at
+[`2c6b20c`](https://github.com/mediumofexchange/reference-ts/tree/2c6b20c).
+
+The prepared live recovery command is
+`node scripts/pool/v3/recovery-store-check.mjs --testnet --authorized-testnet`.
+It requires separate authorization after local/synthetic acceptance and runner
+review. Its ten planned transactions are, in order: genesis opening, funded
+checkpoint, service-settled checkpoint, unanswered request, forced demand,
+withdrawal, second forced demand, settlement, empty return opening, and adopted
+continuation. Live settlement precedes return; the synthetic drill separately
+checks settlement at the opening's exact index.
+
+The pre-submission guard validates actual signed transactions and permits at
+most ten distinct attempts, 0.011 tERG total fees and 0.05 tERG total wallet
+spend, including record-output minimums. Uncertain attempts retain their
+reservations; exact signed retries do not consume another transaction slot.
+An exhausted budget halts the drill, including a partially completed drill.
+Reservations are held for one invocation; there is no automatic restart. A
+new process after any live submission requires a new transaction allowance.
+No extra funding transaction, real funds or mainnet publication is included.
+Silence lasts 16 witnessed blocks, deadlines have roughly 128-block margins,
+polling is every ten seconds, each wait is limited to twenty minutes and the
+whole live session to two hours. A stale demand proof aborts before publication.
+Actual inclusion can still occur too late; the independent reader then refuses
+its force, and the drill retains the fees and partial-run evidence limit.
+The public reader bundle retains package bytes, selection, verification keys,
+artifact identities and independently held venue profile/pin, without seeds or
+journal contents. Offline guard checks run with `recovery-testnet.mjs --check`.
 
 The explicit `node scripts/pool/v3/store-check.mjs --testnet` path uses the own
 v6.0.6 testnet node and throwaway tERG funding. It selects the distinct

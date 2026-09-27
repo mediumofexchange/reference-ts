@@ -165,7 +165,7 @@ describe("the v3 state machine in adoption mode", () => {
 });
 
 describe("the v3 state machine in admission mode", () => {
-  it("judges kinds 1–3 at the horizon with every replay check, and refuses recovery kinds until slice 3", async () => {
+  it("judges at the horizon with every replay check and requires a lag for recovery admission", async () => {
     const context = replay({ admission: true, index: 9n }), state = fresh();
     expect(modeAt(context, 0n)).toBe("admission");
     await applyRecord(state, issue(10n, 101n), context);
@@ -176,8 +176,7 @@ describe("the v3 state machine in admission mode", () => {
     expect(await refusal(state, issue(1n, 110n), replay({ admission: true, index: 9n, revokedAt: 9n }))).toBe("REVOKED");
     const root = state.tree.root();
     const kind4 = await applyRecord(state, demand([root, root], [1n, 2n], 20n), context).then(() => undefined, (e: unknown) => e);
-    expect(kind4).toBeInstanceOf(EvidenceRefusal);
-    expect((kind4 as EvidenceRefusal).status).toBe("unsupported-scope");
+    expect(kind4).toBeInstanceOf(TypeError);
     await expect(applyRecord(state, issue(1n, 110n), replay({ admission: true, index: undefined }))).rejects.toThrow(TypeError);
     expect(state.position).toBe(1n);
   });

@@ -316,15 +316,20 @@ which a running or failed sync leaves in place.
   rather than answering empty, so the frozen transparent path has no Ergo
   venue.
 - **Publishing** (`src/ergo-publisher.ts`): a view given an `ErgoPublisher`
-  exposes neutral `publishRecord(kind, subject, bytes)` for kinds 1–3 and
-  refuses kind 4. Raw publication checks kind, subject and record dimensions;
+  exposes neutral `publishRecord(kind, subject, bytes)` for kinds 1–4.
+  Kind 4 uses a maximal adjacent same-subject output run in one transaction;
+  each complete box fits 4096 bytes, and the complete signed transaction must
+  fit the pinned v6.0.6 node's 98,304-byte limit (`application.conf`). The larger
+  §13 record limit is a reading bound, not a promise that every such record can
+  be published. Oversized transactions refuse before signing or submission.
+  Raw publication checks kind, subject and record dimensions;
   signatures and force are the reader's checks under §6. The older typed
   commitment and revocation helpers additionally refuse invalid signatures.
   It publishes one transaction per record, with
   every output created at the tip of the chain the view verified. The
   publisher holds one funding key, a secp256k1 scalar that pays fees and box
   minimums and nothing else, and builds the transaction in §5's grammar:
-  plain boxes of the key as inputs, output 0 the record at its location with
+  plain boxes of the key as inputs, output 0 the record (or its first piece) at its location with
   `R4` the subject and `R5` the record at the network minimum (360 nanoERG a
   byte of the full box), change to the key where it reaches its own minimum
   (otherwise it joins the fee), and the fee (1.1 mERG by default) at the
@@ -363,7 +368,7 @@ which a running or failed sync leaves in place.
   the publisher's alone.
 - **Not here**: persistence of the headers and objects across restarts (the
   store keeps every header it accepted, and the retained objects stay in
-  memory), pruning of side branches, kind-4 runs, and cancelling an
+  memory), pruning of side branches, and cancelling an
   abandoned publication by spending its input.
 
 [`runtime-sync.mjs`](../experiments/ergo-range/runtime-sync.mjs) runs the
@@ -377,7 +382,8 @@ bits stop the offending supplier's header pass.
 
 [`publisher-check.mjs`](../experiments/ergo-range/publisher-check.mjs) runs
 the publisher on the own testnet node under the reference-testnet identity.
-Its [report](ergo-publisher-verification.json) records signed commitment,
+Its historical [report](ergo-publisher-verification.json) at
+[`2c6b20c`](https://github.com/mediumofexchange/reference-ts/tree/2c6b20c) records signed commitment,
 replacement and revocation transactions, verified inclusion and depth, and
 exact record bytes, subjects and ordinals in their carrying sections.
 The node refuses an altered proof; lost-answer and exact retries submit no

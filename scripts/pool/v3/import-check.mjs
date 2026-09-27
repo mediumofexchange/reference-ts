@@ -345,7 +345,7 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
     const answer = await replayLocalPackage(oversized, verifier, codec);
     assert.equal(answer.status, "resource-refusal"); assert.equal(answer.audit, null); assert.deepEqual(answer.candidates, []);
   });
-  await test("the import event budget charges each replayed position once: an extending checkpoint adds nothing", async () => {
+  await test("the import event budget charges records and fresh ancestry scans, while an extending checkpoint adds nothing", async () => {
     // The smallest event budget, selected by the reader on its verifier, under which the read completes.
     const smallest = async input => {
       const status = async maxEvents => (await replayLocalPackage(input, { ...verifier, importLimits: { maxCheckpoints: 128n, maxEvents } }, codec)).status;
@@ -359,8 +359,9 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
     // b2 extends b1, which extends b0: without b1 the same positions are replayed once each.
     const total = await smallest(payload);
     assert.equal(total, await smallest(compose([a0, a1, b0, b2, c0, c1, d0])));
-    // a1, b1 and b2 each add one new position; openings and c1 add none.
-    if (!silence) assert.equal(total, 3n);
+    // a1, b1 and b2 add three local positions. Fresh openings scan the
+    // imported events: b0 reads one, c0 and d0 three each. c1 resumes.
+    if (!silence) assert.equal(total, 10n);
     // An invalid reader budget is the reader's own configuration error, not missing evidence.
     for (const importLimits of [null, 1n, { maxCheckpoints: 128n }, { maxCheckpoints: -1n, maxEvents: 1n }, { maxCheckpoints: 1, maxEvents: 1n }]) {
       await assert.rejects(replayLocalPackage(payload, { ...verifier, importLimits }, codec), { name: "TypeError", message: "invalid import limits" });

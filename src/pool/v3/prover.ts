@@ -10,7 +10,7 @@
 // requires the proof's public inputs to equal the task's exactly, and checks
 // the proof with the verifier over the same keys, routed by kind (§4), before
 // returning the record. Nothing here admits, signs a receipt or chooses a
-// venue; the issuer's authorization is `authorizeIssue` (witness.ts).
+// venue; issue and recovery signing helpers live in witness.ts.
 import type { Barretenberg } from "@aztec/bb.js";
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { Noir, type CompiledCircuit, type InputMap } from "@noir-lang/noir_js";
@@ -42,7 +42,7 @@ export class ProverError extends Error {
 export interface V3Prover {
   /** The verifier over the same six keys, routing each kind to its own. */
   readonly verifier: ProofVerifier;
-  /** Prove `task`; the record carries no authorization (an issue's is `authorizeIssue`). */
+  /** Prove `task`; issue and settlement authorization is added by witness.ts's signing helpers. */
   prove(task: ProofTask): Promise<Record>;
   /** Releases the verifier's own backend instance; the caller's instance stays open. */
   close(): Promise<void>;
@@ -82,7 +82,7 @@ export async function openV3Prover(api: Barretenberg, programs: Readonly<{ [name
     verifier,
     async prove(task) {
       const kind = task?.kind, circuit = circuits.get(kind);
-      if (circuit === undefined || kind > 3) throw new EncodingError("the prover proves kinds 1–3");
+      if (circuit === undefined) throw new EncodingError("the prover proves kinds 1–4, 6 and 7");
       const expected = [...task.publicInputs], capsules = task.capsules.map(copyBytes);
       const { witness } = await circuit.noir.execute(task.witness as InputMap);
       const proof = await circuit.backend.generateProof(witness, PROOF_OPTIONS);

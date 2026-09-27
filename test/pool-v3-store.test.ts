@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { hexToBytes } from "@noble/hashes/utils.js";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE } from "../src/ergo-profile.js";
 import { Chain } from "../src/ergo-synthetic.js";
 import { NoteTree } from "../src/pool/note-tree.js";
@@ -222,10 +222,10 @@ describe.skipIf(!supported)("the v3 operator journal (Node 24)", () => {
     // The same input again, into other outputs.
     const again = [output(payerSeed, 60, 7n), output(payerSeed, 61, 1n), output(payerSeed, 62, 2n), output(payerSeed, 63, 0n)];
     expect(await refusal(j.submit(payment(again)))).toEqual(["REFUSED", "SPENT"]);
-    // A demand (kind 4): recovery kinds are admitted in slice 3.
+    // A demand must place its anchors even though its stand-in proof verifies.
     const demand = encodeRecord({ domain, kind: 4, publicInputs: [...issueTask(context, funded).publicInputs.slice(0, 7), 5n, 1n, 2n, 3n, 4n, 5n, 6n, 1n, 9n],
       proof: new Uint8Array(32).fill(4), authorization: new Uint8Array(), capsules: [] });
-    expect(await refusal(j.submit(demand))).toEqual(["UNSUPPORTED", undefined]);
+    expect(await refusal(j.submit(demand))).toEqual(["REFUSED", "ANCHOR"]);
     expect(decodeReceipt(await j.submit(burning())).position).toBe(3n);
   });
 
@@ -251,13 +251,13 @@ describe.skipIf(!supported)("the v3 operator journal (Node 24)", () => {
     expect(await refusal(fresh.open("genesis", signed))).toEqual(["CONFLICT", undefined]);
   });
 
-  it("refuses terms for another operator, venue or configuration and clauses it does not serve", async () => {
+  it("refuses terms for another operator, venue or configuration and accepts silence terms", async () => {
     const venue = FixtureVenue.reference(label, lag), j = journal(path(), venue);
     expect(await refusal(j.open("a", signedTerms(termsFields({ operator: issuer }))))).toEqual(["REFUSED", undefined]);
     expect(await refusal(j.open("b", signedTerms(termsFields({ venue: b(7) }))))).toEqual(["REFUSED", undefined]);
     expect(await refusal(j.open("c", signedTerms(termsFields({ configuration: b(7) }))))).toEqual(["REFUSED", undefined]);
     expect(await refusal(j.open("d", signedTerms(termsFields(), b(98))))).toEqual(["REFUSED", undefined]);
-    expect(await refusal(j.open("e", signedTerms(termsFields({ silence: { noCommitmentDuration: 5n, challengeWindow: 5n } }))))).toEqual(["UNSUPPORTED", undefined]);
+    expect((await j.open("e", signedTerms(termsFields({ silence: { noCommitmentDuration: 5n, challengeWindow: 5n } })))).sequence).toBe(1n);
   });
 
   it("admits and signs only what it can still serve within the reader's budget", async () => {
@@ -281,6 +281,35 @@ describe.skipIf(!supported)("the v3 operator journal (Node 24)", () => {
       .find(i => i.kind === 6)!.payload, { maxBytes: 1n << 21n, maxEvents: 1024n });
     expect(trail.records.length).toBe(admitted);
   });
+
+  it("reserves checkpoint work even when unchanged snapshots deduplicate to a small package", async () => {
+    const { j, venue, file } = await opened();
+    let previous = await j.open("genesis", signed);
+    j.close();
+    // A restored journal with 128 genuine signed checkpoints. Building its
+    // durable fixture directly avoids re-verifying every growing venue prefix
+    // while arranging the boundary; reopening still verifies every signature.
+    const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(file);
+    const insert = db.prepare("INSERT INTO events VALUES(?,?,?,?,?)");
+    let tip = Number(db.prepare("SELECT MAX(seq) AS tip FROM events").get()!.tip);
+    for (let sequence = 2; sequence <= 128; sequence++) {
+      const next = signCommitment(operatorSecret, BigInt(sequence), previous.root);
+      insert.run(++tip, `command:empty-${sequence}`, "commit", JSON.stringify({ kind: "commit",
+        at: String(sequence - 1), observed: bytesToHex(encodeCommitment(previous)) }), bytesToHex(encodeCommitment(next)));
+      venue.advance(BigInt(sequence));
+      venue.witness(1, operator, BigInt(sequence), encodeCommitment(next));
+      previous = next;
+    }
+    db.prepare("UPDATE identity SET tip=? WHERE id=1").run(tip); db.close();
+    const restored = journal(file, venue);
+    venue.advance(venue.witnessedIndex() + lag);
+    const before = await restored.package();
+    expect(before.package.length).toBeLessThan(4096);
+    expect(before.selection.sequence).toBe(128n);
+    expect(await refusal(restored.commit("past-work-budget"))).toEqual(["REFUSED", "RESOURCE"]);
+    expect(await refusal(restored.submit(issue()))).toEqual(["REFUSED", "RESOURCE"]);
+    expect(await restored.package()).toEqual(before);
+  }, 90_000);
 
   it("serves only published commitments and the records they carry", async () => {
     const { j } = await opened();
