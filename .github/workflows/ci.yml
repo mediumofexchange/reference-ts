@@ -36,6 +36,15 @@ jobs:
       - run: npm ci
       - name: Six successor proof relations, uninstantiated construction
         run: npm run check:pool:v3 -- --ergo
+      - name: Retain source-bound v3 acceptance reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: pool-v3-reports-${{ matrix.os }}
+          path: |
+            scratch/pool-v3-results.json
+            scratch/pool-v3-store-results.json
+            scratch/pool-v3-local-replay-results.json
+          if-no-files-found: error
       - name: Diagnose proving parameter integrity on failure
         if: failure()
         shell: bash
