@@ -3,29 +3,31 @@
 Updated: 2026-09-27
 
 ## Goal
-Active: finish slice 4's single-backing compact fault-package orchestration on
-`feat/v3-compact-faults`, from `e8cf7e5`. Accept kind-7 evidence through both runtime
-package readers using the same observer as the harness. Acceptance: exact proof/issue-K
+Slice 4's single-backing compact fault-package orchestration is complete at the
+reference-venue boundary; delivery is [PR #27](https://github.com/mediumofexchange/reference-ts/pull/27).
+Implementation `238b418`, acceptance corrections through `ededc97`, from `e8cf7e5`.
+Both runtime package readers accept kind-7 evidence using the shared observer. Exact proof/issue-K
 rejection can replace only a non-opening target trail after complete dependency
 resolution; full and compact reads agree on state and classification, hostile/missing
 evidence refuses, selected envelopes stay complete, and recovery/adoption boundaries
-remain enforced. Verify focused cases, full check and local/synthetic real proofs;
-independent design and integrated adversarial review precede delivery.
+remain enforced. Independent design and integrated review passed.
 Stop at the single-backing reference boundary: no persistence, second backing,
 configuration adoption or new live runs.
 
 ## Status
 - Succession delivered in [PR #26](https://github.com/mediumofexchange/reference-ts/pull/26)
   at `e8cf7e5`; all seven post-merge CI jobs passed.
-- Compact design review found no normative blocker. Typed observer/authentication
-  facts now share runtime and harness code. Both public readers accept kind-7 bytes.
-- Typecheck and 19 focused frontier tests pass, including nine compact cases.
-  Integrated independent review found no correctness blocker; its coverage gap
-  (frontier negative recovery cases) is fixed in the acceptance helper.
-- [PR #27](https://github.com/mediumofexchange/reference-ts/pull/27), implementation
-  `238b418`; final acceptance runs in CI. The superseded local probe was stopped
-  before applying the review fix; no passing real-proof claim from that probe.
-  No active local job or companion branch. Review fix readback remains owed.
+- Typecheck and 19 focused frontier tests pass. Independent review found no runtime
+  blocker; frontier negative recovery coverage and explicit single-backing scope
+  refusals were added to acceptance and independently read back.
+- All seven full reference and pool-v2/v3 proof jobs passed for `ededc97` in
+  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36347810739).
+  Both public APIs pass local/synthetic real-proof import and recovery cases.
+  A disposable oracle probe also passed; it is not proof evidence.
+- Affected reports are refreshed from that passing Linux artifact; nine report
+  binding checks pass. Final changes only retain reports and update documentation;
+  runtime/check inputs reuse the passing baseline. No active local job or companion
+  branch. Inspect PR #27 for its merge revision and post-merge CI when resuming.
 
 ## Evidence
 - Current succession: [local](docs/pool-v3-succession-store-verification.json) and
@@ -47,11 +49,12 @@ configuration adoption or new live runs.
   No new live run is authorized. Testnet header evidence remains current and unchanged.
 
 ## Next
-1. Finish compact acceptance/review, full required checks, refresh affected retained
-   reports, then deliver and clean this slice. Current reports below are baseline
-   evidence until refreshed, not acceptance of the uncommitted port.
-2. Persistence: venue headers/objects beyond retainedBytes, prune side branches, publisher
-   outbox, restart drills; replace full-range reads with a cursor retaining non-held records.
+1. Persistence: begin with a synthetic venue restart probe that reproduces the exact
+   witnessed view from retained headers/objects, then continues sync. Reuse the owning
+   store's durable outbox for publisher state; exercise mid-sync/mid-publication restart
+   and exact retry. Plan side-branch pruning, data beyond retainedBytes and a cursor
+   retaining non-held records. Slice 5 stops before wallet redesign.
+2. Keep compact multi-backing orchestration with the existing slice-7 scope port.
 3. V3 wallet/service (C4.1–2 requests/funding disclosure), retire v2; then multi-backing.
 4. Configuration adoption: parameter provenance, ACIR identities/certificates, replay/import
    bounds, one-transaction condition and BN254 margin. Mainnet needs separate authority.
@@ -79,9 +82,9 @@ configuration adoption or new live runs.
   need separate provisioning authority. Configuration approval and mainnet remain disabled.
 
 ## Open questions
-- Integrated compact-fault adversarial review is owed before merge.
+- No unresolved compact-fault review findings.
 - No normative specification change or companion branch is currently proposed.
 
 Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-27:
-Single-backing succession now shares reviewed runtime transitions and public-only proof readers.
-Compact fault orchestration, configuration adoption, persistence, wallet custody and mainnet remain.
+Single-backing succession and compact fault orchestration share reviewed public proof readers.
+Configuration adoption, persistence, wallet custody, multi-backing runtime and mainnet remain.
