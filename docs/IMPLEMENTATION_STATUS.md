@@ -252,8 +252,10 @@ blocks from the own node and matched a public-node-only view. Given an
 `ErgoPublisher` it publishes kind 1–3 records from its own funding key,
 building and signing each transaction without an Ergo library; the own
 testnet node accepted three chained publications and they read back from
-their block ([publisher](ERGO_VENUE_PROFILE.md#runtime-venue)). It persists
-nothing across restarts and has not published on the mainnet.
+their block ([publisher](ERGO_VENUE_PROFILE.md#runtime-venue)). The optional
+[durable reference view and outbox](ERGO_VENUE_PROFILE.md#durable-reference-view-and-publisher)
+preserve reproducing evidence and exact publication retry. No mainnet publication
+or physical storage qualification is claimed.
 
 ## Successor record conformance
 
@@ -372,9 +374,15 @@ verification. The acceptance command is `npm run check:pool:v3-succession`, with
 `-- --ergo` for synthetic Ergo. The [local](pool-v3-succession-store-verification.json)
 and [synthetic Ergo](pool-v3-succession-store-ergo-verification.json) real-proof
 drills passed; WORK.md tracks full CI and delivery.
-Compact fault-package orchestration remains in the harness. This candidate adds
-no live deployment, configuration adoption, venue/publisher persistence or wallet
-custody evidence.
+Both runtime package readers now accept dependency-resolved single-backing compact
+fault evidence; multi-backing orchestration remains in the harness.
+
+Slice 5 adds the [durable venue and journal-owned publisher](ERGO_VENUE_PROFILE.md#durable-reference-view-and-publisher).
+Synthetic fresh-process crash checks reproduce ranges and exact publication retries;
+reopen authenticates retained evidence, preserves non-held records and deep-fork
+failure, and incomplete fork prefixes survive pruning. Full-history memory and
+checkpoint rewrite costs remain. No live deployment, configuration adoption,
+physical power-loss or wallet custody evidence is added.
 
 ## Runtime pin and recovery models
 

@@ -14,7 +14,7 @@ import { ErgoVenue } from "../src/ergo.js";
 import { attributeBlock, collBytes, frameTransaction, MINER_FEE_TREE_HEX } from "../src/ergo-profile.js";
 import {
   DEFAULT_ERGO_FEE, DEFAULT_MIN_VALUE_PER_BYTE, ergoNodePublisher, ErgoPublisher, payToPublicKeyTree, readPlainBox, verifyErgoProof,
-  type ErgoPublishingSupplier, type NodeRequestInit,
+  type ErgoPublishingSupplier, type ErgoPublisherPersistence, type NodeRequestInit,
 } from "../src/ergo-publisher.js";
 import { operatorAt, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
 import { signRevocation } from "../src/revocation.js";
@@ -51,6 +51,111 @@ function funded(values: readonly bigint[], name?: string): MempoolNode {
 }
 const publisher = (suppliers: readonly ErgoPublishingSupplier[], options: { fee?: bigint } = {}): ErgoPublisher =>
   new ErgoPublisher({ secretKey: SECRET, suppliers, ...options });
+
+describe("durable publisher exact retry", () => {
+  const storage = () => {
+    const state = { text: undefined as string | undefined, fail: false, uncertain: false };
+    const persistence: ErgoPublisherPersistence = {
+      load: () => state.text, guard: () => {}, save: text => {
+        if (state.fail) throw new Error("disk failure"); state.text = text;
+        if (state.uncertain) throw new Error("commit response lost");
+      },
+    };
+    return { state, persistence };
+  };
+  it("reopens after a lost reply and retries dependent transactions with identical signed bytes", async () => {
+    const { persistence } = storage(), n = funded([10_000_000n]), funding = [...n.boxes.values()];
+    const sent: string[] = [];
+    const supplier: ErgoPublishingSupplier = { name: "lost", unspentBoxes: t => n.unspentBoxes(t), hasBox: id => n.hasBox(id),
+      hasTransaction: id => n.hasTransaction(id), submit: async (bytes, id) => { sent.push(hex(bytes)); await n.submit(bytes, id); throw new Error("lost reply"); } };
+    const first = new ErgoPublisher({ secretKey: SECRET, suppliers: [supplier], persistence });
+    await expect(first.publish(request())).rejects.toThrow(/kept and sent again/);
+    const parent = await first.publish(request());
+    await expect(first.publish(request(new Uint8Array(100).fill(8)))).rejects.toThrow(/kept and sent again/);
+    const child = await first.publish(request(new Uint8Array(100).fill(8)));
+    n.pool.splice(0); n.boxes.clear(); for (const bytes of funding) n.fund(bytes);
+    const second = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence });
+    const retried = await second.publish(request(new Uint8Array(100).fill(8)));
+    expect(retried.signed).toEqual(child.signed); expect(retried.id).toEqual(child.id);
+    expect(n.submitted.slice(-2)).toEqual([hex(parent.id), hex(child.id)]);
+    expect(sent).toEqual([hex(parent.signed), hex(child.signed)]);
+    // Public return values never mutate the retained transaction or next snapshot.
+    retried.signed.fill(0); retried.change!.bytes.fill(0);
+    expect((await second.publish(request(new Uint8Array(100).fill(8)))).signed).toEqual(child.signed);
+  });
+
+  it("retains settled change and reserved inputs after restart", async () => {
+    const { persistence } = storage(), n = funded([10_000_000n]);
+    const first = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence });
+    const published = await first.publish(request());
+    await first.settle(() => true);
+    n.unspentBoxes = async () => []; // the index no longer supplies the settled change
+    const reopened = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence });
+    expect((await reopened.publish(request(new Uint8Array(100).fill(2)))).inputs).toEqual([published.change!.id]);
+
+    const separate = storage(), refusing = funded([10_000_000n]); refusing.refuse = () => true;
+    const reserved = new ErgoPublisher({ secretKey: SECRET, suppliers: [refusing], persistence: separate.persistence });
+    await expect(reserved.publish(request())).rejects.toThrow(/kept and sent again/);
+    await reserved.settle(() => true); // another publisher witnessed it; own input is still reserved
+    const after = new ErgoPublisher({ secretKey: SECRET, suppliers: [refusing], persistence: separate.persistence });
+    await expect(after.publish(request(new Uint8Array(100).fill(3)))).rejects.toThrow(/no supplier offered/);
+    expect(refusing.submitted).toHaveLength(1);
+  });
+
+  it("fails before send, poisons uncertain state and keeps the old reservation when rebuilding fails", async () => {
+    const { persistence, state } = storage(), n = funded([10_000_000n]);
+    const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence });
+    state.fail = true;
+    await expect(p.publish(request())).rejects.toThrow("disk failure"); expect(n.submitted).toHaveLength(0);
+    state.fail = false;
+    await expect(p.publish(request())).rejects.toThrow(/reopen from durable state/);
+    const next = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence });
+    const first = await next.publish(request()), durable = state.text;
+    n.pool.splice(0); n.boxes.clear(); n.refuse = () => true;
+    await expect(next.publish(request())).rejects.toThrow(/no supplier offered/);
+    expect(next.unsettled).toBe(1); expect(state.text).toBe(durable);
+    const reopened = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence });
+    expect(reopened.unsettled).toBe(1); expect(first.id).toHaveLength(32);
+  });
+
+  it("refuses wrong keys, policy and corrupted saved transactions or reservations", async () => {
+    const { persistence, state } = storage(), n = funded([10_000_000n]);
+    await new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence }).publish(request());
+    const saved = state.text!;
+    expect(() => new ErgoPublisher({ secretKey: sha("other funding key"), suppliers: [n], persistence })).toThrow(/saved publisher state/);
+    expect(() => new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence, fee: DEFAULT_ERGO_FEE + 1n })).toThrow(/saved publisher state/);
+    for (const mutate of [
+      (s: any) => { s.pending[0].publication.signed.bytes = `00${s.pending[0].publication.signed.bytes.slice(2)}`; },
+      (s: any) => { const proof = s.pending[0].publication.signed; proof.bytes = proof.bytes.slice(0, 68) +
+        (parseInt(proof.bytes.slice(68, 70), 16) ^ 1).toString(16).padStart(2, "0") + proof.bytes.slice(70); },
+      (s: any) => { s.pending[0].request.record.bytes = "01"; },
+      (s: any) => { s.pending[0].inputs[0].value.integer = "99999999"; },
+      (s: any) => { s.pending[0].publication.recordBox.bytes = "00".repeat(32); },
+      (s: any) => { s.spent = []; },
+      (s: any) => { s.created[0].bytes.bytes = "00"; },
+    ]) {
+      const damaged = JSON.parse(saved); mutate(damaged); state.text = JSON.stringify(damaged);
+      expect(() => new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence })).toThrow(/saved publisher|saved publication/);
+    }
+    state.text = saved;
+    expect(new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence }).unsettled).toBe(1);
+  });
+
+  it("recovers the committed transaction after an uncertain save without submitting from the poisoned instance", async () => {
+    const { persistence, state } = storage(), n = funded([10_000_000n]);
+    const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence });
+    state.uncertain = true;
+    await expect(p.publish(request())).rejects.toThrow("commit response lost");
+    expect(n.submitted).toHaveLength(0);
+    state.uncertain = false;
+    await expect(p.publish(request())).rejects.toThrow(/reopen from durable state/);
+    const reopened = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence });
+    const saved = state.text;
+    expect(reopened.unsettled).toBe(1);
+    await reopened.publish(request());
+    expect(state.text).toBe(saved); expect(n.submitted).toHaveLength(1);
+  });
+});
 
 describe("proveDlog proofs are Ergo's", () => {
   // Signed by the sigma-rust 2f840d3 release build (Wallet.sign_message_using_p2pk) with this key.

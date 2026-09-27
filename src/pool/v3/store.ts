@@ -18,6 +18,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
+import type { ErgoPublisherPersistence } from "../../ergo-publisher.js";
 import {
   admittedReplacements, decodeRangeAnswer, heldCommitments, RangeLimitError, replacementChain, revocationIndex,
   type HeldCommitment, type RangeAnswer, type RecordKind,
@@ -197,7 +198,9 @@ export class V3OperatorJournal {
         profile TEXT NOT NULL, domain TEXT NOT NULL, operator TEXT NOT NULL, venue TEXT NOT NULL,
         owner INTEGER NOT NULL, tip INTEGER NOT NULL, observed TEXT NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY CHECK(seq>0), id TEXT NOT NULL UNIQUE,
-        request TEXT NOT NULL, command TEXT NOT NULL, response TEXT NOT NULL) STRICT;`);
+        request TEXT NOT NULL, command TEXT NOT NULL, response TEXT NOT NULL) STRICT;
+        CREATE TABLE IF NOT EXISTS ergo_publisher (id INTEGER PRIMARY KEY CHECK(id=1),
+        revision INTEGER NOT NULL CHECK(revision>0), snapshot TEXT NOT NULL) STRICT;`);
       let meta = this.metadata();
       if (meta === undefined) {
         requireThat(this.db.prepare("SELECT COUNT(*) AS n FROM events").get()?.n === 0, "STORAGE", "journal identity is missing");
@@ -223,6 +226,41 @@ export class V3OperatorJournal {
   get operatorKey(): Uint8Array { return copyBytes(this.operator); }
   /** The configuration's domain. */
   get configurationDomain(): Uint8Array { return copyBytes(this.domain); }
+
+  /** The venue-bound durable publication outbox under this journal's owner
+   * fence. These synchronous transactions may run within publish(); they do
+   * not reenter run() or advance the protocol command log's revision. Each
+   * adapter also fences stale publisher instances sharing the same owner. */
+  publisherPersistence(): ErgoPublisherPersistence {
+    let revision: bigint | undefined;
+    const row = () => {
+      const query = this.db.prepare("SELECT revision,snapshot FROM ergo_publisher WHERE id=1"); query.setReadBigInts(true);
+      return query.get();
+    };
+    const current = () => {
+      const found = row();
+      requireThat(revision === undefined || (found?.revision ?? 0n) === revision, "FENCED", "another publisher changed this outbox");
+      return found;
+    };
+    return Object.freeze({
+      load: (): string | undefined => this.transaction(() => {
+        requireThat(revision === undefined, "STORAGE", "publisher persistence adapter is already loaded");
+        const found = current(); revision = found === undefined ? 0n : found.revision as bigint;
+        requireThat(found === undefined || (typeof found.revision === "bigint" && typeof found.snapshot === "string"), "STORAGE", "invalid publisher outbox");
+        return found?.snapshot as string | undefined;
+      }),
+      guard: (): void => this.transaction(() => { current(); }),
+      save: (snapshot: string): void => {
+        requireThat(typeof snapshot === "string" && revision !== undefined && revision < SQLITE_LIMIT, "STORAGE", "publisher outbox is not loaded or full");
+        const next = revision + 1n;
+        this.transaction(() => {
+          current();
+          this.db.prepare("INSERT INTO ergo_publisher VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,snapshot=excluded.snapshot").run(next, snapshot);
+        });
+        revision = next;
+      },
+    });
+  }
 
   private metadata() {
     const query = this.db.prepare("SELECT * FROM identity WHERE id=1"); query.setReadBigInts(true);

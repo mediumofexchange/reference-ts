@@ -3,68 +3,68 @@
 Updated: 2026-09-27
 
 ## Goal
-Slice 4's single-backing compact fault-package orchestration is complete at the
-reference-venue boundary; delivery is [PR #27](https://github.com/mediumofexchange/reference-ts/pull/27).
-Implementation `238b418`, acceptance corrections through `ededc97`, from `e8cf7e5`.
-Both runtime package readers accept kind-7 evidence using the shared observer. Exact proof/issue-K
-rejection can replace only a non-opening target trail after complete dependency
-resolution; full and compact reads agree on state and classification, hostile/missing
-evidence refuses, selected envelopes stay complete, and recovery/adoption boundaries
-remain enforced. Independent design and integrated review passed.
-Stop at the single-backing reference boundary: no persistence, second backing,
-configuration adoption or new live runs.
+Slice 5: durable reference venue and exact publisher retry on `feat/v3-persistence`,
+from `6e4cea8` ([slice 4 delivery](https://github.com/mediumofexchange/reference-ts/pull/27)).
+Acceptance: synthetic restart reproduces exact witnessed ranges and continues sync;
+interrupted sync/publication preserves atomic snapshots and exact signed retries.
+Retain reproducing sections and all objects, including non-held commitments;
+prune completed deep side paths without losing budget-stopped fork continuation.
+Reuse the owning journal's fenced outbox. Stop before wallet redesign or live runs.
 
 ## Status
-- Succession delivered in [PR #26](https://github.com/mediumofexchange/reference-ts/pull/26)
-  at `e8cf7e5`; all seven post-merge CI jobs passed.
-- Typecheck and 19 focused frontier tests pass. Independent review found no runtime
-  blocker; frontier negative recovery coverage and explicit single-backing scope
-  refusals were added to acceptance and independently read back.
-- All seven full reference and pool-v2/v3 proof jobs passed for `ededc97` in
-  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36347810739).
-  Both public APIs pass local/synthetic real-proof import and recovery cases.
-  A disposable oracle probe also passed; it is not proof evidence.
-- Affected reports are refreshed from that passing Linux artifact; nine report
-  binding checks pass. Final changes only retain reports and update documentation;
-  runtime/check inputs reuse the passing baseline. No active local job or companion
-  branch. Inspect PR #27 for its merge revision and post-merge CI when resuming.
+- Runtime implemented: optional `ErgoVenueJournal`, revalidated headers/sections,
+  durable pin/failure, protected incomplete forks, publisher full-state persistence
+  via `V3OperatorJournal.publisherPersistence()` and one-time venue attachment.
+- Independent design/integrated review passed after fixes for incomplete fork
+  pruning, raw-header/ID handling and reuse of one outbox adapter by two publishers.
+  No unresolved review blocker. No specification change or companion branch.
+- Node 24 typecheck passes. Publisher/journal: 58 focused cases plus final
+  adapter-reuse regression pass. Venue/header regression: all 74 assertions passed,
+  but the test process reported a Vitest worker RPC timeout; this is not a clean
+  passing run. Full final verification remains required.
+- `npm run check:ergo-persistence` passed 11 fresh-process synthetic stages:
+  mid-sync, before/after commit, lost submission reply/exact retry and terminal
+  failure. No proof, physical power-loss or live-operation claim.
+- Final verification job planned: `scratch/persistence-check.ps1`, output
+  `scratch/persistence-check.log`, completion `scratch/persistence-check.exit`.
+  Do not edit runtime/check inputs while it runs. No companion branch.
 
 ## Evidence
-- Current succession: [local](docs/pool-v3-succession-store-verification.json) and
-  [synthetic Ergo](docs/pool-v3-succession-store-ergo-verification.json). The real-proof
-  drill adopts an empty block; focused tests cover nonempty adoption and term races.
-- Delivered slice 3: shared ordinary/recovery transitions, complete bounded ancestry,
-  single-backing demand/settlement, force, exact witnessed return/adoption, receipt reads,
-  non-service counting and kind-4 Ergo publication. Independent review and real-proof
-  local/synthetic/live acceptance passed at the [delivered revision](https://github.com/mediumofexchange/reference-ts/tree/a72888b).
-- Current reader reports (refreshed from the passing Linux CI artifact where affected):
-  [replay](docs/pool-v3-local-replay-verification.json), [conformance](docs/pool-v3-conformance-verification.json),
-  [restoration](docs/pool-restoration-evidence-verification.json) and
-  [runtime venue](docs/ergo-runtime-venue-verification.json).
-- Current [journal](docs/pool-v3-store-verification.json),
-  [local recovery](docs/pool-v3-recovery-store-verification.json),
-  [synthetic Ergo recovery](docs/pool-v3-recovery-store-ergo-verification.json).
-- Live recovery remains historical at [a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json);
-  prior slice-2 live journal/publisher reports remain historical at `2c6b20c`.
-  No new live run is authorized. Testnet header evidence remains current and unchanged.
+- Design, rejected alternatives, review correction and scalability plan:
+  [persistence decision](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox).
+  Usage/limits: [venue guide](docs/ERGO_VENUE_PROFILE.md#durable-reference-view-and-publisher).
+- Full checkpoints rewrite/revalidate retained history. Raw sections stay in
+  memory; retainedBytes still bounds objects only. Supplier quotas reset on process
+  restart. Streaming disk rows and complete-index cursors retaining non-held
+  records are planned scalability work. Uncertain writes poison the instance;
+  reopen can recover an earlier committed view. Malicious rollback is not covered.
+- Publisher restore verifies exact signed transaction consistency; individual
+  historical input values/heights rely on local journal integrity. Corruption can
+  impair rebuild availability, not alter a network-accepted payment.
+- Pre-slice current reports bind `6e4cea8` or earlier inputs. Refresh affected
+  reports from final passing CI, or cite their historical revision; do not describe
+  old bindings as current. Live recovery remains historical at
+  [a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json),
+  prior live journal/publisher at `2c6b20c`. Testnet header evidence is unchanged.
+- Slice 3 and 4 delivered single-backing recovery, succession and compact faults;
+  last full pre-slice proof baseline `ededc97` passed seven jobs in
+  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36347810739).
+  Merge `6e4cea8` post-merge run is `36349234692`; check its final status.
 
 ## Next
-1. Persistence: begin with a synthetic venue restart probe that reproduces the exact
-   witnessed view from retained headers/objects, then continues sync. Reuse the owning
-   store's durable outbox for publisher state; exercise mid-sync/mid-publication restart
-   and exact retry. Plan side-branch pruning, data beyond retainedBytes and a cursor
-   retaining non-held records. Slice 5 stops before wallet redesign.
-2. Keep compact multi-backing orchestration with the existing slice-7 scope port.
-3. V3 wallet/service (C4.1–2 requests/funding disclosure), retire v2; then multi-backing.
-4. Configuration adoption: parameter provenance, ACIR identities/certificates, replay/import
+1. Finish final full checks, refresh affected evidence, verify review readback,
+   commit/push PR, inspect required CI, merge, verify parity and clean scratch.
+2. V3 wallet/service (C4.1–2 requests/funding disclosure), retire v2; then
+   multi-backing including compact fault orchestration (slice 7).
+3. Configuration adoption: provenance, ACIR identities/certificates, replay/import
    bounds, one-transaction condition and BN254 margin. Mainnet needs separate authority.
-5. Complete trails permit roughly 67 repeated spend-sized records in 1 MiB with existing
-   dependencies (size-only probe); lifetime streaming verification remains a separate design.
-6. On touching affected files: byte predicates/codecs → shared byte helpers; caller ownership;
-   Ergo section-vs-transaction charging; applyRecord history check follows effects;
+4. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with
+   existing dependencies (size-only probe); lifetime streaming is separate design.
+5. On touching affected files: shared byte helpers/caller ownership; Ergo section
+   versus transaction charging; applyRecord history check follows effects;
    served-trail caller-object cache. Check v3 successors for v2 intake issues.
-7. Only when a gate needs them: abandoned publication cancellation, batching, index-free box
-   source, venue-moving record, slowest-supplier clock, multi-entry extension fixture,
+6. Only when a gate needs them: cancellation, batching, index-free box source,
+   venue-moving record, slowest-supplier clock, multi-entry extension fixture,
    Poseidon2 on Barretenberg and sponsored holder funding.
 
 ## Retained boundaries and local state
@@ -76,15 +76,14 @@ configuration adoption or new live runs.
 - Retain stopped contained-sync node's 20 GiB
   `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd` and
   `node-startup/`, `sync-preparation/` caches; do not allocate another.
-- Keep active verification logs until retained. Delete slice scratch only after delivery;
+- Keep active verification logs until retained. Delete slice scratch after delivery;
   preserve legacy Temp/moeclean. Node management remains authorized.
-- Qualified hardware/device custody, theft/power-loss/backup drills and continuous recovery
-  need separate provisioning authority. Configuration approval and mainnet remain disabled.
+- Qualified hardware/device custody, theft/power-loss/backup drills and continuous
+  recovery need separate provisioning authority. Configuration/mainnet remain disabled.
 
 ## Open questions
-- No unresolved compact-fault review findings.
-- No normative specification change or companion branch is currently proposed.
+- No unresolved design/review finding. Final acceptance and delivery remain open.
 
-Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-27:
-Single-backing succession and compact fault orchestration share reviewed public proof readers.
-Configuration adoption, persistence, wallet custody, multi-backing runtime and mainnet remain.
+Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-27.
+Persistence adds reusable process recovery; configuration adoption, wallet custody,
+multi-backing runtime, qualified deployment storage and mainnet remain.

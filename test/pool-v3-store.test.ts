@@ -4,6 +4,8 @@ import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE } from "../src/ergo-profile.js";
+import { ErgoPublisher, verifyErgoProof } from "../src/ergo-publisher.js";
+import { MempoolNode, plainBox, SCRIPTS } from "./ergo-chain.js";
 import { Chain } from "../src/ergo-synthetic.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { prepareExactOutput } from "../src/pool/v3/capsules.js";
@@ -155,6 +157,62 @@ describe.skipIf(!supported)("the v3 operator journal (Node 24)", () => {
     await j.open("genesis", signed); await j.publish();
     return { file, venue, j };
   }
+
+  it("persists exact publisher retries in the owning journal and fences its replaced owner", async () => {
+    const file = path(), venue = FixtureVenue.reference(label, lag), j = journal(file, venue);
+    const n = new MempoolNode("outbox", verifyErgoProof);
+    const p = new ErgoPublisher({ secretKey: b(91), suppliers: [n], persistence: j.publisherPersistence() });
+    n.fund(plainBox(p.tree, 10_000_000n, 0n));
+    const request = { location: SCRIPTS[1], subject: b(90), record: b(89), height: 0n };
+    n.refuse = () => true;
+    await expect(p.publish(request)).rejects.toThrow(/kept and sent again/);
+    const submitted = [...n.submitted];
+    const next = journal(file, venue); // replace the database owner before retry
+    await expect(p.publish(request)).rejects.toMatchObject({ code: "FENCED" });
+    expect(n.submitted).toEqual(submitted);
+    const restored = new ErgoPublisher({ secretKey: b(91), suppliers: [n], persistence: next.publisherPersistence() });
+    n.refuse = () => false;
+    const retry = await restored.publish(request);
+    expect(bytesToHex(retry.id)).toBe(submitted[0]);
+    const competing = new ErgoPublisher({ secretKey: b(91), suppliers: [n], persistence: next.publisherPersistence() });
+    await competing.publish({ ...request, record: b(88) });
+    await expect(restored.publish(request)).rejects.toMatchObject({ code: "FENCED" });
+  });
+
+  it("writes the publisher outbox from inside journal publication without reentering its operation queue", async () => {
+    const venue = FixtureVenue.reference(label, lag), j = journal(path(), venue);
+    const n = new MempoolNode("outbox", verifyErgoProof);
+    const p = new ErgoPublisher({ secretKey: b(91), suppliers: [n], persistence: j.publisherPersistence() });
+    n.fund(plainBox(p.tree, 10_000_000n, 0n));
+    const publish = venue.publishRecord.bind(venue);
+    venue.publishRecord = async (kind, subject, record) => {
+      await p.publish({ location: SCRIPTS[1], subject, record, height: 0n });
+      return publish(kind, subject, record);
+    };
+    const opening = await j.open("genesis", signed);
+    expect(await j.publish()).toEqual(opening);
+    expect((await j.package()).selection.sequence).toBe(1n);
+    expect(p.unsettled).toBe(1);
+  });
+
+  it("fences an existing retry when ownership changes during supplier lookup", async () => {
+    const file = path(), venue = FixtureVenue.reference(label, lag), j = journal(file, venue);
+    const n = new MempoolNode("outbox", verifyErgoProof);
+    const p = new ErgoPublisher({ secretKey: b(91), suppliers: [n], persistence: j.publisherPersistence() });
+    n.fund(plainBox(p.tree, 10_000_000n, 0n)); n.refuse = () => true;
+    const request = { location: SCRIPTS[1], subject: b(90), record: b(89), height: 0n };
+    await expect(p.publish(request)).rejects.toThrow(/kept and sent again/);
+    n.hasTransaction = async () => { journal(file, venue); return false; };
+    await expect(p.publish(request)).rejects.toMatchObject({ code: "FENCED" });
+    expect(n.submitted).toHaveLength(1);
+  });
+
+  it("allows only one publisher to load each persistence adapter", () => {
+    const j = journal(path(), FixtureVenue.reference(label, lag)), persistence = j.publisherPersistence();
+    const n = new MempoolNode("outbox", verifyErgoProof);
+    new ErgoPublisher({ secretKey: b(91), suppliers: [n], persistence });
+    expect(() => new ErgoPublisher({ secretKey: b(91), suppliers: [n], persistence })).toThrow(/adapter is already loaded/);
+  });
 
   it("refuses a venue the guard does not recompute before touching the path", () => {
     expect(() => new V3OperatorJournal(path(), { configuration, secret: operatorSecret, venue: new FixtureVenue(venueId, 0n, 3n), reference, verifier }))

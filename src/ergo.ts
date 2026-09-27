@@ -19,9 +19,9 @@
 //
 // **Reads are a materialised view.** `Venue` is synchronous, so this syncs
 // asynchronously and answers synchronously from the last complete snapshot.
-// The view keeps only the objects the profile attributes at the four
-// locations, by index, and the headers it accepted; a later sync reads the new
-// blocks only.
+// The view keeps objects attributed at the four locations, by index, and
+// accepted headers; the optional journal also retains lossless root evidence.
+// A later sync reads the new blocks only.
 //
 // **The witnessed index is the block that included the transaction**, index
 // `i` being the block `i + 1` heights above the anchor, never a box's creation
@@ -49,6 +49,7 @@ import {
 } from "./ergo-profile.js";
 import type { ErgoPublisher, ErgoRecordRequest } from "./ergo-publisher.js";
 import type { ErgoSupplier } from "./ergo-supplier.js";
+import type { ErgoCheckpoint, ErgoVenueJournal } from "./ergo-store.js";
 import {
   COMMITMENT_RANGE, copyRequest, encodeRangeAnswer, heldCommitments, MAX_RANGE_RECORD_BYTES, REPLACEMENT_RANGE, REVOCATION_RANGE,
   type HeldCommitment, type RangeAnswer, type RangeLimits, type RangeRequest, type RecordKind,
@@ -151,6 +152,7 @@ interface HeaderPass {
   readonly report: ErgoSupplierReport;
   readonly added: readonly Uint8Array[];
   readonly last?: Uint8Array;
+  readonly protect?: Uint8Array;
 }
 
 /**
@@ -183,6 +185,9 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
   private readonly sections: (readonly AttributedObject[])[] = [];
   /** The header ids the sections were read for, by index. */
   private readonly sectionHeaders: Uint8Array[] = [];
+  /** Lossless root evidence, retained only by a durable view. */
+  private readonly sectionViews: (readonly ErgoTransactionView[])[] = [];
+  private readonly protectedHeaders = new Map<string, Uint8Array>();
   private retained = 0;
   /** Headers each supplier added while its chain ended off the best chain. */
   private readonly sideHeaders = new WeakMap<object, number>();
@@ -193,9 +198,10 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
   private held = new Map<string, readonly HeldCommitment[]>();
 
   /** Where this view's own records go out; a view without one only reads. */
-  private readonly publisher: ErgoPublisher | undefined;
+  private publisher: ErgoPublisher | undefined;
 
-  constructor(profile: ErgoProfile, anchorContext: readonly Uint8Array[], policy: Partial<ErgoReaderPolicy> = {}, publisher?: ErgoPublisher) {
+  constructor(profile: ErgoProfile, anchorContext: readonly Uint8Array[], policy: Partial<ErgoReaderPolicy> = {}, publisher?: ErgoPublisher,
+    private readonly journal?: ErgoVenueJournal) {
     this.publisher = publisher;
     this.profile = ownErgoProfile(profile);
     this.venueId = ergoProfileIdentity(this.profile);
@@ -215,6 +221,58 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
     const owned = { ...DEFAULT_ERGO_READER_POLICY, ...policy };
     if (!Object.values(owned).every(n => Number.isSafeInteger(n) && n > 0)) throw new VenueError("invalid Ergo reader policy");
     this.policy = Object.freeze(owned);
+    const saved = journal?.load(this.venueId);
+    if (saved !== undefined) this.restore(saved);
+  }
+
+  /** Attach once after opening the owning operator journal's outbox. */
+  attachPublisher(publisher: ErgoPublisher): void {
+    if (this.publisher !== undefined || this.syncing) throw new VenueError("publisher is already attached or sync is running");
+    this.publisher = publisher;
+  }
+
+  private restore(saved: ErgoCheckpoint): void {
+    const invalid = (): never => { throw new VenueError("stored Ergo evidence does not reproduce its witnessed view"); };
+    const headers = new Map<string, ReturnType<typeof parseErgoHeader>>();
+    for (const bytes of saved.headers) {
+      if (this.store.add(bytes) !== "added") invalid();
+      const header = parseErgoHeader(bytes)!; headers.set(bytesToHex(header.id), header);
+    }
+    for (const id of saved.protectedHeaders) {
+      const key = bytesToHex(id);
+      if (!headers.has(key) || this.protectedHeaders.has(key)) invalid();
+      this.protectedHeaders.set(key, copyBytes(id));
+    }
+    const best = this.store.best(), anchor = this.store.tip().anchorHeight;
+    let parent = this.profile.anchor;
+    for (const [index, section] of saved.sections.entries()) {
+      const header = headers.get(bytesToHex(section.header));
+      if (header === undefined || header.height !== anchor + 1n + BigInt(index) || compareBytes(header.parentId, parent) !== 0) invalid();
+      const read = ownSection(section.views), objects = read.views === undefined ? undefined : attributeSection(this.profile, read.views, header!.transactionsRoot);
+      if (objects === undefined) invalid();
+      this.retained += objects!.reduce((total, object) => total + retainedSize(object), 0);
+      if (this.retained > this.policy.retainedBytes) throw new VenueError("stored Ergo evidence exceeds the retained budget");
+      this.sections.push(objects!); this.sectionHeaders.push(copyBytes(section.header)); this.sectionViews.push(read.views!);
+      parent = section.header;
+    }
+    if (saved.witnessed === undefined) {
+      if (saved.pin !== undefined || saved.sections.length !== 0 || saved.failure !== undefined) invalid();
+    } else {
+      if (saved.witnessed !== BigInt(saved.sections.length) - 1n || saved.pin === undefined || compareBytes(parent, saved.pin) !== 0) invalid();
+      if (saved.failure === undefined) {
+        const final = best.headers[Number(saved.witnessed)];
+        if (final === undefined || compareBytes(final.id, saved.pin!) !== 0 || best.height - anchor - 1n - this.profile.depth < saved.witnessed) invalid();
+      }
+      this.snapshot = Object.freeze({ witnessed: saved.witnessed, witnessedHeaderId: copyBytes(saved.pin!), sections: Object.freeze([...this.sections]) });
+    }
+    this.failure = saved.failure;
+  }
+
+  private persist(snapshot: Snapshot | undefined): void {
+    this.journal?.commit({ headers: this.store.retained(),
+      sections: this.sectionViews.map((views, index) => ({ header: this.sectionHeaders[index]!, views })),
+      witnessed: snapshot?.witnessed, pin: snapshot?.witnessedHeaderId,
+      protectedHeaders: [...this.protectedHeaders.values()], failure: this.failure });
   }
 
   get id(): Uint8Array {
@@ -249,10 +307,14 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
     if (this.syncing) throw new VenueError("a sync is already in progress");
     this.syncing = true;
     try {
+      this.journal?.assertOwner();
       // The caller's list is read once; each supplier's name once, for its report.
       const sources = Array.from(suppliers, supplier => ({ supplier, name: nameOf(supplier) }));
       const passes: { supplier: ErgoSupplier; pass: HeaderPass }[] = [];
       for (const source of sources) passes.push({ supplier: source.supplier, pass: await this.syncHeaders(source.supplier, source.name) });
+      for (const { pass } of passes) if (pass.protect !== undefined) {
+        const id = blake2b(pass.protect, { dkLen: 32 }); this.protectedHeaders.set(bytesToHex(id), id);
+      }
       const best = this.store.best(), anchorHeight = this.store.tip().anchorHeight, depth = this.profile.depth;
       // Each supplier is charged, whatever ended its pass, exactly the headers it added that are not on the best
       // chain: a supplier whose chain keeps ending off it spends its side-branch quota and is then withholding, and a
@@ -274,6 +336,7 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
         const kept = best.headers[Number(previous.witnessed)];
         if (kept === undefined || compareBytes(kept.id, previous.witnessedHeaderId) !== 0) {
           this.failure = "venue failure: the best chain left a block witnessed under the depth";
+          this.persist(previous);
           throw new VenueError(this.failure);
         }
       }
@@ -311,16 +374,23 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
         if (read.objects === undefined) { unresolved = index; reason = read.retainedStop ? "retained budget" : "no section"; break; }
         this.sections.push(read.objects);
         this.sectionHeaders.push(copyBytes(header.id));
+        if (this.journal !== undefined) this.sectionViews.push(read.views!);
         sectionsRead++;
       }
       const witnessed = BigInt(this.sections.length) - 1n < bound ? BigInt(this.sections.length) - 1n : bound;
+      let next = this.snapshot;
       if (witnessed >= 0n && witnessed >= clock) {
-        // No await from here: the snapshot and every derivation change together.
-        forgetAdmitted(this);
-        this.held = new Map();
-        this.snapshot = Object.freeze({ witnessed, sections: Object.freeze(this.sections.slice(0, Number(witnessed) + 1)),
+        next = Object.freeze({ witnessed, sections: Object.freeze(this.sections.slice(0, Number(witnessed) + 1)),
           witnessedHeaderId: copyBytes(best.headers[Number(witnessed)]!.id) });
       }
+      if (this.journal !== undefined && next !== undefined) {
+        const canonical = new Set(best.headers.map(h => bytesToHex(h.id)));
+        for (const key of this.protectedHeaders.keys()) if (canonical.has(key)) this.protectedHeaders.delete(key);
+        this.store.prune(next.witnessedHeaderId, [...this.protectedHeaders.values()]);
+      }
+      // No await: commit evidence and pin before exposing the new snapshot.
+      this.persist(next);
+      forgetAdmitted(this); this.held = new Map(); this.snapshot = next;
       const snapshot = this.snapshot;
       // The publisher forgets what this view now holds, in its own queue: it never fails or holds up the sync.
       if (this.publisher !== undefined && snapshot !== undefined) this.publisher.settle(request => this.holds(request)).catch(() => {});
@@ -329,6 +399,9 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
         chainWitnessedIndex: chainWitnessed >= 0n ? chainWitnessed : undefined, tipHeight: best.height, suppliers: Object.freeze(passes.map(({ pass }) => pass.report)),
         sectionsRead, unresolvedIndex: unresolved, ...(reason === undefined ? {} : { unresolvedReason: reason }),
       });
+    } catch (error) {
+      if (this.journal !== undefined && this.failure === undefined) this.failure = "durable Ergo sync failed; reopen the journal";
+      throw error;
     } finally {
       this.syncing = false;
     }
@@ -338,6 +411,7 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
     for (const object of this.sections[index]!) this.retained -= retainedSize(object);
     this.sections.length = index;
     this.sectionHeaders.length = index;
+    if (this.journal !== undefined) this.sectionViews.length = index;
   }
 
   private async syncHeaders(supplier: ErgoSupplier, name: string): Promise<HeaderPass> {
@@ -345,7 +419,7 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
     const ids: Uint8Array[] = [];
     const done = (stopped?: string): HeaderPass => ({ added: ids,
       report: Object.freeze(stopped === undefined ? { name, headersAdded: added } : { name, headersAdded: added, stopped }) });
-    const unfinished = (): HeaderPass => last === undefined ? done("header budget") : { ...done("header budget"), last };
+    const unfinished = (): HeaderPass => last === undefined ? done("header budget") : { ...done("header budget"), last, protect: last };
     const { headersPerSupplier: budget, sideHeadersPerSupplier: sideQuota, supplierTimeoutMs: timeout } = this.policy;
     if ((this.sideHeaders.get(supplier) ?? 0) >= sideQuota) return done("side-branch quota");
     const fetchBudget = 4 * budget + 2 * ANCHOR_CONTEXT, perRequest = BigInt(this.policy.headersPerRequest);
@@ -357,7 +431,7 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
     let from = start > anchorHeight ? start : anchorHeight + 1n, back = depth + 1n;
     while (from <= tip.value) {
       if (added >= budget) return unfinished();
-      if (fetched >= fetchBudget) return done("fetch budget");
+      if (fetched >= fetchBudget) return last === undefined ? done("fetch budget") : { ...done("fetch budget"), protect: last };
       const to = from + perRequest - 1n < tip.value ? from + perRequest - 1n : tip.value, asked = Number(to - from + 1n);
       const answer = await supplied(() => supplier.headers(from, to), timeout);
       if (!answer.ok) return done(answer.failure);
@@ -394,7 +468,7 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
    * or they would exceed the retained bytes. A supplier that does not supply
    * joins `missed`. */
   private async readSection(suppliers: readonly ErgoSupplier[], missed: Set<ErgoSupplier>, headerId: Uint8Array, root: Uint8Array):
-    Promise<{ objects?: readonly AttributedObject[]; bytes: number; retainedStop?: boolean }> {
+    Promise<{ objects?: readonly AttributedObject[]; views?: readonly ErgoTransactionView[]; bytes: number; retainedStop?: boolean }> {
     let bytes = 0;
     for (const supplier of suppliers) {
       const answer = await supplied(() => supplier.section(copyBytes(headerId)), this.policy.supplierTimeoutMs);
@@ -405,7 +479,7 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
       const size = objects.reduce((total, object) => total + retainedSize(object), 0);
       if (this.retained + size > this.policy.retainedBytes) return { bytes, retainedStop: true };
       this.retained += size;
-      return { objects, bytes };
+      return { objects, views: owned.views!, bytes };
     }
     return { bytes };
   }
@@ -413,6 +487,7 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
   // --- Reads ------------------------------------------------------------------
 
   private requireSnapshot(): Snapshot {
+    this.journal?.assertOwner();
     if (this.failure !== undefined) throw new VenueError(this.failure);
     if (this.snapshot === undefined) throw new VenueError("this view has no settled snapshot");
     return this.snapshot;
