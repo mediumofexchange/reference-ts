@@ -375,8 +375,32 @@ try {
     assert.equal(valid.noMatchesMeansZeroBalance, false); assert.equal(valid.spendable, false);
     await reject(empty({ ...termsFields, configuration: b(92) }), "TERMS_CONTEXT");
     await reject(empty({ ...termsFields, venue: b(92) }), "TERMS_CONTEXT");
-    await reject(empty({ ...termsFields, operator: ed25519.getPublicKey(b(92)) }), "TERMS_INITIAL_SCOPE");
-    await reject(empty(termsFields, { entries: [{ backing, link: b(92) }] }), "TERMS_INITIAL_SCOPE");
+    const wrongOperator = empty({ ...termsFields, operator: ed25519.getPublicKey(b(92)) });
+    const wrongLink = empty(termsFields, { entries: [{ backing, link: b(92) }] });
+    const misplaced = await replayLocalPackage(wrongOperator, verifier, codec);
+    assert.equal(misplaced.status, "selection-mismatch"); assert.equal(misplaced.audit, null); assert.deepEqual(misplaced.candidates, []);
+    await reject(wrongLink, "TERMS_SCOPE");
+    // Without the venue's chain, empty-book evidence supports only the original scope.
+    for (const input of [wrongOperator, wrongLink]) {
+      const { venue: _, ...trailOnly } = input;
+      await reject(trailOnly, "TERMS_INITIAL_SCOPE");
+    }
+  });
+  await test("a successor's empty book is derived from the witnessed chain rather than the original key", async () => {
+    const fields = { ...termsFields, replacementRule: rule }, name = codec.rootTermsName(codec.encodeRootTerms(fields));
+    const replacement = replacementFor(name, successorSecret, 10n);
+    const link = replacementHash(name, decodeReplacement(replacement).replacement);
+    const payload = emptyPackage(fields, { operator: successor, entries: [{ backing: name, link }] });
+    const opening = signCommitment(successorSecret, 1n, payload.selection.root), selected = signCommitment(successorSecret, 3n, payload.selection.root);
+    const record = new FixtureVenue(venue, 20n, 2n);
+    record.witness(2, name, 5n, replacement);
+    record.witness(1, successor, 15n, encodeCommitment(opening));
+    record.witness(1, successor, 16n, encodeCommitment(selected));
+    payload.selection.operator = successor;
+    payload.package.commitment = encodeCommitment(selected); payload.venue = record.export();
+    const result = await replayLocalPackage(payload, verifier, codec);
+    assert.equal(result.status, "selected-local-replay"); assert.equal(result.audit.outstanding, "0");
+    assert.equal(result.audit.range.chain.at(-1).operator, hex(successor));
   });
   await test("shared key, seed and selection storage refuses before asynchronous verification", async () => {
     for (const field of ["configuration", "seed", "domain", "trail"]) {

@@ -3,8 +3,9 @@
 Updated: 2026-09-27
 
 ## Goal
-Slice 4 of the [v3 runtime plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2),
-Succession implementation on `feat/v3-succession`, from `7ae61e6`.
+Succession capability within slice 4 of the [v3 runtime plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2).
+Implementation `b109f9e` on `feat/v3-succession`, from `7ae61e6`;
+[PR #26](https://github.com/mediumofexchange/reference-ts/pull/26) owns final delivery.
 Acceptance: distinct-key A→B takeover from signed terms, public packages and witnessed
 replacement records alone; preserve exact finalized imports and spend an inherited note.
 Prove old authority ends at force, pending replacements grant no authority, missing
@@ -25,9 +26,13 @@ Evidence limit: local/synthetic reference venues; earlier live allowances are ex
   Runtime and local/synthetic acceptance script are implemented; focused reader,
   journal and recovery tests pass. Integrated review found a checkpoint reservation
   missing the published-but-unwitnessed checkpoint; the reviewed fix covers admission,
-  takeover, return and adoption. Boundary regressions and required CI remain.
+  takeover, return and adoption. Both boundary regressions pass without signing.
   Local and synthetic Ergo real-proof succession passed; fresh public-only readers
   agree. No active local job or companion branch exists. Logs remain until delivery.
+- All three full reference checks passed in [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36344188146).
+  V3 CI exposed stale empty-scope harness assertions; exact refusal expectations and
+  a positive successor case now pass a focused probe and independent review.
+  Inspect the PR's new proof jobs, retain refreshed artifacts, then finish delivery.
 
 ## Evidence
 - Current succession: [local](docs/pool-v3-succession-store-verification.json) and
@@ -49,7 +54,8 @@ Evidence limit: local/synthetic reference venues; earlier live allowances are ex
   No new live run is authorized. Testnet header evidence remains current and unchanged.
 
 ## Next
-1. Finish boundary regressions, full CI and refreshed report bindings; deliver succession.
+1. Finish CI and refreshed report bindings; deliver succession. Restoration's 14 checks
+   passed locally and its report is refreshed.
 2. Finish slice 4's compact fault-package orchestration in the runtime. Full-trail
    hostile checkpoint classification now works through the journal/public reader;
    compact §9.1 exclusions remain harness-only. Port the corresponding `fault-check`
