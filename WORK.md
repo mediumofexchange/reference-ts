@@ -3,25 +3,25 @@
 Updated: 2026-09-27
 
 ## Goal
-Active: **M2b** of the [plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)'s
-slice 1 (M0–M2a done), branch `feat/v3-synthetic-journal`: `ErgoVenue` as a `RecordPublisher` for kinds 1–3 over the
-synthetic chain (a mining mempool supplier in `src/ergo-synthetic.ts`), the journal publishing
-there under `moe/venue/ergo-synthetic/reference` with its pinned block, and a fresh seedless
-process verifying supply through `ErgoVenue`; the guard at the reader's entry (harness
-fixtures on `localVenueIdentity` ids, replay report re-recorded once); AGENTS.md direction.
-Acceptance: M2a's real-proof flow via `store-check.mjs --ergo`, reader guard refusals; synthetic
-reference evidence only, no deployment/adoption. Checks: `npm run check`, store/replay `--ergo`,
-affected reports and independent adversarial review. Stop: no testnet or recovery kinds.
-Jobs: `scratch/m2b-checks.ps1 -Suite finish` logs `m2b-finish` (`.log`, `.exit`); do not touch the other session's node setup.
+Slice 1 **M0–M2b complete**, [PR #22](https://github.com/mediumofexchange/reference-ts/pull/22):
+kinds 1–3 through the real publisher, synthetic mining and fresh pinned reader; reference guards
+on journal and reader entries. Synthetic reference evidence only, no deployment/adoption.
+Next: slice 2 of the [plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2).
+Start with a read-only own-node probe of testnet header rules; resolve the exact profile before
+dependent code. Acceptance: testnet reference identity, live publication and independent supply
+verification; move the existing publisher check onto that profile. Stop before recovery kinds.
+Use a fresh instance for the new consensus/profile work. No local acceptance job remains;
+coordinate with the separate node-setup session before changing its processes or configuration.
 
 ## Status
 
-- M2b source complete; independent adversarial review found no blocker. Docs/typecheck and
-  publisher tests passed; all 2,083 full-suite assertions passed but Vitest's `onTaskUpdate`
-  timed out. Full-check gate stays open for CI; real-proof acceptance/reports are pending.
+- Independent adversarial review and fixture-fix readbacks found no blocker. All seven jobs in
+  [CI 36314446002](https://github.com/mediumofexchange/reference-ts/actions/runs/36314446002) passed
+  at d347fce (final code). The delivery update changes reports/handoff only; docs, links and all
+  nine current report bindings pass. CI retains the v3 reports; no duplicate local proof run.
 - Ergo ([guide](docs/ERGO_VENUE_PROFILE.md#runtime-venue), spec [01d8db2](https://github.com/mediumofexchange/money-from-first-principles/blob/01d8db2/venue-ergo.md)):
   `ErgoVenue` verifies headers and sections itself; `ErgoPublisher` publishes kinds
-  1–3, one remembered transaction per record. Testnet only; nothing persisted.
+  1–3, one remembered transaction per record. Live publisher evidence is testnet-only; memory-only runtime.
 - Shared-encoding audit (area 8, PR #21): codecs read once, bound, copy, judge the copy; tags in `contexts.ts`.
 - Own nodes (approved): `experiments/ergo-range/nodes.mjs` runs official v6.0.6 mainnet (snapshot,
   127.0.0.1:9053) and testnet (archive + index, 127.0.0.1:9052) from `scratch/ergo-nodes/`; after a
@@ -31,8 +31,8 @@ Jobs: `scratch/m2b-checks.ps1 -Suite finish` logs `m2b-finish` (`.log`, `.exit`)
 
 ## Evidence
 
-- Current, all re-recorded with the shared-encoding audit, verdicts unchanged (heights, testnet
-  transactions and idle-host timings moved): [journal](docs/pool-v3-store-verification.json),
+- Current: M2b refreshed journal/replay (Linux CI), restoration and runtime venue (local); other
+  reports retain matching sources from the shared-encoding audit: [journal](docs/pool-v3-store-verification.json),
   [v3 replay](docs/pool-v3-local-replay-verification.json), [conformance](docs/pool-v3-conformance-verification.json),
   [v2](docs/pool-v2-verification.json), [restoration](docs/pool-restoration-evidence-verification.json),
   [runtime venue](docs/ergo-runtime-venue-verification.json), [publisher](docs/ergo-publisher-verification.json),
@@ -45,7 +45,7 @@ Jobs: `scratch/m2b-checks.ps1 -Suite finish` logs `m2b-finish` (`.log`, `.exit`)
 (each slice's acceptance and stop): v3 beside a frozen v2, one moded state machine and one
 reader over §13 answers; the candidate runs only on recomputed reference venue identities.
 
-1. v3 core (one segment, local and synthetic Ergo): M0–M2a done; M2b (the Goal).
+1. v3 core (one segment, local and synthetic Ergo): M0–M2b done.
 2. Testnet venue: header rules (probe the own node first), identity
    `moe/venue/ergo-testnet/reference`, a live supply check; move the publisher
    check (venue-ergo's context over a testnet anchor today) onto it.
@@ -55,7 +55,7 @@ reader over §13 answers; the candidate runs only on recomputed reference venue 
    recovery kinds in admission (doors at the horizon), silence terms in the journal.
 4. Succession, hostile operator: replacement/takeover, equivocation, key compromise.
 5. Persistence: `ErgoVenue` headers/objects (spill past `retainedBytes`, prune
-   side branches below the clock); publisher memory in the owning outbox; restart
+  side branches below the clock); publisher memory in the owning outbox; restart
    drills for the journal; its full-range reads per operation become a cursor.
 6. v3 wallet and service (C4.1–2 requests, funding disclosure); retire v2.
 7. Multi-backing: scope classification/recovery, counts, receipts.
@@ -67,7 +67,7 @@ reader over §13 answers; the candidate runs only on recomputed reference venue 
 10. Hygiene when touching the files: the ~10 local byte predicates onto the `bytes.ts` intake (Ergo
    and `record-venue` ones read `.length`/`.buffer` and throw TypeError on a look-alike); the
    hand-parsed v3 codecs (`trail`, `package`, `fault-evidence`, `record-range`) onto ByteReader/
-   ByteWriter; vitest `--maxWorkers=2` beside both nodes; readers re-read `args.configuration`/
+   ByteWriter; readers re-read `args.configuration`/
    `verifier`; `ErgoVenue` charges section bytes, not transactions; `applyRecord`'s history check
    follows its effects; `served-trail.ts` caches by caller trail object; `heldCommitments` hides a
    twin at a held sequence from the journal's CONFLICT check (slice 4). v2 items (`inspectNotes`,
@@ -93,7 +93,7 @@ reader over §13 answers; the candidate runs only on recomputed reference venue 
 ## Open questions
 - None.
 
-Roughly **52% done / 48% remaining**, plausible range **42–62%**, reassessed 2026-09-25
-(M2a): the operator now proves, admits, commits, publishes and serves v3 in the runtime,
-and an independent process verifies supply from what it serves; the chain venue path,
-claims recovery, adoption, persistence, custody and mainnet dominate.
+Roughly **55% done / 45% remaining**, plausible range **45–65%**, reassessed 2026-09-27
+(M2b): v3 journal publication and independent supply verification now share the real Ergo
+publisher/reader on a synthetic reference chain. Testnet profile integration, runtime recovery,
+adoption, persistence, wallet custody and mainnet still dominate; no release gate closed.
