@@ -14,7 +14,7 @@ export interface NonServiceCount {
   readonly count: string; readonly fires: boolean; readonly incumbent: string;
   readonly snapshotIndex: string | null;
 }
-export interface CountContext { readonly selection: ReaderSelection; readonly terms: RootTerms; readonly verifier: ProofCheck }
+export interface CountContext { readonly selection: Pick<ReaderSelection, "domain" | "backing">; readonly terms: RootTerms; readonly verifier: ProofCheck }
 
 /** Unadopted publications never change the canonical state's locks or spent tags.
  * First identity indices include invalid proof variants; any verifying variant

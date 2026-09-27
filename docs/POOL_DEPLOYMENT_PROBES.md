@@ -223,6 +223,19 @@ Both commands passed on Linux and Windows in
 Earlier live publisher and journal reports are historical at
 [`2c6b20c`](https://github.com/mediumofexchange/reference-ts/tree/2c6b20c).
 
+The succession acceptance is `npm run check:pool:v3-succession`, with
+`-- --ergo` for the synthetic reference chain. It uses distinct journals and
+real proofs for A→B→A, inherited spending, imported double-spend refusal and
+revoked issuance. Pending/cancelled handovers refuse; a fresh seedless process
+reads only public evidence. Fully evidenced hostile checkpoints are excluded,
+while missing ancestry remains unresolved. Focused tests additionally exercise
+empty-book takeover, a nonempty force block, same-index evidence changes and
+authority ending during adoption. The real-proof drill's adoption block is empty;
+the recovery drill above supplies real-proof force/adoption evidence.
+The [local](pool-v3-succession-store-verification.json) and
+[synthetic Ergo](pool-v3-succession-store-ergo-verification.json) reports own the
+proof counts, package sizes, transaction bytes and source bindings.
+
 The live recovery command is
 `node scripts/pool/v3/recovery-store-check.mjs --testnet --authorized-testnet`.
 It requires separate authorization after local/synthetic acceptance and runner

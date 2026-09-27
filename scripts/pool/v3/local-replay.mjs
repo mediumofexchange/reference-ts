@@ -131,10 +131,10 @@ export async function replayLocalPackage(input, verifier, codec) {
     // selected backing (readLocalEvidence binds the backing to the header).
     const terms = rootTermsOf(codec, signedTerms[selectedEntry]);
     requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
-    // Empty-opening selections retain the original-operator scope. Imports
-    // instead require the term-by-term record walk below.
+    // Without venue evidence only the original scope is supported. A successor
+    // empty book needs the same term-by-term descent as a nonempty import.
     const imports = header.entries.some(entry => entry.opening !== undefined);
-    if (!imports && header.entries.length === 1) requireReplay(same(terms.operator, header.operator) && same(header.entries[0].link, selection.backing), "TERMS_INITIAL_SCOPE");
+    if (venue === undefined && !imports && header.entries.length === 1) requireReplay(same(terms.operator, header.operator) && same(header.entries[0].link, selection.backing), "TERMS_INITIAL_SCOPE");
     if (supplied.faults?.length && venue === undefined) throw new EvidenceRefusal("unsupported-scope");
     context = { selection, terms, signedTerms, header, verifier, codec, reference, importLimits, receiptBytes: supplied.receipt,
       faults: faultObserver(supplied.faults, selection, verifier, codec) };
@@ -155,7 +155,7 @@ export async function replayLocalPackage(input, verifier, codec) {
       const trails = distinct([supplied.trail, ...byteList(supplied.trails, "trails")]);
       try {
         if (header.entries.length !== 1) throw new ScopeRequired();
-        if (imports || supplied.receipt !== undefined || terms.nonService !== undefined) {
+        if (imports || !same(header.entries[0].link, selection.backing) || supplied.receipt !== undefined || terms.nonService !== undefined) {
           const result = await classifyImports(context, directories, record, { snapshots, trails });
           if (result.receipt !== undefined) return { ...refused("receipt-status"), ...context.faults.result(), receipt: result.receipt, rangeEvidence,
             candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,

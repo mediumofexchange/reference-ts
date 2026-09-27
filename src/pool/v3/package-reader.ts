@@ -2,19 +2,20 @@
 // verifier, selection and reference venue are independently held by the reader.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
-import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
+import { compareBytes, copyBytes, copyUnshared, EncodingError } from "../../bytes.js";
 import type { RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, directoryRoot, verifyCommitment } from "../../venue-records.js";
 import { isValue } from "../field.js";
 import { decodeSnapshot } from "./commitments.js";
 import { configurationBytes, configurationHash, decodeConfiguration, type CandidateConfiguration } from "./configuration.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
-import { classifyImports, type ImportLimits, type ImportResult } from "./import-reader.js";
+import { classifyFrontier, classifyImports, importLimitsOf, type FrontierResult, type ImportLimits, type ImportResult } from "./import-reader.js";
 import { decodeEvidenceDirectory, decodeEvidencePackage, type PackageLimits } from "./package.js";
-import { decodedTrails, type ReaderSelection } from "./reader.js";
+import { decodedTrails, type ReaderSelection, type SignedTerms } from "./reader.js";
 import { EvidenceRefusal, requireReplay, ScopeRequired } from "./refusals.js";
 import { checkpointScope } from "./scope-evidence.js";
 import type { ProofCheck } from "./state.js";
+import { decodeRootTerms, rootTermsName, verifyRootTermsSignature } from "./terms.js";
 
 export const PACKAGE_LIMITS: PackageLimits = Object.freeze({ maxBytes: 1_048_576n, maxItems: 1024n });
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
@@ -87,8 +88,39 @@ export async function readSingleBackingPackage(bytes: Uint8Array, selected: Read
     header.sequence <= selection.sequence, "CONTEXT");
   const terms = scope.rootTerms[0]!;
   requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
-  if (header.entries[0]!.opening === undefined) requireReplay(same(terms.operator, header.operator) &&
-    same(header.entries[0]!.link, selection.backing), "TERMS_INITIAL_SCOPE");
   return classifyImports({ selection, terms, header, verifier, reference, importLimits,
     ...(payloads(10).length === 0 ? {} : { receiptBytes: payloads(10)[0]! }) }, directories, venue, { snapshots, trails });
+}
+
+/** Descend every witnessed term for independently authenticated root terms.
+ * An empty result is proved by the complete venue descent, never by missing
+ * package objects. Selection and receipt metadata supply no frontier authority. */
+export async function readSingleBackingFrontier(bytes: Uint8Array, signed: SignedTerms, judgingIndex: bigint,
+  options: PackageReader): Promise<FrontierResult> {
+  const { configuration: configurationIn, verifier: verifierIn, venue, reference: referenceIn, importLimits: limitsIn } = options;
+  const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
+  const verify = verifierIn.verify;
+  if (typeof verify !== "function") throw new TypeError("a proof verifier is required");
+  const verifier: ProofCheck = { verify: verify.bind(verifierIn) };
+  const reference = structuredClone(referenceIn);
+  if (!isValue(judgingIndex)) throw new EncodingError("invalid judging index");
+  const termsBytes = copyUnshared(signed.terms), signature = copyUnshared(signed.signature);
+  requireReplay(verifyRootTermsSignature(termsBytes, signature), "TERMS_SIGNATURE");
+  const terms = decodeRootTerms(termsBytes), backing = rootTermsName(termsBytes);
+  requireReplay(same(terms.configuration, domain), "CONFIGURATION");
+  const importLimits = importLimitsOf(limitsIn);
+  const items = decodeEvidencePackage(bytes, PACKAGE_LIMITS);
+  if (items.some(item => ![1, 2, 3, 4, 6, 10].includes(item.kind)) ||
+      [1, 2, 10].some(kind => items.filter(item => item.kind === kind).length > 1)) throw new EvidenceRefusal("unsupported-scope");
+  const payloads = (kind: number): Uint8Array[] => items.filter(item => item.kind === kind).map(item => item.payload);
+  if (payloads(1).length !== 0) requireReplay(same(payloads(1)[0]!, configurationBytes(configuration)), "CONFIGURATION");
+  const directories = new Map(payloads(3).map(payload => {
+    const entries = decodeEvidenceDirectory(payload, PACKAGE_LIMITS);
+    return [hex(directoryRoot(entries)), entries] as const;
+  }));
+  // Invoke the external adapter only after every caller-owned input is copied.
+  const venueId = requireReferenceVenue(reference, venue);
+  requireReplay(same(terms.venue, venueId), "VENUE_REFERENCE");
+  return classifyFrontier({ selection: { mode: "historical-fixture", domain, venue: venueId, backing, judgingIndex },
+    terms, verifier, reference, importLimits }, directories, venue, { snapshots: payloads(4), trails: payloads(6) });
 }

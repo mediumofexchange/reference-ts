@@ -13,7 +13,7 @@ import { decodeSegmentHeader } from "./headers.js";
 import type { VenueReference } from "./guard.js";
 import { countNonService, type NonServiceCount } from "./non-service.js";
 import { decodedTrails, readRecordView, replayTrail, type CarryingVerdict, type Directories,
-  type FaultObserver, type RecordView, type ReplayContext, type ReplayResult, type ValidCheckpoint } from "./reader.js";
+  type FaultObserver, type ReaderSelection, type RecordView, type ReplayContext, type ReplayResult, type ValidCheckpoint } from "./reader.js";
 import { receiptWalk, type ReceiptVerdict, type ReceiptWalk } from "./receipt-state.js";
 import { decodePublication, encodeRecord, type Record } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal, ScopeRequired, requireReplay, type ClockRecord } from "./refusals.js";
@@ -65,6 +65,18 @@ export interface ImportRanges {
   readonly heldBefore: number; readonly heldAfter: number; readonly chain: RecordView["chain"];
   readonly publications: readonly PublicationVerdict[]; readonly nonService?: NonServiceCount;
 }
+/** A complete backing descent without an asserted selected checkpoint. */
+export interface FrontierContext extends Omit<ImportContext, "selection" | "header" | "receiptBytes" | "receiptWalk" | "contextReceipt"> {
+  readonly selection: Pick<ReaderSelection, "mode" | "domain" | "venue" | "backing" | "judgingIndex">;
+}
+export interface FrontierResult {
+  readonly canonical: CanonicalCheckpoint | undefined;
+  readonly force: readonly ForcedPublication[];
+  readonly work: ImportWork;
+  readonly carrying: readonly ImportCarryingVerdict[];
+  readonly clock: ClockRecord | null | undefined;
+  readonly ranges: Omit<ImportRanges, "checkpointIndex" | "heldBefore" | "heldAfter">;
+}
 export type ImportResult = {
   readonly receipt: ReceiptVerdict; readonly state?: undefined; readonly carrying?: undefined; readonly clock?: undefined;
   readonly ranges?: undefined; readonly canonical?: undefined; readonly force?: undefined; readonly selectedClock?: undefined;
@@ -89,27 +101,47 @@ const NO_FAULTS: FaultObserver = { inspect: async () => {}, intrinsicFailure: ()
  * raw trails, recursion, or replica-provided finality is involved. */
 export async function classifyImports(context: ImportContext, directories: Directories, record: RecordVenue,
   evidence: ImportEvidence): Promise<ImportResult> {
+  return walkImports(context, directories, record, evidence, context);
+}
+
+export async function classifyFrontier(context: FrontierContext, directories: Directories, record: RecordVenue,
+  evidence: ImportEvidence): Promise<FrontierResult> {
+  return walkImports(context, directories, record, evidence);
+}
+
+function walkImports(context: FrontierContext, directories: Directories, record: RecordVenue,
+  evidence: ImportEvidence): Promise<FrontierResult>;
+function walkImports(context: FrontierContext, directories: Directories, record: RecordVenue,
+  evidence: ImportEvidence, selectedContext: ImportContext): Promise<ImportResult>;
+async function walkImports(context: FrontierContext, directories: Directories, record: RecordVenue,
+  evidence: ImportEvidence, selectedContext?: ImportContext): Promise<ImportResult | FrontierResult> {
   const { selection, terms } = context;
+  const selectedSelection = selectedContext?.selection, receiptBytes = selectedContext?.receiptBytes;
   const faults = context.faults ?? NO_FAULTS;
   const view = await readRecordView(selection, terms, directories, record, context.reference);
   const { chain, heldBy, termEnd, carries, revokedAt, t, lag } = view;
   const duration = terms.silence?.noCommitmentDuration;
-  const counting = terms.nonService !== undefined && context.receiptBytes === undefined;
-  let publications: readonly RangeEntry[] | undefined = duration === undefined && !counting ? [] : context.receiptBytes === undefined ?
+  const counting = terms.nonService !== undefined && receiptBytes === undefined;
+  let publications: readonly RangeEntry[] | undefined = duration === undefined && !counting ? [] : receiptBytes === undefined ?
     (await view.ask(4, selection.backing)).entries : undefined;
-  const selectedHeld = (await heldBy(selection.operator)).find(h => h.commitment.sequence === selection.sequence && same(h.commitment.root, selection.root));
-  if (selectedHeld === undefined) throw new EvidenceRefusal("selection-mismatch");
-  if (!same(linkInForce(chain, selectedHeld.index).operator, selection.operator)) throw new EvidenceRefusal("lapsed-selection");
+  const selectedHeld = selectedSelection === undefined ? undefined : (await heldBy(selectedSelection.operator))
+    .find(h => h.commitment.sequence === selectedSelection.sequence && same(h.commitment.root, selectedSelection.root));
+  if (selectedSelection !== undefined) {
+    if (selectedHeld === undefined) throw new EvidenceRefusal("selection-mismatch");
+    if (!same(linkInForce(chain, selectedHeld.index).operator, selectedSelection.operator)) throw new EvidenceRefusal("lapsed-selection");
+  }
   const trails = decodedTrails(evidence.trails), segments = new Map<string, ImportSegment>(), clocks = new Map<string, ImportClock>(), carrying: ImportCarryingVerdict[] = [];
-  if (context.receiptBytes !== undefined) {
-    const receipt = decodeReceipt(context.receiptBytes);
+  if (receiptBytes !== undefined) {
+    const receipt = decodeReceipt(receiptBytes);
     const original = trails.find(trail => same(sha256(trail.header), receipt.segment));
     if (original !== undefined && decodeSegmentHeader(original.header).entries.length !== 1) throw new ScopeRequired();
   }
-  const walk = context.receiptBytes === undefined ? undefined :
-    await receiptWalk(context.receiptBytes, context, view, trails, evidence.snapshots);
-  context.receiptWalk = walk;
-  context.contextReceipt = walk?.receipt;
+  const walk = receiptBytes === undefined ? undefined :
+    await receiptWalk(receiptBytes, selectedContext!, view, trails, evidence.snapshots);
+  if (selectedContext !== undefined) {
+    selectedContext.receiptWalk = walk;
+    selectedContext.contextReceipt = walk?.receipt;
+  }
   const matches = (a: CheckpointIdentity | undefined, b: CheckpointIdentity | undefined): boolean => a !== undefined && b !== undefined && a.sequence === b.sequence && same(a.operator, b.operator) && same(a.root, b.root);
   let canonical: CanonicalCheckpoint | undefined, countSnapshot: CanonicalCheckpoint | undefined;
   let selectedState: ReplayResult | undefined, selectedClock: ImportClock | undefined;
@@ -184,7 +216,7 @@ export async function classifyImports(context: ImportContext, directories: Direc
       if (boundary !== undefined) return { receipt: boundary };
       await publishThrough(held.index);
       if (++checkpoints > limits.maxCheckpoints) throw new EvidenceRefusal("resource-refusal");
-      const c = held.commitment, selected = matches(c, selection);
+      const c = held.commitment, selected = matches(c, selectedSelection);
       if (!selected) { if (selectedState === undefined) heldBefore++; else heldAfter++; }
       const entry = carries(held);
       if (entry === undefined) { walk?.checkpoint(held, undefined, undefined, undefined, "other"); continue; }
@@ -263,7 +295,9 @@ export async function classifyImports(context: ImportContext, directories: Direc
         }
         const trail = evidence.trail!;
         if (c.sequence === header.sequence) requireReplay(trail.records.length === 0, "OPENING");
-        const state = await replayTrail({ ...context, header }, snapshot, trail,
+        const state = await replayTrail({ ...context, header,
+          selection: selectedSelection ?? { ...selection, operator: c.operator, sequence: c.sequence, root: c.root },
+          contextReceipt: selectedContext?.contextReceipt }, snapshot, trail,
           { index: held.index, revokedAt, lastValid: segment.lastValid, imported: segment.imported,
             block: c.sequence === header.sequence ? [] : segment.block, openingIndex: segment.openingIndex, isOpening: c.sequence === header.sequence,
             chargeEvents: charge, chargeRecords: charge });
@@ -275,7 +309,7 @@ export async function classifyImports(context: ImportContext, directories: Direc
         carrying.push({ ...item, class: "valid" });
         const verdict = walk?.checkpoint(held, snapshot.segment, state, header, "valid");
         if (verdict !== undefined) return { receipt: verdict };
-        if (selectedState !== undefined && !walk) throw new EvidenceRefusal("superseded-selection");
+        if (selectedContext !== undefined && selectedState !== undefined && !walk) throw new EvidenceRefusal("superseded-selection");
         if (selected) { selectedState = state; selectedClock = clock; }
       } catch (error) {
         if (!(error instanceof ReplayRefusal)) throw error;
@@ -286,12 +320,13 @@ export async function classifyImports(context: ImportContext, directories: Direc
       }
     }
   }
-  if (selectedState === undefined && !walk) throw new EvidenceRefusal("unresolved-evidence");
+  if (selectedContext !== undefined && selectedState === undefined && !walk) throw new EvidenceRefusal("unresolved-evidence");
   advanceClock(t);
   if (walk) return { receipt: walk.boundary(t, clocks.get(hex(walk.receipt.segment))) ?? walk.finish() };
   await publishThrough(t);
-  if (selectedState === undefined || canonical === undefined || selectedClock === undefined) throw new EvidenceRefusal("unresolved-evidence");
-  const clock = duration === undefined ? null : clockRecord(t, selectedClock);
+  const frontierClock = canonical === undefined ? undefined : clocks.get(hex(canonical.segment));
+  const chosenClock = selectedContext === undefined ? frontierClock : selectedClock;
+  const clock = chosenClock === undefined ? undefined : duration === undefined ? null : clockRecord(t, chosenClock);
   let requestProofs = 0n;
   const nonService = counting ? await countNonService(context, view, countSnapshot, publications!, (amount = 1n) => {
     requestProofs += amount; charge(amount);
@@ -301,8 +336,13 @@ export async function classifyImports(context: ImportContext, directories: Direc
   // tag skips any later identities, so the full answer is an upper bound even
   // when known requests enter a later counting window or gain valid anchors.
   const requestProofReserve = counting ? BigInt(publications!.length) : 0n;
+  const work = { checkpoints, events, requestProofs, requestProofReserve };
+  const ranges = { judgingIndex: t, lag, revokedAt, chain,
+    publications: publicationVerdicts, ...(nonService === undefined ? {} : { nonService }) };
+  if (selectedContext === undefined) return { canonical, force, work, carrying, clock, ranges };
+  if (selectedState === undefined || canonical === undefined || selectedClock === undefined || selectedHeld === undefined || clock === undefined) {
+    throw new EvidenceRefusal("unresolved-evidence");
+  }
   return { state: selectedState, carrying, clock, canonical, force, selectedClock,
-    work: { checkpoints, events, requestProofs, requestProofReserve },
-    ranges: { judgingIndex: t, lag, checkpointIndex: selectedHeld.index, revokedAt, heldBefore, heldAfter, chain,
-      publications: publicationVerdicts, ...(nonService === undefined ? {} : { nonService }) } };
+    work, ranges: { ...ranges, checkpointIndex: selectedHeld.index, heldBefore, heldAfter } };
 }
