@@ -29,6 +29,7 @@ import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidate
   readCandidateKeys } from "./candidate.mjs";
 import { v3Codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
+import { checkCompactRuntime } from "./compact-runtime-check.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../../..");
 assert(process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--ergo"), "unknown local-check option");
@@ -1138,6 +1139,13 @@ try {
       assert.equal(result.audit, null); assert.deepEqual(result.candidates, []);
     }
   });
+  let compactRuntimeGroups = 0;
+  await test("public single-backing package and frontier readers preserve compact fault, import and recovery verdicts", async () => {
+    for (const item of replayPairs({ imported, silent, recovery }, { receiverSeed })) {
+      if (await checkCompactRuntime({ ...item, verifier, codec, portable })) compactRuntimeGroups++;
+    }
+    assert.ok(compactRuntimeGroups > 0);
+  });
   let ergo;
   if (withErgo) {
     // Every group above, replayed again through ErgoVenue over the synthetic chain.
@@ -1265,6 +1273,7 @@ try {
     candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
     platform: process.platform, checks, identities, metrics,
     sourceSha256Lf: sourceHashes(sources),
+    compactRuntimeGroups,
     audit, receiver, dependency, imports: { packageBytes: portable(imported.payload).package.length,
       audit: imported.result, receiver: imported.receiver },
     silenceImports: { packageBytes: portable(silent.payload).package.length, audit: silent.result, receiver: silent.receiver },

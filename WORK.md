@@ -3,32 +3,31 @@
 Updated: 2026-09-27
 
 ## Goal
-Succession capability within slice 4 of the [v3 runtime plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)
-is complete at the reference-venue boundary; delivery is [PR #26](https://github.com/mediumofexchange/reference-ts/pull/26).
-Implementation `b109f9e`, harness correction `2026c1a`, from `7ae61e6`.
-Accepted: distinct-key A→B takeover from signed terms and public witnessed evidence,
-inherited spending, exact-link authority, complete empty-book descent, missing-evidence
-refusal, and witnessed opening/adoption before service. A→B→A preserves signed counters
-and spent state. Hostile checkpoints, K revocation, cancellation and asynchronous
-authority changes refuse without unauthorized signing.
-Stop reached: no second backing, persistence, wallet custody or configuration adoption.
-Evidence limit: local/synthetic reference venues; earlier live allowances are exhausted.
+Slice 4's single-backing compact fault-package orchestration is complete at the
+reference-venue boundary; delivery is [PR #27](https://github.com/mediumofexchange/reference-ts/pull/27).
+Implementation `238b418`, acceptance corrections through `ededc97`, from `e8cf7e5`.
+Both runtime package readers accept kind-7 evidence using the shared observer. Exact proof/issue-K
+rejection can replace only a non-opening target trail after complete dependency
+resolution; full and compact reads agree on state and classification, hostile/missing
+evidence refuses, selected envelopes stay complete, and recovery/adoption boundaries
+remain enforced. Independent design and integrated review passed.
+Stop at the single-backing reference boundary: no persistence, second backing,
+configuration adoption or new live runs.
 
 ## Status
-- Succession preserves the delivered signing-safety prerequisite: raw signed records
-  remain separate from held selection. Affected reader reports are refreshed.
-- Succession design review accepted the shared frontier and exact-link authority.
-  Runtime and local/synthetic acceptance script are implemented; focused reader,
-  journal and recovery tests pass. Integrated review found a checkpoint reservation
-  missing the published-but-unwitnessed checkpoint; the reviewed fix covers admission,
-  takeover, return and adoption. Both boundary regressions pass without signing.
-  Local and synthetic Ergo real-proof succession passed; fresh public-only readers
-  agree. No active local job or companion branch exists.
-- All seven full reference and pool-v2/v3 proof jobs passed for `2026c1a`
-  in [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36344843879).
-  Final changes only retain reports and update documentation; runtime/check inputs
-  reuse that passing baseline. Final docs/link and nine report-binding checks pass.
-  Inspect PR #26 for the merge revision and its post-merge CI status when resuming.
+- Succession delivered in [PR #26](https://github.com/mediumofexchange/reference-ts/pull/26)
+  at `e8cf7e5`; all seven post-merge CI jobs passed.
+- Typecheck and 19 focused frontier tests pass. Independent review found no runtime
+  blocker; frontier negative recovery coverage and explicit single-backing scope
+  refusals were added to acceptance and independently read back.
+- All seven full reference and pool-v2/v3 proof jobs passed for `ededc97` in
+  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36347810739).
+  Both public APIs pass local/synthetic real-proof import and recovery cases.
+  A disposable oracle probe also passed; it is not proof evidence.
+- Affected reports are refreshed from that passing Linux artifact; nine report
+  binding checks pass. Final changes only retain reports and update documentation;
+  runtime/check inputs reuse the passing baseline. No active local job or companion
+  branch. Inspect PR #27 for its merge revision and post-merge CI when resuming.
 
 ## Evidence
 - Current succession: [local](docs/pool-v3-succession-store-verification.json) and
@@ -50,12 +49,12 @@ Evidence limit: local/synthetic reference venues; earlier live allowances are ex
   No new live run is authorized. Testnet header evidence remains current and unchanged.
 
 ## Next
-1. Finish slice 4's compact fault-package orchestration in the runtime. Full-trail
-   hostile checkpoint classification now works through the journal/public reader;
-   compact §9.1 exclusions remain harness-only. Port the corresponding `fault-check`
-   cases without weakening complete-evidence requirements or selected envelopes.
-2. Persistence: venue headers/objects beyond retainedBytes, prune side branches, publisher
-   outbox, restart drills; replace full-range reads with a cursor retaining non-held records.
+1. Persistence: begin with a synthetic venue restart probe that reproduces the exact
+   witnessed view from retained headers/objects, then continues sync. Reuse the owning
+   store's durable outbox for publisher state; exercise mid-sync/mid-publication restart
+   and exact retry. Plan side-branch pruning, data beyond retainedBytes and a cursor
+   retaining non-held records. Slice 5 stops before wallet redesign.
+2. Keep compact multi-backing orchestration with the existing slice-7 scope port.
 3. V3 wallet/service (C4.1–2 requests/funding disclosure), retire v2; then multi-backing.
 4. Configuration adoption: parameter provenance, ACIR identities/certificates, replay/import
    bounds, one-transaction condition and BN254 margin. Mainnet needs separate authority.
@@ -83,9 +82,9 @@ Evidence limit: local/synthetic reference venues; earlier live allowances are ex
   need separate provisioning authority. Configuration approval and mainnet remain disabled.
 
 ## Open questions
-- No unresolved signing-safety or succession review findings.
+- No unresolved compact-fault review findings.
 - No normative specification change or companion branch is currently proposed.
 
 Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-27:
-Single-backing succession now shares reviewed runtime transitions and public-only proof readers.
-Compact fault orchestration, configuration adoption, persistence, wallet custody and mainnet remain.
+Single-backing succession and compact fault orchestration share reviewed public proof readers.
+Configuration adoption, persistence, wallet custody, multi-backing runtime and mainnet remain.

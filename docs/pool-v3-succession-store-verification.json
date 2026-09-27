@@ -22,25 +22,25 @@
       "name": "A issue 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 7630
+      "elapsedMs": 1684
     },
     {
       "name": "B inherited spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 14201
+      "elapsedMs": 3165
     },
     {
       "name": "A imported double spend refused",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 12279
+      "elapsedMs": 3150
     },
     {
       "name": "A revoked issue refused",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 4552
+      "elapsedMs": 1043
     }
   ],
   "transactions": [],
@@ -50,7 +50,7 @@
     "supply": "10",
     "position": "0",
     "spentRoot": "2261233c042322f55531c96b723172fc487a8f7f74afbb8e2e2dcacf6086ba3a",
-    "history": "ab4f3fe8dba24f6c049bb1b7df3338744ec2d766acefe8558db3421e6bb7ab61",
+    "history": "248e3ec4741b5feff27ef2f620fe8c0a29b562c3f00769786f8f15d8b2e78a44",
     "canonical": {
       "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
       "sequence": "5",
@@ -108,7 +108,7 @@
       }
     ]
   },
-  "elapsedMs": 153432,
+  "elapsedMs": 30027,
   "sourceSha256Lf": {
     "dist/backing.js": "08d80f493e1438d95739a2485571ecd5c16b3eb01ed4e6db68c2f5275eabf7e9",
     "dist/bytes.js": "803a06d482439a9fe98de311a08a26c82c1be10e986d09c2a3bd42b169bf6d21",
@@ -130,15 +130,17 @@
     "dist/pool/proof-verifier.js": "fde5e5054ecceced5dd46d3ea002c287852413567d610266fd20f2e1b62622ed",
     "dist/pool/schedule.js": "47136b811c6f4cb3aea5edb82bfe7f051a76583c943bfc0a892714ca6718c967",
     "dist/pool/scope.js": "de29da23e0b75149e1bc5b83568781b0821a26362ba8daec2da283f51a80bcf9",
+    "dist/pool/v3/authorization-evidence.js": "f25b522fd4062602befea7c4f75400059bf62a5a4f345849d15fd262ac07ea3e",
     "dist/pool/v3/capsules.js": "594dfaaf85da7ec968a00c636598642634805d36ce3525c3e20a1fa5bf75e324",
     "dist/pool/v3/commitments.js": "d75b0216af32fa8b28e28f21634446c58ee34aa16b7e7a43d031da6358b8afa4",
     "dist/pool/v3/configuration.js": "225a94dbcda3cfaea355b999c287043f8ee5b1a53f88fd5904d7af8f7444c830",
     "dist/pool/v3/fault-evidence.js": "39af73b8067aa0568dfd70533ed61effabf3911adb98d1ba70ef9afa084d8786",
+    "dist/pool/v3/fault-observer.js": "8e451cc37aacc78f3fd40b348d6b968650eb3a9925e64c3ce9ab1633d2db510f",
     "dist/pool/v3/guard.js": "022fcfe559809db0681cc0aeedb1ebba030f9f4964853fc8def2b7b0418f088e",
     "dist/pool/v3/headers.js": "932184def09c7f76e27da3699f9d205bc56677df742a0285cdf5fd45b3a9c6ff",
     "dist/pool/v3/import-reader.js": "9711c8e718d6806cf216e0ba42cd52b271f7a137b7519f51c1f8c69a85440257",
     "dist/pool/v3/non-service.js": "769032123e29fef40b8a2d665aa887e97685104158f123e5abde024ff7119156",
-    "dist/pool/v3/package-reader.js": "3a8a21af1dbdd29f55d8afac5696e710000a961ab60e03c4bb38e83b247414ab",
+    "dist/pool/v3/package-reader.js": "eeeda307de67c152f4b0f836c9ba082873614f07448c6d3fda78090d8ccd07a3",
     "dist/pool/v3/package.js": "5a0073c9068342854b8368a48a2423d3a56f42ba3639524d07995c2875abada6",
     "dist/pool/v3/prover.js": "024dfd98626981761072504b171279160ce3b981b927cea02c925c126676beda",
     "dist/pool/v3/reader.js": "e57a1fac20dc0f2e2e55fe4c855d64a20e0776f0dbbdadf3399807d853d27382",
@@ -165,7 +167,6 @@
     "package-lock.json": "8203171d98e330e29b091437c947e425fa7b8de9aafa0088a90aae2544f60c9a",
     "scripts/pool/delivery/evidence-reader.mjs": "719a4f1eac2ba2ee10b05d588d13aa819afae25d9cf8cc9a8cf257702609c486",
     "scripts/pool/fixtures.mjs": "9062b9825218adb87171f06261d3c15635efcca6925352562734ca72c2ee5878",
-    "scripts/pool/v3/authorization-evidence.mjs": "338821b52a8415aba08513e1b6c201ea0f51f17bc256fcd5559171adb8a16b09",
     "scripts/pool/v3/candidate-manifest.json": "a5f34d76b1ac9cba71d322c5263fee75120a7756d0b5609720682c344e5049ae",
     "scripts/pool/v3/candidate.mjs": "51273e876c6fe3a6bb76d57e81e379cc82115f942802436ca81e71fd07b1a460",
     "scripts/pool/v3/circuits/burn.nr": "fc701db0ddf076004621ec91dcd25972d46b91bef5f2b00277155ef8a73b8fe5",
@@ -176,9 +177,10 @@
     "scripts/pool/v3/circuits/settle.nr": "5c7ed9ce647fa4440a11b6e43d62d889bd65f26016d9267b702bbac5393ad92d",
     "scripts/pool/v3/circuits/spend.nr": "bde18e670aac3c1771419211a5685e5531da8c75fe1297f78e489855e511fdf7",
     "scripts/pool/v3/codec.mjs": "950686981ff30cce660ff032f2dc29b4caf87fc0f4dac48ca9978f42b17a5e99",
+    "scripts/pool/v3/compact-runtime-check.mjs": "56db1c9c0b41fb558a5d912be5b839e989bae56fcd5095528842051508c4091f",
     "scripts/pool/v3/compile.mjs": "a5a066ae697ff5fce5dd45f55772d14a13c28d5766350af575f4fbc627f1112b",
-    "scripts/pool/v3/ergo-check.mjs": "d2113a043f54ed59dceca6d270e2d6fe205c45d6e4e02231a31b6b3bc4fb0b84",
-    "scripts/pool/v3/fault-evidence.mjs": "97ac98b9269f8e75705fbff7035d72abea1f0d1eacadf53859bdad05bd2e679f",
+    "scripts/pool/v3/ergo-check.mjs": "a618689f420efb3e72da1cd02b9839510f20bc05508ceda556dfcd64b3ff8e8c",
+    "scripts/pool/v3/fault-evidence.mjs": "2eec4d0c1e8756259affafa083a64f498aeba0e47d23c0feac76160cfc2a3875",
     "scripts/pool/v3/local-replay.mjs": "9c9097376fe06723ca4a24f2e8c0b2dd54f73e0ea26e6288062babdfb71215eb",
     "scripts/pool/v3/non-service.mjs": "ffdcb87bbfba72829a1e8697e938ed0cc906b7acfcb15893623660399b903327",
     "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
@@ -209,15 +211,17 @@
     "src/pool/proof-verifier.ts": "e0f04446afea1b2f071c66cd4a978f08c948ab14df04b3d84e6365388640a64b",
     "src/pool/schedule.ts": "4c4936504b7e1445548df649bbbc1a120196ff155a7954a138ffab29b578834a",
     "src/pool/scope.ts": "fe8a66c268bd6a96ba62a1cdbcefd26e0c634de2f5fac44bb4c72722436391c0",
+    "src/pool/v3/authorization-evidence.ts": "3abf5ba67308ba03752183f7e2065d7e0b1990ad1dbec21930d03960289a492e",
     "src/pool/v3/capsules.ts": "95b7c258cf66913ff9a7ffff37c59de453279149b62dbfd4e38519604858505d",
     "src/pool/v3/commitments.ts": "23dbabca0a95179e92ff5fb276de0f94948458b4d749b7da37ac43c115c8593b",
     "src/pool/v3/configuration.ts": "cec9026ac24d98495f80902180c130cc043e563823323705e316708cc27fe245",
     "src/pool/v3/fault-evidence.ts": "ada8e79acac5b0d642da0e691834c3da5bd6c4fd0faed70d447b409c57a2ec57",
+    "src/pool/v3/fault-observer.ts": "1e46252e83438d024b8b42fac837e924bc7be3b01147c94d24e30646abe08f26",
     "src/pool/v3/guard.ts": "aeb6252e1f9ba92d1d8ac9d047ef74c9e87b8b9e385edcbf5758621536d06a5b",
     "src/pool/v3/headers.ts": "2c9c9969dd43c07c1125f07625c94f7ad995b8c0c1274692eeed426ff26c4618",
     "src/pool/v3/import-reader.ts": "ae19e4dec2c8cfa0b7ff34f592f59dd1a40b1a014f70f2976b565d1b8567c3d1",
     "src/pool/v3/non-service.ts": "fe5dae1935d54c6214071e536f30eec049cd6e3f4b63995e5ba1ec5a675140e5",
-    "src/pool/v3/package-reader.ts": "cbcccb831db3b8aceaeab60b13def5f3718d874e50425c3ca5454868c38b9cdb",
+    "src/pool/v3/package-reader.ts": "3c053f878e90ff13646d36316cb454963085b2d86ec90023c07d476917ba8a83",
     "src/pool/v3/package.ts": "80429cf017eb2c8b09bfc8afe2ae0f3b15c5dccb92a0e812eb189672318561ce",
     "src/pool/v3/prover.ts": "f983b5ca7c3e4181e7ddd6446408d7aa415382bd8258b6e2a360b665530bb882",
     "src/pool/v3/reader.ts": "42870e67f8f46f746d0f0d8c6ce765952a69e53baee3944d36cf0da24abf12e5",

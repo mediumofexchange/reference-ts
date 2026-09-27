@@ -8,6 +8,7 @@ import { decodeCommitment, directoryRoot, verifyCommitment } from "../../venue-r
 import { isValue } from "../field.js";
 import { decodeSnapshot } from "./commitments.js";
 import { configurationBytes, configurationHash, decodeConfiguration, type CandidateConfiguration } from "./configuration.js";
+import { faultObserver, type FaultResult } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { classifyFrontier, classifyImports, importLimitsOf, type FrontierResult, type ImportLimits, type ImportResult } from "./import-reader.js";
 import { decodeEvidenceDirectory, decodeEvidencePackage, type PackageLimits } from "./package.js";
@@ -46,8 +47,9 @@ export function ownSelection(input: ReaderSelection): ReaderSelection {
 /** Returns a complete reference verdict/state or throws a named evidence/replay
  * refusal. Never returns a partial state or treats unavailable ancestry as empty.
  * The internal state is newly replayed per call; no asserted state is an input.
- * Compact fault packages and multi-backing orchestration remain harness-only. */
-export async function readSingleBackingPackage(bytes: Uint8Array, selected: ReaderSelection, options: PackageReader): Promise<ImportResult> {
+ * Compact faults replace only dependency-resolved non-opening target trails;
+ * the selected envelope remains complete. Multi-backing reads are unsupported. */
+export async function readSingleBackingPackage(bytes: Uint8Array, selected: ReaderSelection, options: PackageReader): Promise<ImportResult & FaultResult> {
   const { configuration: configurationIn, verifier: verifierIn, venue, reference: referenceIn, importLimits: limitsIn } = options;
   const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
   const verify = verifierIn.verify;
@@ -61,7 +63,7 @@ export async function readSingleBackingPackage(bytes: Uint8Array, selected: Read
     { maxCheckpoints: limitsIn.maxCheckpoints, maxEvents: limitsIn.maxEvents };
   if (!isValue(importLimits.maxCheckpoints) || !isValue(importLimits.maxEvents)) throw new TypeError("invalid import limits");
   const items = decodeEvidencePackage(bytes, PACKAGE_LIMITS);
-  if (items.some(item => ![1, 2, 3, 4, 6, 10].includes(item.kind)) ||
+  if (items.some(item => ![1, 2, 3, 4, 6, 7, 10].includes(item.kind)) ||
       [1, 2, 10].some(kind => items.filter(item => item.kind === kind).length > 1)) throw new EvidenceRefusal("unsupported-scope");
   const payloads = (kind: number): Uint8Array[] => items.filter(item => item.kind === kind).map(item => item.payload);
   if ([1, 2, 3, 4, 6].some(kind => payloads(kind).length === 0)) throw new EvidenceRefusal("unresolved-evidence");
@@ -88,15 +90,17 @@ export async function readSingleBackingPackage(bytes: Uint8Array, selected: Read
     header.sequence <= selection.sequence, "CONTEXT");
   const terms = scope.rootTerms[0]!;
   requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
-  return classifyImports({ selection, terms, header, verifier, reference, importLimits,
+  const faults = faultObserver(payloads(7), selection, verifier);
+  const result = await classifyImports({ selection, terms, header, verifier, reference, importLimits, faults,
     ...(payloads(10).length === 0 ? {} : { receiptBytes: payloads(10)[0]! }) }, directories, venue, { snapshots, trails });
+  return { ...result, ...faults.result() };
 }
 
 /** Descend every witnessed term for independently authenticated root terms.
  * An empty result is proved by the complete venue descent, never by missing
  * package objects. Selection and receipt metadata supply no frontier authority. */
 export async function readSingleBackingFrontier(bytes: Uint8Array, signed: SignedTerms, judgingIndex: bigint,
-  options: PackageReader): Promise<FrontierResult> {
+  options: PackageReader): Promise<FrontierResult & FaultResult> {
   const { configuration: configurationIn, verifier: verifierIn, venue, reference: referenceIn, importLimits: limitsIn } = options;
   const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
   const verify = verifierIn.verify;
@@ -110,7 +114,7 @@ export async function readSingleBackingFrontier(bytes: Uint8Array, signed: Signe
   requireReplay(same(terms.configuration, domain), "CONFIGURATION");
   const importLimits = importLimitsOf(limitsIn);
   const items = decodeEvidencePackage(bytes, PACKAGE_LIMITS);
-  if (items.some(item => ![1, 2, 3, 4, 6, 10].includes(item.kind)) ||
+  if (items.some(item => ![1, 2, 3, 4, 6, 7, 10].includes(item.kind)) ||
       [1, 2, 10].some(kind => items.filter(item => item.kind === kind).length > 1)) throw new EvidenceRefusal("unsupported-scope");
   const payloads = (kind: number): Uint8Array[] => items.filter(item => item.kind === kind).map(item => item.payload);
   if (payloads(1).length !== 0) requireReplay(same(payloads(1)[0]!, configurationBytes(configuration)), "CONFIGURATION");
@@ -121,6 +125,9 @@ export async function readSingleBackingFrontier(bytes: Uint8Array, signed: Signe
   // Invoke the external adapter only after every caller-owned input is copied.
   const venueId = requireReferenceVenue(reference, venue);
   requireReplay(same(terms.venue, venueId), "VENUE_REFERENCE");
-  return classifyFrontier({ selection: { mode: "historical-fixture", domain, venue: venueId, backing, judgingIndex },
-    terms, verifier, reference, importLimits }, directories, venue, { snapshots: payloads(4), trails: payloads(6) });
+  const selection = { mode: "historical-fixture" as const, domain, venue: venueId, backing, judgingIndex };
+  const faults = faultObserver(payloads(7), selection, verifier);
+  const result = await classifyFrontier({ selection, terms, verifier, reference, importLimits, faults },
+    directories, venue, { snapshots: payloads(4), trails: payloads(6) });
+  return { ...result, ...faults.result() };
 }
