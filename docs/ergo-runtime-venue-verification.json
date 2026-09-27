@@ -6,22 +6,22 @@
       "url": "http://127.0.0.1:9053",
       "name": "ergo-mainnet-6.0.6",
       "appVersion": "6.0.6",
-      "headersHeight": 1881079,
-      "fullHeight": 1881079
+      "headersHeight": 1882188,
+      "fullHeight": 1882188
     },
     {
       "url": "http://213.239.193.208:9053",
       "name": "ergo-mainnet-6.0.6",
       "appVersion": "6.0.5-46-78153a1e-SNAPSHOT",
-      "headersHeight": 1881079,
-      "fullHeight": 1881079
+      "headersHeight": 1882188,
+      "fullHeight": 1882188
     }
   ],
   "profile": {
-    "anchorHeight": "1880779",
-    "anchorId": "812784676b6bcadca2c69fa9952955dd1af3568c01d019bd5e6dfe466ace4051",
+    "anchorHeight": "1881888",
+    "anchorId": "9dc879b14f57f2f05f9bff8ce65b794340a033afeadd5785c7bc0976b144be49",
     "depth": "10",
-    "identity": "94adb37a908cae110cdc07ceca26c123646ae20be85e13a6cc2e147ae40e3753",
+    "identity": "838d283d2c5c2fb218c834da3fccefc82cacba9b0e1f9971c147a8f739b64346",
     "locations": "pay-to-public-key trees of the throwaway keys 0x01..01 to 0x04..04"
   },
   "viewA": {
@@ -29,14 +29,14 @@
       "own node",
       "public node"
     ],
-    "ms": 9208.2,
+    "ms": 26246.6,
     "rounds": [
       {
-        "ms": 9208.1,
-        "witnessedIndex": "289",
-        "chainWitnessedIndex": "289",
-        "tipHeight": "1881079",
-        "sectionsRead": 290,
+        "ms": 26246.4,
+        "witnessedIndex": "290",
+        "chainWitnessedIndex": "290",
+        "tipHeight": "1882189",
+        "sectionsRead": 291,
         "unresolvedIndex": null,
         "suppliers": [
           {
@@ -45,93 +45,93 @@
           },
           {
             "name": "public node",
-            "headersAdded": 0
+            "headersAdded": 1
           }
         ]
       }
     ],
-    "witnessedIndex": "289",
-    "witnessedHeight": "1881069",
-    "witnessedHeaderId": "19f6b9e906c36ca2cc3f31c8167533757acdaf5961164e4443b8b6b79e8e0bfa",
+    "witnessedIndex": "290",
+    "witnessedHeight": "1882179",
+    "witnessedHeaderId": "d6fb7a5eedfa616fe27ab02f1f2f04d3287a3ba8e40040b3128d72de6acadb5b",
     "standsOnOwnNodeBlock": true,
-    "headersVerified": 300,
-    "sectionsRead": 290,
-    "msPerBlock": 31.75
+    "headersVerified": 301,
+    "sectionsRead": 291,
+    "msPerBlock": 90.19
   },
   "viewB": {
     "suppliers": [
       "public node"
     ],
-    "ms": 38796.8,
+    "ms": 51448.2,
     "rounds": [
       {
-        "ms": 38796.8,
-        "witnessedIndex": "289",
-        "chainWitnessedIndex": "289",
-        "tipHeight": "1881079",
-        "sectionsRead": 290,
+        "ms": 51448.2,
+        "witnessedIndex": "290",
+        "chainWitnessedIndex": "290",
+        "tipHeight": "1882189",
+        "sectionsRead": 291,
         "unresolvedIndex": null,
         "suppliers": [
           {
             "name": "public node",
-            "headersAdded": 300
+            "headersAdded": 301
           }
         ]
       }
     ],
-    "witnessedIndex": "289"
+    "witnessedIndex": "290"
   },
   "answers": {
-    "toIndex": "289",
+    "toIndex": "290",
     "agree": true,
     "viewA": [
       {
         "kind": 1,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "76ad4e97e0308e5de6c3fb960e7af20f1d704a0d6b974b411b88c7cbc4545bce"
+        "sha256": "a7a9a437ba48ae3c53780af358540608797a180c0b59408c2042cda45f609304"
       },
       {
         "kind": 2,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "e8b4b1d5b8a379cdb9a5eca4b6d1b67694489e4a5f6629618eb9218cb89bb9c6"
+        "sha256": "3da602760a6678b263e2e895a004ca506c78d319fadc9fbd5e58fc02a1144614"
       },
       {
         "kind": 3,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "c42f9af836ff5bd34ec74e769a1240f4e6875ee9465614a85bae1306ed013790"
+        "sha256": "9b9d12c0c8ec56cce59672d486e8c55d80b2eb7bd5d066172068df51a476caf4"
       },
       {
         "kind": 4,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "461e39e2ca814a9e8bdbe5d21694ca5c0c259d717bd2404b83f73242a6478ad3"
+        "sha256": "2994773b07224954b9459d8a6fb9b1dc2b37ddf2e8e4204a92e17cebee763f22"
       },
       {
         "kind": 1,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "707a75a88e41499f9f7d8307af049e51db964b7b718402d8b8d51643ca9386d8"
+        "sha256": "6a90065d15edeababd870939f7dbf3b871bb815637b883a9bdcdb726d602b052"
       },
       {
         "kind": 2,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "0b78889c8e16385f73d6434a4cb99306227cf52b5c32e8a30110118e7b18ea22"
+        "sha256": "9af78e606f6490e4b766a35cb91b544dfd72bd94699c09fbe9fc108959557c6c"
       },
       {
         "kind": 3,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "a029120dee832c99c71d9c0f92bb83db20ee905a281f3f1dce53f6c83e5122fb"
+        "sha256": "85d5674184d6a26ba853a5b14f152555a2873f3d640d67f92dff1112111ba061"
       },
       {
         "kind": 4,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "7197ba2b2bdbc2007fc894b3b0c2be6e19513d7e3859666031a78b348b2489eb"
+        "sha256": "bbee910b42296fda7298afd61d720d392154373637968382027c8aeb2e3e75f4"
       }
     ]
   },
@@ -139,8 +139,8 @@
     "substitutedIndex": "5",
     "aloneWitnessedIndex": "4",
     "aloneUnresolvedIndex": "5",
-    "withOwnWitnessedIndex": "289",
-    "forgedHeaderHeight": "1880785",
+    "withOwnWitnessedIndex": "291",
+    "forgedHeaderHeight": "1881894",
     "forgingReport": [
       {
         "name": "forging",
@@ -149,10 +149,10 @@
       },
       {
         "name": "own node",
-        "headersAdded": 295
+        "headersAdded": 297
       }
     ],
-    "forgedWitnessedIndex": "289"
+    "forgedWitnessedIndex": "291"
   },
   "files": {
     "dist/backing.js": "08d80f493e1438d95739a2485571ecd5c16b3eb01ed4e6db68c2f5275eabf7e9",
@@ -162,7 +162,7 @@
     "dist/ergo-headers.js": "2e272856dddc98ec56eabd5cf7969e7bcbca3edb6cd3163452608f44e9135e19",
     "dist/ergo-profile.js": "cf05f525e18c218b5d10c72dd51b4ebf5f63b2f247993c5d988b43f6e099b25e",
     "dist/ergo-supplier.js": "793f4c0c527918e8b3391a2286a3f19447bcfeb7fd0cde05353efe53a94644dd",
-    "dist/ergo.js": "186afdd35c3a1374831cabbb6169c3a50186bfccdc5e8a85f871125da65bebde",
+    "dist/ergo.js": "7b34ab1e9a81cbd0b0ec83f7d63f9fb727124125c82e6aea4a64663148cce679",
     "dist/keys.js": "07993d86bebf4555f59b82374f616cecfe9be5dc1d3ff19ac8fbc7d31163ed5c",
     "dist/messages.js": "ab09944d243cc56b1d7b8e0e7b94801d37be5de9a2706b0cb4966a989e46a8c4",
     "dist/oplog.js": "06f4e626b03c86daa5dd869351ac7897065d333e7261fd3dd0855d4d1534cbd1",
@@ -184,7 +184,7 @@
     "src/ergo-profile.ts": "e3789d16774c0aa3b78bfdebe3ee007168b80b2204a85958eb50c58d32568476",
     "src/ergo-publisher.ts": "2dabd89ca03ce53a1bbab4142e2bfdd053f0cec625d67cd3cca3e7fd1930de92",
     "src/ergo-supplier.ts": "b9bb52129f4e2fcfdb936682294476ba11e2fa55e27c5775f4000914cdae73f7",
-    "src/ergo.ts": "574d26352e2f4583eb5d58d09fad38398a661026a3120904954452f0dfcd99d6",
+    "src/ergo.ts": "0a841c506ecf75054b576c30d418c68f24278d2a2924f95aa81484eb424ef2b2",
     "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
     "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
     "src/messages.ts": "8a941254bf24650f9146d3875add1f20993a08b17b40ddac1ed060e225191718",

@@ -252,14 +252,16 @@ The v3 codecs below, the spent root and the C4 capsule library live in
 `src/pool/v3/` as candidate runtime code (slice 1 M1 of the
 [v3 runtime plan](../decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2));
 the v3 scripts, including the experimental local replay, read them from
-`dist/`. No runtime state machine, admission or reader uses them yet, and
-nothing is adopted.
+`dist/`. The candidate state machine, admission journal and reader use those
+same codecs on reference venues; nothing is adopted. V2-specific code is
+frozen until the v3 wallet and service pass its ported cases.
 
 `src/pool/v3/records.ts` implements the successor's reviewed
 [canonical record layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/ca727f6/pool-v3.md#5-canonical-statement-records).
 `npm test` checks exact bytes, hostile parsing, delivery association and
-signature-message binding. No admission uses it yet;
-approved v3 configuration, finality and adoption remain undefined.
+signature-message binding. The candidate journal admits issue, spend and burn
+through those records; approved v3 configuration, deployment finality and
+adoption remain undefined.
 `src/pool/v3/commitments.ts` adds the reviewed history/evidence chains,
 snapshot and receipt frames from [pool-v3 §7](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md#7-history-evidence-snapshots-and-receipts).
 Its tests distinguish authenticated failing evidence from substituted bytes
@@ -307,12 +309,17 @@ The operator side runs in `src/pool/v3/` on reference venues only
 ([decision](../decisions/2026-09.md#2026-09-25--admit-commit-and-serve-v3-through-an-operator-journal-proving-in-the-runtime-on-reference-venues-only)):
 the runtime prover (`prover.ts`, `witness.ts`), admission at the horizon in
 `state.ts`, the operator journal (`store.ts`) and the candidate guard
-(`guard.ts`). `npm run check:pool:v3-store` proves an issue, a payment with a
+(`guard.ts`), also enforced at the reader's entry with a caller-held reference
+preimage. `npm run check:pool:v3-store` exercises an issue, a payment with a
 fee to the operator's own request and a burn through the journal on the local
-reference venue; holders spend notes restored from the served package, and a
-fresh seedless process verifies supply from the package and the venue alone
-([report](pool-v3-store-verification.json)). One genesis segment of one
-backing; no recovery kinds, imports, replacement service or chain venue yet.
+reference venue. Add `-- --ergo` for `ErgoVenue` under the synthetic reference
+identity: actual `ErgoPublisher` transactions enter a synthetic mempool, then
+explicit mining and synchronization witness them. Holders spend notes restored
+from the served package; a fresh seedless process verifies supply from the
+package and venue records. In synthetic mode it receives block evidence and
+holds the witnessed block pin separately ([report](pool-v3-store-verification.json)).
+One genesis segment of one backing; no recovery kinds, imports, replacement
+service, live-chain deployment or adopted configuration.
 
 ## Runtime pin and recovery models
 
@@ -357,4 +364,5 @@ and proves them together, including delivery on issue/burn, four spend
 outputs, canonical demand padding, refresh binding and equal-count cross-key
 rejection. See the [conformance suite](../scripts/pool/v3/README.md). V3 remains
 an incomplete construction: no approved configuration hash or artifact pins,
-backing adoption or runtime support is defined.
+backing adoption or deployment support is defined; the runtime candidate
+remains guarded to reference venues.

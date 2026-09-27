@@ -42,7 +42,7 @@
 // else's; a view built without a publisher only reads.
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
+import { byteLength, compareBytes, copyBytes, copyUnshared, EncodingError } from "./bytes.js";
 import { decodeCompactBits, ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, type ErgoHeaderStore } from "./ergo-headers.js";
 import {
   attributeSection, ERGO_SYNTHETIC_REFERENCE, ergoProfileIdentity, ownErgoProfile, rangeEntries, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
@@ -50,10 +50,10 @@ import {
 import type { ErgoPublisher, ErgoRecordRequest } from "./ergo-publisher.js";
 import type { ErgoSupplier } from "./ergo-supplier.js";
 import {
-  COMMITMENT_RANGE, copyRequest, encodeRangeAnswer, heldCommitments, REPLACEMENT_RANGE, REVOCATION_RANGE,
+  COMMITMENT_RANGE, copyRequest, encodeRangeAnswer, heldCommitments, MAX_RANGE_RECORD_BYTES, REPLACEMENT_RANGE, REVOCATION_RANGE,
   type HeldCommitment, type RangeAnswer, type RangeLimits, type RangeRequest, type RecordKind,
 } from "./record-range.js";
-import type { RecordVenue } from "./record-venue.js";
+import type { RecordPublisher, RecordVenue } from "./record-venue.js";
 // The transparent `Venue` face below serves pool-v2's store and retires with it.
 import { forgetAdmitted, type WitnessedReplacement } from "./replacement.js";
 import type { WitnessedRevocation } from "./revocation.js";
@@ -174,7 +174,7 @@ export async function ergoAnchorContext(supplier: ErgoSupplier, anchorId: Uint8A
  * place. The id is derived from the profile, never handed in, so one declared
  * venue cannot be read on two clocks.
  */
-export class ErgoVenue implements Venue, RecordVenue {
+export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
   private readonly profile: ErgoProfile;
   private readonly venueId: Uint8Array;
   private readonly store: ErgoHeaderStore;
@@ -494,12 +494,20 @@ export class ErgoVenue implements Venue, RecordVenue {
    * every output created at the tip of the chain this view verified: at most
    * the height of the block that will include it, which the network requires,
    * and never a supplier's word. Resolves when a supplier accepted the
-   * transaction; the record counts once a later sync reads it.
+   * transaction; the record counts once a later sync reads it. Kinds 1–3 are
+   * carried without judging their signatures or contents (venue-ergo §6).
+   * Kind 4's multi-output publication is not supported by this publisher.
    */
-  private publishRecord(kind: 1 | 2 | 3, subject: Uint8Array, record: Uint8Array): Promise<void> {
+  publishRecord(kind: RecordKind, subject: Uint8Array, record: Uint8Array): Promise<void> {
+    if (kind === 4) throw new VenueError("this publisher does not support kind-4 publications");
+    if (kind !== 1 && kind !== 2 && kind !== 3) throw new EncodingError("invalid Ergo record kind");
+    if (byteLength(subject) !== 32 || byteLength(record) !== MAX_RANGE_RECORD_BYTES[kind]) {
+      throw new EncodingError("invalid Ergo record length");
+    }
+    const ownSubject = copyUnshared(subject), ownRecord = copyUnshared(record);
     if (this.publisher === undefined) throw new VenueError("this view has no publisher; publishing is the operator's wallet");
     this.requireSnapshot();
-    const request = { location: this.profile.scripts[kind], subject, record, height: this.store.tip().height };
+    const request = { location: this.profile.scripts[kind], subject: ownSubject, record: ownRecord, height: this.store.tip().height };
     // Held already, as when a sync settled it after the caller last read: nothing to send.
     if (this.holds(request)) return Promise.resolve();
     return this.publisher.publish(request).then(() => {});

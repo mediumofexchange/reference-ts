@@ -7,7 +7,8 @@ import { join, resolve } from "node:path";
 import { deserialize } from "node:v8";
 import { Barretenberg, BackendType, UltraHonkVerifierBackend } from "@aztec/bb.js";
 import { recordReader, replayEvidencePackage } from "./local-replay.mjs";
-import { FixtureVenue } from "../../../dist/record-venue.js";
+import { FixtureVenue, LOCAL_REFERENCE } from "../../../dist/record-venue.js";
+import { ERGO_SYNTHETIC_REFERENCE } from "../../../dist/ergo-profile.js";
 import { field } from "../fixtures.mjs";
 import { loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys } from "./candidate.mjs";
 import { v3Codec } from "./codec.mjs";
@@ -39,15 +40,17 @@ try {
   const backend = new UltraHonkVerifierBackend(api);
   // The fixture venue record is this process's own range verifier (§13.2),
   // rebuilt from the fixture IPC beside the selection; the package cannot supply it.
-  const verifier = { configuration, verify: (kind, publicInputs, proof) => backend.verifyProof({
+  const verifier = { configuration, reference: { context: LOCAL_REFERENCE, label: new Uint8Array(32).fill(12), lag: 2n },
+    verify: (kind, publicInputs, proof) => backend.verifyProof({
     proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
   }, { verifierTarget: "noir-recursive" }), record: data => recordReader(FixtureVenue.from(data), "fixture-verifier") };
   // Under --ergo the process's own ErgoVenue, on its own anchor context, verifies the package's blocks up to the
   // block the reader pinned, held beside the keys (never in the package).
   if (withErgo) {
-    const { ergoRecord } = await import("./ergo-check.mjs");
+    const { ergoRecord, ERGO_PROFILE } = await import("./ergo-check.mjs");
     const pin = new Uint8Array(readFileSync(join(fileURLToPath(process.argv[2]), "ergo-pin.bin")));
     verifier.record = data => ergoRecord(data, { pin });
+    verifier.reference = { context: ERGO_SYNTHETIC_REFERENCE, profile: ERGO_PROFILE };
   }
   process.stdout.write(JSON.stringify(await replayEvidencePackage(input, verifier, codec)));
 } catch {

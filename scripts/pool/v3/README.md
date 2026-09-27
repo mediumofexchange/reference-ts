@@ -6,8 +6,9 @@ Poseidon2 helper. It implements the proof layouts in
 [pool-v3.md at d57ddb0](https://github.com/mediumofexchange/money-from-first-principles/blob/d57ddb0/pool-v3.md).
 
 V3 is an incomplete construction: no approved configuration hash, artifact
-identity, runtime support or backing adoption is defined. These sources are
-conformance tooling outside `src/`; they do not replace the v2 circuits.
+identity or backing adoption is defined. Its candidate runtime in `src/pool/v3/`
+runs on reference venues only; these scripts are conformance tooling and do
+not replace the frozen v2 circuits.
 The compiler writes temporary projects only under ignored `scratch/` and
 the check records observed source/bytecode/key hashes, checks and metrics in
 `scratch/pool-v3-results.json`. It reuses the existing parameter cache and
@@ -18,6 +19,16 @@ configuration pins. Final pinning requires separate review.
 operator journal, prover and guard (`src/pool/v3/store.ts`, `prover.ts`,
 `guard.ts`) with real proofs on the local reference venue and records
 `scratch/pool-v3-store-results.json`; its fresh reader is `local-worker.mjs`.
+Use `npm run check:pool:v3-store -- --ergo` to run that same issue, payment
+with fee/change and burn flow through `ErgoPublisher` and `ErgoVenue` on the
+synthetic reference chain. A synthetic mempool checks the signed transactions;
+the harness explicitly mines and syncs before the reader consumes them.
+The fresh reader gets served blocks and keeps its witnessed block pin in
+`ergo-pin.bin` beside its keys, outside the supplied package. Wrong pins and
+withheld sections refuse. This uses invented funding and no live node; the
+synthetic chain and candidate configuration establish no deployment or adoption.
+Both modes guard journal and reader entries against the caller's independently
+held reference identity preimage.
 
 The local replay command additionally uses the independently held
 `candidate-manifest.json` and [pool-v3 §11 at 916bffb](https://github.com/mediumofexchange/money-from-first-principles/blob/916bffb/pool-v3.md#11-configuration-and-backing-evidence-before-adoption).

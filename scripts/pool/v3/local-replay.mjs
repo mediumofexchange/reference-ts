@@ -10,6 +10,7 @@ import { ScopeTree } from "../../../dist/pool/scope.js";
 import { ownerOf, commitmentOf, nullifierOf } from "../../../dist/pool/notes.js";
 import { createCapsuleScanner, deriveSettlementOwnerSecret, CapsuleAssociationError, CapsuleFormatError } from "../../../dist/pool/v3/capsules.js";
 import { classifyCarrying, decodedTrails, RANGE_LIMITS, readRecordRanges, readRecordView, replayTrail } from "../../../dist/pool/v3/reader.js";
+import { CandidateVenueError, referenceVenue } from "../../../dist/pool/v3/guard.js";
 import { EvidenceRefusal, ReplayRefusal, ScopeRequired, requireReplay } from "../../../dist/pool/v3/refusals.js";
 import { recoveryState, effectOf, checkRecovery, applyRecovery } from "../../../dist/pool/v3/recovery.js";
 import { servedTrail } from "../../../dist/pool/v3/served-trail.js";
@@ -86,7 +87,7 @@ export const recordReader = (venue, evidenceKind) => ({ evidenceKind, id: venue.
  * raw trails, recursion, or replica-provided finality is involved. */
 async function classifyImports(context, directories, record, evidence) {
   const { selection, terms, codec } = context;
-  const view = await readRecordView(selection, terms, directories, record);
+  const view = await readRecordView(selection, terms, directories, record, context.reference);
   const { chain, heldBy, termEnd, carries, revokedAt, t, lag } = view;
   const duration = terms.silence?.noCommitmentDuration;
   const counting = terms.nonService !== undefined && context.receiptBytes === undefined;
@@ -331,6 +332,11 @@ export async function replayLocalPackage(input, verifier, codec) {
     const { selection, package: supplied, seed } = owned;
     // Do not silently keep the retired issuer override as an alternate input.
     requireReplay(INPUT_SHAPES.includes(fields), "INPUT_FIELDS");
+    // Reference provenance belongs to the caller's verifier, never the package.
+    // Own it once before asynchronous work, and guard even trail-only replay.
+    const reference = structuredClone(verifier.reference);
+    const expectedVenue = referenceVenue(reference);
+    requireReplay(selection?.venue instanceof Uint8Array && same(selection.venue, expectedVenue.id), "VENUE_REFERENCE");
     // The reader's own budget selection is checked before any evidence.
     const importLimits = importLimitsOf(verifier);
     requireReplay(codec.verifyConfiguration(supplied?.configuration, verifier.configuration), "CONFIGURATION");
@@ -354,7 +360,7 @@ export async function replayLocalPackage(input, verifier, codec) {
     const imports = header.entries.some(entry => entry.opening !== undefined);
     if (!imports && header.entries.length === 1) requireReplay(same(terms.operator, header.operator) && same(header.entries[0].link, selection.backing), "TERMS_INITIAL_SCOPE");
     if (supplied.faults?.length && venue === undefined) throw new EvidenceRefusal("unsupported-scope");
-    context = { selection, terms, signedTerms, header, verifier, codec, importLimits, receiptBytes: supplied.receipt,
+    context = { selection, terms, signedTerms, header, verifier, codec, reference, importLimits, receiptBytes: supplied.receipt,
       faults: faultObserver(supplied.faults, selection, verifier, codec) };
     if (supplied.receipt !== undefined && (seed !== undefined || venue === undefined)) throw new EvidenceRefusal("unsupported-scope");
     let ranges = null, carrying = null, clock = null, state, rangeEvidence = "none";
@@ -380,13 +386,13 @@ export async function replayLocalPackage(input, verifier, codec) {
             currentRangeAuthenticated: selection.mode !== "historical-fixture" };
           ({ carrying, state, clock, ranges } = result);
         } else {
-          ranges = await readRecordRanges(selection, terms, header, directories, record);
+          ranges = await readRecordRanges(selection, terms, header, directories, record, reference);
           ({ carrying, state, clock } = await classifyCarrying(context, ranges, { snapshot, trail, snapshots, trails }));
         }
       } catch (error) {
         if (!(error instanceof ScopeRequired)) throw error;
         const result = await classifyScopes(context, directories, record, { snapshots, trails },
-          { readRecordView, decodedTrails, replayTrail, requireReplay, ReplayRefusal, IMPORT_LIMITS: context.importLimits });
+          { readRecordView: (...args) => readRecordView(...args, reference), decodedTrails, replayTrail, requireReplay, ReplayRefusal, IMPORT_LIMITS: context.importLimits });
         if (result.receipt !== undefined) return { ...refused("receipt-status"), ...context.faults.result(), receipt: result.receipt, rangeEvidence,
           candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
           currentRangeAuthenticated: selection.mode !== "historical-fixture" };
@@ -440,6 +446,7 @@ export async function replayLocalPackage(input, verifier, codec) {
           carrying, clock, ...(ranges.publications === undefined ? {} : { publications: ranges.publications }),
           ...(ranges.nonService === undefined ? {} : { nonService: ranges.nonService }) } }, candidates };
   } catch (error) {
+    if (error instanceof CandidateVenueError) return failure("invalid-local-replay", "VENUE_REFERENCE");
     if (error instanceof ReplayRefusal) return failure("invalid-local-replay", error.check);
     // A lapsed selection carries the clock record proving the lapse (C2b.4.1) beside the refusal.
     if (error instanceof EvidenceRefusal) return { ...failure(error.status), ...(error.clock === undefined ? {} : { clock: error.clock }) };

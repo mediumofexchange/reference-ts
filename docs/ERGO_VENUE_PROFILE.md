@@ -223,8 +223,9 @@ spendability flags remain false.
 
 ## Runtime venue
 
-`new ErgoVenue(profile, anchorContext, policy?)` implements the runtime's
-`Venue` for any backing whose **E** declares the profile's identity;
+`new ErgoVenue(profile, anchorContext, policy?, publisher?)` implements the
+runtime's `Venue`, neutral `RecordVenue` and `RecordPublisher` interfaces for
+any backing whose **E** declares the profile's identity;
 `ergoProfile` applies the reference default depth of 10
 ([decision](../decisions/2026-09.md#2026-09-25--select-the-ergo-venue-profile-for-pool-v3-record-ranges)),
 and `ergoAnchorContext` takes the anchor's 1,024-header context from any
@@ -286,8 +287,11 @@ which a running or failed sync leaves in place.
   rather than answering empty, so the frozen transparent path has no Ergo
   venue.
 - **Publishing** (`src/ergo-publisher.ts`): a view given an `ErgoPublisher`
-  publishes commitments, replacements and revocations (kinds 1–3; it refuses
-  an unsigned commitment or revocation), one transaction per record, with
+  exposes neutral `publishRecord(kind, subject, bytes)` for kinds 1–3 and
+  refuses kind 4. Raw publication checks kind, subject and record dimensions;
+  signatures and force are the reader's checks under §6. The older typed
+  commitment and revocation helpers additionally refuse invalid signatures.
+  It publishes one transaction per record, with
   every output created at the tip of the chain the view verified. The
   publisher holds one funding key, a secp256k1 scalar that pays fees and box
   minimums and nothing else, and builds the transaction in §5's grammar:
@@ -334,14 +338,13 @@ which a running or failed sync leaves in place.
   abandoned publication by spending its input.
 
 [`runtime-sync.mjs`](../experiments/ergo-range/runtime-sync.mjs) runs the
-view on the real mainnet ([report](ergo-runtime-venue-verification.json)):
-anchored 300 blocks below the own node's tip, it verified 300 headers and read
-290 sections in one sync of 11.7 s (about 40 ms a block, most of it the work checks),
-stood on the own node's block at its final index, and a second view synced
-from a public node alone reached the same block with byte-identical empty
-answers for every kind. A supplier substituting one section alone stopped the
-clock before that block, and the own node beside it carried the clock past; a
-supplier raising one header's difficulty bits was stopped at that header.
+view on real mainnet headers and sections. The
+[report](ergo-runtime-venue-verification.json) owns the anchor, ranges and
+measurements. It compares a view synced from the own node with an independent
+view synced from a public node, including their witnessed block and exact
+range answers. It also checks that a substituted section stops the clock,
+an honest supplier supplies the missing valid section, and altered difficulty
+bits stop the offending supplier's header pass.
 
 [`publisher-check.mjs`](../experiments/ergo-range/publisher-check.mjs) runs
 the publisher on the own testnet node
@@ -362,6 +365,14 @@ answer, an outage and a dropped parent each leave one transaction per
 record, an invented box is refused beside a node that lacks it, and a
 `PoolStore` on an `ErgoVenue` over the synthetic chain publishes its opening
 and finds it held after the depth.
+
+The candidate v3 journal also uses this neutral publishing interface on the
+synthetic reference chain (`store-check.mjs --ergo`). Its issue/pay/burn flow
+serves packages and mined block evidence to a fresh seedless reader, whose
+witnessed block pin is held independently beside its candidate keys. Both
+journal and reader require the caller's reference identity preimage. See the
+[journal acceptance](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
+for the report and synthetic-only limits; no live node or funds enter that flow.
 
 What remains before an Ergo deployment: persistence, the one-transaction
 condition checked against an adopted configuration, publication on the

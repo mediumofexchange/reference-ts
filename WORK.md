@@ -1,23 +1,24 @@
 # Current work
 
-Updated: 2026-09-25
+Updated: 2026-09-27
 
 ## Goal
-
-Next 1, **M2b** of the [plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)'s
-slice 1 (M0–M2a done), new branch: `ErgoVenue` as a `RecordPublisher` for kinds 1–3 over the
+Active: **M2b** of the [plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)'s
+slice 1 (M0–M2a done), branch `feat/v3-synthetic-journal`: `ErgoVenue` as a `RecordPublisher` for kinds 1–3 over the
 synthetic chain (a mining mempool supplier in `src/ergo-synthetic.ts`), the journal publishing
 there under `moe/venue/ergo-synthetic/reference` with its pinned block, and a fresh seedless
 process verifying supply through `ErgoVenue`; the guard at the reader's entry (harness
 fixtures on `localVenueIdentity` ids, replay report re-recorded once); AGENTS.md direction.
-Acceptance: `store-check.mjs --ergo` runs the M2a flow on the synthetic chain; guard
-refusals at the reader. Stop: no testnet (slice 2), no recovery kinds.
+Acceptance: M2a's real-proof flow via `store-check.mjs --ergo`, reader guard refusals; synthetic
+reference evidence only, no deployment/adoption. Checks: `npm run check`, store/replay `--ergo`,
+affected reports and independent adversarial review. Stop: no testnet or recovery kinds.
+Jobs: `scratch/m2b-checks.ps1 -Suite finish` logs `m2b-finish` (`.log`, `.exit`); do not touch the other session's node setup.
 
 ## Status
 
-- [M2a](decisions/2026-09.md#2026-09-25--admit-commit-and-serve-v3-through-an-operator-journal-proving-in-the-runtime-on-reference-venues-only)
-  merged: `src/pool/v3/` `witness.ts`, `prover.ts`, admission in `state.ts`, the journal
-  `store.ts` and `guard.ts`; `FixtureVenue` publishes under `localVenueIdentity`.
+- M2b source complete; independent adversarial review found no blocker. Docs/typecheck and
+  publisher tests passed; all 2,083 full-suite assertions passed but Vitest's `onTaskUpdate`
+  timed out. Full-check gate stays open for CI; real-proof acceptance/reports are pending.
 - Ergo ([guide](docs/ERGO_VENUE_PROFILE.md#runtime-venue), spec [01d8db2](https://github.com/mediumofexchange/money-from-first-principles/blob/01d8db2/venue-ergo.md)):
   `ErgoVenue` verifies headers and sections itself; `ErgoPublisher` publishes kinds
   1–3, one remembered transaction per record. Testnet only; nothing persisted.
@@ -90,7 +91,6 @@ reader over §13 answers; the candidate runs only on recomputed reference venue 
   disabled; device qualification and mainnet publication too.
 
 ## Open questions
-
 - None.
 
 Roughly **52% done / 48% remaining**, plausible range **42–62%**, reassessed 2026-09-25

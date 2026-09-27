@@ -15,7 +15,9 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
+import { copyBytes } from "./bytes.js";
 import { ANCHOR_CONTEXT } from "./ergo-headers.js";
+import type { ErgoPublishingSupplier } from "./ergo-publisher.js";
 import { ERGO_SYNTHETIC_REFERENCE, transactionsRoot, type ErgoProfile, type ErgoTransactionView } from "./ergo-profile.js";
 import type { ErgoSupplier } from "./ergo-supplier.js";
 import type { RecordKind } from "./record-range.js";
@@ -193,5 +195,194 @@ export class BranchSupplier implements ErgoSupplier {
     if (substitute !== undefined) return substitute;
     for (const block of ancestors(this.tip)) if (bytesToHex(block.id) === key) return block.section;
     return undefined;
+  }
+}
+
+let fundingSerial = 0;
+/** A plain box of `tree` as the node serializes it, created by a transaction with id `txId` at output `index`. */
+export function plainBox(tree: Uint8Array, value: bigint, creationHeight: bigint, txId: Uint8Array = sha(`funding-${fundingSerial++}`), index = 0): Uint8Array {
+  return cat(vlq(value), tree, vlq(creationHeight), Uint8Array.of(0, 0), txId, vlq(BigInt(index)));
+}
+
+/**
+ * A node's mempool for the publisher's transactions, written independently of
+ * the publisher: it reads a signed transaction in the publisher's shape
+ * (inputs with a proof and no extension, no data inputs or tokens, outputs
+ * with `Coll[Byte]` registers), and accepts it only where every input is an
+ * unspent box it holds, every proof verifies for that box's key over the
+ * unsigned bytes, and the values balance exactly. Accepted transactions wait
+ * in `pool` for the chain to mine them. This reference supplier supports the
+ * synthetic profile's pay-to-public-key locations and the fee tree; it does
+ * not reproduce full node consensus or relay policy.
+ */
+export class MempoolNode implements ErgoPublishingSupplier {
+  readonly name: string;
+  /** Unspent boxes by id, as bytes. */
+  readonly boxes = new Map<string, Uint8Array>();
+  /** Accepted transactions, oldest first, until taken by `take`. */
+  readonly pool: ErgoTransactionView[] = [];
+  readonly submitted: string[] = [];
+  /** Whether `unspentBoxes` shows the mempool's outputs and hides what it spends; a stale index does neither. */
+  mempoolAware = true;
+  refuse: (id: string) => boolean = () => false;
+  /** Boxes in blocks, which a stale index lists. */
+  readonly confirmed = new Map<string, Uint8Array>();
+  /** Ids of transactions `take` handed to a block. */
+  readonly mined = new Set<string>();
+  private readonly spentInPool = new Set<string>();
+  private readonly createdInPool = new Map<string, Uint8Array>();
+
+  constructor(name: string, private readonly verify: (publicKey: Uint8Array, message: Uint8Array, proof: Uint8Array) => boolean) {
+    this.name = name;
+  }
+
+  fund(box: Uint8Array): Uint8Array {
+    box = copyBytes(box);
+    const id = hash(box);
+    this.confirmed.set(bytesToHex(id), box);
+    this.boxes.set(bytesToHex(id), box);
+    return id;
+  }
+
+  async unspentBoxes(tree: Uint8Array): Promise<readonly Uint8Array[]> {
+    const source = this.mempoolAware ? this.boxes : this.confirmed;
+    return [...source.values()].filter(box => { const read = readBox(box); return read !== undefined && bytesToHex(read.tree) === bytesToHex(tree); }).map(copyBytes);
+  }
+
+  async hasBox(boxId: Uint8Array): Promise<boolean> {
+    return this.boxes.has(bytesToHex(boxId));
+  }
+
+  async hasTransaction(id: Uint8Array): Promise<boolean> {
+    return this.mined.has(bytesToHex(id)) || this.pool.some(t => bytesToHex(hash(t.unsigned)) === bytesToHex(id));
+  }
+
+  async submit(signed: Uint8Array, id: Uint8Array): Promise<void> {
+    signed = copyBytes(signed);
+    id = copyBytes(id);
+    const tx = readSigned(signed);
+    this.submitted.push(bytesToHex(id));
+    if (tx === undefined || bytesToHex(hash(tx.unsigned)) !== bytesToHex(id) || this.refuse(bytesToHex(id))) throw new Error("refused");
+    if (this.mined.has(bytesToHex(id)) || this.pool.some(t => bytesToHex(hash(t.unsigned)) === bytesToHex(id))) return;
+    let total = 0n;
+    const inputs = new Set<string>();
+    for (const [i, input] of tx.inputs.entries()) {
+      const key = bytesToHex(input.boxId);
+      if (inputs.has(key)) throw new Error("an input occurs twice");
+      inputs.add(key);
+      const box = this.boxes.get(bytesToHex(input.boxId)), read = box === undefined ? undefined : readBox(box);
+      if (read === undefined || bytesToHex(read.tree.subarray(0, 3)) !== "0008cd" || !this.verify(read.tree.subarray(3), tx.unsigned, tx.proofs[i]!)) {
+        throw new Error("an input is missing or its proof does not verify");
+      }
+      total += read.value;
+    }
+    if (total !== tx.outputs.reduce((sum, o) => sum + o.value, 0n)) throw new Error("values do not balance");
+    for (const input of tx.inputs) {
+      const key = bytesToHex(input.boxId);
+      this.boxes.delete(key);
+      this.createdInPool.delete(key);
+      this.spentInPool.add(key);
+    }
+    tx.outputs.forEach((output, index) => {
+      const box = cat(output.candidate, id, vlq(BigInt(index)));
+      this.boxes.set(bytesToHex(hash(box)), box);
+      this.createdInPool.set(bytesToHex(hash(box)), box);
+    });
+    this.pool.push(Object.freeze({ unsigned: tx.unsigned, witnessId: hash(cat(...tx.proofs)).subarray(1) }));
+  }
+
+  /** The pool's transactions for the next block; their outputs become confirmed. */
+  take(): ErgoTransactionView[] {
+    for (const id of this.spentInPool) this.confirmed.delete(id);
+    for (const [id, box] of this.createdInPool) this.confirmed.set(id, box);
+    this.createdInPool.clear();
+    this.spentInPool.clear();
+    for (const t of this.pool) this.mined.add(bytesToHex(hash(t.unsigned)));
+    return this.pool.splice(0);
+  }
+}
+
+/** A box's value and pay-to-public-key tree, for synthetic funding and change. */
+function readBox(box: Uint8Array): { value: bigint; tree: Uint8Array } | undefined {
+  const cursor = { at: 0 };
+  const value = readVlq(box, cursor);
+  if (value === undefined) return undefined;
+  if (cursor.at + 36 <= box.length && box[cursor.at] === 0x00 && box[cursor.at + 1] === 0x08 && box[cursor.at + 2] === 0xcd) {
+    return { value, tree: box.subarray(cursor.at, cursor.at + 36) };
+  }
+  return undefined;
+}
+function readVlq(bytes: Uint8Array, cursor: { at: number }): bigint | undefined {
+  let value = 0n;
+  for (let shift = 0n; cursor.at < bytes.length && shift < 70n; shift += 7n) {
+    const byte = bytes[cursor.at++]!;
+    value |= BigInt(byte & 0x7f) << shift;
+    if ((byte & 0x80) === 0) return (shift > 0n && byte === 0) || value > 0xffff_ffff_ffff_ffffn ? undefined : value;
+  }
+  return undefined;
+}
+/** A signed transaction in the publisher's shape, split into its parts. */
+function readSigned(signed: Uint8Array): {
+  unsigned: Uint8Array; proofs: Uint8Array[]; inputs: { boxId: Uint8Array }[]; outputs: { value: bigint; candidate: Uint8Array }[];
+} | undefined {
+  const cursor = { at: 0 }, parts: Uint8Array[] = [], proofs: Uint8Array[] = [], inputs: { boxId: Uint8Array }[] = [];
+  const count = readVlq(signed, cursor);
+  if (count === undefined || count === 0n || count > 65535n) return undefined;
+  parts.push(vlq(count));
+  for (let i = 0n; i < count; i++) {
+    if (cursor.at + 32 > signed.length) return undefined;
+    const boxId = signed.subarray(cursor.at, cursor.at + 32);
+    cursor.at += 32;
+    const length = readVlq(signed, cursor);
+    if (length === undefined || length > 65535n || length > BigInt(signed.length - cursor.at)) return undefined;
+    proofs.push(signed.subarray(cursor.at, cursor.at + Number(length)));
+    cursor.at += Number(length);
+    if (signed[cursor.at++] !== 0) return undefined;
+    inputs.push({ boxId });
+    parts.push(boxId, Uint8Array.of(0, 0));
+  }
+  const bodyStart = cursor.at;
+  if (readVlq(signed, cursor) !== 0n || readVlq(signed, cursor) !== 0n) return undefined;
+  const outputCount = readVlq(signed, cursor);
+  if (outputCount === undefined || outputCount === 0n || outputCount > 65535n) return undefined;
+  const outputs: { value: bigint; candidate: Uint8Array }[] = [];
+  for (let i = 0n; i < outputCount; i++) {
+    const start = cursor.at, value = readVlq(signed, cursor);
+    if (value === undefined) return undefined;
+    const tree = signed[cursor.at] === 0x00 ? 36 : signed[cursor.at] === 0x10 ? 105 : -1;
+    if (tree < 0 || cursor.at + tree > signed.length) return undefined;
+    cursor.at += tree;
+    const height = readVlq(signed, cursor);
+    if (height === undefined || height > 0xffff_ffffn || signed[cursor.at++] !== 0) return undefined;
+    const registers = signed[cursor.at++]!;
+    if (registers === undefined || registers > 6) return undefined;
+    for (let r = 0; r < registers; r++) {
+      if (signed[cursor.at++] !== 0x0e) return undefined;
+      const length = readVlq(signed, cursor);
+      if (length === undefined || length > 65535n || length > BigInt(signed.length - cursor.at)) return undefined;
+      cursor.at += Number(length);
+    }
+    outputs.push({ value, candidate: signed.subarray(start, cursor.at) });
+  }
+  if (cursor.at !== signed.length) return undefined;
+  return { unsigned: cat(...parts, signed.subarray(bodyStart)), proofs, inputs, outputs };
+}
+
+/** A mining supplier for synthetic journal drills. Transactions must first
+ * pass the mempool's proof and value checks; only mine() puts them into
+ * header-authenticated sections, and readers still apply their depth. */
+export class MiningSupplier extends BranchSupplier {
+  readonly mempool: MempoolNode;
+  private readonly miningChain: Chain;
+
+  constructor(name: string, chain: Chain, verify: (publicKey: Uint8Array, message: Uint8Array, proof: Uint8Array) => boolean) {
+    super(name, chain.anchor, chain);
+    this.miningChain = chain;
+    this.mempool = new MempoolNode(`${name} mempool`, verify);
+  }
+
+  mine(count = 1): void {
+    if (!Number.isSafeInteger(count) || count < 0) throw new TypeError("invalid synthetic block count");
+    for (let i = 0; i < count; i++) this.tip = this.miningChain.mine(this.tip, this.mempool.take());
   }
 }

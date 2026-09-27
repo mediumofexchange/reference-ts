@@ -17,12 +17,13 @@ import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
 import { LIMITS } from "../delivery/evidence-reader.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { recordReader, replayLocalPackage, replayEvidencePackage, PACKAGE_LIMITS, RANGE_LIMITS } from "./local-replay.mjs";
-import { FixtureVenue } from "../../../dist/record-venue.js";
+import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity } from "../../../dist/record-venue.js";
+import { ERGO_SYNTHETIC_REFERENCE } from "../../../dist/ergo-profile.js";
 import { checkImports } from "./import-check.mjs";
 import { checkScopes } from "./scope-check.mjs";
 import { checkScopeRecovery } from "./scope-recovery-check.mjs";
 import { checkRecovery } from "./recovery-check.mjs";
-import { checkErgoReplay, ERGO_VENUE, replayPairs, underErgo } from "./ergo-check.mjs";
+import { checkErgoReplay, ERGO_PROFILE, ERGO_VENUE, replayPairs, underErgo } from "./ergo-check.mjs";
 import { field } from "../fixtures.mjs";
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration,
   readCandidateKeys } from "./candidate.mjs";
@@ -73,12 +74,14 @@ try {
   const verifierBackend = new UltraHonkVerifierBackend(api);
   // The harness selects the range verifier: a fixture venue rebuilt from the
   // fixture's own witnessed records (pool-v3 §13.2), never from the package.
-  const verifier = { configuration, verify: (kind, publicInputs, proof) => verifierBackend.verifyProof({
+  const reference = withErgo ? { context: ERGO_SYNTHETIC_REFERENCE, profile: ERGO_PROFILE }
+    : { context: LOCAL_REFERENCE, label: b(12), lag: 2n };
+  const verifier = { configuration, reference, verify: (kind, publicInputs, proof) => verifierBackend.verifyProof({
     proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
   }, options), record: data => recordReader(FixtureVenue.from(data), "fixture-verifier") };
   // Under --ergo every fixture names the synthetic chain's venue identity, so any group can be replayed through ErgoVenue.
   const domain = codec.configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16);
-  const venue = withErgo ? ERGO_VENUE : b(12);
+  const venue = withErgo ? ERGO_VENUE : localVenueIdentity(reference.label, reference.lag);
   const payerSeed = b(21), receiverSeed = b(22), issuerKey = ed25519.getPublicKey(issuerSecret);
   const operator = ed25519.getPublicKey(operatorSecret);
   const termsFields = { obligor: issuerKey, payout: { thing: "test units", quantumExponent: 0, perUnit: 1n },
@@ -264,6 +267,22 @@ try {
     assert.equal(result.audit, null); assert.deepEqual(result.candidates, []);
   }
   let receiver, audit;
+  await test("the reader requires reference provenance before proof replay, including without venue evidence", async () => {
+    const noProof = { ...verifier, verify() { throw new Error("candidate guard ran after proof replay"); } };
+    const { venue: _unused, ...trailOnly } = complete;
+    const deployment = { ...ERGO_PROFILE }; delete deployment.reference;
+    for (const reference of [undefined, { context: LOCAL_REFERENCE, label: b(13), lag: 2n },
+      { context: LOCAL_REFERENCE, label: b(12), lag: 3n }, { context: "moe/venue/ergo-testnet/reference" },
+      { context: ERGO_SYNTHETIC_REFERENCE, profile: deployment }]) {
+      for (const input of [complete, trailOnly]) {
+        const result = await replayLocalPackage(input, { ...noProof, reference }, codec);
+        assert.equal(result.status, "invalid-local-replay"); assert.equal(result.check, "VENUE_REFERENCE");
+        assert.equal(result.audit, null); assert.deepEqual(result.candidates, []);
+      }
+    }
+    const selected = { ...complete, selection: { ...complete.selection, venue: b(12) } };
+    assert.equal((await replayLocalPackage(selected, noProof, codec)).check, "VENUE_REFERENCE");
+  });
   await test("all six candidate sources, bytecodes and retained keys match independent pins", () => {
     for (const [kind, name] of RELATION_KINDS) {
       const bad = clone(manifest); bad.sources[`${name}.nr`] = "00".repeat(32);
@@ -710,7 +729,7 @@ try {
   });
   await test("record ranges are the verifier's own: another venue, an unwitnessed index, a stale answer or an unheld selection cannot certify", async () => {
     const elsewhere = clone(complete); elsewhere.venue.id = b(13);
-    assert.equal((await replayLocalPackage(elsewhere, verifier, codec)).status, "unresolved-evidence");
+    assert.equal((await replayLocalPackage(elsewhere, verifier, codec)).check, "VENUE_REFERENCE");
     const future = clone(complete); future.selection.judgingIndex = 21n;
     assert.equal((await replayLocalPackage(future, verifier, codec)).status, "unresolved-evidence");
     const notNow = clone(complete); notNow.selection.judgingIndex = 15n;
@@ -731,7 +750,7 @@ try {
       return { ...own, range: request => own.range({ ...request, toIndex: request.toIndex - 1n }) };
     } };
     assert.equal((await replayLocalPackage(complete, stale, codec)).status, "unresolved-evidence");
-    const silent = { ...verifier, record: () => ({ range: () => undefined, witnessedIndex: () => 20n, lag: () => 2n }) };
+    const silent = { ...verifier, record: () => ({ id: venue, range: () => undefined, witnessedIndex: () => 20n, lag: () => 2n }) };
     assert.equal((await replayLocalPackage(complete, silent, codec)).status, "unresolved-evidence");
     // A flood at the operator's location beyond the reader's entry budget is a resource refusal, never a verdict.
     const flooded = clone(complete), junk = new Uint8Array(136).fill(7);
@@ -740,7 +759,7 @@ try {
     assert.equal(refusal.status, "resource-refusal"); assert.equal(refusal.audit, null);
     assert.equal((await replayLocalPackage(complete, { configuration, verify: verifier.verify }, codec)).status, "unresolved-evidence");
     const failure = new Error("range service unavailable");
-    await assert.rejects(replayLocalPackage(complete, { ...verifier, record: () => ({ range() { throw failure; }, witnessedIndex: () => 20n, lag: () => 2n }) }, codec), error => error === failure);
+    await assert.rejects(replayLocalPackage(complete, { ...verifier, record: () => ({ id: venue, range() { throw failure; }, witnessedIndex: () => 20n, lag: () => 2n }) }, codec), error => error === failure);
     const { venue: omitted, ...withoutVenue } = complete;
     assert.equal(omitted.records.length, 4);
     const plain = await replayLocalPackage(withoutVenue, verifier, codec);

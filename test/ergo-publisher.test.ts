@@ -5,6 +5,9 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeBacking, signBacking } from "../src/backing.js";
+import { EncodingError } from "../src/bytes.js";
+import { decodeRangeAnswer, type RecordKind } from "../src/record-range.js";
+import type { RecordPublisher } from "../src/record-venue.js";
 import type { SignedBacking } from "../src/pool/segment.js";
 import { encodeCommitment, signCommitment, type Commitment } from "../src/commitment.js";
 import { ErgoVenue } from "../src/ergo.js";
@@ -17,7 +20,7 @@ import { operatorAt, replacementMessage, ROLE_OPERATOR, type Replacement } from 
 import { signRevocation } from "../src/revocation.js";
 import { VenueError } from "../src/venue.js";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { BranchSupplier, Chain, hex, MempoolNode, plainBox, SCRIPTS, type Block } from "./ergo-chain.js";
+import { BranchSupplier, Chain, hex, MiningSupplier, MempoolNode, plainBox, SCRIPTS, type Block } from "./ergo-chain.js";
 import { CONFIG, DOMAIN, Oracle } from "./pool-support.js";
 import { KEYS, SECRETS } from "./support.js";
 
@@ -357,6 +360,67 @@ const commitmentOf = (sequence: bigint, fill: number): Commitment =>
   signCommitment(SECRETS.operator, sequence, new Uint8Array(32).fill(fill));
 
 describe("the view publishes through its wallet and holds only what it reads", () => {
+  it("carries raw kinds 1–3 through the mining supplier, owns their bytes and waits for finality", async () => {
+    const supplier = new MiningSupplier("journal", chain, verifyErgoProof);
+    supplier.mempool.fund(plainBox(TREE, 100_000_000n, chain.anchor.height));
+    const p = publisher([supplier.mempool]);
+    const v = new ErgoVenue(PROFILE, chain.context, {}, p);
+    const records: RecordPublisher = v;
+    supplier.mine(Number(DEPTH) + 1);
+    await v.sync([supplier]);
+    const including = v.witnessedIndex() + v.lag();
+    const lengths = [136, 233, 96];
+    const limits = { maxEntries: 10n, maxBytes: 4096n };
+    for (const kind of [1, 2, 3] as const) {
+      const subject = SUBJECT.slice(), record = new Uint8Array(lengths[kind - 1]!).fill(kind);
+      const pending = records.publishRecord(kind, subject, record);
+      subject.fill(0); record.fill(0);
+      await pending;
+      await records.publishRecord(kind, SUBJECT, new Uint8Array(lengths[kind - 1]!).fill(kind));
+    }
+    expect(supplier.mempool.pool).toHaveLength(3);
+    expect(new Set(supplier.mempool.submitted).size).toBe(3);
+    const read = (venue: ErgoVenue, kind: RecordKind) => {
+      const request = { venue: venue.id, kind, subject: SUBJECT, fromIndex: 0n, toIndex: venue.witnessedIndex() };
+      return decodeRangeAnswer(venue.range(request, limits)!, request, limits).entries;
+    };
+    supplier.mine(Number(DEPTH));
+    await v.sync([supplier]);
+    expect(read(v, 1)).toEqual([]);
+    supplier.mine();
+    await v.sync([supplier]);
+    const fresh = new ErgoVenue(PROFILE, chain.context);
+    await fresh.sync([supplier]);
+    for (const kind of [1, 2, 3] as const) {
+      expect(read(fresh, kind)).toEqual([{ index: including, ordinal: 0n, record: new Uint8Array(lengths[kind - 1]!).fill(kind) }]);
+      await records.publishRecord(kind, SUBJECT, new Uint8Array(lengths[kind - 1]!).fill(kind));
+    }
+    expect(supplier.mempool.pool).toHaveLength(0);
+    // A parent change spent by another transaction in this block cannot reappear in the index.
+    supplier.mempool.mempoolAware = false;
+    const unspent = await supplier.mempool.unspentBoxes(TREE);
+    expect(unspent).toHaveLength(1);
+    expect(await supplier.mempool.hasBox(hash(unspent[0]!))).toBe(true);
+  });
+
+  it("refuses unsupported publication kinds and malformed raw records before submitting", async () => {
+    const network = new Network();
+    network.mine(5);
+    const v = await view(network);
+    expect(() => v.publishRecord(4, SUBJECT, RECORD)).toThrow(/does not support kind-4/);
+    expect(() => v.publishRecord(0 as RecordKind, SUBJECT, RECORD)).toThrow(EncodingError);
+    expect(() => v.publishRecord(1, new Uint8Array(31), RECORD)).toThrow(/record length/);
+    for (const [kind, length] of [[1, 136], [2, 233], [3, 96]] as const) {
+      expect(() => v.publishRecord(kind, SUBJECT, new Uint8Array(length - 1))).toThrow(/record length/);
+      expect(() => v.publishRecord(kind, SUBJECT, new Uint8Array(length + 1))).toThrow(/record length/);
+    }
+    expect(() => v.publishRecord(1, SUBJECT, new Uint8Array(new SharedArrayBuffer(136)))).toThrow(/shared byte array/);
+    expect(() => v.publishRecord(1, SUBJECT, Object.create(Uint8Array.prototype) as Uint8Array)).toThrow(/not a byte array/);
+    expect(network.node.submitted).toEqual([]);
+    const readOnly = await view(network, false);
+    expect(() => readOnly.publishRecord(1, SUBJECT, RECORD)).toThrow(/no publisher/);
+  });
+
   it("publishes a commitment, a replacement and a revocation, each held once its block is final", async () => {
     const network = new Network();
     network.mine(Number(DEPTH) + 2);

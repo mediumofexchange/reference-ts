@@ -180,6 +180,33 @@ paths, durable invoice restoration and network retention remain dependencies
 for the end-to-end restoration target. No v2 bytes, circuits, keys or runtime
 APIs change, and no v3 configuration is adopted.
 
+### Reference operator journal
+
+`npm run check:pool:v3-store` exercises the candidate runtime's operator
+journal and prover on the local reference venue. Add `-- --ergo` for the
+synthetic Ergo reference chain: the journal publishes through `ErgoVenue`'s
+`RecordPublisher` interface and the actual `ErgoPublisher`, with invented
+funding in a synthetic mempool. Explicit mining and synchronization separate
+transaction acceptance from witnessing. Raw Ergo publication supports record
+kinds 1–3; kind-4 publication runs remain outside this slice.
+
+The acceptance flow issues to a holder's request, pays with a fee and change,
+then burns. Holders restore their input notes through the reader. A fresh
+seedless process checks public supply from the served package and venue
+evidence, and a fresh holder process restores the same remaining note. Under
+`--ergo` the evidence contains blocks, while the reader holds its witnessed
+block pin separately beside the candidate keys; wrong pins and withheld
+sections refuse. Journal and reader entries recompute the reference identity
+from the caller's preimage. The [retained report](pool-v3-store-verification.json)
+owns the source hashes, outcomes and measurements.
+
+This covers one genesis segment of one backing and real proofs on reference
+venues. It provides no live-chain finality, adopted configuration, wallet
+custody, recovery admission, imports or replacement service. The synthetic
+chain's difficulty permits anyone to re-mine it, so its independent pin remains
+an explicit trust input. Restart replay does not establish publisher or venue
+persistence across a process restart.
+
 ### Conditional initial-segment replay
 
 `npm run check:pool:local-replay` runs real successor issue, spend and burn
