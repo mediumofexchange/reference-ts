@@ -6,8 +6,8 @@
 // commitments over v3 directories and snapshots (§7), publishes them through
 // the record venue from an outbox, and serves §12 packages a reader verifies
 // alone. A witnessed silence boundary permits an empty return opening, then
-// exact adoption through its witnessed index before service. Replacement and
-// several backings remain later slices; reopening replays the journal commands.
+// exact adoption through its witnessed index before service. Replacement imports
+// the record-derived frontier; reopening replays the journal commands.
 //
 // Candidate only: the configuration comes from the caller's manifest check
 // and the venue must be a reference venue (guard.ts). Time is the venue's
@@ -31,9 +31,9 @@ import { encodeReceipt, receiptBytes, snapshotBytes, snapshotDigest, type Snapsh
 import { configurationBytes, configurationHash, decodeConfiguration, type CandidateConfiguration } from "./configuration.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "./headers.js";
-import { encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem, type PackageLimits } from "./package.js";
+import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem, type PackageLimits } from "./package.js";
 import { RANGE_LIMITS, TRAIL_LIMITS, type SignedTerms } from "./reader.js";
-import { readSingleBackingPackage } from "./package-reader.js";
+import { readSingleBackingFrontier, readSingleBackingPackage } from "./package-reader.js";
 import { IMPORT_LIMITS, type ImportResult } from "./import-reader.js";
 import { decodeRecord, encodeRecord, evidenceHashes, statementHash } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
@@ -58,8 +58,8 @@ export class V3StoreError extends Error {
     super(message); this.name = "V3StoreError";
   }
 }
-function requireThat(ok: boolean, code: V3StoreError["code"], message: string): asserts ok {
-  if (!ok) throw new V3StoreError(code, message);
+function requireThat(ok: boolean, code: V3StoreError["code"], message: string, check?: string): asserts ok {
+  if (!ok) throw new V3StoreError(code, message, check);
 }
 function decimal(value: unknown): bigint {
   requireThat(typeof value === "string" && /^(0|[1-9][0-9]*)$/.test(value), "STORAGE", "invalid stored counter");
@@ -68,6 +68,7 @@ function decimal(value: unknown): bigint {
 
 type Command =
   | { kind: "open"; terms: string; signature: string; at: string; observed: string | null }
+  | { kind: "takeover"; terms: string; signature: string; evidence: string; at: string; observed: string | null }
   | { kind: "commit"; at: string; observed: string | null }
   | { kind: "admit"; record: string; horizon: string }
   | { kind: "return"; at: string; observed: string | null }
@@ -76,6 +77,7 @@ type Command =
 function commandText(c: Command): string {
   switch (c?.kind) {
     case "open": return JSON.stringify({ kind: c.kind, terms: c.terms, signature: c.signature, at: c.at, observed: c.observed });
+    case "takeover": return JSON.stringify({ kind: c.kind, terms: c.terms, signature: c.signature, evidence: c.evidence, at: c.at, observed: c.observed });
     case "commit": return JSON.stringify({ kind: c.kind, at: c.at, observed: c.observed });
     case "admit": return JSON.stringify({ kind: c.kind, record: c.record, horizon: c.horizon });
     case "return": return JSON.stringify({ kind: c.kind, at: c.at, observed: c.observed });
@@ -85,7 +87,7 @@ function commandText(c: Command): string {
   }
 }
 
-/** The one genesis segment: its header, scope and signed terms. */
+/** The active segment: its header, scope and signed terms. */
 interface Opened {
   readonly header: SegmentHeader;
   readonly headerBytes: Uint8Array;
@@ -115,6 +117,8 @@ interface Engine {
   /** The last admission's horizon; horizons never move back. */
   horizon: bigint;
   readonly archives: { readonly opened: Opened; readonly records: readonly Uint8Array[] }[];
+  /** Public imported dependencies, never this key's signing history. */
+  readonly evidence: EvidenceItem[];
   pendingReturn: boolean;
 }
 type StateRead = Extract<ImportResult, { readonly state: object }>;
@@ -278,7 +282,7 @@ export class V3OperatorJournal {
       return q.all();
     });
     const engine: Engine = { revision: 0n, opened: undefined, state: undefined, records: [], receipts: new Map(), signed: [], horizon: 0n,
-      archives: [], pendingReturn: false };
+      archives: [], evidence: [], pendingReturn: false };
     for (const row of rows) {
       requireThat(row.seq === engine.revision + 1n && typeof row.command === "string" && typeof row.response === "string" &&
         typeof row.id === "string" && typeof row.request === "string", "STORAGE", "invalid journal row");
@@ -309,6 +313,13 @@ export class V3OperatorJournal {
       engine.opened = opened;
       engine.state = openSegmentState(opened.segment, undefined, undefined, undefined, () => {});
       this.replaySigned(engine, command, at(command.at), response);
+    } else if (command.kind === "takeover") {
+      const signed = { terms: hexToBytes(command.terms), signature: hexToBytes(command.signature) }, evidence = hexToBytes(command.evidence);
+      requireThat(/^command:/.test(id) && request === this.takeoverRequest(command.terms, command.signature, command.evidence),
+        "STORAGE", "stored takeover disagrees with replay");
+      const index = at(command.at);
+      await this.prepareTakeover(engine, signed, evidence, index);
+      this.replaySigned(engine, command, index, response);
     } else if (command.kind === "commit") {
       requireThat(engine.opened !== undefined && /^command:/.test(id) && request === "commit", "STORAGE", "stored commitment disagrees with replay");
       this.replaySigned(engine, command, at(command.at), response);
@@ -361,20 +372,89 @@ export class V3OperatorJournal {
   private openRequest(terms: string, signature: string): string {
     return JSON.stringify({ kind: "open", terms, signature });
   }
-  /** The genesis segment of the backing `signed` names, served by this key on this venue (C2.4.1, pool-v3 §8). */
-  private opening(signed: SignedTerms): Opened {
+  private takeoverRequest(terms: string, signature: string, evidence: string): string {
+    return JSON.stringify({ kind: "takeover", terms, signature, evidence });
+  }
+  private signedTerms(signed: SignedTerms): RootTerms {
     let terms: RootTerms;
     try { terms = decodeRootTerms(signed.terms); } catch (error) {
       if (error instanceof EncodingError) throw new V3StoreError("REFUSED", "the terms do not decode", "TERMS");
       throw error;
     }
     requireThat(verifyRootTermsSignature(signed.terms, signed.signature), "REFUSED", "the backer's signature does not verify");
+    requireThat(same(terms.configuration, this.domain) && same(terms.venue, this.venueId), "REFUSED", "the terms name another configuration or venue");
+    return terms;
+  }
+  /** The genesis segment of the backing `signed` names, served by this key on this venue (C2.4.1, pool-v3 §8). */
+  private opening(signed: SignedTerms): Opened {
+    const terms = this.signedTerms(signed);
     requireThat(same(terms.operator, this.operator) && same(terms.configuration, this.domain) && same(terms.venue, this.venueId),
       "REFUSED", "the terms name another operator, configuration or venue");
     const backing = rootTermsName(signed.terms);
     const header: SegmentHeader = { domain: this.domain, venue: this.venueId, operator: this.operator, sequence: 1n, entries: [{ backing, link: backing }] };
     return { header, headerBytes: segmentBytes(header), segment: segmentIdentity(header), scope: new ScopeTree(header.entries).root(), backing,
       terms, signed: { terms: copyBytes(signed.terms), signature: copyBytes(signed.signature) } };
+  }
+  /** Derive authority from the original signed terms and the exact chain link. */
+  private successor(engine: Engine, signed: SignedTerms, at: bigint): Opened {
+    const terms = this.signedTerms(signed), backing = rootTermsName(signed.terms);
+    const admitted = admittedReplacements(this.ask(2, backing, at), terms.replacementRule);
+    const { chain } = replacementChain(admitted, { backing, original: terms.operator, lag: this.lag, now: at });
+    const current = chain.at(-1)!;
+    requireThat(chain.length > 1 && same(current.operator, this.operator), "STALE", "this key has no current successor term");
+    const old = engine.opened;
+    if (old !== undefined) {
+      requireThat(same(old.backing, backing), "UNSUPPORTED", "the journal serves one backing");
+      const previous = chain.findIndex(link => same(link.link, old.header.entries[0]!.link));
+      requireThat(previous >= 0 && previous < chain.length - 1, "STALE", "the active segment's term has not ended");
+    }
+    const sequence = (engine.signed.at(-1)?.commitment.sequence ?? 0n) + 1n;
+    requireThat(sequence < U64, "STORAGE", "signed sequence counter exhausted");
+    const header: SegmentHeader = { domain: this.domain, venue: this.venueId, operator: this.operator, sequence,
+      entries: [{ backing, link: current.link }] };
+    return { header, headerBytes: segmentBytes(header), segment: segmentIdentity(header), scope: new ScopeTree(header.entries).root(), backing,
+      terms, signed: { terms: copyBytes(signed.terms), signature: copyBytes(signed.signature) } };
+  }
+  /** Reuse the public reader's complete descent, including proof of an empty
+   * book. No asserted state, selected predecessor or imported signing counter. */
+  private async prepareTakeover(engine: Engine, signed: SignedTerms, evidence: Uint8Array, at: bigint): Promise<void> {
+    const target = this.successor(engine, signed, at);
+    let source;
+    try {
+      source = await readSingleBackingFrontier(evidence, signed, at,
+        { configuration: this.configuration, verifier: this.verifier, venue: this.venue, reference: this.reference });
+    } catch (error) {
+      if ((error instanceof EvidenceRefusal && error.status === "resource-refusal") || error instanceof PackageLimitError) {
+        throw new V3StoreError("REFUSED", "takeover evidence exceeds the reader's budget", "RESOURCE");
+      }
+      if (error instanceof EvidenceRefusal || error instanceof ReplayRefusal || error instanceof EncodingError) {
+        throw new V3StoreError("UNAVAILABLE", "the public evidence does not establish the takeover state");
+      }
+      throw error;
+    }
+    const current = source.ranges.chain.at(-1)!;
+    requireThat(same(current.link, target.header.entries[0]!.link), "STALE", "the replacement chain changed during takeover");
+    const canonical = source.canonical;
+    requireThat(canonical === undefined || canonical.index < current.from, "STALE", "the current successor term already has a carrying checkpoint");
+    const work = source.work;
+    this.reserveReadCheckpoints(engine, heldCommitments(this.ask(1, this.operator, at)).held, work.checkpoints, 2n);
+    requireThat(work.events - work.requestProofs + work.requestProofReserve + BigInt(canonical?.state.events.size ?? 0) <= IMPORT_LIMITS.maxEvents,
+    "REFUSED", "takeover leaves no reader budget for service", "RESOURCE");
+    const header: SegmentHeader = { ...target.header, entries: [{ backing: target.backing, link: current.link,
+      ...(canonical === undefined ? {} : { opening: { operator: copyBytes(canonical.commitment.operator),
+        sequence: canonical.commitment.sequence, root: copyBytes(canonical.commitment.root) } }) }] };
+    const opened: Opened = { ...target, header, headerBytes: segmentBytes(header), segment: segmentIdentity(header), scope: new ScopeTree(header.entries).root() };
+    this.diverging = true;
+    if (engine.opened !== undefined) engine.archives.push({ opened: engine.opened, records: [...engine.records] });
+    const retained = new Map(engine.evidence.map(item => [`${item.kind}:${bytesToHex(sha256(item.payload))}`, item]));
+    for (const item of decodeEvidencePackage(evidence, SERVED_PACKAGE_LIMITS)) {
+      if ([3, 4, 6].includes(item.kind)) retained.set(`${item.kind}:${bytesToHex(sha256(item.payload))}`, item);
+    }
+    engine.evidence.splice(0, engine.evidence.length, ...retained.values());
+    engine.records.splice(0);
+    engine.opened = opened;
+    engine.state = openSegmentState(opened.segment, undefined, canonical?.state, undefined, () => {});
+    engine.pendingReturn = true;
   }
   private replayOf(opened: Opened, horizon: bigint, revokedAt: bigint | undefined): SegmentReplay {
     return { domain: this.domain, backing: opened.backing, segment: opened.segment, scope: opened.scope, terms: opened.terms,
@@ -425,16 +505,27 @@ export class V3OperatorJournal {
       return same(c.operator, this.operator) && verifyCommitment(c);
     });
     let boundaries: bigint[] = [], revokedAt: bigint | undefined;
+    const evidence: string[] = [];
+    const bind = (answer: RangeAnswer): void => {
+      evidence.push(JSON.stringify(answer.entries.map(e => [e.index.toString(), e.ordinal.toString(), bytesToHex(sha256(e.record))])));
+    };
+    bind(answer);
     const opened = engine.opened;
     if (opened !== undefined) {
-      // The original operator's term ends where a replacement takes force (C2.5); its revocation ends issuance (C2b.1).
-      const admitted = admittedReplacements(this.ask(2, opened.backing, now), opened.terms.replacementRule);
-      const { chain, pending } = replacementChain(admitted, { backing: opened.backing, original: this.operator, lag: this.lag, now });
-      const end = chain[1]?.from ?? pending?.from;
+      const replacements = this.ask(2, opened.backing, now); bind(replacements);
+      const admitted = admittedReplacements(replacements, opened.terms.replacementRule);
+      const { chain, pending } = replacementChain(admitted, { backing: opened.backing, original: opened.terms.operator, lag: this.lag, now });
+      const term = chain.findIndex(link => same(link.link, opened.header.entries[0]!.link) && same(link.operator, this.operator));
+      requireThat(term >= 0, "STALE", "the segment's term is not in the witnessed chain");
+      const end = chain[term + 1]?.from ?? pending?.from;
       boundaries = end === undefined ? [] : [end];
-      revokedAt = revocationIndex(this.ask(3, opened.terms.obligor, now));
+      const revocations = this.ask(3, opened.terms.obligor, now); bind(revocations);
+      revokedAt = revocationIndex(revocations);
+      const operators = new Map(chain.map(link => [bytesToHex(link.operator), link.operator]));
+      for (const operator of operators.values()) if (!same(operator, this.operator)) bind(this.ask(1, operator, now));
+      if (opened.terms.silence !== undefined || opened.terms.nonService !== undefined) bind(this.ask(4, opened.backing, now));
     }
-    const key = JSON.stringify([now.toString(), held.map(h => [h.index.toString(), hexOf(h.commitment)]), conflict, boundaries.map(String), revokedAt?.toString() ?? null]);
+    const key = JSON.stringify([now.toString(), evidence, conflict, boundaries.map(String), revokedAt?.toString() ?? null]);
     return { now, lag: this.lag, held, conflict, boundaries, revokedAt, key };
   }
   private exclusive(view: View): void {
@@ -444,6 +535,12 @@ export class V3OperatorJournal {
     const current = this.view(engine);
     this.exclusive(current);
     requireThat(current.key === view.key, "STALE", "the venue changed during the journal operation");
+  }
+  private signingSchedule(view: View, admission = false): void {
+    const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries: view.boundaries,
+      ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
+    requireThat(!schedule.lapsed, "STALE", "the operator's term has ended");
+    requireThat(admission ? schedule.admissionOpen : schedule.commitNow, "SCHEDULE", "the scope's signing schedule is closed");
   }
   private isHeld(view: View, signed: Signed): boolean {
     const held = view.held.find(h => h.commitment.sequence === signed.commitment.sequence);
@@ -461,9 +558,10 @@ export class V3OperatorJournal {
       ...(this.isHeld(view, last) ? {} : { unwitnessedSignedAt: last.at }), ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
     requireThat(!schedule.lapsed, "STALE", "the operator's term has ended");
     requireThat(action === "admit" ? schedule.admissionOpen : schedule.commitNow, "SCHEDULE", "the scope's signing schedule is closed");
-    if (engine.opened.terms.silence !== undefined || engine.opened.terms.nonService !== undefined) {
+    if (engine.evidence.length > 0 || engine.opened.terms.silence !== undefined || engine.opened.terms.nonService !== undefined) {
       const source = await this.currentRead(engine, view.now);
       this.serviceClock(source, view.now);
+      this.reserveReadCheckpoints(engine, view.held, source.work.checkpoints);
       this.reserveEvents(engine, source, action === "admit" ? 1n : 0n);
     }
     if (view.revokedAt !== undefined) {
@@ -487,7 +585,7 @@ export class V3OperatorJournal {
     for (const candidate of [...engine.signed].reverse()) {
       if (!held.some(h => hexOf(h.commitment) === hexOf(candidate.commitment))) continue;
       const c = candidate.commitment;
-      const bytes = this.encodePackage(opened, engine.signed, c, engine.records, engine.archives);
+      const bytes = this.encodePackage(opened, engine.signed, c, engine.records, engine.archives, engine.evidence);
       try {
         const result = await readSingleBackingPackage(bytes, { mode: "historical-fixture", domain: this.domain, venue: this.venueId,
           backing: opened.backing, operator: this.operator, sequence: c.sequence, root: c.root, judgingIndex: at },
@@ -518,6 +616,13 @@ export class V3OperatorJournal {
     if (BigInt(engine.signed.length) + count > IMPORT_LIMITS.maxCheckpoints) {
       throw new V3StoreError("REFUSED", "the next checkpoint exceeds the reader's work budget", "RESOURCE");
     }
+  }
+  /** Held public ancestry plus every own unheld signing that can still land,
+   * and the checkpoint(s) needed to finalize the proposed work. */
+  private reserveReadCheckpoints(engine: Engine, held: readonly HeldCommitment[], checkpoints: bigint, count = 1n): void {
+    const known = new Set(held.map(h => hexOf(h.commitment)));
+    const unheld = BigInt(engine.signed.filter(signed => !known.has(hexOf(signed.commitment))).length);
+    requireThat(checkpoints + unheld + count <= IMPORT_LIMITS.maxCheckpoints, "REFUSED", "the next checkpoint exceeds the reader's work budget", "RESOURCE");
   }
 
   /** Known record-prefix work for the next continuation. A first continuation
@@ -596,6 +701,7 @@ export class V3OperatorJournal {
         ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
       requireThat(!schedule.lapsed && schedule.commitNow, "SCHEDULE", "return signing is outside the operator's term");
       const source = await this.currentRead(engine, view.now);
+      this.reserveReadCheckpoints(engine, view.held, source.work.checkpoints, 2n);
       if (this.reservedEventWork(source) + BigInt(source.state.events.size) > IMPORT_LIMITS.maxEvents) {
         throw new V3StoreError("REFUSED", "the return exceeds the reader's ancestry budget", "RESOURCE");
       }
@@ -603,7 +709,7 @@ export class V3OperatorJournal {
       this.prepareReturn(engine, source, view.now);
       const opened = engine.opened!, { directory, snapshot } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
       const previous = engine.signed.at(-1)!.commitment;
-      this.encodePackage(opened, [...engine.signed, { directory, snapshot }], previous, [], engine.archives);
+      this.encodePackage(opened, [...engine.signed, { directory, snapshot }], previous, [], engine.archives, engine.evidence);
       const commitment = this.transaction(() => {
         this.stable(engine, view);
         const c = signCommitment(this.secret, opened.header.sequence, directoryRoot(directory));
@@ -627,19 +733,23 @@ export class V3OperatorJournal {
       requireThat(engine.pendingReturn, "STALE", "the segment is not a pending return");
       const view = this.view(engine), held = view.held.find(h => h.commitment.sequence === opened.header.sequence);
       this.exclusive(view);
+      this.signingSchedule(view, true);
       requireThat(held !== undefined && hexOf(held.commitment) === hexOf(engine.signed.at(-1)!.commitment), "UNAVAILABLE", "the return opening is not witnessed");
       const current = await this.currentRead(engine, view.now);
       this.serviceClock(current, view.now);
+      this.reserveReadCheckpoints(engine, view.held, current.work.checkpoints);
       const source = await this.currentRead(engine, held.index);
       const block = source.force.filter(event => event.index > source.state.adoptionIndex && event.index <= source.canonical.index);
       this.reserveCheckpoint(engine);
       this.reserveEvents(engine, current, BigInt(block.length));
       const last = engine.signed.at(-1)!;
       this.encodePackage(opened, [...engine.signed, { directory: [{ name: opened.backing, digest: new Uint8Array(32) }],
-        snapshot: new Uint8Array(last.snapshot.length) }], held.commitment, [...engine.records, ...block.map(event => event.bytes)], engine.archives);
+        snapshot: new Uint8Array(last.snapshot.length) }], held.commitment, [...engine.records, ...block.map(event => event.bytes)], engine.archives, engine.evidence);
       this.diverging = true;
-      const receipts = await this.applyAdoption(engine, source, () => this.stable(engine, view)), { directory, snapshot } = this.checkpoint(engine);
-      this.encodePackage(opened, [...engine.signed, { directory, snapshot }], held.commitment, engine.records, engine.archives);
+      const receipts = await this.applyAdoption(engine, source, () => {
+        this.stable(engine, view); this.signingSchedule(view, true);
+      }), { directory, snapshot } = this.checkpoint(engine);
+      this.encodePackage(opened, [...engine.signed, { directory, snapshot }], held.commitment, engine.records, engine.archives, engine.evidence);
       this.transaction(() => {
         this.stable(engine, view);
         this.append(engine, id, "adopt", { kind: "adopt", at: held.index.toString(), opening: opened.header.sequence.toString() }, JSON.stringify(receipts.map(bytesToHex)));
@@ -708,6 +818,38 @@ export class V3OperatorJournal {
     });
   }
 
+  /** C2.7: activate a witnessed successor term from public evidence alone.
+   * The empty opening must be published, witnessed and adopted before service. */
+  async takeover(id: string, signed: SignedTerms, evidence: Uint8Array): Promise<Commitment> {
+    const commandId = this.commandId(id);
+    const own = { terms: copyBytes(signed?.terms), signature: copyBytes(signed?.signature) }, bytes = copyBytes(evidence);
+    const terms = bytesToHex(own.terms), signature = bytesToHex(own.signature), encoded = bytesToHex(bytes);
+    const request = this.takeoverRequest(terms, signature, encoded);
+    return this.run(async engine => {
+      const prior = this.prior(commandId, request);
+      if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
+      const at = this.clock(), target = this.successor(engine, own, at);
+      const view = this.view({ ...engine, opened: target });
+      requireThat(view.now === at, "STALE", "the venue changed during takeover");
+      this.exclusive(view); this.signingSchedule(view);
+      this.reserveCheckpoint(engine, 2n);
+      await this.prepareTakeover(engine, own, bytes, at);
+      const opened = engine.opened!, { directory, snapshot } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
+      // Budget the exact wire shape before signing. Signature bytes have fixed size.
+      const placeholder: Commitment = { operator: this.operator, sequence: opened.header.sequence, root: directoryRoot(directory), signature: new Uint8Array(64) };
+      this.encodePackage(opened, [...engine.signed, { directory, snapshot }], placeholder, [], engine.archives, engine.evidence);
+      const commitment = this.transaction(() => {
+        this.stable(engine, view);
+        const c = signCommitment(this.secret, opened.header.sequence, directoryRoot(directory));
+        this.append(engine, commandId, request, { kind: "takeover", terms, signature, evidence: encoded, at: at.toString(), observed }, bytesToHex(encodeCommitment(c)));
+        return c;
+      });
+      engine.signed.push({ opened, commitment, length: 0n, at, observed, directory, snapshot, published: false });
+      engine.revision++;
+      return copyCommitment(commitment);
+    });
+  }
+
   /**
    * Admit one kind 1–6 record at the horizon (the read index plus the lag)
    * and return its original signed receipt record (§7.2). An exact statement
@@ -730,7 +872,7 @@ export class V3OperatorJournal {
       // The checkpoint that will carry this record must still be served within the reader's budget.
       const last = engine.signed.at(-1)!;
       this.encodePackage(opened, [...engine.signed, { directory: [{ name: opened.backing, digest: new Uint8Array(32) }],
-        snapshot: new Uint8Array(last.snapshot.length) }], last.commitment, [...engine.records, bytes], engine.archives);
+        snapshot: new Uint8Array(last.snapshot.length) }], last.commitment, [...engine.records, bytes], engine.archives, engine.evidence);
       const before = state.position;
       try { await applyRecord(state, bytes, this.replayOf(opened, horizon, view.revokedAt)); }
       catch (error) {
@@ -764,7 +906,7 @@ export class V3OperatorJournal {
       const last = engine.signed.at(-1)!, sequence = last.commitment.sequence + 1n;
       requireThat(sequence < U64, "STORAGE", "signed sequence counter exhausted");
       const { directory, snapshot } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
-      this.encodePackage(engine.opened!, [...engine.signed, { directory, snapshot }], last.commitment, engine.records, engine.archives);
+      this.encodePackage(engine.opened!, [...engine.signed, { directory, snapshot }], last.commitment, engine.records, engine.archives, engine.evidence);
       const commitment = this.transaction(() => {
         this.stable(engine, view);
         const c = signCommitment(this.secret, sequence, directoryRoot(directory));
@@ -807,10 +949,11 @@ export class V3OperatorJournal {
    * journal admits and signs only what it can still serve.
    */
   private encodePackage(opened: Opened, signed: readonly Pick<Signed, "directory" | "snapshot">[], selected: Commitment,
-    records: readonly Uint8Array[], archives: Engine["archives"] = []): Uint8Array {
+    records: readonly Uint8Array[], archives: Engine["archives"] = [], evidence: Engine["evidence"] = []): Uint8Array {
     try {
       const payloads = new Map<string, EvidenceItem>();
       const add = (kind: number, payload: Uint8Array): void => { payloads.set(`${kind}:${bytesToHex(sha256(payload))}`, { kind, payload }); };
+      for (const item of evidence) add(item.kind, item.payload);
       add(1, configurationBytes(this.configuration)); add(2, encodeCommitment(selected));
       add(6, encodeTrail({ header: opened.headerBytes, terms: [opened.signed], records }, TRAIL_LIMITS));
       for (const archive of archives) add(6, encodeTrail({ header: archive.opened.headerBytes, terms: [archive.opened.signed], records: archive.records }, TRAIL_LIMITS));
@@ -839,7 +982,7 @@ export class V3OperatorJournal {
       return { selection: { domain: copyBytes(this.domain), venue: copyBytes(this.venueId), backing: copyBytes(opened.backing),
         operator: copyBytes(this.operator), sequence: selected.commitment.sequence, root: copyBytes(selected.commitment.root) },
       package: this.encodePackage(opened, through, selected.commitment,
-        same(selected.opened.segment, opened.segment) ? engine.records.slice(0, Number(selected.length)) : [], engine.archives) };
+        same(selected.opened.segment, opened.segment) ? engine.records.slice(0, Number(selected.length)) : [], engine.archives, engine.evidence) };
     });
   }
 

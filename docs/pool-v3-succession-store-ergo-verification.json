@@ -1,126 +1,154 @@
 {
   "status": "passed",
   "specification": "786f962",
-  "evidence": "local-runtime-real-proofs",
+  "evidence": "synthetic-ergo-runtime-real-proofs",
   "limits": [
     "candidate configuration only",
     "single backing",
     "no live broadcasts",
-    "no persistence or adoption claim"
+    "no persistence or configuration adoption claim",
+    "empty recovery block; forced recovery acceptance is separate"
   ],
   "checks": [
-    "real-proof issue and service redemption leave outstanding supply unchanged",
-    "a real segment-free request counts once against canonical holder evidence",
-    "silence refuses service and holder-only evidence derives publication force",
-    "fresh runtime reader verifies exact adoption and refuses missing ancestry"
+    "A issues with a real proof and a fresh public reader verifies supply",
+    "unauthorized and pending takeover refuse; incumbent-self replacement cancels handover",
+    "B takes over only at force from complete public ancestry and witnesses before service",
+    "B spends the inherited note with a real proof and preserves A's finality",
+    "A reappointment imports B's state and keeps A's own counter and imported replay protection",
+    "an authentic hostile checkpoint is excluded only with complete authenticated evidence"
   ],
   "proofs": [
     {
-      "name": "issue 0",
+      "name": "A issue 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1391
+      "elapsedMs": 5392
     },
     {
-      "name": "issue 1",
+      "name": "B inherited spend",
+      "kind": 2,
+      "bytes": 14656,
+      "elapsedMs": 11375
+    },
+    {
+      "name": "A imported double spend refused",
+      "kind": 2,
+      "bytes": 14656,
+      "elapsedMs": 15573
+    },
+    {
+      "name": "A revoked issue refused",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 899
-    },
-    {
-      "name": "service demand withdrawn",
-      "kind": 4,
-      "bytes": 14656,
-      "elapsedMs": 2281
-    },
-    {
-      "name": "service demand settled",
-      "kind": 4,
-      "bytes": 14656,
-      "elapsedMs": 2267
-    },
-    {
-      "name": "service settlement at inclusive horizon",
-      "kind": 6,
-      "bytes": 14656,
-      "elapsedMs": 2262
-    },
-    {
-      "name": "unanswered request",
-      "kind": 7,
-      "bytes": 14656,
-      "elapsedMs": 1233
-    },
-    {
-      "name": "forced first demand",
-      "kind": 4,
-      "bytes": 14656,
-      "elapsedMs": 2251
-    },
-    {
-      "name": "forced second demand",
-      "kind": 4,
-      "bytes": 14656,
-      "elapsedMs": 2258
-    },
-    {
-      "name": "forced settlement at return index",
-      "kind": 6,
-      "bytes": 14656,
-      "elapsedMs": 2249
+      "elapsedMs": 3235
     }
   ],
-  "transactions": [],
-  "maxPackageBytes": 126037,
+  "transactions": [
+    {
+      "unsignedBytes": 413
+    },
+    {
+      "unsignedBytes": 413
+    },
+    {
+      "unsignedBytes": 510
+    },
+    {
+      "unsignedBytes": 510
+    },
+    {
+      "unsignedBytes": 413
+    },
+    {
+      "unsignedBytes": 510
+    },
+    {
+      "unsignedBytes": 413
+    },
+    {
+      "unsignedBytes": 413
+    },
+    {
+      "unsignedBytes": 510
+    },
+    {
+      "unsignedBytes": 413
+    },
+    {
+      "unsignedBytes": 372
+    },
+    {
+      "unsignedBytes": 413
+    },
+    {
+      "unsignedBytes": 413
+    }
+  ],
+  "maxPackageBytes": 34700,
   "receiptHeadroomBytes": 360,
   "final": {
-    "supply": "20",
-    "position": "4",
-    "adoptionIndex": "24",
-    "spentRoot": "5f374bcb11033eb9d6497b5c89ab72fac42592b033d4e3ebe9804e5102bca7c0",
-    "history": "68fc200350f4244a477e8226a09b997315fb81f2cdaf20782053e66159b35823",
-    "canonicalIndex": "25",
-    "force": [
-      {
-        "index": "21",
-        "kind": 4,
-        "sha256": "1cf3484f40caf1c21d3a1f7fb5da9b5bf988de24deb94b5e9be771c7e735e757"
-      },
-      {
-        "index": "22",
-        "kind": 5,
-        "sha256": "ad107d625049e0fd7767a75c33e6ab970daec14a64701ab317f8a0cac92e505e"
-      },
-      {
-        "index": "23",
-        "kind": 4,
-        "sha256": "15b797adefc8f454f87188ec26b6a6221e2da5537bb9a237dce5a462e108f33f"
-      },
-      {
-        "index": "24",
-        "kind": 6,
-        "sha256": "7f743bf60e73ca30e337e9e1091978e9956f74ce2407c6a18d904622bad5e2c1"
-      }
-    ],
-    "clock": {
-      "duration": "16",
-      "snapshotIndex": "24",
-      "gap": "1",
-      "open": false,
-      "boundary": null,
-      "opening": "24"
+    "supply": "10",
+    "position": "0",
+    "spentRoot": "7c508ac3c03f76246a4225622a9f91b7924c7bf0007f260f20f80d1921a92d71",
+    "history": "941f1dd02213afbc25c05e865921fd4a5b0bd4549c4702dde409072d3c9b31b7",
+    "canonical": {
+      "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+      "sequence": "5",
+      "index": "42"
     },
-    "nonService": {
-      "duration": "2",
-      "threshold": "1",
-      "window": "12",
-      "count": "0",
-      "fires": false,
-      "incumbent": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
-      "snapshotIndex": "24"
-    }
+    "carrying": [
+      {
+        "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+        "sequence": "1",
+        "index": "2",
+        "class": "valid"
+      },
+      {
+        "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+        "sequence": "2",
+        "index": "4",
+        "class": "valid"
+      },
+      {
+        "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+        "sequence": "3",
+        "index": "16",
+        "class": "valid"
+      },
+      {
+        "operator": "204040e364c10f2bec9c1fe500a1cd4c247c89d650a01ed7e82caba867877c21",
+        "sequence": "1",
+        "index": "26",
+        "class": "valid"
+      },
+      {
+        "operator": "204040e364c10f2bec9c1fe500a1cd4c247c89d650a01ed7e82caba867877c21",
+        "sequence": "2",
+        "index": "28",
+        "class": "valid"
+      },
+      {
+        "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+        "sequence": "4",
+        "index": "38",
+        "class": "valid"
+      },
+      {
+        "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+        "sequence": "5",
+        "index": "42",
+        "class": "valid"
+      },
+      {
+        "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
+        "sequence": "6",
+        "index": "44",
+        "class": "excluded",
+        "check": "SNAPSHOT"
+      }
+    ]
   },
-  "elapsedMs": 33067,
+  "elapsedMs": 153182,
   "sourceSha256Lf": {
     "dist/backing.js": "08d80f493e1438d95739a2485571ecd5c16b3eb01ed4e6db68c2f5275eabf7e9",
     "dist/bytes.js": "803a06d482439a9fe98de311a08a26c82c1be10e986d09c2a3bd42b169bf6d21",
@@ -194,14 +222,11 @@
     "scripts/pool/v3/local-replay.mjs": "9c9097376fe06723ca4a24f2e8c0b2dd54f73e0ea26e6288062babdfb71215eb",
     "scripts/pool/v3/non-service.mjs": "ffdcb87bbfba72829a1e8697e938ed0cc906b7acfcb15893623660399b903327",
     "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
-    "scripts/pool/v3/public-artifacts.mjs": "82feec1b0fd8c67c6eeae12e7e54c578ebf353133210225a8db281f3484122cf",
     "scripts/pool/v3/receipt-state.mjs": "5171b1510e8a805e1ae2f4f2492cce37ec1de596109e7f416438788cfd004e0c",
-    "scripts/pool/v3/recovery-store-check.mjs": "8880bb1935abba8c73dc6e3c55239940c5d2a32370353769a8fb6ae1f9e2fca0",
-    "scripts/pool/v3/recovery-testnet.mjs": "bd1ed52fff6ab8ac23c199b54264a827be41d79871f8b9b84b6d925aba22cfa6",
     "scripts/pool/v3/scope-evidence.mjs": "bdb32a7d393cd77263c6d1b60f3503905fbe229387d7b348a1a902d160aacaed",
     "scripts/pool/v3/scope-recovery.mjs": "e6713678128bf80bebdb53e2a8b93bc45863485bfffa7e4c455832166de94a0a",
     "scripts/pool/v3/scope-replay.mjs": "99519763746d9b17e10dc3b125f84b38189e35bd1b67f1a6b2a2745355dcc86f",
-    "scripts/pool/v3/testnet.mjs": "a3d4b1c379d1368148fa9d306dcd78ccf509e5e9724cd9649f5664fcddc7124a",
+    "scripts/pool/v3/succession-store-check.mjs": "4097378a427e79563a187f0f06c5f88de12242eab534acfd45f248aa140dbe85",
     "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
     "src/bytes.ts": "7b78d53db688cb16092e2fdcb0689968f3e8f6765f56303abfb50816b2a6f3bd",
     "src/commitment.ts": "98eac617566d4b1770d99a5a0da94b9047e5a57ec4e576eb1ec20597b69aa93e",

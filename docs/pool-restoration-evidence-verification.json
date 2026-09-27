@@ -63,7 +63,7 @@
     "src/pool/v3/fault-evidence.ts": "ada8e79acac5b0d642da0e691834c3da5bd6c4fd0faed70d447b409c57a2ec57",
     "src/pool/v3/guard.ts": "aeb6252e1f9ba92d1d8ac9d047ef74c9e87b8b9e385edcbf5758621536d06a5b",
     "src/pool/v3/headers.ts": "2c9c9969dd43c07c1125f07625c94f7ad995b8c0c1274692eeed426ff26c4618",
-    "src/pool/v3/reader.ts": "f98f2a9d827554c8e92d0d8f6cdc4bdf7e20e8312ab363fddea28f8067e4f4b2",
+    "src/pool/v3/reader.ts": "42870e67f8f46f746d0f0d8c6ce765952a69e53baee3944d36cf0da24abf12e5",
     "src/pool/v3/records.ts": "5cb68ec45d9babeb147ea60b592470fac5d08096df137993257b933718ac36f6",
     "src/pool/v3/recovery.ts": "5ab123a6052ddb0c4fe62595ff59a4009cc6cc923d5ac180c68ed34e7aabb4a7",
     "src/pool/v3/refusals.ts": "3a95f2631f87aff52b6e6434fe8c3a7ce91c5c78d06ed14be3cf9ef2936a5b90",

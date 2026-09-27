@@ -81,7 +81,7 @@ function read<T>(call: () => T): T {
  * venue's; a supplied answer is never evidence. This view is shared by the
  * original-segment clock and the import walks. Nothing here classifies a
  * checkpoint. */
-export async function readRecordView(selection: ReaderSelection, terms: RootTerms, directories: Directories,
+export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "domain" | "venue" | "backing" | "judgingIndex">, terms: RootTerms, directories: Directories,
   venue: RecordVenue, reference: VenueReference): Promise<RecordView> {
   // The caller holds this preimage independently of supplied record evidence.
   // Candidate v3 never reads a deployment venue, even if it offers valid ranges.

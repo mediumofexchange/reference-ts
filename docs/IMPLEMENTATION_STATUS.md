@@ -273,7 +273,8 @@ using real signatures. Authentication alone supplies no checkpoint verdict.
 with canonical scope/opening references and bounded strict decoding. Its
 signed-directory and hostile-byte tests establish header conformance. The reader
 checks single-backing opening evidence and recovery adoption; complete certificate
-formats, replacement-service acceptance and configuration adoption remain open.
+formats and configuration adoption remain open. Reference-venue succession is
+covered by the slice-4 runtime below.
 `src/pool/v3/fault-evidence.ts` adds the [portable fault-evidence record](https://github.com/mediumofexchange/money-from-first-principles/blob/322bcae/pool-v3.md#9-fault-evidence-records):
 exact raw target bytes and an evidence suffix, checked against an externally
 authenticated snapshot with an explicit reader budget. Successful evidence
@@ -345,8 +346,8 @@ reads publications through that index before issuing adopted receipts.
 includes a fresh process that has only public evidence and independent reader
 inputs. The [local](pool-v3-recovery-store-verification.json) and
 [synthetic Ergo](pool-v3-recovery-store-ergo-verification.json) real-proof
-acceptance passed in [CI at 74eade8](https://github.com/mediumofexchange/reference-ts/actions/runs/36327647966)
-on Linux and Windows. The separately authorized [live testnet recovery](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
+acceptance is retained for the current reader; WORK.md records its checked CI baseline.
+The separately authorized [live testnet recovery](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
 and retained public-bundle readback also passed. That live evidence is historical
 at `a72888b`; later journal changes need their own acceptance evidence.
 [Measurements and limits](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
@@ -354,6 +355,20 @@ distinguish this single-backing candidate drill from deployment acceptance.
 Complete trails remain bounded; imports do not erase ancestry or reset the
 package/work budgets. No replacement service, wallet custody, persistence,
 live deployment or adopted configuration is supplied by this slice.
+
+Slice 4 adds public-evidence successor activation through `store.ts` `takeover`.
+The shared import walk exposes a canonical frontier without trusting a selected
+predecessor, including an empty book proved by complete descent. Exact replacement
+links govern authority; A→B→A imports B's state while continuing A's own signed
+counter. Every successor opening waits for witnessing and exact adoption before
+service. Complete relevant venue ranges bind signing stability across asynchronous
+verification. The acceptance command is `npm run check:pool:v3-succession`, with
+`-- --ergo` for synthetic Ergo. The [local](pool-v3-succession-store-verification.json)
+and [synthetic Ergo](pool-v3-succession-store-ergo-verification.json) real-proof
+drills passed; WORK.md tracks full CI and delivery.
+Compact fault-package orchestration remains in the harness. This candidate adds
+no live deployment, configuration adoption, venue/publisher persistence or wallet
+custody evidence.
 
 ## Runtime pin and recovery models
 

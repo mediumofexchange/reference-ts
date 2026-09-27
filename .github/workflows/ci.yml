@@ -46,6 +46,8 @@ jobs:
             scratch/pool-v3-local-replay-results.json
             docs/pool-v3-recovery-store-verification.json
             docs/pool-v3-recovery-store-ergo-verification.json
+            docs/pool-v3-succession-store-verification.json
+            docs/pool-v3-succession-store-ergo-verification.json
           if-no-files-found: error
       - name: Diagnose proving parameter integrity on failure
         if: failure()
