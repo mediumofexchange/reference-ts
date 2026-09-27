@@ -303,7 +303,8 @@ bytecode/key hashes, real-proof checks and the resulting public audit.
 through both public package readers. It compares selected state, classification,
 clock and fault observations across successor imports, spent predecessors and
 returned segments; the Ergo pass repeats these reads over verified synthetic
-headers. Refusal fixtures check the selected public API's exact refusal. These
+headers. Selection-independent unresolved/resource fixtures require the exact
+refusal from both public APIs, including faults inside the adopted block. These
 are candidate reference reads, with no adopted configuration or live-chain claim.
 
 The fixture issues 10, pays 7 with change 3, then burns 5 with receiver change

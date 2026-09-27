@@ -19,6 +19,14 @@ export async function checkCompactRuntime({ payload, result, verifier, codec, po
     await assert.rejects(() => readSingleBackingPackage(bytes, payload.selection, options), error =>
       result.status === "invalid-local-replay" ? error instanceof ReplayRefusal && error.check === result.check :
         error instanceof EvidenceRefusal && error.status === result.status, label);
+    // These fixture refusals concern the descent's missing dependencies or
+    // unsupported compact target, not selection currency or its full envelope.
+    // Frontier must refuse the same inside-block/cross-checkpoint cases even
+    // though it has no caller-selected checkpoint.
+    if (["unresolved-evidence", "resource-refusal"].includes(result.status)) {
+      await assert.rejects(() => readSingleBackingFrontier(bytes, trail.terms[0], payload.selection.judgingIndex, options),
+        error => error instanceof EvidenceRefusal && error.status === result.status, `${label}: frontier refusal`);
+    }
     return true;
   }
   const selected = await readSingleBackingPackage(bytes, payload.selection, options);

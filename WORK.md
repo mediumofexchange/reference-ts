@@ -12,18 +12,20 @@ evidence refuses, selected envelopes stay complete, and recovery/adoption bounda
 remain enforced. Verify focused cases, full check and local/synthetic real proofs;
 independent design and integrated adversarial review precede delivery.
 Stop at the single-backing reference boundary: no persistence, second backing,
-configuration adoption or new live runs. Prior delivery follows for baseline context.
+configuration adoption or new live runs.
 
 ## Status
 - Succession delivered in [PR #26](https://github.com/mediumofexchange/reference-ts/pull/26)
-  at `e8cf7e5`; its post-merge CI was running at slice startup.
+  at `e8cf7e5`; all seven post-merge CI jobs passed.
 - Compact design review found no normative blocker. Typed observer/authentication
   facts now share runtime and harness code. Both public readers accept kind-7 bytes.
 - Typecheck and 19 focused frontier tests pass, including nine compact cases.
-  Integrated independent adversarial review and real-proof acceptance are running.
-- Detached `scratch/compact-check.ps1` runs local-check `--ergo`; log and completion
-  marker are `scratch/compact-real.log` and `scratch/compact-real.exit` (PID 8488).
-  Do not change its source inputs or rebuild dist until it ends. No companion branch.
+  Integrated independent review found no correctness blocker; its coverage gap
+  (frontier negative recovery cases) is fixed in the acceptance helper.
+- [PR #27](https://github.com/mediumofexchange/reference-ts/pull/27), implementation
+  `238b418`; final acceptance runs in CI. The superseded local probe was stopped
+  before applying the review fix; no passing real-proof claim from that probe.
+  No active local job or companion branch. Review fix readback remains owed.
 
 ## Evidence
 - Current succession: [local](docs/pool-v3-succession-store-verification.json) and
