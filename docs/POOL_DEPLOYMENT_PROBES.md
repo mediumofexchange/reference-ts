@@ -215,8 +215,12 @@ at the opening index. The fresh process receives no journal or asserted state;
 missing directories, snapshots or ancestry refuse. The complete package must
 fit the existing byte budget with receipt headroom. Work budgets also cover
 checkpoints and imported ancestry; unchanged snapshots cannot evade them.
-These new commands are under verification and do not yet provide live recovery
-evidence. The earlier live publisher and journal reports are historical at
+The [local](pool-v3-recovery-store-verification.json) and
+[synthetic Ergo](pool-v3-recovery-store-ergo-verification.json) reports retain
+the passing real-proof acceptance, package size and actual funding cost.
+Both commands passed on Linux and Windows in
+[CI at 74eade8](https://github.com/mediumofexchange/reference-ts/actions/runs/36327647966).
+They do not provide live recovery evidence. Earlier live publisher and journal reports are historical at
 [`2c6b20c`](https://github.com/mediumofexchange/reference-ts/tree/2c6b20c).
 
 The prepared live recovery command is

@@ -24,36 +24,37 @@ testnet transactions are exhausted. No new live transactions have been made.
   Publisher rejects signed transactions over the pinned node's 98,304-byte ceiling.
 - Focused force, witness, recovery journal, publisher and request-work tests passed. The
   128-checkpoint journal regression now restores 128 genuine signatures and passes; the
-  separate reader regression walks all 128 held checkpoints. Full verification remains open.
-- Earlier full runs had superseded fixture failures/RPC timeouts. Corrected checkpoint fixture
-  passes. `run-v3-clean.ps1` (PID 17652) has an unchanged sequencing-model timeout under CPU
-  contention; await `v3-clean.exit`. No Java priority was changed: busiest node is outside workspace.
-- Final job `scratch/run-v3-serial.ps1` (PID 7504, `v3-serial.log/.exit`) waits for that exit,
-  then runs every full-check stage with one Vitest worker (same assertions/timeouts), real-proof
-  v3, restoration and GET-only runtime venue refresh. Earlier delivery/focused/final/acceptance
-  jobs ended. No complete final pass or real-proof recovery report yet.
-- Real-proof recovery acceptance is `scripts/pool/v3/recovery-store-check.mjs`, local and
-  `--ergo`; its reports are not yet generated. No live acceptance claim.
+  separate reader regression walks all 128 held checkpoints. All seven CI jobs passed at
+  `74eade8`: full checks on Node 20/24 and real-proof v2/v3 checks on Linux and Windows.
+- Earlier local full runs had fixture/host-contention timeouts. Duplicate single-worker run
+  was stopped after CI passed. No Java priority was changed and no verification job remains active.
+- Local `run-v3-reports.ps1` completed: fourteen restoration checks and fresh GET-only runtime
+  venue verification passed; both source-bound reports are refreshed and current.
+- Real-proof local and synthetic recovery acceptance passed; reports retain the complete
+  package and transaction measurements. Fresh public readers verify force and exact adoption.
 - Gated live mode and narrow optional submission-budget callback passed independent source
-  review; offline guard awaits rebuilt dist. Preliminary plan: ten transactions,
-  total funding cap 0.05 tERG; confirm against measured synthetic results before authorization.
-- No companion branch or normative change. No commits or push of this patch yet.
+  review and rebuilt offline hostile guard checks. The [live plan](docs/POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
+  caps ten transactions, 0.011 tERG fees and 0.05 tERG total; synthetic cost fits. No live run yet.
+- Reviewed implementation is `74eade8`, pushed in draft [PR #24](https://github.com/mediumofexchange/reference-ts/pull/24).
+  [CI run](https://github.com/mediumofexchange/reference-ts/actions/runs/36327647966) passed; no merge.
+  No companion branch or normative change. Following commit retains evidence and this handoff only.
 
 ## Evidence
 - Slice 2 reports are historical at `2c6b20c` where recovery changes touch their source bindings:
   [live journal](docs/pool-v3-testnet-verification.json), [bundle readback](docs/pool-v3-testnet-reader-verification.json),
   [publisher](docs/ergo-publisher-verification.json). Earlier CI at
   [acc1ab7](https://github.com/mediumofexchange/reference-ts/actions/runs/36318895153) does not cover this patch.
-- Re-record affected current [journal](docs/pool-v3-store-verification.json),
+- Refreshed current [journal](docs/pool-v3-store-verification.json),
   [replay](docs/pool-v3-local-replay-verification.json), [conformance](docs/pool-v3-conformance-verification.json),
   [restoration](docs/pool-restoration-evidence-verification.json) and
-  [runtime venue](docs/ergo-runtime-venue-verification.json); run `check:evidence`.
+  [runtime venue](docs/ergo-runtime-venue-verification.json). Recovery reports:
+  [local](docs/pool-v3-recovery-store-verification.json), [synthetic Ergo](docs/pool-v3-recovery-store-ergo-verification.json).
 - Unchanged [testnet header](docs/ergo-testnet-header-verification.json) evidence pins upstream
   `23aabead`, legacy 45 s predictor, signed-Int overflow and terminal reset; no EIP-37 clamps.
 
 ## Next
-1. Finish focused regression, real-proof local/synthetic and full acceptance; resolve failures,
-   refresh reports/docs and review live runner. Then present exact live plan for authorization.
+1. Obtain separate authorization for the prepared ten-transaction testnet drill; then run
+   `node scripts/pool/v3/recovery-store-check.mjs --testnet --authorized-testnet` once.
 2. Complete live single-backing recovery and holder-only readback after separate authorization.
    Deliver slice only after acceptance, reviewed final patch, CI and merge verification.
 3. Succession/hostile operator: replacement/takeover, equivocation, key compromise.
@@ -87,9 +88,9 @@ testnet transactions are exhausted. No new live transactions have been made.
   require separate provisioning authority. Configuration approval and mainnet stay disabled.
 
 ## Open questions
-- Live recovery authorization outstanding; runtime acceptance and final delivery still open.
-- No blockers from independent runtime source review; test/proof evidence remains required.
+- Live recovery authorization outstanding; live acceptance and final merge/delivery remain open.
+- No unresolved review findings; local/synthetic acceptance and required CI passed.
 
-Roughly **55% done / 45% remaining**, plausible range **45–65%**, reassessed 2026-09-27 (slice 2).
-Runtime recovery verification, configuration adoption, persistence, wallet custody and mainnet
-remain consequential; reassess after accepted slice 3 evidence, not implementation alone.
+Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-27:
+single-backing recovery now shares reviewed runtime transitions and independent real-proof readers.
+Live recovery, replacement, configuration adoption, persistence, wallet custody and mainnet remain.

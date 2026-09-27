@@ -337,7 +337,10 @@ reads publications through that index before issuing adopted receipts.
 `npm run check:pool:v3-recovery` is the real-proof acceptance command, with
 `-- --ergo` selecting actual kind-4 transactions on the synthetic chain. It
 includes a fresh process that has only public evidence and independent reader
-inputs. Verification is in progress; no live recovery acceptance is claimed.
+inputs. The [local](pool-v3-recovery-store-verification.json) and
+[synthetic Ergo](pool-v3-recovery-store-ergo-verification.json) real-proof
+acceptance passed in [CI at 74eade8](https://github.com/mediumofexchange/reference-ts/actions/runs/36327647966)
+on Linux and Windows. No live recovery acceptance is claimed.
 Complete trails remain bounded; imports do not erase ancestry or reset the
 package/work budgets. No replacement service, wallet custody, persistence,
 live deployment or adopted configuration is supplied by this slice.

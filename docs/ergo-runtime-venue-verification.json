@@ -6,22 +6,22 @@
       "url": "http://127.0.0.1:9053",
       "name": "ergo-mainnet-6.0.6",
       "appVersion": "6.0.6",
-      "headersHeight": 1882252,
-      "fullHeight": 1882252
+      "headersHeight": 1882339,
+      "fullHeight": 1882339
     },
     {
       "url": "http://213.239.193.208:9053",
       "name": "ergo-mainnet-6.0.6",
       "appVersion": "6.0.5-46-78153a1e-SNAPSHOT",
-      "headersHeight": 1882252,
-      "fullHeight": 1882252
+      "headersHeight": 1882339,
+      "fullHeight": 1882339
     }
   ],
   "profile": {
-    "anchorHeight": "1881952",
-    "anchorId": "e66c5370f88872b05e1c0c15bf64942c492139339e93e7d453c28434f03bce39",
+    "anchorHeight": "1882039",
+    "anchorId": "41fa907c28de4ed12d78e8d3887e94794e0d06dee4ab62753d1a645a7b2594f2",
     "depth": "10",
-    "identity": "d9b105767522b81b1afc5f442979164f97c2e309883ee2f160fe615023172a38",
+    "identity": "162216d096d6291ff5bb5b07da5937c294092d20de44cb5298efb4e3d7828813",
     "locations": "pay-to-public-key trees of the throwaway keys 0x01..01 to 0x04..04"
   },
   "viewA": {
@@ -29,13 +29,13 @@
       "own node",
       "public node"
     ],
-    "ms": 14072.8,
+    "ms": 13355.9,
     "rounds": [
       {
-        "ms": 14072.6,
+        "ms": 13355.7,
         "witnessedIndex": "289",
         "chainWitnessedIndex": "289",
-        "tipHeight": "1882252",
+        "tipHeight": "1882339",
         "sectionsRead": 290,
         "unresolvedIndex": null,
         "suppliers": [
@@ -51,24 +51,24 @@
       }
     ],
     "witnessedIndex": "289",
-    "witnessedHeight": "1882242",
-    "witnessedHeaderId": "d1979473845ef6b7ffe1970a72e55022e398ed84250740003a09180a0bbbda94",
+    "witnessedHeight": "1882329",
+    "witnessedHeaderId": "30b7b028c3192ad69afbd992ed3f0446a3c6630380487573fefc40f45961aacc",
     "standsOnOwnNodeBlock": true,
     "headersVerified": 300,
     "sectionsRead": 290,
-    "msPerBlock": 48.53
+    "msPerBlock": 46.05
   },
   "viewB": {
     "suppliers": [
       "public node"
     ],
-    "ms": 37006.8,
+    "ms": 37164.2,
     "rounds": [
       {
-        "ms": 37006.8,
+        "ms": 37164.1,
         "witnessedIndex": "289",
         "chainWitnessedIndex": "289",
-        "tipHeight": "1882252",
+        "tipHeight": "1882339",
         "sectionsRead": 290,
         "unresolvedIndex": null,
         "suppliers": [
@@ -89,49 +89,49 @@
         "kind": 1,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "03e8b4a3e953c6a1cb542f11995286754407f1afd73267351d8161560ebed353"
+        "sha256": "2b48a8f48a8d21b08c708fb3e31a1f4e26209e27cc5f2af16ecdb3c0bde86d90"
       },
       {
         "kind": 2,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "0f3d7535237db5473e7c71ae2d01cc23be93b89132d1f4fdc8b568492490ae80"
+        "sha256": "515e6790797d36ab7b7a9e856693fa563987ba32030864b314dfedee24c8b463"
       },
       {
         "kind": 3,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "1991f0a64e7cbc807c3ad8a13beb7556c2a7e525a3ccdd4e30448390221f79b7"
+        "sha256": "23a00ad4c1ac51a65b7da9ff3015a6022bc0a0c636a641b9571bc459d33515ca"
       },
       {
         "kind": 4,
         "subject": "1111111111111111111111111111111111111111111111111111111111111111",
         "entries": 0,
-        "sha256": "38902c27aed9ab9d15d378c2f39e4a7aff3d0bface85f3d314ee9fda6949e5f4"
+        "sha256": "b14c98fcb06af65172045c0f44e2e897011f6292d60d32a1192542865deba603"
       },
       {
         "kind": 1,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "72e2d39f69a5426c62993acdd6f9fd0966bf6fc4636154093a3d24797ae41a06"
+        "sha256": "b964f6b144d490e5fb71e88248092fafaf0f278a3cd85b4f3d37167590a035ea"
       },
       {
         "kind": 2,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "ac526fa6b47ae5aabbfa46b52d9dd7d7e310c488c882a8904168b493409a6fea"
+        "sha256": "e75f6d516e8103e61e4a57d23cdb9f820d6201e2babd6a258f52afd0c5ae7c48"
       },
       {
         "kind": 3,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "2112bf2afaebacb731b0c63cdba45ff4915df61870aee53b31772ea58d155902"
+        "sha256": "0c3afd37615a3e76b278580f126ee9ff6c56bed98942983e3021f12910050206"
       },
       {
         "kind": 4,
         "subject": "2222222222222222222222222222222222222222222222222222222222222222",
         "entries": 0,
-        "sha256": "a68f5d3ae5192ef266fe8ee4ec88897affbb38fce54e2e8fb7a9466078f4c160"
+        "sha256": "9ee86aa1ccad1956ce4af8ff84f7f003054b465ec5de1a0296344a757fce0055"
       }
     ]
   },
@@ -139,8 +139,8 @@
     "substitutedIndex": "5",
     "aloneWitnessedIndex": "4",
     "aloneUnresolvedIndex": "5",
-    "withOwnWitnessedIndex": "289",
-    "forgedHeaderHeight": "1881958",
+    "withOwnWitnessedIndex": "290",
+    "forgedHeaderHeight": "1882045",
     "forgingReport": [
       {
         "name": "forging",
@@ -149,10 +149,10 @@
       },
       {
         "name": "own node",
-        "headersAdded": 295
+        "headersAdded": 296
       }
     ],
-    "forgedWitnessedIndex": "289"
+    "forgedWitnessedIndex": "290"
   },
   "files": {
     "dist/backing.js": "08d80f493e1438d95739a2485571ecd5c16b3eb01ed4e6db68c2f5275eabf7e9",
@@ -162,7 +162,7 @@
     "dist/ergo-headers.js": "14e14e42681342fcec2fed74c9e006ac683bf1c5214c7a823ce91b5803d9953e",
     "dist/ergo-profile.js": "6accb1f4e0307f6570e8ebfdccb656fcb3a9dd10ecaae4d3ab1d7fe80e77c36c",
     "dist/ergo-supplier.js": "793f4c0c527918e8b3391a2286a3f19447bcfeb7fd0cde05353efe53a94644dd",
-    "dist/ergo.js": "506d9c0288c64876e62d3cd90d62220ab62f97f5bdf910544a90e670ec321f44",
+    "dist/ergo.js": "fa69e3f108af859b8cb706c55bf77f01978fee52a554b0ab2359ffc2d4f351d5",
     "dist/keys.js": "07993d86bebf4555f59b82374f616cecfe9be5dc1d3ff19ac8fbc7d31163ed5c",
     "dist/messages.js": "ab09944d243cc56b1d7b8e0e7b94801d37be5de9a2706b0cb4966a989e46a8c4",
     "dist/oplog.js": "06f4e626b03c86daa5dd869351ac7897065d333e7261fd3dd0855d4d1534cbd1",
@@ -182,9 +182,9 @@
     "src/contexts.ts": "9cd0dc417e99aa8be367caf7548cc588caa4a750f08864037645cb75779c69fa",
     "src/ergo-headers.ts": "808872a0e47327d804287c4718616b3d413fffb52605d90f37c68b1e3d5a198f",
     "src/ergo-profile.ts": "12ee44043a1dce07e8c86984b061b87cb79fa3193365b162d97db7632c21d631",
-    "src/ergo-publisher.ts": "2dabd89ca03ce53a1bbab4142e2bfdd053f0cec625d67cd3cca3e7fd1930de92",
+    "src/ergo-publisher.ts": "6b438c4c775ddddc96b1c55d0584d2e4a1320f8ca417cc1022fab65bdf6cde8a",
     "src/ergo-supplier.ts": "b9bb52129f4e2fcfdb936682294476ba11e2fa55e27c5775f4000914cdae73f7",
-    "src/ergo.ts": "e35289491737d62a36663c292c62229d5901cc19edb714048bac1d4a818873cd",
+    "src/ergo.ts": "c8e82588894ee42f0b23d737ea7410e9c3da292c6544849910a9f40da5b61a5d",
     "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
     "src/ledger.ts": "ba57291a573ea2c9f4dc52c820db6ec0567675358e61b918842ef1a1c60b8096",
     "src/messages.ts": "8a941254bf24650f9146d3875add1f20993a08b17b40ddac1ed060e225191718",
