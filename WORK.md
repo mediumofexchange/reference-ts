@@ -54,8 +54,8 @@ and 0.05 tERG total caps. Its allowance and slice 2's separate allowance are exh
   `23aabead`, legacy 45 s predictor, signed-Int overflow and terminal reset; no EIP-37 clamps.
 
 ## Next
-1. Finish delivery through PR #24 after final CI; verify
-   merge/main parity and remove merged branch and disposable slice scratch. No live job remains.
+1. Inspect PR #24's recorded CI/merge state before resuming; after verified merge, use main,
+   remove its merged branch and disposable slice scratch, then start slice 4. No live job remains.
 2. Begin slice 4 only after delivery. Prefer a fresh instance for the distinct succession scope;
    this handoff and the linked plan are sufficient startup context.
 3. Succession/hostile operator: replacement/takeover, equivocation, key compromise.
@@ -90,7 +90,7 @@ and 0.05 tERG total caps. Its allowance and slice 2's separate allowance are exh
   require separate provisioning authority. Configuration approval and mainnet stay disabled.
 
 ## Open questions
-- Live recovery and independent bundle acceptance passed; final merge/delivery remains open.
+- No remaining slice 3 acceptance blockers; PR #24 records final CI and delivery state.
 - No unresolved review findings; local/synthetic acceptance and required CI passed.
 
 Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-27:
