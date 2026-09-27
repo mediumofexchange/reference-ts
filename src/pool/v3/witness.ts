@@ -1,18 +1,19 @@
-// The holder's and backer's side of pool-v3 §3.1–3.3: the circuit inputs and
-// exact public inputs of an issue, a two-in/four-out spend and a burn, from
-// notes, their paths and prepared outputs (C4.1–C4.4). Pure: nothing here
-// proves, signs or judges validity; the prover (prover.ts) executes a task and
-// checks the proof's public inputs against these, and admission judges the
-// record. A padding input's path and anchor are unconstrained by the relation
-// (§3.2) but must still name an accepted root, which the reader checks.
+// Holder/backer witnesses and authorizations for pool-v3 §3 and §6.
+// Task builders do not prove or judge validity: prover.ts checks the proof's
+// public inputs against the task, and the reader judges the record. Ordinary
+// spending and settlement padding still needs an accepted root; demand
+// padding uses zero anchors/tags, and requests are segment-free.
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { copyBytes, compareBytes, EncodingError } from "../../bytes.js";
-import { limbsOf } from "../field.js";
+import { identifierOf, limbsOf } from "../field.js";
 import type { NotePath } from "../note-tree.js";
 import type { NoteOpening } from "../notes.js";
 import { ScopeTree } from "../scope.js";
 import { segmentIdentity, type SegmentHeader } from "./headers.js";
-import { deliveryHash, statementBytes, type Kind, type Record } from "./records.js";
+import { acceptanceBytes, acceptanceId, decodeRecord, deliveryHash, encodeRecord, encodeSettlementAuthorization,
+  releaseBytes, statementBytes, statementHash, withdrawalBytes, type Acceptance, type Kind, type Record,
+  type SignedAcceptance } from "./records.js";
+import { tagOf } from "./recovery.js";
 
 /** The noir_js input map: decimal strings, booleans and nested arrays of them. */
 export type WitnessValue = string | boolean | readonly WitnessValue[] | { readonly [key: string]: WitnessValue };
@@ -20,7 +21,7 @@ export type WitnessMap = { readonly [key: string]: WitnessValue };
 
 /** One statement to prove: its kind, the circuit inputs, the public inputs the proof must carry and the ordered capsules. */
 export interface ProofTask {
-  readonly kind: Extract<Kind, 1 | 2 | 3>;
+  readonly kind: Extract<Kind, 1 | 2 | 3 | 4 | 6 | 7>;
   readonly witness: WitnessMap;
   readonly publicInputs: readonly bigint[];
   readonly capsules: readonly Uint8Array[];
@@ -54,7 +55,7 @@ export interface OutputNote {
 const decimal = (value: bigint): string => value.toString();
 const limbs = (identifier: Uint8Array): string[] => limbsOf(identifier).map(decimal);
 
-/** The public prefix every kind 1–3 statement starts with, and each scoped backing's path. */
+/** The public prefix of segment-bound kinds 1–6, and each scoped backing's path. */
 function prefixOf(context: SegmentContext): { readonly prefix: bigint[]; readonly base: WitnessMap; scoped(backing: Uint8Array): WitnessMap } {
   const { domain, header } = context;
   if (!(domain instanceof Uint8Array) || domain.length !== 32 || compareBytes(domain, header.domain) !== 0) {
@@ -132,4 +133,81 @@ export function burnTask(context: SegmentContext, quantity: bigint, inputs: read
 export function authorizeIssue(record: Record, issuerSecret: Uint8Array): Record {
   if (record?.kind !== 1) throw new EncodingError("only an issue carries the backer's authorization");
   return Object.freeze({ ...record, authorization: ed25519.sign(statementBytes(record), issuerSecret) });
+}
+
+/** The holder chooses and retains the presenter's signing secret and both witnessed indices. */
+export interface DemandNotice {
+  readonly backing: Uint8Array;
+  readonly quantity: bigint;
+  readonly presenter: Uint8Array;
+  readonly instant: bigint;
+  readonly deadline: bigint;
+}
+
+/** C3.2–3: a holding proof binds the notice; padding anchors and tags are exactly zero. */
+export function demandTask(context: SegmentContext, inputs: readonly NoteInput[], notice: DemandNotice): ProofTask {
+  const { prefix, base, scoped } = prefixOf(context), own = inputsOf(inputs);
+  const { backing, quantity, presenter, instant, deadline } = notice;
+  const anchors = inputs.map(i => i.note.opening.value === 0n ? 0n : i.anchor);
+  const tags = inputs.map(i => i.note.opening.value === 0n ? 0n : tagOf(i.note.nf));
+  const publicInputs = [...prefix, ...limbsOf(backing), quantity, ...anchors, ...tags, ...limbsOf(presenter), instant, deadline];
+  statementBytes({ domain: context.domain, kind: 4, publicInputs });
+  return Object.freeze({ kind: 4,
+    witness: { ...base, ...scoped(backing), inputs: own["inputs"]!, secrets: own["secrets"]!,
+      siblings: own["siblings"]!, right: own["right"]!, anchors: anchors.map(decimal), tags: tags.map(decimal),
+      backing: limbs(backing), quantity: decimal(quantity), presenter: limbs(presenter), instant: decimal(instant), deadline: decimal(deadline) },
+    publicInputs: Object.freeze(publicInputs), capsules: Object.freeze([]) });
+}
+
+/** C3.5: the holder proves transfer to the backer's public opening, without its spend secret. */
+export function settleTask(context: SegmentContext, inputs: readonly NoteInput[], output: Pick<OutputNote, "opening" | "cm">,
+  demand: Uint8Array): ProofTask {
+  const { prefix, base, scoped } = prefixOf(context), own = inputsOf(inputs), { opening } = output;
+  const publicInputs = [...prefix, ...limbsOf(opening.backing), opening.value, opening.owner, opening.rho,
+    ...inputs.map(i => i.anchor), ...inputs.map(i => i.note.nf), output.cm, ...limbsOf(demand)];
+  statementBytes({ domain: context.domain, kind: 6, publicInputs });
+  return Object.freeze({ kind: 6,
+    witness: { ...base, ...scoped(opening.backing), ...own, backing: limbs(opening.backing), quantity: decimal(opening.value),
+      owner: decimal(opening.owner), rho_out: decimal(opening.rho), cm_out: decimal(output.cm), demand: limbs(demand) },
+    publicInputs: Object.freeze(publicInputs), capsules: Object.freeze([]) });
+}
+
+/** C2b.5.1: one real note's segment-free request, with a holder-chosen refresh value. */
+export function requestTask(domain: Uint8Array, input: NoteInput, refresh: bigint): ProofTask {
+  const { note, anchor, path } = input, tag = tagOf(note.nf);
+  const publicInputs = [...limbsOf(domain), ...limbsOf(note.opening.backing), anchor, tag, refresh];
+  statementBytes({ domain, kind: 7, publicInputs });
+  return Object.freeze({ kind: 7,
+    witness: { domain: limbs(domain), backing: limbs(note.opening.backing), anchor: decimal(anchor), tag: decimal(tag),
+      refresh: decimal(refresh), note: noteOf(note.opening), secret: decimal(note.secret),
+      siblings: path.siblings.map(decimal), right: [...path.right] },
+    publicInputs: Object.freeze(publicInputs), capsules: Object.freeze([]) });
+}
+
+/** C3.6: a proofless withdrawal, signed by the holder's demand presenter for this segment. */
+export function withdrawalRecord(context: SegmentContext, demand: Uint8Array, presenterSecret: Uint8Array): Record {
+  const { prefix } = prefixOf(context);
+  const record: Record = { domain: context.domain, kind: 5, publicInputs: [...prefix, ...limbsOf(demand)],
+    proof: new Uint8Array(), authorization: new Uint8Array(), capsules: [] };
+  return decodeRecord(encodeRecord({ ...record, authorization: ed25519.sign(withdrawalBytes(record), presenterSecret) }));
+}
+
+/** C3.4: the backer signs its public owner; it retains the corresponding settlement spend secret. */
+export function authorizeAcceptance(acceptance: Acceptance, issuerSecret: Uint8Array): SignedAcceptance {
+  const own = { domain: copyBytes(acceptance.domain), demand: copyBytes(acceptance.demand),
+    owner: acceptance.owner, deadline: acceptance.deadline };
+  return Object.freeze({ ...own, signature: ed25519.sign(acceptanceBytes(own), issuerSecret) });
+}
+
+/** C3.6: bind the presenter's release to this exact settlement and matching acceptance.
+ * The reader still checks the backer's signature, standing demand, tags and deadlines. */
+export function authorizeSettlement(record: Record, acceptance: SignedAcceptance, presenterSecret: Uint8Array): Record {
+  if (record?.kind !== 6) throw new EncodingError("only a settlement carries a release");
+  statementBytes(record); acceptanceBytes(acceptance);
+  const demand = identifierOf(record.publicInputs[15]!, record.publicInputs[16]!);
+  if (compareBytes(record.domain, acceptance.domain) !== 0 || compareBytes(demand, acceptance.demand) !== 0 ||
+      record.publicInputs[8] !== acceptance.owner) throw new EncodingError("the acceptance does not match the settlement");
+  const release = releaseBytes(record.domain, demand, acceptanceId(acceptance), statementHash(record));
+  const authorization = encodeSettlementAuthorization(acceptance.deadline, acceptance.signature, ed25519.sign(release, presenterSecret));
+  return decodeRecord(encodeRecord({ ...record, authorization }));
 }

@@ -3,97 +3,96 @@
 Updated: 2026-09-27
 
 ## Goal
-Slice 2 of the [plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)
-accepted; delivery via [PR #23](https://github.com/mediumofexchange/reference-ts/pull/23),
-`feat/v3-testnet-venue` based on slice 1's `4c42bba`. Runtime implementation is `5ec0302`.
-Live publication, fresh seedless supply verification, hostile cases, current report bindings
-and independent review passed. Stop boundary reached before recovery kinds; no adoption or deployment.
-Next is slice 3's single-backing redemption/failure path. First decide the served-segment bound
-below, then review the recovery design against the pinned specification before dependent code.
-Node management authorized 2026-09-27; the seven expressly authorized throwaway-wallet testnet
-transactions and their fees completed. No real funds or mainnet transactions were used.
+Slice 3 of the [plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)
+has completed acceptance on `feat/v3-recovery`, from slice 2 `2c6b20c` ([PR #23](https://github.com/mediumofexchange/reference-ts/pull/23)).
+Acceptance: real-proof redemption under service, disappearance with force from a holder's
+package and venue alone, return with exact adoption, non-service counting, and missing-evidence
+refusal. Run ported hostile cases, independent review, full checks and source-bound acceptance.
+The [reviewed design](decisions/2026-09.md#2026-09-27--preserve-complete-recovery-evidence-and-share-the-force-transition)
+retains complete bounded ancestry; imports do not reset lifetime evidence budgets.
+Stop: no replacement drills, persistence, wallet custody, multi-backing or configuration adoption.
+The authorized live recovery drill passed within its ten-transaction, 0.011 tERG fee
+and 0.05 tERG total caps. Its allowance and slice 2's separate allowance are exhausted.
 
 ## Status
-- Slice 2: testnet rules/identity, publisher and real-proof journal harness implemented; design and
-  integrated sensitive patch and final packaging passed independent review. Publisher and live journal passed.
-- Pinned upstream `23aabead`: 45 s legacy predictor, no EIP-37 clamps, signed-Int prediction
-  overflow and terminal difficulty reset; hostile fixtures pass. [Decision](decisions/2026-09.md#2026-09-27--read-the-reference-testnet-through-its-pinned-header-rules).
-- All seven [CI jobs at acc1ab7](https://github.com/mediumofexchange/reference-ts/actions/runs/36318895153)
-  passed (full checks, v2/v3 real proofs on Linux/Windows). No companion specification branch.
-- Ergo ([guide](docs/ERGO_VENUE_PROFILE.md#runtime-venue), spec [01d8db2](https://github.com/mediumofexchange/money-from-first-principles/blob/01d8db2/venue-ergo.md)):
-  `ErgoVenue` verifies headers and sections itself; `ErgoPublisher` publishes kinds
-  1–3, one remembered transaction per record. Live publisher evidence is testnet-only; memory-only runtime.
-- Own nodes: v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052), `scratch/ergo-nodes/`.
-  Approved launcher `experiments/ergo-range/nodes.mjs`: start/watch via WMI (terminal children die).
-- Testnet wallet: `scratch/ergo-testnet/wallet.json` (~19,999.88 tERG; backed up); this run completed.
+- Runtime: demand/withdrawal/settlement admission and witnesses; fixed-anchor publication force;
+  promoted import/package/receipt/non-service readers; journal witnessed retirement, empty return,
+  actual-opening-index adoption and complete evidence packages; kind-4 Ergo output runs.
+- Integrated adversarial review and critical-fix readback passed. Fixes reserve checkpoint/event
+  work including imported ancestry and known future request counts; adoption budgets current
+  evidence while deriving the historical exact block; return reserves two checkpoints.
+  Publisher rejects signed transactions over the pinned node's 98,304-byte ceiling.
+- Focused force, witness, recovery journal, publisher and request-work tests passed. The
+  128-checkpoint journal regression now restores 128 genuine signatures and passes; the
+  separate reader regression walks all 128 held checkpoints. All seven CI jobs passed at
+  `74eade8`: full checks on Node 20/24 and real-proof v2/v3 checks on Linux and Windows.
+- Earlier local full runs had fixture/host-contention timeouts. Duplicate single-worker run
+  was stopped after CI passed. No Java priority was changed and no verification job remains active.
+- Local `run-v3-reports.ps1` completed: fourteen restoration checks and fresh GET-only runtime
+  venue verification passed; both source-bound reports are refreshed and current.
+- Real-proof local and synthetic recovery acceptance passed; reports retain the complete
+  package and transaction measurements. Fresh public readers verify force and exact adoption.
+- Gated live mode and narrow optional submission-budget callback passed independent source
+  review and rebuilt offline hostile guard checks. The [live plan](docs/POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
+  ran successfully within its caps; [live report](docs/pool-v3-recovery-store-testnet-verification.json)
+  binds unchanged reviewed sources. A fresh process verified the retained public reader bundle.
+- Reviewed implementation is `74eade8`, delivered through [PR #24](https://github.com/mediumofexchange/reference-ts/pull/24).
+  [CI at a34a046](https://github.com/mediumofexchange/reference-ts/actions/runs/36328998544) passed all seven jobs.
+  Delivery follow-up changes reports/docs only; docs/links and current source bindings passed.
 
 ## Evidence
-- Current: restoration, live runtime venue and full checks passed locally; testnet reader passed
-  1,239 headers and ten recalculations: [testnet headers](docs/ergo-testnet-header-verification.json).
-  [Live testnet journal](docs/pool-v3-testnet-verification.json) passed at `acc1ab7`; corrected public bundle and synthetic journal passed.
-  Report homes: [journal](docs/pool-v3-store-verification.json),
-  [v3 replay](docs/pool-v3-local-replay-verification.json), [conformance](docs/pool-v3-conformance-verification.json),
-  [v2](docs/pool-v2-verification.json), [restoration](docs/pool-restoration-evidence-verification.json),
-  [runtime venue](docs/ergo-runtime-venue-verification.json), [publisher](docs/ergo-publisher-verification.json),
-  [headers](docs/ergo-header-verification.json), [framer](docs/ergo-framer-hostile-equivalence-verification.json).
-- Current bundle [readback](docs/pool-v3-testnet-reader-verification.json) is separate from the unchanged live report; retired probes remain at `1b4857a`.
+- Slice 2 reports are historical at `2c6b20c` where recovery changes touch their source bindings:
+  [live journal](docs/pool-v3-testnet-verification.json), [bundle readback](docs/pool-v3-testnet-reader-verification.json),
+  [publisher](docs/ergo-publisher-verification.json). Earlier CI at
+  [acc1ab7](https://github.com/mediumofexchange/reference-ts/actions/runs/36318895153) does not cover this patch.
+- Refreshed current [journal](docs/pool-v3-store-verification.json),
+  [replay](docs/pool-v3-local-replay-verification.json), [conformance](docs/pool-v3-conformance-verification.json),
+  [restoration](docs/pool-restoration-evidence-verification.json) and
+  [runtime venue](docs/ergo-runtime-venue-verification.json). Recovery reports:
+  [local](docs/pool-v3-recovery-store-verification.json), [synthetic Ergo](docs/pool-v3-recovery-store-ergo-verification.json).
+- Unchanged [testnet header](docs/ergo-testnet-header-verification.json) evidence pins upstream
+  `23aabead`, legacy 45 s predictor, signed-Int overflow and terminal reset; no EIP-37 clamps.
 
 ## Next
-[Plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2)
-(each slice's acceptance and stop): v3 beside a frozen v2, one moded state machine and one
-reader over §13 answers; the candidate runs only on recomputed reference venue identities.
-
-1. v3 core (one segment, local and synthetic Ergo): M0–M2b done.
-2. Testnet venue done: pinned header rules, distinct reference identity, publisher and live journal
-   acceptance; the fresh seedless reader verifies supply from public bytes and its own node reads.
-   This reference-only observation closes no adoption, recovery or production finality gate.
-3. Redemption and failure path, single backing: under service first, then
-   silence, force (a `state.ts` mode; decide its check order), snapshot redemption,
-   return/adoption, non-service count, kind-4 runs; testnet drills, holder's package only;
-   recovery kinds in admission (doors at the horizon), silence terms in the journal.
-4. Succession, hostile operator: replacement/takeover, equivocation, key compromise.
-5. Persistence: `ErgoVenue` headers/objects (spill past `retainedBytes`, prune
-  side branches below the clock); publisher memory in the owning outbox; restart
-   drills for the journal; its full-range reads per operation become a cursor.
-6. v3 wallet and service (C4.1–2 requests, funding disclosure); retire v2.
-7. Multi-backing: scope classification/recovery, counts, receipts.
-8. Adoption, pool-v3 §1: identities with parameter provenance, ACIR identities and refusal checks via
-   `constraints.mjs` (`v3/check.mjs:121`), certificates, replay/import rules, bounds, one-transaction
-   condition, the proof curve's stated margin (BN254: ~100-bit discrete log). Mainnet needs funds.
-9. Segment length: a served trail from the opening fits ~68 real-proof records in the reader's
-   1 MiB budget (then RESOURCE); decide imports or a served suffix before slice 3's drills.
-10. Hygiene when touching the files: the ~10 local byte predicates onto the `bytes.ts` intake (Ergo
-   and `record-venue` ones read `.length`/`.buffer` and throw TypeError on a look-alike); the
-   hand-parsed v3 codecs (`trail`, `package`, `fault-evidence`, `record-range`) onto ByteReader/
-   ByteWriter; readers re-read `args.configuration`/
-   `verifier`; `ErgoVenue` charges section bytes, not transactions; `applyRecord`'s history check
-   follows its effects; `served-trail.ts` caches by caller trail object; `heldCommitments` hides a
-   twin at a held sequence from the journal's CONFLICT check (slice 4). v2 items (`inspectNotes`,
-   replay `statements.slice`, `activate`, `submit` reload, v1 store codec, `bytecode(k)` gzip,
-   `encodeSpentProof` holes, lenient wallet-restore `BigInt`): check v3 successors.
-11. Later, only when a decision or gate needs it: cancelling an abandoned publication, batched records,
-   an index-free box source, a venue-moving record (C2.3.1), the slowest-supplier clock, a multi-entry
-   extension fixture, Poseidon2 on Barretenberg, sponsored holder funding (devnet versions, faster
-   Blake2b, a warmed verifier dropped).
+1. Inspect PR #24's recorded CI/merge state before resuming; after verified merge, use main,
+   remove its merged branch and disposable slice scratch, then start slice 4. No live job remains.
+2. Begin slice 4 only after delivery. Prefer a fresh instance for the distinct succession scope;
+   this handoff and the linked plan are sufficient startup context.
+3. Succession/hostile operator: replacement/takeover, equivocation, key compromise.
+4. Persistence: venue headers/objects beyond retainedBytes, prune side branches, publisher outbox,
+   restart drills; replace journal full-range reads per operation with a cursor.
+5. V3 wallet/service (C4.1–2 requests/funding disclosure), retire v2; multi-backing recovery/counts.
+6. Configuration adoption: parameter provenance, ACIR identities/certificates, replay/import
+   bounds, one-transaction condition and BN254 margin. Mainnet needs separate funds authority.
+7. Complete trails currently permit roughly 67 repeated spend-sized records in 1 MiB with existing
+   dependencies (size-only probe); lifetime streaming verification remains a separate design.
+8. On touching affected files: local byte predicates → bytes.ts; hand-parsed v3 codecs →
+   ByteReader/Writer; verify caller ownership; Ergo section-vs-transaction byte charging;
+   applyRecord history check follows effects; served-trail caller-object cache;
+   heldCommitments hides a twin at held sequence (slice 4). Check v3 successors for v2 intake issues.
+9. Only when a gate needs them: abandoned publication cancellation, batching, index-free box
+   source, venue-moving record, slowest-supplier clock, multi-entry extension fixture,
+   Poseidon2 on Barretenberg and sponsored holder funding.
 
 ## Retained boundaries and local state
-- Configured v2: local real-proof payments, private delivery, public audit. [Device contract](docs/POOL_WALLET_DEVICE.md),
-  [observations](docs/pool-wallet-device-verification.json): preflight fails; qualified hardware,
-  theft/power-loss/backup drills and continuous recovery require separate provisioning authority.
-- Retain the stopped contained-sync node’s detached 20 GiB image
-  `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd` with its tool caches
-  (`node-startup/`, `sync-preparation/`); do not delete it or allocate another. Keep `private-payment-crs/`,
-  `jdk/` (the framer probe's javac) and `ergo-headers/` (their report holds the digests).
-- Retain `scratch/testnet-header-probe/` (header report inputs) and `scratch/pool-v3-testnet-reader/`
-  (public bundle pinned by the readback report); replay with `node scratch/pool-v3-testnet-reader/replay.mjs`.
-  Own nodes remain running; verification jobs ended. Other slice-2 `testnet-*` scratch files are disposable.
-- Preserve legacy Temp/moeclean. Configuration approval, device qualification and mainnet stay disabled.
+- Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes remain running under
+  `scratch/ergo-nodes/`; approved WMI launcher `experiments/ergo-range/nodes.mjs`.
+- Keep `scratch/ergo-testnet/wallet.json` (backed up; slice 2 ~19,999.88 tERG), public
+  `scratch/pool-v3-testnet-reader/` and `scratch/pool-v3-recovery-testnet-reader/` public bundles,
+  `testnet-header-probe/`, `private-payment-crs/`,
+  `jdk/` and `ergo-headers/`. Node management remains authorized.
+- Retain stopped contained-sync node's 20 GiB
+  `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd` and
+  `node-startup/`, `sync-preparation/` caches; do not allocate another.
+- Keep active verification logs until results are retained. Delete slice scratch only after
+  delivery and only inside ignored scratch; preserve legacy Temp/moeclean.
+- Qualified hardware/device custody, theft/power-loss/backup drills and continuous recovery
+  require separate provisioning authority. Configuration approval and mainnet stay disabled.
 
 ## Open questions
-- No slice-2 acceptance or review gate remains. Next: the served-segment bound and slice-3 design review.
-  CI at `acc1ab7` covers unchanged runtime; final bundle/synthetic checks and docs cover the tooling correction.
+- No remaining slice 3 acceptance blockers; PR #24 records final CI and delivery state.
+- No unresolved review findings; local/synthetic acceptance and required CI passed.
 
-Roughly **55% done / 45% remaining**, plausible range **45–65%**, reassessed 2026-09-27 (slice 2):
-v3 journal publication and independent supply verification now share the real Ergo publisher/reader
-on the live reference testnet. Runtime recovery, adoption, persistence, wallet custody and mainnet
-still dominate; no release gate closed.
+Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-27:
+single-backing recovery now shares reviewed runtime transitions and independent real-proof readers.
+Replacement, configuration adoption, persistence, wallet custody and mainnet remain.

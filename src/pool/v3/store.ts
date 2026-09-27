@@ -1,12 +1,13 @@
 // Node 24 optional entry point. The pool-v3 operator journal (v3 runtime plan,
-// slice 1): one durable command log per operator key and venue, fenced to one
-// owner, on PoolStore's SQLite pattern. It opens the genesis segment of one
-// backing, admits issue, spend and burn through the state machine's admission
+// slices 1–3): one durable command log per operator key and venue, fenced to one
+// owner, on PoolStore's SQLite pattern. It serves one backing, admits ordinary
+// and recovery records through the state machine's admission
 // mode (state.ts) with original signed receipts (§7.2), signs checkpoint
 // commitments over v3 directories and snapshots (§7), publishes them through
 // the record venue from an outbox, and serves §12 packages a reader verifies
-// alone. Imports, recovery kinds, replacement and several backings are later
-// slices; a journal reopened after a restart replays its commands.
+// alone. A witnessed silence boundary permits an empty return opening, then
+// exact adoption through its witnessed index before service. Replacement and
+// several backings remain later slices; reopening replays the journal commands.
 //
 // Candidate only: the configuration comes from the caller's manifest check
 // and the venue must be a reference venue (guard.ts). Time is the venue's
@@ -27,11 +28,13 @@ import { decodeCommitment, directoryRoot, encodeCommitment, signCommitment, veri
 import { scopeSchedule } from "../schedule.js";
 import { ScopeTree } from "../scope.js";
 import { encodeReceipt, receiptBytes, snapshotBytes, snapshotDigest, type Snapshot } from "./commitments.js";
-import { configurationBytes, configurationHash, type CandidateConfiguration } from "./configuration.js";
+import { configurationBytes, configurationHash, decodeConfiguration, type CandidateConfiguration } from "./configuration.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "./headers.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem, type PackageLimits } from "./package.js";
 import { RANGE_LIMITS, TRAIL_LIMITS, type SignedTerms } from "./reader.js";
+import { readSingleBackingPackage } from "./package-reader.js";
+import { IMPORT_LIMITS, type ImportResult } from "./import-reader.js";
 import { decodeRecord, encodeRecord, evidenceHashes, statementHash } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
 import { applyRecord, openSegmentState, type ProofCheck, type SegmentReplay, type SegmentState } from "./state.js";
@@ -67,12 +70,16 @@ type Command =
   | { kind: "open"; terms: string; signature: string; at: string; observed: string | null }
   | { kind: "commit"; at: string; observed: string | null }
   | { kind: "admit"; record: string; horizon: string }
+  | { kind: "return"; at: string; observed: string | null }
+  | { kind: "adopt"; at: string; opening: string }
   | { kind: "published"; sequence: string };
 function commandText(c: Command): string {
   switch (c?.kind) {
     case "open": return JSON.stringify({ kind: c.kind, terms: c.terms, signature: c.signature, at: c.at, observed: c.observed });
     case "commit": return JSON.stringify({ kind: c.kind, at: c.at, observed: c.observed });
     case "admit": return JSON.stringify({ kind: c.kind, record: c.record, horizon: c.horizon });
+    case "return": return JSON.stringify({ kind: c.kind, at: c.at, observed: c.observed });
+    case "adopt": return JSON.stringify({ kind: c.kind, at: c.at, opening: c.opening });
     case "published": return JSON.stringify({ kind: c.kind, sequence: c.sequence });
     default: throw new V3StoreError("STORAGE", "unknown journal command");
   }
@@ -89,6 +96,7 @@ interface Opened {
   readonly signed: SignedTerms;
 }
 interface Signed {
+  readonly opened: Opened;
   readonly commitment: Commitment;
   readonly length: bigint;
   readonly at: bigint;
@@ -106,7 +114,10 @@ interface Engine {
   readonly signed: Signed[];
   /** The last admission's horizon; horizons never move back. */
   horizon: bigint;
+  readonly archives: { readonly opened: Opened; readonly records: readonly Uint8Array[] }[];
+  pendingReturn: boolean;
 }
+type StateRead = Extract<ImportResult, { readonly state: object }>;
 /** The venue at one instant: its clock and lag, this key's held commitments, the backing's term boundaries and K's revocation. */
 interface View {
   readonly now: bigint;
@@ -148,6 +159,7 @@ export class V3OperatorJournal {
   private readonly venueId: Uint8Array;
   private readonly lag: bigint;
   private readonly verifier: ProofCheck;
+  private readonly reference: VenueReference;
   private readonly owner: bigint;
   private readonly resumedAt: bigint | undefined;
   private observedIndex: bigint;
@@ -162,7 +174,8 @@ export class V3OperatorJournal {
     const { configuration, secret, venue, reference, verifier } = options;
     // The guard first: the candidate runs only on a reference venue.
     this.venueId = requireReferenceVenue(reference, venue);
-    this.configuration = configuration; this.domain = configurationHash(configuration);
+    this.reference = structuredClone(reference);
+    this.configuration = decodeConfiguration(configurationBytes(configuration)); this.domain = configurationHash(this.configuration);
     this.venue = venue; this.lag = venue.lag(); this.verifier = verifier;
     this.secret = copyBytes(secret); this.operator = ed25519.getPublicKey(this.secret);
     this.observedIndex = 0n;
@@ -261,7 +274,8 @@ export class V3OperatorJournal {
       const q = this.db.prepare("SELECT seq,id,request,command,response FROM events ORDER BY seq"); q.setReadBigInts(true);
       return q.all();
     });
-    const engine: Engine = { revision: 0n, opened: undefined, state: undefined, records: [], receipts: new Map(), signed: [], horizon: 0n };
+    const engine: Engine = { revision: 0n, opened: undefined, state: undefined, records: [], receipts: new Map(), signed: [], horizon: 0n,
+      archives: [], pendingReturn: false };
     for (const row of rows) {
       requireThat(row.seq === engine.revision + 1n && typeof row.command === "string" && typeof row.response === "string" &&
         typeof row.id === "string" && typeof row.request === "string", "STORAGE", "invalid journal row");
@@ -295,6 +309,19 @@ export class V3OperatorJournal {
     } else if (command.kind === "commit") {
       requireThat(engine.opened !== undefined && /^command:/.test(id) && request === "commit", "STORAGE", "stored commitment disagrees with replay");
       this.replaySigned(engine, command, at(command.at), response);
+    } else if (command.kind === "return") {
+      requireThat(engine.opened !== undefined && !engine.pendingReturn && /^command:/.test(id) && request === "return", "STORAGE", "invalid return command");
+      const index = at(command.at), source = await this.currentRead(engine, index);
+      this.prepareReturn(engine, source, index);
+      this.replaySigned(engine, command, index, response);
+    } else if (command.kind === "adopt") {
+      const opening = engine.opened;
+      requireThat(opening !== undefined && engine.pendingReturn && command.opening === opening.header.sequence.toString() &&
+        id === `adopt:${command.opening}` && request === "adopt", "STORAGE", "invalid adoption command");
+      const index = decimal(command.at), source = await this.currentRead(engine, index);
+      requireThat(source.canonical.index === index && source.canonical.commitment.sequence === opening.header.sequence, "STORAGE", "adoption index differs from the witnessed opening");
+      const receipts = await this.applyAdoption(engine, source);
+      requireThat(response === JSON.stringify(receipts.map(bytesToHex)), "STORAGE", "adoption receipts disagree with replay");
     } else if (command.kind === "admit") {
       const state = engine.state, opened = engine.opened;
       requireThat(state !== undefined && opened !== undefined, "STORAGE", "a receipt without a segment");
@@ -325,7 +352,7 @@ export class V3OperatorJournal {
       commitment.sequence === highest + 1n && same(commitment.root, directoryRoot(directory)), "STORAGE", "stored commitment disagrees with replay");
     // What the venue held of this key at signing: nothing yet, or a commitment this journal signed before.
     requireThat(command.observed === null || engine.signed.some(s => hexOf(s.commitment) === command.observed), "STORAGE", "invalid observed commitment");
-    engine.signed.push({ commitment, length: BigInt(engine.records.length), at, observed: command.observed, directory, snapshot, published: false });
+    engine.signed.push({ opened: engine.opened!, commitment, length: BigInt(engine.records.length), at, observed: command.observed, directory, snapshot, published: false });
   }
 
   private openRequest(terms: string, signature: string): string {
@@ -341,8 +368,6 @@ export class V3OperatorJournal {
     requireThat(verifyRootTermsSignature(signed.terms, signed.signature), "REFUSED", "the backer's signature does not verify");
     requireThat(same(terms.operator, this.operator) && same(terms.configuration, this.domain) && same(terms.venue, this.venueId),
       "REFUSED", "the terms name another operator, configuration or venue");
-    // The failure path (silence, non-service) lands in slice 3.
-    requireThat(terms.silence === undefined && terms.nonService === undefined, "UNSUPPORTED", "silence and non-service clauses are not served yet");
     const backing = rootTermsName(signed.terms);
     const header: SegmentHeader = { domain: this.domain, venue: this.venueId, operator: this.operator, sequence: 1n, entries: [{ backing, link: backing }] };
     return { header, headerBytes: segmentBytes(header), segment: segmentIdentity(header), scope: new ScopeTree(header.entries).root(), backing,
@@ -350,7 +375,7 @@ export class V3OperatorJournal {
   }
   private replayOf(opened: Opened, horizon: bigint, revokedAt: bigint | undefined): SegmentReplay {
     return { domain: this.domain, backing: opened.backing, segment: opened.segment, scope: opened.scope, terms: opened.terms,
-      verifier: this.verifier, index: horizon, admission: true, revokedAt, block: [] };
+      verifier: this.verifier, index: horizon, lag: this.lag, admission: true, revokedAt, block: [] };
   }
   /** The current snapshot of the one backing and its directory (§7). */
   private checkpoint(engine: Engine): { readonly directory: readonly SnapshotDigest[]; readonly snapshot: Uint8Array } {
@@ -405,8 +430,9 @@ export class V3OperatorJournal {
     return held !== undefined && hexOf(held.commitment) === hexOf(signed.commitment);
   }
   /** Service needs the current signed state, the scope's schedule open, and for issuance an unrevoked backer. */
-  private ready(engine: Engine, view: View, action: "admit" | "commit"): void {
+  private async ready(engine: Engine, view: View, action: "admit" | "commit"): Promise<void> {
     requireThat(engine.opened !== undefined && engine.state !== undefined, "STALE", "open the segment first");
+    requireThat(!engine.pendingReturn, "STALE", "the return opening must be witnessed and its block adopted before service");
     const last = engine.signed.at(-1)!, latest = hexOf(view.held.at(-1)?.commitment);
     // Another commitment of this key at a sequence the journal never signed means the key has another journal.
     requireThat(view.held.every(h => hexOf(engine.signed[Number(h.commitment.sequence) - 1]?.commitment) === hexOf(h.commitment)),
@@ -417,16 +443,188 @@ export class V3OperatorJournal {
       ...(this.isHeld(view, last) ? {} : { unwitnessedSignedAt: last.at }), ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
     requireThat(!schedule.lapsed, "STALE", "the operator's term has ended");
     requireThat(action === "admit" ? schedule.admissionOpen : schedule.commitNow, "SCHEDULE", "the scope's signing schedule is closed");
+    if (engine.opened.terms.silence !== undefined || engine.opened.terms.nonService !== undefined) {
+      const source = await this.currentRead(engine, view.now);
+      this.serviceClock(source, view.now);
+      this.reserveEvents(engine, source, action === "admit" ? 1n : 0n);
+    }
     if (view.revokedAt !== undefined) {
       // Only issuance finalized before K's revocation stays; a later tail needs recovery (slice 3).
       let finalized = 0n;
       for (const signed of engine.signed) {
         const held = view.held.find(h => h.commitment.sequence === signed.commitment.sequence);
-        if (held !== undefined && hexOf(held.commitment) === hexOf(signed.commitment) && held.index < view.revokedAt && signed.length > finalized) finalized = signed.length;
+        if (same(signed.opened.segment, engine.opened.segment) && held !== undefined && hexOf(held.commitment) === hexOf(signed.commitment) && held.index < view.revokedAt && signed.length > finalized) finalized = signed.length;
       }
       requireThat(!engine.records.slice(Number(finalized)).some(bytes => decodeRecord(bytes).kind === 1), "UNSUPPORTED",
         "issuance without pre-revocation finality needs recovery");
     }
+  }
+
+  /** Read all dependencies from bytes, including later lapsed/excluded signed
+   * checkpoints. Trying an older selection never omits those checkpoints. */
+  private async currentRead(engine: Engine, at: bigint): Promise<StateRead> {
+    const opened = engine.opened;
+    requireThat(opened !== undefined, "STALE", "there is no segment to read");
+    const held = heldCommitments(this.ask(1, this.operator, at)).held;
+    for (const candidate of [...engine.signed].reverse()) {
+      if (!held.some(h => hexOf(h.commitment) === hexOf(candidate.commitment))) continue;
+      const c = candidate.commitment;
+      const bytes = this.encodePackage(opened, engine.signed, c, engine.records, engine.archives);
+      try {
+        const result = await readSingleBackingPackage(bytes, { mode: "historical-fixture", domain: this.domain, venue: this.venueId,
+          backing: opened.backing, operator: this.operator, sequence: c.sequence, root: c.root, judgingIndex: at },
+        { configuration: this.configuration, verifier: this.verifier, venue: this.venue, reference: this.reference });
+        requireThat(result.state !== undefined, "UNAVAILABLE", "a journal state read returned a receipt");
+        return result;
+      } catch (error) {
+        if (error instanceof ReplayRefusal || (error instanceof EvidenceRefusal && error.status === "lapsed-selection")) continue;
+        if (error instanceof EvidenceRefusal) throw new V3StoreError("UNAVAILABLE", `canonical evidence: ${error.status}`);
+        throw error;
+      }
+    }
+    throw new V3StoreError("UNAVAILABLE", "no canonical witnessed checkpoint is available");
+  }
+
+  private serviceClock(source: StateRead, now: bigint): void {
+    const clock = source.clock;
+    if (clock === null) return;
+    if (clock.boundary !== null && BigInt(clock.boundary) <= now) throw new V3StoreError("STALE", "the segment is permanently retired by silence", "SILENCE");
+    if (now + this.lag - source.canonical.index > BigInt(clock.duration)) {
+      throw new V3StoreError("SCHEDULE", "the witnessing horizon reaches silence", "SILENCE");
+    }
+  }
+
+  /** Every signed checkpoint can still reach the venue. Deduplicated package
+   * bytes do not bound the reader's checkpoint work, so reserve that separately. */
+  private reserveCheckpoint(engine: Engine, count = 1n): void {
+    if (BigInt(engine.signed.length) + count > IMPORT_LIMITS.maxCheckpoints) {
+      throw new V3StoreError("REFUSED", "the next checkpoint exceeds the reader's work budget", "RESOURCE");
+    }
+  }
+
+  /** Known record-prefix work for the next continuation. A first continuation
+   * with an adopted block replays from the imported frontier, not its empty
+   * opening. Later independent venue publications can still exhaust a reader's
+   * local budgets; no journal can bound what other parties publish. */
+  private reserveEvents(engine: Engine, source: StateRead, extra: bigint): void {
+    const unadopted = source.force.filter(event => event.index > source.state.adoptionIndex && event.index <= source.canonical.index);
+    const rebuild = source.canonical.commitment.sequence === engine.opened!.header.sequence && unadopted.length > 0;
+    const ancestry = rebuild ? BigInt(new Map(source.state.resumeKey.imported?.events).size) : 0n;
+    const records = BigInt(engine.records.length) + extra - (rebuild ? 0n : source.state.position);
+    if (this.reservedEventWork(source) + ancestry + records > IMPORT_LIMITS.maxEvents) {
+      throw new V3StoreError("REFUSED", "the continuation exceeds the reader's event budget", "RESOURCE");
+    }
+  }
+
+  /** Known requests may enter the counting window before the next checkpoint. */
+  private reservedEventWork(source: StateRead): bigint {
+    return source.work.events - source.work.requestProofs + source.work.requestProofReserve;
+  }
+
+  /** Change only the in-memory segment; the caller atomically records the
+   * signed empty opening. Old bytes stay as evidence, not live accepted state. */
+  private prepareReturn(engine: Engine, source: StateRead, at: bigint): void {
+    const old = engine.opened!;
+    requireThat(!engine.pendingReturn && source.clock?.boundary !== null && source.clock?.boundary !== undefined &&
+      BigInt(source.clock.boundary) <= at && same(source.canonical.segment, old.segment), "STALE", "return needs the active segment's witnessed silence boundary");
+    const sequence = engine.signed.at(-1)!.commitment.sequence + 1n;
+    requireThat(sequence < U64, "STORAGE", "signed sequence counter exhausted");
+    const predecessor = source.canonical.commitment;
+    const header: SegmentHeader = { ...old.header, sequence, entries: [{ backing: old.backing, link: old.header.entries[0]!.link,
+      opening: { operator: copyBytes(predecessor.operator), sequence: predecessor.sequence, root: copyBytes(predecessor.root) } }] };
+    const opened: Opened = { ...old, header, headerBytes: segmentBytes(header), segment: segmentIdentity(header), scope: new ScopeTree(header.entries).root() };
+    engine.archives.push({ opened: old, records: [...engine.records] });
+    engine.records.splice(0);
+    engine.opened = opened;
+    engine.state = openSegmentState(opened.segment, undefined, source.state, undefined, () => {});
+    engine.pendingReturn = true;
+  }
+
+  /** The verified opening determines the exact block. Force was checked by
+   * the reader at each original index; adoption changes the fresh local tree. */
+  private async applyAdoption(engine: Engine, source: StateRead): Promise<Uint8Array[]> {
+    const opened = engine.opened!, state = engine.state!;
+    requireThat(engine.pendingReturn && source.canonical.commitment.sequence === opened.header.sequence &&
+      same(source.canonical.segment, opened.segment), "STALE", "the witnessed opening is not this return");
+    const block = source.force.filter(event => event.index > source.state.adoptionIndex && event.index <= source.canonical.index);
+    const receipts: Uint8Array[] = [];
+    const replay: SegmentReplay = { ...this.replayOf(opened, source.canonical.index, source.ranges.revokedAt), admission: false, block };
+    for (const event of block) {
+      await applyRecord(state, event.bytes, replay);
+      engine.records.push(copyBytes(event.bytes));
+      const receipt = this.receipt(engine, event.bytes), identity = bytesToHex(statementHash(event.record));
+      receipts.push(receipt);
+      if (!engine.receipts.has(identity)) engine.receipts.set(identity, receipt);
+    }
+    engine.pendingReturn = false;
+    return receipts;
+  }
+
+  /** C2b.4.1: sign an empty successor only after witnessed silence. This does
+   * not authorize service; publish, wait for witnessing, then call adopt(). */
+  async return(id: string): Promise<Commitment> {
+    const commandId = this.commandId(id);
+    return this.run(async engine => {
+      const prior = this.prior(commandId, "return");
+      if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
+      const view = this.view(engine);
+      requireThat(engine.opened !== undefined && !engine.pendingReturn, "STALE", "a return is already pending or no segment exists");
+      this.reserveCheckpoint(engine, 2n); // Empty return and its service continuation.
+      requireThat(view.held.every(h => engine.signed.some(s => hexOf(s.commitment) === hexOf(h.commitment))), "CONFLICT", "another journal signed this key");
+      const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries: view.boundaries,
+        ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
+      requireThat(!schedule.lapsed && schedule.commitNow, "SCHEDULE", "return signing is outside the operator's term");
+      const source = await this.currentRead(engine, view.now);
+      if (this.reservedEventWork(source) + BigInt(source.state.events.size) > IMPORT_LIMITS.maxEvents) {
+        throw new V3StoreError("REFUSED", "the return exceeds the reader's ancestry budget", "RESOURCE");
+      }
+      this.diverging = true;
+      this.prepareReturn(engine, source, view.now);
+      const opened = engine.opened!, { directory, snapshot } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
+      const previous = engine.signed.at(-1)!.commitment;
+      this.encodePackage(opened, [...engine.signed, { directory, snapshot }], previous, [], engine.archives);
+      const commitment = this.transaction(() => {
+        this.stable(engine, view);
+        const c = signCommitment(this.secret, opened.header.sequence, directoryRoot(directory));
+        this.append(engine, commandId, "return", { kind: "return", at: view.now.toString(), observed }, bytesToHex(encodeCommitment(c)));
+        return c;
+      });
+      engine.signed.push({ opened, commitment, length: 0n, at: view.now, observed, directory, snapshot, published: false });
+      engine.revision++;
+      return copyCommitment(commitment);
+    });
+  }
+
+  /** C2b.4.2: wait for the actual opening index r and re-read through r before
+   * co-signing its exact adopted block. Exact retry returns the same receipts. */
+  async adopt(): Promise<readonly Uint8Array[]> {
+    return this.run(async engine => {
+      const opened = engine.opened;
+      requireThat(opened !== undefined, "STALE", "no return opening exists");
+      const id = `adopt:${opened.header.sequence}`, prior = this.prior(id, "adopt");
+      if (prior !== undefined) return (JSON.parse(prior) as string[]).map(hexToBytes);
+      requireThat(engine.pendingReturn, "STALE", "the segment is not a pending return");
+      const view = this.view(engine), held = view.held.find(h => h.commitment.sequence === opened.header.sequence);
+      requireThat(held !== undefined && hexOf(held.commitment) === hexOf(engine.signed.at(-1)!.commitment), "UNAVAILABLE", "the return opening is not witnessed");
+      const current = await this.currentRead(engine, view.now);
+      this.serviceClock(current, view.now);
+      const source = await this.currentRead(engine, held.index);
+      const block = source.force.filter(event => event.index > source.state.adoptionIndex && event.index <= source.canonical.index);
+      this.reserveCheckpoint(engine);
+      this.reserveEvents(engine, current, BigInt(block.length));
+      const last = engine.signed.at(-1)!;
+      this.encodePackage(opened, [...engine.signed, { directory: [{ name: opened.backing, digest: new Uint8Array(32) }],
+        snapshot: new Uint8Array(last.snapshot.length) }], held.commitment, [...engine.records, ...block.map(event => event.bytes)], engine.archives);
+      this.diverging = true;
+      const receipts = await this.applyAdoption(engine, source), { directory, snapshot } = this.checkpoint(engine);
+      this.encodePackage(opened, [...engine.signed, { directory, snapshot }], held.commitment, engine.records, engine.archives);
+      this.transaction(() => {
+        this.stable(engine, view);
+        this.append(engine, id, "adopt", { kind: "adopt", at: held.index.toString(), opening: opened.header.sequence.toString() }, JSON.stringify(receipts.map(bytesToHex)));
+      });
+      engine.revision++;
+      return receipts.map(copyBytes);
+    });
   }
 
   /** Fenced lookup of an earlier command's reply; the same identifier with other content conflicts. */
@@ -481,14 +679,14 @@ export class V3OperatorJournal {
         return c;
       });
       engine.opened = opened; engine.state = state;
-      engine.signed.push({ commitment, length: 0n, at: view.now, observed: null, directory, snapshot, published: false });
+      engine.signed.push({ opened, commitment, length: 0n, at: view.now, observed: null, directory, snapshot, published: false });
       engine.revision++;
       return copyCommitment(commitment);
     });
   }
 
   /**
-   * Admit one kind 1–3 record at the horizon (the read index plus the lag)
+   * Admit one kind 1–6 record at the horizon (the read index plus the lag)
    * and return its original signed receipt record (§7.2). An exact statement
    * already admitted returns its original receipt, even with another proof.
    */
@@ -502,13 +700,14 @@ export class V3OperatorJournal {
       const prior = engine.receipts.get(hash);
       if (prior !== undefined) return copyBytes(prior);
       const view = this.view(engine);
-      this.ready(engine, view, "admit");
+      this.reserveCheckpoint(engine);
+      await this.ready(engine, view, "admit");
       const opened = engine.opened!, state = engine.state!, horizon = view.now + view.lag;
       requireThat(horizon < U64, "SCHEDULE", "the horizon is past the venue's index space");
       // The checkpoint that will carry this record must still be served within the reader's budget.
       const last = engine.signed.at(-1)!;
       this.encodePackage(opened, [...engine.signed, { directory: [{ name: opened.backing, digest: new Uint8Array(32) }],
-        snapshot: new Uint8Array(last.snapshot.length) }], last.commitment, [...engine.records, bytes]);
+        snapshot: new Uint8Array(last.snapshot.length) }], last.commitment, [...engine.records, bytes], engine.archives);
       const before = state.position;
       try { await applyRecord(state, bytes, this.replayOf(opened, horizon, view.revokedAt)); }
       catch (error) {
@@ -537,18 +736,19 @@ export class V3OperatorJournal {
       const prior = this.prior(commandId, "commit");
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
       const view = this.view(engine);
-      this.ready(engine, view, "commit");
+      this.reserveCheckpoint(engine);
+      await this.ready(engine, view, "commit");
       const last = engine.signed.at(-1)!, sequence = last.commitment.sequence + 1n;
       requireThat(sequence < U64, "STORAGE", "signed sequence counter exhausted");
       const { directory, snapshot } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
-      this.encodePackage(engine.opened!, [...engine.signed, { directory, snapshot }], last.commitment, engine.records);
+      this.encodePackage(engine.opened!, [...engine.signed, { directory, snapshot }], last.commitment, engine.records, engine.archives);
       const commitment = this.transaction(() => {
         this.stable(engine, view);
         const c = signCommitment(this.secret, sequence, directoryRoot(directory));
         this.append(engine, commandId, "commit", { kind: "commit", at: view.now.toString(), observed }, bytesToHex(encodeCommitment(c)));
         return c;
       });
-      engine.signed.push({ commitment, length: BigInt(engine.records.length), at: view.now, observed, directory, snapshot, published: false });
+      engine.signed.push({ opened: engine.opened!, commitment, length: BigInt(engine.records.length), at: view.now, observed, directory, snapshot, published: false });
       engine.revision++;
       return copyCommitment(commitment);
     });
@@ -584,12 +784,13 @@ export class V3OperatorJournal {
    * journal admits and signs only what it can still serve.
    */
   private encodePackage(opened: Opened, signed: readonly Pick<Signed, "directory" | "snapshot">[], selected: Commitment,
-    records: readonly Uint8Array[]): Uint8Array {
+    records: readonly Uint8Array[], archives: Engine["archives"] = []): Uint8Array {
     try {
       const payloads = new Map<string, EvidenceItem>();
       const add = (kind: number, payload: Uint8Array): void => { payloads.set(`${kind}:${bytesToHex(sha256(payload))}`, { kind, payload }); };
       add(1, configurationBytes(this.configuration)); add(2, encodeCommitment(selected));
       add(6, encodeTrail({ header: opened.headerBytes, terms: [opened.signed], records }, TRAIL_LIMITS));
+      for (const archive of archives) add(6, encodeTrail({ header: archive.opened.headerBytes, terms: [archive.opened.signed], records: archive.records }, TRAIL_LIMITS));
       for (const s of signed) { add(3, encodeEvidenceDirectory(s.directory, SERVED_PACKAGE_LIMITS)); add(4, s.snapshot); }
       const items = [...payloads.values()].sort((a, b) => a.kind - b.kind || compareBytes(sha256(a.payload), sha256(b.payload)));
       return encodeEvidencePackage(items, SERVED_ROOM);
@@ -614,7 +815,8 @@ export class V3OperatorJournal {
       const selected = engine.signed[at]!, through = engine.signed.slice(0, at + 1);
       return { selection: { domain: copyBytes(this.domain), venue: copyBytes(this.venueId), backing: copyBytes(opened.backing),
         operator: copyBytes(this.operator), sequence: selected.commitment.sequence, root: copyBytes(selected.commitment.root) },
-      package: this.encodePackage(opened, through, selected.commitment, engine.records.slice(0, Number(selected.length))) };
+      package: this.encodePackage(opened, through, selected.commitment,
+        same(selected.opened.segment, opened.segment) ? engine.records.slice(0, Number(selected.length)) : [], engine.archives) };
     });
   }
 

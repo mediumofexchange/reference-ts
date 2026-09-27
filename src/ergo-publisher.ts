@@ -1,8 +1,9 @@
 // Publishing records on Ergo (venue-ergo.md §§5, 8): the operator's wallet.
 //
-// A record is one output at its kind's location whose R4 is the subject and
-// R5 the record (§6). This builds that transaction in the profile's grammar
-// (§5): plain inputs of one pay-to-public-key key with empty extensions, the
+// A record is one output, or a kind-4 adjacent run at its location, whose
+// R4 is the subject and R5 the record or piece (§6). This builds that
+// transaction in the profile's grammar (§5): plain inputs of one
+// pay-to-public-key key with empty extensions, the
 // record output, change back to the key and the fee at the miner-fee tree,
 // every register a `Coll[Byte]`. It signs each input itself, Ergo's proveDlog
 // Schnorr proof over the unsigned bytes, on @noble/curves, so the runtime needs
@@ -43,6 +44,7 @@ import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex, hexToBytes, randomBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes } from "./bytes.js";
 import { MINER_FEE_TREE_HEX } from "./ergo-profile.js";
+import { MAX_RANGE_RECORD_BYTES } from "./record-range.js";
 import { parseNodeJson, type NodeJson } from "./ergo-supplier.js";
 import { VenueError } from "./venue-error.js";
 
@@ -64,6 +66,10 @@ const PROOF_BYTES = CHALLENGE_BYTES + 32;
 const NONCE_TAG = new TextEncoder().encode("moe/ergo/publisher/nonce/v1");
 /** The node's consensus limit on a box's serialized bytes. */
 const MAX_BOX_BYTES = 4096;
+/** Pinned Ergo v6.0.6 (23aabead), src/main/resources/application.conf:
+ * node.maxTransactionSize = 98304. This is the default mempool bound on the
+ * signed transaction, separate from the profile's 131,914-byte record bound. */
+const MAX_TRANSACTION_BYTES = 98_304;
 const MAX_U16 = 0xffff;
 const MAX_U64 = (1n << 64n) - 1n;
 const MAX_INPUTS = 64;
@@ -211,9 +217,9 @@ export interface ErgoPublication {
   readonly unsigned: Uint8Array;
   readonly signed: Uint8Array;
   readonly inputs: readonly Uint8Array[];
-  /** The record box's id: output 0. */
+  /** The first record box's id: output 0. All pieces share its transaction. */
   readonly recordBox: Uint8Array;
-  /** The change box (output 1), where there is one. */
+  /** The change box immediately after the record output or run, where there is one. */
   readonly change?: ErgoPlainBox & { readonly bytes: Uint8Array };
 }
 
@@ -222,48 +228,89 @@ export interface ErgoRecordRequest {
   readonly location: Uint8Array;
   readonly subject: Uint8Array;
   readonly record: Uint8Array;
+  /** Kind 4 only: split the record into an adjacent same-subject output run
+   * in one transaction. The venue selects this from its record kind. */
+  readonly chunked?: boolean;
   /** Every output's creation height: at most the including block's height and
    * at least every input's (the node's `txFuture` and `txMonotonicHeight`). */
   readonly height: bigint;
 }
 
-const recordOutput = (request: ErgoRecordRequest): Omit<Candidate, "value"> =>
-  ({ tree: request.location, registers: [coll(request.subject), coll(request.record)] });
+function recordOutputs(request: ErgoRecordRequest, perByte: bigint): Candidate[] {
+  const output = (piece: Uint8Array): Omit<Candidate, "value"> =>
+    ({ tree: request.location, registers: [coll(request.subject), coll(piece)] });
+  let size = request.record.length;
+  if (request.chunked) {
+    // Reserve the largest encoded output index. The piece itself stays below
+    // the framer's Coll[Byte] bound, and its full box below the node's bound.
+    let low = 0, high = Math.min(MAX_U16, MAX_BOX_BYTES);
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2), candidate = output(new Uint8Array(middle));
+      const value = minimumValue(candidate, request.height, MAX_U16, perByte);
+      if (boxLength({ ...candidate, value }, request.height, MAX_U16) <= MAX_BOX_BYTES) low = middle;
+      else high = middle - 1;
+    }
+    size = low;
+    if (size === 0 || Math.max(1, Math.ceil(request.record.length / size)) > MAX_U16 - 2) {
+      throw new VenueError("the publication does not fit one transaction's output run");
+    }
+  }
+  const outputs: Candidate[] = [];
+  // An empty record still has one shaped output; the venue does not decode it.
+  for (let at = 0; at < request.record.length || outputs.length === 0; at += size) {
+    const candidate = output(request.record.subarray(at, at + size)), index = outputs.length;
+    const value = minimumValue(candidate, request.height, index, perByte);
+    if (boxLength({ ...candidate, value }, request.height, index) > MAX_BOX_BYTES) throw new VenueError("the record does not fit one box");
+    outputs.push({ ...candidate, value });
+    if (size === 0) break;
+  }
+  return outputs;
+}
 /** What a publication spends beside change: the record box's minimum, the fee and a change box's minimum. */
-const publicationCost = (request: ErgoRecordRequest, tree: Uint8Array, fee: bigint, perByte: bigint): bigint =>
-  minimumValue(recordOutput(request), request.height, 0, perByte) + fee + minimumValue({ tree, registers: [] }, request.height, 1, perByte);
+const publicationCost = (request: ErgoRecordRequest, tree: Uint8Array, fee: bigint, perByte: bigint): bigint => {
+  const outputs = recordOutputs(request, perByte);
+  return outputs.reduce((sum, output) => sum + output.value, 0n) + fee +
+    minimumValue({ tree, registers: [] }, request.height, outputs.length, perByte);
+};
 
 /** The unsigned and signed transaction carrying one record, from these inputs
- * (all of `key`'s tree, in order): output 0 the record at its location with
- * the minimum value, output 1 the change to the key where it reaches the
- * minimum (otherwise it joins the fee), output 2 the fee. */
+ * (all of `key`'s tree, in order): the record output or adjacent run at its
+ * location with each box's minimum value, then change to the key where it
+ * reaches the minimum (otherwise it joins the fee), then the fee. */
 function buildPublication(key: ErgoKey, tree: Uint8Array, inputs: readonly ErgoPlainBox[], request: ErgoRecordRequest, fee: bigint, perByte: bigint): ErgoPublication {
   const { height } = request;
-  const record = recordOutput(request);
-  const recordValue = minimumValue(record, height, 0, perByte);
-  const outputs: Candidate[] = [{ ...record, value: recordValue }];
-  if (boxLength(outputs[0]!, height, 0) > MAX_BOX_BYTES) throw new VenueError("the record does not fit one box");
+  const outputs = recordOutputs(request, perByte), changeIndex = outputs.length;
+  const recordValue = outputs.reduce((sum, output) => sum + output.value, 0n);
   const total = inputs.reduce((sum, box) => sum + box.value, 0n);
-  const changeMinimum = minimumValue({ tree, registers: [] }, height, 1, perByte);
+  const changeMinimum = minimumValue({ tree, registers: [] }, height, changeIndex, perByte);
   const rest = total - recordValue - fee;
   if (rest < 0n) throw new VenueError("the publisher's boxes do not cover the record and the fee");
   let paid = fee;
   if (rest >= changeMinimum) outputs.push({ tree, registers: [], value: rest });
   else paid += rest;
+  if (paid < minimumValue({ tree: FEE_TREE, registers: [] }, height, outputs.length, perByte)) {
+    throw new VenueError("the fee is below its box's minimum value");
+  }
   outputs.push({ tree: FEE_TREE, registers: [], value: paid });
   const body = concat(vlq(0n), vlq(0n), vlq(BigInt(outputs.length)), ...outputs.map(o => candidateBytes(o, height)));
   const unsigned = concat(vlq(BigInt(inputs.length)), ...inputs.map(box => concat(box.id, vlq(0n), Uint8Array.of(0))), body);
+  // Each proveDlog proof adds exactly 56 bytes: its length prefix, like the
+  // unsigned empty proof's, is one byte. Check the complete signed size once
+  // inputs, change and fee are fixed, before proving or remembering anything.
+  if (unsigned.length + inputs.length * PROOF_BYTES > MAX_TRANSACTION_BYTES) {
+    throw new VenueError("the signed transaction exceeds the node's 98304-byte publication limit");
+  }
   const signed = concat(vlq(BigInt(inputs.length)), ...inputs.map((box, i) => {
     const proof = key.prove(unsigned, i);
     return concat(box.id, vlq(BigInt(proof.length)), proof, Uint8Array.of(0));
   }), body);
   const id = hash(unsigned);
   const boxId = (index: number): Uint8Array => hash(concat(candidateBytes(outputs[index]!, height), id, vlq(BigInt(index))));
-  const change = outputs.length === 3 ? outputs[1]! : undefined;
+  const change = outputs.length === changeIndex + 2 ? outputs[changeIndex]! : undefined;
   return Object.freeze({
     id, unsigned, signed, inputs: Object.freeze(inputs.map(box => copyBytes(box.id))), recordBox: boxId(0),
     ...(change === undefined ? {} : { change: Object.freeze({
-      id: boxId(1), value: change.value, creationHeight: height, bytes: concat(candidateBytes(change, height), id, vlq(1n)),
+      id: boxId(changeIndex), value: change.value, creationHeight: height, bytes: concat(candidateBytes(change, height), id, vlq(BigInt(changeIndex))),
     }) }),
   });
 }
@@ -565,10 +612,12 @@ export class ErgoPublisher {
 }
 
 function ownRequest(request: ErgoRecordRequest): ErgoRecordRequest {
-  const { location, subject, record, height } = request;
-  if (!isRealBytes(location) || !isRealBytes(subject) || subject.length !== 32 || !isRealBytes(record) || record.length > MAX_U16 ||
+  const { location, subject, record, height, chunked } = request;
+  if ((chunked !== undefined && typeof chunked !== "boolean") || !isRealBytes(location) || !isRealBytes(subject) || subject.length !== 32 ||
+      !isRealBytes(record) || record.length > (chunked ? MAX_RANGE_RECORD_BYTES[4] : MAX_U16) ||
       typeof height !== "bigint" || height < 0n || height > 0xffff_ffffn) throw new VenueError("invalid Ergo record request");
-  return Object.freeze({ location: copyBytes(location), subject: copyBytes(subject), record: copyBytes(record), height });
+  return Object.freeze({ location: copyBytes(location), subject: copyBytes(subject), record: copyBytes(record), height,
+    ...(chunked === undefined ? {} : { chunked }) });
 }
 
 // --- A node as a publishing supplier ------------------------------------------------------------------------
@@ -689,4 +738,3 @@ function copyPlainBox(statement: NodeJson): Uint8Array | undefined {
   const out = concat(vlq(value), tree, vlq(height), Uint8Array.of(0, 0), txId, vlq(index));
   return statement.get("boxId") === bytesToHex(hash(out)) ? out : undefined;
 }
-

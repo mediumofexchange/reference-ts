@@ -496,18 +496,18 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
    * and never a supplier's word. Resolves when a supplier accepted the
    * transaction; the record counts once a later sync reads it. Kinds 1–3 are
    * carried without judging their signatures or contents (venue-ergo §6).
-   * Kind 4's multi-output publication is not supported by this publisher.
+   * Kind 4 is one adjacent same-subject output run in that same transaction.
    */
   publishRecord(kind: RecordKind, subject: Uint8Array, record: Uint8Array): Promise<void> {
-    if (kind === 4) throw new VenueError("this publisher does not support kind-4 publications");
-    if (kind !== 1 && kind !== 2 && kind !== 3) throw new EncodingError("invalid Ergo record kind");
-    if (byteLength(subject) !== 32 || byteLength(record) !== MAX_RANGE_RECORD_BYTES[kind]) {
+    if (kind !== 1 && kind !== 2 && kind !== 3 && kind !== 4) throw new EncodingError("invalid Ergo record kind");
+    const length = byteLength(record);
+    if (byteLength(subject) !== 32 || (kind === 4 ? length > MAX_RANGE_RECORD_BYTES[4] : length !== MAX_RANGE_RECORD_BYTES[kind])) {
       throw new EncodingError("invalid Ergo record length");
     }
     const ownSubject = copyUnshared(subject), ownRecord = copyUnshared(record);
     if (this.publisher === undefined) throw new VenueError("this view has no publisher; publishing is the operator's wallet");
     this.requireSnapshot();
-    const request = { location: this.profile.scripts[kind], subject: ownSubject, record: ownRecord, height: this.store.tip().height };
+    const request = { location: this.profile.scripts[kind], subject: ownSubject, record: ownRecord, height: this.store.tip().height, chunked: kind === 4 };
     // Held already, as when a sync settled it after the caller last read: nothing to send.
     if (this.holds(request)) return Promise.resolve();
     return this.publisher.publish(request).then(() => {});
@@ -515,7 +515,7 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
 
   /** Whether the snapshot holds this exact record at its location under its subject. */
   private holds(request: ErgoRecordRequest): boolean {
-    const kind = ([1, 2, 3] as const).find(k => compareBytes(this.profile.scripts[k], request.location) === 0);
+    const kind = ([1, 2, 3, 4] as const).find(k => compareBytes(this.profile.scripts[k], request.location) === 0);
     return kind !== undefined && this.entries(kind, request.subject).entries.some(entry => compareBytes(entry.record, request.record) === 0);
   }
 

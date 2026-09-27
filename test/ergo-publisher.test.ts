@@ -6,12 +6,12 @@ import { blake2b } from "@noble/hashes/blake2b.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeBacking, signBacking } from "../src/backing.js";
 import { EncodingError } from "../src/bytes.js";
-import { decodeRangeAnswer, type RecordKind } from "../src/record-range.js";
+import { decodeRangeAnswer, MAX_RANGE_RECORD_BYTES, type RecordKind } from "../src/record-range.js";
 import type { RecordPublisher } from "../src/record-venue.js";
 import type { SignedBacking } from "../src/pool/segment.js";
 import { encodeCommitment, signCommitment, type Commitment } from "../src/commitment.js";
 import { ErgoVenue } from "../src/ergo.js";
-import { attributeBlock, frameTransaction, MINER_FEE_TREE_HEX } from "../src/ergo-profile.js";
+import { attributeBlock, collBytes, frameTransaction, MINER_FEE_TREE_HEX } from "../src/ergo-profile.js";
 import {
   DEFAULT_ERGO_FEE, DEFAULT_MIN_VALUE_PER_BYTE, ergoNodePublisher, ErgoPublisher, payToPublicKeyTree, readPlainBox, verifyErgoProof,
   type ErgoPublishingSupplier, type NodeRequestInit,
@@ -20,7 +20,7 @@ import { operatorAt, replacementMessage, ROLE_OPERATOR, type Replacement } from 
 import { signRevocation } from "../src/revocation.js";
 import { VenueError } from "../src/venue.js";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { BranchSupplier, Chain, hex, MiningSupplier, MempoolNode, plainBox, SCRIPTS, type Block } from "./ergo-chain.js";
+import { BranchSupplier, Chain, hex, MiningSupplier, MempoolNode, plainBox, plainOutput, rawOutput, SCRIPTS, transaction, type Block } from "./ergo-chain.js";
 import { CONFIG, DOMAIN, Oracle } from "./pool-support.js";
 import { KEYS, SECRETS } from "./support.js";
 
@@ -39,7 +39,7 @@ const TREE = payToPublicKeyTree(PUBLIC);
 const HEIGHT = 900_010n;
 const SUBJECT = new Uint8Array(32).fill(0x51);
 const RECORD = new Uint8Array(136).map((_, i) => i);
-const request = (record = RECORD, location = SCRIPTS[1], height = HEIGHT) => ({ location, subject: SUBJECT, record, height });
+const request = (record: Uint8Array = RECORD, location: Uint8Array = SCRIPTS[1], height = HEIGHT) => ({ location, subject: SUBJECT, record, height });
 
 function node(name = "node"): MempoolNode {
   return new MempoolNode(name, verifyErgoProof);
@@ -125,6 +125,93 @@ describe("a publication is one record in the profile's grammar", () => {
     await expect(p.publish(request(new Uint8Array(4_100)))).rejects.toThrow(/does not fit one box/);
     await expect(p.publish({ ...request(), subject: new Uint8Array(31) })).rejects.toThrow(VenueError);
     await expect(p.publish({ ...request(), height: -1n })).rejects.toThrow(VenueError);
+  });
+});
+
+describe("kind-4 publications are one adjacent output run", () => {
+  const publicationRequest = (record: Uint8Array) => ({ ...request(record, SCRIPTS[4]), chunked: true });
+
+  it("carries a proof-sized record in one transaction, paying each full box's minimum and chaining its change", async () => {
+    const record = Uint8Array.from({ length: 16_000 }, (_, i) => i % 251);
+    const n = funded([100_000_000n]), p = publisher([n]);
+    const publication = await p.publish(publicationRequest(record));
+    const outputs = frameTransaction(publication.unsigned)!;
+    const pieces = outputs.slice(0, -2);
+    expect(pieces.length).toBeGreaterThan(1);
+    for (const piece of pieces) {
+      expect(hex(piece.ergoTree)).toBe(hex(SCRIPTS[4]));
+      expect(collBytes(piece.registers.R4!)!).toEqual(SUBJECT);
+    }
+    expect(Buffer.concat(pieces.map(piece => collBytes(piece.registers.R5!)!))).toEqual(Buffer.from(record));
+    expect(attributeBlock(new Chain().profile(3n), n.pool)).toMatchObject([{ kind: 4, ordinal: 0n, record }]);
+    const recordBoxes = [...n.boxes.values()].filter(bytes => !readPlainBox(bytes, TREE) && !readPlainBox(bytes, Buffer.from(MINER_FEE_TREE_HEX, "hex")));
+    expect(recordBoxes).toHaveLength(pieces.length);
+    expect(recordBoxes.every(bytes => bytes.length <= 4096)).toBe(true);
+    const recordCost = recordBoxes.reduce((sum, bytes) => sum + DEFAULT_MIN_VALUE_PER_BYTE * BigInt(bytes.length), 0n);
+    expect(publication.change!.value).toBe(100_000_000n - recordCost - DEFAULT_ERGO_FEE);
+    expect(readPlainBox(publication.change!.bytes, TREE)?.id).toEqual(publication.change!.id);
+    const again = await p.publish(publicationRequest(record));
+    expect(again.signed).toEqual(publication.signed);
+    expect(n.submitted).toHaveLength(1);
+    const next = await p.publish(request());
+    expect(next.inputs).toEqual([publication.change!.id]);
+    await expect(publisher([funded([recordCost + DEFAULT_ERGO_FEE - 1n])]).publish(publicationRequest(record))).rejects.toThrow(/do not cover/);
+    const dust = await publisher([funded([recordCost + DEFAULT_ERGO_FEE + 1n])]).publish(publicationRequest(record));
+    expect(dust.change).toBeUndefined();
+    expect(frameTransaction(dust.unsigned)).toHaveLength(pieces.length + 1);
+  });
+
+  it("enforces the pinned node's signed transaction size, including every input proof, before remembering or submitting", async () => {
+    // These fixture lengths leave exactly 98,304 signed bytes with the
+    // fixed tree, height, fee and change above. A second input adds 90 bytes.
+    for (const [values, length] of [[ [100_000_000n], 96_027 ], [ [20_000_000n, 20_000_000n], 95_937 ]] as const) {
+      const n = funded(values), p = publisher([n]);
+      await expect(p.publish(publicationRequest(new Uint8Array(length + 1)))).rejects.toThrow(/signed transaction exceeds.*98304/);
+      expect(p.unsettled).toBe(0);
+      expect(n.submitted).toEqual([]);
+      const fitting = await p.publish(publicationRequest(new Uint8Array(length)));
+      expect(fitting.signed).toHaveLength(98_304);
+      expect(fitting.inputs).toHaveLength(values.length);
+      expect(p.unsettled).toBe(1);
+      expect(n.submitted).toHaveLength(1);
+    }
+    const n = funded([100_000_000n]), p = publisher([n]);
+    await expect(p.publish(publicationRequest(new Uint8Array(MAX_RANGE_RECORD_BYTES[4])))).rejects.toThrow(/signed transaction exceeds.*98304/);
+    expect(p.unsettled).toBe(0);
+    expect(n.submitted).toEqual([]);
+  });
+
+  it("does not reassemble interrupted, reordered, truncated or cross-transaction pieces into the original record", async () => {
+    const record = Uint8Array.from({ length: 15_600 }, (_, i) => i % 251), n = funded([100_000_000n]);
+    const publication = await publisher([n]).publish(publicationRequest(record));
+    const pieces = frameTransaction(publication.unsigned)!.slice(0, -2)
+      .map(output => rawOutput(output.ergoTree, [output.registers.R4!, output.registers.R5!]));
+    const profile = new Chain().profile(3n);
+    const variants = [
+      [transaction([pieces[0]!, plainOutput, ...pieces.slice(1)])],
+      [transaction([pieces[1]!, pieces[0]!, ...pieces.slice(2)])],
+      [transaction(pieces.slice(0, -1))],
+      [transaction(pieces.slice(0, 1)), transaction(pieces.slice(1))],
+    ];
+    expect(attributeBlock(profile, [transaction(pieces)])).toMatchObject([{ kind: 4, record }]);
+    for (const variant of variants) {
+      const objects = attributeBlock(profile, variant);
+      expect(objects.some(object => hex(object.record) === hex(record))).toBe(false);
+    }
+    const truncated = transaction(pieces);
+    expect(attributeBlock(profile, [{ ...truncated, unsigned: truncated.unsigned.slice(0, -1) }])).toEqual([]);
+  });
+
+  it("bounds and owns requests before supplier calls, and carries an empty raw record without interpreting it", async () => {
+    const n = funded([100_000_000n]), p = publisher([n]);
+    await expect(p.publish(publicationRequest(new Uint8Array(MAX_RANGE_RECORD_BYTES[4] + 1)))).rejects.toThrow(/invalid Ergo record request/);
+    await expect(p.publish({ ...publicationRequest(RECORD), chunked: 1 } as never)).rejects.toThrow(/invalid Ergo record request/);
+    const shared = new Uint8Array(new SharedArrayBuffer(10));
+    await expect(p.publish(publicationRequest(shared))).rejects.toThrow(/invalid Ergo record request/);
+    expect(n.submitted).toEqual([]);
+    const empty = await p.publish(publicationRequest(new Uint8Array()));
+    expect(frameTransaction(empty.unsigned)).toHaveLength(3);
+    expect(attributeBlock(new Chain().profile(3n), n.pool)).toMatchObject([{ kind: 4, record: new Uint8Array() }]);
   });
 });
 
@@ -360,7 +447,7 @@ const commitmentOf = (sequence: bigint, fill: number): Commitment =>
   signCommitment(SECRETS.operator, sequence, new Uint8Array(32).fill(fill));
 
 describe("the view publishes through its wallet and holds only what it reads", () => {
-  it("carries raw kinds 1–3 through the mining supplier, owns their bytes and waits for finality", async () => {
+  it("carries raw kinds 1–4 through the mining supplier, owns their bytes and waits for finality", async () => {
     const supplier = new MiningSupplier("journal", chain, verifyErgoProof);
     supplier.mempool.fund(plainBox(TREE, 100_000_000n, chain.anchor.height));
     const p = publisher([supplier.mempool]);
@@ -369,17 +456,17 @@ describe("the view publishes through its wallet and holds only what it reads", (
     supplier.mine(Number(DEPTH) + 1);
     await v.sync([supplier]);
     const including = v.witnessedIndex() + v.lag();
-    const lengths = [136, 233, 96];
-    const limits = { maxEntries: 10n, maxBytes: 4096n };
-    for (const kind of [1, 2, 3] as const) {
+    const lengths = [136, 233, 96, 16_000];
+    const limits = { maxEntries: 10n, maxBytes: 32_768n };
+    for (const kind of [1, 2, 3, 4] as const) {
       const subject = SUBJECT.slice(), record = new Uint8Array(lengths[kind - 1]!).fill(kind);
       const pending = records.publishRecord(kind, subject, record);
       subject.fill(0); record.fill(0);
       await pending;
       await records.publishRecord(kind, SUBJECT, new Uint8Array(lengths[kind - 1]!).fill(kind));
     }
-    expect(supplier.mempool.pool).toHaveLength(3);
-    expect(new Set(supplier.mempool.submitted).size).toBe(3);
+    expect(supplier.mempool.pool).toHaveLength(4);
+    expect(new Set(supplier.mempool.submitted).size).toBe(4);
     const read = (venue: ErgoVenue, kind: RecordKind) => {
       const request = { venue: venue.id, kind, subject: SUBJECT, fromIndex: 0n, toIndex: venue.witnessedIndex() };
       return decodeRangeAnswer(venue.range(request, limits)!, request, limits).entries;
@@ -389,10 +476,12 @@ describe("the view publishes through its wallet and holds only what it reads", (
     expect(read(v, 1)).toEqual([]);
     supplier.mine();
     await v.sync([supplier]);
+    await p.settle(() => false); // wait for the verifying view's queued settlement, including kind 4
+    expect(p.unsettled).toBe(0);
     const fresh = new ErgoVenue(PROFILE, chain.context);
     await fresh.sync([supplier]);
-    for (const kind of [1, 2, 3] as const) {
-      expect(read(fresh, kind)).toEqual([{ index: including, ordinal: 0n, record: new Uint8Array(lengths[kind - 1]!).fill(kind) }]);
+    for (const kind of [1, 2, 3, 4] as const) {
+      expect(read(fresh, kind)).toEqual([{ index: including, ordinal: kind === 4 ? 3n << 32n : 0n, record: new Uint8Array(lengths[kind - 1]!).fill(kind) }]);
       await records.publishRecord(kind, SUBJECT, new Uint8Array(lengths[kind - 1]!).fill(kind));
     }
     expect(supplier.mempool.pool).toHaveLength(0);
@@ -407,7 +496,7 @@ describe("the view publishes through its wallet and holds only what it reads", (
     const network = new Network();
     network.mine(5);
     const v = await view(network);
-    expect(() => v.publishRecord(4, SUBJECT, RECORD)).toThrow(/does not support kind-4/);
+    expect(() => v.publishRecord(4, SUBJECT, new Uint8Array(MAX_RANGE_RECORD_BYTES[4] + 1))).toThrow(/record length/);
     expect(() => v.publishRecord(0 as RecordKind, SUBJECT, RECORD)).toThrow(EncodingError);
     expect(() => v.publishRecord(1, new Uint8Array(31), RECORD)).toThrow(/record length/);
     for (const [kind, length] of [[1, 136], [2, 233], [3, 96]] as const) {

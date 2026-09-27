@@ -217,6 +217,13 @@ export function withdrawalBytes(s: Statement): Uint8Array {
   return w.finish();
 }
 
+/** The fixed settlement authorization frame from §5; this does not verify signatures. */
+export function encodeSettlementAuthorization(deadline: bigint, acceptanceSignature: Uint8Array, releaseSignature: Uint8Array): Uint8Array {
+  const w = new ByteWriter(); w.u64(deadline);
+  fixed(w, acceptanceSignature, 64); fixed(w, releaseSignature, 64);
+  return w.finish();
+}
+
 /** Reconstruct exact signing messages; the caller must verify both signatures
  * and resolve the demand/terms/state/time. This function grants no authority. */
 export function settlementAuthorization(s: Record): {

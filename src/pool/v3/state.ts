@@ -7,13 +7,12 @@
 //
 // | Mode      | Judged at                          | Proof, context, anchor, recovery guards      | Issuer signature, revocation, supply, spent, outputs |
 // |-----------|------------------------------------|----------------------------------------------|------------------------------------------------------|
-// | admission | the horizon: read index plus lag    | yes; kinds 1–3 only until slice 3            | yes                                                  |
+// | admission | the horizon: read index plus lag    | yes; door deadlines apply                   | yes                                                  |
 // | replay    | the checkpoint's witnessed index    | yes; door deadlines not re-judged (C3.8)     | yes                                                  |
 // | adoption  | an adopted publication's own index  | no: exact bytes the force judgment verified  | yes                                                  |
+// | force     | the publication's witnessed index  | yes; door deadlines apply                   | spent/outputs and recovery effects only               |
 //
-// Admission is the operator journal's (store.ts); recovery kinds join it with
-// their door conditions at the horizon in slice 3. Publication force (the
-// reader, C2b.3.2) joins as a mode when its caller lands.
+// Force keeps the snapshot's anchors fixed; it has no local tree or history.
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes } from "../../bytes.js";
 import { verifySignatureStrict } from "../../keys.js";
@@ -28,11 +27,64 @@ import type { RootTerms } from "./terms.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 
-export type StepMode = "admission" | "replay" | "adoption";
+export type StepMode = "admission" | "replay" | "adoption" | "force";
 
 /** The reader's proof verifier: true only for a proof of `kind` over exactly these public inputs. */
 export interface ProofCheck {
   verify(kind: number, publicInputs: bigint[], proof: Uint8Array): Promise<boolean> | boolean;
+}
+
+/** C2b.3.2 recovery over a fixed snapshot forest, without a segment's local history. */
+export interface ForceState extends RecoveryState {
+  readonly anchors: ReadonlySet<bigint>;
+  readonly nullifiers: Set<bigint>;
+  readonly outputsSeen: Set<bigint>;
+}
+export interface ForceContext {
+  readonly mode: "force";
+  readonly domain: Uint8Array;
+  readonly backing: Uint8Array;
+  readonly segment: Uint8Array;
+  readonly scope: bigint;
+  readonly issuer: Uint8Array;
+  readonly index: bigint;
+  readonly lag: bigint;
+  readonly verifier: ProofCheck;
+}
+export function openForceState(source: RecoveryState & {
+  readonly anchors: ReadonlySet<bigint>; readonly nullifiers: ReadonlySet<bigint>; readonly outputsSeen: ReadonlySet<bigint>;
+}): ForceState {
+  return { ...recoveryState(source), anchors: new Set(source.anchors), nullifiers: new Set(source.nullifiers), outputsSeen: new Set(source.outputsSeen) };
+}
+async function checkProof(record: Record, verifier: ProofCheck): Promise<void> {
+  if (record.kind !== 5) requireReplay(await verifier.verify(record.kind, [...record.publicInputs], new Uint8Array(record.proof)) === true, "PROOF");
+}
+function checkUniqueEffects(nfs: readonly bigint[], outputs: readonly bigint[], hasNullifier: (nf: bigint) => boolean,
+  outputsSeen: ReadonlySet<bigint>): void {
+  requireReplay(new Set(nfs).size === nfs.length && nfs.every(nf => nf !== 0n && !hasNullifier(nf)), "SPENT");
+  requireReplay(new Set(outputs).size === outputs.length && outputs.every(cm => cm !== 0n && !outputsSeen.has(cm)), "OUTPUT");
+}
+/** Apply only an already-verified forced publication's effects when rebuilding its prefix. */
+export function applyForceEffects(state: ForceState, record: Record): void {
+  if (record.kind !== 4 && record.kind !== 5 && record.kind !== 6) throw new EvidenceRefusal("unsupported-scope");
+  applyRecovery(record, state);
+  const { nfs, outputs } = effectOf(record);
+  nfs.forEach(nf => state.nullifiers.add(nf)); outputs.forEach(cm => state.outputsSeen.add(cm));
+}
+/** The reader establishes routing, an open gap, the strictly earlier snapshot and venue order.
+ * Every check precedes mutation; force never extends the snapshot's forest. */
+export async function applyForceRecord(state: ForceState, bytes: Uint8Array, context: ForceContext): Promise<void> {
+  const record = decodeRecord(bytes), p = record.publicInputs;
+  if (context.mode !== "force" || ![4, 5, 6].includes(record.kind)) throw new EvidenceRefusal("unsupported-scope");
+  requireReplay(same(record.domain, context.domain) && same(identifierOf(p[2]!, p[3]!), context.segment) && p[4] === context.scope, "CONTEXT");
+  if (record.kind !== 5) requireReplay(same(identifierOf(p[5]!, p[6]!), context.backing), "BACKING");
+  await checkProof(record, context.verifier);
+  const { roots, nfs, outputs } = effectOf(record);
+  requireReplay(roots.every(root => state.anchors.has(root)), "ANCHOR");
+  checkUniqueEffects(nfs, outputs, nf => state.nullifiers.has(nf), state.outputsSeen);
+  checkRecovery(record, state, { check: requireReplay, backing: context.backing, issuer: context.issuer,
+    at: context.index, lag: context.lag, door: true });
+  applyForceEffects(state, record);
 }
 /** An output a receiver may scan: its capsule, or for a settlement the record naming its owner. */
 export interface ScanOutput { readonly cm: bigint; readonly capsule?: Uint8Array | undefined; readonly settlement?: Record }
@@ -168,6 +220,8 @@ export interface SegmentReplay {
   readonly index?: bigint | undefined;
   /** The operator's admission (store.ts) rather than a reader's replay. */
   readonly admission?: boolean | undefined;
+  /** The actual venue lag, required for recovery admission's door checks. */
+  readonly lag?: bigint | undefined;
   /** K's revocation index (C2b.1), or per scoped backing. */
   readonly revokedAt?: bigint | undefined;
   readonly revocations?: ReadonlyMap<string, bigint | undefined> | undefined;
@@ -178,7 +232,7 @@ export interface SegmentReplay {
 }
 
 /** The mode a position applies in: exact adopted bytes inside the adopted block, then the caller's admission or replay. */
-export function modeAt(replay: SegmentReplay, position: bigint): StepMode {
+export function modeAt(replay: SegmentReplay, position: bigint): Exclude<StepMode, "force"> {
   return replay.block[Number(position)] !== undefined ? "adoption" : replay.admission === true ? "admission" : "replay";
 }
 
@@ -196,7 +250,7 @@ export async function applyRecord(state: SegmentState, bytes: Uint8Array, replay
   if (![1, 2, 3, 4, 5, 6].includes(kind)) throw new EvidenceRefusal("unsupported-scope");
   if (mode === "admission") {
     if (replay.index === undefined) throw new TypeError("admission is judged at the horizon");
-    if (kind > 3) throw new EvidenceRefusal("unsupported-scope");
+    if (kind >= 4 && replay.lag === undefined) throw new TypeError("recovery admission needs the venue's lag");
   }
   const demandId = kind === 5 || kind === 6 ? hex(identifierOf(p[kind === 5 ? 5 : 15]!, p[kind === 5 ? 6 : 16]!)) : undefined;
   const demand = demandId === undefined ? undefined : state.demands.get(demandId);
@@ -226,7 +280,7 @@ export async function applyRecord(state: SegmentState, bytes: Uint8Array, replay
     const cutoff = replay.revocations === undefined ? replay.revokedAt : replay.revocations.get(hex(backing));
     requireReplay(cutoff === undefined || cutoff > replay.index, "REVOKED");
   }
-  if (mode !== "adoption" && kind !== 5) requireReplay(await replay.verifier.verify(kind, [...p], new Uint8Array(record.proof)) === true, "PROOF");
+  if (mode !== "adoption") await checkProof(record, replay.verifier);
   if (kind !== 2 && kind !== 5) {
     requireReplay(scoped || same(backing, replay.backing), "BACKING");
     if (kind === 1) {
@@ -237,10 +291,10 @@ export async function applyRecord(state: SegmentState, bytes: Uint8Array, replay
   const { nfs, roots, outputs } = effectOf(record);
   if (mode !== "adoption") {
     requireReplay(roots.every(root => state.anchors.has(root)), "ANCHOR");
-    checkRecovery(record, state, { check: requireReplay, backing, issuer: issuerKey, at });
+    checkRecovery(record, state, { check: requireReplay, backing, issuer: issuerKey, at,
+      ...(replay.lag === undefined ? {} : { lag: replay.lag }), door: mode === "admission" && kind >= 4 });
   }
-  requireReplay(new Set(nfs).size === nfs.length && nfs.every(nf => nf !== 0n && !state.spent.has(fieldToBytes(nf))), "SPENT");
-  requireReplay(new Set(outputs).size === outputs.length && outputs.every(cm => cm !== 0n && !state.outputsSeen.has(cm)), "OUTPUT");
+  checkUniqueEffects(nfs, outputs, nf => state.spent.has(fieldToBytes(nf)), state.outputsSeen);
   requireReplay(state.tree.size + BigInt(outputs.length) <= NOTE_TREE_CAPACITY && position + 1n < VALUE_BOUND, "CAPACITY");
 
   const leaves = state.tree.appendAll(outputs);
