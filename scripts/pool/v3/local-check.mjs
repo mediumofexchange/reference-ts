@@ -757,7 +757,7 @@ try {
     for (let i = 0; i <= Number(RANGE_LIMITS.maxEntries); i++) flooded.venue.records.push({ kind: 1, subject: operator, index: 2n, record: junk });
     const refusal = await replayLocalPackage(flooded, verifier, codec);
     assert.equal(refusal.status, "resource-refusal"); assert.equal(refusal.audit, null);
-    assert.equal((await replayLocalPackage(complete, { configuration, verify: verifier.verify }, codec)).status, "unresolved-evidence");
+    assert.equal((await replayLocalPackage(complete, { configuration, reference, verify: verifier.verify }, codec)).status, "unresolved-evidence");
     const failure = new Error("range service unavailable");
     await assert.rejects(replayLocalPackage(complete, { ...verifier, record: () => ({ id: venue, range() { throw failure; }, witnessedIndex: () => 20n, lag: () => 2n }) }, codec), error => error === failure);
     const { venue: omitted, ...withoutVenue } = complete;
