@@ -1,7 +1,7 @@
 // Public package/frontier acceptance over existing real-proof hostile fixtures.
 import assert from "node:assert/strict";
 import { readSingleBackingPackage, readSingleBackingFrontier } from "../../../dist/pool/v3/package-reader.js";
-import { EvidenceRefusal, ReplayRefusal } from "../../../dist/pool/v3/refusals.js";
+import { EvidenceRefusal, ReplayRefusal, ScopeRequired } from "../../../dist/pool/v3/refusals.js";
 import { LIMITS } from "../delivery/evidence-reader.mjs";
 
 const hex = bytes => Buffer.from(bytes).toString("hex");
@@ -15,6 +15,18 @@ export async function checkCompactRuntime({ payload, result, verifier, codec, po
   const bytes = portable(payload).package;
   const options = { configuration: verifier.configuration, verifier, reference: verifier.reference,
     venue: await verifier.record(payload.venue) };
+  // Some single-header fixtures deliberately dispatch the harness into its
+  // shared-scope reader through a later carrying multi-entry directory. The
+  // public runtime must retain its single-backing boundary even after lapse.
+  const scopedDirectory = [payload.package.directory, ...(payload.package.directories ?? [])]
+    .some(entries => entries.length !== 1 && entries.some(entry => hex(entry.name) === hex(payload.selection.backing)));
+  if (scopedDirectory) {
+    if (!["selected-local-replay", "historical-local-replay"].includes(result.status)) return false;
+    await assert.rejects(() => readSingleBackingPackage(bytes, payload.selection, options), ScopeRequired, `${label}: selected scope`);
+    await assert.rejects(() => readSingleBackingFrontier(bytes, trail.terms[0], payload.selection.judgingIndex, options),
+      ScopeRequired, `${label}: frontier scope`);
+    return true;
+  }
   if (!["selected-local-replay", "historical-local-replay", "receipt-status"].includes(result.status)) {
     await assert.rejects(() => readSingleBackingPackage(bytes, payload.selection, options), error =>
       result.status === "invalid-local-replay" ? error instanceof ReplayRefusal && error.check === result.check :
