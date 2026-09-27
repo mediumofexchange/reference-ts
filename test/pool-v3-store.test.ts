@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { ERGO_SYNTHETIC_REFERENCE } from "../src/ergo-profile.js";
+import { ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE } from "../src/ergo-profile.js";
 import { Chain } from "../src/ergo-synthetic.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { prepareExactOutput } from "../src/pool/v3/capsules.js";
@@ -96,6 +96,19 @@ describe("the candidate guard", () => {
     const shifting = { ...mainnet, get reference() { return reads++ === 0 ? ERGO_SYNTHETIC_REFERENCE : undefined; } };
     const shifted = referenceVenue({ context: ERGO_SYNTHETIC_REFERENCE, profile: shifting as typeof profile });
     expect(shifted.id).toEqual(synthetic.id);
+  });
+  it("binds testnet to its own context, profile and lag, without inferring a network from an id", () => {
+    const profile = { ...new Chain().profile(2n), reference: ERGO_TESTNET_REFERENCE } as const;
+    const reference = { context: ERGO_TESTNET_REFERENCE, profile } as const, expected = referenceVenue(reference);
+    expect(expected.lag).toBe(3n);
+    expect(requireReferenceVenue(reference, { id: expected.id, lag: () => 3n })).toEqual(expected.id);
+    const synthetic = { ...profile, reference: ERGO_SYNTHETIC_REFERENCE } as const;
+    expect(referenceVenue({ context: ERGO_SYNTHETIC_REFERENCE, profile: synthetic }).id).not.toEqual(expected.id);
+    expect(() => referenceVenue({ ...reference, profile: synthetic })).toThrow(CandidateVenueError);
+    expect(() => referenceVenue({ context: ERGO_SYNTHETIC_REFERENCE, profile })).toThrow(CandidateVenueError);
+    const { reference: _, ...deployment } = profile;
+    expect(() => referenceVenue({ ...reference, profile: deployment })).toThrow(CandidateVenueError);
+    expect(() => requireReferenceVenue(reference, { id: expected.id, lag: () => 2n })).toThrow(CandidateVenueError);
   });
 });
 

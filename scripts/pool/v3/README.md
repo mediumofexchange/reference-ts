@@ -30,6 +30,24 @@ synthetic chain and candidate configuration establish no deployment or adoption.
 Both modes guard journal and reader entries against the caller's independently
 held reference identity preimage.
 
+`node scripts/pool/v3/store-check.mjs --testnet` is an explicit live acceptance
+command after a build. It uses the own v6.0.6 testnet node at `127.0.0.1:9052`
+and the throwaway wallet in `scratch/ergo-testnet/wallet.json`, and submits
+testnet transactions. It is never invoked by ordinary checks or CI. The same
+issue/payment/burn path waits for actual inclusion and depth through `ErgoVenue`;
+the testnet profile selects the legacy header rules and depth 2. A fresh seedless
+worker reads the node itself with its profile, endpoint, judging index, pin and
+candidate keys held outside the supplied package. Wrong pins and withheld
+sections must remain unresolved. Successful runs retain
+`scratch/pool-v3-testnet-results.json` and a public reader bundle, replayed with
+`node scratch/pool-v3-testnet-reader/replay.mjs`. The bundle holds no wallet key,
+holder seed, witness or journal; it includes the public bytecode required by
+the reader's six artifact/key identity checks. The retained [live report](../../../docs/pool-v3-testnet-verification.json)
+records transaction acceptance at `acc1ab7`. Run
+`node scripts/pool/v3/testnet-reader-check.mjs` to check the completed bundle
+without transactions; its [readback report](../../../docs/pool-v3-testnet-reader-verification.json)
+binds current sources and bundle hashes. Current work belongs in WORK.md.
+
 The local replay command additionally uses the independently held
 `candidate-manifest.json` and [pool-v3 §11 at 916bffb](https://github.com/mediumofexchange/money-from-first-principles/blob/916bffb/pool-v3.md#11-configuration-and-backing-evidence-before-adoption).
 It checks all six candidate source/toolchain/bytecode/key identities, the fixed

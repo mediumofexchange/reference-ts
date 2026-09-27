@@ -9,16 +9,16 @@
 // The guard stops misuse, not a hostile caller: an adapter that presents a
 // reference identity while delegating elsewhere is outside what bytes can check.
 import { compareBytes, copyBytes } from "../../bytes.js";
-import { ergoLag, ergoProfileIdentity, ERGO_SYNTHETIC_REFERENCE, ownErgoProfile, type ErgoProfile } from "../../ergo-profile.js";
+import { ergoLag, ergoProfileIdentity, ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ownErgoProfile, type ErgoProfile } from "../../ergo-profile.js";
 import { LOCAL_REFERENCE, localVenueIdentity, type RecordVenue } from "../../record-venue.js";
 
 /** A reference venue's identity preimage, as the caller independently holds it. */
 export type VenueReference =
   | { readonly context: typeof LOCAL_REFERENCE; readonly label: Uint8Array; readonly lag: bigint }
-  | { readonly context: typeof ERGO_SYNTHETIC_REFERENCE; readonly profile: ErgoProfile };
+  | { readonly context: typeof ERGO_SYNTHETIC_REFERENCE | typeof ERGO_TESTNET_REFERENCE; readonly profile: ErgoProfile };
 
-/** The contexts the candidate runs under; the testnet's joins with its header rules (slice 2). */
-export const CANDIDATE_CONTEXTS = Object.freeze([LOCAL_REFERENCE, ERGO_SYNTHETIC_REFERENCE] as const);
+/** Reference contexts, with independently selected anchors for real testnet readers. */
+export const CANDIDATE_CONTEXTS = Object.freeze([LOCAL_REFERENCE, ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE] as const);
 
 /** A venue the candidate may not run on, or a preimage outside the closed set. */
 export class CandidateVenueError extends Error {
@@ -34,11 +34,11 @@ export function referenceVenue(reference: VenueReference): { readonly id: Uint8A
       const { label, lag } = reference;
       return { id: localVenueIdentity(label, lag), lag };
     }
-    if (context === ERGO_SYNTHETIC_REFERENCE) {
+    if (context === ERGO_SYNTHETIC_REFERENCE || context === ERGO_TESTNET_REFERENCE) {
       // Read once and owned, so the context checked is the context hashed.
       const profile = ownErgoProfile(reference.profile);
-      // A profile without the synthetic context is venue-ergo's: the mainnet.
-      if (profile.reference !== ERGO_SYNTHETIC_REFERENCE) throw new CandidateVenueError("the candidate never runs on a deployment profile");
+      // The preimage must select this same reference context; absence names the mainnet profile.
+      if (profile.reference !== context) throw new CandidateVenueError("the candidate requires the selected reference profile");
       return { id: ergoProfileIdentity(profile), lag: ergoLag(profile) };
     }
   } catch (error) {

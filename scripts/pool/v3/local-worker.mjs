@@ -15,7 +15,8 @@ import { v3Codec } from "./codec.mjs";
 
 let api;
 try {
-  if (process.argv.length > 4 || (process.argv[3] !== undefined && !["--local", "--ergo", "--ergo-fixture"].includes(process.argv[3]))) throw new Error("unknown reader mode");
+  if (process.argv.length > 4 || (process.argv[3] !== undefined && !["--local", "--ergo", "--ergo-fixture", "--testnet"].includes(process.argv[3]))) throw new Error("unknown reader mode");
+  const withTestnet = process.argv[3] === "--testnet";
   const withErgo = process.argv[3] === "--ergo";
   const withErgoReference = withErgo || process.argv[3] === "--ergo-fixture";
   const codec = v3Codec;
@@ -31,6 +32,7 @@ try {
   }
   const input = deserialize(Buffer.concat(chunks));
   const fields = Object.keys(input).sort().join(",");
+  if (withTestnet && fields !== "package,selection") throw new Error("testnet reader takes only public package and selection");
   if (!["package,selection", "package,seed,selection", "package,selection,venue", "package,seed,selection,venue"].includes(fields)) {
     throw new Error("unexpected fixture input");
   }
@@ -56,7 +58,19 @@ try {
       verifier.record = data => ergoRecord(data, { pin });
     }
   }
-  process.stdout.write(JSON.stringify(await replayEvidencePackage(input, verifier, codec)));
+  if (withTestnet) {
+    const { readTestnetSelection, testnetRecord } = await import("./testnet.mjs");
+    const directory = fileURLToPath(process.argv[2]);
+    const selected = readTestnetSelection(join(directory, "testnet-reader.json"));
+    const pin = new Uint8Array(readFileSync(join(directory, "ergo-pin.bin")));
+    if (input.selection?.judgingIndex !== selected.judgingIndex) throw new Error("testnet judging index differs from the reader's selection");
+    verifier.reference = { context: selected.profile.reference, profile: selected.profile };
+    verifier.record = () => testnetRecord(selected, pin);
+  }
+  // The existing replay harness uses venue presence to select range replay.
+  // This reader-owned sentinel carries no supplier/profile data and its
+  // record factory above ignores it; IPC cannot select trail-only fallback.
+  process.stdout.write(JSON.stringify(await replayEvidencePackage(withTestnet ? { ...input, venue: {} } : input, verifier, codec)));
 } catch {
   process.stderr.write("local replay fixture failed\n");
   process.exitCode = 1;

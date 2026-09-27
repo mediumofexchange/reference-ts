@@ -200,12 +200,31 @@ sections refuse. Journal and reader entries recompute the reference identity
 from the caller's preimage. The [retained report](pool-v3-store-verification.json)
 owns the source hashes, outcomes and measurements.
 
-This covers one genesis segment of one backing and real proofs on reference
-venues. It provides no live-chain finality, adopted configuration, wallet
+These local/synthetic checks cover one genesis segment of one backing and real
+proofs on reference venues. They provide no live-chain finality, adopted configuration, wallet
 custody, recovery admission, imports or replacement service. The synthetic
 chain's difficulty permits anyone to re-mine it, so its independent pin remains
 an explicit trust input. Restart replay does not establish publisher or venue
 persistence across a process restart.
+
+The explicit `node scripts/pool/v3/store-check.mjs --testnet` path uses the own
+v6.0.6 testnet node and throwaway tERG funding. It selects the distinct
+reference-testnet identity and verifies the pinned testnet header rules,
+inclusion and depth through `ErgoVenue`. The fresh seedless reader receives
+only the served package and selection; its endpoint, profile, judging index,
+witnessed pin and verification keys are held separately, and it fetches the
+headers and sections itself. Wrong pins and withheld carrying sections must
+remain unresolved. A successful run retains a public bundle in
+`scratch/pool-v3-testnet-reader/`, runnable with its `replay.mjs`; the bundle
+contains no holder seed, wallet key, witness or journal. The [live report](pool-v3-testnet-verification.json)
+owns the transaction run at `acc1ab7`. Its initial export omitted public bytecode
+needed by the reader's identity checks; the corrected export retains it beside
+the keys. `node scripts/pool/v3/testnet-reader-check.mjs` rebuilds those public
+artifacts and verifies the bundle without sending transactions. Its separate
+[readback report](pool-v3-testnet-reader-verification.json) binds the corrected
+exporter and reader, preserves every original bundle input hash, and records
+standalone replay and altered-bytecode refusal. The chosen anchor and prehistory remain trust inputs; depth 2 on
+one controlled testnet node establishes no mainnet finality, adoption or deployment.
 
 ### Conditional initial-segment replay
 

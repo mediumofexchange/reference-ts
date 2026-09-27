@@ -12,6 +12,9 @@ import * as headers from "../src/ergo-headers.js";
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/ergo-mainnet-recalculation.json", import.meta.url), "utf8")) as
   { headers: { height: number; id: string; bytes: string }[] };
 const real = fixture.headers.map(entry => ({ ...entry, bytes: Uint8Array.from(Buffer.from(entry.bytes, "hex")) }));
+const testnetFixture = JSON.parse(readFileSync(new URL("./fixtures/ergo-testnet-recalculation.json", import.meta.url), "utf8")) as
+  { headers: { height: number; id: string; bytes: string }[] };
+const testnetReal = testnetFixture.headers.map(entry => ({ ...entry, bytes: Uint8Array.from(Buffer.from(entry.bytes, "hex")) }));
 const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString("hex");
 const parse = (bytes: Uint8Array): headers.ErgoHeader => {
   const header = headers.parseErgoHeader(bytes);
@@ -192,6 +195,32 @@ describe("Ergo headers from their bytes", () => {
     }
   });
 
+  it("owns header bytes and IDs without consulting spoofed byte properties", () => {
+    const spoof = (bytes: Uint8Array): Uint8Array => {
+      const input = Uint8Array.from(bytes);
+      for (const key of ["length", "buffer", "slice", Symbol.iterator]) {
+        Object.defineProperty(input, key, { get() { throw new Error("caller property read"); } });
+      }
+      return input;
+    };
+    const input = spoof(real[9]!.bytes), parsed = parse(input);
+    expect(hex(parsed.id)).toBe(real[9]!.id);
+    input[0] = 0;
+    expect(parsed.bytes[0]).toBe(4);
+    const s = headers.ergoHeaderStore(spoof(anchor.id), baseContext)!;
+    const worked = mine(child(anchor)), id = parse(worked).id;
+    expect(s.add(spoof(worked))).toBe("added");
+    expect(s.heightOf(spoof(id))).toBe(anchor.height + 1n);
+    expect(s.forkHeight(spoof(id))).toBe(anchor.height + 1n);
+    expect(s.heightOf(new Proxy(id, {}))).toBeUndefined();
+    expect(s.forkHeight(Object.create(Uint8Array.prototype) as Uint8Array)).toBeUndefined();
+    const shared = new Uint8Array(new SharedArrayBuffer(real[9]!.bytes.length));
+    shared.set(real[9]!.bytes);
+    Object.defineProperty(shared, "buffer", { get() { throw new Error("shared buffer property read"); } });
+    expect(headers.parseErgoHeader(shared)).toBeUndefined();
+    expect(s.add(shared)).toBe("malformed");
+  });
+
   it("reads real version 1 headers with their Autolykos v1 solution and checks its equation", () => {
     for (const entry of v1Fixture.headers) {
       const bytes = Uint8Array.from(Buffer.from(entry.bytes, "hex")), header = parse(bytes);
@@ -339,5 +368,128 @@ describe("the reader's header store", () => {
     const now = s.best();
     now.headers[0]!.id[0]! ^= 1;
     expect(hex(s.best().headers[0]!.id)).toBe(hex(parse(a1).id));
+  });
+});
+
+describe("the testnet header rules", () => {
+  const interval = 45_000n;
+  const smallBits = (difficulty: number): number => 0x0300_0000 | difficulty;
+  // Only the fields read by difficulty adjustment vary; these synthetic samples are not worked headers.
+  const samples = (spacing: bigint, difficulties = Array<number>(9).fill(1000), lastHeight = 1152n): headers.ErgoHeader[] =>
+    difficulties.map((difficulty, i) => ({ ...anchor, height: lastHeight - BigInt(8 - i) * 128n,
+      timestamp: T0 + BigInt(i) * 128n * spacing, nBits: smallBits(difficulty) }));
+  const testnetStore = (bytes: Uint8Array[]): headers.ErgoHeaderStore => {
+    const built = headers.ergoHeaderStore(parse(bytes.at(-1)!).id, bytes, "testnet");
+    if (built === undefined) throw new Error("testnet store not built");
+    return built;
+  };
+
+  it("derives real testnet IDs, work and the node's changed legacy difficulty", () => {
+    const previous = testnetReal.slice(0, 9).map(entry => parse(entry.bytes));
+    const boundary = parse(testnetReal[9]!.bytes);
+    expect(hex(boundary.parentId)).toBe(hex(previous[8]!.id));
+    expect(headers.testnetDifficulty(previous)).toBe(12_191_858_688n);
+    expect(headers.decodeCompactBits(boundary.nBits)).toBe(12_191_858_688n);
+    expect(headers.decodeCompactBits(previous[8]!.nBits)).toBe(9_768_796_160n);
+    expect(headers.eip37Difficulty(previous)).not.toBe(headers.decodeCompactBits(boundary.nBits));
+    for (const entry of testnetReal) {
+      const header = parse(entry.bytes);
+      expect(header.height).toBe(BigInt(entry.height));
+      expect(hex(header.id)).toBe(entry.id);
+      expect(headers.autolykosPowValid(header)).toBe(true);
+    }
+    const shifted = previous.map((header, i) => i === 4 ? { ...header, timestamp: header.timestamp + 600_000n } : header);
+    expect(headers.testnetDifficulty(shifted)).not.toBe(headers.decodeCompactBits(boundary.nBits));
+  });
+
+  it("uses 45 seconds without mainnet's average or clamps and falls back to one", () => {
+    expect(headers.testnetDifficulty(samples(interval))).toBe(1000n);
+    expect(headers.eip37Difficulty(samples(interval))).toBe(1500n);
+    expect(headers.testnetDifficulty(samples(180_000n))).toBe(250n);
+    expect(headers.testnetDifficulty(samples(15_000n))).toBe(3000n);
+    // The eight observations fall by 100 per epoch, predicting zero; a steeper fall predicts a negative value.
+    expect(headers.testnetDifficulty(samples(interval, [900, 800, 700, 600, 500, 400, 300, 200, 100]))).toBe(1n);
+    expect(headers.testnetDifficulty(samples(interval, [900, 800, 700, 600, 500, 400, 300, 200, 1]))).toBe(1n);
+  });
+
+  it("preserves the node's signed-Int prediction point on both networks", () => {
+    const falling = [1000, 900, 800, 700, 600, 500, 400, 300, 200];
+    const finalParent = 2_147_483_520n;
+    // Before overflow the next observation is 100. At the final parent, the prediction height wraps to
+    // -2147483648: the line gives 3355443300, whose compact normalization is 3355443200.
+    expect(headers.testnetDifficulty(samples(interval, falling, finalParent - 128n))).toBe(100n);
+    expect(headers.testnetDifficulty(samples(interval, falling, finalParent))).toBe(3_355_443_200n);
+    expect(headers.eip37Difficulty(samples(2n * MINUTE, falling, finalParent - 128n))).toBe(150n);
+    expect(headers.eip37Difficulty(samples(2n * MINUTE, falling, finalParent))).toBe(250n);
+    expect(headers.testnetDifficulty(samples(interval, [...falling].reverse(), finalParent))).toBe(1n);
+  });
+
+  it("requires the complete context and minimum anchor, and refuses an unknown rule selector", () => {
+    const first = context(1025n, interval), firstId = parse(first.at(-1)!).id;
+    expect(headers.ergoHeaderStore(firstId, first, "testnet")).toBeDefined();
+    expect(headers.ergoHeaderStore(firstId, first)).toBeUndefined();
+    expect(headers.ergoHeaderStore(firstId, first, "mainnet")).toBeUndefined();
+    expect(headers.ergoHeaderStore(firstId, first.slice(1), "testnet")).toBeUndefined();
+    expect(headers.ergoHeaderStore(firstId, first.slice(0, -1), "testnet")).toBeUndefined();
+    const early = context(1024n, interval);
+    expect(headers.ergoHeaderStore(parse(early.at(-1)!).id, early, "testnet")).toBeUndefined();
+    // This exercises the JavaScript boundary, where TypeScript's closed union does not constrain callers.
+    expect(headers.ergoHeaderStore(anchor.id, baseContext, "unknown" as "mainnet")).toBeUndefined();
+    const broken = [...first];
+    broken[500] = encode({ parentId: new Uint8Array(32), timestamp: T0, nBits: D4, height: 501n });
+    expect(headers.ergoHeaderStore(firstId, broken, "testnet")).toBeUndefined();
+  });
+
+  it("recalculates only after the boundary, rejecting worked wrong difficulty and unworked correct difficulty", () => {
+    // Half the testnet interval makes the next epoch's requirement 8, outside mainnet's 1.5x clamp.
+    const ancestry = context(1151n, interval / 2n), s = testnetStore(ancestry);
+    const root = parse(ancestry.at(-1)!);
+    const before = child(root, { timestamp: root.timestamp + interval / 2n });
+    expect(s.add(mine({ ...before, nBits: smallBits(8) }))).toBe("difficulty");
+    const atBoundary = mine(before);
+    expect(s.add(atBoundary)).toBe("added");
+    const boundary = parse(atBoundary);
+    const recalc = child(boundary, { timestamp: boundary.timestamp + interval / 2n, nBits: smallBits(8) });
+    expect(s.add(mine({ ...recalc, nBits: D4 }))).toBe("difficulty");
+    expect(s.add(mine(recalc, false))).toBe("pow");
+    const after = mine(recalc);
+    expect(s.add(after)).toBe("added");
+    const inside = child(parse(after), { nBits: smallBits(8) });
+    expect(s.add(mine({ ...inside, nBits: D4 }))).toBe("difficulty");
+    expect(s.add(mine(inside))).toBe("added");
+    expect(s.best().height).toBe(1154n);
+    expect(s.best().score).toBe(20n);
+  });
+
+  it("resets difficulty to 32 only at the final representable child height", () => {
+    const ancestry = context(2_147_483_644n, interval), s = testnetStore(ancestry);
+    let parent = parse(ancestry.at(-1)!);
+    for (const height of [2_147_483_645n, 2_147_483_646n]) {
+      const fields = child(parent);
+      expect(fields.height).toBe(height);
+      expect(s.add(mine({ ...fields, nBits: smallBits(32) }))).toBe("difficulty");
+      const bytes = mine(fields);
+      expect(s.add(bytes)).toBe("added");
+      parent = parse(bytes);
+    }
+    const final = child(parent, { nBits: smallBits(32) });
+    expect(s.add(mine({ ...final, nBits: D4 }))).toBe("difficulty");
+    expect(s.add(mine(final, false))).toBe("pow");
+    expect(s.add(mine(final))).toBe("added");
+    expect(s.best().height).toBe(2_147_483_647n);
+    expect(s.best().score).toBe(40n);
+    expect(headers.parseErgoHeader(encode({ ...final, height: 2_147_483_648n }))).toBeUndefined();
+  });
+
+  it("dispatches proof of work by version before the testnet activation height", () => {
+    const ancestry = context(1153n, interval), s = testnetStore(ancestry);
+    let parent = parse(ancestry.at(-1)!);
+    for (const version of [1, 0, 4, 5, 128, 255]) {
+      const fields = child(parent, { version });
+      const bytes = version === 1 ? mineV1(fields) : mine(fields);
+      expect(s.add(bytes)).toBe("added");
+      parent = parse(bytes);
+    }
+    expect(s.best().headers.map(header => header.version)).toEqual([1n, 0n, 4n, 5n, 128n, 255n]);
   });
 });

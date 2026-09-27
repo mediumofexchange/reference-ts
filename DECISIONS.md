@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-27` [Read the reference testnet through its pinned header rules](decisions/2026-09.md#2026-09-27--read-the-reference-testnet-through-its-pinned-header-rules)
 - `2026-09-25` [Admit, commit and serve v3 through an operator journal, proving in the runtime, on reference venues only](decisions/2026-09.md#2026-09-25--admit-commit-and-serve-v3-through-an-operator-journal-proving-in-the-runtime-on-reference-venues-only)
 - `2026-09-25` [Promote the v3 state machine and single-segment reader, and read Ergo only through ErgoVenue](decisions/2026-09.md#2026-09-25--promote-the-v3-state-machine-and-single-segment-reader-and-read-ergo-only-through-ergovenue)
 - `2026-09-25` [Retire probes whose questions are answered](decisions/2026-09.md#2026-09-25--retire-probes-whose-questions-are-answered)

@@ -1,21 +1,41 @@
 {
-  "schema": "moe-v3-operator-journal-1",
+  "schema": "moe-v3-testnet-journal-1",
   "specification": "786f962",
   "node": "v24.6.0",
   "platform": "win32",
-  "elapsedMs": 144729,
+  "elapsedMs": 1028721,
   "candidateDomain": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
-  "backing": "b2ba4542689d5c78f19e03b18b94954356be31526ea4c7a23cdd105138dfaec6",
+  "backing": "5e30fcff17598cf41103777f177b33713893b55c7566d4dc68105203af1d4c50",
   "venue": {
-    "context": "moe/venue/ergo-synthetic/reference",
-    "lag": "2",
-    "id": "55ae0a5d111ed4e8e93056315c03554c262c329b02ebae1fc458f409ae34974c",
-    "anchor": "e82e1330effedb38f0962713a8462fd54117e2231bad8f2c9880ca43d596a7f1",
-    "depth": "1",
-    "witnessedBlock": "d812dbbad567552849594c55750ea104f9acd440525cb5f8e013137a5e0b3009",
-    "tipHeight": "900010",
-    "funding": "invented synthetic box",
-    "publisher": "ErgoPublisher"
+    "context": "moe/venue/ergo-testnet/reference",
+    "lag": "3",
+    "id": "f48d13b01cf1c732beb8639650ee4c705c04108c2f07d7a10509f91cf68382ff",
+    "schema": "moe-v3-testnet-reader-1",
+    "endpoint": "http://127.0.0.1:9052",
+    "depth": "2",
+    "anchor": "0ebfd98de61dbf14666c5088b1ba0bc6773199d4f25c9e1fb2bcc87f871b7ab6",
+    "anchorHeight": "567207",
+    "judgingIndex": "17",
+    "witnessedBlock": "68430ec4a9aef4eddac83f5c775b27068313b4248d2dbf71aa18d8a4b44b9d30",
+    "tipHeight": "567227",
+    "anchorContextSha256": "8ac3f2bbb2e5e0004de78572251af208796d992a2fa045145aee9d2d67cb7349",
+    "funding": "throwaway testnet key",
+    "publisher": "ErgoPublisher",
+    "submittedTransactions": [
+      "6fa7c62334df30313f630122e59eaf465bbc3a5f753b67ee325e03f6cf3481f5",
+      "6ecde44674944b5454cd0edf58bee56009b7dd95fc7f6df20e17f05573c0c759",
+      "74b3e104552a306d5f7a8378ee2859833c8aa776f16a71e515dede56c2a05030",
+      "bd954edb339d0d2882eb9634ffd8fccb58f866cee91000daf48654f926a6aaf5"
+    ],
+    "budgets": {
+      "requestMs": 30000,
+      "responseBytes": 67108864,
+      "maxBlocks": 4096,
+      "publicationWaitMs": 1200000,
+      "runMs": 7200000,
+      "workerMs": 300000,
+      "pollMs": 10000
+    }
   },
   "checks": [
     "the prover refuses artifacts whose keys are not the configuration's",
@@ -29,7 +49,6 @@
     "the reader derives supply 10 minus 5 and reads each original receipt as final",
     "receiver, payer and operator restore exactly their unspent notes from their seeds",
     "a fresh seedless process verifies the same supply from the package and the venue alone",
-    "a fresh process restores the receiver's note from its seed and public bytes",
     "the fresh reader refuses a wrong independent pin and a withheld carrying section",
     "a reopened journal replays its commands to the same package and replies"
   ],
@@ -38,31 +57,31 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 5472
+      "elapsedMs": 3039
     },
     {
       "label": "pay 7, fee 1, change 2",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 11322
+      "elapsedMs": 13567
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 9014
+      "elapsedMs": 12203
     },
     {
       "label": "double spend refused",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 10775
+      "elapsedMs": 5185
     },
     {
       "label": "issue 10 again",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 4614
+      "elapsedMs": 2321
     }
   ],
   "packageBytes": 48250,
@@ -141,12 +160,11 @@
     "scripts/pool/v3/local-worker.mjs": "964a9c911b52e994d263fd387071a743d2910d3a4bead286a614f1dff157e5ae",
     "scripts/pool/v3/non-service.mjs": "f573f4556b99049ef0c7e46d42f4b3f380a6b9ebe9c450aca20ef616fce4573a",
     "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
-    "scripts/pool/v3/public-artifacts.mjs": "82feec1b0fd8c67c6eeae12e7e54c578ebf353133210225a8db281f3484122cf",
     "scripts/pool/v3/receipt-state.mjs": "5c4e69983c2900ab72f41bbe9a34f8d7ad7a5ceebbccc6d96931e55e1c3f3245",
     "scripts/pool/v3/scope-evidence.mjs": "a5bdd711885ded5bb5f43f13c7769b7e9e86789658fe9af0a3627581b4f85a16",
     "scripts/pool/v3/scope-recovery.mjs": "ae6f5a68680110cf19604a71047230c84ad296cbd71f5e457a1fb1618d02a6de",
     "scripts/pool/v3/scope-replay.mjs": "99519763746d9b17e10dc3b125f84b38189e35bd1b67f1a6b2a2745355dcc86f",
-    "scripts/pool/v3/store-check.mjs": "6bd9ec63028d850e4067080ae529fb2327ee7d374b3002608cc264d2dc4aac6c",
+    "scripts/pool/v3/store-check.mjs": "69ddc3359b0fdff53c38a96f73789263ed2269bcf0ba2d074aa28f7da243e6d8",
     "scripts/pool/v3/testnet.mjs": "acd65d9845744e1ce0b822c2b368aadbf308631a2e31378bca3e79fb9bb4956e",
     "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
     "src/bytes.ts": "7b78d53db688cb16092e2fdcb0689968f3e8f6765f56303abfb50816b2a6f3bd",
@@ -209,20 +227,20 @@
     "noMatchesMeansZeroBalance": false,
     "unresolvedCoverage": true,
     "spendable": false,
-    "rangeEvidence": "ergo-venue-synthetic-chain",
+    "rangeEvidence": "ergo-venue-live-testnet",
     "audit": {
       "records": "3",
       "issued": "10",
       "burned": "5",
       "outstanding": "5",
-      "noteRoot": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
-      "spentRoot": "41e94caf3396dda075e9a2387c9b08df36128abf54b7ca339fe569498c8c4196",
-      "historyHash": "69b4a3ce59763cabd06f8b554bc320642cfb7b5892899919c897a861ea180cdb",
-      "evidenceHash": "8f7166c577927b725c78ef6054380996c07559525e8a8e3014fe4ebaf41ae944",
+      "noteRoot": "7001211368950791204425289609627694322810533263219697946132244270963995256399",
+      "spentRoot": "7ab239562ec14bea39c3d0655949222636988309e2fc381d79e129ad1f513175",
+      "historyHash": "10f94e896c05ef29664b5c02c8e5b6a480e43d2285a56a737324b6739840eca7",
+      "evidenceHash": "8825d7738aa6c9907cbe194bb01a1d1b59886f5c48c3bfc51ca9d8122b1e9c7f",
       "range": {
-        "judgingIndex": "8",
-        "lag": "2",
-        "checkpointIndex": "8",
+        "judgingIndex": "17",
+        "lag": "3",
+        "checkpointIndex": "17",
         "revokedAt": null,
         "heldBefore": 3,
         "heldAfter": 0,
@@ -230,28 +248,28 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "from": "0",
-            "link": "b2ba4542689d5c78f19e03b18b94954356be31526ea4c7a23cdd105138dfaec6"
+            "link": "5e30fcff17598cf41103777f177b33713893b55c7566d4dc68105203af1d4c50"
           }
         ],
         "carrying": [
           {
             "sequence": "1",
-            "index": "2",
+            "index": "5",
             "class": "valid"
           },
           {
             "sequence": "2",
-            "index": "4",
+            "index": "9",
             "class": "valid"
           },
           {
             "sequence": "3",
-            "index": "6",
+            "index": "13",
             "class": "valid"
           },
           {
             "sequence": "4",
-            "index": "8",
+            "index": "17",
             "class": "valid"
           }
         ],
@@ -272,20 +290,20 @@
       "noMatchesMeansZeroBalance": false,
       "unresolvedCoverage": true,
       "spendable": false,
-      "rangeEvidence": "ergo-venue-synthetic-chain",
+      "rangeEvidence": "ergo-venue-live-testnet",
       "audit": {
         "records": "3",
         "issued": "10",
         "burned": "5",
         "outstanding": "5",
-        "noteRoot": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
-        "spentRoot": "41e94caf3396dda075e9a2387c9b08df36128abf54b7ca339fe569498c8c4196",
-        "historyHash": "69b4a3ce59763cabd06f8b554bc320642cfb7b5892899919c897a861ea180cdb",
-        "evidenceHash": "8f7166c577927b725c78ef6054380996c07559525e8a8e3014fe4ebaf41ae944",
+        "noteRoot": "7001211368950791204425289609627694322810533263219697946132244270963995256399",
+        "spentRoot": "7ab239562ec14bea39c3d0655949222636988309e2fc381d79e129ad1f513175",
+        "historyHash": "10f94e896c05ef29664b5c02c8e5b6a480e43d2285a56a737324b6739840eca7",
+        "evidenceHash": "8825d7738aa6c9907cbe194bb01a1d1b59886f5c48c3bfc51ca9d8122b1e9c7f",
         "range": {
-          "judgingIndex": "8",
-          "lag": "2",
-          "checkpointIndex": "8",
+          "judgingIndex": "17",
+          "lag": "3",
+          "checkpointIndex": "17",
           "revokedAt": null,
           "heldBefore": 3,
           "heldAfter": 0,
@@ -293,28 +311,28 @@
             {
               "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
               "from": "0",
-              "link": "b2ba4542689d5c78f19e03b18b94954356be31526ea4c7a23cdd105138dfaec6"
+              "link": "5e30fcff17598cf41103777f177b33713893b55c7566d4dc68105203af1d4c50"
             }
           ],
           "carrying": [
             {
               "sequence": "1",
-              "index": "2",
+              "index": "5",
               "class": "valid"
             },
             {
               "sequence": "2",
-              "index": "4",
+              "index": "9",
               "class": "valid"
             },
             {
               "sequence": "3",
-              "index": "6",
+              "index": "13",
               "class": "valid"
             },
             {
               "sequence": "4",
-              "index": "8",
+              "index": "17",
               "class": "valid"
             }
           ],
@@ -323,15 +341,15 @@
       },
       "candidates": [
         {
-          "cm": "15686299922504505669957400967020460048560003465379193004079991671810932491381",
-          "nf": "1509210980281031761153924058095610296398970619763122196121192929440485600489",
+          "cm": "21870240602056461531555698897853765074520169913324299524553730968554243908631",
+          "nf": "19990248415302588347326743149703974065065077437941602714558888225320577294451",
           "value": "2",
           "leaf": "5",
-          "anchor": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
+          "anchor": "7001211368950791204425289609627694322810533263219697946132244270963995256399",
           "siblings": [
-            "10926618549965629033098522085785336007861600508202226846645366385848895825261",
+            "5189327807554076006084348572551705640226083849830703992710057176382626559871",
             "16257989699773466206393016511488115181357775227253857822747532441271299011144",
-            "17943619932978180669168944850450184853392918015207940348979011485707924389957",
+            "4413932768389291344401101669559071781160691459883851458283920559758445653109",
             "1935094829533267935830464563796710052445228582946993128186972021230315590035",
             "18383913181606838331795460117774658566856597132399717689821053927504534850729",
             "6650121914657515867260011416921319045587517571339686030450569779952452434446",
@@ -412,20 +430,20 @@
       "noMatchesMeansZeroBalance": false,
       "unresolvedCoverage": true,
       "spendable": false,
-      "rangeEvidence": "ergo-venue-synthetic-chain",
+      "rangeEvidence": "ergo-venue-live-testnet",
       "audit": {
         "records": "3",
         "issued": "10",
         "burned": "5",
         "outstanding": "5",
-        "noteRoot": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
-        "spentRoot": "41e94caf3396dda075e9a2387c9b08df36128abf54b7ca339fe569498c8c4196",
-        "historyHash": "69b4a3ce59763cabd06f8b554bc320642cfb7b5892899919c897a861ea180cdb",
-        "evidenceHash": "8f7166c577927b725c78ef6054380996c07559525e8a8e3014fe4ebaf41ae944",
+        "noteRoot": "7001211368950791204425289609627694322810533263219697946132244270963995256399",
+        "spentRoot": "7ab239562ec14bea39c3d0655949222636988309e2fc381d79e129ad1f513175",
+        "historyHash": "10f94e896c05ef29664b5c02c8e5b6a480e43d2285a56a737324b6739840eca7",
+        "evidenceHash": "8825d7738aa6c9907cbe194bb01a1d1b59886f5c48c3bfc51ca9d8122b1e9c7f",
         "range": {
-          "judgingIndex": "8",
-          "lag": "2",
-          "checkpointIndex": "8",
+          "judgingIndex": "17",
+          "lag": "3",
+          "checkpointIndex": "17",
           "revokedAt": null,
           "heldBefore": 3,
           "heldAfter": 0,
@@ -433,28 +451,28 @@
             {
               "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
               "from": "0",
-              "link": "b2ba4542689d5c78f19e03b18b94954356be31526ea4c7a23cdd105138dfaec6"
+              "link": "5e30fcff17598cf41103777f177b33713893b55c7566d4dc68105203af1d4c50"
             }
           ],
           "carrying": [
             {
               "sequence": "1",
-              "index": "2",
+              "index": "5",
               "class": "valid"
             },
             {
               "sequence": "2",
-              "index": "4",
+              "index": "9",
               "class": "valid"
             },
             {
               "sequence": "3",
-              "index": "6",
+              "index": "13",
               "class": "valid"
             },
             {
               "sequence": "4",
-              "index": "8",
+              "index": "17",
               "class": "valid"
             }
           ],
@@ -463,15 +481,15 @@
       },
       "candidates": [
         {
-          "cm": "10237417308485628418847305918071656818276314211116088118295983857760747155242",
-          "nf": "21815417671279373993682271628351947080677661174665587607103610009092855876946",
+          "cm": "13770527509132082483802267093484168684189308083167466803179697540993755070314",
+          "nf": "8542169703040125055979233035273201337392394942781421802621777750088401219733",
           "value": "2",
           "leaf": "3",
-          "anchor": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
+          "anchor": "7001211368950791204425289609627694322810533263219697946132244270963995256399",
           "siblings": [
-            "8386023699952047584930136490001325865941261961921083845202515686188576508254",
-            "7944702502596410175610972407488513216761517985170188000907422622645025347087",
-            "17141448308124742917637442869597814570932147959372696626567327142639430357337",
+            "12675285355318697146653859724830689555924740813128783056576163237556138600579",
+            "12720311930148240263412990104854429776789702424220567536252788666538126682367",
+            "11240473053620356443639735158034045302246913532555170629793560440565240688745",
             "1935094829533267935830464563796710052445228582946993128186972021230315590035",
             "18383913181606838331795460117774658566856597132399717689821053927504534850729",
             "6650121914657515867260011416921319045587517571339686030450569779952452434446",
@@ -552,20 +570,20 @@
       "noMatchesMeansZeroBalance": false,
       "unresolvedCoverage": true,
       "spendable": false,
-      "rangeEvidence": "ergo-venue-synthetic-chain",
+      "rangeEvidence": "ergo-venue-live-testnet",
       "audit": {
         "records": "3",
         "issued": "10",
         "burned": "5",
         "outstanding": "5",
-        "noteRoot": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
-        "spentRoot": "41e94caf3396dda075e9a2387c9b08df36128abf54b7ca339fe569498c8c4196",
-        "historyHash": "69b4a3ce59763cabd06f8b554bc320642cfb7b5892899919c897a861ea180cdb",
-        "evidenceHash": "8f7166c577927b725c78ef6054380996c07559525e8a8e3014fe4ebaf41ae944",
+        "noteRoot": "7001211368950791204425289609627694322810533263219697946132244270963995256399",
+        "spentRoot": "7ab239562ec14bea39c3d0655949222636988309e2fc381d79e129ad1f513175",
+        "historyHash": "10f94e896c05ef29664b5c02c8e5b6a480e43d2285a56a737324b6739840eca7",
+        "evidenceHash": "8825d7738aa6c9907cbe194bb01a1d1b59886f5c48c3bfc51ca9d8122b1e9c7f",
         "range": {
-          "judgingIndex": "8",
-          "lag": "2",
-          "checkpointIndex": "8",
+          "judgingIndex": "17",
+          "lag": "3",
+          "checkpointIndex": "17",
           "revokedAt": null,
           "heldBefore": 3,
           "heldAfter": 0,
@@ -573,28 +591,28 @@
             {
               "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
               "from": "0",
-              "link": "b2ba4542689d5c78f19e03b18b94954356be31526ea4c7a23cdd105138dfaec6"
+              "link": "5e30fcff17598cf41103777f177b33713893b55c7566d4dc68105203af1d4c50"
             }
           ],
           "carrying": [
             {
               "sequence": "1",
-              "index": "2",
+              "index": "5",
               "class": "valid"
             },
             {
               "sequence": "2",
-              "index": "4",
+              "index": "9",
               "class": "valid"
             },
             {
               "sequence": "3",
-              "index": "6",
+              "index": "13",
               "class": "valid"
             },
             {
               "sequence": "4",
-              "index": "8",
+              "index": "17",
               "class": "valid"
             }
           ],
@@ -603,15 +621,15 @@
       },
       "candidates": [
         {
-          "cm": "8386023699952047584930136490001325865941261961921083845202515686188576508254",
-          "nf": "11869996675337531212144006180184538099826728216874820392164100206825956025854",
+          "cm": "12675285355318697146653859724830689555924740813128783056576163237556138600579",
+          "nf": "4491189541076400704593101231567928638223725667664204160243437770546813597099",
           "value": "1",
           "leaf": "2",
-          "anchor": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
+          "anchor": "7001211368950791204425289609627694322810533263219697946132244270963995256399",
           "siblings": [
-            "10237417308485628418847305918071656818276314211116088118295983857760747155242",
-            "7944702502596410175610972407488513216761517985170188000907422622645025347087",
-            "17141448308124742917637442869597814570932147959372696626567327142639430357337",
+            "13770527509132082483802267093484168684189308083167466803179697540993755070314",
+            "12720311930148240263412990104854429776789702424220567536252788666538126682367",
+            "11240473053620356443639735158034045302246913532555170629793560440565240688745",
             "1935094829533267935830464563796710052445228582946993128186972021230315590035",
             "18383913181606838331795460117774658566856597132399717689821053927504534850729",
             "6650121914657515867260011416921319045587517571339686030450569779952452434446",
@@ -690,7 +708,7 @@
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "2",
-          "index": "4"
+          "index": "9"
         }
       ],
       "contradictedAt": []
@@ -702,7 +720,7 @@
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "3",
-          "index": "6"
+          "index": "13"
         }
       ],
       "contradictedAt": []
@@ -714,7 +732,7 @@
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "4",
-          "index": "8"
+          "index": "17"
         }
       ],
       "contradictedAt": []
@@ -732,20 +750,20 @@
       "noMatchesMeansZeroBalance": false,
       "unresolvedCoverage": true,
       "spendable": false,
-      "rangeEvidence": "ergo-venue-synthetic-chain",
+      "rangeEvidence": "ergo-venue-live-testnet",
       "audit": {
         "records": "3",
         "issued": "10",
         "burned": "5",
         "outstanding": "5",
-        "noteRoot": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
-        "spentRoot": "41e94caf3396dda075e9a2387c9b08df36128abf54b7ca339fe569498c8c4196",
-        "historyHash": "69b4a3ce59763cabd06f8b554bc320642cfb7b5892899919c897a861ea180cdb",
-        "evidenceHash": "8f7166c577927b725c78ef6054380996c07559525e8a8e3014fe4ebaf41ae944",
+        "noteRoot": "7001211368950791204425289609627694322810533263219697946132244270963995256399",
+        "spentRoot": "7ab239562ec14bea39c3d0655949222636988309e2fc381d79e129ad1f513175",
+        "historyHash": "10f94e896c05ef29664b5c02c8e5b6a480e43d2285a56a737324b6739840eca7",
+        "evidenceHash": "8825d7738aa6c9907cbe194bb01a1d1b59886f5c48c3bfc51ca9d8122b1e9c7f",
         "range": {
-          "judgingIndex": "8",
-          "lag": "2",
-          "checkpointIndex": "8",
+          "judgingIndex": "17",
+          "lag": "3",
+          "checkpointIndex": "17",
           "revokedAt": null,
           "heldBefore": 3,
           "heldAfter": 0,
@@ -753,28 +771,28 @@
             {
               "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
               "from": "0",
-              "link": "b2ba4542689d5c78f19e03b18b94954356be31526ea4c7a23cdd105138dfaec6"
+              "link": "5e30fcff17598cf41103777f177b33713893b55c7566d4dc68105203af1d4c50"
             }
           ],
           "carrying": [
             {
               "sequence": "1",
-              "index": "2",
+              "index": "5",
               "class": "valid"
             },
             {
               "sequence": "2",
-              "index": "4",
+              "index": "9",
               "class": "valid"
             },
             {
               "sequence": "3",
-              "index": "6",
+              "index": "13",
               "class": "valid"
             },
             {
               "sequence": "4",
-              "index": "8",
+              "index": "17",
               "class": "valid"
             }
           ],
@@ -782,146 +800,6 @@
         }
       },
       "candidates": []
-    },
-    "receiver": {
-      "status": "selected-local-replay",
-      "fullV3Replay": false,
-      "currentRangeAuthenticated": true,
-      "candidateConfigurationChecked": true,
-      "signedTermsAuthenticated": true,
-      "termsAuthorityAuthenticated": true,
-      "completenessClaim": false,
-      "noMatchesMeansZeroBalance": false,
-      "unresolvedCoverage": true,
-      "spendable": false,
-      "rangeEvidence": "ergo-venue-synthetic-chain",
-      "audit": {
-        "records": "3",
-        "issued": "10",
-        "burned": "5",
-        "outstanding": "5",
-        "noteRoot": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
-        "spentRoot": "41e94caf3396dda075e9a2387c9b08df36128abf54b7ca339fe569498c8c4196",
-        "historyHash": "69b4a3ce59763cabd06f8b554bc320642cfb7b5892899919c897a861ea180cdb",
-        "evidenceHash": "8f7166c577927b725c78ef6054380996c07559525e8a8e3014fe4ebaf41ae944",
-        "range": {
-          "judgingIndex": "8",
-          "lag": "2",
-          "checkpointIndex": "8",
-          "revokedAt": null,
-          "heldBefore": 3,
-          "heldAfter": 0,
-          "chain": [
-            {
-              "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
-              "from": "0",
-              "link": "b2ba4542689d5c78f19e03b18b94954356be31526ea4c7a23cdd105138dfaec6"
-            }
-          ],
-          "carrying": [
-            {
-              "sequence": "1",
-              "index": "2",
-              "class": "valid"
-            },
-            {
-              "sequence": "2",
-              "index": "4",
-              "class": "valid"
-            },
-            {
-              "sequence": "3",
-              "index": "6",
-              "class": "valid"
-            },
-            {
-              "sequence": "4",
-              "index": "8",
-              "class": "valid"
-            }
-          ],
-          "clock": null
-        }
-      },
-      "candidates": [
-        {
-          "cm": "15686299922504505669957400967020460048560003465379193004079991671810932491381",
-          "nf": "1509210980281031761153924058095610296398970619763122196121192929440485600489",
-          "value": "2",
-          "leaf": "5",
-          "anchor": "4651199717052503935236773109989879229154185941837417849482745782968009970312",
-          "siblings": [
-            "10926618549965629033098522085785336007861600508202226846645366385848895825261",
-            "16257989699773466206393016511488115181357775227253857822747532441271299011144",
-            "17943619932978180669168944850450184853392918015207940348979011485707924389957",
-            "1935094829533267935830464563796710052445228582946993128186972021230315590035",
-            "18383913181606838331795460117774658566856597132399717689821053927504534850729",
-            "6650121914657515867260011416921319045587517571339686030450569779952452434446",
-            "845043333535205747680782585765216487309952857158244204638951000115525663969",
-            "1798565372180516634517843282450706694542445499858350052460863933410324420334",
-            "12082351775801795992599119410575771090046502720172243783387647860247227871902",
-            "17392670516229609273138538435194690200647498693429087923197847846467620878366",
-            "18270147803583966115185581568756452890223528135804716937646296736746340714319",
-            "6245281075527541134368495049517243664719812052214528999106154137816504162189",
-            "5771305936450134295237779198955973617491950584355028563949759501589674323328",
-            "8375117846537600003339886617732755020518140880023263272035782507904755134166",
-            "1402956623894417358519384271339285842133055840035948184830517042721409232939",
-            "10518453832655181976446617300434900287841057900980895845234303440776175031342",
-            "15485975685389868597531359628984423612206441834147218371890432861420618086233",
-            "15422680120123365729179431955186502234992765602151752301487612439836632415437",
-            "3956483861973015592013083471667691148363938305872047999848739786219821549630",
-            "1086051623285356080920660076036760901133490110146331619651622591312371431716",
-            "2915904499750125353540875529397177727199377493198348513681582475949711605897",
-            "20164087144993267523342657261822731817585018270367494699207673407082461049973",
-            "6242064092034472953019862381003839448720318820550567656011695795729872763820",
-            "486473096388032301890231500231637785138514345257938344321238940657971574478",
-            "8682912164133426756325886608207438073742770514324345939761663338459940455365",
-            "9032327814826196994352281082085265791527933228092108861697327508420029459713",
-            "11946683638986745115214649685278219707650430060924747485486585022833169300696",
-            "19219361000372015911425077088009647148763037724375627703239846977182347147882",
-            "20250997086726519601015986826877099693245538547315475919513141220642229899021",
-            "14413420282722522993748367414404798853361893034082534437626176948595980240628",
-            "4920301475339101562902404357157229632407380396727250905915335784284364493374",
-            "3490399488954770152131810821200763799606626796619604090245668179171764908058"
-          ],
-          "right": [
-            true,
-            false,
-            true,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false
-          ],
-          "pathScope": "replayed-local-tree-only",
-          "spendable": false
-        }
-      ]
     },
     "wrongPin": {
       "status": "unresolved-evidence",
@@ -956,8 +834,25 @@
       "candidates": []
     }
   },
+  "publicBundle": {
+    "directory": "scratch/pool-v3-testnet-reader",
+    "totalBytes": 71476,
+    "replay": "node scratch/pool-v3-testnet-reader/replay.mjs",
+    "sha256": {
+      "input.bin": "5295e57e35df4052f0e2ff8068a934fe462e5ba0303e9df58f130c6669f9cf38",
+      "testnet-reader.json": "78a1af14b784a145b32c26290ad36aa41f2b40c34ea0030bec423eab9f1e8bd7",
+      "ergo-pin.bin": "d6dc10101f4c6dc2d46b1a78a4f84e2b14209a339e4278f1a1c7fd075a51126d",
+      "1.vk": "65cc0ada6618c79df403d8276cd6a201e36936fb6264e516a34c4bf225729da0",
+      "2.vk": "850131fcd564ce15a238142051a0780623c8c759ccaffb4e389aad5a5056acba",
+      "3.vk": "ce55384238c5448505f7c34b938ae92152ea75c3c412c779b20aea57bf82f3be",
+      "4.vk": "cf3912b74b1c72eef4114049f792b76462cb3cf38f19181a90dd279175b61aa4",
+      "6.vk": "ea5b3e66ced10ded8cd72bae33c6cf4dd7d2704735713ce3b7f2f76126967654",
+      "7.vk": "1f048f189568b0b6ffdac39c71957aee34ed3485490d8594aba86d800e2aeaf4",
+      "replay.mjs": "e687a9311d55c12943c801121f56e023b5ea60e4d01ee78f606f24e2a9bd3db0"
+    }
+  },
   "limits": [
-    "Candidate configuration from the independently held manifest; actual ErgoPublisher transactions mined by a synthetic supplier and read through ErgoVenue under a recomputed synthetic reference identity. The seedless reader independently holds the witnessed block pin: difficulty 1 permits anyone to re-mine a heavier chain. Invented funding; no live node, network deployment, adopted domain or real-chain finality.",
+    "Explicit live testnet only, own node v6.0.6, depth 2. The independently selected already-final anchor and its pre-anchor ancestry are trust inputs. Header work, testnet difficulty, linkage and transaction sections after that anchor are verified by ErgoVenue. The fresh seedless reader holds its manifest, keys, endpoint, profile and witnessed pin outside the package and fetches node bytes itself. No mainnet, adopted domain, deployment or production finality claim.",
     "One genesis segment of one backing: no imports, recovery kinds, replacement, second backing or silence/non-service clause. The journal reads the venue's full ranges on every operation.",
     "Holders are this script: the payer and receiver restore paths through the reader and prove with the runtime prover; no wallet store, request transport or fee quote.",
     "Restart replay is exercised once here; restarts mid-publication and exact retry across restarts are slice 5."

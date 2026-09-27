@@ -142,9 +142,13 @@ describe("Ergo venue-profile candidate", () => {
     const synthetic: profile.ErgoProfile = { ...base, reference: profile.ERGO_SYNTHETIC_REFERENCE };
     expect(Buffer.from(profile.ergoProfileIdentity(synthetic))).toEqual(expected("moe/venue/ergo-synthetic/reference"));
     expect(profile.ownErgoProfile(synthetic).reference).toBe(profile.ERGO_SYNTHETIC_REFERENCE);
+    const testnet: profile.ErgoProfile = { ...base, reference: profile.ERGO_TESTNET_REFERENCE };
+    expect(Buffer.from(profile.ergoProfileIdentity(testnet))).toEqual(expected("moe/venue/ergo-testnet/reference"));
+    expect(profile.ownErgoProfile(testnet).reference).toBe(profile.ERGO_TESTNET_REFERENCE);
+    expect(profile.ergoProfileIdentity(testnet)).not.toEqual(profile.ergoProfileIdentity(synthetic));
     expect("reference" in profile.ownErgoProfile(base)).toBe(false);
     // Any other context, venue-ergo's own spelled out included, is not in the set.
-    for (const reference of ["moe/venue/ergo/v3", "moe/venue/ergo-testnet/reference", "moe/venue/local/reference", "", null, 1]) {
+    for (const reference of ["moe/venue/ergo/v3", "moe/venue/ergo-testnet/unknown", "moe/venue/local/reference", "", null, 1]) {
       expect(() => profile.ergoProfileIdentity({ ...base, reference } as unknown as profile.ErgoProfile)).toThrow(EncodingError);
     }
   });

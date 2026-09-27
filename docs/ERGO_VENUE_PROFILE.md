@@ -42,13 +42,32 @@ names the synthetic chain (`src/ergo-synthetic.ts`, reference tooling for
 the tests and the local replay) under the mainnet rules, and `ErgoVenue`
 reads it only above an anchor of difficulty 1: no mainnet header has it, and
 a header id commits to its ancestry, so a profile naming the synthetic
-context cannot follow the mainnet. The testnet's context joins with its
-header rules; `ownErgoProfile` refuses every other context. Beside them,
+context cannot follow the mainnet. `moe/venue/ergo-testnet/reference`
+(`ERGO_TESTNET_REFERENCE`) selects the pinned testnet rules below;
+`ownErgoProfile` refuses every other context. Beside them,
 `moe/venue/local/reference` (`LOCAL_REFERENCE`, `src/record-venue.ts`) names
 a `FixtureVenue` by a 32-byte label and its lag, with no header rules. The
 pool-v3 candidate runs only on a venue whose identity its guard recomputes
 from one of these preimages (`src/pool/v3/guard.ts`); venue-ergo's own
 context is refused there.
+
+The reference testnet context selects v6.0.6's legacy predictor: 45-second
+target, epochs of 128, eight-epoch lookback, fallback difficulty 1, compact
+normalization, without EIP-37's average or clamps. The header store requires
+the same 1,024 predecessors plus anchor, with testnet anchor height at least
+1,025. It preserves the pinned source's signed-Int prediction point at the
+terminal epoch and difficulty reset to 32 at child height 2,147,483,647.
+Version 1 still uses Autolykos v1 and every other version v2. Mainnet defaults
+and identities remain as specified in venue-ergo.
+
+The testnet anchor is an independently selected trust input. Its context
+binds the selected chain and rules; a hash cannot prove an arbitrary anchor's
+network. The explicit live checks use the controlled own testnet node, check
+its release/network and current-chain anchor readback, and choose depth 2.
+That depth carries no production-finality or mainnet-latency claim. Pre-anchor
+ancestry, full block validity and the heaviest chain the supplier withholds
+remain light-client trust limits. See the
+[decision and reviewed alternatives](../decisions/2026-09.md#2026-09-27--read-the-reference-testnet-through-its-pinned-header-rules).
 
 ## Header source
 
@@ -84,6 +103,16 @@ proofs add nothing here: the verifier needs every header from the anchor's
 child, and the anchor already fixes the ancestry a proof would summarize.
 
 ## Costs and limits
+
+The reference-testnet header check is
+[`testnet-header-check.mjs`](../experiments/ergo-range/testnet-header-check.mjs).
+Its [source-bound report](ergo-testnet-header-verification.json) records a
+contiguous real window, every recalculation in that window and fresh own-node
+tip agreement. It takes an independently pinned anchor and applies the runtime
+store to every descendant. Terminal signed-Int arithmetic and activation reset
+are covered by hostile unit fixtures, rather than the current-height window.
+This is header evidence only; the [live journal report](pool-v3-testnet-verification.json)
+separately records publication and public supply verification.
 
 - The reader runs no decoder, so no decoder's refusal denies a range. Until
   2026-09-24 it decoded with sigma-rust, first unpinned and then as a
@@ -347,17 +376,13 @@ an honest supplier supplies the missing valid section, and altered difficulty
 bits stop the offending supplier's header pass.
 
 [`publisher-check.mjs`](../experiments/ergo-range/publisher-check.mjs) runs
-the publisher on the own testnet node
-([report](ergo-publisher-verification.json)): a commitment, a replacement
-and a revocation, each signed by its own key, went out as three
-transactions chained in the mempool (416, 513 and 375 unsigned bytes, each
-56 bytes more signed); before each submission the node checked the bytes
-and refused them with one proof byte changed; the replacement's first
-answer was lost, and the retry found its record box and sent nothing;
-publishing the commitment again submitted nothing (the node itself answers
-a second submission of a pooled transaction with a refusal); and the including blocks' sections,
-each accepted only where it reproduced its header's root, carried exactly the
-three records at their kinds, subjects and ordinals. In tests
+the publisher on the own testnet node under the reference-testnet identity.
+Its [report](ergo-publisher-verification.json) records signed commitment,
+replacement and revocation transactions, verified inclusion and depth, and
+exact record bytes, subjects and ordinals in their carrying sections.
+The node refuses an altered proof; lost-answer and exact retries submit no
+additional transaction. The report owns the anchor, transaction ids and sizes.
+In tests
 (`test/ergo-publisher.test.ts`) recorded proofs signed by sigma-rust
 verify and every variation is refused, a mempool written independently of
 the publisher admits only balanced, fully signed transactions, a lost
@@ -372,7 +397,9 @@ serves packages and mined block evidence to a fresh seedless reader, whose
 witnessed block pin is held independently beside its candidate keys. Both
 journal and reader require the caller's reference identity preimage. See the
 [journal acceptance](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
-for the report and synthetic-only limits; no live node or funds enter that flow.
+for the synthetic report and limits. The explicit `--testnet` path uses the same
+journal on the live reference testnet, with throwaway tERG funding and a fresh
+reader fetching its own headers and sections ([live report](pool-v3-testnet-verification.json)).
 
 What remains before an Ergo deployment: persistence, the one-transaction
 condition checked against an adopted configuration, publication on the
