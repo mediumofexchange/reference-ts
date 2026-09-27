@@ -4,7 +4,8 @@ Updated: 2026-09-27
 
 ## Goal
 Slice 4 of the [v3 runtime plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2),
-on `feat/v3-hostile-operator` from delivered `a72888b`.
+Signing-safety implementation `ce90145` on `feat/v3-hostile-operator`, from `a72888b`;
+[PR #25](https://github.com/mediumofexchange/reference-ts/pull/25) records final CI and delivery.
 First acceptance boundary: a journal detects every authentic commitment of its own key
 outside its durable signing history, including a twin hidden by the held-record rule,
 and refuses new signatures. Historical packages, existing outbox publication and exact
@@ -30,7 +31,7 @@ Evidence limit: local/synthetic reference venues; earlier live allowances are ex
 - Source-bound synthetic journal and local/synthetic recovery acceptance passed;
   all three reports are refreshed. The seven current reports below pass source checks.
   Other drifted reports remain historical; no live evidence was re-recorded.
-- Full checks and proof suites are merge gates in the branch's PR. Inspect its CI and
+- Full checks and proof suites are merge gates in PR #25. Inspect its CI and
   merge state before resuming dependent work. No circuit change or local job remains.
 
 ## Evidence
