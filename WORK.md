@@ -3,31 +3,30 @@
 Updated: 2026-09-27
 
 ## Goal
-Slice 1 **M0–M2b complete**, [PR #22](https://github.com/mediumofexchange/reference-ts/pull/22):
-kinds 1–3 through the real publisher, synthetic mining and fresh pinned reader; reference guards
-on journal and reader entries. Synthetic reference evidence only, no deployment/adoption.
-Next: slice 2 of the [plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2).
-Start with a read-only own-node probe of testnet header rules; resolve the exact profile before
-dependent code. Acceptance: testnet reference identity, live publication and independent supply
-verification; move the existing publisher check onto that profile. Stop before recovery kinds.
-Use a fresh instance for the new consensus/profile work. No local acceptance job remains;
-coordinate with the separate node-setup session before changing its processes or configuration.
+Slice 2 of the [plan](decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2),
+branch `feat/v3-testnet-venue`, based on slice 1's merged `4c42bba` ([PR #22](https://github.com/mediumofexchange/reference-ts/pull/22)).
+Probe the own testnet node's headers against pinned v6.0.6 source before dependent runtime code.
+Acceptance: recomputed testnet reference identity; journal publication and fresh seedless supply
+verification on the live testnet; publisher check on that profile; hostile header cases, full
+checks, affected report bindings and independent adversarial review. Stop before recovery kinds.
+Evidence remains reference-only, no adoption or deployment. The endpoint `127.0.0.1:9052` is
+offline; node restart/endpoint coordination is pending. Existing mainnet node processes are
+unchanged. No local acceptance job is running; no companion specification branch yet.
 
 ## Status
 
-- Independent adversarial review and fixture-fix readbacks found no blocker. All seven jobs in
-  [CI 36314446002](https://github.com/mediumofexchange/reference-ts/actions/runs/36314446002) passed
-  at d347fce (final code). The delivery update changes reports/handoff only; docs, links and all
-  nine current report bindings pass. CI retains the v3 reports; no duplicate local proof run.
+- Slice 1 passed independent review and all seven [CI jobs](https://github.com/mediumofexchange/reference-ts/actions/runs/36314446002)
+  at d347fce; merged as 4c42bba. Slice 2 has no runtime patch or live acceptance yet.
+- Pinned upstream `23aabead` confirms testnet's 45 s legacy predictor, no EIP-37 clamps;
+  signed-Int prediction overflow and terminal difficulty reset need hostile fixtures. Ordinary-height
+  probe formula reviewed; cache freshness and source-binding gaps fixed. Notes/probe retained below.
 - Ergo ([guide](docs/ERGO_VENUE_PROFILE.md#runtime-venue), spec [01d8db2](https://github.com/mediumofexchange/money-from-first-principles/blob/01d8db2/venue-ergo.md)):
   `ErgoVenue` verifies headers and sections itself; `ErgoPublisher` publishes kinds
   1–3, one remembered transaction per record. Live publisher evidence is testnet-only; memory-only runtime.
 - Shared-encoding audit (area 8, PR #21): codecs read once, bound, copy, judge the copy; tags in `contexts.ts`.
-- Own nodes (approved): `experiments/ergo-range/nodes.mjs` runs official v6.0.6 mainnet (snapshot,
-  127.0.0.1:9053) and testnet (archive + index, 127.0.0.1:9052) from `scratch/ergo-nodes/`; after a
-  reboot run `nodes.mjs start` and `watch 10` via WMI `Win32_Process.Create` (terminal children die).
-- Testnet wallet: ignored `scratch/ergo-testnet/wallet.json` (~19,999.89 tERG, copy outside
-  the repo), no approval needed.
+- Own nodes: v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052), `scratch/ergo-nodes/`.
+  Approved launcher `experiments/ergo-range/nodes.mjs`: start/watch via WMI (terminal children die).
+- Testnet wallet: `scratch/ergo-testnet/wallet.json` (~19,999.89 tERG; backed up), approved.
 
 ## Evidence
 
@@ -87,11 +86,12 @@ reader over §13 answers; the candidate runs only on recomputed reference venue 
   `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd` with its tool caches
   (`node-startup/`, `sync-preparation/`); do not delete it or allocate another. Keep `private-payment-crs/`,
   `jdk/` (the framer probe's javac) and `ergo-headers/` (their report holds the digests).
-- Preserve the legacy Temp/moeclean worktree (another checkout). Configuration approval stays
-  disabled; device qualification and mainnet publication too.
+- Retain `scratch/testnet-header-probe.mjs`, `scratch/testnet-profile-notes.md` and its
+  `scratch/testnet-header-probe/` cache until slice 2 acceptance retires them; no detached job.
+- Preserve legacy Temp/moeclean. Configuration approval, device qualification and mainnet stay disabled.
 
 ## Open questions
-- None.
+- Node coordination pending; then run retained probe, review anchor/depth/rules and implement slice 2.
 
 Roughly **55% done / 45% remaining**, plausible range **45–65%**, reassessed 2026-09-27
 (M2b): v3 journal publication and independent supply verification now share the real Ergo
