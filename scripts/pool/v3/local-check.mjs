@@ -1133,7 +1133,7 @@ try {
   // Spawned worker processes get this process's --stack-size, if it has one; a
   // child process does not inherit execArgv.
   const stackFlags = process.execArgv.filter(flag => /^--stack[-_]size=/.test(flag));
-  function worker(payload, mode) {
+  function worker(payload, mode = withErgo ? "--ergo-fixture" : undefined) {
     const child = spawnSync(process.execPath, [...stackFlags, join(here, "local-worker.mjs"), url, ...(mode === undefined ? [] : [mode])], {
       input: serialize(portable(payload)), timeout: 60_000, cwd: build, windowsHide: true, maxBuffer: 1_048_576,
     });
@@ -1142,6 +1142,10 @@ try {
   }
   await test("fresh public verifier has no wallet seed; separate receiver restores from public evidence only", () => {
     assert.deepEqual(Object.keys(complete).sort(), ["package", "selection", "venue"]);
+    // The harness selects the fixed reference independently of package bytes.
+    const wrongReference = worker(complete, withErgo ? "--local" : "--ergo-fixture");
+    assert.equal(wrongReference.status, "invalid-local-replay");
+    assert.equal(wrongReference.check, "VENUE_REFERENCE");
     assert.deepEqual(worker(complete), audit);
     assert.deepEqual(worker({ ...complete, seed: receiverSeed }), receiver);
     assert.deepEqual(worker(extended), dependency);

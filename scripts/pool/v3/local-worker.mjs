@@ -15,8 +15,9 @@ import { v3Codec } from "./codec.mjs";
 
 let api;
 try {
-  if (process.argv.length > 4 || (process.argv[3] !== undefined && process.argv[3] !== "--ergo")) throw new Error("unknown reader mode");
+  if (process.argv.length > 4 || (process.argv[3] !== undefined && !["--local", "--ergo", "--ergo-fixture"].includes(process.argv[3]))) throw new Error("unknown reader mode");
   const withErgo = process.argv[3] === "--ergo";
+  const withErgoReference = withErgo || process.argv[3] === "--ergo-fixture";
   const codec = v3Codec;
   const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
   const configuration = candidateConfiguration(manifest, codec);
@@ -44,13 +45,16 @@ try {
     verify: (kind, publicInputs, proof) => backend.verifyProof({
     proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
   }, { verifierTarget: "noir-recursive" }), record: data => recordReader(FixtureVenue.from(data), "fixture-verifier") };
-  // Under --ergo the process's own ErgoVenue, on its own anchor context, verifies the package's blocks up to the
-  // block the reader pinned, held beside the keys (never in the package).
-  if (withErgo) {
+  // Both Ergo modes use this process's fixed profile. --ergo-fixture retains
+  // FixtureVenue for differential checks; --ergo verifies blocks through its
+  // own ErgoVenue up to the pin held beside the keys (never in the package).
+  if (withErgoReference) {
     const { ergoRecord, ERGO_PROFILE } = await import("./ergo-check.mjs");
-    const pin = new Uint8Array(readFileSync(join(fileURLToPath(process.argv[2]), "ergo-pin.bin")));
-    verifier.record = data => ergoRecord(data, { pin });
     verifier.reference = { context: ERGO_SYNTHETIC_REFERENCE, profile: ERGO_PROFILE };
+    if (withErgo) {
+      const pin = new Uint8Array(readFileSync(join(fileURLToPath(process.argv[2]), "ergo-pin.bin")));
+      verifier.record = data => ergoRecord(data, { pin });
+    }
   }
   process.stdout.write(JSON.stringify(await replayEvidencePackage(input, verifier, codec)));
 } catch {
