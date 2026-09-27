@@ -77,7 +77,7 @@ checks nine real-data mutations for their refusal reasons and, with
 `--recalculations`, the model's EIP-37 difficulty and proof of work at every
 recalculation since activation against the first source's accepted headers.
 Responses are cached under `scratch/ergo-headers/`, so `--offline` re-runs it
-from the cache ([retained report](../../docs/ergo-header-verification.json)):
+from the cache ([historical retained report at 6e4cea8](https://github.com/mediumofexchange/reference-ts/blob/6e4cea8/docs/ergo-header-verification.json)):
 
 ```powershell
 node experiments/ergo-range/header-verify.mjs --anchor 1873360 --to 1880300 --recalculations --out docs/ergo-header-verification.json
@@ -91,7 +91,8 @@ the default depth, a view syncs from the own node and a public node, then a
 second view from the public node alone, and a supplier that substitutes one
 section and one that raises one header's difficulty are each set beside the
 own node. It needs the own mainnet node running, caches nothing and writes
-the [runtime venue report](../../docs/ergo-runtime-venue-verification.json):
+a fresh runtime report. The [retained report at 6e4cea8](https://github.com/mediumofexchange/reference-ts/blob/6e4cea8/docs/ergo-runtime-venue-verification.json)
+predates persistence changes:
 
 ```powershell
 node experiments/ergo-range/runtime-sync.mjs --out docs/ergo-runtime-venue-verification.json

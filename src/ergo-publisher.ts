@@ -31,11 +31,10 @@
 // any unsettled transaction whose change it spends), so a lost response, an
 // unreachable supplier or a dropped transaction never leads to a second,
 // non-conflicting one. It is forgotten only once a verifying view holds the
-// record (`settle`). The memory is not stored: after a restart a retry may
-// publish a second, identical object, which readers take as one (a
-// commitment's later witnessing is below the held sequence, a revocation's
-// first witnessing counts, and a repeated replacement restates its own
-// link), so the cost is a fee. Change this publisher created is spent before
+// record (`settle`). An optional journal adapter stores the complete outbox
+// before submission, so reopening retries the exact signed transaction. The
+// default memory-only publisher loses this reservation on restart; a repeated
+// object is still read as one, but may cost another fee. Change this publisher created is spent before
 // any index shows it, so publications chain in the mempool. The funding key
 // must be this publisher's alone: a transaction spending its boxes elsewhere
 // can invalidate a remembered one for good.
@@ -277,7 +276,8 @@ const publicationCost = (request: ErgoRecordRequest, tree: Uint8Array, fee: bigi
  * (all of `key`'s tree, in order): the record output or adjacent run at its
  * location with each box's minimum value, then change to the key where it
  * reaches the minimum (otherwise it joins the fee), then the fee. */
-function buildPublication(key: ErgoKey, tree: Uint8Array, inputs: readonly ErgoPlainBox[], request: ErgoRecordRequest, fee: bigint, perByte: bigint): ErgoPublication {
+function buildPublication(key: ErgoKey, tree: Uint8Array, inputs: readonly ErgoPlainBox[], request: ErgoRecordRequest, fee: bigint, perByte: bigint,
+  proofs?: readonly Uint8Array[]): ErgoPublication {
   const { height } = request;
   const outputs = recordOutputs(request, perByte), changeIndex = outputs.length;
   const recordValue = outputs.reduce((sum, output) => sum + output.value, 0n);
@@ -301,7 +301,8 @@ function buildPublication(key: ErgoKey, tree: Uint8Array, inputs: readonly ErgoP
     throw new VenueError("the signed transaction exceeds the node's 98304-byte publication limit");
   }
   const signed = concat(vlq(BigInt(inputs.length)), ...inputs.map((box, i) => {
-    const proof = key.prove(unsigned, i);
+    const proof = proofs === undefined ? key.prove(unsigned, i) : proofs[i]!;
+    if (proofs !== undefined && !verifyErgoProof(key.publicKey, unsigned, proof)) throw new VenueError("invalid saved publication proof");
     return concat(box.id, vlq(BigInt(proof.length)), proof, Uint8Array.of(0));
   }), body);
   const id = hash(unsigned);
@@ -339,6 +340,17 @@ export interface ErgoPublisherOptions {
   readonly minValuePerByte?: bigint;
   /** A supplier call not settled in this many milliseconds did not supply. */
   readonly timeoutMs?: number;
+  /** Durable exact retry, bound by its owning journal to this venue. */
+  readonly persistence?: ErgoPublisherPersistence;
+}
+
+/** Synchronous durable storage. save must commit atomically before returning;
+ * guard fences the owner immediately before every external submission. A
+ * failed save/guard poisons this instance: reopen it from durable state. */
+export interface ErgoPublisherPersistence {
+  load(): string | undefined;
+  save(snapshot: string): void;
+  guard(): void;
 }
 
 /** A publication built for one record, remembered before it is first sent. */
@@ -347,6 +359,23 @@ interface Pending {
   readonly request: ErgoRecordRequest;
   readonly inputs: readonly ErgoPlainBox[];
   readonly publication: ErgoPublication;
+}
+type CreatedBox = ErgoPlainBox & { readonly bytes: Uint8Array };
+interface PublisherState {
+  readonly version: number;
+  readonly tree: Uint8Array;
+  readonly fee: bigint;
+  readonly perByte: bigint;
+  readonly pending: readonly Pending[];
+  readonly spent: readonly string[];
+  readonly created: readonly CreatedBox[];
+}
+const stateText = (state: PublisherState): string => JSON.stringify(state, (_key, value: unknown) =>
+  typeof value === "bigint" ? { integer: value.toString() } : isRealBytes(value) ? { bytes: bytesToHex(value) } : value);
+function copyPublication(p: ErgoPublication): ErgoPublication {
+  return Object.freeze({ id: copyBytes(p.id), unsigned: copyBytes(p.unsigned), signed: copyBytes(p.signed),
+    inputs: Object.freeze(p.inputs.map(copyBytes)), recordBox: copyBytes(p.recordBox),
+    ...(p.change === undefined ? {} : { change: Object.freeze({ ...p.change, id: copyBytes(p.change.id), bytes: copyBytes(p.change.bytes) }) }) });
 }
 const recordKey = (r: ErgoRecordRequest): string =>
   bytesToHex(concat(vlq(BigInt(r.location.length)), r.location, r.subject, vlq(BigInt(r.record.length)), r.record));
@@ -362,6 +391,9 @@ export class ErgoPublisher {
   readonly #fee: bigint;
   readonly #perByte: bigint;
   readonly #timeoutMs: number;
+  readonly #persistence: ErgoPublisherPersistence | undefined;
+  #failed = false;
+  #saves = 0;
   /** Unsettled publications by record, oldest first. */
   readonly #pending = new Map<string, Pending>();
   /** The unsettled publication that creates each change box, by box id. */
@@ -369,7 +401,7 @@ export class ErgoPublisher {
   /** Boxes remembered publications spend. */
   readonly #spent = new Set<string>();
   /** Change this publisher created and has not spent, landed or not, while no supplier shows it gone. */
-  readonly #created = new Map<string, ErgoPlainBox>();
+  readonly #created = new Map<string, CreatedBox>();
   #queue: Promise<unknown> = Promise.resolve();
 
   constructor(options: ErgoPublisherOptions) {
@@ -380,11 +412,18 @@ export class ErgoPublisher {
     this.#fee = options.fee ?? DEFAULT_ERGO_FEE;
     this.#perByte = options.minValuePerByte ?? DEFAULT_MIN_VALUE_PER_BYTE;
     this.#timeoutMs = options.timeoutMs ?? 60_000;
+    this.#persistence = options.persistence;
     if (typeof this.#fee !== "bigint" || typeof this.#perByte !== "bigint" || this.#perByte < 1n || this.#perByte > 1_000_000n ||
         this.#fee > MAX_U64 || !Number.isSafeInteger(this.#timeoutMs) || this.#timeoutMs <= 0) throw new VenueError("invalid Ergo publisher options");
     // The fee box is a box too: it must reach the minimum at any height.
     if (this.#fee < minimumValue({ tree: FEE_TREE, registers: [] }, 0xffff_ffffn, 2, this.#perByte)) {
       throw new VenueError("the fee is below its box's minimum value");
+    }
+    if (this.#persistence !== undefined) {
+      this.#guard();
+      const saved = this.#persistence.load();
+      if (saved !== undefined) this.#restore(saved);
+      else this.#persist();
     }
   }
 
@@ -396,6 +435,102 @@ export class ErgoPublisher {
   /** How many publications are remembered and not yet settled. */
   get unsettled(): number {
     return this.#pending.size;
+  }
+
+  #guard(): void {
+    if (this.#failed) throw new VenueError("publisher persistence failed; reopen from durable state");
+    try { this.#persistence?.guard(); } catch (error) { this.#failed = true; throw error; }
+  }
+
+  #snapshot(): string {
+    return stateText({ version: 1, tree: this.#tree, fee: this.#fee, perByte: this.#perByte,
+      pending: [...this.#pending.values()], spent: [...this.#spent], created: [...this.#created.values()] });
+  }
+
+  #persist(): void {
+    try { if (this.#persistence !== undefined) this.#persistence.save(this.#snapshot()); this.#saves++; }
+    catch (error) { this.#failed = true; throw error; }
+  }
+
+  #deriveChanges(): void {
+    this.#byChange.clear();
+    for (const pending of this.#pending.values()) {
+      if (pending.publication.change !== undefined) this.#byChange.set(bytesToHex(pending.publication.change.id), pending);
+    }
+  }
+
+  /** Reconstruct the complete transaction from the request, input metadata and
+   * policy, using only the saved proofs; never sign on the restore path. The
+   * canonical readback also rejects extra fields, duplicate entries and altered
+   * transaction metadata. Input IDs and aggregate value are bound, but each
+   * historical input's value/height is retained journal state, not independently
+   * authenticated box evidence. Corruption can spoil a later rebuild; the
+   * network still checks actual input values/heights. Persistence is trusted
+   * for availability, not parsing. */
+  #restore(text: string): void {
+    try {
+      const saved = JSON.parse(text, (_key, value: unknown): unknown => {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
+        const entry = value as { integer?: unknown; bytes?: unknown };
+        if (Object.keys(value).length === 1 && typeof entry.integer === "string" && /^(0|[1-9][0-9]*)$/.test(entry.integer)) return BigInt(entry.integer);
+        if (Object.keys(value).length === 1 && typeof entry.bytes === "string" && /^(?:[0-9a-f]{2})*$/.test(entry.bytes)) return hexToBytes(entry.bytes);
+        return value;
+      }) as PublisherState;
+      const ensure = (condition: boolean): void => { if (!condition) throw new VenueError("invalid saved publisher state"); };
+      ensure(saved !== null && typeof saved === "object" && saved.version === 1 && isRealBytes(saved.tree) &&
+        compareBytes(saved.tree, this.#tree) === 0 && saved.fee === this.#fee && saved.perByte === this.#perByte &&
+        Array.isArray(saved.pending) && saved.pending.length <= PENDING_LIMIT && Array.isArray(saved.spent) && Array.isArray(saved.created));
+      const box = (input: ErgoPlainBox): ErgoPlainBox => {
+        ensure(input !== null && typeof input === "object" && isRealBytes(input.id) && input.id.length === 32 &&
+          typeof input.value === "bigint" && input.value >= 0n && input.value <= MAX_U64 &&
+          typeof input.creationHeight === "bigint" && input.creationHeight >= 0n && input.creationHeight <= 0xffff_ffffn);
+        return Object.freeze({ id: copyBytes(input.id), value: input.value, creationHeight: input.creationHeight });
+      };
+      const spentByPending = new Set<string>();
+      for (const entry of saved.pending) {
+        const request = ownRequest(entry.request), key = recordKey(request);
+        ensure(entry.key === key && !this.#pending.has(key) && Array.isArray(entry.inputs) && entry.inputs.length > 0 && entry.inputs.length <= MAX_INPUTS);
+        const inputs = entry.inputs.map(box);
+        for (const input of inputs) {
+          const id = bytesToHex(input.id);
+          ensure(input.creationHeight <= request.height && !spentByPending.has(id)); spentByPending.add(id);
+        }
+        const signed = entry.publication.signed;
+        ensure(isRealBytes(signed) && signed.length <= MAX_TRANSACTION_BYTES);
+        // At most 64 inputs: the count and each proof length are one-byte VLQs.
+        ensure(signed[0] === inputs.length);
+        const proofs = inputs.map((_input, i) => {
+          const offset = 1 + i * (32 + 1 + PROOF_BYTES + 1);
+          ensure(signed[offset + 32] === PROOF_BYTES);
+          return signed.subarray(offset + 33, offset + 33 + PROOF_BYTES);
+        });
+        const publication = buildPublication(this.#key, this.#tree, inputs, request, this.#fee, this.#perByte, proofs);
+        this.#pending.set(key, Object.freeze({ key, request, inputs: Object.freeze(inputs), publication }));
+      }
+      for (const id of saved.spent) {
+        ensure(typeof id === "string" && /^[0-9a-f]{64}$/.test(id) && !this.#spent.has(id)); this.#spent.add(id);
+      }
+      for (const id of spentByPending) ensure(this.#spent.has(id));
+      for (const entry of saved.created) {
+        const metadata = box(entry), parsed = readPlainBox(entry.bytes, this.#tree), id = bytesToHex(metadata.id);
+        ensure(parsed !== undefined && compareBytes(parsed.id, metadata.id) === 0 && parsed.value === metadata.value &&
+          parsed.creationHeight === metadata.creationHeight && !this.#created.has(id) && !this.#spent.has(id));
+        this.#created.set(id, Object.freeze({ ...metadata, bytes: copyBytes(entry.bytes) }));
+      }
+      this.#deriveChanges();
+      for (const [id, pending] of this.#byChange) {
+        const change = pending.publication.change!;
+        const created = this.#created.get(id);
+        if (created !== undefined) ensure(compareBytes(created.bytes, change.bytes) === 0);
+        for (const child of this.#pending.values()) for (const input of child.inputs) {
+          if (bytesToHex(input.id) === id) ensure(input.value === change.value && input.creationHeight === change.creationHeight);
+        }
+      }
+      ensure(this.#snapshot() === text);
+    } catch (error) {
+      if (error instanceof VenueError) throw error;
+      throw new VenueError("invalid saved publisher state");
+    }
   }
 
   /**
@@ -430,7 +565,7 @@ export class ErgoPublisher {
   async settle(holds: (request: ErgoRecordRequest) => boolean): Promise<void> {
     return this.#serialized(async () => {
       for (const pending of [...this.#pending.values()]) {
-        if (!holds(pending.request)) continue;
+        if (!holds(ownRequest(pending.request))) continue;
         const { publication } = pending, change = publication.change;
         const landed = await this.#any(s => s.hasBox(copyBytes(publication.recordBox))) ||
           (change !== undefined && await this.#any(s => s.hasBox(copyBytes(change.id))));
@@ -440,11 +575,24 @@ export class ErgoPublisher {
         if (landed) for (const input of publication.inputs) this.#spent.delete(bytesToHex(input));
         else if (change !== undefined) this.#created.delete(bytesToHex(change.id));
       }
+      this.#persist();
     });
   }
 
   #serialized<T>(action: () => Promise<T>): Promise<T> {
-    const run = this.#queue.then(action);
+    const run = this.#queue.then(async () => {
+      this.#guard();
+      const pending = new Map(this.#pending), spent = new Set(this.#spent), created = new Map(this.#created), saves = this.#saves;
+      try { return await action(); } catch (error) {
+        if (saves === this.#saves) {
+          this.#pending.clear(); for (const [key, value] of pending) this.#pending.set(key, value);
+          this.#spent.clear(); for (const value of spent) this.#spent.add(value);
+          this.#created.clear(); for (const [key, value] of created) this.#created.set(key, value);
+          this.#deriveChanges();
+        }
+        throw error;
+      }
+    });
     this.#queue = run.catch(() => undefined);
     return run;
   }
@@ -454,7 +602,7 @@ export class ErgoPublisher {
     const kept = (): never => { throw new VenueError("no supplier accepted the publication; it is kept and sent again on the next attempt"); };
     let pending = this.#pending.get(key);
     if (pending !== undefined) {
-      if (await this.#shown(pending) || await this.#send(pending, new Set())) return pending.publication;
+      if (await this.#shown(pending) || await this.#send(pending, new Set())) return copyPublication(pending.publication);
       const { live, gone } = await this.#inspect(pending);
       if (gone.length > 0) {
         this.#forget(pending, gone);
@@ -473,7 +621,7 @@ export class ErgoPublisher {
       pending = await this.#build(key, request, [], new Set());
     }
     if (!await this.#send(pending, new Set())) kept();
-    return pending.publication;
+    return copyPublication(pending.publication);
   }
 
   /** A new transaction for the record, spending `required` and never `excluded`, remembered before it is sent. */
@@ -481,10 +629,12 @@ export class ErgoPublisher {
     // Outputs are created no lower than any required input (the node's txMonotonicHeight).
     const floor = required.reduce((high, box) => (box.creationHeight > high ? box.creationHeight : high), asked.height);
     const request: ErgoRecordRequest = floor === asked.height ? asked : Object.freeze({ ...asked, height: floor });
-    const inputs = await this.#select(request.height, publicationCost(request, this.#tree, this.#fee, this.#perByte), required, excluded);
+    const selected = await this.#select(request.height, publicationCost(request, this.#tree, this.#fee, this.#perByte), required, excluded);
+    const inputs = selected.map(box => Object.freeze({ id: copyBytes(box.id), value: box.value, creationHeight: box.creationHeight }));
     const pending: Pending = Object.freeze({ key, request, inputs: Object.freeze(inputs),
       publication: buildPublication(this.#key, this.#tree, inputs, request, this.#fee, this.#perByte) });
     this.#remember(pending);
+    this.#persist();
     return pending;
   }
 
@@ -519,7 +669,13 @@ export class ErgoPublisher {
     }
     let accepted = false;
     for (const supplier of this.#suppliers) {
-      const answer = await this.#call(() => supplier.submit(copyBytes(pending.publication.signed), copyBytes(pending.publication.id)));
+      let guardError: unknown;
+      const answer = await this.#call(() => {
+        try { this.#guard(); } catch (error) { guardError = error; throw error; }
+        return supplier.submit(copyBytes(pending.publication.signed), copyBytes(pending.publication.id));
+      });
+      if (guardError !== undefined) throw guardError;
+      this.#guard();
       accepted ||= answer.ok;
     }
     return accepted;
@@ -594,7 +750,7 @@ export class ErgoPublisher {
     const change = pending.publication.change;
     if (change !== undefined) {
       this.#byChange.set(bytesToHex(change.id), pending);
-      this.#created.set(bytesToHex(change.id), Object.freeze({ id: change.id, value: change.value, creationHeight: change.creationHeight }));
+      this.#created.set(bytesToHex(change.id), Object.freeze({ id: change.id, value: change.value, creationHeight: change.creationHeight, bytes: change.bytes }));
     }
   }
 

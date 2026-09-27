@@ -106,7 +106,7 @@ child, and the anchor already fixes the ancestry a proof would summarize.
 
 The reference-testnet header check is
 [`testnet-header-check.mjs`](../experiments/ergo-range/testnet-header-check.mjs).
-Its [source-bound report](ergo-testnet-header-verification.json) records a
+Its [historical source-bound report](https://github.com/mediumofexchange/reference-ts/blob/6e4cea8/docs/ergo-testnet-header-verification.json) records a
 contiguous real window, every recalculation in that window and fresh own-node
 tip agreement. It takes an independently pinned anchor and applies the runtime
 store to every descendant. Terminal signed-Int arithmetic and activation reset
@@ -260,7 +260,8 @@ any backing whose **E** declares the profile's identity;
 and `ergoAnchorContext` takes the anchor's 1,024-header context from any
 supplier, authenticated by linkage alone. `sync(suppliers)` is asynchronous
 and incremental; every read is synchronous, from the last complete snapshot,
-which a running or failed sync leaves in place.
+which a running sync leaves in place. A durable-storage failure fences reads
+until the journal is reopened.
 
 - **Suppliers** (`src/ergo-supplier.ts`): `ErgoSupplier` is header bytes by
   height and a block's section by header id; `ergoNodeSupplier(url)` copies
@@ -362,18 +363,62 @@ which a running or failed sync leaves in place.
   inputs once a supplier shows that it landed; a record the view already
   holds is not sent. The view's `publish` throws
   its refusals at once and resolves on acceptance, which is not holding;
-  a `PoolStore` awaits it inside its existing lag window. After a restart
-  the memory is gone, so a retry may publish a second, identical object,
-  which readers take as one at the cost of a fee; the funding key must be
-  the publisher's alone.
-- **Not here**: persistence of the headers and objects across restarts (the
-  store keeps every header it accepted, and the retained objects stay in
-  memory), pruning of side branches, and cancelling an
-  abandoned publication by spending its input.
+  a `PoolStore` awaits it inside its existing lag window. Without a persistence
+  adapter a restart loses the queue; the durable v3 path is described below.
+  The funding key must be the publisher's alone.
+- **Not here**: cancelling an abandoned publication by spending its input,
+  disk streaming beyond the object budget, or physical custody guarantees.
+
+### Durable reference view and publisher
+
+`ErgoVenueJournal` (`src/ergo-store.ts`, Node 24) is an optional fifth
+`ErgoVenue` constructor argument, created with a persistent path and the caller's
+`ergoProfileIdentity(profile)`. It stores complete lossless section evidence,
+accepted headers in insertion order, a witnessed pin and terminal failure in an
+atomic fenced SQLite WAL/FULL checkpoint. Reopen verifies header work and roots
+and reattributes every object before answering; a local checksum is not a
+replacement for those checks. The caller still supplies the profile and anchor
+context. Close the journal handle when the view is retired.
+
+The durable view prunes inferior deep side paths, preserving ancestry to each
+header/fetch-budget stopped pass across restarts. Otherwise a competing chain
+longer than one sync budget could never accumulate enough accepted work to reveal
+a finality failure. Newly supplied heavier ancestry still fails the persistent
+pin. Per-supplier side quotas remain object-local and reset with a new process.
+
+To connect the publisher, restore/sync the venue, open `V3OperatorJournal`, create
+`ErgoPublisher` with `persistence: journal.publisherPersistence()`, then call the
+venue's one-time `attachPublisher(publisher)`. The operator journal fences and
+atomically saves the publisher's pending transactions, reservations and owned
+change before broadcast. Reopen uses exact signed bytes, validates their saved
+proofs against the reconstructed request/inputs/policy, and guards each retry
+against a stale owner. Reuse the same funding key and policy. No secret enters
+either checkpoint. The adapter belongs to one publisher instance.
+Saved input IDs and the complete signed outputs are verified; individual historic
+input values/heights remain trusted journal metadata. Corruption can spoil future
+rebuild availability but cannot change a transaction accepted by the network.
+
+`npm run check:ergo-persistence` (after build, also in `npm run check`) terminates
+fresh child processes during sync, before/after checkpoint commit, and after
+submission before the response. Subsequent children reproduce the old/new exact
+range, retry identical signed transaction bytes/id, and preserve terminal failure.
+Focused tests add corrupted evidence, non-held twins, equal-work precedence,
+owner fencing, pending-change dependencies and budget continuation.
+
+This stores and rewrites complete checkpoints and revalidates retained history
+on startup; raw sections remain in memory beside objects. `retainedBytes` still
+bounds objects only. Reopen with an insufficient budget refuses, and a larger
+budget resumes the retained stop. Disk streaming and a complete-index cursor
+retaining non-held records are the next scalability design, described in the
+[decision](../decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox).
+Evidence is synthetic process recovery, not physical power-loss, malicious
+rollback, wallet custody or live deployment. An uncertain commit poisons the
+instance; reopen can find the previous committed state, including when a newly
+observed finality failure was not durably written.
 
 [`runtime-sync.mjs`](../experiments/ergo-range/runtime-sync.mjs) runs the
 view on real mainnet headers and sections. The
-[report](ergo-runtime-venue-verification.json) owns the anchor, ranges and
+[historical report at 6e4cea8](https://github.com/mediumofexchange/reference-ts/blob/6e4cea8/docs/ergo-runtime-venue-verification.json) owns the anchor, ranges and
 measurements. It compares a view synced from the own node with an independent
 view synced from a public node, including their witnessed block and exact
 range answers. It also checks that a substituted section stops the clock,
@@ -407,7 +452,7 @@ for the synthetic report and limits. The explicit `--testnet` path uses the same
 journal on the live reference testnet, with throwaway tERG funding and a fresh
 reader fetching its own headers and sections ([live report](pool-v3-testnet-verification.json)).
 
-What remains before an Ergo deployment: persistence, the one-transaction
+What remains before an Ergo deployment: qualified durable storage/custody, the one-transaction
 condition checked against an adopted configuration, publication on the
 mainnet (real funds), and a latency distribution of kind-4 publications at
 their size and fee (A10 timed the mainnet's own transactions; P2 made two

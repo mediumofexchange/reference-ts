@@ -358,6 +358,11 @@ export interface ErgoHeaderStore {
   forkHeight(id: Uint8Array): bigint | undefined;
   /** The height of an accepted header, in constant time; undefined for one the store has not accepted. */
   heightOf(id: Uint8Array): bigint | undefined;
+  /** Accepted descendants in insertion order (tie precedence), copied. */
+  retained(): readonly Uint8Array[];
+  /** Drop complete inferior side subtrees below a final header, except
+   * those containing a protected incomplete supplier pass. */
+  prune(witnessed: Uint8Array, protectedIds: readonly Uint8Array[]): void;
 }
 interface Entry { readonly header: ErgoHeader; readonly parent: Entry | undefined; readonly score: bigint; readonly above: boolean }
 
@@ -455,6 +460,27 @@ export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Arr
     heightOf(id: Uint8Array): bigint | undefined {
       const owned = ownBytes(id);
       return owned !== undefined && owned.length === 32 ? byId.get(bytesToHex(owned))?.header.height : undefined;
+    },
+    retained(): readonly Uint8Array[] {
+      return [...byId.values()].filter(e => e.above).map(e => copyBytes(e.header.bytes));
+    },
+    prune(witnessed: Uint8Array, protectedIds: readonly Uint8Array[]): void {
+      const final = byId.get(bytesToHex(witnessed));
+      if (final === undefined || ancestorAt(best, final.header.height) !== final) throw new Error("pruning requires a best-chain final header");
+      const keep = new Set<Entry>();
+      for (let at: Entry | undefined = best; at !== undefined; at = at.parent) keep.add(at);
+      for (const id of protectedIds) {
+        let at = byId.get(bytesToHex(id));
+        if (at === undefined) throw new Error("unknown protected header");
+        while (at !== undefined && !keep.has(at)) { keep.add(at); at = at.parent; }
+      }
+      // Insertion order is parent-before-child. Keeping an ancestor alone
+      // does not protect its divergent children; only whole protected paths
+      // and descendants of the final header are required for continuation.
+      for (const [id, entry] of byId) {
+        if (!entry.above || keep.has(entry)) continue;
+        if (ancestorAt(entry, final.header.height) !== final) byId.delete(id);
+      }
     },
   });
 }

@@ -1356,7 +1356,7 @@ The reader need not run a node to authenticate headers: the profile's
 (`src/ergo-headers.ts`) verifies header bytes itself from the
 pinned anchor. `experiments/ergo-range/header-verify.mjs` ran it on real
 mainnet headers on 2026-09-24
-([retained report](ergo-header-verification.json), recorded offline from
+([retained report at 6e4cea8](https://github.com/mediumofexchange/reference-ts/blob/6e4cea8/docs/ergo-header-verification.json), recorded offline from
 the run's cached responses):
 
 - **Window.** From the P4 anchor at 1,873,360, the store was built from the
