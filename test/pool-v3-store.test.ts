@@ -98,11 +98,11 @@ describe("the candidate guard", () => {
     expect(shifted.id).toEqual(synthetic.id);
   });
   it("binds testnet to its own context, profile and lag, without inferring a network from an id", () => {
-    const profile = { ...new Chain().profile(2n), reference: ERGO_TESTNET_REFERENCE };
-    const reference = { context: ERGO_TESTNET_REFERENCE, profile }, expected = referenceVenue(reference);
+    const profile = { ...new Chain().profile(2n), reference: ERGO_TESTNET_REFERENCE } as const;
+    const reference = { context: ERGO_TESTNET_REFERENCE, profile } as const, expected = referenceVenue(reference);
     expect(expected.lag).toBe(3n);
     expect(requireReferenceVenue(reference, { id: expected.id, lag: () => 3n })).toEqual(expected.id);
-    const synthetic = { ...profile, reference: ERGO_SYNTHETIC_REFERENCE };
+    const synthetic = { ...profile, reference: ERGO_SYNTHETIC_REFERENCE } as const;
     expect(referenceVenue({ context: ERGO_SYNTHETIC_REFERENCE, profile: synthetic }).id).not.toEqual(expected.id);
     expect(() => referenceVenue({ ...reference, profile: synthetic })).toThrow(CandidateVenueError);
     expect(() => referenceVenue({ context: ERGO_SYNTHETIC_REFERENCE, profile })).toThrow(CandidateVenueError);
