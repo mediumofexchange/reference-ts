@@ -14,8 +14,8 @@
 //   and ordinals under the profile's attribution;
 // - the replacement's first submission reaches the node and its answer is lost: the publication fails, and the retry
 //   finds the record box and returns that same transaction without sending another.
-// The testnet has no verified header view here (the runtime's header rules are the mainnet's), so the outputs'
-// creation height is the node's full height and the header is the node's word; the root binds the section to it.
+// The reference-testnet profile selects the runtime's pinned testnet header rules.
+// The independently selected anchor is a trust input; subsequent headers and sections are reader-verified.
 // Usage, from the repository root on Node 24 with the own testnet node (extraIndex) running:
 //   node experiments/ergo-range/publisher-check.mjs [--node http://127.0.0.1:9052]
 //     [--wallet scratch/ergo-testnet/wallet.json] [--depth 2] [--max-wait 60] [--out docs/ergo-publisher-verification.json]
@@ -27,7 +27,9 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { parseErgoHeader } from "../../dist/ergo-headers.js";
-import { attributeSection, ergoOrdinal, ownErgoProfile } from "../../dist/ergo-profile.js";
+import { ErgoVenue, ergoAnchorContext } from "../../dist/ergo.js";
+import { attributeSection, ergoOrdinal, ergoProfileIdentity, ERGO_TESTNET_REFERENCE, ownErgoProfile } from "../../dist/ergo-profile.js";
+import { decodeRangeAnswer } from "../../dist/record-range.js";
 import { DEFAULT_ERGO_FEE, DEFAULT_MIN_VALUE_PER_BYTE, ErgoPublisher, ergoNodePublisher, payToPublicKeyTree } from "../../dist/ergo-publisher.js";
 import { ergoNodeSupplier } from "../../dist/ergo-supplier.js";
 import { encodeCommitment, encodeReplacement, encodeRevocation, replacementMessage, ROLE_OPERATOR, signCommitment, signRevocation } from "../../dist/venue-records.js";
@@ -54,6 +56,8 @@ async function node(method, path, body) {
 }
 const info = JSON.parse((await node("GET", "/info")).text);
 assert.equal(info.network, "testnet", "the node is not a testnet node");
+assert.equal(info.appVersion, "6.0.6");
+assert(info.headersHeight - info.fullHeight <= Number(depth), "the own testnet node must be synced");
 
 let report;
 const minValuePerByte = BigInt(info.parameters.minValuePerByte);
@@ -64,12 +68,18 @@ const secretKey = Buffer.from(wallet.secretHex, "hex");
 const tree = payToPublicKeyTree(secp256k1.getPublicKey(secretKey, true));
 assert.equal(hex(tree), wallet.ergoTree);
 
-// Three locations and a fourth, pay-to-public-key trees of keys derived here; the anchor is only named.
+// The testnet anchor is independently selected before records, already depth blocks behind the full tip.
 const derived = label => sha256(`moe/experiment/ergo-publisher/${label}`);
 const location = k => payToPublicKeyTree(secp256k1.getPublicKey(derived(`location/${k}`), true));
 const startHeight = BigInt(info.fullHeight);
-const [startHeader] = await ergoNodeSupplier(nodeUrl).headers(startHeight, startHeight);
-const profile = ownErgoProfile({ anchor: blake2b(startHeader, { dkLen: 32 }), depth, scripts: { 1: location(1), 2: location(2), 3: location(3), 4: location(4) } });
+const anchorHeight = startHeight - depth, supplier = ergoNodeSupplier(nodeUrl, { name: "own testnet node" });
+const [anchorHeader] = await supplier.headers(anchorHeight, anchorHeight);
+assert(anchorHeader !== undefined && parseErgoHeader(anchorHeader)?.height === anchorHeight);
+const profile = ownErgoProfile({ reference: ERGO_TESTNET_REFERENCE, anchor: blake2b(anchorHeader, { dkLen: 32 }), depth,
+  scripts: { 1: location(1), 2: location(2), 3: location(3), 4: location(4) } });
+const view = new ErgoVenue(profile, await ergoAnchorContext(supplier, profile.anchor, anchorHeight));
+const initial = await view.sync([supplier]);
+assert(initial.tipHeight >= startHeight, "the initial tip is verified by the reader");
 
 // The records, each signed by its own key.
 const operatorSecret = derived("operator"), backerSecret = derived("backer"), successorSecret = derived("successor");
@@ -88,7 +98,7 @@ const records = [
 assert.deepEqual(records.map(r => r.record.length), [136, 233, 96]);
 
 // The node, checked before every submission: the true bytes pass, one changed proof byte fails.
-const supplier = ergoNodeSupplier(nodeUrl, { name: "own testnet node" }), nodePublisher = ergoNodePublisher(nodeUrl, { name: "own testnet node" });
+const nodePublisher = ergoNodePublisher(nodeUrl, { name: "own testnet node" });
 const checks = [];
 // One submission (the replacement's) reaches the node and its answer is lost.
 let loseNext = false, lost = null;
@@ -140,16 +150,30 @@ const duplicate = await node("POST", "/transactions/bytes", hex(publications[0].
 // Wait for every transaction to be `depth` blocks deep.
 const deadline = Date.now() + maxWaitMinutes * 60_000;
 const inclusion = new Map();
+let witnessed;
 for (;;) {
   for (const { publication } of publications) {
     if (inclusion.has(hex(publication.id))) continue;
     const answer = await node("GET", `/blockchain/transaction/byId/${hex(publication.id)}`);
     if (answer.status === 200) inclusion.set(hex(publication.id), BigInt(JSON.parse(answer.text).inclusionHeight));
   }
-  const full = BigInt(JSON.parse((await node("GET", "/info")).text).fullHeight);
-  if (inclusion.size === publications.length && [...inclusion.values()].every(h => full >= h + depth)) break;
+  witnessed = await view.sync([supplier]);
+  assert.equal(witnessed.unresolvedIndex, undefined, "the reader needs every section");
+  if (inclusion.size === publications.length && witnessed.witnessedIndex !== undefined &&
+      [...inclusion.values()].every(h => witnessed.witnessedIndex >= h - anchorHeight - 1n)) break;
   assert(Date.now() < deadline, "the transactions were not final in time");
   await sleep(20_000);
+}
+// Header ids bind ancestry. A fresh current-chain anchor readback also catches a
+// node that served another chain when the profile was initially selected.
+const [currentAnchor] = await supplier.headers(anchorHeight, anchorHeight);
+assert.equal(hex(parseErgoHeader(currentAnchor).id), hex(profile.anchor));
+const rangeLimits = { maxBytes: 1_048_576n, maxEntries: 4096n };
+for (const record of records) {
+  const request = { venue: view.id, kind: record.kind, subject: record.subject, fromIndex: 0n, toIndex: view.witnessedIndex() };
+  const answer = decodeRangeAnswer(view.range(request, rangeLimits), request, rangeLimits);
+  assert.equal(answer.entries.filter(entry => hex(entry.record) === hex(record.record)).length, 1,
+    "the verified venue carries the exact published record once");
 }
 
 // Read each including block back under the profile: the section counts only where it reproduces the header's root.
@@ -179,7 +203,9 @@ report = {
   node: { url: nodeUrl, name: info.name, appVersion: info.appVersion, network: info.network, startHeight: startHeight.toString(),
     minValuePerByte: minValuePerByte.toString() },
   fee: DEFAULT_ERGO_FEE.toString(),
-  profile: { depth: depth.toString(), locations: Object.fromEntries(Object.entries(profile.scripts).map(([k, v]) => [k, hex(v)])) },
+  profile: { context: profile.reference, identity: hex(ergoProfileIdentity(profile)), anchor: hex(profile.anchor), anchorHeight: anchorHeight.toString(),
+    depth: depth.toString(), witnessedIndex: witnessed.witnessedIndex.toString(), witnessedHeaderId: hex(witnessed.witnessedHeaderId),
+    locations: Object.fromEntries(Object.entries(profile.scripts).map(([k, v]) => [k, hex(v)])) },
   publications: publications.map(({ kind, name, subject, record, publication }) => ({
     kind, name, subject: hex(subject), recordBytes: record.length, recordSha256: hex(sha256(record)), txId: hex(publication.id),
     inputs: publication.inputs.map(hex), unsignedBytes: publication.unsigned.length, signedBytes: publication.signed.length,
@@ -194,8 +220,7 @@ report = {
   limitations: [
     "Testnet acceptance is not mainnet acceptance; the transaction rules exercised (signatures, value balance, minimum box value, " +
       "fee, creation heights) are the same node release's, but no mainnet transaction was sent.",
-    "The creation height is the node's full height and the headers are the node's word: the runtime's verified header view " +
-      "follows the mainnet's rules only. The root binds each section to its header.",
+    "Reference-testnet context and depth chosen explicitly; the anchor and its prehistory are trust inputs. ErgoVenue verifies every subsequent header and section. No cryptographic network authentication or adopted configuration is claimed.",
     "One node, the own one, was the only supplier; propagation to other nodes and miners was not measured separately.",
   ],
 };

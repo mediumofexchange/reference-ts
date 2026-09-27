@@ -2,10 +2,10 @@
 //
 // The profile reads each block's section against its header's transaction
 // root; proof of work and chain selection are the header source's. This module
-// is that source, for mainnet headers above the profile's pinned anchor. It reads
+// is that source, for headers above the profile's pinned anchor. It reads
 // each header from its canonical bytes and derives the id from them, then
 // applies the pinned node's (v6.0.6) header rules for a child header: height
-// one above the parent, timestamp above the parent's, the EIP-37 required
+// one above the parent, timestamp above the parent's, the context's required
 // difficulty and the Autolykos proof of work. It keeps every header it has
 // accepted as a tree rooted at the anchor and names the heaviest chain by the
 // node's score (the sum of required difficulties). Headers may therefore come
@@ -37,7 +37,7 @@
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { compareBytes, copyBytes } from "./bytes.js";
+import { compareBytes, copyBytes, copyUnshared, EncodingError } from "./bytes.js";
 
 /** Mainnet's EIP-37 rule applies to every header at or above this height. */
 export const EIP37_ACTIVATION_HEIGHT = 844_673n;
@@ -45,6 +45,10 @@ export const DIFFICULTY_EPOCH = 128n;
 const USE_LAST_EPOCHS = 8n, BLOCK_INTERVAL_MS = 120_000n, PRECISION = 1_000_000_000n;
 /** Mainnet's `initialDifficultyHex`, the floor of the predictive estimate. */
 const INITIAL_DIFFICULTY = 0x0117_6500_0000n;
+/** Pinned v6.0.6 reference-testnet rules, not caller-selected parameters. */
+const TESTNET_INTERVAL_MS = 45_000n, TESTNET_INITIAL_DIFFICULTY = 1n;
+const TESTNET_V2_ACTIVATION_HEIGHT = 2_147_483_647n;
+export type ErgoHeaderRules = "mainnet" | "testnet";
 /** Headers below the anchor the difficulty rule can read: eight epochs. */
 export const ANCHOR_CONTEXT = Number(USE_LAST_EPOCHS * DIFFICULTY_EPOCH);
 /** Version 1 carries an Autolykos v1 solution and no new-fields length. */
@@ -62,11 +66,11 @@ for (let i = 0; i < 1024; i++) { M[i * 8 + 6] = i >> 8; M[i * 8 + 7] = i & 0xff;
 const MOD_Q_RANGE = ((1n << 256n) / Q) * Q;
 
 const hash = (bytes: Uint8Array): Uint8Array => blake2b(bytes, { dkLen: 32 });
-/** A real byte array: `ArrayBuffer.isView` is read first, so an object that
- * only inherits from `Uint8Array` or a proxy is refused before any getter
- * runs. */
-const isBytes = (v: unknown): v is Uint8Array =>
-  ArrayBuffer.isView(v) && v instanceof Uint8Array && !(v.buffer instanceof SharedArrayBuffer);
+/** Read through the common byte intake; inspect only the owned copy. */
+function ownBytes(value: Uint8Array): Uint8Array | undefined {
+  try { return copyUnshared(value); }
+  catch (error) { if (error instanceof EncodingError) return undefined; throw error; }
+}
 const unsigned = (bytes: Uint8Array): bigint => bytes.length === 0 ? 0n : BigInt(`0x${bytesToHex(bytes)}`);
 const u32be = (n: bigint): Uint8Array => Uint8Array.of(Number((n >> 24n) & 0xffn), Number((n >> 16n) & 0xffn), Number((n >> 8n) & 0xffn), Number(n & 0xffn));
 function concat(...parts: Uint8Array[]): Uint8Array {
@@ -134,8 +138,9 @@ const isIdentity = (bytes: Uint8Array): boolean => bytes[0] === 0;
  * node's id is the hash of its own serialization; any other input is
  * undefined. */
 export function parseErgoHeader(input: Uint8Array): ErgoHeader | undefined {
-  if (!isBytes(input)) return undefined;
-  const bytes = copyBytes(input);
+  const owned = ownBytes(input);
+  if (owned === undefined) return undefined;
+  const bytes: Uint8Array = owned;
   const version = bytes[0];
   if (version === undefined) return undefined;
   let at = 1;
@@ -275,19 +280,13 @@ function hexToBytes32(value: bigint): Uint8Array {
   return out;
 }
 
-/** The difficulty a header must carry after `parent`, from the headers at
- * heights `parent − 128·i` for `i` = 8 down to 0 (ascending) at an epoch
- * boundary; elsewhere the parent's. This is the node's EIP-37 rule: the
- * average of the classic estimate over the last epoch and the
- * least-squares prediction over eight epochs (itself held within ×1.5 and
- * ÷2 of the last difficulty), held within the same bounds and normalized. */
-export function eip37Difficulty(previous: readonly ErgoHeader[]): bigint {
-  const last = previous[previous.length - 1]!, lastDifficulty = decodeCompactBits(last.nBits);
+/** The node's least-squares prediction over successive epoch estimates,
+ * compact-normalized. Mainnet EIP-37 also clamps and averages this result;
+ * reference testnet uses it directly. Inputs are linked internal ancestors. */
+function predictiveDifficulty(previous: readonly ErgoHeader[], interval: bigint, initial: bigint): bigint {
+  const last = previous[previous.length - 1]!;
   const perEpoch = (start: ErgoHeader, end: ErgoHeader): bigint =>
-    decodeCompactBits(end.nBits) * BLOCK_INTERVAL_MS * DIFFICULTY_EPOCH / (end.timestamp - start.timestamp);
-  const clamp = (value: bigint): bigint => value > lastDifficulty
-    ? (value < lastDifficulty * 3n / 2n ? value : lastDifficulty * 3n / 2n)
-    : (value > lastDifficulty / 2n ? value : lastDifficulty / 2n);
+    decodeCompactBits(end.nBits) * interval * DIFFICULTY_EPOCH / (end.timestamp - start.timestamp);
   let predictive: bigint;
   if (previous.length === 1 || previous[0]!.timestamp >= last.timestamp) predictive = decodeCompactBits(previous[0]!.nBits);
   else {
@@ -300,11 +299,30 @@ export function eip37Difficulty(previous: readonly ErgoHeader[]): bigint {
       for (const [height, difficulty] of data) { xy += height * difficulty; x += height; x2 += height * height; y += difficulty; }
       const b = (xy * size - x * y) * PRECISION / (x2 * size - x * x);
       const a = (y * PRECISION - b * x) / size / PRECISION;
-      interpolated = a + b * (data[data.length - 1]![0] + DIFFICULTY_EPOCH) / PRECISION;
+      // DifficultyAdjustment.interpolate computes this addition as Scala Int.
+      // Preserve its wrap in the final epoch, even though all other arithmetic is bigint.
+      const point = BigInt.asIntN(32, data[data.length - 1]![0] + DIFFICULTY_EPOCH);
+      interpolated = a + b * point / PRECISION;
     }
-    predictive = interpolated >= 1n ? interpolated : INITIAL_DIFFICULTY;
+    predictive = interpolated >= 1n ? interpolated : initial;
   }
-  predictive = normalizeDifficulty(predictive);
+  return normalizeDifficulty(predictive);
+}
+
+/** Testnet's pinned legacy predictor: no EIP-37 average or clamps. */
+export function testnetDifficulty(previous: readonly ErgoHeader[]): bigint {
+  return predictiveDifficulty(previous, TESTNET_INTERVAL_MS, TESTNET_INITIAL_DIFFICULTY);
+}
+
+/** Mainnet EIP-37: average the classic estimate and clamped prediction, then clamp and normalize. */
+export function eip37Difficulty(previous: readonly ErgoHeader[]): bigint {
+  const last = previous[previous.length - 1]!, lastDifficulty = decodeCompactBits(last.nBits);
+  const perEpoch = (start: ErgoHeader, end: ErgoHeader): bigint =>
+    decodeCompactBits(end.nBits) * BLOCK_INTERVAL_MS * DIFFICULTY_EPOCH / (end.timestamp - start.timestamp);
+  const clamp = (value: bigint): bigint => value > lastDifficulty
+    ? (value < lastDifficulty * 3n / 2n ? value : lastDifficulty * 3n / 2n)
+    : (value > lastDifficulty / 2n ? value : lastDifficulty / 2n);
+  const predictive = predictiveDifficulty(previous, BLOCK_INTERVAL_MS, INITIAL_DIFFICULTY);
   const classic = perEpoch(previous[previous.length - 2]!, last);
   return normalizeDifficulty(clamp((classic + clamp(predictive)) / 2n));
 }
@@ -346,11 +364,13 @@ interface Entry { readonly header: ErgoHeader; readonly parent: Entry | undefine
 /** A store rooted at the anchor. `context` is the chain, ascending, of at
  * least `ANCHOR_CONTEXT` headers below the anchor followed by the anchor
  * itself; it is authenticated by linkage alone, its last id must be
- * `anchorId`, and the anchor must sit where every header above it follows
- * the EIP-37 rule. Otherwise there is no store. */
-export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Array[]): ErgoHeaderStore | undefined {
-  if (!isBytes(anchorId) || anchorId.length !== 32 || !Array.isArray(context) || context.length < ANCHOR_CONTEXT + 1) return undefined;
-  const anchor = copyBytes(anchorId);
+ * `anchorId`. Mainnet anchors must precede only EIP-37 headers; testnet anchors
+ * are at least 1,025, giving the full lookback above genesis height 1.
+ * The closed rule selector is chosen by ErgoVenue from its owned profile. */
+export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Array[], rules: ErgoHeaderRules = "mainnet"): ErgoHeaderStore | undefined {
+  const anchor = ownBytes(anchorId);
+  if (anchor === undefined || anchor.length !== 32 || !Array.isArray(context) || context.length < ANCHOR_CONTEXT + 1 ||
+      (rules !== "mainnet" && rules !== "testnet")) return undefined;
   const byId = new Map<string, Entry>();
   let previous: Entry | undefined;
   for (const bytes of context) {
@@ -361,7 +381,8 @@ export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Arr
     byId.set(bytesToHex(header.id), previous);
   }
   const root = previous!;
-  if (compareBytes(root.header.id, anchor) !== 0 || root.header.height + 1n < EIP37_ACTIVATION_HEIGHT) return undefined;
+  const minimum = rules === "testnet" ? BigInt(ANCHOR_CONTEXT) + 1n : EIP37_ACTIVATION_HEIGHT - 1n;
+  if (compareBytes(root.header.id, anchor) !== 0 || root.header.height < minimum) return undefined;
   let best = root;
 
   const ancestorAt = (entry: Entry, height: bigint): Entry | undefined => {
@@ -370,6 +391,9 @@ export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Arr
     return at?.header.height === height ? at : undefined;
   };
   const required = (parent: Entry): bigint | undefined => {
+    // HeadersProcessor.requiredDifficultyAfter applies this before the legacy
+    // epoch calculation. The parser's maximum height makes only the child case reachable.
+    if (rules === "testnet" && (parent.header.height === TESTNET_V2_ACTIVATION_HEIGHT || parent.header.height + 1n === TESTNET_V2_ACTIVATION_HEIGHT)) return 32n;
     if (parent.header.height % DIFFICULTY_EPOCH !== 0n) return decodeCompactBits(parent.header.nBits);
     const previousHeaders: ErgoHeader[] = [];
     for (let i = USE_LAST_EPOCHS; i >= 0n; i--) {
@@ -378,7 +402,7 @@ export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Arr
       if (ancestor === undefined) return undefined;
       previousHeaders.push(ancestor.header);
     }
-    return eip37Difficulty(previousHeaders);
+    return rules === "testnet" ? testnetDifficulty(previousHeaders) : eip37Difficulty(previousHeaders);
   };
 
   return Object.freeze({
@@ -415,8 +439,9 @@ export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Arr
       return Object.freeze({ id: copyBytes(best.header.id), height: best.header.height, score: best.score, anchorHeight: root.header.height });
     },
     forkHeight(id: Uint8Array): bigint | undefined {
-      if (!isBytes(id) || id.length !== 32) return undefined;
-      let at = byId.get(bytesToHex(id));
+      const owned = ownBytes(id);
+      if (owned === undefined || owned.length !== 32) return undefined;
+      let at = byId.get(bytesToHex(owned));
       if (at === undefined || !at.above) return undefined;
       // Walk the best chain down to the side header's height, then both down together until they meet.
       let onBest: Entry | undefined = best;
@@ -428,7 +453,8 @@ export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Arr
       return at?.header.height ?? root.header.height;
     },
     heightOf(id: Uint8Array): bigint | undefined {
-      return isBytes(id) && id.length === 32 ? byId.get(bytesToHex(id))?.header.height : undefined;
+      const owned = ownBytes(id);
+      return owned !== undefined && owned.length === 32 ? byId.get(bytesToHex(owned))?.header.height : undefined;
     },
   });
 }

@@ -9,9 +9,9 @@ Probe the own testnet node's headers against pinned v6.0.6 source before depende
 Acceptance: recomputed testnet reference identity; journal publication and fresh seedless supply
 verification on the live testnet; publisher check on that profile; hostile header cases, full
 checks, affected report bindings and independent adversarial review. Stop before recovery kinds.
-Evidence remains reference-only, no adoption or deployment. The endpoint `127.0.0.1:9052` is
-offline; node restart/endpoint coordination is pending. Existing mainnet node processes are
-unchanged. No local acceptance job is running; no companion specification branch yet.
+Evidence remains reference-only, no adoption or deployment. Node management authorized 2026-09-27;
+testnet `127.0.0.1:9052` restarted and synced. GET-only probe runs via
+`scratch/testnet-probe-run.ps1` (log/exit beside it). No companion specification branch yet.
 
 ## Status
 
@@ -91,7 +91,7 @@ reader over §13 answers; the candidate runs only on recomputed reference venue 
 - Preserve legacy Temp/moeclean. Configuration approval, device qualification and mainnet stay disabled.
 
 ## Open questions
-- Node coordination pending; then run retained probe, review anchor/depth/rules and implement slice 2.
+- Probe then profile review (`scratch/testnet-profile-proposal.md`); implement slice 2 after they pass.
 
 Roughly **55% done / 45% remaining**, plausible range **45–65%**, reassessed 2026-09-27
 (M2b): v3 journal publication and independent supply verification now share the real Ergo

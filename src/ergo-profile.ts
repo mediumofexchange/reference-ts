@@ -29,8 +29,10 @@ export const ERGO_PROFILE_CONTEXT = "moe/venue/ergo/v3";
  * rules. A profile naming it hashes to another identity, so which chain a
  * venue identity names is read from its preimage, never from its 32 bytes. */
 export const ERGO_SYNTHETIC_REFERENCE = "moe/venue/ergo-synthetic/reference";
-/** The closed set of reference contexts; the testnet's joins with its header rules. */
-export const ERGO_REFERENCE_CONTEXTS = Object.freeze([ERGO_SYNTHETIC_REFERENCE] as const);
+/** Reference-only testnet rules; the caller independently selects its testnet anchor. */
+export const ERGO_TESTNET_REFERENCE = "moe/venue/ergo-testnet/reference";
+/** Closed contexts select pinned rules, never arbitrary difficulty parameters. */
+export const ERGO_REFERENCE_CONTEXTS = Object.freeze([ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE] as const);
 export type ErgoReferenceContext = (typeof ERGO_REFERENCE_CONTEXTS)[number];
 export const RECORD_KINDS: readonly RecordKind[] = Object.freeze([1, 2, 3, 4]);
 const MAX_U64 = (1n << 64n) - 1n, MAX_U32 = 0xffff_ffffn, COLL_BYTE_TYPE = 0x0e;
@@ -56,15 +58,15 @@ export interface ErgoProfile {
 export function ownErgoProfile(profile: ErgoProfile): ErgoProfile {
   if (profile === null || typeof profile !== "object") throw new EncodingError("invalid Ergo profile");
   const { reference, anchor, depth, scripts } = profile;
-  if ((reference !== undefined && !ERGO_REFERENCE_CONTEXTS.includes(reference)) || !isBytes(anchor, 32) || compareBytes(anchor, ZERO32) === 0 || !u64(depth) || depth === MAX_U64 ||
+  const ownedAnchor = copyUnshared(anchor);
+  if ((reference !== undefined && !ERGO_REFERENCE_CONTEXTS.includes(reference)) || ownedAnchor.length !== 32 || compareBytes(ownedAnchor, ZERO32) === 0 || !u64(depth) || depth === MAX_U64 ||
       scripts === null || typeof scripts !== "object") {
     throw new EncodingError("invalid Ergo profile");
   }
   const owned: Partial<Record<RecordKind, Uint8Array>> = {};
   for (const kind of RECORD_KINDS) {
     const script = scripts[kind];
-    if (!isBytes(script)) throw new EncodingError("invalid Ergo profile script");
-    const copy = copyBytes(script);
+    const copy = copyUnshared(script);
     // A location is one tree the framer reads whole, or no output could be at it.
     if (!isTree(copy)) throw new EncodingError("invalid Ergo profile script");
     owned[kind] = copy;
@@ -75,7 +77,7 @@ export function ownErgoProfile(profile: ErgoProfile): ErgoProfile {
       if (other < kind && compareBytes(owned[other]!, owned[kind]!) === 0) throw new EncodingError("two kinds at one location");
     }
   }
-  return Object.freeze({ ...(reference === undefined ? {} : { reference }), anchor: copyBytes(anchor), depth,
+  return Object.freeze({ ...(reference === undefined ? {} : { reference }), anchor: ownedAnchor, depth,
     scripts: Object.freeze(owned as Record<RecordKind, Uint8Array>) });
 }
 /** Naming the venue is agreeing the chain from its anchor, the depth and the

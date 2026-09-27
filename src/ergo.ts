@@ -9,7 +9,7 @@
 // **The reader verifies the chain itself; no supplier is trusted.** A node,
 // the reader's own included, is a supplier of header bytes and block sections.
 // The header store checks every header from the anchor's context (linkage,
-// height, timestamp, EIP-37 difficulty, Autolykos work) and names the heaviest
+// height, timestamp, context-selected difficulty, Autolykos work) and names the heaviest
 // chain; a section counts only where it reproduces the transaction root of a
 // header on that chain. Every output of every transaction of every block from
 // the anchor's child to the witnessed index is read, so a record's absence is
@@ -45,7 +45,7 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { byteLength, compareBytes, copyBytes, copyUnshared, EncodingError } from "./bytes.js";
 import { decodeCompactBits, ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, type ErgoHeaderStore } from "./ergo-headers.js";
 import {
-  attributeSection, ERGO_SYNTHETIC_REFERENCE, ergoProfileIdentity, ownErgoProfile, rangeEntries, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
+  attributeSection, ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, ownErgoProfile, rangeEntries, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
 } from "./ergo-profile.js";
 import type { ErgoPublisher, ErgoRecordRequest } from "./ergo-publisher.js";
 import type { ErgoSupplier } from "./ergo-supplier.js";
@@ -199,7 +199,7 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
     this.publisher = publisher;
     this.profile = ownErgoProfile(profile);
     this.venueId = ergoProfileIdentity(this.profile);
-    const store = ergoHeaderStore(this.profile.anchor, anchorContext);
+    const store = ergoHeaderStore(this.profile.anchor, anchorContext, this.profile.reference === ERGO_TESTNET_REFERENCE ? "testnet" : "mainnet");
     if (store === undefined) throw new VenueError("the anchor context does not authenticate the profile's anchor");
     // Each context selects its header rules. venue-ergo's and the synthetic reference context read the mainnet
     // rules, the synthetic one only above an anchor of difficulty 1: no mainnet header has it, and a header id

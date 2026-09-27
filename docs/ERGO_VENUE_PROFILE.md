@@ -42,13 +42,32 @@ names the synthetic chain (`src/ergo-synthetic.ts`, reference tooling for
 the tests and the local replay) under the mainnet rules, and `ErgoVenue`
 reads it only above an anchor of difficulty 1: no mainnet header has it, and
 a header id commits to its ancestry, so a profile naming the synthetic
-context cannot follow the mainnet. The testnet's context joins with its
-header rules; `ownErgoProfile` refuses every other context. Beside them,
+context cannot follow the mainnet. `moe/venue/ergo-testnet/reference`
+(`ERGO_TESTNET_REFERENCE`) selects the pinned testnet rules below;
+`ownErgoProfile` refuses every other context. Beside them,
 `moe/venue/local/reference` (`LOCAL_REFERENCE`, `src/record-venue.ts`) names
 a `FixtureVenue` by a 32-byte label and its lag, with no header rules. The
 pool-v3 candidate runs only on a venue whose identity its guard recomputes
 from one of these preimages (`src/pool/v3/guard.ts`); venue-ergo's own
 context is refused there.
+
+The reference testnet context selects v6.0.6's legacy predictor: 45-second
+target, epochs of 128, eight-epoch lookback, fallback difficulty 1, compact
+normalization, without EIP-37's average or clamps. The header store requires
+the same 1,024 predecessors plus anchor, with testnet anchor height at least
+1,025. It preserves the pinned source's signed-Int prediction point at the
+terminal epoch and difficulty reset to 32 at child height 2,147,483,647.
+Version 1 still uses Autolykos v1 and every other version v2. Mainnet defaults
+and identities remain as specified in venue-ergo.
+
+The testnet anchor is an independently selected trust input. Its context
+binds the selected chain and rules; a hash cannot prove an arbitrary anchor's
+network. The explicit live checks use the controlled own testnet node, check
+its release/network and current-chain anchor readback, and choose depth 2.
+That depth carries no production-finality or mainnet-latency claim. Pre-anchor
+ancestry, full block validity and the heaviest chain the supplier withholds
+remain light-client trust limits. See the
+[decision and reviewed alternatives](../decisions/2026-09.md#2026-09-27--read-the-reference-testnet-through-its-pinned-header-rules).
 
 ## Header source
 
