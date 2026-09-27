@@ -249,14 +249,15 @@ The public reader bundle retains package bytes, selection, verification keys,
 artifact identities and independently held venue profile/pin, without seeds or
 journal contents. Offline guard checks run with `recovery-testnet.mjs --check`.
 
-The authorized 2026-09-27 [live testnet acceptance](pool-v3-recovery-store-testnet-verification.json)
+The authorized 2026-09-27 [live testnet acceptance at a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
 passed all four groups with nine real proofs and ten distinct transactions.
 Total spend was 0.03434168 tERG, including 0.011 tERG fees; the complete package
 was 126,037 bytes. The holder-only reader verified force, non-service count,
 unchanged supply of 20 and exact adoption of four recovery records at opening
 index 51; missing directories, snapshots and trails refused. A separate fresh
 process also verified the retained public bundle. This is single-backing testnet
-evidence under the candidate configuration; persistence, replacement service,
+evidence under the candidate configuration, historical after subsequent journal
+changes; persistence, replacement service,
 custody, configuration adoption and mainnet remain outside the acceptance.
 
 The explicit `node scripts/pool/v3/store-check.mjs --testnet` path uses the own

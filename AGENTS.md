@@ -181,13 +181,13 @@ clones/dependency trees at the workspace root. Apply obvious low-risk workflow i
 larger opportunities in WORK.md without derailing the slice.
 
 The host is Windows (Git Bash, PowerShell; LF files). Use absolute paths or `git -C`; the shell's
-directory drifts. Write large text and multi-line scripts to a scratch file with the editor, not a
-heredoc or `node -e`. Search with the Grep tool or `git grep`: `scratch/` holds tens of GB of node
-data. Start commands that can pass two minutes (`npm test`, `npm run check`, `check:pool*`,
-`check:evidence`, probes, CI waits) in the background, logging output and exit code to scratch; wait
-with an until-loop or Monitor, never `sleep N; check`. WORK.md names detached jobs (own Ergo nodes,
-drivers); change files they read only on a branch/worktree, merging after they end. New commits,
-fresh file times or live agent processes mean another session shares the checkout: stay read-only.
+directory drifts. Write large scripts to scratch with the editor, not a heredoc or `node -e`.
+Search with `rg` or `git grep`, excluding ignored scratch (tens of GB of node data).
+Commands that can pass two minutes run detached with output and exit code in scratch; clear old
+completion markers before starting and wait with an until-loop or Monitor, never `sleep N; check`.
+WORK.md names detached jobs; change files they read only on a branch/worktree, merging after they end.
+Stay read-only when unexplained commits/file changes or a confirmed active session show concurrent
+editing of this checkout. An idle or unrelated agent process alone does not establish that.
 
 WORK.md alone holds the coarse product-effort estimate (method in production requirements).
 Reassess from gathered evidence after meaningful product progress or a major blocker, without extra

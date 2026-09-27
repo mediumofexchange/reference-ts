@@ -123,6 +123,9 @@ interface View {
   readonly now: bigint;
   readonly lag: bigint;
   readonly held: readonly HeldCommitment[];
+  /** An authentic record of this key outside the durable signing history,
+   * including records the venue's holding rule does not select. */
+  readonly conflict: boolean;
   readonly boundaries: readonly bigint[];
   readonly revokedAt: bigint | undefined;
   readonly key: string;
@@ -408,7 +411,19 @@ export class V3OperatorJournal {
     }
   }
   private view(engine: Engine): View {
-    const now = this.clock(), held = heldCommitments(this.ask(1, this.operator, now)).held;
+    const now = this.clock(), answer = this.ask(1, this.operator, now), held = heldCommitments(answer).held;
+    const signed = new Set(engine.signed.map(s => hexOf(s.commitment)));
+    // C2.3.3 selects held state; it does not erase evidence that another
+    // process has signed with this key (§13.3, invariant 22). Exact local
+    // bytes were authenticated when signed or reloaded. Verify every other
+    // same-key record before treating it as a conflict, including old twins.
+    const conflict = answer.entries.some(entry => {
+      if (signed.has(bytesToHex(entry.record))) return false;
+      let c: Commitment;
+      try { c = decodeCommitment(entry.record); }
+      catch (error) { if (error instanceof EncodingError) return false; throw error; }
+      return same(c.operator, this.operator) && verifyCommitment(c);
+    });
     let boundaries: bigint[] = [], revokedAt: bigint | undefined;
     const opened = engine.opened;
     if (opened !== undefined) {
@@ -419,11 +434,16 @@ export class V3OperatorJournal {
       boundaries = end === undefined ? [] : [end];
       revokedAt = revocationIndex(this.ask(3, opened.terms.obligor, now));
     }
-    const key = JSON.stringify([now.toString(), held.map(h => [h.index.toString(), hexOf(h.commitment)]), boundaries.map(String), revokedAt?.toString() ?? null]);
-    return { now, lag: this.lag, held, boundaries, revokedAt, key };
+    const key = JSON.stringify([now.toString(), held.map(h => [h.index.toString(), hexOf(h.commitment)]), conflict, boundaries.map(String), revokedAt?.toString() ?? null]);
+    return { now, lag: this.lag, held, conflict, boundaries, revokedAt, key };
+  }
+  private exclusive(view: View): void {
+    requireThat(!view.conflict, "CONFLICT", "the venue contains a commitment this journal did not sign");
   }
   private stable(engine: Engine, view: View): void {
-    requireThat(this.view(engine).key === view.key, "STALE", "the venue changed during the journal operation");
+    const current = this.view(engine);
+    this.exclusive(current);
+    requireThat(current.key === view.key, "STALE", "the venue changed during the journal operation");
   }
   private isHeld(view: View, signed: Signed): boolean {
     const held = view.held.find(h => h.commitment.sequence === signed.commitment.sequence);
@@ -431,12 +451,10 @@ export class V3OperatorJournal {
   }
   /** Service needs the current signed state, the scope's schedule open, and for issuance an unrevoked backer. */
   private async ready(engine: Engine, view: View, action: "admit" | "commit"): Promise<void> {
+    this.exclusive(view);
     requireThat(engine.opened !== undefined && engine.state !== undefined, "STALE", "open the segment first");
     requireThat(!engine.pendingReturn, "STALE", "the return opening must be witnessed and its block adopted before service");
     const last = engine.signed.at(-1)!, latest = hexOf(view.held.at(-1)?.commitment);
-    // Another commitment of this key at a sequence the journal never signed means the key has another journal.
-    requireThat(view.held.every(h => hexOf(engine.signed[Number(h.commitment.sequence) - 1]?.commitment) === hexOf(h.commitment)),
-      "CONFLICT", "the venue holds a commitment this journal did not sign");
     const current = latest === hexOf(last.commitment) || (last.published && view.now < last.at + view.lag && latest === last.observed);
     requireThat(current, "STALE", "the signed state is not current");
     const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries: view.boundaries,
@@ -542,7 +560,7 @@ export class V3OperatorJournal {
 
   /** The verified opening determines the exact block. Force was checked by
    * the reader at each original index; adoption changes the fresh local tree. */
-  private async applyAdoption(engine: Engine, source: StateRead): Promise<Uint8Array[]> {
+  private async applyAdoption(engine: Engine, source: StateRead, beforeReceipt?: () => void): Promise<Uint8Array[]> {
     const opened = engine.opened!, state = engine.state!;
     requireThat(engine.pendingReturn && source.canonical.commitment.sequence === opened.header.sequence &&
       same(source.canonical.segment, opened.segment), "STALE", "the witnessed opening is not this return");
@@ -552,6 +570,9 @@ export class V3OperatorJournal {
     for (const event of block) {
       await applyRecord(state, event.bytes, replay);
       engine.records.push(copyBytes(event.bytes));
+      // Live adoption rechecks after every await and before signing; journal
+      // reload only reproduces already durable replies and supplies no guard.
+      beforeReceipt?.();
       const receipt = this.receipt(engine, event.bytes), identity = bytesToHex(statementHash(event.record));
       receipts.push(receipt);
       if (!engine.receipts.has(identity)) engine.receipts.set(identity, receipt);
@@ -568,9 +589,9 @@ export class V3OperatorJournal {
       const prior = this.prior(commandId, "return");
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
       const view = this.view(engine);
+      this.exclusive(view);
       requireThat(engine.opened !== undefined && !engine.pendingReturn, "STALE", "a return is already pending or no segment exists");
       this.reserveCheckpoint(engine, 2n); // Empty return and its service continuation.
-      requireThat(view.held.every(h => engine.signed.some(s => hexOf(s.commitment) === hexOf(h.commitment))), "CONFLICT", "another journal signed this key");
       const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries: view.boundaries,
         ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
       requireThat(!schedule.lapsed && schedule.commitNow, "SCHEDULE", "return signing is outside the operator's term");
@@ -605,6 +626,7 @@ export class V3OperatorJournal {
       if (prior !== undefined) return (JSON.parse(prior) as string[]).map(hexToBytes);
       requireThat(engine.pendingReturn, "STALE", "the segment is not a pending return");
       const view = this.view(engine), held = view.held.find(h => h.commitment.sequence === opened.header.sequence);
+      this.exclusive(view);
       requireThat(held !== undefined && hexOf(held.commitment) === hexOf(engine.signed.at(-1)!.commitment), "UNAVAILABLE", "the return opening is not witnessed");
       const current = await this.currentRead(engine, view.now);
       this.serviceClock(current, view.now);
@@ -616,7 +638,7 @@ export class V3OperatorJournal {
       this.encodePackage(opened, [...engine.signed, { directory: [{ name: opened.backing, digest: new Uint8Array(32) }],
         snapshot: new Uint8Array(last.snapshot.length) }], held.commitment, [...engine.records, ...block.map(event => event.bytes)], engine.archives);
       this.diverging = true;
-      const receipts = await this.applyAdoption(engine, source), { directory, snapshot } = this.checkpoint(engine);
+      const receipts = await this.applyAdoption(engine, source, () => this.stable(engine, view)), { directory, snapshot } = this.checkpoint(engine);
       this.encodePackage(opened, [...engine.signed, { directory, snapshot }], held.commitment, engine.records, engine.archives);
       this.transaction(() => {
         this.stable(engine, view);
@@ -659,6 +681,7 @@ export class V3OperatorJournal {
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
       requireThat(engine.opened === undefined, "UNSUPPORTED", "the journal holds one genesis segment");
       const opened = this.opening(own), view = this.view(engine);
+      this.exclusive(view);
       requireThat(view.held.length === 0, "CONFLICT", "this key already has commitments on the venue");
       const admitted = admittedReplacements(this.ask(2, opened.backing, view.now), opened.terms.replacementRule);
       const { chain, pending } = replacementChain(admitted, { backing: opened.backing, original: this.operator, lag: this.lag, now: view.now });

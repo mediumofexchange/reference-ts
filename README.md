@@ -10,12 +10,13 @@ increased obligations and for moving a holder's claims.
 
 ## Status
 
-The active runtime is a **shielded pool**: private notes with public verification
-of issuance and conservation. It implements v2 proofs, canonical history,
-receipt readers and durable sequencing. Recovery and successor v3 formats
-have executable models and conformance checks; they are not runtime support.
+The active development path is a **shielded pool**: private notes with public
+verification of issuance and conservation. The guarded v3 candidate runtime
+supports issue, payment, burn and single-backing recovery on local and synthetic
+reference venues, with historical live testnet acceptance. Its configuration
+is unadopted; replacement service, persistence and wallet integration remain open.
 
-A [local Node 24 service and client](docs/POOL_SERVICE.md) now expose durable
+A frozen v2 [local Node 24 service and client](docs/POOL_SERVICE.md) expose durable
 pool submission, commitment and publication retry. A [local wallet fixture](docs/POOL_WALLET.md)
 adds durable requests, private HTTPS delivery, payment retries and verified,
 once-only invoice records.
@@ -23,15 +24,16 @@ The [configured local commands](docs/POOL_LOCAL_PROFILE.md) use caller-held sign
 terms and pinned real proofs, with separate holder and operator credentials.
 They support encrypted offline wallet handoff and receiver credential rotation.
 Its real-proof mode checks public supply in a separate process, and crash
-tests cover wallet commits. It still uses a local venue; a usable wallet and
-external witness write adapter remain open. The API and wire format are experimental, the
+tests cover wallet commits. This wallet still uses a local venue; v3 supplies
+the Ergo read/write adapter, while a usable wallet and qualified device custody
+remain open. The API and wire format are experimental, the
 package is not published to npm, and no completed security audit or live
 deployment is claimed.
 
-The runtime tracks specification revision
+The frozen v2 runtime tracks specification revision
 [`3676757a1c8ddc0df607352c6bddbb48f6d85a09`](https://github.com/mediumofexchange/money-from-first-principles/tree/3676757a1c8ddc0df607352c6bddbb48f6d85a09).
 See [implementation status](docs/IMPLEMENTATION_STATUS.md) for component
-evidence and later model pins, and [production requirements](docs/PRODUCTION_REQUIREMENTS.md)
+evidence and later v3 pins, and [production requirements](docs/PRODUCTION_REQUIREMENTS.md)
 for the remaining acceptance criteria.
 
 ## Build and verify

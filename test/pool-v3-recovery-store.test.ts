@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -18,6 +18,7 @@ import { decodeTrail } from "../src/pool/v3/trail.js";
 import { authorizeAcceptance, authorizeIssue, authorizeSettlement, demandTask, issueTask, requestTask, settleTask,
   withdrawalRecord, type ProofTask } from "../src/pool/v3/witness.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
+import { encodeCommitment, signCommitment } from "../src/venue-records.js";
 
 // Journal and reader integration with explicit stand-in proofs. The companion
 // recovery-store-check.mjs runs these recovery builders under all real keys.
@@ -42,7 +43,7 @@ describe.skipIf(!supported)("v3 recovery journal and independent package reader"
       rmSync(directory, { recursive: true, force: true });
     }
   });
-  async function fixture() {
+  async function fixture(beforeVerify = () => {}) {
     mkdirSync(scratch, { recursive: true });
     const directory = mkdtempSync(join(scratch, "v3-recovery-journal-test-")); directories.push(directory);
     const venue = FixtureVenue.reference(label, lag);
@@ -54,7 +55,8 @@ describe.skipIf(!supported)("v3 recovery journal and independent package reader"
     const funded = prepareExactOutput(b(21), domain, b(31), backing, 10n), pad = prepareExactOutput(b(21), domain, b(32), backing, 0n);
     const tree = new NoteTree(); tree.append(funded.cm);
     const input = { note: funded, anchor: tree.root(), path: tree.path(0n) }, inputs = [input, { ...input, note: pad }];
-    const j = new V3OperatorJournal(join(directory, "journal.db"), { configuration, secret: operatorSecret, venue, reference, verifier }); journals.push(j);
+    const j = new V3OperatorJournal(join(directory, "journal.db"), { configuration, secret: operatorSecret, venue, reference,
+      verifier: { verify: (...args) => { beforeVerify(); return verifier.verify(...args); } } }); journals.push(j);
     await j.open("genesis", signed); await j.publish();
     await j.submit(encodeRecord(authorizeIssue(record(issueTask(context, funded)), issuerSecret)));
     await j.commit("issued"); await j.publish();
@@ -117,6 +119,38 @@ describe.skipIf(!supported)("v3 recovery journal and independent package reader"
     expect(await f.j.return("returned")).toEqual(opening);
     await expect(f.j.adopt()).rejects.toMatchObject({ code: "UNAVAILABLE" });
     await f.j.publish(); expect(await f.j.adopt()).toEqual([]);
+  });
+
+  it("refuses return and adoption after an authentic hidden commitment from the same key", async () => {
+    const f = await fixture(); f.venue.advance(7n);
+    f.venue.witness(1, operator, 7n, encodeCommitment(signCommitment(operatorSecret, 1n, b(255))));
+    await expect(f.j.return("compromised-return")).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await f.j.package()).toEqual(f.held);
+
+    const g = await fixture(); g.venue.advance(7n);
+    const opening = await g.j.return("return"); await g.j.publish();
+    g.venue.witness(1, operator, g.venue.witnessedIndex(),
+      encodeCommitment(signCommitment(operatorSecret, 1n, b(255))));
+    await expect(g.j.adopt()).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await g.j.return("return")).toEqual(opening);
+    expect((await g.j.package()).selection.sequence).toBe(opening.sequence);
+  });
+
+  it("checks for a conflict appearing during adoption verification before signing any receipt", async () => {
+    let duringProof = () => {};
+    const f = await fixture(() => duringProof()); f.venue.advance(7n);
+    await f.venue.publishRecord(4, f.backing, f.publication(1, f.demand(6n)));
+    await f.j.return("return"); await f.j.publish();
+    const saved = await f.j.package(), twin = encodeCommitment(signCommitment(operatorSecret, 1n, b(255)));
+    duringProof = () => { f.venue.witness(1, operator, f.venue.witnessedIndex(), twin); };
+    const sign = vi.spyOn(ed25519, "sign");
+    try {
+      await expect(f.j.adopt()).rejects.toMatchObject({ code: "CONFLICT" });
+      expect(sign).not.toHaveBeenCalled();
+    } finally { sign.mockRestore(); }
+    // Failed adoption must not persist receipts or make exact retry succeed.
+    await expect(f.j.adopt()).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await f.j.package()).toEqual(saved);
   });
 
   it("reads force without the journal and adopts exact venue order including settlement at return index", async () => {

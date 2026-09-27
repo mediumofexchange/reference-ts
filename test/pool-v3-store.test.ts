@@ -20,7 +20,7 @@ import { decodeTrail } from "../src/pool/v3/trail.js";
 import { authorizeIssue, burnTask, issueTask, spendTask, type ProofTask, type SegmentContext } from "../src/pool/v3/witness.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity } from "../src/record-venue.js";
-import { encodeCommitment, encodeRevocation, signCommitment, signRevocation } from "../src/venue-records.js";
+import { encodeCommitment, encodeRevocation, isEquivocation, signCommitment, signRevocation } from "../src/venue-records.js";
 
 // The pool-v3 operator journal (src/pool/v3/store.ts) on the local reference
 // venue, over records built by witness.ts with proofs a test verifier judges.
@@ -249,6 +249,57 @@ describe.skipIf(!supported)("the v3 operator journal (Node 24)", () => {
     expect(await refusal(j.submit(issue()))).toEqual(["CONFLICT", undefined]);
     const fresh = journal(path(), venue);
     expect(await refusal(fresh.open("genesis", signed))).toEqual(["CONFLICT", undefined]);
+  });
+
+  it.each(["same index", "later index"])("refuses a hidden same-sequence twin at %s while retaining historical replies", async location => {
+    const { venue, j, file } = await opened();
+    const own = await j.open("genesis", signed);
+    const receipt = await j.submit(issue()), saved = await j.package();
+    const twin = signCommitment(operatorSecret, own.sequence, new Uint8Array(32).fill(255));
+    // The larger root loses the same-index tie; only the raw range retains it.
+    expect(Buffer.compare(encodeCommitment(own), encodeCommitment(twin))).toBe(-1);
+    expect(isEquivocation(own, twin)).toBe(true);
+    if (location === "later index") venue.advance(venue.witnessedIndex() + 1n);
+    venue.witness(1, operator, venue.witnessedIndex(), encodeCommitment(twin));
+    expect(await refusal(j.submit(payment()))).toEqual(["CONFLICT", undefined]);
+    expect(await refusal(j.commit("after-twin"))).toEqual(["CONFLICT", undefined]);
+    expect(await j.open("genesis", signed)).toEqual(own);
+    expect(await j.submit(issue())).toEqual(receipt);
+    expect(await j.publish()).toEqual(own);
+    expect(await j.package()).toEqual(saved);
+    j.close();
+    const restored = journal(file, venue);
+    venue.advance(venue.witnessedIndex() + lag);
+    expect(await restored.submit(issue())).toEqual(receipt);
+    expect(await restored.package()).toEqual(saved);
+    expect(await refusal(restored.submit(payment()))).toEqual(["CONFLICT", undefined]);
+  });
+
+  it("ignores exact reposts, invalid signatures and another key's records", async () => {
+    const { venue, j } = await opened(), own = await j.open("genesis", signed);
+    const forged = encodeCommitment(signCommitment(operatorSecret, own.sequence, b(255)));
+    forged[135] = forged[135]! ^ 1;
+    venue.advance(2n);
+    for (const bytes of [encodeCommitment(own), forged, new Uint8Array(136),
+      encodeCommitment(signCommitment(issuerSecret, own.sequence, b(255)))]) {
+      venue.witness(1, operator, 2n, bytes);
+    }
+    expect(decodeReceipt(await j.submit(issue())).position).toBe(1n);
+    expect((await j.commit("after-junk")).sequence).toBe(2n);
+  });
+
+  it("rechecks hidden conflicts after proof verification before signing a receipt", async () => {
+    const venue = FixtureVenue.reference(label, lag);
+    let duringProof = () => {};
+    const j = new V3OperatorJournal(path(), { configuration, secret: operatorSecret, venue, reference,
+      verifier: { verify: (...args) => { duringProof(); return verifier.verify(...args); } } });
+    journals.push(j);
+    const own = await j.open("genesis", signed); await j.publish();
+    duringProof = () => { venue.witness(1, operator, venue.witnessedIndex(),
+      encodeCommitment(signCommitment(operatorSecret, own.sequence, b(255)))); };
+    expect(await refusal(j.submit(issue()))).toEqual(["CONFLICT", undefined]);
+    expect(await refusal(j.submit(issue()))).toEqual(["CONFLICT", undefined]);
+    expect((await j.package()).selection.sequence).toBe(1n);
   });
 
   it("refuses terms for another operator, venue or configuration and accepts silence terms", async () => {

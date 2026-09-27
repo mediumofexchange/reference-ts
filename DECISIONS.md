@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-27` [Check the complete signing history before succession](decisions/2026-09.md#2026-09-27--check-the-complete-signing-history-before-succession)
 - `2026-09-27` [Preserve complete recovery evidence and share the force transition](decisions/2026-09.md#2026-09-27--preserve-complete-recovery-evidence-and-share-the-force-transition)
 - `2026-09-27` [Read the reference testnet through its pinned header rules](decisions/2026-09.md#2026-09-27--read-the-reference-testnet-through-its-pinned-header-rules)
 - `2026-09-25` [Admit, commit and serve v3 through an operator journal, proving in the runtime, on reference venues only](decisions/2026-09.md#2026-09-25--admit-commit-and-serve-v3-through-an-operator-journal-proving-in-the-runtime-on-reference-venues-only)
