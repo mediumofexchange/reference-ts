@@ -9,7 +9,7 @@ import { decodeEvidencePackage, encodeEvidencePackage } from '../../../dist/pool
 import { decodeRecord, encodeRecord } from '../../../dist/pool/v3/records.js';
 import { V3ServiceClient } from '../../../dist/pool/v3/service-client.js';
 import { SERVED_PACKAGE_LIMITS } from '../../../dist/pool/v3/store.js';
-import { V3ReceiverWallet } from '../../../dist/pool/v3/wallet-store.js';
+import { V3Wallet } from '../../../dist/pool/v3/wallet-store.js';
 import { FixtureVenue } from '../../../dist/record-venue.js';
 import { encodeCommitment } from '../../../dist/venue-records.js';
 import { ADMIN, WALLET, backing, configuration, domain, load, operator, reference, save, terms, verifier } from './service-fixture.mjs';
@@ -18,7 +18,7 @@ const [mode, directory, baseUrl] = process.argv.slice(2);
 const walletPath = join(directory, 'receiver.sqlite');
 if (mode === 'prepare') {
   const venue = FixtureVenue.reference(reference.label, reference.lag);
-  const wallet = new V3ReceiverWallet(walletPath, { configuration, venue, reference, verifier });
+  const wallet = new V3Wallet(walletPath, { configuration, venue, reference, verifier });
   try { save(join(directory, 'request.v8'), wallet.request('invoice', backing, 7n)); } finally { wallet.close(); }
   console.log(JSON.stringify({ pid: process.pid }));
   process.exit(0);
@@ -48,7 +48,7 @@ if (mode === 'initial') {
   const tail = await client.commit('tail'); assert.equal(tail.sequence, 3n);
   assert.deepEqual(await client.package(backing), complete, 'committed unpublished records/checkpoint are excluded');
   const venue = FixtureVenue.from(load(join(directory, 'venue.v8')));
-  const wallet = new V3ReceiverWallet(walletPath, { configuration, venue, reference, verifier });
+  const wallet = new V3Wallet(walletPath, { configuration, venue, reference, verifier });
   try {
     const items = decodeEvidencePackage(complete.package, SERVED_PACKAGE_LIMITS);
     const withheld = encodeEvidencePackage(items.filter(item => item.kind !== 6), SERVED_PACKAGE_LIMITS);
@@ -80,7 +80,7 @@ if (mode === 'initial') {
   assert.equal(encoded(await client.publish()), encoded(tail));
   assert.equal((await client.package(backing)).selection.sequence, 3n);
   const venue = FixtureVenue.from(load(join(directory, 'venue.v8')));
-  const wallet = new V3ReceiverWallet(walletPath, { configuration, venue, reference, verifier });
+  const wallet = new V3Wallet(walletPath, { configuration, venue, reference, verifier });
   try { assert.deepEqual(wallet.fulfillment('invoice'), load(join(directory, 'fulfilled.v8'))); } finally { wallet.close(); }
   result = { receipt: first, commit: encoded(commit), tail: encoded(tail) };
 } else throw new Error('invalid acceptance client mode');

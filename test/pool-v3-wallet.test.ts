@@ -13,7 +13,7 @@ import { encodePublication, encodeRecord, statementHash, type Record } from "../
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
 import { copyPaymentRequest, type PaymentRequest } from "../src/pool/v3/wallet-request.js";
-import type { V3ReceiverWallet as Wallet } from "../src/pool/v3/wallet-store.js";
+import type { V3Wallet as Wallet } from "../src/pool/v3/wallet-store.js";
 import { authorizeAcceptance, authorizeIssue, authorizeSettlement, burnTask, demandTask, issueTask, settleTask, spendTask,
   type ProofTask } from "../src/pool/v3/witness.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
@@ -32,11 +32,11 @@ const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicIn
   proof: b(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 
 describe.skipIf(!supported)("durable v3 receiver requests and current fulfillment", () => {
-  let V3ReceiverWallet: typeof import("../src/pool/v3/wallet-store.js").V3ReceiverWallet;
+  let V3Wallet: typeof import("../src/pool/v3/wallet-store.js").V3Wallet;
   let V3OperatorJournal: typeof import("../src/pool/v3/store.js").V3OperatorJournal;
   const wallets: Wallet[] = [], journals: Journal[] = [], directories: string[] = [], scratch = resolve("scratch");
   beforeAll(async () => {
-    ({ V3ReceiverWallet } = await import("../src/pool/v3/wallet-store.js"));
+    ({ V3Wallet } = await import("../src/pool/v3/wallet-store.js"));
     ({ V3OperatorJournal } = await import("../src/pool/v3/store.js"));
   });
   afterEach(() => {
@@ -58,7 +58,7 @@ describe.skipIf(!supported)("durable v3 receiver requests and current fulfillmen
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
     const reader: PackageReader = { configuration, venue, reference, verifier: options.readerVerifier ?? verifier };
     const path = join(directory, "receiver.db");
-    const reopen = (selected = reader) => { const wallet = new V3ReceiverWallet(path, selected); wallets.push(wallet); return wallet; };
+    const reopen = (selected = reader) => { const wallet = new V3Wallet(path, selected); wallets.push(wallet); return wallet; };
     const wallet = reopen(), request = wallet.request("invoice", backing, 7n);
     const j = new V3OperatorJournal(join(directory, "journal.db"), { configuration, venue, reference, verifier, secret: operatorSecret });
     journals.push(j); await j.open("genesis", signed); await j.publish();

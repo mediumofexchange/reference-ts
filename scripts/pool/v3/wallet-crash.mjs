@@ -1,4 +1,4 @@
-// C4.2/5 process-restart acceptance with a synthetic venue and proof oracle.
+// C4.2/5 and pool-fees C1.2.5 process-restart acceptance with a synthetic venue and proof oracle.
 // Abrupt process exits exercise SQLite transaction boundaries, not power loss,
 // physical custody, rollback resistance, real proofs or live venue operation.
 import assert from 'node:assert/strict';
@@ -10,7 +10,7 @@ import { promisify } from 'node:util';
 import { deserialize, serialize } from 'node:v8';
 
 if (Number(process.versions.node.split('.')[0]) < 24) {
-  console.log('SKIP v3 receiver crash check: Node.js 24 or newer is required.');
+  console.log('SKIP v3 wallet crash check: Node.js 24 or newer is required.');
   process.exit(0);
 }
 const { DatabaseSync } = await import('node:sqlite');
@@ -22,7 +22,7 @@ const { configurationHash, RELATIONS } = await import('../../../dist/pool/v3/con
 const { encodeRecord } = await import('../../../dist/pool/v3/records.js');
 const { V3OperatorJournal } = await import('../../../dist/pool/v3/store.js');
 const { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } = await import('../../../dist/pool/v3/terms.js');
-const { V3ReceiverWallet } = await import('../../../dist/pool/v3/wallet-store.js');
+const { V3Wallet } = await import('../../../dist/pool/v3/wallet-store.js');
 const { authorizeIssue, issueTask, spendTask } = await import('../../../dist/pool/v3/witness.js');
 const { FixtureVenue, LOCAL_REFERENCE } = await import('../../../dist/record-venue.js');
 const { encodeCommitment } = await import('../../../dist/venue-records.js');
@@ -40,6 +40,9 @@ const publicRequest = out => ({ domain, opening: out.opening, cm: out.cm, capsul
 const record = task => ({ domain, kind: task.kind, publicInputs: task.publicInputs,
   proof: b(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 
+const prove = async task => record(task);
+const order = fixture => ({ request: fixture.payee, value: 7n });
+
 async function worker(directory, operation, phase, action) {
   const path = join(directory, `${operation}-${phase}.sqlite`), fixturePath = `${path}.fixture`;
   if (action === 'setup') {
@@ -47,20 +50,26 @@ async function worker(directory, operation, phase, action) {
     const terms = encodeRootTerms({ obligor: issuer, operator, configuration: domain, venue: venue.id, interval: 20n,
       payout: { thing: 'crash fixture units', quantumExponent: 0, perUnit: 1n } });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) };
-    const backing = rootTermsName(terms), wallet = new V3ReceiverWallet(path, { configuration, venue, reference, verifier });
+    const backing = rootTermsName(terms), wallet = new V3Wallet(path, { configuration, venue, reference, verifier });
     const fixture = { backing, signed, venue: venue.export() };
-    if (operation === 'fulfillment') {
-      fixture.request = wallet.request('invoice', backing, 7n);
+    if (operation !== 'request') {
       const journal = new V3OperatorJournal(`${path}.journal`, { configuration, venue, reference, verifier, secret: operatorSecret });
       try {
         await journal.open('genesis', signed); await journal.publish();
         const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
         const out = (id, value) => prepareExactOutput(b(21), domain, b(id), backing, value);
-        const funded = out(31, 10n), pad = out(32, 0n), tree = new NoteTree(); tree.append(funded.cm);
-        await journal.submit(encodeRecord(authorizeIssue(record(issueTask(context, funded)), issuerSecret)));
-        const input = { note: funded, anchor: tree.root(), path: tree.path(0n) };
-        await journal.submit(encodeRecord(record(spendTask(context, [input, { ...input, note: pad }],
-          [out(33, 1n), fixture.request, out(34, 2n), out(35, 0n)]))));
+        if (operation === 'fulfillment') {
+          fixture.request = wallet.request('invoice', backing, 7n);
+          const funded = out(31, 10n), pad = out(32, 0n), tree = new NoteTree(); tree.append(funded.cm);
+          await journal.submit(encodeRecord(authorizeIssue(record(issueTask(context, funded)), issuerSecret)));
+          const input = { note: funded, anchor: tree.root(), path: tree.path(0n) };
+          await journal.submit(encodeRecord(record(spendTask(context, [input, { ...input, note: pad }],
+            [out(33, 1n), fixture.request, out(34, 2n), out(35, 0n)]))));
+        } else {
+          // The wallet pays from its own issued note; the payee's request is public bytes only.
+          await journal.submit(encodeRecord(authorizeIssue(record(issueTask(context, wallet.request('fund', backing, 10n))), issuerSecret)));
+          fixture.payee = publicRequest(out(40, 7n));
+        }
         fixture.checkpoint = await journal.commit('payment'); await journal.publish();
         fixture.package = (await journal.package()).package;
         fixture.venue = venue.export();
@@ -69,7 +78,7 @@ async function worker(directory, operation, phase, action) {
     wallet.close(); save(fixturePath, fixture); return;
   }
   const fixture = load(fixturePath), venue = FixtureVenue.from(fixture.venue);
-  const wallet = new V3ReceiverWallet(path, { configuration, venue, reference, verifier });
+  const wallet = new V3Wallet(path, { configuration, venue, reference, verifier });
   if (action === 'crash') {
     // Initialization has committed. Arm only the operation's own COMMIT; the
     // deliberate exit leaves its DB handle open, without rollback or close.
@@ -78,22 +87,36 @@ async function worker(directory, operation, phase, action) {
       if (sql.trim().toUpperCase() !== 'COMMIT') return original.call(this, sql);
       if (operation === 'request') {
         const row = this.prepare('SELECT * FROM receiver_requests WHERE alias=?').get('invoice');
-        const seed = this.prepare('SELECT seed FROM receiver_identity WHERE id=1').get().seed;
+        const seed = this.prepare('SELECT seed FROM wallet_identity WHERE id=1').get().seed;
         // Capture public candidate bytes only; the fixture never exports seed
         // or request randomness. Before-COMMIT candidate must not survive.
         save(`${path}.candidate`, publicRequest(prepareExactOutput(seed, domain, row.request_id, row.backing, BigInt(row.value))));
       }
+      // The candidate record is public bytes; before COMMIT it must not survive.
+      if (operation === 'payment') save(`${path}.candidate`, this.prepare('SELECT record FROM payer_payments WHERE alias=?').get('shop').record);
       if (phase === 'before') process.exit(71);
       original.call(this, sql);
       process.exit(72);
     };
     if (operation === 'request') wallet.request('invoice', fixture.backing, 7n);
+    else if (operation === 'payment') await wallet.prepare('shop', order(fixture), fixture.package, fixture.signed, prove);
     else await wallet.fulfill('invoice', fixture.package, fixture.signed);
     assert.fail('operation did not reach its crash boundary');
   }
   try {
     if (operation === 'request') save(`${path}.${action}`, wallet.request('invoice', fixture.backing, 7n));
-    else {
+    else if (operation === 'payment') {
+      const prior = wallet.payment('shop');
+      if (action === 'restore' && phase === 'before') {
+        assert.equal(prior, undefined, 'an uncommitted payment reserves nothing');
+        save(`${path}.${action}`, await wallet.prepare('shop', order(fixture), fixture.package, fixture.signed, prove));
+      } else {
+        assert.ok(prior, 'committed payment must survive a lost reply');
+        save(`${path}.${action}`, prior);
+        // An exact alias retry reads the saved record without evidence or proving.
+        assert.deepEqual(await wallet.prepare('shop', order(fixture), new Uint8Array(), fixture.signed, undefined), prior);
+      }
+    } else {
       const prior = wallet.fulfillment('invoice');
       if (action === 'restore' && phase === 'before') {
         assert.equal(prior, undefined);
@@ -127,13 +150,15 @@ if (process.argv[2] === '--worker') {
     }
   };
   try {
-    for (const operation of ['request', 'fulfillment']) for (const phase of ['before', 'after']) {
+    for (const operation of ['request', 'fulfillment', 'payment']) for (const phase of ['before', 'after']) {
       const path = join(directory, `${operation}-${phase}.sqlite`);
       await run(operation, phase, 'setup'); await run(operation, phase, 'crash');
       const fixture = load(`${path}.fixture`), db = new DatabaseSync(path);
       try {
-        const table = operation === 'request' ? 'receiver_requests' : 'receiver_fulfilled';
-        assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, phase === 'before' ? 0 : 1);
+        const tables = { request: ['receiver_requests'], fulfillment: ['receiver_fulfilled'], payment: ['payer_payments', 'payer_inputs'] };
+        for (const table of tables[operation]) {
+          assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, phase === 'before' ? 0 : 1);
+        }
         if (operation === 'fulfillment' && phase === 'after') {
           const row = db.prepare('SELECT * FROM receiver_fulfilled').get();
           assert.deepEqual(row.package, fixture.package);
@@ -148,11 +173,15 @@ if (process.argv[2] === '--worker') {
       if (operation === 'request') {
         if (phase === 'after') assert.deepEqual(restored, load(`${path}.candidate`));
         else assert.notEqual(restored.cm, load(`${path}.candidate`).cm, 'uncommitted candidate must not be reused');
+      } else if (operation === 'payment') {
+        assert.equal(restored.status, 'prepared'); assert.equal(restored.payee, fixture.payee.cm);
+        if (phase === 'after') assert.deepEqual(restored.record, load(`${path}.candidate`));
+        else assert.notDeepEqual(restored.record, load(`${path}.candidate`), 'uncommitted candidate must not be reused');
       } else assert.deepEqual(restored, { request: fixture.request, checkpoint: fixture.checkpoint,
         judgingIndex: fixture.venue.witnessedIndex, package: fixture.package, terms: fixture.signed });
-      console.log(`PASS v3 receiver ${operation}/${phase}: abrupt COMMIT exit, exact restart and retry.`);
+      console.log(`PASS v3 wallet ${operation}/${phase}: abrupt COMMIT exit, exact restart and retry.`);
     }
-    console.log('V3 receiver crash check passed: four abrupt exits; synthetic process evidence only.');
+    console.log('V3 wallet crash check passed: six abrupt exits; synthetic process evidence only.');
   } finally {
     const target = realpathSync(directory);
     assert.ok(dirname(target) === scratch && target.startsWith(scratch + sep) && target.startsWith(join(scratch, 'v3-wallet-crash-')),
