@@ -304,18 +304,15 @@ until the journal is reopened.
 - **Failure**: if the best chain leaves the block the clock stands on, the
   reorganization passed the depth (§13.2): every read and later sync
   refuses with `VenueError`, and the reader needs a new view.
-- **Reads**: commitments are pool-v3 §13.3's held commitments (a sequence
-  held only above zero, so `nextSequenceFor` starts at one, as pool
-  commitment sequences do); replacements are every kind-2 object that
-  decodes and names the backing, for the walk to judge; revocations are the
-  kind-3 objects that decode, name the key and verify. Every subject is
-  answered by exhaustion, so no subject is registered before a sync.
-  `range(request, limits)` is the §13 answer from the same sections, a
-  `RecordVenue` answer: undefined where the view cannot answer, and a
-  `RangeLimitError` past the caller's budget. The profile carries no
-  transparent operation or commit records, and the view refuses those reads
-  rather than answering empty, so the frozen transparent path has no Ergo
-  venue.
+- **Reads**: the view's one read is `range(request, limits)`, the §13 answer
+  from the synced sections as a `RecordVenue` answer: undefined where the
+  view cannot answer, and a `RangeLimitError` past the caller's budget.
+  Every subject is answered from the same sections, so no subject is
+  registered before a sync. Readers take held commitments (pool-v3 §13.3),
+  replacements and revocations from range answers through
+  `src/record-range.ts`. The view has no transparent `Venue` face, so the
+  frozen transparent path has no Ergo venue, and the profile's rule that
+  another declaration uses only kind 1–3 records holds by construction.
 - **Publishing** (`src/ergo-publisher.ts`): a view given an `ErgoPublisher`
   exposes neutral `publishRecord(kind, subject, bytes)` for kinds 1–4.
   Kind 4 uses a maximal adjacent same-subject output run in one transaction;

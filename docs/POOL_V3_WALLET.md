@@ -175,9 +175,11 @@ resends the same record. Both records spend the same nullifiers into the same
 commitments, so at most one can enter canonical history and the payee's exact
 request is paid once. A direct fee stays with its original recipient even when
 another operator admits the reproof; paying the current operator instead is a
-new spend (C1.2.5). Reservations stay until final or failed: release with
-other outputs (cancellation), same-segment tail repair (C2.10.9a) and release
-of never-admitted inputs are not implemented. Multi-backing payments and
+new spend (C1.2.5). Reservations are permanent: a failed payment's other
+input stays reserved although it is unspent, so a copy that breaks the
+one-active-copy rule can strand it until the seed is restored into a new
+wallet. Release with other outputs (cancellation), same-segment tail repair
+(C2.10.9a) and release of never-admitted inputs are not implemented. Multi-backing payments and
 cross-backing fees are refused. The wallet profile is `moe/wallet/v3/2`; a
 first-profile payer database, which kept no output openings, is refused.
 

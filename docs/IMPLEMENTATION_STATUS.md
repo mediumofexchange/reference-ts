@@ -222,8 +222,8 @@ EIP-37 recalculation
 it rests on the work, so withholding a heavier chain remains a supplier's
 power. The [runtime venue](ERGO_VENUE_PROFILE.md#runtime-venue) reads Ergo only
 under the profile: `ErgoVenue` syncs headers and sections from untrusted
-node suppliers under a per-supplier header budget, answers the runtime's
-`Venue` reads by exhaustion and §13 ranges from the same sections, stops its
+node suppliers under a per-supplier header budget, answers §13 ranges for
+every subject from the synced sections, stops its
 clock before a missing section and fails on a reorganization past the depth;
 it replaced the view over a node's box index. On the mainnet it synced 300
 blocks from the own node and matched a public-node-only view. Given an
