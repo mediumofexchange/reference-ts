@@ -670,15 +670,19 @@ export class ErgoPublisher {
 
   /** Send to `supplier` after the unsettled publications whose change it spends and that supplier lacks. A
    * supplier holding a transaction holds its parents, so its ancestry is walked only where it answers that it
-   * lacks the child; one that fails to answer is sent the transaction alone, so it cannot stall a walk, and a
-   * parent it does not take ends the walk there, since the child spends that parent's change. */
-  async #sendTo(supplier: ErgoPublishingSupplier, pending: Pending, visited: Set<string>): Promise<boolean> {
+   * lacks the child; one that fails to answer is sent the transaction alone, so it cannot stall a walk. A
+   * parent it does not take ends the walk: the publication asked for is still sent (the parent may have landed
+   * where this supplier cannot say so), but no descendant between them. */
+  async #sendTo(supplier: ErgoPublishingSupplier, pending: Pending, visited: Set<string>, asked = true): Promise<boolean> {
     visited.add(pending.key);
     const shown = await this.#shown(supplier, pending);
     if (shown === true) return true;
     if (shown === false) for (const input of pending.publication.inputs) {
       const parent = this.#byChange.get(bytesToHex(input));
-      if (parent !== undefined && !visited.has(parent.key) && !await this.#sendTo(supplier, parent, visited)) return false;
+      if (parent !== undefined && !visited.has(parent.key) && !await this.#sendTo(supplier, parent, visited, false)) {
+        if (!asked) return false;
+        break;
+      }
     }
     let guardError: unknown;
     const answer = await this.#call(() => {

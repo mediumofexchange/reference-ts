@@ -466,9 +466,22 @@ describe("a publication is sent once, and publications chain", () => {
       hasTransaction: id => m.hasTransaction(id), submit: (s, id) => m.submit(s, id) };
     const p = publisher([n, partial]), ids: string[] = [];
     for (let i = 1; i <= 3; i++) ids.push(hex((await p.publish(request(new Uint8Array(136).fill(i)))).id));
-    // Each attempt reaches the first transaction through its descendants, and m refuses it: nothing built on it is sent.
-    expect(m.submitted).toEqual([ids[0], ids[0], ids[0]]);
+    // Each attempt reaches the first transaction through its descendants and m refuses it: the walk ends there,
+    // and of what lies between only the publication asked for is sent.
+    expect(m.submitted).toEqual([ids[0], ids[0], ids[1], ids[0], ids[2]]);
     expect(n.pool).toHaveLength(3);
+  });
+
+  it("still sends the publication asked for when a supplier refuses a parent that already landed there", async () => {
+    const n = funded([10_000_000n]);
+    // Box queries fail and transaction queries miss what landed, so a landed parent is resent and refused as spent.
+    const blind: ErgoPublishingSupplier = { name: "blind", unspentBoxes: t => n.unspentBoxes(t), hasBox: async () => { throw new Error("400"); },
+      hasTransaction: async () => false,
+      submit: async (s, id) => { if (await n.hasTransaction(id)) throw new Error("inputs spent"); return n.submit(s, id); } };
+    const p = publisher([blind]);
+    await p.publish(request(new Uint8Array(136).fill(1)));
+    await p.publish(request(new Uint8Array(136).fill(2)));
+    expect(n.pool).toHaveLength(2);
   });
 
   it("sends a dropped transaction again before the one that spends its change", async () => {
