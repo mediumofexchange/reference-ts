@@ -80,18 +80,9 @@ both venues (CI). Next run: M3 (Next 1).
   recovery need separate provisioning authority. Configuration/mainnet remain disabled.
 
 ## Open questions
-- 2026-09-28, non-blocking: `site/index.html` says the wallet and external witness
-  write side "remain to be built"; the v3 wallet, single-backing recovery and Ergo
-  publication exist as unadopted candidates. A site push is live deployment, so it
-  needs authorization: edit that sentence to e.g. "Single-backing recovery, a
-  seed-restorable wallet and Ergo publication run as unadopted candidates;
-  configuration adoption and multi-backing remain." and push `site` main.
 - No service delivery blocker remains. Server timeout followed by eventual
   journal completion has source review, without a direct timed acceptance case.
 - Disk streaming and physical custody remain separate persistence boundaries.
-- Deletions refused by the classifier (non-blocking): `git rm` the unused shims
-  `scripts/pool/v3/{receipt-state,non-service}.mjs` and, after `local-replay.mjs` imports
-  from `dist/pool/v3/{scope-evidence,terms}.js`, `scope-evidence.mjs`.
 
 Roughly **62% done / 38% remaining**, plausible range **52–72%**, reassessed 2026-09-28 (the
 multi-backing reader and journal are in; wallet multi-backing, configuration adoption, qualified storage, mainnet remain).

@@ -16,7 +16,8 @@ import { classifyScopes } from "../../../dist/pool/v3/scope-reader.js";
 import { classifyImports } from "../../../dist/pool/v3/import-reader.js";
 import { servedTrail } from "../../../dist/pool/v3/served-trail.js";
 import { LIMITS, readLocalEvidence } from "./evidence-reader.mjs";
-import { resolveTerms, rootTermsOf } from "./scope-evidence.mjs";
+import { resolveTerms } from "../../../dist/pool/v3/scope-evidence.js";
+import { decodeRootTerms } from "../../../dist/pool/v3/terms.js";
 import { boundFaultInputs, faultObserver } from "./fault-evidence.mjs";
 
 export { RANGE_LIMITS };
@@ -125,11 +126,11 @@ export async function replayLocalPackage(input, verifier, codec) {
     // verifying supplied field; a failing one is ignored, and without any the
     // terms are missing evidence, so the read is unresolved.
     const suppliedTrails = [trail, ...decodedTrails(byteList(supplied.trails, "trails"))];
-    const signedTerms = header.entries.map((entry, i) => resolveTerms(codec, suppliedTrails, sha256(trail.header), entry, i));
+    const signedTerms = header.entries.map((entry, i) => resolveTerms(suppliedTrails, sha256(trail.header), entry, i));
     if (signedTerms.some(field => field === undefined)) throw new EvidenceRefusal("unresolved-evidence");
     // Resolution verified the selected field's signature and its name as the
     // selected backing (readLocalEvidence binds the backing to the header).
-    const terms = rootTermsOf(codec, signedTerms[selectedEntry]);
+    const terms = decodeRootTerms(signedTerms[selectedEntry].terms);
     requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
     // Without venue evidence only the original scope is supported. A successor
     // empty book needs the same term-by-term descent as a nonempty import.
