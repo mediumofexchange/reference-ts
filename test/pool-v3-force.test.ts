@@ -28,9 +28,9 @@ function withdrawal(d: Uint8Array, signer = presenterSecret): Uint8Array {
     proof: new Uint8Array(), authorization: new Uint8Array(64), capsules: [] };
   return encodeRecord({ ...record, authorization: ed25519.sign(withdrawalBytes(record), signer) });
 }
-function settle(d: Uint8Array, deadline = 12n, nf = 101n, output = 301n, signer = presenterSecret): Uint8Array {
+function settle(d: Uint8Array, deadline = 12n, nf = 101n, output = 301n, signer = presenterSecret, quantity = 5n): Uint8Array {
   const id = statementHash(decodeRecord(d));
-  const record: Record = { domain, kind: 6, publicInputs: [...prefix, ...limbsOf(backing), 5n, 88n, 99n,
+  const record: Record = { domain, kind: 6, publicInputs: [...prefix, ...limbsOf(backing), quantity, 88n, 99n,
     EMPTY_NOTE_ROOT, EMPTY_NOTE_ROOT, nf, 102n, output, ...limbsOf(id)], proof: b(8), authorization: new Uint8Array(136), capsules: [] };
   const acceptance = { domain, demand: id, owner: 88n, deadline };
   return encodeRecord({ ...record, authorization: encodeSettlementAuthorization(deadline,
@@ -79,6 +79,9 @@ describe("publication force over the snapshot forest", () => {
     await refuses(state, withdrawal(d, b(6)), "SIGNATURE");
     await refuses(state, settle(d, 12n, 101n, 301n, b(6)), "SIGNATURE");
     await refuses(state, settle(d, 12n, 201n), "TAGS");
+    // A slot the demand tagged 0 carrying value, signed by both parties: the tag check passes
+    // it, so only the demand's quantity keeps the settlement to the named claims (C3.5, invariant 27).
+    await refuses(state, settle(d, 12n, 101n, 301n, presenterSecret, 6n), "QUANTITY");
     const spent = openForceState(state); spent.nullifiers.add(101n);
     await refuses(spent, settle(d, 12n, 101n, 301n, b(6)), "SPENT");
     const output = openForceState(state); output.outputsSeen.add(301n);
