@@ -50,7 +50,7 @@ describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
   });
 
   /** The payer wallet holds two issued notes of `funds`; a receiver and an operator fee recipient request payment. */
-  async function fixture(funds: readonly bigint[] = [10n, 6n]) {
+  async function fixture(funds: readonly bigint[] = [10n, 6n], readerVerifier: typeof verifier | { verify: (...args: Parameters<typeof verifier.verify>) => Promise<boolean> } = verifier) {
     mkdirSync(scratch, { recursive: true });
     const directory = mkdtempSync(join(scratch, "v3-payer-test-")); directories.push(directory);
     const venue = FixtureVenue.reference(label, lag);
@@ -58,7 +58,7 @@ describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
       interval: 20n, payout: { thing: "payer units", quantumExponent: 0, perUnit: 1n } });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
-    const reader = { configuration, venue, reference, verifier };
+    const reader = { configuration, venue, reference, verifier: readerVerifier };
     const open = (name: string) => { const wallet = new V3Wallet(join(directory, `${name}.db`), reader); wallets.push(wallet); return wallet; };
     const payer = open("payer"), receiver = open("receiver");
     const j = new V3OperatorJournal(join(directory, "journal.db"), { configuration, venue, reference, verifier, secret: operatorSecret });
@@ -232,6 +232,22 @@ describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
     expect(view.holdings.map(h => [h.cm, h.value, h.status])).toEqual([[change.cm, 4n, "available"]]);
     expect(f.payer.payment("shop")).toMatchObject({ status: "failed", final: undefined, inputs: payment.inputs });
     await expect(f.j.submit(payment.record)).rejects.toMatchObject({ code: "REFUSED" });
+  });
+
+  it("answers an exact retry with the saved record when the winner reserved the only note during its read", async () => {
+    let gate: Promise<void> | undefined, release = () => {}, entered = () => {};
+    const blocked = new Promise<void>(resolve => { entered = resolve; });
+    const f = await fixture([10n], { verify: async (...args) => {
+      const held = gate;
+      if (held !== undefined) { gate = undefined; entered(); await held; }
+      return verifier.verify(...args);
+    } });
+    gate = new Promise(resolve => { release = resolve; });
+    const late = f.payer.prepare("shop", f.order, f.served, f.signed, prove);
+    await blocked;
+    const winner = await f.payer.prepare("shop", f.order, f.served, f.signed, prove);
+    release();
+    expect(await late).toEqual(winner);
   });
 
   it("refuses the same alias with another order, including a concurrent one", async () => {

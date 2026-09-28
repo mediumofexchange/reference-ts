@@ -408,6 +408,12 @@ export class V3Wallet {
     requireThat(theirs.every(cm => taken.get(cm.toString()) === undefined), "CONFLICT", "request is already in a saved payment");
 
     const view = await this.frontier(packageBytes, signed), { canonical, force, notes, at } = view;
+    // A concurrent exact call may have saved while this one read: answer it before selection.
+    const racing = sameOrder();
+    if (racing !== undefined) {
+      requireThat(racing, "CONFLICT", "alias names another payment order");
+      return this.payment(name)!;
+    }
     requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
     requireThat(theirs.every(cm => !canonical.state.outputsSeen.has(cm)), "CONFLICT", "request is already paid");
     const header = this.headerOf(view.bytes, canonical.segment, canonical.scope, backing);
