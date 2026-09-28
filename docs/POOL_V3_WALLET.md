@@ -283,7 +283,7 @@ without freezing, submit and fulfillment completions racing the freeze, an
 interleaved destination, continuation of pending work including reproof after
 takeover, and seed restoration of holdings with change.
 `npm run check:pool:v3-wallet` exercises fresh processes at request, fulfillment,
-payment, reproof, export and restore commit boundaries with synthetic evidence. These are process-exit
+payment, receipt, reproof, export and restore commit boundaries with synthetic evidence. These are process-exit
 tests, not physical power-loss or qualified-storage evidence.
 
 The real-proof `scripts/pool/v3/store-check.mjs` obtains the payment request

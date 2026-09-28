@@ -205,7 +205,10 @@ proofs on reference venues. They provide no live-chain finality, adopted configu
 custody, recovery admission, imports or replacement service. The synthetic
 chain's difficulty permits anyone to re-mine it, so its independent pin remains
 an explicit trust input. Restart replay does not establish publisher or venue
-persistence across a process restart.
+persistence across a process restart. `npm run check:pool:v3-journal` kills a
+fresh process before and after the COMMIT of an opening, an admission and a
+checkpoint; the next process returns the exact reply, publishes the outbox and
+signs the next sequence (synthetic venue and proof oracle, not power loss).
 
 The recovery acceptance is `npm run check:pool:v3-recovery`, and
 `npm run check:pool:v3-recovery -- --ergo` for the synthetic Ergo reference.
