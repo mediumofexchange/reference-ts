@@ -15,7 +15,9 @@ verification of issuance and conservation. The guarded v3 candidate runtime
 supports issue, payment, burn and single-backing recovery on local and synthetic
 reference venues, with historical live testnet acceptance. Its configuration
 is unadopted; succession and bounded venue/publisher process persistence run on
-reference venues. Wallet integration and qualified deployment storage remain open.
+reference venues. A [v3 receiver wallet](docs/POOL_V3_WALLET.md) persists exact
+requests and independently verified final fulfillment. Payer/service integration
+and qualified deployment storage remain open.
 
 A frozen v2 [local Node 24 service and client](docs/POOL_SERVICE.md) expose durable
 pool submission, commitment and publication retry. A [local wallet fixture](docs/POOL_WALLET.md)
