@@ -3,7 +3,7 @@
   "specification": "786f962",
   "node": "v24.21.0",
   "platform": "linux",
-  "elapsedMs": 28891,
+  "elapsedMs": 37993,
   "candidateDomain": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
   "backing": "b2ba4542689d5c78f19e03b18b94954356be31526ea4c7a23cdd105138dfaec6",
   "venue": {
@@ -12,7 +12,7 @@
     "id": "55ae0a5d111ed4e8e93056315c03554c262c329b02ebae1fc458f409ae34974c",
     "anchor": "e82e1330effedb38f0962713a8462fd54117e2231bad8f2c9880ca43d596a7f1",
     "depth": "1",
-    "witnessedBlock": "c4be140a016f1cb1b492a0448139a2d055db04bb0ece2f29c109d4eeb7d18add",
+    "witnessedBlock": "9e8e50541e6a806b2fafa99d60c2b0ae454b2162ae63d4bfb01445c8b05f8fd1",
     "tipHeight": "900010",
     "funding": "invented synthetic box",
     "publisher": "ErgoPublisher"
@@ -22,7 +22,7 @@
     "the journal runs only on a venue whose identity recomputes from its reference preimage",
     "the operator opens and publishes the genesis segment the backer's terms name",
     "the backer proves and signs issue 10 to the payer's request; the journal admits, commits and publishes",
-    "the payer spends its restored note: 7 to the receiver, a fee of 1 to the operator's request, change 2",
+    "the payer wallet pays 7 to the receiver and a fee of 1 to the operator's request from its restored note, change 2",
     "the receiver independently replays the HTTP service package and durably fulfills its saved exact request once",
     "the receiver burns 5 of its restored 7 with change 2",
     "admission refuses a real proof moved to another statement, a changed public input and a valid double spend",
@@ -39,31 +39,31 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1303
+      "elapsedMs": 1681
     },
     {
       "label": "pay 7, fee 1, change 2",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 2520
+      "elapsedMs": 3466
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 1980
+      "elapsedMs": 2910
     },
     {
       "label": "double spend refused",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 2422
+      "elapsedMs": 3442
     },
     {
       "label": "issue 10 again",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 778
+      "elapsedMs": 1119
     }
   ],
   "packageBytes": 48250,
@@ -102,6 +102,7 @@
     "dist/pool/v3/fault-observer.js": "8e451cc37aacc78f3fd40b348d6b968650eb3a9925e64c3ce9ab1633d2db510f",
     "dist/pool/v3/guard.js": "022fcfe559809db0681cc0aeedb1ebba030f9f4964853fc8def2b7b0418f088e",
     "dist/pool/v3/headers.js": "932184def09c7f76e27da3699f9d205bc56677df742a0285cdf5fd45b3a9c6ff",
+    "dist/pool/v3/holdings.js": "8e1a651e202ebea601c7138255cac02a408e5e93d58a2a50e0d14e56b9f9220c",
     "dist/pool/v3/import-reader.js": "9711c8e718d6806cf216e0ba42cd52b271f7a137b7519f51c1f8c69a85440257",
     "dist/pool/v3/non-service.js": "769032123e29fef40b8a2d665aa887e97685104158f123e5abde024ff7119156",
     "dist/pool/v3/package-reader.js": "eeeda307de67c152f4b0f836c9ba082873614f07448c6d3fda78090d8ccd07a3",
@@ -123,7 +124,7 @@
     "dist/pool/v3/terms.js": "7a7c4432cb7b49b8e8e5018829567946b2c2aebaf9ca13c4f3f8cb79d0d547f5",
     "dist/pool/v3/trail.js": "2dab50c14cf643e9cfddf742b5b30c82a69e177f1471a4992cebca7ac598cbfc",
     "dist/pool/v3/wallet-request.js": "0ffd6ad1f6252063186c1b46aca52f78bedb3be7523f7fe8dba0a768ea1e231f",
-    "dist/pool/v3/wallet-store.js": "24cd4df90ac558b5fda287447cb69f0a74590c53c3e75b857e14b3973b786611",
+    "dist/pool/v3/wallet-store.js": "4abc6932b981edcf06602984dd8bf6885214df0de57572c6a31355e51d7b6671",
     "dist/pool/v3/witness.js": "e4e2cce534c8d54cdec4ad899897b0d315c3528a2b0c80a9cc2a9e33a289f508",
     "dist/presentation.js": "6ad4dae46ede448079dc0dd824fe1b12bc770b204f9d84b20facafa8dc308dac",
     "dist/record-range.js": "d7e1c2f8cb58256abbbce621e32f152c021e55a7eb0471dbbd906a07c6c23a8c",
@@ -159,7 +160,7 @@
     "scripts/pool/v3/scope-evidence.mjs": "bdb32a7d393cd77263c6d1b60f3503905fbe229387d7b348a1a902d160aacaed",
     "scripts/pool/v3/scope-recovery.mjs": "e6713678128bf80bebdb53e2a8b93bc45863485bfffa7e4c455832166de94a0a",
     "scripts/pool/v3/scope-replay.mjs": "99519763746d9b17e10dc3b125f84b38189e35bd1b67f1a6b2a2745355dcc86f",
-    "scripts/pool/v3/store-check.mjs": "fa56ce6b95c341b2bc84c03d8f2b37df22d9e5dd93404f379494d8246ecca8b3",
+    "scripts/pool/v3/store-check.mjs": "838cc83340aa43ef19c2866de526c578656e0c29b4b24ff254b78933634a3c5f",
     "scripts/pool/v3/testnet.mjs": "a3d4b1c379d1368148fa9d306dcd78ccf509e5e9724cd9649f5664fcddc7124a",
     "src/backing.ts": "e37951e05273c9280aa2dcab7a3dedc510189e5f43de06a2e1f2a73a9415aaa4",
     "src/bytes.ts": "7b78d53db688cb16092e2fdcb0689968f3e8f6765f56303abfb50816b2a6f3bd",
@@ -192,6 +193,7 @@
     "src/pool/v3/fault-observer.ts": "1e46252e83438d024b8b42fac837e924bc7be3b01147c94d24e30646abe08f26",
     "src/pool/v3/guard.ts": "aeb6252e1f9ba92d1d8ac9d047ef74c9e87b8b9e385edcbf5758621536d06a5b",
     "src/pool/v3/headers.ts": "2c9c9969dd43c07c1125f07625c94f7ad995b8c0c1274692eeed426ff26c4618",
+    "src/pool/v3/holdings.ts": "5c713c378b6de55f9bb8332dc678ba76d24204c60e1f94d8a222c429acc3f29a",
     "src/pool/v3/import-reader.ts": "ae19e4dec2c8cfa0b7ff34f592f59dd1a40b1a014f70f2976b565d1b8567c3d1",
     "src/pool/v3/non-service.ts": "fe5dae1935d54c6214071e536f30eec049cd6e3f4b63995e5ba1ec5a675140e5",
     "src/pool/v3/package-reader.ts": "3c053f878e90ff13646d36316cb454963085b2d86ec90023c07d476917ba8a83",
@@ -213,7 +215,7 @@
     "src/pool/v3/terms.ts": "d70b26e03d11e303f88b6a19d396cea01cb74275891b8fe898d195b35faeff04",
     "src/pool/v3/trail.ts": "2b3f5e5cf4b8828080b1706f303bfad785388cf9518671ddfea7ac07e330097a",
     "src/pool/v3/wallet-request.ts": "28932005b121a58b5727d56755c5ad94867f458c7a4e206c9765ccdc352076d0",
-    "src/pool/v3/wallet-store.ts": "c7603996e2963d404ffabc96cbcd3d1183417699eaa69a110f912fc153cff5d6",
+    "src/pool/v3/wallet-store.ts": "2b8f77705968b8745f1582d2bc861cb299aaaf0dceefb9668629618bc11cc27a",
     "src/pool/v3/witness.ts": "3d48d91112d90bdf8c5a07b1df7878d130c5c9cc1a9437278e54588f2105e760",
     "src/presentation.ts": "adcd73c862129f4ccd4d02b14df16c0f701127f3d8d504f0bb91e91734b46bb3",
     "src/record-range.ts": "0658a6592bba3883c5f9c7fd368cdee07f9fe8049ab5ee041af40df78577a840",
@@ -241,10 +243,10 @@
       "issued": "10",
       "burned": "5",
       "outstanding": "5",
-      "noteRoot": "10560688977898515759983772262632820303210192593223215895508729474807317808799",
-      "spentRoot": "c1feaed73a897cc69bb7d7892975e01302152b7e513df2e5044a6bc03561d078",
-      "historyHash": "f9ec309dcede2d5dca1b072ca1b72085b9d91fa73d31f85d23bbccc9f6ace9df",
-      "evidenceHash": "cb1eca1dca6efbedefb206480d11f14cfc7aea34be786faba511d6560f8ad172",
+      "noteRoot": "7420390164074040160702489913881069197136630161405800569141519822562912874876",
+      "spentRoot": "523672f70ed95bd620452fadbca774dfd1ea3fc6f4727cfb50f8fe6ee74c5c39",
+      "historyHash": "bb4295d9a00e27496acf0f8809892050424a404abad08185fa930eaa54a9d3e9",
+      "evidenceHash": "d370af392a1a61dc8a6bee192380555645ebbb18674ec1e64198f154ed56c013",
       "range": {
         "judgingIndex": "8",
         "lag": "2",
@@ -304,10 +306,10 @@
         "issued": "10",
         "burned": "5",
         "outstanding": "5",
-        "noteRoot": "10560688977898515759983772262632820303210192593223215895508729474807317808799",
-        "spentRoot": "c1feaed73a897cc69bb7d7892975e01302152b7e513df2e5044a6bc03561d078",
-        "historyHash": "f9ec309dcede2d5dca1b072ca1b72085b9d91fa73d31f85d23bbccc9f6ace9df",
-        "evidenceHash": "cb1eca1dca6efbedefb206480d11f14cfc7aea34be786faba511d6560f8ad172",
+        "noteRoot": "7420390164074040160702489913881069197136630161405800569141519822562912874876",
+        "spentRoot": "523672f70ed95bd620452fadbca774dfd1ea3fc6f4727cfb50f8fe6ee74c5c39",
+        "historyHash": "bb4295d9a00e27496acf0f8809892050424a404abad08185fa930eaa54a9d3e9",
+        "evidenceHash": "d370af392a1a61dc8a6bee192380555645ebbb18674ec1e64198f154ed56c013",
         "range": {
           "judgingIndex": "8",
           "lag": "2",
@@ -349,15 +351,15 @@
       },
       "candidates": [
         {
-          "cm": "4623786006573076541364966135005293910893228590873922051892291358979561019761",
-          "nf": "15527193401356966692530891698687495027178704286204689887173586320073930824315",
+          "cm": "7618246669866153341195963379594103903184465199204213165031701648419976190767",
+          "nf": "10559267915695575081494794537243461062265749198536667123751142198994334241000",
           "value": "2",
           "leaf": "5",
-          "anchor": "10560688977898515759983772262632820303210192593223215895508729474807317808799",
+          "anchor": "7420390164074040160702489913881069197136630161405800569141519822562912874876",
           "siblings": [
-            "10926618549965629033098522085785336007861600508202226846645366385848895825261",
+            "8386023699952047584930136490001325865941261961921083845202515686188576508254",
             "16257989699773466206393016511488115181357775227253857822747532441271299011144",
-            "5391125758298781872077454447472554516081713867330871689272333076652303108434",
+            "10498662463221491045270048064143028998820437143397226232584394498757352691367",
             "1935094829533267935830464563796710052445228582946993128186972021230315590035",
             "18383913181606838331795460117774658566856597132399717689821053927504534850729",
             "6650121914657515867260011416921319045587517571339686030450569779952452434446",
@@ -444,10 +446,10 @@
         "issued": "10",
         "burned": "5",
         "outstanding": "5",
-        "noteRoot": "10560688977898515759983772262632820303210192593223215895508729474807317808799",
-        "spentRoot": "c1feaed73a897cc69bb7d7892975e01302152b7e513df2e5044a6bc03561d078",
-        "historyHash": "f9ec309dcede2d5dca1b072ca1b72085b9d91fa73d31f85d23bbccc9f6ace9df",
-        "evidenceHash": "cb1eca1dca6efbedefb206480d11f14cfc7aea34be786faba511d6560f8ad172",
+        "noteRoot": "7420390164074040160702489913881069197136630161405800569141519822562912874876",
+        "spentRoot": "523672f70ed95bd620452fadbca774dfd1ea3fc6f4727cfb50f8fe6ee74c5c39",
+        "historyHash": "bb4295d9a00e27496acf0f8809892050424a404abad08185fa930eaa54a9d3e9",
+        "evidenceHash": "d370af392a1a61dc8a6bee192380555645ebbb18674ec1e64198f154ed56c013",
         "range": {
           "judgingIndex": "8",
           "lag": "2",
@@ -489,15 +491,15 @@
       },
       "candidates": [
         {
-          "cm": "10237417308485628418847305918071656818276314211116088118295983857760747155242",
-          "nf": "21815417671279373993682271628351947080677661174665587607103610009092855876946",
+          "cm": "16260853432490735295407058977562303863967746081363584580155985191848402496126",
+          "nf": "17529679491964911992855589886714255902521745603868341732217417430935151934819",
           "value": "2",
-          "leaf": "3",
-          "anchor": "10560688977898515759983772262632820303210192593223215895508729474807317808799",
+          "leaf": "2",
+          "anchor": "7420390164074040160702489913881069197136630161405800569141519822562912874876",
           "siblings": [
-            "8386023699952047584930136490001325865941261961921083845202515686188576508254",
-            "13726149706595666623854941499696588022017556697163087674177023994419226303049",
-            "15859494058254426222026074048537263444247528681317075782008605056949355386799",
+            "649767751505600205366175967264400356886097093055449390791212604951276259112",
+            "4435660274878846708709791421652298585572042858594433753412641441024169347352",
+            "10543370109424587958815746706267841855926416518936239068457136657590691255948",
             "1935094829533267935830464563796710052445228582946993128186972021230315590035",
             "18383913181606838331795460117774658566856597132399717689821053927504534850729",
             "6650121914657515867260011416921319045587517571339686030450569779952452434446",
@@ -529,7 +531,7 @@
             "3490399488954770152131810821200763799606626796619604090245668179171764908058"
           ],
           "right": [
-            true,
+            false,
             true,
             false,
             false,
@@ -584,10 +586,10 @@
         "issued": "10",
         "burned": "5",
         "outstanding": "5",
-        "noteRoot": "10560688977898515759983772262632820303210192593223215895508729474807317808799",
-        "spentRoot": "c1feaed73a897cc69bb7d7892975e01302152b7e513df2e5044a6bc03561d078",
-        "historyHash": "f9ec309dcede2d5dca1b072ca1b72085b9d91fa73d31f85d23bbccc9f6ace9df",
-        "evidenceHash": "cb1eca1dca6efbedefb206480d11f14cfc7aea34be786faba511d6560f8ad172",
+        "noteRoot": "7420390164074040160702489913881069197136630161405800569141519822562912874876",
+        "spentRoot": "523672f70ed95bd620452fadbca774dfd1ea3fc6f4727cfb50f8fe6ee74c5c39",
+        "historyHash": "bb4295d9a00e27496acf0f8809892050424a404abad08185fa930eaa54a9d3e9",
+        "evidenceHash": "d370af392a1a61dc8a6bee192380555645ebbb18674ec1e64198f154ed56c013",
         "range": {
           "judgingIndex": "8",
           "lag": "2",
@@ -632,12 +634,12 @@
           "cm": "8386023699952047584930136490001325865941261961921083845202515686188576508254",
           "nf": "11869996675337531212144006180184538099826728216874820392164100206825956025854",
           "value": "1",
-          "leaf": "2",
-          "anchor": "10560688977898515759983772262632820303210192593223215895508729474807317808799",
+          "leaf": "4",
+          "anchor": "7420390164074040160702489913881069197136630161405800569141519822562912874876",
           "siblings": [
-            "10237417308485628418847305918071656818276314211116088118295983857760747155242",
-            "13726149706595666623854941499696588022017556697163087674177023994419226303049",
-            "15859494058254426222026074048537263444247528681317075782008605056949355386799",
+            "7618246669866153341195963379594103903184465199204213165031701648419976190767",
+            "16257989699773466206393016511488115181357775227253857822747532441271299011144",
+            "10498662463221491045270048064143028998820437143397226232584394498757352691367",
             "1935094829533267935830464563796710052445228582946993128186972021230315590035",
             "18383913181606838331795460117774658566856597132399717689821053927504534850729",
             "6650121914657515867260011416921319045587517571339686030450569779952452434446",
@@ -670,8 +672,8 @@
           ],
           "right": [
             false,
-            true,
             false,
+            true,
             false,
             false,
             false,
@@ -764,10 +766,10 @@
         "issued": "10",
         "burned": "5",
         "outstanding": "5",
-        "noteRoot": "10560688977898515759983772262632820303210192593223215895508729474807317808799",
-        "spentRoot": "c1feaed73a897cc69bb7d7892975e01302152b7e513df2e5044a6bc03561d078",
-        "historyHash": "f9ec309dcede2d5dca1b072ca1b72085b9d91fa73d31f85d23bbccc9f6ace9df",
-        "evidenceHash": "cb1eca1dca6efbedefb206480d11f14cfc7aea34be786faba511d6560f8ad172",
+        "noteRoot": "7420390164074040160702489913881069197136630161405800569141519822562912874876",
+        "spentRoot": "523672f70ed95bd620452fadbca774dfd1ea3fc6f4727cfb50f8fe6ee74c5c39",
+        "historyHash": "bb4295d9a00e27496acf0f8809892050424a404abad08185fa930eaa54a9d3e9",
+        "evidenceHash": "d370af392a1a61dc8a6bee192380555645ebbb18674ec1e64198f154ed56c013",
         "range": {
           "judgingIndex": "8",
           "lag": "2",
@@ -826,10 +828,10 @@
         "issued": "10",
         "burned": "5",
         "outstanding": "5",
-        "noteRoot": "10560688977898515759983772262632820303210192593223215895508729474807317808799",
-        "spentRoot": "c1feaed73a897cc69bb7d7892975e01302152b7e513df2e5044a6bc03561d078",
-        "historyHash": "f9ec309dcede2d5dca1b072ca1b72085b9d91fa73d31f85d23bbccc9f6ace9df",
-        "evidenceHash": "cb1eca1dca6efbedefb206480d11f14cfc7aea34be786faba511d6560f8ad172",
+        "noteRoot": "7420390164074040160702489913881069197136630161405800569141519822562912874876",
+        "spentRoot": "523672f70ed95bd620452fadbca774dfd1ea3fc6f4727cfb50f8fe6ee74c5c39",
+        "historyHash": "bb4295d9a00e27496acf0f8809892050424a404abad08185fa930eaa54a9d3e9",
+        "evidenceHash": "d370af392a1a61dc8a6bee192380555645ebbb18674ec1e64198f154ed56c013",
         "range": {
           "judgingIndex": "8",
           "lag": "2",
@@ -871,15 +873,15 @@
       },
       "candidates": [
         {
-          "cm": "4623786006573076541364966135005293910893228590873922051892291358979561019761",
-          "nf": "15527193401356966692530891698687495027178704286204689887173586320073930824315",
+          "cm": "7618246669866153341195963379594103903184465199204213165031701648419976190767",
+          "nf": "10559267915695575081494794537243461062265749198536667123751142198994334241000",
           "value": "2",
           "leaf": "5",
-          "anchor": "10560688977898515759983772262632820303210192593223215895508729474807317808799",
+          "anchor": "7420390164074040160702489913881069197136630161405800569141519822562912874876",
           "siblings": [
-            "10926618549965629033098522085785336007861600508202226846645366385848895825261",
+            "8386023699952047584930136490001325865941261961921083845202515686188576508254",
             "16257989699773466206393016511488115181357775227253857822747532441271299011144",
-            "5391125758298781872077454447472554516081713867330871689272333076652303108434",
+            "10498662463221491045270048064143028998820437143397226232584394498757352691367",
             "1935094829533267935830464563796710052445228582946993128186972021230315590035",
             "18383913181606838331795460117774658566856597132399717689821053927504534850729",
             "6650121914657515867260011416921319045587517571339686030450569779952452434446",
@@ -985,7 +987,7 @@
   "limits": [
     "Candidate configuration from the independently held manifest; actual ErgoPublisher transactions mined by a synthetic supplier and read through ErgoVenue under a recomputed synthetic reference identity. The seedless reader independently holds the witnessed block pin: difficulty 1 permits anyone to re-mine a heavier chain. Invented funding; no live node, network deployment, adopted domain or real-chain finality.",
     "One genesis segment of one backing: no imports, recovery kinds, replacement, second backing or silence/non-service clause. The journal reads the venue's full ranges on every operation.",
-    "The receiver wallet persists an exact request and final fulfillment across reopening. Submission, commitment, publication and evidence retrieval use the authenticated loopback v3 service. Payer custody, receiver invitation transport and fee quotes remain outside this fixture; holders restore paths and prove through the existing reader/prover.",
+    "The payer wallet restores its note from the served package, selects and pads its inputs, prepares its own change and zero outputs beside the receiver's and operator's exact requests, proves through the runtime prover, saves and submits the exact record, and reconciles it final. The receiver wallet persists an exact request and final fulfillment across reopening. Submission, commitment, publication and evidence retrieval use the authenticated loopback v3 service. Receiver invitation transport and fee quotes remain outside this fixture; the burn and hostile cases restore paths and prove through the existing reader/prover.",
     "Restart replay is exercised once here; restarts mid-publication and exact retry across restarts are slice 5."
   ]
 }

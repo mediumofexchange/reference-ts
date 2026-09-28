@@ -3,66 +3,70 @@
 Updated: 2026-09-28
 
 ## Goal
-Continue slice 6 after the accepted loopback v3 service: authenticated receiver
-request delivery, payer custody and complete ordinary payment. The service now
-transports submit/commit/publish and published evidence over the existing journal;
-independent receiver replay establishes fulfillment. Payer reservations, receiver
-invitations, restoration, public deployment and v2 retirement remain outside this
-delivered capability. No normative change or companion branch.
+Slice 6b delivered by PR #31 from `feat/v3-payer` (no companion branch or normative
+change): one `V3Wallet` seed receives and pays. It restores single-backing
+holdings from the independently read current frontier (C4.6 seed scan,
+`holdings.ts`), selects one note or the least-total pair, pads, adds own
+change/zero outputs beside the payee's and optional fee recipient's exact requests
+(pool-fees C1.2.3–5) in shuffled order, requires the local prover's record to be
+the task and to verify, and saves it with permanent input/output reservations
+before returning it. `submit` keeps the first receipt matching the saved record;
+`sync` marks payments final (all outputs in canonical history, imports included)
+or failed (an input spent otherwise). Stop boundary kept: no reproof/release
+after lapse, multi-backing, request transport, backup or deployment claim.
 
 ## Status
-- Service PR #30: implementation `b0622b1`, final timeout assertion `3ceb307`.
-  All seven jobs passed in [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36383083132):
-  Node 20/24 checks and Linux/Windows real-proof suites. Independent design and
-  integrated adversarial review found no blockers. Focused tests and separate
-  processes cover changed-proof retry, lost completed reply, restart and fencing.
-- The delivery commit changes only this handoff, specification links and the
-  retained Linux journal report; it reuses that unchanged runtime/test baseline.
-  All six current reports match their bound sources. No local job remains.
-  Inspect the latest main CI on resume; delivery does not preclaim its result.
-  V2 modules and wire profiles remain frozen.
+- Commits `74f7a89` (wallet), `9ea0feb` (review fixes), `886cd1e` (concurrent
+  retry fix), `b9ea5d3` (harness, docs). Independent adversarial review found two
+  major issues (finality across succession, alias retry with another order) and
+  five minor ones. All were fixed and read back, with regression tests that fail
+  on the old code where deterministic.
+- Oracle tests: 13 payer and 11 receiver cases; `check:pool:v3-wallet` passes six
+  abrupt exits including payment before/after COMMIT. Real-proof `store-check.mjs`
+  paid through the wallet over HTTP locally (14 checks, 5 proofs, before the last
+  retry fix). Its fresh-process worker is now asynchronous: `spawnSync` blocked the
+  in-process service, so an overdue keep-alive close raced the next fetch.
+- PR #31 at `b9ea5d3`: all seven jobs passed in
+  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36389184603)
+  (Node 20/24 checks, v2 pool and v3 real-proof suites on Linux/Windows). A local
+  re-record/`npm run check` chain was reaped under host memory pressure (2.3 of
+  15.9 GB free), so the journal report is that run's Linux `--ergo` artifact; all
+  six current reports match their bound sources. The delivery commit changes
+  only this handoff and that report. V2 remains frozen.
 
 ## Evidence
-- Service API, independent authority and interrupted-operation limits:
-  [guide](docs/POOL_V3_SERVICE.md). Separate-process acceptance uses oracle proofs;
-  real-proof HTTP acceptance passed through the journal harness on both platforms.
-- Receiver API, caller obligations and test boundaries: [guide](docs/POOL_V3_WALLET.md).
-  Local plaintext custody, one active copy, authenticated request delivery and
-  independent evidence retention are preconditions; no physical-storage claim.
-- Design, rejected alternatives, review correction and scalability plan:
-  [persistence decision](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox).
-  Usage/limits: [venue guide](docs/ERGO_VENUE_PROFILE.md#durable-reference-view-and-publisher).
-- Full checkpoints rewrite/revalidate retained history. Raw sections stay in
-  memory; retainedBytes still bounds objects only. Supplier quotas reset on process
-  restart. Streaming disk rows and complete-index cursors retaining non-held
-  records are planned scalability work. Uncertain writes poison the instance;
-  reopen can recover an earlier committed view. Malicious rollback is not covered.
+- Wallet API, custody preconditions and payment limits: [guide](docs/POOL_V3_WALLET.md).
+  Open silence clocks and published-but-not-yet-effective handovers are not
+  refused before preparation; such inputs stay reserved until reproof/release.
+- Service API and interrupted-operation limits: [guide](docs/POOL_V3_SERVICE.md).
+- Persistence design and scalability plan:
+  [decision](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox);
+  full checkpoints still rewrite retained history and raw sections stay in memory.
 - Current reports: [journal](docs/pool-v3-store-verification.json),
   [replay](docs/pool-v3-local-replay-verification.json),
   [recovery](docs/pool-v3-recovery-store-verification.json),
   [Ergo recovery](docs/pool-v3-recovery-store-ergo-verification.json),
   [succession](docs/pool-v3-succession-store-verification.json) and
   [Ergo succession](docs/pool-v3-succession-store-ergo-verification.json).
-  They prove the existing runtime flows; process persistence is separate synthetic
-  crash evidence. Live recovery remains historical at
+  Live recovery is historical at
   [a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json),
-  prior live journal/publisher at `2c6b20c`. Header and real-mainnet reader reports
-  are historical at `6e4cea8` after their bound modules changed.
+  live journal at `2c6b20c`; header and mainnet reader reports at `6e4cea8`.
 
 ## Next
-1. Continue slice 6: authenticated receiver requests, payer reservations and exact
-   pending statements, four-output selection with fees/funding disclosure, holder
-   recovery, restoration and backup. Start with the authenticated request and
-   saved payer-statement boundary; port relevant frozen v2 cases.
-   Stay with this instance for the next adjacent payer/receiver capability.
+1. Continue slice 6: reproof of a pending payment after lapse or term end (same
+   inputs and outputs in the successor segment, pool-fees C1.2.5) and an explicit
+   open-silence-clock refusal before preparation. Reservations are permanent
+   today; then authenticated receiver invitation transport, encrypted backup and
+   restoration drills; port the remaining frozen v2 delivery/pairing/backup cases.
 2. Retire v2 only after its wallet/service cases pass on v3; then
    multi-backing including compact fault orchestration (slice 7).
 3. Configuration adoption: provenance, ACIR identities/certificates, replay/import
    bounds, one-transaction condition and BN254 margin. Mainnet needs separate authority.
 4. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with
    existing dependencies (size-only probe); lifetime streaming is separate design.
-5. On touching affected files: shared byte helpers/caller ownership; Ergo section
-   versus transaction charging; applyRecord history check follows effects;
+5. On touching affected files: `local-replay.mjs` candidates should call
+   `holdings.ts` (re-records six reports); fold `fulfill` into `sync`; shared
+   byte helpers/caller ownership; Ergo section versus transaction charging; applyRecord history check follows effects;
    served-trail caller-object cache. Check v3 successors for v2 intake issues.
 6. Only when a gate needs them: cancellation, batching, index-free box source,
    venue-moving record, slowest-supplier clock, multi-entry extension fixture,
@@ -87,6 +91,7 @@ delivered capability. No normative change or companion branch.
   journal completion has source review, without a direct timed acceptance case.
 - Disk streaming and physical custody remain separate persistence boundaries.
 
-Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-27.
-Persistence adds reusable process recovery; configuration adoption, wallet custody,
-multi-backing runtime, qualified deployment storage and mainnet remain.
+Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-28.
+Payer custody adds the ordinary payment path, still within that rounding;
+configuration adoption, reproof/transport/backup, multi-backing runtime,
+qualified deployment storage and mainnet remain.

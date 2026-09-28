@@ -1,8 +1,8 @@
 // Real-proof acceptance for the v3 operator journal (runtime plan slice 1, M2a–b):
-// the backer issues, a holder pays with a fee and change, another burns, each
+// the backer issues, the payer wallet pays with a fee and change, another burns, each
 // proven by the runtime prover and admitted by src/pool/v3/store.ts on the local
 // reference venue, or --ergo through the actual publisher and a synthetic mining
-// supplier; holders spend notes they restore from the served package;
+// supplier; the payer wallet and holders spend notes they restore from the served package;
 // a fresh seedless process verifies supply from the package and the venue alone.
 // --testnet explicitly publishes on the own live testnet node, never in CI.
 import assert from "node:assert/strict";
@@ -10,7 +10,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
 import { serialize } from "node:v8";
 import { Barretenberg, BackendType, UltraHonkBackend } from "@aztec/bb.js";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -20,7 +21,7 @@ import { ERGO_SYNTHETIC_REFERENCE } from "../../../dist/ergo-profile.js";
 import { ErgoPublisher, verifyErgoProof } from "../../../dist/ergo-publisher.js";
 import { MiningSupplier, plainBox } from "../../../dist/ergo-synthetic.js";
 import { prepareExactOutput, recoverCapsule } from "../../../dist/pool/v3/capsules.js";
-import { V3ReceiverWallet } from "../../../dist/pool/v3/wallet-store.js";
+import { V3Wallet } from "../../../dist/pool/v3/wallet-store.js";
 import { copyPaymentRequest } from "../../../dist/pool/v3/wallet-request.js";
 import { decodeReceipt, encodeReceipt } from "../../../dist/pool/v3/commitments.js";
 import { createV3Service } from "../../../dist/pool/v3/service-http.js";
@@ -62,7 +63,7 @@ const sources = sourceClosure(["scripts/pool/v3/store-check.mjs", "scripts/pool/
   ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
   "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
 const sourceSha256Lf = sourceHashes(sources), runStarted = performance.now();
-let api, journal, receiverWallet, serviceServer, serviceClient;
+let api, journal, receiverWallet, payerWallet, serviceServer, serviceClient;
 async function stopService() {
   if (serviceServer === undefined) return;
   const server = serviceServer; serviceServer = undefined;
@@ -91,7 +92,7 @@ try {
 
   // The parties: a backer (K), the operator it names, and three holders' seeds.
   const issuerSecret = b(15), operatorSecret = b(16), issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
-  const payerSeed = b(21), operatorSeed = b(23);
+  const operatorSeed = b(23);
   const label = b(12), lag = live?.venue.lag() ?? 2n;
   const reference = live?.reference ?? (withErgo ? { context: ERGO_SYNTHETIC_REFERENCE, profile: ERGO_PROFILE } : { context: LOCAL_REFERENCE, label, lag });
   const supplier = withErgo ? new MiningSupplier("journal-synthetic", ERGO_CHAIN, verifyErgoProof) : undefined;
@@ -123,19 +124,24 @@ try {
   const signed = { terms: termsBytes, signature: ed25519.sign(codec.rootTermsSignatureMessage(termsBytes), issuerSecret) };
   const backing = codec.rootTermsName(termsBytes);
   const receiverPath = join(build, "receiver.db"), receiverOptions = { configuration, venue, reference, verifier: prover.verifier };
-  receiverWallet = new V3ReceiverWallet(receiverPath, receiverOptions);
+  receiverWallet = new V3Wallet(receiverPath, receiverOptions);
   const receiverSeed = receiverWallet.recoverySeed();
   const paidRequest = receiverWallet.request("payment", backing, 7n);
   receiverWallet.close();
-  receiverWallet = new V3ReceiverWallet(receiverPath, receiverOptions);
+  receiverWallet = new V3Wallet(receiverPath, receiverOptions);
   assert.deepEqual(receiverWallet.request("payment", backing, 7n), paidRequest);
   assert.deepEqual(Object.keys(paidRequest).sort(), ["capsule", "cm", "domain", "opening"]);
   const payerRequest = copyPaymentRequest(paidRequest, { domain, backing, value: 7n });
   const header = { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] }, context = { domain, header };
   // Each output is its recipient's own exact request (C4.1–C4.3); the fee is the operator's (pool-fees C1.2.4).
   const request = (seed, id, value) => prepareExactOutput(seed, domain, b(id), backing, value);
-  const funded = request(payerSeed, 31, 10n), paid = { ...recoverCapsule(receiverSeed, domain, paidRequest.cm, paidRequest.capsule), capsule: paidRequest.capsule }, fee = request(operatorSeed, 33, 1n);
-  const change = request(payerSeed, 34, 2n), zero = request(payerSeed, 35, 0n), pad = request(payerSeed, 36, 0n);
+  // The payer wallet requests its own funding; it later selects, pads and prepares change itself.
+  payerWallet = new V3Wallet(join(build, "payer.db"), receiverOptions);
+  const payerSeed = payerWallet.recoverySeed(), funded = payerWallet.request("funding", backing, 10n);
+  const fundedNote = recoverCapsule(payerSeed, domain, funded.cm, funded.capsule);
+  const paid = { ...recoverCapsule(receiverSeed, domain, paidRequest.cm, paidRequest.capsule), capsule: paidRequest.capsule }, fee = request(operatorSeed, 33, 1n);
+  const feeRequest = copyPaymentRequest({ domain, opening: fee.opening, cm: fee.cm, capsule: fee.capsule }, { domain, backing, value: 1n });
+  const pad = request(payerSeed, 36, 0n);
   const burnChange = request(receiverSeed, 37, 2n), receiverPad = request(receiverSeed, 38, 0n);
   const journalPath = join(build, "journal.db"), options = { configuration, secret: operatorSecret, venue, reference, verifier: prover.verifier };
   const credentials = { walletToken: randomBytes(32).toString("hex"), adminToken: randomBytes(32).toString("hex") };
@@ -208,12 +214,20 @@ try {
     assert.equal(decodeReceipt(receipts.issue).position, 1n);
     await checkpoint("after-issue");
   });
-  await test("the payer spends its restored note: 7 to the receiver, a fee of 1 to the operator's request, change 2", async () => {
-    const input = spent = await restored(payerSeed, funded);
-    records.pay = encodeRecord(await prove(spendTask(context, [input, { ...input, note: pad }], [payerRequest, fee, change, zero]), "pay 7, fee 1, change 2"));
-    receipts.pay = await submit(records.pay);
+  let payerView;
+  await test("the payer wallet pays 7 to the receiver and a fee of 1 to the operator's request from its restored note, change 2", async () => {
+    spent = await restored(payerSeed, fundedNote);
+    const order = { request: payerRequest, value: 7n, fee: { request: feeRequest, value: 1n } };
+    const payment = await payerWallet.prepare("receiver", order, (await serviceClient.package(backing)).package, signed,
+      task => prove(task, "pay 7, fee 1, change 2"));
+    assert.deepEqual(payment.inputs, [fundedNote.nf]);
+    records.pay = payment.record;
+    receipts.pay = encodeReceipt(await payerWallet.submit("receiver", serviceClient));
     assert.equal(decodeReceipt(receipts.pay).position, 2n);
     await checkpoint("after-pay");
+    payerView = await payerWallet.sync((await serviceClient.package(backing)).package, signed);
+    assert.equal(payerWallet.payment("receiver").status, "final");
+    assert.deepEqual(payerView.holdings.map(h => [h.value, h.status]), [[2n, "available"]]);
   });
   await test("the receiver independently replays the HTTP service package and durably fulfills its saved exact request once", async () => {
     const input = await served();
@@ -221,7 +235,7 @@ try {
     assert.deepEqual(fulfillment.request, paidRequest);
     assert.equal(fulfillment.judgingIndex, venue.witnessedIndex());
     receiverWallet.close();
-    receiverWallet = new V3ReceiverWallet(receiverPath, receiverOptions);
+    receiverWallet = new V3Wallet(receiverPath, receiverOptions);
     assert.deepEqual(receiverWallet.fulfillment("payment"), fulfillment);
     await assert.rejects(receiverWallet.fulfill("payment", input.package, signed), { code: "CONFLICT" });
   });
@@ -275,7 +289,7 @@ try {
   await test("receiver, payer and operator restore exactly their unspent notes from their seeds", () => {
     const values = result => result.candidates.map(c => [BigInt(c.cm), c.value]);
     assert.deepEqual(values(holdings.receiver), [[burnChange.cm, "2"]]);
-    assert.deepEqual(values(holdings.payer), [[change.cm, "2"]]);
+    assert.deepEqual(values(holdings.payer), [[payerView.holdings[0].cm, "2"]]);
     assert.deepEqual(values(holdings.operator), [[fee.cm, "1"]]);
     for (const result of Object.values(holdings)) assert.deepEqual(result.audit, audit.audit);
   });
@@ -284,22 +298,30 @@ try {
   // The fresh reader holds this pin beside its keys, independently of the served package.
   if (withErgo || withTestnet) writeFileSync(join(build, "ergo-pin.bin"), pin);
   if (withTestnet) writeFileSync(join(build, "testnet-reader.json"), JSON.stringify(live.readerConfig()));
-  const worker = (input, directory = build) => {
+  // Asynchronous, so the in-process loopback service keeps its connection
+  // timers: a blocked loop let an overdue keep-alive close race the next fetch.
+  const worker = async (input, directory = build) => {
     const url = pathToFileURL(directory + sep).href;
-    const child = spawnSync(process.execPath, [join(here, "local-worker.mjs"), url, ...(withTestnet ? ["--testnet"] : withErgo ? ["--ergo"] : [])], {
-      input: serialize(input), timeout: withTestnet ? testnet.TESTNET_LIMITS.workerMs : 120_000, cwd: build, windowsHide: true, maxBuffer: 1_048_576 });
-    assert.equal(child.error, undefined); assert.equal(child.status, 0, child.stderr.toString());
-    return JSON.parse(child.stdout.toString());
+    const child = spawn(process.execPath, [join(here, "local-worker.mjs"), url, ...(withTestnet ? ["--testnet"] : withErgo ? ["--ergo"] : [])], {
+      timeout: withTestnet ? testnet.TESTNET_LIMITS.workerMs : 120_000, cwd: build, windowsHide: true });
+    const stdout = [], stderr = [];
+    child.stdout.on("data", chunk => stdout.push(chunk)); child.stderr.on("data", chunk => stderr.push(chunk));
+    const closed = once(child, "close");
+    child.stdin.end(serialize(input));
+    const [status, signal] = await closed, output = Buffer.concat(stdout);
+    assert.equal(signal, null, "worker timed out"); assert.equal(status, 0, Buffer.concat(stderr).toString());
+    assert(output.length <= 1_048_576, "worker output budget");
+    return JSON.parse(output.toString());
   };
   const fresh = {};
   await test("a fresh seedless process verifies the same supply from the package and the venue alone", async () => {
     const input = await served();
     assert.deepEqual(Object.keys(input).sort(), withTestnet ? ["package", "selection"] : ["package", "selection", "venue"]);
-    fresh.audit = worker(input);
+    fresh.audit = await worker(input);
     assert.deepEqual(fresh.audit, audit);
   });
   if (!withTestnet) await test("a fresh process restores the receiver's note from its seed and public bytes", async () => {
-    fresh.receiver = worker(await served(receiverSeed));
+    fresh.receiver = await worker(await served(receiverSeed));
     assert.deepEqual(fresh.receiver, holdings.receiver);
   });
   if (withErgo || withTestnet) await test("the fresh reader refuses a wrong independent pin and a withheld carrying section", async () => {
@@ -313,7 +335,7 @@ try {
     const wrongPin = new Uint8Array(pin); wrongPin[0] ^= 1;
     try {
       writeFileSync(join(build, "ergo-pin.bin"), wrongPin);
-      fresh.wrongPin = refused(worker(input));
+      fresh.wrongPin = refused(await worker(input));
     } finally { writeFileSync(join(build, "ergo-pin.bin"), pin); }
     if (withTestnet) {
       // Withhold the last commitment's actual carrying block, which need not
@@ -322,14 +344,14 @@ try {
       const withheldHeader = hex(await live.headerId(BigInt(carrying.index)));
       try {
         writeFileSync(join(build, "testnet-reader.json"), JSON.stringify({ ...live.readerConfig(), withheldHeader }));
-        fresh.withheldSection = refused(worker(input));
+        fresh.withheldSection = refused(await worker(input));
       } finally { writeFileSync(join(build, "testnet-reader.json"), JSON.stringify(live.readerConfig())); }
       return;
     }
     // At depth 1 the tip's parent is the witnessed block carrying the last commitment.
     // Keep that header and all ancestry intact, withholding only its transaction section.
     assert.equal(hex(input.venue.tip.parent.id), hex(pin));
-    fresh.withheldSection = refused(worker({ ...input,
+    fresh.withheldSection = refused(await worker({ ...input,
       venue: { tip: { ...input.venue.tip, parent: { ...input.venue.tip.parent, section: [] } } } }));
   });
   const finalPackage = await serviceClient.package(backing);
@@ -372,7 +394,7 @@ try {
     assert(totalBytes <= 4_194_304, "public testnet reader bundle budget");
     mkdirSync(directory, { recursive: true });
     for (const [name, value] of files) writeFileSync(join(directory, name), value);
-    assert.deepEqual(worker(input, directory), fresh.audit, "the retained public bundle must replay independently");
+    assert.deepEqual(await worker(input, directory), fresh.audit, "the retained public bundle must replay independently");
     publicBundle = { directory: "scratch/pool-v3-testnet-reader", totalBytes,
       replay: "node scratch/pool-v3-testnet-reader/replay.mjs",
       sha256: Object.fromEntries([...files].map(([name, value]) => [name, hex(sha(value))])) };
@@ -397,14 +419,14 @@ try {
       ? "Candidate configuration from the independently held manifest; actual ErgoPublisher transactions mined by a synthetic supplier and read through ErgoVenue under a recomputed synthetic reference identity. The seedless reader independently holds the witnessed block pin: difficulty 1 permits anyone to re-mine a heavier chain. Invented funding; no live node, network deployment, adopted domain or real-chain finality."
       : "Candidate configuration from the independently held manifest and a local reference venue whose identity the guard recomputes; no adopted domain, chain venue or finality.",
       "One genesis segment of one backing: no imports, recovery kinds, replacement, second backing or silence/non-service clause. The journal reads the venue's full ranges on every operation.",
-      "The receiver wallet persists an exact request and final fulfillment across reopening. Submission, commitment, publication and evidence retrieval use the authenticated loopback v3 service. Payer custody, receiver invitation transport and fee quotes remain outside this fixture; holders restore paths and prove through the existing reader/prover.",
+      "The payer wallet restores its note from the served package, selects and pads its inputs, prepares its own change and zero outputs beside the receiver's and operator's exact requests, proves through the runtime prover, saves and submits the exact record, and reconciles it final. The receiver wallet persists an exact request and final fulfillment across reopening. Submission, commitment, publication and evidence retrieval use the authenticated loopback v3 service. Receiver invitation transport and fee quotes remain outside this fixture; the burn and hostile cases restore paths and prove through the existing reader/prover.",
       "Restart replay is exercised once here; restarts mid-publication and exact retry across restarts are slice 5."] };
   const reportName = withTestnet ? "pool-v3-testnet-results.json" : "pool-v3-store-results.json";
   writeFileSync(join(scratch, reportName), JSON.stringify(report, null, 2) + "\n");
   console.log(`PASS: ${checks.length} operator journal checks, ${metrics.length} real proofs; scratch/${reportName}`);
 } finally {
   await stopService();
-  receiverWallet?.close();
+  receiverWallet?.close(); payerWallet?.close();
   try { journal?.close(); } catch { /* already closed */ }
   if (api) await api.destroy();
   const target = realpathSync(build);
