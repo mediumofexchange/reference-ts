@@ -8,7 +8,7 @@ import { performance } from 'node:perf_hooks';
 import { Noir } from '@noir-lang/noir_js';
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from '@aztec/bb.js';
 import { fixtures, field, FIELD, U64_MAX } from '../fixtures.mjs';
-import { asFields, assertions, bypass, FRAME, inputRanges, names, refusal, withoutRange } from '../constraints.mjs';
+import { asFields, assertions, bypass, failedOpcode, FRAME, inputRanges, names, refusal, withoutRange } from '../constraints.mjs';
 import { EncodingError } from '../../../dist/bytes.js';
 import { proofVerifier } from '../../../dist/pool/proof-verifier.js';
 import { POOL_V3_CIRCUITS } from '../../../dist/pool/v3/prover.js';
@@ -134,8 +134,9 @@ try {
   const refused = [];
   async function rejects(kind, label, mutate, expected, base = bases[kind], recompute = false) {
     const v = structuredClone(base); await mutate(v); if (recompute) await rebuild(kind, v);
-    const actual = await circuits[kind].hostile.execute(asFields(v)).then(() => 'solved', error => refusal(circuits[kind].widened, error));
-    refused.push({ kind, label, expected, actual }); checks.push(`${label}: refused by ${expected}`);
+    const { actual, at } = await circuits[kind].hostile.execute(asFields(v)).then(() => ({ actual: 'solved' }),
+      error => ({ actual: refusal(circuits[kind].widened, error), at: failedOpcode(error) }));
+    refused.push({ kind, label, expected, actual, at }); checks.push(`${label}: refused by ${expected}`);
   }
   for (const kind of kinds) proofs[kind] = await accepts(kind, bases[kind], kind + ': exact public order and real proof', true);
 
@@ -330,12 +331,18 @@ try {
     ]) await rejects(kind, `${kind}: ${label}`, mutate, expected, bases[kind], recompute);
   }
 
+  // The padding in the first slot, so each slot's padding rule is reached.
+  const paddedFirst = structuredClone(spend);
+  for (const key of ['inputs','secrets','anchors','nullifiers','siblings','right','links','scope_siblings','scope_right']) paddedFirst[key].reverse();
+  await rebuild('spend', paddedFirst); await accepts('spend', paddedFirst, 'spend: padding in the first slot');
+  for (const [i, base] of [[0, paddedFirst], [1, spend]]) {
+    // The other scoped backing under its own valid link and scope path: only the padding rule refuses it.
+    await rejects('spend', `spend: padding from another scoped backing ${i}`, v => {
+      const s = f.scope.path(1n); v.inputs[i].backing = [...f.b]; v.links[i] = [...f.linkB]; v.scope_siblings[i] = s.siblings; v.scope_right[i] = s.right;
+    }, S.padding, base, true);
+  }
   for (const [label, mutate, expected, base = spend, recompute = false] of [
     ['wrong scope root', v => { v.scope = field(1); }, INPUT_SCOPE],
-    // The other scoped backing under its own valid link and scope path: only the padding rule refuses it.
-    ['padding from another scoped backing', v => {
-      const s = f.scope.path(1n); v.inputs[1].backing = [...f.b]; v.links[1] = [...f.linkB]; v.scope_siblings[1] = s.siblings; v.scope_right[1] = s.right;
-    }, S.padding, spend, true],
     ['both inputs outside the scope with recomputed hashes', v => {
       v.inputs.forEach(n => { n.backing = [...f.foreign]; }); v.output_notes.forEach(n => { n.backing = [...f.foreign]; });
     }, INPUT_SCOPE, spend, true],
@@ -350,6 +357,9 @@ try {
     ['second input wrong scope path', v => { v.scope_siblings[1][0] = field(1); }, INPUT_SCOPE, cross],
     ['second input wrong scope direction', v => { v.scope_right[1][0] = !v.scope_right[1][0]; }, INPUT_SCOPE, cross],
     ['backing conversion preserves the global total', v => { v.output_notes[1].value = '26'; v.output_notes[3].value = '9'; }, S.conserve, cross, true],
+    // Each input backing's own conservation, the other's holding.
+    ['first backing inflated beside a conserved second', v => { v.output_notes[1].value = '28'; }, S.conserve, cross, true],
+    ['second backing inflated beside a conserved first', v => { v.output_notes[3].value = '9'; }, S.conserve, cross, true],
     ['wrapped u64 conservation', v => { v.output_notes[0].value = (U64_MAX - 1n).toString(); v.output_notes[1].value = '0'; }, S.conserve, maxima, true],
     ['input u64 overflow with conserved outputs', v => {
       v.inputs[0].value = (1n << 64n).toString(); v.output_notes[0].value = v.output_notes[1].value = (1n << 63n).toString();
@@ -426,18 +436,18 @@ try {
     ['backing limb overflow', v => { v.backing[0] = (1n << 128n).toString(); }, 'range backing[0]'],
   ]) await rejects('request', `request: ${label}`, mutate, expected, request, recompute);
 
-  // Each hostile witness fails the constraint it names, and every assertion of each
-  // relation is some witness's refusal, but those only a zero Poseidon2 output reaches:
-  // a zero commitment, nullifier or scope leaf, or an input owner already equal to
-  // H(T_OWNER, secret).
+  // Each hostile witness fails the constraint it names, and every assertion instance of
+  // each relation (each call site and loop iteration) is some witness's failing
+  // constraint, but those only a zero Poseidon2 output reaches: a zero commitment,
+  // nullifier or scope leaf, or an input owner already equal to H(T_OWNER, secret).
   const misnamed = refused.filter(r => !names(r.expected, r.actual));
   assert.deepEqual(misnamed, [], 'each hostile witness fails the constraint it names');
   const unreachable = a => /notes\.nr assert\((cm|nf|leaf) != 0\)$/.test(a) || (a.includes('holding(') && a.endsWith(N.ownerZero));
   for (const kind of kinds) {
-    const named = new Set(refused.filter(r => r.kind === kind).map(r => r.actual));
-    const unnamed = assertions(circuits[kind].program).filter(a => !named.has(a));
-    assert.deepEqual(unnamed.filter(a => !unreachable(a)), [], `${kind}: every reachable assertion is a named refusal`);
-    checks.push(`${kind}: every assertion is a named hostile refusal but ${unnamed.length} only a zero Poseidon2 output reaches`);
+    const failed = refused.filter(r => r.kind === kind && r.at !== undefined).map(r => r.at);
+    const unnamed = assertions(circuits[kind].program).filter(({ first, last }) => !failed.some(at => first <= at && at <= last));
+    assert.deepEqual(unnamed.filter(a => !unreachable(a.chain)), [], `${kind}: every reachable assertion instance is a named refusal`);
+    checks.push(`${kind}: every assertion instance is a named hostile refusal but ${unnamed.length} only a zero Poseidon2 output reaches`);
   }
 
   for(const kind of ['issue','spend','burn']) {

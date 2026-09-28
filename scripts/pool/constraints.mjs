@@ -153,18 +153,30 @@ function chainOf(program, debug, at) {
   return frames.join(FRAME);
 }
 
+/** The ACIR opcode a failed constraint's error names; `refusal` checks the error's shape. */
+export function failedOpcode(error) {
+  return Number((error?.cause ?? error).callStack[0]);
+}
+
 /**
- * Every source assertion the program's ACIR carries, as the call chain `refusal` names
- * when it fails: one entry per call site, however many opcodes the assertion compiles
- * to. A loop body's iterations share one chain.
+ * Every assertion instance the program's ACIR carries: a maximal run of consecutive
+ * opcodes at one assertion's call chain, as `refusal` names it, from `first` to `last`.
+ * Each call site and each unrolled loop iteration is its own instance, although
+ * iterations share the chain. An opcode without a source location must be an ABI
+ * input's range check.
  */
 export function assertions(program) {
-  const { debug: [debug] } = decode(program), chains = new Set();
-  for (const at of Object.keys(debug.acir_locations)) {
-    const chain = chainOf(program, debug, at), innermost = chain.split(FRAME).pop();
-    if (/^\S+\.nr assert(_eq)?\(/.test(innermost)) chains.add(chain);
-  }
-  return [...chains].sort();
+  const { opcodes, debug: [debug] } = decode(program), leaves = inputsOf(program.abi), runs = [];
+  opcodes.forEach((opcode, at) => {
+    if (debug.acir_locations[at] === undefined) {
+      assert((rangeOf(opcode)?.witness ?? Infinity) < leaves.length, `opcode ${at} without a location is an input's range check`);
+      return;
+    }
+    const chain = chainOf(program, debug, at), run = runs.at(-1);
+    if (run?.chain === chain && run.last === at - 1) run.last = at;
+    else runs.push({ chain, first: at, last: at });
+  });
+  return runs.filter(({ chain }) => /^\S+\.nr assert(_eq)?\(/.test(chain.split(FRAME).pop()));
 }
 
 /** Between the frames of a refusal's call chain; source text holds `>` but not this. */
