@@ -4,8 +4,7 @@
 // classified in held order with the C2b.6.1 clock and C2b.4.1 lapse.
 // Candidate until adoption: no approved configuration or authenticated-chain
 // finality verdict. Single-backing imports, receipts, force and counts use
-// import-reader.ts and package-reader.ts. Multiple-backing orchestration stays
-// in the conditional replay harness until its slice promotes it.
+// import-reader.ts and package-reader.ts; multi-backing scopes use scope-reader.ts.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";

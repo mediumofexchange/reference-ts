@@ -3,23 +3,17 @@
 Updated: 2026-09-28
 
 ## Goal
-Review-code pass (done) over main since `3b9db9f` plus slice 6f's v2 deletion (PR #37,
-merged `8cf66cb`; slice 6f delivered). Acceptance: each confirmed defect fixed with a
-regression test on `fix/review-code-2026-09-28`, independently reviewed, CI green, seven
-current v3 reports re-recorded from CI, deferred findings in Next. No new features.
+Slice 7 M1 (branch `feat/scope-reader`): the multi-backing reader in `src/`. Promote
+`scripts/pool/v3/scope-{replay,recovery}.mjs` (whole-scope classification, merged
+imports, per-backing adoption, force/clock, cross-scope receipts, counts, compact
+faults) to `src/pool/v3/scope-reader.ts`, add a runtime package entry for any scope,
+and delete the harness copies. Acceptance: local-check's scope groups pass through
+`src/` on both venues with identical verdicts (CI `check:pool:v3 -- --ergo`), the
+runtime entry agrees with them, independent review, reports re-recorded. Stop: no
+operator activation of multi-backing segments, wallet payment or testnet drill (M2/M3).
 
 ## Status
-- Six read-only lanes reviewed Ergo reading, Ergo publishing, v3 state/reader, the
-  operator journal, wallet/service and evidence/spec agreement. Fixed, with tests: a
-  supplier repeating the anchor made the durable Ergo view unopenable (`ergo.ts`); one
-  supplier claiming every transaction stopped resends to honest nodes
-  (`ergo-publisher.ts`); a committed kind-7 record left reads unresolved instead of
-  failing replay (`state.ts`, check `KIND`); sync throws and caller errors in the
-  publish path; stale Ergo, v2 and wallet docs; unused v2 tags. Refuted: wrong-length
-  proofs verify false. The fix review's three read-backs shaped the publisher's
-  per-supplier parent walk (tests pin its query and submit counts).
-- Delivered in PR #38: seven current reports re-recorded from CI run 36442873841,
-  `check:evidence` current for the six file-bound ones. Next run: pick from Next.
+- Started 2026-09-28 from main `e57fc31`.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
@@ -36,7 +30,8 @@ current v3 reports re-recorded from CI, deferred findings in Next. No new featur
   Pool-v2 and its guides/reports: [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Multi-backing, including compact fault orchestration (slice 7).
+1. Multi-backing (slice 7): M1 reader above; M2 operator activation and succession of
+   multi-backing segments in the journal; M3 two-backing testnet drill.
 2. Configuration adoption: provenance, ACIR identities/certificates, replay/import
    bounds, one-transaction condition and BN254 margin. Mainnet needs separate authority.
 3. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with

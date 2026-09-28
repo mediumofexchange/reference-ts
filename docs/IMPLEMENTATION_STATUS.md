@@ -353,7 +353,8 @@ verification. The acceptance command is `npm run check:pool:v3-succession`, with
 and [synthetic Ergo](pool-v3-succession-store-ergo-verification.json) real-proof
 drills passed; WORK.md tracks full CI and delivery.
 Both runtime package readers now accept dependency-resolved single-backing compact
-fault evidence; multi-backing orchestration remains in the harness.
+fault evidence. Slice 7 M1 moves multi-backing reads to `scope-reader.ts`, read
+through `readPackage`; the journal still opens only single-backing segments.
 
 Slice 5 adds the [durable venue and journal-owned publisher](ERGO_VENUE_PROFILE.md#durable-reference-view-and-publisher).
 Synthetic fresh-process crash checks reproduce ranges and exact publication retries;
