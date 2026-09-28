@@ -55,12 +55,13 @@ persistence. The [v3 wallet](POOL_V3_WALLET.md) now persists C4.1–2 exact
 requests and C4.5 final fulfillment after independent current-frontier replay,
 including forced spends and locks. It pays exact requests and direct fee
 requests (pool-fees C1.2.3–5) from single-backing holdings found by the C4.6
-seed scan, saving the exact record with permanent reservations before
-submission and reconciling it from canonical evidence. The
+seed scan, saving the exact record with its reservations before submission,
+re-proving it with the same outputs after its segment lapses, and reconciling
+it from canonical evidence. The
 [v3 loopback service](POOL_V3_SERVICE.md) adds bounded journal operations and
 public package retrieval, with independently verified receiver fulfillment and
 process retry/restart/fencing acceptance. Authenticated receiver invitation
-transport, reproof after lapse, multi-backing payment, backup and physical
+transport, cancellation/release, multi-backing payment, backup and physical
 qualification remain open; these capabilities do not yet retire the v2 checks.
 
 The frozen transparent implementation and its local pilot remain adversarial

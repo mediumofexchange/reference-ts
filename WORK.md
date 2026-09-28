@@ -3,17 +3,19 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 6b delivered by PR #31 from `feat/v3-payer` (no companion branch or normative
-change): one `V3Wallet` seed receives and pays. It restores single-backing
-holdings from the independently read current frontier (C4.6 seed scan,
-`holdings.ts`), selects one note or the least-total pair, pads, adds own
-change/zero outputs beside the payee's and optional fee recipient's exact requests
-(pool-fees C1.2.3–5) in shuffled order, requires the local prover's record to be
-the task and to verify, and saves it with permanent input/output reservations
-before returning it. `submit` keeps the first receipt matching the saved record;
-`sync` marks payments final (all outputs in canonical history, imports included)
-or failed (an input spent otherwise). Stop boundary kept: no reproof/release
-after lapse, multi-backing, request transport, backup or deployment claim.
+Slice 6c on `feat/v3-reproof` (no companion branch or normative change): a
+pending `V3Wallet` payment whose segment stopped being canonical (term end or
+silence lapse; C1.2.5, C4.4) is re-proven in the canonical successor with the
+same input nullifiers, outputs and capsules, so its reservation resolves instead
+of staying permanent. Acceptance: `reprove` refuses while the saved segment is
+canonical, resolves final/failed payments without proving, keeps superseded
+records and receipts, and a submission racing a reproof cannot attach a stale
+receipt; preparation and reproof refuse when the canonical segment's silence
+clock refuses admission. Oracle tests cover takeover and silence return; the
+crash check covers the reproof commit. Stop boundary: no release/cancellation
+with other outputs, same-segment tail repair, multi-backing, transport or backup.
+Slice 6b (PR #31) delivered paying: seed-scanned holdings, selection, exact
+records with reservations, first matching receipt, final/failed `sync`.
 
 ## Status
 - Commits `74f7a89` (wallet), `9ea0feb` (review fixes), `886cd1e` (concurrent

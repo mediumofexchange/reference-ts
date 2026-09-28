@@ -15,6 +15,7 @@ import { copyRequest, type RangeRequest, type RangeLimits } from "../../record-r
 import type { RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, encodeCommitment, type Commitment } from "../../venue-records.js";
 import { identifierOf, isValue } from "../field.js";
+import { commitmentOf } from "../notes.js";
 import { ScopeTree } from "../scope.js";
 import { prepareExactOutput, type PreparedOutput } from "./capsules.js";
 import { decodeReceipt, encodeReceipt, verifyReceipt, type Receipt } from "./commitments.js";
@@ -33,10 +34,10 @@ import { copyPaymentRequest, type PaymentRequest } from "./wallet-request.js";
 import { spendTask, type NoteInput, type OutputNote, type ProofTask } from "./witness.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
-const PROFILE = "moe/wallet/v3/1", MAX_OWNER = (1n << 63n) - 1n;
+const PROFILE = "moe/wallet/v3/2", MAX_OWNER = (1n << 63n) - 1n;
 export class V3WalletError extends Error {
   constructor(readonly code: "INVALID" | "UNKNOWN" | "CONFLICT" | "FENCED" | "STORAGE" |
-    "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS", message: string) { super(message); this.name = "V3WalletError"; }
+    "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE", message: string) { super(message); this.name = "V3WalletError"; }
 }
 function requireThat(ok: boolean, code: V3WalletError["code"], message: string): asserts ok {
   if (!ok) throw new V3WalletError(code, message);
@@ -78,6 +79,9 @@ export interface Payment {
   readonly status: "prepared" | "final" | "failed";
   readonly receipt: Receipt | undefined;
   readonly final: { readonly checkpoint: Commitment; readonly judgingIndex: bigint } | undefined;
+  /** Earlier records of this payment in segments that stopped being canonical, oldest
+   * first, with any receipt: evidence of that operator's acceptance, never finality. */
+  readonly superseded: readonly { readonly record: Uint8Array; readonly receipt: Receipt | undefined }[];
 }
 export interface Holding { readonly cm: bigint; readonly value: bigint; readonly status: "available" | "reserved" | "locked" }
 /** One backing's holdings at an independently witnessed index; no claim about other backings or venues. */
@@ -173,12 +177,16 @@ export class V3Wallet {
           checkpoint BLOB NOT NULL, judging_index TEXT NOT NULL, package BLOB NOT NULL, terms BLOB NOT NULL, signature BLOB NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS payer_payments (alias TEXT PRIMARY KEY, statement TEXT NOT NULL UNIQUE, record BLOB NOT NULL,
           backing BLOB NOT NULL, operator BLOB NOT NULL, payee TEXT NOT NULL, value TEXT NOT NULL, fee TEXT, fee_value TEXT,
-          status TEXT NOT NULL CHECK(status IN ('prepared','final','failed')), receipt BLOB, checkpoint BLOB, judging_index TEXT) STRICT;
+          status TEXT NOT NULL CHECK(status IN ('prepared','final','failed')), receipt BLOB, checkpoint BLOB, judging_index TEXT,
+          zero BLOB) STRICT;
         CREATE TABLE IF NOT EXISTS payer_inputs (nf TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES payer_payments(alias)) STRICT;
-        CREATE TABLE IF NOT EXISTS payer_outputs (cm TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES payer_payments(alias)) STRICT;`);
+        CREATE TABLE IF NOT EXISTS payer_outputs (cm TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES payer_payments(alias),
+          value TEXT NOT NULL, owner TEXT NOT NULL, rho TEXT NOT NULL) STRICT;
+        CREATE TABLE IF NOT EXISTS payer_superseded (statement TEXT NOT NULL, alias TEXT NOT NULL REFERENCES payer_payments(alias),
+          record BLOB NOT NULL, receipt BLOB) STRICT;`);
       let meta = this.metadata();
       if (meta === undefined) {
-        requireThat(["receiver_requests", "receiver_fulfilled", "payer_payments", "payer_inputs", "payer_outputs"].every(table =>
+        requireThat(["receiver_requests", "receiver_fulfilled", "payer_payments", "payer_inputs", "payer_outputs", "payer_superseded"].every(table =>
           this.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()?.n === 0), "STORAGE", "wallet identity is missing");
         this.db.prepare("INSERT INTO wallet_identity VALUES(1,?,?,?,?,0)").run(PROFILE, hex(this.domain), hex(this.venueId), randomBytes(32));
         meta = this.metadata()!;
@@ -254,7 +262,55 @@ export class V3Wallet {
       const spent = force.nullifiers;
       notes = ownedNotes(this.seed, this.domain, backing, canonical.state).filter(note => !spent.has(note.nf));
     }
-    return { bytes, terms, backing, at, observed, canonical, force, notes, chain: result.ranges.chain };
+    return { bytes, terms, backing, at, observed, canonical, force, notes, chain: result.ranges.chain, lag: result.ranges.lag, clock: result.clock };
+  }
+  /** The canonical segment's header, if a new statement for it could still be
+   * admitted: its operator term has not ended and, where the backing declares
+   * silence, the operator's witnessing horizon has not reached the clock (the
+   * journal's own admission rule). Advisory: the operator judges admission. */
+  private admissible(view: Awaited<ReturnType<V3Wallet["frontier"]>>): SegmentHeader {
+    const { canonical, chain, clock, at, lag } = view;
+    requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
+    const header = this.headerOf(view.bytes, canonical.segment, canonical.scope, view.backing);
+    // A statement for an ended term would be refused.
+    const term = chain.at(-1);
+    requireThat(term !== undefined && same(term.operator, header.operator) && same(term.link, header.entries[0]!.link),
+      "CONFLICT", "the canonical segment's operator term has ended");
+    requireThat(clock === null || clock === undefined || (clock.boundary === null &&
+      at + lag - canonical.index <= BigInt(clock.duration)), "SILENCE", "the canonical segment's silence clock closes admission");
+    return header;
+  }
+  /** final: all four outputs are in canonical history, imports included (own
+   * change/zero outputs are fresh, so no other statement creates them); failed:
+   * a reserved input was spent otherwise. Statement identities are not imported
+   * into a successor segment, so they cannot decide this. */
+  private resolution(name: string, record: Record, canonical: { state: { outputsSeen: ReadonlySet<bigint> } }, force: ForceState) {
+    if (record.publicInputs.slice(9, 13).every(cm => canonical.state.outputsSeen.has(cm))) return "final" as const;
+    const inputs = this.db.prepare("SELECT nf FROM payer_inputs WHERE alias=?").all(name);
+    return inputs.some(r => force.nullifiers.has(BigInt(r.nf as string))) ? "failed" as const : undefined;
+  }
+  private resolve(updates: readonly { alias: string; status: "final" | "failed" }[], checkpoint: Uint8Array | undefined, at: bigint): void {
+    if (updates.length !== 0) this.transaction(() => {
+      const update = this.db.prepare("UPDATE payer_payments SET status=?, checkpoint=?, judging_index=? WHERE alias=? AND status='prepared'");
+      for (const { alias: name, status } of updates) update.run(status, status === "final" ? checkpoint! : null,
+        status === "final" ? at.toString() : null, name);
+    });
+  }
+  /** The prover's record must be exactly the task and verify under the wallet's own verifier. */
+  private async proven(task: ProofTask, prove: LocalProver): Promise<Uint8Array> {
+    const proven = await prove(task);
+    let bytes: Uint8Array;
+    try { bytes = encodeRecord(proven); } catch (error) {
+      if (error instanceof EncodingError) throw new V3WalletError("INVALID", "prover returned a malformed record");
+      throw error;
+    }
+    const record = decodeRecord(bytes);
+    requireThat(record.kind === 2 && same(record.domain, this.domain) && record.authorization.length === 0 &&
+      record.publicInputs.length === task.publicInputs.length && record.publicInputs.every((v, i) => v === task.publicInputs[i]) &&
+      record.capsules.length === task.capsules.length && record.capsules.every((c, i) => same(c, task.capsules[i]!)),
+      "INVALID", "prover returned another statement");
+    requireThat(await this.options.verifier.verify(2, [...record.publicInputs], new Uint8Array(record.proof)) === true, "INVALID", "proof does not verify");
+    return bytes;
   }
   private holdingsOf(notes: readonly OwnedNote[], force: ForceState | undefined, at: bigint): Holding[] {
     const reserved = this.db.prepare("SELECT 1 FROM payer_inputs WHERE nf=?");
@@ -340,36 +396,27 @@ export class V3Wallet {
       status: row.status as Payment["status"],
       receipt: row.receipt === null ? undefined : decodeReceipt(row.receipt as Uint8Array),
       final: row.checkpoint === null ? undefined :
-        { checkpoint: decodeCommitment(row.checkpoint as Uint8Array), judgingIndex: BigInt(row.judging_index as string) } };
+        { checkpoint: decodeCommitment(row.checkpoint as Uint8Array), judgingIndex: BigInt(row.judging_index as string) },
+      superseded: this.db.prepare("SELECT record,receipt FROM payer_superseded WHERE alias=? ORDER BY rowid").all(name).map(old =>
+        ({ record: copyUnshared(old.record as Uint8Array), receipt: old.receipt === null ? undefined : decodeReceipt(old.receipt as Uint8Array) })) };
   }
 
   /** This backing's holdings through the complete canonical frontier at the
-   * venue's current index; resolves saved payments from that evidence. A
-   * payment is final only when all four of its outputs are in canonical
-   * history, imported ancestry included: its own change and zero outputs are
-   * fresh, so no other statement creates them. It is failed only when one of
-   * its inputs was spent otherwise. Statement identities are not imported
-   * into a successor segment, so they cannot decide this. */
+   * venue's current index; resolves saved payments final or failed from that
+   * evidence. A payment still prepared after its segment stopped being
+   * canonical needs `reprove`. */
   async sync(packageBytes: Uint8Array, signed: SignedTerms): Promise<WalletView> {
     this.active();
     const { backing, at, observed, canonical, force, notes } = await this.frontier(packageBytes, signed);
     const updates: { alias: string; status: "final" | "failed" }[] = [];
     if (canonical !== undefined && force !== undefined) {
-      const rows = this.db.prepare("SELECT alias,record FROM payer_payments WHERE status='prepared' AND backing=?").all(backing);
-      const inputs = this.db.prepare("SELECT nf FROM payer_inputs WHERE alias=?");
-      for (const row of rows) {
-        const name = row.alias as string, outputs = decodeRecord(row.record as Uint8Array).publicInputs.slice(9, 13);
-        if (outputs.every(cm => canonical.state.outputsSeen.has(cm))) updates.push({ alias: name, status: "final" });
-        else if (inputs.all(name).some(r => force.nullifiers.has(BigInt(r.nf as string)))) updates.push({ alias: name, status: "failed" });
+      for (const row of this.db.prepare("SELECT alias,record FROM payer_payments WHERE status='prepared' AND backing=?").all(backing)) {
+        const status = this.resolution(row.alias as string, decodeRecord(row.record as Uint8Array), canonical, force);
+        if (status !== undefined) updates.push({ alias: row.alias as string, status });
       }
     }
-    const checkpoint = canonical === undefined ? undefined : encodeCommitment(canonical.commitment);
     observed.check();
-    if (updates.length !== 0) this.transaction(() => {
-      const update = this.db.prepare("UPDATE payer_payments SET status=?, checkpoint=?, judging_index=? WHERE alias=? AND status='prepared'");
-      for (const { alias: name, status } of updates) update.run(status, status === "final" ? checkpoint! : null,
-        status === "final" ? at.toString() : null, name);
-    });
+    this.resolve(updates, canonical === undefined ? undefined : encodeCommitment(canonical.commitment), at);
     return { backing, judgingIndex: at, checkpoint: canonical?.commitment, holdings: this.holdingsOf(notes, force, at) };
   }
 
@@ -416,34 +463,19 @@ export class V3Wallet {
     }
     requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
     requireThat(theirs.every(cm => !canonical.state.outputsSeen.has(cm)), "CONFLICT", "request is already paid");
-    const header = this.headerOf(view.bytes, canonical.segment, canonical.scope, backing);
-    // A statement for an ended term would be refused, and its reservation is permanent.
-    const term = view.chain.at(-1);
-    requireThat(term !== undefined && same(term.operator, header.operator) && same(term.link, header.entries[0]!.link),
-      "CONFLICT", "the canonical segment's operator term has ended");
+    const header = this.admissible(view);
     const holdings = this.holdingsOf(notes, force, at), available = notes.filter((_, i) => holdings[i]!.status === "available");
     const selected = select(available, total), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
     const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.tree.root(), path: note.tree.path(note.leaf) }));
     // A zero input names the same backing and needs no membership (C1.2.3).
-    if (inputs.length === 1) inputs.push({ ...inputs[0]!, note: this.fresh(backing, 0n) });
+    const zero = inputs.length === 1 ? this.fresh(backing, 0n) : undefined;
+    if (zero !== undefined) inputs.push({ ...inputs[0]!, note: zero });
     const outputs: OutputNote[] = [payee, ...(fee === undefined ? [] : [fee.request]), this.fresh(backing, sum - total)];
     while (outputs.length < 4) outputs.push(this.fresh(backing, 0n));
     // Public order labels no position (C1.2.3); the saved record fixes it for retries.
     for (let i = outputs.length - 1; i > 0; i--) { const j = randomInt(i + 1); [outputs[i], outputs[j]] = [outputs[j]!, outputs[i]!]; }
-    const task = spendTask({ domain: this.domain, header }, inputs, outputs);
-    const proven = await prove(task);
-    let bytes: Uint8Array;
-    try { bytes = encodeRecord(proven); } catch (error) {
-      if (error instanceof EncodingError) throw new V3WalletError("INVALID", "prover returned a malformed record");
-      throw error;
-    }
-    const record = decodeRecord(bytes);
-    requireThat(record.kind === 2 && same(record.domain, this.domain) && record.authorization.length === 0 &&
-      record.publicInputs.length === task.publicInputs.length && record.publicInputs.every((v, i) => v === task.publicInputs[i]) &&
-      record.capsules.length === task.capsules.length && record.capsules.every((c, i) => same(c, task.capsules[i]!)),
-      "INVALID", "prover returned another statement");
-    requireThat(await this.options.verifier.verify(2, [...record.publicInputs], new Uint8Array(record.proof)) === true, "INVALID", "proof does not verify");
-    const statement = hex(statementHash(record)), reserved = selected.map(note => note.nf.toString());
+    const bytes = await this.proven(spendTask({ domain: this.domain, header }, inputs, outputs), prove);
+    const statement = hex(statementHash(decodeRecord(bytes))), reserved = selected.map(note => note.nf.toString());
     this.transaction(() => {
       // A concurrent exact call may have saved first: adopt its record, never this proof.
       const winner = sameOrder();
@@ -451,10 +483,76 @@ export class V3Wallet {
       const input = this.db.prepare("SELECT 1 FROM payer_inputs WHERE nf=?");
       requireThat(reserved.every(nf => input.get(nf) === undefined), "CONFLICT", "an input is reserved by another payment");
       requireThat(outputs.every(out => taken.get(out.cm.toString()) === undefined), "CONFLICT", "an output belongs to another payment");
-      this.db.prepare("INSERT INTO payer_payments VALUES(?,?,?,?,?,?,?,?,?,'prepared',NULL,NULL,NULL)").run(name, statement, bytes,
-        backing, header.operator, payee.cm.toString(), value.toString(), fee?.request.cm.toString() ?? null, fee?.value.toString() ?? null);
+      this.db.prepare("INSERT INTO payer_payments VALUES(?,?,?,?,?,?,?,?,?,'prepared',NULL,NULL,NULL,?)").run(name, statement, bytes,
+        backing, header.operator, payee.cm.toString(), value.toString(), fee?.request.cm.toString() ?? null, fee?.value.toString() ?? null,
+        zero?.requestId ?? null);
       for (const nf of reserved) this.db.prepare("INSERT INTO payer_inputs VALUES(?,?)").run(nf, name);
-      for (const out of outputs) this.db.prepare("INSERT INTO payer_outputs VALUES(?,?)").run(out.cm.toString(), name);
+      // Every opening is kept so a reproof can rebuild the same outputs (C1.2.5).
+      for (const { cm, opening } of outputs) this.db.prepare("INSERT INTO payer_outputs VALUES(?,?,?,?,?)")
+        .run(cm.toString(), name, opening.value.toString(), opening.owner.toString(), opening.rho.toString());
+    });
+    return this.payment(name)!;
+  }
+
+  /** pool-fees C1.2.5 and C4.4: once a prepared payment's segment is no longer
+   * the canonical one (its term ended or silence lapsed its tail), prove the
+   * same statement again in the canonical segment. The input nullifiers,
+   * outputs, capsules and order are the saved ones; only the segment, scope
+   * and anchors change. A payment already final or failed by the current
+   * evidence is resolved without proving, and one whose record already names
+   * the canonical segment is returned unchanged. Both records spend the same
+   * nullifiers into the same commitments, so at most one can ever be admitted
+   * into canonical history. The superseded record and any receipt are kept. */
+  async reprove(name: string, packageBytes: Uint8Array, signed: SignedTerms, prove: LocalProver): Promise<Payment> {
+    name = alias(name);
+    const saved = this.payment(name);
+    requireThat(saved !== undefined, "UNKNOWN", "unknown payment");
+    if (saved.status !== "prepared") return saved;
+    const row = this.db.prepare("SELECT backing,zero FROM payer_payments WHERE alias=?").get(name)!;
+    const backing = copyUnshared(row.backing as Uint8Array);
+    requireThat(same(rootTermsName(copyUnshared(signed.terms)), backing), "INVALID", "terms do not name the payment's backing");
+    requireThat(typeof prove === "function", "INVALID", "a local prover is required");
+    const view = await this.frontier(packageBytes, signed), { canonical, force, notes, at, observed } = view;
+    requireThat(canonical !== undefined && force !== undefined, "ABSENT", "no canonical checkpoint to spend from");
+    const old = decodeRecord(saved.record), p = old.publicInputs;
+    const status = this.resolution(name, old, canonical, force);
+    if (status !== undefined) {
+      observed.check();
+      this.resolve([{ alias: name, status }], encodeCommitment(canonical.commitment), at);
+      return this.payment(name)!;
+    }
+    if (same(identifierOf(p[2]!, p[3]!), canonical.segment)) return saved;
+    const header = this.admissible(view);
+    // The same notes, now read in the canonical segment's accepted history.
+    const zero = row.zero === null ? undefined : prepareExactOutput(this.seed, this.domain, row.zero as Uint8Array, backing, 0n);
+    const positive = saved.inputs.map(nf => notes.find(note => note.nf === nf));
+    requireThat(positive.every(note => note !== undefined), "ABSENT", "a reserved input is not in canonical history");
+    requireThat(!positive.some(note => locked(force, tagOf(note.nf), at)), "LOCKED", "a reserved input is locked by a standing demand");
+    const placed = positive.map(note => ({ note, anchor: note.tree.root(), path: note.tree.path(note.leaf) }));
+    const inputs: NoteInput[] = p.slice(7, 9).map(nf => {
+      if (zero !== undefined && nf === zero.nf) return { ...placed[0]!, note: zero };
+      const input = placed.find(i => i.note.nf === nf);
+      requireThat(input !== undefined, "STORAGE", "saved inputs do not reproduce the record");
+      return input;
+    });
+    const opening = this.db.prepare("SELECT value,owner,rho FROM payer_outputs WHERE cm=? AND alias=?");
+    const outputs: OutputNote[] = p.slice(9, 13).map((cm, i) => {
+      const out = opening.get(cm.toString(), name);
+      requireThat(out !== undefined, "STORAGE", "saved outputs do not reproduce the record");
+      const note = { backing, value: BigInt(out.value as string), owner: BigInt(out.owner as string), rho: BigInt(out.rho as string) };
+      requireThat(commitmentOf(this.domain, note) === cm, "STORAGE", "saved outputs do not reproduce the record");
+      return { opening: note, cm, capsule: old.capsules[i]! };
+    });
+    const bytes = await this.proven(spendTask({ domain: this.domain, header }, inputs, outputs), prove);
+    const statement = hex(statementHash(decodeRecord(bytes)));
+    this.transaction(() => {
+      // A concurrent reproof or resolution may have replaced the record first: keep it.
+      const current = this.db.prepare("SELECT receipt FROM payer_payments WHERE alias=? AND statement=? AND status='prepared'")
+        .get(name, hex(saved.statement));
+      if (current === undefined) return;
+      this.db.prepare("INSERT INTO payer_superseded VALUES(?,?,?,?)").run(hex(saved.statement), name, saved.record, current.receipt as Uint8Array | null);
+      this.db.prepare("UPDATE payer_payments SET statement=?, record=?, operator=?, receipt=NULL WHERE alias=?")
+        .run(statement, bytes, header.operator, name);
     });
     return this.payment(name)!;
   }
@@ -482,6 +580,9 @@ export class V3Wallet {
       same(receipt.proofHash, digests.proofHash) && same(receipt.signatureHash, digests.signatureHash),
       "INVALID", "receipt does not authenticate the saved record");
     this.transaction(() => {
+      // A reproof during submission replaced the record this receipt authenticates.
+      requireThat(this.db.prepare("SELECT 1 FROM payer_payments WHERE alias=? AND statement=?").get(name, hex(saved.statement)) !== undefined,
+        "CONFLICT", "the payment was re-proven during submission");
       this.db.prepare("UPDATE payer_payments SET receipt=? WHERE alias=? AND receipt IS NULL").run(encodeReceipt(receipt), name);
     });
     return this.payment(name)!.receipt!;
