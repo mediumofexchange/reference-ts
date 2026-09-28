@@ -33,7 +33,7 @@ subpath APIs, not root exports; the wire/client modules can load on Node 20.
 
 `submit(record)` checks the receipt signature, expected domain/operator, source
 segment, scope and statement identity under
-[pool-v3 §7.2](https://github.com/mediumofexchange/money-from-first-principles/blob/02d911c/pool-v3.md#72-receipts-bind-the-exact-event-evidence).
+[pool-v3 §7.2](https://github.com/mediumofexchange/money-from-first-principles/blob/786f962/pool-v3.md#72-receipts-bind-the-exact-event-evidence).
 An exact statement retry can supply a different valid proof and still receives
 the original receipt. Its proof digest need not equal the retry's proof digest.
 Adoption into another segment requires additional evidence; this ordinary-submit
@@ -53,7 +53,7 @@ venue. The venue supplies the judging index and complete range answers. Server
 metadata cannot select those inputs. Missing or changed evidence refuses
 fulfillment, and receipts alone cannot fulfill a request. See the
 [receiver obligations](POOL_V3_WALLET.md) and
-[package rule](https://github.com/mediumofexchange/money-from-first-principles/blob/02d911c/pool-v3.md#12-evidence-packages-and-dependency-retention).
+[package rule](https://github.com/mediumofexchange/money-from-first-principles/blob/786f962/pool-v3.md#12-evidence-packages-and-dependency-retention).
 
 ## Bounds and interrupted operations
 
