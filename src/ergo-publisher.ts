@@ -602,7 +602,7 @@ export class ErgoPublisher {
     const kept = (): never => { throw new VenueError("no supplier accepted the publication; it is kept and sent again on the next attempt"); };
     let pending = this.#pending.get(key);
     if (pending !== undefined) {
-      if (await this.#shown(pending) || await this.#send(pending, new Set())) return copyPublication(pending.publication);
+      if (await this.#send(pending, new Set())) return copyPublication(pending.publication);
       const { live, gone } = await this.#inspect(pending);
       if (gone.length > 0) {
         this.#forget(pending, gone);
@@ -665,10 +665,12 @@ export class ErgoPublisher {
     visited.add(pending.key);
     for (const input of pending.publication.inputs) {
       const parent = this.#byChange.get(bytesToHex(input));
-      if (parent !== undefined && !visited.has(parent.key) && !await this.#shown(parent)) await this.#send(parent, visited);
+      if (parent !== undefined && !visited.has(parent.key)) await this.#send(parent, visited);
     }
     let accepted = false;
     for (const supplier of this.#suppliers) {
+      // A supplier's claim spares only that supplier: another that missed the transaction is still sent it.
+      if (await this.#shown(supplier, pending)) { accepted = true; continue; }
       let guardError: unknown;
       const answer = await this.#call(() => {
         try { this.#guard(); } catch (error) { guardError = error; throw error; }
@@ -681,11 +683,13 @@ export class ErgoPublisher {
     return accepted;
   }
 
-  /** Whether a supplier shows the record box or holds the transaction: it is pending or it landed, and its
-   * inputs, spent by it, are not gone. */
-  async #shown(pending: Pending): Promise<boolean> {
-    return await this.#any(supplier => supplier.hasBox(copyBytes(pending.publication.recordBox))) ||
-      this.#any(supplier => supplier.hasTransaction(copyBytes(pending.publication.id)));
+  /** Whether `supplier` shows the record box or holds the transaction: it is pending or it landed there, and
+   * its inputs, spent by it, are not gone. */
+  async #shown(supplier: ErgoPublishingSupplier, pending: Pending): Promise<boolean> {
+    const box = await this.#call(() => supplier.hasBox(copyBytes(pending.publication.recordBox)));
+    if (box.ok && box.value === true) return true;
+    const held = await this.#call(() => supplier.hasTransaction(copyBytes(pending.publication.id)));
+    return held.ok && held.value === true;
   }
 
   /**

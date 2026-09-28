@@ -425,6 +425,26 @@ describe("a publication is sent once, and publications chain", () => {
     expect(new Set(n.submitted)).toEqual(new Set([hex(first.id)]));
   });
 
+  it("sends a transaction again to a supplier that missed it, whatever another supplier claims to hold", async () => {
+    const n = funded([10_000_000n]);
+    let down = true;
+    const honest: ErgoPublishingSupplier = { name: "honest", unspentBoxes: t => n.unspentBoxes(t), hasBox: id => n.hasBox(id),
+      hasTransaction: id => n.hasTransaction(id), submit: (s, id) => (down ? Promise.reject(new Error("down")) : n.submit(s, id)) };
+    // A supplier that claims every transaction and relays none.
+    const liar: ErgoPublishingSupplier = { name: "liar", unspentBoxes: async () => [], hasBox: async () => { throw new Error("no answer"); },
+      hasTransaction: async () => true, submit: async () => {} };
+    const p = publisher([honest, liar]);
+    const first = await p.publish(request());
+    expect(n.pool).toHaveLength(0);
+    down = false;
+    expect(hex((await p.publish(request())).id)).toBe(hex(first.id));
+    expect(n.pool).toHaveLength(1);
+    // A later record spending its change reaches the honest supplier with its parent.
+    await p.publish(request(new Uint8Array(136).fill(7)));
+    expect(n.pool).toHaveLength(2);
+    expect(n.submitted.filter(id => id === hex(first.id))).toHaveLength(1); // once it holds the parent, it is not sent again
+  });
+
   it("sends a dropped transaction again before the one that spends its change", async () => {
     const funding = plainBox(TREE, 10_000_000n, HEIGHT - 5n), n = node();
     n.fund(funding);
