@@ -1,18 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { decodeBacking, encodeBacking, makeBacking, POOL_CONSTRUCTION, signBacking } from "../src/backing.js";
+import { decodeBacking, encodeBacking, makeBacking, POOL_CONSTRUCTION, signBacking, type Backing } from "../src/backing.js";
 import { EncodingError } from "../src/bytes.js";
 import { utf8Encoder } from "../src/contexts.js";
 import { LedgerError, replayLog, TransparentLedger } from "../src/ledger.js";
 import { requirePilotBacking } from "../src/pilot-wire.js";
 import { Sequencer, SequencerError } from "../src/sequencer.js";
 import { LocalVenue } from "../src/venue.js";
-import { DOMAIN as CONFIG_HASH, makePoolBacking } from "./pool-support.js";
 import { KEYS, makeTransparentBacking, pub, SECRETS } from "./support.js";
 
 // Construction §C1.3 and pool-v2 §2: E names the construction and a
 // configuration hash, inside the backing's name. In canonical encoding v1
 // that is evidence clause 0x05; without it the backing is served under the
-// transparent profile.
+// transparent profile. The pool-v2 runtime is retired; the clause's bytes and
+// the transparent path's refusal of a pool backing remain.
+
+/** A synthetic configuration hash: the clause carries 32 bytes, whatever they name. */
+const CONFIG_HASH = new Uint8Array(32).fill(0x44);
+function makePoolBacking(secret: Uint8Array, thing = "EUR", configuration: Uint8Array = CONFIG_HASH): Backing {
+  return makeBacking({
+    obligor: pub(secret),
+    payout: { thing, quantumExponent: -2, perUnit: 100n },
+    reliance: [],
+    evidence: { setting: "pool", operator: KEYS.operator, construction: "moe/pool/v2", configuration },
+  });
+}
 
 describe("E names the construction and its configuration (C1.3)", () => {
   it("encodes the construction clause after the other clauses and decodes to the same backing", () => {

@@ -253,7 +253,7 @@ spendability flags remain false.
 ## Runtime venue
 
 `new ErgoVenue(profile, anchorContext, policy?, publisher?)` implements the
-runtime's `Venue`, neutral `RecordVenue` and `RecordPublisher` interfaces for
+neutral `RecordVenue` and `RecordPublisher` interfaces for
 any backing whose **E** declares the profile's identity;
 `ergoProfile` applies the reference default depth of 10
 ([decision](../decisions/2026-09.md#2026-09-25--select-the-ergo-venue-profile-for-pool-v3-record-ranges)),
@@ -361,9 +361,9 @@ until the journal is reopened.
   view settles its publisher after each sync, in the publisher's queue: a
   publication is forgotten once the snapshot holds its record, and its
   inputs once a supplier shows that it landed; a record the view already
-  holds is not sent. The view's `publish` throws
+  holds is not sent. The view's `publishRecord` throws
   its refusals at once and resolves on acceptance, which is not holding;
-  a `PoolStore` awaits it inside its existing lag window. Without a persistence
+  the v3 journal awaits it inside its existing lag window. Without a persistence
   adapter a restart loses the queue; the durable v3 path is described below.
   The funding key must be the publisher's alone.
 - **Not here**: cancelling an abandoned publication by spending its input,
@@ -438,9 +438,7 @@ In tests
 verify and every variation is refused, a mempool written independently of
 the publisher admits only balanced, fully signed transactions, a lost
 answer, an outage and a dropped parent each leave one transaction per
-record, an invented box is refused beside a node that lacks it, and a
-`PoolStore` on an `ErgoVenue` over the synthetic chain publishes its opening
-and finds it held after the depth.
+record, and an invented box is refused beside a node that lacks it.
 
 The candidate v3 journal also uses this neutral publishing interface on the
 synthetic reference chain (`store-check.mjs --ergo`). Its issue/pay/burn flow

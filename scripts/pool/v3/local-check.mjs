@@ -14,7 +14,7 @@ import { ScopeTree } from "../../../dist/pool/scope.js";
 import { limbsOf, fieldToBytes } from "../../../dist/pool/field.js";
 import { decodeReplacement, directoryRoot, encodeCommitment, encodeReplacement, encodeRevocation, replacementHash, replacementMessage, ROLE_OPERATOR, signCommitment, signRevocation } from "../../../dist/venue-records.js";
 import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
-import { LIMITS } from "../delivery/evidence-reader.mjs";
+import { LIMITS } from "./evidence-reader.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { recordReader, replayLocalPackage, replayEvidencePackage, PACKAGE_LIMITS, RANGE_LIMITS } from "./local-replay.mjs";
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity } from "../../../dist/record-venue.js";

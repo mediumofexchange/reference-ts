@@ -17,7 +17,7 @@
 // can withhold, which leaves reads unresolved, but cannot make the reader
 // accept a header without its work or a section its header did not commit to.
 //
-// **Reads are a materialised view.** `Venue` is synchronous, so this syncs
+// **Reads are a materialised view.** `RecordVenue` is synchronous, so this syncs
 // asynchronously and answers synchronously from the last complete snapshot.
 // The view keeps objects attributed at the four locations, by index, and
 // accepted headers; the optional journal also retains lossless root evidence.
@@ -51,19 +51,10 @@ import type { ErgoPublisher, ErgoRecordRequest } from "./ergo-publisher.js";
 import type { ErgoSupplier } from "./ergo-supplier.js";
 import type { ErgoCheckpoint, ErgoVenueJournal } from "./ergo-store.js";
 import {
-  COMMITMENT_RANGE, copyRequest, encodeRangeAnswer, heldCommitments, MAX_RANGE_RECORD_BYTES, REPLACEMENT_RANGE, REVOCATION_RANGE,
-  type HeldCommitment, type RangeAnswer, type RangeLimits, type RangeRequest, type RecordKind,
+  copyRequest, encodeRangeAnswer, MAX_RANGE_RECORD_BYTES, type RangeAnswer, type RangeLimits, type RangeRequest, type RecordKind,
 } from "./record-range.js";
 import type { RecordPublisher, RecordVenue } from "./record-venue.js";
-// The transparent `Venue` face below serves pool-v2's store and retires with it.
-import { forgetAdmitted, type WitnessedReplacement } from "./replacement.js";
-import type { WitnessedRevocation } from "./revocation.js";
-import type { Venue, WitnessedCommit, WitnessedOp } from "./venue.js";
 import { VenueError } from "./venue-error.js";
-import {
-  copyReplacement, copyRevocation, decodeReplacement, decodeRevocation, encodeCommitment, encodeReplacement, encodeRevocation,
-  isSignedRevocation, verifyCommitment, type Commitment, type Replacement, type Revocation,
-} from "./venue-records.js";
 
 /** The reference runtime's finality depth: over one measured mainnet day,
  * 99.8% of included transactions landed inside C3.3's window at depth 10,
@@ -176,7 +167,7 @@ export async function ergoAnchorContext(supplier: ErgoSupplier, anchorId: Uint8A
  * place. The id is derived from the profile, never handed in, so one declared
  * venue cannot be read on two clocks.
  */
-export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
+export class ErgoVenue implements RecordVenue, RecordPublisher {
   private readonly profile: ErgoProfile;
   private readonly venueId: Uint8Array;
   private readonly store: ErgoHeaderStore;
@@ -194,9 +185,6 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
   private snapshot: Snapshot | undefined;
   private syncing = false;
   private failure: string | undefined;
-  /** Per-snapshot derivations, by kind and subject. */
-  private held = new Map<string, readonly HeldCommitment[]>();
-
   /** Where this view's own records go out; a view without one only reads. */
   private publisher: ErgoPublisher | undefined;
 
@@ -390,7 +378,7 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
       }
       // No await: commit evidence and pin before exposing the new snapshot.
       this.persist(next);
-      forgetAdmitted(this); this.held = new Map(); this.snapshot = next;
+      this.snapshot = next;
       const snapshot = this.snapshot;
       // The publisher forgets what this view now holds, in its own queue: it never fails or holds up the sync.
       if (this.publisher !== undefined && snapshot !== undefined) this.publisher.settle(request => this.holds(request)).catch(() => {});
@@ -523,47 +511,6 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
     return { request, entries: rangeEntries(index => snapshot.sections[Number(index)], request)! };
   }
 
-  /** C2.3.3 read index by index (§13.3): the held commitments of one key, rising in sequence as they rise in index. */
-  private heldFor(operator: Uint8Array): readonly HeldCommitment[] {
-    const key = bytesToHex(operator);
-    const cached = this.held.get(key);
-    if (cached !== undefined) return cached;
-    const held = heldCommitments(this.entries(COMMITMENT_RANGE, operator)).held;
-    this.held.set(key, held);
-    return held;
-  }
-
-  /** Publish a signed commitment through the view's publisher (kind 1, filed
-   * under its operator). A refusal throws at once; the returned promise
-   * settles when a supplier accepted the transaction, and a caller awaits it,
-   * as `PoolStore.publish` does. */
-  publish(commitment: Commitment): Promise<void> {
-    if (!verifyCommitment(commitment)) throw new VenueError("commitment signature invalid");
-    return this.publishRecord(COMMITMENT_RANGE, commitment.operator, encodeCommitment(commitment));
-  }
-
-  publishOp(): void {
-    throw new VenueError("this venue carries no transparent operation records");
-  }
-
-  /** Publish a replacement record (kind 2, filed under its backing). Whether it
-   * is signed and in force is the walk's question, as on every venue. */
-  publishReplacement(backingName: Uint8Array, replacement: Replacement): Promise<void> {
-    let record: Uint8Array;
-    try {
-      record = encodeReplacement(backingName, replacement);
-    } catch (cause) {
-      throw new VenueError(`published replacement does not encode: ${String(cause)}`);
-    }
-    return this.publishRecord(REPLACEMENT_RANGE, backingName, record);
-  }
-
-  /** Publish a revocation signed by the key it revokes (kind 3, filed under that key). */
-  publishRevocation(revocation: Revocation): Promise<void> {
-    if (!isSignedRevocation(revocation)) throw new VenueError("revocation is not signed by the key it revokes");
-    return this.publishRecord(REVOCATION_RANGE, revocation.obligor, encodeRevocation(revocation));
-  }
-
   /**
    * One record at its kind's location, through the view's publisher, with
    * every output created at the tip of the chain this view verified: at most
@@ -592,105 +539,6 @@ export class ErgoVenue implements Venue, RecordVenue, RecordPublisher {
   private holds(request: ErgoRecordRequest): boolean {
     const kind = ([1, 2, 3, 4] as const).find(k => compareBytes(this.profile.scripts[k], request.location) === 0);
     return kind !== undefined && this.entries(kind, request.subject).entries.some(entry => compareBytes(entry.record, request.record) === 0);
-  }
-
-  publishCommit(): void {
-    throw new VenueError("this venue reads the chain; publishing is the holder's wallet");
-  }
-
-  /**
-   * The profile carries no transparent operation record, and this refuses
-   * rather than answering empty: no operations reads as nothing published.
-   */
-  publishedOpsFor(): WitnessedOp[] {
-    throw new VenueError("this venue carries no transparent operation records");
-  }
-
-  /**
-   * Nor commits (pool-v3 §13.1 names them outside the frame): no commits reads
-   * as "the attempt did not commit", which frees a reservation that may have
-   * settled elsewhere.
-   */
-  commitsFor(): WitnessedCommit[] {
-    throw new VenueError("this venue carries no commit records");
-  }
-
-  /** Every revocation object K published here that decodes, names K and verifies, in witnessed order. */
-  revocationsFor(obligor: Uint8Array): WitnessedRevocation[] {
-    const out: WitnessedRevocation[] = [];
-    for (const entry of this.entries(REVOCATION_RANGE, obligor).entries) {
-      try {
-        const revocation = decodeRevocation(entry.record);
-        if (compareBytes(revocation.obligor, obligor) !== 0 || !isSignedRevocation(revocation)) continue;
-        out.push({ revocation: copyRevocation(revocation), at: entry.index });
-      } catch (error) {
-        if (error instanceof EncodingError) continue;
-        throw error;
-      }
-    }
-    return out;
-  }
-
-  /**
-   * Every replacement object filed under the backing that decodes and names
-   * it, in witnessed order, as copies. Signatures, the lead floor and the walk
-   * are the reader's (`successionOf`).
-   */
-  replacementsFor(backingName: Uint8Array): WitnessedReplacement[] {
-    const out: WitnessedReplacement[] = [];
-    for (const entry of this.entries(REPLACEMENT_RANGE, backingName).entries) {
-      try {
-        const decoded = decodeReplacement(entry.record);
-        if (compareBytes(decoded.backingName, backingName) !== 0) continue;
-        out.push({ replacement: copyReplacement(decoded.replacement), at: entry.index });
-      } catch (error) {
-        if (error instanceof EncodingError) continue;
-        throw error;
-      }
-    }
-    return out;
-  }
-
-  latestFor(operator: Uint8Array, asOf?: bigint): Commitment | undefined {
-    return copyCommitment(this.latestHeld(operator, asOf)?.commitment);
-  }
-
-  previousFor(operator: Uint8Array, beforeSequence: bigint, asOf?: bigint): Commitment | undefined {
-    return copyCommitment(this.latestHeld(operator, asOf, beforeSequence)?.commitment);
-  }
-
-  witnessedAtFor(operator: Uint8Array, asOf?: bigint): bigint | undefined {
-    return this.latestHeld(operator, asOf)?.index;
-  }
-
-  witnessedAtSequence(operator: Uint8Array, sequence: bigint): bigint | undefined {
-    const held = this.latestHeld(operator, undefined, sequence + 1n);
-    return held?.commitment.sequence === sequence ? held.index : undefined;
-  }
-
-  firstCommitmentFor(operator: Uint8Array, notBefore = 0n): bigint | undefined {
-    for (const held of this.heldFor(operator)) if (held.index >= notBefore) return held.index;
-    return undefined;
-  }
-
-  nextSequenceFor(operator: Uint8Array): bigint {
-    const latest = this.latestHeld(operator);
-    // The venue holds a sequence only above zero (pool-v3 §13.3; pool sequences count from one).
-    return latest === undefined ? 1n : latest.commitment.sequence + 1n;
-  }
-
-  /** The last held commitment witnessed at or before `asOf` with a sequence
-   * below `beforeSequence`; held commitments rise in both, so one search. */
-  private latestHeld(operator: Uint8Array, asOf?: bigint, beforeSequence?: bigint): HeldCommitment | undefined {
-    const log = this.heldFor(operator), limit = asOf ?? this.requireSnapshot().witnessed;
-    let low = 0, high = log.length;
-    while (low < high) {
-      const mid = low + Math.floor((high - low) / 2);
-      const held = log[mid]!;
-      if (held.index <= limit && (beforeSequence === undefined || held.commitment.sequence < beforeSequence)) low = mid + 1;
-      else high = mid;
-    }
-    return log[low - 1];
   }
 }
 
@@ -758,8 +606,3 @@ function ownSection(answer: unknown): { views?: ErgoTransactionView[]; bytes: nu
 /** What one retained object costs: its record, its subject and a fixed overhead. */
 const retainedSize = (object: AttributedObject): number => object.record.length + object.subject.length + OBJECT_OVERHEAD;
 
-function copyCommitment(value: Commitment | undefined): Commitment | undefined {
-  return value === undefined ? undefined : {
-    sequence: value.sequence, root: copyBytes(value.root), operator: copyBytes(value.operator), signature: copyBytes(value.signature),
-  };
-}

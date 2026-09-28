@@ -14,7 +14,7 @@ import { CandidateVenueError, referenceVenue } from "../../../dist/pool/v3/guard
 import { EvidenceRefusal, ReplayRefusal, ScopeRequired, requireReplay } from "../../../dist/pool/v3/refusals.js";
 import { classifyImports } from "../../../dist/pool/v3/import-reader.js";
 import { servedTrail } from "../../../dist/pool/v3/served-trail.js";
-import { LIMITS, readLocalEvidence } from "../delivery/evidence-reader.mjs";
+import { LIMITS, readLocalEvidence } from "./evidence-reader.mjs";
 import { classifyScopes } from "./scope-replay.mjs";
 import { resolveTerms, rootTermsOf } from "./scope-evidence.mjs";
 import { boundFaultInputs, faultObserver } from "./fault-evidence.mjs";

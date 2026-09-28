@@ -1,29 +1,15 @@
-// The shielded pool's claim layer (Construction §C1.2; pool-v2), in the
-// order it is built: the field and the in-circuit hash, notes, the note
-// tree, the spent set, the scope, the frames, the segment with its import,
-// admission and replay, and the receipt.
+// The shielded pool's shared primitives (Construction §C1.2), which pool-v3
+// builds on: the field and the in-circuit hash, notes, the note tree, the
+// scope and the scope schedule.
 //
-// The proof backend (`pool/proof-verifier.ts`, with pool-v2's circuits bound
-// in `pool/barretenberg.ts`) is reachable on its own subpaths only, since it
-// needs `@aztec/bb.js`; the circuits it verifies are the pinned sources in
-// `pool/circuits/`.
-// `pool/store.ts` is also a separate subpath: its durable SQLite journal
-// requires Node 24, while this barrel retains the package's Node 20 floor.
+// pool-v3 itself (`pool/v3/`) is reachable on its own subpaths only, as is
+// the proof backend (`pool/proof-verifier.ts`), since it needs `@aztec/bb.js`;
+// its durable journals require Node 24, while this barrel retains the
+// package's Node 20 floor.
 
 export * from "./field.js";
 export * from "./poseidon2.js";
 export * from "./notes.js";
 export * from "./note-tree.js";
-export * from "./spent-set.js";
 export * from "./scope.js";
-export * from "./statement.js";
-export * from "./segment.js";
-export * from "./receipt.js";
-export * from "./receipt-record.js";
-export * from "./receipt-repair.js";
-export * from "./receipt-status.js";
 export * from "./schedule.js";
-export * from "./authority.js";
-export * from "./descent.js";
-export * from "./checkpoint.js";
-export * from "./opening.js";

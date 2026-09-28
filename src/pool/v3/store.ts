@@ -1,6 +1,6 @@
 // Node 24 optional entry point. The pool-v3 operator journal (v3 runtime plan,
 // slices 1–3): one durable command log per operator key and venue, fenced to one
-// owner, on PoolStore's SQLite pattern. It serves one backing, admits ordinary
+// owner, in one SQLite database. It serves one backing, admits ordinary
 // and recovery records through the state machine's admission
 // mode (state.ts) with original signed receipts (§7.2), signs checkpoint
 // commitments over v3 directories and snapshots (§7), publishes them through

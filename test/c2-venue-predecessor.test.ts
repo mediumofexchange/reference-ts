@@ -15,7 +15,7 @@ const records = [
   { at: 8n, commitment: signCommitment(SECRETS.operator, MAX, new Uint8Array(32).fill(4)) },
 ];
 const other = signCommitment(SECRETS.alice, 2n, new Uint8Array(32).fill(5));
-// The Ergo venue's descent over the same shape is in ergo-venue.test.ts.
+// The Ergo venue answers ranges only; its held records over the same shape are in ergo-venue.test.ts.
 async function fixture(kind: "local" | "lagging"): Promise<Venue> {
   const entries = [...records, { at: 3n, commitment: other }].sort((a, b) => a.at < b.at ? -1 : a.at > b.at ? 1 : 0);
   const chain = new LocalVenue();

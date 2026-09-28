@@ -181,7 +181,7 @@ const admittedByVenue = new WeakMap<Venue, Map<string, { through: number; seen: 
 
 /**
  * Drop everything this memo holds for a venue: the call a venue makes when it
- * replaces its whole view (`ErgoVenue.sync`), so that positions it judged
+ * replaces its whole view, so that positions it judged
  * against the old view are judged again against the new. Not a verifier — it
  * answers nothing — which is why it is not on the refusal surface.
  */
@@ -226,8 +226,8 @@ export function forgetAdmitted(venue: Venue): void {
  * **What it leans on is the Venue contract's append-only clause — for WHO IS
  * IN FORCE, not merely for freshness.** Positions 0 up to `through` have been
  * judged and are never judged again for the life of the venue object, so a
- * view that re-gathers must only ever move that count forward (`ErgoVenue.sync`'s
- * finalised prefix is exactly that promise). A view that LOST records is out of
+ * view that re-gathers must only ever move that count forward (a finalised
+ * prefix is exactly that promise). A view that LOST records is out of
  * contract and is judged again from scratch rather than trusted; a view that
  * CHANGED a record below that count, at any length no shorter — a
  * reorganisation below the
@@ -239,8 +239,7 @@ export function forgetAdmitted(venue: Venue): void {
  * slice-37 panel and its review; the per-record verdict memo that removes it
  * costs fourteen times the per-walk residual and is the fallback if the clause
  * is ever weakened). A venue that re-gathers its whole view says so —
- * `forgetAdmitted` — and `ErgoVenue.sync` does, because its own frontier walk
- * is this memo's first reader and would otherwise widen on the stale chain. The sequencer's walk cache already keys on this clause;
+ * `forgetAdmitted`. (`ErgoVenue`, which once did, is no longer a `Venue`.) The sequencer's walk cache already keys on this clause;
  * this holds the same assumption one layer down, where every reader shares it
  * instead of only the one that thought to cache.
  *

@@ -1,14 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
-import { afterEach, describe, expect, it } from "vitest";
-import { makeBacking, signBacking } from "../src/backing.js";
+import { describe, expect, it } from "vitest";
 import { EncodingError } from "../src/bytes.js";
 import { decodeRangeAnswer, MAX_RANGE_RECORD_BYTES, type RecordKind } from "../src/record-range.js";
 import type { RecordPublisher } from "../src/record-venue.js";
-import type { SignedBacking } from "../src/pool/segment.js";
 import { encodeCommitment, signCommitment, type Commitment } from "../src/commitment.js";
 import { ErgoVenue } from "../src/ergo.js";
 import { attributeBlock, collBytes, frameTransaction, MINER_FEE_TREE_HEX } from "../src/ergo-profile.js";
@@ -16,12 +12,8 @@ import {
   DEFAULT_ERGO_FEE, DEFAULT_MIN_VALUE_PER_BYTE, ergoNodePublisher, ErgoPublisher, payToPublicKeyTree, readPlainBox, verifyErgoProof,
   type ErgoPublishingSupplier, type ErgoPublisherPersistence, type NodeRequestInit,
 } from "../src/ergo-publisher.js";
-import { operatorAt, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
-import { signRevocation } from "../src/revocation.js";
-import { VenueError } from "../src/venue.js";
-import { ed25519 } from "@noble/curves/ed25519.js";
+import { VenueError } from "../src/venue-error.js";
 import { BranchSupplier, Chain, hex, MiningSupplier, MempoolNode, plainBox, plainOutput, rawOutput, SCRIPTS, transaction, type Block } from "./ergo-chain.js";
-import { CONFIG, DOMAIN, Oracle } from "./pool-support.js";
 import { KEYS, SECRETS } from "./support.js";
 
 // The runtime's Ergo wallet (ergo-publisher.ts): proveDlog proofs on
@@ -615,54 +607,10 @@ describe("the view publishes through its wallet and holds only what it reads", (
     expect(() => readOnly.publishRecord(1, SUBJECT, RECORD)).toThrow(/no publisher/);
   });
 
-  it("publishes a commitment, a replacement and a revocation, each held once its block is final", async () => {
-    const network = new Network();
-    network.mine(Number(DEPTH) + 2);
-    const v = await view(network);
-    // Published now, included in the next block; the walk floors the lead at twice the lag plus one.
-    const including = v.witnessedIndex() + DEPTH + 1n, effective = including + 2n * v.lag() + 1n;
-    const ruled = makeBacking({ obligor: KEYS.backer2, payout: { thing: "USD", quantumExponent: -2, perUnit: 100n }, reliance: [],
-      evidence: { setting: "transparent", operator: KEYS.operator, silence: { noCommitmentDuration: 1000n, challengeWindow: 5n },
-        replacementRule: KEYS.backer2, witnessing: { venue: v.id, interval: 5n } } });
-    const unsigned = { role: ROLE_OPERATOR, successor: KEYS.carol, predecessor: ruled.name, effective,
-      signature: new Uint8Array(64), successorSignature: new Uint8Array(64) };
-    const message = replacementMessage(ruled.name, unsigned);
-    const r: Replacement = { ...unsigned, signature: ed25519.sign(message, SECRETS.backer2), successorSignature: ed25519.sign(message, SECRETS.carol) };
-    const c = commitmentOf(1n, 0xaa), revocation = signRevocation(SECRETS.backer);
-    await v.publish(c);
-    await v.publishReplacement(ruled.name, r);
-    await v.publishRevocation(revocation);
-    expect(network.node.pool).toHaveLength(3);
-    // Accepted is not held: nothing is read before the including block is final.
-    await v.sync([network.supplier]);
-    expect(v.latestFor(KEYS.operator)).toBeUndefined();
-    network.mine(Number(DEPTH));
-    await v.sync([network.supplier]);
-    expect(v.latestFor(KEYS.operator)).toBeUndefined();
-    network.mine();
-    await v.sync([network.supplier]);
-    expect(v.witnessedIndex()).toBe(including);
-    expect(v.latestFor(KEYS.operator)).toEqual(c);
-    expect(v.witnessedAtSequence(KEYS.operator, 1n)).toBe(including);
-    expect(v.replacementsFor(ruled.name)).toEqual([{ replacement: r, at: including }]);
-    network.mine(Number(effective - including));
-    await v.sync([network.supplier]);
-    expect(v.witnessedIndex()).toBe(effective);
-    expect(hex(operatorAt(ruled, v, effective - 1n))).toBe(hex(KEYS.operator));
-    expect(hex(operatorAt(ruled, v, effective))).toBe(hex(KEYS.carol));
-    expect(v.revocationsFor(KEYS.backer)).toEqual([{ revocation, at: including }]);
-  });
-
-  it("refuses to publish unsigned records, and before a settled snapshot", async () => {
+  it("refuses to publish before a settled snapshot", async () => {
     const network = new Network();
     const unsynced = new ErgoVenue(PROFILE, chain.context, {}, publisher([network.node]));
-    expect(() => unsynced.publish(commitmentOf(1n, 1))).toThrow(/no settled snapshot/);
-    network.mine(5);
-    const v = await view(network);
-    const c = commitmentOf(1n, 1);
-    expect(() => v.publish({ ...c, signature: new Uint8Array(64) })).toThrow(/signature invalid/);
-    const revocation = signRevocation(SECRETS.backer);
-    expect(() => v.publishRevocation({ ...revocation, obligor: KEYS.backer2 })).toThrow(/not signed/);
+    expect(() => unsynced.publishRecord(1, KEYS.operator, encodeCommitment(commitmentOf(1n, 1)))).toThrow(/no settled snapshot/);
     expect(network.node.submitted).toHaveLength(0);
   });
 
@@ -672,7 +620,7 @@ describe("the view publishes through its wallet and holds only what it reads", (
     const p = publisher([network.node]);
     const v = new ErgoVenue(PROFILE, chain.context, {}, p);
     await v.sync([network.supplier]);
-    await v.publish(commitmentOf(1n, 2));
+    await v.publishRecord(1, KEYS.operator, encodeCommitment(commitmentOf(1n, 2)));
     const second = await p.publish({ location: SCRIPTS[1], subject: KEYS.operator, record: encodeCommitment(commitmentOf(2n, 3)), height: network.tip.height });
     expect(p.unsettled).toBe(2);
     network.mine(Number(DEPTH));
@@ -691,51 +639,8 @@ describe("the view publishes through its wallet and holds only what it reads", (
     expect(network.node.pool).toHaveLength(1);
     // A record the view already holds is not sent again.
     const before = network.node.submitted.length;
-    await v.publish(commitmentOf(1n, 2));
+    await v.publishRecord(1, KEYS.operator, encodeCommitment(commitmentOf(1n, 2)));
     expect(network.node.submitted).toHaveLength(before);
-  });
-});
-
-const supported = Number(process.versions.node.split(".")[0]) >= 24;
-describe.skipIf(!supported)("a pool store publishes on the Ergo view (Node 24)", () => {
-  const directories: string[] = [], scratch = resolve("scratch");
-  afterEach(() => {
-    for (const directory of directories.splice(0)) {
-      if (!resolve(directory).startsWith(scratch + sep)) throw new Error("invalid cleanup path");
-      rmSync(directory, { recursive: true, force: true });
-    }
-  });
-
-  it("signs its opening, publishes it through the view's wallet and finds it held after the depth", async () => {
-    const { PoolStore } = await import("../src/pool/store.js");
-    const network = new Network();
-    network.mine(6);
-    const v = await view(network);
-    const terms = (thing: string): SignedBacking => {
-      const backing = makeBacking({ obligor: KEYS.backer, payout: { thing, quantumExponent: -2, perUnit: 100n }, reliance: [],
-        evidence: { setting: "pool", operator: KEYS.operator, construction: "moe/pool/v2", configuration: DOMAIN,
-          witnessing: { venue: v.id, interval: 1n }, replacementRule: KEYS.backer } });
-      return { backing, signature: signBacking(SECRETS.backer, backing) };
-    };
-    mkdirSync(scratch, { recursive: true });
-    const directory = mkdtempSync(join(scratch, "ergo-publisher-")); directories.push(directory);
-    const store = new PoolStore(join(directory, "state.db"), CONFIG, SECRETS.operator, v, new Oracle());
-    try {
-      const opening = await store.activate("opening", [terms("EUR")]);
-      const published = await store.publish();
-      expect(published).toEqual(opening);
-      expect(network.node.pool).toHaveLength(1);
-      // A retry before inclusion sends the same transaction, not a second record.
-      await store.publish();
-      expect(new Set(network.node.submitted).size).toBe(1);
-      network.mine(Number(DEPTH) + 1);
-      await v.sync([network.supplier]);
-      expect(v.latestFor(KEYS.operator)).toEqual(opening);
-      expect(await store.publish()).toEqual(opening);
-      expect(network.node.pool).toHaveLength(0);
-    } finally {
-      store.close();
-    }
   });
 });
 

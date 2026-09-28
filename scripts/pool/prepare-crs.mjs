@@ -1,5 +1,6 @@
 // Reproducible test parameters for bb.js 5.2.0's default 2^19 BN254 points.
-// Identities match docs/pool-v2-verification.json and fresh downloads from both
+// Identities match those first recorded for pool-v2 (docs/pool-v2-verification.json
+// at a020215) and fresh downloads from both
 // upstream hosts. This does not attest to ceremony trust or pin a v3 config.
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';

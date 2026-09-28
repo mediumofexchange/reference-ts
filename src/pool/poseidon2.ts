@@ -15,7 +15,7 @@
 // wallet-computed commitment unprovable, so the test vectors are the binding.
 //
 // The sponge is the one pool-v2 §1 states, which is noir-lang/poseidon
-// v0.3.0's (`circuits/vendor/poseidon2.nr`): the state starts as
+// v0.3.0's (`src/pool/circuits/vendor/poseidon2.nr`): the state starts as
 // [0, 0, 0, n · 2^64] for n inputs; inputs are added into the first three
 // state elements three at a time, each full block followed by one
 // permutation; a final partial block of one or two inputs is added and

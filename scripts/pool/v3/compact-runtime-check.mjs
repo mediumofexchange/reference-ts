@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readSingleBackingPackage, readSingleBackingFrontier } from "../../../dist/pool/v3/package-reader.js";
 import { EvidenceRefusal, ReplayRefusal, ScopeRequired } from "../../../dist/pool/v3/refusals.js";
-import { LIMITS } from "../delivery/evidence-reader.mjs";
+import { LIMITS } from "./evidence-reader.mjs";
 
 const hex = bytes => Buffer.from(bytes).toString("hex");
 

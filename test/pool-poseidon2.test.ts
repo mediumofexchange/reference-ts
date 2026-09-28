@@ -10,7 +10,7 @@ import { poseidon2Hash, poseidon2Permutation } from "../src/pool/poseidon2.js";
 // implementation is bound to the circuits' by vectors: the permutation's own
 // test vector from Barretenberg's poseidon2_params.hpp, and hash outputs
 // recorded from Barretenberg 5.2.0's `poseidon2Hash`, the backend the pinned
-// circuits prove under (`scripts/pool/check.mjs` proves against the same).
+// circuits prove under (`scripts/pool/v3/check.mjs` proves against the same).
 
 const p = FIELD_MODULUS;
 

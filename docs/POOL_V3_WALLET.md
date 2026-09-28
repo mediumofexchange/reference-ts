@@ -57,7 +57,7 @@ Until operator fee quotes exist, an operator's fee request is authenticated the
 same way; a quote signed under the operator's already pinned key would be a new
 signed message and is left for that work.
 
-The frozen v2 [pairing](POOL_WALLET_PAIRING.md) and delivery cases map to v3 as
+The retired v2 [pairing](https://github.com/mediumofexchange/reference-ts/blob/a020215/docs/POOL_WALLET_PAIRING.md) and delivery cases mapped to v3 as
 follows. Canonical bounded framing, malformed fields, independent exact digest,
 domain and every invoice term, and mismatch refusal before any network or proof
 use are covered by `test/pool-v3-request.test.ts` and the payer's request
@@ -299,6 +299,6 @@ successor segment is covered by the succession check.
 That harness hands the request object across directly; the request frame and
 digest are oracle-tested. A human authentication channel is not qualified.
 Cancellation/release and multi-backing payment remain open; backup and
-restoration are oracle and process tested, not physical-loss drills. Existing v2
-wallet/service code and checks remain until all their replacement cases pass.
+restoration are oracle and process tested, not physical-loss drills. The v2
+wallet and service retired against a [case map](../decisions/2026-09.md#2026-09-28--retire-v2-against-a-case-map-of-its-checks).
 This library establishes no mainnet readiness or physical custody qualification.

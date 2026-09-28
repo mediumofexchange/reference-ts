@@ -857,7 +857,7 @@ None changes `src/`, the pinned v2 identities or the specification.
 
 - **P1 Circuits, offline.** Write `demand.nr`, `settle.nr`, `request.nr`
   beside copies of `notes.nr` and the helper under `scratch/pool-v3/circuits`,
-  with `T_TAG` added to `notes.nr`; compile with `scripts/compile-noir.mjs`
+  with `T_TAG` added to `notes.nr`; compile with [`scripts/compile-noir.mjs`](https://github.com/mediumofexchange/reference-ts/blob/a020215/scripts/compile-noir.mjs)
   generalized to a kind list; derive keys with the pinned toolchain; prove
   synthetic fixtures from `scripts/pool/fixtures.mjs`; record public-input
   order and count, proof bytes, execution, proving and verification times.

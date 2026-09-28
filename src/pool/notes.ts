@@ -10,7 +10,8 @@
 // binds the whole opening under the domain; the nullifier is a function of
 // the immutable note and its owner's secret alone.
 //
-// These are the host's copies of the relations `circuits/notes.nr` proves.
+// These are the host's copies of the relations pool-v3's `notes.nr`
+// (`scripts/pool/v3/circuits/`) proves.
 // The wallet computes commitments to build outputs and paths, and nullifiers
 // to spend; the operator computes nothing here beyond the tree nodes, since a
 // spend reveals neither the note nor the secret. The checks mirror the

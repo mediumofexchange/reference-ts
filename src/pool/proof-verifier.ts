@@ -1,7 +1,7 @@
 // Proof verification under Barretenberg 5.2.0's UltraHonk over BN254 with the
-// verifier target `noir-recursive`, which is the zero-knowledge mode (pool-v2
-// §12, pool-v3 §4). The backend's legacy `keccak` mode disables zero knowledge
-// and is no construction here.
+// verifier target `noir-recursive`, which is the zero-knowledge mode (pool-v3
+// §4). The backend's legacy `keccak` mode disables zero knowledge and is no
+// construction here.
 //
 // Construction-neutral: a construction passes its circuits as data — each
 // statement kind, the name of its compiled artifact and its public-input count
@@ -9,10 +9,10 @@
 // artifact's bytecode, names each circuit's identity for the caller to pin
 // against its configuration, and verifies a kind against that kind's key and
 // nothing else; it never accepts a verification key supplied with a statement.
-// `barretenberg.ts` binds pool-v2's table.
+// `v3/prover.ts` binds pool-v3's table.
 //
-// This module and `barretenberg.ts` are the only ones that import
-// `@aztec/bb.js`, an optional peer dependency.
+// This module and `v3/prover.ts` are the only ones that import `@aztec/bb.js`,
+// an optional peer dependency.
 
 import { sha256 } from "@noble/hashes/sha2.js";
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
@@ -75,7 +75,7 @@ export const startBackend = (options: BackendOptions): Promise<Barretenberg> => 
 // infinity. Each is a property of the supplied bytes, so the statement is
 // invalid and verifies as false. Any other failure is the backend's, not the
 // data's, and stays visible. The list is the pinned version's; a pin move
-// re-establishes it (scripts/pool/check.mjs pins each message).
+// re-establishes it (scripts/pool/v3/check.mjs pins each message).
 const MALFORMED_PROOF = Object.freeze([
   "Non-canonical proof element: value >= field modulus",
   "Assertion failed: (uint256_t(fr_vec[0]) < (uint256_t(1) << (NUM_LIMB_BITS * 2)))",

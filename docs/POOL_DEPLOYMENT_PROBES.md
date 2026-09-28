@@ -34,26 +34,24 @@ already present in the lockfile before this probe; no new runtime dependency
 is added to the library. Its development-server Node requirement is narrower
 than the library's Node 20 minimum.
 
-```powershell
-npm run bench:pool:prepare
-npm run bench:pool:browser
-```
+`npm run bench:pool:prepare` and `npm run bench:pool:browser` ran at a020215,
+opening `http://127.0.0.1:4173/` to record the device/browser, run the
+benchmark and download the JSON. The server was loopback-only and served
+synthetic benchmark assets and development modules. For an Android device with
+USB debugging and `adb` already configured, `adb reverse tcp:4173 tcp:4173`
+made that same URL reachable on the phone without exposing the repository to
+the LAN. Reverse forwarding is transport only; it does not emulate phone
+hardware on desktop.
 
-Open `http://127.0.0.1:4173/`, record the device/browser, run the benchmark and
-download the JSON. The server is loopback-only and serves synthetic benchmark
-assets and development modules. For an Android device with USB debugging and
-`adb` already configured, `adb reverse tcp:4173 tcp:4173` makes that same URL
-reachable on the phone without exposing the repository to the LAN. Reverse
-forwarding is transport only; it does not emulate phone hardware on desktop.
-
-Preparation reuses `scripts/pool/compile.mjs` and the existing synthetic
-fixtures. It verifies source, bytecode and key identities against the v2
-manifest, requires the cached parameters recorded in
-`docs/pool-v2-verification.json`, and publishes the completion manifest only
-after the assets exist. A failed preparation invalidates that marker. Scratch
-compiler files are removed on ordinary completion/failure; interrupted runs
-may leave disposable compiler directories in `scratch/`. No parameters are
-silently fetched by preparation or by the browser probe.
+Preparation reused [`scripts/pool/compile.mjs`](https://github.com/mediumofexchange/reference-ts/blob/a020215/scripts/pool/compile.mjs)
+and the existing synthetic fixtures. It verified source, bytecode and key
+identities against the v2 manifest, required the cached parameters recorded in
+[`docs/pool-v2-verification.json`](https://github.com/mediumofexchange/reference-ts/blob/a020215/docs/pool-v2-verification.json),
+and published the completion manifest only after the assets existed. A failed
+preparation invalidated that marker. Scratch compiler files were removed on
+ordinary completion/failure; interrupted runs could leave disposable compiler
+directories in `scratch/`. No parameters were silently fetched by preparation
+or by the browser probe.
 
 The browser exercises only spend, with one worker and the pinned
 `noir-recursive` ZK target. It verifies the locally derived spend key, the
@@ -99,9 +97,9 @@ is the record codec's. `npm test` checks the recorded profile-1 vector byte
 for byte, deterministic retries, key separation, u64 and width bounds,
 malformed/context-swapped/tampered capsules, authenticated wrong-commitment
 plaintext, the ordered delivery vector, the settlement owner secret and an
-independent WebCrypto envelope. With Node 24, `npm run check:pool:restoration`
-adds restoration from signed local evidence below; CI runs it on Linux and
-Windows beside the pinned v2 proof checks. The v3 conformance suite
+independent WebCrypto envelope. On Node 24, `npm run check:pool:restoration`
+at a020215 added restoration from signed local evidence below; CI ran it on
+Linux and Windows beside the then-pinned v2 proof checks. The v3 conformance suite
 (`npm run check:pool:v3`) proves the digest's binding in all three successor
 relations.
 
@@ -145,9 +143,9 @@ Device and full-history replay costs remain additional gates.
 
 ### Restoration from exact local evidence
 
-`npm run check:pool:restoration` connects the existing capsule scanner to the
-canonical v3 served-trail, record, snapshot and header codecs; Linux and
-Windows CI run it. The
+`npm run check:pool:restoration` at a020215 connected the existing capsule
+scanner to the canonical v3 served-trail, record, snapshot and header codecs;
+Linux and Windows CI ran it. The
 [retained result](pool-restoration-evidence-verification.json) pins the sources.
 
 A fresh child receives only a synthetic seed, an independently selected fixture
@@ -666,7 +664,7 @@ the probe only accumulates an already validated set. The path algebra proves
 the retained non-membership capability, without selecting a published proof
 format or parser.
 
-Run `npm run bench:pool:spent` to regenerate
+`npm run bench:pool:spent` at a020215 regenerated
 `scratch/pool-spent-set/report.json`. The
 [recorded report](pool-spent-verification.json) pins the specification and
 LF-normalized source hashes, environment and deterministic roots; it is
