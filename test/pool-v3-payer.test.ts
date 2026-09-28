@@ -11,7 +11,7 @@ import { configurationHash, RELATIONS, type CandidateConfiguration } from "../sr
 import { decodeRecord, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
-import type { PaymentRequest } from "../src/pool/v3/wallet-request.js";
+import { authenticatePaymentRequest, encodePaymentRequest, paymentRequestDigest, type PaymentRequest } from "../src/pool/v3/wallet-request.js";
 import type { LocalProver, V3Wallet as Wallet } from "../src/pool/v3/wallet-store.js";
 import { authorizeIssue, burnTask, issueTask, spendTask, type ProofTask } from "../src/pool/v3/witness.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
@@ -114,6 +114,26 @@ describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
     // The change note is found by the seed scan alone: 10 − 7 − 1.
     expect(after.holdings.map(h => [h.value, h.status])).toEqual([[6n, "available"], [2n, "available"]]);
     expect(f.payer.payment("shop")).toMatchObject({ status: "final", receipt, final: { checkpoint: after.checkpoint, judgingIndex: after.judgingIndex } });
+  });
+
+  it("pays a request carried as bytes only after its independently obtained digest matches", async () => {
+    const f = await fixture();
+    // The receiver shows the digest on its authenticated channel; the frame may travel any private way.
+    const frame = encodePaymentRequest(f.invoice), trusted = paymentRequestDigest(frame);
+    const receiver = f.open("receiver");
+    expect(encodePaymentRequest(receiver.request("invoice", f.backing, 7n))).toEqual(frame);
+    // A substituted request, however well formed, fails against the receiver's digest before anything is reserved.
+    const attacker = encodePaymentRequest(f.open("attacker").request("invoice", f.backing, 7n));
+    expect(() => authenticatePaymentRequest(attacker, trusted)).toThrow(EncodingError);
+    const request = authenticatePaymentRequest(frame, trusted);
+    expect(request).toEqual(f.invoice);
+    await expect(f.payer.prepare("shop", { ...f.order, request, value: 8n }, f.served, f.signed, prove))
+      .rejects.toThrow("invalid exact payment request");
+    expect(f.payer.payment("shop")).toBeUndefined();
+    const payment = await f.payer.prepare("shop", { ...f.order, request }, f.served, f.signed, prove);
+    expect(outputsOf(payment.record)).toContain(f.invoice.cm);
+    await f.payer.submit("shop", f.service);
+    expect((await receiver.fulfill("invoice", await f.publish(), f.signed)).request).toEqual(f.invoice);
   });
 
   it("selects the least-total pair, pads a single input and refuses a payment needing three notes", async () => {

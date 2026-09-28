@@ -177,7 +177,7 @@ describe("domain-separation tags are prefix-free", () => {
   it("no live tag is a prefix of another, including any exported but left out of the load-time list", () => {
     expect(contextsArePrefixFree()).toBe(true);
     const exported = Object.values(contexts).filter((v): v is Uint8Array => v instanceof Uint8Array);
-    expect(exported.length).toBe(47);
+    expect(exported.length).toBe(48);
     expect(contextsArePrefixFree(exported)).toBe(true);
   });
 
