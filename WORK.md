@@ -3,8 +3,8 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 6d on `feat/v3-request-exchange` (no companion branch or normative
-change): a receiver's exact v3 payment request (pool-delivery C4.1) passes to
+Slice 6d delivered by PR #33 from `feat/v3-request-exchange` (no companion
+branch or normative change): a receiver's exact v3 payment request (pool-delivery C4.1) passes to
 the payer as one canonical 246-byte frame (`moe/wallet/v3/request`), accepted
 only when its SHA-256 equals a digest obtained independently from the
 receiver. V3 needs no receiver endpoint, credential, capability or inbox: the
@@ -19,15 +19,19 @@ receipt handoff for pending acceptance, backup or real-proof harness change.
 
 ## Status
 - Commits `7b527c4` (frame, digest, tests), `56f1727` (docs, decision, case
-  map) and the review-fix commit. Independent adversarial review found no
-  blocker/major; four minor findings resolved: display reads return terms
-  without the capsule (`prepare` refuses them, tested), and the guide states
-  self-digest limits, full machine comparison, fee requests and first-payment
-  griefing. The tag stays beside its codec (tested prefix-free against
-  `contexts.ts`), so the six current reports keep their bound shared sources.
-- Focused tests pass locally: 4 frame cases, 17 payer cases, typecheck. Only
-  the journal report binds a changed source (`wallet-request.ts`); it is
-  re-recorded from the Linux `--ergo` CI artifact before merge.
+  map) and `31227b9` (review fixes). Independent adversarial review found no
+  blocker/major; four minor findings resolved and read back: display reads
+  return terms without the capsule (`prepare` refuses them, tested), and the
+  guide states self-digest limits, full machine comparison, fee requests and
+  first-payment griefing. The tag stays beside its codec (tested prefix-free
+  against `contexts.ts`), so shared sources bound by reports are unchanged.
+- Focused tests pass locally (4 frame, 17 payer cases, typecheck). PR #33 at
+  `31227b9`: all seven jobs passed in
+  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36402484639);
+  the journal report is its Linux `--ergo` artifact (only `wallet-request.ts`
+  changed) and all six current reports match their bound sources. The delivery
+  commit changes only WORK.md and that report. Local full `npm run check` was
+  not run (host memory at ~0.6 of 15.9 GB free).
 
 ## Evidence
 - Wallet API, custody preconditions, reproof and payment limits: [guide](docs/POOL_V3_WALLET.md).
