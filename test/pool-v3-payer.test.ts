@@ -289,6 +289,9 @@ describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
       .rejects.toMatchObject({ code: "CONFLICT" });
     expect(f.payer.payment("stale")).toBeUndefined();
     const successor = await f.takeover(), served = (await successor.package()).package;
+    // The checkpointed statement is final in the imported history: reprove resolves it without proving.
+    expect(await f.payer.reprove("shop", served, f.signed, async () => { throw new Error("not called"); }))
+      .toMatchObject({ status: "final", superseded: [] });
     const view = await f.payer.sync(served, f.signed);
     expect(f.payer.payment("shop")).toMatchObject({ status: "final", inputs: payment.inputs });
     expect(view.holdings.map(h => [h.value, h.status])).toEqual([[6n, "available"], [2n, "available"]]);
@@ -308,7 +311,9 @@ describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
     const receipt = await f.payer.submit("shop", f.service);
     await f.replace();
     const pending = f.payer.payment("shop")!;
-    expect(await f.payer.reprove("shop", (await f.j.package()).package, f.signed, prove)).toEqual(pending);
+    await expect(f.payer.reprove("shop", (await f.j.package()).package, f.signed, prove)).rejects
+      .toMatchObject({ code: "CONFLICT", message: "the canonical segment's operator term has ended" });
+    expect(f.payer.payment("shop")).toEqual(pending);
     const successor = await f.takeover(), served = (await successor.package()).package;
     await f.payer.sync(served, f.signed);
     expect(f.payer.payment("shop")).toEqual(pending);
@@ -341,11 +346,18 @@ describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
     const f = await fixture();
     const payment = await f.payer.prepare("shop", f.order, f.served, f.signed, prove);
     const stale = decodeReceipt(await f.j.submit(payment.record));
+    const early = f.venue.export(), earlyPackage = (await f.j.package()).package;
     await f.replace();
     const served = (await (await f.takeover()).package()).package;
     const racing = { submit: async () => { await f.payer.reprove("shop", served, f.signed, prove); return stale; } };
     await expect(f.payer.submit("shop", racing)).rejects.toMatchObject({ code: "CONFLICT" });
-    expect(f.payer.payment("shop")).toMatchObject({ receipt: undefined, superseded: [{ record: payment.record, receipt: undefined }] });
+    const reproven = f.payer.payment("shop")!;
+    expect(reproven).toMatchObject({ receipt: undefined, superseded: [{ record: payment.record, receipt: stale }] });
+    // At an older index A is still canonical and admitting: that view cannot move the record back.
+    const lagging = new V3Wallet(join(f.directory, "payer.db"), { configuration, venue: FixtureVenue.from(early), reference, verifier });
+    wallets.push(lagging);
+    await expect(lagging.reprove("shop", earlyPackage, f.signed, prove)).rejects.toMatchObject({ code: "CHANGED_VIEW" });
+    expect(lagging.payment("shop")).toEqual(reproven);
   });
 
   it("refuses preparation while the silence clock closes admission and reproves into the returned segment", async () => {
@@ -359,6 +371,8 @@ describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
     f.venue.advance(7n);
     await expect(f.payer.prepare("late", late, f.served, f.signed, prove)).rejects.toMatchObject({ code: "SILENCE" });
     expect(f.payer.payment("late")).toBeUndefined();
+    await expect(f.payer.reprove("shop", (await f.j.package()).package, f.signed, prove)).rejects.toMatchObject({ code: "SILENCE" });
+    expect(f.payer.payment("shop")!.record).toEqual(payment.record);
     await f.j.return("returned"); await f.j.publish(); await f.j.adopt();
     const served = (await f.j.package()).package;
     await f.payer.sync(served, f.signed);
@@ -370,6 +384,14 @@ describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
     await f.payer.sync(final, f.signed);
     expect(f.payer.payment("shop")).toMatchObject({ status: "final", superseded: [{ record: payment.record }] });
     expect((await f.payer.prepare("late", late, final, f.signed, prove)).status).toBe("prepared");
+    // A returned segment whose own horizon reaches silence refuses the reproof and keeps the record.
+    const g = await fixture([10n, 6n], verifier, { silence: { noCommitmentDuration: 4n, challengeWindow: 5n } });
+    const pending = await g.payer.prepare("shop", g.order, g.served, g.signed, prove);
+    g.venue.advance(7n); await g.j.return("returned"); await g.j.publish(); await g.j.adopt();
+    const returned = (await g.j.package()).package;
+    g.venue.advance(g.venue.witnessedIndex() + 3n);
+    await expect(g.payer.reprove("shop", returned, g.signed, prove)).rejects.toMatchObject({ code: "SILENCE" });
+    expect(g.payer.payment("shop")).toEqual(pending);
   });
 
   it("refuses a database from the earlier receiver-only profile instead of replacing its seed", async () => {

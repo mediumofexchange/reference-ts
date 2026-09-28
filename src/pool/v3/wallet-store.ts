@@ -178,7 +178,7 @@ export class V3Wallet {
         CREATE TABLE IF NOT EXISTS payer_payments (alias TEXT PRIMARY KEY, statement TEXT NOT NULL UNIQUE, record BLOB NOT NULL,
           backing BLOB NOT NULL, operator BLOB NOT NULL, payee TEXT NOT NULL, value TEXT NOT NULL, fee TEXT, fee_value TEXT,
           status TEXT NOT NULL CHECK(status IN ('prepared','final','failed')), receipt BLOB, checkpoint BLOB, judging_index TEXT,
-          zero BLOB) STRICT;
+          zero BLOB, judged TEXT NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS payer_inputs (nf TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES payer_payments(alias)) STRICT;
         CREATE TABLE IF NOT EXISTS payer_outputs (cm TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES payer_payments(alias),
           value TEXT NOT NULL, owner TEXT NOT NULL, rho TEXT NOT NULL) STRICT;
@@ -454,7 +454,7 @@ export class V3Wallet {
     const taken = this.db.prepare("SELECT 1 FROM payer_outputs WHERE cm=?");
     requireThat(theirs.every(cm => taken.get(cm.toString()) === undefined), "CONFLICT", "request is already in a saved payment");
 
-    const view = await this.frontier(packageBytes, signed), { canonical, force, notes, at } = view;
+    const view = await this.frontier(packageBytes, signed), { canonical, force, notes, at, observed } = view;
     // A concurrent exact call may have saved while this one read: answer it before selection.
     const racing = sameOrder();
     if (racing !== undefined) {
@@ -464,6 +464,8 @@ export class V3Wallet {
     requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
     requireThat(theirs.every(cm => !canonical.state.outputsSeen.has(cm)), "CONFLICT", "request is already paid");
     const header = this.admissible(view);
+    // The venue answers behind this decision are rechecked before proving.
+    observed.check();
     const holdings = this.holdingsOf(notes, force, at), available = notes.filter((_, i) => holdings[i]!.status === "available");
     const selected = select(available, total), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
     const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.tree.root(), path: note.tree.path(note.leaf) }));
@@ -483,9 +485,9 @@ export class V3Wallet {
       const input = this.db.prepare("SELECT 1 FROM payer_inputs WHERE nf=?");
       requireThat(reserved.every(nf => input.get(nf) === undefined), "CONFLICT", "an input is reserved by another payment");
       requireThat(outputs.every(out => taken.get(out.cm.toString()) === undefined), "CONFLICT", "an output belongs to another payment");
-      this.db.prepare("INSERT INTO payer_payments VALUES(?,?,?,?,?,?,?,?,?,'prepared',NULL,NULL,NULL,?)").run(name, statement, bytes,
+      this.db.prepare("INSERT INTO payer_payments VALUES(?,?,?,?,?,?,?,?,?,'prepared',NULL,NULL,NULL,?,?)").run(name, statement, bytes,
         backing, header.operator, payee.cm.toString(), value.toString(), fee?.request.cm.toString() ?? null, fee?.value.toString() ?? null,
-        zero?.requestId ?? null);
+        zero?.requestId ?? null, at.toString());
       for (const nf of reserved) this.db.prepare("INSERT INTO payer_inputs VALUES(?,?)").run(nf, name);
       // Every opening is kept so a reproof can rebuild the same outputs (C1.2.5).
       for (const { cm, opening } of outputs) this.db.prepare("INSERT INTO payer_outputs VALUES(?,?,?,?,?)")
@@ -499,8 +501,11 @@ export class V3Wallet {
    * same statement again in the canonical segment. The input nullifiers,
    * outputs, capsules and order are the saved ones; only the segment, scope
    * and anchors change. A payment already final or failed by the current
-   * evidence is resolved without proving, and one whose record already names
-   * the canonical segment is returned unchanged. Both records spend the same
+   * evidence is resolved without proving. One whose record already names the
+   * canonical segment is returned unchanged while that segment can admit it,
+   * and refused with the admission code (CONFLICT, SILENCE) while it cannot. A
+   * view older than the one the saved record was built from is refused: a dead
+   * segment never becomes canonical again. Both records spend the same
    * nullifiers into the same commitments, so at most one can ever be admitted
    * into canonical history. The superseded record and any receipt are kept. */
   async reprove(name: string, packageBytes: Uint8Array, signed: SignedTerms, prove: LocalProver): Promise<Payment> {
@@ -508,12 +513,13 @@ export class V3Wallet {
     const saved = this.payment(name);
     requireThat(saved !== undefined, "UNKNOWN", "unknown payment");
     if (saved.status !== "prepared") return saved;
-    const row = this.db.prepare("SELECT backing,zero FROM payer_payments WHERE alias=?").get(name)!;
+    const row = this.db.prepare("SELECT backing,zero,judged FROM payer_payments WHERE alias=?").get(name)!;
     const backing = copyUnshared(row.backing as Uint8Array);
     requireThat(same(rootTermsName(copyUnshared(signed.terms)), backing), "INVALID", "terms do not name the payment's backing");
     requireThat(typeof prove === "function", "INVALID", "a local prover is required");
     const view = await this.frontier(packageBytes, signed), { canonical, force, notes, at, observed } = view;
     requireThat(canonical !== undefined && force !== undefined, "ABSENT", "no canonical checkpoint to spend from");
+    requireThat(at >= BigInt(row.judged as string), "CHANGED_VIEW", "the venue view is older than the saved record's");
     const old = decodeRecord(saved.record), p = old.publicInputs;
     const status = this.resolution(name, old, canonical, force);
     if (status !== undefined) {
@@ -521,8 +527,9 @@ export class V3Wallet {
       this.resolve([{ alias: name, status }], encodeCommitment(canonical.commitment), at);
       return this.payment(name)!;
     }
-    if (same(identifierOf(p[2]!, p[3]!), canonical.segment)) return saved;
     const header = this.admissible(view);
+    if (same(identifierOf(p[2]!, p[3]!), canonical.segment)) return saved;
+    observed.check();
     // The same notes, now read in the canonical segment's accepted history.
     const zero = row.zero === null ? undefined : prepareExactOutput(this.seed, this.domain, row.zero as Uint8Array, backing, 0n);
     const positive = saved.inputs.map(nf => notes.find(note => note.nf === nf));
@@ -551,8 +558,8 @@ export class V3Wallet {
         .get(name, hex(saved.statement));
       if (current === undefined) return;
       this.db.prepare("INSERT INTO payer_superseded VALUES(?,?,?,?)").run(hex(saved.statement), name, saved.record, current.receipt as Uint8Array | null);
-      this.db.prepare("UPDATE payer_payments SET statement=?, record=?, operator=?, receipt=NULL WHERE alias=?")
-        .run(statement, bytes, header.operator, name);
+      this.db.prepare("UPDATE payer_payments SET statement=?, record=?, operator=?, receipt=NULL, judged=? WHERE alias=?")
+        .run(statement, bytes, header.operator, at.toString(), name);
     });
     return this.payment(name)!;
   }
@@ -579,12 +586,18 @@ export class V3Wallet {
       operator: row.operator as Uint8Array }, receipt) && same(receipt.statementHash, saved.statement) &&
       same(receipt.proofHash, digests.proofHash) && same(receipt.signatureHash, digests.signatureHash),
       "INVALID", "receipt does not authenticate the saved record");
-    this.transaction(() => {
-      // A reproof during submission replaced the record this receipt authenticates.
-      requireThat(this.db.prepare("SELECT 1 FROM payer_payments WHERE alias=? AND statement=?").get(name, hex(saved.statement)) !== undefined,
-        "CONFLICT", "the payment was re-proven during submission");
-      this.db.prepare("UPDATE payer_payments SET receipt=? WHERE alias=? AND receipt IS NULL").run(encodeReceipt(receipt), name);
+    const current = this.transaction(() => {
+      const statement = hex(saved.statement), bytes = encodeReceipt(receipt);
+      if (this.db.prepare("SELECT 1 FROM payer_payments WHERE alias=? AND statement=?").get(name, statement) !== undefined) {
+        this.db.prepare("UPDATE payer_payments SET receipt=? WHERE alias=? AND receipt IS NULL").run(bytes, name);
+        return true;
+      }
+      // A reproof during submission replaced the record: the receipt stays with the
+      // superseded record as evidence of that operator's acceptance (C2.10.9).
+      this.db.prepare("UPDATE payer_superseded SET receipt=? WHERE alias=? AND statement=? AND receipt IS NULL").run(bytes, name, statement);
+      return false;
     });
+    requireThat(current, "CONFLICT", "the payment was re-proven during submission");
     return this.payment(name)!.receipt!;
   }
 

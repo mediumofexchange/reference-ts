@@ -103,10 +103,15 @@ spent otherwise.
 `reprove(alias, package, signedTerms, prove)` handles a payment that stays
 `prepared` after its segment stopped being canonical, because the operator's
 term ended or silence lapsed its unfinished tail (pool-fees C1.2.5, C4.4). It
-reads the same frontier, resolves a payment already final or failed without
-proving, and returns the payment unchanged while its record names the
-canonical segment. Otherwise it rebuilds the saved statement in the canonical
-segment: the same input nullifiers (the reserved notes, found again by the seed
+reads the same frontier, refusing `CHANGED_VIEW` at an index older than the
+one the saved record was built from (a dead segment never becomes canonical
+again, but a lagging venue view could show it so), and resolves a payment
+already final or failed without proving. While the record names the canonical
+segment it returns the payment unchanged if that segment can admit it, and
+otherwise refuses with the admission code (`CONFLICT` for an ended term with
+no successor yet, `SILENCE` for a clock that closes admission), so a stuck
+payment is distinguishable from a live one. Otherwise, after rechecking the
+venue answers, it rebuilds the saved statement in the canonical segment: the same input nullifiers (the reserved notes, found again by the seed
 scan in imported history, and the saved zero input), the same outputs,
 capsules and order; only segment, scope and anchors change. Admission is
 checked as for preparation, an input missing from canonical history refuses
@@ -115,7 +120,10 @@ refuses `LOCKED`. The new record replaces the saved one only if the saved
 statement is still current, keeping the old record and any receipt under
 `superseded`; the receipt remains evidence of that operator's acceptance, not
 finality. A receipt returned for a record that a reproof replaced during
-submission is refused. Both records spend the same nullifiers into the same
+submission is kept on that superseded record and the call refuses `CONFLICT`.
+After a return opening the wallet may reprove before the operator has adopted
+the return block; submission is then refused until adoption, and a retry
+resends the same record. Both records spend the same nullifiers into the same
 commitments, so at most one can enter canonical history and the payee's exact
 request is paid once. A direct fee stays with its original recipient even when
 another operator admits the reproof; paying the current operator instead is a
@@ -141,8 +149,10 @@ when a restored copy spends the reserved input. Its reproof cases cover a
 pending payment lapsed by takeover and by silence return, the preserved
 nullifiers/outputs/capsules, final settlement by the new operator and the
 payee's fulfillment, substituted reproof statements, idempotent retries,
-resolution without proving, a stale receipt racing a reproof, and `SILENCE`
-refusal at the horizon and after the boundary.
+resolution without proving, a stale receipt racing a reproof (kept as
+superseded evidence), a lagging venue view, an ended term without successor,
+and `SILENCE` refusal at the horizon, after the boundary and in a returned
+segment past its own horizon.
 `npm run check:pool:v3-wallet` exercises fresh processes at request, fulfillment,
 payment and reproof commit boundaries with synthetic evidence. These are process-exit
 tests, not physical power-loss or qualified-storage evidence.
