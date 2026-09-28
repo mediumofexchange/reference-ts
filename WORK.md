@@ -21,7 +21,15 @@ multi-backing or adoption.
   architecture, rules, requirements and fault guide.
 - Local: typecheck and the affected tests (156) pass; low memory (~2 GB) rules out a full
   local run, so CI is the acceptance run.
-- **Open:** STATUS_PLACEHOLDER
+- Review: an independent adversarial review of `9c8b353` found nothing blocking; its doc,
+  comment and test notes are applied in the docs commit.
+- **Open:** PR #37 CI was pending when its watcher was reaped for low memory. Next run:
+  `gh pr checks 37`; fix any failure; when green, `gh run download <run> -n
+  pool-v3-reports-ubuntu-latest -D scratch/ci-artifact`, copy `scratch/pool-v3-store-results.json`
+  and `pool-v3-local-replay-results.json` to `docs/pool-v3-store-verification.json` and
+  `docs/pool-v3-local-replay-verification.json`, take the four recovery/succession
+  `docs/` reports as they are, confirm with `npm run check:evidence` that the six match,
+  commit, wait for CI, merge, delete the branch and `scratch/ci-artifact`.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
