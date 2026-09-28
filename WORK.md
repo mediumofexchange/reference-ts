@@ -3,20 +3,19 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 7 M2 (branch `feat/scope-journal`): the operator journal serves multi-backing
-scopes. `open` takes several backings' terms; admission, commitments and packages carry
-one snapshot per scoped backing; one `rescope` command changes scope at a committed
-boundary (C2.10.9): take successor terms from public evidence (any-scope frontier),
-keep live backings from the journal's own canonical state, drop ended ones; an elective
-change first needs the whole tail witnessed. `takeover` becomes `rescope` taking one
-term; silence return keeps the whole scope. Journal reads go through `readPackage`.
-Acceptance: a fast oracle-proof test runs scope-check's split/rejoin story through
-journals with `readPackage` agreeing per backing; named refusals for an unwitnessed
-elective tail, a kept ended term and foreign terms; single-backing suites unchanged;
-CI green; reports re-recorded; independent review. Stop: no adoption, no testnet (M3).
+Slice 7 M2 (branch `feat/scope-journal`): the journal serves multi-backing scopes;
+`open` takes several terms; one `rescope` command changes scope at a committed boundary
+(C2.10.9; [decision](decisions/2026-09.md#2026-09-28--change-a-journals-scope-with-one-command-at-a-committed-boundary)).
+Acceptance: scope-check's split/rejoin story through journals with per-backing
+`readPackage` agreement (oracle test; real-proof `scope-store-check.mjs` on both venues),
+named refusals, unchanged single-backing suites, CI green, reports re-recorded,
+independent review. Stop: no adoption or testnet (M3).
 
 ## Status
-- M1 (PR #39): `scope-reader.ts` and `readPackage` read any scope in the runtime.
+- Branch (6881f03 +): journal, `readFrontier`, `package(backing)`; the new oracle test and
+  v3/service suites pass locally. `scope-store-check.mjs` is new in `check:pool:v3`, first
+  run in CI (2 GB free locally). Owed: CI, reports from its artifact (seven current, two
+  new scope reports; then link them in implementation status), opus review, merge.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
@@ -33,9 +32,9 @@ CI green; reports re-recorded; independent review. Stop: no adoption, no testnet
   Pool-v2 and its guides/reports: [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Multi-backing (slice 7, M1 reader done): M2 operator activation and succession of
-   multi-backing segments in the journal (`store.ts` opens single-backing only; its
-   reads move to `readPackage`); M3 two-backing testnet drill. Stop: no adoption.
+1. Multi-backing (slice 7): M3 two-backing testnet drill, after the wallet reads
+   multi-backing packages (`wallet-store.ts` uses `readSingleBackingFrontier`). Adding a
+   fresh original-term backing to a live scope is unimplemented. Stop: no adoption.
 2. Configuration adoption: provenance, ACIR identities/certificates, replay/import
    bounds, one-transaction condition and BN254 margin. Mainnet needs separate authority.
 3. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with

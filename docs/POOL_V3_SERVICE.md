@@ -17,7 +17,7 @@ Credentials grant local operations, never protocol authorization or finality.
 | `POST /commands` | `{ version: 1, profile: "pool-store/v3", kind: "submit", record }` | `kind: "accepted"`, exact signed receipt |
 | `POST /commands` | `{ version: 1, profile: "pool-store/v3", kind: "commit", id }` | `kind: "committed"`, signed commitment |
 | `POST /commands` | `{ version: 1, profile: "pool-store/v3", kind: "publish" }` | `kind: "published"`, signed commitment |
-| `GET /package` | No parameters | `kind: "package"`, selection metadata and evidence bytes |
+| `GET /package` | Optional `?backing=` with 64 lowercase hex digits naming a backing the served commitment carries (default: the scope's first) | `kind: "package"`, selection metadata naming that backing and evidence bytes |
 
 Every successful reply also carries version 1 and the same profile. Byte fields
 are lowercase hex. Commit identifiers match `[A-Za-z0-9._:-]{1,128}`. Records
