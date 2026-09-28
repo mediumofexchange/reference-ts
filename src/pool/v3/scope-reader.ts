@@ -15,8 +15,8 @@ import { EMPTY_NOTE_ROOT } from "../note-tree.js";
 import { ScopeTree } from "../scope.js";
 import { decodeReceipt, decodeSnapshot, type Snapshot } from "./commitments.js";
 import type { SegmentHeader } from "./headers.js";
-import { importLimitsOf, NO_FAULTS, type ImportCarryingVerdict, type ImportContext, type ImportEvidence,
-  type PublicationVerdict } from "./import-reader.js";
+import { importLimitsOf, NO_FAULTS, type CanonicalCheckpoint, type ForcedPublication, type FrontierContext, type FrontierResult,
+  type ImportCarryingVerdict, type ImportContext, type ImportEvidence, type ImportWork, type PublicationVerdict } from "./import-reader.js";
 import { countNonService, type NonServiceCount } from "./non-service.js";
 import { decodedTrails, readRecordView, replayTrail, type Directories, type RecordView, type ReplayResult,
   type ValidCheckpoint } from "./reader.js";
@@ -129,15 +129,22 @@ export interface ScopeRanges {
   /** A scope read names each publication's backing; a single-backing read has one. */
   readonly publications: readonly (PublicationVerdict & { readonly backing?: string })[]; readonly nonService?: NonServiceCount;
 }
+/** A forced publication; a scope read names its backing. */
+export interface ScopeForcedPublication extends ForcedPublication { readonly backing?: string }
 export type ScopeResult = { readonly receipt: ReceiptVerdict; readonly state?: undefined } | {
   readonly receipt?: undefined; readonly state: ReplayResult; readonly carrying: readonly ImportCarryingVerdict[];
   readonly clock: ClockRecord | null; readonly ranges: ScopeRanges;
+  /** The selected checkpoint, which a successful read establishes as the backing's canonical one. */
+  readonly canonical: CanonicalCheckpoint;
+  /** Every scoped backing's forced publications through the judging index, in venue order. */
+  readonly force: readonly ScopeForcedPublication[];
+  readonly work: ImportWork;
 };
 type Latest = (backing: Uint8Array, terms: RootTerms, child?: Child) => Promise<ValidScope | undefined>;
 
 /** C2b.3.1–4.2 per backing. Snapshots exclude the entire publication index;
  * canonical opening predecessors additionally include lower same-key sequences. */
-function scopeRecovery(context: ImportContext, viewFor: (backing: Uint8Array, terms: RootTerms) => Promise<RecordView>,
+function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "receiptBytes">, viewFor: (backing: Uint8Array, terms: RootTerms) => Promise<RecordView>,
   latest: Latest, charge: (amount: bigint) => void) {
   const { selection, verifier } = context;
   const answers = new Map<string, Promise<readonly RangeEntry[]>>(), positions = new Map<string, string>();
@@ -267,11 +274,100 @@ function scopeRecovery(context: ImportContext, viewFor: (backing: Uint8Array, te
  * A receipt instead returns its verdict at the deciding checkpoint or boundary. */
 export async function classifyScopes(context: ImportContext, directories: Directories, record: RecordVenue,
   evidence: ImportEvidence): Promise<ScopeResult> {
+  const { selection } = context;
+  const walk = scopeWalk(context, directories, record, evidence), { viewFor, latest, recovery, classify, inspect, chargeEvents } = walk;
+  const trails = decodedTrails(evidence.trails);
+  const view = await viewFor(selection.backing, context.terms);
+  const selectedHeld = (await view.heldBy(selection.operator)).find(held => matches(held.commitment, selection));
+  if (selectedHeld === undefined) throw new EvidenceRefusal("selection-mismatch");
+  if (context.receiptBytes !== undefined) {
+    const receipt = decodeReceipt(context.receiptBytes);
+    const original = authenticatedScope(trails, receipt.segment);
+    const { header } = original, scopeViews = new Map<string, RecordView>(), termsByBacking = new Map<string, RootTerms>();
+    // authenticatedScope resolved and verified every scoped terms field.
+    for (let i = 0; i < header.entries.length; i++) {
+      const scoped = header.entries[i]!, terms = original.rootTerms[i]!;
+      if (!same(terms.configuration, selection.domain) || !same(terms.venue, selection.venue)) throw new EvidenceRefusal("invalid-receipt");
+      termsByBacking.set(hex(scoped.backing), terms);
+      scopeViews.set(hex(scoped.backing), await viewFor(scoped.backing, terms));
+    }
+    const walk = await receiptWalk(context.receiptBytes, context, view, trails, evidence.snapshots, scopeViews);
+    // A fallback can already have established contradictions. Keep these facts
+    // if a newly required complete-scope dependency refuses the repeated walk.
+    const prior = context.receiptWalk;
+    context.receiptWalk = { evidence: () => {
+      const facts: ReceiptFact[] = [...(prior?.evidence().contradictedAt ?? []), ...walk.evidence().contradictedAt];
+      return { contradictedAt: facts.filter((fact, i) => facts.findIndex(other =>
+        other.operator === fact.operator && other.sequence === fact.sequence) === i) };
+    } };
+    context.contextReceipt = walk.receipt;
+    let openingIndex: bigint | undefined;
+    const boundary = async (at: bigint): Promise<ReceiptVerdict | undefined> => {
+      if (openingIndex === undefined) return undefined;
+      const through = walk.termBoundary !== undefined && walk.termBoundary < at ? walk.termBoundary : at;
+      let earliest: bigint | undefined;
+      for (const scoped of header.entries) {
+        const clock = await recovery.clock(scoped.backing, termsByBacking.get(hex(scoped.backing))!, openingIndex, through);
+        if (clock?.boundary !== undefined && (earliest === undefined || clock.boundary < earliest)) earliest = clock.boundary;
+      }
+      return walk.boundary(at, { boundary: earliest });
+    };
+    for (const held of await view.heldBy(header.operator)) {
+      if (held.commitment.sequence < header.sequence) continue;
+      inspect(held);
+      const ended = await boundary(held.index);
+      if (ended !== undefined) return { receipt: ended };
+      const scoped = header.entries.find(entry => scopeViews.get(hex(entry.backing))!.carries(held) !== undefined);
+      if (scoped === undefined) { walk.checkpoint(held, undefined, undefined, undefined, "other"); continue; }
+      const result = await classify(held, scoped.backing);
+      const verdict = walk.checkpoint(held, result.segment, result.class === "valid" ? result.state : undefined, result.header, result.class);
+      if (result.class === "valid" && same(result.segment, receipt.segment) && held.commitment.sequence === header.sequence) openingIndex = held.index;
+      if (verdict !== undefined) return { receipt: verdict };
+    }
+    return { receipt: await boundary(view.t) ?? walk.finish() };
+  }
+  if (!same(linkInForce(view.chain, selectedHeld.index).operator, selection.operator)) throw new EvidenceRefusal("lapsed-selection");
+  const selected = await classify(selectedHeld, selection.backing);
+  if (selected.class === "lapsed") throw new EvidenceRefusal("lapsed-selection");
+  if (selected.class === "excluded") throw new ReplayRefusal(selected.check);
+  const current = await latest(selection.backing, context.terms);
+  if (!matches(current?.commitment, selection)) throw new EvidenceRefusal("superseded-selection");
+  const { clock, publications, force, nonService } = await walk.around(selected, context.terms, view);
+  const { carrying, results } = await walk.carrying();
+  return { state: selected.state, carrying, clock, canonical: canonicalOf(selected), force, work: await walk.work(context.terms), ranges: {
+    judgingIndex: view.t, lag: view.lag, checkpointIndex: selectedHeld.index, revokedAt: view.revokedAt, chain: view.chain,
+    heldBefore: results.filter(item => before(item, selectedHeld)).length,
+    heldAfter: results.filter(item => before(selectedHeld, item)).length, publications,
+    ...(nonService === undefined ? {} : { nonService }) } };
+}
+
+/** C2.7 descent for one backing's independently authenticated terms in any
+ * scope: its canonical checkpoint, if the record holds one, with the forced
+ * publications, clock and work a single-backing frontier read reports. */
+export async function classifyScopeFrontier(context: FrontierContext, directories: Directories, record: RecordVenue,
+  evidence: ImportEvidence): Promise<FrontierResult> {
+  const { selection, terms } = context, walk = scopeWalk(context, directories, record, evidence);
+  const view = await walk.viewFor(selection.backing, terms), canonical = await walk.latest(selection.backing, terms);
+  const around = await walk.around(canonical, terms, view), { carrying } = await walk.carrying();
+  return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, work: await walk.work(terms), carrying,
+    clock: canonical === undefined ? undefined : around.clock, ranges: { judgingIndex: view.t, lag: view.lag, revokedAt: view.revokedAt,
+      chain: view.chain, publications: around.publications, ...(around.nonService === undefined ? {} : { nonService: around.nonService }) } };
+}
+
+const canonicalOf = (valid: ValidScope): CanonicalCheckpoint => ({ commitment: valid.commitment, index: valid.index, segment: valid.segment,
+  scope: new ScopeTree(valid.header.entries).root(), state: valid.state });
+
+/** What a scope read needs besides a selected checkpoint or backing. */
+type WalkContext = FrontierContext & Pick<ImportContext, "receiptBytes" | "contextReceipt">;
+
+/** Whole-scope classification, shared by selected and frontier reads. Every
+ * checkpoint is classified once; work is charged against the reader's limits. */
+function scopeWalk(context: WalkContext, directories: Directories, record: RecordVenue, evidence: ImportEvidence) {
   const { selection } = context, faults = context.faults ?? NO_FAULTS, limits = importLimitsOf(context.importLimits);
   const trails = decodedTrails(evidence.trails), snapshots = new Map(evidence.snapshots.map(bytes => [hex(sha256(bytes)), bytes]));
   const views = new Map<string, Promise<RecordView>>(), verified = new Map<string, Promise<ScopeVerdict>>();
   const heldSeen = new Set<string>(), latestCache = new Map<string, Promise<ValidScope | undefined>>();
-  let eventWork = 0n;
+  let eventWork = 0n, requestProofs = 0n;
   const chargeEvents = (amount: bigint): void => {
     eventWork += amount;
     if (eventWork > limits.maxEvents) throw new EvidenceRefusal("resource-refusal");
@@ -412,7 +508,7 @@ export async function classifyScopes(context: ImportContext, directories: Direct
         const classification = scope.classificationEvidence(intrinsic);
         if (classification.intrinsic !== undefined) return { ...base, class: "excluded", check: classification.intrinsic };
         const revocations = new Map([...scopeViews].map(([name, view]) => [name, view.revokedAt]));
-        const state = await replayTrail({ ...context, selection: { ...selection, backing }, terms: scopedTerms.get(hex(backing))!, header, scopedTerms },
+        const state = await replayTrail({ ...context, selection: { ...selection, backing, operator: c.operator, sequence: c.sequence, root: c.root }, terms: scopedTerms.get(hex(backing))!, header, scopedTerms },
           snapshot, classification.trail, { index: held.index, revocations, lastValid, imported, isOpening: opening,
             block: opening ? [] : block, openingIndex, chargeEvents });
         for (const s of scopedSnapshots) {
@@ -429,90 +525,49 @@ export async function classifyScopes(context: ImportContext, directories: Direct
     verified.set(id, pending);
     return pending;
   };
-  const view = await viewFor(selection.backing, context.terms);
-  const selectedHeld = (await view.heldBy(selection.operator)).find(held => matches(held.commitment, selection));
-  if (selectedHeld === undefined) throw new EvidenceRefusal("selection-mismatch");
-  if (context.receiptBytes !== undefined) {
-    const receipt = decodeReceipt(context.receiptBytes);
-    const original = authenticatedScope(trails, receipt.segment);
-    const { header } = original, scopeViews = new Map<string, RecordView>(), termsByBacking = new Map<string, RootTerms>();
-    // authenticatedScope resolved and verified every scoped terms field.
-    for (let i = 0; i < header.entries.length; i++) {
-      const scoped = header.entries[i]!, terms = original.rootTerms[i]!;
-      if (!same(terms.configuration, selection.domain) || !same(terms.venue, selection.venue)) throw new EvidenceRefusal("invalid-receipt");
-      termsByBacking.set(hex(scoped.backing), terms);
-      scopeViews.set(hex(scoped.backing), await viewFor(scoped.backing, terms));
+  // Around a classified checkpoint: every scoped backing's publications through
+  // t, the clock from its segment's opening with the scope's earliest boundary,
+  // and the selected backing's non-service count strictly before t.
+  const around = async (valid: ValidScope | undefined, terms: RootTerms, view: RecordView) => {
+    const publications: ScopePublicationVerdict[] = [], force: ScopeForce[] = [], clocks: (ScopeClock | null)[] = [];
+    for (const scoped of valid?.header.entries ?? [{ backing: selection.backing }]) {
+      const scopedTerms = valid?.scopedTerms.get(hex(scoped.backing)) ?? terms;
+      const published = await recovery.forces(scoped.backing, scopedTerms, selection.judgingIndex);
+      publications.push(...published.verdicts);
+      force.push(...published.force);
+      if (valid !== undefined) clocks.push(await recovery.clock(scoped.backing, scopedTerms, valid.openingIndex, selection.judgingIndex));
     }
-    const walk = await receiptWalk(context.receiptBytes, context, view, trails, evidence.snapshots, scopeViews);
-    // A fallback can already have established contradictions. Keep these facts
-    // if a newly required complete-scope dependency refuses the repeated walk.
-    const prior = context.receiptWalk;
-    context.receiptWalk = { evidence: () => {
-      const facts: ReceiptFact[] = [...(prior?.evidence().contradictedAt ?? []), ...walk.evidence().contradictedAt];
-      return { contradictedAt: facts.filter((fact, i) => facts.findIndex(other =>
-        other.operator === fact.operator && other.sequence === fact.sequence) === i) };
-    } };
-    context.contextReceipt = walk.receipt;
-    let openingIndex: bigint | undefined;
-    const boundary = async (at: bigint): Promise<ReceiptVerdict | undefined> => {
-      if (openingIndex === undefined) return undefined;
-      const through = walk.termBoundary !== undefined && walk.termBoundary < at ? walk.termBoundary : at;
-      let earliest: bigint | undefined;
-      for (const scoped of header.entries) {
-        const clock = await recovery.clock(scoped.backing, termsByBacking.get(hex(scoped.backing))!, openingIndex, through);
-        if (clock?.boundary !== undefined && (earliest === undefined || clock.boundary < earliest)) earliest = clock.boundary;
+    let clock: ClockRecord | null = null;
+    if (valid !== undefined) {
+      const selectedClock = clocks[valid.header.entries.findIndex(entry => same(entry.backing, selection.backing))]!;
+      if (selectedClock !== null) for (const scopedClock of clocks) {
+        if (scopedClock!.boundary !== undefined && (selectedClock.boundary === undefined || scopedClock!.boundary < selectedClock.boundary)) {
+          selectedClock.boundary = scopedClock!.boundary;
+        }
       }
-      return walk.boundary(at, { boundary: earliest });
-    };
-    for (const held of await view.heldBy(header.operator)) {
-      if (held.commitment.sequence < header.sequence) continue;
-      inspect(held);
-      const ended = await boundary(held.index);
-      if (ended !== undefined) return { receipt: ended };
-      const scoped = header.entries.find(entry => scopeViews.get(hex(entry.backing))!.carries(held) !== undefined);
-      if (scoped === undefined) { walk.checkpoint(held, undefined, undefined, undefined, "other"); continue; }
-      const result = await classify(held, scoped.backing);
-      const verdict = walk.checkpoint(held, result.segment, result.class === "valid" ? result.state : undefined, result.header, result.class);
-      if (result.class === "valid" && same(result.segment, receipt.segment) && held.commitment.sequence === header.sequence) openingIndex = held.index;
-      if (verdict !== undefined) return { receipt: verdict };
+      clock = selectedClock === null ? null : { duration: selectedClock.duration.toString(),
+        snapshotIndex: selectedClock.snapshotIndex.toString(), gap: selectedClock.gap.toString(), open: selectedClock.open,
+        boundary: selectedClock.boundary === undefined ? null : selectedClock.boundary.toString(), opening: selectedClock.opening.toString() };
     }
-    return { receipt: await boundary(view.t) ?? walk.finish() };
-  }
-  if (!same(linkInForce(view.chain, selectedHeld.index).operator, selection.operator)) throw new EvidenceRefusal("lapsed-selection");
-  const selected = await classify(selectedHeld, selection.backing);
-  if (selected.class === "lapsed") throw new EvidenceRefusal("lapsed-selection");
-  if (selected.class === "excluded") throw new ReplayRefusal(selected.check);
-  const current = await latest(selection.backing, context.terms);
-  if (!matches(current?.commitment, selection)) throw new EvidenceRefusal("superseded-selection");
-  const publications: ScopePublicationVerdict[] = [], clocks: (ScopeClock | null)[] = [];
-  for (const scoped of selected.header.entries) {
-    const terms = selected.scopedTerms.get(hex(scoped.backing))!;
-    publications.push(...(await recovery.forces(scoped.backing, terms, selection.judgingIndex)).verdicts);
-    clocks.push(await recovery.clock(scoped.backing, terms, selected.openingIndex, selection.judgingIndex));
-  }
-  const selectedClock = clocks[selected.header.entries.findIndex(entry => same(entry.backing, selection.backing))]!;
-  if (selectedClock !== null) for (const scopedClock of clocks) {
-    if (scopedClock!.boundary !== undefined && (selectedClock.boundary === undefined || scopedClock!.boundary < selectedClock.boundary)) {
-      selectedClock.boundary = scopedClock!.boundary;
-    }
-  }
-  const clock: ClockRecord | null = selectedClock === null ? null : { duration: selectedClock.duration.toString(),
-    snapshotIndex: selectedClock.snapshotIndex.toString(), gap: selectedClock.gap.toString(), open: selectedClock.open,
-    boundary: selectedClock.boundary === undefined ? null : selectedClock.boundary.toString(), opening: selectedClock.opening.toString() };
-  publications.sort((a, b) => venueOrder({ index: BigInt(a.index), ordinal: BigInt(a.ordinal) }, { index: BigInt(b.index), ordinal: BigInt(b.ordinal) }));
-  // The audit may select a checkpoint at t; C2b.5.2 instead reads the whole
-  // canonical scope strictly before t. Unadopted force never mutates it.
-  const nonService = context.terms.nonService === undefined ? undefined : await countNonService(context, view,
-    await latest(selection.backing, context.terms, { index: view.t, strict: true }),
-    await recovery.publications(selection.backing, context.terms), () => chargeEvents(1n));
-  const results = await Promise.all(verified.values());
-  const carrying = results.sort((a, b) => a.index < b.index ? -1 : a.index > b.index ? 1 :
-    a.commitment.sequence < b.commitment.sequence ? -1 : a.commitment.sequence > b.commitment.sequence ? 1 : 0)
-    .map(item => ({ operator: hex(item.commitment.operator), sequence: item.commitment.sequence.toString(), index: item.index.toString(),
-      class: item.class, ...(item.class === "excluded" ? { check: item.check } : {}) }));
-  return { state: selected.state, carrying, clock, ranges: { judgingIndex: view.t, lag: view.lag,
-    checkpointIndex: selectedHeld.index, revokedAt: view.revokedAt, chain: view.chain,
-    heldBefore: results.filter(item => before(item, selectedHeld)).length,
-    heldAfter: results.filter(item => before(selectedHeld, item)).length, publications,
-    ...(nonService === undefined ? {} : { nonService }) } };
+    publications.sort((a, b) => venueOrder({ index: BigInt(a.index), ordinal: BigInt(a.ordinal) }, { index: BigInt(b.index), ordinal: BigInt(b.ordinal) }));
+    force.sort(venueOrder);
+    // The audit may select a checkpoint at t; C2b.5.2 instead reads the whole
+    // canonical scope strictly before t. Unadopted force never mutates it.
+    const nonService = terms.nonService === undefined ? undefined : await countNonService({ selection, terms, verifier: context.verifier }, view,
+      await latest(selection.backing, terms, { index: view.t, strict: true }),
+      await recovery.publications(selection.backing, terms), () => { requestProofs++; chargeEvents(1n); });
+    return { clock, publications, force, nonService };
+  };
+  const carrying = async () => {
+    const results = await Promise.all(verified.values());
+    return { results, carrying: results.sort((a, b) => a.index < b.index ? -1 : a.index > b.index ? 1 :
+      a.commitment.sequence < b.commitment.sequence ? -1 : a.commitment.sequence > b.commitment.sequence ? 1 : 0)
+      .map(item => ({ operator: hex(item.commitment.operator), sequence: item.commitment.sequence.toString(), index: item.index.toString(),
+        class: item.class, ...(item.class === "excluded" ? { check: item.check } : {}) })) };
+  };
+  // Known requests may enter a later counting window: at most one proof check
+  // per already-known publication of the selected backing (import-reader.ts).
+  const work = async (terms: RootTerms): Promise<ImportWork> => ({ checkpoints: BigInt(heldSeen.size), events: eventWork, requestProofs,
+    requestProofReserve: terms.nonService === undefined ? 0n : BigInt((await recovery.publications(selection.backing, terms)).length) });
+  return { viewFor, latest, recovery, classify, inspect, chargeEvents, around, carrying, work };
 }

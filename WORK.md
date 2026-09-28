@@ -3,18 +3,20 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 7 M1 (done, PR #39): the multi-backing reader in `src/`. Acceptance: local-check's
-scope groups pass through `src/` on both venues with identical verdicts, `readPackage`
-agrees with them, independent review, reports re-recorded. Next run: slice 7 M2.
+Slice 7 M2 (branch `feat/scope-journal`): the operator journal serves multi-backing
+scopes. `open` takes several backings' terms; admission, commitments and packages carry
+one snapshot per scoped backing; one `rescope` command changes scope at a committed
+boundary (C2.10.9): take successor terms from public evidence (any-scope frontier),
+keep live backings from the journal's own canonical state, drop ended ones; an elective
+change first needs the whole tail witnessed. `takeover` becomes `rescope` taking one
+term; silence return keeps the whole scope. Journal reads go through `readPackage`.
+Acceptance: a fast oracle-proof test runs scope-check's split/rejoin story through
+journals with `readPackage` agreeing per backing; named refusals for an unwitnessed
+elective tail, a kept ended term and foreign terms; single-backing suites unchanged;
+CI green; reports re-recorded; independent review. Stop: no adoption, no testnet (M3).
 
 ## Status
-- `src/pool/v3/scope-reader.ts` replaces `scope-{replay,recovery}.mjs` (same reads,
-  charges and checks; resume identity kept). `readPackage` reads any scope, falling back
-  from the single-backing walk on `ScopeRequired`. `scope-runtime-check.mjs` compared
-  it with 23 multi-backing selections; `test/pool-v3-scope-reader.test.ts` is the
-  oracle-proof fixture. The replay report's verdict fields equal main's (only
-  proof-randomized hashes differ). An opus review found no blockers; its coverage and
-  doc findings are fixed, the refusal-evidence gap is Next 5(h).
+- M1 (PR #39): `scope-reader.ts` and `readPackage` read any scope in the runtime.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),

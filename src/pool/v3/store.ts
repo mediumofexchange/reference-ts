@@ -21,11 +21,12 @@ import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import type { ErgoPublisherPersistence } from "../../ergo-publisher.js";
 import {
   admittedReplacements, decodeRangeAnswer, heldCommitments, RangeLimitError, replacementChain, revocationIndex,
-  type HeldCommitment, type RangeAnswer, type RecordKind,
+  type ChainLink, type HeldCommitment, type RangeAnswer, type RecordKind,
 } from "../../record-range.js";
 import type { RecordPublisher, RecordVenue } from "../../record-venue.js";
 import { VenueError } from "../../venue-error.js";
 import { decodeCommitment, directoryRoot, encodeCommitment, signCommitment, verifyCommitment, type Commitment, type SnapshotDigest } from "../../venue-records.js";
+import { identifierOf } from "../field.js";
 import { scopeSchedule } from "../schedule.js";
 import { ScopeTree } from "../scope.js";
 import { encodeReceipt, receiptBytes, snapshotBytes, snapshotDigest, type Snapshot } from "./commitments.js";
@@ -34,11 +35,12 @@ import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "./headers.js";
 import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem, type PackageLimits } from "./package.js";
 import { RANGE_LIMITS, TRAIL_LIMITS, type SignedTerms } from "./reader.js";
-import { readSingleBackingFrontier, readSingleBackingPackage } from "./package-reader.js";
-import { IMPORT_LIMITS, type ImportResult } from "./import-reader.js";
+import { readFrontier, readPackage } from "./package-reader.js";
+import { IMPORT_LIMITS, type CanonicalCheckpoint, type FrontierResult } from "./import-reader.js";
 import { decodeRecord, encodeRecord, evidenceHashes, statementHash } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
-import { applyRecord, openSegmentState, type ProofCheck, type SegmentReplay, type SegmentState } from "./state.js";
+import { mergeFinalizedPrefixes, type ScopeForcedPublication, type ScopeResult } from "./scope-reader.js";
+import { applyRecord, openSegmentState, type ImportedState, type ProofCheck, type SegmentReplay, type SegmentState } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature, type RootTerms } from "./terms.js";
 import { encodeTrail, TrailLimitError } from "./trail.js";
 
@@ -67,18 +69,36 @@ function decimal(value: unknown): bigint {
   return BigInt(value);
 }
 
+/** Signed terms as stored: hex terms and signature. */
+type TermsText = readonly [string, string];
 type Command =
-  | { kind: "open"; terms: string; signature: string; at: string; observed: string | null }
-  | { kind: "takeover"; terms: string; signature: string; evidence: string; at: string; observed: string | null }
+  | { kind: "open"; scope: readonly TermsText[]; at: string; observed: string | null }
+  | { kind: "rescope"; take: readonly TermsText[]; keep: readonly string[]; evidence: string; at: string; observed: string | null }
   | { kind: "commit"; at: string; observed: string | null }
   | { kind: "admit"; record: string; horizon: string }
   | { kind: "return"; at: string; observed: string | null }
   | { kind: "adopt"; at: string; opening: string }
   | { kind: "published"; sequence: string };
+const signedOf = ([terms, signature]: TermsText): SignedTerms => ({ terms: hexToBytes(terms), signature: hexToBytes(signature) });
+const termsText = (signed: SignedTerms): TermsText => [bytesToHex(signed.terms), bytesToHex(signed.signature)];
+const HEX = /^(?:[0-9a-f]{2})*$/;
+const hexList = (value: unknown): readonly string[] => {
+  requireThat(Array.isArray(value) && value.every(item => typeof item === "string" && HEX.test(item)), "STORAGE", "invalid journal command");
+  return value as string[];
+};
+const termsList = (value: unknown): readonly TermsText[] => {
+  requireThat(Array.isArray(value), "STORAGE", "invalid journal command");
+  return value.map(pair => {
+    const [terms, signature, ...rest] = hexList(pair);
+    requireThat(terms !== undefined && signature !== undefined && rest.length === 0, "STORAGE", "invalid journal command");
+    return [terms, signature] as const;
+  });
+};
 function commandText(c: Command): string {
   switch (c?.kind) {
-    case "open": return JSON.stringify({ kind: c.kind, terms: c.terms, signature: c.signature, at: c.at, observed: c.observed });
-    case "takeover": return JSON.stringify({ kind: c.kind, terms: c.terms, signature: c.signature, evidence: c.evidence, at: c.at, observed: c.observed });
+    case "open": return JSON.stringify({ kind: c.kind, scope: termsList(c.scope), at: c.at, observed: c.observed });
+    case "rescope": return JSON.stringify({ kind: c.kind, take: termsList(c.take), keep: hexList(c.keep), evidence: hexList([c.evidence])[0],
+      at: c.at, observed: c.observed });
     case "commit": return JSON.stringify({ kind: c.kind, at: c.at, observed: c.observed });
     case "admit": return JSON.stringify({ kind: c.kind, record: c.record, horizon: c.horizon });
     case "return": return JSON.stringify({ kind: c.kind, at: c.at, observed: c.observed });
@@ -88,16 +108,29 @@ function commandText(c: Command): string {
   }
 }
 
-/** The active segment: its header, scope and signed terms. */
+/** One scoped backing: its name and original signed terms. */
+interface Scoped {
+  readonly backing: Uint8Array;
+  readonly terms: RootTerms;
+  readonly signed: SignedTerms;
+}
+/** The active segment: its header, scope root and each scoped backing in header order. */
 interface Opened {
   readonly header: SegmentHeader;
   readonly headerBytes: Uint8Array;
   readonly segment: Uint8Array;
   readonly scope: bigint;
-  readonly backing: Uint8Array;
-  readonly terms: RootTerms;
-  readonly signed: SignedTerms;
+  readonly entries: readonly Scoped[];
 }
+function openedOf(header: SegmentHeader, entries: readonly Scoped[]): Opened {
+  return { header, headerBytes: segmentBytes(header), segment: segmentIdentity(header), scope: new ScopeTree(header.entries).root(), entries };
+}
+/** The term link a segment's header names for `backing`. */
+const linkOf = (opened: Opened, backing: Uint8Array): Uint8Array => opened.header.entries.find(entry => same(entry.backing, backing))!.link;
+const isTermsList = (value: SignedTerms | readonly SignedTerms[]): value is readonly SignedTerms[] => Array.isArray(value);
+/** Snapshots have fixed width (commitments.ts). */
+const SNAPSHOT_BYTES = snapshotBytes({ backing: new Uint8Array(32), segment: new Uint8Array(32), historyHash: new Uint8Array(32),
+  evidenceHash: new Uint8Array(32), issued: 0n, burned: 0n }).length;
 interface Signed {
   readonly opened: Opened;
   readonly commitment: Commitment;
@@ -105,9 +138,19 @@ interface Signed {
   readonly at: bigint;
   readonly observed: string | null;
   readonly directory: readonly SnapshotDigest[];
-  readonly snapshot: Uint8Array;
+  /** One snapshot per scoped backing, in directory order. */
+  readonly snapshots: readonly Uint8Array[];
   published: boolean;
 }
+/** A scope change (C2.10.9): successor terms to take from public evidence and
+ * live backings of the active scope to keep from the journal's own state. */
+export interface Rescope {
+  readonly take?: readonly SignedTerms[];
+  readonly keep?: readonly Uint8Array[];
+  /** Public evidence for the taken terms' ancestry; required exactly when taking. */
+  readonly evidence?: Uint8Array;
+}
+interface OwnRescope { readonly take: readonly SignedTerms[]; readonly keep: readonly Uint8Array[]; readonly evidence: Uint8Array }
 interface Engine {
   revision: bigint;
   opened: Opened | undefined;
@@ -122,8 +165,8 @@ interface Engine {
   readonly evidence: EvidenceItem[];
   pendingReturn: boolean;
 }
-type StateRead = Extract<ImportResult, { readonly state: object }>;
-/** The venue at one instant: its clock and lag, this key's held commitments, the backing's term boundaries and K's revocation. */
+type StateRead = Extract<ScopeResult, { readonly state: object }>;
+/** The venue at one instant: its clock and lag, this key's held commitments, every scoped backing's term boundary and each K's revocation. */
 interface View {
   readonly now: bigint;
   readonly lag: bigint;
@@ -132,7 +175,8 @@ interface View {
    * including records the venue's holding rule does not select. */
   readonly conflict: boolean;
   readonly boundaries: readonly bigint[];
-  readonly revokedAt: bigint | undefined;
+  /** Each scoped backing's K revocation index, by backing name. */
+  readonly revocations: ReadonlyMap<string, bigint | undefined>;
   readonly key: string;
 }
 
@@ -341,22 +385,22 @@ export class V3OperatorJournal {
       return index;
     };
     if (command.kind === "open") {
-      requireThat(engine.opened === undefined && /^command:/.test(id) && request === this.openRequest(command.terms, command.signature),
+      requireThat(engine.opened === undefined && /^command:/.test(id) && request === this.openRequest(command.scope),
         "STORAGE", "stored opening disagrees with replay");
       let opened: Opened;
-      try { opened = this.opening({ terms: hexToBytes(command.terms), signature: hexToBytes(command.signature) }); } catch (error) {
+      try { opened = this.opening(command.scope.map(signedOf)); } catch (error) {
         if (error instanceof V3StoreError) throw new V3StoreError("STORAGE", "a stored opening no longer opens");
         throw error;
       }
       engine.opened = opened;
       engine.state = openSegmentState(opened.segment, undefined, undefined, undefined, () => {});
       this.replaySigned(engine, command, at(command.at), response);
-    } else if (command.kind === "takeover") {
-      const signed = { terms: hexToBytes(command.terms), signature: hexToBytes(command.signature) }, evidence = hexToBytes(command.evidence);
-      requireThat(/^command:/.test(id) && request === this.takeoverRequest(command.terms, command.signature, command.evidence),
-        "STORAGE", "stored takeover disagrees with replay");
+    } else if (command.kind === "rescope") {
+      requireThat(/^command:/.test(id) && request === this.rescopeRequest(command.take, command.keep, command.evidence),
+        "STORAGE", "stored scope change disagrees with replay");
       const index = at(command.at);
-      await this.prepareTakeover(engine, signed, evidence, index);
+      await this.prepareRescope(engine, { take: command.take.map(signedOf), keep: command.keep.map(hexToBytes),
+        evidence: hexToBytes(command.evidence) }, index);
       this.replaySigned(engine, command, index, response);
     } else if (command.kind === "commit") {
       requireThat(engine.opened !== undefined && /^command:/.test(id) && request === "commit", "STORAGE", "stored commitment disagrees with replay");
@@ -384,7 +428,7 @@ export class V3OperatorJournal {
       const horizon = decimal(command.horizon);
       requireThat(horizon >= engine.horizon && horizon <= this.observedIndex + this.lag, "STORAGE", "stored horizon is inconsistent");
       engine.horizon = horizon;
-      try { await applyRecord(state, bytes, this.replayOf(opened, horizon, undefined)); } catch (error) {
+      try { await applyRecord(state, bytes, this.replayOf(opened, horizon, new Map())); } catch (error) {
         if (error instanceof ReplayRefusal || error instanceof EvidenceRefusal) throw new V3StoreError("STORAGE", "a stored statement no longer admits");
         throw error;
       }
@@ -398,20 +442,20 @@ export class V3OperatorJournal {
     }
   }
   private replaySigned(engine: Engine, command: { observed: string | null }, at: bigint, response: string): void {
-    const { directory, snapshot } = this.checkpoint(engine);
+    const { directory, snapshots } = this.checkpoint(engine);
     const commitment = decodeCommitment(hexToBytes(response)), highest = engine.signed.at(-1)?.commitment.sequence ?? 0n;
     requireThat(hexOf(commitment) === response && verifyCommitment(commitment) && same(commitment.operator, this.operator) &&
       commitment.sequence === highest + 1n && same(commitment.root, directoryRoot(directory)), "STORAGE", "stored commitment disagrees with replay");
     // What the venue held of this key at signing: nothing yet, or a commitment this journal signed before.
     requireThat(command.observed === null || engine.signed.some(s => hexOf(s.commitment) === command.observed), "STORAGE", "invalid observed commitment");
-    engine.signed.push({ opened: engine.opened!, commitment, length: BigInt(engine.records.length), at, observed: command.observed, directory, snapshot, published: false });
+    engine.signed.push({ opened: engine.opened!, commitment, length: BigInt(engine.records.length), at, observed: command.observed, directory, snapshots, published: false });
   }
 
-  private openRequest(terms: string, signature: string): string {
-    return JSON.stringify({ kind: "open", terms, signature });
+  private openRequest(scope: readonly TermsText[]): string {
+    return JSON.stringify({ kind: "open", scope });
   }
-  private takeoverRequest(terms: string, signature: string, evidence: string): string {
-    return JSON.stringify({ kind: "takeover", terms, signature, evidence });
+  private rescopeRequest(take: readonly TermsText[], keep: readonly string[], evidence: string): string {
+    return JSON.stringify({ kind: "rescope", take, keep, evidence });
   }
   private signedTerms(signed: SignedTerms): RootTerms {
     let terms: RootTerms;
@@ -423,45 +467,89 @@ export class V3OperatorJournal {
     requireThat(same(terms.configuration, this.domain) && same(terms.venue, this.venueId), "REFUSED", "the terms name another configuration or venue");
     return terms;
   }
-  /** The genesis segment of the backing `signed` names, served by this key on this venue (C2.4.1, pool-v3 §8). */
-  private opening(signed: SignedTerms): Opened {
-    const terms = this.signedTerms(signed);
-    requireThat(same(terms.operator, this.operator) && same(terms.configuration, this.domain) && same(terms.venue, this.venueId),
-      "REFUSED", "the terms name another operator, configuration or venue");
-    const backing = rootTermsName(signed.terms);
-    const header: SegmentHeader = { domain: this.domain, venue: this.venueId, operator: this.operator, sequence: 1n, entries: [{ backing, link: backing }] };
-    return { header, headerBytes: segmentBytes(header), segment: segmentIdentity(header), scope: new ScopeTree(header.entries).root(), backing,
-      terms, signed: { terms: copyBytes(signed.terms), signature: copyBytes(signed.signature) } };
+  /** The genesis segment of the backings `scope` names, served by this key on this venue (C2.4.1, C2.10.1, pool-v3 §8). */
+  private opening(scope: readonly SignedTerms[]): Opened {
+    const entries = this.scoped(scope);
+    requireThat(entries.length > 0, "REFUSED", "a segment scopes at least one backing", "SCOPE");
+    requireThat(entries.every(({ terms }) => same(terms.operator, this.operator)), "REFUSED", "the terms name another operator, configuration or venue");
+    const header: SegmentHeader = { domain: this.domain, venue: this.venueId, operator: this.operator, sequence: 1n,
+      entries: entries.map(({ backing }) => ({ backing, link: backing })) };
+    return openedOf(header, entries);
   }
-  /** Derive authority from the original signed terms and the exact chain link. */
-  private successor(engine: Engine, signed: SignedTerms, at: bigint): Opened {
-    const terms = this.signedTerms(signed), backing = rootTermsName(signed.terms);
-    const admitted = admittedReplacements(this.ask(2, backing, at), terms.replacementRule);
-    const { chain } = replacementChain(admitted, { backing, original: terms.operator, lag: this.lag, now: at });
-    const current = chain.at(-1)!;
-    requireThat(chain.length > 1 && same(current.operator, this.operator), "STALE", "this key has no current successor term");
-    const old = engine.opened;
-    if (old !== undefined) {
-      requireThat(same(old.backing, backing), "UNSUPPORTED", "the journal serves one backing");
-      const previous = chain.findIndex(link => same(link.link, old.header.entries[0]!.link));
-      requireThat(previous >= 0 && previous < chain.length - 1, "STALE", "the active segment's term has not ended");
+  /** Authenticated terms in header order, each backing once. */
+  private scoped(scope: readonly SignedTerms[]): Scoped[] {
+    const entries = scope.map(signed => {
+      const terms = this.signedTerms(signed);
+      return { backing: rootTermsName(signed.terms), terms, signed: { terms: copyBytes(signed.terms), signature: copyBytes(signed.signature) } };
+    }).sort((a, b) => compareBytes(a.backing, b.backing));
+    requireThat(entries.every((entry, i) => i === 0 || !same(entries[i - 1]!.backing, entry.backing)), "REFUSED", "the scope names a backing twice", "SCOPE");
+    return entries;
+  }
+  /** A backing's witnessed term chain at `at` and any pending replacement. */
+  private chain(backing: Uint8Array, terms: RootTerms, at: bigint) {
+    return replacementChain(admittedReplacements(this.ask(2, backing, at), terms.replacementRule),
+      { backing, original: terms.operator, lag: this.lag, now: at });
+  }
+  /**
+   * The next segment's scope at `at`, before any opening is read (C2.10.9).
+   * Each taken term is this key's current successor term, ending the active
+   * segment's own term for that backing; each kept backing's current term is
+   * still the active segment's. An elective change, while every old term is
+   * live, first needs the whole admitted tail and latest commitment witnessed.
+   */
+  private rescopeTarget(engine: Engine, spec: OwnRescope, at: bigint): { readonly opened: Opened; readonly taken: readonly Scoped[];
+    readonly links: ReadonlyMap<string, ChainLink> } {
+    const old = engine.opened, taken = this.scoped(spec.take), links = new Map<string, ChainLink>();
+    requireThat(spec.keep.length === 0 || (old !== undefined && !engine.pendingReturn), "STALE", "only an adopted segment's backings can be kept");
+    const kept = spec.keep.map(name => {
+      const entry = old?.entries.find(scoped => same(scoped.backing, name));
+      requireThat(entry !== undefined, "REFUSED", "a kept backing is outside the active scope", "SCOPE");
+      return entry;
+    });
+    const all = [...taken, ...kept].sort((a, b) => compareBytes(a.backing, b.backing));
+    requireThat(all.length > 0 && all.every((entry, i) => i === 0 || !same(all[i - 1]!.backing, entry.backing)), "REFUSED",
+      "the new scope names each backing once", "SCOPE");
+    for (const entry of taken) {
+      const { chain } = this.chain(entry.backing, entry.terms, at), current = chain.at(-1)!;
+      requireThat(chain.length > 1 && same(current.operator, this.operator), "STALE", "this key has no current successor term");
+      if (old !== undefined && old.entries.some(scoped => same(scoped.backing, entry.backing))) {
+        const previous = chain.findIndex(link => same(link.link, linkOf(old, entry.backing)));
+        requireThat(previous >= 0 && previous < chain.length - 1, "STALE", "the active segment's term has not ended");
+      }
+      links.set(bytesToHex(entry.backing), current);
+    }
+    let lapsed = false;
+    for (const entry of old?.entries ?? []) {
+      const current = this.chain(entry.backing, entry.terms, at).chain.at(-1)!;
+      const live = same(current.link, linkOf(old!, entry.backing)) && same(current.operator, this.operator);
+      lapsed ||= !live;
+      if (kept.includes(entry)) {
+        requireThat(live, "STALE", "a kept backing's term has ended");
+        links.set(bytesToHex(entry.backing), current);
+      }
+    }
+    if (old !== undefined && !lapsed) {
+      const last = engine.signed.at(-1)!, held = heldCommitments(this.ask(1, this.operator, at)).held;
+      requireThat(!engine.pendingReturn && same(last.opened.segment, old.segment) && last.length === BigInt(engine.records.length) &&
+        held.some(h => hexOf(h.commitment) === hexOf(last.commitment)), "STALE", "an elective scope change first witnesses the whole tail", "TAIL");
     }
     const sequence = (engine.signed.at(-1)?.commitment.sequence ?? 0n) + 1n;
     requireThat(sequence < U64, "STORAGE", "signed sequence counter exhausted");
     const header: SegmentHeader = { domain: this.domain, venue: this.venueId, operator: this.operator, sequence,
-      entries: [{ backing, link: current.link }] };
-    return { header, headerBytes: segmentBytes(header), segment: segmentIdentity(header), scope: new ScopeTree(header.entries).root(), backing,
-      terms, signed: { terms: copyBytes(signed.terms), signature: copyBytes(signed.signature) } };
+      entries: all.map(({ backing }) => ({ backing, link: links.get(bytesToHex(backing))!.link })) };
+    return { opened: openedOf(header, all), taken, links };
   }
-  /** Reuse the public reader's complete descent, including proof of an empty
-   * book. No asserted state, selected predecessor or imported signing counter. */
-  private async prepareTakeover(engine: Engine, signed: SignedTerms, evidence: Uint8Array, at: bigint): Promise<void> {
-    const target = this.successor(engine, signed, at);
-    let source;
-    try {
-      source = await readSingleBackingFrontier(evidence, signed, at,
-        { configuration: this.configuration, verifier: this.verifier, venue: this.venue, reference: this.reference });
-    } catch (error) {
+  private readerOptions() {
+    return { configuration: this.configuration, verifier: this.verifier, venue: this.venue, reference: this.reference };
+  }
+  /** Read every opening from bytes: a taken term by the public reader's
+   * complete descent of the evidence, including proof of an empty book, and a
+   * kept backing by the journal's own canonical read. No asserted state,
+   * selected predecessor or imported signing counter (C2.7, C2.10.4–7). */
+  private async prepareRescope(engine: Engine, spec: OwnRescope, at: bigint): Promise<void> {
+    const target = this.rescopeTarget(engine, spec, at), openings = new Map<string, CanonicalCheckpoint | undefined>();
+    let checkpoints = 0n, events = 0n, provided: EvidenceItem[] = [], evidence = spec.evidence;
+    const unestablished = (error: unknown): never => {
       if ((error instanceof EvidenceRefusal && error.status === "resource-refusal") || error instanceof PackageLimitError) {
         throw new V3StoreError("REFUSED", "takeover evidence exceeds the reader's budget", "RESOURCE");
       }
@@ -469,42 +557,80 @@ export class V3OperatorJournal {
         throw new V3StoreError("UNAVAILABLE", "the public evidence does not establish the takeover state");
       }
       throw error;
+    };
+    if (target.taken.length > 0) {
+      try { provided = decodeEvidencePackage(spec.evidence, SERVED_PACKAGE_LIMITS).filter(item => [3, 4, 6, 7].includes(item.kind)); }
+      catch (error) { unestablished(error); }
+      // A journal with history reads its own checkpoints beside the public
+      // evidence: a taken term may follow, or already hold, one of this key's (C2.7.1).
+      if (engine.opened !== undefined) evidence = this.encodePackage(engine.opened, engine.signed, engine.signed.at(-1)!.commitment,
+        engine.records, engine.archives, [...engine.evidence, ...provided]);
     }
-    const current = source.ranges.chain.at(-1)!;
-    requireThat(same(current.link, target.header.entries[0]!.link), "STALE", "the replacement chain changed during takeover");
-    const canonical = source.canonical;
-    requireThat(canonical === undefined || canonical.index < current.from, "STALE", "the current successor term already has a carrying checkpoint");
-    const work = source.work;
-    this.reserveReadCheckpoints(engine, heldCommitments(this.ask(1, this.operator, at)).held, work.checkpoints, 2n);
-    requireThat(work.events - work.requestProofs + work.requestProofReserve + BigInt(canonical?.state.events.size ?? 0) <= IMPORT_LIMITS.maxEvents,
-    "REFUSED", "takeover leaves no reader budget for service", "RESOURCE");
-    const header: SegmentHeader = { ...target.header, entries: [{ backing: target.backing, link: current.link,
-      ...(canonical === undefined ? {} : { opening: { operator: copyBytes(canonical.commitment.operator),
-        sequence: canonical.commitment.sequence, root: copyBytes(canonical.commitment.root) } }) }] };
-    const opened: Opened = { ...target, header, headerBytes: segmentBytes(header), segment: segmentIdentity(header), scope: new ScopeTree(header.entries).root() };
+    for (const entry of target.taken) {
+      let source: FrontierResult;
+      try { source = await readFrontier(evidence, entry.signed, at, this.readerOptions()); } catch (error) { return unestablished(error); }
+      const current = source.ranges.chain.at(-1)!;
+      requireThat(same(current.link, target.links.get(bytesToHex(entry.backing))!.link), "STALE", "the replacement chain changed during takeover");
+      requireThat(source.canonical === undefined || source.canonical.index < current.from, "STALE", "the current successor term already has a carrying checkpoint");
+      openings.set(bytesToHex(entry.backing), source.canonical);
+      checkpoints += source.work.checkpoints; events += this.reservedEventWork(source);
+    }
+    for (const name of spec.keep) {
+      const source = await this.currentRead(engine, at, name);
+      openings.set(bytesToHex(name), source.canonical);
+      checkpoints += source.work.checkpoints; events += this.reservedEventWork(source);
+    }
+    // One import per distinct canonical checkpoint; several are merged once (C2.10.6–7).
+    const parents = new Map<string, CanonicalCheckpoint>();
+    for (const canonical of openings.values()) if (canonical !== undefined) parents.set(hexOf(canonical.commitment)!, canonical);
+    let imported: ImportedState | undefined = parents.size === 1 ? [...parents.values()][0]!.state : undefined;
+    if (parents.size > 1) {
+      try { imported = mergeFinalizedPrefixes([...parents.values()].map(parent => ({ state: parent.state })), () => {}); } catch (error) {
+        if (error instanceof ReplayRefusal) throw new V3StoreError("UNAVAILABLE", "the imported histories conflict");
+        throw error;
+      }
+    }
+    this.reserveReadCheckpoints(engine, heldCommitments(this.ask(1, this.operator, at)).held, checkpoints, 2n);
+    requireThat(events + BigInt(new Map(imported?.events).size) <= IMPORT_LIMITS.maxEvents,
+      "REFUSED", "the scope change leaves no reader budget for service", "RESOURCE");
+    const header: SegmentHeader = { ...target.opened.header, entries: target.opened.header.entries.map(entry => {
+      const canonical = openings.get(bytesToHex(entry.backing));
+      return canonical === undefined ? entry : { ...entry, opening: { operator: copyBytes(canonical.commitment.operator),
+        sequence: canonical.commitment.sequence, root: copyBytes(canonical.commitment.root) } };
+    }) };
+    const opened = openedOf(header, target.opened.entries);
     this.diverging = true;
     if (engine.opened !== undefined) engine.archives.push({ opened: engine.opened, records: [...engine.records] });
-    const retained = new Map(engine.evidence.map(item => [`${item.kind}:${bytesToHex(sha256(item.payload))}`, item]));
-    for (const item of decodeEvidencePackage(evidence, SERVED_PACKAGE_LIMITS)) {
-      if ([3, 4, 6].includes(item.kind)) retained.set(`${item.kind}:${bytesToHex(sha256(item.payload))}`, item);
+    if (target.taken.length > 0) {
+      const retained = new Map(engine.evidence.map(item => [`${item.kind}:${bytesToHex(sha256(item.payload))}`, item]));
+      for (const item of provided) if (item.kind !== 7) retained.set(`${item.kind}:${bytesToHex(sha256(item.payload))}`, item);
+      engine.evidence.splice(0, engine.evidence.length, ...retained.values());
     }
-    engine.evidence.splice(0, engine.evidence.length, ...retained.values());
     engine.records.splice(0);
     engine.opened = opened;
-    engine.state = openSegmentState(opened.segment, undefined, canonical?.state, undefined, () => {});
+    engine.state = openSegmentState(opened.segment, undefined, imported, undefined, () => {});
     engine.pendingReturn = true;
   }
-  private replayOf(opened: Opened, horizon: bigint, revokedAt: bigint | undefined): SegmentReplay {
-    return { domain: this.domain, backing: opened.backing, segment: opened.segment, scope: opened.scope, terms: opened.terms,
-      verifier: this.verifier, index: horizon, lag: this.lag, admission: true, revokedAt, block: [] };
+  /** Each scoped K's revocation index as witnessed through `at`. */
+  private revocations(opened: Opened, at: bigint): Map<string, bigint | undefined> {
+    return new Map(opened.entries.map(({ backing, terms }) => [bytesToHex(backing), revocationIndex(this.ask(3, terms.obligor, at))]));
   }
-  /** The current snapshot of the one backing and its directory (§7). */
-  private checkpoint(engine: Engine): { readonly directory: readonly SnapshotDigest[]; readonly snapshot: Uint8Array } {
+  /** Admission, or a stored judgment, under the scope's terms and each scoped K's revocation. */
+  private replayOf(opened: Opened, horizon: bigint, revocations: ReadonlyMap<string, bigint | undefined>): SegmentReplay {
+    const first = opened.entries[0]!, scoped = opened.entries.length > 1;
+    return { domain: this.domain, backing: first.backing, segment: opened.segment, scope: opened.scope, terms: first.terms,
+      ...(scoped ? { scopedTerms: new Map(opened.entries.map(entry => [bytesToHex(entry.backing), entry.terms])), revocations } :
+        { revokedAt: revocations.get(bytesToHex(first.backing)) }),
+      verifier: this.verifier, index: horizon, lag: this.lag, admission: true, block: [] };
+  }
+  /** Every scoped backing's current snapshot and the directory over them (§7, C2.10.3). */
+  private checkpoint(engine: Engine): { readonly directory: readonly SnapshotDigest[]; readonly snapshots: readonly Uint8Array[] } {
     const opened = engine.opened!, state = engine.state!;
-    const totals = state.totals.get(bytesToHex(opened.backing)) ?? { issued: 0n, burned: 0n };
-    const snapshot: Snapshot = { backing: opened.backing, segment: opened.segment, historyHash: state.history, evidenceHash: state.evidence,
-      issued: totals.issued, burned: totals.burned };
-    return { directory: [{ name: copyBytes(opened.backing), digest: snapshotDigest(snapshot) }], snapshot: snapshotBytes(snapshot) };
+    const snapshots: Snapshot[] = opened.entries.map(({ backing }) => {
+      const totals = state.totals.get(bytesToHex(backing)) ?? { issued: 0n, burned: 0n };
+      return { backing, segment: opened.segment, historyHash: state.history, evidenceHash: state.evidence, issued: totals.issued, burned: totals.burned };
+    });
+    return { directory: snapshots.map(s => ({ name: copyBytes(s.backing), digest: snapshotDigest(s) })), snapshots: snapshots.map(snapshotBytes) };
   }
   /** The receipt of the record just applied at the state's position (§7.2), after the last signed commitment. */
   private receipt(engine: Engine, bytes: Uint8Array): Uint8Array {
@@ -542,29 +668,31 @@ export class V3OperatorJournal {
       catch (error) { if (error instanceof EncodingError) return false; throw error; }
       return same(c.operator, this.operator) && verifyCommitment(c);
     });
-    let boundaries: bigint[] = [], revokedAt: bigint | undefined;
+    const boundaries: bigint[] = [], revocations = new Map<string, bigint | undefined>();
     const evidence: string[] = [];
     const bind = (answer: RangeAnswer): void => {
       evidence.push(JSON.stringify(answer.entries.map(e => [e.index.toString(), e.ordinal.toString(), bytesToHex(sha256(e.record))])));
     };
     bind(answer);
-    const opened = engine.opened;
-    if (opened !== undefined) {
-      const replacements = this.ask(2, opened.backing, now); bind(replacements);
-      const admitted = admittedReplacements(replacements, opened.terms.replacementRule);
-      const { chain, pending } = replacementChain(admitted, { backing: opened.backing, original: opened.terms.operator, lag: this.lag, now });
-      const term = chain.findIndex(link => same(link.link, opened.header.entries[0]!.link) && same(link.operator, this.operator));
+    // Every scoped backing's term chain, K's revocation and publications; the
+    // scope's schedule follows its earliest term boundary (C2.10.9).
+    for (const { backing, terms } of engine.opened?.entries ?? []) {
+      const replacements = this.ask(2, backing, now); bind(replacements);
+      const admitted = admittedReplacements(replacements, terms.replacementRule);
+      const { chain, pending } = replacementChain(admitted, { backing, original: terms.operator, lag: this.lag, now });
+      const term = chain.findIndex(link => same(link.link, linkOf(engine.opened!, backing)) && same(link.operator, this.operator));
       requireThat(term >= 0, "STALE", "the segment's term is not in the witnessed chain");
       const end = chain[term + 1]?.from ?? pending?.from;
-      boundaries = end === undefined ? [] : [end];
-      const revocations = this.ask(3, opened.terms.obligor, now); bind(revocations);
-      revokedAt = revocationIndex(revocations);
+      if (end !== undefined) boundaries.push(end);
+      const revoked = this.ask(3, terms.obligor, now); bind(revoked);
+      revocations.set(bytesToHex(backing), revocationIndex(revoked));
       const operators = new Map(chain.map(link => [bytesToHex(link.operator), link.operator]));
       for (const operator of operators.values()) if (!same(operator, this.operator)) bind(this.ask(1, operator, now));
-      if (opened.terms.silence !== undefined || opened.terms.nonService !== undefined) bind(this.ask(4, opened.backing, now));
+      if (terms.silence !== undefined || terms.nonService !== undefined) bind(this.ask(4, backing, now));
     }
-    const key = JSON.stringify([now.toString(), evidence, conflict, boundaries.map(String), revokedAt?.toString() ?? null]);
-    return { now, lag: this.lag, held, conflict, boundaries, revokedAt, key };
+    const key = JSON.stringify([now.toString(), evidence, conflict, boundaries.map(String),
+      [...revocations].map(([name, at]) => [name, at?.toString() ?? null])]);
+    return { now, lag: this.lag, held, conflict, boundaries, revocations, key };
   }
   private exclusive(view: View): void {
     requireThat(!view.conflict, "CONFLICT", "the venue contains a commitment this journal did not sign");
@@ -596,38 +724,43 @@ export class V3OperatorJournal {
       ...(this.isHeld(view, last) ? {} : { unwitnessedSignedAt: last.at }), ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
     requireThat(!schedule.lapsed, "STALE", "the operator's term has ended");
     requireThat(action === "admit" ? schedule.admissionOpen : schedule.commitNow, "SCHEDULE", "the scope's signing schedule is closed");
-    if (engine.evidence.length > 0 || engine.opened.terms.silence !== undefined || engine.opened.terms.nonService !== undefined) {
+    if (engine.evidence.length > 0 || engine.opened.entries.some(({ terms }) => terms.silence !== undefined || terms.nonService !== undefined)) {
       const source = await this.currentRead(engine, view.now);
       this.serviceClock(source, view.now);
       this.reserveReadCheckpoints(engine, view.held, source.work.checkpoints);
       this.reserveEvents(engine, source, action === "admit" ? 1n : 0n);
     }
-    if (view.revokedAt !== undefined) {
+    for (const { backing } of engine.opened.entries) {
+      const revokedAt = view.revocations.get(bytesToHex(backing));
+      if (revokedAt === undefined) continue;
       // Only issuance finalized before K's revocation stays; a later tail needs recovery (slice 3).
       let finalized = 0n;
       for (const signed of engine.signed) {
         const held = view.held.find(h => h.commitment.sequence === signed.commitment.sequence);
-        if (same(signed.opened.segment, engine.opened.segment) && held !== undefined && hexOf(held.commitment) === hexOf(signed.commitment) && held.index < view.revokedAt && signed.length > finalized) finalized = signed.length;
+        if (same(signed.opened.segment, engine.opened.segment) && held !== undefined && hexOf(held.commitment) === hexOf(signed.commitment) && held.index < revokedAt && signed.length > finalized) finalized = signed.length;
       }
-      requireThat(!engine.records.slice(Number(finalized)).some(bytes => decodeRecord(bytes).kind === 1), "UNSUPPORTED",
-        "issuance without pre-revocation finality needs recovery");
+      requireThat(!engine.records.slice(Number(finalized)).some(bytes => {
+        const record = decodeRecord(bytes);
+        return record.kind === 1 && same(identifierOf(record.publicInputs[5]!, record.publicInputs[6]!), backing);
+      }), "UNSUPPORTED", "issuance without pre-revocation finality needs recovery");
     }
   }
 
   /** Read all dependencies from bytes, including later lapsed/excluded signed
-   * checkpoints. Trying an older selection never omits those checkpoints. */
-  private async currentRead(engine: Engine, at: bigint): Promise<StateRead> {
+   * checkpoints. Trying an older selection never omits those checkpoints.
+   * The read selects `backing` (by default the scope's first) in any scope. */
+  private async currentRead(engine: Engine, at: bigint, backing = engine.opened?.entries[0]!.backing): Promise<StateRead> {
     const opened = engine.opened;
-    requireThat(opened !== undefined, "STALE", "there is no segment to read");
+    requireThat(opened !== undefined && backing !== undefined, "STALE", "there is no segment to read");
     const held = heldCommitments(this.ask(1, this.operator, at)).held;
     for (const candidate of [...engine.signed].reverse()) {
       if (!held.some(h => hexOf(h.commitment) === hexOf(candidate.commitment))) continue;
+      if (!candidate.directory.some(entry => same(entry.name, backing))) continue;
       const c = candidate.commitment;
       const bytes = this.encodePackage(opened, engine.signed, c, engine.records, engine.archives, engine.evidence);
       try {
-        const result = await readSingleBackingPackage(bytes, { mode: "historical-fixture", domain: this.domain, venue: this.venueId,
-          backing: opened.backing, operator: this.operator, sequence: c.sequence, root: c.root, judgingIndex: at },
-        { configuration: this.configuration, verifier: this.verifier, venue: this.venue, reference: this.reference });
+        const result = await readPackage(bytes, { mode: "historical-fixture", domain: this.domain, venue: this.venueId,
+          backing, operator: this.operator, sequence: c.sequence, root: c.root, judgingIndex: at }, this.readerOptions());
         requireThat(result.state !== undefined, "UNAVAILABLE", "a journal state read returned a receipt");
         return result;
       } catch (error) {
@@ -668,7 +801,7 @@ export class V3OperatorJournal {
    * opening. Later independent venue publications can still exhaust a reader's
    * local budgets; no journal can bound what other parties publish. */
   private reserveEvents(engine: Engine, source: StateRead, extra: bigint): void {
-    const unadopted = source.force.filter(event => event.index > source.state.adoptionIndex && event.index <= source.canonical.index);
+    const unadopted = this.unadopted(source);
     const rebuild = source.canonical.commitment.sequence === engine.opened!.header.sequence && unadopted.length > 0;
     const ancestry = rebuild ? BigInt(new Map(source.state.resumeKey.imported?.events).size) : 0n;
     const records = BigInt(engine.records.length) + extra - (rebuild ? 0n : source.state.position);
@@ -677,8 +810,16 @@ export class V3OperatorJournal {
     }
   }
 
+  /** Forced publications after the canonical state's adoption index of their
+   * backing, through its index, in venue order: an opening's exact block (C2b.4.1). */
+  private unadopted(source: StateRead): readonly ScopeForcedPublication[] {
+    const { state, canonical } = source;
+    return source.force.filter(event => event.index <= canonical.index &&
+      event.index > (event.backing === undefined ? state.adoptionIndex : state.adoptionIndices.get(event.backing) ?? 0n));
+  }
+
   /** Known requests may enter the counting window before the next checkpoint. */
-  private reservedEventWork(source: StateRead): bigint {
+  private reservedEventWork(source: Pick<StateRead, "work">): bigint {
     return source.work.events - source.work.requestProofs + source.work.requestProofReserve;
   }
 
@@ -690,10 +831,11 @@ export class V3OperatorJournal {
       BigInt(source.clock.boundary) <= at && same(source.canonical.segment, old.segment), "STALE", "return needs the active segment's witnessed silence boundary");
     const sequence = engine.signed.at(-1)!.commitment.sequence + 1n;
     requireThat(sequence < U64, "STORAGE", "signed sequence counter exhausted");
+    // The whole scope returns from its one canonical checkpoint (C2.10.3).
     const predecessor = source.canonical.commitment;
-    const header: SegmentHeader = { ...old.header, sequence, entries: [{ backing: old.backing, link: old.header.entries[0]!.link,
-      opening: { operator: copyBytes(predecessor.operator), sequence: predecessor.sequence, root: copyBytes(predecessor.root) } }] };
-    const opened: Opened = { ...old, header, headerBytes: segmentBytes(header), segment: segmentIdentity(header), scope: new ScopeTree(header.entries).root() };
+    const header: SegmentHeader = { ...old.header, sequence, entries: old.header.entries.map(({ backing, link }) => ({ backing, link,
+      opening: { operator: copyBytes(predecessor.operator), sequence: predecessor.sequence, root: copyBytes(predecessor.root) } })) };
+    const opened = openedOf(header, old.entries);
     engine.archives.push({ opened: old, records: [...engine.records] });
     engine.records.splice(0);
     engine.opened = opened;
@@ -707,9 +849,9 @@ export class V3OperatorJournal {
     const opened = engine.opened!, state = engine.state!;
     requireThat(engine.pendingReturn && source.canonical.commitment.sequence === opened.header.sequence &&
       same(source.canonical.segment, opened.segment), "STALE", "the witnessed opening is not this return");
-    const block = source.force.filter(event => event.index > source.state.adoptionIndex && event.index <= source.canonical.index);
-    const receipts: Uint8Array[] = [];
-    const replay: SegmentReplay = { ...this.replayOf(opened, source.canonical.index, source.ranges.revokedAt), admission: false, block };
+    const block = this.unadopted(source), receipts: Uint8Array[] = [];
+    const replay: SegmentReplay = { ...this.replayOf(opened, source.canonical.index, this.revocations(opened, source.canonical.index)),
+      admission: false, block };
     for (const event of block) {
       await applyRecord(state, event.bytes, replay);
       engine.records.push(copyBytes(event.bytes));
@@ -745,16 +887,16 @@ export class V3OperatorJournal {
       }
       this.diverging = true;
       this.prepareReturn(engine, source, view.now);
-      const opened = engine.opened!, { directory, snapshot } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
+      const opened = engine.opened!, { directory, snapshots } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
       const previous = engine.signed.at(-1)!.commitment;
-      this.encodePackage(opened, [...engine.signed, { directory, snapshot }], previous, [], engine.archives, engine.evidence);
+      this.encodePackage(opened, [...engine.signed, { directory, snapshots }], previous, [], engine.archives, engine.evidence);
       const commitment = this.transaction(() => {
         this.stable(engine, view);
         const c = signCommitment(this.secret, opened.header.sequence, directoryRoot(directory));
         this.append(engine, commandId, "return", { kind: "return", at: view.now.toString(), observed }, bytesToHex(encodeCommitment(c)));
         return c;
       });
-      engine.signed.push({ opened, commitment, length: 0n, at: view.now, observed, directory, snapshot, published: false });
+      engine.signed.push({ opened, commitment, length: 0n, at: view.now, observed, directory, snapshots, published: false });
       engine.revision++;
       return copyCommitment(commitment);
     });
@@ -777,17 +919,16 @@ export class V3OperatorJournal {
       this.serviceClock(current, view.now);
       this.reserveReadCheckpoints(engine, view.held, current.work.checkpoints);
       const source = await this.currentRead(engine, held.index);
-      const block = source.force.filter(event => event.index > source.state.adoptionIndex && event.index <= source.canonical.index);
+      const block = this.unadopted(source);
       this.reserveCheckpoint(engine);
       this.reserveEvents(engine, current, BigInt(block.length));
-      const last = engine.signed.at(-1)!;
-      this.encodePackage(opened, [...engine.signed, { directory: [{ name: opened.backing, digest: new Uint8Array(32) }],
-        snapshot: new Uint8Array(last.snapshot.length) }], held.commitment, [...engine.records, ...block.map(event => event.bytes)], engine.archives, engine.evidence);
+      this.encodePackage(opened, [...engine.signed, this.placeholder(opened)],
+        held.commitment, [...engine.records, ...block.map(event => event.bytes)], engine.archives, engine.evidence);
       this.diverging = true;
       const receipts = await this.applyAdoption(engine, source, () => {
         this.stable(engine, view); this.signingSchedule(view, true);
-      }), { directory, snapshot } = this.checkpoint(engine);
-      this.encodePackage(opened, [...engine.signed, { directory, snapshot }], held.commitment, engine.records, engine.archives, engine.evidence);
+      }), { directory, snapshots } = this.checkpoint(engine);
+      this.encodePackage(opened, [...engine.signed, { directory, snapshots }], held.commitment, engine.records, engine.archives, engine.evidence);
       this.transaction(() => {
         this.stable(engine, view);
         this.append(engine, id, "adopt", { kind: "adopt", at: held.index.toString(), opening: opened.header.sequence.toString() }, JSON.stringify(receipts.map(bytesToHex)));
@@ -819,11 +960,12 @@ export class V3OperatorJournal {
     // Memory follows only after SQLite commits; every uncertain outcome reloads.
   }
 
-  /** Open and sign the genesis segment of the backing `signed` names (C2.4.1). Publishing is explicit. */
-  async open(id: string, signed: SignedTerms): Promise<Commitment> {
+  /** Open and sign the genesis segment of the backings `signed` names, one or
+   * several (C2.4.1, C2.10.1). Publishing is explicit. */
+  async open(id: string, signed: SignedTerms | readonly SignedTerms[]): Promise<Commitment> {
     const commandId = this.commandId(id);
-    const own = { terms: copyBytes(signed?.terms), signature: copyBytes(signed?.signature) };
-    const request = this.openRequest(bytesToHex(own.terms), bytesToHex(own.signature));
+    const own = (isTermsList(signed) ? [...signed] : [signed]).map(s => ({ terms: copyBytes(s?.terms), signature: copyBytes(s?.signature) }));
+    const scope = own.map(termsText), request = this.openRequest(scope);
     return this.run(async engine => {
       const prior = this.prior(commandId, request);
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
@@ -831,61 +973,90 @@ export class V3OperatorJournal {
       const opened = this.opening(own), view = this.view(engine);
       this.exclusive(view);
       requireThat(view.held.length === 0, "CONFLICT", "this key already has commitments on the venue");
-      const admitted = admittedReplacements(this.ask(2, opened.backing, view.now), opened.terms.replacementRule);
-      const { chain, pending } = replacementChain(admitted, { backing: opened.backing, original: this.operator, lag: this.lag, now: view.now });
-      requireThat(chain.length === 1, "STALE", "the operator's term has ended");
-      requireThat(revocationIndex(this.ask(3, opened.terms.obligor, view.now)) === undefined, "UNSUPPORTED", "the backer has revoked K");
-      // A witnessed replacement ends the term at its effective index: the opening is signed by C2.6.1's last signing index.
-      const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries: pending === undefined ? [] : [pending.from],
+      // A witnessed replacement ends a term at its effective index: the opening is signed by C2.6.1's last signing index.
+      const boundaries: bigint[] = [];
+      for (const { backing, terms } of opened.entries) {
+        const { chain, pending } = this.chain(backing, terms, view.now);
+        requireThat(chain.length === 1, "STALE", "the operator's term has ended");
+        requireThat(revocationIndex(this.ask(3, terms.obligor, view.now)) === undefined, "UNSUPPORTED", "the backer has revoked K");
+        if (pending !== undefined) boundaries.push(pending.from);
+      }
+      const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries,
         ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
       requireThat(schedule.commitNow, "SCHEDULE", "the opening's signing schedule is closed");
       const state = openSegmentState(opened.segment, undefined, undefined, undefined, () => {});
-      const probe: Engine = { ...engine, opened, state };
-      const { directory, snapshot } = this.checkpoint(probe);
+      const { directory, snapshots } = this.checkpoint({ ...engine, opened, state });
+      this.encodePackage(opened, [{ directory, snapshots }], this.unsigned(1n, directory), []);
       const commitment = this.transaction(() => {
         this.stable(engine, view);
         const c = signCommitment(this.secret, 1n, directoryRoot(directory));
-        this.append(engine, commandId, request, { kind: "open", terms: bytesToHex(own.terms), signature: bytesToHex(own.signature),
-          at: view.now.toString(), observed: null }, bytesToHex(encodeCommitment(c)));
+        this.append(engine, commandId, request, { kind: "open", scope, at: view.now.toString(), observed: null }, bytesToHex(encodeCommitment(c)));
         return c;
       });
       engine.opened = opened; engine.state = state;
-      engine.signed.push({ opened, commitment, length: 0n, at: view.now, observed: null, directory, snapshot, published: false });
+      engine.signed.push({ opened, commitment, length: 0n, at: view.now, observed: null, directory, snapshots, published: false });
       engine.revision++;
       return copyCommitment(commitment);
     });
   }
 
-  /** C2.7: activate a witnessed successor term from public evidence alone.
-   * The empty opening must be published, witnessed and adopted before service. */
-  async takeover(id: string, signed: SignedTerms, evidence: Uint8Array): Promise<Commitment> {
+  /**
+   * C2.7, C2.10.9: sign the empty opening of a new scope at a committed
+   * boundary. Taken successor terms import from `evidence` alone; kept
+   * backings of the active scope import the journal's own canonical state;
+   * backings left out are dropped. The opening must be published, witnessed
+   * and adopted before service.
+   */
+  async rescope(id: string, change: Rescope): Promise<Commitment> {
     const commandId = this.commandId(id);
-    const own = { terms: copyBytes(signed?.terms), signature: copyBytes(signed?.signature) }, bytes = copyBytes(evidence);
-    const terms = bytesToHex(own.terms), signature = bytesToHex(own.signature), encoded = bytesToHex(bytes);
-    const request = this.takeoverRequest(terms, signature, encoded);
+    const take = [...(change?.take ?? [])].map(s => ({ terms: copyBytes(s?.terms), signature: copyBytes(s?.signature) }));
+    const keep = [...(change?.keep ?? [])].map(name => copyBytes(name));
+    const evidence = change?.evidence === undefined ? new Uint8Array() : copyBytes(change.evidence);
+    requireThat(keep.every(name => name.length === 32) && (take.length > 0) === (change?.evidence !== undefined), "REFUSED",
+      "evidence accompanies exactly the taken terms; kept backings are 32-byte names", "SCOPE");
+    const own: OwnRescope = { take, keep, evidence };
+    const texts = take.map(termsText), names = keep.map(name => bytesToHex(name)), encoded = bytesToHex(evidence);
+    const request = this.rescopeRequest(texts, names, encoded);
     return this.run(async engine => {
       const prior = this.prior(commandId, request);
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
-      const at = this.clock(), target = this.successor(engine, own, at);
-      const view = this.view({ ...engine, opened: target });
-      requireThat(view.now === at, "STALE", "the venue changed during takeover");
+      const at = this.clock(), target = this.rescopeTarget(engine, own, at);
+      const view = this.view({ ...engine, opened: target.opened });
+      requireThat(view.now === at, "STALE", "the venue changed during the scope change");
       this.exclusive(view); this.signingSchedule(view);
       this.reserveCheckpoint(engine, 2n);
-      await this.prepareTakeover(engine, own, bytes, at);
-      const opened = engine.opened!, { directory, snapshot } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
+      await this.prepareRescope(engine, own, at);
+      const opened = engine.opened!, { directory, snapshots } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
       // Budget the exact wire shape before signing. Signature bytes have fixed size.
-      const placeholder: Commitment = { operator: this.operator, sequence: opened.header.sequence, root: directoryRoot(directory), signature: new Uint8Array(64) };
-      this.encodePackage(opened, [...engine.signed, { directory, snapshot }], placeholder, [], engine.archives, engine.evidence);
+      this.encodePackage(opened, [...engine.signed, { directory, snapshots }], this.unsigned(opened.header.sequence, directory), [],
+        engine.archives, engine.evidence);
       const commitment = this.transaction(() => {
         this.stable(engine, view);
         const c = signCommitment(this.secret, opened.header.sequence, directoryRoot(directory));
-        this.append(engine, commandId, request, { kind: "takeover", terms, signature, evidence: encoded, at: at.toString(), observed }, bytesToHex(encodeCommitment(c)));
+        this.append(engine, commandId, request, { kind: "rescope", take: texts, keep: names, evidence: encoded, at: at.toString(), observed },
+          bytesToHex(encodeCommitment(c)));
         return c;
       });
-      engine.signed.push({ opened, commitment, length: 0n, at, observed, directory, snapshot, published: false });
+      engine.signed.push({ opened, commitment, length: 0n, at, observed, directory, snapshots, published: false });
       engine.revision++;
       return copyCommitment(commitment);
     });
+  }
+
+  /** C2.7: activate one witnessed successor term from public evidence alone;
+   * a `rescope` that takes that term and keeps nothing else. */
+  takeover(id: string, signed: SignedTerms, evidence: Uint8Array): Promise<Commitment> {
+    return this.rescope(id, { take: [signed], evidence });
+  }
+  /** A commitment's wire size before signing: signatures have fixed width. */
+  private unsigned(sequence: bigint, directory: readonly SnapshotDigest[]): Commitment {
+    return { operator: this.operator, sequence, root: directoryRoot(directory), signature: new Uint8Array(64) };
+  }
+  /** A checkpoint's wire size before its state is known: every scoped snapshot
+   * and directory entry has fixed width; distinct fills never deduplicate. */
+  private placeholder(opened: Opened): Pick<Signed, "directory" | "snapshots"> {
+    return { directory: opened.entries.map(({ backing }) => ({ name: backing, digest: new Uint8Array(32) })),
+      snapshots: opened.entries.map((_, i) => { const bytes = new Uint8Array(SNAPSHOT_BYTES); new DataView(bytes.buffer).setUint32(0, i + 1); return bytes; }) };
   }
 
   /**
@@ -909,10 +1080,10 @@ export class V3OperatorJournal {
       requireThat(horizon < U64, "SCHEDULE", "the horizon is past the venue's index space");
       // The checkpoint that will carry this record must still be served within the reader's budget.
       const last = engine.signed.at(-1)!;
-      this.encodePackage(opened, [...engine.signed, { directory: [{ name: opened.backing, digest: new Uint8Array(32) }],
-        snapshot: new Uint8Array(last.snapshot.length) }], last.commitment, [...engine.records, bytes], engine.archives, engine.evidence);
+      this.encodePackage(opened, [...engine.signed, this.placeholder(opened)],
+        last.commitment, [...engine.records, bytes], engine.archives, engine.evidence);
       const before = state.position;
-      try { await applyRecord(state, bytes, this.replayOf(opened, horizon, view.revokedAt)); }
+      try { await applyRecord(state, bytes, this.replayOf(opened, horizon, view.revocations)); }
       catch (error) {
         if (state.position !== before) this.diverging = true;
         if (error instanceof ReplayRefusal) throw new V3StoreError("REFUSED", `admission refused: ${error.check}`, error.check);
@@ -943,15 +1114,15 @@ export class V3OperatorJournal {
       await this.ready(engine, view, "commit");
       const last = engine.signed.at(-1)!, sequence = last.commitment.sequence + 1n;
       requireThat(sequence < U64, "STORAGE", "signed sequence counter exhausted");
-      const { directory, snapshot } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
-      this.encodePackage(engine.opened!, [...engine.signed, { directory, snapshot }], last.commitment, engine.records, engine.archives, engine.evidence);
+      const { directory, snapshots } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
+      this.encodePackage(engine.opened!, [...engine.signed, { directory, snapshots }], last.commitment, engine.records, engine.archives, engine.evidence);
       const commitment = this.transaction(() => {
         this.stable(engine, view);
         const c = signCommitment(this.secret, sequence, directoryRoot(directory));
         this.append(engine, commandId, "commit", { kind: "commit", at: view.now.toString(), observed }, bytesToHex(encodeCommitment(c)));
         return c;
       });
-      engine.signed.push({ opened: engine.opened!, commitment, length: BigInt(engine.records.length), at: view.now, observed, directory, snapshot, published: false });
+      engine.signed.push({ opened: engine.opened!, commitment, length: BigInt(engine.records.length), at: view.now, observed, directory, snapshots, published: false });
       engine.revision++;
       return copyCommitment(commitment);
     });
@@ -986,16 +1157,17 @@ export class V3OperatorJournal {
    * (`TRAIL_LIMITS`, `SERVED_PACKAGE_LIMITS` with room for one receipt) refuses as RESOURCE, so the
    * journal admits and signs only what it can still serve.
    */
-  private encodePackage(opened: Opened, signed: readonly Pick<Signed, "directory" | "snapshot">[], selected: Commitment,
+  private encodePackage(opened: Opened, signed: readonly Pick<Signed, "directory" | "snapshots">[], selected: Commitment,
     records: readonly Uint8Array[], archives: Engine["archives"] = [], evidence: Engine["evidence"] = []): Uint8Array {
     try {
       const payloads = new Map<string, EvidenceItem>();
       const add = (kind: number, payload: Uint8Array): void => { payloads.set(`${kind}:${bytesToHex(sha256(payload))}`, { kind, payload }); };
       for (const item of evidence) add(item.kind, item.payload);
       add(1, configurationBytes(this.configuration)); add(2, encodeCommitment(selected));
-      add(6, encodeTrail({ header: opened.headerBytes, terms: [opened.signed], records }, TRAIL_LIMITS));
-      for (const archive of archives) add(6, encodeTrail({ header: archive.opened.headerBytes, terms: [archive.opened.signed], records: archive.records }, TRAIL_LIMITS));
-      for (const s of signed) { add(3, encodeEvidenceDirectory(s.directory, SERVED_PACKAGE_LIMITS)); add(4, s.snapshot); }
+      const termsOf = (scope: Opened): SignedTerms[] => scope.entries.map(entry => entry.signed);
+      add(6, encodeTrail({ header: opened.headerBytes, terms: termsOf(opened), records }, TRAIL_LIMITS));
+      for (const archive of archives) add(6, encodeTrail({ header: archive.opened.headerBytes, terms: termsOf(archive.opened), records: archive.records }, TRAIL_LIMITS));
+      for (const s of signed) { add(3, encodeEvidenceDirectory(s.directory, SERVED_PACKAGE_LIMITS)); for (const snapshot of s.snapshots) add(4, snapshot); }
       const items = [...payloads.values()].sort((a, b) => a.kind - b.kind || compareBytes(sha256(a.payload), sha256(b.payload)));
       return encodeEvidencePackage(items, SERVED_ROOM);
     } catch (error) {
@@ -1010,14 +1182,19 @@ export class V3OperatorJournal {
    * The §12 package for the latest commitment published or held on the venue,
    * with every checkpoint signed through it. Records admitted after it are not
    * served, nor is a commitment still in the outbox. A held one counts even
-   * where a lost reply left its publication unrecorded.
+   * where a lost reply left its publication unrecorded. The selection names
+   * `backing` (by default the scope's first); a reader selects its own.
    */
-  async package(): Promise<ServedPackage> {
+  async package(backing?: Uint8Array): Promise<ServedPackage> {
+    const named = backing === undefined ? undefined : copyBytes(backing);
     return this.run(async engine => {
       const view = this.view(engine), opened = engine.opened, at = engine.signed.findLastIndex(s => s.published || this.isHeld(view, s));
       requireThat(opened !== undefined && at >= 0, "STALE", "no published commitment to serve");
       const selected = engine.signed[at]!, through = engine.signed.slice(0, at + 1);
-      return { selection: { domain: copyBytes(this.domain), venue: copyBytes(this.venueId), backing: copyBytes(opened.backing),
+      // The selection names `backing`, by default the scope's first; its directory must carry it.
+      const name = named ?? selected.opened.entries[0]!.backing;
+      requireThat(selected.directory.some(entry => same(entry.name, name)), "REFUSED", "the served commitment does not carry the backing", "SCOPE");
+      return { selection: { domain: copyBytes(this.domain), venue: copyBytes(this.venueId), backing: copyBytes(name),
         operator: copyBytes(this.operator), sequence: selected.commitment.sequence, root: copyBytes(selected.commitment.root) },
       package: this.encodePackage(opened, through, selected.commitment,
         same(selected.opened.segment, opened.segment) ? engine.records.slice(0, Number(selected.length)) : [], engine.archives, engine.evidence) };

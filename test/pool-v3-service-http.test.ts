@@ -65,7 +65,16 @@ describe.skipIf(!supported)("v3 service HTTP trust boundary (Node 24)", () => {
     expect((await raw(f.url, command({ kind: "publish" }), ADMIN)).status).toBe(200);
     const response = await fetch(new URL("/package", f.url), { headers: { authorization: `Bearer ${TOKEN}` } });
     expect(response.status).toBe(200); expect(response.headers.get("cache-control")).toBe("no-store");
-    await response.arrayBuffer(); expect(f.journal.package).toHaveBeenCalledOnce();
+    await response.arrayBuffer(); expect(f.journal.package).toHaveBeenCalledExactlyOnceWith(undefined);
+    // A multi-backing scope serves the holder's backing by name; any other query is not a route.
+    const named = await fetch(new URL(`/package?backing=${"0b".repeat(32)}`, f.url), { headers: { authorization: `Bearer ${TOKEN}` } });
+    expect(named.status).toBe(200); await named.arrayBuffer();
+    expect(f.journal.package).toHaveBeenLastCalledWith(b(11));
+    for (const query of ["?backing=0B", `?backing=${"0b".repeat(31)}`, `?backing=${"0b".repeat(32)}&x=1`, "?other=1"]) {
+      const refused = await fetch(new URL(`/package${query}`, f.url), { headers: { authorization: `Bearer ${TOKEN}` } });
+      expect(refused.status).toBe(404); await refused.arrayBuffer();
+    }
+    expect(f.journal.package).toHaveBeenCalledTimes(2);
   });
 
   it("rejects wrong and duplicate authorization before invoking the journal", async () => {
