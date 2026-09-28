@@ -135,10 +135,14 @@ export function refusal(program, error) {
   const range = rangeOf(opcodes[Number(at)]);
   const leaves = inputsOf(program.abi);
   if (range !== undefined && range.witness < leaves.length) return `range ${leaves[range.witness].path}`;
-  const debug = infos[cause.acirFunctionId ?? 0];
+  assert.equal(cause.acirFunctionId ?? 0, 0, 'one ACIR function');
+  return chainOf(program, infos[0], at);
+}
+
+/** The call chain from main's call site to the source at ACIR opcode `at`, outermost first. */
+function chainOf(program, debug, at) {
   const id = debug.acir_locations[at];
   assert.notEqual(id, undefined, `opcode ${at} has a source location`);
-  // The call chain from main's call site to the failing assertion, outermost first.
   const frames = [];
   for (let node = debug.location_tree.locations[id]; node.parent !== null; node = debug.location_tree.locations[node.parent]) {
     const { file, span } = node.value, { path, source } = program.file_map[file];
@@ -147,6 +151,20 @@ export function refusal(program, error) {
   }
   assert.notEqual(frames.length, 0, `opcode ${at} has a source location`);
   return frames.join(FRAME);
+}
+
+/**
+ * Every source assertion the program's ACIR carries, as the call chain `refusal` names
+ * when it fails: one entry per call site, however many opcodes the assertion compiles
+ * to. A loop body's iterations share one chain.
+ */
+export function assertions(program) {
+  const { debug: [debug] } = decode(program), chains = new Set();
+  for (const at of Object.keys(debug.acir_locations)) {
+    const chain = chainOf(program, debug, at), innermost = chain.split(FRAME).pop();
+    if (/^\S+\.nr assert(_eq)?\(/.test(innermost)) chains.add(chain);
+  }
+  return [...chains].sort();
 }
 
 /** Between the frames of a refusal's call chain; source text holds `>` but not this. */
