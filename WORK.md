@@ -12,17 +12,14 @@ check` and CI `check:pool:v3 -- --ergo` pass without v2, docs agree, the `ErgoVe
 face removal reviewed. Stop boundary: no transparent-path retirement, multi-backing or adoption.
 
 ## Status
-- M1 commits: `765a6e4` (journal crash drill `check:pool:v3-journal`, receipt crash
-  boundary, journal refusals, truthy-verifier and cross-backing cases, verifier test on
-  the shared module) and `a020215` (range opcodes on all six relations, ten type-escape
-  attacks with the range-removed control, malformed proofs through `proofVerifier`).
-- Local: typecheck, focused vitest files, the fourteen-exit wallet and six-exit journal
-  drills, and `scripts/pool/v3/check.mjs` (335 checks, 18 recorded proofs) pass. The six
-  current reports still match their bound sources. Tests and tooling only: focused
-  self-review of the delegated circuit port; no runtime source changed. Full vitest: 2246
-  pass (exit 1 only from the low-memory worker-RPC flake). **Open:** PR #36 CI was pending
-  when the run's watcher was reaped for low memory; next run: `gh pr checks 36`, merge if
-  green (fix and push if not), delete the branch, then start M2 on a fresh branch.
+- M1 commits: `765a6e4` (journal crash drill `check:pool:v3-journal`, receipt crash boundary,
+  journal, verifier and cross-backing refusals) and `a020215` (range opcodes on all six
+  relations, ten type-escape attacks, malformed proofs through `proofVerifier`).
+- Local: typecheck, full vitest (2246 pass; exit 1 only from the low-memory worker-RPC
+  flake), the wallet and journal drills and `scripts/pool/v3/check.mjs` (335 checks) pass;
+  the six current reports match. Tests/tooling only, self-reviewed; no runtime change.
+  **Open:** PR #36 CI was pending when the watcher was reaped for low memory. Next run:
+  `gh pr checks 36`, merge if green (else fix), delete the branch, then M2 on a new branch.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md) (reproof resolves unpredicted handovers),
