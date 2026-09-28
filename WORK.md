@@ -3,42 +3,30 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 6e delivered by PR #35 from `feat/v3-wallet-backup` (no companion branch or
-normative change): the v3 wallet's two restoration paths
-([decision](decisions/2026-09.md#2026-09-28--restore-the-v3-wallet-from-its-seed-or-an-encrypted-handoff-that-freezes-its-source),
-[guide](docs/POOL_V3_WALLET.md#backup-and-restoration)). `V3Wallet.restoreSeed` (C4.6)
-finds the same holdings, change included, with no local state (C4.2).
-`exportBackup`/`restoreBackup` move the complete local state under a random key
-and an independently kept digest (AES-256-GCM, domain and venue as associated data).
-The export freezes the source in the same transaction. A restore is staged and then
-hard-linked to a new destination. Acceptance: the v2 backup cases ported and passing,
-continuation after restore (retries, reservations, submit, sync, reprove after takeover),
-and export/import crash boundaries in `check:pool:v3-wallet`. Stop boundary: no
-continuous backup, rollback protection, password KDF, streaming beyond 64 MiB,
-physical custody or v2 retirement.
+Slice 6f, retire v2, on `feat/retire-v2` (no companion branch or normative change;
+[decision and case map](decisions/2026-09.md#2026-09-28--retire-v2-against-a-case-map-of-its-checks)).
+M1, delivered by this branch's PR: every remaining v2 wallet, service, real-proof, crash
+and store check mapped by behavior to a v3 case, a v2-only mechanism or a later slice,
+and the gaps ported. M2, next: delete v2 (Next 1). Acceptance for the slice: `npm run
+check` and CI `check:pool:v3 -- --ergo` pass without v2, docs agree, the `ErgoVenue`
+face removal reviewed. Stop boundary: no transparent-path retirement, multi-backing or adoption.
 
 ## Status
-- Commits `d79df25` (feature, tests, crash drill), `881038e` (docs, decision),
-  `b1e0c60` and `39a3c63` (review fixes). Independent adversarial review found no
-  blocker or major issue. Its minor findings were resolved and read back: staged restore
-  with link, options read once, freeze rechecked before proving, exact-DDL export check,
-  wording, and zeroing. Remaining noted limits: hard links required, and a crash can
-  leave a plaintext staging copy that must be deleted.
-- Local: 44 wallet/payer/backup cases, typecheck and the twelve-exit crash drill pass.
-  CI: all seven jobs passed at `39a3c63` ([run](https://github.com/mediumofexchange/reference-ts/actions/runs/36415773501));
-  the journal report is its Linux artifact (only wallet sources changed) and all six current
-  reports match their bound sources. Local full `npm run check` was not run; CI ran it.
+- M1 commits: `765a6e4` (journal crash drill `check:pool:v3-journal`, receipt crash boundary,
+  journal, verifier and cross-backing refusals) and `a020215` (range opcodes on all six
+  relations, ten type-escape attacks, malformed proofs through `proofVerifier`).
+- Local: typecheck, full vitest (2246 pass; exit 1 only from the low-memory worker-RPC
+  flake), the wallet and journal drills and `scripts/pool/v3/check.mjs` (335 checks) pass;
+  the six current reports match. Tests/tooling only, self-reviewed; no runtime change.
+  **Open:** PR #36 CI was pending when the watcher was reaped for low memory. Next run:
+  `gh pr checks 36`, merge if green (else fix), delete the branch, then M2 on a new branch.
 
 ## Evidence
-- Wallet API, custody preconditions, reproof and payment limits: [guide](docs/POOL_V3_WALLET.md).
-  Published-but-not-yet-effective handovers are not predicted; reproof resolves them.
-- Service API and interrupted-operation limits: [guide](docs/POOL_V3_SERVICE.md).
-- Persistence design and scalability plan:
-  [decision](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox);
-  full checkpoints still rewrite retained history and raw sections stay in memory.
+- Guides: [wallet](docs/POOL_V3_WALLET.md) (reproof resolves unpredicted handovers),
+  [service](docs/POOL_V3_SERVICE.md), [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
+  (full checkpoints still rewrite retained history; raw sections stay in memory).
 - Current reports: [journal](docs/pool-v3-store-verification.json),
-  [replay](docs/pool-v3-local-replay-verification.json),
-  [recovery](docs/pool-v3-recovery-store-verification.json),
+  [replay](docs/pool-v3-local-replay-verification.json), [recovery](docs/pool-v3-recovery-store-verification.json),
   [Ergo recovery](docs/pool-v3-recovery-store-ergo-verification.json),
   [succession](docs/pool-v3-succession-store-verification.json) and
   [Ergo succession](docs/pool-v3-succession-store-ergo-verification.json).
@@ -47,12 +35,28 @@ physical custody or v2 retirement.
   live journal at `2c6b20c`; header and mainnet reader reports at `6e4cea8`.
 
 ## Next
-1. Finish slice 6 by retiring v2. First inventory every remaining v2 wallet,
-   service, real-proof, crash and store check against its v3 counterpart
-   (backup, pairing and delivery are now mapped or ported). Port the gaps, then
-   delete v2's `src/pool` modules, tests, scripts and reports (the plan's slice 6
-   acceptance). Same-segment tail repair (C2.10.9a) and release of never-admitted
-   inputs stay with cancellation in item 6 until a gate needs them.
+1. M2, delete v2 (one branch, then review of the ErgoVenue change):
+   - `scripts/pool/v3/check.mjs`: read toolchain and helper pins from
+     `candidate-manifest.json`, not `src/pool/circuits/manifest.json`; keep
+     `scripts/pool/{constraints,fixtures,prepare-crs}.mjs`; fix the comment in
+     `src/pool/proof-verifier.ts` naming `scripts/pool/check.mjs`.
+   - Delete `src/pool/` except `field`, `poseidon2`, `notes`, `note-tree`,
+     `scope`, `schedule`, `proof-verifier`, `v3/` and `circuits/vendor/`; the
+     v2 tests (`pool-*` without v3 successors, `pool-support.ts`,
+     `pool-record-support.ts`, `model/pool-fault-evidence.test.ts`); v2 scripts
+     (`pool/{check,admission,compile,store-crash*}`, `browser`, `service`,
+     `wallet`, `local`, `delivery`, `spent-set`, `scripts/compile-noir.mjs`);
+     their package scripts, CI `pool` job and device-storage step.
+   - Keep v3's bytes distinct from v2's in `pool-v3-headers`/`records` tests by
+     tag, not by the v2 decoder. `ErgoVenue` drops its transparent `Venue` face
+     (`ergo-venue.test.ts` PoolAuthorityView cases, `ergo-publisher.test.ts` type).
+   - Package: root barrel exports the shared primitives; v3 stays on subpaths;
+     `check-package.mjs` imports `pool/v3/store`; `files` keeps the vendor helper.
+   - Docs: retire the v2 guides (POOL_{SERVICE,STORE,WALLET*,LOCAL_PROFILE,RECEIPTS})
+     and v2 reports as permalinks at `a020215`; update README, AGENTS.md (v2 freeze,
+     check table), IMPLEMENTATION_STATUS, architecture map, PROTOCOL_RULES rows,
+     PRODUCTION_REQUIREMENTS. `backing.ts`/`contexts.ts` keep v2 names (transparent
+     path, reserved tags). Same-segment repair and cancellation stay in item 6.
 2. Multi-backing, including compact fault orchestration (slice 7).
 3. Configuration adoption: provenance, ACIR identities/certificates, replay/import
    bounds, one-transaction condition and BN254 margin. Mainnet needs separate authority.

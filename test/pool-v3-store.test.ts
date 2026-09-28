@@ -448,4 +448,39 @@ describe.skipIf(!supported)("the v3 operator journal (Node 24)", () => {
     expect(decodeReceipt(await second.submit(burning())).position).toBe(3n);
     expect(decodeReceipt(await second.submit(issue())).position).toBe(1n);
   });
+
+  it("requires a persistent path and refuses stored rows that disagree with replay", async () => {
+    const venue = FixtureVenue.reference(label, lag);
+    for (const file of [":memory:", "file:journal.db", " "]) expect(await refusal((async () => journal(file, venue))())).toEqual(["STORAGE", undefined]);
+    for (const tamper of [
+      "UPDATE events SET response = '00' || substr(response, 3) WHERE id LIKE 'statement:%'",
+      "UPDATE events SET command = replace(command, '\"kind\":\"admit\"', '\"kind\": \"admit\"') WHERE id LIKE 'statement:%'",
+      "UPDATE events SET command = replace(command, '\"at\":\"', '\"at\":\"9') WHERE request = 'commit'",
+      "DELETE FROM events WHERE seq = (SELECT MAX(seq) FROM events)",
+    ]) {
+      const { file, venue: v, j } = await opened();
+      await j.submit(issue()); await j.commit("c2"); j.close();
+      const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(file);
+      expect(Number(db.prepare(tamper).run().changes)).toBe(1); db.close();
+      expect(await refusal((async () => journal(file, v).package())())).toEqual(["STORAGE", undefined]);
+    }
+  });
+
+  it("answers a concurrent operation BUSY and hands the caller owned package bytes", async () => {
+    const { j } = await opened();
+    const first = j.submit(issue());
+    expect(await refusal(j.submit(payment()))).toEqual(["BUSY", undefined]);
+    await first; await j.commit("c2"); await j.publish();
+    const served = await j.package(), copy = structuredClone(served);
+    served.package.fill(0); served.selection.root.fill(0); served.selection.backing.fill(0);
+    expect(await j.package()).toEqual(copy);
+  });
+
+  it("refuses a genesis opening where this key already has commitments on the venue", async () => {
+    // Another journal of the same key has published its opening there.
+    const { venue } = await opened();
+    const fresh = journal(path(), venue);
+    await expect(fresh.open("genesis", signed)).rejects.toThrow(/a commitment this journal did not sign/);
+    expect(await refusal(fresh.open("genesis", signed))).toEqual(["CONFLICT", undefined]);
+  });
 });

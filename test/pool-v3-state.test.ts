@@ -90,6 +90,8 @@ describe("the v3 state machine in replay mode", () => {
     expect(await refusal(state, issue(1n, 110n, {}, OTHER), context)).toBe("BACKING");
     expect(await refusal(state, issue(10n, 101n), context)).toBe("REPEATED_STATEMENT");
     expect(await refusal(state, issue(1n, 110n), replay({ verifier: { verify: () => false } }))).toBe("PROOF");
+    // Only a boolean true verifies: a truthy answer from a misbehaving verifier is a refusal.
+    expect(await refusal(state, issue(1n, 110n), replay({ verifier: { verify: () => "yes" as unknown as boolean } }))).toBe("PROOF");
     expect(await refusal(state, issue(1n, 110n, { signer: b(8) }), context)).toBe("SIGNATURE");
     expect(await refusal(state, issue((1n << 64n) - 10n, 110n), context)).toBe("SUPPLY");
     expect(await refusal(state, burn(11n, [root, root], [201n, 202n], 110n), context)).toBe("SUPPLY");

@@ -7,8 +7,11 @@ import { join, resolve, sep } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { Noir } from '@noir-lang/noir_js';
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from '@aztec/bb.js';
-import { fixtures, field, U64_MAX } from '../fixtures.mjs';
+import { fixtures, field, FIELD, U64_MAX } from '../fixtures.mjs';
+import { asFields, bypass, inputRanges, names, refusal, withoutRange } from '../constraints.mjs';
 import { EncodingError } from '../../../dist/bytes.js';
+import { proofVerifier } from '../../../dist/pool/proof-verifier.js';
+import { POOL_V3_CIRCUITS } from '../../../dist/pool/v3/prover.js';
 import { deliveryHash } from '../../../dist/pool/v3/records.js';
 import { V3_SPECIFICATION } from './provenance.mjs';
 
@@ -30,16 +33,23 @@ try {
   execFileSync(process.execPath, [join(here, 'compile.mjs'), build], { cwd: root, windowsHide: true, stdio: 'inherit', timeout: 300000 });
   const compiledSourceHashes = json(join(build, 'source-hashes.json'));
   assert.equal(compiledSourceHashes.poseidon2, manifest.sources['vendor/poseidon2.nr']);
-  api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath: join(root, 'scratch/private-payment-crs') });
+  const crsPath = join(root, 'scratch/private-payment-crs');
+  api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath });
   for (const kind of kinds) {
     const program = json(join(build, kind + '.json'));
     assert.equal(program.noir_version, '1.0.0-beta.26+40d6574f851d926f93e0c3a271bac3e6e82ac905');
     const backend = new UltraHonkBackend(program.bytecode, api), vk = await backend.getVerificationKey(options);
-    circuits[kind] = { program, backend, vk, noir: new Noir(program) };
+    // Hostile witnesses run on the same bytecode through an ABI with every integer
+    // and boolean typed as a field, so the constraints refuse them, not the encoder.
+    const widened = bypass(program);
+    circuits[kind] = { program, backend, vk, noir: new Noir(program), widened, hostile: new Noir(widened) };
     identities[kind] = { source: sha(readFileSync(join(here, 'circuits', kind + '.nr'))), bytecode: sha(Buffer.from(program.bytecode, 'base64')), vk: sha(vk), vkBytes: vk.length };
     assert.equal(identities[kind].source, compiledSourceHashes[kind], kind + ': source changed during build');
   }
   assert.equal(new Set(kinds.map(k => identities[k].vk)).size, 6);
+  // Limbs below 2^128, values below 2^64 and direction bits are the circuit's own
+  // constraints, not the ABI encoder's; public inputs are exactly their ABI witnesses.
+  for (const kind of kinds) checks.push(`${kind}: all ${inputRanges(circuits[kind].program)} integer and boolean inputs are range-checked in ACIR`);
   const f = await fixtures(api), verifier = new UltraHonkVerifierBackend(api);
   const tag = nf => f.hash([1007, nf]);
   const prefix = v => [...v.domain, ...v.segment, v.scope];
@@ -331,6 +341,161 @@ try {
     const bad=structuredClone(vector);bad[0].capsule[1]^=1;
     assert.notDeepEqual(hashOf(bad),digest);
     checks.push(kind+': exact synthetic capsule vector hash, missing/tampered vector rejected');
+  }
+
+  // Witnesses outside the declared types, booleans included, that satisfy every other
+  // constraint: what a prover that skips noir_js's encoder can build. Each is refused by
+  // that input's range check, solves once only that check is removed, and, proven from
+  // that solution with the real program and key, does not verify; the valid control,
+  // solved and proven the same way, does.
+  for (const kind of kinds) {
+    await circuits[kind].hostile.execute(asFields(bases[kind]));
+    checks.push(kind + ': the field-typed ABI, booleans included, solves the valid witness');
+  }
+  async function beyondTypes(label, kind, base, mutate, expected) {
+    assert(expected.startsWith('range '));
+    const input = structuredClone(base); await mutate(input);
+    const actual = await circuits[kind].hostile.execute(asFields(input)).then(() => 'solved', error => refusal(circuits[kind].widened, error));
+    assert(names(expected, actual), `${label}: refused by ${actual}, expected ${expected}`);
+    const unranged = new Noir(withoutRange(circuits[kind].program, expected.slice('range '.length)));
+    const proven = async value => {
+      const { witness } = await unranged.execute(asFields(value));
+      const proof = await circuits[kind].backend.generateProof(witness, options);
+      assert.deepEqual(proof.publicInputs.map(field), publicInputsOf(kind, value), label);
+      return verifier.verifyProof({ ...proof, verificationKey: circuits[kind].vk }, options);
+    };
+    assert.equal(await proven(base), true, `${label}: control`);
+    assert.equal(await proven(input), false, label);
+    checks.push(`${label}: refused by ${expected}, solves without that range check, and its proof does not verify where the valid one does`);
+  }
+  const mod = x => ((x % FIELD) + FIELD) % FIELD;
+  const inverse = x => { let r = 1n, b = mod(x); for (let e = FIELD - 2n; e > 0n; e >>= 1n, b = b * b % FIELD) if (e & 1n) r = r * b % FIELD; return r; };
+  const H = async values => BigInt(await f.hash(values.map(value => mod(BigInt(value)))));
+  // The root's two children on a valid path of `depth` levels under node tag `tag`.
+  async function children(tag, depth, leaf, siblings, right) {
+    let node = leaf;
+    for (let l = 0; l < depth - 1; l++) {
+      const s = BigInt(siblings[l]); node = right[l] ? await H([tag, l, s, node]) : await H([tag, l, node, s]);
+    }
+    const top = BigInt(siblings[depth - 1]);
+    return right[depth - 1] ? [top, node] : [node, top];
+  }
+  // A direction d selects left = node + d·(sibling − node) and right = sibling − d·(sibling − node);
+  // with sibling = A + B − node and d = (A − node)/(sibling − node) any node lands under children (A, B).
+  const forge = (node, [A, B]) => {
+    const sibling = mod(A + B - node);
+    return { sibling: field(sibling), direction: field(mod((A - node) * inverse(sibling - node))) };
+  };
+  // An unminted note of 1,000,000 under the anchor that holds `real`, by one non-boolean bit 31
+  // (note tree: tag 1004, depth 32); its owner's secret is 777.
+  async function unminted(real, anchor, siblings, right) {
+    const top = await children(1004, 32, BigInt(await f.cm(real)), siblings, right);
+    assert.equal(await H([1004, 31, ...top]), BigInt(anchor));
+    const note = { backing: [...real.backing], value: '1000000', owner: await f.hash([1001, 777]), rho: field(778) };
+    let node = BigInt(await f.cm(note));
+    for (let l = 0; l < 31; l++) node = await H([1004, l, node, 0]);
+    const { sibling, direction } = forge(node, top);
+    const path = { siblings: Array(32).fill(field(0)), right: Array(32).fill(false) };
+    path.siblings[31] = sibling; path.right[31] = direction;
+    return { note, secret: field(777), ...path };
+  }
+  await beyondTypes('spend: an output of p - 900 wraps conservation and mints 900', 'spend', spend, async v => {
+    v.output_notes[0].value = (FIELD - 900n).toString(); v.output_notes[1].value = '1000'; await rebuild('spend', v);
+  }, 'range output_notes[0].value');
+  await beyondTypes('spend: an input of 2^64 in the tree pays two outputs of 2^63', 'spend', spend, async v => {
+    v.inputs[0].value = (1n << 64n).toString(); v.output_notes[0].value = v.output_notes[1].value = (1n << 63n).toString();
+    await rebuild('spend', v);
+  }, 'range inputs[0].value');
+  await beyondTypes('spend: a non-boolean direction puts an unminted note under a real anchor', 'spend', spend, async v => {
+    const u = await unminted(v.inputs[0], v.anchors[0], v.siblings[0], v.right[0]);
+    v.inputs[0] = u.note; v.secrets[0] = u.secret; v.siblings[0] = u.siblings; v.right[0] = u.right;
+    v.output_notes[0].value = '400000'; v.output_notes[1].value = '600000'; await f.refresh(v); delivery('spend', v);
+  }, 'range right[0][31]');
+  await beyondTypes('settle: a non-boolean direction settles an unminted note under a real anchor', 'settle', settle, async v => {
+    const u = await unminted(v.inputs[0], v.anchors[0], v.siblings[0], v.right[0]);
+    v.inputs[0] = u.note; v.secrets[0] = u.secret; v.siblings[0] = u.siblings; v.right[0] = u.right;
+    v.quantity = u.note.value; v.nullifiers[0] = await f.nf(u.note, u.secret, v.domain);
+    v.cm_out = await f.cm({ backing: v.backing, value: v.quantity, owner: v.owner, rho: v.rho_out }, v.domain);
+  }, 'range right[0][31]');
+  await beyondTypes('demand: a non-boolean direction demands on an unminted note under a real anchor', 'demand', demand, async v => {
+    const u = await unminted(v.inputs[0], v.anchors[0], v.siblings[0], v.right[0]);
+    v.inputs[0] = u.note; v.secrets[0] = u.secret; v.siblings[0] = u.siblings; v.right[0] = u.right;
+    v.quantity = u.note.value; v.tags[0] = await tag(await f.nf(u.note, u.secret, v.domain));
+  }, 'range right[0][31]');
+  await beyondTypes('request: a non-boolean direction requests on an unminted note under a real anchor', 'request', request, async v => {
+    const u = await unminted(v.note, v.anchor, v.siblings, v.right);
+    v.note = u.note; v.secret = u.secret; v.siblings = u.siblings; v.right = u.right;
+    v.tag = await tag(await f.nf(u.note, u.secret, v.domain));
+  }, 'range right[31]');
+  await beyondTypes('issue: a non-boolean scope direction puts a foreign backing in the scope', 'issue', bases.issue, async v => {
+    const top = await children(1006, 16, await H([1005, ...f.a, ...f.linkA]), v.scope_siblings, v.scope_right);
+    assert.equal(await H([1006, 15, ...top]), BigInt(v.scope));
+    let node = await H([1005, ...f.foreign, ...v.link]);
+    for (let l = 0; l < 15; l++) node = await H([1006, l, node, 0]);
+    const { sibling, direction } = forge(node, top);
+    v.backing = [...f.foreign]; await rebuild('issue', v);
+    v.scope_siblings = Array(16).fill(field(0)); v.scope_siblings[15] = sibling;
+    v.scope_right = Array(16).fill(false); v.scope_right[15] = direction;
+  }, 'range scope_right[15]');
+  await beyondTypes('issue: a quantity of 2^64 + 5 under its own commitment', 'issue', bases.issue, async v => {
+    v.quantity = ((1n << 64n) + 5n).toString(); await rebuild('issue', v);
+  }, 'range quantity');
+  await beyondTypes('issue: a backing limb of 2^128 + 31 under a scope that holds it', 'issue', bases.issue, async v => {
+    v.backing = [((1n << 128n) + 31n).toString(), v.backing[1]]; await rebuild('issue', v);
+    let node = await H([1005, ...v.backing, ...v.link]), zero = 0n;
+    v.scope_siblings = []; v.scope_right = Array(16).fill(false);
+    for (let l = 0; l < 16; l++) {
+      v.scope_siblings.push(field(zero)); node = await H([1006, l, node, zero]); zero = await H([1006, l, zero, zero]);
+    }
+    v.scope = field(node);
+  }, 'range backing[0]');
+  await beyondTypes('burn: a change of p - 50 wraps 100 = 150 + change', 'burn', bases.burn, async v => {
+    v.quantity = '150'; v.change.value = (FIELD - 50n).toString(); await rebuild('burn', v);
+  }, 'range change.value');
+
+  // The shared proof verifier over v3's circuit table, with proofs bb.js throws on: an element past
+  // its modulus, a coordinate limb out of range, a commitment off the curve and pairing points at
+  // infinity. Each verifies as false, and a run of them longer than the one after which a reused
+  // backend instance fails every verification leaves a valid proof verifying.
+  {
+    const programs = Object.fromEntries(kinds.map(k => [k, circuits[k].program]));
+    const shared = await proofVerifier(api, POOL_V3_CIRCUITS, programs, { crsPath });
+    const hex = b => Buffer.from(b).toString('hex'), kindOf = Object.fromEntries(POOL_V3_CIRCUITS.circuits.map(c => [c.name, c.kind]));
+    assert.deepEqual(POOL_V3_CIRCUITS.circuits.map(c => [c.name, c.publicInputs]), kinds.map(k => [k, counts[k]]));
+    for (const kind of kinds) {
+      assert.deepEqual([hex(shared.identities[kind].bytecode), hex(shared.identities[kind].vk)], [identities[kind].bytecode, identities[kind].vk], kind);
+      assert.equal(await shared.verify(kindOf[kind], proofs[kind].publicInputs.map(BigInt), proofs[kind].proof), true, kind);
+    }
+    checks.push('the shared verifier derives the six identities from this build and verifies each relation\'s proof under its kind');
+    const valid = proofs.issue, inputs = valid.publicInputs.map(BigInt), vk = circuits.issue.vk;
+    const word = (i, value) => { const p = new Uint8Array(valid.proof); p.set(Buffer.from(value.toString(16).padStart(64, '0'), 'hex'), i * 32); return p; };
+    const malformed = [
+      ['an element past its modulus', word(0, (1n << 256n) - 1n), 'Non-canonical proof element: value >= field modulus'],
+      ['a low coordinate limb out of range', word(8, FIELD - 1n), 'Assertion failed: (uint256_t(fr_vec[0]) < (uint256_t(1) << (NUM_LIMB_BITS * 2)))'],
+      ['a high coordinate limb out of range', word(9, FIELD - 1n), 'Assertion failed: (uint256_t(fr_vec[1]) < (uint256_t(1) << (TOTAL_BITS - NUM_LIMB_BITS * 2)))'],
+      ['a commitment off the curve', word(8, 1n), 'Deserialized point is not on the curve'],
+      ['pairing points at infinity', new Uint8Array(valid.proof.length), 'Cannot aggregate: incoming pairing points are at infinity'],
+    ];
+    const raw = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath });
+    try {
+      const reused = new UltraHonkVerifierBackend(raw);
+      const rawVerify = proof => reused.verifyProof({ proof, publicInputs: valid.publicInputs, verificationKey: vk }, options);
+      for (const [label, bytes, message] of malformed) await assert.rejects(rawVerify(bytes), error => error.message.startsWith(message), label);
+      const offCurve = malformed[3][1];
+      for (let i = 0; i < 96; i++) await rawVerify(offCurve).catch(() => {});
+      await assert.rejects(rawVerify(valid.proof), /memory access out of bounds/, 'the control: a reused instance fails after the run');
+    } finally { await raw.destroy(); }
+    checks.push('the control: a reused raw backend throws the five pinned malformed-proof messages and fails a valid proof after 96 more');
+    for (const [label, bytes] of malformed) {
+      assert.equal(await shared.verify(kindOf.issue, inputs, bytes), false, label);
+      checks.push(`the shared verifier answers false for ${label}`);
+    }
+    for (let i = 0; i < 96; i++) assert.equal(await shared.verify(kindOf.issue, inputs, malformed[3][1]), false);
+    assert.equal(await shared.verify(kindOf.issue, inputs, valid.proof), true);
+    checks.push('the shared verifier never reuses an instance that threw: a valid proof verifies after 96 malformed ones');
+    await shared.close();
+    await assert.rejects(shared.verify(kindOf.issue, inputs, valid.proof), /the proof verifier is closed/);
+    checks.push('a closed shared verifier refuses instead of calling a destroyed instance');
   }
   const git=args=>execFileSync('git',args,{cwd:root,encoding:'utf8',windowsHide:true,timeout:30_000}).trim();
   const report={candidate:'combined six successor relations', referenceBase:git(['rev-parse','HEAD']), referenceTreeClean:git(['status','--porcelain','--untracked-files=no'])==='', companionSpec:V3_SPECIFICATION,

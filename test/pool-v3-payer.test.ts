@@ -166,7 +166,18 @@ describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
     await expect(f.payer.prepare("wrong", { request: f.invoice, value: 8n }, f.served, f.signed, prove)).rejects.toThrow(EncodingError);
     await expect(f.payer.prepare("same-fee", { request: f.invoice, value: 7n, fee: { request: f.invoice, value: 7n } }, f.served, f.signed, prove))
       .rejects.toMatchObject({ code: "INVALID" });
-    await f.payer.prepare("shop", f.order, f.served, f.signed, prove);
+    // Multi-backing payments and cross-backing fees refuse: the agreed backing is the signed terms' own.
+    const foreign = f.receiver.request("foreign", b(99), 7n);
+    await expect(f.payer.prepare("foreign", { request: foreign, value: 7n }, f.served, f.signed, prove)).rejects.toThrow("invalid exact payment request");
+    await expect(f.payer.prepare("foreign-fee", { ...f.order, fee: { request: f.receiver.request("foreign-fee", b(99), 1n), value: 1n } },
+      f.served, f.signed, prove)).rejects.toThrow("invalid exact payment request");
+    expect(f.payer.payment("foreign")).toBeUndefined(); expect(f.payer.payment("foreign-fee")).toBeUndefined();
+    const saved = await f.payer.prepare("shop", f.order, f.served, f.signed, prove);
+    // Returned records are the caller's copies; the saved record is unchanged.
+    const inputs = [...saved.inputs];
+    saved.record.fill(0); (saved.inputs as bigint[]).length = 0;
+    expect(f.payer.payment("shop")!.record).not.toEqual(saved.record);
+    expect(f.payer.payment("shop")!.inputs).toEqual(inputs);
     await expect(f.payer.prepare("again", { request: f.invoice, value: 7n }, f.served, f.signed, prove)).rejects.toMatchObject({ code: "CONFLICT" });
     await expect(f.payer.prepare("fee-again", { request: f.receiver.request("other", f.backing, 1n), value: 1n,
       fee: { request: f.feeRequest, value: 1n } }, f.served, f.signed, prove)).rejects.toMatchObject({ code: "CONFLICT" });
