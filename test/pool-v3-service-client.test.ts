@@ -143,7 +143,7 @@ describe("bounded v3 local service client", () => {
   it("aborts a real server that stalls after response headers", async () => {
     const url = await endpoint((_, response) => { response.setHeader("content-type", "application/json"); response.flushHeaders(); });
     const started = Date.now();
-    await expect(new V3ServiceClient(url, TOKEN, expected()).package(backing)).rejects.toThrow();
+    await expect(new V3ServiceClient(url, TOKEN, expected()).package(backing)).rejects.toMatchObject({ name: "AbortError" });
     expect(Date.now() - started).toBeLessThan(14_000);
   }, 15_000);
 });
