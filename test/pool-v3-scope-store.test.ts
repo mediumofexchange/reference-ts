@@ -12,6 +12,7 @@ import { decodeSegmentHeader } from "../src/pool/v3/headers.js";
 import { PACKAGE_LIMITS, readPackage } from "../src/pool/v3/package-reader.js";
 import { decodeEvidencePackage, encodeEvidencePackage } from "../src/pool/v3/package.js";
 import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
+import { mergeFinalizedPrefixes } from "../src/pool/v3/scope-reader.js";
 import { encodePublication, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
 import type { ServedPackage, V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
@@ -51,10 +52,10 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
     mkdirSync(scratch, { recursive: true });
     const directory = mkdtempSync(join(scratch, "v3-scope-journal-test-")); directories.push(directory);
     const venue = FixtureVenue.reference(label, lag);
-    const backingOf = (thing: string, issuer: Uint8Array, operator = aKey) => {
+    const backingOf = (thing: string, issuer: Uint8Array, operator = aKey, silenced = silence) => {
       const terms = encodeRootTerms({ obligor: ed25519.getPublicKey(issuer), operator, replacementRule: ed25519.getPublicKey(ruleSecret),
         configuration: domain, venue: venue.id, interval: 30n, payout: { thing, quantumExponent: 0, perUnit: 1n },
-        ...(silence ? { silence: { noCommitmentDuration: 4n, challengeWindow: 5n } } : {}) });
+        ...(silenced ? { silence: { noCommitmentDuration: 4n, challengeWindow: 5n } } : {}) });
       return { name: rootTermsName(terms), issuer, signed: { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuer) } };
     };
     const x = backingOf("scope journal x", issuerX), y = backingOf("scope journal y", issuerY);
@@ -129,9 +130,17 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
     const bj = f.create(bSecret, "b");
     expect((await bj.takeover("take-x", f.x.signed, f.held.package)).sequence).toBe(1n);
     await expect(f.a.rescope("keep-ended", { keep: [f.x.name, f.y.name] })).rejects.toMatchObject({ code: "STALE" });
+    // The reader of the split opening merges and re-reads its parent's ancestry beyond
+    // the parent read itself; the journal reserves both passes (C2.10.6).
+    const parent = await f.read(await f.a.package(f.y.name), f.y.name);
+    let merging = 0n;
+    const merged = mergeFinalizedPrefixes([{ state: parent.state }], amount => { merging += amount; });
     expect((await f.a.rescope("split", { keep: [f.y.name] })).sequence).toBe(3n);
     await expect(f.a.submit(f.issue(await f.context(f.a), f.output(f.y.name, 33, 1n), f.y.issuer))).rejects.toMatchObject({ code: "STALE" });
     for (const j of [bj, f.a]) { await j.publish(); expect(await j.adopt()).toEqual([]); }
+    const split = await f.read(await f.a.package(f.y.name), f.y.name);
+    expect(split.work.events).toBeGreaterThan(parent.work.events + BigInt(parent.state.events.size));
+    expect(split.work.events).toBeLessThanOrEqual(parent.work.events + merging + BigInt(merged.events.size));
     const [ctxB, ctxA] = [await f.context(bj), await f.context(f.a)];
     expect(ctxB.header.entries).toEqual([{ backing: f.x.name, link: toB.link, opening: { operator: aKey, sequence: 2n, root: f.held.selection.root } }]);
     expect(ctxA.header.entries).toEqual([{ backing: f.y.name, link: f.y.name, opening: { operator: aKey, sequence: 2n, root: f.held.selection.root } }]);
@@ -214,6 +223,9 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
     await expect(a.open("dup", [f.x.signed, f.x.signed])).rejects.toMatchObject({ code: "REFUSED", check: "SCOPE" });
     const foreign = f.backingOf("scope journal z", issuerY, bKey);
     await expect(a.open("foreign", [f.x.signed, foreign.signed])).rejects.toMatchObject({ code: "REFUSED" });
+    // C2.10.2: one clock per scope; a reader would exclude mixed silence durations.
+    const silenced = f.backingOf("scope journal w", issuerY, aKey, true);
+    await expect(a.open("mixed-clock", [f.x.signed, silenced.signed])).rejects.toMatchObject({ code: "REFUSED", check: "SCOPE" });
     await a.open("genesis", [f.x.signed, f.y.signed]); await a.publish();
     await expect(a.rescope("nothing", {})).rejects.toMatchObject({ code: "REFUSED", check: "SCOPE" });
     await expect(a.rescope("outside", { keep: [foreign.name] })).rejects.toMatchObject({ code: "REFUSED", check: "SCOPE" });
@@ -222,7 +234,9 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
     // Dropping a live backing is elective: allowed once the whole tail is witnessed.
     await a.submit(f.issue(await f.context(a), f.output(f.x.name, 31, 10n), f.x.issuer));
     await expect(a.rescope("drop-x", { keep: [f.y.name] })).rejects.toMatchObject({ code: "STALE", check: "TAIL" });
-    await a.commit("issued"); await a.publish();
+    await a.commit("issued");
+    await expect(a.rescope("drop-x", { keep: [f.y.name] })).rejects.toMatchObject({ code: "STALE", check: "TAIL" });
+    await a.publish();
     expect((await a.rescope("drop-x", { keep: [f.y.name] })).sequence).toBe(3n);
     await a.publish(); await a.adopt();
     expect((await f.read(await a.package(), f.y.name)).state.issued).toBe(0n);

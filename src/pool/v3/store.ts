@@ -97,7 +97,8 @@ const termsList = (value: unknown): readonly TermsText[] => {
 function commandText(c: Command): string {
   switch (c?.kind) {
     case "open": return JSON.stringify({ kind: c.kind, scope: termsList(c.scope), at: c.at, observed: c.observed });
-    case "rescope": return JSON.stringify({ kind: c.kind, take: termsList(c.take), keep: hexList(c.keep), evidence: hexList([c.evidence])[0],
+    case "rescope": requireThat(hexList(c.keep).every(name => name.length === 64), "STORAGE", "invalid journal command");
+      return JSON.stringify({ kind: c.kind, take: termsList(c.take), keep: hexList(c.keep), evidence: hexList([c.evidence])[0],
       at: c.at, observed: c.observed });
     case "commit": return JSON.stringify({ kind: c.kind, at: c.at, observed: c.observed });
     case "admit": return JSON.stringify({ kind: c.kind, record: c.record, horizon: c.horizon });
@@ -124,6 +125,11 @@ interface Opened {
 }
 function openedOf(header: SegmentHeader, entries: readonly Scoped[]): Opened {
   return { header, headerBytes: segmentBytes(header), segment: segmentIdentity(header), scope: new ScopeTree(header.entries).root(), entries };
+}
+/** C2.10.2: one clock per scope. A reader excludes a scope whose silence durations differ (SILENCE_SCOPE). */
+function oneClock(entries: readonly Scoped[]): void {
+  const durations = entries.map(({ terms }) => terms.silence?.noCommitmentDuration);
+  requireThat(durations.every(duration => duration === durations[0]), "REFUSED", "the scoped backings declare different silence clocks", "SCOPE");
 }
 /** The term link a segment's header names for `backing`. */
 const linkOf = (opened: Opened, backing: Uint8Array): Uint8Array => opened.header.entries.find(entry => same(entry.backing, backing))!.link;
@@ -177,6 +183,8 @@ interface View {
   readonly boundaries: readonly bigint[];
   /** Each scoped backing's K revocation index, by backing name. */
   readonly revocations: ReadonlyMap<string, bigint | undefined>;
+  /** Publications of each scoped backing with a non-service clause, by backing name. */
+  readonly requests: ReadonlyMap<string, bigint>;
   readonly key: string;
 }
 
@@ -399,8 +407,14 @@ export class V3OperatorJournal {
       requireThat(/^command:/.test(id) && request === this.rescopeRequest(command.take, command.keep, command.evidence),
         "STORAGE", "stored scope change disagrees with replay");
       const index = at(command.at);
-      await this.prepareRescope(engine, { take: command.take.map(signedOf), keep: command.keep.map(hexToBytes),
-        evidence: hexToBytes(command.evidence) }, index);
+      try {
+        await this.prepareRescope(engine, { take: command.take.map(signedOf), keep: command.keep.map(hexToBytes),
+          evidence: hexToBytes(command.evidence) }, index);
+      } catch (error) {
+        // A venue without an answer stays retryable; any other refusal means the row disagrees.
+        if (error instanceof V3StoreError && error.code !== "UNAVAILABLE") throw new V3StoreError("STORAGE", "a stored scope change no longer applies");
+        throw error;
+      }
       this.replaySigned(engine, command, index, response);
     } else if (command.kind === "commit") {
       requireThat(engine.opened !== undefined && /^command:/.test(id) && request === "commit", "STORAGE", "stored commitment disagrees with replay");
@@ -483,6 +497,7 @@ export class V3OperatorJournal {
       return { backing: rootTermsName(signed.terms), terms, signed: { terms: copyBytes(signed.terms), signature: copyBytes(signed.signature) } };
     }).sort((a, b) => compareBytes(a.backing, b.backing));
     requireThat(entries.every((entry, i) => i === 0 || !same(entries[i - 1]!.backing, entry.backing)), "REFUSED", "the scope names a backing twice", "SCOPE");
+    oneClock(entries);
     return entries;
   }
   /** A backing's witnessed term chain at `at` and any pending replacement. */
@@ -509,6 +524,7 @@ export class V3OperatorJournal {
     const all = [...taken, ...kept].sort((a, b) => compareBytes(a.backing, b.backing));
     requireThat(all.length > 0 && all.every((entry, i) => i === 0 || !same(all[i - 1]!.backing, entry.backing)), "REFUSED",
       "the new scope names each backing once", "SCOPE");
+    oneClock(all);
     for (const entry of taken) {
       const { chain } = this.chain(entry.backing, entry.terms, at), current = chain.at(-1)!;
       requireThat(chain.length > 1 && same(current.operator, this.operator), "STALE", "this key has no current successor term");
@@ -583,16 +599,9 @@ export class V3OperatorJournal {
     // One import per distinct canonical checkpoint; several are merged once (C2.10.6–7).
     const parents = new Map<string, CanonicalCheckpoint>();
     for (const canonical of openings.values()) if (canonical !== undefined) parents.set(hexOf(canonical.commitment)!, canonical);
-    let imported: ImportedState | undefined = parents.size === 1 ? [...parents.values()][0]!.state : undefined;
-    if (parents.size > 1) {
-      try { imported = mergeFinalizedPrefixes([...parents.values()].map(parent => ({ state: parent.state })), () => {}); } catch (error) {
-        if (error instanceof ReplayRefusal) throw new V3StoreError("UNAVAILABLE", "the imported histories conflict");
-        throw error;
-      }
-    }
+    const { imported, work } = this.openingImports([...parents.values()]);
     this.reserveReadCheckpoints(engine, heldCommitments(this.ask(1, this.operator, at)).held, checkpoints, 2n);
-    requireThat(events + BigInt(new Map(imported?.events).size) <= IMPORT_LIMITS.maxEvents,
-      "REFUSED", "the scope change leaves no reader budget for service", "RESOURCE");
+    requireThat(events + work <= IMPORT_LIMITS.maxEvents, "REFUSED", "the scope change leaves no reader budget for service", "RESOURCE");
     const header: SegmentHeader = { ...target.opened.header, entries: target.opened.header.entries.map(entry => {
       const canonical = openings.get(bytesToHex(entry.backing));
       return canonical === undefined ? entry : { ...entry, opening: { operator: copyBytes(canonical.commitment.operator),
@@ -610,6 +619,22 @@ export class V3OperatorJournal {
     engine.opened = opened;
     engine.state = openSegmentState(opened.segment, undefined, imported, undefined, () => {});
     engine.pendingReturn = true;
+  }
+  /**
+   * An opening's import and the event work a reader spends reading it beyond its
+   * parents' own reads: a scope reader merges every distinct parent's events,
+   * comparing events that share a tag or demand (C2.10.6), then reads the merged
+   * ancestry once more; a single-backing reader reads one parent's ancestry only.
+   * Both are counted, so the reservation never falls short of either reader.
+   */
+  private openingImports(parents: readonly CanonicalCheckpoint[]): { readonly imported: ImportedState | undefined; readonly work: bigint } {
+    let work = 0n, merged;
+    try { merged = mergeFinalizedPrefixes(parents.map(parent => ({ state: parent.state })), amount => { work += amount; }); } catch (error) {
+      if (error instanceof ReplayRefusal) throw new V3StoreError("UNAVAILABLE", "the imported histories conflict");
+      throw error;
+    }
+    const imported = parents.length === 0 ? undefined : parents.length === 1 ? parents[0]!.state : merged;
+    return { imported, work: work + BigInt(merged.events.size) };
   }
   /** Each scoped K's revocation index as witnessed through `at`. */
   private revocations(opened: Opened, at: bigint): Map<string, bigint | undefined> {
@@ -668,7 +693,7 @@ export class V3OperatorJournal {
       catch (error) { if (error instanceof EncodingError) return false; throw error; }
       return same(c.operator, this.operator) && verifyCommitment(c);
     });
-    const boundaries: bigint[] = [], revocations = new Map<string, bigint | undefined>();
+    const boundaries: bigint[] = [], revocations = new Map<string, bigint | undefined>(), requests = new Map<string, bigint>();
     const evidence: string[] = [];
     const bind = (answer: RangeAnswer): void => {
       evidence.push(JSON.stringify(answer.entries.map(e => [e.index.toString(), e.ordinal.toString(), bytesToHex(sha256(e.record))])));
@@ -688,11 +713,14 @@ export class V3OperatorJournal {
       revocations.set(bytesToHex(backing), revocationIndex(revoked));
       const operators = new Map(chain.map(link => [bytesToHex(link.operator), link.operator]));
       for (const operator of operators.values()) if (!same(operator, this.operator)) bind(this.ask(1, operator, now));
-      if (terms.silence !== undefined || terms.nonService !== undefined) bind(this.ask(4, backing, now));
+      if (terms.silence !== undefined || terms.nonService !== undefined) {
+        const publications = this.ask(4, backing, now); bind(publications);
+        if (terms.nonService !== undefined) requests.set(bytesToHex(backing), BigInt(publications.entries.length));
+      }
     }
     const key = JSON.stringify([now.toString(), evidence, conflict, boundaries.map(String),
       [...revocations].map(([name, at]) => [name, at?.toString() ?? null])]);
-    return { now, lag: this.lag, held, conflict, boundaries, revocations, key };
+    return { now, lag: this.lag, held, conflict, boundaries, revocations, requests, key };
   }
   private exclusive(view: View): void {
     requireThat(!view.conflict, "CONFLICT", "the venue contains a commitment this journal did not sign");
@@ -728,7 +756,7 @@ export class V3OperatorJournal {
       const source = await this.currentRead(engine, view.now);
       this.serviceClock(source, view.now);
       this.reserveReadCheckpoints(engine, view.held, source.work.checkpoints);
-      this.reserveEvents(engine, source, action === "admit" ? 1n : 0n);
+      this.reserveEvents(engine, source, (action === "admit" ? 1n : 0n) + this.otherRequests(engine, view));
     }
     for (const { backing } of engine.opened.entries) {
       const revokedAt = view.revocations.get(bytesToHex(backing));
@@ -818,6 +846,13 @@ export class V3OperatorJournal {
       event.index > (event.backing === undefined ? state.adoptionIndex : state.adoptionIndices.get(event.backing) ?? 0n));
   }
 
+  /** The journal reads the scope's first backing. A reader selecting another
+   * backing with a non-service clause may also read its publications and check
+   * one request proof per publication (C2b.5.2); reserve both for each. */
+  private otherRequests(engine: Engine, view: View): bigint {
+    return (engine.opened?.entries.slice(1) ?? []).reduce((sum, { backing }) => sum + 2n * (view.requests.get(bytesToHex(backing)) ?? 0n), 0n);
+  }
+
   /** Known requests may enter the counting window before the next checkpoint. */
   private reservedEventWork(source: Pick<StateRead, "work">): bigint {
     return source.work.events - source.work.requestProofs + source.work.requestProofReserve;
@@ -882,7 +917,7 @@ export class V3OperatorJournal {
       requireThat(!schedule.lapsed && schedule.commitNow, "SCHEDULE", "return signing is outside the operator's term");
       const source = await this.currentRead(engine, view.now);
       this.reserveReadCheckpoints(engine, view.held, source.work.checkpoints, 2n);
-      if (this.reservedEventWork(source) + BigInt(source.state.events.size) > IMPORT_LIMITS.maxEvents) {
+      if (this.reservedEventWork(source) + this.openingImports([source.canonical]).work + this.otherRequests(engine, view) > IMPORT_LIMITS.maxEvents) {
         throw new V3StoreError("REFUSED", "the return exceeds the reader's ancestry budget", "RESOURCE");
       }
       this.diverging = true;
@@ -921,7 +956,7 @@ export class V3OperatorJournal {
       const source = await this.currentRead(engine, held.index);
       const block = this.unadopted(source);
       this.reserveCheckpoint(engine);
-      this.reserveEvents(engine, current, BigInt(block.length));
+      this.reserveEvents(engine, current, BigInt(block.length) + this.otherRequests(engine, view));
       this.encodePackage(opened, [...engine.signed, this.placeholder(opened)],
         held.commitment, [...engine.records, ...block.map(event => event.bytes)], engine.archives, engine.evidence);
       this.diverging = true;
