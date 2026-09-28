@@ -234,8 +234,11 @@ destination another process created first is never touched. A refused or
 interrupted restore leaves nothing at `path` and is simply retried there; after
 a lost reply, an existing `path` with `custody().restoredFrom` equal to the
 digest confirms success. Only a crash can leave the staging file
-(`<path>.restore-<hex>`), which holds plaintext wallet state and should be
-deleted. The restored wallet continues the saved work.
+(`<path>.restore-<hex>`). It holds plaintext wallet state, possibly a complete
+restore, so delete it and never open it: opening it beside a retried restore
+would make two active copies. The destination's file system must support hard
+links; FAT/exFAT and some network or synced folders refuse with `STORAGE`. The
+restored wallet continues the saved work.
 Exact retries return the saved records. Reservations hold. A receipt lost to
 the freeze is recovered by resubmitting the identical bytes, which the journal
 answers with its original receipt. `sync` and `reprove` resolve the rest.

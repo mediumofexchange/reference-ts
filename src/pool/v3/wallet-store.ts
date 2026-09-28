@@ -510,7 +510,9 @@ export class V3Wallet {
       installing = { ...restore, domain: own.domain, venue: own.venueId };
       let wallet: V3Wallet;
       try { wallet = new V3Wallet(staging, own.reader); } finally { installing = undefined; }
-      try { wallet.db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); } finally { wallet.close(); }
+      try {
+        requireThat(wallet.db.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get()?.busy === 0, "STORAGE", "staging checkpoint was blocked");
+      } finally { wallet.close(); }
       fresh();
       try { linkSync(staging, path); } catch (error) {
         requireThat((error as NodeJS.ErrnoException).code !== "EEXIST", "CONFLICT", "recovery requires a new destination");
