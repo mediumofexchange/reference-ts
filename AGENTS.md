@@ -147,15 +147,18 @@ binds, so a report generator hashes every source its verdict depends on (includi
 parsers) and takes specification pins from one constant. Rerun affected checks after fixes and
 required checks on final code. Do not duplicate unchanged passing CI locally or weaken checks after
 failures. A negative test asserts the specific refusal (code, check or reason), not merely a throw.
+Below ~4 GB free memory, skip local full/real-proof runs and take v3 reports from the CI run's
+`pool-v3-reports-ubuntu-latest` artifact (`gh run download <id> -n <name> -D scratch/ci-artifact`).
 
 Preserve unrelated changes. Make logical commits, fetch/inspect upstream, integrate without
 rewriting others' work, satisfy protections and required checks, then merge/push under standing
-authority. Verify final commit, clean status and remote parity. Inspect available CI for that
-revision and distinguish pending from passed. Do not bypass failed or unavailable required gates.
-After a verified merge, delete the merged branch locally and on the remote, its worktrees and the
-slice's disposable scratch files; only WORK.md's retained local state outlives a slice. Deletions
-the permission check refuses go into the one deletion list under WORK.md's Open questions. Prefer
-one complete handoff in the delivery commit; follow up only for new evidence or a correction.
+authority. Verify final commit, clean status and remote parity. Distinguish pending from passed CI
+for that revision: once checks are listed, wait with one background `gh pr checks <n> --watch
+--interval 60` (real-proof jobs take 15–30 min), not per-job turns. Never bypass failed or
+unavailable required gates. After a verified merge, delete the merged branch locally and remotely,
+its worktrees and the slice's disposable scratch; only WORK.md's retained local state outlives a
+slice. Refused deletions go into the one deletion list under WORK.md's Open questions. Prefer one
+complete handoff in the delivery commit; follow up only for new evidence or a correction.
 
 A slice is complete when acceptance is demonstrated, relevant hostile cases pass, material review
 findings are resolved, specification/code/docs agree, and delivery is verified. Models and fixture
@@ -174,26 +177,23 @@ terms and rule numbers in code, tests and commits, not new metaphors; consult th
 vocabulary](docs/PROTOCOL_RULES.md#older-vocabulary) only for older material. Commit prefixes:
 `spec:`, `feat:`, `fix:`, `docs:`, `test:`, `chore:`, with a plain title naming the rule or change.
 
-Keep disposable probes/build copies in ignored `scratch/`; promote lasting evidence then remove
-obsolete copies. Edit files with the editor tool; a scripted edit is disposable and deleted after
-use. Preserve explicitly retained evidence and useful verified caches. Never place full
-clones/dependency trees at the workspace root. Apply obvious low-risk workflow improvements; put
-larger opportunities in WORK.md without derailing the slice.
+Keep disposable probes/build copies in ignored `scratch/`; promote lasting evidence, then remove
+obsolete copies. Edit with the editor tool; a scripted edit is disposable. Preserve retained evidence
+and useful verified caches; no clones/dependency trees at the workspace root. Apply obvious low-risk
+workflow improvements; put larger ones in WORK.md without derailing the slice.
 
 The host is Windows (Git Bash, PowerShell; LF files). Use absolute paths or `git -C`; the shell's
 directory drifts. Write large scripts to scratch with the editor, not a heredoc or `node -e`.
-Search with `rg` or `git grep`, excluding ignored scratch (tens of GB of node data).
+Search with `rg`/`git grep` and size with `du` only outside `scratch/ergo-nodes` (tens of GB).
 Commands that can pass two minutes run detached with output and exit code in scratch; clear old
 completion markers before starting and wait with an until-loop or Monitor, never `sleep N; check`.
 WORK.md names detached jobs; change files they read only on a branch/worktree, merging after they end.
 Stay read-only when unexplained commits/file changes or a confirmed active session show concurrent
-editing of this checkout. An idle or unrelated agent process alone does not establish that.
+editing of this checkout; an idle or unrelated agent process alone does not establish that.
 
 WORK.md alone holds the coarse product-effort estimate (method in production requirements).
 Reassess from gathered evidence after meaningful product progress or a major blocker, without extra
-research just to estimate; credit reusable progress, never commit/test counts or workflow cleanup.
-Report changed/requested rounded estimates and blockers, omitting unchanged percentages.
+research; credit reusable progress, never commit/test counts or cleanup; report it when changed.
 
-Final reports state behavior, verification/review, delivery and remaining limits, and recommend
-staying with this instance or switching by next work and context freshness. WORK.md must suffice to
-resume independently.
+Final reports state behavior, verification/review, delivery, remaining limits and a stay/switch
+recommendation by next work and context freshness. WORK.md must suffice to resume independently.

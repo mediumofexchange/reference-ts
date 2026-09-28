@@ -89,6 +89,9 @@ receipt handoff for pending acceptance, backup or real-proof harness change.
 - No service delivery blocker remains. Server timeout followed by eventual
   journal completion has source review, without a direct timed acceptance case.
 - Disk streaming and physical custody remain separate persistence boundaries.
+- 2026-09-28, non-blocking: the separate archive node (`C:\Users\Bob\ergo-node`, `-Xmx6G`) leaves
+  ~1–2 of 16 GB free, so slices re-record from CI instead of local full/real-proof runs. Stopping it
+  (its stop script) or lowering `-Xmx` while idle restores local checks; it is outside this project.
 
 Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-28.
 Payer custody and reproof add the ordinary payment path, within that rounding;
