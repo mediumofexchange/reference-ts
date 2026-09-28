@@ -3,20 +3,18 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 7 M3 (branch `feat/scope-wallet`): `V3Wallet` receives, holds, pays and re-proves in
-a backing whose canonical segment scopes several backings (C4.5–7, pool-fees C1.2.3–5 over
-C2.10.3–7): `readFrontier`, the backing's own scope entry for header/term checks, the
-scoped witness path. Acceptance: oracle-proof `test/pool-v3-scope-wallet.test.ts` (shared
-segment, split re-proof, rejoined imported roots, hostile header/term cases) and a
-real-proof wallet payment in the rejoined scope of `scope-store-check.mjs` on both venues
-(CI). Stop: delivered on main with the two scope reports re-recorded. The live two-backing
-drill runs after adoption ([decision](decisions/2026-09.md#2026-09-28--pay-one-backing-in-any-scope-and-run-the-live-two-backing-drill-after-adoption)).
+Slice 7 M3 (done, PR #42): `V3Wallet` receives, holds, pays and re-proves one backing
+whose canonical segment scopes several (C4.5–7, pool-fees C1.2.3–5 over C2.10.3–9):
+`readFrontier`, every scoped term checked for admission (`scopeChains`), force past the
+backing's own adoption index. Accepted by `test/pool-v3-scope-wallet.test.ts` and the
+real-proof wallet payment in `scope-store-check.mjs` on both venues (CI). The live
+two-backing drill runs after adoption ([decision](decisions/2026-09.md#2026-09-28--pay-one-backing-in-any-scope-and-run-the-live-two-backing-drill-after-adoption)).
+Next run: Next 1.
 
 ## Status
-- M3 on PR #42. Opus review: a blocker (one ended scoped term must end admission for
-  every scoped backing; the scope reader now returns `scopeChains`) and a should-fix
-  (force past the backing's own adoption index at scope openings) fixed in 2c95f68
-  and read back with no blockers. Reports re-recorded from that PR's CI artifact.
+- Opus review: a blocker (one ended scoped term ends admission for every scoped backing)
+  and a should-fix (scope openings have no single adoption index) fixed in 2c95f68, read
+  back with no blockers. Reports from CI run 36483555469; scope reports add the wallet.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
