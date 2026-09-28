@@ -3,34 +3,26 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 6c delivered by PR #32 from `feat/v3-reproof` (no companion branch or
-normative change): a pending `V3Wallet` payment whose segment stopped being
-canonical (term end or silence lapse) is re-proven by `reprove` in the canonical
-successor with the same input nullifiers, outputs, capsules and order (pool-fees
-C1.2.5, C4.4), so its reservation resolves instead of staying permanent. Final or
-failed payments resolve without proving; superseded records and receipts
-(including one racing the reproof) are kept; a lagging venue view is refused.
-Preparation and reproof refuse an ended term (`CONFLICT`) or a silence clock
-that closes admission (`SILENCE`, the journal's own rule). Stop boundary kept:
-no cancellation/release with other outputs, same-segment tail repair,
-multi-backing, transport or backup. Wallet profile is now `moe/wallet/v3/2`.
+Slice 6d on `feat/v3-request-exchange` (no companion branch or normative
+change): a receiver's exact v3 payment request (pool-delivery C4.1) passes to
+the payer as one canonical 246-byte frame (`moe/wallet/v3/request`), accepted
+only when its SHA-256 equals a digest obtained independently from the
+receiver. V3 needs no receiver endpoint, credential, capability or inbox: the
+payee's output and capsule are public and `fulfill` finds the payment
+([decision](decisions/2026-09.md#2026-09-28--exchange-v3-payment-requests-as-digest-authenticated-frames-without-a-receiver-endpoint)).
+Acceptance: every single-byte change and noncanonical frame refuses; a
+substituted well-formed request refuses against the receiver's digest; the
+authenticated request is paid and fulfilled; v2 pairing/delivery cases are
+mapped in the [wallet guide](docs/POOL_V3_WALLET.md#request-exchange). Stop
+boundary: no network transport, signing identity, fee quotes, text/QR form,
+receipt handoff for pending acceptance, backup or real-proof harness change.
 
 ## Status
-- Commits `b963013` (reproof, silence refusal, crash case, docs) and `ff5bbdb`
-  (review fixes). Independent adversarial review found no blocker/major; four
-  minor findings (racing receipt dropped, lagging view could move a record back,
-  no venue recheck before proving, stuck payments looked live) were fixed with
-  tests; the lagging-view test fails with its guard disabled.
-- Oracle tests: 16 payer and 11 receiver cases; `check:pool:v3-wallet` passes
-  eight abrupt exits including reproof before/after COMMIT. Reproof is not run
-  under real proofs; the succession check proves a successor-segment spend of
-  inherited notes, which is the same relation instance shape.
-- Local full `npm run check` and real-proof re-recording were not run (host at
-  ~0.9 of 15.9 GB free, 5.8 GB held by the archive node). PR #32 at `ff5bbdb`:
-  all seven jobs passed in
-  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36397521221);
-  the journal report is its Linux `--ergo` artifact and all six current reports
-  match their bound sources. The delivery commit changes only docs and that report.
+- Commit `7b527c4` (frame, digest, tag, tests); docs and decision follow.
+  Independent adversarial review running on `7b527c4`; merge waits for it.
+- Focused tests pass: 4 frame cases, 17 payer cases (new request-exchange
+  case), tag count 48 prefix-free; typecheck clean. No retained report binds
+  the changed sources (store-check unchanged).
 
 ## Evidence
 - Wallet API, custody preconditions, reproof and payment limits: [guide](docs/POOL_V3_WALLET.md).
@@ -50,10 +42,10 @@ multi-backing, transport or backup. Wallet profile is now `moe/wallet/v3/2`.
   live journal at `2c6b20c`; header and mainnet reader reports at `6e4cea8`.
 
 ## Next
-1. Continue slice 6: authenticated receiver invitation transport, then encrypted
-   backup and restoration drills; port the remaining frozen v2 delivery/pairing/
-   backup cases. Same-segment tail repair (C2.10.9a resubmission) and release of
-   never-admitted inputs stay with cancellation in item 6 until a gate needs them.
+1. Continue slice 6: encrypted v3 wallet backup and restoration drills; port the
+   frozen v2 backup cases (v2 pairing/delivery cases are mapped). Same-segment
+   tail repair (C2.10.9a resubmission) and release of never-admitted inputs stay
+   with cancellation in item 6 until a gate needs them.
 2. Retire v2 only after its wallet/service cases pass on v3; then
    multi-backing including compact fault orchestration (slice 7).
 3. Configuration adoption: provenance, ACIR identities/certificates, replay/import
@@ -66,7 +58,9 @@ multi-backing, transport or backup. Wallet profile is now `moe/wallet/v3/2`.
    served-trail caller-object cache. Check v3 successors for v2 intake issues.
 6. Only when a gate needs them: cancellation, batching, index-free box source,
    venue-moving record, slowest-supplier clock, multi-entry extension fixture,
-   Poseidon2 on Barretenberg and sponsored holder funding.
+   Poseidon2 on Barretenberg and sponsored holder funding; operator fee quotes,
+   a text/QR form of the request frame, receipt handoff for C4.5 pending
+   acceptance, and routing store-check's request through the frame.
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under

@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-28` [Exchange v3 payment requests as digest-authenticated frames without a receiver endpoint](decisions/2026-09.md#2026-09-28--exchange-v3-payment-requests-as-digest-authenticated-frames-without-a-receiver-endpoint)
 - `2026-09-27` [Persist reproducing venue evidence and the owning journal's publication outbox](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
 - `2026-09-27` [Take over from the public canonical frontier](decisions/2026-09.md#2026-09-27--take-over-from-the-public-canonical-frontier)
 - `2026-09-27` [Check the complete signing history before succession](decisions/2026-09.md#2026-09-27--check-the-complete-signing-history-before-succession)
