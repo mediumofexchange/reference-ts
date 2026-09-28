@@ -6,7 +6,7 @@ import { hexToBytes } from "@noble/hashes/utils.js";
 import { EncodingError } from "../src/bytes.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { prepareExactOutput, recoverCapsule } from "../src/pool/v3/capsules.js";
-import { decodeReceipt, type Receipt } from "../src/pool/v3/commitments.js";
+import { decodeReceipt, encodeReceipt, receiptBytes, type Receipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeRecord, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
@@ -15,6 +15,7 @@ import type { PaymentRequest } from "../src/pool/v3/wallet-request.js";
 import type { LocalProver, V3Wallet as Wallet } from "../src/pool/v3/wallet-store.js";
 import { authorizeIssue, burnTask, issueTask, spendTask, type ProofTask } from "../src/pool/v3/witness.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
+import { encodeReplacement, replacementMessage, type Replacement } from "../src/venue-records.js";
 
 // Stand-in proofs isolate payer custody; store-check.mjs proves the same flow
 // under the candidate keys. v2 cases ported: selection, padding, reservation,
@@ -22,8 +23,8 @@ import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
 const b = (n: number) => new Uint8Array(32).fill(n), supported = Number(process.versions.node.split(".")[0]) >= 24;
 const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"),
   circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"] };
-const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16);
-const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
+const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16), successorSecret = b(18);
+const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret), successorKey = ed25519.getPublicKey(successorSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
 const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind };
 const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicInputs: task.publicInputs,
@@ -53,8 +54,8 @@ describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
     mkdirSync(scratch, { recursive: true });
     const directory = mkdtempSync(join(scratch, "v3-payer-test-")); directories.push(directory);
     const venue = FixtureVenue.reference(label, lag);
-    const terms = encodeRootTerms({ obligor: issuer, operator, configuration: domain, venue: venue.id, interval: 20n,
-      payout: { thing: "payer units", quantumExponent: 0, perUnit: 1n } });
+    const terms = encodeRootTerms({ obligor: issuer, operator, replacementRule: issuer, configuration: domain, venue: venue.id,
+      interval: 20n, payout: { thing: "payer units", quantumExponent: 0, perUnit: 1n } });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
     const reader = { configuration, venue, reference, verifier };
@@ -69,7 +70,22 @@ describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
     const invoice = receiver.request("invoice", backing, 7n), fee = prepareExactOutput(b(22), domain, b(33), backing, 1n);
     const feeRequest: PaymentRequest = { domain, opening: fee.opening, cm: fee.cm, capsule: fee.capsule };
     const service = { submit: async (bytes: Uint8Array) => decodeReceipt(await j.submit(bytes)) };
-    return { directory, venue, signed, backing, context, payer, receiver, open, j, publish, funding, invoice, feeRequest, service,
+    /** The backer replaces the operator with B; once effective, B takes over from A's published package and adopts. */
+    const replace = async () => {
+      const effective = venue.witnessedIndex() + 2n * lag + 2n;
+      const unsigned: Replacement = { role: 1, successor: successorKey, predecessor: backing, effective,
+        signature: new Uint8Array(64), successorSignature: new Uint8Array(64) };
+      const message = replacementMessage(backing, unsigned);
+      await venue.publishRecord(2, backing, encodeReplacement(backing,
+        { ...unsigned, signature: ed25519.sign(message, issuerSecret), successorSignature: ed25519.sign(message, successorSecret) }));
+      venue.advance(effective);
+    };
+    const takeover = async () => {
+      const b2 = new V3OperatorJournal(join(directory, "successor.db"), { configuration, venue, reference, verifier, secret: successorSecret });
+      journals.push(b2); await b2.takeover("takeover", signed, (await j.package()).package); await b2.publish(); await b2.adopt();
+      return b2;
+    };
+    return { directory, venue, signed, backing, context, payer, receiver, open, j, publish, replace, takeover, funding, invoice, feeRequest, service,
       served: await publish(), order: { request: invoice, value: 7n, fee: { request: feeRequest, value: 1n } } };
   }
 
@@ -216,5 +232,59 @@ describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
     expect(view.holdings.map(h => [h.cm, h.value, h.status])).toEqual([[change.cm, 4n, "available"]]);
     expect(f.payer.payment("shop")).toMatchObject({ status: "failed", final: undefined, inputs: payment.inputs });
     await expect(f.j.submit(payment.record)).rejects.toMatchObject({ code: "REFUSED" });
+  });
+
+  it("refuses the same alias with another order, including a concurrent one", async () => {
+    const f = await fixture();
+    const payment = await f.payer.prepare("shop", f.order, f.served, f.signed, prove);
+    await expect(f.payer.prepare("shop", { request: f.invoice, value: 7n }, f.served, f.signed, prove)).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(f.payer.prepare("shop", { ...f.order, fee: { request: f.receiver.request("fee2", f.backing, 1n), value: 1n } },
+      new Uint8Array(), f.signed, prove)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(f.payer.payment("shop")).toEqual(payment);
+    const g = await fixture();
+    const results = await Promise.allSettled([g.payer.prepare("race", g.order, g.served, g.signed, prove),
+      g.payer.prepare("race", { request: g.invoice, value: 7n }, g.served, g.signed, prove)]);
+    expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.find(r => r.status === "rejected")).toMatchObject({ reason: { code: "CONFLICT" } });
+  });
+
+  it("refuses an operator-signed receipt for the statement with another proof", async () => {
+    const f = await fixture();
+    const payment = await f.payer.prepare("shop", f.order, f.served, f.signed, prove);
+    const receipt = decodeReceipt(await f.j.submit(payment.record));
+    const fields = { ...receipt, proofHash: b(1) }, other = { ...fields, signature: ed25519.sign(receiptBytes(fields), operatorSecret) };
+    await expect(f.payer.submit("shop", { submit: async () => other })).rejects.toMatchObject({ code: "INVALID" });
+    expect(f.payer.payment("shop")!.receipt).toBeUndefined();
+    expect(encodeReceipt(await f.payer.submit("shop", f.service))).toEqual(encodeReceipt(receipt));
+  });
+
+  it("reconciles a payment final across operator takeover and pays from an imported note in the successor segment", async () => {
+    const f = await fixture();
+    const payment = await f.payer.prepare("shop", f.order, f.served, f.signed, prove);
+    await f.payer.submit("shop", f.service); await f.publish();
+    await f.replace();
+    // A's term has ended: a statement for its segment would be refused and stay reserved.
+    const other = f.receiver.request("other", f.backing, 3n);
+    await expect(f.payer.prepare("stale", { request: other, value: 3n }, (await f.j.package()).package, f.signed, prove))
+      .rejects.toMatchObject({ code: "CONFLICT" });
+    expect(f.payer.payment("stale")).toBeUndefined();
+    const successor = await f.takeover(), served = (await successor.package()).package;
+    const view = await f.payer.sync(served, f.signed);
+    expect(f.payer.payment("shop")).toMatchObject({ status: "final", inputs: payment.inputs });
+    expect(view.holdings.map(h => [h.value, h.status])).toEqual([[6n, "available"], [2n, "available"]]);
+    expect((await f.receiver.fulfill("invoice", served, f.signed)).request).toEqual(f.invoice);
+    const next = await f.payer.prepare("next", { request: other, value: 3n }, served, f.signed, prove);
+    const receipt = await f.payer.submit("next", { submit: async bytes => decodeReceipt(await successor.submit(bytes)) });
+    expect(receipt.operator).toEqual(successorKey);
+    await successor.commit("next"); await successor.publish();
+    await f.payer.sync((await successor.package()).package, f.signed);
+    expect(f.payer.payment("next")).toMatchObject({ status: "final", inputs: next.inputs });
+  });
+
+  it("refuses a database from the earlier receiver-only profile instead of replacing its seed", async () => {
+    const f = await fixture(), { DatabaseSync } = await import("node:sqlite"), path = join(f.directory, "old.db");
+    const db = new DatabaseSync(path);
+    db.exec("CREATE TABLE receiver_identity (id INTEGER PRIMARY KEY, seed BLOB NOT NULL) STRICT;"); db.close();
+    expect(() => f.open("old")).toThrow(expect.objectContaining({ code: "CONFLICT" }));
   });
 });

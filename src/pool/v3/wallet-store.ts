@@ -25,7 +25,7 @@ import { ownedNotes, type OwnedNote } from "./holdings.js";
 import { decodeEvidencePackage } from "./package.js";
 import { PACKAGE_LIMITS, readSingleBackingFrontier, type PackageReader } from "./package-reader.js";
 import { decodedTrails, type SignedTerms } from "./reader.js";
-import { decodeRecord, encodeRecord, statementHash, type Record } from "./records.js";
+import { decodeRecord, encodeRecord, evidenceHashes, statementHash, type Record } from "./records.js";
 import { locked, tagOf } from "./recovery.js";
 import { applyForceEffects, openForceState, type ForceState } from "./state.js";
 import { rootTermsName } from "./terms.js";
@@ -160,7 +160,11 @@ export class V3Wallet {
       this.db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA temp_store=MEMORY;");
       requireThat(this.db.prepare("PRAGMA journal_mode").get()?.journal_mode === "wal" &&
         this.db.prepare("PRAGMA synchronous").get()?.synchronous === 2, "STORAGE", "WAL and FULL synchronization required");
-      this.db.exec(`BEGIN IMMEDIATE;
+      this.db.exec("BEGIN IMMEDIATE");
+      // An earlier receiver-only profile's seed is never silently replaced.
+      requireThat(this.db.prepare("SELECT 1 FROM sqlite_schema WHERE name='receiver_identity'").get() === undefined,
+        "CONFLICT", "wallet database has an earlier profile");
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS wallet_identity (id INTEGER PRIMARY KEY CHECK(id=1),
           profile TEXT NOT NULL, domain TEXT NOT NULL, venue TEXT NOT NULL, seed BLOB NOT NULL, owner INTEGER NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS receiver_requests (alias TEXT PRIMARY KEY, request_id BLOB NOT NULL UNIQUE,
@@ -174,7 +178,7 @@ export class V3Wallet {
         CREATE TABLE IF NOT EXISTS payer_outputs (cm TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES payer_payments(alias)) STRICT;`);
       let meta = this.metadata();
       if (meta === undefined) {
-        requireThat(["receiver_requests", "receiver_fulfilled", "payer_payments"].every(table =>
+        requireThat(["receiver_requests", "receiver_fulfilled", "payer_payments", "payer_inputs", "payer_outputs"].every(table =>
           this.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()?.n === 0), "STORAGE", "wallet identity is missing");
         this.db.prepare("INSERT INTO wallet_identity VALUES(1,?,?,?,?,0)").run(PROFILE, hex(this.domain), hex(this.venueId), randomBytes(32));
         meta = this.metadata()!;
@@ -250,7 +254,7 @@ export class V3Wallet {
       const spent = force.nullifiers;
       notes = ownedNotes(this.seed, this.domain, backing, canonical.state).filter(note => !spent.has(note.nf));
     }
-    return { bytes, terms, backing, at, observed, canonical, force, notes };
+    return { bytes, terms, backing, at, observed, canonical, force, notes, chain: result.ranges.chain };
   }
   private holdingsOf(notes: readonly OwnedNote[], force: ForceState | undefined, at: bigint): Holding[] {
     const reserved = this.db.prepare("SELECT 1 FROM payer_inputs WHERE nf=?");
@@ -341,18 +345,21 @@ export class V3Wallet {
 
   /** This backing's holdings through the complete canonical frontier at the
    * venue's current index; resolves saved payments from that evidence. A
-   * payment is final only when its statement is in canonical history, and
-   * failed only when one of its inputs was spent by another statement. */
+   * payment is final only when all four of its outputs are in canonical
+   * history, imported ancestry included: its own change and zero outputs are
+   * fresh, so no other statement creates them. It is failed only when one of
+   * its inputs was spent otherwise. Statement identities are not imported
+   * into a successor segment, so they cannot decide this. */
   async sync(packageBytes: Uint8Array, signed: SignedTerms): Promise<WalletView> {
     this.active();
     const { backing, at, observed, canonical, force, notes } = await this.frontier(packageBytes, signed);
     const updates: { alias: string; status: "final" | "failed" }[] = [];
     if (canonical !== undefined && force !== undefined) {
-      const rows = this.db.prepare("SELECT alias,statement FROM payer_payments WHERE status='prepared' AND backing=?").all(backing);
+      const rows = this.db.prepare("SELECT alias,record FROM payer_payments WHERE status='prepared' AND backing=?").all(backing);
       const inputs = this.db.prepare("SELECT nf FROM payer_inputs WHERE alias=?");
       for (const row of rows) {
-        const name = row.alias as string;
-        if (canonical.state.statements.has(row.statement as string)) updates.push({ alias: name, status: "final" });
+        const name = row.alias as string, outputs = decodeRecord(row.record as Uint8Array).publicInputs.slice(9, 13);
+        if (outputs.every(cm => canonical.state.outputsSeen.has(cm))) updates.push({ alias: name, status: "final" });
         else if (inputs.all(name).some(r => force.nullifiers.has(BigInt(r.nf as string)))) updates.push({ alias: name, status: "failed" });
       }
     }
@@ -369,21 +376,33 @@ export class V3Wallet {
   /** pool-fees C1.2.3–5: pay one exact request, and optionally one exact fee
    * request, from this seed's holdings in the canonical segment. The record is
    * saved with permanent input/output reservations before it is returned; an
-   * exact alias retry returns the saved record without evidence or proving.
+   * exact alias retry returns the saved record without evidence or proving,
+   * and the same alias with another order refuses (C1.2.5).
    * Selection is advisory: the operator and later replay judge spentness. */
   async prepare(name: string, order: PaymentOrder, packageBytes: Uint8Array, signed: SignedTerms,
     prove: LocalProver): Promise<Payment> {
-    name = alias(name);
-    const saved = this.payment(name);
-    if (saved !== undefined) return saved;
-    requireThat(typeof prove === "function", "INVALID", "a local prover is required");
+    name = alias(name); this.active();
     const backing = rootTermsName(copyUnshared(signed.terms));
+    // Each caller field is read once; the copies are what is checked and saved.
     const { request: requestIn, value, fee: feeIn } = order;
+    const feeRequestIn = feeIn?.request, feeValue = feeIn?.value;
     const payee = copyPaymentRequest(requestIn, { domain: this.domain, backing, value });
-    const fee = feeIn === undefined ? undefined : { value: feeIn.value,
-      request: copyPaymentRequest(feeIn.request, { domain: this.domain, backing, value: feeIn.value }) };
+    const fee = feeIn === undefined ? undefined : { value: feeValue!,
+      request: copyPaymentRequest(feeRequestIn!, { domain: this.domain, backing, value: feeValue! }) };
     const total = value + (fee?.value ?? 0n);
     requireThat(isValue(total) && (fee === undefined || fee.request.cm !== payee.cm), "INVALID", "invalid payment order");
+    const intent = [hex(backing), payee.cm.toString(), value.toString(), fee?.request.cm.toString() ?? null, fee?.value.toString() ?? null];
+    const sameOrder = (): boolean | undefined => {
+      const row = this.db.prepare("SELECT backing,payee,value,fee,fee_value FROM payer_payments WHERE alias=?").get(name);
+      if (row === undefined) return undefined;
+      return [hex(row.backing as Uint8Array), row.payee, row.value, row.fee, row.fee_value].every((field, i) => field === intent[i]);
+    };
+    const existing = sameOrder();
+    if (existing !== undefined) {
+      requireThat(existing, "CONFLICT", "alias names another payment order");
+      return this.payment(name)!;
+    }
+    requireThat(typeof prove === "function", "INVALID", "a local prover is required");
     const theirs = [payee.cm, ...(fee === undefined ? [] : [fee.request.cm])];
     const taken = this.db.prepare("SELECT 1 FROM payer_outputs WHERE cm=?");
     requireThat(theirs.every(cm => taken.get(cm.toString()) === undefined), "CONFLICT", "request is already in a saved payment");
@@ -392,6 +411,10 @@ export class V3Wallet {
     requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
     requireThat(theirs.every(cm => !canonical.state.outputsSeen.has(cm)), "CONFLICT", "request is already paid");
     const header = this.headerOf(view.bytes, canonical.segment, canonical.scope, backing);
+    // A statement for an ended term would be refused, and its reservation is permanent.
+    const term = view.chain.at(-1);
+    requireThat(term !== undefined && same(term.operator, header.operator) && same(term.link, header.entries[0]!.link),
+      "CONFLICT", "the canonical segment's operator term has ended");
     const holdings = this.holdingsOf(notes, force, at), available = notes.filter((_, i) => holdings[i]!.status === "available");
     const selected = select(available, total), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
     const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.tree.root(), path: note.tree.path(note.leaf) }));
@@ -416,7 +439,9 @@ export class V3Wallet {
     requireThat(await this.options.verifier.verify(2, [...record.publicInputs], new Uint8Array(record.proof)) === true, "INVALID", "proof does not verify");
     const statement = hex(statementHash(record)), reserved = selected.map(note => note.nf.toString());
     this.transaction(() => {
-      if (this.db.prepare("SELECT 1 FROM payer_payments WHERE alias=?").get(name) !== undefined) return;
+      // A concurrent exact call may have saved first: adopt its record, never this proof.
+      const winner = sameOrder();
+      if (winner !== undefined) { requireThat(winner, "CONFLICT", "alias names another payment order"); return; }
       const input = this.db.prepare("SELECT 1 FROM payer_inputs WHERE nf=?");
       requireThat(reserved.every(nf => input.get(nf) === undefined), "CONFLICT", "an input is reserved by another payment");
       requireThat(outputs.every(out => taken.get(out.cm.toString()) === undefined), "CONFLICT", "an output belongs to another payment");
@@ -444,9 +469,12 @@ export class V3Wallet {
       if (error instanceof EncodingError) throw new V3WalletError("INVALID", "malformed receipt");
       throw error;
     }
+    // Only this record's exact proof and authorization can be the admitted event (C2.10.9a).
+    const digests = evidenceHashes(record);
     requireThat(verifyReceipt({ domain: this.domain, segment: identifierOf(p[2]!, p[3]!), scopeRoot: p[4]!,
-      operator: row.operator as Uint8Array }, receipt) && same(receipt.statementHash, saved.statement),
-      "INVALID", "receipt does not authenticate the saved statement");
+      operator: row.operator as Uint8Array }, receipt) && same(receipt.statementHash, saved.statement) &&
+      same(receipt.proofHash, digests.proofHash) && same(receipt.signatureHash, digests.signatureHash),
+      "INVALID", "receipt does not authenticate the saved record");
     this.transaction(() => {
       this.db.prepare("UPDATE payer_payments SET receipt=? WHERE alias=? AND receipt IS NULL").run(encodeReceipt(receipt), name);
     });
