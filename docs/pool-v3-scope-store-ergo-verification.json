@@ -19,7 +19,7 @@
       "name": "A issue x 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1713
+      "elapsedMs": 1719
     },
     {
       "name": "A issue y 20",
@@ -31,25 +31,25 @@
       "name": "B x spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3444
+      "elapsedMs": 3495
     },
     {
       "name": "A y spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3417
+      "elapsedMs": 3523
     },
     {
       "name": "A issue y 5 before rejoin",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1124
+      "elapsedMs": 1112
     },
     {
       "name": "A joined mixed spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3432
+      "elapsedMs": 3475
     }
   ],
   "transactions": [
@@ -95,7 +95,7 @@
       "burned": "0",
       "position": "1",
       "spentRoot": "86b9039a6ac81119219f624419a7ba872045860c067d8f42714830d310634284",
-      "history": "3013c515a169f38eddf3ce5234193ff8bdd44506697154044bd42f484723d662",
+      "history": "d9825f4967757ee22495416090688df92990a0f6cd0b5dd2ef6e0d9175b4e6fe",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "7",
@@ -163,7 +163,7 @@
       "burned": "0",
       "position": "1",
       "spentRoot": "86b9039a6ac81119219f624419a7ba872045860c067d8f42714830d310634284",
-      "history": "3013c515a169f38eddf3ce5234193ff8bdd44506697154044bd42f484723d662",
+      "history": "d9825f4967757ee22495416090688df92990a0f6cd0b5dd2ef6e0d9175b4e6fe",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "7",
@@ -227,7 +227,7 @@
       ]
     }
   },
-  "elapsedMs": 39750,
+  "elapsedMs": 40274,
   "sourceSha256Lf": {
     "dist/bytes.js": "9ab7f0e779a1d9e26923d6c0eb9367512fb514c36ff265d741c492e0b14056c9",
     "dist/contexts.js": "09d2961ae68c6a7ebec5636d2011769d01800922756e1ed36686497f35af2a69",
@@ -293,9 +293,8 @@
     "scripts/pool/v3/ergo-check.mjs": "a618689f420efb3e72da1cd02b9839510f20bc05508ceda556dfcd64b3ff8e8c",
     "scripts/pool/v3/evidence-reader.mjs": "719a4f1eac2ba2ee10b05d588d13aa819afae25d9cf8cc9a8cf257702609c486",
     "scripts/pool/v3/fault-evidence.mjs": "502b2cc1a9455e5eca71b794700be621fd7eaf8f3d70f55008c3a361a047c29c",
-    "scripts/pool/v3/local-replay.mjs": "83996e945213e54cf2965948ada6427e8d1a98019dc5696863ad3ad3bd598392",
+    "scripts/pool/v3/local-replay.mjs": "bad30f27975dd5f449b618373e8593dfd7fb7558da91fe2c694a687241770b54",
     "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
-    "scripts/pool/v3/scope-evidence.mjs": "bdb32a7d393cd77263c6d1b60f3503905fbe229387d7b348a1a902d160aacaed",
     "scripts/pool/v3/scope-store-check.mjs": "b95624e852445f05d0febf300fd8c90f6a38402885ef52f32d809ec1f3265b2a",
     "src/bytes.ts": "f6904c1a8701538f6fda5963500b460611e5f18fd4ea0c925ef8dc098cce55fd",
     "src/contexts.ts": "555dcc03061a6c451ffd6dc63f2486ad920014186e4ec01d164ec7282b27764b",

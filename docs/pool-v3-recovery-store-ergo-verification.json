@@ -19,55 +19,55 @@
       "name": "issue 0",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1729
+      "elapsedMs": 1724
     },
     {
       "name": "issue 1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1123
+      "elapsedMs": 1121
     },
     {
       "name": "service demand withdrawn",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2928
+      "elapsedMs": 2915
     },
     {
       "name": "service demand settled",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2924
+      "elapsedMs": 2925
     },
     {
       "name": "service settlement at inclusive horizon",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2924
+      "elapsedMs": 2905
     },
     {
       "name": "unanswered request",
       "kind": 7,
       "bytes": 14656,
-      "elapsedMs": 1567
+      "elapsedMs": 1568
     },
     {
       "name": "forced first demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2930
+      "elapsedMs": 2883
     },
     {
       "name": "forced second demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2908
+      "elapsedMs": 2884
     },
     {
       "name": "forced settlement at return index",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2924
+      "elapsedMs": 2902
     }
   ],
   "transactions": [
@@ -115,13 +115,13 @@
     "position": "4",
     "adoptionIndex": "31",
     "spentRoot": "fffd456a20d0d582a358aaf322350494f197abdd3494f66bce0903d8c5b59e78",
-    "history": "ad24f2c865012aad957bb4b1b42d93d0792aca4cf09e33f2f568fd66fbbe72e4",
+    "history": "2311d50669cdcbd5d0e73b70131dc1dcf3ed3e0929bbd13fb88db263ddf2d1a0",
     "canonicalIndex": "33",
     "force": [
       {
         "index": "25",
         "kind": 4,
-        "sha256": "5b2d170e3f1fda5857d4ed06da3dcee3c1a0a20ab22ecb51aeb21092fbc8a65c"
+        "sha256": "0edc7b7c795a0501b44d33638d046178115c77aaf1a9b75506f8e0bba7c3ed32"
       },
       {
         "index": "27",
@@ -131,12 +131,12 @@
       {
         "index": "29",
         "kind": 4,
-        "sha256": "0c5d3436ff6fe1f31fa8509ce4de95b82beaa2cfd07e0249d98850b2210aac0f"
+        "sha256": "1b279fc17b6dad5b8d08bd4c5bb08d97d7535f0a5e215bd8c8f3fb85e6f7a1a2"
       },
       {
         "index": "31",
         "kind": 6,
-        "sha256": "53a88690a830b7d1c244adffb06ab5fcaa9dedf0c032d69895caa3f85f3f0933"
+        "sha256": "0ed096874f0bbc332d8e78f732c9d048f4190e8643015af91b2a9ae93060c834"
       }
     ],
     "clock": {
@@ -157,7 +157,7 @@
       "snapshotIndex": "31"
     }
   },
-  "elapsedMs": 43166,
+  "elapsedMs": 42989,
   "sourceSha256Lf": {
     "dist/bytes.js": "9ab7f0e779a1d9e26923d6c0eb9367512fb514c36ff265d741c492e0b14056c9",
     "dist/contexts.js": "09d2961ae68c6a7ebec5636d2011769d01800922756e1ed36686497f35af2a69",
@@ -223,12 +223,11 @@
     "scripts/pool/v3/ergo-check.mjs": "a618689f420efb3e72da1cd02b9839510f20bc05508ceda556dfcd64b3ff8e8c",
     "scripts/pool/v3/evidence-reader.mjs": "719a4f1eac2ba2ee10b05d588d13aa819afae25d9cf8cc9a8cf257702609c486",
     "scripts/pool/v3/fault-evidence.mjs": "502b2cc1a9455e5eca71b794700be621fd7eaf8f3d70f55008c3a361a047c29c",
-    "scripts/pool/v3/local-replay.mjs": "83996e945213e54cf2965948ada6427e8d1a98019dc5696863ad3ad3bd598392",
+    "scripts/pool/v3/local-replay.mjs": "bad30f27975dd5f449b618373e8593dfd7fb7558da91fe2c694a687241770b54",
     "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
     "scripts/pool/v3/public-artifacts.mjs": "82feec1b0fd8c67c6eeae12e7e54c578ebf353133210225a8db281f3484122cf",
     "scripts/pool/v3/recovery-store-check.mjs": "8880bb1935abba8c73dc6e3c55239940c5d2a32370353769a8fb6ae1f9e2fca0",
     "scripts/pool/v3/recovery-testnet.mjs": "bd1ed52fff6ab8ac23c199b54264a827be41d79871f8b9b84b6d925aba22cfa6",
-    "scripts/pool/v3/scope-evidence.mjs": "bdb32a7d393cd77263c6d1b60f3503905fbe229387d7b348a1a902d160aacaed",
     "scripts/pool/v3/testnet.mjs": "a3d4b1c379d1368148fa9d306dcd78ccf509e5e9724cd9649f5664fcddc7124a",
     "src/bytes.ts": "f6904c1a8701538f6fda5963500b460611e5f18fd4ea0c925ef8dc098cce55fd",
     "src/contexts.ts": "555dcc03061a6c451ffd6dc63f2486ad920014186e4ec01d164ec7282b27764b",
