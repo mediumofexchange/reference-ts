@@ -1,5 +1,6 @@
 // C4.1–7 and pool-fees C1.2.3–5 on guarded reference venues: one seed receives
-// exact requests and pays from its own restored single-backing holdings. Node 24,
+// exact requests and pays from its own restored holdings of one backing, whose
+// canonical segment may scope several (C2.10). Node 24,
 // plaintext local custody: database/WAL/host backups require protected storage and
 // one active copy; the offline handoff is encrypted and freezes its source. A saved fulfillment or final payment is historical local
 // accounting, never a second credit or permission to spend. Request
@@ -25,7 +26,7 @@ import { requireReferenceVenue } from "./guard.js";
 import { decodeSegmentHeader, segmentIdentity, type SegmentHeader } from "./headers.js";
 import { ownedNotes, type OwnedNote } from "./holdings.js";
 import { decodeEvidencePackage } from "./package.js";
-import { PACKAGE_LIMITS, readSingleBackingFrontier, type PackageReader } from "./package-reader.js";
+import { PACKAGE_LIMITS, readFrontier, type PackageReader } from "./package-reader.js";
 import { decodedTrails, type SignedTerms } from "./reader.js";
 import { decodeRecord, encodeRecord, evidenceHashes, statementHash, type Record } from "./records.js";
 import { locked, tagOf } from "./recovery.js";
@@ -322,13 +323,15 @@ export class V3Wallet {
   }
 
   /** Independently read the terms' backing at the venue's current witnessed
-   * index; restore this seed's unspent positive notes, force effects applied. */
+   * index, in any scope (C2.10.3–7); restore this seed's unspent positive notes
+   * of that backing, force effects applied. Other scoped backings' notes of the
+   * shared history are that backing's view, not this one's. */
   private async frontier(packageBytes: Uint8Array, signed: SignedTerms) {
     const bytes = copyUnshared(packageBytes), terms = { terms: copyUnshared(signed.terms), signature: copyUnshared(signed.signature) };
     const backing = rootTermsName(terms.terms), at = this.options.venue.witnessedIndex();
     requireThat(isValue(at), "INVALID", "invalid witnessed index");
     const observed = observedView(this.options.venue, this.venueId, at);
-    const result = await readSingleBackingFrontier(bytes, terms, at, { ...this.options, venue: observed.venue });
+    const result = await readFrontier(bytes, terms, at, { ...this.options, venue: observed.venue });
     const canonical = result.canonical;
     let force: ForceState | undefined, notes: OwnedNote[] = [];
     if (canonical !== undefined) {
@@ -346,10 +349,10 @@ export class V3Wallet {
   private admissible(view: Awaited<ReturnType<V3Wallet["frontier"]>>): SegmentHeader {
     const { canonical, chain, clock, at, lag } = view;
     requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
-    const header = this.headerOf(view.bytes, canonical.segment, canonical.scope, view.backing);
+    const { header, entry } = this.headerOf(view.bytes, canonical.segment, canonical.scope, view.backing);
     // A statement for an ended term would be refused.
     const term = chain.at(-1);
-    requireThat(term !== undefined && same(term.operator, header.operator) && same(term.link, header.entries[0]!.link),
+    requireThat(term !== undefined && same(term.operator, header.operator) && same(term.link, entry.link),
       "CONFLICT", "the canonical segment's operator term has ended");
     requireThat(clock === null || clock === undefined || (clock.boundary === null &&
       at + lag - canonical.index <= BigInt(clock.duration)), "SILENCE", "the canonical segment's silence clock closes admission");
@@ -802,15 +805,16 @@ export class V3Wallet {
     return this.payment(name)!.receipt!;
   }
 
-  /** The canonical segment's header from the package's own trails, bound by identity. */
-  private headerOf(bytes: Uint8Array, segment: Uint8Array, scope: bigint, backing: Uint8Array): SegmentHeader {
+  /** The canonical segment's header from the package's own trails, bound by
+   * identity, and this backing's entry in its scope (C2.10.2). */
+  private headerOf(bytes: Uint8Array, segment: Uint8Array, scope: bigint, backing: Uint8Array) {
     const trails = decodedTrails(decodeEvidencePackage(bytes, PACKAGE_LIMITS).filter(item => item.kind === 6).map(item => item.payload));
     const found = trails.find(trail => same(sha256(trail.header), segment));
     requireThat(found !== undefined, "ABSENT", "canonical segment header is absent");
-    const header = decodeSegmentHeader(found.header);
-    requireThat(same(segmentIdentity(header), segment) && new ScopeTree(header.entries).root() === scope &&
-      header.entries.length === 1 && same(header.entries[0]!.backing, backing), "INVALID", "canonical segment is not this backing's");
-    return header;
+    const header = decodeSegmentHeader(found.header), entry = header.entries.find(scoped => same(scoped.backing, backing));
+    requireThat(same(segmentIdentity(header), segment) && new ScopeTree(header.entries).root() === scope && entry !== undefined,
+      "INVALID", "canonical segment is not this backing's");
+    return { header, entry };
   }
 
   close(): void { if (!this.closed) { this.closed = true; this.seed.fill(0); this.db.close(); } }
