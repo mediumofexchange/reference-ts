@@ -201,6 +201,6 @@ The invariants above say *what* must be true. These say *how* to build it. The g
 
 **An error names the boundary that refused.** `EncodingError`, `SigningError`, `LedgerError` (`NonceError`), `SequencerError`, `VenueError`, `PilotError`, and in pool-v3 `ReplayRefusal`, `EvidenceRefusal`, `V3StoreError`, `V3WalletError`. Do not add one without a new boundary to name.
 
-**Domain tags live in one file.** Every context string or magic that opens a signed or hashed message, for every construction (the v3 candidate and the frozen transparent path), is declared in `src/contexts.ts`, and the prefix-free property is asserted at load. A tag collision is a signature-forgery class. Key-derivation labels and local wallet identifiers are not message tags and stay beside their use.
+**Domain tags live in one file.** Every context string or magic that opens a signed or hashed message, for the v3 candidate and the frozen transparent path, is declared in `src/contexts.ts`, and the prefix-free property is asserted at load. A tag collision is a signature-forgery class. Key-derivation labels and local wallet identifiers are not message tags and stay beside their use.
 
 **Cryptography is hashes, signatures and the declared proof system, and nothing else.** `@noble/hashes`, `@noble/curves`, and the pinned circuit backend the pool declares in **E**. A new primitive is a decision, not a dependency bump.
