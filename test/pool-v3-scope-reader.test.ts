@@ -16,7 +16,7 @@ import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { deliveryHash, encodeRecord, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { ScopeRequired } from "../src/pool/v3/refusals.js";
 import { mergeFinalizedPrefixes } from "../src/pool/v3/scope-reader.js";
-import { applyRecord, openSegmentState } from "../src/pool/v3/state.js";
+import { applyRecord, openSegmentState, type SegmentState } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
 import { encodeTrail } from "../src/pool/v3/trail.js";
 
@@ -36,7 +36,8 @@ const stateOf = <T extends { readonly receipt?: unknown }>(result: T): Exclude<T
 const pack = (items: readonly EvidenceItem[]) => encodeEvidencePackage([...items].sort((a, z) =>
   a.kind - z.kind || compareBytes(sha256(a.payload), sha256(z.payload))), PACKAGE_LIMITS);
 
-/** One operator opens a segment scoping two backings and issues into the first. */
+/** One operator opens a segment scoping two backings and issues into the first;
+ * a successor segment may then import the first backing alone. */
 async function twoBackings() {
   const venue = FixtureVenue.reference(label, lag, 10n);
   const termsOf = (thing: string): RootTerms => ({ configuration: domain, venue: venue.id, obligor: issuer, operator, interval: 10n,
@@ -46,11 +47,15 @@ async function twoBackings() {
     return { fields, name: rootTermsName(terms), signed: { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) } };
   }).sort((a, z) => compareBytes(a.name, z.name));
   const [x, y] = backings as [typeof backings[0], typeof backings[0]];
-  const header: SegmentHeader = { domain, venue: venue.id, operator, sequence: 1n,
-    entries: backings.map(item => ({ backing: item.name, link: item.name })) };
-  const id = segmentIdentity(header), scope = new ScopeTree(header.entries).root();
-  const scopedTerms = new Map(backings.map(item => [hex(item.name), item.fields]));
-  const state = openSegmentState(id, undefined, undefined, undefined, () => {}), records: Uint8Array[] = [];
+  const open = (scoped: typeof backings, sequence: bigint, predecessor?: Commitment, imported?: SegmentState) => {
+    const header: SegmentHeader = { domain, venue: venue.id, operator, sequence,
+      entries: scoped.map(item => ({ backing: item.name, link: item.name, ...(predecessor === undefined ? {} : { opening: predecessor }) })) };
+    const id = segmentIdentity(header);
+    return { header, id, scoped, scope: new ScopeTree(header.entries).root(), records: [] as Uint8Array[],
+      scopedTerms: new Map(scoped.map(item => [hex(item.name), item.fields])),
+      state: openSegmentState(id, undefined, imported, undefined, () => {}) };
+  };
+  let current = open(backings, 1n);
   const items: EvidenceItem[] = [];
   const add = (kind: number, payload: Uint8Array) => {
     if (!items.some(item => item.kind === kind && compareBytes(item.payload, payload) === 0)) items.push({ kind, payload });
@@ -61,17 +66,18 @@ async function twoBackings() {
     const directory = snapshots.map(snapshot => ({ name: snapshot.backing, digest: snapshotDigest(snapshot) }));
     for (const snapshot of snapshots) add(4, snapshotBytes(snapshot));
     add(3, encodeEvidenceDirectory(directory, PACKAGE_LIMITS));
-    add(6, encodeTrail({ header: segmentBytes(header), terms: backings.map(item => item.signed), records }, TRAIL_LIMITS));
+    add(6, encodeTrail({ header: segmentBytes(current.header), terms: current.scoped.map(item => item.signed), records: current.records }, TRAIL_LIMITS));
     const commitment = signCommitment(operatorSecret, sequence, directoryRoot(directory));
     venue.witness(1, operator, index, encodeCommitment(commitment));
     return commitment;
   }
   function snapshotsNow() {
-    return backings.map(item => ({ backing: item.name, segment: id, historyHash: state.history, evidenceHash: state.evidence,
+    const { id, state } = current;
+    return current.scoped.map(item => ({ backing: item.name, segment: id, historyHash: state.history, evidenceHash: state.evidence,
       ...(state.totals.get(hex(item.name)) ?? { issued: 0n, burned: 0n }) }));
   }
   async function issue(value: bigint, output: bigint) {
-    const capsules = [new Uint8Array(89).fill(1)], outputs = [output];
+    const { id, scope, scopedTerms, state, records } = current, capsules = [new Uint8Array(89).fill(1)], outputs = [output];
     const record: Record = { domain, kind: 1, publicInputs: [...limbsOf(domain), ...limbsOf(id), scope, ...limbsOf(x.name),
       value, ...outputs, ...limbsOf(deliveryHash(domain, outputs, capsules))], proof: b(7), authorization: new Uint8Array(64), capsules };
     const bytes = encodeRecord({ ...record, authorization: ed25519.sign(statementBytes(record), issuerSecret) });
@@ -83,7 +89,9 @@ async function twoBackings() {
   const read = (backing: Uint8Array, commitment: Commitment) => readPackage(pack([...items,
     { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(commitment) }]),
   selection(backing, commitment), { configuration, verifier, reference, venue });
-  return { venue, x, y, items, checkpoint, issue, selection, read };
+  /** An empty successor opening scoping the first backing alone, importing `predecessor`. */
+  const successor = (sequence: bigint, predecessor: Commitment) => { current = open([x], sequence, predecessor, current.state); };
+  return { venue, x, y, items, checkpoint, issue, successor, selection, read };
 }
 
 describe("multi-backing scope reader", () => {
@@ -101,6 +109,25 @@ describe("multi-backing scope reader", () => {
     const selected = pack([...f.items, { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(latest) }]);
     await expect(readSingleBackingPackage(selected, f.selection(f.x.name, latest), { configuration, verifier, reference, venue: f.venue }))
       .rejects.toBeInstanceOf(ScopeRequired);
+  });
+
+  it("reads a single-backing successor whose predecessor scoped two backings through the scope reader", async () => {
+    const f = await twoBackings();
+    f.checkpoint(1n, 1n); await f.issue(5n, 101n);
+    const predecessor = f.checkpoint(2n, 3n);
+    f.successor(3n, predecessor);
+    const opening = f.checkpoint(3n, 4n);
+    const read = stateOf(await f.read(f.x.name, opening));
+    expect(read.state.issued).toBe(5n); expect(read.state.position).toBe(0n);
+    expect(read.carrying.map(item => [item.sequence, item.class])).toEqual([["1", "valid"], ["2", "valid"], ["3", "valid"]]);
+    const selected = pack([...f.items, { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(opening) }]);
+    await expect(readSingleBackingPackage(selected, f.selection(f.x.name, opening), { configuration, verifier, reference, venue: f.venue }))
+      .rejects.toBeInstanceOf(ScopeRequired);
+    // The successor must import the scoped predecessor, not the segment's older opening.
+    const stale = await twoBackings();
+    const first = stale.checkpoint(1n, 1n); await stale.issue(5n, 101n); stale.checkpoint(2n, 3n);
+    stale.successor(3n, first);
+    await expect(stale.read(stale.x.name, stale.checkpoint(3n, 4n))).rejects.toMatchObject({ check: "IMPORT" });
   });
 
   it("excludes a checkpoint whose directory omits a scoped backing or misstates its supply", async () => {
@@ -127,5 +154,8 @@ describe("multi-backing scope reader", () => {
     const [id, event] = [...read.state!.events][0]!;
     const conflicting = { ...read.state!, events: new Map([[id, { ...event, identity: "other" }]]) };
     expect(() => mergeFinalizedPrefixes([{ state: read.state! }, { state: conflicting }], () => {})).toThrow(expect.objectContaining({ check: "CONTINUITY" }));
+    // A distinct event repeating an imported output is a conflicting history.
+    const repeated = { ...read.state!, events: new Map([["other:1", { ...event, segment: "other" }]]) };
+    expect(() => mergeFinalizedPrefixes([{ state: read.state! }, { state: repeated }], () => {})).toThrow(expect.objectContaining({ check: "OUTPUT" }));
   });
 });

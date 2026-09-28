@@ -1,4 +1,4 @@
-// Single-backing candidate §12 evidence and §13 record reader. Configuration,
+// Candidate §12 evidence and §13 record readers, single- and multi-backing. Configuration,
 // verifier, selection and reference venue are independently held by the reader.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
@@ -52,8 +52,8 @@ export function ownSelection(input: ReaderSelection): ReaderSelection {
  * the selected envelope remains complete. A multi-backing scope throws
  * ScopeRequired; readPackage reads any scope. */
 export async function readSingleBackingPackage(bytes: Uint8Array, selected: ReaderSelection, options: PackageReader): Promise<ImportResult & FaultResult> {
-  const { context, directories, evidence, faults } = openPackage(bytes, selected, options, false);
-  const result = await classifyImports(context, directories, options.venue, evidence);
+  const { context, directories, evidence, faults, venue } = openPackage(bytes, selected, options, false);
+  const result = await classifyImports(context, directories, venue, evidence);
   return { ...result, ...faults.result() };
 }
 
@@ -61,13 +61,13 @@ export async function readSingleBackingPackage(bytes: Uint8Array, selected: Read
  * several backings, the selection's or one in its ancestry, is read by the scope
  * reader (C2.10.3–7) with the same refusals. Carries no canonical frontier. */
 export async function readPackage(bytes: Uint8Array, selected: ReaderSelection, options: PackageReader): Promise<ScopeResult & FaultResult> {
-  const { context, directories, evidence, faults, header } = openPackage(bytes, selected, options, true);
+  const { context, directories, evidence, faults, header, venue } = openPackage(bytes, selected, options, true);
   let result: ScopeResult | undefined;
   if (header.entries.length === 1) {
-    try { result = await classifyImports(context, directories, options.venue, evidence); }
+    try { result = await classifyImports(context, directories, venue, evidence); }
     catch (error) { if (!(error instanceof ScopeRequired)) throw error; }
   }
-  result ??= await classifyScopes(context, directories, options.venue, evidence);
+  result ??= await classifyScopes(context, directories, venue, evidence);
   return { ...result, ...faults.result() };
 }
 
@@ -115,7 +115,7 @@ function openPackage(bytes: Uint8Array, selected: ReaderSelection, options: Pack
   const faults = faultObserver(payloads(7), selection, verifier);
   const context: ImportContext = { selection, terms, header, verifier, reference, importLimits, faults,
     ...(payloads(10).length === 0 ? {} : { receiptBytes: payloads(10)[0]! }) };
-  return { context, directories, evidence: { snapshots, trails }, faults, header };
+  return { context, directories, evidence: { snapshots, trails }, faults, header, venue };
 }
 
 /** Descend every witnessed term for independently authenticated root terms.
