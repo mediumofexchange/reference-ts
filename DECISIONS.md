@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-28` [Restore the v3 wallet from its seed or an encrypted handoff that freezes its source](decisions/2026-09.md#2026-09-28--restore-the-v3-wallet-from-its-seed-or-an-encrypted-handoff-that-freezes-its-source)
 - `2026-09-28` [Exchange v3 payment requests as digest-authenticated frames without a receiver endpoint](decisions/2026-09.md#2026-09-28--exchange-v3-payment-requests-as-digest-authenticated-frames-without-a-receiver-endpoint)
 - `2026-09-27` [Persist reproducing venue evidence and the owning journal's publication outbox](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
 - `2026-09-27` [Take over from the public canonical frontier](decisions/2026-09.md#2026-09-27--take-over-from-the-public-canonical-frontier)
