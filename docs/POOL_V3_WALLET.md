@@ -94,7 +94,8 @@ An uncertain write poisons the handle; reopening reads the committed state.
 `fulfillment(alias)` retrieves the original historical result after a lost reply.
 A second `fulfill` call conflicts even if identical. Lookup never authorizes a
 second external credit, and the saved historical result never asserts current
-spendability. Local aliases and accounting acknowledgments need their own backup.
+spendability. Local aliases and accounting acknowledgments need their own backup
+(C4.5); see [backup and restoration](#backup-and-restoration).
 
 ## Paying
 
@@ -180,6 +181,80 @@ of never-admitted inputs are not implemented. Multi-backing payments and
 cross-backing fees are refused. The wallet profile is `moe/wallet/v3/2`; a
 first-profile payer database, which kept no output openings, is refused.
 
+## Backup and restoration
+
+There are two paths, for two losses.
+
+**Seed restoration** (C4.6) recovers money after the device and its local state
+are lost. `V3Wallet.restoreSeed(path, options, seed)` creates a new wallet at a
+new path from the backed-up seed. `sync` then finds the same positive unspent
+notes, including change, from complete public evidence. No request, alias,
+fulfillment or pending payment returns, because none is seed-recoverable (C4.2).
+New requests draw fresh random identifiers, so nothing is reused. A payment
+another copy prepared but never finished is unknown here: its inputs show as
+available until it settles or they are spent, and a new payment over them
+fails if the old one wins. A request the lost wallet issued, once paid,
+appears as an ordinary holding, but it cannot be fulfilled against its lost
+alias. Losing labels therefore loses accounting, never money, and cannot credit
+anything twice.
+
+**Encrypted offline handoff** moves the complete local state to one new
+database: seed, aliases, unfulfilled requests, fulfillments with their evidence,
+payments with records, reservations, output openings, receipts and superseded
+records. `exportBackup(key)` takes a random 32-byte key (for example from
+`createWalletBackupKey()`). One transaction reads every state row, seals the
+snapshot and marks the source frozen, so no later request, reservation or
+fulfillment can be missing from the backup. From then on no handle of the
+source, before or after a restart, can request, fulfill, sync, prepare,
+reprove or submit (`FENCED`). A preparation or reproof still reading evidence
+at the freeze refuses before proving; a submission or fulfillment in flight
+fails when it tries to save its result. Saved results stay readable. A
+repeated export, including after restart for a lost reply, returns the same
+bytes, and only to the same key. The holder keeps the key and
+`walletBackupDigest(bytes)` separately from the encrypted bytes.
+
+`V3Wallet.restoreBackup(path, options, bytes, key, digest)` requires the exact
+digest, the key and the same configuration and venue. The envelope's associated
+data binds the tag `moe/wallet/v3/backup`, the domain and the venue. The
+restore writes the state rows in their original order, in one transaction,
+with the digest as `custody().restoredFrom`. SQLite's strict column types,
+uniqueness, status and reference constraints refuse rows that do not fit the
+schema. Beyond that, the authenticated content is trusted as the holder's own
+state; the wallet's usual checks (request reproduction, reproof output
+reproduction) apply when each row is used. Export compares the stored table
+definitions with the wallet's own, so a database of any other shape refuses
+before freezing rather than exporting a backup that could not be restored.
+
+The destination must be new. An existing file (the source included),
+`:memory:` and leftover `-wal`/`-shm` files are refused. The wallet is built in
+an exclusively created staging file beside `path`, checkpointed, closed and
+then hard-linked to `path`, which fails if anything appeared there meanwhile.
+So `path` either does not exist or holds the complete restore, and a
+destination another process created first is never touched. A refused or
+interrupted restore leaves nothing at `path` and is simply retried there; after
+a lost reply, an existing `path` with `custody().restoredFrom` equal to the
+digest confirms success. Only a crash can leave the staging file
+(`<path>.restore-<hex>`). It holds plaintext wallet state, possibly a complete
+restore, so delete it and never open it: opening it beside a retried restore
+would make two active copies. The destination's file system must support hard
+links; FAT/exFAT and some network or synced folders refuse with `STORAGE`. The
+restored wallet continues the saved work.
+Exact retries return the saved records. Reservations hold. A receipt lost to
+the freeze is recovered by resubmitting the identical bytes, which the journal
+answers with its original receipt. `sync` and `reprove` resolve the rest.
+
+The envelope is AES-256-GCM with a random 96-bit nonce under Node's crypto,
+capped at 64 MiB: export and restore hold the whole plaintext in memory. An
+unsupported schema or an oversized wallet refuses export before freezing. There
+is no password derivation, continuous backup or rollback protection. The
+decoded plaintext is bounded but materializes its rows. Only a holder of the
+key can supply it, and that holder also holds the seed. The handoff is a
+controlled transfer between devices, the v2 custody pattern on v3's domain and
+venue ([decision](../decisions/2026-09.md#2026-09-28--restore-the-v3-wallet-from-its-seed-or-an-encrypted-handoff-that-freezes-its-source)).
+Activating two restores of one backup, or keeping a seed-restored wallet beside
+the original, breaks the one-active-copy precondition. Freezing cannot recall
+a submission already sent, so quiesce operations before exporting.
+
 ## Acceptance and remaining work
 
 `test/pool-v3-wallet.test.ts` ports receiver cases with oracle proofs, including
@@ -200,8 +275,15 @@ resolution without proving, a stale receipt racing a reproof (kept as
 superseded evidence), a lagging venue view, an ended term without successor,
 and `SILENCE` refusal at the horizon, after the boundary and in a returned
 segment past its own horizon.
+`test/pool-v3-wallet-backup.test.ts` ports the v2 offline-handoff cases: complete
+round trip with every state row compared, freeze across handles and restart,
+exact re-export, wrong key, digest, domain and venue, corruption, state no
+wallet could write, occupied destinations, unsupported schema and oversize
+without freezing, submit and fulfillment completions racing the freeze, an
+interleaved destination, continuation of pending work including reproof after
+takeover, and seed restoration of holdings with change.
 `npm run check:pool:v3-wallet` exercises fresh processes at request, fulfillment,
-payment and reproof commit boundaries with synthetic evidence. These are process-exit
+payment, reproof, export and restore commit boundaries with synthetic evidence. These are process-exit
 tests, not physical power-loss or qualified-storage evidence.
 
 The real-proof `scripts/pool/v3/store-check.mjs` obtains the payment request
@@ -216,7 +298,7 @@ successor segment is covered by the succession check.
 
 That harness hands the request object across directly; the request frame and
 digest are oracle-tested. A human authentication channel is not qualified.
-Cancellation/release, multi-backing payment, encrypted backup and
-restoration drills remain open. Existing v2
+Cancellation/release and multi-backing payment remain open; backup and
+restoration are oracle and process tested, not physical-loss drills. Existing v2
 wallet/service code and checks remain until all their replacement cases pass.
 This library establishes no mainnet readiness or physical custody qualification.

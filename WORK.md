@@ -3,35 +3,31 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 6d delivered by PR #33 from `feat/v3-request-exchange` (no companion
-branch or normative change): a receiver's exact v3 payment request (pool-delivery C4.1) passes to
-the payer as one canonical 246-byte frame (`moe/wallet/v3/request`), accepted
-only when its SHA-256 equals a digest obtained independently from the
-receiver. V3 needs no receiver endpoint, credential, capability or inbox: the
-payee's output and capsule are public and `fulfill` finds the payment
-([decision](decisions/2026-09.md#2026-09-28--exchange-v3-payment-requests-as-digest-authenticated-frames-without-a-receiver-endpoint)).
-Acceptance: every single-byte change and noncanonical frame refuses; a
-substituted well-formed request refuses against the receiver's digest; the
-authenticated request is paid and fulfilled; v2 pairing/delivery cases are
-mapped in the [wallet guide](docs/POOL_V3_WALLET.md#request-exchange). Stop
-boundary: no network transport, signing identity, fee quotes, text/QR form,
-receipt handoff for pending acceptance, backup or real-proof harness change.
+Slice 6e delivered by PR #35 from `feat/v3-wallet-backup` (no companion branch or
+normative change): the v3 wallet's two restoration paths
+([decision](decisions/2026-09.md#2026-09-28--restore-the-v3-wallet-from-its-seed-or-an-encrypted-handoff-that-freezes-its-source),
+[guide](docs/POOL_V3_WALLET.md#backup-and-restoration)). `V3Wallet.restoreSeed` (C4.6)
+finds the same holdings, change included, with no local state (C4.2).
+`exportBackup`/`restoreBackup` move the complete local state under a random key
+and an independently kept digest (AES-256-GCM, domain and venue as associated data).
+The export freezes the source in the same transaction. A restore is staged and then
+hard-linked to a new destination. Acceptance: the v2 backup cases ported and passing,
+continuation after restore (retries, reservations, submit, sync, reprove after takeover),
+and export/import crash boundaries in `check:pool:v3-wallet`. Stop boundary: no
+continuous backup, rollback protection, password KDF, streaming beyond 64 MiB,
+physical custody or v2 retirement.
 
 ## Status
-- Commits `7b527c4` (frame, digest, tests), `56f1727` (docs, decision, case
-  map) and `31227b9` (review fixes). Independent adversarial review found no
-  blocker/major; four minor findings resolved and read back: display reads
-  return terms without the capsule (`prepare` refuses them, tested), and the
-  guide states self-digest limits, full machine comparison, fee requests and
-  first-payment griefing. The tag stays beside its codec (tested prefix-free
-  against `contexts.ts`), so shared sources bound by reports are unchanged.
-- Focused tests pass locally (4 frame, 17 payer cases, typecheck). PR #33 at
-  `31227b9`: all seven jobs passed in
-  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36402484639);
-  the journal report is its Linux `--ergo` artifact (only `wallet-request.ts`
-  changed) and all six current reports match their bound sources. The delivery
-  commit changes only WORK.md and that report. Local full `npm run check` was
-  not run (host memory at ~0.6 of 15.9 GB free).
+- Commits `d79df25` (feature, tests, crash drill), `881038e` (docs, decision),
+  `b1e0c60` and `39a3c63` (review fixes). Independent adversarial review found no
+  blocker or major issue. Its minor findings were resolved and read back: staged restore
+  with link, options read once, freeze rechecked before proving, exact-DDL export check,
+  wording, and zeroing. Remaining noted limits: hard links required, and a crash can
+  leave a plaintext staging copy that must be deleted.
+- Local: 44 wallet/payer/backup cases, typecheck and the twelve-exit crash drill pass.
+  CI: all seven jobs passed at `39a3c63` ([run](https://github.com/mediumofexchange/reference-ts/actions/runs/36415773501));
+  the journal report is its Linux artifact (only wallet sources changed) and all six current
+  reports match their bound sources. Local full `npm run check` was not run; CI ran it.
 
 ## Evidence
 - Wallet API, custody preconditions, reproof and payment limits: [guide](docs/POOL_V3_WALLET.md).
@@ -51,12 +47,13 @@ receipt handoff for pending acceptance, backup or real-proof harness change.
   live journal at `2c6b20c`; header and mainnet reader reports at `6e4cea8`.
 
 ## Next
-1. Continue slice 6: encrypted v3 wallet backup and restoration drills; port the
-   frozen v2 backup cases (v2 pairing/delivery cases are mapped). Same-segment
-   tail repair (C2.10.9a resubmission) and release of never-admitted inputs stay
-   with cancellation in item 6 until a gate needs them.
-2. Retire v2 only after its wallet/service cases pass on v3; then
-   multi-backing including compact fault orchestration (slice 7).
+1. Finish slice 6 by retiring v2. First inventory every remaining v2 wallet,
+   service, real-proof, crash and store check against its v3 counterpart
+   (backup, pairing and delivery are now mapped or ported). Port the gaps, then
+   delete v2's `src/pool` modules, tests, scripts and reports (the plan's slice 6
+   acceptance). Same-segment tail repair (C2.10.9a) and release of never-admitted
+   inputs stay with cancellation in item 6 until a gate needs them.
+2. Multi-backing, including compact fault orchestration (slice 7).
 3. Configuration adoption: provenance, ACIR identities/certificates, replay/import
    bounds, one-transaction condition and BN254 margin. Mainnet needs separate authority.
 4. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with
@@ -80,6 +77,8 @@ receipt handoff for pending acceptance, backup or real-proof harness change.
 - Retain stopped contained-sync node's 20 GiB
   `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd` and
   `node-startup/`, `sync-preparation/` caches; do not allocate another.
+- The separate archive node (`C:\Users\Bob\ergo-node`, outside this project) keeps
+  syncing as a background job: 3 GB heap, below-normal priority (2026-09-28).
 - Keep active verification logs until retained. Delete slice scratch after delivery;
   preserve legacy Temp/moeclean. Node management remains authorized.
 - Qualified hardware/device custody, theft/power-loss/backup drills and continuous
@@ -89,11 +88,8 @@ receipt handoff for pending acceptance, backup or real-proof harness change.
 - No service delivery blocker remains. Server timeout followed by eventual
   journal completion has source review, without a direct timed acceptance case.
 - Disk streaming and physical custody remain separate persistence boundaries.
-- 2026-09-28, non-blocking: the separate archive node (`C:\Users\Bob\ergo-node`, `-Xmx6G`) leaves
-  ~1–2 of 16 GB free, so slices re-record from CI instead of local full/real-proof runs. Stopping it
-  (its stop script) or lowering `-Xmx` while idle restores local checks; it is outside this project.
 
 Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-28.
-Payer custody and reproof add the ordinary payment path, within that rounding;
-configuration adoption, transport/backup, multi-backing runtime,
-qualified deployment storage and mainnet remain.
+Payer custody, reproof, request exchange and backup/restoration complete the
+single-backing wallet path, within that rounding; v2 retirement, configuration
+adoption, multi-backing runtime, qualified deployment storage and mainnet remain.

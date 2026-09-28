@@ -62,8 +62,10 @@ it from canonical evidence. The
 public package retrieval, with independently verified receiver fulfillment and
 process retry/restart/fencing acceptance. Requests pass between wallets as
 canonical frames authenticated by an independently obtained digest; v3 needs
-no receiver endpoint. Cancellation/release, multi-backing payment, backup and
-physical qualification remain open; these capabilities do not yet retire the v2 checks.
+no receiver endpoint. A wallet restores holdings from its seed alone, or its
+complete local state from an encrypted offline handoff that freezes the source.
+Cancellation/release, multi-backing payment, continuous backup and physical
+qualification remain open; these capabilities do not yet retire the v2 checks.
 
 The frozen transparent implementation and its local pilot remain adversarial
 and integration evidence. The duplicate private-payment experiment is retired;
