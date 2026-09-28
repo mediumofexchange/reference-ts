@@ -10,12 +10,12 @@ import { decodeSnapshot } from "./commitments.js";
 import { configurationBytes, configurationHash, decodeConfiguration, type CandidateConfiguration } from "./configuration.js";
 import { faultObserver, type FaultResult } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
-import { classifyFrontier, classifyImports, importLimitsOf, type FrontierResult, type ImportContext, type ImportLimits, type ImportResult } from "./import-reader.js";
+import { classifyFrontier, classifyImports, importLimitsOf, type FrontierContext, type FrontierResult, type ImportContext, type ImportLimits, type ImportResult } from "./import-reader.js";
 import { decodeEvidenceDirectory, decodeEvidencePackage, type PackageLimits } from "./package.js";
 import { decodedTrails, type ReaderSelection, type SignedTerms } from "./reader.js";
 import { EvidenceRefusal, requireReplay, ScopeRequired } from "./refusals.js";
 import { checkpointScope } from "./scope-evidence.js";
-import { classifyScopes, type ScopeResult } from "./scope-reader.js";
+import { classifyScopeFrontier, classifyScopes, type ScopeResult } from "./scope-reader.js";
 import type { ProofCheck } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature } from "./terms.js";
 
@@ -123,6 +123,26 @@ function openPackage(bytes: Uint8Array, selected: ReaderSelection, options: Pack
  * package objects. Selection and receipt metadata supply no frontier authority. */
 export async function readSingleBackingFrontier(bytes: Uint8Array, signed: SignedTerms, judgingIndex: bigint,
   options: PackageReader): Promise<FrontierResult & FaultResult> {
+  const { context, directories, evidence, faults, venue } = openFrontier(bytes, signed, judgingIndex, options);
+  const result = await classifyFrontier(context, directories, venue, evidence);
+  return { ...result, ...faults.result() };
+}
+
+/** As readSingleBackingFrontier where the backing's ancestry may scope several
+ * backings: the scope reader descends it (C2.10.3–7) with the same refusals. */
+export async function readFrontier(bytes: Uint8Array, signed: SignedTerms, judgingIndex: bigint,
+  options: PackageReader): Promise<FrontierResult & FaultResult> {
+  const { context, directories, evidence, faults, venue } = openFrontier(bytes, signed, judgingIndex, options);
+  let result: FrontierResult;
+  try { result = await classifyFrontier(context, directories, venue, evidence); }
+  catch (error) {
+    if (!(error instanceof ScopeRequired)) throw error;
+    result = await classifyScopeFrontier(context, directories, venue, evidence);
+  }
+  return { ...result, ...faults.result() };
+}
+
+function openFrontier(bytes: Uint8Array, signed: SignedTerms, judgingIndex: bigint, options: PackageReader) {
   const { configuration: configurationIn, verifier: verifierIn, venue, reference: referenceIn, importLimits: limitsIn } = options;
   const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
   const verify = verifierIn.verify;
@@ -149,7 +169,6 @@ export async function readSingleBackingFrontier(bytes: Uint8Array, signed: Signe
   requireReplay(same(terms.venue, venueId), "VENUE_REFERENCE");
   const selection = { mode: "historical-fixture" as const, domain, venue: venueId, backing, judgingIndex };
   const faults = faultObserver(payloads(7), selection, verifier);
-  const result = await classifyFrontier({ selection, terms, verifier, reference, importLimits, faults },
-    directories, venue, { snapshots: payloads(4), trails: payloads(6) });
-  return { ...result, ...faults.result() };
+  const context: FrontierContext = { selection, terms, verifier, reference, importLimits, faults };
+  return { context, directories, evidence: { snapshots: payloads(4), trails: payloads(6) }, faults, venue };
 }

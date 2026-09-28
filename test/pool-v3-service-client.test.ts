@@ -90,8 +90,13 @@ describe("bounded v3 local service client", () => {
   });
 
   it("pins package routing without treating package metadata as a finality verdict", async () => {
-    const good = served(), url = await responding(packageReply(good));
+    const good = served(), paths: (string | undefined)[] = [];
+    const url = await endpoint((request, response) => {
+      paths.push(request.url); request.resume(); response.setHeader("content-type", "application/json"); response.end(JSON.stringify(packageReply(good)));
+    });
     expect(await new V3ServiceClient(url, TOKEN, expected()).package(backing)).toEqual(good);
+    // The holder names its own backing; a multi-backing service selects it.
+    expect(paths).toEqual([`/package?backing=${Buffer.from(backing).toString("hex")}`]);
     for (const field of ["domain", "venue", "operator", "backing"] as const) {
       const wrong = await responding(packageReply({ ...good, selection: { ...good.selection, [field]: b(26) } }));
       await expect(new V3ServiceClient(wrong, TOKEN, expected()).package(backing)).rejects.toThrow("wrong service package context");

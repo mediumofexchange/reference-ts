@@ -108,7 +108,7 @@ export class V3ServiceClient {
   /** Bounded evidence transport only. Metadata never selects the reader's
    * authority, judging index, finality, current balance or spendability. */
   async package(backing: Uint8Array): Promise<ServedPackage> {
-    const ownBacking = identifier(backing), result = decodeV3ServicePackage(await this.request("/package"));
+    const ownBacking = identifier(backing), result = decodeV3ServicePackage(await this.request(`/package?backing=${hex(ownBacking)}`));
     const s = result.selection;
     if (!same(s.domain, this.#domain) || !same(s.operator, this.#operator) || !same(s.venue, this.#venue) || !same(s.backing, ownBacking)) {
       throw new EncodingError("wrong service package context");

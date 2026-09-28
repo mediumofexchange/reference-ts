@@ -68,8 +68,11 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
       request.resume(); send(401, { code: "UNAUTHORIZED" }); return;
     }
     try {
-      if (request.method === "GET" && request.url === "/package") {
-        send(200, packageReply(await journal.package()), MAX_V3_SERVICE_RESPONSE_BYTES); return;
+      // A multi-backing scope serves each holder's backing by name (C2.10.3).
+      const served = request.method === "GET" ? /^\/package(?:\?backing=([0-9a-f]{64}))?$/.exec(request.url ?? "") : null;
+      if (served !== null) {
+        const backing = served[1] === undefined ? undefined : hexToBytes(served[1]);
+        send(200, packageReply(await journal.package(backing)), MAX_V3_SERVICE_RESPONSE_BYTES); return;
       }
       if (request.method === "POST" && request.url === "/commands") {
         const command = parseV3ServiceCommand(await readBody(request));

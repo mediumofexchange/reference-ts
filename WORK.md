@@ -3,18 +3,16 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 7 M1 (done, PR #39): the multi-backing reader in `src/`. Acceptance: local-check's
-scope groups pass through `src/` on both venues with identical verdicts, `readPackage`
-agrees with them, independent review, reports re-recorded. Next run: slice 7 M2.
+Slice 7 M2 (done, PR #40): the journal serves multi-backing scopes; `open` takes several
+terms; one `rescope` command changes scope at a committed boundary (C2.10.9;
+[decision](decisions/2026-09.md#2026-09-28--change-a-journals-scope-with-one-command-at-a-committed-boundary)).
+Accepted by `test/pool-v3-scope-store.test.ts` and real-proof `scope-store-check.mjs` on
+both venues (CI). Next run: M3 (Next 1).
 
 ## Status
-- `src/pool/v3/scope-reader.ts` replaces `scope-{replay,recovery}.mjs` (same reads,
-  charges and checks; resume identity kept). `readPackage` reads any scope, falling back
-  from the single-backing walk on `ScopeRequired`. `scope-runtime-check.mjs` compared
-  it with 23 multi-backing selections; `test/pool-v3-scope-reader.test.ts` is the
-  oracle-proof fixture. The replay report's verdict fields equal main's (only
-  proof-randomized hashes differ). An opus review found no blockers; its coverage and
-  doc findings are fixed, the refusal-evidence gap is Next 5(h).
+- Opus review: two blockers fixed (mixed silence clock refused; openings reserve the
+  reader's merge pass), plus non-first non-service reserve. Reports from CI run
+  36466553770: verdict fields equal main's; paths/leaf order/block ids vary per run.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
@@ -23,17 +21,18 @@ agrees with them, independent review, reports re-recorded. Next run: slice 7 M2.
 - Current reports: [conformance](docs/pool-v3-conformance-verification.json), [journal](docs/pool-v3-store-verification.json),
   [replay](docs/pool-v3-local-replay-verification.json), [recovery](docs/pool-v3-recovery-store-verification.json),
   [Ergo recovery](docs/pool-v3-recovery-store-ergo-verification.json),
-  [succession](docs/pool-v3-succession-store-verification.json) and
-  [Ergo succession](docs/pool-v3-succession-store-ergo-verification.json).
+  [succession](docs/pool-v3-succession-store-verification.json), [Ergo succession](docs/pool-v3-succession-store-ergo-verification.json),
+  [scope](docs/pool-v3-scope-store-verification.json) and [Ergo scope](docs/pool-v3-scope-store-ergo-verification.json).
   Live recovery is historical at
   [a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json),
   live journal at `2c6b20c`; header and mainnet reader reports at `6e4cea8`.
   Pool-v2 and its guides/reports: [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Multi-backing (slice 7, M1 reader done): M2 operator activation and succession of
-   multi-backing segments in the journal (`store.ts` opens single-backing only; its
-   reads move to `readPackage`); M3 two-backing testnet drill. Stop: no adoption.
+1. Multi-backing (slice 7) M3: the wallet reads multi-backing packages (`wallet-store.ts`
+   uses `readSingleBackingFrontier`; switch to `readFrontier`, scoped witness contexts),
+   then a two-backing testnet drill. Unimplemented: adding an original-term backing to a
+   live scope. Single-backing openings now over-reserve by |E| (conservative).
 2. Configuration adoption: provenance, ACIR identities/certificates, replay/import
    bounds, one-transaction condition and BN254 margin. Mainnet needs separate authority.
 3. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with
@@ -94,5 +93,5 @@ agrees with them, independent review, reports re-recorded. Next run: slice 7 M2.
   `scripts/pool/v3/{receipt-state,non-service}.mjs` and, after `local-replay.mjs` imports
   from `dist/pool/v3/{scope-evidence,terms}.js`, `scope-evidence.mjs`.
 
-Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-28 (the
-multi-backing reader is in; operator activation, configuration adoption, qualified storage, mainnet remain).
+Roughly **62% done / 38% remaining**, plausible range **52–72%**, reassessed 2026-09-28 (the
+multi-backing reader and journal are in; wallet multi-backing, configuration adoption, qualified storage, mainnet remain).
