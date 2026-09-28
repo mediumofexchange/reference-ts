@@ -112,9 +112,11 @@ The canonical segment may scope several backings (C2.10.2). Its history, spent
 set and roots are shared, so one package serves each scoped backing, but each
 view holds only that backing's notes. A statement spends and creates notes of
 the one backing named by the terms; the spend proves each input's path to that
-backing's own scope entry, and the term check compares the chain's current
-link with that entry's link, so a same-operator reappointment still ends the
-segment's term. After a split or rejoin, the notes of each backing are found in
+backing's own scope entry. One scoped backing's ended term ends the segment for
+all of them (C2.10.9), so preparation compares every scoped backing's current
+link and operator with its entry (the scope reader reports each chain); a
+same-operator reappointment also ends the term. Forced publications count past
+the backing's own adoption index, since a scope opening merges several. After a split or rejoin, the notes of each backing are found in
 the segments they were created in, and pay under those original roots.
 
 `prepare(alias, { request, value, fee? }, package, signedTerms, prove)` checks
@@ -310,7 +312,8 @@ successor segment is covered by the succession check.
 That harness hands the request object across directly; the request frame and
 digest are oracle-tested. A human authentication channel is not qualified.
 `test/pool-v3-scope-wallet.test.ts` covers two backings in one scope: separate
-views and payments of each from one package, reproof of each backing's pending
+views and payments of each from one package, both refused once either term
+ends, an adopted and withdrawn demand read once at a split opening, reproof of each backing's pending
 payment into its own segment after a split, a split package that does not
 establish the other backing, payment under imported roots after a rejoin, a
 same-operator reappointment ending the segment's term, and one silence clock

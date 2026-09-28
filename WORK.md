@@ -13,7 +13,10 @@ real-proof wallet payment in the rejoined scope of `scope-store-check.mjs` on bo
 drill runs after adoption ([decision](decisions/2026-09.md#2026-09-28--pay-one-backing-in-any-scope-and-run-the-live-two-backing-drill-after-adoption)).
 
 ## Status
-- M2 done (PR #40). M3 in progress.
+- M3 on PR #42. Opus review: a blocker (one ended scoped term must end admission for
+  every scoped backing; the scope reader now returns `scopeChains`) and a should-fix
+  (force past the backing's own adoption index at scope openings) fixed in 2c95f68
+  and read back with no blockers. Reports re-recorded from that PR's CI artifact.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
