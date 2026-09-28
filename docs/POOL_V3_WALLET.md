@@ -65,7 +65,7 @@ The existing real-proof `scripts/pool/v3/store-check.mjs` now obtains the paymen
 request from the receiver wallet, gives the payer only public output bytes,
 proves the four-output payment, and fulfills from independently replayed public
 evidence. The source-bound [journal report](pool-v3-store-verification.json)
-records that acceptance once refreshed. Payer inputs, fee/change requests and
+records that acceptance. Payer inputs, fee/change requests and
 proof preparation in this fixture still belong to the harness.
 
 Authenticated request transport, payer pending statements/reservations, automatic

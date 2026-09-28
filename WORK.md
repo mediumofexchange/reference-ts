@@ -3,16 +3,15 @@
 Updated: 2026-09-28
 
 ## Goal
-Active: first v3 wallet capability on `feat/v3-wallet-receive`: durable exact
-receiver requests through independently verified final fulfillment (C4.1–5).
-Acceptance: persist random request identifiers before disclosure, exact retry
-after reopen, no secret in payer requests, exact capsule/output matching,
-current canonical replay including recovery force, duplicate-credit refusal,
-owner fencing and durable evidence/fulfillment before acknowledgment. Port
-hostile v2 receiver cases and exercise the real-proof journal flow. This is a
-local library capability; authenticated transport, payer reservations/selection,
-backup/restoration and v2 retirement remain later slice-6 milestones. Stop at
-verified receiver acceptance; no live operation or physical-custody claim.
+The first v3 receiver capability (C4.1–5) is accepted: durable exact requests
+through independently verified final fulfillment. Delivery is
+[PR #29](https://github.com/mediumofexchange/reference-ts/pull/29), implementation
+`ce888e7` from `9e7d430`. Random request identifiers persist before disclosure;
+current canonical replay checks exact output/capsule and recovery spend/lock
+effects before durable once-only acceptance. Exact request retry and historical
+fulfillment lookup survive reopening. This is a local library capability;
+authenticated transport, payer custody, backup/restoration and v2 retirement
+remain later slice-6 milestones. Stop before those components or live operation.
 
 ## Status
 - Persistence slice 5 merged as `9e7d430` (PR #28); all seven post-merge jobs
@@ -22,10 +21,20 @@ verified receiver acceptance; no live operation or physical-custody claim.
   same-index changes. Final fulfillment includes current forced spends and locks.
 - Eleven focused receiver tests, typecheck, build and four abrupt COMMIT-boundary
   crash cases passed. Independent integrated adversarial review found no blocker.
-  Real-proof integration added; full CI and real-proof execution remain pending.
+- All seven full reference and v2/v3 proof jobs passed for `ce888e7` in
+  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36379901554),
+  including Node 20/24 Linux and Node 24 Windows full checks. The real-proof
+  four-output payment uses the receiver's saved request and final fulfillment.
+- The journal report is refreshed from the passing Linux artifact; all six
+  current runtime reports' source bindings match. Final changes retain evidence
+  and documentation only; runtime/check inputs reuse the passing baseline.
+  Inspect PR #29 for merge revision and post-merge CI when resuming.
 - V2 request/transport bytes remain frozen. This receiver does not retire them.
 
 ## Evidence
+- Receiver API, caller obligations and test boundaries: [guide](docs/POOL_V3_WALLET.md).
+  Local plaintext custody, one active copy, authenticated request delivery and
+  independent evidence retention are preconditions; no physical-storage claim.
 - Design, rejected alternatives, review correction and scalability plan:
   [persistence decision](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox).
   Usage/limits: [venue guide](docs/ERGO_VENUE_PROFILE.md#durable-reference-view-and-publisher).
@@ -45,12 +54,12 @@ verified receiver acceptance; no live operation or physical-custody claim.
   [a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json),
   prior live journal/publisher at `2c6b20c`. Header and real-mainnet reader reports
   are historical at `6e4cea8` after their bound modules changed.
-- Slice 4 merged at `6e4cea8`; all seven post-merge jobs passed in `36349234692`.
 
 ## Next
-1. Finish receiver acceptance/review/delivery, then continue slice 6: authenticated
+1. Continue slice 6: authenticated
    requests, payer reservations and exact pending statements, four-output selection
    with fees/funding disclosure, service, holder recovery, restoration and backup.
+   Stay with this instance for the next adjacent wallet/service capability.
 2. Retire v2 only after its wallet/service cases pass on v3; then
    multi-backing including compact fault orchestration (slice 7).
 3. Configuration adoption: provenance, ACIR identities/certificates, replay/import
@@ -79,7 +88,7 @@ verified receiver acceptance; no live operation or physical-custody claim.
   recovery need separate provisioning authority. Configuration/mainnet remain disabled.
 
 ## Open questions
-- Full CI/real-proof acceptance and delivery remain pending.
+- No unresolved receiver review blocker; full wallet/service migration remains open.
 - Disk streaming and physical custody remain separate persistence boundaries.
 
 Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-27.
