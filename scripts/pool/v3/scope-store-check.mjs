@@ -1,6 +1,7 @@
-// Multi-backing runtime journal acceptance with actual holder proofs (slice 7 M2):
+// Multi-backing runtime journal acceptance with actual holder proofs (slice 7 M2-3):
 // one segment over two backings, a split at one backing's term end, and an
-// elective rejoin after the witnessed tail, each read per backing by a fresh process.
+// elective rejoin after the witnessed tail, each read per backing by a fresh process;
+// a wallet pays in the rejoined scope from a note imported from the split segment.
 // --ergo uses the actual publisher and a synthetic mining supplier. No live mode.
 // --worker independently reconstructs the venue and reads public evidence only.
 import assert from "node:assert/strict";
@@ -21,13 +22,15 @@ import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
 import { readPackage, PACKAGE_LIMITS } from "../../../dist/pool/v3/package-reader.js";
 import { decodeReceipt } from "../../../dist/pool/v3/commitments.js";
 import { decodeEvidencePackage } from "../../../dist/pool/v3/package.js";
-import { decodeSegmentHeader } from "../../../dist/pool/v3/headers.js";
+import { decodeSegmentHeader, segmentIdentity } from "../../../dist/pool/v3/headers.js";
 import { TRAIL_LIMITS } from "../../../dist/pool/v3/reader.js";
 import { decodeTrail } from "../../../dist/pool/v3/trail.js";
 import { openV3Prover } from "../../../dist/pool/v3/prover.js";
 import { V3OperatorJournal, V3StoreError } from "../../../dist/pool/v3/store.js";
+import { V3Wallet } from "../../../dist/pool/v3/wallet-store.js";
 import { authorizeIssue, issueTask, spendTask } from "../../../dist/pool/v3/witness.js";
-import { encodeRecord } from "../../../dist/pool/v3/records.js";
+import { decodeRecord, encodeRecord } from "../../../dist/pool/v3/records.js";
+import { identifierOf } from "../../../dist/pool/field.js";
 import { PROOF_OPTIONS } from "../../../dist/pool/proof-verifier.js";
 import { field } from "../fixtures.mjs";
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys } from "./candidate.mjs";
@@ -80,7 +83,7 @@ async function acceptance(ergo) {
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
   const hashes = sourceHashes(sources);
-  let api, prover, completed = false;
+  let api, prover, completed = false; const wallets = [];
   try {
     const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
     const configuration = candidateConfiguration(manifest, codec), domain = codec.configurationHash(configuration);
@@ -117,6 +120,9 @@ async function acceptance(ergo) {
     const create = (name, secret) => { const journal = new V3OperatorJournal(join(build, `${name}.db`),
       { configuration, secret, venue, reference, verifier: prover.verifier }); journals.push(journal); return journal; };
     const a = create("a", aSecret), successor = create("b", bSecret);
+    const wallet = name => { const opened = new V3Wallet(join(build, `${name}.db`), { configuration, verifier: prover.verifier, venue, reference });
+      wallets.push(opened); return opened; };
+    const payer = wallet("payer"), receiver = wallet("receiver");
     const served = async (journal, backing) => { const value = await journal.package(backing.name); packages.push(value.package.length); return {
       package: value.package, selection: { ...value.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
       venue: ergo ? { tip: supplier.tip } : venue.export() }; };
@@ -200,7 +206,8 @@ async function acceptance(ergo) {
       const toA = await replace(aSecret, toB.link); await force(toA);
       await refusal(successor.commit("ended-b"), "STALE");
       const evidence = (await served(successor, x)).package, split = await contextOf(a, y);
-      await a.submit(encodeRecord(authorizeIssue(await prove(issueTask(split, output(y, b(21), 35, 5n)), "A issue y 5 before rejoin"), y.issuer)));
+      const funding = payer.request("fund-y", y.name, 5n);
+      await a.submit(encodeRecord(authorizeIssue(await prove(issueTask(split, funding), "A issue y 5 to the wallet before rejoin"), y.issuer)));
       const rejoin = { take: [x.signed], keep: [y.name], evidence };
       await refusal(a.rescope("rejoin", rejoin), "STALE", "TAIL");
       await checkpoint(a, "issued-y");
@@ -215,21 +222,39 @@ async function acceptance(ergo) {
       const spend = await prove(spendTask(joined, [input(paidX[0], treeX, 0n), input(paidY[0], treeY, 0n)], mixed), "A joined mixed spend");
       assert.equal(decodeReceipt(await a.submit(encodeRecord(spend))).position, 1n);
       await checkpoint(a, "mixed");
+      assert(summary(await read(await served(a, y))).position === "1");
+    });
+    await test("a wallet restores its imported y note from the rejoined package and pays a request with a real proof in that scope", async () => {
+      const joined = await contextOf(a, y), held = (await served(a, y)).package;
+      const before = await payer.sync(held, y.signed);
+      assert.deepEqual(before.holdings.map(h => [h.value, h.status]), [[5n, "available"]]);
+      const invoice = receiver.request("invoice", y.name, 3n);
+      const payment = await payer.prepare("shop", { request: invoice, value: 3n }, held, y.signed, task => prove(task, "wallet y spend in joined scope"));
+      const p = decodeRecord(payment.record).publicInputs;
+      assert.equal(hex(identifierOf(p[2], p[3])), hex(segmentIdentity(joined.header)));
+      const receipt = await payer.submit("shop", { submit: async bytes => decodeReceipt(await a.submit(bytes)) });
+      assert.equal(receipt.position, 2n);
+      await checkpoint(a, "wallet");
+      const paid = (await served(a, y)).package;
+      assert.equal((await receiver.fulfill("invoice", paid, y.signed)).request.cm, invoice.cm);
+      const after = await payer.sync(paid, y.signed);
+      assert.deepEqual(after.holdings.map(h => [h.value, h.status]), [[2n, "available"]]);
+      assert.equal(payer.payment("shop").status, "final");
       final = await both(a, [10n, 25n]);
-      assert(final.every(result => result.position === "1" && result.carrying.every(item => item.class === "valid")));
+      assert(final.every(result => result.position === "2" && result.carrying.every(item => item.class === "valid")));
     });
     checkCandidateSources(manifest); assert.deepEqual(sourceHashes(sources), hashes, "sources changed during acceptance");
     assert(Math.max(...packages) + 360 <= Number(PACKAGE_LIMITS.maxBytes));
     const report = { status: "passed", specification: V3_SPECIFICATION,
       evidence: ergo ? "synthetic-ergo-runtime-real-proofs" : "local-runtime-real-proofs",
-      limits: ["candidate configuration only", "two backings, one operator per term", "no live broadcasts",
+      limits: ["candidate configuration only", "two backings, one operator per term", "one wallet payment, in the rejoined scope", "no live broadcasts",
         "no persistence or configuration adoption claim", "empty recovery blocks; forced recovery over a scope is oracle-proof only"],
       checks, proofs, transactions, maxPackageBytes: Math.max(...packages), receiptHeadroomBytes: 360,
       final: { x: final[0], y: final[1] }, elapsedMs: Math.round(performance.now() - started), sourceSha256Lf: hashes };
     writeFileSync(join(root, "docs", `pool-v3-scope-store${ergo ? "-ergo" : ""}-verification.json`), JSON.stringify(report, null, 2) + "\n");
     process.stdout.write(JSON.stringify(report, null, 2) + "\n"); completed = true;
   } finally {
-    for (const journal of journals) journal.close(); await prover?.close(); await api?.destroy();
+    for (const opened of [...journals, ...wallets]) opened.close(); await prover?.close(); await api?.destroy();
     if (completed) { assert(build.startsWith(scratch + sep)); rmSync(build, { recursive: true, force: true }); }
     else process.stderr.write(`Scope acceptance scratch retained after failure: ${build}\n`);
   }
