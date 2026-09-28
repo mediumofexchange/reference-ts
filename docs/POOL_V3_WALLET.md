@@ -63,13 +63,14 @@ physical power-loss or qualified-storage evidence.
 
 The existing real-proof `scripts/pool/v3/store-check.mjs` now obtains the payment
 request from the receiver wallet, gives the payer only public output bytes,
-proves the four-output payment, and fulfills from independently replayed public
-evidence. The source-bound [journal report](pool-v3-store-verification.json)
+proves the four-output payment, submits it through the [local service](POOL_V3_SERVICE.md),
+and fulfills from independently replayed public evidence downloaded over HTTP.
+The source-bound [journal report](pool-v3-store-verification.json)
 records that acceptance. Payer inputs, fee/change requests and
 proof preparation in this fixture still belong to the harness.
 
 Authenticated request transport, payer pending statements/reservations, automatic
-four-output selection and fee disclosure, service integration, holder recovery,
+four-output selection and fee disclosure, holder recovery,
 seed restoration and encrypted backup remain later slice-6 milestones. Existing
 v2 wallet/service code and checks remain until all their replacement cases pass.
 This library establishes no mainnet readiness or physical custody qualification.

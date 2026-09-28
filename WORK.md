@@ -3,35 +3,29 @@
 Updated: 2026-09-28
 
 ## Goal
-The first v3 receiver capability (C4.1–5) is accepted: durable exact requests
-through independently verified final fulfillment. Delivery is
-[PR #29](https://github.com/mediumofexchange/reference-ts/pull/29), implementation
-`ce888e7` from `9e7d430`. Random request identifiers persist before disclosure;
-current canonical replay checks exact output/capsule and recovery spend/lock
-effects before durable once-only acceptance. Exact request retry and historical
-fulfillment lookup survive reopening. This is a local library capability;
-authenticated transport, payer custody, backup/restoration and v2 retirement
-remain later slice-6 milestones. Stop before those components or live operation.
+Continue slice 6 after the accepted loopback v3 service: authenticated receiver
+request delivery, payer custody and complete ordinary payment. The service now
+transports submit/commit/publish and published evidence over the existing journal;
+independent receiver replay establishes fulfillment. Payer reservations, receiver
+invitations, restoration, public deployment and v2 retirement remain outside this
+delivered capability. No normative change or companion branch.
 
 ## Status
-- Persistence slice 5 merged as `9e7d430` (PR #28); all seven post-merge jobs
-  passed in [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36352595201).
-- Receiver design reviewed; no specification change or companion branch.
-  The wallet rechecks every used venue range before its durable write, including
-  same-index changes. Final fulfillment includes current forced spends and locks.
-- Eleven focused receiver tests, typecheck, build and four abrupt COMMIT-boundary
-  crash cases passed. Independent integrated adversarial review found no blocker.
-- All seven full reference and v2/v3 proof jobs passed for `ce888e7` in
-  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36379901554),
-  including Node 20/24 Linux and Node 24 Windows full checks. The real-proof
-  four-output payment uses the receiver's saved request and final fulfillment.
-- The journal report is refreshed from the passing Linux artifact; all six
-  current runtime reports' source bindings match. Final changes retain evidence
-  and documentation only; runtime/check inputs reuse the passing baseline.
-  Inspect PR #29 for merge revision and post-merge CI when resuming.
-- V2 request/transport bytes remain frozen. This receiver does not retire them.
+- Service PR #30: implementation `b0622b1`, final timeout assertion `3ceb307`.
+  All seven jobs passed in [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36383083132):
+  Node 20/24 checks and Linux/Windows real-proof suites. Independent design and
+  integrated adversarial review found no blockers. Focused tests and separate
+  processes cover changed-proof retry, lost completed reply, restart and fencing.
+- The delivery commit changes only this handoff, specification links and the
+  retained Linux journal report; it reuses that unchanged runtime/test baseline.
+  All six current reports match their bound sources. No local job remains.
+  Inspect the latest main CI on resume; delivery does not preclaim its result.
+  V2 modules and wire profiles remain frozen.
 
 ## Evidence
+- Service API, independent authority and interrupted-operation limits:
+  [guide](docs/POOL_V3_SERVICE.md). Separate-process acceptance uses oracle proofs;
+  real-proof HTTP acceptance passed through the journal harness on both platforms.
 - Receiver API, caller obligations and test boundaries: [guide](docs/POOL_V3_WALLET.md).
   Local plaintext custody, one active copy, authenticated request delivery and
   independent evidence retention are preconditions; no physical-storage claim.
@@ -56,10 +50,11 @@ remain later slice-6 milestones. Stop before those components or live operation.
   are historical at `6e4cea8` after their bound modules changed.
 
 ## Next
-1. Continue slice 6: authenticated
-   requests, payer reservations and exact pending statements, four-output selection
-   with fees/funding disclosure, service, holder recovery, restoration and backup.
-   Stay with this instance for the next adjacent wallet/service capability.
+1. Continue slice 6: authenticated receiver requests, payer reservations and exact
+   pending statements, four-output selection with fees/funding disclosure, holder
+   recovery, restoration and backup. Start with the authenticated request and
+   saved payer-statement boundary; port relevant frozen v2 cases.
+   Stay with this instance for the next adjacent payer/receiver capability.
 2. Retire v2 only after its wallet/service cases pass on v3; then
    multi-backing including compact fault orchestration (slice 7).
 3. Configuration adoption: provenance, ACIR identities/certificates, replay/import
@@ -88,7 +83,8 @@ remain later slice-6 milestones. Stop before those components or live operation.
   recovery need separate provisioning authority. Configuration/mainnet remain disabled.
 
 ## Open questions
-- No unresolved receiver review blocker; full wallet/service migration remains open.
+- No service delivery blocker remains. Server timeout followed by eventual
+  journal completion has source review, without a direct timed acceptance case.
 - Disk streaming and physical custody remain separate persistence boundaries.
 
 Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-27.
