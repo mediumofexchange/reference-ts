@@ -460,6 +460,17 @@ describe("a publication is sent once, and publications chain", () => {
     expect(sent).toEqual([`mute ${hex(last.id)}`]);
   });
 
+  it("walks for a supplier one of whose queries says it lacks the child, and stops at a parent it refuses", async () => {
+    const n = funded([10_000_000n]), m = node("without the funding box");
+    const partial: ErgoPublishingSupplier = { name: "partial", unspentBoxes: async () => [], hasBox: async () => { throw new Error("400"); },
+      hasTransaction: id => m.hasTransaction(id), submit: (s, id) => m.submit(s, id) };
+    const p = publisher([n, partial]), ids: string[] = [];
+    for (let i = 1; i <= 3; i++) ids.push(hex((await p.publish(request(new Uint8Array(136).fill(i)))).id));
+    // Each attempt reaches the first transaction through its descendants, and m refuses it: nothing built on it is sent.
+    expect(m.submitted).toEqual([ids[0], ids[0], ids[0]]);
+    expect(n.pool).toHaveLength(3);
+  });
+
   it("sends a dropped transaction again before the one that spends its change", async () => {
     const funding = plainBox(TREE, 10_000_000n, HEIGHT - 5n), n = node();
     n.fund(funding);

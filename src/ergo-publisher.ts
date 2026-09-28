@@ -670,14 +670,15 @@ export class ErgoPublisher {
 
   /** Send to `supplier` after the unsettled publications whose change it spends and that supplier lacks. A
    * supplier holding a transaction holds its parents, so its ancestry is walked only where it answers that it
-   * lacks the child; one that fails to answer is sent the transaction alone, so it cannot stall a walk. */
+   * lacks the child; one that fails to answer is sent the transaction alone, so it cannot stall a walk, and a
+   * parent it does not take ends the walk there, since the child spends that parent's change. */
   async #sendTo(supplier: ErgoPublishingSupplier, pending: Pending, visited: Set<string>): Promise<boolean> {
     visited.add(pending.key);
     const shown = await this.#shown(supplier, pending);
     if (shown === true) return true;
     if (shown === false) for (const input of pending.publication.inputs) {
       const parent = this.#byChange.get(bytesToHex(input));
-      if (parent !== undefined && !visited.has(parent.key)) await this.#sendTo(supplier, parent, visited);
+      if (parent !== undefined && !visited.has(parent.key) && !await this.#sendTo(supplier, parent, visited)) return false;
     }
     let guardError: unknown;
     const answer = await this.#call(() => {
@@ -690,13 +691,14 @@ export class ErgoPublisher {
   }
 
   /** Whether `supplier` shows the record box or holds the transaction (it is pending or it landed there, and
-   * its inputs, spent by it, are not gone); undefined where it fails to answer. */
+   * its inputs, spent by it, are not gone); false where either query answers that it lacks it, undefined
+   * where neither answers. */
   async #shown(supplier: ErgoPublishingSupplier, pending: Pending): Promise<boolean | undefined> {
     const box = await this.#call(() => supplier.hasBox(copyBytes(pending.publication.recordBox)));
     if (box.ok && box.value === true) return true;
     const held = await this.#call(() => supplier.hasTransaction(copyBytes(pending.publication.id)));
     if (held.ok && held.value === true) return true;
-    return box.ok && held.ok ? false : undefined;
+    return box.ok || held.ok ? false : undefined;
   }
 
   /**
