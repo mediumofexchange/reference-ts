@@ -359,7 +359,9 @@ segment and change scope with one `rescope` command (take successor terms, keep 
 backings, drop the rest; an elective change waits for the witnessed tail); silence
 return keeps the whole scope. `npm run check:pool:v3-scope` runs the two-backing
 split/rejoin with real proofs and fresh per-backing readers on local and synthetic
-Ergo venues (reports pending CI); a two-backing testnet drill is M3.
+Ergo venues ([local](pool-v3-scope-store-verification.json),
+[synthetic Ergo](pool-v3-scope-store-ergo-verification.json)); a two-backing testnet
+drill is M3.
 
 Slice 5 adds the [durable venue and journal-owned publisher](ERGO_VENUE_PROFILE.md#durable-reference-view-and-publisher).
 Synthetic fresh-process crash checks reproduce ranges and exact publication retries;
