@@ -3,7 +3,7 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 6b delivered on branch `feat/v3-payer` (no companion branch or normative
+Slice 6b delivered by PR #31 from `feat/v3-payer` (no companion branch or normative
 change): one `V3Wallet` seed receives and pays. It restores single-backing
 holdings from the independently read current frontier (C4.6 seed scan,
 `holdings.ts`), selects one note or the least-total pair, pads, adds own
@@ -17,7 +17,7 @@ after lapse, multi-backing, request transport, backup or deployment claim.
 
 ## Status
 - Commits `74f7a89` (wallet), `9ea0feb` (review fixes), `886cd1e` (concurrent
-  retry fix) plus the delivery commit. Independent adversarial review found two
+  retry fix), `b9ea5d3` (harness, docs). Independent adversarial review found two
   major issues (finality across succession, alias retry with another order) and
   five minor ones. All were fixed and read back, with regression tests that fail
   on the old code where deterministic.
@@ -26,9 +26,13 @@ after lapse, multi-backing, request transport, backup or deployment claim.
   paid through the wallet over HTTP locally (14 checks, 5 proofs, before the last
   retry fix). Its fresh-process worker is now asynchronous: `spawnSync` blocked the
   in-process service, so an overdue keep-alive close raced the next fetch.
-- The local re-record/`npm run check` chain was reaped under host memory pressure
-  (2.3 of 15.9 GB free); the journal report is retained from this PR's Linux CI
-  artifact, as before. Inspect the latest main CI on resume. V2 remains frozen.
+- PR #31 at `b9ea5d3`: all seven jobs passed in
+  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36389184603)
+  (Node 20/24 checks, v2 pool and v3 real-proof suites on Linux/Windows). A local
+  re-record/`npm run check` chain was reaped under host memory pressure (2.3 of
+  15.9 GB free), so the journal report is that run's Linux `--ergo` artifact; all
+  six current reports match their bound sources. The delivery commit changes
+  only this handoff and that report. V2 remains frozen.
 
 ## Evidence
 - Wallet API, custody preconditions and payment limits: [guide](docs/POOL_V3_WALLET.md).
