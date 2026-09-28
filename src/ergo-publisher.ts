@@ -41,7 +41,7 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex, hexToBytes, randomBytes } from "@noble/hashes/utils.js";
-import { compareBytes, copyBytes } from "./bytes.js";
+import { compareBytes, copyBytes, EncodingError } from "./bytes.js";
 import { MINER_FEE_TREE_HEX } from "./ergo-profile.js";
 import { MAX_RANGE_RECORD_BYTES } from "./record-range.js";
 import { parseNodeJson, type NodeJson } from "./ergo-supplier.js";
@@ -775,7 +775,7 @@ function ownRequest(request: ErgoRecordRequest): ErgoRecordRequest {
   const { location, subject, record, height, chunked } = request;
   if ((chunked !== undefined && typeof chunked !== "boolean") || !isRealBytes(location) || !isRealBytes(subject) || subject.length !== 32 ||
       !isRealBytes(record) || record.length > (chunked ? MAX_RANGE_RECORD_BYTES[4] : MAX_U16) ||
-      typeof height !== "bigint" || height < 0n || height > 0xffff_ffffn) throw new VenueError("invalid Ergo record request");
+      typeof height !== "bigint" || height < 0n || height > 0xffff_ffffn) throw new EncodingError("invalid Ergo record request");
   return Object.freeze({ location: copyBytes(location), subject: copyBytes(subject), record: copyBytes(record), height,
     ...(chunked === undefined ? {} : { chunked }) });
 }

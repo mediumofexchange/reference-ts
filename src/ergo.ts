@@ -523,7 +523,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
    * carried without judging their signatures or contents (venue-ergo §6).
    * Kind 4 is one adjacent same-subject output run in that same transaction.
    */
-  publishRecord(kind: RecordKind, subject: Uint8Array, record: Uint8Array): Promise<void> {
+  async publishRecord(kind: RecordKind, subject: Uint8Array, record: Uint8Array): Promise<void> {
     if (kind !== 1 && kind !== 2 && kind !== 3 && kind !== 4) throw new EncodingError("invalid Ergo record kind");
     const length = byteLength(record);
     if (byteLength(subject) !== 32 || (kind === 4 ? length > MAX_RANGE_RECORD_BYTES[4] : length !== MAX_RANGE_RECORD_BYTES[kind])) {
@@ -534,8 +534,8 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     this.requireSnapshot();
     const request = { location: this.profile.scripts[kind], subject: ownSubject, record: ownRecord, height: this.store.tip().height, chunked: kind === 4 };
     // Held already, as when a sync settled it after the caller last read: nothing to send.
-    if (this.holds(request)) return Promise.resolve();
-    return this.publisher.publish(request).then(() => {});
+    if (this.holds(request)) return;
+    await this.publisher.publish(request);
   }
 
   /** Whether the snapshot holds this exact record at its location under its subject. */

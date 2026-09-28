@@ -217,11 +217,11 @@ describe("a publication is one record in the profile's grammar", () => {
     await expect(publisher([node()]).publish(request())).rejects.toThrow(/no supplier offered/);
   });
 
-  it("refuses a record that does not fit one box, and malformed requests", async () => {
+  it("refuses a record that does not fit one box, and malformed requests as the caller's errors", async () => {
     const p = publisher([funded([100_000_000_000n])]);
     await expect(p.publish(request(new Uint8Array(4_100)))).rejects.toThrow(/does not fit one box/);
-    await expect(p.publish({ ...request(), subject: new Uint8Array(31) })).rejects.toThrow(VenueError);
-    await expect(p.publish({ ...request(), height: -1n })).rejects.toThrow(VenueError);
+    await expect(p.publish({ ...request(), subject: new Uint8Array(31) })).rejects.toThrow(EncodingError);
+    await expect(p.publish({ ...request(), height: -1n })).rejects.toThrow(EncodingError);
   });
 });
 
@@ -301,7 +301,7 @@ describe("kind-4 publications are one adjacent output run", () => {
 
   it("bounds and owns requests before supplier calls, and carries an empty raw record without interpreting it", async () => {
     const n = funded([100_000_000n]), p = publisher([n]);
-    await expect(p.publish(publicationRequest(new Uint8Array(MAX_RANGE_RECORD_BYTES[4] + 1)))).rejects.toThrow(/invalid Ergo record request/);
+    await expect(p.publish(publicationRequest(new Uint8Array(MAX_RANGE_RECORD_BYTES[4] + 1)))).rejects.toThrow(EncodingError);
     await expect(p.publish({ ...publicationRequest(RECORD), chunked: 1 } as never)).rejects.toThrow(/invalid Ergo record request/);
     const shared = new Uint8Array(new SharedArrayBuffer(10));
     await expect(p.publish(publicationRequest(shared))).rejects.toThrow(/invalid Ergo record request/);
@@ -613,24 +613,24 @@ describe("the view publishes through its wallet and holds only what it reads", (
     const network = new Network();
     network.mine(5);
     const v = await view(network);
-    expect(() => v.publishRecord(4, SUBJECT, new Uint8Array(MAX_RANGE_RECORD_BYTES[4] + 1))).toThrow(/record length/);
-    expect(() => v.publishRecord(0 as RecordKind, SUBJECT, RECORD)).toThrow(EncodingError);
-    expect(() => v.publishRecord(1, new Uint8Array(31), RECORD)).toThrow(/record length/);
+    await expect(v.publishRecord(4, SUBJECT, new Uint8Array(MAX_RANGE_RECORD_BYTES[4] + 1))).rejects.toThrow(/record length/);
+    await expect(v.publishRecord(0 as RecordKind, SUBJECT, RECORD)).rejects.toThrow(EncodingError);
+    await expect(v.publishRecord(1, new Uint8Array(31), RECORD)).rejects.toThrow(/record length/);
     for (const [kind, length] of [[1, 136], [2, 233], [3, 96]] as const) {
-      expect(() => v.publishRecord(kind, SUBJECT, new Uint8Array(length - 1))).toThrow(/record length/);
-      expect(() => v.publishRecord(kind, SUBJECT, new Uint8Array(length + 1))).toThrow(/record length/);
+      await expect(v.publishRecord(kind, SUBJECT, new Uint8Array(length - 1))).rejects.toThrow(/record length/);
+      await expect(v.publishRecord(kind, SUBJECT, new Uint8Array(length + 1))).rejects.toThrow(/record length/);
     }
-    expect(() => v.publishRecord(1, SUBJECT, new Uint8Array(new SharedArrayBuffer(136)))).toThrow(/shared byte array/);
-    expect(() => v.publishRecord(1, SUBJECT, Object.create(Uint8Array.prototype) as Uint8Array)).toThrow(/not a byte array/);
+    await expect(v.publishRecord(1, SUBJECT, new Uint8Array(new SharedArrayBuffer(136)))).rejects.toThrow(/shared byte array/);
+    await expect(v.publishRecord(1, SUBJECT, Object.create(Uint8Array.prototype) as Uint8Array)).rejects.toThrow(/not a byte array/);
     expect(network.node.submitted).toEqual([]);
     const readOnly = await view(network, false);
-    expect(() => readOnly.publishRecord(1, SUBJECT, RECORD)).toThrow(/no publisher/);
+    await expect(readOnly.publishRecord(1, SUBJECT, RECORD)).rejects.toThrow(/no publisher/);
   });
 
   it("refuses to publish before a settled snapshot", async () => {
     const network = new Network();
     const unsynced = new ErgoVenue(PROFILE, chain.context, {}, publisher([network.node]));
-    expect(() => unsynced.publishRecord(1, KEYS.operator, encodeCommitment(commitmentOf(1n, 1)))).toThrow(/no settled snapshot/);
+    await expect(unsynced.publishRecord(1, KEYS.operator, encodeCommitment(commitmentOf(1n, 1)))).rejects.toThrow(/no settled snapshot/);
     expect(network.node.submitted).toHaveLength(0);
   });
 
