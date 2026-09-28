@@ -1,34 +1,29 @@
 # Current work
 
-Updated: 2026-09-27
+Updated: 2026-09-28
 
 ## Goal
-Slice 5's bounded process persistence acceptance is complete; delivery is
-[PR #28](https://github.com/mediumofexchange/reference-ts/pull/28), implementation
-`f8fb78a` from `6e4cea8`. Synthetic restarts reproduce exact witnessed ranges,
-continue sync and preserve exact signed publication retries in the owning outbox.
-Complete section evidence retains non-held records; deep-side pruning preserves
-budget-stopped fork continuation and durable finality failure. Independent review
-passed. Stop before wallet redesign or live runs.
+Active: first v3 wallet capability on `feat/v3-wallet-receive`: durable exact
+receiver requests through independently verified final fulfillment (C4.1–5).
+Acceptance: persist random request identifiers before disclosure, exact retry
+after reopen, no secret in payer requests, exact capsule/output matching,
+current canonical replay including recovery force, duplicate-credit refusal,
+owner fencing and durable evidence/fulfillment before acknowledgment. Port
+hostile v2 receiver cases and exercise the real-proof journal flow. This is a
+local library capability; authenticated transport, payer reservations/selection,
+backup/restoration and v2 retirement remain later slice-6 milestones. Stop at
+verified receiver acceptance; no live operation or physical-custody claim.
 
 ## Status
-- Runtime implemented: optional `ErgoVenueJournal`, revalidated headers/sections,
-  durable pin/failure, protected incomplete forks, publisher full-state persistence
-  via `V3OperatorJournal.publisherPersistence()` and one-time venue attachment.
-- Independent design/integrated review passed after fixes for incomplete fork
-  pruning, raw-header/ID handling and reuse of one outbox adapter by two publishers.
-  No unresolved review blocker. No specification change or companion branch.
-- All seven full reference and v2/v3 proof jobs passed for `f8fb78a` in
-  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36351105871).
-  This includes Node 20/24 Linux and Node 24 Windows full checks. Clean CI
-  supersedes a local Vitest RPC timeout; the redundant local full run was stopped.
-- `npm run check:ergo-persistence` passed 11 fresh-process synthetic stages:
-  mid-sync, before/after commit, lost submission reply/exact retry and terminal
-  failure. No proof, physical power-loss or live-operation claim.
-- Six affected reports are refreshed from the passing Linux artifact; all their
-  source bindings match. Final changes only retain reports and correct documentation;
-  runtime/check inputs reuse the passing baseline. No active local job or companion
-  branch. Inspect PR #28 for merge revision and post-merge CI when resuming.
+- Persistence slice 5 merged as `9e7d430` (PR #28); all seven post-merge jobs
+  passed in [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36352595201).
+- Receiver design reviewed; no specification change or companion branch.
+  The wallet rechecks every used venue range before its durable write, including
+  same-index changes. Final fulfillment includes current forced spends and locks.
+- Eleven focused receiver tests, typecheck, build and four abrupt COMMIT-boundary
+  crash cases passed. Independent integrated adversarial review found no blocker.
+  Real-proof integration added; full CI and real-proof execution remain pending.
+- V2 request/transport bytes remain frozen. This receiver does not retire them.
 
 ## Evidence
 - Design, rejected alternatives, review correction and scalability plan:
@@ -39,9 +34,6 @@ passed. Stop before wallet redesign or live runs.
   restart. Streaming disk rows and complete-index cursors retaining non-held
   records are planned scalability work. Uncertain writes poison the instance;
   reopen can recover an earlier committed view. Malicious rollback is not covered.
-- Publisher restore verifies exact signed transaction consistency; individual
-  historical input values/heights rely on local journal integrity. Corruption can
-  impair rebuild availability, not alter a network-accepted payment.
 - Current reports: [journal](docs/pool-v3-store-verification.json),
   [replay](docs/pool-v3-local-replay-verification.json),
   [recovery](docs/pool-v3-recovery-store-verification.json),
@@ -56,10 +48,9 @@ passed. Stop before wallet redesign or live runs.
 - Slice 4 merged at `6e4cea8`; all seven post-merge jobs passed in `36349234692`.
 
 ## Next
-1. Begin v3 wallet/service (C4.1–2 requests/funding disclosure) with a focused
-   inventory of reusable v2 custody/transport and acceptance cases. Port a complete
-   request-to-fulfillment capability, preserving reference guards and exact retry.
-   Recommend a fresh instance for this new component boundary.
+1. Finish receiver acceptance/review/delivery, then continue slice 6: authenticated
+   requests, payer reservations and exact pending statements, four-output selection
+   with fees/funding disclosure, service, holder recovery, restoration and backup.
 2. Retire v2 only after its wallet/service cases pass on v3; then
    multi-backing including compact fault orchestration (slice 7).
 3. Configuration adoption: provenance, ACIR identities/certificates, replay/import
@@ -88,8 +79,8 @@ passed. Stop before wallet redesign or live runs.
   recovery need separate provisioning authority. Configuration/mainnet remain disabled.
 
 ## Open questions
-- No unresolved design/review finding; disk streaming and physical custody remain
-  explicit later boundaries, not missing process-restart acceptance.
+- Full CI/real-proof acceptance and delivery remain pending.
+- Disk streaming and physical custody remain separate persistence boundaries.
 
 Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-27.
 Persistence adds reusable process recovery; configuration adoption, wallet custody,

@@ -19,7 +19,9 @@ import { ErgoVenue } from "../../../dist/ergo.js";
 import { ERGO_SYNTHETIC_REFERENCE } from "../../../dist/ergo-profile.js";
 import { ErgoPublisher, verifyErgoProof } from "../../../dist/ergo-publisher.js";
 import { MiningSupplier, plainBox } from "../../../dist/ergo-synthetic.js";
-import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
+import { prepareExactOutput, recoverCapsule } from "../../../dist/pool/v3/capsules.js";
+import { V3ReceiverWallet } from "../../../dist/pool/v3/wallet-store.js";
+import { copyPaymentRequest } from "../../../dist/pool/v3/wallet-request.js";
 import { decodeReceipt } from "../../../dist/pool/v3/commitments.js";
 import { CandidateVenueError } from "../../../dist/pool/v3/guard.js";
 import { openV3Prover, ProverError } from "../../../dist/pool/v3/prover.js";
@@ -58,7 +60,7 @@ const sources = sourceClosure(["scripts/pool/v3/store-check.mjs", "scripts/pool/
   ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
   "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
 const sourceSha256Lf = sourceHashes(sources), runStarted = performance.now();
-let api, journal;
+let api, journal, receiverWallet;
 try {
   const live = withTestnet ? await testnet.openTestnet() : undefined;
   const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
@@ -82,7 +84,7 @@ try {
 
   // The parties: a backer (K), the operator it names, and three holders' seeds.
   const issuerSecret = b(15), operatorSecret = b(16), issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
-  const payerSeed = b(21), receiverSeed = b(22), operatorSeed = b(23);
+  const payerSeed = b(21), operatorSeed = b(23);
   const label = b(12), lag = live?.venue.lag() ?? 2n;
   const reference = live?.reference ?? (withErgo ? { context: ERGO_SYNTHETIC_REFERENCE, profile: ERGO_PROFILE } : { context: LOCAL_REFERENCE, label, lag });
   const supplier = withErgo ? new MiningSupplier("journal-synthetic", ERGO_CHAIN, verifyErgoProof) : undefined;
@@ -113,10 +115,19 @@ try {
     operator, configuration: domain, venue: venue.id, interval: withTestnet ? BigInt(testnet.TESTNET_LIMITS.maxBlocks) : 10n });
   const signed = { terms: termsBytes, signature: ed25519.sign(codec.rootTermsSignatureMessage(termsBytes), issuerSecret) };
   const backing = codec.rootTermsName(termsBytes);
+  const receiverPath = join(build, "receiver.db"), receiverOptions = { configuration, venue, reference, verifier: prover.verifier };
+  receiverWallet = new V3ReceiverWallet(receiverPath, receiverOptions);
+  const receiverSeed = receiverWallet.recoverySeed();
+  const paidRequest = receiverWallet.request("payment", backing, 7n);
+  receiverWallet.close();
+  receiverWallet = new V3ReceiverWallet(receiverPath, receiverOptions);
+  assert.deepEqual(receiverWallet.request("payment", backing, 7n), paidRequest);
+  assert.deepEqual(Object.keys(paidRequest).sort(), ["capsule", "cm", "domain", "opening"]);
+  const payerRequest = copyPaymentRequest(paidRequest, { domain, backing, value: 7n });
   const header = { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] }, context = { domain, header };
   // Each output is its recipient's own exact request (C4.1–C4.3); the fee is the operator's (pool-fees C1.2.4).
   const request = (seed, id, value) => prepareExactOutput(seed, domain, b(id), backing, value);
-  const funded = request(payerSeed, 31, 10n), paid = request(receiverSeed, 32, 7n), fee = request(operatorSeed, 33, 1n);
+  const funded = request(payerSeed, 31, 10n), paid = { ...recoverCapsule(receiverSeed, domain, paidRequest.cm, paidRequest.capsule), capsule: paidRequest.capsule }, fee = request(operatorSeed, 33, 1n);
   const change = request(payerSeed, 34, 2n), zero = request(payerSeed, 35, 0n), pad = request(payerSeed, 36, 0n);
   const burnChange = request(receiverSeed, 37, 2n), receiverPad = request(receiverSeed, 38, 0n);
   const journalPath = join(build, "journal.db"), options = { configuration, secret: operatorSecret, venue, reference, verifier: prover.verifier };
@@ -182,10 +193,20 @@ try {
   });
   await test("the payer spends its restored note: 7 to the receiver, a fee of 1 to the operator's request, change 2", async () => {
     const input = spent = await restored(payerSeed, funded);
-    records.pay = encodeRecord(await prove(spendTask(context, [input, { ...input, note: pad }], [paid, fee, change, zero]), "pay 7, fee 1, change 2"));
+    records.pay = encodeRecord(await prove(spendTask(context, [input, { ...input, note: pad }], [payerRequest, fee, change, zero]), "pay 7, fee 1, change 2"));
     receipts.pay = await journal.submit(records.pay);
     assert.equal(decodeReceipt(receipts.pay).position, 2n);
     await checkpoint("after-pay");
+  });
+  await test("the receiver replays the complete current package and durably fulfills its saved exact request once", async () => {
+    const input = await served();
+    const fulfillment = await receiverWallet.fulfill("payment", input.package, signed);
+    assert.deepEqual(fulfillment.request, paidRequest);
+    assert.equal(fulfillment.judgingIndex, venue.witnessedIndex());
+    receiverWallet.close();
+    receiverWallet = new V3ReceiverWallet(receiverPath, receiverOptions);
+    assert.deepEqual(receiverWallet.fulfillment("payment"), fulfillment);
+    await assert.rejects(receiverWallet.fulfill("payment", input.package, signed), { code: "CONFLICT" });
   });
   await test("the receiver burns 5 of its restored 7 with change 2", async () => {
     const input = await restored(receiverSeed, paid);
@@ -358,12 +379,13 @@ try {
       ? "Candidate configuration from the independently held manifest; actual ErgoPublisher transactions mined by a synthetic supplier and read through ErgoVenue under a recomputed synthetic reference identity. The seedless reader independently holds the witnessed block pin: difficulty 1 permits anyone to re-mine a heavier chain. Invented funding; no live node, network deployment, adopted domain or real-chain finality."
       : "Candidate configuration from the independently held manifest and a local reference venue whose identity the guard recomputes; no adopted domain, chain venue or finality.",
       "One genesis segment of one backing: no imports, recovery kinds, replacement, second backing or silence/non-service clause. The journal reads the venue's full ranges on every operation.",
-      "Holders are this script: the payer and receiver restore paths through the reader and prove with the runtime prover; no wallet store, request transport or fee quote.",
+      "The receiver wallet persists an exact request and final fulfillment across reopening. Payer custody, request transport and fee quotes remain outside this fixture; holders restore paths and prove through the existing reader/prover.",
       "Restart replay is exercised once here; restarts mid-publication and exact retry across restarts are slice 5."] };
   const reportName = withTestnet ? "pool-v3-testnet-results.json" : "pool-v3-store-results.json";
   writeFileSync(join(scratch, reportName), JSON.stringify(report, null, 2) + "\n");
   console.log(`PASS: ${checks.length} operator journal checks, ${metrics.length} real proofs; scratch/${reportName}`);
 } finally {
+  receiverWallet?.close();
   try { journal?.close(); } catch { /* already closed */ }
   if (api) await api.destroy();
   const target = realpathSync(build);
