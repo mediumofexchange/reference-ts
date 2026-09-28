@@ -70,7 +70,7 @@ v3 counterpart, because v3 has no receiver endpoint, credential or private
 delivery. Restoration of wallet state belongs to encrypted backup.
 
 `fulfill(alias, packageBytes, signedRootTerms)` reads the complete canonical
-single-backing frontier through the venue's current witnessed index. It accepts
+frontier of the terms' backing, in any scope (C2.10.3–7), through the venue's current witnessed index. It accepts
 only the saved exact positive output and capsule in verified finalized history,
 with no current nullifier spend or standing demand lock. Valid force publications
 after the canonical adoption index contribute their spend/lock effects. A receipt
@@ -107,6 +107,15 @@ force-spent notes are not holdings; notes under a standing demand are `locked`,
 and inputs of a saved payment are `reserved`. The view covers one backing at
 one witnessed index; it is not a global balance, and restoring from the seed
 alone finds the same notes, including change.
+
+The canonical segment may scope several backings (C2.10.2). Its history, spent
+set and roots are shared, so one package serves each scoped backing, but each
+view holds only that backing's notes. A statement spends and creates notes of
+the one backing named by the terms; the spend proves each input's path to that
+backing's own scope entry, and the term check compares the chain's current
+link with that entry's link, so a same-operator reappointment still ends the
+segment's term. After a split or rejoin, the notes of each backing are found in
+the segments they were created in, and pay under those original roots.
 
 `prepare(alias, { request, value, fee? }, package, signedTerms, prove)` checks
 each exact request against the agreed domain, backing and amount, refuses a
@@ -300,7 +309,16 @@ successor segment is covered by the succession check.
 
 That harness hands the request object across directly; the request frame and
 digest are oracle-tested. A human authentication channel is not qualified.
-Cancellation/release and multi-backing payment remain open; backup and
+`test/pool-v3-scope-wallet.test.ts` covers two backings in one scope: separate
+views and payments of each from one package, reproof of each backing's pending
+payment into its own segment after a split, a split package that does not
+establish the other backing, payment under imported roots after a rejoin, a
+same-operator reappointment ending the segment's term, and one silence clock
+closing both. `scope-store-check.mjs` pays one wallet request with a real proof
+in the rejoined scope from a note created in the split segment
+([local](pool-v3-scope-store-verification.json), [synthetic Ergo](pool-v3-scope-store-ergo-verification.json)).
+A statement spending two backings' notes is outside the wallet.
+Cancellation/release remain open; backup and
 restoration are oracle and process tested, not physical-loss drills. The v2
 wallet and service retired against a [case map](../decisions/2026-09.md#2026-09-28--retire-v2-against-a-case-map-of-its-checks).
 This library establishes no mainnet readiness or physical custody qualification.

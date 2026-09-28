@@ -3,16 +3,17 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 7 M2 (done, PR #40): the journal serves multi-backing scopes; `open` takes several
-terms; one `rescope` command changes scope at a committed boundary (C2.10.9;
-[decision](decisions/2026-09.md#2026-09-28--change-a-journals-scope-with-one-command-at-a-committed-boundary)).
-Accepted by `test/pool-v3-scope-store.test.ts` and real-proof `scope-store-check.mjs` on
-both venues (CI). Next run: M3 (Next 1).
+Slice 7 M3 (branch `feat/scope-wallet`): `V3Wallet` receives, holds, pays and re-proves in
+a backing whose canonical segment scopes several backings (C4.5–7, pool-fees C1.2.3–5 over
+C2.10.3–7): `readFrontier`, the backing's own scope entry for header/term checks, the
+scoped witness path. Acceptance: oracle-proof `test/pool-v3-scope-wallet.test.ts` (shared
+segment, split re-proof, rejoined imported roots, hostile header/term cases) and a
+real-proof wallet payment in the rejoined scope of `scope-store-check.mjs` on both venues
+(CI). Stop: delivered on main with the two scope reports re-recorded. The live two-backing
+drill runs after adoption ([decision](decisions/2026-09.md#2026-09-28--pay-one-backing-in-any-scope-and-run-the-live-two-backing-drill-after-adoption)).
 
 ## Status
-- Opus review: two blockers fixed (mixed silence clock refused; openings reserve the
-  reader's merge pass), plus non-first non-service reserve. Reports from CI run
-  36466553770: verdict fields equal main's; paths/leaf order/block ids vary per run.
+- M2 done (PR #40). M3 in progress.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
@@ -29,12 +30,11 @@ both venues (CI). Next run: M3 (Next 1).
   Pool-v2 and its guides/reports: [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Multi-backing (slice 7) M3: the wallet reads multi-backing packages (`wallet-store.ts`
-   uses `readSingleBackingFrontier`; switch to `readFrontier`, scoped witness contexts),
-   then a two-backing testnet drill. Unimplemented: adding an original-term backing to a
-   live scope. Single-backing openings now over-reserve by |E| (conservative).
-2. Configuration adoption: provenance, ACIR identities/certificates, replay/import
-   bounds, one-transaction condition and BN254 margin. Mainnet needs separate authority.
+1. Configuration adoption (plan slice 8): provenance, ACIR identities/certificates,
+   replay/import bounds, one-transaction condition and BN254 margin; then the live
+   two-backing drill under the adopted configuration. Mainnet needs separate authority.
+2. Multi-backing leftovers: adding an original-term backing to a live scope; statements
+   spending several backings from the wallet; single-backing openings over-reserve by |E|.
 3. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with
    existing dependencies (size-only probe); lifetime streaming is separate design.
 4. On touching affected files: `local-replay.mjs` candidates should call
