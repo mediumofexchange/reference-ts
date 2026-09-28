@@ -231,9 +231,9 @@ export interface TrailOptions {
 }
 
 /** One checkpoint's trail under the segment's scope and terms, through the
- * state machine. A deterministic failure throws ReplayRefusal with its check;
- * an unsupported record kind throws EvidenceRefusal; the verifier's own
- * failures propagate. `lastValid` is the segment's last valid checkpoint
+ * state machine. A deterministic failure, a kind-7 record included, throws
+ * ReplayRefusal with its check; an unindexed recovery record throws
+ * EvidenceRefusal; the verifier's own failures propagate. `lastValid` is the segment's last valid checkpoint
  * before this one: the trail must reach its length and reproduce its evidence
  * and history hashes there (C2.10.12, pool-v3 §7.1), the evidence before any
  * verification. */

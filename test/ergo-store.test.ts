@@ -131,6 +131,23 @@ describe.skipIf(!supported)("durable independently replayed Ergo view", () => {
     expect(stored.protectedHeaders).toContain(bytesToHex(fork[1]!.id)); expect(stored.headers).toHaveLength(14);
   });
 
+  it("protects no anchor or context header a supplier repeats until the fetch budget, so the view reopens", async () => {
+    const path = file(), main = chain.extend(chain.anchor, 12), first = opened(path);
+    const repeated = [chain.anchor.bytes, chain.context[0]!];
+    for (const bytes of repeated) {
+      const noisy = {
+        name: "repeated anchor context", tipHeight: async () => chain.anchor.height + 100_000n,
+        headers: async (from: bigint, to: bigint) => Array.from({ length: Number(to - from + 1n) }, () => bytes),
+        section: async () => undefined,
+      };
+      const report = await first.venue.sync([supplier(main), noisy]);
+      expect(report.suppliers[1]).toEqual({ name: "repeated anchor context", headersAdded: 0, stopped: "fetch budget" });
+      expect(report.witnessedIndex).toBe(9n);
+    }
+    first.journal.close();
+    expect(opened(path).venue.witnessedIndex()).toBe(9n);
+  });
+
   it("replays original equal-work precedence when withheld sections initially prevent witnessing the fork", async () => {
     const path = file(), main = records(), alternate = chain.extend(main[0]!, 9, () => [], 71);
     const source = supplier(main); source.withheld.add(bytesToHex(main[1]!.id));

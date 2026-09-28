@@ -916,7 +916,7 @@ export class V3OperatorJournal {
       catch (error) {
         if (state.position !== before) this.diverging = true;
         if (error instanceof ReplayRefusal) throw new V3StoreError("REFUSED", `admission refused: ${error.check}`, error.check);
-        if (error instanceof EvidenceRefusal) throw new V3StoreError("UNSUPPORTED", "this record kind is not admitted yet");
+        if (error instanceof EvidenceRefusal) throw new V3StoreError("UNSUPPORTED", "the record needs evidence admission does not hold");
         throw error;
       }
       this.diverging = true;

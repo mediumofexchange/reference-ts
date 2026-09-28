@@ -559,7 +559,7 @@ describe("this view reads; publishing is a wallet handed to it", () => {
       [3, KEYS.backer, encodeRevocation(signRevocation(SECRETS.backer))],
       [4, backing.name, new Uint8Array(40)],
     ];
-    for (const [kind, subject, record] of records) expect(() => v.publishRecord(kind, subject, record)).toThrow(/no publisher/);
+    for (const [kind, subject, record] of records) await expect(v.publishRecord(kind, subject, record)).rejects.toThrow(/no publisher/);
   });
 });
 

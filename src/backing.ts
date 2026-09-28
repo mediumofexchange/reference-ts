@@ -98,7 +98,8 @@ const CLAUSE_NON_SERVICE = 0x04;
 const CLAUSE_CONSTRUCTION = 0x05;
 /** E has a handful of blocks in the paper, not a stream of them. */
 const MAX_EVIDENCE_CLAUSES = 16;
-/** The one construction this reference knows how to serve and to check (pool-v2). */
+/** The one construction name clause 0x05 decodes (pool-v2 §2). Pool-v2 is retired, so nothing here serves or
+ * checks such a backing; the transparent path refuses it. */
 export const POOL_CONSTRUCTION = "moe/pool/v2";
 const MAX_CONSTRUCTION_BYTES = 64;
 

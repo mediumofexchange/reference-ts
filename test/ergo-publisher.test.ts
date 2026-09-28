@@ -217,11 +217,11 @@ describe("a publication is one record in the profile's grammar", () => {
     await expect(publisher([node()]).publish(request())).rejects.toThrow(/no supplier offered/);
   });
 
-  it("refuses a record that does not fit one box, and malformed requests", async () => {
+  it("refuses a record that does not fit one box, and malformed requests as the caller's errors", async () => {
     const p = publisher([funded([100_000_000_000n])]);
     await expect(p.publish(request(new Uint8Array(4_100)))).rejects.toThrow(/does not fit one box/);
-    await expect(p.publish({ ...request(), subject: new Uint8Array(31) })).rejects.toThrow(VenueError);
-    await expect(p.publish({ ...request(), height: -1n })).rejects.toThrow(VenueError);
+    await expect(p.publish({ ...request(), subject: new Uint8Array(31) })).rejects.toThrow(EncodingError);
+    await expect(p.publish({ ...request(), height: -1n })).rejects.toThrow(EncodingError);
   });
 });
 
@@ -301,7 +301,7 @@ describe("kind-4 publications are one adjacent output run", () => {
 
   it("bounds and owns requests before supplier calls, and carries an empty raw record without interpreting it", async () => {
     const n = funded([100_000_000n]), p = publisher([n]);
-    await expect(p.publish(publicationRequest(new Uint8Array(MAX_RANGE_RECORD_BYTES[4] + 1)))).rejects.toThrow(/invalid Ergo record request/);
+    await expect(p.publish(publicationRequest(new Uint8Array(MAX_RANGE_RECORD_BYTES[4] + 1)))).rejects.toThrow(EncodingError);
     await expect(p.publish({ ...publicationRequest(RECORD), chunked: 1 } as never)).rejects.toThrow(/invalid Ergo record request/);
     const shared = new Uint8Array(new SharedArrayBuffer(10));
     await expect(p.publish(publicationRequest(shared))).rejects.toThrow(/invalid Ergo record request/);
@@ -423,6 +423,65 @@ describe("a publication is sent once, and publications chain", () => {
     expect(hex((await p.publish(request())).id)).toBe(hex(first.id));
     expect(n.pool).toHaveLength(1);
     expect(new Set(n.submitted)).toEqual(new Set([hex(first.id)]));
+  });
+
+  it("sends a transaction again to a supplier that missed it, whatever another supplier claims to hold", async () => {
+    const n = funded([10_000_000n]);
+    let down = true;
+    const honest: ErgoPublishingSupplier = { name: "honest", unspentBoxes: t => n.unspentBoxes(t), hasBox: id => n.hasBox(id),
+      hasTransaction: id => n.hasTransaction(id), submit: (s, id) => (down ? Promise.reject(new Error("down")) : n.submit(s, id)) };
+    // A supplier that claims every transaction and relays none.
+    const liar: ErgoPublishingSupplier = { name: "liar", unspentBoxes: async () => [], hasBox: async () => { throw new Error("no answer"); },
+      hasTransaction: async () => true, submit: async () => {} };
+    const p = publisher([honest, liar]);
+    const first = await p.publish(request());
+    expect(n.pool).toHaveLength(0);
+    down = false;
+    expect(hex((await p.publish(request())).id)).toBe(hex(first.id));
+    expect(n.pool).toHaveLength(1);
+    // A later record spending its change reaches the honest supplier with its parent.
+    await p.publish(request(new Uint8Array(136).fill(7)));
+    expect(n.pool).toHaveLength(2);
+    expect(n.submitted.filter(id => id === hex(first.id))).toHaveLength(1); // once it holds the parent, it is not sent again
+  });
+
+  it("walks unsettled parents only for a supplier that answers it lacks the child", async () => {
+    const n = funded([10_000_000n]), asked: string[] = [], sent: string[] = [];
+    const counting = (name: string, fail: boolean): ErgoPublishingSupplier => ({ name, unspentBoxes: t => n.unspentBoxes(t),
+      hasBox: id => { asked.push(`${name} box`); return fail ? Promise.reject(new Error("no answer")) : n.hasBox(id); },
+      hasTransaction: id => { asked.push(`${name} tx`); return fail ? Promise.reject(new Error("no answer")) : n.hasTransaction(id); },
+      submit: (s, id) => { sent.push(`${name} ${hex(id)}`); return n.submit(s, id); } });
+    const p = publisher([counting("holder", false), counting("mute", true)]);
+    for (let i = 1; i <= 3; i++) await p.publish(request(new Uint8Array(136).fill(i)));
+    asked.length = 0; sent.length = 0;
+    const last = await p.publish(request(new Uint8Array(136).fill(3)));
+    // The holder shows the child, so none of its ancestry is asked about; the mute supplier is sent the child alone.
+    expect(asked).toEqual(["holder box", "mute box", "mute tx"]);
+    expect(sent).toEqual([`mute ${hex(last.id)}`]);
+  });
+
+  it("walks for a supplier one of whose queries says it lacks the child, and stops at a parent it refuses", async () => {
+    const n = funded([10_000_000n]), m = node("without the funding box");
+    const partial: ErgoPublishingSupplier = { name: "partial", unspentBoxes: async () => [], hasBox: async () => { throw new Error("400"); },
+      hasTransaction: id => m.hasTransaction(id), submit: (s, id) => m.submit(s, id) };
+    const p = publisher([n, partial]), ids: string[] = [];
+    for (let i = 1; i <= 3; i++) ids.push(hex((await p.publish(request(new Uint8Array(136).fill(i)))).id));
+    // Each attempt reaches the first transaction through its descendants and m refuses it: the walk ends there,
+    // and of what lies between only the publication asked for is sent.
+    expect(m.submitted).toEqual([ids[0], ids[0], ids[1], ids[0], ids[2]]);
+    expect(n.pool).toHaveLength(3);
+  });
+
+  it("still sends the publication asked for when a supplier refuses a parent that already landed there", async () => {
+    const n = funded([10_000_000n]);
+    // Box queries fail and transaction queries miss what landed, so a landed parent is resent and refused as spent.
+    const blind: ErgoPublishingSupplier = { name: "blind", unspentBoxes: t => n.unspentBoxes(t), hasBox: async () => { throw new Error("400"); },
+      hasTransaction: async () => false,
+      submit: async (s, id) => { if (await n.hasTransaction(id)) throw new Error("inputs spent"); return n.submit(s, id); } };
+    const p = publisher([blind]);
+    await p.publish(request(new Uint8Array(136).fill(1)));
+    await p.publish(request(new Uint8Array(136).fill(2)));
+    expect(n.pool).toHaveLength(2);
   });
 
   it("sends a dropped transaction again before the one that spends its change", async () => {
@@ -593,24 +652,24 @@ describe("the view publishes through its wallet and holds only what it reads", (
     const network = new Network();
     network.mine(5);
     const v = await view(network);
-    expect(() => v.publishRecord(4, SUBJECT, new Uint8Array(MAX_RANGE_RECORD_BYTES[4] + 1))).toThrow(/record length/);
-    expect(() => v.publishRecord(0 as RecordKind, SUBJECT, RECORD)).toThrow(EncodingError);
-    expect(() => v.publishRecord(1, new Uint8Array(31), RECORD)).toThrow(/record length/);
+    await expect(v.publishRecord(4, SUBJECT, new Uint8Array(MAX_RANGE_RECORD_BYTES[4] + 1))).rejects.toThrow(/record length/);
+    await expect(v.publishRecord(0 as RecordKind, SUBJECT, RECORD)).rejects.toThrow(EncodingError);
+    await expect(v.publishRecord(1, new Uint8Array(31), RECORD)).rejects.toThrow(/record length/);
     for (const [kind, length] of [[1, 136], [2, 233], [3, 96]] as const) {
-      expect(() => v.publishRecord(kind, SUBJECT, new Uint8Array(length - 1))).toThrow(/record length/);
-      expect(() => v.publishRecord(kind, SUBJECT, new Uint8Array(length + 1))).toThrow(/record length/);
+      await expect(v.publishRecord(kind, SUBJECT, new Uint8Array(length - 1))).rejects.toThrow(/record length/);
+      await expect(v.publishRecord(kind, SUBJECT, new Uint8Array(length + 1))).rejects.toThrow(/record length/);
     }
-    expect(() => v.publishRecord(1, SUBJECT, new Uint8Array(new SharedArrayBuffer(136)))).toThrow(/shared byte array/);
-    expect(() => v.publishRecord(1, SUBJECT, Object.create(Uint8Array.prototype) as Uint8Array)).toThrow(/not a byte array/);
+    await expect(v.publishRecord(1, SUBJECT, new Uint8Array(new SharedArrayBuffer(136)))).rejects.toThrow(/shared byte array/);
+    await expect(v.publishRecord(1, SUBJECT, Object.create(Uint8Array.prototype) as Uint8Array)).rejects.toThrow(/not a byte array/);
     expect(network.node.submitted).toEqual([]);
     const readOnly = await view(network, false);
-    expect(() => readOnly.publishRecord(1, SUBJECT, RECORD)).toThrow(/no publisher/);
+    await expect(readOnly.publishRecord(1, SUBJECT, RECORD)).rejects.toThrow(/no publisher/);
   });
 
   it("refuses to publish before a settled snapshot", async () => {
     const network = new Network();
     const unsynced = new ErgoVenue(PROFILE, chain.context, {}, publisher([network.node]));
-    expect(() => unsynced.publishRecord(1, KEYS.operator, encodeCommitment(commitmentOf(1n, 1)))).toThrow(/no settled snapshot/);
+    await expect(unsynced.publishRecord(1, KEYS.operator, encodeCommitment(commitmentOf(1n, 1)))).rejects.toThrow(/no settled snapshot/);
     expect(network.node.submitted).toHaveLength(0);
   });
 

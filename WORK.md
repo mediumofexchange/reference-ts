@@ -3,39 +3,29 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 6f, retire v2 (no companion branch or normative change;
-[decision and case map](decisions/2026-09.md#2026-09-28--retire-v2-against-a-case-map-of-its-checks)).
-M1 (PR #36, merged `0182d36`) mapped every v2 check and ported the gaps. M2, on
-`feat/delete-v2`: delete v2. Acceptance: `npm run check` and CI `check:pool:v3 -- --ergo`
-pass without v2, docs agree, the `ErgoVenue` face removal independently reviewed, the six
-current v3 reports re-recorded. Stop boundary: no transparent-path retirement,
-multi-backing or adoption.
+Review-code pass (done) over main since `3b9db9f` plus slice 6f's v2 deletion (PR #37,
+merged `8cf66cb`; slice 6f delivered). Acceptance: each confirmed defect fixed with a
+regression test on `fix/review-code-2026-09-28`, independently reviewed, CI green, seven
+current v3 reports re-recorded from CI, deferred findings in Next. No new features.
 
 ## Status
-- `9c8b353` deletes the v2 runtime, circuits, tests, harnesses, package scripts, CI `pool`
-  job and device-storage step; `ErgoVenue` keeps only `RecordVenue`/`RecordPublisher`
-  and its tests read range answers through `record-range.ts`; the package ships `dist`
-  only; `scripts/pool/v3/check.mjs` reads `candidate-manifest.json`; the evidence reader
-  moved to `scripts/pool/v3/`. A docs commit retires the v2 guides and five v2 reports as
-  permalinks at `a020215` and updates README (runtime pin `01d8db2`), AGENTS.md, status,
-  architecture, rules, requirements and fault guide.
-- Local: typecheck and the affected tests (156) pass; low memory (~2 GB) rules out a full
-  local run, so CI is the acceptance run.
-- Review: an independent adversarial review of `9c8b353` found nothing blocking; its doc,
-  comment and test notes are applied in the docs commit.
-- **Open:** PR #37 CI was pending when its watcher was reaped for low memory. Next run:
-  `gh pr checks 37`; fix any failure; when green, `gh run download <run> -n
-  pool-v3-reports-ubuntu-latest -D scratch/ci-artifact`, copy `scratch/pool-v3-store-results.json`
-  and `pool-v3-local-replay-results.json` to `docs/pool-v3-store-verification.json` and
-  `docs/pool-v3-local-replay-verification.json`, take the four recovery/succession
-  `docs/` reports as they are, confirm with `npm run check:evidence` that the six match,
-  commit, wait for CI, merge, delete the branch and `scratch/ci-artifact`.
+- Six read-only lanes reviewed Ergo reading, Ergo publishing, v3 state/reader, the
+  operator journal, wallet/service and evidence/spec agreement. Fixed, with tests: a
+  supplier repeating the anchor made the durable Ergo view unopenable (`ergo.ts`); one
+  supplier claiming every transaction stopped resends to honest nodes
+  (`ergo-publisher.ts`); a committed kind-7 record left reads unresolved instead of
+  failing replay (`state.ts`, check `KIND`); sync throws and caller errors in the
+  publish path; stale Ergo, v2 and wallet docs; unused v2 tags. Refuted: wrong-length
+  proofs verify false. The fix review's three read-backs shaped the publisher's
+  per-supplier parent walk (tests pin its query and submit counts).
+- Delivered in PR #38: seven current reports re-recorded from CI run 36442873841,
+  `check:evidence` current for the six file-bound ones. Next run: pick from Next.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
   [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
   (full checkpoints still rewrite retained history; raw sections stay in memory).
-- Current reports: [journal](docs/pool-v3-store-verification.json),
+- Current reports: [conformance](docs/pool-v3-conformance-verification.json), [journal](docs/pool-v3-store-verification.json),
   [replay](docs/pool-v3-local-replay-verification.json), [recovery](docs/pool-v3-recovery-store-verification.json),
   [Ergo recovery](docs/pool-v3-recovery-store-ergo-verification.json),
   [succession](docs/pool-v3-succession-store-verification.json) and
@@ -55,10 +45,20 @@ multi-backing or adoption.
    `holdings.ts` (re-records six reports); fold `fulfill` into `sync`; shared
    byte helpers/caller ownership; Ergo section versus transaction charging; applyRecord history check follows effects;
    served-trail caller-object cache; drop the explicit `vite` dev pin (served the
-   retired browser probe) at the next dependency change. Untested on v3 (source holds
-   them): a second commit refused while one is in flight (`store.ts` `ready`), and
-   `IMPORT_RANK` (`import-reader.ts`).
-5. Only when a gate needs them: cancellation, batching, index-free box source,
+   retired browser probe) at the next dependency change. Untested on v3: a second
+   commit refused while one is in flight (`store.ts` `ready`; a probe traced it holding);
+   `IMPORT_RANK` holds by construction (held commitments arrive in order).
+5. Review findings deferred 2026-09-28: (a) `guard.ts` accepts a testnet-context
+   profile anchored on a mainnet header, which the header store follows until the next
+   epoch boundary (<=127 blocks); `testnet.mjs` checks `/info` network, so only a new
+   caller is exposed; fix by a difficulty bound like the synthetic one or a testnet
+   context long enough to check its last boundary. (b) `store.ts` `package()` serves a
+   published commitment never held after the lag (C2.4.3). (c) `store.ts` `submit` may
+   return an old-segment receipt for an adopted forced record (traced only). (d) Ergo
+   reports bind pool-v3 `786f962` but no `venue-ergo.md` revision; the CRS is unbound.
+   (e) ErgoVenue's side-branch quota never resets. (f) Wallet `prepare`/`reprove` read
+   `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit.
+6. Only when a gate needs them: cancellation, batching, index-free box source,
    venue-moving record, slowest-supplier clock, multi-entry extension fixture,
    Poseidon2 on Barretenberg and sponsored holder funding; operator fee quotes,
    a text/QR form of the request frame, receipt handoff for C4.5 pending
@@ -82,6 +82,12 @@ multi-backing or adoption.
   recovery need separate provisioning authority. Configuration/mainnet remain disabled.
 
 ## Open questions
+- 2026-09-28, non-blocking: `site/index.html` says the wallet and external witness
+  write side "remain to be built"; the v3 wallet, single-backing recovery and Ergo
+  publication exist as unadopted candidates. A site push is live deployment, so it
+  needs authorization: edit that sentence to e.g. "Single-backing recovery, a
+  seed-restorable wallet and Ergo publication run as unadopted candidates;
+  configuration adoption and multi-backing remain." and push `site` main.
 - No service delivery blocker remains. Server timeout followed by eventual
   journal completion has source review, without a direct timed acceptance case.
 - Disk streaming and physical custody remain separate persistence boundaries.

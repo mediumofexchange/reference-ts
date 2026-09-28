@@ -33,20 +33,9 @@
 //   moe/replacement/v1         E's rule naming a successor operator
 //   moe/revocation/v1          K withdrawing its own authority to issue
 //
-// The shielded pool's construction (pool-v2) hashes and signs under its own
-// family, none a prefix of another or of the tags above:
-//
-//   moe/pool/v2/config         the configuration whose hash is the construction domain (§2)
-//   moe/pool/v2/segment        a segment header, whose hash is the segment identity (§6)
-//   moe/pool/v2/statement      what a statement asserts; K signs it for an issuance (§7)
-//   moe/pool/v2/genesis        historyHash_0, from the segment identity (§9)
-//   moe/pool/v2/history        historyHash_i (§9)
-//   moe/pool/v2/receipt        the operator's acceptance evidence (§9)
-//   moe/pool/v2/snapshot       a backing's snapshot digest in the directory (§9)
-//   moe/pool/v2/spent/leaf     a spent-set leaf (§11)
-//   moe/pool/v2/spent/node     a spent-set node (§11)
-//
-// Its candidate successor (pool-v3, pool-spent) has a family of its own:
+// The shielded pool's candidate construction (pool-v3, pool-spent) hashes and
+// signs under its own family, none a prefix of another or of the tags above
+// (retired pool-v2's `moe/pool/v2/` family is no longer declared):
 //
 //   moe/pool/v3/config         the candidate configuration (§11.1)
 //   moe/pool/v3/statement      a statement (§5); a record opens with its bytes
@@ -92,15 +81,6 @@ export const ATTEMPT_CONTEXT = tag("moe/attempt/v1");
 export const COMMIT_CONTEXT = tag("moe/commit/v1");
 export const REPLACEMENT_CONTEXT = tag("moe/replacement/v1");
 export const REVOCATION_CONTEXT = tag("moe/revocation/v1");
-export const POOL_CONFIG_CONTEXT = tag("moe/pool/v2/config");
-export const POOL_SEGMENT_CONTEXT = tag("moe/pool/v2/segment");
-export const POOL_STATEMENT_CONTEXT = tag("moe/pool/v2/statement");
-export const POOL_GENESIS_CONTEXT = tag("moe/pool/v2/genesis");
-export const POOL_HISTORY_CONTEXT = tag("moe/pool/v2/history");
-export const POOL_RECEIPT_CONTEXT = tag("moe/pool/v2/receipt");
-export const POOL_SNAPSHOT_CONTEXT = tag("moe/pool/v2/snapshot");
-export const POOL_SPENT_LEAF_CONTEXT = tag("moe/pool/v2/spent/leaf");
-export const POOL_SPENT_NODE_CONTEXT = tag("moe/pool/v2/spent/node");
 export const V3_CONFIG_CONTEXT = tag("moe/pool/v3/config");
 export const V3_STATEMENT_CONTEXT = tag("moe/pool/v3/statement");
 export const V3_DELIVERY_CONTEXT = tag("moe/pool/v3/delivery");
@@ -152,15 +132,6 @@ const ALL_CONTEXTS = [
   COMMIT_CONTEXT,
   REPLACEMENT_CONTEXT,
   REVOCATION_CONTEXT,
-  POOL_CONFIG_CONTEXT,
-  POOL_SEGMENT_CONTEXT,
-  POOL_STATEMENT_CONTEXT,
-  POOL_GENESIS_CONTEXT,
-  POOL_HISTORY_CONTEXT,
-  POOL_RECEIPT_CONTEXT,
-  POOL_SNAPSHOT_CONTEXT,
-  POOL_SPENT_LEAF_CONTEXT,
-  POOL_SPENT_NODE_CONTEXT,
   V3_CONFIG_CONTEXT,
   V3_STATEMENT_CONTEXT,
   V3_DELIVERY_CONTEXT,
