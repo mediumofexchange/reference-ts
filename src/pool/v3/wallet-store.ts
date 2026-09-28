@@ -336,24 +336,29 @@ export class V3Wallet {
     let force: ForceState | undefined, notes: OwnedNote[] = [];
     if (canonical !== undefined) {
       force = openForceState(canonical.state);
-      for (const publication of result.force) if (publication.index > canonical.state.adoptionIndex) applyForceEffects(force, publication.record);
+      // This backing's own adoption index: a scope opening's merged import has no single one.
+      const adopted = canonical.state.adoptionIndices.get(hex(backing)) ?? canonical.state.adoptionIndex;
+      for (const publication of result.force) if (publication.index > adopted) applyForceEffects(force, publication.record);
       const spent = force.nullifiers;
       notes = ownedNotes(this.seed, this.domain, backing, canonical.state).filter(note => !spent.has(note.nf));
     }
-    return { bytes, terms, backing, at, observed, canonical, force, notes, chain: result.ranges.chain, lag: result.ranges.lag, clock: result.clock };
+    return { bytes, terms, backing, at, observed, canonical, force, notes, chain: result.ranges.chain, scopeChains: result.scopeChains,
+      lag: result.ranges.lag, clock: result.clock };
   }
   /** The canonical segment's header, if a new statement for it could still be
-   * admitted: its operator term has not ended and, where the backing declares
+   * admitted: no scoped backing's operator term has ended (one ending ends the
+   * segment for every scoped backing, C2.10.9) and, where the backing declares
    * silence, the operator's witnessing horizon has not reached the clock (the
    * journal's own admission rule). Advisory: the operator judges admission. */
   private admissible(view: Awaited<ReturnType<V3Wallet["frontier"]>>): SegmentHeader {
-    const { canonical, chain, clock, at, lag } = view;
+    const { canonical, chain, scopeChains, clock, at, lag } = view;
     requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
-    const { header, entry } = this.headerOf(view.bytes, canonical.segment, canonical.scope, view.backing);
+    const header = this.headerOf(view.bytes, canonical.segment, canonical.scope, view.backing);
     // A statement for an ended term would be refused.
-    const term = chain.at(-1);
-    requireThat(term !== undefined && same(term.operator, header.operator) && same(term.link, entry.link),
-      "CONFLICT", "the canonical segment's operator term has ended");
+    requireThat(header.entries.every(entry => {
+      const term = (same(entry.backing, view.backing) ? chain : scopeChains?.get(hex(entry.backing)))?.at(-1);
+      return term !== undefined && same(term.operator, header.operator) && same(term.link, entry.link);
+    }), "CONFLICT", "the canonical segment's operator term has ended");
     requireThat(clock === null || clock === undefined || (clock.boundary === null &&
       at + lag - canonical.index <= BigInt(clock.duration)), "SILENCE", "the canonical segment's silence clock closes admission");
     return header;
@@ -806,15 +811,15 @@ export class V3Wallet {
   }
 
   /** The canonical segment's header from the package's own trails, bound by
-   * identity, and this backing's entry in its scope (C2.10.2). */
+   * identity and scoping this backing (C2.10.2). */
   private headerOf(bytes: Uint8Array, segment: Uint8Array, scope: bigint, backing: Uint8Array) {
     const trails = decodedTrails(decodeEvidencePackage(bytes, PACKAGE_LIMITS).filter(item => item.kind === 6).map(item => item.payload));
     const found = trails.find(trail => same(sha256(trail.header), segment));
     requireThat(found !== undefined, "ABSENT", "canonical segment header is absent");
-    const header = decodeSegmentHeader(found.header), entry = header.entries.find(scoped => same(scoped.backing, backing));
-    requireThat(same(segmentIdentity(header), segment) && new ScopeTree(header.entries).root() === scope && entry !== undefined,
-      "INVALID", "canonical segment is not this backing's");
-    return { header, entry };
+    const header = decodeSegmentHeader(found.header);
+    requireThat(same(segmentIdentity(header), segment) && new ScopeTree(header.entries).root() === scope &&
+      header.entries.some(scoped => same(scoped.backing, backing)), "INVALID", "canonical segment is not this backing's");
+    return header;
   }
 
   close(): void { if (!this.closed) { this.closed = true; this.seed.fill(0); this.db.close(); } }

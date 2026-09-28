@@ -5,18 +5,20 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes } from "../src/bytes.js";
 import { identifierOf } from "../src/pool/field.js";
+import { NoteTree } from "../src/pool/note-tree.js";
+import { prepareExactOutput, recoverCapsule } from "../src/pool/v3/capsules.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeSegmentHeader, segmentIdentity } from "../src/pool/v3/headers.js";
 import { PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
 import { decodeEvidencePackage } from "../src/pool/v3/package.js";
 import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
-import { decodeRecord, encodeRecord, type Record } from "../src/pool/v3/records.js";
+import { decodeRecord, encodePublication, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
 import { decodeTrail } from "../src/pool/v3/trail.js";
 import type { LocalProver, V3Wallet as Wallet } from "../src/pool/v3/wallet-store.js";
-import { authorizeIssue, issueTask, type ProofTask, type SegmentContext } from "../src/pool/v3/witness.js";
+import { authorizeIssue, demandTask, issueTask, withdrawalRecord, type ProofTask, type SegmentContext } from "../src/pool/v3/witness.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
 import { encodeReplacement, replacementHash, replacementMessage, type Replacement } from "../src/venue-records.js";
 
@@ -55,14 +57,14 @@ describe.skipIf(!supported)("v3 wallet over multi-backing scopes", () => {
   });
 
   /** A opens {x, y} and issues 10 x and 20 y to the payer's requests in one shared history. */
-  async function shared(silence = false) {
+  async function shared(silence?: bigint) {
     mkdirSync(scratch, { recursive: true });
     const directory = mkdtempSync(join(scratch, "v3-scope-wallet-test-")); directories.push(directory);
     const venue = FixtureVenue.reference(label, lag);
     const backingOf = (thing: string, issuer: Uint8Array) => {
       const terms = encodeRootTerms({ obligor: ed25519.getPublicKey(issuer), operator: aKey, replacementRule: ed25519.getPublicKey(ruleSecret),
         configuration: domain, venue: venue.id, interval: 30n, payout: { thing, quantumExponent: 0, perUnit: 1n },
-        ...(silence ? { silence: { noCommitmentDuration: 4n, challengeWindow: 5n } } : {}) });
+        ...(silence === undefined ? {} : { silence: { noCommitmentDuration: silence, challengeWindow: 5n } }) });
       return { name: rootTermsName(terms), issuer, signed: { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuer) } };
     };
     const x = backingOf("scope wallet x", issuerX), y = backingOf("scope wallet y", issuerY);
@@ -134,11 +136,16 @@ describe.skipIf(!supported)("v3 wallet over multi-backing scopes", () => {
     const payX = await f.payer.prepare("shop-x", f.orders.x, f.held, f.x.signed, prove);
     const payY = await f.payer.prepare("shop-y", f.orders.y, f.held, f.y.signed, prove);
     const toB = await f.replace(bSecret, f.x.name);
-    // x's term under A has ended; y's has not, but A's shared segment admits nothing more.
-    await expect(f.payer.reprove("shop-x", f.held, f.x.signed, prove))
-      .rejects.toMatchObject({ code: "CONFLICT", message: "the canonical segment's operator term has ended" });
-    await expect(f.payer.prepare("late-x", { request: f.receiver.request("late", f.x.name, 1n), value: 1n }, f.held, f.x.signed, prove))
-      .rejects.toMatchObject({ code: "CONFLICT" });
+    // x's term under A has ended; y's has not, but A's shared segment admits nothing more for either.
+    for (const [name, signed] of [["shop-x", f.x.signed], ["shop-y", f.y.signed]] as const) {
+      await expect(f.payer.reprove(name, f.held, signed, prove))
+        .rejects.toMatchObject({ code: "CONFLICT", message: "the canonical segment's operator term has ended" });
+    }
+    for (const [name, backing, signed] of [["late-x", f.x.name, f.x.signed], ["late-y", f.y.name, f.y.signed]] as const) {
+      await expect(f.payer.prepare(name, { request: f.receiver.request(name, backing, 1n), value: 1n }, f.held, signed, prove))
+        .rejects.toMatchObject({ code: "CONFLICT", message: "the canonical segment's operator term has ended" });
+      expect(f.payer.payment(name)).toBeUndefined();
+    }
     const bj = f.create(bSecret, "b");
     await bj.takeover("take-x", f.x.signed, f.held);
     await f.a.rescope("split", { keep: [f.y.name] });
@@ -202,8 +209,37 @@ describe.skipIf(!supported)("v3 wallet over multi-backing scopes", () => {
     expect(values(await f.payer.sync(f.held, f.x.signed))).toEqual([[10n, "available"]]);
   });
 
+  it("applies a demand adopted and withdrawn before a split once, never again at the split opening", async () => {
+    const f = await shared(8n), presenter = b(18);
+    const owned = recoverCapsule(f.payer.recoverySeed(), domain, f.fundY.cm, f.fundY.capsule)!;
+    const tree = new NoteTree(); tree.appendAll([f.fundX.cm, f.fundY.cm]);
+    const input = { note: owned, anchor: tree.root(), path: tree.path(1n) };
+    // A falls silent; the holder forces a demand on its y note, and A returns and adopts it.
+    f.venue.advance(f.venue.witnessedIndex() + 11n);
+    const instant = f.venue.witnessedIndex() - 1n;
+    const demand = record(demandTask(f.ctx, [input, { ...input, note: prepareExactOutput(b(21), domain, b(34), f.y.name, 0n) }],
+      { backing: f.y.name, quantity: 20n, presenter: ed25519.getPublicKey(presenter), instant, deadline: instant + 80n }));
+    await f.venue.publishRecord(4, f.y.name, encodePublication({ domain, backing: f.y.name, kind: 1, record: demand }));
+    await f.a.return("returned"); await f.a.publish();
+    expect((await f.a.adopt()).map(bytes => decodeReceipt(bytes).statementHash)).toEqual([statementHash(demand)]);
+    await f.checkpoint(f.a, "adopted");
+    expect(values(await f.payer.sync(await f.served(f.a), f.y.signed))).toEqual([[20n, "locked"]]);
+    await f.a.submit(encodeRecord(withdrawalRecord({ domain, header: await f.header(f.a) }, statementHash(demand), presenter)));
+    await f.checkpoint(f.a, "withdrawn");
+    expect(values(await f.payer.sync(await f.served(f.a), f.y.signed))).toEqual([[20n, "available"]]);
+    // x moves to B and A splits y off: the opening imports the withdrawn state, whose demand stays withdrawn.
+    await f.replace(bSecret, f.x.name);
+    const bj = f.create(bSecret, "b");
+    await bj.takeover("take-x", f.x.signed, await f.served(f.a));
+    await f.a.rescope("split", { keep: [f.y.name] });
+    for (const j of [bj, f.a]) { await j.publish(); expect(await j.adopt()).toEqual([]); }
+    const view = await f.payer.sync(await f.served(f.a), f.y.signed);
+    expect(view.checkpoint!.sequence).toBe((await f.header(f.a)).sequence);
+    expect(values(view)).toEqual([[20n, "available"]]);
+  });
+
   it("closes admission for every scoped backing on the scope's one silence clock", async () => {
-    const f = await shared(true);
+    const f = await shared(4n);
     f.venue.advance(f.venue.witnessedIndex() + 5n);
     for (const [name, order, signed] of [["shop-x", f.orders.x, f.x.signed], ["shop-y", f.orders.y, f.y.signed]] as const) {
       await expect(f.payer.prepare(name, order, f.held, signed, prove)).rejects.toMatchObject({ code: "SILENCE" });

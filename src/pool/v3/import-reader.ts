@@ -76,6 +76,10 @@ export interface FrontierResult {
   readonly carrying: readonly ImportCarryingVerdict[];
   readonly clock: ClockRecord | null | undefined;
   readonly ranges: Omit<ImportRanges, "checkpointIndex" | "heldBefore" | "heldAfter">;
+  /** Scope reads only: the replacement chain through the judging index of every
+   * backing the canonical segment scopes, keyed by hex name. One ended term ends
+   * the segment for all of them (C2.10.9). */
+  readonly scopeChains?: ReadonlyMap<string, RecordView["chain"]>;
 }
 export type ImportResult = {
   readonly receipt: ReceiptVerdict; readonly state?: undefined; readonly carrying?: undefined; readonly clock?: undefined;
