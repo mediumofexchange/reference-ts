@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { isMalformedProofFailure } from "../src/pool/barretenberg.js";
+import { isMalformedProofFailure } from "../src/pool/proof-verifier.js";
 
-// The pinned backend's own messages (scripts/pool/check.mjs raises each on a real proof).
+// The pinned backend's own messages (scripts/pool/v3/check.mjs raises each on a real proof).
 const MALFORMED = [
   "Non-canonical proof element: value >= field modulus",
   "Assertion failed: (uint256_t(fr_vec[0]) < (uint256_t(1) << (NUM_LIMB_BITS * 2)))\n  Left   : 0x30644e",
@@ -10,7 +10,7 @@ const MALFORMED = [
   "Cannot aggregate: incoming pairing points are at infinity (probably uninitialized).",
 ];
 
-describe("the verifier's classification of backend failures (pool-v2 §12)", () => {
+describe("the verifier's classification of backend failures", () => {
   it("reads the pinned backend's malformed-proof failures as malformed", () => {
     for (const message of MALFORMED) expect(isMalformedProofFailure(new Error(message))).toBe(true);
   });

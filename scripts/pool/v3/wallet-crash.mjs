@@ -1,5 +1,5 @@
 // C4.2/5 and pool-fees C1.2.5 process-restart acceptance (request, fulfillment,
-// payment, reproof, offline export and restore) with a synthetic venue and proof oracle.
+// payment, receipt, reproof, offline export and restore) with a synthetic venue and proof oracle.
 // Abrupt process exits exercise SQLite transaction boundaries, not power loss,
 // physical custody, rollback resistance, real proofs or live venue operation.
 import assert from 'node:assert/strict';
@@ -21,6 +21,7 @@ const { NoteTree } = await import('../../../dist/pool/note-tree.js');
 const { prepareExactOutput } = await import('../../../dist/pool/v3/capsules.js');
 const { configurationHash, RELATIONS } = await import('../../../dist/pool/v3/configuration.js');
 const { encodeRecord } = await import('../../../dist/pool/v3/records.js');
+const { decodeReceipt } = await import('../../../dist/pool/v3/commitments.js');
 const { V3OperatorJournal } = await import('../../../dist/pool/v3/store.js');
 const { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } = await import('../../../dist/pool/v3/terms.js');
 const { V3Wallet } = await import('../../../dist/pool/v3/wallet-store.js');
@@ -94,6 +95,10 @@ async function worker(directory, operation, phase, action) {
             fixture.package = (await successor.package()).package;
           } finally { successor.close(); }
         }
+        if (operation === 'receipt') {
+          // The operator admitted the saved record; its reply to the wallet is what the crash loses.
+          fixture.receipt = await journal.submit((await wallet.prepare('shop', order(fixture), fixture.package, signed, prove)).record);
+        }
         fixture.venue = venue.export();
       } finally { journal.close(); }
     }
@@ -127,6 +132,7 @@ async function worker(directory, operation, phase, action) {
     if (operation === 'request') wallet.request('invoice', fixture.backing, 7n);
     else if (operation === 'payment') await wallet.prepare('shop', order(fixture), fixture.package, fixture.signed, prove);
     else if (operation === 'reproof') await wallet.reprove('shop', fixture.package, fixture.signed, prove);
+    else if (operation === 'receipt') await wallet.submit('shop', { submit: async () => decodeReceipt(fixture.receipt) });
     else if (operation === 'export') wallet.exportBackup(backupKey);
     // The restore's one COMMIT installs identity, state and provenance together in its staging file.
     else if (operation === 'import') V3Wallet.restoreBackup(`${path}.restored`, reader, fixture.backup, backupKey, fixture.digest);
@@ -166,6 +172,14 @@ async function worker(directory, operation, phase, action) {
       if (action === 'restore' && phase === 'before') assert.deepEqual(prior.record, fixture.prepared);
       else assert.notDeepEqual(prior.record, fixture.prepared, 'committed reproof must survive a lost reply');
       save(`${path}.${action}`, await wallet.reprove('shop', fixture.package, fixture.signed, prove));
+    } else if (operation === 'receipt') {
+      // An uncommitted receipt is asked for again (the operator answers an exact retry
+      // with its original reply); a committed one is returned without asking.
+      const prior = wallet.payment('shop'), uncommitted = action === 'restore' && phase === 'before';
+      assert.equal(prior.receipt === undefined, uncommitted);
+      save(`${path}.${action}`, await wallet.submit('shop', { submit: async () => {
+        assert.ok(uncommitted, 'a saved receipt must not be asked for again'); return decodeReceipt(fixture.receipt);
+      } }));
     } else {
       const prior = wallet.fulfillment('invoice');
       if (action === 'restore' && phase === 'before') {
@@ -200,7 +214,7 @@ if (process.argv[2] === '--worker') {
     }
   };
   try {
-    for (const operation of ['request', 'fulfillment', 'payment', 'reproof', 'export', 'import']) for (const phase of ['before', 'after']) {
+    for (const operation of ['request', 'fulfillment', 'payment', 'receipt', 'reproof', 'export', 'import']) for (const phase of ['before', 'after']) {
       const path = join(directory, `${operation}-${phase}.sqlite`);
       await run(operation, phase, 'setup'); await run(operation, phase, 'crash');
       const staged = operation === 'import' ? readdirSync(directory).filter(name => name.startsWith(`${operation}-${phase}.sqlite.restored.restore-`) && !/-(wal|shm)$/.test(name)) : [];
@@ -217,9 +231,12 @@ if (process.argv[2] === '--worker') {
           assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_schema WHERE name='wallet_identity'").get().n, phase === 'before' ? 0 : 1);
         }
         const tables = { request: ['receiver_requests'], fulfillment: ['receiver_fulfilled'], payment: ['payer_payments', 'payer_inputs'],
-          reproof: ['payer_superseded'], export: [], import: [] };
+          receipt: [], reproof: ['payer_superseded'], export: [], import: [] };
         for (const table of tables[operation]) {
           assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, phase === 'before' ? 0 : 1);
+        }
+        if (operation === 'receipt') {
+          assert.equal(db.prepare('SELECT receipt IS NOT NULL AS saved FROM payer_payments').get().saved, phase === 'before' ? 0 : 1);
         }
         if (operation === 'fulfillment' && phase === 'after') {
           const row = db.prepare('SELECT * FROM receiver_fulfilled').get();
@@ -246,12 +263,13 @@ if (process.argv[2] === '--worker') {
       } else if (operation === 'export') {
         if (phase === 'after') assert.deepEqual(restored, load(`${path}.candidate`));
         else assert.notDeepEqual(restored, load(`${path}.candidate`), 'uncommitted export must not be reused');
-      } else if (operation === 'import') assert.deepEqual(restored, fixture.request);
+      } else if (operation === 'receipt') assert.deepEqual(restored, decodeReceipt(fixture.receipt));
+      else if (operation === 'import') assert.deepEqual(restored, fixture.request);
       else assert.deepEqual(restored, { request: fixture.request, checkpoint: fixture.checkpoint,
         judgingIndex: fixture.venue.witnessedIndex, package: fixture.package, terms: fixture.signed });
       console.log(`PASS v3 wallet ${operation}/${phase}: abrupt COMMIT exit, exact restart and retry.`);
     }
-    console.log('V3 wallet crash check passed: twelve abrupt exits; synthetic process evidence only.');
+    console.log('V3 wallet crash check passed: fourteen abrupt exits; synthetic process evidence only.');
   } finally {
     const target = realpathSync(directory);
     assert.ok(dirname(target) === scratch && target.startsWith(scratch + sep) && target.startsWith(join(scratch, 'v3-wallet-crash-')),
