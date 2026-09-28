@@ -19,7 +19,10 @@ face removal reviewed. Stop boundary: no transparent-path retirement, multi-back
 - Local: typecheck, focused vitest files, the fourteen-exit wallet and six-exit journal
   drills, and `scripts/pool/v3/check.mjs` (335 checks, 18 recorded proofs) pass. The six
   current reports still match their bound sources. Tests and tooling only: focused
-  self-review of the delegated circuit port; no runtime source changed.
+  self-review of the delegated circuit port; no runtime source changed. Full vitest: 2246
+  pass (exit 1 only from the low-memory worker-RPC flake). **Open:** PR #36 CI was pending
+  when the run's watcher was reaped for low memory; next run: `gh pr checks 36`, merge if
+  green (fix and push if not), delete the branch, then start M2 on a fresh branch.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md) (reproof resolves unpredicted handovers),
