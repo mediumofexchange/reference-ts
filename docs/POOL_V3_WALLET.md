@@ -36,19 +36,26 @@ scans). The frame itself may travel any private way. The payer calls
 `authenticatePaymentRequest(frame, trustedDigest)`, which hashes and decodes one
 private copy and refuses unless the digest matches; `prepare` then checks the
 agreed domain, backing and amount. The trusted digest must never come from the
-frame's own carrier. When the exact bytes already arrive over the authenticated
-channel, the payer computes the digest from those bytes. `readPaymentRequest`
-decodes strictly for display and authenticates nothing. An exact request retry,
-also after restart, yields the same frame and digest.
+frame's own carrier: hashing the received frame to obtain the digest
+authenticates it only when those exact bytes themselves arrived over the
+authenticated channel. The digest is compared in full by machine (scanned or
+pasted), never by a person checking a prefix or suffix, which a substituted
+request can be ground to match. `readPaymentRequest` decodes strictly for
+display and authenticates nothing; it returns the domain, backing, value and
+commitment without the capsule, so `prepare` refuses its result. An exact
+request retry, also after restart, yields the same frame and digest.
 
 The frame contains no secret, but it links its output commitment and value to
-whoever holds it, so it travels privately. It carries no endpoint, credential,
-expiry, label or receiver identity key: a stable signing key would link a
-receiver's requests, which C4.3 avoids, and the payer learns nothing else it
-needs. V3 has no payer-to-receiver delivery. The payee's output and capsule are
-in the public statement, and the receiver finds the payment with `fulfill`
-from public evidence (C4.5, C4.8). An operator's fee request is exchanged the
-same way; fee quotes are not provided.
+whoever holds it, so it travels privately. Anyone holding it can also pay it
+first, at the full amount, after which the intended payer's `prepare` refuses it
+as already paid. It carries no endpoint, credential, expiry, label or receiver
+identity key: a stable signing key would link a receiver's requests, which C4.3
+avoids, and the payer learns nothing else it needs. V3 has no payer-to-receiver
+delivery. The payee's output and capsule are in the public statement, and the
+receiver finds the payment with `fulfill` from public evidence (C4.5, C4.8).
+Until operator fee quotes exist, an operator's fee request is authenticated the
+same way; a quote signed under the operator's already pinned key would be a new
+signed message and is left for that work.
 
 The frozen v2 [pairing](POOL_WALLET_PAIRING.md) and delivery cases map to v3 as
 follows. Canonical bounded framing, malformed fields, independent exact digest,

@@ -11,7 +11,7 @@ import { configurationHash, RELATIONS, type CandidateConfiguration } from "../sr
 import { decodeRecord, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
-import { authenticatePaymentRequest, encodePaymentRequest, paymentRequestDigest, type PaymentRequest } from "../src/pool/v3/wallet-request.js";
+import { authenticatePaymentRequest, encodePaymentRequest, paymentRequestDigest, readPaymentRequest, type PaymentRequest } from "../src/pool/v3/wallet-request.js";
 import type { LocalProver, V3Wallet as Wallet } from "../src/pool/v3/wallet-store.js";
 import { authorizeIssue, burnTask, issueTask, spendTask, type ProofTask } from "../src/pool/v3/witness.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
@@ -125,6 +125,9 @@ describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
     // A substituted request, however well formed, fails against the receiver's digest before anything is reserved.
     const attacker = encodePaymentRequest(f.open("attacker").request("invoice", f.backing, 7n));
     expect(() => authenticatePaymentRequest(attacker, trusted)).toThrow(EncodingError);
+    // Display terms from an unauthenticated read carry no capsule and cannot be paid.
+    await expect(f.payer.prepare("shop", { ...f.order, request: readPaymentRequest(frame) as never }, f.served, f.signed, prove))
+      .rejects.toThrow(EncodingError);
     const request = authenticatePaymentRequest(frame, trusted);
     expect(request).toEqual(f.invoice);
     await expect(f.payer.prepare("shop", { ...f.order, request, value: 8n }, f.served, f.signed, prove))

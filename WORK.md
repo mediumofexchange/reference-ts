@@ -18,11 +18,16 @@ boundary: no network transport, signing identity, fee quotes, text/QR form,
 receipt handoff for pending acceptance, backup or real-proof harness change.
 
 ## Status
-- Commit `7b527c4` (frame, digest, tag, tests); docs and decision follow.
-  Independent adversarial review running on `7b527c4`; merge waits for it.
-- Focused tests pass: 4 frame cases, 17 payer cases (new request-exchange
-  case), tag count 48 prefix-free; typecheck clean. No retained report binds
-  the changed sources (store-check unchanged).
+- Commits `7b527c4` (frame, digest, tests), `56f1727` (docs, decision, case
+  map) and the review-fix commit. Independent adversarial review found no
+  blocker/major; four minor findings resolved: display reads return terms
+  without the capsule (`prepare` refuses them, tested), and the guide states
+  self-digest limits, full machine comparison, fee requests and first-payment
+  griefing. The tag stays beside its codec (tested prefix-free against
+  `contexts.ts`), so the six current reports keep their bound shared sources.
+- Focused tests pass locally: 4 frame cases, 17 payer cases, typecheck. Only
+  the journal report binds a changed source (`wallet-request.ts`); it is
+  re-recorded from the Linux `--ergo` CI artifact before merge.
 
 ## Evidence
 - Wallet API, custody preconditions, reproof and payment limits: [guide](docs/POOL_V3_WALLET.md).

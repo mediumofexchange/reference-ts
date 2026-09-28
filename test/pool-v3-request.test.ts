@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { EncodingError } from "../src/bytes.js";
-import { WALLET_V3_REQUEST_CONTEXT } from "../src/contexts.js";
+import * as contexts from "../src/contexts.js";
 import { FIELD_MODULUS, fieldToBytes } from "../src/pool/field.js";
 import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import {
   authenticatePaymentRequest, encodePaymentRequest, PAYMENT_REQUEST_BYTES, paymentRequestDigest, readPaymentRequest,
-  type PaymentRequest,
+  WALLET_V3_REQUEST_CONTEXT, type PaymentRequest,
 } from "../src/pool/v3/wallet-request.js";
 
 // C4.1 request exchange: one fixed-width frame, authenticated only by a digest
@@ -27,10 +27,13 @@ describe("v3 payment request frame (pool-delivery C4.1)", () => {
     expect(frame.length).toBe(PAYMENT_REQUEST_BYTES); expect(PAYMENT_REQUEST_BYTES).toBe(246);
     expect(frame.subarray(0, tag)).toEqual(WALLET_V3_REQUEST_CONTEXT);
     expect(digest).toBe(bytesToHex(sha256(frame)));
-    expect(readPaymentRequest(frame)).toEqual(r);
-    expect(encodePaymentRequest(readPaymentRequest(frame))).toEqual(frame);
+    const tags = Object.values(contexts).filter((v): v is Uint8Array => v instanceof Uint8Array);
+    expect(contexts.contextsArePrefixFree([...tags, WALLET_V3_REQUEST_CONTEXT])).toBe(true);
+    // Display terms carry no capsule, so they cannot stand in for the request.
+    const shown = readPaymentRequest(frame);
+    expect(shown).toEqual({ domain, backing, value: 7n, cm: r.cm });
     const accepted = authenticatePaymentRequest(frame, digest);
-    expect(accepted).toEqual(r);
+    expect(accepted).toEqual(r); expect(encodePaymentRequest(accepted)).toEqual(frame);
     accepted.domain.fill(0); accepted.capsule.fill(0); accepted.opening.backing.fill(0);
     expect(authenticatePaymentRequest(frame, digest)).toEqual(r);
     // Hashing and decoding read one private copy of the caller's bytes.

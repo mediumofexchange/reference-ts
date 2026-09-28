@@ -70,11 +70,6 @@
 //   moe/pool/v3/spent/leaf     a spent-root leaf
 //   moe/pool/v3/spent/node     a spent-root node
 //
-// A wallet's application frame, hashed for independent authentication but
-// never signed or part of a statement:
-//
-//   moe/wallet/v3/request      a receiver's exact payment request (pool-delivery C4.1)
-//
 // Two binary magics open hashed preimages too, and are held to the same rule:
 // "MOEB" a backing's terms (its name is their hash) and "MOED" a directory
 // (its root). The frozen transparent path keeps its own copy of "MOEB".
@@ -127,7 +122,6 @@ export const V3_RANGE_CONTEXT = tag("moe/pool/v3/range");
 export const V3_SPENT_EMPTY_CONTEXT = tag("moe/pool/v3/spent/empty");
 export const V3_SPENT_LEAF_CONTEXT = tag("moe/pool/v3/spent/leaf");
 export const V3_SPENT_NODE_CONTEXT = tag("moe/pool/v3/spent/node");
-export const WALLET_V3_REQUEST_CONTEXT = tag("moe/wallet/v3/request");
 export const TERMS_MAGIC = tag("MOEB");
 export const DIRECTORY_MAGIC = tag("MOED");
 
@@ -188,7 +182,6 @@ const ALL_CONTEXTS = [
   V3_SPENT_EMPTY_CONTEXT,
   V3_SPENT_LEAF_CONTEXT,
   V3_SPENT_NODE_CONTEXT,
-  WALLET_V3_REQUEST_CONTEXT,
   TERMS_MAGIC,
   DIRECTORY_MAGIC,
 ];

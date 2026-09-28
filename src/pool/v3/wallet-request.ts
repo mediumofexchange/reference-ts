@@ -2,7 +2,6 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { ByteReader, ByteWriter, compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
-import { WALLET_V3_REQUEST_CONTEXT } from "../../contexts.js";
 import { bytesToField, fieldToBytes } from "../field.js";
 import { commitmentOf, copyNoteOpening } from "../notes.js";
 import { CAPSULE_BYTES, PROFILE } from "./capsules.js";
@@ -25,6 +24,11 @@ export function copyPaymentRequest(input: PaymentRequest,
       capsule.length !== CAPSULE_BYTES || capsule[0] !== PROFILE) throw new EncodingError("invalid exact payment request");
   return { domain, opening, cm, capsule };
 }
+
+/** An application frame's tag, never signed or part of a statement; like the
+ * capsule's HKDF strings it lives beside its codec, and its test checks it
+ * against contexts.ts for prefix freedom. */
+export const WALLET_V3_REQUEST_CONTEXT = new TextEncoder().encode("moe/wallet/v3/request");
 
 /** Tag, domain, backing, value, owner, rho and capsule; `cm` is recomputed. */
 export const PAYMENT_REQUEST_BYTES = WALLET_V3_REQUEST_CONTEXT.length + 32 + 32 + 8 + 32 + 32 + CAPSULE_BYTES;
@@ -62,9 +66,16 @@ export function paymentRequestDigest(frame: Uint8Array): string {
   return bytesToHex(sha256(own));
 }
 
-/** Strict structural reading for display only: it authenticates nothing. */
-export function readPaymentRequest(frame: Uint8Array): PaymentRequest {
-  return decode(copyUnshared(frame));
+/** What a payer is asked to agree to, without the capsule, so it cannot be paid. */
+export interface PaymentRequestTerms {
+  readonly domain: Uint8Array; readonly backing: Uint8Array; readonly value: bigint; readonly cm: bigint;
+}
+
+/** Strict structural reading for display only: it authenticates nothing and
+ * returns no capsule, so `prepare` refuses its result. */
+export function readPaymentRequest(frame: Uint8Array): PaymentRequestTerms {
+  const r = decode(copyUnshared(frame));
+  return { domain: r.domain, backing: r.opening.backing, value: r.opening.value, cm: r.cm };
 }
 
 /** The payer's entry: the frame must hash to a digest obtained independently
