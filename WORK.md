@@ -85,5 +85,5 @@ Next run: Next 1.
   journal completion has source review, without a direct timed acceptance case.
 - Disk streaming and physical custody remain separate persistence boundaries.
 
-Roughly **62% done / 38% remaining**, plausible range **52–72%**, reassessed 2026-09-28 (the
-multi-backing reader and journal are in; wallet multi-backing, configuration adoption, qualified storage, mainnet remain).
+Roughly **63% done / 37% remaining**, plausible range **53–73%**, reassessed 2026-09-28 (the
+multi-backing reader, journal and wallet are in; configuration adoption, qualified storage, mainnet remain).
