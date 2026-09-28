@@ -73,14 +73,20 @@ builds the spend in the canonical segment, whose header it takes from the
 package trail matching that segment's identity. The caller's `prove` runs
 locally and receives spend secrets. The wallet requires the returned record to
 be exactly the task and to verify under its own verifier, then saves it with
-unique input-nullifier and output-commitment reservations in one transaction
-before returning it. A proof failure reserves nothing. An exact alias retry
+unique input-nullifier and output-commitment reservations, every output opening
+and the zero input's request identifier in one transaction before returning it. A proof failure reserves nothing. An exact alias retry
 returns the saved record without reading evidence or proving; the same alias
 with another order refuses. A concurrent exact call adopts the first saved
 record, and a competing alias over the same inputs refuses. Preparation also
-refuses when the canonical segment's operator term has already ended at the
-witnessed index, because such a statement would be refused while its
-reservation stays.
+refuses when the operator would refuse the statement: the canonical segment's
+operator term has ended at the witnessed index (`CONFLICT`), or, where the
+backing declares silence, a boundary is witnessed or the witnessing horizon
+(index plus lag since the canonical checkpoint) exceeds the clock's duration
+(`SILENCE`), the journal's own admission rule. A published handover not yet
+effective is not predicted; such a payment is resolved by reproof. The venue
+answers behind these decisions are rechecked before proving, so a venue that
+advances during the read refuses `CHANGED_VIEW` with nothing reserved; callers
+on a live venue retry.
 
 A direct fee is the fee recipient's own exact request (pool-fees C1.2.4). That
 recipient learns the backing, its fee output and its association with the
@@ -95,11 +101,40 @@ operator liability, not finality. `sync` marks a payment `final` only when all
 four of its outputs are in canonical history, including history imported into a
 successor segment. Its own change and zero outputs are fresh, so no other
 statement creates them. It marks a payment `failed` only when an input was
-spent otherwise. An open silence clock and a published handover not yet effective
-are not checked before preparation. Reservations are
-permanent in this profile: reproof after a lapse (same inputs and outputs in a
-new segment) and release of never-admitted inputs are not implemented, so such
-inputs stay unavailable. Multi-backing payments and cross-backing fees are refused.
+spent otherwise.
+
+`reprove(alias, package, signedTerms, prove)` handles a payment that stays
+`prepared` after its segment stopped being canonical, because the operator's
+term ended or silence lapsed its unfinished tail (pool-fees C1.2.5, C4.4). It
+reads the same frontier, refusing `CHANGED_VIEW` at an index older than the
+one the saved record was built from (a dead segment never becomes canonical
+again, but a lagging venue view could show it so), and resolves a payment
+already final or failed without proving. While the record names the canonical
+segment it returns the payment unchanged if that segment can admit it, and
+otherwise refuses with the admission code (`CONFLICT` for an ended term with
+no successor yet, `SILENCE` for a clock that closes admission), so a stuck
+payment is distinguishable from a live one. Otherwise, after rechecking the
+venue answers, it rebuilds the saved statement in the canonical segment: the same input nullifiers (the reserved notes, found again by the seed
+scan in imported history, and the saved zero input), the same outputs,
+capsules and order; only segment, scope and anchors change. Admission is
+checked as for preparation, an input missing from canonical history refuses
+`ABSENT` (for example a note created in the lapsed tail) and a locked input
+refuses `LOCKED`. The new record replaces the saved one only if the saved
+statement is still current, keeping the old record and any receipt under
+`superseded`; the receipt remains evidence of that operator's acceptance, not
+finality. A receipt returned for a record that a reproof replaced during
+submission is kept on that superseded record and the call refuses `CONFLICT`.
+After a return opening the wallet may reprove before the operator has adopted
+the return block; submission is then refused until adoption, and a retry
+resends the same record. Both records spend the same nullifiers into the same
+commitments, so at most one can enter canonical history and the payee's exact
+request is paid once. A direct fee stays with its original recipient even when
+another operator admits the reproof; paying the current operator instead is a
+new spend (C1.2.5). Reservations stay until final or failed: release with
+other outputs (cancellation), same-segment tail repair (C2.10.9a) and release
+of never-admitted inputs are not implemented. Multi-backing payments and
+cross-backing fees are refused. The wallet profile is `moe/wallet/v3/2`; a
+first-profile payer database, which kept no output openings, is refused.
 
 ## Acceptance and remaining work
 
@@ -113,9 +148,16 @@ failure and substituted statements, concurrent retry, forged and lost receipts,
 restart with fencing, final reconciliation with seed-found change, finality and
 imported-note payment across operator takeover, changed alias orders, receipts
 for another proof, earlier-profile databases, and failure
-when a restored copy spends the reserved input.
-`npm run check:pool:v3-wallet` exercises fresh processes at request, fulfillment
-and payment commit boundaries with synthetic evidence. These are process-exit
+when a restored copy spends the reserved input. Its reproof cases cover a
+pending payment lapsed by takeover and by silence return, the preserved
+nullifiers/outputs/capsules, final settlement by the new operator and the
+payee's fulfillment, substituted reproof statements, idempotent retries,
+resolution without proving, a stale receipt racing a reproof (kept as
+superseded evidence), a lagging venue view, an ended term without successor,
+and `SILENCE` refusal at the horizon, after the boundary and in a returned
+segment past its own horizon.
+`npm run check:pool:v3-wallet` exercises fresh processes at request, fulfillment,
+payment and reproof commit boundaries with synthetic evidence. These are process-exit
 tests, not physical power-loss or qualified-storage evidence.
 
 The real-proof `scripts/pool/v3/store-check.mjs` obtains the payment request
@@ -125,8 +167,10 @@ through the [local service](POOL_V3_SERVICE.md). The payer reconciles the
 payment final; the receiver fulfills from independently replayed public
 evidence downloaded over HTTP. The source-bound
 [journal report](pool-v3-store-verification.json) records that acceptance.
+Reproof is oracle-tested only; a real-proof spend of inherited notes in a
+successor segment is covered by the succession check.
 
-Authenticated request transport, reproof/release after lapse, multi-backing
+Authenticated request transport, cancellation/release, multi-backing
 payment, encrypted backup and restoration drills remain open. Existing v2
 wallet/service code and checks remain until all their replacement cases pass.
 This library establishes no mainnet readiness or physical custody qualification.

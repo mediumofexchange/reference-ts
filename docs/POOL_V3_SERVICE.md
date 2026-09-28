@@ -90,6 +90,6 @@ receiver fulfillment independently. Its evidence is retained in the
 [journal report](pool-v3-store-verification.json). The payment is prepared,
 saved and submitted by the [v3 wallet](POOL_V3_WALLET.md); issue, burn and the
 hostile cases are still prepared by the harness. Authenticated receiver invitation
-delivery, reproof after lapse, restoration drills and encrypted backup remain
+delivery, restoration drills and encrypted backup remain
 open. V2 checks stay until their remaining wallet
 and service cases pass on v3. No live service or physical custody is qualified.
